@@ -88,6 +88,11 @@ pub struct Download {
 pub struct Library {
     pub name: String,
     pub downloads: Option<LibraryDownloads>,
+    /// Maven repository base URL (Fabric/Quilt/Forge style libraries that
+    /// have no `downloads` block). The file path comes from `name`.
+    pub url: Option<String>,
+    pub sha1: Option<String>,
+    pub size: Option<u64>,
     /// Legacy natives: OS name → classifier (may contain `${arch}`).
     pub natives: Option<HashMap<String, String>>,
     pub rules: Option<Vec<Rule>>,
@@ -105,6 +110,8 @@ pub struct Artifact {
     pub path: Option<String>,
     pub sha1: Option<String>,
     pub size: Option<u64>,
+    /// Empty for files generated locally (e.g. Forge's patched client jar).
+    #[serde(default)]
     pub url: String,
 }
 

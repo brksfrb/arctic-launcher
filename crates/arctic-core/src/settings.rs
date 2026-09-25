@@ -29,8 +29,14 @@ pub struct Settings {
     pub extra_jvm_args: String,
     /// Use this `java(w).exe` instead of a managed runtime.
     pub java_override: Option<PathBuf>,
-    /// Version last selected on the Play tab.
+    /// Version last selected on the Play tab (Vanilla instance).
     pub last_version: Option<String>,
+    /// Instance last selected on the Play tab (`None` = Vanilla).
+    pub last_instance: Option<String>,
+    /// Offer snapshots in version pickers.
+    pub show_snapshots: bool,
+    /// Offer old alpha/beta versions in version pickers.
+    pub show_old_versions: bool,
     pub update_channel: UpdateChannel,
     pub check_updates_on_start: bool,
     /// Animated backdrop (aurora, snow, shooting stars).
@@ -75,6 +81,9 @@ impl Default for Settings {
             extra_jvm_args: String::new(),
             java_override: None,
             last_version: None,
+            last_instance: None,
+            show_snapshots: false,
+            show_old_versions: false,
             update_channel: UpdateChannel::Stable,
             check_updates_on_start: true,
             animations: true,

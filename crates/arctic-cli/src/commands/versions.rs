@@ -52,9 +52,10 @@ pub fn install(ctx: &Ctx, args: &InstallArgs) -> Result<i32> {
     let instance = instances::load_default(&ctx.dirs)?;
     let settings = Settings::load(&ctx.dirs)?;
     let progress = |p: ProgressInfo| ctx.out.progress(p);
+    let version = versions::load_version(&ctx.dirs, &entry, &progress)?;
     let installed = launch::install(
         &ctx.dirs,
-        &entry,
+        version,
         &instance.game_dir(&ctx.dirs),
         settings.java_override,
         &progress,

@@ -37,12 +37,15 @@ pub fn resolve_libraries(dirs: &DataDirs, version: &VersionJson, env: &RuleEnv) 
         .iter()
         .filter(|l| rules_allow(l.rules.as_deref(), env))
     {
-        if let Some(artifact) = lib.downloads.as_ref().and_then(|d| d.artifact.as_ref())
-            && let Some(job) = library_job(dirs, lib, artifact, None)
+        if let Some(artifact) = main_artifact(lib)
+            && let Some(job) = library_job(dirs, lib, &artifact, None)
             && seen.insert(job.dest.clone())
         {
             out.classpath.push(job.dest.clone());
-            out.jobs.push(job);
+            // Locally generated files (no URL) are on the classpath only.
+            if !job.url.is_empty() {
+                out.jobs.push(job);
+            }
         }
         if let Some(classifier) = native_classifier(lib, env)
             && let Some(artifact) = lib
@@ -61,6 +64,28 @@ pub fn resolve_libraries(dirs: &DataDirs, version: &VersionJson, env: &RuleEnv) 
         }
     }
     out
+}
+
+/// Mojang's library repository, the default for libraries without a URL.
+const MOJANG_LIBRARIES: &str = "https://libraries.minecraft.net/";
+
+/// The jar to put on the classpath: the explicit `downloads.artifact`, or
+/// one derived from a Maven `url` + `name` (Fabric/Quilt/legacy Forge).
+fn main_artifact(lib: &Library) -> Option<Artifact> {
+    if let Some(downloads) = &lib.downloads {
+        return downloads.artifact.clone();
+    }
+    if lib.natives.is_some() {
+        return None;
+    }
+    let base = lib.url.as_deref().unwrap_or(MOJANG_LIBRARIES);
+    let path = maven_path(&lib.name)?;
+    Some(Artifact {
+        url: format!("{}/{path}", base.trim_end_matches('/')),
+        path: Some(path),
+        sha1: lib.sha1.clone(),
+        size: lib.size,
+    })
 }
 
 /// Legacy natives classifier for this OS, e.g. `natives-windows-64`.
@@ -283,6 +308,32 @@ mod tests {
         assert_eq!(libs.natives.len(), 1);
         assert_eq!(libs.natives[0].exclude, ["META-INF/"]);
         assert_eq!(libs.jobs.len(), 2);
+    }
+
+    #[test]
+    fn maven_style_and_local_libraries() {
+        let version: VersionJson = serde_json::from_str(
+            r#"{"id":"fabric","mainClass":"M","libraries":[
+                {"name":"net.fabricmc:fabric-loader:0.16.9","url":"https://maven.fabricmc.net/"},
+                {"name":"org.ow2.asm:asm:9.7"},
+                {"name":"net.minecraftforge:forge:1.20.1-47.3.0:client",
+                 "downloads":{"artifact":{"path":"net/minecraftforge/forge/1.20.1-47.3.0/forge-1.20.1-47.3.0-client.jar","url":""}}}
+            ]}"#,
+        )
+        .unwrap();
+        let dirs = DataDirs::new("root");
+        let libs = resolve_libraries(&dirs, &version, &env());
+        assert_eq!(libs.classpath.len(), 3);
+        assert_eq!(libs.jobs.len(), 2, "local forge jar has no download");
+        assert_eq!(
+            libs.jobs[0].url,
+            "https://maven.fabricmc.net/net/fabricmc/fabric-loader/0.16.9/fabric-loader-0.16.9.jar"
+        );
+        assert!(
+            libs.jobs[1]
+                .url
+                .starts_with("https://libraries.minecraft.net/org/ow2/asm/asm/9.7/")
+        );
     }
 
     #[test]

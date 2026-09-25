@@ -22,7 +22,7 @@ use crate::net::download_all;
 use crate::settings::Settings;
 use crate::storage::DataDirs;
 use crate::versions::{RuleEnv, VersionEntry, VersionJson, load_version, mark_installed};
-use crate::{APP_VERSION, Error, LAUNCHER_BRAND, Progress, ProgressInfo, Result, java};
+use crate::{APP_VERSION, Error, LAUNCHER_BRAND, Progress, ProgressInfo, Result, java, loaders};
 
 use self::args::{JvmOptions, Placeholders, substitute};
 
@@ -87,13 +87,11 @@ pub struct Installation {
 /// worker thread.
 pub fn install(
     dirs: &DataDirs,
-    entry: &VersionEntry,
+    version: VersionJson,
     game_dir: &Path,
     java_override: Option<PathBuf>,
     progress: Progress,
 ) -> Result<Installation> {
-    progress(ProgressInfo::stage("Reading version"));
-    let version = load_version(dirs, entry, &|_| {})?;
     fs::create_dir_all(game_dir).at(game_dir)?;
     let libs = files::resolve_libraries(dirs, &version, &RuleEnv::current());
     let client = files::client_job(dirs, &version)?;
@@ -148,15 +146,32 @@ pub fn install(
 }
 
 /// Download everything and build the command. Safe to call from a worker thread.
+///
+/// For modded instances the vanilla version is installed first (the loader
+/// installer needs its client jar and Java), then the loader profile is
+/// layered on top and its extra libraries are downloaded.
 pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
-    let game_dir = req.instance.game_dir(req.dirs);
-    let installation = install(
-        req.dirs,
-        req.version,
-        &game_dir,
-        req.settings.java_override.clone(),
-        progress,
-    )?;
+    let dirs = req.dirs;
+    let game_dir = req.instance.game_dir(dirs);
+    let java_override = req.settings.java_override.clone();
+    progress(ProgressInfo::stage("Reading version"));
+    let vanilla = load_version(dirs, req.version, &|_| {})?;
+    let version = match (req.instance.loader.kind(), req.instance.loader.version()) {
+        (Some(kind), Some(loader_version)) => {
+            let base = install(
+                dirs,
+                vanilla.clone(),
+                &game_dir,
+                java_override.clone(),
+                progress,
+            )?;
+            let stage = format!("Installing {} {loader_version}", kind.label());
+            progress(ProgressInfo::stage(&stage));
+            loaders::install_profile(dirs, kind, loader_version, &vanilla, &base.java, progress)?
+        }
+        _ => vanilla,
+    };
+    let installation = install(dirs, version, &game_dir, java_override, progress)?;
     Ok(plan(req, &installation))
 }
 

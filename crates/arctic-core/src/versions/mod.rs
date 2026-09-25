@@ -1,8 +1,10 @@
 //! Mojang version metadata: the global manifest and per-version JSON.
 
+pub mod merge;
 pub mod model;
 pub mod rules;
 
+pub use merge::merge;
 pub use model::{AssetIndex, Library, VersionJson, maven_path};
 pub use rules::{RuleEnv, rules_allow};
 

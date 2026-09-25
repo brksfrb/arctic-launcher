@@ -9,6 +9,8 @@ pub mod error;
 pub mod instances;
 pub mod java;
 pub mod launch;
+pub mod loaders;
+pub mod mods;
 pub mod net;
 pub mod profiles;
 pub mod settings;
