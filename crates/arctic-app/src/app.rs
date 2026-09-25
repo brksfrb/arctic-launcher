@@ -176,6 +176,7 @@ pub struct ArcticApp {
     applied_theme: Option<ThemeMode>,
     theme_fade: Option<crate::theme_fade::ThemeFade>,
     discord: crate::discord::Discord,
+    pub(crate) onboarding: Option<crate::ui::Onboarding>,
     /// Maximize on the first frame (creating the window maximized is
     /// unreliable on Windows: wrong restore size, flicker).
     maximize_pending: bool,
@@ -210,6 +211,7 @@ impl ArcticApp {
             applied_theme: None,
             theme_fade: None,
             discord: crate::discord::Discord::new(),
+            onboarding: None,
             maximize_pending: data.settings.start_maximized,
             pending_launch: startup.launch.clone(),
             msa_configured: MsaConfig::load(&dirs).is_ok(),
@@ -253,6 +255,7 @@ impl ArcticApp {
             login_attempts: 0,
         };
         app.apply_profile_data(data);
+        app.maybe_start_onboarding(startup.launch.is_some());
         if let Some(query) = &startup.account {
             match app.accounts.find(query).map(|a| a.id.clone()) {
                 Some(id) => {

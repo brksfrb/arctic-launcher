@@ -10,6 +10,8 @@ pub use instances::InstancesUi;
 pub use logs::LogViewKey;
 pub use profiles::ProfileDialog;
 mod nav;
+mod onboarding;
+pub use onboarding::Onboarding;
 mod play;
 mod profiles;
 mod settings;

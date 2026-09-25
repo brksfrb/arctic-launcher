@@ -100,6 +100,7 @@ impl ArcticApp {
                 title,
                 disabled.unwrap_or(desc),
                 disabled.is_none(),
+                false,
             ) {
                 match choice {
                     Choice::Browser => self.start_login(true),
@@ -259,7 +260,7 @@ impl ArcticApp {
     }
 }
 
-fn dialog_frame(p: &Palette) -> egui::Frame {
+pub(super) fn dialog_frame(p: &Palette) -> egui::Frame {
     egui::Frame::new()
         .fill(p.surface)
         .stroke(Stroke::new(1.0, p.card_stroke))
@@ -268,13 +269,14 @@ fn dialog_frame(p: &Palette) -> egui::Frame {
 }
 
 /// Large clickable option; returns true when clicked.
-fn option_tile(
+pub(super) fn option_tile(
     ui: &mut egui::Ui,
     p: &Palette,
     icon: Icon,
     title: &str,
     desc: &str,
     enabled: bool,
+    selected: bool,
 ) -> bool {
     let sense = if enabled {
         Sense::click()
@@ -294,7 +296,11 @@ fn option_tile(
     painter.rect_stroke(
         rect,
         CornerRadius::same(12),
-        Stroke::new(1.0, lerp_color(p.card_stroke, p.accent, hover)),
+        if selected {
+            Stroke::new(2.0, p.accent)
+        } else {
+            Stroke::new(1.0, lerp_color(p.card_stroke, p.accent, hover))
+        },
         StrokeKind::Inside,
     );
     let fg = if enabled { p.text } else { p.muted };

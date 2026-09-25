@@ -69,6 +69,7 @@ impl ArcticApp {
                     });
             });
 
+        self.onboarding_dialog(&ctx);
         self.add_account_dialog(&ctx);
         self.remove_account_dialog(&ctx);
         self.profile_dialogs(&ctx);

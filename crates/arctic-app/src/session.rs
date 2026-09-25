@@ -103,6 +103,7 @@ impl ArcticApp {
         self.tasks = self.tasks.with_dirs(self.dirs.clone());
         let data = ProfileData::load(&self.dirs, &self.tasks, &mut self.toasts);
         self.apply_profile_data(data);
+        self.maybe_start_onboarding(false);
         let name = self.profiles.active().name.clone();
         self.toasts
             .push(Kind::Success, format!("Switched to {name}"), "");

@@ -15,6 +15,7 @@ pub mod net;
 pub mod profiles;
 pub mod settings;
 pub mod storage;
+pub mod system;
 pub mod update;
 pub mod versions;
 

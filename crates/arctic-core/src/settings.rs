@@ -49,6 +49,8 @@ pub struct Settings {
     pub on_game_start: GameStartAction,
     /// Show what you're playing on Discord.
     pub discord_presence: bool,
+    /// First-run setup finished (or skipped) for this profile.
+    pub onboarded: bool,
 }
 
 /// What the launcher window does once the game window is up.
@@ -94,6 +96,7 @@ impl Default for Settings {
             theme: ThemeMode::Default,
             on_game_start: GameStartAction::KeepOpen,
             discord_presence: true,
+            onboarded: false,
         }
     }
 }
