@@ -1,0 +1,22 @@
+[
+  {
+    "id": "aurora",
+    "name": "Aurora",
+    "free": true
+  },
+  {
+    "id": "snowflake",
+    "name": "Snowflake",
+    "free": true
+  },
+  {
+    "id": "glacier",
+    "name": "Glacier",
+    "free": true
+  },
+  {
+    "id": "midnight",
+    "name": "Midnight",
+    "free": true
+  }
+]

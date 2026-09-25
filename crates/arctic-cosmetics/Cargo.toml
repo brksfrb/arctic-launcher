@@ -1,0 +1,28 @@
+[package]
+name = "arctic-cosmetics"
+description = "Arctic Launcher cosmetics server: catalog, equipped cosmetics and Mojang-verified sign-in."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+axum = "0.8.9"
+hex = "0.4.3"
+hmac = "0.13.0"
+log = "0.4.34"
+env_logger = "0.11.11"
+uuid = { version = "1.26.1", features = ["v4"] }
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sha2 = "0.11.0"
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"] }
+ureq = { version = "3.4.2", features = ["json"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+tower = { version = "0.5", features = ["util"] }
