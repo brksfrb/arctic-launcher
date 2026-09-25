@@ -9,6 +9,7 @@ mod icon_raster;
 mod logbook;
 mod motion;
 mod session;
+mod skin_tasks;
 mod startup;
 mod tasks;
 mod theme;

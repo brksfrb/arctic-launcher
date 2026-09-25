@@ -37,6 +37,7 @@ pub enum Tab {
     Play,
     Accounts,
     Instances,
+    Skins,
     Together,
     Logs,
     Settings,
@@ -44,10 +45,11 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 7] = [
+    pub const ALL: [Tab; 8] = [
         Tab::Play,
         Tab::Accounts,
         Tab::Instances,
+        Tab::Skins,
         Tab::Together,
         Tab::Logs,
         Tab::Settings,
@@ -180,6 +182,7 @@ pub struct ArcticApp {
     discord: crate::discord::Discord,
     pub(crate) onboarding: Option<crate::ui::Onboarding>,
     pub(crate) together: crate::ui::TogetherUi,
+    pub(crate) skins: crate::ui::SkinsUi,
     devshot: crate::devshot::DevShot,
     /// Maximize on the first frame (creating the window maximized is
     /// unreliable on Windows: wrong restore size, flicker).
@@ -217,6 +220,7 @@ impl ArcticApp {
             discord: crate::discord::Discord::new(),
             onboarding: None,
             together: crate::ui::TogetherUi::default(),
+            skins: crate::ui::SkinsUi::default(),
             devshot: crate::devshot::DevShot::from_env(),
             maximize_pending: data.settings.start_maximized,
             pending_launch: startup.launch.clone(),
@@ -582,6 +586,9 @@ impl ArcticApp {
             | Event::ModInstalled(..)
             | Event::ModIcon(..)) => self.on_instances_event(e, ctx),
             Event::Share(id, event) => self.on_share_event(id, event),
+            e @ (Event::SkinAccount(..) | Event::PlayerSkin(..) | Event::SkinFile(..)) => {
+                self.on_skins_event(e)
+            }
             Event::UpdateChecked(result) => self.on_update_checked(result),
             Event::UpdateInstalled(result) => self.on_update_installed(result),
         }

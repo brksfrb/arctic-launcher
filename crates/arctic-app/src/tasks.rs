@@ -76,6 +76,12 @@ pub enum Event {
     ModInstalled(String, String, Outcome<Vec<InstalledMod>>),
     /// Icon bytes for a URL.
     ModIcon(String, Outcome<Vec<u8>>),
+    /// Skin and capes of an account (account id, result).
+    SkinAccount(String, Outcome<crate::skin_tasks::AccountSkin>),
+    /// Another player's skin by name.
+    PlayerSkin(String, Outcome<(Vec<u8>, arctic_core::skins::Variant)>),
+    /// A picked skin file (name, bytes), or `None` if cancelled.
+    SkinFile(Outcome<Option<(String, Vec<u8>)>>),
     /// Play-together session update.
     Share(arctic_share::SessionId, arctic_share::ShareEvent),
 }
@@ -102,7 +108,11 @@ impl Tasks {
         }
     }
 
-    fn run(&self, job: impl FnOnce(&Tasks) + Send + 'static) {
+    pub(crate) fn dirs(&self) -> &DataDirs {
+        &self.dirs
+    }
+
+    pub(crate) fn run(&self, job: impl FnOnce(&Tasks) + Send + 'static) {
         let me = self.clone();
         std::thread::spawn(move || job(&me));
     }
@@ -118,7 +128,7 @@ impl Tasks {
         }
     }
 
-    fn send(&self, event: Event) {
+    pub(crate) fn send(&self, event: Event) {
         // The receiver only disappears when the app is closing.
         let _ = self.tx.send(event);
         self.ctx.request_repaint();

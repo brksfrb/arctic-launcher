@@ -9,6 +9,8 @@ use eframe::egui::{Color32, Painter, Pos2, Rect, Shape, Stroke, Vec2, vec2};
 pub enum Icon {
     Play,
     User,
+    /// T-shirt (skins).
+    Shirt,
     /// Two people (play together).
     Friends,
     Layers,
@@ -60,6 +62,24 @@ pub fn draw(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
                 })
                 .collect();
             painter.add(Shape::closed_line(shoulders, stroke));
+        }
+        Icon::Shirt => {
+            poly(
+                &[
+                    vec2(-0.3, -0.7),
+                    vec2(-0.8, -0.45),
+                    vec2(-0.62, -0.05),
+                    vec2(-0.42, -0.14),
+                    vec2(-0.42, 0.75),
+                    vec2(0.42, 0.75),
+                    vec2(0.42, -0.14),
+                    vec2(0.62, -0.05),
+                    vec2(0.8, -0.45),
+                    vec2(0.3, -0.7),
+                    vec2(0.0, -0.5),
+                ],
+                true,
+            );
         }
         Icon::Friends => {
             let person = |dx: f32, scale: f32| {
