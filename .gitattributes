@@ -1,0 +1,4 @@
+# Keep the repository LF-only regardless of local core.autocrlf settings.
+* text=auto eol=lf
+*.ico binary
+*.png binary
