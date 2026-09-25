@@ -37,6 +37,8 @@ pub struct SkinsUi {
     loaded_for: Option<PathBuf>,
     pub library: Library,
     textures: HashMap<String, SkinTexture>,
+    /// Keys whose PNG couldn't be read or decoded (not retried every frame).
+    failed: std::collections::HashSet<String>,
     pub selection: Selection,
     /// Account id → its skin state (fetched when the tab opens).
     pub account: HashMap<String, Result<AccountSkin, String>>,
@@ -128,8 +130,14 @@ impl ArcticApp {
     /// Texture for a library entry or the current skin, uploading on first use.
     pub(crate) fn skin_texture(&mut self, ctx: &egui::Context, key: &str) -> Option<&SkinTexture> {
         if !self.skins.textures.contains_key(key) {
+            if self.skins.failed.contains(key) {
+                return None;
+            }
             let png = self.skin_png(key)?;
-            let texture = upload(ctx, key, &png)?;
+            let Some(texture) = upload(ctx, key, &png) else {
+                self.skins.failed.insert(key.to_owned());
+                return None;
+            };
             self.skins.textures.insert(key.to_owned(), texture);
         }
         self.skins.textures.get(key)
@@ -227,6 +235,7 @@ impl ArcticApp {
                 self.skins.busy = false;
                 // New textures for the current skin and capes.
                 self.skins.textures.retain(|k, _| k.starts_with("lib:"));
+                self.skins.failed.clear();
                 if let Err(e) = &result {
                     self.toasts
                         .push(Kind::Error, "Skin change failed", e.clone());

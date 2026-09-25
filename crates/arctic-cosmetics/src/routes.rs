@@ -29,6 +29,9 @@ pub struct AppState {
     pub limiter: Limiter,
     pub secret: Vec<u8>,
     pub session_url: String,
+    /// Behind a reverse proxy: take the client address from
+    /// `X-Forwarded-For` instead of the connection.
+    pub trust_proxy: bool,
 }
 
 type Shared = Arc<AppState>;
@@ -58,16 +61,36 @@ fn error(status: StatusCode, message: &str) -> Response {
 }
 
 async fn rate_limit(State(state): State<Shared>, request: Request, next: Next) -> Response {
-    let ip = request
-        .extensions()
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|c| c.0.ip());
+    let forwarded = state
+        .trust_proxy
+        .then(|| forwarded_ip(request.headers()))
+        .flatten();
+    let ip = forwarded.or_else(|| {
+        request
+            .extensions()
+            .get::<ConnectInfo<SocketAddr>>()
+            .map(|c| c.0.ip())
+    });
     if let Some(ip) = ip
         && !state.limiter.allow(ip)
     {
         return error(StatusCode::TOO_MANY_REQUESTS, "slow down");
     }
     next.run(request).await
+}
+
+/// The original client address set by a trusted proxy (the last hop it
+/// appended, so clients can't spoof it by sending their own header).
+fn forwarded_ip(headers: &HeaderMap) -> Option<std::net::IpAddr> {
+    headers
+        .get("x-forwarded-for")?
+        .to_str()
+        .ok()?
+        .rsplit(',')
+        .next()?
+        .trim()
+        .parse()
+        .ok()
 }
 
 async fn catalog(State(state): State<Shared>) -> Response {
@@ -250,6 +273,7 @@ mod tests {
             limiter: Limiter::new(1000, Duration::from_secs(60)),
             secret: b"test-secret-test-secret-test-secret".to_vec(),
             session_url: fake_session().await,
+            trust_proxy: false,
         }))
     }
 
@@ -353,6 +377,14 @@ mod tests {
         .await;
         assert_eq!(found[UUID]["cape"], "aurora");
         assert_eq!(found.as_object().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn forwarded_ip_uses_the_proxy_hop() {
+        let mut h = HeaderMap::new();
+        h.insert("x-forwarded-for", "6.6.6.6, 10.0.0.7".parse().unwrap());
+        assert_eq!(forwarded_ip(&h), Some("10.0.0.7".parse().unwrap()));
+        assert_eq!(forwarded_ip(&HeaderMap::new()), None);
     }
 
     #[tokio::test(flavor = "multi_thread")]
