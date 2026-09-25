@@ -4,7 +4,7 @@ This is for people building Arctic Launcher themselves. Official releases alread
 include an approved client ID.
 
 Microsoft sign-in needs an Azure application (client) ID. It is **not** stored in the
-repository. Offline accounts work without any of this.
+repository.
 
 ## 1. Register an Azure app
 

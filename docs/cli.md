@@ -6,7 +6,7 @@ make desktop shortcuts, or run Minecraft on a machine you only reach over SSH.
 
 ```powershell
 arctic launch                       # latest release as the active account
-arctic launch 1.21.4 --offline Steve
+arctic launch 1.21.4
 arctic launch latest --account Alex --memory 6G --wait
 arctic open --launch 1.20.1         # open the launcher window and start 1.20.1
 ```
@@ -58,7 +58,6 @@ Downloads whatever is missing, then starts Minecraft.
 | Option | Meaning |
 |---|---|
 | `-a, --account <NAME>` | Saved account by username, UUID or id (default: the active account) |
-| `--offline <USERNAME>` | Play offline with this name. Not saved unless you add `--save` |
 | `-m, --memory <SIZE>` | Max heap, e.g. `4G`, `6144M`, `6144` |
 | `--width <PX>` / `--height <PX>` | Window size |
 | `--fullscreen` | Start fullscreen |
@@ -74,7 +73,6 @@ automatically when needed.
 
 ```text
 arctic accounts list
-arctic accounts add-offline <USERNAME>
 arctic accounts login [--browser]     # device code by default (works over SSH)
 arctic accounts use <ACCOUNT>
 arctic accounts remove <ACCOUNT>

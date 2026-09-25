@@ -40,7 +40,7 @@ CI runs these on every push.
 - `ARCTIC_DATA_DIR=<dir>` keeps a dev build's data away from your real installation. A
   `portable.txt` next to the executable does the same, using `./data`.
 - `cargo run -p arctic-core --example smoke_launch -- latest --spawn` downloads and starts a
-  version with an offline account and prints timings.
+  version and prints timings.
 - `arctic -v …` shows the launcher's log on stderr.
 
 ## Microsoft sign-in in your build
@@ -48,8 +48,8 @@ CI runs these on every push.
 Microsoft sign-in needs an Azure application (client) ID that Mojang has approved for
 Minecraft. Official releases include one. For your own builds, register an app and pass
 its ID at build time or at runtime, as described in
-[microsoft-auth.md](microsoft-auth.md). Without it, offline accounts still work and the
-Microsoft options show as unavailable.
+[microsoft-auth.md](microsoft-auth.md). Without it, the Microsoft options show as
+unavailable.
 
 ## Releasing
 

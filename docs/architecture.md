@@ -76,10 +76,8 @@ which stream `GameEvent::Output` to the UI (capped at 20k lines). The launcher's
 
 ## Accounts (`arctic-core::auth`)
 
-`AccountStore` holds `Vec<Account>` plus the active id. Each `Account` is either:
-
-- `Offline`: UUID = Java's `nameUUIDFromBytes("OfflinePlayer:<name>")`.
-- `Microsoft(MicrosoftSession)`: MSA refresh token, Minecraft access token, expiry, xuid.
+`AccountStore` holds `Vec<Account>` plus the active id. Each `Account` holds a
+`MicrosoftSession`: MSA refresh token, Minecraft access token, expiry, xuid.
 
 The Microsoft chain is MSA OAuth → Xbox Live → XSTS → `login_with_xbox` → profile, and it
 has two entry points:
