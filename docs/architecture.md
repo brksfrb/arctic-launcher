@@ -7,8 +7,9 @@
 - **Never block the UI thread.** Network and disk work runs on `std::thread`s (see
   `arctic-app/src/tasks.rs`), which report back through an `mpsc` channel of `Event`s and call
   `request_repaint()`.
-- **Small and fast.** The app uses blocking `ureq` with no async runtime, eframe's `glow`
-  backend instead of `wgpu`, and one static executable. Launch checks use file sizes rather
+- **Small and fast.** The app uses blocking `ureq`, eframe's `glow` backend instead of
+  `wgpu`, and one static executable. The only async runtime is inside `arctic-share`, and it
+  starts the first time you use Play together. Launch checks use file sizes rather
   than re-hashing thousands of assets, and downloads are SHA-1 verified as they stream.
 - **No secrets in git.** Tokens live only in `accounts.json` in the local data dir. The Azure
   client ID comes from env or local config.
@@ -89,20 +90,69 @@ has two entry points:
 Tokens are refreshed before launch when they are within 5 minutes of expiry.
 TODO: encrypt `accounts.json` at rest with Windows DPAPI.
 
-## Instances and future mod loaders
+## Crates
+
+| Crate | What it is |
+|---|---|
+| `arctic-core` | Everything that isn't UI: versions, Java, launching, loaders, mods, skins, accounts |
+| `arctic-app` | The egui launcher |
+| `arctic-cli` | The `arctic` command |
+| `arctic-share` | Play together: peer-to-peer LAN tunnels (iroh) |
+| `arctic-cosmetics` | The Arctic cosmetics server (capes, sign-in via Mojang's session server) |
+| `mod/fabric` | The Arctic Fabric mod (Java, Gradle), bundled into the launcher as a jar |
+
+## Instances and mod loaders (`instances`, `loaders`)
 
 `instances/<id>/instance.json` + `instances/<id>/minecraft/` (game dir). Libraries, assets,
 versions and runtimes live in `shared/` and `runtimes/`, so instances stay small.
 
-To add a loader later:
+For a loader instance, `launch::prepare` installs vanilla first, then asks
+`loaders::install_profile` for the loader's version JSON and merges it onto vanilla
+(`versions::merge`: the loader's libraries win over vanilla ones with the same
+`group:artifact`, arguments are appended).
 
-1. Add a variant to `instances::Loader` (e.g. `Fabric { loader_version }`).
-2. Fetch the loader's profile JSON into `shared/versions/<loader-id>/`. It has
-   `inheritsFrom: <vanilla id>`, which `VersionJson::inherits_from` already models.
-3. Merge the profile with its parent (libraries appended, `mainClass` and arguments
-   overridden). `versions::load_version` currently rejects inherited profiles with a clear
-   error; that check is where the merge goes.
-4. Show instances in the Instances tab (`arctic-app/src/ui/instances.rs`).
+- **Fabric / Quilt:** one request to their meta servers for the profile.
+- **NeoForge / Forge (1.13+):** the official installer jar is downloaded (and cached), the
+  libraries bundled in it are extracted, and its client processors run with the instance's
+  Java. A marker in `meta/loaders/` records the result, so later launches need no network.
+- **Forge 1.7.10–1.12.2:** the legacy installer format; the universal jar is extracted and
+  referenced directly.
+
+## Mods (`mods`)
+
+Modrinth search and install. Installing resolves the whole dependency tree before
+downloading anything, so a missing dependency changes nothing on disk. Installed mods are
+tracked in `instances/<id>/mods.json` (project, version, title, icon); jars added by hand are
+listed too. Disabling a mod renames it to `*.jar.disabled`.
+
+## Play together (`arctic-share`)
+
+The host's invite code is its iroh endpoint id. The host listens for Minecraft's "Open to
+LAN" multicast announcements (224.0.2.60:4445) to find the local world's port. A guest
+connects over QUIC (hole punching, relay fallback), opens a local TCP port, and announces it
+to games on the same PC with multicast TTL 0, so the world appears in the Multiplayer LAN
+list. Each Minecraft connection is one bidirectional QUIC stream. Only connections from the
+guest's own machine are accepted.
+
+## Skins (`skins`)
+
+A per-profile library in `profiles/<id>/skins/` (`library.json` + PNGs). Skin changes use
+the Minecraft services API with the account's access token. Legacy 64×32 skins are expanded
+and cleaned the same way the game does. The 3D preview (`arctic-app/src/ui/skins/model.rs`)
+builds a textured mesh per body part, back-face culls and depth-sorts the faces.
+
+## Arctic mod and cosmetics
+
+The Fabric mod (`mod/fabric`) replaces a player's cape texture with their Arctic cape, adds
+an Arctic button to the title and pause screens, and opens a menu to pick a cape. It looks
+players up in batches of 100 and caches the answers for 10 minutes. The launcher embeds the
+built jar (`mod/fabric/dist/`) and copies it into Fabric and Quilt instances of supported
+Minecraft versions before launch (`arctic_mod::sync`), unless the instance turns it off.
+
+Sign-in to the cosmetics server never sends a password or token to Arctic: the client asks
+for a challenge, calls Mojang's `session/minecraft/join` with it, and the server confirms
+with `hasJoined`, like a Minecraft server does. The server then issues an HMAC-signed token
+that expires after a week.
 
 ## Platforms
 

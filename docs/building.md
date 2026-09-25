@@ -25,6 +25,32 @@ This produces:
 
 Run the launcher directly with `cargo run --release -p arctic-app`.
 
+### The Arctic mod
+
+The launcher embeds `mod/fabric/dist/arctic-mod-<version>.jar`, which is committed, so the
+steps above don't need Java. To change the mod, you need JDK 25:
+
+```sh
+cd mod/fabric
+./gradlew build
+cp build/libs/arctic-mod-26.3-*.jar dist/arctic-mod-26.3.jar
+```
+
+Launch a Fabric instance with `ARCTIC_COSMETICS_URL=http://127.0.0.1:8080` set to point the
+mod and the launcher at a local cosmetics server.
+
+### The cosmetics server
+
+```sh
+ARCTIC_COSMETICS_SECRET=$(openssl rand -hex 32) \
+ARCTIC_COSMETICS_ASSETS=crates/arctic-cosmetics/assets \
+cargo run -p arctic-cosmetics
+```
+
+It listens on `0.0.0.0:8080` and stores data in `cosmetics.db`. For deployment there is a
+Dockerfile: `docker build -f crates/arctic-cosmetics/Dockerfile -t arctic-cosmetics .` (mount
+a volume at `/data`).
+
 ## Checks
 
 ```sh
