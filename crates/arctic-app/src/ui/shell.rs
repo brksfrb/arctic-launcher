@@ -76,6 +76,7 @@ impl ArcticApp {
         self.remove_account_dialog(&ctx);
         self.profile_dialogs(&ctx);
         self.create_instance_dialog(&ctx);
+        self.import_worlds_dialog(&ctx);
         if let Some(action) = self.toasts.show(&ctx, p) {
             match action {
                 ToastAction::ShowLogs => {

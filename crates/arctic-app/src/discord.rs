@@ -59,17 +59,22 @@ impl Discord {
         });
     }
 
-    /// Call every frame; sends only changes.
-    pub fn sync(&mut self, enabled: bool, playing: bool) {
+    /// Call every frame; sends only changes. `together` replaces the second
+    /// line while playing with friends (e.g. "Hosting a world").
+    pub fn sync(&mut self, enabled: bool, playing: bool, together: Option<String>) {
         if !playing {
             self.game = None;
         }
         let want = enabled.then(|| {
-            self.game.clone().unwrap_or_else(|| Presence {
+            let mut presence = self.game.clone().unwrap_or_else(|| Presence {
                 details: "In the launcher".into(),
                 state: None,
                 since: self.launcher_since,
-            })
+            });
+            if let Some(note) = together {
+                presence.state = Some(note);
+            }
+            presence
         });
         if self.sent.as_ref() != Some(&want) {
             let _ = self.tx.send(want.clone());

@@ -239,6 +239,17 @@ impl ArcticApp {
         }
     }
 
+    /// Short status for Discord while sharing or joined.
+    pub(crate) fn together_status(&self) -> Option<String> {
+        match &self.together.session {
+            Session::Hosting { guests: 0, .. } => Some("Hosting a world".into()),
+            Session::Hosting { guests: 1, .. } => Some("Hosting a world · 1 friend".into()),
+            Session::Hosting { guests, .. } => Some(format!("Hosting a world · {guests} friends")),
+            Session::Joined { .. } => Some("Playing with friends".into()),
+            _ => None,
+        }
+    }
+
     fn share_service(&mut self) -> Option<&Share> {
         if self.together.service.is_none() {
             match Share::new(self.tasks.share_sink()) {

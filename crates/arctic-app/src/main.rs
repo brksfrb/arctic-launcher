@@ -18,6 +18,7 @@ mod titlebar;
 mod toasts;
 mod ui;
 mod widgets;
+mod world_tasks;
 
 use std::sync::Arc;
 
