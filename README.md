@@ -35,15 +35,15 @@
   instant.
 - **Light.** One small native app, no Electron and no browser engine. It uses almost no
   CPU while you play.
-- **Your accounts, side by side.** Sign in with Microsoft (browser or a short code) or
-  play offline. Keep several accounts and switch in one click.
+- **Your accounts, side by side.** Sign in with Microsoft in the browser or with a short
+  code. Keep several accounts and switch in one click.
 - **Profiles.** Keep completely separate setups on one PC, each with its own accounts,
   settings, instances and worlds. Switch from the top of the sidebar.
 - **Live logs.** Minecraft's output appears inside the launcher, readable, searchable and
   filterable by warnings or errors.
 - **Made to look at.** An animated arctic night with aurora, snowfall and shooting stars.
   Aurora, Dark and Light themes.
-- **Command line included.** `arctic launch 1.21.4 --offline Steve`, scriptable JSON
+- **Command line included.** `arctic launch 1.21.4`, scriptable JSON
   output, and desktop shortcuts that start a version directly.
 - **Stays up to date.** Updates install themselves in seconds, verified before they're
   applied.
@@ -79,7 +79,7 @@ your `PATH` as `arctic`. See the [command line guide](docs/cli.md).
 
 ## Getting started
 
-1. Open **Accounts** and add your Microsoft account, or an offline name.
+1. Open **Accounts** and sign in with your Microsoft account.
 2. On **Play**, pick a version. The picker shows which ones are already installed.
 3. Press **Play**.
 
@@ -92,7 +92,7 @@ the logo.
 ```sh
 arctic launch                          # latest release, active account
 arctic launch 1.20.1 --account Alex --memory 6G
-arctic launch latest --offline Steve --wait
+arctic launch latest --wait
 arctic install 1.21.4                  # download only
 arctic profiles create "Speedruns" --switch
 arctic open --launch 1.21.4            # open the launcher and start playing
