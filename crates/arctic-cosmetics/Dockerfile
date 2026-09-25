@@ -13,6 +13,7 @@ WORKDIR /app
 ENV ARCTIC_COSMETICS_ADDR=0.0.0.0:8080 \
     ARCTIC_COSMETICS_DB=/data/cosmetics.db \
     ARCTIC_COSMETICS_ASSETS=/app/assets
+RUN mkdir /data && chown nobody /data
 VOLUME /data
 EXPOSE 8080
 USER nobody

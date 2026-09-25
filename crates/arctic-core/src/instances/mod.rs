@@ -137,6 +137,13 @@ pub struct Instance {
     /// Icon shown for this instance; defaults to the loader's style.
     #[serde(default)]
     pub icon: InstanceIcon,
+    /// Install Arctic's companion mod (Fabric/Quilt, supported versions).
+    #[serde(default = "enabled")]
+    pub arctic_mod: bool,
+}
+
+fn enabled() -> bool {
+    true
 }
 
 impl Instance {
@@ -148,6 +155,7 @@ impl Instance {
             version: None,
             max_memory_mb: None,
             icon: Loader::Vanilla.default_icon(),
+            arctic_mod: true,
         }
     }
 
@@ -196,6 +204,7 @@ pub fn create(dirs: &DataDirs, name: &str, game_version: &str, loader: Loader) -
         loader,
         version: Some(game_version.to_owned()),
         max_memory_mb: None,
+        arctic_mod: true,
     };
     let mods = instance.game_dir(dirs).join("mods");
     std::fs::create_dir_all(&mods).map_err(|e| Error::io(&mods, e))?;
@@ -240,6 +249,23 @@ fn unique_id(dirs: &DataDirs, name: &str) -> String {
         .map(|n| format!("{base}-{n}"))
         .find(|id| !taken(id))
         .unwrap_or(base)
+}
+
+/// An instance by id or (case-insensitive) name, including the default.
+pub fn find(dirs: &DataDirs, query: &str) -> Result<Instance> {
+    let query = query.trim();
+    let default = load_default(dirs)?;
+    if query.eq_ignore_ascii_case(&default.id) || query.eq_ignore_ascii_case(&default.name) {
+        return Ok(default);
+    }
+    list_custom(dirs)?
+        .into_iter()
+        .find(|i| i.id == query || i.name.eq_ignore_ascii_case(query))
+        .ok_or_else(|| {
+            Error::Other(format!(
+                "no instance named '{query}' (see `arctic instances list`)"
+            ))
+        })
 }
 
 /// User-created instances (everything except the default).

@@ -244,7 +244,12 @@ impl ArcticApp {
         };
         let mods_dir = instance.game_dir(&self.dirs).join("mods");
         let index = mods::index_path(&self.dirs.instance_dir(id));
-        let files = mods::list(&mods_dir, &index).unwrap_or_default();
+        // The bundled Arctic mod is managed by the launcher, not listed.
+        let files = mods::list(&mods_dir, &index)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|f| f.file_name != arctic_core::arctic_mod::FILE_NAME)
+            .collect();
         self.inst.mod_files = Some((id.to_owned(), files));
     }
 

@@ -65,6 +65,84 @@ pub enum Command {
     },
     /// Open the launcher window (optionally straight into a launch).
     Open(OpenArgs),
+    /// Manage instances (separate game folders with their own version and mods).
+    #[command(subcommand)]
+    Instances(InstancesCommand),
+    /// Find and manage mods from Modrinth in an instance.
+    #[command(subcommand)]
+    Mods(ModsCommand),
+}
+
+/// Mod loader for `instances create`.
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+pub enum LoaderArg {
+    Vanilla,
+    Fabric,
+    Quilt,
+    Neoforge,
+    Forge,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum InstancesCommand {
+    /// List instances.
+    List,
+    /// Create an instance.
+    Create {
+        name: String,
+        /// Minecraft version, `latest` or `latest-snapshot`.
+        #[arg(long, default_value = "latest")]
+        version: String,
+        #[arg(long, value_enum, default_value = "vanilla")]
+        loader: LoaderArg,
+        /// Loader version (default: newest stable).
+        #[arg(long)]
+        loader_version: Option<String>,
+    },
+    /// Move an instance to the trash (instances/.trash).
+    Remove {
+        /// Instance id or name.
+        instance: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ModsCommand {
+    /// Search Modrinth for mods that fit an instance.
+    Search {
+        query: String,
+        /// Instance id or name.
+        #[arg(short, long)]
+        instance: String,
+        #[arg(short = 'n', long, default_value_t = 10)]
+        limit: usize,
+    },
+    /// Install a mod (and its required dependencies) by slug or project id.
+    Install {
+        project: String,
+        #[arg(short, long)]
+        instance: String,
+    },
+    /// List the mods in an instance.
+    List {
+        #[arg(short, long)]
+        instance: String,
+    },
+    /// Remove a mod by file name.
+    Remove {
+        file: String,
+        #[arg(short, long)]
+        instance: String,
+    },
+    /// Turn a mod on or off without removing it.
+    Toggle {
+        file: String,
+        #[arg(short, long)]
+        instance: String,
+        /// `on` or `off`.
+        #[arg(value_parser = ["on", "off"])]
+        state: String,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -89,9 +167,14 @@ pub struct InstallArgs {
 
 #[derive(Debug, Args)]
 pub struct LaunchArgs {
-    /// Version id, `latest` or `latest-snapshot`.
+    /// Version id, `latest` or `latest-snapshot`. Custom instances use
+    /// their own version instead.
     #[arg(default_value = "latest")]
     pub version: String,
+
+    /// Launch this instance (id or name) with its version and mods.
+    #[arg(short, long)]
+    pub instance: Option<String>,
 
     /// Play as a saved account (username, UUID or id). Defaults to the
     /// active account.
