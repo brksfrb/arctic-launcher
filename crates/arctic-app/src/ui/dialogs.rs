@@ -67,7 +67,7 @@ impl ArcticApp {
         } else {
             Some("Microsoft sign-in isn't available in this build")
         };
-        let options = [
+        let mut options = vec![
             (
                 Choice::Browser,
                 Icon::External,
@@ -82,14 +82,16 @@ impl ArcticApp {
                 "Enter a short code on any device.",
                 ms_note,
             ),
-            (
+        ];
+        if cfg!(feature = "offline-accounts") {
+            options.push((
                 Choice::Offline,
                 Icon::User,
                 "Offline",
                 "Singleplayer and offline-mode servers.",
                 None,
-            ),
-        ];
+            ));
+        }
         for (choice, icon, title, desc, disabled) in options {
             if option_tile(
                 ui,

@@ -95,14 +95,16 @@ pub struct LaunchArgs {
 
     /// Play as a saved account (username, UUID or id). Defaults to the
     /// active account.
-    #[arg(short, long, conflicts_with = "offline")]
+    #[arg(short, long)]
     pub account: Option<String>,
 
     /// Play offline with this username (not saved unless --save).
-    #[arg(long, value_name = "USERNAME")]
+    #[cfg(feature = "offline-accounts")]
+    #[arg(long, value_name = "USERNAME", conflicts_with = "account")]
     pub offline: Option<String>,
 
     /// Save the --offline account to the account list.
+    #[cfg(feature = "offline-accounts")]
     #[arg(long, requires = "offline")]
     pub save: bool,
 
@@ -140,6 +142,7 @@ pub enum AccountsCommand {
     /// List saved accounts (the active one is marked).
     List,
     /// Add an offline account and make it active.
+    #[cfg(feature = "offline-accounts")]
     AddOffline { username: String },
     /// Sign in with Microsoft (device code by default; works over SSH).
     Login {
