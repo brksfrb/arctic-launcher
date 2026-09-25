@@ -84,6 +84,8 @@ pub enum Event {
     ArcticCapes(String, Outcome<crate::skin_tasks::ArcticCapes>),
     /// A picked skin file (name, bytes), or `None` if cancelled.
     SkinFile(Outcome<Option<(String, Vec<u8>)>>),
+    /// A world import, backup or other world job finished (instance id, message).
+    WorldsDone(String, Outcome<String>),
     /// Play-together session update.
     Share(arctic_share::SessionId, arctic_share::ShareEvent),
 }

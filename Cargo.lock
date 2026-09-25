@@ -327,6 +327,7 @@ dependencies = [
  "base64 0.23.1",
  "dirs",
  "env_logger",
+ "flate2",
  "hex",
  "log",
  "lzma-rs",

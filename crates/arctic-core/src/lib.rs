@@ -21,6 +21,7 @@ pub mod storage;
 pub mod system;
 pub mod update;
 pub mod versions;
+pub mod worlds;
 
 pub use error::{Error, Result};
 

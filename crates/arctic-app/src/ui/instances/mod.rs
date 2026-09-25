@@ -6,6 +6,7 @@ mod create;
 mod detail;
 mod icon_picker;
 mod mods_page;
+mod worlds;
 
 use std::collections::{HashMap, HashSet};
 
@@ -45,6 +46,7 @@ pub enum InstancePage {
     #[default]
     Mods,
     Browse,
+    Worlds,
     Settings,
 }
 
@@ -87,6 +89,10 @@ pub struct InstancesUi {
     pub icons: HashMap<String, IconState>,
     pub loader_games: HashMap<LoaderKind, Load<HashSet<String>>>,
     pub loader_versions: HashMap<(LoaderKind, String), Load<Vec<LoaderVersion>>>,
+    /// Worlds of the open instance.
+    pub worlds: Option<(String, Vec<arctic_core::worlds::World>)>,
+    pub worlds_busy: bool,
+    pub import: Option<worlds::ImportDialog>,
 }
 
 impl ArcticApp {
@@ -230,8 +236,10 @@ impl ArcticApp {
         {
             InstancePage::Mods
         } else {
-            InstancePage::Settings
+            InstancePage::Worlds
         };
+        self.inst.worlds = None;
+        self.inst.import = None;
         self.inst.confirm_delete = false;
         self.inst.rename = None;
         self.refresh_mods(id);

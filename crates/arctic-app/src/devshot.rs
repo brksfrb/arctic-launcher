@@ -11,6 +11,8 @@ pub struct DevShot {
     path: Option<PathBuf>,
     delay: f64,
     requested: bool,
+    /// `ARCTIC_DEVSHOT_INSTANCE`: open this instance's page first.
+    pub open_instance: Option<String>,
 }
 
 impl DevShot {
@@ -27,6 +29,7 @@ impl DevShot {
             path,
             delay,
             requested: false,
+            open_instance: std::env::var("ARCTIC_DEVSHOT_INSTANCE").ok(),
         }
     }
 

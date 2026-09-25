@@ -77,12 +77,14 @@ impl ArcticApp {
                 ui.selectable_value(&mut self.inst.page, InstancePage::Mods, "Mods");
                 ui.selectable_value(&mut self.inst.page, InstancePage::Browse, "Browse mods");
             }
+            ui.selectable_value(&mut self.inst.page, InstancePage::Worlds, "Worlds");
             ui.selectable_value(&mut self.inst.page, InstancePage::Settings, "Settings");
         });
         ui.add_space(10.0);
         match (self.inst.page, modded) {
             (InstancePage::Mods, true) => self.mods_page(ui, &instance),
             (InstancePage::Browse, true) => self.browse_page(ui, &instance),
+            (InstancePage::Worlds, _) => self.worlds_page(ui, &instance),
             _ => self.instance_settings(ui, &instance),
         }
     }

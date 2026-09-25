@@ -586,6 +586,7 @@ impl ArcticApp {
             | Event::ModInstalled(..)
             | Event::ModIcon(..)) => self.on_instances_event(e, ctx),
             Event::Share(id, event) => self.on_share_event(id, event),
+            Event::WorldsDone(id, result) => self.on_worlds_done(id, result),
             e @ (Event::SkinAccount(..)
             | Event::PlayerSkin(..)
             | Event::SkinFile(..)
@@ -706,11 +707,17 @@ impl eframe::App for ArcticApp {
         }
         self.update_theme(&ctx, frame);
         let playing = !matches!(self.launch, LaunchState::Idle);
-        self.discord.sync(self.settings.discord_presence, playing);
+        let together = self.together_status();
+        self.discord
+            .sync(self.settings.discord_presence, playing, together);
         self.shell(ui);
         self.splash.show(&ctx, self.palette());
         self.autosave_settings(&ctx);
         self.pace_scenery(&ctx);
+        if let Some(id) = self.devshot.open_instance.take() {
+            self.set_tab(Tab::Instances, 0.0);
+            self.open_instance(&id);
+        }
         self.devshot.update(&ctx);
     }
 
