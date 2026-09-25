@@ -317,9 +317,62 @@ pub fn instance_emblem(ui: &mut Ui, p: &Palette, icon: &InstanceIcon, size: f32)
     let hover = ui
         .ctx()
         .animate_bool(response.id.with("h"), response.hovered());
+    let t = ui.input(|i| i.time) as f32;
+    paint_emblem_with_hover(ui.painter(), p, icon, rect, t, hover);
+    response
+        .on_hover_text("Change icon")
+        .on_hover_cursor(CursorIcon::PointingHand)
+}
+
+/// Clickable emblem at a fixed `rect` (for emblems painted inside cards).
+pub fn emblem_at(
+    ui: &mut Ui,
+    p: &Palette,
+    icon: &InstanceIcon,
+    rect: Rect,
+    id: egui::Id,
+) -> Response {
+    let response = ui.interact(rect, id, Sense::click());
+    let hover = ui.ctx().animate_bool(id.with("h"), response.hovered());
+    let t = ui.input(|i| i.time) as f32;
+    paint_emblem_with_hover(ui.painter(), p, icon, rect, t, hover);
+    response
+        .on_hover_text("Change icon")
+        .on_hover_cursor(CursorIcon::PointingHand)
+}
+
+/// One line of text, left-center aligned at `pos`, cut with "…" past `max_width`.
+pub fn text_elided(
+    painter: &egui::Painter,
+    pos: egui::Pos2,
+    text: &str,
+    font: egui::FontId,
+    color: egui::Color32,
+    max_width: f32,
+) {
+    let mut job = egui::text::LayoutJob::simple_singleline(text.to_owned(), font, color);
+    job.wrap = egui::text::TextWrapping::truncate_at_width(max_width.max(0.0));
+    let galley = painter.layout_job(job);
+    let top_left = egui::pos2(pos.x, pos.y - galley.size().y / 2.0);
+    painter.galley(top_left, galley, color);
+}
+
+/// Paint an instance emblem into `rect` (non-interactive).
+pub fn paint_emblem(painter: &egui::Painter, p: &Palette, icon: &InstanceIcon, rect: Rect, t: f32) {
+    paint_emblem_with_hover(painter, p, icon, rect, t, 0.0);
+}
+
+fn paint_emblem_with_hover(
+    painter: &egui::Painter,
+    p: &Palette,
+    icon: &InstanceIcon,
+    rect: Rect,
+    t: f32,
+    hover: f32,
+) {
+    let size = rect.width();
     let color = flakes::icon_color(icon, p.accent);
     let radius = CornerRadius::same((size * 0.25) as u8);
-    let painter = ui.painter();
     painter.rect_filled(rect, radius, color.gamma_multiply(0.14 + 0.08 * hover));
     painter.rect_stroke(
         rect,
@@ -327,7 +380,6 @@ pub fn instance_emblem(ui: &mut Ui, p: &Palette, icon: &InstanceIcon, size: f32)
         Stroke::new(1.0, color.gamma_multiply(0.4 + 0.3 * hover)),
         StrokeKind::Inside,
     );
-    let t = ui.input(|i| i.time) as f32;
     crate::art::glow(
         painter,
         rect.center(),
@@ -343,7 +395,13 @@ pub fn instance_emblem(ui: &mut Ui, p: &Palette, icon: &InstanceIcon, size: f32)
         t * 0.1,
         color,
     );
-    response
-        .on_hover_text("Change icon")
-        .on_hover_cursor(CursorIcon::PointingHand)
+}
+
+/// Roomy single-line text field used everywhere (taller than egui's
+/// default, with comfortable padding and a slightly larger font).
+pub fn text_field(text: &mut dyn egui::TextBuffer) -> egui::TextEdit<'_> {
+    egui::TextEdit::singleline(text)
+        .margin(egui::Margin::symmetric(10, 8))
+        .font(FontId::proportional(15.0))
+        .min_size(vec2(0.0, 36.0))
 }

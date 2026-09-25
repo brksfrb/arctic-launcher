@@ -3,7 +3,9 @@
 use std::sync::mpsc;
 
 use arctic_core::ProgressInfo;
-use arctic_core::auth::{self, Account, AccountStore, offline};
+#[cfg(feature = "offline-accounts")]
+use arctic_core::auth::offline;
+use arctic_core::auth::{self, Account, AccountStore};
 use arctic_core::launch::{self, GameEvent, LaunchRequest};
 use arctic_core::settings::Settings;
 use arctic_core::versions::VersionManifest;
@@ -118,6 +120,7 @@ fn apply_overrides(settings: Settings, args: &LaunchArgs) -> Result<Settings> {
 /// sessions are refreshed (and saved) when needed.
 fn pick_account(ctx: &Ctx, args: &LaunchArgs) -> Result<Account> {
     let mut store = AccountStore::load(&ctx.dirs)?;
+    #[cfg(feature = "offline-accounts")]
     if let Some(name) = &args.offline {
         let account = offline::create(name)?;
         if args.save {
@@ -127,12 +130,16 @@ fn pick_account(ctx: &Ctx, args: &LaunchArgs) -> Result<Account> {
         return Ok(account);
     }
     let account = match &args.account {
-        Some(query) => store
-            .find(query)
-            .cloned()
-            .ok_or_else(|| Error::Other(format!("no account matches '{query}' (see `arctic accounts list`)")))?,
+        Some(query) => store.find(query).cloned().ok_or_else(|| {
+            Error::Other(format!(
+                "no account matches '{query}' (see `arctic accounts list`)"
+            ))
+        })?,
         None => store.active().cloned().ok_or_else(|| {
-            Error::Other("no account selected: use --offline NAME, --account NAME, or `arctic accounts add-offline`".into())
+            Error::Other(
+                "no account selected: use --account NAME or sign in with `arctic accounts login`"
+                    .into(),
+            )
         })?,
     };
     let (fresh, changed) = auth::ensure_fresh(&ctx.dirs, &account)?;

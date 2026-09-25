@@ -5,6 +5,9 @@ use eframe::egui::{
     vec2,
 };
 
+use arctic_core::instances::Instance;
+use arctic_core::versions::{VersionEntry, VersionKind, VersionManifest};
+
 use crate::app::{AddAccount, ArcticApp, LaunchState, ManifestState, Tab};
 use crate::art::avatar::paint_face;
 use crate::art::icons::{self, Icon};
@@ -18,30 +21,30 @@ const PICKER_WIDTH: f32 = 340.0;
 impl ArcticApp {
     pub(crate) fn play_tab(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        widgets::page_header(ui, p, "Play", "Vanilla Minecraft, ready when you are.");
+        widgets::page_header(ui, p, "Play", "Pick an instance and jump in.");
+        let instance = self.selected_instance().clone();
         crate::theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
-                let emblem = widgets::instance_emblem(ui, p, &self.instance.icon, 64.0);
-                self.icon_picker(&emblem);
+                let emblem = widgets::instance_emblem(ui, p, &instance.icon, 64.0);
+                self.icon_picker(&emblem, &instance.id);
                 ui.add_space(6.0);
-                ui.vertical(|ui| {
-                    ui.add_space(6.0);
-                    ui.label(
-                        RichText::new(&self.instance.name)
-                            .size(22.0)
-                            .strong()
-                            .color(p.text),
-                    );
-                    ui.label(RichText::new("Default instance").color(p.muted));
-                });
+                self.instance_switcher(ui, &instance);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     self.account_chip(ui);
                 });
             });
             ui.add_space(12.0);
             ui.label(RichText::new("VERSION").small().color(p.muted));
-            self.version_picker(ui);
+            if instance.is_default() {
+                self.version_picker(ui);
+            } else {
+                ui.label(
+                    RichText::new(Self::instance_subtitle(&instance))
+                        .size(16.0)
+                        .color(p.text),
+                );
+            }
         });
         ui.add_space(22.0);
         ui.horizontal(|ui| {
@@ -54,6 +57,99 @@ impl ArcticApp {
         });
         ui.add_space(10.0);
         self.launch_status(ui);
+    }
+
+    /// Versions shown in pickers: releases, plus snapshots / old versions
+    /// when enabled in Settings. Newest first.
+    pub(crate) fn visible_versions(&self, manifest: &VersionManifest) -> Vec<VersionEntry> {
+        manifest
+            .versions
+            .iter()
+            .filter(|v| match v.kind {
+                VersionKind::Release => true,
+                VersionKind::Snapshot => self.settings.show_snapshots,
+                VersionKind::OldBeta | VersionKind::OldAlpha => self.settings.show_old_versions,
+                VersionKind::Other => false,
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Instance name + subtitle; click to pick another instance.
+    fn instance_switcher(&mut self, ui: &mut egui::Ui, instance: &Instance) {
+        let p = self.palette();
+        let response = ui
+            .vertical(|ui| {
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(&instance.name)
+                            .size(22.0)
+                            .strong()
+                            .color(p.text),
+                    );
+                    let (r, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
+                    icons::draw(ui.painter(), Icon::ChevronDown, r, p.muted);
+                });
+                let subtitle = if instance.is_default() {
+                    "Default instance".to_owned()
+                } else {
+                    format!("{} instance", instance.loader.label())
+                };
+                ui.label(RichText::new(subtitle).color(p.muted));
+            })
+            .response
+            .interact(Sense::click())
+            .on_hover_text("Switch instance")
+            .on_hover_cursor(CursorIcon::PointingHand);
+        let mut all = vec![self.instance.clone()];
+        all.extend(self.custom_instances.iter().cloned());
+        let mut pick = None;
+        let mut create = false;
+        Popup::from_toggle_button_response(&response)
+            .close_behavior(PopupCloseBehavior::CloseOnClick)
+            .width(300.0)
+            .gap(6.0)
+            .show(|ui| {
+                for option in &all {
+                    let (rect, row) =
+                        ui.allocate_exact_size(vec2(ui.available_width(), 44.0), Sense::click());
+                    if row.hovered() || option.id == instance.id {
+                        ui.painter()
+                            .rect_filled(rect, CornerRadius::same(8), p.surface_hover);
+                    }
+                    let emblem = egui::Rect::from_center_size(
+                        rect.left_center() + vec2(22.0, 0.0),
+                        vec2(32.0, 32.0),
+                    );
+                    widgets::paint_emblem(ui.painter(), p, &option.icon, emblem, 0.0);
+                    ui.painter().text(
+                        rect.left_center() + vec2(46.0, -8.0),
+                        Align2::LEFT_CENTER,
+                        &option.name,
+                        FontId::proportional(14.5),
+                        p.text,
+                    );
+                    ui.painter().text(
+                        rect.left_center() + vec2(46.0, 10.0),
+                        Align2::LEFT_CENTER,
+                        Self::instance_subtitle(option),
+                        FontId::proportional(11.5),
+                        p.muted,
+                    );
+                    if row.clicked() {
+                        pick = Some(option.id.clone());
+                    }
+                }
+                ui.separator();
+                create = ui.button("New instance…").clicked();
+            });
+        if let Some(id) = pick {
+            self.settings.last_instance = (id != self.instance.id).then_some(id);
+        }
+        if create {
+            self.open_create_dialog();
+        }
     }
 
     fn account_chip(&mut self, ui: &mut egui::Ui) {
@@ -149,9 +245,18 @@ impl ArcticApp {
         icons::draw(ui.painter(), Icon::ChevronDown, chevron, p.muted);
         let response = response.on_hover_cursor(CursorIcon::PointingHand);
 
-        let releases: Vec<(String, String)> = manifest
-            .releases()
-            .map(|v| (v.id.clone(), v.release_time.chars().take(10).collect()))
+        let releases: Vec<(String, String)> = self
+            .visible_versions(manifest)
+            .into_iter()
+            .map(|v| {
+                let date: String = v.release_time.chars().take(10).collect();
+                let label = match v.kind {
+                    VersionKind::Release => date,
+                    VersionKind::Snapshot => format!("{date} · snapshot"),
+                    _ => format!("{date} · old"),
+                };
+                (v.id, label)
+            })
             .collect();
         Popup::from_toggle_button_response(&response)
             .close_behavior(PopupCloseBehavior::CloseOnClickOutside)
@@ -163,16 +268,22 @@ impl ArcticApp {
     fn version_list(&mut self, ui: &mut egui::Ui, releases: &[(String, String)], latest: &str) {
         let p = self.palette();
         ui.add(
-            egui::TextEdit::singleline(&mut self.version_filter)
+            widgets::text_field(&mut self.version_filter)
                 .hint_text("Search versions")
                 .desired_width(f32::INFINITY),
         );
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.installed_only, false, "All releases");
+            ui.selectable_value(&mut self.installed_only, false, "All");
             ui.selectable_value(
                 &mut self.installed_only,
                 true,
-                format!("Installed ({})", self.installed.len()),
+                format!(
+                    "Installed ({})",
+                    releases
+                        .iter()
+                        .filter(|(id, _)| self.installed.contains(id))
+                        .count()
+                ),
             );
         });
         ui.separator();
@@ -284,7 +395,7 @@ impl ArcticApp {
     fn quick_actions(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         if widgets::icon_button(ui, p, Icon::Folder, "Open game folder").clicked() {
-            let dir = self.instance.game_dir(&self.dirs);
+            let dir = self.selected_instance().game_dir(&self.dirs);
             let _ = std::fs::create_dir_all(&dir);
             if let Err(e) = open::that_detached(&dir) {
                 self.toasts.push(
@@ -297,7 +408,7 @@ impl ArcticApp {
         let log = self
             .dirs
             .logs()
-            .join(format!("game-{}.log", self.instance.id));
+            .join(format!("game-{}.log", self.selected_instance().id));
         if log.is_file()
             && widgets::icon_button(ui, p, Icon::Document, "Open last game log").clicked()
         {

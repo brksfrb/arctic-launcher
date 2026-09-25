@@ -3,6 +3,7 @@
 
 mod app;
 mod art;
+mod discord;
 mod icon_raster;
 mod logbook;
 mod motion;
@@ -10,6 +11,7 @@ mod session;
 mod startup;
 mod tasks;
 mod theme;
+mod theme_fade;
 mod titlebar;
 mod toasts;
 mod ui;

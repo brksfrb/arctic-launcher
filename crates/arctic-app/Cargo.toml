@@ -12,9 +12,16 @@ authors.workspace = true
 arctic-core = { version = "0.1.0", path = "../arctic-core" }
 # glow (OpenGL) instead of the default wgpu backend keeps the binary small.
 eframe = { version = "0.36.2", default-features = false, features = ["accesskit", "default_fonts", "glow", "links", "wayland", "x11"] }
+egui_extras = { version = "0.36", default-features = false, features = ["image"] }
+discord-rich-presence = "1.1.0"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 log = "0.4.34"
 open = "5.4.4"
 raw-window-handle = "0.6"
+
+[features]
+# Offline (username-only) accounts. Off in release builds for now.
+offline-accounts = []
 
 [[bin]]
 name = "arctic-launcher"

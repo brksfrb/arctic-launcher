@@ -2,8 +2,10 @@
 
 use std::sync::atomic::AtomicBool;
 
+use arctic_core::auth::AccountStore;
 use arctic_core::auth::microsoft::{self, MsaConfig};
-use arctic_core::auth::{AccountStore, offline};
+#[cfg(feature = "offline-accounts")]
+use arctic_core::auth::offline;
 use arctic_core::{Error, Result};
 use serde_json::json;
 
@@ -14,6 +16,7 @@ pub fn run(ctx: &Ctx, command: &AccountsCommand) -> Result<i32> {
     let mut store = AccountStore::load(&ctx.dirs)?;
     match command {
         AccountsCommand::List => list(ctx, &store),
+        #[cfg(feature = "offline-accounts")]
         AccountsCommand::AddOffline { username } => {
             let account = offline::create(username)?;
             store.upsert(account.clone());
@@ -72,9 +75,7 @@ pub fn run(ctx: &Ctx, command: &AccountsCommand) -> Result<i32> {
 
 fn list(ctx: &Ctx, store: &AccountStore) {
     if store.accounts.is_empty() && !ctx.out.json {
-        println!(
-            "No accounts. Add one with `arctic accounts add-offline NAME` or `arctic accounts login`."
-        );
+        println!("No accounts. Add one with `arctic accounts login`.");
     }
     for account in &store.accounts {
         let active = store.active.as_deref() == Some(account.id.as_str());

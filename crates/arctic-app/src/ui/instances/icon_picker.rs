@@ -1,6 +1,6 @@
-//! Instances tab and the instance icon picker (snowflake style + color).
+//! Instance icon picker: snowflake style + color, per instance.
 
-use arctic_core::instances::FlakeStyle;
+use arctic_core::instances::{FlakeStyle, InstanceIcon};
 use eframe::egui::{
     self, CornerRadius, Popup, PopupCloseBehavior, Response, RichText, Sense, Stroke, StrokeKind,
     vec2,
@@ -8,99 +8,49 @@ use eframe::egui::{
 
 use crate::app::ArcticApp;
 use crate::art::flakes::{self, SWATCHES};
-use crate::art::icons::{self, Icon};
+
 use crate::art::lerp_color;
 use crate::theme;
 use crate::toasts::Kind;
-use crate::widgets;
 
 const STYLE_TILE: f32 = 58.0;
 
 impl ArcticApp {
-    /// Placeholder until mod loaders land. The data model and directory
-    /// layout (`instances/<id>/`) already support multiple instances.
-    pub(crate) fn instances_tab(&mut self, ui: &mut egui::Ui) {
-        let p = self.palette();
-        widgets::page_header(
-            ui,
-            p,
-            "Instances",
-            "Separate game folders, each with its own version, mods and snowflake.",
-        );
-
-        theme::card(p).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                let emblem = widgets::instance_emblem(ui, p, &self.instance.icon, 56.0);
-                self.icon_picker(&emblem);
-                ui.add_space(4.0);
-                ui.vertical(|ui| {
-                    ui.add_space(6.0);
-                    ui.label(
-                        RichText::new(&self.instance.name)
-                            .size(18.0)
-                            .strong()
-                            .color(p.text),
-                    );
-                    ui.label(
-                        RichText::new(
-                            "Default instance · plays any release · click the icon to customize",
-                        )
-                        .color(p.muted),
-                    );
-                });
-            });
-        });
-        ui.add_space(28.0);
-
-        ui.vertical_centered(|ui| {
-            let (rect, _) = ui.allocate_exact_size(vec2(64.0, 64.0), Sense::hover());
-            icons::draw(ui.painter(), Icon::Layers, rect.shrink(8.0), p.muted);
-            ui.add_space(6.0);
-            ui.label(
-                RichText::new("Modded instances are coming")
-                    .size(18.0)
-                    .strong()
-                    .color(p.text),
-            );
-            ui.label(
-                RichText::new(
-                    "Fabric, Quilt and Forge instances will live here, each with its own snowflake style and color.",
-                )
-                .color(p.muted),
-            );
-            for instance in &self.custom_instances {
-                ui.label(format!("{} · {:?}", instance.name, instance.loader));
-            }
-        });
-    }
-
     /// Popup anchored to an instance emblem for choosing style and color.
-    pub(crate) fn icon_picker(&mut self, anchor: &Response) {
-        let before = self.instance.icon;
+    pub(crate) fn icon_picker(&mut self, anchor: &Response, instance_id: &str) {
+        let Some(before) = self.instance_by_id(instance_id).map(|i| i.icon) else {
+            return;
+        };
+        let mut icon = before;
+        let p = self.palette();
         Popup::from_toggle_button_response(anchor)
             .close_behavior(PopupCloseBehavior::CloseOnClickOutside)
             .gap(8.0)
             .width(3.0 * (STYLE_TILE + 8.0) + 8.0)
-            .show(|ui| self.icon_picker_body(ui));
-        if self.instance.icon != before
-            && let Err(e) = self.instance.save(&self.dirs)
-        {
-            self.toasts
-                .push(Kind::Error, "Could not save instance", e.to_string());
+            .show(|ui| icon_picker_body(ui, p, &mut icon));
+        if icon != before {
+            let dirs = self.dirs.clone();
+            if let Some(instance) = self.instance_mut(instance_id) {
+                instance.icon = icon;
+                if let Err(e) = instance.save(&dirs) {
+                    self.toasts
+                        .push(Kind::Error, "Could not save instance", e.to_string());
+                }
+            }
         }
     }
+}
 
-    fn icon_picker_body(&mut self, ui: &mut egui::Ui) {
-        let p = self.palette();
-        let color = flakes::icon_color(&self.instance.icon, p.accent);
+fn icon_picker_body(ui: &mut egui::Ui, p: &theme::Palette, icon: &mut InstanceIcon) {
+    {
+        let color = flakes::icon_color(icon, p.accent);
         ui.label(RichText::new("Snowflake").strong().color(p.text));
         egui::Grid::new("flake_styles")
             .spacing(vec2(8.0, 8.0))
             .show(ui, |ui| {
                 for (i, style) in FlakeStyle::ALL.into_iter().enumerate() {
-                    if style_tile(ui, style, self.instance.icon.style == style, color, p) {
-                        self.instance.icon.style = style;
+                    if style_tile(ui, style, icon.style == style, color, p) {
+                        icon.style = style;
                     }
                     if i % 3 == 2 {
                         ui.end_row();
@@ -110,23 +60,18 @@ impl ArcticApp {
         ui.add_space(6.0);
         ui.label(RichText::new("Color").strong().color(p.text));
         ui.horizontal_wrapped(|ui| {
-            if swatch(
-                ui,
-                p.accent,
-                self.instance.icon.color.is_none(),
-                "Theme accent",
-            ) {
-                self.instance.icon.color = None;
+            if swatch(ui, p.accent, icon.color.is_none(), "Theme accent") {
+                icon.color = None;
             }
             for rgb in SWATCHES {
                 let c = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
-                if swatch(ui, c, self.instance.icon.color == Some(rgb), "") {
-                    self.instance.icon.color = Some(rgb);
+                if swatch(ui, c, icon.color == Some(rgb), "") {
+                    icon.color = Some(rgb);
                 }
             }
-            let mut custom = self.instance.icon.color.unwrap_or([0x7d, 0xd3, 0xfc]);
+            let mut custom = icon.color.unwrap_or([0x7d, 0xd3, 0xfc]);
             if ui.color_edit_button_srgb(&mut custom).changed() {
-                self.instance.icon.color = Some(custom);
+                icon.color = Some(custom);
             }
         });
     }

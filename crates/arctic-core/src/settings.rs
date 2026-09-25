@@ -47,6 +47,8 @@ pub struct Settings {
     pub start_maximized: bool,
     pub theme: ThemeMode,
     pub on_game_start: GameStartAction,
+    /// Show what you're playing on Discord.
+    pub discord_presence: bool,
 }
 
 /// What the launcher window does once the game window is up.
@@ -91,6 +93,7 @@ impl Default for Settings {
             start_maximized: false,
             theme: ThemeMode::Default,
             on_game_start: GameStartAction::KeepOpen,
+            discord_presence: true,
         }
     }
 }

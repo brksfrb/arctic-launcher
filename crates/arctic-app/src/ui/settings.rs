@@ -63,6 +63,12 @@ impl ArcticApp {
             );
         });
 
+        section(ui, p, "Versions", |ui| {
+            ui.checkbox(&mut s.show_snapshots, "Show snapshots")
+                .on_hover_text("Weekly development builds. They can break worlds; back up first.");
+            ui.checkbox(&mut s.show_old_versions, "Show old alpha and beta versions");
+        });
+
         section(ui, p, "Game window", |ui| {
             ui.horizontal(|ui| {
                 ui.label("Resolution");
@@ -93,6 +99,10 @@ impl ArcticApp {
                     "Minimize launcher",
                 );
             });
+            ui.checkbox(
+                &mut s.discord_presence,
+                "Show what you're playing on Discord",
+            );
         });
 
         section(ui, p, "Java", |ui| {
@@ -103,7 +113,7 @@ impl ArcticApp {
             );
             ui.horizontal(|ui| {
                 ui.label("Extra JVM arguments");
-                ui.add(egui::TextEdit::singleline(&mut s.extra_jvm_args).desired_width(320.0));
+                ui.add(widgets::text_field(&mut s.extra_jvm_args).desired_width(320.0));
             });
             java_override(ui, p, s);
         });
@@ -233,7 +243,7 @@ fn java_override(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) {
         ui.horizontal(|ui| {
             ui.label("Path to javaw.exe");
             if ui
-                .add(egui::TextEdit::singleline(&mut text).desired_width(320.0))
+                .add(widgets::text_field(&mut text).desired_width(320.0))
                 .changed()
             {
                 *path = PathBuf::from(text.trim());

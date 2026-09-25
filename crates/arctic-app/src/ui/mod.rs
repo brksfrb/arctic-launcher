@@ -6,6 +6,7 @@ mod dialogs;
 mod instances;
 mod logs;
 
+pub use instances::InstancesUi;
 pub use logs::LogViewKey;
 pub use profiles::ProfileDialog;
 mod nav;

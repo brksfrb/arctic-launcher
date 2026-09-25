@@ -156,7 +156,7 @@ impl ArcticApp {
         );
         ui.add_space(10.0);
         let edit = ui.add(
-            egui::TextEdit::singleline(&mut name)
+            widgets::text_field(&mut name)
                 .hint_text("e.g. Speedruns, Family, Testing")
                 .char_limit(32)
                 .desired_width(f32::INFINITY),
@@ -220,7 +220,7 @@ impl ArcticApp {
                         ui.painter().circle_filled(dot.center(), 6.0, rgb(profile.color));
                         match &mut renaming {
                             Some((id, text)) if *id == profile.id => {
-                                let r = ui.add(egui::TextEdit::singleline(text).char_limit(32).desired_width(180.0));
+                                let r = ui.add(widgets::text_field(text).char_limit(32).desired_width(180.0));
                                 let done = ui.button("Save").clicked()
                                     || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
                                 if done {

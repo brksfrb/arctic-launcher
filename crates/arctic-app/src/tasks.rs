@@ -12,6 +12,8 @@ use arctic_core::auth::microsoft::{self, DeviceCode, MsaConfig};
 use arctic_core::auth::{Account, now_secs};
 use arctic_core::instances::Instance;
 use arctic_core::launch::{self, GameEvent, GameHandle, LaunchRequest};
+use arctic_core::loaders::{self, LoaderKind, LoaderVersion};
+use arctic_core::mods::{self, InstalledMod, SearchPage, SearchQuery};
 use arctic_core::settings::Settings;
 use arctic_core::storage::DataDirs;
 use arctic_core::update::{self, UpdateChannel, UpdateInfo};
@@ -63,6 +65,17 @@ pub enum Event {
     Face(String, Face),
     UpdateChecked(Outcome<Option<UpdateInfo>>),
     UpdateInstalled(Outcome<()>),
+    /// Minecraft versions a loader supports.
+    LoaderGames(LoaderKind, Outcome<Vec<String>>),
+    /// Loader versions for (loader, Minecraft version).
+    LoaderVersions(LoaderKind, String, Outcome<Vec<LoaderVersion>>),
+    /// Mod search results for request id.
+    ModSearch(u64, Outcome<SearchPage>),
+    ModProgress(ProgressSnapshot),
+    /// (instance id, project id, result)
+    ModInstalled(String, String, Outcome<Vec<InstalledMod>>),
+    /// Icon bytes for a URL.
+    ModIcon(String, Outcome<Vec<u8>>),
 }
 
 /// Handle used by the UI to start background jobs.
@@ -186,6 +199,58 @@ impl Tasks {
         self.run(move |t| match avatar::fetch_face(&t.dirs, &uuid) {
             Ok(face) => t.send(Event::Face(uuid, face)),
             Err(e) => log::debug!("avatar for {uuid} unavailable: {e}"),
+        });
+    }
+
+    pub fn loader_games(&self, kind: LoaderKind) {
+        self.run(move |t| {
+            let result = loaders::game_versions(kind).map_err(|e| e.to_string());
+            t.send(Event::LoaderGames(kind, result));
+        });
+    }
+
+    pub fn loader_versions(&self, kind: LoaderKind, game: String) {
+        self.run(move |t| {
+            let result = loaders::loader_versions(kind, &game).map_err(|e| e.to_string());
+            t.send(Event::LoaderVersions(kind, game, result));
+        });
+    }
+
+    pub fn mod_search(&self, request: u64, query: SearchQuery) {
+        self.run(move |t| {
+            let result = mods::search(&query).map_err(|e| e.to_string());
+            t.send(Event::ModSearch(request, result));
+        });
+    }
+
+    pub fn mod_install(&self, instance: Instance, project_id: String) {
+        self.run(move |t| {
+            let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
+            let game = instance.version.clone().unwrap_or_default();
+            let result = match instance.loader.kind() {
+                Some(loader) => {
+                    let dir = t.dirs.instance_dir(&instance.id);
+                    let mods_dir = instance.game_dir(&t.dirs).join("mods");
+                    mods::install(
+                        &project_id,
+                        &game,
+                        loader,
+                        &mods_dir,
+                        &mods::index_path(&dir),
+                        &progress,
+                    )
+                    .map_err(|e| e.to_string())
+                }
+                None => Err("Vanilla instances can't load mods".to_owned()),
+            };
+            t.send(Event::ModInstalled(instance.id, project_id, result));
+        });
+    }
+
+    pub fn mod_icon(&self, url: String) {
+        self.run(move |t| {
+            let result = mods::icon(&url, &t.dirs.cache().join("icons")).map_err(|e| e.to_string());
+            t.send(Event::ModIcon(url, result));
         });
     }
 

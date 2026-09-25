@@ -26,7 +26,7 @@ use crate::startup::StartupOptions;
 use crate::tasks::{Event, LaunchId, LoginAttempt, ProgressSnapshot, Tasks};
 use crate::theme::{self, Palette};
 use crate::toasts::{Kind, ToastAction, Toasts};
-use crate::ui::ProfileDialog;
+use crate::ui::{InstancesUi, ProfileDialog};
 
 /// Backdrop frame interval when focused / unfocused.
 const FRAME_FOCUSED: Duration = Duration::from_millis(33);
@@ -147,6 +147,8 @@ pub struct ArcticApp {
     pub(crate) add_account: AddAccount,
     pub(crate) remove_confirm: Option<String>,
     pub(crate) profile_dialog: ProfileDialog,
+    /// Instances tab state (pages, mod browser, create dialog).
+    pub(crate) inst: InstancesUi,
     pub(crate) update: UpdateState,
     pub(crate) toasts: Toasts,
     pub(crate) msa_configured: bool,
@@ -172,6 +174,8 @@ pub struct ArcticApp {
     early_game_events: Vec<GameEvent>,
     splash: Splash,
     applied_theme: Option<ThemeMode>,
+    theme_fade: Option<crate::theme_fade::ThemeFade>,
+    discord: crate::discord::Discord,
     /// Maximize on the first frame (creating the window maximized is
     /// unreliable on Windows: wrong restore size, flicker).
     maximize_pending: bool,
@@ -187,6 +191,7 @@ impl ArcticApp {
         profiles: ProfileStore,
         startup: StartupOptions,
     ) -> Self {
+        egui_extras::install_image_loaders(&cc.egui_ctx);
         let (tx, rx) = mpsc::channel();
         let dirs = profiles.scoped(&root);
         let tasks = Tasks::new(tx, cc.egui_ctx.clone(), dirs.clone());
@@ -203,6 +208,8 @@ impl ArcticApp {
         let mut app = Self {
             splash: Splash::new(intro),
             applied_theme: None,
+            theme_fade: None,
+            discord: crate::discord::Discord::new(),
             maximize_pending: data.settings.start_maximized,
             pending_launch: startup.launch.clone(),
             msa_configured: MsaConfig::load(&dirs).is_ok(),
@@ -225,6 +232,7 @@ impl ArcticApp {
             add_account: AddAccount::Closed,
             remove_confirm: None,
             profile_dialog: ProfileDialog::Closed,
+            inst: InstancesUi::default(),
             update,
             toasts,
             version_filter: String::new(),
@@ -269,8 +277,11 @@ impl ArcticApp {
         self.game_log.clear();
         self.game_log_rev += 1;
         self.log_cache = None;
+        // Instance pages and mod listings belong to the old profile.
+        self.inst = InstancesUi::default();
         // Theme is per profile: force a re-apply on the next frame.
         self.applied_theme = None;
+        self.theme_fade = None;
     }
 
     /// Save settings now if they changed.
@@ -286,7 +297,35 @@ impl ArcticApp {
     }
 
     pub(crate) fn palette(&self) -> &'static Palette {
-        theme::palette(self.settings.theme)
+        match &self.theme_fade {
+            Some(fade) => fade.palette(self.settings.theme),
+            None => theme::palette(self.settings.theme),
+        }
+    }
+
+    /// Apply theme changes, cross-fading from the previous theme.
+    fn update_theme(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
+        let now = ctx.input(|i| i.time);
+        let mut changed = false;
+        if self.applied_theme != Some(self.settings.theme) {
+            // The first apply (startup, profile switch) is instant.
+            self.theme_fade = self
+                .applied_theme
+                .map(|from| crate::theme_fade::ThemeFade::new(from, now));
+            self.applied_theme = Some(self.settings.theme);
+            changed = true;
+        }
+        if let Some(fade) = &mut self.theme_fade {
+            if !fade.update(now) {
+                self.theme_fade = None;
+            }
+            ctx.request_repaint();
+            changed = true;
+        }
+        if changed {
+            theme::apply(ctx, self.palette());
+            crate::titlebar::apply(frame, self.palette());
+        }
     }
 
     pub(crate) fn set_tab(&mut self, tab: Tab, now: f64) {
@@ -380,23 +419,43 @@ impl ArcticApp {
         let ManifestState::Ready(manifest) = &self.manifest else {
             return;
         };
-        let Some(version) = self
-            .settings
-            .last_version
+        // Vanilla follows the Play-tab version; custom instances pin theirs.
+        let instance = self.selected_instance().clone();
+        let version_id = if instance.is_default() {
+            self.settings.last_version.clone()
+        } else {
+            instance.version.clone()
+        };
+        let Some(version) = version_id
             .as_deref()
             .and_then(|id| manifest.find(id))
             .cloned()
         else {
+            self.toasts.push(
+                Kind::Error,
+                "Unknown Minecraft version",
+                format!(
+                    "{} needs a version that isn't in Mojang's list.",
+                    instance.name
+                ),
+            );
             return;
         };
         let Some(account) = self.accounts.active().cloned() else {
             return;
         };
         self.launch_id += 1;
+        self.discord.game_started(
+            format!("Minecraft {}", version.id),
+            instance.loader.label().to_owned(),
+        );
         self.early_game_events.clear();
         self.push_game_log(vec![LogLine {
             level: Level::Info,
-            text: format!("──── Launching {} as {} ────", version.id, account.username),
+            text: format!(
+                "──── Launching {} ({}) as {} ────",
+                instance.name, version.id, account.username
+            ),
         }]);
         self.launch = LaunchState::Preparing {
             progress: ProgressSnapshot {
@@ -408,7 +467,7 @@ impl ArcticApp {
         self.tasks.launch(
             self.launch_id,
             version,
-            self.instance.clone(),
+            instance,
             account,
             self.settings.clone(),
         );
@@ -507,6 +566,12 @@ impl ArcticApp {
             Event::Face(uuid, face) => {
                 self.faces.insert(uuid, face);
             }
+            e @ (Event::LoaderGames(..)
+            | Event::LoaderVersions(..)
+            | Event::ModSearch(..)
+            | Event::ModProgress(..)
+            | Event::ModInstalled(..)
+            | Event::ModIcon(..)) => self.on_instances_event(e, ctx),
             Event::UpdateChecked(result) => self.on_update_checked(result),
             Event::UpdateInstalled(result) => self.on_update_installed(result),
         }
@@ -621,11 +686,9 @@ impl eframe::App for ArcticApp {
         if std::mem::take(&mut self.maximize_pending) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
         }
-        if self.applied_theme != Some(self.settings.theme) {
-            self.applied_theme = Some(self.settings.theme);
-            theme::apply(&ctx, self.palette());
-            crate::titlebar::apply(frame, self.palette());
-        }
+        self.update_theme(&ctx, frame);
+        let playing = !matches!(self.launch, LaunchState::Idle);
+        self.discord.sync(self.settings.discord_presence, playing);
         self.shell(ui);
         self.splash.show(&ctx, self.palette());
         self.autosave_settings(&ctx);

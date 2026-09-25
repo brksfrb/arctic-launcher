@@ -126,7 +126,7 @@ impl ArcticApp {
             }
             ui.separator();
             ui.add(
-                egui::TextEdit::singleline(&mut self.log_search)
+                widgets::text_field(&mut self.log_search)
                     .hint_text("Filter…")
                     .desired_width(180.0),
             );
