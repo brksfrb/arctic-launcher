@@ -37,6 +37,8 @@ pub struct Settings {
     pub animations: bool,
     /// Short snowflake intro when the launcher opens.
     pub intro: bool,
+    /// Open the launcher window maximized.
+    pub start_maximized: bool,
     pub theme: ThemeMode,
     pub on_game_start: GameStartAction,
 }
@@ -77,6 +79,7 @@ impl Default for Settings {
             check_updates_on_start: true,
             animations: true,
             intro: true,
+            start_maximized: false,
             theme: ThemeMode::Default,
             on_game_start: GameStartAction::KeepOpen,
         }

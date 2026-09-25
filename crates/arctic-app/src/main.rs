@@ -6,6 +6,7 @@ mod art;
 mod icon_raster;
 mod logbook;
 mod motion;
+mod session;
 mod startup;
 mod tasks;
 mod theme;
@@ -16,6 +17,8 @@ mod widgets;
 
 use std::sync::Arc;
 
+use arctic_core::profiles::ProfileStore;
+use arctic_core::settings::Settings;
 use arctic_core::storage::DataDirs;
 use eframe::egui;
 
@@ -31,8 +34,29 @@ fn main() -> eframe::Result {
             std::process::exit(1);
         }
     };
-    logbook::init(dirs.logs().join("launcher.log"));
+    logbook::init(dirs.launcher_logs().join("launcher.log"));
     let startup = startup::StartupOptions::parse(std::env::args().skip(1));
+    if let Err(e) = dirs.ensure() {
+        log::error!("could not create data folders: {e}");
+    }
+    let mut profiles = match ProfileStore::load_or_init(&dirs) {
+        Ok(p) => p,
+        Err(e) => {
+            log::error!("profiles unavailable: {e}");
+            std::process::exit(1);
+        }
+    };
+    if let Some(query) = &startup.profile {
+        match profiles.find(query).map(|p| p.id.clone()) {
+            Some(id) => {
+                profiles.set_active(&id);
+            }
+            None => log::warn!("no profile named '{query}'"),
+        }
+    }
+    let maximized = Settings::load(&profiles.scoped(&dirs))
+        .map(|s| s.start_maximized)
+        .unwrap_or(false);
     log::info!(
         "{} {} — data dir {}",
         arctic_core::APP_NAME,
@@ -50,12 +74,13 @@ fn main() -> eframe::Result {
             .with_title(arctic_core::APP_NAME)
             .with_icon(Arc::new(icon))
             .with_inner_size(DEFAULT_WINDOW)
-            .with_min_inner_size(MIN_WINDOW),
+            .with_min_inner_size(MIN_WINDOW)
+            .with_maximized(maximized),
         ..Default::default()
     };
     eframe::run_native(
         arctic_core::APP_NAME,
         options,
-        Box::new(move |cc| Ok(Box::new(app::ArcticApp::new(cc, dirs, startup)))),
+        Box::new(move |cc| Ok(Box::new(app::ArcticApp::new(cc, dirs, profiles, startup)))),
     )
 }

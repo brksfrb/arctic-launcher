@@ -41,6 +41,7 @@ impl ArcticApp {
             ui.checkbox(&mut s.animations, "Animated background")
                 .on_hover_text("Aurora, snowfall and shooting stars. Pauses while you play.");
             ui.checkbox(&mut s.intro, "Intro animation on start");
+            ui.checkbox(&mut s.start_maximized, "Start the launcher maximized");
         });
 
         section(ui, p, "Memory", |ui| {

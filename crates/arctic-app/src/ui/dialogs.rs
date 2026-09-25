@@ -65,7 +65,7 @@ impl ArcticApp {
         let ms_note = if self.msa_configured {
             None
         } else {
-            Some("Not configured (see docs/microsoft-auth.md)")
+            Some("Microsoft sign-in isn't available in this build")
         };
         let options = [
             (

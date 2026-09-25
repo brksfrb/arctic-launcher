@@ -11,13 +11,15 @@ arctic launch latest --account Alex --memory 6G --wait
 arctic open --launch 1.20.1         # open the launcher window and start 1.20.1
 ```
 
-Build it with `cargo build --release -p arctic-cli`. The binary is
-`target\release\arctic.exe`. Releases ship it as `arctic-windows-x64.exe`.
+Download `arctic-windows-x64.exe` or `arctic-linux-x64` from the
+[latest release](https://github.com/brksfrb/arctic-launcher/releases/latest) and put it on
+your `PATH` as `arctic`.
 
 ## Global options
 
 | Option | Meaning |
 |---|---|
+| `-p, --profile <NAME>` | Work in this profile instead of the active one (also `ARCTIC_PROFILE`) |
 | `--data-dir <DIR>` | Use another data folder (also `ARCTIC_DATA_DIR`) |
 | `--json` | Machine-readable output: one JSON object per line on stdout |
 | `-v, --verbose` | Print launcher log messages to stderr |
@@ -65,7 +67,7 @@ Downloads whatever is missing, then starts Minecraft.
 | `--dry-run` | Prepare everything and print the command line (token redacted) |
 
 Without `--wait`, the game is started **detached**: it keeps running after `arctic` exits,
-and its output goes to `logs\game-vanilla.log`. Microsoft sessions are refreshed
+and its output goes to `profiles\<profile>\logs\game-vanilla.log`. Microsoft sessions are refreshed
 automatically when needed.
 
 ### `arctic accounts`
@@ -79,7 +81,20 @@ arctic accounts remove <ACCOUNT>
 ```
 
 `<ACCOUNT>` is a username (case-insensitive), a Minecraft UUID (with or without dashes),
-or the internal id. Microsoft login needs a client ID (see [microsoft-auth.md](microsoft-auth.md)).
+or the internal id.
+
+### `arctic profiles`
+
+```text
+arctic profiles list
+arctic profiles create <NAME> [--switch]
+arctic profiles use <PROFILE>
+arctic profiles rename <PROFILE> <NEW_NAME>
+arctic profiles remove <PROFILE>        # folder moves to profiles/.trash
+```
+
+Every command works on the active profile unless you pass `-p, --profile <NAME>` (or set
+`ARCTIC_PROFILE`), e.g. `arctic -p Speedruns launch 1.16.1`.
 
 ### `arctic java <VERSION>`
 
@@ -106,6 +121,7 @@ Starts the launcher window, detached. Options are passed through to the GUI:
 | `--account <NAME>` | Select this account first |
 | `--tab <TAB>` | `play`, `accounts`, `instances`, `logs`, `settings`, `about` |
 | `--no-intro` | Skip the intro animation |
+| `--profile <NAME>` | Open in this profile |
 
 The launcher exe is looked up next to `arctic.exe` (as `arctic-launcher.exe` or
 `Arctic Launcher.exe`) or via `ARCTIC_LAUNCHER_EXE`.
@@ -115,7 +131,7 @@ The launcher exe is looked up next to `arctic.exe` (as `arctic-launcher.exe` or
 The same flags work on the launcher itself, which is useful for desktop shortcuts:
 
 ```text
-"Arctic Launcher.exe" --launch 1.21.4 --account Steve --no-intro
+"Arctic Launcher.exe" --launch 1.21.4 --account Steve --profile Speedruns --no-intro
 ```
 
 ## JSON output

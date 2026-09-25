@@ -6,9 +6,10 @@ The launcher updates itself from GitHub Releases of `brksfrb/arctic-launcher`.
 
 1. Bump `version` in the root `Cargo.toml` (`[workspace.package]`) and commit.
 2. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
-3. `.github/workflows/release.yml` builds `arctic-launcher-windows-x64.exe` on Windows and
-   creates the GitHub release with that asset. GitHub stores a `sha256:` digest for every
-   asset, and the updater refuses assets without one.
+3. `.github/workflows/release.yml` builds on Windows and Linux and publishes the release
+   with four assets: `arctic-launcher-windows-x64.exe`, `arctic-launcher-linux-x64`,
+   `arctic-windows-x64.exe` and `arctic-linux-x64`. GitHub stores a `sha256:` digest for
+   every asset, and the updater refuses assets without one.
 
 Tags containing a `-` (e.g. `v0.3.0-beta.1`) are published as **pre-releases**, which only the
 **Beta** update channel sees.

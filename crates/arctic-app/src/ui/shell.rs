@@ -71,6 +71,7 @@ impl ArcticApp {
 
         self.add_account_dialog(&ctx);
         self.remove_account_dialog(&ctx);
+        self.profile_dialogs(&ctx);
         if let Some(action) = self.toasts.show(&ctx, p) {
             match action {
                 ToastAction::ShowLogs => {

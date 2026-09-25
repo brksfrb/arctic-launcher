@@ -121,7 +121,7 @@ impl ArcticApp {
                         .dirs
                         .logs()
                         .join(format!("game-{}.log", self.instance.id)),
-                    LogSource::Launcher => self.dirs.logs().join("launcher.log"),
+                    LogSource::Launcher => self.dirs.launcher_logs().join("launcher.log"),
                 };
                 if file.is_file()
                     && widgets::icon_button(ui, p, Icon::Document, "Open log file").clicked()

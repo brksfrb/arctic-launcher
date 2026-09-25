@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 use eframe::egui::emath::easing;
 
 /// Seconds a tab takes to fade/slide in.
-pub const TAB_TRANSITION: f32 = 0.22;
+pub const TAB_TRANSITION: f32 = 0.16;
 /// Window used to smooth the download speed.
 const RATE_WINDOW_SECS: f64 = 2.5;
 

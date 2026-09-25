@@ -65,7 +65,9 @@ pub struct Palette {
     pub card_fill: Color32,
     pub card_stroke: Color32,
     pub nav_fill: Color32,
-    /// Native title bar color (matches the sidebar over the sky).
+    /// Native title bar color (matches the sidebar over the sky). Only
+    /// Windows lets apps tint the native title bar.
+    #[cfg_attr(not(windows), allow(dead_code))]
     pub titlebar: Color32,
     pub shadow: Color32,
     pub scene: Scene,

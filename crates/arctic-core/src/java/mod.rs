@@ -109,7 +109,6 @@ pub fn java_executable(runtime_dir: &Path) -> PathBuf {
     if cfg!(windows) {
         runtime_dir.join("bin").join("javaw.exe")
     } else {
-        // TODO(linux/mac): mac runtimes live under jre.bundle/Contents/Home.
         runtime_dir.join("bin").join("java")
     }
 }
@@ -267,11 +266,28 @@ fn collect_files(
                     lzma,
                 });
             }
-            // Links only appear in mac/linux runtimes. TODO(linux): create symlinks.
-            RuntimeFile::Link { target } => log::debug!("skipping runtime link {rel} -> {target}"),
+            RuntimeFile::Link { target } => link(&dest, &target)?,
         }
     }
     Ok((jobs, executables))
+}
+
+/// Runtime manifests contain symlinks on Linux/macOS (e.g. `bin/` helpers).
+#[cfg(unix)]
+fn link(dest: &Path, target: &str) -> Result<()> {
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent).at(parent)?;
+    }
+    if fs::symlink_metadata(dest).is_ok() {
+        return Ok(());
+    }
+    std::os::unix::fs::symlink(target, dest).at(dest)
+}
+
+#[cfg(not(unix))]
+fn link(dest: &Path, target: &str) -> Result<()> {
+    log::debug!("skipping runtime link {} -> {target}", dest.display());
+    Ok(())
 }
 
 #[cfg(unix)]

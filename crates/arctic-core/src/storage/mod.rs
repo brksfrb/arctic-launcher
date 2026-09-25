@@ -2,19 +2,26 @@
 //!
 //! ```text
 //! <root>                          %LOCALAPPDATA%\ArcticLauncher (default)
-//! ├── settings.json               user settings (no secrets)
-//! ├── accounts.json               account store (tokens; local only, never synced)
+//! ├── profiles.json               profile list + active profile
+//! ├── profiles/<id>/              everything that belongs to one profile:
+//! │   ├── settings.json             settings (no secrets)
+//! │   ├── accounts.json             accounts (tokens; local only)
+//! │   ├── instances/<id>/           instance.json + minecraft/ (worlds, mods…)
+//! │   └── logs/                     game logs
 //! ├── msa.json                    optional local Microsoft client config
 //! ├── meta/                       cached Mojang manifests
-//! ├── shared/                     game files shared by all instances
+//! ├── shared/                     content-addressed game files (all profiles)
 //! │   ├── versions/<id>/<id>.{json,jar}
 //! │   ├── libraries/…             maven layout
 //! │   └── assets/{indexes,objects,virtual,log_configs}
 //! ├── runtimes/<component>/       managed Java runtimes
-//! ├── instances/<id>/             instance.json + minecraft/ (game dir)
-//! ├── logs/                       launcher + game logs
-//! └── cache/                      downloaded updates, temp files
+//! ├── logs/launcher.log           launcher log
+//! └── cache/                      avatars, downloaded updates
 //! ```
+//!
+//! A `DataDirs` is either unscoped (profile paths fall back to the root,
+//! used only before profiles are resolved and for migration) or scoped to a
+//! profile via [`DataDirs::with_profile`].
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -35,11 +42,25 @@ const DIR_NAME: &str = "ArcticLauncher";
 #[derive(Debug, Clone)]
 pub struct DataDirs {
     root: PathBuf,
+    /// Where profile-scoped data lives (`root` until a profile is chosen).
+    profile_root: PathBuf,
 }
 
 impl DataDirs {
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        let root = root.into();
+        Self {
+            profile_root: root.clone(),
+            root,
+        }
+    }
+
+    /// The same layout scoped to profile `id`.
+    pub fn with_profile(&self, id: &str) -> Self {
+        Self {
+            root: self.root.clone(),
+            profile_root: self.profiles_dir().join(id),
+        }
     }
 
     /// Resolve the data root: `ARCTIC_DATA_DIR`, then portable mode, then
@@ -61,18 +82,22 @@ impl DataDirs {
             .ok_or_else(|| Error::Other("could not determine local app data directory".into()))
     }
 
-    /// Create the top-level directories.
+    /// Create the launcher-wide directories, plus the profile's own ones
+    /// when this layout is scoped to a profile.
     pub fn ensure(&self) -> Result<()> {
-        for dir in [
+        let mut dirs = vec![
             self.meta(),
             self.versions(),
             self.libraries(),
             self.assets(),
             self.runtimes(),
-            self.instances(),
-            self.logs(),
+            self.launcher_logs(),
             self.cache(),
-        ] {
+        ];
+        if self.profile_root != self.root {
+            dirs.extend([self.instances(), self.logs()]);
+        }
+        for dir in dirs {
             fs::create_dir_all(&dir).at(&dir)?;
         }
         Ok(())
@@ -81,11 +106,21 @@ impl DataDirs {
     pub fn root(&self) -> &Path {
         &self.root
     }
+    /// Folder of the current profile (the root when unscoped).
+    pub fn profile_root(&self) -> &Path {
+        &self.profile_root
+    }
+    pub fn profiles_file(&self) -> PathBuf {
+        self.root.join("profiles.json")
+    }
+    pub fn profiles_dir(&self) -> PathBuf {
+        self.root.join("profiles")
+    }
     pub fn settings_file(&self) -> PathBuf {
-        self.root.join("settings.json")
+        self.profile_root.join("settings.json")
     }
     pub fn accounts_file(&self) -> PathBuf {
-        self.root.join("accounts.json")
+        self.profile_root.join("accounts.json")
     }
     pub fn msa_config_file(&self) -> PathBuf {
         self.root.join("msa.json")
@@ -112,12 +147,17 @@ impl DataDirs {
         self.root.join("runtimes")
     }
     pub fn instances(&self) -> PathBuf {
-        self.root.join("instances")
+        self.profile_root.join("instances")
     }
     pub fn instance_dir(&self, id: &str) -> PathBuf {
         self.instances().join(id)
     }
+    /// Game logs of the current profile.
     pub fn logs(&self) -> PathBuf {
+        self.profile_root.join("logs")
+    }
+    /// Launcher-wide logs (`launcher.log`).
+    pub fn launcher_logs(&self) -> PathBuf {
         self.root.join("logs")
     }
     pub fn cache(&self) -> PathBuf {
@@ -173,10 +213,34 @@ mod tests {
     }
 
     #[test]
+    fn profile_scoping_splits_shared_and_private_paths() {
+        let d = DataDirs::new("root").with_profile("work");
+        assert_eq!(
+            d.settings_file(),
+            Path::new("root/profiles/work/settings.json")
+        );
+        assert_eq!(
+            d.instance_dir("vanilla"),
+            Path::new("root/profiles/work/instances/vanilla")
+        );
+        assert_eq!(d.logs(), Path::new("root/profiles/work/logs"));
+        assert_eq!(d.libraries(), Path::new("root/shared/libraries"));
+        assert_eq!(d.launcher_logs(), Path::new("root/logs"));
+        assert_eq!(d.profiles_file(), Path::new("root/profiles.json"));
+    }
+
+    #[test]
     fn ensure_creates_dirs() {
         let dir = tempfile::tempdir().unwrap();
         let d = DataDirs::new(dir.path());
         d.ensure().unwrap();
         assert!(d.libraries().is_dir() && d.runtimes().is_dir());
+        assert!(
+            !d.instances().exists(),
+            "unscoped layout must not create profile dirs"
+        );
+        let scoped = d.with_profile("p");
+        scoped.ensure().unwrap();
+        assert!(scoped.instances().is_dir() && scoped.logs().is_dir());
     }
 }

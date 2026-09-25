@@ -9,9 +9,10 @@ use std::time::Duration;
 use arctic_core::auth::avatar::{self, Face};
 use arctic_core::auth::microsoft::{DeviceCode, MsaConfig};
 use arctic_core::auth::{Account, AccountStore};
-use arctic_core::instances::{self, Instance};
+use arctic_core::instances::Instance;
 use arctic_core::launch::logparse::{Level, LogLine};
 use arctic_core::launch::{GameEvent, GameHandle};
+use arctic_core::profiles::ProfileStore;
 use arctic_core::settings::{GameStartAction, Settings, ThemeMode};
 use arctic_core::storage::DataDirs;
 use arctic_core::update::UpdateInfo;
@@ -20,10 +21,12 @@ use eframe::egui;
 
 use crate::art::splash::Splash;
 use crate::motion::RateMeter;
+use crate::session::ProfileData;
 use crate::startup::StartupOptions;
 use crate::tasks::{Event, LaunchId, LoginAttempt, ProgressSnapshot, Tasks};
 use crate::theme::{self, Palette};
 use crate::toasts::{Kind, ToastAction, Toasts};
+use crate::ui::ProfileDialog;
 
 /// Backdrop frame interval when focused / unfocused.
 const FRAME_FOCUSED: Duration = Duration::from_millis(33);
@@ -123,6 +126,10 @@ pub enum UpdateState {
 }
 
 pub struct ArcticApp {
+    /// Launcher-wide layout (shared downloads, caches).
+    pub(crate) root: DataDirs,
+    pub(crate) profiles: ProfileStore,
+    /// Layout scoped to the active profile.
     pub(crate) dirs: DataDirs,
     pub(crate) tasks: Tasks,
     events: Receiver<Event>,
@@ -139,6 +146,7 @@ pub struct ArcticApp {
     pub(crate) launch: LaunchState,
     pub(crate) add_account: AddAccount,
     pub(crate) remove_confirm: Option<String>,
+    pub(crate) profile_dialog: ProfileDialog,
     pub(crate) update: UpdateState,
     pub(crate) toasts: Toasts,
     pub(crate) msa_configured: bool,
@@ -170,70 +178,49 @@ pub struct ArcticApp {
 }
 
 impl ArcticApp {
-    pub fn new(cc: &eframe::CreationContext<'_>, dirs: DataDirs, startup: StartupOptions) -> Self {
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
+        root: DataDirs,
+        profiles: ProfileStore,
+        startup: StartupOptions,
+    ) -> Self {
         let (tx, rx) = mpsc::channel();
+        let dirs = profiles.scoped(&root);
         let tasks = Tasks::new(tx, cc.egui_ctx.clone(), dirs.clone());
         let mut toasts = Toasts::default();
-        let mut note = |what: &str, e: arctic_core::Error| {
-            log::error!("{what}: {e}");
-            toasts.push(Kind::Error, what, e.to_string());
-        };
-        if let Err(e) = dirs.ensure() {
-            note("Could not create data folders", e);
-        }
-        let settings = Settings::load(&dirs).unwrap_or_else(|e| {
-            note("Settings were unreadable, using defaults", e);
-            Settings::default()
-        });
-        let accounts = AccountStore::load(&dirs).unwrap_or_else(|e| {
-            note("Accounts file was unreadable", e);
-            AccountStore::default()
-        });
-        let instance = instances::load_default(&dirs).unwrap_or_else(|e| {
-            note("Could not load the Vanilla instance", e);
-            Instance::vanilla_default()
-        });
-
-        theme::apply(&cc.egui_ctx, theme::palette(settings.theme));
+        let data = ProfileData::load(&dirs, &tasks, &mut toasts);
         tasks.load_manifest();
-        let update = if settings.check_updates_on_start {
-            tasks.check_update(settings.update_channel);
+        let update = if data.settings.check_updates_on_start {
+            tasks.check_update(data.settings.update_channel);
             UpdateState::Checking
         } else {
             UpdateState::Idle
         };
-        let mut accounts = accounts;
-        if let Some(query) = &startup.account {
-            match accounts.find(query).map(|a| a.id.clone()) {
-                Some(id) => {
-                    accounts.set_active(&id);
-                }
-                None => toasts.push(Kind::Error, format!("No account named '{query}'"), ""),
-            }
-        }
-        let faces = load_faces(&dirs, &accounts, &tasks);
-
-        Self {
-            splash: Splash::new(settings.intro && !startup.no_intro),
+        let intro = data.settings.intro && !startup.no_intro;
+        let mut app = Self {
+            splash: Splash::new(intro),
             applied_theme: None,
             pending_launch: startup.launch.clone(),
             msa_configured: MsaConfig::load(&dirs).is_ok(),
             installed: versions::installed_versions(&dirs),
-            custom_instances: instances::list_custom(&dirs).unwrap_or_default(),
-            saved_settings: settings.clone(),
+            custom_instances: Vec::new(),
+            saved_settings: data.settings.clone(),
+            settings: data.settings.clone(),
+            root,
+            profiles,
             dirs,
             tasks,
             events: rx,
             tab: startup.tab.unwrap_or(Tab::Play),
             tab_changed_at: 0.0,
-            settings,
-            accounts,
-            faces,
-            instance,
+            accounts: AccountStore::default(),
+            faces: HashMap::new(),
+            instance: Instance::vanilla_default(),
             manifest: ManifestState::Loading,
             launch: LaunchState::Idle,
             add_account: AddAccount::Closed,
             remove_confirm: None,
+            profile_dialog: ProfileDialog::Closed,
             update,
             toasts,
             version_filter: String::new(),
@@ -252,6 +239,45 @@ impl ArcticApp {
             launch_id: 0,
             early_game_events: Vec::new(),
             login_attempts: 0,
+        };
+        app.apply_profile_data(data);
+        if let Some(query) = &startup.account {
+            match app.accounts.find(query).map(|a| a.id.clone()) {
+                Some(id) => {
+                    app.accounts.set_active(&id);
+                }
+                None => app
+                    .toasts
+                    .push(Kind::Error, format!("No account named '{query}'"), ""),
+            }
+        }
+        app
+    }
+
+    /// Replace all profile-scoped state (used at start and on switch).
+    pub(crate) fn apply_profile_data(&mut self, data: ProfileData) {
+        self.saved_settings = data.settings.clone();
+        self.settings = data.settings;
+        self.accounts = data.accounts;
+        self.instance = data.instance;
+        self.custom_instances = data.custom_instances;
+        self.faces = data.faces;
+        self.game_log.clear();
+        self.game_log_rev += 1;
+        self.log_cache = None;
+        // Theme is per profile: force a re-apply on the next frame.
+        self.applied_theme = None;
+    }
+
+    /// Save settings now if they changed.
+    pub(crate) fn persist_settings(&mut self) {
+        if self.settings != self.saved_settings {
+            match self.settings.save(&self.dirs) {
+                Ok(()) => self.saved_settings = self.settings.clone(),
+                Err(e) => self
+                    .toasts
+                    .push(Kind::Error, "Could not save settings", e.to_string()),
+            }
         }
     }
 
@@ -557,13 +583,8 @@ impl ArcticApp {
     /// Persist settings once the user stops dragging a control.
     fn autosave_settings(&mut self, ctx: &egui::Context) {
         let dragging = ctx.input(|i| i.pointer.any_down());
-        if self.settings != self.saved_settings && !dragging {
-            match self.settings.save(&self.dirs) {
-                Ok(()) => self.saved_settings = self.settings.clone(),
-                Err(e) => self
-                    .toasts
-                    .push(Kind::Error, "Could not save settings", e.to_string()),
-            }
+        if !dragging {
+            self.persist_settings();
         }
     }
 
@@ -585,20 +606,6 @@ impl ArcticApp {
             (false, true) => {}
         }
     }
-}
-
-/// Cached avatars for instant display; refresh stale Microsoft ones.
-fn load_faces(dirs: &DataDirs, accounts: &AccountStore, tasks: &Tasks) -> HashMap<String, Face> {
-    let mut faces = HashMap::new();
-    for account in accounts.accounts.iter().filter(|a| a.is_microsoft()) {
-        if let Some(face) = avatar::cached_face(dirs, &account.uuid) {
-            faces.insert(account.uuid.clone(), face);
-        }
-        if avatar::needs_refresh(dirs, &account.uuid) {
-            tasks.fetch_face(account.uuid.clone());
-        }
-    }
-    faces
 }
 
 impl eframe::App for ArcticApp {

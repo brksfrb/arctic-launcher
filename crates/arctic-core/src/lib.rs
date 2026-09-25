@@ -10,6 +10,7 @@ pub mod instances;
 pub mod java;
 pub mod launch;
 pub mod net;
+pub mod profiles;
 pub mod settings;
 pub mod storage;
 pub mod update;

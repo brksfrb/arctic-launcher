@@ -3,6 +3,7 @@
 //! ```text
 //! arctic-launcher.exe [--launch <version|latest>] [--account <name|uuid>]
 //!                     [--tab <play|accounts|instances|logs|settings|about>] [--no-intro]
+//!                     [--profile <name|id>]
 //! ```
 //! Unknown flags are ignored so old shortcuts never stop the app starting.
 
@@ -16,6 +17,8 @@ pub struct StartupOptions {
     pub account: Option<String>,
     pub tab: Option<Tab>,
     pub no_intro: bool,
+    /// Profile to open (name or id).
+    pub profile: Option<String>,
 }
 
 impl StartupOptions {
@@ -28,6 +31,7 @@ impl StartupOptions {
                 "--account" => opts.account = args.next(),
                 "--tab" => opts.tab = args.next().as_deref().and_then(parse_tab),
                 "--no-intro" => opts.no_intro = true,
+                "--profile" => opts.profile = args.next(),
                 other => log::warn!("ignoring unknown argument {other}"),
             }
         }

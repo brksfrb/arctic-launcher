@@ -12,7 +12,8 @@ use crate::art::{self, lerp_color};
 
 const ITEM_HEIGHT: f32 = 40.0;
 const ITEM_GAP: f32 = 4.0;
-const SLIDE_TIME: f32 = 0.2;
+/// Highlight slide duration (cubic ease-out, so it feels snappy).
+const SLIDE_TIME: f32 = 0.14;
 
 fn tab_info(tab: Tab) -> (Icon, &'static str) {
     match tab {
@@ -30,7 +31,9 @@ impl ArcticApp {
         let p = self.palette();
         ui.add_space(4.0);
         art::logo(ui, p);
-        ui.add_space(18.0);
+        ui.add_space(6.0);
+        self.profile_chip(ui);
+        ui.add_space(12.0);
 
         let now = ui.input(|i| i.time);
         let width = ui.available_width();
@@ -48,9 +51,7 @@ impl ArcticApp {
             )
         };
         let selected_index = Tab::ALL.iter().position(|t| *t == self.tab).unwrap_or(0) as f32;
-        let anim =
-            ui.ctx()
-                .animate_value_with_time(egui::Id::new("nav_pill"), selected_index, SLIDE_TIME);
+        let anim = eased_slide(ui.ctx(), selected_index, now);
         let pill = row_rect(anim);
         ui.painter().rect_filled(
             pill,
@@ -212,4 +213,25 @@ impl ArcticApp {
             self.save_accounts();
         }
     }
+}
+
+/// Position of the nav highlight, eased toward `target` (row index).
+/// Remembers (from, to, start) in egui memory between frames.
+fn eased_slide(ctx: &egui::Context, target: f32, now: f64) -> f32 {
+    let id = egui::Id::new("nav_pill_slide");
+    let (from, to, start) = ctx
+        .data(|d| d.get_temp::<(f32, f32, f64)>(id))
+        .unwrap_or((target, target, now));
+    let current = from + (to - from) * crate::motion::eased(now, start, SLIDE_TIME);
+    let state = if to == target {
+        (from, to, start)
+    } else {
+        (current, target, now)
+    };
+    ctx.data_mut(|d| d.insert_temp(id, state));
+    let t = crate::motion::eased(now, state.2, SLIDE_TIME);
+    if t < 1.0 {
+        ctx.request_repaint();
+    }
+    state.0 + (state.1 - state.0) * t
 }

@@ -3,6 +3,7 @@
 pub mod accounts;
 pub mod launch;
 pub mod misc;
+pub mod profiles;
 pub mod versions;
 
 use arctic_core::storage::DataDirs;
@@ -13,6 +14,9 @@ use crate::output::Out;
 
 /// Shared state for a command run.
 pub struct Ctx {
+    /// Launcher-wide layout (profiles.json, shared downloads).
+    pub root: DataDirs,
+    /// Layout scoped to the selected profile.
     pub dirs: DataDirs,
     pub out: Out,
 }

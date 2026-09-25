@@ -7,6 +7,7 @@ mod cli;
 mod commands;
 mod output;
 
+use arctic_core::profiles::ProfileStore;
 use arctic_core::storage::DataDirs;
 use clap::Parser;
 use serde_json::json;
@@ -45,21 +46,44 @@ fn run(cli: &Cli, out: Out) -> Result<i32, (Out, arctic_core::Error)> {
             Err(e) => return Err((out, e)),
         },
     };
-    if let Err(e) = dirs.ensure() {
-        return Err((out, e));
-    }
-    let ctx = Ctx { dirs, out };
+    let scoped = match select_profile(&dirs, cli.profile.as_deref()) {
+        Ok(scoped) => scoped,
+        Err(e) => return Err((out, e)),
+    };
+    let ctx = Ctx {
+        root: dirs,
+        dirs: scoped,
+        out,
+    };
     let result = match &cli.command {
         Command::Versions(args) => commands::versions::list(&ctx, args),
         Command::Install(args) => commands::versions::install(&ctx, args),
         Command::Launch(args) => commands::launch::run(&ctx, args),
         Command::Accounts(cmd) => commands::accounts::run(&ctx, cmd),
+        Command::Profiles(cmd) => commands::profiles::run(&ctx, cmd),
         Command::Java { version } => commands::misc::java_for(&ctx, version),
         Command::Paths => commands::misc::paths(&ctx),
         Command::Update { beta } => commands::misc::update_check(&ctx, *beta),
         Command::Open(args) => commands::misc::open(&ctx, args),
     };
     result.map_err(|e| (ctx.out, e))
+}
+
+/// Resolve the profile to work in (`--profile`, else the active one).
+fn select_profile(root: &DataDirs, query: Option<&str>) -> arctic_core::Result<DataDirs> {
+    root.ensure()?;
+    let store = ProfileStore::load_or_init(root)?;
+    let profile = match query {
+        Some(q) => store.find(q).ok_or_else(|| {
+            arctic_core::Error::Other(format!(
+                "no profile matches '{q}' (see `arctic profiles list`)"
+            ))
+        })?,
+        None => store.active(),
+    };
+    let scoped = root.with_profile(&profile.id);
+    scoped.ensure()?;
+    Ok(scoped)
 }
 
 /// Minimal logger for `--verbose`.

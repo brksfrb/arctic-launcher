@@ -1,163 +1,110 @@
-// Dependency-free snowflake icon rasterizer. Shared by the app (window icon)
-// and `build.rs` (the .exe icon) via `include!`, so it must not use crates.
+// Dependency-free app icon rasterizer. Shared by the app (window icon) and
+// `build.rs` (the .exe icon) via `include!`, so it must not use crates.
 //
-// Transparent background; a detailed six-armed crystal with a white→ice
-// gradient and a thin deep-blue outline so it reads on light and dark
-// wallpapers. Small sizes use a simplified design to stay crisp.
+// The Arctic mark: six bold kite-shaped arms with notched tips and small
+// side barbs around a hexagon core, shaded white at the center to ice blue
+// at the tips, on a transparent background. Bold enough to stay crisp at
+// 16px.
 
-use std::f32::consts::{FRAC_PI_3, PI, TAU};
+use std::f32::consts::{PI, TAU};
 
-/// Line segment with its stroke width: [x0, y0, x1, y1, width].
-type Seg = [f32; 5];
-
-const INNER: [f32; 3] = [240.0, 251.0, 255.0];
-const ICE: [f32; 3] = [125.0, 211.0, 252.0];
-const DEEP: [f32; 3] = [56.0, 189.0, 248.0];
-const OUTLINE: [f32; 3] = [12.0, 74.0, 110.0];
+const INNER: [f32; 3] = [196.0, 234.0, 254.0];
+const OUTER: [f32; 3] = [14.0, 165.0, 233.0];
 /// Supersampling grid per axis (SS × SS samples per pixel).
-const SS: u32 = 3;
+const SS: u32 = 4;
+
+// Arm geometry in units of the icon size, arm pointing up from the center
+// (y grows downward, so "up" is negative y).
+const KITE: [(f32, f32); 4] = [(0.0, -0.46), (0.075, -0.22), (0.0, -0.10), (-0.075, -0.22)];
+const NOTCH: [(f32, f32); 6] = [
+    (0.0, -0.36),
+    (0.10, -0.42),
+    (0.10, -0.30),
+    (0.0, -0.27),
+    (-0.10, -0.30),
+    (-0.10, -0.42),
+];
+/// Side barbs: (x0, y0, x1, y1), stroked with round caps.
+const BARBS: [(f32, f32, f32, f32); 2] = [(0.04, -0.33, 0.13, -0.38), (-0.04, -0.33, -0.13, -0.38)];
+const BARB_WIDTH: f32 = 0.05;
+const CORE_RADIUS: f32 = 0.10;
+const GRADIENT_RADIUS: f32 = 0.46;
 
 /// RGBA (unpremultiplied) icon, `size`×`size`.
 pub fn app_icon_rgba(size: u32) -> Vec<u8> {
     let n = size as f32;
-    let segs = flake_segments(n);
-    let radius = n * 0.46;
-    let outline = (n * 0.012).max(0.8);
     let mut rgba = Vec::with_capacity((size * size * 4) as usize);
     for y in 0..size {
         for x in 0..size {
-            let (mut flake, mut edge) = (0.0f32, 0.0f32);
+            let mut hits = 0u32;
             for sy in 0..SS {
                 for sx in 0..SS {
-                    let px = x as f32 + (sx as f32 + 0.5) / SS as f32;
-                    let py = y as f32 + (sy as f32 + 0.5) / SS as f32;
-                    let d = signed_distance(&segs, px, py);
-                    flake += (0.5 - d).clamp(0.0, 1.0);
-                    edge += (0.5 - (d - outline)).clamp(0.0, 1.0);
+                    // Sample position relative to the center, in icon units.
+                    let u = (x as f32 + (sx as f32 + 0.5) / SS as f32) / n - 0.5;
+                    let v = (y as f32 + (sy as f32 + 0.5) / SS as f32) / n - 0.5;
+                    if inside_mark(u, v) {
+                        hits += 1;
+                    }
                 }
             }
-            let samples = (SS * SS) as f32;
-            let (flake, edge) = (flake / samples, edge / samples);
-            let dist =
-                ((x as f32 + 0.5 - n / 2.0).powi(2) + (y as f32 + 0.5 - n / 2.0).powi(2)).sqrt();
-            let t = (dist / radius).clamp(0.0, 1.0);
-            let fill = if t < 0.5 {
-                mix3(INNER, ICE, t / 0.5)
-            } else {
-                mix3(ICE, DEEP, (t - 0.5) / 0.5)
-            };
-            // Flake over outline, both over transparency.
-            let alpha = flake + edge * (1.0 - flake);
-            let color = if alpha > 0.0 {
-                mix3(OUTLINE, fill, flake / alpha)
-            } else {
-                [0.0; 3]
-            };
-            rgba.extend_from_slice(&[
-                color[0] as u8,
-                color[1] as u8,
-                color[2] as u8,
-                (alpha * 255.0) as u8,
-            ]);
+            let coverage = hits as f32 / (SS * SS) as f32;
+            let (cx, cy) = ((x as f32 + 0.5) / n - 0.5, (y as f32 + 0.5) / n - 0.5);
+            let t = ((cx * cx + cy * cy).sqrt() / GRADIENT_RADIUS).clamp(0.0, 1.0);
+            let c = [
+                INNER[0] + (OUTER[0] - INNER[0]) * t,
+                INNER[1] + (OUTER[1] - INNER[1]) * t,
+                INNER[2] + (OUTER[2] - INNER[2]) * t,
+            ];
+            rgba.extend_from_slice(&[c[0] as u8, c[1] as u8, c[2] as u8, (coverage * 255.0) as u8]);
         }
     }
     rgba
 }
 
-fn mix3(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
-    [
-        a[0] + (b[0] - a[0]) * t,
-        a[1] + (b[1] - a[1]) * t,
-        a[2] + (b[2] - a[2]) * t,
-    ]
-}
-
-/// Distance to the stroked shape (negative inside).
-fn signed_distance(segs: &[Seg], px: f32, py: f32) -> f32 {
-    segs.iter()
-        .map(|s| dist_to_segment(px, py, s) - s[4] / 2.0)
-        .fold(f32::MAX, f32::min)
-}
-
-fn flake_segments(n: f32) -> Vec<Seg> {
-    let (cx, cy) = (n / 2.0, n / 2.0);
-    let r = n * 0.44;
-    let detailed = n >= 40.0;
-    let arm_w = if detailed {
-        n * 0.03
-    } else {
-        (n * 0.085).max(1.6)
-    };
-    let branch_w = arm_w * if detailed { 0.78 } else { 0.9 };
-    // (position along the arm, branch length) as fractions of r.
-    let branches: &[(f32, f32)] = if detailed {
-        &[(0.38, 0.24), (0.60, 0.21), (0.80, 0.12)]
-    } else {
-        &[(0.55, 0.28)]
-    };
-    let mut segs = Vec::new();
-    let mut seg = |x0: f32, y0: f32, x1: f32, y1: f32, w: f32| segs.push([x0, y0, x1, y1, w]);
-    for k in 0..6 {
-        let a = k as f32 * TAU / 6.0 - PI / 2.0;
-        let (dx, dy) = (a.cos(), a.sin());
-        seg(cx, cy, cx + dx * r, cy + dy * r, arm_w);
-        for &(at, len) in branches {
-            let (bx, by) = (cx + dx * r * at, cy + dy * r * at);
-            for side in [-1.0f32, 1.0] {
-                let b = a + side * FRAC_PI_3;
-                seg(
-                    bx,
-                    by,
-                    bx + b.cos() * r * len,
-                    by + b.sin() * r * len,
-                    branch_w,
-                );
-            }
-        }
-        if detailed {
-            // Small fork at the tip and a short spike between arms.
-            let (tx, ty) = (cx + dx * r * 0.93, cy + dy * r * 0.93);
-            for side in [-1.0f32, 1.0] {
-                let b = a + side * FRAC_PI_3;
-                seg(
-                    tx,
-                    ty,
-                    tx + b.cos() * r * 0.06,
-                    ty + b.sin() * r * 0.06,
-                    branch_w * 0.8,
-                );
-            }
-            let between = a + PI / 6.0;
-            let (sx, sy) = (cx + between.cos() * r * 0.18, cy + between.sin() * r * 0.18);
-            seg(
-                sx,
-                sy,
-                cx + between.cos() * r * 0.3,
-                cy + between.sin() * r * 0.3,
-                branch_w * 0.7,
-            );
-        }
+/// Whether point (u, v) (center-relative, icon units) is inside the mark.
+fn inside_mark(u: f32, v: f32) -> bool {
+    if inside_hexagon(u, v, CORE_RADIUS) {
+        return true;
     }
-    if detailed {
-        // Hexagonal core ring.
-        let hr = r * 0.13;
-        for k in 0..6 {
-            let a0 = k as f32 * TAU / 6.0 - PI / 2.0 + PI / 6.0;
-            let a1 = a0 + TAU / 6.0;
-            seg(
-                cx + a0.cos() * hr,
-                cy + a0.sin() * hr,
-                cx + a1.cos() * hr,
-                cy + a1.sin() * hr,
-                branch_w * 0.8,
-            );
-        }
-    }
-    segs
+    (0..6).any(|k| {
+        // Rotate the point into arm k's frame (arm k points at k * 60°).
+        let a = -(k as f32) * TAU / 6.0;
+        let (s, c) = a.sin_cos();
+        let (lu, lv) = (u * c - v * s, u * s + v * c);
+        let blade = point_in_polygon(lu, lv, &KITE) && !point_in_polygon(lu, lv, &NOTCH);
+        let barb = BARBS
+            .iter()
+            .any(|&(x0, y0, x1, y1)| dist_to_segment(lu, lv, x0, y0, x1, y1) <= BARB_WIDTH / 2.0);
+        blade || barb
+    })
 }
 
-fn dist_to_segment(px: f32, py: f32, s: &Seg) -> f32 {
-    let (ax, ay, bx, by) = (s[0], s[1], s[2], s[3]);
+fn inside_hexagon(u: f32, v: f32, r: f32) -> bool {
+    let corners: Vec<(f32, f32)> = (0..6)
+        .map(|k| {
+            let a = k as f32 * PI / 3.0;
+            (r * a.cos(), r * a.sin())
+        })
+        .collect();
+    point_in_polygon(u, v, &corners)
+}
+
+/// Even-odd ray casting; works for concave polygons like the notch.
+fn point_in_polygon(x: f32, y: f32, poly: &[(f32, f32)]) -> bool {
+    let mut inside = false;
+    let mut j = poly.len() - 1;
+    for i in 0..poly.len() {
+        let (xi, yi) = poly[i];
+        let (xj, yj) = poly[j];
+        if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
+}
+
+fn dist_to_segment(px: f32, py: f32, ax: f32, ay: f32, bx: f32, by: f32) -> f32 {
     let (abx, aby) = (bx - ax, by - ay);
     let len_sq = (abx * abx + aby * aby).max(f32::EPSILON);
     let t = (((px - ax) * abx + (py - ay) * aby) / len_sq).clamp(0.0, 1.0);

@@ -35,10 +35,12 @@ impl MsaConfig {
                 client_id: id.to_owned(),
             });
         }
-        Err(Error::NotConfigured(format!(
-            "Microsoft login is not configured. Set {CLIENT_ID_ENV} or create {} \
-             with {{\"client_id\": \"…\"}} (see docs/microsoft-auth.md).",
+        log::debug!(
+            "no Microsoft client ID: set {CLIENT_ID_ENV} or {} (see docs/building.md)",
             dirs.msa_config_file().display()
-        )))
+        );
+        Err(Error::NotConfigured(
+            "Microsoft sign-in isn't available in this build of Arctic Launcher.".into(),
+        ))
     }
 }

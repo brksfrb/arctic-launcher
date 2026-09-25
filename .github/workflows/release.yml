@@ -9,12 +9,23 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  ASSET: arctic-launcher-windows-x64.exe
-  CLI_ASSET: arctic-windows-x64.exe
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            launcher: target/release/arctic-launcher.exe
+            cli: target/release/arctic.exe
+            launcher_asset: arctic-launcher-windows-x64.exe
+            cli_asset: arctic-windows-x64.exe
+          - os: ubuntu-latest
+            launcher: target/release/arctic-launcher
+            cli: target/release/arctic
+            launcher_asset: arctic-launcher-linux-x64
+            cli_asset: arctic-linux-x64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -31,17 +42,36 @@ jobs:
 
       - name: Build
         env:
-          # Optional: baked in as the default Azure client ID (see docs/microsoft-auth.md).
+          # Azure client ID for Microsoft sign-in (see docs/microsoft-auth.md).
           ARCTIC_MSA_CLIENT_ID: ${{ secrets.ARCTIC_MSA_CLIENT_ID }}
         run: cargo build --release -p arctic-app -p arctic-cli
 
-      - name: Publish GitHub release
+      - name: Stage assets
         shell: bash
+        run: |
+          mkdir dist
+          cp "${{ matrix.launcher }}" "dist/${{ matrix.launcher_asset }}"
+          cp "${{ matrix.cli }}" "dist/${{ matrix.cli_asset }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}
+          path: dist/*
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp target/release/arctic-launcher.exe "$ASSET"
-          cp target/release/arctic.exe "$CLI_ASSET"
+          chmod +x dist/*linux*
           prerelease=""
           case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" "$ASSET" "$CLI_ASSET" --title "Arctic Launcher $GITHUB_REF_NAME" --generate-notes $prerelease
+          gh release create "$GITHUB_REF_NAME" dist/* --title "Arctic Launcher $GITHUB_REF_NAME" --generate-notes $prerelease

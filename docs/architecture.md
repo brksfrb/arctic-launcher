@@ -106,16 +106,25 @@ To add a loader later:
    error; that check is where the merge goes.
 4. Show instances in the Instances tab (`arctic-app/src/ui/instances.rs`).
 
-## Linux later
+## Platforms
 
-Platform-specific spots are marked `TODO(linux)`:
+Windows and Linux (x86-64) are supported from the same code. The differences are small:
+- `javaw.exe` vs `bin/java` in managed runtimes;
+- runtime symlinks, which exist only on Linux;
+- the classpath separator;
+- the updater's per-platform release asset;
+- the Windows-only title bar tint and exe icon.
 
-- Rule evaluation already maps the host to Mojang's `windows`/`linux`/`osx` names
-  (`versions::rules`).
-- `java::platform_key` / `java_executable` are the only runtime path differences.
-  Runtime `link` entries (symlinks) still need creating.
-- The classpath separator is already `cfg`-dependent.
-- The updater's asset name would gain a Linux variant (`update::WINDOWS_ASSET`).
+Rule evaluation maps the host to Mojang's `windows`/`linux`/`osx` names.
+
+## Profiles (`arctic-core::profiles`)
+
+`profiles.json` lists profiles and the active one. `DataDirs::with_profile(id)` scopes the
+per-profile paths (settings, accounts, instances, game logs) to `profiles/<id>/`. Shared
+downloads (`shared/`, `runtimes/`, `meta/`, `cache/`) stay launcher-wide. On first start,
+data from the pre-profiles layout is moved into `profiles/default/`. Removing a profile
+moves its folder to `profiles/.trash/`. The app switches profiles by reloading all
+profile-scoped state (`session.rs`), and the CLI takes `--profile`.
 
 ## Updates (`arctic-core::update`)
 

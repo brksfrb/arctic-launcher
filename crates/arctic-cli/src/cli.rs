@@ -14,6 +14,16 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "DIR", env = "ARCTIC_DATA_DIR")]
     pub data_dir: Option<PathBuf>,
 
+    /// Profile to use (name or id). Defaults to the active profile.
+    #[arg(
+        short = 'p',
+        long,
+        global = true,
+        value_name = "PROFILE",
+        env = "ARCTIC_PROFILE"
+    )]
+    pub profile: Option<String>,
+
     /// Machine-readable output: one JSON object per line.
     #[arg(long, global = true)]
     pub json: bool,
@@ -37,6 +47,9 @@ pub enum Command {
     /// Manage accounts.
     #[command(subcommand)]
     Accounts(AccountsCommand),
+    /// Manage profiles (separate accounts, settings, instances and worlds).
+    #[command(subcommand)]
+    Profiles(ProfilesCommand),
     /// Print the Java executable a version would use (installing it if needed).
     Java {
         /// Version id, `latest` or `latest-snapshot`.
@@ -144,6 +157,25 @@ pub enum AccountsCommand {
         /// Username, UUID or id.
         account: String,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ProfilesCommand {
+    /// List profiles (the active one is marked).
+    List,
+    /// Create a profile.
+    Create {
+        name: String,
+        /// Also make it the active profile.
+        #[arg(long)]
+        switch: bool,
+    },
+    /// Make a profile the active one (used by the launcher too).
+    Use { profile: String },
+    /// Rename a profile.
+    Rename { profile: String, new_name: String },
+    /// Remove a profile (its folder is moved to profiles/.trash).
+    Remove { profile: String },
 }
 
 #[derive(Debug, Args)]

@@ -78,6 +78,15 @@ impl Tasks {
         Self { tx, ctx, dirs }
     }
 
+    /// Same channel, different data folders (after a profile switch).
+    pub fn with_dirs(&self, dirs: DataDirs) -> Self {
+        Self {
+            tx: self.tx.clone(),
+            ctx: self.ctx.clone(),
+            dirs,
+        }
+    }
+
     fn run(&self, job: impl FnOnce(&Tasks) + Send + 'static) {
         let me = self.clone();
         std::thread::spawn(move || job(&me));

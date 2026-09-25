@@ -26,8 +26,11 @@ use crate::storage::DataDirs;
 use crate::{APP_VERSION, Error, Progress, ProgressInfo, Result};
 
 pub const GITHUB_REPO: &str = "brksfrb/arctic-launcher";
-/// Release asset the Windows build is published as.
-pub const WINDOWS_ASSET: &str = "arctic-launcher-windows-x64.exe";
+/// Release asset of the launcher for this platform.
+#[cfg(windows)]
+pub const PLATFORM_ASSET: &str = "arctic-launcher-windows-x64.exe";
+#[cfg(not(windows))]
+pub const PLATFORM_ASSET: &str = "arctic-launcher-linux-x64";
 const REQUIRED_MARKER: &str = "<!-- arctic:required -->";
 const MIN_SUPPORTED_PREFIX: &str = "<!-- arctic:min-supported=";
 const RELEASES_PER_PAGE: u32 = 20;
@@ -92,7 +95,7 @@ fn pick_update(
         .filter_map(|r| parse_tag(&r.tag_name).map(|v| (v, r)))
         .filter(|(v, _)| v > current);
     let (version, release) = eligible.max_by(|a, b| a.0.cmp(&b.0))?;
-    let asset = release.assets.iter().find(|a| a.name == WINDOWS_ASSET)?;
+    let asset = release.assets.iter().find(|a| a.name == PLATFORM_ASSET)?;
     let sha256 = asset
         .digest
         .as_deref()?
@@ -160,7 +163,7 @@ pub fn download_and_apply(dirs: &DataDirs, info: &UpdateInfo, progress: Progress
 
     if hex::encode(hasher.finalize()) != info.sha256 {
         let _ = fs::remove_file(&path);
-        return Err(Error::Checksum(WINDOWS_ASSET.into()));
+        return Err(Error::Checksum(PLATFORM_ASSET.into()));
     }
     self_replace::self_replace(&path)
         .map_err(|e| Error::Other(format!("could not install update: {e}")))?;
@@ -187,7 +190,7 @@ mod tests {
             draft: false,
             html_url: format!("https://example/{tag}"),
             assets: vec![Asset {
-                name: WINDOWS_ASSET.into(),
+                name: PLATFORM_ASSET.into(),
                 browser_download_url: "u".into(),
                 size: 10,
                 digest: digest.map(str::to_owned),
