@@ -1,8 +1,10 @@
 //! Command implementations. Each returns the process exit code.
 
 pub mod accounts;
+pub mod instances;
 pub mod launch;
 pub mod misc;
+pub mod mods;
 pub mod profiles;
 pub mod versions;
 

@@ -80,6 +80,8 @@ pub enum Event {
     SkinAccount(String, Outcome<crate::skin_tasks::AccountSkin>),
     /// Another player's skin by name.
     PlayerSkin(String, Outcome<(Vec<u8>, arctic_core::skins::Variant)>),
+    /// Arctic capes for an account (account id, result).
+    ArcticCapes(String, Outcome<crate::skin_tasks::ArcticCapes>),
     /// A picked skin file (name, bytes), or `None` if cancelled.
     SkinFile(Outcome<Option<(String, Vec<u8>)>>),
     /// Play-together session update.

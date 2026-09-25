@@ -22,7 +22,9 @@ use crate::net::download_all;
 use crate::settings::Settings;
 use crate::storage::DataDirs;
 use crate::versions::{RuleEnv, VersionEntry, VersionJson, load_version, mark_installed};
-use crate::{APP_VERSION, Error, LAUNCHER_BRAND, Progress, ProgressInfo, Result, java, loaders};
+use crate::{
+    APP_VERSION, Error, LAUNCHER_BRAND, Progress, ProgressInfo, Result, arctic_mod, java, loaders,
+};
 
 use self::args::{JvmOptions, Placeholders, substitute};
 
@@ -167,7 +169,21 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
             )?;
             let stage = format!("Installing {} {loader_version}", kind.label());
             progress(ProgressInfo::stage(&stage));
-            loaders::install_profile(dirs, kind, loader_version, &vanilla, &base.java, progress)?
+            let profile = loaders::install_profile(
+                dirs,
+                kind,
+                loader_version,
+                &vanilla,
+                &base.java,
+                progress,
+            )?;
+            if matches!(
+                kind,
+                loaders::LoaderKind::Fabric | loaders::LoaderKind::Quilt
+            ) {
+                arctic_mod::sync(&game_dir.join("mods"), &vanilla.id, req.instance.arctic_mod)?;
+            }
+            profile
         }
         _ => vanilla,
     };
@@ -196,6 +212,7 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
             .extra_jvm_args
             .split_whitespace()
             .map(str::to_owned)
+            .chain(arctic_mod::jvm_flag())
             .collect(),
         logging_arg,
         fullscreen: settings.fullscreen,

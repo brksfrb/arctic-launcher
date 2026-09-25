@@ -1,0 +1,24 @@
+{
+	"schemaVersion": 1,
+	"id": "arctic",
+	"version": "${version}",
+	"name": "Arctic",
+	"description": "Arctic Launcher's companion mod: capes from Arctic, visible to other Arctic players, and an in-game Arctic menu.",
+	"authors": ["Arctic Launcher contributors"],
+	"contact": {
+		"homepage": "https://arcticlauncher.com",
+		"sources": "https://github.com/brksfrb/arctic-launcher"
+	},
+	"license": "GPL-3.0-or-later",
+	"icon": "assets/arctic/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": ["com.arcticlauncher.mod.ArcticMod"]
+	},
+	"mixins": ["arctic.mixins.json"],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25"
+	}
+}

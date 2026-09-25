@@ -7,7 +7,20 @@ use arctic_core::skins::Variant;
 use arctic_core::skins::api::{self, Profile};
 use arctic_core::{Error, Result};
 
+use arctic_core::cosmetics::{self, CatalogItem};
+
 use crate::tasks::{Event, Tasks};
+
+/// Arctic capes: what's offered and what the player wears.
+#[derive(Debug, Clone)]
+pub struct ArcticCapes {
+    pub catalog: Vec<CatalogItem>,
+    /// (cape id, PNG)
+    pub textures: Vec<(String, Vec<u8>)>,
+    pub equipped: Option<String>,
+    /// Cosmetics session, reused for later changes.
+    pub token: String,
+}
 
 /// The signed-in player's skin state with textures downloaded.
 #[derive(Debug, Clone)]
@@ -80,6 +93,59 @@ impl Tasks {
                 "Skins can only be changed on Microsoft accounts.".into(),
             )),
         }
+    }
+
+    /// Sign in to Arctic (or reuse `token`), optionally equip a cape, and
+    /// read the catalog and the equipped cape.
+    pub fn arctic_capes(
+        &self,
+        account: Account,
+        token: Option<String>,
+        equip: Option<Option<String>>,
+    ) {
+        self.run(move |t| {
+            let id = account.id.clone();
+            let result = t
+                .arctic_capes_blocking(account, token, equip)
+                .map_err(|e| e.to_string());
+            t.send(Event::ArcticCapes(id, result));
+        });
+    }
+
+    fn arctic_capes_blocking(
+        &self,
+        account: Account,
+        token: Option<String>,
+        equip: Option<Option<String>>,
+    ) -> Result<ArcticCapes> {
+        let base = cosmetics::base_url();
+        let catalog = cosmetics::catalog(&base)?;
+        let token = match token {
+            Some(t) => t,
+            None => {
+                let (uuid, name) = (account.uuid.clone(), account.username.clone());
+                let access = self.fresh_token(account)?;
+                cosmetics::sign_in(&base, &access, &uuid, &name)?
+            }
+        };
+        if let Some(cape) = &equip {
+            cosmetics::equip(&base, &token, cape.as_deref())?;
+        }
+        let me = cosmetics::me(&base, &token)?;
+        let textures = catalog
+            .iter()
+            .filter_map(|c| {
+                cosmetics::texture(&base, &c.id)
+                    .ok()
+                    .map(|png| (c.id.clone(), png))
+            })
+            .collect();
+        Ok(ArcticCapes {
+            catalog,
+            textures,
+            equipped: me.equipped.cape,
+            token,
+        })
     }
 
     /// Another player's current skin, by name.

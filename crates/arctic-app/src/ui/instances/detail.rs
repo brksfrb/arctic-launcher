@@ -162,6 +162,7 @@ impl ArcticApp {
         if instance.is_default() {
             return;
         }
+        self.arctic_mod_card(ui, instance);
         ui.add_space(12.0);
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -182,6 +183,44 @@ impl ArcticApp {
                     self.delete_instance(&id);
                 }
             });
+        });
+    }
+
+    /// Toggle for Arctic's companion mod (Fabric and Quilt only).
+    fn arctic_mod_card(&mut self, ui: &mut egui::Ui, instance: &Instance) {
+        use arctic_core::arctic_mod;
+        use arctic_core::loaders::LoaderKind;
+        let p = self.palette();
+        let fabric_like = matches!(
+            instance.loader.kind(),
+            Some(LoaderKind::Fabric | LoaderKind::Quilt)
+        );
+        if !fabric_like {
+            return;
+        }
+        let supported = instance
+            .version
+            .as_deref()
+            .is_some_and(arctic_mod::supports);
+        ui.add_space(12.0);
+        theme::card(p).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(RichText::new("Arctic mod").size(17.0).strong().color(p.text));
+            ui.label(
+                RichText::new(
+                    "Arctic capes (seen by other Arctic players) and an Arctic button in the pause menu.",
+                )
+                .color(p.muted),
+            );
+            if !supported {
+                ui.label(RichText::new("Not available for this Minecraft version yet.").color(p.muted));
+                return;
+            }
+            let mut on = instance.arctic_mod;
+            if ui.checkbox(&mut on, "Install the Arctic mod").changed() {
+                let id = instance.id.clone();
+                self.update_instance(&id, |i| i.arctic_mod = on);
+            }
         });
     }
 

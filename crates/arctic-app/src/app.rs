@@ -586,9 +586,10 @@ impl ArcticApp {
             | Event::ModInstalled(..)
             | Event::ModIcon(..)) => self.on_instances_event(e, ctx),
             Event::Share(id, event) => self.on_share_event(id, event),
-            e @ (Event::SkinAccount(..) | Event::PlayerSkin(..) | Event::SkinFile(..)) => {
-                self.on_skins_event(e)
-            }
+            e @ (Event::SkinAccount(..)
+            | Event::PlayerSkin(..)
+            | Event::SkinFile(..)
+            | Event::ArcticCapes(..)) => self.on_skins_event(e),
             Event::UpdateChecked(result) => self.on_update_checked(result),
             Event::UpdateInstalled(result) => self.on_update_installed(result),
         }

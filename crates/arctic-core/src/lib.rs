@@ -4,7 +4,9 @@
 //! (e.g. by a future CLI or Linux build). The egui app in `arctic-app` only
 //! drives these APIs from background threads.
 
+pub mod arctic_mod;
 pub mod auth;
+pub mod cosmetics;
 pub mod error;
 pub mod instances;
 pub mod java;

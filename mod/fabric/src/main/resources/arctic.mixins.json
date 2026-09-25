@@ -1,0 +1,13 @@
+{
+	"required": true,
+	"package": "com.arcticlauncher.mod.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"client": [
+		"AbstractClientPlayerMixin",
+		"PauseScreenMixin",
+		"TitleScreenMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

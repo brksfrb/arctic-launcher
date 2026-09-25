@@ -65,6 +65,8 @@ fn run(cli: &Cli, out: Out) -> Result<i32, (Out, arctic_core::Error)> {
         Command::Paths => commands::misc::paths(&ctx),
         Command::Update { beta } => commands::misc::update_check(&ctx, *beta),
         Command::Open(args) => commands::misc::open(&ctx, args),
+        Command::Instances(cmd) => commands::instances::run(&ctx, cmd),
+        Command::Mods(cmd) => commands::mods::run(&ctx, cmd),
     };
     result.map_err(|e| (ctx.out, e))
 }

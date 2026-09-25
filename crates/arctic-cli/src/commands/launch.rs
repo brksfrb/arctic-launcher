@@ -19,9 +19,14 @@ use crate::output::parse_memory;
 pub fn run(ctx: &Ctx, args: &LaunchArgs) -> Result<i32> {
     let settings = apply_overrides(Settings::load(&ctx.dirs)?, args)?;
     let manifest = VersionManifest::fetch(&ctx.dirs)?;
-    let entry = resolve_version(&manifest, &args.version)?;
+    let instance = match &args.instance {
+        Some(query) => instances::find(&ctx.dirs, query)?,
+        None => instances::load_default(&ctx.dirs)?,
+    };
+    // Custom instances pin their Minecraft version.
+    let version = instance.version.as_deref().unwrap_or(&args.version);
+    let entry = resolve_version(&manifest, version)?;
     let account = pick_account(ctx, args)?;
-    let instance = instances::load_default(&ctx.dirs)?;
 
     let progress = |p: ProgressInfo| ctx.out.progress(p);
     let req = LaunchRequest {

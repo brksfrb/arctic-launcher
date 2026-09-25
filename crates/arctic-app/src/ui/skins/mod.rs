@@ -11,7 +11,7 @@ use arctic_core::skins::{self, Library, SkinEntry, Variant};
 use eframe::egui::{self, ColorImage, TextureHandle, TextureOptions};
 
 use crate::app::ArcticApp;
-use crate::skin_tasks::{AccountSkin, SkinChange};
+use crate::skin_tasks::{AccountSkin, ArcticCapes, SkinChange};
 use crate::tasks::Event;
 use crate::toasts::Kind;
 
@@ -46,6 +46,9 @@ pub struct SkinsUi {
     pub yaw: f32,
     pub pitch: f32,
     pub renaming: Option<(String, String)>,
+    /// Account id → Arctic capes (fetched with the account's skin).
+    pub arctic: HashMap<String, Result<ArcticCapes, String>>,
+    pub arctic_busy: bool,
 }
 
 impl ArcticApp {
@@ -94,7 +97,24 @@ impl ArcticApp {
             return;
         }
         self.skins.busy = true;
-        self.tasks.skin_account(account, SkinChange::None);
+        self.tasks.skin_account(account.clone(), SkinChange::None);
+        if !self.skins.arctic.contains_key(&account.id) && !self.skins.arctic_busy {
+            self.skins.arctic_busy = true;
+            self.tasks.arctic_capes(account, None, None);
+        }
+    }
+
+    /// Equip an Arctic cape (or none) for the active account.
+    fn equip_arctic_cape(&mut self, cape: Option<String>) {
+        let Some(account) = self.accounts.active().cloned() else {
+            return;
+        };
+        let token = match self.skins.arctic.get(&account.id) {
+            Some(Ok(state)) => Some(state.token.clone()),
+            _ => None,
+        };
+        self.skins.arctic_busy = true;
+        self.tasks.arctic_capes(account, token, Some(cape));
     }
 
     fn change_account_skin(&mut self, change: SkinChange) {
@@ -120,6 +140,16 @@ impl ArcticApp {
             return Library::read_png(&self.skins_dir(), id).ok();
         }
         let account = self.accounts.active()?;
+        if let Some(id) = key.strip_prefix("arctic:") {
+            return match self.skins.arctic.get(&account.id)? {
+                Ok(state) => state
+                    .textures
+                    .iter()
+                    .find(|(c, _)| c == id)
+                    .map(|(_, png)| png.clone()),
+                Err(_) => None,
+            };
+        }
         match self.skins.account.get(&account.id)? {
             Ok(state) if key == "current" => state.skin_png.clone(),
             Ok(state) => {
@@ -203,6 +233,11 @@ impl ArcticApp {
                 }
                 self.skins.account.insert(account_id, result);
             }
+            Event::ArcticCapes(account_id, result) => {
+                self.skins.arctic_busy = false;
+                self.skins.textures.retain(|k, _| !k.starts_with("arctic:"));
+                self.skins.arctic.insert(account_id, result);
+            }
             Event::PlayerSkin(name, result) => {
                 self.skins.looking_up = false;
                 match result {
@@ -225,7 +260,7 @@ impl ArcticApp {
 
 fn upload(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture> {
     // Capes are 64×32 (or larger multiples); skins go through the skin decoder.
-    if key.starts_with("cape:") {
+    if key.starts_with("cape:") || key.starts_with("arctic:") {
         let image = image::load_from_memory(png).ok()?.to_rgba8();
         let size = [image.width() as usize, image.height() as usize];
         let color = ColorImage::from_rgba_unmultiplied(size, image.as_raw());

@@ -138,6 +138,61 @@ impl ArcticApp {
             None => self.current_actions(ui),
         }
         self.capes_row(ui);
+        self.arctic_capes_row(ui);
+    }
+
+    /// Arctic capes: seen by other players using the Arctic mod.
+    fn arctic_capes_row(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
+        let Some(account) = self.accounts.active().filter(|a| a.is_microsoft()) else {
+            return;
+        };
+        ui.add_space(10.0);
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("ARCTIC CAPES").small().color(p.muted));
+            if self.skins.arctic_busy {
+                ui.spinner();
+            }
+        });
+        let state = match self.skins.arctic.get(&account.id) {
+            Some(Ok(state)) => state.clone(),
+            Some(Err(_)) => {
+                ui.label(
+                    RichText::new("Arctic capes are unavailable right now.")
+                        .small()
+                        .color(p.muted),
+                );
+                return;
+            }
+            None => return,
+        };
+        let ctx = ui.ctx().clone();
+        let mut pick: Option<Option<String>> = None;
+        ui.horizontal_wrapped(|ui| {
+            let none = state.equipped.is_none();
+            if cape_tile(ui, p, None, "No Arctic cape", none) && !none {
+                pick = Some(None);
+            }
+            for item in &state.catalog {
+                let tex = self
+                    .skin_texture(&ctx, &format!("arctic:{}", item.id))
+                    .map(|t| t.handle.id());
+                let active = state.equipped.as_deref() == Some(item.id.as_str());
+                if cape_tile(ui, p, tex, &item.name, active) && !active {
+                    pick = Some(Some(item.id.clone()));
+                }
+            }
+        });
+        ui.label(
+            RichText::new("Shown to players with the Arctic mod, over your Minecraft cape.")
+                .small()
+                .color(p.muted),
+        );
+        if let Some(choice) = pick
+            && !self.skins.arctic_busy
+        {
+            self.equip_arctic_cape(choice);
+        }
     }
 
     fn current_actions(&mut self, ui: &mut egui::Ui) {
@@ -430,6 +485,12 @@ impl ArcticApp {
 
     fn active_cape_key(&self) -> Option<String> {
         let a = self.accounts.active()?;
+        // An Arctic cape shows over the Minecraft one, like in game.
+        if let Some(Ok(arctic)) = self.skins.arctic.get(&a.id)
+            && let Some(id) = &arctic.equipped
+        {
+            return Some(format!("arctic:{id}"));
+        }
         match self.skins.account.get(&a.id)? {
             Ok(state) => state
                 .profile
