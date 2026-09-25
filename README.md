@@ -22,7 +22,9 @@
   <a href="docs/cli.md">Command line</a>
 </p>
 
----
+<p align="center">
+  <img src="docs/assets/screenshot.webp" alt="Arctic Launcher" width="900">
+</p>
 
 ## Why Arctic
 

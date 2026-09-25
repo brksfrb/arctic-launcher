@@ -38,15 +38,20 @@ impl ArcticApp {
             "Logs",
             "Live output from Minecraft and the launcher.",
         );
+        // Toolbar first: it may change the source, filter or clear the log,
+        // and the view below must be built from the state it leaves behind.
+        let copy_requested = self.logs_toolbar(ui);
+        ui.add_space(8.0);
         if let Some((total, lines)) = logbook::snapshot_if_changed(self.launcher_log_seen) {
             self.launcher_log = lines;
             self.launcher_log_seen = total;
         }
+        let source = self.log_source;
         let key = LogViewKey {
-            source: self.log_source,
+            source,
             min_level: self.log_min_level,
             query: self.log_search.trim().to_lowercase(),
-            revision: match self.log_source {
+            revision: match source {
                 LogSource::Game => self.game_log_rev,
                 LogSource::Launcher => self.launcher_log_seen,
             },
@@ -60,14 +65,29 @@ impl ArcticApp {
             .as_ref()
             .map(|(_, i)| i.clone())
             .unwrap_or_default();
-
-        self.logs_toolbar(ui, &indices);
-        ui.add_space(8.0);
-        let line = |i: usize| match self.log_source {
-            LogSource::Game => &self.game_log[i],
-            LogSource::Launcher => &self.launcher_log[i],
+        let line = |i: usize| match source {
+            LogSource::Game => self.game_log.get(i),
+            LogSource::Launcher => self.launcher_log.get(i),
         };
-        console(ui, p, &indices, &line, self.log_follow, self.log_source);
+        if copy_requested {
+            let text: Vec<&str> = indices
+                .iter()
+                .filter_map(|&i| line(i))
+                .map(|l| l.text.as_str())
+                .collect();
+            ui.ctx().copy_text(text.join(
+                "
+",
+            ));
+            let count = text.len();
+            self.toasts
+                .push(Kind::Info, format!("Copied {count} lines"), "");
+        }
+        let line = |i: usize| match source {
+            LogSource::Game => self.game_log.get(i),
+            LogSource::Launcher => self.launcher_log.get(i),
+        };
+        console(ui, p, &indices, &line, self.log_follow, source);
     }
 
     fn filter_log(&self, key: &LogViewKey) -> Vec<usize> {
@@ -93,8 +113,10 @@ impl ArcticApp {
         }
     }
 
-    fn logs_toolbar(&mut self, ui: &mut egui::Ui, indices: &[usize]) {
+    /// Returns true when "Copy" was clicked.
+    fn logs_toolbar(&mut self, ui: &mut egui::Ui) -> bool {
         let p = self.palette();
+        let mut copy = false;
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.log_source, LogSource::Game, "Minecraft");
             ui.selectable_value(&mut self.log_source, LogSource::Launcher, "Launcher");
@@ -129,19 +151,11 @@ impl ArcticApp {
                     let _ = open::that_detached(&file);
                 }
                 if widgets::icon_button(ui, p, Icon::Copy, "Copy shown lines").clicked() {
-                    let text: Vec<&str> = indices
-                        .iter()
-                        .map(|&i| match self.log_source {
-                            LogSource::Game => self.game_log[i].text.as_str(),
-                            LogSource::Launcher => self.launcher_log[i].text.as_str(),
-                        })
-                        .collect();
-                    ui.ctx().copy_text(text.join("\n"));
-                    self.toasts
-                        .push(Kind::Info, format!("Copied {} lines", indices.len()), "");
+                    copy = true;
                 }
             });
         });
+        copy
     }
 }
 
@@ -149,7 +163,7 @@ fn console<'a>(
     ui: &mut egui::Ui,
     p: &Palette,
     indices: &[usize],
-    line: &dyn Fn(usize) -> &'a LogLine,
+    line: &dyn Fn(usize) -> Option<&'a LogLine>,
     follow: bool,
     source: LogSource,
 ) {
@@ -183,8 +197,7 @@ fn console<'a>(
                 .max_height(height)
                 .stick_to_bottom(follow)
                 .show_rows(ui, row_height, indices.len(), |ui, range| {
-                    for &i in &indices[range] {
-                        let l = line(i);
+                    for l in indices[range].iter().filter_map(|&i| line(i)) {
                         let color = match l.level {
                             Level::Error => p.error,
                             Level::Warn => p.warn,

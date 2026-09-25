@@ -172,6 +172,9 @@ pub struct ArcticApp {
     early_game_events: Vec<GameEvent>,
     splash: Splash,
     applied_theme: Option<ThemeMode>,
+    /// Maximize on the first frame (creating the window maximized is
+    /// unreliable on Windows: wrong restore size, flicker).
+    maximize_pending: bool,
     /// Launch requested on the command line, run once versions are loaded.
     pending_launch: Option<String>,
     login_attempts: LoginAttempt,
@@ -200,6 +203,7 @@ impl ArcticApp {
         let mut app = Self {
             splash: Splash::new(intro),
             applied_theme: None,
+            maximize_pending: data.settings.start_maximized,
             pending_launch: startup.launch.clone(),
             msa_configured: MsaConfig::load(&dirs).is_ok(),
             installed: versions::installed_versions(&dirs),
@@ -613,6 +617,9 @@ impl eframe::App for ArcticApp {
         let ctx = ui.ctx().clone();
         while let Ok(event) = self.events.try_recv() {
             self.handle_event(event, &ctx);
+        }
+        if std::mem::take(&mut self.maximize_pending) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
         }
         if self.applied_theme != Some(self.settings.theme) {
             self.applied_theme = Some(self.settings.theme);

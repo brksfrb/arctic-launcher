@@ -18,7 +18,6 @@ mod widgets;
 use std::sync::Arc;
 
 use arctic_core::profiles::ProfileStore;
-use arctic_core::settings::Settings;
 use arctic_core::storage::DataDirs;
 use eframe::egui;
 
@@ -54,9 +53,7 @@ fn main() -> eframe::Result {
             None => log::warn!("no profile named '{query}'"),
         }
     }
-    let maximized = Settings::load(&profiles.scoped(&dirs))
-        .map(|s| s.start_maximized)
-        .unwrap_or(false);
+
     log::info!(
         "{} {} — data dir {}",
         arctic_core::APP_NAME,
@@ -74,8 +71,7 @@ fn main() -> eframe::Result {
             .with_title(arctic_core::APP_NAME)
             .with_icon(Arc::new(icon))
             .with_inner_size(DEFAULT_WINDOW)
-            .with_min_inner_size(MIN_WINDOW)
-            .with_maximized(maximized),
+            .with_min_inner_size(MIN_WINDOW),
         ..Default::default()
     };
     eframe::run_native(
