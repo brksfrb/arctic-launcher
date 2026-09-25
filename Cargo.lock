@@ -293,7 +293,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "arctic-core",
  "arctic-share",
@@ -311,7 +311,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "arctic-core",
  "clap",
@@ -322,7 +322,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.23.1",
  "dirs",
@@ -350,7 +350,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-cosmetics"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
  "env_logger",
@@ -370,7 +370,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-share"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "data-encoding",
  "env_logger",
