@@ -1,0 +1,33 @@
+[package]
+name = "arctic-core"
+description = "Core library for Arctic Launcher: auth, versions, Java runtimes, launching, updates."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
+[dependencies]
+base64 = "0.23.1"
+dirs = "7.0.0"
+hex = "0.4.3"
+log = "0.4.34"
+lzma-rs = "0.3.0"
+md-5 = "0.11.0"
+open = "5.4.4"
+png = "0.18.1"
+self-replace = "1.5.0"
+semver = "1.0.28"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sha1 = "0.11.0"
+sha2 = "0.11.0"
+thiserror = "2.0.21"
+ureq = { version = "3.4.2", features = ["json", "platform-verifier"] }
+uuid = { version = "1.26.1", features = ["v4", "serde"] }
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+env_logger = "0.11.11"
+tempfile = "3.27.0"

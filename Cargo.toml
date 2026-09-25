@@ -1,0 +1,17 @@
+[workspace]
+resolver = "3"
+members = ["crates/arctic-core", "crates/arctic-app", "crates/arctic-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/brksfrb/arctic-launcher"
+homepage = "https://arcticlauncher.com"
+authors = ["Arctic Launcher contributors"]
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+opt-level = 3

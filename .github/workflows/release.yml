@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  ASSET: arctic-launcher-windows-x64.exe
+  CLI_ASSET: arctic-windows-x64.exe
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check tag matches Cargo version
+        shell: bash
+        run: |
+          version=$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)
+          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME != v$version"; exit 1; }
+
+      - name: Test
+        run: cargo test --workspace
+
+      - name: Build
+        env:
+          # Optional: baked in as the default Azure client ID (see docs/microsoft-auth.md).
+          ARCTIC_MSA_CLIENT_ID: ${{ secrets.ARCTIC_MSA_CLIENT_ID }}
+        run: cargo build --release -p arctic-app -p arctic-cli
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp target/release/arctic-launcher.exe "$ASSET"
+          cp target/release/arctic.exe "$CLI_ASSET"
+          prerelease=""
+          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" "$ASSET" "$CLI_ASSET" --title "Arctic Launcher $GITHUB_REF_NAME" --generate-notes $prerelease

@@ -1,0 +1,27 @@
+[package]
+name = "arctic-app"
+description = "Arctic Launcher desktop app (egui)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
+[dependencies]
+arctic-core = { version = "0.1.0", path = "../arctic-core" }
+# glow (OpenGL) instead of the default wgpu backend keeps the binary small.
+eframe = { version = "0.36.2", default-features = false, features = ["accesskit", "default_fonts", "glow", "links", "wayland", "x11"] }
+log = "0.4.34"
+open = "5.4.4"
+raw-window-handle = "0.6"
+
+[[bin]]
+name = "arctic-launcher"
+path = "src/main.rs"
+
+[build-dependencies]
+winresource = "0.1.31"
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Dwm"] }

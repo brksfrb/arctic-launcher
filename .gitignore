@@ -1,0 +1,34 @@
+# Build output
+/target/
+**/*.rs.bk
+
+# Local configuration and secrets — never commit these
+.env
+.env.*
+!.env.example
+msa.json
+*.secret
+*.pem
+*.key
+*.pfx
+*.p12
+*.jks
+*.keystore
+*.snk
+
+# Launcher data when running in portable mode / dev data dirs
+/data/
+portable.txt
+
+# AI assistant / local tooling notes (never committed)
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+AGENTS.md
+
+# Editors / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
