@@ -6,7 +6,7 @@
 
 <p align="center">
   A fast, lightweight Minecraft launcher.<br>
-  Every release, the right Java, your accounts, a few clicks.
+  Every release, mod loaders, mods, skins and playing with friends, in one small app.
 </p>
 
 <p align="center">
@@ -35,6 +35,17 @@
   instant.
 - **Light.** One small native app, no Electron and no browser engine. It uses almost no
   CPU while you play.
+- **Mods in a click.** Create Fabric, Quilt, NeoForge or Forge instances, then search
+  Modrinth and install mods with their dependencies. Each instance keeps its own version,
+  mods and worlds.
+- **Play together.** Invite friends into your world with a code. No server, no port
+  forwarding: open your world to LAN and Arctic connects you directly (or through an
+  encrypted relay when a direct link isn't possible).
+- **Skins and capes.** Preview skins on a 3D model, keep a library, copy a player's skin
+  by name, and switch skins and capes without leaving the launcher.
+- **Arctic capes.** Free Arctic capes, visible to everyone playing with the Arctic mod,
+  plus an Arctic menu inside the game. The mod is added to Fabric and Quilt instances
+  automatically, and you can turn it off per instance.
 - **Your accounts, side by side.** Sign in with Microsoft in the browser or with a short
   code. Keep several accounts and switch in one click.
 - **Profiles.** Keep completely separate setups on one PC, each with its own accounts,
@@ -43,8 +54,9 @@
   filterable by warnings or errors.
 - **Made to look at.** An animated arctic night with aurora, snowfall and shooting stars.
   Aurora, Dark and Light themes.
-- **Command line included.** `arctic launch 1.21.4`, scriptable JSON
-  output, and desktop shortcuts that start a version directly.
+- **Discord status.** Friends see what you're playing. Turn it off in Settings.
+- **Command line included.** Launch versions and instances, install mods and manage
+  profiles from a terminal, with scriptable JSON output.
 - **Stays up to date.** Updates install themselves in seconds, verified before they're
   applied.
 - **Open source** under the GPL-3.0.
@@ -79,11 +91,16 @@ your `PATH` as `arctic`. See the [command line guide](docs/cli.md).
 
 ## Getting started
 
-1. Open **Accounts** and sign in with your Microsoft account.
-2. On **Play**, pick a version. The picker shows which ones are already installed.
-3. Press **Play**.
+The first time you open Arctic, a short setup picks your theme, account, memory and
+first instance. After that:
 
-Memory, window size, theme and more are under **Settings**. To keep a separate setup,
+1. On **Play**, pick a version or an instance. The picker shows which versions are
+   already installed.
+2. Press **Play**.
+
+For mods, open **Instances**, create a Fabric instance and use **Browse mods**. To play
+with friends, open **Play together**. Memory, window size, theme and more are under
+**Settings**. To keep a separate setup,
 for example for testing or family members, create a **profile** from the switcher under
 the logo.
 
@@ -94,6 +111,9 @@ arctic launch                          # latest release, active account
 arctic launch 1.20.1 --account Alex --memory 6G
 arctic launch latest --wait
 arctic install 1.21.4                  # download only
+arctic instances create "Fabric" --version 26.3 --loader fabric
+arctic mods install sodium --instance fabric
+arctic launch --instance fabric
 arctic profiles create "Speedruns" --switch
 arctic open --launch 1.21.4            # open the launcher and start playing
 ```
@@ -109,15 +129,26 @@ Each profile lives in `profiles/<name>/`. Worlds are inside
 `instances/vanilla/minecraft/saves`. `arctic paths` prints them all.
 
 **Where are my sign-in details stored?**
-Only on your computer, in your profile folder. Arctic talks to Microsoft, Xbox and Mojang
-to sign you in and nowhere else.
+Only on your computer, in your profile folder. They are sent only to Microsoft, Xbox and
+Mojang to sign you in. Arctic's own services (Arctic capes) never receive your password or
+tokens: they check who you are the same way a Minecraft server does.
+
+**What does Arctic connect to?**
+Mojang and Microsoft for the game and sign-in, Modrinth and the Fabric, Quilt, NeoForge
+and Forge servers for mods and loaders, GitHub for updates, and the Arctic cosmetics
+service for capes. Play together connects you directly to your friend, using a public
+relay only to set that up or when a direct link fails.
 
 **Does it need Java?**
 No. Arctic downloads the official Java runtime each Minecraft version needs and keeps it
 up to date.
 
 **Mods?**
-Fabric, Quilt and Forge instances are on the way.
+Yes. Create a Fabric, Quilt, NeoForge or Forge instance under **Instances** and browse
+Modrinth from there. You can also drop `.jar` files into the instance's `mods` folder.
+
+**Do my friends need Arctic to play together?**
+Yes, both of you need Arctic Launcher, the same Minecraft version and the same mods.
 
 **Is this an official Minecraft product?**
 No. Arctic Launcher is an independent project, not approved by or associated with Mojang

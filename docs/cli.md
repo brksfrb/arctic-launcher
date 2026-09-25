@@ -8,6 +8,7 @@ make desktop shortcuts, or run Minecraft on a machine you only reach over SSH.
 arctic launch                       # latest release as the active account
 arctic launch 1.21.4
 arctic launch latest --account Alex --memory 6G --wait
+arctic launch --instance fabric     # an instance, with its own version and mods
 arctic open --launch 1.20.1         # open the launcher window and start 1.20.1
 ```
 
@@ -57,6 +58,7 @@ Downloads whatever is missing, then starts Minecraft.
 
 | Option | Meaning |
 |---|---|
+| `-i, --instance <NAME>` | Launch an instance (id or name). Custom instances use their own Minecraft version |
 | `-a, --account <NAME>` | Saved account by username, UUID or id (default: the active account) |
 | `-m, --memory <SIZE>` | Max heap, e.g. `4G`, `6144M`, `6144` |
 | `--width <PX>` / `--height <PX>` | Window size |
@@ -68,6 +70,48 @@ Downloads whatever is missing, then starts Minecraft.
 Without `--wait`, the game is started **detached**: it keeps running after `arctic` exits,
 and its output goes to `profiles\<profile>\logs\game-vanilla.log`. Microsoft sessions are refreshed
 automatically when needed.
+
+### `arctic instances`
+
+```text
+arctic instances list
+arctic instances create <NAME> [--version <VERSION>] [--loader <LOADER>] [--loader-version <V>]
+arctic instances remove <INSTANCE>
+```
+
+`--loader` is `vanilla` (default), `fabric`, `quilt`, `neoforge` or `forge`. Without
+`--loader-version`, the newest stable loader build for that Minecraft version is used.
+Removing an instance moves its folder (worlds included) to `instances/.trash`.
+
+```text
+arctic instances create "Fabric" --version 26.3 --loader fabric
+Created Fabric (Fabric 0.19.5, Minecraft 26.3). Start it with: arctic launch --instance fabric
+```
+
+JSON (`list`): `{"id","name","version","loader","loader_version"}` per instance.
+
+### `arctic mods`
+
+Mods come from [Modrinth](https://modrinth.com) and are matched to the instance's
+Minecraft version and loader. Required dependencies are installed too.
+
+```text
+arctic mods search <QUERY> --instance <INSTANCE> [-n <LIMIT>]
+arctic mods install <SLUG_OR_ID> --instance <INSTANCE>
+arctic mods list --instance <INSTANCE>
+arctic mods toggle <FILE> on|off --instance <INSTANCE>
+arctic mods remove <FILE> --instance <INSTANCE>
+```
+
+```text
+arctic mods install sodium-extra --instance fabric
+Installed Sodium Extra 0.6.1
+Installed Sodium 0.6.13 (dependency)
+```
+
+JSON: `search` prints `{"id","slug","title","author","downloads","description"}`,
+`install` prints one `{"event":"installed",...}` per file, `list` prints
+`{"file","enabled","title","size"}`.
 
 ### `arctic accounts`
 
