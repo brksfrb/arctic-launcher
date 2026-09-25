@@ -76,6 +76,8 @@ pub enum Event {
     ModInstalled(String, String, Outcome<Vec<InstalledMod>>),
     /// Icon bytes for a URL.
     ModIcon(String, Outcome<Vec<u8>>),
+    /// Play-together session update.
+    Share(arctic_share::SessionId, arctic_share::ShareEvent),
 }
 
 /// Handle used by the UI to start background jobs.
@@ -103,6 +105,17 @@ impl Tasks {
     fn run(&self, job: impl FnOnce(&Tasks) + Send + 'static) {
         let me = self.clone();
         std::thread::spawn(move || job(&me));
+    }
+
+    /// Callback for the play-together service, feeding the event loop.
+    pub fn share_sink(
+        &self,
+    ) -> impl Fn(arctic_share::SessionId, arctic_share::ShareEvent) + Send + Sync + 'static {
+        let (tx, ctx) = (self.tx.clone(), self.ctx.clone());
+        move |id, event| {
+            let _ = tx.send(Event::Share(id, event));
+            ctx.request_repaint();
+        }
     }
 
     fn send(&self, event: Event) {

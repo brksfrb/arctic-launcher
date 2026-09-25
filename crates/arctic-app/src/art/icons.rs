@@ -9,6 +9,8 @@ use eframe::egui::{Color32, Painter, Pos2, Rect, Shape, Stroke, Vec2, vec2};
 pub enum Icon {
     Play,
     User,
+    /// Two people (play together).
+    Friends,
     Layers,
     Gear,
     Info,
@@ -58,6 +60,21 @@ pub fn draw(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
                 })
                 .collect();
             painter.add(Shape::closed_line(shoulders, stroke));
+        }
+        Icon::Friends => {
+            let person = |dx: f32, scale: f32| {
+                let head = c + vec2(dx, -0.3 * scale) * s;
+                painter.circle_stroke(head, 0.24 * scale * s, stroke);
+                let body: Vec<Pos2> = (0..=12)
+                    .map(|i| {
+                        let a = std::f32::consts::PI * (1.0 + i as f32 / 12.0);
+                        c + vec2(dx + a.cos() * 0.5 * scale, 0.75 + a.sin() * 0.5 * scale) * s
+                    })
+                    .collect();
+                painter.add(Shape::line(body, stroke));
+            };
+            person(-0.36, 0.9);
+            person(0.4, 0.8);
         }
         Icon::Layers => {
             for dy in [-0.45, 0.0, 0.45] {

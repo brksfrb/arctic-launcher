@@ -37,16 +37,18 @@ pub enum Tab {
     Play,
     Accounts,
     Instances,
+    Together,
     Logs,
     Settings,
     About,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 6] = [
+    pub const ALL: [Tab; 7] = [
         Tab::Play,
         Tab::Accounts,
         Tab::Instances,
+        Tab::Together,
         Tab::Logs,
         Tab::Settings,
         Tab::About,
@@ -177,6 +179,8 @@ pub struct ArcticApp {
     theme_fade: Option<crate::theme_fade::ThemeFade>,
     discord: crate::discord::Discord,
     pub(crate) onboarding: Option<crate::ui::Onboarding>,
+    pub(crate) together: crate::ui::TogetherUi,
+    devshot: crate::devshot::DevShot,
     /// Maximize on the first frame (creating the window maximized is
     /// unreliable on Windows: wrong restore size, flicker).
     maximize_pending: bool,
@@ -212,6 +216,8 @@ impl ArcticApp {
             theme_fade: None,
             discord: crate::discord::Discord::new(),
             onboarding: None,
+            together: crate::ui::TogetherUi::default(),
+            devshot: crate::devshot::DevShot::from_env(),
             maximize_pending: data.settings.start_maximized,
             pending_launch: startup.launch.clone(),
             msa_configured: MsaConfig::load(&dirs).is_ok(),
@@ -575,6 +581,7 @@ impl ArcticApp {
             | Event::ModProgress(..)
             | Event::ModInstalled(..)
             | Event::ModIcon(..)) => self.on_instances_event(e, ctx),
+            Event::Share(id, event) => self.on_share_event(id, event),
             Event::UpdateChecked(result) => self.on_update_checked(result),
             Event::UpdateInstalled(result) => self.on_update_installed(result),
         }
@@ -696,6 +703,7 @@ impl eframe::App for ArcticApp {
         self.splash.show(&ctx, self.palette());
         self.autosave_settings(&ctx);
         self.pace_scenery(&ctx);
+        self.devshot.update(&ctx);
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {

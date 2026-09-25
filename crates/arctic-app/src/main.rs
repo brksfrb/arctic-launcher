@@ -3,6 +3,7 @@
 
 mod app;
 mod art;
+mod devshot;
 mod discord;
 mod icon_raster;
 mod logbook;

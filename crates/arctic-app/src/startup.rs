@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! arctic-launcher.exe [--launch <version|latest>] [--account <name|uuid>]
-//!                     [--tab <play|accounts|instances|logs|settings|about>] [--no-intro]
+//!                     [--tab <play|accounts|instances|together|logs|settings|about>] [--no-intro]
 //!                     [--profile <name|id>]
 //! ```
 //! Unknown flags are ignored so old shortcuts never stop the app starting.
@@ -44,6 +44,7 @@ fn parse_tab(name: &str) -> Option<Tab> {
         "play" => Some(Tab::Play),
         "accounts" => Some(Tab::Accounts),
         "instances" => Some(Tab::Instances),
+        "together" => Some(Tab::Together),
         "logs" => Some(Tab::Logs),
         "settings" => Some(Tab::Settings),
         "about" => Some(Tab::About),

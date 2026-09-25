@@ -1,0 +1,20 @@
+[package]
+name = "arctic-share"
+description = "Arctic Launcher peer-to-peer world sharing."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
+[dev-dependencies]
+env_logger = "0.11.11"
+tokio = { version = "1.53.1", features = ["rt", "time", "net"] }
+
+[dependencies]
+iroh = { version = "1.2.0", default-features = false, features = ["tls-ring", "portmapper", "platform-verifier"] }
+data-encoding = "2.9.0"
+log = "0.4.34"
+socket2 = { version = "0.6.5", features = ["all"] }
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "net", "io-util", "time", "sync", "macros"] }

@@ -15,4 +15,6 @@ pub use onboarding::Onboarding;
 mod play;
 mod profiles;
 mod settings;
+mod together;
+pub use together::TogetherUi;
 mod shell;
