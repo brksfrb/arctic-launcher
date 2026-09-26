@@ -18,6 +18,15 @@ use crate::widgets::{self, PlayState};
 const PLAY_SIZE: [f32; 2] = [300.0, 62.0];
 const PICKER_WIDTH: f32 = 340.0;
 
+/// Which versions the picker lists.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum VersionView {
+    #[default]
+    All,
+    Installed,
+    Favorites,
+}
+
 impl ArcticApp {
     pub(crate) fn play_tab(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
@@ -289,17 +298,21 @@ impl ArcticApp {
                 .desired_width(f32::INFINITY),
         );
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.installed_only, false, "All");
+            let installed = releases
+                .iter()
+                .filter(|(id, _)| self.installed.contains(id))
+                .count();
+            let favorites = self.settings.favorite_versions.len();
+            ui.selectable_value(&mut self.version_view, VersionView::All, "All");
             ui.selectable_value(
-                &mut self.installed_only,
-                true,
-                format!(
-                    "Installed ({})",
-                    releases
-                        .iter()
-                        .filter(|(id, _)| self.installed.contains(id))
-                        .count()
-                ),
+                &mut self.version_view,
+                VersionView::Installed,
+                format!("Installed ({installed})"),
+            );
+            ui.selectable_value(
+                &mut self.version_view,
+                VersionView::Favorites,
+                format!("Favorites ({favorites})"),
             );
         });
         ui.separator();
@@ -307,13 +320,22 @@ impl ArcticApp {
         let rows: Vec<&(String, String)> = releases
             .iter()
             .filter(|(id, _)| filter.is_empty() || id.to_lowercase().contains(&filter))
-            .filter(|(id, _)| !self.installed_only || self.installed.contains(id))
+            .filter(|(id, _)| match self.version_view {
+                VersionView::All => true,
+                VersionView::Installed => self.installed.contains(id),
+                VersionView::Favorites => self.settings.favorite_versions.contains(id),
+            })
             .collect();
         egui::ScrollArea::vertical()
             .max_height(300.0)
             .show(ui, |ui| {
                 if rows.is_empty() {
-                    ui.label(RichText::new("No matching versions").color(p.muted));
+                    let text = if self.version_view == VersionView::Favorites {
+                        "Star a version to keep it here."
+                    } else {
+                        "No matching versions"
+                    };
+                    ui.label(RichText::new(text).color(p.muted));
                 }
                 for (id, date) in rows {
                     let is_selected = self.settings.last_version.as_deref() == Some(id.as_str());
@@ -327,15 +349,31 @@ impl ArcticApp {
                         egui::Color32::TRANSPARENT
                     };
                     ui.painter().rect_filled(rect, CornerRadius::same(8), fill);
+                    let star_rect = egui::Rect::from_center_size(
+                        rect.left_center() + vec2(18.0, 0.0),
+                        vec2(26.0, 26.0),
+                    );
+                    let star = ui
+                        .interact(star_rect, response.id.with("star"), Sense::click())
+                        .on_hover_text("Favorite")
+                        .on_hover_cursor(CursorIcon::PointingHand);
+                    let favorite = self.settings.favorite_versions.contains(id);
+                    let (icon, color) = match (favorite, star.hovered()) {
+                        (true, _) => (Icon::StarFilled, p.accent),
+                        (false, true) => (Icon::Star, p.text),
+                        (false, false) if response.hovered() => (Icon::Star, p.muted),
+                        (false, false) => (Icon::Star, p.muted.gamma_multiply(0.4)),
+                    };
+                    icons::draw(ui.painter(), icon, star_rect.shrink(6.0), color);
                     ui.painter().text(
-                        rect.left_center() + vec2(10.0, 0.0),
+                        rect.left_center() + vec2(36.0, 0.0),
                         Align2::LEFT_CENTER,
                         id,
                         FontId::proportional(14.5),
                         p.text,
                     );
                     ui.painter().text(
-                        rect.left_center() + vec2(110.0, 0.0),
+                        rect.left_center() + vec2(136.0, 0.0),
                         Align2::LEFT_CENTER,
                         date,
                         FontId::proportional(12.0),
@@ -359,7 +397,14 @@ impl ArcticApp {
                             p.accent,
                         );
                     }
-                    if response.on_hover_cursor(CursorIcon::PointingHand).clicked() {
+                    if star.clicked() {
+                        let favs = &mut self.settings.favorite_versions;
+                        if favorite {
+                            favs.retain(|v| v != id);
+                        } else {
+                            favs.push(id.clone());
+                        }
+                    } else if response.on_hover_cursor(CursorIcon::PointingHand).clicked() {
                         self.settings.last_version = Some(id.clone());
                         ui.close();
                     }

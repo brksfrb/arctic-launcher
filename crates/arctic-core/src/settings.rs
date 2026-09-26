@@ -53,6 +53,8 @@ pub struct Settings {
     pub onboarded: bool,
     /// Keep running in the system tray when the window is closed.
     pub tray: bool,
+    /// Versions starred in the version picker.
+    pub favorite_versions: Vec<String>,
 }
 
 /// What the launcher window does once the game window is up.
@@ -100,6 +102,7 @@ impl Default for Settings {
             discord_presence: true,
             onboarded: false,
             tray: true,
+            favorite_versions: Vec::new(),
         }
     }
 }

@@ -9,6 +9,10 @@ use eframe::egui::{Color32, Painter, Pos2, Rect, Shape, Stroke, Vec2, vec2};
 pub enum Icon {
     Play,
     User,
+    /// Five-point star outline (favorites).
+    Star,
+    /// Filled star.
+    StarFilled,
     /// T-shirt (skins).
     Shirt,
     /// Two people (play together).
@@ -63,6 +67,29 @@ pub fn draw(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
                 })
                 .collect();
             painter.add(Shape::closed_line(shoulders, stroke));
+        }
+        Icon::Star | Icon::StarFilled => {
+            let points: Vec<Pos2> = (0..10)
+                .map(|i| {
+                    let r = if i % 2 == 0 { 0.8 } else { 0.36 };
+                    let a = -std::f32::consts::FRAC_PI_2 + i as f32 * std::f32::consts::PI / 5.0;
+                    c + vec2(a.cos(), a.sin()) * r * s
+                })
+                .collect();
+            if icon == Icon::StarFilled {
+                // Concave shape: fill as a fan around the center.
+                let mut mesh = eframe::egui::Mesh::default();
+                mesh.colored_vertex(c, color);
+                for p in &points {
+                    mesh.colored_vertex(*p, color);
+                }
+                for i in 0..10u32 {
+                    mesh.add_triangle(0, 1 + i, 1 + (i + 1) % 10);
+                }
+                painter.add(Shape::mesh(mesh));
+            } else {
+                painter.add(Shape::closed_line(points, stroke));
+            }
         }
         Icon::Shirt => {
             poly(
