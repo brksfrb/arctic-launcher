@@ -171,10 +171,11 @@ pub fn download_and_apply(dirs: &DataDirs, info: &UpdateInfo, progress: Progress
     Ok(())
 }
 
-/// Start the (new) executable and let the caller exit.
+/// Start the (new) executable and let the caller exit. `--replace` tells it
+/// to take over instead of handing off to this still-running process.
 pub fn restart() -> Result<()> {
     let exe: PathBuf = std::env::current_exe().map_err(|e| Error::Other(e.to_string()))?;
-    Command::new(&exe).spawn().at(&exe)?;
+    Command::new(&exe).arg("--replace").spawn().at(&exe)?;
     Ok(())
 }
 

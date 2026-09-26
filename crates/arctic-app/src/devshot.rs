@@ -56,6 +56,7 @@ impl DevShot {
             {
                 log::error!("devshot: {e}");
             }
+            crate::tray::set_quitting();
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }
