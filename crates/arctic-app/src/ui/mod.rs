@@ -13,6 +13,7 @@ mod nav;
 mod onboarding;
 pub use onboarding::Onboarding;
 mod play;
+pub use play::VersionView;
 mod profiles;
 mod settings;
 mod skins;

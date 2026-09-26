@@ -157,7 +157,7 @@ pub struct ArcticApp {
     pub(crate) toasts: Toasts,
     pub(crate) msa_configured: bool,
     pub(crate) version_filter: String,
-    pub(crate) installed_only: bool,
+    pub(crate) version_view: crate::ui::VersionView,
     pub(crate) game_log: VecDeque<LogLine>,
     /// Bumped whenever `game_log` changes (for the Logs tab cache).
     pub(crate) game_log_rev: u64,
@@ -258,7 +258,7 @@ impl ArcticApp {
             update,
             toasts,
             version_filter: String::new(),
-            installed_only: false,
+            version_view: crate::ui::VersionView::All,
             game_log: VecDeque::new(),
             game_log_rev: 0,
             launcher_log: Vec::new(),

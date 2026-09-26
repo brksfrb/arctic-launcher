@@ -47,6 +47,7 @@ struct Face {
     corners: [V3; 4],
     uv: [Pos2; 4],
     depth: f32,
+    texture: TextureId,
 }
 
 /// Draw the player into `rect`. `cape` is a 64×32 cape texture.
@@ -66,16 +67,32 @@ pub fn paint(
         let k = CAMERA / (CAMERA - p[2]);
         pos2(center.x + p[0] * scale * k, center.y - p[1] * scale * k)
     };
+    let mut faces = build_faces(
+        &parts(variant, has_overlay, pose.swing),
+        skin,
+        64.0,
+        64.0,
+        &view,
+    );
     if let Some(cape) = cape {
-        let faces = build_faces(&[cape_part(pose.swing)], 64.0, 32.0, &view);
-        painter.add(mesh(cape, &faces, &project));
+        faces.extend(build_faces(
+            &[cape_part(pose.swing)],
+            cape,
+            64.0,
+            32.0,
+            &view,
+        ));
     }
-    let faces = build_faces(&parts(variant, has_overlay, pose.swing), 64.0, 64.0, &view);
-    painter.add(mesh(skin, &faces, &project));
+    // One depth order for body and cape, so each hides the other correctly;
+    // consecutive faces with the same texture share a mesh.
+    faces.sort_by(|a, b| a.depth.total_cmp(&b.depth));
+    for run in faces.chunk_by(|a, b| a.texture == b.texture) {
+        painter.add(mesh(run, &project));
+    }
 }
 
-fn mesh(texture: TextureId, faces: &[Face], project: &impl Fn(V3) -> Pos2) -> Mesh {
-    let mut mesh = Mesh::with_texture(texture);
+fn mesh(faces: &[Face], project: &impl Fn(V3) -> Pos2) -> Mesh {
+    let mut mesh = Mesh::with_texture(faces.first().map_or(TextureId::default(), |f| f.texture));
     for face in faces {
         let base = mesh.vertices.len() as u32;
         for (corner, uv) in face.corners.iter().zip(face.uv) {
@@ -92,7 +109,13 @@ fn mesh(texture: TextureId, faces: &[Face], project: &impl Fn(V3) -> Pos2) -> Me
 }
 
 /// Visible faces of all parts in view space, sorted far to near.
-fn build_faces(parts: &[Part], tex_w: f32, tex_h: f32, view: &impl Fn(V3) -> V3) -> Vec<Face> {
+fn build_faces(
+    parts: &[Part],
+    texture: TextureId,
+    tex_w: f32,
+    tex_h: f32,
+    view: &impl Fn(V3) -> V3,
+) -> Vec<Face> {
     let mut faces = Vec::with_capacity(parts.len() * 3);
     for part in parts {
         for (corners, normal, uv) in box_faces(part) {
@@ -105,7 +128,12 @@ fn build_faces(parts: &[Part], tex_w: f32, tex_h: f32, view: &impl Fn(V3) -> V3)
             }
             let depth = corners.iter().map(|c| c[2]).sum::<f32>() / 4.0;
             let uv = uv.map(|(u, v)| pos2(u / tex_w, v / tex_h));
-            faces.push(Face { corners, uv, depth });
+            faces.push(Face {
+                corners,
+                uv,
+                depth,
+                texture,
+            });
         }
     }
     faces.sort_by(|a, b| a.depth.total_cmp(&b.depth));
@@ -329,7 +357,7 @@ mod tests {
             [0.0; 3],
             0.0,
         )];
-        let faces = build_faces(&head, 64.0, 64.0, &view);
+        let faces = build_faces(&head, TextureId::default(), 64.0, 64.0, &view);
         assert_eq!(faces.len(), 1);
         // Head front is at (8,8)-(16,16) in the texture.
         assert_eq!(faces[0].uv[0], pos2(8.0 / 64.0, 8.0 / 64.0));
@@ -356,13 +384,22 @@ mod tests {
             [0.0; 3],
             0.0,
         )];
-        assert_eq!(build_faces(&head, 64.0, 64.0, &view).len(), 3);
+        assert_eq!(
+            build_faces(&head, TextureId::default(), 64.0, 64.0, &view).len(),
+            3
+        );
     }
 
     #[test]
     fn faces_are_sorted_far_to_near() {
         let view = |p: V3| rotate_view(p, pose(0.8));
-        let faces = build_faces(&parts(Variant::Classic, true, 0.2), 64.0, 64.0, &view);
+        let faces = build_faces(
+            &parts(Variant::Classic, true, 0.2),
+            TextureId::default(),
+            64.0,
+            64.0,
+            &view,
+        );
         assert!(faces.windows(2).all(|w| w[0].depth <= w[1].depth));
         assert!(!faces.is_empty());
     }

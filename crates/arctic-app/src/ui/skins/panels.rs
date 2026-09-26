@@ -66,9 +66,14 @@ impl ArcticApp {
             .and_then(|r| r.as_ref().err().cloned());
         if let Some(e) = error {
             ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new(format!("Arctic looks are unavailable: {e}")).color(p.error),
-                );
+                // Connection problems get a plain message; details go to the log.
+                let text = if e.starts_with("network error") {
+                    log::info!("looks server: {e}");
+                    "Can't reach the Arctic looks server right now.".to_owned()
+                } else {
+                    format!("Arctic looks are unavailable: {e}")
+                };
+                ui.label(RichText::new(text).color(p.muted));
                 if ui.link("Retry").clicked() {
                     self.request_skin_state(true);
                 }

@@ -69,8 +69,14 @@ impl ArcticApp {
         if self.skins.loaded_for.as_ref() == Some(&dir) {
             return;
         }
+        // Debug builds: ARCTIC_DEVSHOT_YAW turns the preview (screenshots).
+        let yaw = std::env::var("ARCTIC_DEVSHOT_YAW")
+            .ok()
+            .filter(|_| cfg!(debug_assertions))
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0.5);
         self.skins = SkinsUi {
-            yaw: 0.5,
+            yaw,
             pitch: 0.12,
             ..SkinsUi::default()
         };
