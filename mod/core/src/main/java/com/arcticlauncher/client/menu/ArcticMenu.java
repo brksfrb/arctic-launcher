@@ -2,6 +2,7 @@ package com.arcticlauncher.client.menu;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
+import com.arcticlauncher.client.config.CrosshairConfig;
 import com.arcticlauncher.client.config.HudSlot;
 import com.arcticlauncher.client.gfx.Draw;
 import com.arcticlauncher.client.gfx.Gfx;
@@ -22,6 +23,8 @@ public final class ArcticMenu extends Page {
 	private enum Tab {
 		HUD("HUD", "Choose what shows on screen."),
 		FEATURES("Features", "Hold a key to zoom or look around freely."),
+		VIEW("View", "Chat and screen tweaks."),
+		CROSSHAIR("Crosshair", "Your own crosshair: shape, size and color."),
 		LOOKS("Looks", "Every Arctic player sees your cape."),
 		STYLE("Style", "How Minecraft's menus look.");
 
@@ -38,6 +41,8 @@ public final class ArcticMenu extends Page {
 	private static final int PAD = 10;
 	private static final int ROW = 24;
 	private static final int HUD_ROW = 18;
+	private static final int HUD_COLUMNS = 3;
+	private static final int PREVIEW = 64;
 	private static final int KEY_W = 76;
 	private static final int MAX_NEARBY = 3;
 	/** Remembered while the game runs. */
@@ -87,11 +92,12 @@ public final class ArcticMenu extends Page {
 		px = (width - pw) / 2;
 		py = (height - ph) / 2;
 		int y = py + 34;
-		if (tab == Tab.FEATURES && !ArcticClient.platform().hasFeatures()) {
+		boolean game = ArcticClient.platform().hasFeatures();
+		if (needsGame(tab) && !game) {
 			tab = Tab.HUD;
 		}
 		for (final Tab t : Tab.values()) {
-			if (t == Tab.FEATURES && !ArcticClient.platform().hasFeatures()) {
+			if (needsGame(t) && !game) {
 				continue;
 			}
 			add(new Button(t.title, new Runnable() {
@@ -110,10 +116,15 @@ public final class ArcticMenu extends Page {
 			}
 		})).bounds(px + 8, py + ph - 28, SIDEBAR - 16, 20);
 		keyButtons.clear();
+		steppers.clear();
 		if (tab == Tab.HUD) {
 			buildHud();
 		} else if (tab == Tab.FEATURES) {
 			buildFeatures();
+		} else if (tab == Tab.VIEW) {
+			buildView();
+		} else if (tab == Tab.CROSSHAIR) {
+			buildCrosshair();
 		} else if (tab == Tab.LOOKS) {
 			buildLooks();
 		} else {
@@ -131,12 +142,12 @@ public final class ArcticMenu extends Page {
 			}
 		}).primary()).bounds(contentX() + contentW() - 80, py + 10, 80, 18);
 		// Two columns of switches; the editor places what's on.
-		int colW = (contentW() - 6) / 2;
+		int colW = (contentW() - 12) / HUD_COLUMNS;
 		int i = 0;
 		for (HudWidget w : ArcticClient.hud().widgets()) {
 			final HudSlot slot = ArcticClient.hud().slot(w);
-			int x = contentX() + (i % 2) * (colW + 6);
-			int y = contentTop() + (i / 2) * (HUD_ROW + 2);
+			int x = contentX() + (i % HUD_COLUMNS) * (colW + 6);
+			int y = contentTop() + (i / HUD_COLUMNS) * (HUD_ROW + 2);
 			add(new Toggle(w.name, null, new Toggle.Binding() {
 				@Override
 				public boolean get() {
@@ -226,7 +237,105 @@ public final class ArcticMenu extends Page {
 				c.fullbrightKey = key;
 			}
 		});
+		y += ROW + 4;
+		add(new Toggle("Toggle Sprint", "Press sprint once to keep sprinting",
+				bind(() -> c.toggleSprint, on -> c.toggleSprint = on))).bounds(contentX(), y, contentW() - KEY_W - 6, ROW);
+		y += ROW + 4;
+		add(new Toggle("Toggle Sneak", "Press sneak once to keep sneaking",
+				bind(() -> c.toggleSneak, on -> c.toggleSneak = on))).bounds(contentX(), y, contentW() - KEY_W - 6, ROW);
 	}
+
+	/** A switch bound to a config field, saved on change. */
+	private static Toggle.Binding bind(final java.util.function.BooleanSupplier get, final java.util.function.Consumer<Boolean> set) {
+		return new Toggle.Binding() {
+			@Override
+			public boolean get() {
+				return get.getAsBoolean();
+			}
+
+			@Override
+			public void set(boolean on) {
+				set.accept(on);
+				ArcticClient.saveConfig();
+			}
+		};
+	}
+
+	private static boolean needsGame(Tab t) {
+		return t == Tab.FEATURES || t == Tab.VIEW || t == Tab.CROSSHAIR;
+	}
+
+	// ---- View ------------------------------------------------------------------
+
+	private void buildView() {
+		final ClientConfig c = ArcticClient.config();
+		int y = contentTop();
+		row(y, "Chat timestamps", "The time in front of every chat line", bind(() -> c.chatTimestamps, on -> c.chatTimestamps = on));
+		y += ROW + 4;
+		row(y, "Stack repeated chat", "Show (x3) instead of the same line again", bind(() -> c.chatStack, on -> c.chatStack = on));
+		y += ROW + 4;
+		row(y, "Low fire", "A shorter fire overlay when you're burning", bind(() -> c.lowFire, on -> c.lowFire = on));
+		y += ROW + 4;
+		row(y, "Clear weather", "Hide rain and thunder on your screen", bind(() -> c.clearWeather, on -> c.clearWeather = on));
+	}
+
+	private void row(int y, String name, String hint, Toggle.Binding binding) {
+		add(new Toggle(name, hint, binding)).bounds(contentX(), y, contentW(), ROW);
+	}
+
+	// ---- Crosshair ---------------------------------------------------------------
+
+	private void buildCrosshair() {
+		final CrosshairConfig c = ArcticClient.config().crosshair;
+		int w = contentW() - PREVIEW - 10;
+		int x = contentX();
+		int y = contentTop();
+		add(new Toggle("Custom crosshair", null, bind(() -> c.enabled, on -> c.enabled = on))).bounds(x, y, w, 18);
+		y += 22;
+		int bw = (w - 3 * 3) / 4;
+		String[] names = {"Cross", "Dot", "Circle", "Both"};
+		for (int i = 0; i < CrosshairConfig.STYLES.length; i++) {
+			final String style = CrosshairConfig.STYLES[i];
+			add(new Button(names[i], () -> {
+				c.style = style;
+				ArcticClient.saveConfig();
+				rebuild();
+			}).selected(style.equals(c.style))).bounds(x + i * (bw + 3), y, bw, 16);
+		}
+		y += 20;
+		y = stepper(y, "Size", () -> c.size, v -> c.size = v, 1, 12);
+		y = stepper(y, "Gap", () -> c.gap, v -> c.gap = v, 0, 8);
+		y = stepper(y, "Thickness", () -> c.thickness, v -> c.thickness = v, 1, 4);
+		for (int i = 0; i < CrosshairConfig.COLORS.length; i++) {
+			final int color = CrosshairConfig.COLORS[i];
+			add(new Swatch(color, color == c.color, () -> {
+				c.color = color;
+				ArcticClient.saveConfig();
+				rebuild();
+			})).bounds(x + i * 18, y, 14, 14);
+		}
+		y += 18;
+		add(new Toggle("Outline", null, bind(() -> c.outline, on -> c.outline = on))).bounds(x, y, w, 18);
+	}
+
+	/** "Label   -  value  +" for a small number setting; returns the next row. */
+	private int stepper(int y, String label, final java.util.function.IntSupplier get,
+			final java.util.function.IntConsumer set, final int min, final int max) {
+		int right = contentX() + contentW() - PREVIEW - 10;
+		add(new Button("-", () -> {
+			set.accept(Math.max(min, get.getAsInt() - 1));
+			ArcticClient.saveConfig();
+		})).bounds(right - 60, y, 16, 16);
+		add(new Button("+", () -> {
+			set.accept(Math.min(max, get.getAsInt() + 1));
+			ArcticClient.saveConfig();
+		})).bounds(right - 16, y, 16, 16);
+		steppers.add(new Object[] {label, get, y});
+		return y + 20;
+	}
+
+	/** Labels and values of the steppers, drawn each frame: {label, getter, y}. */
+	private final java.util.List<Object[]> steppers = new java.util.ArrayList<Object[]>();
 
 	/** A switch with a key button beside it. */
 	private void feature(int y, String name, String hint, Toggle.Binding on, KeyButton.Binding key) {
@@ -382,6 +491,9 @@ public final class ArcticMenu extends Page {
 		g.text(tab.title, contentX(), py + 10, s.text, false);
 		int room = tab == Tab.HUD ? contentW() - 90 : contentW();
 		g.text(Draw.fit(g, status(), room), contentX(), py + 22, s.muted, false);
+		if (tab == Tab.CROSSHAIR) {
+			drawCrosshairTab(g, s);
+		}
 		if (tab == Tab.STYLE) {
 			Style chosen = ArcticClient.style();
 			int y = contentTop() + 74;
@@ -389,6 +501,23 @@ public final class ArcticMenu extends Page {
 			g.text(Draw.fit(g, chosen.description, contentW()), contentX(), y + 12, s.muted, false);
 			g.text("Changes apply right away, to every menu.", contentX(), y + 30, s.muted, false);
 		}
+	}
+
+	private void drawCrosshairTab(Gfx g, Style s) {
+		int w = contentW() - PREVIEW - 10;
+		for (Object[] st : steppers) {
+			int y = (Integer) st[2];
+			g.text((String) st[0], contentX() + 4, y + 4, s.text, false);
+			String v = String.valueOf(((java.util.function.IntSupplier) st[1]).getAsInt());
+			Draw.centered(g, v, contentX() + w - 30, y + 4, s.text, false);
+		}
+		int bx = contentX() + contentW() - PREVIEW;
+		int by = contentTop();
+		// The preview sits on a sky-and-grass backdrop, like in game.
+		g.gradient(bx, by, bx + PREVIEW, by + PREVIEW, 0xFF7FB2FF, 0xFFB5D3FF);
+		g.fill(bx, by + PREVIEW * 2 / 3, bx + PREVIEW, by + PREVIEW, 0xFF5E9E3B);
+		Draw.outline(g, bx, by, bx + PREVIEW, by + PREVIEW, 2, s.border);
+		com.arcticlauncher.client.hud.Crosshair.render(g, ArcticClient.config().crosshair, bx + PREVIEW / 2, by + PREVIEW / 2);
 	}
 
 	private String status() {

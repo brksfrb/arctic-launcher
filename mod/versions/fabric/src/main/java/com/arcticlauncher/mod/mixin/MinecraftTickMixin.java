@@ -8,10 +8,10 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** The client tick: Arctic reads its held keys (Zoom, Freelook). */
+/** Before each client tick: Arctic reads its keys and applies toggles. */
 @Mixin(Minecraft.class)
 abstract class MinecraftTickMixin {
-	@Inject(method = "tick", at = @At("TAIL"))
+	@Inject(method = "tick", at = @At("HEAD"))
 	private void arctic$tick(CallbackInfo ci) {
 		ArcticClient.tick(Compat.screen() != null);
 	}

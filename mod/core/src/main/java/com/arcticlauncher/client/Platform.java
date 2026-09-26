@@ -55,8 +55,31 @@ public interface Platform {
 	/** Switch to third person (true) or back to the view before (false). */
 	void setThirdPerson(boolean on);
 
-	/** Zoom, Freelook and Fullbright work on this version. */
+	/** Zoom, Freelook, Fullbright and the other game features work on this version. */
 	boolean hasFeatures();
+
+	/** Is the key bound to a control physically held (ignoring toggles)? */
+	boolean physicalKeyDown(GameKey key);
+
+	/** Press or release a control as if its key were held. */
+	void setKeyDown(GameKey key, boolean down);
+
+	/** How long ago the player was hurt, in ticks (vanilla hurtTime), 0 if not. */
+	int hurtTime();
+
+	// ---- HUD data (items are the game's own stacks, drawn with Gfx.item) ------
+
+	/** Worn armor, head to feet, then the main hand: {stack, durability text or null}. */
+	java.util.List<Object[]> armor();
+
+	/** Active effects: {name, time left like "1:23", color (Integer ARGB)}. */
+	java.util.List<Object[]> effects();
+
+	/** The held item and how many of it you carry: {stack, total}, or null. */
+	Object[] heldItem();
+
+	/** The creature you're aiming at or just hit: {name, health, max health}, or null. */
+	Object[] target();
 
 	/** The vanilla HUD is hidden (F1) or covered by the debug screen. */
 	boolean hudHidden();

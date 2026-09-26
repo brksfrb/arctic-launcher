@@ -24,6 +24,9 @@ public interface Gfx {
 	 */
 	void texture(String key, int x, int y, int w, int h, float u, float v, int regionW, int regionH, int texW, int texH);
 
+	/** An item icon (16×16) with its count and durability bar; {@code stack} is the game's. */
+	void item(Object stack, int x, int y);
+
 	void push();
 
 	void pop();

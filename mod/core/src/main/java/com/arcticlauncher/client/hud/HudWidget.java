@@ -25,6 +25,11 @@ public abstract class HudWidget {
 		this.column = column;
 	}
 
+	/** Needs the version's game hooks (hidden where they don't exist). */
+	public boolean needsGame() {
+		return false;
+	}
+
 	public abstract int width(Gfx g);
 
 	public abstract int height();

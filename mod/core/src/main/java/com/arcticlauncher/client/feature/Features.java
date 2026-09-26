@@ -1,5 +1,6 @@
 package com.arcticlauncher.client.feature;
 
+import com.arcticlauncher.client.GameKey;
 import com.arcticlauncher.client.Platform;
 import com.arcticlauncher.client.config.ClientConfig;
 
@@ -29,17 +30,29 @@ public final class Features {
 	private float lookPitch;
 
 	private boolean fullbrightKeyWasDown;
+	/** Held keys simulated by the self-test (no keyboard there). */
+	private boolean simulatedZoom;
+	private boolean simulatedLook;
+
+	private final Combat combat = new Combat();
+	private final Toggle sprint = new Toggle(GameKey.SPRINT);
+	private final Toggle sneak = new Toggle(GameKey.SNEAK);
 
 	public Features(Platform platform, ClientConfig config) {
 		this.platform = platform;
 		this.config = config;
 	}
 
-	/** 20 times a second while in a world: read the held keys. */
+	/** 20 times a second while in a world, before the game ticks. */
 	public void tick(boolean screenOpen) {
+		if (platform.hasFeatures()) {
+			sprint.tick(config.toggleSprint, screenOpen);
+			sneak.tick(config.toggleSneak, screenOpen);
+			combat.tick(platform.hurtTime());
+		}
 		boolean inGame = !screenOpen && platform.hasFeatures();
-		zooming = inGame && config.zoomEnabled && down(config.zoomKey);
-		boolean wantLook = inGame && config.freelookEnabled && down(config.freelookKey);
+		zooming = inGame && config.zoomEnabled && (simulatedZoom || down(config.zoomKey));
+		boolean wantLook = inGame && config.freelookEnabled && (simulatedLook || down(config.freelookKey));
 		if (wantLook != freelook) {
 			setFreelook(wantLook);
 		}
@@ -66,6 +79,51 @@ public final class Features {
 			lookPitch = (float) p[4];
 		}
 		platform.setThirdPerson(on);
+	}
+
+	/** For the self-test: act as if the Zoom/Freelook keys were held. */
+	public void simulate(boolean zoom, boolean look) {
+		simulatedZoom = zoom;
+		simulatedLook = look;
+	}
+
+	public Combat combat() {
+		return combat;
+	}
+
+	/** "Sprinting (toggled)", "Sneaking (toggled)", or null. */
+	public String movement() {
+		if (sneak.on) {
+			return "Sneaking (toggled)";
+		}
+		return sprint.on ? "Sprinting (toggled)" : null;
+	}
+
+	/** Press the key once to keep a control held; press again to let go. */
+	private final class Toggle {
+		private final GameKey key;
+		private boolean wasDown;
+		boolean on;
+
+		Toggle(GameKey key) {
+			this.key = key;
+		}
+
+		void tick(boolean enabled, boolean screenOpen) {
+			if (!enabled) {
+				if (on) {
+					on = false;
+					platform.setKeyDown(key, platform.physicalKeyDown(key));
+				}
+				return;
+			}
+			boolean down = !screenOpen && platform.physicalKeyDown(key);
+			if (down && !wasDown) {
+				on = !on;
+			}
+			wasDown = down;
+			platform.setKeyDown(key, on || down);
+		}
 	}
 
 	// ---- Zoom ------------------------------------------------------------------

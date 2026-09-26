@@ -18,7 +18,12 @@
 		"MinecraftTickMixin",
 		"EntityTurnMixin"<% if (features) { %>,
 		"CameraMixin",
-		"LightmapMixin"<% } %>
+		"LightmapMixin",
+		"ChatComponentMixin",
+		"HudCrosshairMixin",
+		"ScreenEffectRendererMixin",
+		"LevelWeatherMixin",
+		"MultiPlayerGameModeMixin"<% } %>
 	],
 	"injectors": {
 		"defaultRequire": 1

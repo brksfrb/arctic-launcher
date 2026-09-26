@@ -79,6 +79,7 @@ final class Widgets {
 			}
 		});
 		all.add(new Keystrokes(cps));
+		all.addAll(GameWidgets.all());
 		return all;
 	}
 
