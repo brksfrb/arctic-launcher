@@ -3,7 +3,7 @@
 use arctic_core::auth::avatar::Face;
 use eframe::egui::{Color32, CornerRadius, Painter, Rect, Stroke, StrokeKind, vec2};
 
-/// Paint `face` filling `rect`, with rounded corners and a subtle frame.
+/// Paint `face` filling `rect`, with a square frame like the head itself.
 pub fn paint_face(painter: &Painter, rect: Rect, face: &Face, frame: Color32) {
     let px = rect.width() / 8.0;
     let clip = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
@@ -16,6 +16,11 @@ pub fn paint_face(painter: &Painter, rect: Rect, face: &Face, frame: Color32) {
             clip.rect_filled(cell, 0.0, Color32::from_rgb(r, g, b));
         }
     }
-    let radius = CornerRadius::same((rect.width() * 0.18) as u8);
-    painter.rect_stroke(rect, radius, Stroke::new(2.0, frame), StrokeKind::Outside);
+    // Heads are square: a tiny radius just softens the frame's corners.
+    painter.rect_stroke(
+        rect,
+        CornerRadius::same(2),
+        Stroke::new(2.0, frame),
+        StrokeKind::Outside,
+    );
 }
