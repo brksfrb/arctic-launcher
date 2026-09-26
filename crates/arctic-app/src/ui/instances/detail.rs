@@ -109,7 +109,7 @@ impl ArcticApp {
                     .rename
                     .clone()
                     .unwrap_or_else(|| instance.name.clone());
-                ui.horizontal(|ui| {
+                widgets::field_row(ui, |ui| {
                     ui.label("Name");
                     ui.add(
                         widgets::text_field(&mut name)
@@ -210,7 +210,7 @@ impl ArcticApp {
             ui.label(RichText::new("Arctic mod").size(17.0).strong().color(p.text));
             ui.label(
                 RichText::new(
-                    "Arctic capes (seen by other Arctic players) and an Arctic button in the pause menu.",
+                    "Shows everyone's Arctic looks (skins and capes) and adds an Arctic menu in game.",
                 )
                 .color(p.muted),
             );

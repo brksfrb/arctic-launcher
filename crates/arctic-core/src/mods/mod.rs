@@ -8,6 +8,7 @@
 
 mod files;
 mod index;
+pub mod modpack;
 mod modrinth;
 mod resolve;
 #[cfg(test)]
@@ -44,6 +45,8 @@ pub struct SearchQuery {
     pub sort: SortBy,
     pub offset: usize,
     pub limit: usize,
+    /// Search modpacks instead of mods.
+    pub modpacks: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

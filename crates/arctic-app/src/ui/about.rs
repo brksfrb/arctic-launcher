@@ -3,12 +3,13 @@ use arctic_core::{APP_NAME, APP_VERSION};
 use eframe::egui::{self, RichText, Sense, vec2};
 
 use crate::app::{ArcticApp, UpdateState};
-use crate::art::icons::Icon;
+use crate::art::icons::{self, Icon};
 use crate::art::{glow, snowflake};
 use crate::theme;
 use crate::widgets;
 
 const WEBSITE: &str = "https://arcticlauncher.com";
+const DISCORD: &str = "https://discord.arcticlauncher.com";
 
 impl ArcticApp {
     pub(crate) fn about_tab(&mut self, ui: &mut egui::Ui) {
@@ -41,6 +42,9 @@ impl ArcticApp {
                     ui.ctx().open_url(egui::OpenUrl::new_tab(format!(
                         "https://github.com/{GITHUB_REPO}"
                     )));
+                }
+                if widgets::button(ui, p, Some(Icon::Friends), "Discord", false).clicked() {
+                    ui.ctx().open_url(egui::OpenUrl::new_tab(DISCORD));
                 }
             });
             ui.add_space(8.0);
@@ -83,7 +87,11 @@ impl ArcticApp {
                 });
             }
             UpdateState::UpToDate => {
-                ui.label("You're on the latest version.");
+                ui.horizontal(|ui| {
+                    let (r, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
+                    icons::draw(ui.painter(), Icon::Check, r, p.accent);
+                    ui.label(RichText::new("You're on the latest version.").color(p.accent));
+                });
             }
             UpdateState::Available { info, .. } => {
                 ui.label(
