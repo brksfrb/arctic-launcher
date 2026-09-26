@@ -2,8 +2,8 @@
 	"schemaVersion": 1,
 	"id": "arctic",
 	"version": "${version}",
-	"name": "Arctic",
-	"description": "Arctic Launcher's companion mod: capes from Arctic, visible to other Arctic players, and an in-game Arctic menu.",
+	"name": "Arctic Client",
+	"description": "Arctic Launcher's client: Arctic menus and styles, HUD widgets (FPS, CPS, ping, keystrokes), and Arctic looks visible to other Arctic players.",
 	"authors": ["Arctic Launcher contributors"],
 	"contact": {
 		"homepage": "https://arcticlauncher.com",

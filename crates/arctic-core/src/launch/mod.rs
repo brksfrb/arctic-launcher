@@ -192,7 +192,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
             ) {
                 arctic_mod::sync(&game_dir.join("mods"), &vanilla.id, req.instance.arctic_mod)?;
                 if req.instance.arctic_mod && arctic_mod::supports(&vanilla.id) {
-                    share_cosmetics_session(dirs, &game_dir, req.account);
+                    share_cosmetics_session(req, &game_dir);
                 }
             }
             profile
@@ -222,17 +222,22 @@ fn effective_loader(
     arctic_mod::client_loader(dirs, game).map(|v| (loaders::LoaderKind::Fabric, v))
 }
 
-/// Let the Arctic mod publish looks as this player. Best effort: without
-/// the cosmetics server the game still starts, and the mod can show looks.
-fn share_cosmetics_session(dirs: &DataDirs, game_dir: &Path, account: &Account) {
+/// Tell the Arctic mod its menu style and let it publish looks as this
+/// player. Best effort: without the cosmetics server the game still starts.
+fn share_cosmetics_session(req: &LaunchRequest, game_dir: &Path) {
     let base = crate::cosmetics::base_url();
-    match crate::cosmetics::token_for(dirs, &base, account) {
-        Ok(token) => {
-            if let Err(e) = crate::cosmetics::write_mod_session(game_dir, &base, &token) {
-                log::warn!("arctic session file: {e}");
-            }
-        }
-        Err(e) => log::info!("Arctic cosmetics unavailable: {e}"),
+    let token = crate::cosmetics::token_for(req.dirs, &base, req.account)
+        .inspect_err(|e| log::info!("Arctic cosmetics unavailable: {e}"))
+        .ok();
+    let settings = req.settings;
+    if let Err(e) = crate::cosmetics::write_mod_session(
+        game_dir,
+        &base,
+        token.as_deref(),
+        settings.client_style,
+        settings.client_style_set,
+    ) {
+        log::warn!("arctic session file: {e}");
     }
 }
 

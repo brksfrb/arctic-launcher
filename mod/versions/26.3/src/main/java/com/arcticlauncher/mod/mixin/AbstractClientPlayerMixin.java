@@ -1,6 +1,8 @@
 package com.arcticlauncher.mod.mixin;
 
-import com.arcticlauncher.mod.Cosmetics;
+import com.arcticlauncher.client.ArcticClient;
+import com.arcticlauncher.client.looks.Look;
+import com.arcticlauncher.mod.GfxImpl;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.core.ClientAsset;
 import net.minecraft.resources.Identifier;
@@ -16,25 +18,29 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 abstract class AbstractClientPlayerMixin {
 	@Inject(method = "getSkin", at = @At("RETURN"), cancellable = true)
 	private void arctic$look(CallbackInfoReturnable<PlayerSkin> cir) {
-		Cosmetics.Look look = Cosmetics.lookFor(((AbstractClientPlayer) (Object) this).getUUID());
+		Look look = ArcticClient.looks().lookFor(((AbstractClientPlayer) (Object) this).getUUID());
 		if (look == null) {
 			return;
 		}
 		PlayerSkin skin = cir.getReturnValue();
 		ClientAsset.Texture body = skin.body();
 		PlayerModelType model = skin.model();
-		Identifier skinTexture = Cosmetics.texture(look.skin());
+		Identifier skinTexture = ready(look.skin);
 		if (skinTexture != null) {
 			body = new ClientAsset.ResourceTexture(skinTexture, skinTexture);
-			model = look.slim() ? PlayerModelType.SLIM : PlayerModelType.WIDE;
+			model = look.slim ? PlayerModelType.SLIM : PlayerModelType.WIDE;
 		}
 		ClientAsset.Texture cape = skin.cape();
 		ClientAsset.Texture elytra = skin.elytra();
-		Identifier capeTexture = Cosmetics.texture(look.cape());
+		Identifier capeTexture = ready(look.cape);
 		if (capeTexture != null) {
 			cape = new ClientAsset.ResourceTexture(capeTexture, capeTexture);
 			elytra = cape;
 		}
 		cir.setReturnValue(new PlayerSkin(body, cape, elytra, model, skin.secure()));
+	}
+
+	private static Identifier ready(String hash) {
+		return ArcticClient.looks().texture(hash) ? GfxImpl.look(hash) : null;
 	}
 }

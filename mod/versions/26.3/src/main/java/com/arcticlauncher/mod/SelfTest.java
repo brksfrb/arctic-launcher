@@ -1,20 +1,36 @@
 package com.arcticlauncher.mod;
 
+import com.arcticlauncher.client.ArcticClient;
+import com.arcticlauncher.client.MenuAction;
+import com.arcticlauncher.client.looks.Look;
+import com.arcticlauncher.client.menu.ArcticMenu;
+import com.arcticlauncher.client.menu.HudEditor;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.resources.Identifier;
 
 /**
  * Development check, only with {@code -Darctic.selftest=true}: loads the
- * mixin targets, waits for the player's cape, opens the Arctic menu,
- * saves a screenshot and quits. Lets the mod be verified without clicking.
+ * mixin targets, waits for the player's look, then walks through the
+ * Arctic screens taking a screenshot of each, and quits. Lets the client
+ * be verified without clicking.
  */
 final class SelfTest {
+	private static final int STEP_SECONDS = 3;
+	private static final String[] TARGETS = {
+			"net.minecraft.client.player.AbstractClientPlayer",
+			"net.minecraft.client.gui.screens.PauseScreen",
+			"net.minecraft.client.gui.screens.TitleScreen",
+			"net.minecraft.client.gui.Hud",
+			"net.minecraft.client.gui.components.AbstractSliderButton",
+			"net.minecraft.client.gui.components.EditBox",
+			"net.minecraft.client.gui.components.Checkbox",
+			"net.minecraft.client.MouseHandler",
+			"net.minecraft.client.KeyboardHandler"};
+
 	private static final ScheduledExecutorService TIMER = Executors.newSingleThreadScheduledExecutor(r -> {
 		Thread t = new Thread(r, "arctic-selftest");
 		t.setDaemon(true);
@@ -33,10 +49,7 @@ final class SelfTest {
 
 	private static void loadTargets() {
 		ClassLoader loader = SelfTest.class.getClassLoader();
-		for (String name : new String[] {
-				"net.minecraft.client.player.AbstractClientPlayer",
-				"net.minecraft.client.gui.screens.PauseScreen",
-				"net.minecraft.client.gui.screens.TitleScreen"}) {
+		for (String name : TARGETS) {
 			try {
 				Class.forName(name, false, loader);
 				ArcticMod.LOG.info("selftest: mixin target {} loaded", name);
@@ -44,38 +57,64 @@ final class SelfTest {
 				ArcticMod.LOG.error("selftest: FAILED to load {}", name, e);
 			}
 		}
-		waitForCape(0);
+		waitForLook(0);
 	}
 
-	private static void waitForCape(int attempt) {
+	private static void waitForLook(int attempt) {
 		UUID self = Minecraft.getInstance().getUser().getProfileId();
-		Cosmetics.Look look = Cosmetics.lookFor(self);
-		Identifier skin = look == null ? null : Cosmetics.texture(look.skin());
-		Identifier cape = look == null ? null : Cosmetics.texture(look.cape());
-		if (cape != null && (look.skin() == null || skin != null)) {
-			ArcticMod.LOG.info("selftest: look skin={} cape={} slim={}", skin, cape, look.slim());
-			openMenu();
+		Look look = ArcticClient.looks().lookFor(self);
+		boolean cape = look != null && ArcticClient.looks().texture(look.cape);
+		boolean skin = look != null && (look.skin == null || ArcticClient.looks().texture(look.skin));
+		if (cape && skin) {
+			ArcticMod.LOG.info("selftest: look skin={} cape={} slim={}", look.skin, look.cape, look.slim);
+			tour();
 		} else if (attempt < 20) {
-			TIMER.schedule(() -> waitForCape(attempt + 1), 1, TimeUnit.SECONDS);
+			TIMER.schedule(() -> waitForLook(attempt + 1), 1, TimeUnit.SECONDS);
 		} else {
-			ArcticMod.LOG.error("selftest: FAILED no cape for {}", self);
-			openMenu();
+			ArcticMod.LOG.error("selftest: no look for {} (is the Arctic server running?)", self);
+			tour();
 		}
 	}
 
-	private static void openMenu() {
-		Minecraft mc = Minecraft.getInstance();
-		mc.execute(() -> {
-			Screen parent = mc.gui.screen();
-			mc.gui.setScreen(new ArcticScreen(parent));
-		});
-		TIMER.schedule(() -> mc.execute(() -> {
-			Screenshot.grab(mc, false);
-			ArcticMod.LOG.info("selftest: screenshot taken");
-		}), 5, TimeUnit.SECONDS);
-		TIMER.schedule(() -> mc.execute(() -> {
-			ArcticMod.LOG.info("selftest: done");
-			mc.stop();
-		}), 8, TimeUnit.SECONDS);
+	/** Screenshot the title, each Arctic menu tab, the HUD editor and a vanilla screen. */
+	private static void tour() {
+		Runnable[] steps = {
+				() -> shot("title"),
+				() -> open("hud", "menu-hud"),
+				() -> open("looks", "menu-looks"),
+				() -> open("style", "menu-style"),
+				() -> {
+					ArcticClient.platform().openPage(new HudEditor());
+					later(() -> shot("hud-editor"));
+				},
+				() -> {
+					Minecraft.getInstance().gui.setScreen(null);
+					ArcticClient.platform().action(MenuAction.OPTIONS);
+					later(() -> shot("options"));
+				},
+				() -> {
+					ArcticMod.LOG.info("selftest: done");
+					Minecraft.getInstance().stop();
+				}};
+		for (int i = 0; i < steps.length; i++) {
+			Runnable step = steps[i];
+			TIMER.schedule(() -> Minecraft.getInstance().execute(step), (long) i * STEP_SECONDS * 2, TimeUnit.SECONDS);
+		}
+	}
+
+	private static void open(String tab, String name) {
+		ArcticMenu.showTab(tab);
+		Minecraft.getInstance().gui.setScreen(null);
+		ArcticClient.platform().openPage(new ArcticMenu());
+		later(() -> shot(name));
+	}
+
+	private static void later(Runnable r) {
+		TIMER.schedule(() -> Minecraft.getInstance().execute(r), STEP_SECONDS, TimeUnit.SECONDS);
+	}
+
+	private static void shot(String name) {
+		Screenshot.grab(Minecraft.getInstance(), false);
+		ArcticMod.LOG.info("selftest: screenshot {}", name);
 	}
 }

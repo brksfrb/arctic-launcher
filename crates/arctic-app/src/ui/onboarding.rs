@@ -33,15 +33,17 @@ enum Step {
     Look,
     Account,
     Memory,
+    Client,
     Start,
 }
 
 impl Step {
-    const ALL: [Step; 5] = [
+    const ALL: [Step; 6] = [
         Step::Welcome,
         Step::Look,
         Step::Account,
         Step::Memory,
+        Step::Client,
         Step::Start,
     ];
 
@@ -118,6 +120,7 @@ impl ArcticApp {
                         Step::Look => self.look_step(ui),
                         Step::Account => self.account_step(ui),
                         Step::Memory => self.memory_step(ui),
+                        Step::Client => self.client_step(ui),
                         Step::Start => self.start_step(ui),
                     }
                 });
@@ -283,6 +286,18 @@ impl ArcticApp {
         }
     }
 
+    fn client_step(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
+        heading(
+            ui,
+            p,
+            "Your in-game style",
+            "The Arctic Client restyles Minecraft's menus. Press Right Shift in game for HUD widgets and capes.",
+        );
+        ui.add_space(12.0);
+        super::client_style::picker(ui, p, &mut self.settings, (WIDTH - 24.0) / 3.0);
+    }
+
     fn start_step(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         heading(ui, p, "What do you want to play?", "");
@@ -295,7 +310,7 @@ impl ArcticApp {
                 FirstPlay::Vanilla,
                 Icon::Play,
                 "Vanilla",
-                "The latest Minecraft release, exactly as Mojang made it.",
+                "The latest Minecraft release, with the Arctic Client.",
             ),
             (
                 FirstPlay::Modded,

@@ -9,5 +9,5 @@ pluginManagement {
 	}
 }
 
-// Arctic Launcher's companion mod
+// Arctic Client for Minecraft 26.3 (Fabric). Build from mod/: ./gradlew -p versions/26.3 build
 rootProject.name = 'arctic-mod'
