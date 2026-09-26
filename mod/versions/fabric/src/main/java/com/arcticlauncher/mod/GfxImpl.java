@@ -67,7 +67,11 @@ public final class GfxImpl implements Gfx {
 
 	@Override
 	public void text(String text, int x, int y, int color, boolean shadow) {
+		//#if MC >= 26.1
 		g.text(font, text, x, y, color, shadow);
+		//#else
+		g.drawString(font, text, x, y, color, shadow);
+		//#endif
 	}
 
 	@Override

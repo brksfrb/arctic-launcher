@@ -52,7 +52,7 @@
 - **Arctic Client.** Vanilla gets a fresh look: restyled menus (pick Arctic, Aurora or
   Classic), HUD widgets like FPS, CPS, ping and keystrokes that you drag into place, and
   everyone's Arctic looks in game. Press Right Shift in game for the Arctic menu. It's on
-  by default for Minecraft 26.3, comes to Fabric and Quilt instances too, and you can turn
+  by default for Minecraft 1.21.9 and newer, comes to Fabric and Quilt instances too, and you can turn
   it off per instance.
 - **Performance, built in.** One switch adds Sodium, Lithium, FerriteCore, ImmediatelyFast
   and EntityCulling to Vanilla for much higher FPS, fetched from Modrinth for your version.
