@@ -136,6 +136,8 @@ fn smoke_instance(kind: LoaderKind, game: &str, loader_version: String) -> Insta
         version: Some(game.to_owned()),
         max_memory_mb: None,
         arctic_mod: false,
+        java_path: None,
+        jvm_args: String::new(),
     }
 }
 
