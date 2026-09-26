@@ -118,7 +118,12 @@ impl ArcticApp {
             ..SkinsUi::default()
         };
         match Library::load(&dir) {
-            Ok(lib) => self.skins.library = lib,
+            Ok(mut lib) => {
+                if let Err(e) = lib.dedupe(&dir) {
+                    log::warn!("skin library cleanup: {e}");
+                }
+                self.skins.library = lib;
+            }
             Err(e) => self.toasts.push(
                 Kind::Error,
                 "Could not read your skin library",
