@@ -124,6 +124,12 @@ final class WorldTest {
 					later(() -> shot("world-rain-cleared"));
 				},
 				() -> {
+					c.clearWeather = false;
+					command("weather clear");
+					ArcticClient.platform().openPage(new com.arcticlauncher.client.menu.HudEditor());
+					TIMER.schedule(() -> run(() -> shot("world-hud-editor")), STEP, TimeUnit.SECONDS);
+				},
+				() -> {
 					ArcticMod.LOG.info("worldtest: done");
 					Minecraft.getInstance().stop();
 				}};

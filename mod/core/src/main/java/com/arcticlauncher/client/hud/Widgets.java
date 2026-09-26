@@ -23,19 +23,19 @@ final class Widgets {
 
 	static List<HudWidget> all(final Cps cps) {
 		List<HudWidget> all = new ArrayList<HudWidget>();
-		all.add(new TextWidget("fps", "FPS", "Frames per second", "000", true) {
+		all.add(new TextWidget("fps", "FPS", "Frames per second", true) {
 			@Override
 			protected String value(boolean preview) {
 				return String.valueOf(platform().fps());
 			}
 		});
-		all.add(new TextWidget("cps", "CPS", "Clicks per second (left | right)", "00 | 00", true) {
+		all.add(new TextWidget("cps", "CPS", "Clicks per second (left | right)", true) {
 			@Override
 			protected String value(boolean preview) {
 				return cps.get(Keys.MOUSE_LEFT) + " | " + cps.get(Keys.MOUSE_RIGHT);
 			}
 		});
-		all.add(new TextWidget("ping", "Ping", "Latency to the server", "000 ms", true) {
+		all.add(new TextWidget("ping", "Ping", "Latency to the server", true) {
 			@Override
 			protected String value(boolean preview) {
 				int ms = platform().ping();
@@ -48,14 +48,14 @@ final class Widgets {
 		all.add(coords());
 		all.add(direction());
 		all.add(new Speed());
-		all.add(new TextWidget("biome", "Biome", "The biome you're in", "Snowy Plains", false) {
+		all.add(new TextWidget("biome", "Biome", "The biome you're in", false) {
 			@Override
 			protected String value(boolean preview) {
 				String biome = platform().biome();
 				return biome == null ? "Plains" : biome;
 			}
 		});
-		all.add(new TextWidget("day", "Day", "Days passed in this world", "000", false) {
+		all.add(new TextWidget("day", "Day", "Days passed in this world", false) {
 			@Override
 			protected String value(boolean preview) {
 				long time = platform().dayTime();
@@ -63,7 +63,7 @@ final class Widgets {
 			}
 		});
 		all.add(clock());
-		all.add(new TextWidget("memory", "Memory", "Java memory in use", "100% 0000 MB", false) {
+		all.add(new TextWidget("memory", "Memory", "Java memory in use", false) {
 			@Override
 			protected String value(boolean preview) {
 				Runtime rt = Runtime.getRuntime();
@@ -71,7 +71,7 @@ final class Widgets {
 				return used * 100 / rt.maxMemory() + "% " + Math.round(used / MB) + " MB";
 			}
 		});
-		all.add(new TextWidget("server", "Server", "The server you're playing on", "play.example.net", false) {
+		all.add(new TextWidget("server", "Server", "The server you're playing on", false) {
 			@Override
 			protected String value(boolean preview) {
 				String server = platform().server();
@@ -84,7 +84,7 @@ final class Widgets {
 	}
 
 	private static HudWidget coords() {
-		return new TextWidget("coords", "XYZ", "Your coordinates", "-0000 000 -0000", false) {
+		return new TextWidget("coords", "XYZ", "Your coordinates", false) {
 			@Override
 			protected String value(boolean preview) {
 				double[] p = platform().position();
@@ -97,7 +97,7 @@ final class Widgets {
 	}
 
 	private static HudWidget direction() {
-		return new TextWidget("direction", "Facing", "Compass direction and angle", "NW 000°", false) {
+		return new TextWidget("direction", "Facing", "Compass direction and angle", false) {
 			@Override
 			protected String value(boolean preview) {
 				double[] p = platform().position();
@@ -116,7 +116,7 @@ final class Widgets {
 	}
 
 	private static HudWidget clock() {
-		return new TextWidget("clock", "Time", "Your local time", "00:00", false) {
+		return new TextWidget("clock", "Time", "Your local time", false) {
 			private final SimpleDateFormat format = new SimpleDateFormat("HH:mm");
 
 			@Override
@@ -135,7 +135,7 @@ final class Widgets {
 		private double speed;
 
 		Speed() {
-			super("speed", "Speed", "How fast you're moving (blocks/s)", "00.0 b/s", false);
+			super("speed", "Speed", "How fast you're moving (blocks/s)", false);
 		}
 
 		@Override

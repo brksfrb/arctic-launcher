@@ -31,7 +31,7 @@ final class GameWidgets {
 		all.add(new Effects());
 		all.add(new Held());
 		all.add(new Target());
-		all.add(new GameText("reach", "Reach", "Distance of your last hit", "0.00 m") {
+		all.add(new GameText("reach", "Reach", "Distance of your last hit") {
 			@Override
 			protected String value(boolean preview) {
 				double reach = ArcticClient.features().combat().reach();
@@ -41,13 +41,13 @@ final class GameWidgets {
 				return String.format(Locale.ROOT, "%.2f m", reach);
 			}
 		});
-		all.add(new GameText("combo", "Combo", "Hits in a row without getting hit", "00") {
+		all.add(new GameText("combo", "Combo", "Hits in a row without getting hit") {
 			@Override
 			protected String value(boolean preview) {
 				return String.valueOf(ArcticClient.features().combat().combo());
 			}
 		});
-		all.add(new GameText("movement", "Move", "Shows toggled sprint or sneak", "Sprinting (toggled)") {
+		all.add(new GameText("movement", "Move", "Shows toggled sprint or sneak") {
 			@Override
 			protected String value(boolean preview) {
 				String m = ArcticClient.features().movement();
@@ -59,8 +59,8 @@ final class GameWidgets {
 
 	/** A text widget that needs game hooks. */
 	private abstract static class GameText extends TextWidget {
-		GameText(String id, String label, String description, String sample) {
-			super(id, label, description, sample, false);
+		GameText(String id, String label, String description) {
+			super(id, label, description, false);
 		}
 
 		@Override
@@ -85,8 +85,9 @@ final class GameWidgets {
 		private static List<Object[]> rows(boolean preview) {
 			List<Object[]> rows = platform().armor();
 			if (rows.isEmpty() && preview) {
-				Object[] empty = {null, "---"};
-				return Arrays.asList(empty, empty, empty, empty);
+				// Sample durabilities, so the editor shows what it will look like.
+				return Arrays.asList(new Object[] {null, "363"}, new Object[] {null, "528"},
+						new Object[] {null, "495"}, new Object[] {null, "429"});
 			}
 			return rows;
 		}
@@ -113,7 +114,7 @@ final class GameWidgets {
 				if (row[0] != null) {
 					g.item(row[0], PAD, y);
 				} else {
-					Draw.round(g, PAD, y, PAD + ICON, y + ICON, 2, Draw.alpha(s.muted, 0.3f));
+					placeholderIcon(g, PAD, y, s);
 				}
 				if (row[1] != null) {
 					g.text((String) row[1], PAD + ICON + 3, y + 4, s.text, false);
@@ -121,6 +122,12 @@ final class GameWidgets {
 				y += ROW;
 			}
 		}
+	}
+
+	/** A stand-in item icon for the editor: a small tinted square. */
+	private static void placeholderIcon(Gfx g, int x, int y, Style s) {
+		Draw.round(g, x + 2, y + 2, x + ICON - 2, y + ICON - 2, 2, Draw.alpha(s.accent, 0.45f));
+		Draw.outline(g, x + 2, y + 2, x + ICON - 2, y + ICON - 2, 2, Draw.alpha(s.accent, 0.8f));
 	}
 
 	/** Active potion effects with time left. */
@@ -209,7 +216,7 @@ final class GameWidgets {
 			}
 			Draw.round(g, 0, 0, width(g), height(), 2, s.hud);
 			if (held == null) {
-				Draw.round(g, PAD, PAD / 2, PAD + ICON, PAD / 2 + ICON, 2, Draw.alpha(s.muted, 0.3f));
+				placeholderIcon(g, PAD, PAD / 2, s);
 				g.text("64", PAD + ICON + 3, PAD / 2 + 4, s.text, false);
 				return;
 			}
