@@ -1,8 +1,9 @@
 name: Deploy cosmetics server
 
-# When the cosmetics server (or Cargo.lock) changes on main, ask brksfrb/arctic-cosmetics-deploy
-# to build the image and roll it out to cosmetics.arcticlauncher.com. The build itself lives in
-# that repo; this only sends the signal.
+# When the cosmetics server (or Cargo.lock) changes on main, build its image, push it to
+# ghcr.io/brksfrb/arctic-launcher/cosmetics and roll it out to cosmetics.arcticlauncher.com.
+# Uses the run's own GITHUB_TOKEN for the registry; the rollout goes over a deploy-only SSH key
+# that can do nothing on the server except queue this one deploy.
 
 on:
   push:
@@ -12,20 +13,52 @@ on:
       - "Cargo.lock"
   workflow_dispatch: {}
 
-permissions: {}
+concurrency:
+  group: cosmetics-deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/brksfrb/arctic-launcher/cosmetics
 
 jobs:
-  trigger:
+  deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - name: Request a deploy
+      - uses: actions/checkout@v5
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: crates/arctic-cosmetics/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=gha,scope=cosmetics
+          cache-to: type=gha,scope=cosmetics,mode=max
+
+      - name: Roll out
         env:
-          # Fine-grained token with Actions: read and write on brksfrb/arctic-cosmetics-deploy only.
-          GH_TOKEN: ${{ secrets.COSMETICS_DEPLOY_TOKEN }}
+          KEY: ${{ secrets.COSMETICS_DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
         run: |
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::warning::COSMETICS_DEPLOY_TOKEN is not set; the deploy repo's schedule will pick this up instead."
+          if [ -z "$KEY" ] || [ -z "$HOST" ] || [ -z "$KNOWN_HOSTS" ]; then
+            echo "::warning::Deploy secrets are not set; the image is pushed but not rolled out."
             exit 0
           fi
-          gh workflow run deploy.yml -R brksfrb/arctic-cosmetics-deploy
-          echo "Deploy requested for ${GITHUB_SHA::7}."
+          install -m 600 /dev/null key && printf '%s\n' "$KEY" > key
+          printf '%s\n' "$KNOWN_HOSTS" > known_hosts
+          ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts -o ConnectTimeout=25 -i key root@"$HOST" deploy
