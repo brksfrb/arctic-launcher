@@ -181,6 +181,11 @@ The client is split so it can cover many Minecraft versions:
   mixins that replace the title screen, draw the HUD, count clicks, open the menu, restyle
   vanilla buttons, sliders, fields and checkboxes, and apply Arctic skins and capes.
 
+The Performance switch (`mods::performance`) adds well-known optimization mods to Vanilla
+instances from Modrinth, tracked in `arctic-performance.json` beside the game folder so they
+never mix with user mods. It rechecks for new builds weekly, keeps what's installed when
+offline, and runs Fabric even on versions the client doesn't support yet.
+
 Vanilla screens keep their own logic; only their widgets and backdrop are restyled, so
 adapters stay small. The Classic style turns restyling off and keeps the HUD.
 

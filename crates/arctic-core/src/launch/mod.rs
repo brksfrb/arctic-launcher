@@ -191,6 +191,15 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 loaders::LoaderKind::Fabric | loaders::LoaderKind::Quilt
             ) {
                 arctic_mod::sync(&game_dir.join("mods"), &vanilla.id, req.instance.arctic_mod)?;
+                if req.instance.loader.kind().is_none() {
+                    progress(ProgressInfo::stage("Checking performance mods"));
+                    crate::mods::performance::sync(
+                        &game_dir,
+                        &vanilla.id,
+                        req.instance.performance,
+                        progress,
+                    )?;
+                }
                 if req.instance.arctic_mod && arctic_mod::supports(&vanilla.id) {
                     share_cosmetics_session(req, &game_dir);
                 }
@@ -203,9 +212,10 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
     Ok(plan(req, &installation))
 }
 
-/// The loader to launch with. Vanilla instances run the Arctic Client
-/// (Fabric + the Arctic mod, invisible to the player) on versions it
-/// supports, unless the instance turned it off ("pure vanilla").
+/// The loader to launch with. Vanilla instances run on Fabric, invisible
+/// to the player, for the Arctic Client (versions it supports) and the
+/// Performance mods (any version Fabric supports), unless both are off
+/// ("pure vanilla").
 fn effective_loader(
     dirs: &DataDirs,
     instance: &Instance,
@@ -214,12 +224,17 @@ fn effective_loader(
     if let (Some(kind), Some(version)) = (instance.loader.kind(), instance.loader.version()) {
         return Some((kind, version.to_owned()));
     }
-    if !instance.arctic_mod || !arctic_mod::supports(game) {
-        // Pure vanilla: make sure a previous client run left nothing behind.
-        let _ = arctic_mod::sync(&instance.game_dir(dirs).join("mods"), game, false);
-        return None;
+    let client = instance.arctic_mod && arctic_mod::supports(game);
+    let fabric = (client || instance.performance)
+        .then(|| arctic_mod::client_loader(dirs, game))
+        .flatten();
+    if fabric.is_none() {
+        // Pure vanilla: make sure earlier Fabric runs left nothing behind.
+        let game_dir = instance.game_dir(dirs);
+        let _ = arctic_mod::sync(&game_dir.join("mods"), game, false);
+        let _ = crate::mods::performance::sync(&game_dir, game, false, &|_| {});
     }
-    arctic_mod::client_loader(dirs, game).map(|v| (loaders::LoaderKind::Fabric, v))
+    fabric.map(|v| (loaders::LoaderKind::Fabric, v))
 }
 
 /// Tell the Arctic mod its menu style and let it publish looks as this

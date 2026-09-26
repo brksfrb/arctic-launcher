@@ -10,6 +10,7 @@ mod files;
 mod index;
 pub mod modpack;
 mod modrinth;
+pub mod performance;
 mod resolve;
 #[cfg(test)]
 mod tests;

@@ -138,6 +138,7 @@ fn smoke_instance(kind: LoaderKind, game: &str, loader_version: String) -> Insta
         arctic_mod: false,
         java_path: None,
         jvm_args: String::new(),
+        performance: false,
     }
 }
 

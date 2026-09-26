@@ -163,6 +163,7 @@ impl ArcticApp {
         });
         self.java_card(ui, instance);
         self.arctic_mod_card(ui, instance);
+        self.performance_card(ui, instance);
         if instance.is_default() {
             return;
         }
@@ -271,7 +272,7 @@ impl ArcticApp {
         let (title, about, toggle) = if vanilla {
             (
                 "Arctic Client",
-                "Arctic's menus and looks in game. Minecraft runs through Fabric underneath; turn this off for pure vanilla.",
+                "Arctic's menus, HUD and looks in game. Minecraft runs through Fabric underneath; turn this and Performance off for pure vanilla.",
                 "Play with the Arctic Client",
             )
         } else {
@@ -293,10 +294,40 @@ impl ArcticApp {
             }
             if !supported {
                 ui.label(
-                    RichText::new(
-                        "Not available for this Minecraft version yet; it plays as pure vanilla.",
-                    )
-                    .color(p.muted),
+                    RichText::new("Not available for this Minecraft version yet.").color(p.muted),
+                );
+            }
+        });
+    }
+
+    /// Vanilla instances: the Performance switch (Sodium, Lithium, …).
+    fn performance_card(&mut self, ui: &mut egui::Ui, instance: &Instance) {
+        if instance.loader.kind().is_some() {
+            return;
+        }
+        let p = self.palette();
+        ui.add_space(12.0);
+        theme::card(p).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(RichText::new("Performance").size(17.0).strong().color(p.text));
+            ui.label(
+                RichText::new(
+                    "Adds Sodium, Lithium, FerriteCore, ImmediatelyFast and EntityCulling for much higher FPS. Downloaded from Modrinth for your version; ones not updated yet are skipped.",
+                )
+                .color(p.muted),
+            );
+            let mut on = instance.performance;
+            if ui.checkbox(&mut on, "Boost FPS with performance mods").changed() {
+                let id = instance.id.clone();
+                self.update_instance(&id, |i| i.performance = on);
+            }
+            let installed =
+                arctic_core::mods::performance::installed(&instance.game_dir(&self.dirs));
+            if on && !installed.is_empty() {
+                ui.label(
+                    RichText::new(format!("Installed: {}", installed.join(", ")))
+                        .small()
+                        .color(p.muted),
                 );
             }
         });
