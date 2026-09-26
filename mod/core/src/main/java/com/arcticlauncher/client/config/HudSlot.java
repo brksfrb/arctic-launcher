@@ -22,6 +22,8 @@ public final class HudSlot {
 	public int dx;
 	public int dy;
 	public float scale = 1f;
+	/** Draw the widget's backdrop panel. */
+	public boolean background = true;
 
 	public HudSlot() {}
 
@@ -37,6 +39,7 @@ public final class HudSlot {
 		c.dx = dx;
 		c.dy = dy;
 		c.scale = scale;
+		c.background = background;
 		return c;
 	}
 }

@@ -60,11 +60,15 @@ final class Keystrokes extends HudWidget {
 		return ArcticClient.platform().inWorld() && ArcticClient.platform().keyDown(key);
 	}
 
-	private static void key(Gfx g, Style s, int x, int y, int w, int h, String label, boolean pressed) {
-		Draw.round(g, x, y, x + w, y + h, 2, pressed ? Draw.alpha(s.accent, 0.85f) : s.hud);
+	private void key(Gfx g, Style s, int x, int y, int w, int h, String label, boolean pressed) {
+		if (pressed) {
+			Draw.round(g, x, y, x + w, y + h, 2, Draw.alpha(s.accent, 0.85f));
+		} else {
+			panel(g, s, x, y, x + w, y + h);
+		}
 		if (label != null) {
 			int color = pressed ? s.onAccent : s.text;
-			Draw.centered(g, label, x + w / 2, y + (h - 8) / 2, color, false);
+			Draw.centered(g, label, x + w / 2, y + (h - 8) / 2, color, !pressed && shadow());
 		}
 	}
 }

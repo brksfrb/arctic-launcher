@@ -27,6 +27,9 @@ public interface Gfx {
 	/** An item icon (16×16) with its count and durability bar; {@code stack} is the game's. */
 	void item(Object stack, int x, int y);
 
+	/** A GUI sprite from the game's atlas (like an effect icon); {@code sprite} is the game's id. */
+	void sprite(Object sprite, int x, int y, int w, int h);
+
 	void push();
 
 	void pop();

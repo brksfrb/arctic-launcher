@@ -124,6 +124,13 @@ final class WorldTest {
 					later(() -> shot("world-rain-cleared"));
 				},
 				() -> {
+					ArcticPacks.setSmoothFont(true);
+					TIMER.schedule(() -> run(() -> {
+						Compat.setScreen(null);
+						shot("world-smooth-font");
+					}), STEP + 2, TimeUnit.SECONDS);
+				},
+				() -> {
 					c.clearWeather = false;
 					command("weather clear");
 					ArcticClient.platform().openPage(new com.arcticlauncher.client.menu.HudEditor());

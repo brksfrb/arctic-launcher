@@ -191,6 +191,22 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean smoothFont() {
+		//#if MC >= 26.3
+		return ArcticPacks.smoothFontOn();
+		//#else
+		return false;
+		//#endif
+	}
+
+	@Override
+	public void setSmoothFont(boolean on) {
+		//#if MC >= 26.3
+		ArcticPacks.setSmoothFont(on);
+		//#endif
+	}
+
+	@Override
 	public boolean physicalKeyDown(GameKey key) {
 		return Compat.keyDown(mapping(mc().options, key).saveString());
 	}

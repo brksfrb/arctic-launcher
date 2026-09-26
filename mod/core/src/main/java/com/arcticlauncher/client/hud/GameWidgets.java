@@ -108,7 +108,7 @@ final class GameWidgets {
 			if (rows.isEmpty()) {
 				return;
 			}
-			Draw.round(g, 0, 0, width(g), PAD + rows.size() * ROW, 2, s.hud);
+			panel(g, s, 0, 0, width(g), PAD + rows.size() * ROW);
 			int y = PAD / 2;
 			for (Object[] row : rows) {
 				if (row[0] != null) {
@@ -117,7 +117,7 @@ final class GameWidgets {
 					placeholderIcon(g, PAD, y, s);
 				}
 				if (row[1] != null) {
-					g.text((String) row[1], PAD + ICON + 3, y + 4, s.text, false);
+					g.text((String) row[1], PAD + ICON + 3, y + 4, s.text, shadow());
 				}
 				y += ROW;
 			}
@@ -130,9 +130,10 @@ final class GameWidgets {
 		Draw.outline(g, x + 2, y + 2, x + ICON - 2, y + ICON - 2, 2, Draw.alpha(s.accent, 0.8f));
 	}
 
-	/** Active potion effects with time left. */
+	/** Active potion effects with their icon and time left. */
 	private static final class Effects extends HudWidget {
-		private static final int LINE = 11;
+		private static final int LINE = 12;
+		private static final int EFFECT_ICON = 10;
 
 		Effects() {
 			super("effects", "Effects", "Active effects and time left", false, Column.RIGHT);
@@ -160,7 +161,7 @@ final class GameWidgets {
 			for (Object[] r : rows(true)) {
 				w = Math.max(w, g.textWidth(r[0] + "  " + r[1]));
 			}
-			return PAD * 2 + 5 + w;
+			return PAD * 2 + EFFECT_ICON + 3 + w;
 		}
 
 		@Override
@@ -175,13 +176,18 @@ final class GameWidgets {
 				return;
 			}
 			int w = width(g);
-			Draw.round(g, 0, 0, w, PAD + rows.size() * LINE, 2, s.hud);
-			int y = PAD / 2 + 1;
+			panel(g, s, 0, 0, w, PAD + rows.size() * LINE);
+			int y = PAD / 2;
 			for (Object[] r : rows) {
-				g.fill(PAD, y, PAD + 2, y + 8, 0xFF000000 | (Integer) r[2]);
-				g.text((String) r[0], PAD + 5, y, s.text, false);
+				Object icon = r.length > 3 ? r[3] : null;
+				if (icon != null) {
+					g.sprite(icon, PAD, y + 1, EFFECT_ICON, EFFECT_ICON);
+				} else {
+					Draw.round(g, PAD + 1, y + 2, PAD + EFFECT_ICON - 1, y + EFFECT_ICON, 2, 0xFF000000 | (Integer) r[2]);
+				}
+				g.text((String) r[0], PAD + EFFECT_ICON + 3, y + 2, s.text, shadow());
 				String time = (String) r[1];
-				g.text(time, w - PAD - g.textWidth(time), y, s.muted, false);
+				g.text(time, w - PAD - g.textWidth(time), y + 2, s.muted, shadow());
 				y += LINE;
 			}
 		}
@@ -214,14 +220,14 @@ final class GameWidgets {
 			if (held == null && !preview) {
 				return;
 			}
-			Draw.round(g, 0, 0, width(g), height(), 2, s.hud);
+			panel(g, s, 0, 0, width(g), height());
 			if (held == null) {
 				placeholderIcon(g, PAD, PAD / 2, s);
-				g.text("64", PAD + ICON + 3, PAD / 2 + 4, s.text, false);
+				g.text("64", PAD + ICON + 3, PAD / 2 + 4, s.text, shadow());
 				return;
 			}
 			g.item(held[0], PAD, PAD / 2);
-			g.text(String.valueOf(held[1]), PAD + ICON + 3, PAD / 2 + 4, s.text, false);
+			g.text(String.valueOf(held[1]), PAD + ICON + 3, PAD / 2 + 4, s.text, shadow());
 		}
 	}
 
@@ -260,10 +266,10 @@ final class GameWidgets {
 			}
 			float health = (Float) t[1];
 			float max = Math.max(1f, (Float) t[2]);
-			Draw.round(g, 0, 0, W, H, 2, s.hud);
-			g.text(Draw.fit(g, (String) t[0], W - 50), PAD, PAD, s.text, false);
+			panel(g, s, 0, 0, W, H);
+			g.text(Draw.fit(g, (String) t[0], W - 50), PAD, PAD, s.text, shadow());
 			String hp = String.format(Locale.ROOT, "%.1f / %.0f", health, max);
-			g.text(hp, W - PAD - g.textWidth(hp), PAD, s.muted, false);
+			g.text(hp, W - PAD - g.textWidth(hp), PAD, s.muted, shadow());
 			int barY = H - PAD - 5;
 			Draw.round(g, PAD, barY, W - PAD, barY + 5, 1, Draw.alpha(s.muted, 0.35f));
 			int filled = Math.round((W - PAD * 2) * Math.max(0f, Math.min(1f, health / max)));

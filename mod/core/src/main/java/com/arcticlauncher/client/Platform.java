@@ -58,6 +58,12 @@ public interface Platform {
 	/** Zoom, Freelook, Fullbright and the other game features work on this version. */
 	boolean hasFeatures();
 
+	/** The smooth font pack is on. */
+	boolean smoothFont();
+
+	/** Switch the smooth font (reloads the game's resources). */
+	void setSmoothFont(boolean on);
+
 	/** Is the key bound to a control physically held (ignoring toggles)? */
 	boolean physicalKeyDown(GameKey key);
 
@@ -72,7 +78,7 @@ public interface Platform {
 	/** Worn armor, head to feet, then the main hand: {stack, durability text or null}. */
 	java.util.List<Object[]> armor();
 
-	/** Active effects: {name, time left like "1:23", color (Integer ARGB)}. */
+	/** Active effects: {name, time left like "1:23", color (Integer ARGB), icon sprite or null}. */
 	java.util.List<Object[]> effects();
 
 	/** The held item and how many of it you carry: {stack, total}, or null. */

@@ -53,8 +53,8 @@
   Classic), a dozen HUD widgets (FPS, CPS, ping, keystrokes, coordinates, speed, biome and
   armor, effects, target health, reach and combo) that line up on their own and snap into
   place when you move them, Zoom, Freelook, Fullbright, Toggle Sprint and Sneak, a
-  crosshair editor, chat timestamps, low fire, clear weather, and everyone's Arctic looks
-  in game. Press Right Shift in game for the Arctic menu. It's on
+  crosshair editor, a smooth font, chat timestamps, low fire, clear weather, and everyone's
+  Arctic looks in game. Press Right Shift in game for the Arctic menu. It's on
   by default for Minecraft 1.21.6 and newer, comes to Fabric and Quilt instances too, and you can turn
   it off per instance.
 - **Performance, built in.** One switch adds Sodium, Lithium, FerriteCore, ImmediatelyFast
