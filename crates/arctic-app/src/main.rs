@@ -10,6 +10,7 @@ mod icon_raster;
 mod logbook;
 mod motion;
 mod session;
+mod single_instance;
 mod skin_tasks;
 mod startup;
 mod tasks;
@@ -17,8 +18,10 @@ mod theme;
 mod theme_fade;
 mod titlebar;
 mod toasts;
+mod tray;
 mod ui;
 mod widgets;
+mod window;
 mod world_tasks;
 
 use std::sync::Arc;
@@ -39,8 +42,14 @@ fn main() -> eframe::Result {
             std::process::exit(1);
         }
     };
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    // Already running (maybe hidden in the tray): hand over and exit.
+    let forwarded = match single_instance::claim(dirs.root(), &args) {
+        single_instance::Claim::Forwarded => return Ok(()),
+        single_instance::Claim::Primary(rx) => rx,
+    };
     logbook::init(dirs.launcher_logs().join("launcher.log"));
-    let startup = startup::StartupOptions::parse(std::env::args().skip(1));
+    let startup = startup::StartupOptions::parse(args);
     if let Err(e) = dirs.ensure() {
         log::error!("could not create data folders: {e}");
     }
@@ -83,6 +92,10 @@ fn main() -> eframe::Result {
     eframe::run_native(
         arctic_core::APP_NAME,
         options,
-        Box::new(move |cc| Ok(Box::new(app::ArcticApp::new(cc, dirs, profiles, startup)))),
+        Box::new(move |cc| {
+            Ok(Box::new(app::ArcticApp::new(
+                cc, dirs, profiles, startup, forwarded,
+            )))
+        }),
     )
 }

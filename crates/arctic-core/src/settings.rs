@@ -51,6 +51,8 @@ pub struct Settings {
     pub discord_presence: bool,
     /// First-run setup finished (or skipped) for this profile.
     pub onboarded: bool,
+    /// Keep running in the system tray when the window is closed.
+    pub tray: bool,
 }
 
 /// What the launcher window does once the game window is up.
@@ -97,6 +99,7 @@ impl Default for Settings {
             on_game_start: GameStartAction::KeepOpen,
             discord_presence: true,
             onboarded: false,
+            tray: true,
         }
     }
 }

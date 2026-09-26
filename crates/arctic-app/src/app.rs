@@ -184,6 +184,10 @@ pub struct ArcticApp {
     pub(crate) together: crate::ui::TogetherUi,
     pub(crate) skins: crate::ui::SkinsUi,
     devshot: crate::devshot::DevShot,
+    /// Command lines from later starts (see `single_instance`).
+    forwarded: std::sync::mpsc::Receiver<Vec<String>>,
+    tray: Option<crate::tray::Tray>,
+    window_known: bool,
     /// Maximize on the first frame (creating the window maximized is
     /// unreliable on Windows: wrong restore size, flicker).
     maximize_pending: bool,
@@ -198,6 +202,7 @@ impl ArcticApp {
         root: DataDirs,
         profiles: ProfileStore,
         startup: StartupOptions,
+        forwarded: std::sync::mpsc::Receiver<Vec<String>>,
     ) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
         // Ctrl +/- would scale the whole UI; the layout isn't made for that.
@@ -224,6 +229,9 @@ impl ArcticApp {
             together: crate::ui::TogetherUi::default(),
             skins: crate::ui::SkinsUi::default(),
             devshot: crate::devshot::DevShot::from_env(),
+            forwarded,
+            tray: None,
+            window_known: false,
             maximize_pending: data.settings.start_maximized,
             pending_launch: startup.launch.clone(),
             msa_configured: MsaConfig::load(&dirs).is_ok(),
@@ -488,6 +496,59 @@ impl ArcticApp {
         );
     }
 
+    /// Tray icon, close-to-tray and starts forwarded from other processes.
+    fn window_and_tray(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
+        if !self.window_known {
+            self.window_known = true;
+            crate::window::remember(frame);
+            let wake_ctx = ctx.clone();
+            crate::single_instance::on_wake(move || {
+                crate::window::show();
+                wake_ctx.request_repaint();
+            });
+        }
+        if self.settings.tray && self.tray.is_none() && crate::window::is_known() {
+            self.tray = crate::tray::Tray::new(ctx);
+        }
+        let tray_on = self.settings.tray && self.tray.is_some();
+        if tray_on && !crate::tray::quitting() && ctx.input(|i| i.viewport().close_requested()) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.persist_settings();
+            crate::window::hide();
+        }
+        let now = ctx.input(|i| i.time);
+        let actions: Vec<_> = self
+            .tray
+            .as_ref()
+            .map(|t| t.actions.try_iter().collect())
+            .unwrap_or_default();
+        for action in actions {
+            match action {
+                crate::tray::Action::Play => {
+                    self.set_tab(Tab::Play, now);
+                    if matches!(self.launch, LaunchState::Idle) {
+                        self.launch_selected();
+                    }
+                }
+            }
+        }
+        while let Ok(args) = self.forwarded.try_recv() {
+            let opts = StartupOptions::parse(args);
+            if let Some(tab) = opts.tab {
+                self.set_tab(tab, now);
+            }
+            if let Some(query) = &opts.account
+                && let Some(id) = self.accounts.find(query).map(|a| a.id.clone())
+            {
+                self.accounts.set_active(&id);
+            }
+            if opts.launch.is_some() {
+                self.pending_launch = opts.launch;
+                self.run_pending_launch();
+            }
+        }
+    }
+
     /// `--launch` from the command line: pick the version, then Play.
     fn run_pending_launch(&mut self) {
         let Some(query) = self.pending_launch.take() else {
@@ -710,6 +771,7 @@ impl eframe::App for ArcticApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
         }
         self.update_theme(&ctx, frame);
+        self.window_and_tray(&ctx, frame);
         let playing = !matches!(self.launch, LaunchState::Idle);
         let together = self.together_status();
         self.discord

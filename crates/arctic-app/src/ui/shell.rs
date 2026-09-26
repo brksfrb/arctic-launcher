@@ -166,6 +166,7 @@ impl ArcticApp {
             );
             return;
         }
+        crate::tray::set_quitting();
         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
     }
 }

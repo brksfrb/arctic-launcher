@@ -42,6 +42,10 @@ impl ArcticApp {
                 .on_hover_text("Aurora, snowfall and shooting stars. Pauses while you play.");
             ui.checkbox(&mut s.intro, "Intro animation on start");
             ui.checkbox(&mut s.start_maximized, "Start the launcher maximized");
+            if cfg!(windows) {
+                ui.checkbox(&mut s.tray, "Keep Arctic in the system tray when closed")
+                    .on_hover_text("Reopens instantly. Quit from the tray icon.");
+            }
         });
 
         section(ui, p, "Memory", |ui| {
