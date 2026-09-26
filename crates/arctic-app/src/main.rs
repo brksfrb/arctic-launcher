@@ -5,6 +5,7 @@ mod app;
 mod art;
 mod devshot;
 mod discord;
+mod fonts;
 mod icon_raster;
 mod logbook;
 mod motion;
