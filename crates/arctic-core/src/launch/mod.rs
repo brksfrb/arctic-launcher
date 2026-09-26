@@ -162,7 +162,12 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         .or_else(|| req.settings.java_override.clone());
     progress(ProgressInfo::stage("Reading version"));
     let vanilla = load_version(dirs, req.version, &|_| {})?;
-    let version = match (req.instance.loader.kind(), req.instance.loader.version()) {
+    let loader = effective_loader(dirs, req.instance, &vanilla.id);
+    let version = match loader
+        .as_ref()
+        .map(|(k, v)| (Some(*k), Some(v.as_str())))
+        .unwrap_or((None, None))
+    {
         (Some(kind), Some(loader_version)) => {
             let base = install(
                 dirs,
@@ -196,6 +201,25 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
     };
     let installation = install(dirs, version, &game_dir, java_override, progress)?;
     Ok(plan(req, &installation))
+}
+
+/// The loader to launch with. Vanilla instances run the Arctic Client
+/// (Fabric + the Arctic mod, invisible to the player) on versions it
+/// supports, unless the instance turned it off ("pure vanilla").
+fn effective_loader(
+    dirs: &DataDirs,
+    instance: &Instance,
+    game: &str,
+) -> Option<(loaders::LoaderKind, String)> {
+    if let (Some(kind), Some(version)) = (instance.loader.kind(), instance.loader.version()) {
+        return Some((kind, version.to_owned()));
+    }
+    if !instance.arctic_mod || !arctic_mod::supports(game) {
+        // Pure vanilla: make sure a previous client run left nothing behind.
+        let _ = arctic_mod::sync(&instance.game_dir(dirs).join("mods"), game, false);
+        return None;
+    }
+    arctic_mod::client_loader(dirs, game).map(|v| (loaders::LoaderKind::Fabric, v))
 }
 
 /// Let the Arctic mod publish looks as this player. Best effort: without

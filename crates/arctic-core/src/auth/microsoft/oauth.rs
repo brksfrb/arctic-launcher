@@ -15,6 +15,25 @@ const DEVICE_CODE_URL: &str = "https://login.microsoftonline.com/consumers/oauth
 const TOKEN_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
 pub(super) const SCOPE: &str = "XboxLive.signin offline_access";
 const DEVICE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
+/// login.live.com endpoints, used by live-style client IDs.
+const LIVE_DEVICE_CODE_URL: &str = "https://login.live.com/oauth20_connect.srf";
+const LIVE_TOKEN_URL: &str = "https://login.live.com/oauth20_token.srf";
+const LIVE_SCOPE: &str = "service::user.auth.xboxlive.com::MBI_SSL";
+const LIVE_DEVICE_GRANT: &str = "device_code";
+
+/// (device code URL, token URL, scope, device grant) for this client.
+fn endpoints(cfg: &MsaConfig) -> (&'static str, &'static str, &'static str, &'static str) {
+    if cfg.is_live() {
+        (
+            LIVE_DEVICE_CODE_URL,
+            LIVE_TOKEN_URL,
+            LIVE_SCOPE,
+            LIVE_DEVICE_GRANT,
+        )
+    } else {
+        (DEVICE_CODE_URL, TOKEN_URL, SCOPE, DEVICE_GRANT)
+    }
+}
 /// How often the cancel flag is checked while waiting between polls.
 const CANCEL_CHECK: Duration = Duration::from_millis(200);
 const SLOW_DOWN_EXTRA: Duration = Duration::from_secs(5);
@@ -27,6 +46,7 @@ pub struct DeviceCode {
     pub verification_uri: String,
     pub expires_in: u64,
     pub interval: u64,
+    #[serde(default)]
     pub message: String,
 }
 
@@ -49,9 +69,9 @@ enum TokenResponse {
     },
 }
 
-fn post_token_form(form: &[(&str, &str)]) -> Result<TokenResponse> {
+fn post_token_form(url: &str, form: &[(&str, &str)]) -> Result<TokenResponse> {
     let mut resp = agent()
-        .post(TOKEN_URL)
+        .post(url)
         .config()
         .http_status_as_error(false)
         .build()
@@ -64,9 +84,12 @@ fn oauth_error(error: &str, description: Option<String>) -> Error {
 }
 
 pub(super) fn request_device_code(cfg: &MsaConfig) -> Result<DeviceCode> {
-    let mut resp = agent()
-        .post(DEVICE_CODE_URL)
-        .send_form([("client_id", cfg.client_id.as_str()), ("scope", SCOPE)])?;
+    let (url, _, scope, _) = endpoints(cfg);
+    let mut form = vec![("client_id", cfg.client_id.as_str()), ("scope", scope)];
+    if cfg.is_live() {
+        form.push(("response_type", "device_code"));
+    }
+    let mut resp = agent().post(url).send_form(form)?;
     Ok(resp.body_mut().read_json()?)
 }
 
@@ -84,12 +107,13 @@ pub(super) fn poll_device_code(
                 "the login code expired, please try again".into(),
             ));
         }
+        let (_, token_url, _, grant) = endpoints(cfg);
         let form = [
-            ("grant_type", DEVICE_GRANT),
+            ("grant_type", grant),
             ("client_id", cfg.client_id.as_str()),
             ("device_code", code.device_code.as_str()),
         ];
-        match post_token_form(&form)? {
+        match post_token_form(token_url, &form)? {
             TokenResponse::Ok(tokens) => return Ok(tokens),
             TokenResponse::Err { error, .. } if error == "authorization_pending" => {}
             TokenResponse::Err { error, .. } if error == "slow_down" => interval += SLOW_DOWN_EXTRA,
@@ -117,7 +141,7 @@ pub(super) fn exchange_code(
         ("redirect_uri", redirect_uri),
         ("code_verifier", verifier),
     ];
-    match post_token_form(&form)? {
+    match post_token_form(TOKEN_URL, &form)? {
         TokenResponse::Ok(tokens) => Ok(tokens),
         TokenResponse::Err {
             error,
@@ -127,13 +151,14 @@ pub(super) fn exchange_code(
 }
 
 pub(super) fn refresh(cfg: &MsaConfig, refresh_token: &str) -> Result<MsaTokens> {
+    let (_, token_url, scope, _) = endpoints(cfg);
     let form = [
         ("grant_type", "refresh_token"),
         ("client_id", cfg.client_id.as_str()),
-        ("scope", SCOPE),
+        ("scope", scope),
         ("refresh_token", refresh_token),
     ];
-    match post_token_form(&form)? {
+    match post_token_form(token_url, &form)? {
         TokenResponse::Ok(tokens) => Ok(tokens),
         TokenResponse::Err {
             error,

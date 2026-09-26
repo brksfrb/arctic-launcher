@@ -34,13 +34,22 @@ pub fn finish_device_code(
     cancel: &AtomicBool,
 ) -> Result<Account> {
     let tokens = oauth::poll_device_code(cfg, code, cancel)?;
-    complete_login(tokens)
+    complete_login(tokens, cfg.is_live())
 }
 
 /// Browser flow: opens the system browser and waits for the loopback redirect.
+/// Live-style client IDs can't redirect back to us, so they open the code
+/// page with the code already filled in and wait the same way.
 pub fn login_with_browser(cfg: &MsaConfig, cancel: &AtomicBool) -> Result<Account> {
+    if cfg.is_live() {
+        let code = start_device_code(cfg)?;
+        let url = format!("{}?otc={}", code.verification_uri, code.user_code);
+        open::that_detached(&url)
+            .map_err(|e| Error::Other(format!("could not open the browser: {e}")))?;
+        return finish_device_code(cfg, &code, cancel);
+    }
     let tokens = browser::authorize(cfg, cancel)?;
-    complete_login(tokens)
+    complete_login(tokens, false)
 }
 
 /// Mint a fresh Minecraft token from the stored MSA refresh token.
@@ -49,15 +58,15 @@ pub fn refresh(cfg: &MsaConfig, account: &Account) -> Result<Account> {
         return Ok(account.clone());
     };
     let tokens = oauth::refresh(cfg, &session.refresh_token)?;
-    let refreshed = complete_login(tokens)?;
+    let refreshed = complete_login(tokens, cfg.is_live())?;
     Ok(Account {
         id: account.id.clone(),
         ..refreshed
     })
 }
 
-fn complete_login(tokens: MsaTokens) -> Result<Account> {
-    let xbl = xbox::xbox_live(&tokens.access_token)?;
+fn complete_login(tokens: MsaTokens, live: bool) -> Result<Account> {
+    let xbl = xbox::xbox_live(&tokens.access_token, live)?;
     let xsts = xbox::xsts(&xbl.token)?;
     let mc = xbox::minecraft_login(&xsts.user_hash, &xsts.token)?;
     let profile = xbox::profile(&mc.access_token)?;
