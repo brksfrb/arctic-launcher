@@ -8,6 +8,7 @@ use eframe::egui;
 
 /// What the tray asked the app to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(windows), allow(dead_code))] // no tray outside Windows yet
 pub enum Action {
     Play,
 }
