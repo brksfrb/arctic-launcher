@@ -17,8 +17,11 @@ import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.injection.Redirect;
 //#if MC >= 26.3
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
-//#else
+//#elif MC >= 1.21.6
 import com.mojang.blaze3d.pipeline.RenderPipeline;
+//#else
+import java.util.function.Function;
+import net.minecraft.client.renderer.RenderType;
 //#endif
 //#endif
 
@@ -36,7 +39,11 @@ abstract class AbstractButtonMixin {
 	//#else
 	// Before 1.21.11 the background sprite is drawn inside renderWidget.
 	@Redirect(method = "extractWidgetRenderState", at = @At(value = "INVOKE", target = Compat.BLIT_SPRITE_TINTED, ordinal = 0))
+	//#if MC >= 1.21.6
 	private void arctic$background(GuiGraphicsExtractor g, RenderPipeline pipeline, Identifier sprite, int x, int y, int w, int h, int color) {
+	//#else
+	private void arctic$background(GuiGraphicsExtractor g, Function<Identifier, RenderType> pipeline, Identifier sprite, int x, int y, int w, int h, int color) {
+	//#endif
 		if (ArcticClient.restyles()) {
 			draw(g);
 		} else {

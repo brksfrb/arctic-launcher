@@ -32,7 +32,13 @@ final class SelfTest {
 			"net.minecraft.client.gui.components.EditBox",
 			"net.minecraft.client.gui.components.Checkbox",
 			"net.minecraft.client.MouseHandler",
-			"net.minecraft.client.KeyboardHandler"};
+			"net.minecraft.client.KeyboardHandler",
+			"net.minecraft.client.Camera",
+			"net.minecraft.world.entity.Entity",
+			//#if MC >= 26.3
+			"net.minecraft.client.renderer.LightmapRenderStateExtractor",
+			//#endif
+	};
 
 	private static final ScheduledExecutorService TIMER = Executors.newSingleThreadScheduledExecutor(r -> {
 		Thread t = new Thread(r, "arctic-selftest");
@@ -85,8 +91,13 @@ final class SelfTest {
 	private static void tour() {
 		Runnable[] steps = {
 				() -> shot("title"),
-				SelfTest::clickOptions,
+				() -> {
+					// Start from the title menu, whatever happened meanwhile.
+					Compat.setScreen(new PageScreen(ArcticClient.titleMenu(), null));
+					soon(SelfTest::clickOptions);
+				},
 				() -> open("hud", "menu-hud"),
+				() -> open("features", "menu-features"),
 				() -> open("looks", "menu-looks"),
 				() -> open("style", "menu-style"),
 				() -> {
@@ -97,6 +108,11 @@ final class SelfTest {
 					Compat.setScreen(null);
 					ArcticClient.platform().action(MenuAction.OPTIONS);
 					later(() -> shot("options"));
+				},
+				() -> {
+					// Leaving a world or a menu ends in setScreen(null): must be Arctic's title.
+					Compat.setScreen(null);
+					ArcticMod.LOG.info("selftest: back to title is {}", name(Compat.screen()));
 				},
 				() -> {
 					ArcticMod.LOG.info("selftest: done");
@@ -118,6 +134,13 @@ final class SelfTest {
 		double y = (h / 4 + 138) * scale;
 		ArcticMod.LOG.info("selftest: clicking at gui ({}, {}) on {}", x / scale, y / scale, name(Compat.screen()));
 		//#if MC >= 26.3
+		if (!mc.isWindowActive()) {
+			// Minecraft ignores clicks on an unfocused window; click the screen itself.
+			ArcticMod.LOG.info("selftest: window not focused, clicking the screen directly");
+			Compat.click(Compat.screen(), x / scale, y / scale);
+			soon(() -> ArcticMod.LOG.info("selftest: after click the screen is {}", name(Compat.screen())));
+			return;
+		}
 		long window = mc.getWindow().handle();
 		mc.mouseHandler.onMove(window, x, y, 0, 0);
 		mc.mouseHandler.onMove(window, x, y, 0, 0);
@@ -128,7 +151,7 @@ final class SelfTest {
 		// Older versions keep the input handler private: click the screen directly.
 		Compat.click(Compat.screen(), x / scale, y / scale);
 		//#endif
-		later(() -> {
+		soon(() -> {
 			ArcticMod.LOG.info("selftest: after click the screen is {}", name(Compat.screen()));
 			shot("after-click");
 		});
@@ -143,6 +166,11 @@ final class SelfTest {
 		Compat.setScreen(null);
 		ArcticClient.platform().openPage(new ArcticMenu());
 		later(() -> shot(name));
+	}
+
+	/** A second from now, well inside the current step. */
+	private static void soon(Runnable r) {
+		TIMER.schedule(() -> Minecraft.getInstance().execute(r), 1, TimeUnit.SECONDS);
 	}
 
 	private static void later(Runnable r) {

@@ -7,6 +7,7 @@ package com.arcticlauncher.client;
 public final class Keys {
 	public static final int ESCAPE = 256;
 	public static final int ENTER = 257;
+	public static final int BACKSPACE = 259;
 	public static final int RIGHT_SHIFT = 344;
 
 	public static final int MOUSE_LEFT = 0;

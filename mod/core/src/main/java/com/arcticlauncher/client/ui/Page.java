@@ -109,7 +109,11 @@ public abstract class Page {
 		return false;
 	}
 
-	public boolean keyPressed(int key) {
+	/**
+	 * A key press: {@code key} in core codes ({@link Keys}), {@code nativeKey}
+	 * as the game reported it (for binding keys, see {@code Platform.keyName}).
+	 */
+	public boolean keyPressed(int key, int nativeKey) {
 		if (key == Keys.ESCAPE && closeOnEscape()) {
 			close();
 			return true;

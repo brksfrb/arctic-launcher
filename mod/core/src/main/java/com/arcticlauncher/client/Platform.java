@@ -27,10 +27,36 @@ public interface Platform {
 	/** True while playing (a world is loaded). */
 	boolean inWorld();
 
-	/** Player {x, y, z, yaw}, or null outside a world. */
+	/** Player {x, y, z, yaw, pitch}, or null outside a world. */
 	double[] position();
 
 	boolean keyDown(GameKey key);
+
+	/** The biome at the player, like "Snowy Plains", or null. */
+	String biome();
+
+	/** The server's address, "Singleplayer", or null outside a world. */
+	String server();
+
+	/** World time in ticks (day = time / 24000), or -1 outside a world. */
+	long dayTime();
+
+	// ---- Keys and camera (features) ------------------------------------------------
+
+	/** Is the key with this Minecraft name ("key.keyboard.c") held? */
+	boolean isKeyDown(String key);
+
+	/** A key's label for menus ("C", "Left Alt"). */
+	String keyLabel(String key);
+
+	/** The Minecraft name of a key the game reported (a native key code). */
+	String keyName(int nativeKey);
+
+	/** Switch to third person (true) or back to the view before (false). */
+	void setThirdPerson(boolean on);
+
+	/** Zoom, Freelook and Fullbright work on this version. */
+	boolean hasFeatures();
 
 	/** The vanilla HUD is hidden (F1) or covered by the debug screen. */
 	boolean hudHidden();

@@ -6,8 +6,11 @@ import com.arcticlauncher.client.style.Skin;
 import com.arcticlauncher.mod.GfxImpl;
 //#if MC >= 26.3
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
-//#else
+//#elif MC >= 1.21.6
 import com.mojang.blaze3d.pipeline.RenderPipeline;
+//#else
+import java.util.function.Function;
+import net.minecraft.client.renderer.RenderType;
 //#endif
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -23,7 +26,11 @@ abstract class EditBoxMixin {
 	@Redirect(
 			method = "extractWidgetRenderState",
 			at = @At(value = "INVOKE", target = Compat.BLIT_SPRITE))
+	//#if MC >= 1.21.6
 	private void arctic$field(GuiGraphicsExtractor g, RenderPipeline pipeline, Identifier sprite, int x, int y, int w, int h) {
+	//#else
+	private void arctic$field(GuiGraphicsExtractor g, Function<Identifier, RenderType> pipeline, Identifier sprite, int x, int y, int w, int h) {
+	//#endif
 		if (!ArcticClient.restyles()) {
 			g.blitSprite(pipeline, sprite, x, y, w, h);
 			return;
