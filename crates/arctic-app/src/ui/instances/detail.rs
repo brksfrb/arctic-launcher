@@ -162,10 +162,10 @@ impl ArcticApp {
             }
         });
         self.java_card(ui, instance);
+        self.arctic_mod_card(ui, instance);
         if instance.is_default() {
             return;
         }
-        self.arctic_mod_card(ui, instance);
         ui.add_space(12.0);
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -258,31 +258,46 @@ impl ArcticApp {
             instance.loader.kind(),
             Some(LoaderKind::Fabric | LoaderKind::Quilt)
         );
-        if !fabric_like {
+        let vanilla = instance.loader.kind().is_none();
+        if !fabric_like && !vanilla {
             return;
         }
-        let supported = instance
+        // The default instance follows the Play tab's version.
+        let version = instance
             .version
-            .as_deref()
-            .is_some_and(arctic_mod::supports);
+            .clone()
+            .or_else(|| self.settings.last_version.clone());
+        let supported = version.as_deref().is_some_and(arctic_mod::supports);
+        let (title, about, toggle) = if vanilla {
+            (
+                "Arctic Client",
+                "Arctic's menus and looks in game. Minecraft runs through Fabric underneath; turn this off for pure vanilla.",
+                "Play with the Arctic Client",
+            )
+        } else {
+            (
+                "Arctic mod",
+                "Shows everyone's Arctic looks (skins and capes) and adds an Arctic menu in game.",
+                "Install the Arctic mod",
+            )
+        };
         ui.add_space(12.0);
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new("Arctic mod").size(17.0).strong().color(p.text));
-            ui.label(
-                RichText::new(
-                    "Shows everyone's Arctic looks (skins and capes) and adds an Arctic menu in game.",
-                )
-                .color(p.muted),
-            );
-            if !supported {
-                ui.label(RichText::new("Not available for this Minecraft version yet.").color(p.muted));
-                return;
-            }
+            ui.label(RichText::new(title).size(17.0).strong().color(p.text));
+            ui.label(RichText::new(about).color(p.muted));
             let mut on = instance.arctic_mod;
-            if ui.checkbox(&mut on, "Install the Arctic mod").changed() {
+            if ui.checkbox(&mut on, toggle).changed() {
                 let id = instance.id.clone();
                 self.update_instance(&id, |i| i.arctic_mod = on);
+            }
+            if !supported {
+                ui.label(
+                    RichText::new(
+                        "Not available for this Minecraft version yet; it plays as pure vanilla.",
+                    )
+                    .color(p.muted),
+                );
             }
         });
     }
