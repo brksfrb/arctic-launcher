@@ -28,6 +28,12 @@ const BODY_TIMEOUT_BASE: Duration = Duration::from_secs(15);
 const MIN_SPEED_BYTES_PER_SEC: u64 = 100 * 1024;
 /// Minimum interval between progress callbacks.
 const REPORT_EVERY_MS: u64 = 50;
+/// Files at least this big are fetched in parallel byte ranges, so one slow
+/// server connection doesn't cap the speed of a big jar.
+const SEGMENT_MIN_SIZE: u64 = 8 * 1024 * 1024;
+/// Target bytes per range, and the most ranges per file.
+const SEGMENT_SIZE: u64 = 4 * 1024 * 1024;
+const MAX_SEGMENTS: u64 = 6;
 
 /// One file to fetch. `sha1`/`size` describe the final file on disk and are
 /// verified when present.
@@ -202,9 +208,24 @@ fn pending_jobs(jobs: Vec<DownloadJob>) -> Vec<DownloadJob> {
 /// shouldn't fail a whole launch: retry each file a few times.
 fn download_with_retry(job: &DownloadJob, reporter: &Reporter) -> Result<()> {
     let mut attempt = 1;
+    let mut segmented = segments(job).is_some();
     loop {
         let transferred = Cell::new(0);
-        match download_one(job, reporter, &transferred) {
+        let result = if segmented {
+            match download_segmented(job, reporter, &transferred) {
+                Err(Segmented::NoRanges) => {
+                    segmented = false;
+                    reporter.remove_bytes(transferred.get());
+                    transferred.set(0);
+                    download_one(job, reporter, &transferred)
+                }
+                Err(Segmented::Failed(e)) => Err(e),
+                Ok(()) => Ok(()),
+            }
+        } else {
+            download_one(job, reporter, &transferred)
+        };
+        match result {
             Ok(()) => return Ok(()),
             Err(e) if attempt < ATTEMPTS => {
                 log::warn!("retrying {} (attempt {attempt}): {e}", job.url);
@@ -259,6 +280,140 @@ fn download_one(job: &DownloadJob, reporter: &Reporter, transferred: &Cell<u64>)
         return Err(e);
     }
     fs::rename(&tmp, &job.dest).at(&job.dest)
+}
+
+/// Byte ranges `[start, end)` for a large, uncompressed file of known size.
+fn segments(job: &DownloadJob) -> Option<Vec<(u64, u64)>> {
+    let size = job.size.filter(|s| *s >= SEGMENT_MIN_SIZE)?;
+    if job.lzma.is_some() {
+        return None;
+    }
+    let count = size.div_ceil(SEGMENT_SIZE).clamp(2, MAX_SEGMENTS);
+    let step = size.div_ceil(count);
+    Some(
+        (0..count)
+            .map(|i| (i * step, ((i + 1) * step).min(size)))
+            .filter(|(start, end)| start < end)
+            .collect(),
+    )
+}
+
+enum Segmented {
+    /// The server ignored the Range header; download the usual way.
+    NoRanges,
+    Failed(Error),
+}
+
+impl From<Error> for Segmented {
+    fn from(e: Error) -> Self {
+        Segmented::Failed(e)
+    }
+}
+
+/// Fetch every range in parallel into one preallocated `.part` file, then
+/// hash the whole file and rename it into place.
+fn download_segmented(
+    job: &DownloadJob,
+    reporter: &Reporter,
+    transferred: &Cell<u64>,
+) -> std::result::Result<(), Segmented> {
+    let Some(ranges) = segments(job) else {
+        return Err(Segmented::NoRanges);
+    };
+    if let Some(parent) = job.dest.parent() {
+        fs::create_dir_all(parent).at(parent)?;
+    }
+    let tmp = part_path(&job.dest);
+    let file = fs::File::create(&tmp).at(&tmp)?;
+    file.set_len(job.size.unwrap_or(0)).at(&tmp)?;
+    drop(file);
+    let counted = AtomicU64::new(0);
+    let outcome: Vec<std::result::Result<(), Segmented>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = ranges
+            .iter()
+            .map(|&(start, end)| {
+                let (tmp, counted) = (&tmp, &counted);
+                scope.spawn(move || fetch_range(job, tmp, start, end, reporter, counted))
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| {
+                h.join()
+                    .unwrap_or_else(|_| Err(Error::Other("download thread panicked".into()).into()))
+            })
+            .collect()
+    });
+    transferred.set(counted.load(Ordering::Relaxed));
+    let failure = outcome.into_iter().find_map(|r| r.err());
+    if let Some(failure) = failure {
+        let _ = fs::remove_file(&tmp);
+        return Err(failure);
+    }
+    let size_ok = fs::metadata(&tmp).at(&tmp)?.len() == job.size.unwrap_or(0);
+    let hash_ok = match &job.sha1 {
+        Some(want) => want.eq_ignore_ascii_case(&sha1_file(&tmp)?),
+        None => true,
+    };
+    if !size_ok || !hash_ok {
+        let _ = fs::remove_file(&tmp);
+        return Err(Error::Checksum(job.url.clone()).into());
+    }
+    fs::rename(&tmp, &job.dest).at(&job.dest)?;
+    Ok(())
+}
+
+/// Write bytes `[start, end)` of the file at the same offset in `tmp`.
+fn fetch_range(
+    job: &DownloadJob,
+    tmp: &Path,
+    start: u64,
+    end: u64,
+    reporter: &Reporter,
+    counted: &AtomicU64,
+) -> std::result::Result<(), Segmented> {
+    use std::io::{Seek, SeekFrom};
+    let len = end - start;
+    let mut resp = super::agent()
+        .get(&job.url)
+        .header("Range", &format!("bytes={start}-{}", end - 1))
+        .config()
+        .timeout_recv_body(Some(body_timeout(Some(len))))
+        .build()
+        .call()
+        .map_err(Error::from)?;
+    let ranged = resp.status().as_u16() == 206
+        && resp
+            .headers()
+            .get("content-range")
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|v| v.starts_with(&format!("bytes {start}-")));
+    if !ranged {
+        return Err(Segmented::NoRanges);
+    }
+    let mut out = fs::OpenOptions::new().write(true).open(tmp).at(tmp)?;
+    out.seek(SeekFrom::Start(start)).at(tmp)?;
+    let mut body = resp.body_mut().as_reader();
+    let mut buf = vec![0u8; BUF_SIZE];
+    let mut got = 0u64;
+    loop {
+        let n = body.read(&mut buf).at(tmp)?;
+        if n == 0 {
+            break;
+        }
+        let n = n.min((len - got) as usize);
+        out.write_all(&buf[..n]).at(tmp)?;
+        got += n as u64;
+        counted.fetch_add(n as u64, Ordering::Relaxed);
+        reporter.add_bytes(n as u64);
+        if got == len {
+            break;
+        }
+    }
+    if got != len {
+        return Err(Error::Other(format!("short range read from {}", job.url)).into());
+    }
+    Ok(())
 }
 
 /// Both the transferred stream (if compressed) and the final file must match.
@@ -475,6 +630,20 @@ mod tests {
         assert_eq!(take(&queue, true), Some(1));
         assert_eq!(take(&queue, true), None);
         assert_eq!(take(&queue, false), None);
+    }
+
+    #[test]
+    fn large_files_split_into_even_ranges() {
+        assert!(segments(&job("a", Some(1024))).is_none());
+        assert!(segments(&job("a", None)).is_none());
+        let size = 20 * 1024 * 1024 + 3;
+        let ranges = segments(&job("a", Some(size))).unwrap();
+        assert_eq!(ranges.len(), 6);
+        assert_eq!(ranges[0].0, 0);
+        assert_eq!(ranges.last().unwrap().1, size);
+        assert!(ranges.windows(2).all(|w| w[0].1 == w[1].0));
+        let huge = segments(&job("a", Some(500 * 1024 * 1024))).unwrap();
+        assert_eq!(huge.len(), MAX_SEGMENTS as usize);
     }
 
     #[test]
