@@ -5,12 +5,14 @@ import com.arcticlauncher.client.MenuAction;
 import com.arcticlauncher.client.looks.Look;
 import com.arcticlauncher.client.menu.ArcticMenu;
 import com.arcticlauncher.client.menu.HudEditor;
+import com.mojang.blaze3d.platform.InputConstants;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import net.minecraft.client.input.MouseButtonInfo;
 
 /**
  * Development check, only with {@code -Darctic.selftest=true}: loads the
@@ -80,6 +82,7 @@ final class SelfTest {
 	private static void tour() {
 		Runnable[] steps = {
 				() -> shot("title"),
+				SelfTest::clickOptions,
 				() -> open("hud", "menu-hud"),
 				() -> open("looks", "menu-looks"),
 				() -> open("style", "menu-style"),
@@ -100,6 +103,31 @@ final class SelfTest {
 			Runnable step = steps[i];
 			TIMER.schedule(() -> Minecraft.getInstance().execute(step), (long) i * STEP_SECONDS * 2, TimeUnit.SECONDS);
 		}
+	}
+
+	/** Click the title menu's Options button through Minecraft's own input path. */
+	private static void clickOptions() {
+		Minecraft mc = Minecraft.getInstance();
+		int w = mc.getWindow().getGuiScaledWidth();
+		int h = mc.getWindow().getGuiScaledHeight();
+		double scale = mc.getWindow().getGuiScale();
+		double x = (w / 2 - 90) * scale;
+		double y = (h / 4 + 138) * scale;
+		long window = mc.getWindow().handle();
+		mc.mouseHandler.onMove(window, x, y, 0, 0);
+		mc.mouseHandler.onMove(window, x, y, 0, 0);
+		ArcticMod.LOG.info("selftest: clicking at gui ({}, {}) on {}", x / scale, y / scale, name(mc.gui.screen()));
+		MouseButtonInfo left = new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0);
+		mc.mouseHandler.onButton(window, left, InputConstants.PRESS);
+		mc.mouseHandler.onButton(window, left, InputConstants.RELEASE);
+		later(() -> {
+			ArcticMod.LOG.info("selftest: after click the screen is {}", name(Minecraft.getInstance().gui.screen()));
+			shot("after-click");
+		});
+	}
+
+	private static String name(Object screen) {
+		return screen == null ? "none" : screen.getClass().getSimpleName();
 	}
 
 	private static void open(String tab, String name) {
