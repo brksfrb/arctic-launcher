@@ -146,6 +146,9 @@ pub struct Instance {
     /// Extra JVM flags added after the launcher-wide ones.
     #[serde(default)]
     pub jvm_args: String,
+    /// Vanilla instances: add performance mods (Sodium, Lithium, …).
+    #[serde(default = "enabled")]
+    pub performance: bool,
 }
 
 fn enabled() -> bool {
@@ -164,6 +167,7 @@ impl Instance {
             arctic_mod: true,
             java_path: None,
             jvm_args: String::new(),
+            performance: true,
         }
     }
 
@@ -215,6 +219,7 @@ pub fn create(dirs: &DataDirs, name: &str, game_version: &str, loader: Loader) -
         arctic_mod: true,
         java_path: None,
         jvm_args: String::new(),
+        performance: true,
     };
     let mods = instance.game_dir(dirs).join("mods");
     std::fs::create_dir_all(&mods).map_err(|e| Error::io(&mods, e))?;
