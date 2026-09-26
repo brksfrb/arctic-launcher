@@ -1,0 +1,31 @@
+name: Deploy cosmetics server
+
+# When the cosmetics server (or Cargo.lock) changes on main, ask brksfrb/arctic-cosmetics-deploy
+# to build the image and roll it out to cosmetics.arcticlauncher.com. The build itself lives in
+# that repo; this only sends the signal.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/arctic-cosmetics/**"
+      - "Cargo.lock"
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request a deploy
+        env:
+          # Fine-grained token with Actions: read and write on brksfrb/arctic-cosmetics-deploy only.
+          GH_TOKEN: ${{ secrets.COSMETICS_DEPLOY_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::COSMETICS_DEPLOY_TOKEN is not set; the deploy repo's schedule will pick this up instead."
+            exit 0
+          fi
+          gh workflow run deploy.yml -R brksfrb/arctic-cosmetics-deploy
+          echo "Deploy requested for ${GITHUB_SHA::7}."
