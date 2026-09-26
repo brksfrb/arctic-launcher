@@ -73,7 +73,7 @@ public final class GameInfo {
 			MobEffect effect = e.getEffect().value();
 			int level = e.getAmplifier();
 			String name = effect.getDisplayName().getString() + (level > 0 && level < ROMAN.length ? " " + ROMAN[level] : "");
-			rows.add(new Object[] {name, time(e), effect.getColor()});
+			rows.add(new Object[] {name, time(e), effect.getColor(), net.minecraft.client.gui.Hud.getMobEffectSprite(e.getEffect())});
 		}
 		return rows;
 	}

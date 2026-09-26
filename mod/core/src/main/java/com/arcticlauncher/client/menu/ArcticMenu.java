@@ -21,7 +21,7 @@ import java.util.List;
 /** The Arctic menu (Right Shift in game): HUD, looks and style. */
 public final class ArcticMenu extends Page {
 	private enum Tab {
-		HUD("HUD", "Choose what shows on screen."),
+		HUD("HUD", "Live info over the game, where you want it."),
 		FEATURES("Features", "Hold a key to zoom or look around freely."),
 		VIEW("View", "Chat and screen tweaks."),
 		CROSSHAIR("Crosshair", "Your own crosshair: shape, size and color."),
@@ -40,8 +40,6 @@ public final class ArcticMenu extends Page {
 	private static final int SIDEBAR = 92;
 	private static final int PAD = 10;
 	private static final int ROW = 24;
-	private static final int HUD_ROW = 18;
-	private static final int HUD_COLUMNS = 3;
 	private static final int PREVIEW = 64;
 	private static final int KEY_W = 76;
 	private static final int MAX_NEARBY = 3;
@@ -135,33 +133,26 @@ public final class ArcticMenu extends Page {
 	// ---- HUD -------------------------------------------------------------------
 
 	private void buildHud() {
-		add(new Button("Edit layout", new Runnable() {
-			@Override
-			public void run() {
-				ArcticClient.platform().openPage(new HudEditor());
-			}
-		}).primary()).bounds(contentX() + contentW() - 80, py + 10, 80, 18);
-		// Two columns of switches; the editor places what's on.
-		int colW = (contentW() - 12) / HUD_COLUMNS;
-		int i = 0;
-		for (HudWidget w : ArcticClient.hud().widgets()) {
-			final HudSlot slot = ArcticClient.hud().slot(w);
-			int x = contentX() + (i % HUD_COLUMNS) * (colW + 6);
-			int y = contentTop() + (i / HUD_COLUMNS) * (HUD_ROW + 2);
-			add(new Toggle(w.name, null, new Toggle.Binding() {
-				@Override
-				public boolean get() {
-					return slot.enabled;
-				}
+		int w = Math.min(160, contentW());
+		add(new Button("Edit HUD", () -> ArcticClient.platform().openPage(new HudEditor())).primary())
+				.bounds(contentX(), contentTop() + 64, w, 20);
+		add(new Button("Reset HUD", () -> ArcticClient.hud().reset())).bounds(contentX(), contentTop() + 88, w, 20);
+	}
 
-				@Override
-				public void set(boolean on) {
-					slot.enabled = on;
-					ArcticClient.saveConfig();
-				}
-			})).bounds(x, y, colW, HUD_ROW);
-			i++;
+	/** What the HUD editor does, above its button. */
+	private void drawHudTab(Gfx g, Style s) {
+		int shown = 0;
+		for (HudWidget w : ArcticClient.hud().widgets()) {
+			if (ArcticClient.hud().slot(w).enabled) {
+				shown++;
+			}
 		}
+		int y = contentTop();
+		g.text("Widgets show live info over the game: FPS, keys,", contentX(), y, s.text, false);
+		g.text("armor, effects, coordinates and more.", contentX(), y + 11, s.text, false);
+		g.text("In the editor, switch widgets on from the list and", contentX(), y + 28, s.muted, false);
+		g.text("drag them anywhere; they snap into line.", contentX(), y + 39, s.muted, false);
+		g.text(shown + " of " + ArcticClient.hud().widgets().size() + " widgets on", contentX(), y + 116, s.muted, false);
 	}
 
 	// ---- Features --------------------------------------------------------------
@@ -277,6 +268,18 @@ public final class ArcticMenu extends Page {
 		row(y, "Low fire", "A shorter fire overlay when you're burning", bind(() -> c.lowFire, on -> c.lowFire = on));
 		y += ROW + 4;
 		row(y, "Clear weather", "Hide rain and thunder on your screen", bind(() -> c.clearWeather, on -> c.clearWeather = on));
+		y += ROW + 4;
+		row(y, "Smooth font", "A clean, sharper font for all text (reloads resources)", new Toggle.Binding() {
+			@Override
+			public boolean get() {
+				return ArcticClient.platform().smoothFont();
+			}
+
+			@Override
+			public void set(boolean on) {
+				ArcticClient.platform().setSmoothFont(on);
+			}
+		});
 	}
 
 	private void row(int y, String name, String hint, Toggle.Binding binding) {
@@ -489,10 +492,13 @@ public final class ArcticMenu extends Page {
 		g.texture("icon", px + 10, py + 10, 14, 14, 0, 0, 256, 256, 256, 256);
 		g.text("§lArctic", px + 28, py + 13, s.text, false);
 		g.text(tab.title, contentX(), py + 10, s.text, false);
-		int room = tab == Tab.HUD ? contentW() - 90 : contentW();
+		int room = contentW();
 		g.text(Draw.fit(g, status(), room), contentX(), py + 22, s.muted, false);
 		if (tab == Tab.CROSSHAIR) {
 			drawCrosshairTab(g, s);
+		}
+		if (tab == Tab.HUD) {
+			drawHudTab(g, s);
 		}
 		if (tab == Tab.STYLE) {
 			Style chosen = ArcticClient.style();

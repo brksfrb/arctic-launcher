@@ -23,7 +23,8 @@
 		"HudCrosshairMixin",
 		"ScreenEffectRendererMixin",
 		"LevelWeatherMixin",
-		"MultiPlayerGameModeMixin"<% } %>
+		"MultiPlayerGameModeMixin",
+		"PackRepositoryMixin"<% } %>
 	],
 	"injectors": {
 		"defaultRequire": 1

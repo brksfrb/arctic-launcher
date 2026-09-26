@@ -16,6 +16,8 @@ public abstract class HudWidget {
 	public final String description;
 	final boolean onByDefault;
 	final Column column;
+	/** Draw the backdrop panel (set per widget by the player). */
+	protected boolean background = true;
 
 	protected HudWidget(String id, String name, String description, boolean onByDefault, Column column) {
 		this.id = id;
@@ -23,6 +25,18 @@ public abstract class HudWidget {
 		this.description = description;
 		this.onByDefault = onByDefault;
 		this.column = column;
+	}
+
+	/** The widget's backdrop, unless the player turned backgrounds off. */
+	protected void panel(Gfx g, Style s, int x0, int y0, int x1, int y1) {
+		if (background) {
+			com.arcticlauncher.client.gfx.Draw.round(g, x0, y0, x1, y1, 2, s.hud);
+		}
+	}
+
+	/** Text needs a shadow to read without a backdrop. */
+	protected boolean shadow() {
+		return !background;
 	}
 
 	/** Needs the version's game hooks (hidden where they don't exist). */

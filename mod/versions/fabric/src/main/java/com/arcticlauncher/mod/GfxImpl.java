@@ -103,6 +103,13 @@ public final class GfxImpl implements Gfx {
 	}
 
 	@Override
+	public void sprite(Object sprite, int x, int y, int w, int h) {
+		//#if MC >= 26.1
+		g.blitSprite(RenderPipelines.GUI_TEXTURED, (Identifier) sprite, x, y, w, h);
+		//#endif
+	}
+
+	@Override
 	public void push() {
 		//#if MC >= 1.21.6
 		g.pose().pushMatrix();

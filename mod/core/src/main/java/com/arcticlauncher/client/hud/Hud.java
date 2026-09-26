@@ -61,36 +61,68 @@ public final class Hud {
 		config.hud.clear();
 	}
 
-	/** Every shown widget's rectangle {x, y, w, h}, in drawing order. */
+	/**
+	 * Every shown widget's rectangle {x, y, w, h}. Moved widgets go where
+	 * they were put; the rest stack in their column, stepping around them.
+	 */
 	public Map<HudWidget, int[]> layout(Gfx g) {
 		Map<HudWidget, int[]> rects = new IdentityHashMap<HudWidget, int[]>();
+		List<int[]> taken = new ArrayList<int[]>();
+		for (HudWidget w : widgets) {
+			HudSlot slot = slot(w);
+			if (slot.enabled && slot.placed) {
+				int ww = Math.round(w.width(g) * slot.scale);
+				int hh = Math.round(w.height() * slot.scale);
+				int x = clamp(anchored(slot.ax, slot.dx, g.width(), ww), g.width() - ww);
+				int y = clamp(anchored(slot.ay, slot.dy, g.height(), hh), g.height() - hh);
+				int[] r = {x, y, ww, hh};
+				rects.put(w, r);
+				taken.add(r);
+			}
+		}
 		Stack left = new Stack();
 		Stack right = new Stack();
 		int bottom = Math.max(MARGIN + 20, g.height() - BOTTOM_RESERVE);
 		for (HudWidget w : widgets) {
 			HudSlot slot = slot(w);
-			if (!slot.enabled) {
+			if (!slot.enabled || slot.placed) {
 				continue;
 			}
 			int ww = Math.round(w.width(g) * slot.scale);
 			int hh = Math.round(w.height() * slot.scale);
-			int x;
-			int y;
-			if (slot.placed) {
-				x = anchored(slot.ax, slot.dx, g.width(), ww);
-				y = anchored(slot.ay, slot.dy, g.height(), hh);
-			} else {
-				Stack stack = w.column == HudWidget.Column.LEFT ? left : right;
+			boolean onLeft = w.column == HudWidget.Column.LEFT;
+			Stack stack = onLeft ? left : right;
+			int[] r = new int[4];
+			for (int tries = 0; tries < 64; tries++) {
 				stack.fit(hh, bottom);
-				x = w.column == HudWidget.Column.LEFT ? stack.x : g.width() - stack.x - ww;
-				y = stack.y;
-				stack.take(ww, hh);
+				int x = onLeft ? stack.x : g.width() - stack.x - ww;
+				r = new int[] {clamp(x, g.width() - ww), clamp(stack.y, g.height() - hh), ww, hh};
+				int[] hit = overlap(r, taken);
+				if (hit == null) {
+					break;
+				}
+				// Step below whatever is in the way and try again.
+				stack.y = hit[1] + hit[3] + GAP;
 			}
-			x = Math.max(0, Math.min(g.width() - ww, x));
-			y = Math.max(0, Math.min(g.height() - hh, y));
-			rects.put(w, new int[] {x, y, ww, hh});
+			stack.take(ww, hh);
+			rects.put(w, r);
+			taken.add(r);
 		}
 		return rects;
+	}
+
+	private static int clamp(int v, int max) {
+		return Math.max(0, Math.min(max, v));
+	}
+
+	/** The first rectangle in {@code others} that overlaps {@code r}, or null. */
+	private static int[] overlap(int[] r, List<int[]> others) {
+		for (int[] o : others) {
+			if (r[0] < o[0] + o[2] && o[0] < r[0] + r[2] && r[1] < o[1] + o[3] && o[1] < r[1] + r[3]) {
+				return o;
+			}
+		}
+		return null;
 	}
 
 	/** Where the next unmoved widget goes in a column (x from its screen edge). */
@@ -176,6 +208,7 @@ public final class Hud {
 		g.push();
 		g.translate(rect[0], rect[1]);
 		g.scale(slot(w).scale);
+		w.background = slot(w).background;
 		w.render(g, s, preview);
 		g.pop();
 	}

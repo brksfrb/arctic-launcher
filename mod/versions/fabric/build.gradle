@@ -181,6 +181,10 @@ processResources {
 	filesMatching(['fabric.mod.json', 'arctic.mixins.json']) {
 		expand props
 	}
+	// The smooth font pack is a game feature; older builds leave it out.
+	if (!atLeast('26.3')) {
+		exclude 'resourcepacks/**'
+	}
 }
 
 tasks.withType(JavaCompile).configureEach {

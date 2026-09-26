@@ -33,8 +33,8 @@ public abstract class TextWidget extends HudWidget {
 	@Override
 	public void render(Gfx g, Style s, boolean preview) {
 		int w = width(g);
-		Draw.round(g, 0, 0, w, HEIGHT, 2, s.hud);
-		g.text(label, PAD, 3, s.accent, false);
-		g.text(value(preview), PAD + g.textWidth(label) + GAP, 3, s.text, false);
+		panel(g, s, 0, 0, w, HEIGHT);
+		g.text(label, PAD, 3, s.accent, shadow());
+		g.text(value(preview), PAD + g.textWidth(label) + GAP, 3, s.text, shadow());
 	}
 }
