@@ -36,8 +36,10 @@
 - **Light.** One small native app, no Electron and no browser engine. It uses almost no
   CPU while you play.
 - **Mods in a click.** Create Fabric, Quilt, NeoForge or Forge instances, then search
-  Modrinth and install mods with their dependencies. Each instance keeps its own version,
-  mods and worlds.
+  Modrinth and install mods with their dependencies, or install a whole modpack in one
+  click. Each instance keeps its own version, mods, worlds and Java settings.
+- **Bring your worlds.** Import worlds from the Minecraft Launcher, Prism Launcher, other
+  instances or a .zip, and back them up with one click.
 - **Play together.** Invite friends into your world with a code. No server, no port
   forwarding: open your world to LAN and Arctic connects you directly (or through an
   encrypted relay when a direct link isn't possible).

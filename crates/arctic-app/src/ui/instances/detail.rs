@@ -161,6 +161,7 @@ impl ArcticApp {
                 self.update_instance(&id, |i| i.max_memory_mb = custom.then_some(mb));
             }
         });
+        self.java_card(ui, instance);
         if instance.is_default() {
             return;
         }
@@ -185,6 +186,66 @@ impl ArcticApp {
                     self.delete_instance(&id);
                 }
             });
+        });
+    }
+
+    /// Per-instance Java executable and JVM flags.
+    fn java_card(&mut self, ui: &mut egui::Ui, instance: &Instance) {
+        let p = self.palette();
+        let id = instance.id.clone();
+        ui.add_space(12.0);
+        theme::card(p).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(RichText::new("Java").size(17.0).strong().color(p.text));
+            let mut custom = instance.java_path.is_some();
+            if ui
+                .checkbox(&mut custom, "Use a specific Java for this instance")
+                .changed()
+            {
+                let path = custom.then(|| self.settings.java_override.clone().unwrap_or_default());
+                self.update_instance(&id, |i| i.java_path = path);
+            }
+            if let Some(path) = &instance.java_path {
+                let mut text = path.display().to_string();
+                let response = widgets::field_row(ui, |ui| {
+                    ui.label("Path");
+                    ui.add(
+                        widgets::text_field(&mut text)
+                            .hint_text("C:\\Program Files\\Java\\bin\\javaw.exe")
+                            .desired_width(420.0),
+                    )
+                })
+                .inner;
+                if response.changed() {
+                    self.update_instance(&id, |i| i.java_path = Some(text.trim().into()));
+                }
+                if !path.as_os_str().is_empty() && !path.is_file() {
+                    ui.label(
+                        RichText::new("That file doesn't exist; the managed Java will be used.")
+                            .color(p.warn),
+                    );
+                }
+            } else {
+                ui.label(
+                    RichText::new("Arctic downloads the right Java for each Minecraft version.")
+                        .color(p.muted),
+                );
+            }
+            ui.add_space(6.0);
+            let mut args = instance.jvm_args.clone();
+            let changed = widgets::field_row(ui, |ui| {
+                ui.label("Extra JVM arguments");
+                ui.add(
+                    widgets::text_field(&mut args)
+                        .hint_text("e.g. -XX:+UseZGC")
+                        .desired_width(420.0),
+                )
+                .changed()
+            })
+            .inner;
+            if changed {
+                self.update_instance(&id, |i| i.jvm_args = args);
+            }
         });
     }
 

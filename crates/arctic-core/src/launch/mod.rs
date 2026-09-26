@@ -155,7 +155,11 @@ pub fn install(
 pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
     let dirs = req.dirs;
     let game_dir = req.instance.game_dir(dirs);
-    let java_override = req.settings.java_override.clone();
+    let java_override = req
+        .instance
+        .java_path
+        .clone()
+        .or_else(|| req.settings.java_override.clone());
     progress(ProgressInfo::stage("Reading version"));
     let vanilla = load_version(dirs, req.version, &|_| {})?;
     let version = match (req.instance.loader.kind(), req.instance.loader.version()) {
@@ -228,6 +232,7 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
         extra: settings
             .extra_jvm_args
             .split_whitespace()
+            .chain(req.instance.jvm_args.split_whitespace())
             .map(str::to_owned)
             .chain(arctic_mod::jvm_flag())
             .collect(),

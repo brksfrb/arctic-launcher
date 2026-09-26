@@ -140,6 +140,12 @@ pub struct Instance {
     /// Install Arctic's companion mod (Fabric/Quilt, supported versions).
     #[serde(default = "enabled")]
     pub arctic_mod: bool,
+    /// Java executable for this instance (falls back to the launcher setting).
+    #[serde(default)]
+    pub java_path: Option<std::path::PathBuf>,
+    /// Extra JVM flags added after the launcher-wide ones.
+    #[serde(default)]
+    pub jvm_args: String,
 }
 
 fn enabled() -> bool {
@@ -156,6 +162,8 @@ impl Instance {
             max_memory_mb: None,
             icon: Loader::Vanilla.default_icon(),
             arctic_mod: true,
+            java_path: None,
+            jvm_args: String::new(),
         }
     }
 
@@ -205,6 +213,8 @@ pub fn create(dirs: &DataDirs, name: &str, game_version: &str, loader: Loader) -
         version: Some(game_version.to_owned()),
         max_memory_mb: None,
         arctic_mod: true,
+        java_path: None,
+        jvm_args: String::new(),
     };
     let mods = instance.game_dir(dirs).join("mods");
     std::fs::create_dir_all(&mods).map_err(|e| Error::io(&mods, e))?;
