@@ -4,7 +4,7 @@ use eframe::egui::{self, RichText, Sense, vec2};
 
 use crate::app::{ArcticApp, UpdateState};
 use crate::art::icons::{self, Icon};
-use crate::art::{glow, snowflake};
+use crate::art::{brand_mark, glow};
 use crate::theme;
 use crate::widgets;
 
@@ -21,7 +21,7 @@ impl ArcticApp {
                 let (rect, _) = ui.allocate_exact_size(vec2(72.0, 72.0), Sense::hover());
                 let t = ui.input(|i| i.time) as f32;
                 glow(ui.painter(), rect.center(), 44.0, p.accent, 0.8);
-                snowflake(ui.painter(), rect.center(), 26.0, t * 0.12, p.accent);
+                brand_mark(ui.ctx(), ui.painter(), rect.center(), 28.0, t * 0.12);
                 ui.vertical(|ui| {
                     ui.add_space(8.0);
                     ui.label(RichText::new(APP_NAME).size(24.0).strong().color(p.text));

@@ -319,12 +319,14 @@ pub(super) fn option_tile(
         FontId::proportional(15.5),
         fg,
     );
-    painter.text(
+    // Long descriptions are cut to fit, never drawn past the tile.
+    crate::widgets::text_elided(
+        painter,
         rect.left_center() + vec2(54.0, 11.0),
-        Align2::LEFT_CENTER,
         desc,
         FontId::proportional(12.5),
         p.muted,
+        rect.width() - 54.0 - 14.0,
     );
     enabled
         && response

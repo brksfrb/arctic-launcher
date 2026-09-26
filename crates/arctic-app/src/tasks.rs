@@ -52,7 +52,8 @@ type Outcome<T> = std::result::Result<T, String>;
 
 pub enum Event {
     Manifest(Outcome<VersionManifest>),
-    LaunchProgress(ProgressSnapshot),
+    /// Preparing a launch (id, progress).
+    LaunchProgress(LaunchId, ProgressSnapshot),
     UpdateProgress(ProgressSnapshot),
     AccountRefreshed(Account),
     /// Game process started (window not necessarily up yet). Carries the
@@ -64,6 +65,8 @@ pub enum Event {
     LoginFinished(LoginAttempt, Outcome<Account>),
     Face(String, Face),
     UpdateChecked(Outcome<Option<UpdateInfo>>),
+    /// A proxy test finished (the settings tested, result).
+    ProxyTested(arctic_core::proxy::ProxySettings, Outcome<()>),
     UpdateInstalled(Outcome<()>),
     /// Minecraft versions a loader supports.
     LoaderGames(LoaderKind, Outcome<Vec<String>>),
@@ -96,6 +99,21 @@ pub enum Event {
     GalleryTaken(Outcome<(String, Vec<u8>, arctic_core::skins::Variant, bool)>),
     /// A gallery share or report finished (message).
     GalleryDone(Outcome<String>),
+    /// Other launchers looked through (the folder, if one was picked).
+    MigrateScanned(Option<PathBuf>, crate::migrate_tasks::ScanResult),
+    MigrateProgress(String, ProgressSnapshot),
+    MigrateItemDone(crate::migrate_tasks::Outcome),
+    MigrateFinished,
+    /// The game asked to add an account (show the sign-in).
+    AddAccountFromGame,
+    /// A share code was made.
+    ShareCode(Outcome<String>),
+    /// A share file was saved (`None` = cancelled).
+    ShareSaved(Outcome<Option<PathBuf>>),
+    /// A shared bundle was read from a file or code (`None` = cancelled).
+    ShareLoaded(Outcome<Option<arctic_core::sharing::Bundle>>),
+    ShareProgress(ProgressSnapshot),
+    ShareImported(Outcome<crate::share_tasks::Imported>),
     /// Play-together session update.
     Share(arctic_share::SessionId, arctic_share::ShareEvent),
 }
@@ -106,11 +124,18 @@ pub struct Tasks {
     tx: Sender<Event>,
     ctx: egui::Context,
     dirs: DataDirs,
+    /// The in-game account switcher's bridge, passed to launched games.
+    bridge: Option<Arc<arctic_core::bridge::BridgeInfo>>,
 }
 
 impl Tasks {
     pub fn new(tx: Sender<Event>, ctx: egui::Context, dirs: DataDirs) -> Self {
-        Self { tx, ctx, dirs }
+        Self {
+            tx,
+            ctx,
+            dirs,
+            bridge: None,
+        }
     }
 
     /// Same channel, different data folders (after a profile switch).
@@ -119,7 +144,13 @@ impl Tasks {
             tx: self.tx.clone(),
             ctx: self.ctx.clone(),
             dirs,
+            bridge: self.bridge.clone(),
         }
+    }
+
+    pub fn with_bridge(mut self, bridge: Option<Arc<arctic_core::bridge::BridgeInfo>>) -> Self {
+        self.bridge = bridge;
+        self
     }
 
     pub(crate) fn dirs(&self) -> &DataDirs {
@@ -162,9 +193,10 @@ impl Tasks {
         instance: Instance,
         account: Account,
         settings: Settings,
+        copy: u32,
     ) {
         self.run(move |t| {
-            let result = t.launch_blocking(id, &version, &instance, account, &settings);
+            let result = t.launch_blocking(id, &version, &instance, account, &settings, copy);
             let result = result.map(|(game, log)| (game, log, version.id.clone()));
             t.send(Event::Launched(id, result.map_err(|e| e.to_string())));
         });
@@ -177,9 +209,10 @@ impl Tasks {
         instance: &Instance,
         account: Account,
         settings: &Settings,
+        copy: u32,
     ) -> Result<(GameHandle, PathBuf)> {
         let progress =
-            |p: ProgressInfo| self.send(Event::LaunchProgress(ProgressSnapshot::from(p)));
+            |p: ProgressInfo| self.send(Event::LaunchProgress(id, ProgressSnapshot::from(p)));
         let account = if account.needs_refresh(now_secs()) {
             progress(ProgressInfo::stage("Refreshing Microsoft login"));
             let cfg = MsaConfig::load(&self.dirs)?;
@@ -195,6 +228,8 @@ impl Tasks {
             instance,
             account: &account,
             settings,
+            bridge: self.bridge.as_deref(),
+            copy,
         };
         let plan = launch::prepare(&req, &progress)?;
         let (tx, ctx) = (self.tx.clone(), self.ctx.clone());
@@ -320,6 +355,13 @@ impl Tasks {
         self.run(move |t| {
             let result = mods::icon(&url, &t.dirs.cache().join("icons")).map_err(|e| e.to_string());
             t.send(Event::ModIcon(url, result));
+        });
+    }
+
+    pub fn test_proxy(&self, proxy: arctic_core::proxy::ProxySettings) {
+        self.run(move |t| {
+            let result = arctic_core::net::test_proxy(&proxy).map_err(|e| e.to_string());
+            t.send(Event::ProxyTested(proxy, result));
         });
     }
 

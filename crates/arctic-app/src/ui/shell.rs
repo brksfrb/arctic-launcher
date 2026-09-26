@@ -77,12 +77,11 @@ impl ArcticApp {
         self.profile_dialogs(&ctx);
         self.create_instance_dialog(&ctx);
         self.import_worlds_dialog(&ctx);
+        self.share_dialogs(&ctx);
+        self.migrate_dialog(&ctx);
         if let Some(action) = self.toasts.show(&ctx, p) {
             match action {
-                ToastAction::ShowLogs => {
-                    self.log_source = crate::app::LogSource::Game;
-                    self.set_tab(Tab::Logs, now);
-                }
+                ToastAction::ShowLogs(id) => self.show_run_log(id, now),
             }
         }
     }

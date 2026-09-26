@@ -1,6 +1,6 @@
 //! Application state and event handling. Layout lives in `ui/`.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
@@ -11,21 +11,19 @@ use arctic_core::auth::microsoft::{DeviceCode, MsaConfig};
 use arctic_core::auth::{Account, AccountStore};
 use arctic_core::instances::Instance;
 use arctic_core::launch::logparse::{Level, LogLine};
-use arctic_core::launch::{GameEvent, GameHandle};
 use arctic_core::profiles::ProfileStore;
-use arctic_core::settings::{GameStartAction, Settings, ThemeMode};
+use arctic_core::settings::{Settings, ThemeMode};
 use arctic_core::storage::DataDirs;
 use arctic_core::update::UpdateInfo;
 use arctic_core::versions::{self, VersionManifest};
 use eframe::egui;
 
 use crate::art::splash::Splash;
-use crate::motion::RateMeter;
 use crate::session::ProfileData;
 use crate::startup::StartupOptions;
-use crate::tasks::{Event, LaunchId, LoginAttempt, ProgressSnapshot, Tasks};
+use crate::tasks::{Event, LaunchId, LoginAttempt, Tasks};
 use crate::theme::{self, Palette};
-use crate::toasts::{Kind, ToastAction, Toasts};
+use crate::toasts::{Kind, Toasts};
 use crate::ui::{InstancesUi, ProfileDialog};
 
 /// Backdrop frame interval when focused / unfocused.
@@ -57,35 +55,17 @@ impl Tab {
     ];
 }
 
-/// Which log the Logs tab shows.
+/// Which log the Logs tab shows: a game run's, or the launcher's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogSource {
-    Game,
+    Game(LaunchId),
     Launcher,
 }
-
-/// Game log lines kept in memory (older ones are dropped).
-const GAME_LOG_LINES: usize = 20_000;
 
 pub enum ManifestState {
     Loading,
     Ready(VersionManifest),
     Failed(String),
-}
-
-pub enum LaunchState {
-    Idle,
-    Preparing {
-        progress: ProgressSnapshot,
-        meter: RateMeter,
-    },
-    /// Process started, waiting for the game window.
-    Starting {
-        game: GameHandle,
-    },
-    Running {
-        game: GameHandle,
-    },
 }
 
 /// The "Add account" dialog.
@@ -141,13 +121,17 @@ pub struct ArcticApp {
     pub(crate) tab_changed_at: f64,
     pub(crate) settings: Settings,
     saved_settings: Settings,
+    /// Saved proxy settings (the Network section edits a draft of them).
+    pub(crate) proxy: arctic_core::proxy::ProxySettings,
+    pub(crate) network: crate::ui::NetworkUi,
+    /// Answers the running game's account switcher.
+    bridge: crate::bridge_host::BridgeHost,
     pub(crate) accounts: AccountStore,
     faces: HashMap<String, Face>,
     pub(crate) instance: Instance,
     pub(crate) custom_instances: Vec<Instance>,
     pub(crate) manifest: ManifestState,
     pub(crate) installed: HashSet<String>,
-    pub(crate) launch: LaunchState,
     pub(crate) add_account: AddAccount,
     pub(crate) remove_confirm: Option<String>,
     pub(crate) profile_dialog: ProfileDialog,
@@ -158,9 +142,8 @@ pub struct ArcticApp {
     pub(crate) msa_configured: bool,
     pub(crate) version_filter: String,
     pub(crate) version_view: crate::ui::VersionView,
-    pub(crate) game_log: VecDeque<LogLine>,
-    /// Bumped whenever `game_log` changes (for the Logs tab cache).
-    pub(crate) game_log_rev: u64,
+    /// Games started from here (several can run at once).
+    pub(crate) runs: crate::runs::Runs,
     pub(crate) launcher_log: Vec<LogLine>,
     pub(crate) launcher_log_seen: u64,
     /// Filtered line indices for the Logs tab, and what they were built for.
@@ -169,19 +152,17 @@ pub struct ArcticApp {
     pub(crate) log_min_level: Level,
     pub(crate) log_search: String,
     pub(crate) log_follow: bool,
-    minimized_for_game: bool,
+    pub(crate) minimized_for_game: bool,
     /// (start time, button center) of the Play-press snowflake burst.
     pub(crate) play_burst: Option<(f64, egui::Pos2)>,
-    /// Current launch; events from older launches are ignored.
-    launch_id: LaunchId,
-    /// Game events that overtook their `Launched` event.
-    early_game_events: Vec<GameEvent>,
     splash: Splash,
     applied_theme: Option<ThemeMode>,
     theme_fade: Option<crate::theme_fade::ThemeFade>,
     discord: crate::discord::Discord,
     pub(crate) onboarding: Option<crate::ui::Onboarding>,
     pub(crate) together: crate::ui::TogetherUi,
+    pub(crate) sharing: crate::ui::ShareUi,
+    pub(crate) migrate: Option<crate::ui::MigrateUi>,
     pub(crate) skins: crate::ui::SkinsUi,
     devshot: crate::devshot::DevShot,
     /// Command lines from later starts (see `single_instance`).
@@ -210,6 +191,8 @@ impl ArcticApp {
         let (tx, rx) = mpsc::channel();
         let dirs = profiles.scoped(&root);
         let tasks = Tasks::new(tx, cc.egui_ctx.clone(), dirs.clone());
+        let bridge = crate::bridge_host::BridgeHost::start(&tasks);
+        let tasks = tasks.with_bridge(bridge.info.clone());
         let mut toasts = Toasts::default();
         let data = ProfileData::load(&dirs, &tasks, &mut toasts);
         tasks.load_manifest();
@@ -227,6 +210,8 @@ impl ArcticApp {
             discord: crate::discord::Discord::new(),
             onboarding: None,
             together: crate::ui::TogetherUi::default(),
+            sharing: crate::ui::ShareUi::default(),
+            migrate: None,
             skins: crate::ui::SkinsUi::default(),
             devshot: crate::devshot::DevShot::from_env(),
             forwarded,
@@ -239,6 +224,9 @@ impl ArcticApp {
             custom_instances: Vec::new(),
             saved_settings: data.settings.clone(),
             settings: data.settings.clone(),
+            proxy: Default::default(),
+            network: Default::default(),
+            bridge,
             root,
             profiles,
             dirs,
@@ -250,7 +238,6 @@ impl ArcticApp {
             faces: HashMap::new(),
             instance: Instance::vanilla_default(),
             manifest: ManifestState::Loading,
-            launch: LaunchState::Idle,
             add_account: AddAccount::Closed,
             remove_confirm: None,
             profile_dialog: ProfileDialog::Closed,
@@ -259,19 +246,16 @@ impl ArcticApp {
             toasts,
             version_filter: String::new(),
             version_view: crate::ui::VersionView::All,
-            game_log: VecDeque::new(),
-            game_log_rev: 0,
+            runs: crate::runs::Runs::default(),
             launcher_log: Vec::new(),
             launcher_log_seen: 0,
             log_cache: None,
-            log_source: LogSource::Game,
+            log_source: LogSource::Launcher,
             log_min_level: Level::Debug,
             log_search: String::new(),
             log_follow: true,
             minimized_for_game: false,
             play_burst: None,
-            launch_id: 0,
-            early_game_events: Vec::new(),
             login_attempts: 0,
         };
         app.apply_profile_data(data);
@@ -290,6 +274,18 @@ impl ArcticApp {
     }
 
     /// Replace all profile-scoped state (used at start and on switch).
+    /// Settings and instances were changed on disk (a profile import).
+    pub(crate) fn reload_after_import(&mut self) {
+        if let Ok(settings) = Settings::load(&self.dirs) {
+            self.saved_settings = settings.clone();
+            self.settings = settings;
+        }
+        if let Ok(vanilla) = arctic_core::instances::load_default(&self.dirs) {
+            self.instance = vanilla;
+        }
+        self.reload_instances();
+    }
+
     pub(crate) fn apply_profile_data(&mut self, data: ProfileData) {
         self.saved_settings = data.settings.clone();
         self.settings = data.settings;
@@ -297,8 +293,13 @@ impl ArcticApp {
         self.instance = data.instance;
         self.custom_instances = data.custom_instances;
         self.faces = data.faces;
-        self.game_log.clear();
-        self.game_log_rev += 1;
+        self.network = crate::ui::NetworkUi {
+            draft: data.proxy.clone(),
+            ..Default::default()
+        };
+        self.proxy = data.proxy;
+        self.bridge.update(&self.accounts, &self.tasks);
+        self.runs.clear();
         self.log_cache = None;
         // Instance pages and mod listings belong to the old profile.
         self.inst = InstancesUi::default();
@@ -366,6 +367,7 @@ impl ArcticApp {
     }
 
     pub(crate) fn save_accounts(&mut self) {
+        self.bridge.update(&self.accounts, &self.tasks);
         if let Err(e) = self.accounts.save(&self.dirs) {
             self.toasts
                 .push(Kind::Error, "Could not save accounts", e.to_string());
@@ -439,6 +441,16 @@ impl ArcticApp {
 
     /// Start preparing + launching the selected version for the active account.
     pub(crate) fn launch_selected(&mut self) {
+        self.launch_selected_as(false);
+    }
+
+    /// Start the selected instance again while it runs (a second account,
+    /// say); each copy gets its own log.
+    pub(crate) fn launch_another_copy(&mut self) {
+        self.launch_selected_as(true);
+    }
+
+    fn launch_selected_as(&mut self, another_copy: bool) {
         let ManifestState::Ready(manifest) = &self.manifest else {
             return;
         };
@@ -467,33 +479,38 @@ impl ArcticApp {
         let Some(account) = self.accounts.active().cloned() else {
             return;
         };
-        self.launch_id += 1;
+        let copy = self
+            .runs
+            .active()
+            .filter(|r| r.instance_id == instance.id)
+            .count() as u32;
+        if copy > 0 && !another_copy {
+            self.toasts.push(
+                Kind::Info,
+                format!("{} is already running", instance.name),
+                "Pick another instance to play more at once.",
+            );
+            return;
+        }
         self.discord.game_started(
             format!("Minecraft {}", version.id),
             instance.loader.label().to_owned(),
         );
-        self.early_game_events.clear();
-        self.push_game_log(vec![LogLine {
-            level: Level::Info,
-            text: format!(
+        let id = self.runs.start(
+            &instance.id,
+            format!("{} · {}", instance.name, version.id),
+            instance.game_dir(&self.dirs),
+        );
+        self.run_note(
+            id,
+            format!(
                 "──── Launching {} ({}) as {} ────",
                 instance.name, version.id, account.username
             ),
-        }]);
-        self.launch = LaunchState::Preparing {
-            progress: ProgressSnapshot {
-                stage: "Starting".into(),
-                ..ProgressSnapshot::default()
-            },
-            meter: RateMeter::default(),
-        };
-        self.tasks.launch(
-            self.launch_id,
-            version,
-            instance,
-            account,
-            self.settings.clone(),
         );
+        self.log_source = LogSource::Game(id);
+        self.tasks
+            .launch(id, version, instance, account, self.settings.clone(), copy);
     }
 
     /// Tray icon, close-to-tray and starts forwarded from other processes.
@@ -526,7 +543,7 @@ impl ArcticApp {
             match action {
                 crate::tray::Action::Play => {
                     self.set_tab(Tab::Play, now);
-                    if matches!(self.launch, LaunchState::Idle) {
+                    if !self.runs.instance_active(&self.selected_instance().id) {
                         self.launch_selected();
                     }
                 }
@@ -589,12 +606,7 @@ impl ArcticApp {
                 self.run_pending_launch();
             }
             Event::Manifest(Err(e)) => self.manifest = ManifestState::Failed(e),
-            Event::LaunchProgress(snapshot) => {
-                if let LaunchState::Preparing { progress, meter } = &mut self.launch {
-                    meter.push(now, snapshot.bytes_done);
-                    *progress = snapshot;
-                }
-            }
+            Event::LaunchProgress(id, snapshot) => self.on_launch_progress(id, snapshot, now),
             Event::UpdateProgress(p) => {
                 if let UpdateState::Installing { done, total, .. } = &mut self.update {
                     (*done, *total) = (p.bytes_done, p.bytes_total);
@@ -604,23 +616,14 @@ impl ArcticApp {
                 self.accounts.upsert(account);
                 self.save_accounts();
             }
-            Event::Launched(id, _) | Event::Game(id, _) if id != self.launch_id => {}
-            Event::Launched(_, Ok((game, _log_file, version))) => {
-                self.installed.insert(version);
-                self.launch = LaunchState::Starting { game };
-                // Replay events from a game that was faster than our bookkeeping.
-                for event in std::mem::take(&mut self.early_game_events) {
-                    self.on_game_event(event, ctx);
-                }
+            Event::Launched(id, result) => {
+                let result = result.map(|(game, _log_file, version)| {
+                    self.installed.insert(version);
+                    game
+                });
+                self.on_launched(id, result, ctx);
             }
-            Event::Launched(_, Err(e)) => {
-                self.launch = LaunchState::Idle;
-                self.toasts.push(Kind::Error, "Launch failed", e);
-            }
-            Event::Game(_, event) if matches!(self.launch, LaunchState::Preparing { .. }) => {
-                self.early_game_events.push(event);
-            }
-            Event::Game(_, event) => self.on_game_event(event, ctx),
+            Event::Game(id, event) => self.on_game_event(id, event, ctx),
             Event::DeviceCode(attempt, code) => {
                 if let AddAccount::Microsoft {
                     attempt: current,
@@ -651,6 +654,24 @@ impl ArcticApp {
             Event::Share(id, event) => self.on_share_event(id, event),
             Event::WorldsDone(id, result) => self.on_worlds_done(id, result),
             Event::ModpackInstalled(result) => self.on_modpack_installed(result),
+            Event::MigrateScanned(folder, result) => {
+                self.on_migrate_scanned(folder.is_some(), result)
+            }
+            Event::MigrateProgress(label, p) => self.on_migrate_progress(label, p),
+            Event::MigrateItemDone(outcome) => self.on_migrate_item(outcome),
+            Event::MigrateFinished => self.on_migrate_finished(),
+            Event::AddAccountFromGame => {
+                crate::window::show();
+                self.set_tab(Tab::Accounts, now);
+                if matches!(self.add_account, AddAccount::Closed) {
+                    self.add_account = AddAccount::Choose;
+                }
+            }
+            Event::ShareCode(result) => self.on_share_code(result, ctx),
+            Event::ShareSaved(result) => self.on_share_saved(result),
+            Event::ShareLoaded(result) => self.on_share_loaded(result),
+            Event::ShareProgress(p) => self.sharing.progress = Some(p),
+            Event::ShareImported(result) => self.on_share_imported(result, now),
             e @ (Event::SkinAccount(..)
             | Event::PlayerSkin(..)
             | Event::SkinFile(..)
@@ -660,67 +681,9 @@ impl ArcticApp {
             | Event::GalleryTaken(..)
             | Event::GalleryDone(..)) => self.on_skins_event(e),
             Event::UpdateChecked(result) => self.on_update_checked(result),
+            Event::ProxyTested(proxy, result) => self.on_proxy_tested(proxy, result),
             Event::UpdateInstalled(result) => self.on_update_installed(result),
         }
-    }
-
-    fn on_game_event(&mut self, event: GameEvent, ctx: &egui::Context) {
-        match event {
-            GameEvent::WindowReady => {
-                let LaunchState::Starting { game } =
-                    std::mem::replace(&mut self.launch, LaunchState::Idle)
-                else {
-                    return;
-                };
-                self.launch = LaunchState::Running { game };
-                if self.settings.on_game_start == GameStartAction::Minimize {
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
-                    self.minimized_for_game = true;
-                }
-            }
-            GameEvent::Output(lines) => self.push_game_log(lines),
-            GameEvent::Exited { code } => {
-                self.launch = LaunchState::Idle;
-                if self.minimized_for_game {
-                    self.minimized_for_game = false;
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
-                }
-                match code {
-                    Some(0) => {}
-                    // The game's own shutdown watchdog fired: quitting took too
-                    // long (typically network threads hanging without internet).
-                    Some(_) if self.shutdown_watchdog_fired() => self.toasts.push(
-                        Kind::Info,
-                        "Minecraft closed",
-                        "It was slow to shut down, which happens without internet.",
-                    ),
-                    Some(c) => self.toasts.push_with_action(
-                        Kind::Error,
-                        "Minecraft closed unexpectedly",
-                        format!("Exit code {c}."),
-                        Some(ToastAction::ShowLogs),
-                    ),
-                    None => self.toasts.push(Kind::Info, "Minecraft was stopped", ""),
-                }
-            }
-        }
-    }
-
-    /// The last game run ended with Minecraft's "Client shutdown" watchdog.
-    fn shutdown_watchdog_fired(&self) -> bool {
-        self.game_log
-            .iter()
-            .rev()
-            .take(400)
-            .any(|l| l.text.contains("Client shutdown from post-main"))
-    }
-
-    fn push_game_log(&mut self, lines: Vec<LogLine>) {
-        self.game_log_rev += 1;
-        self.game_log.extend(lines);
-        let excess = self.game_log.len().saturating_sub(GAME_LOG_LINES);
-        self.game_log.drain(..excess);
     }
 
     fn on_update_checked(&mut self, result: Result<Option<UpdateInfo>, String>) {
@@ -767,10 +730,7 @@ impl ArcticApp {
             return;
         }
         let focused = ctx.input(|i| i.focused);
-        let game_running = matches!(
-            self.launch,
-            LaunchState::Starting { .. } | LaunchState::Running { .. }
-        );
+        let game_running = self.runs.any_game();
         match (focused, game_running) {
             (true, _) => ctx.request_repaint_after(FRAME_FOCUSED),
             (false, false) => ctx.request_repaint_after(FRAME_UNFOCUSED),
@@ -791,7 +751,7 @@ impl eframe::App for ArcticApp {
         }
         self.update_theme(&ctx, frame);
         self.window_and_tray(&ctx, frame);
-        let playing = !matches!(self.launch, LaunchState::Idle);
+        let playing = self.runs.any_active();
         let together = self.together_status();
         self.discord
             .sync(self.settings.discord_presence, playing, together);
@@ -824,6 +784,7 @@ impl eframe::App for ArcticApp {
                 self.inst.page = crate::ui::InstancePage::Settings;
             }
         }
+        self.devshot_share();
         self.devshot.update(&ctx);
     }
 

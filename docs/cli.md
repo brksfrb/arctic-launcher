@@ -138,6 +138,56 @@ arctic profiles remove <PROFILE>        # folder moves to profiles/.trash
 Every command works on the active profile unless you pass `-p, --profile <NAME>` (or set
 `ARCTIC_PROFILE`), e.g. `arctic -p Speedruns launch 1.16.1`.
 
+### `arctic migrate`
+
+Brings instances over from other launchers and clients: version, loader, mods, configs,
+worlds, resource and shader packs, options and servers. Originals are never changed and
+accounts never come along. Supported: Minecraft Launcher, TLauncher, Prism, PolyMC,
+MultiMC (with `--folder`), Modrinth App, CurseForge, ATLauncher, GDLauncher (new and
+old), and the own mods of LabyMod, Lunar and Feather. LabyMod and Lunar HUD layouts and
+keys can be applied too.
+
+```text
+arctic migrate list [--folder <DIR>]
+arctic migrate instance <KEY_OR_NAME> [--skip mods,worlds,resourcepacks,shaderpacks,settings,screenshots] [--name <NAME>]
+arctic migrate all [--skip ...]
+arctic migrate hud <KEY> [--instance <INSTANCE>] [--on fps,coords,...]
+```
+
+While importing, mods are checked the way the loaders check them: mods their own files
+say won't run on that Minecraft version come switched off, a required mod the pack is
+missing is fetched from Modrinth, and mods are matched to Modrinth by hash so they can be
+updated and shared. Lunar saves only settings that differ from its defaults, so widgets
+without a saved on/off state are listed; `--on` picks them (default: the ones that were
+moved somewhere).
+
+### `arctic share` and `arctic import`
+
+Share an instance (version, loader and the exact Modrinth versions of its mods, no jar
+files), a HUD layout, a crosshair, all Arctic Client settings, or a whole profile.
+
+```text
+arctic share instance|hud|crosshair|client|profile [--instance <INSTANCE>] [--as code|text|file] [--out <FILE>]
+arctic import <CODE | TEXT | FILE> [--instance <INSTANCE>]
+```
+
+A code (`abcd-efgh`) is stored on the Arctic server and needs a signed-in account; text
+(`arctic1.…`) and `.json` files work without it. Accounts, the proxy, Java paths and JVM
+arguments are never included, and everything imported is checked value by value first.
+
+### `arctic worlds`, `skin`, `look`, `proxy`, `settings`, `crash`, `together`
+
+```text
+arctic worlds list|sources [--instance <I>]
+arctic worlds import <FOLDER_OR_ZIP> | backup <WORLD> | remove <WORLD> [--instance <I>]
+arctic skin show | set <PNG> [--model classic|slim] | reset | cape <NAME|none>
+arctic look show | skin <PNG|none> | cape <PRESET|PNG|none> | wear [IDS...]
+arctic proxy show | set <HOST> [PORT] [--username U] [--password P] | off | test
+arctic settings show | get <KEY> | set <KEY> <VALUE>
+arctic crash [FILE] [--instance <I>]
+arctic together host [--port N] | join <CODE>
+```
+
 ### `arctic java <VERSION>`
 
 Prints the Java executable that version uses, installing the runtime if needed. This is

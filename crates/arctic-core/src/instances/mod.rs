@@ -149,6 +149,9 @@ pub struct Instance {
     /// Vanilla instances: add performance mods (Sodium, Lithium, …).
     #[serde(default = "enabled")]
     pub performance: bool,
+    /// Vanilla instances: add Iris so shader packs work.
+    #[serde(default)]
+    pub shaders: bool,
 }
 
 fn enabled() -> bool {
@@ -168,6 +171,7 @@ impl Instance {
             java_path: None,
             jvm_args: String::new(),
             performance: true,
+            shaders: false,
         }
     }
 
@@ -220,11 +224,35 @@ pub fn create(dirs: &DataDirs, name: &str, game_version: &str, loader: Loader) -
         java_path: None,
         jvm_args: String::new(),
         performance: true,
+        shaders: false,
     };
     let mods = instance.game_dir(dirs).join("mods");
     std::fs::create_dir_all(&mods).map_err(|e| Error::io(&mods, e))?;
     instance.save(dirs)?;
     Ok(instance)
+}
+
+/// `name` (trimmed to fit), or `name (2)`… if an instance already uses it.
+pub fn free_name(dirs: &DataDirs, name: &str) -> Result<String> {
+    let name: String = name.trim().chars().take(MAX_NAME_LEN).collect();
+    let name = if name.is_empty() {
+        "Imported".to_owned()
+    } else {
+        name
+    };
+    let mut taken: Vec<String> = list_custom(dirs)?
+        .into_iter()
+        .map(|i| i.name.to_lowercase())
+        .collect();
+    taken.push("vanilla".into());
+    if !taken.contains(&name.to_lowercase()) {
+        return Ok(name);
+    }
+    let stem: String = name.chars().take(MAX_NAME_LEN - 5).collect();
+    Ok((2..)
+        .map(|n| format!("{stem} ({n})"))
+        .find(|n| !taken.contains(&n.to_lowercase()))
+        .unwrap_or(stem))
 }
 
 /// Move an instance folder (worlds and mods included) to `instances/.trash`.

@@ -5,7 +5,7 @@ use arctic_core::settings::MIN_MEMORY_MB;
 use eframe::egui::{self, CornerRadius, RichText, Stroke};
 
 use super::InstancePage;
-use crate::app::{ArcticApp, LaunchState, Tab};
+use crate::app::{ArcticApp, Tab};
 use crate::art::icons::Icon;
 use crate::theme::{self, Palette};
 use crate::toasts::Kind;
@@ -13,7 +13,7 @@ use crate::widgets;
 
 const MAX_MEMORY_MB: u32 = 32 * 1024;
 
-pub(super) fn dialog_frame(p: &Palette) -> egui::Frame {
+pub(crate) fn dialog_frame(p: &Palette) -> egui::Frame {
     egui::Frame::new()
         .fill(p.surface)
         .stroke(Stroke::new(1.0, p.card_stroke))
@@ -49,7 +49,7 @@ impl ArcticApp {
                     ui.label(RichText::new(Self::instance_subtitle(&instance)).color(p.muted));
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let idle = matches!(self.launch, LaunchState::Idle);
+                    let idle = !self.runs.instance_active(id);
                     let play = ui
                         .add_enabled_ui(idle, |ui| {
                             widgets::button(ui, p, Some(Icon::Play), "Play", true)
@@ -61,6 +61,11 @@ impl ArcticApp {
                         let now = ui.input(|i| i.time);
                         self.set_tab(Tab::Play, now);
                         self.launch_selected();
+                    }
+                    if widgets::icon_button(ui, p, Icon::Share, "Share: mods, HUD, crosshair")
+                        .clicked()
+                    {
+                        self.open_share(Some(id.to_owned()));
                     }
                     if widgets::icon_button(ui, p, Icon::Folder, "Open instance folder").clicked() {
                         let dir = instance.game_dir(&self.dirs);
@@ -334,7 +339,7 @@ impl ArcticApp {
     }
 
     /// Apply `change` to an instance and save it.
-    fn update_instance(&mut self, id: &str, change: impl FnOnce(&mut Instance)) {
+    pub(crate) fn update_instance(&mut self, id: &str, change: impl FnOnce(&mut Instance)) {
         let dirs = self.dirs.clone();
         let Some(instance) = self.instance_mut(id) else {
             return;

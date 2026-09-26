@@ -17,6 +17,7 @@ use arctic_core::mods::{self, ModFile, SearchPage, SortBy};
 use eframe::egui::{self, Align2, FontId, RichText, vec2};
 
 pub use create::CreateForm;
+pub(crate) use detail::dialog_frame;
 
 use crate::app::ArcticApp;
 use crate::art::icons::Icon;
@@ -171,6 +172,18 @@ impl ArcticApp {
                 }
                 if widgets::button(ui, p, Some(Icon::Layers), "Modpacks", false).clicked() {
                     self.inst.modpacks_open = true;
+                }
+                if widgets::button(ui, p, Some(Icon::Layers), "From another launcher", false)
+                    .on_hover_text("Bring instances, worlds and HUD setups over from TLauncher, CurseForge, Prism, Lunar…")
+                    .clicked()
+                {
+                    self.open_migrate();
+                }
+                if widgets::button(ui, p, Some(Icon::Import), "Import", false)
+                    .on_hover_text("Add an instance, HUD layout or crosshair someone shared")
+                    .clicked()
+                {
+                    self.open_share_import();
                 }
             });
         });

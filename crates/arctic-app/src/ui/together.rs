@@ -4,7 +4,7 @@
 use arctic_share::{LanWorld, SessionId, Share, ShareEvent};
 use eframe::egui::{self, RichText};
 
-use crate::app::{ArcticApp, LaunchState};
+use crate::app::ArcticApp;
 use crate::art::icons::Icon;
 use crate::theme::{self, Palette};
 use crate::toasts::Kind;
@@ -191,7 +191,7 @@ impl ArcticApp {
                 });
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    let idle = matches!(self.launch, LaunchState::Idle);
+                    let idle = !self.runs.instance_active(&self.selected_instance().id);
                     let play = ui
                         .add_enabled_ui(idle, |ui| {
                             widgets::button(ui, p, Some(Icon::Play), "Launch Minecraft", true)

@@ -112,6 +112,8 @@ fn run_case(dirs: &DataDirs, manifest: &VersionManifest, case: &str) -> BoxResul
             instance: &instance,
             account: &account,
             settings: &settings,
+            bridge: None,
+            copy: 0,
         },
         &progress,
     )?;
@@ -139,6 +141,7 @@ fn smoke_instance(kind: LoaderKind, game: &str, loader_version: String) -> Insta
         java_path: None,
         jvm_args: String::new(),
         performance: false,
+        shaders: false,
     }
 }
 

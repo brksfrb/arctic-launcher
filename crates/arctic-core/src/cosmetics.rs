@@ -52,6 +52,9 @@ pub struct Look {
     #[serde(default)]
     pub model: String,
     pub cape: Option<String>,
+    /// Worn 3D cosmetics (catalog ids).
+    #[serde(default)]
+    pub cosmetics: Vec<String>,
 }
 
 impl Look {
@@ -82,6 +85,8 @@ pub enum CapeChoice {
 pub struct NewLook {
     pub skin: Option<(Texture, Variant)>,
     pub cape: Option<CapeChoice>,
+    /// Cosmetics to wear; `None` leaves the current ones on.
+    pub cosmetics: Option<Vec<String>>,
 }
 
 impl NewLook {
@@ -98,7 +103,11 @@ impl NewLook {
                     Some(p) => CapeChoice::Preset(p.id.clone()),
                     None => CapeChoice::Custom(Texture::Hash(hash.to_owned())),
                 });
-        Self { skin, cape }
+        Self {
+            skin,
+            cape,
+            cosmetics: None,
+        }
     }
 }
 
@@ -149,7 +158,10 @@ pub fn set_look(base: &str, token: &str, look: &NewLook) -> Result<Look> {
         .config()
         .http_status_as_error(false)
         .build()
-        .send_json(serde_json::json!({ "skin": skin, "cape": cape }))?;
+        .send_json(match &look.cosmetics {
+            Some(ids) => serde_json::json!({ "skin": skin, "cape": cape, "cosmetics": ids }),
+            None => serde_json::json!({ "skin": skin, "cape": cape }),
+        })?;
     let status = resp.status().as_u16();
     if !(200..300).contains(&status) {
         return Err(Error::Other(server_error(&mut resp, status)));
@@ -157,7 +169,7 @@ pub fn set_look(base: &str, token: &str, look: &NewLook) -> Result<Look> {
     Ok(resp.body_mut().with_config().limit(MAX_BYTES).read_json()?)
 }
 
-fn server_error(resp: &mut ureq::http::Response<ureq::Body>, status: u16) -> String {
+pub(crate) fn server_error(resp: &mut ureq::http::Response<ureq::Body>, status: u16) -> String {
     #[derive(Deserialize)]
     struct Body {
         error: String,
@@ -305,10 +317,15 @@ fn url_segment(id: &str) -> String {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Credential {
     /// Offline accounts: the key that claims the name on the server.
+    #[serde(default, with = "crate::secret::on_disk_opt")]
     key: Option<String>,
+    #[serde(default, with = "crate::secret::on_disk_opt")]
     token: Option<String>,
     #[serde(default)]
     expires: u64,
+    /// The server that issued `token` (tokens only work there).
+    #[serde(default)]
+    server: String,
 }
 
 /// Per-profile store of cosmetics keys and tokens (`cosmetics.json`).
@@ -325,16 +342,25 @@ fn credentials_path(dirs: &DataDirs) -> PathBuf {
 pub fn token_for(dirs: &DataDirs, base: &str, account: &Account) -> Result<String> {
     let path = credentials_path(dirs);
     let mut creds: Credentials = load_json(&path)?.unwrap_or_default();
+    // Files from before encryption: save them encrypted right away.
+    if std::fs::read_to_string(&path).is_ok_and(|t| crate::secret::has_plain(&t, &["key", "token"]))
+    {
+        save_json(&path, &creds)?;
+    }
     let entry = creds.accounts.entry(account.uuid.clone()).or_default();
     if let Some(token) = &entry.token
         && entry.expires > now_secs() + TOKEN_MARGIN_SECS
+        && entry.server == base
     {
         return Ok(token.clone());
     }
     let session = match &account.kind {
-        AccountKind::Microsoft(ms) => {
-            sign_in_microsoft(base, &ms.access_token, &account.uuid, &account.username)?
-        }
+        AccountKind::Microsoft(ms) => sign_in_microsoft(
+            base,
+            &ms.access_token.reveal(),
+            &account.uuid,
+            &account.username,
+        )?,
         AccountKind::Offline => {
             let key = entry
                 .key
@@ -353,6 +379,7 @@ pub fn token_for(dirs: &DataDirs, base: &str, account: &Account) -> Result<Strin
     let entry = creds.accounts.entry(account.uuid.clone()).or_default();
     entry.token = Some(session.token.clone());
     entry.expires = session.expires;
+    entry.server = base.to_owned();
     save_json(&path, &creds)?;
     Ok(session.token)
 }
@@ -405,15 +432,30 @@ fn sign_in_offline(base: &str, name: &str, key: &str) -> Result<Session> {
     Ok(resp.body_mut().with_config().limit(MAX_BYTES).read_json()?)
 }
 
-/// Tell the Arctic mod in `game_dir` which session to use, so looks picked
-/// in game are published as this player.
-pub fn write_mod_session(
-    game_dir: &Path,
-    base: &str,
-    token: Option<&str>,
-    style: crate::settings::ClientStyle,
-    style_set: u64,
-) -> Result<()> {
+/// What the Arctic mod gets from the launcher for one game session.
+pub struct ModSession<'a> {
+    pub base: &'a str,
+    /// Cosmetics session, so looks picked in game publish as this player.
+    pub token: Option<&'a str>,
+    pub style: crate::settings::ClientStyle,
+    pub fancy: bool,
+    pub style_set: u64,
+    pub proxy: &'a crate::proxy::ProxySettings,
+    /// In-game account switching, while the launcher runs.
+    pub bridge: Option<&'a crate::bridge::BridgeInfo>,
+}
+
+/// Write the session file for the Arctic mod in `game_dir`.
+pub fn write_mod_session(game_dir: &Path, session: &ModSession) -> Result<()> {
+    let ModSession {
+        base,
+        token,
+        style,
+        fancy,
+        style_set,
+        proxy,
+        bridge,
+    } = session;
     let path = game_dir.join("config").join("arctic-session.json");
     save_json(
         &path,
@@ -421,7 +463,19 @@ pub fn write_mod_session(
             "url": base,
             "token": token,
             "style": style.id(),
+            "fancy": fancy,
             "style_set": style_set,
+            // Server connections through the proxy (the Arctic Client does
+            // that part; Minecraft only proxies its own web services).
+            "proxy": {
+                "enabled": proxy.active().is_some(),
+                "host": proxy.bare_host(),
+                "port": proxy.port,
+                "username": proxy.username,
+                "password": proxy.password,
+                "set": proxy.set,
+            },
+            "bridge": bridge,
         }),
     )
 }
@@ -446,6 +500,25 @@ pub const MAX_CAPE_FRAMES: u32 = 8;
 /// matching the Arctic Client).
 pub const CAPE_FRAME_SECS: f64 = 0.125;
 
+/// Width and height from a PNG's header, without decoding the pixels.
+pub fn png_size(png: &[u8]) -> Option<(u32, u32)> {
+    let reader = png::Decoder::new(std::io::Cursor::new(png))
+        .read_info()
+        .ok()?;
+    Some((reader.info().width, reader.info().height))
+}
+
+/// Widest cape accepted (HD capes, as the server allows).
+pub const MAX_CAPE_WIDTH: u32 = 512;
+
+/// Whether a PNG is a cape the server would accept, judged from its header
+/// before anything is decoded.
+pub fn is_cape_png(png: &[u8]) -> bool {
+    png_size(png).is_some_and(|(w, h)| {
+        (64..=MAX_CAPE_WIDTH).contains(&w) && w.is_power_of_two() && cape_frames(w, h).is_some()
+    })
+}
+
 /// Frames in a cape image of `width`×`height`: 1 for a plain cape, more
 /// for animated ones, `None` if it isn't a cape layout.
 pub fn cape_frames(width: u32, height: u32) -> Option<u32> {
@@ -459,6 +532,31 @@ pub fn cape_frames(width: u32, height: u32) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn png(w: u32, h: u32) -> Vec<u8> {
+        let mut out = Vec::new();
+        let mut enc = png::Encoder::new(&mut out, w, h);
+        enc.set_color(png::ColorType::Rgba);
+        let mut writer = enc.write_header().unwrap();
+        writer
+            .write_image_data(&vec![255u8; (w * h * 4) as usize])
+            .unwrap();
+        drop(writer);
+        out
+    }
+
+    #[test]
+    fn cape_pngs_are_judged_by_their_header() {
+        assert!(is_cape_png(&png(64, 32)));
+        assert!(is_cape_png(&png(128, 64 * 4)));
+        assert!(!is_cape_png(&png(96, 48)));
+        assert!(!is_cape_png(b"not a png"));
+        // A small file claiming a huge size is refused before decoding.
+        let mut huge = png(64, 32);
+        huge[16..20].copy_from_slice(&65_536u32.to_be_bytes());
+        huge[20..24].copy_from_slice(&32_768u32.to_be_bytes());
+        assert!(!is_cape_png(&huge));
+    }
 
     #[test]
     fn counts_cape_frames() {

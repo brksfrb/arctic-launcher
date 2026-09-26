@@ -192,6 +192,7 @@ impl ArcticApp {
             .frame(super::detail::dialog_frame(p))
             .show(ctx, |ui| {
                 ui.set_width(520.0);
+                crate::widgets::lift_controls(ui, p);
                 ui.label(
                     RichText::new("Import worlds")
                         .size(22.0)

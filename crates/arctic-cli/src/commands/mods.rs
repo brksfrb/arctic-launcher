@@ -28,6 +28,20 @@ pub fn run(ctx: &Ctx, command: &ModsCommand) -> Result<i32> {
                 format!("Removed {file}")
             });
         }
+        ModsCommand::Recognize { instance } => {
+            let inst = modded(ctx, instance)?;
+            let (dir, index) = folders(ctx, &inst);
+            let game = inst.version.clone().unwrap_or_default();
+            let kind = inst
+                .loader
+                .kind()
+                .ok_or_else(|| Error::Other("no mod loader".into()))?;
+            let r = mods::recognize(&dir, &index, &game, kind)?;
+            ctx.out.emit(
+                json!({"event": "recognized", "tracked": r.tracked, "unknown": r.unknown, "mismatched": r.mismatched}),
+                || format!("{} mods recognized on Modrinth, {} not found there", r.tracked, r.unknown),
+            );
+        }
         ModsCommand::Toggle {
             file,
             instance,
@@ -70,7 +84,7 @@ fn search(ctx: &Ctx, inst: &Instance, text: &str, limit: usize) -> Result<()> {
         sort: SortBy::Relevance,
         offset: 0,
         limit,
-        modpacks: false,
+        project_type: mods::ProjectType::Mod,
     })?;
     for hit in page.hits {
         ctx.out.emit(

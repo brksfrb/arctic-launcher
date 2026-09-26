@@ -32,6 +32,26 @@ impl Out {
         }
     }
 
+    /// Something worth knowing that isn't the result (stderr for humans).
+    pub fn info(&self, message: &str) {
+        self.note("info", message);
+    }
+
+    /// Something that went only partly right.
+    pub fn warn(&self, message: &str) {
+        self.note("warning", message);
+    }
+
+    fn note(&self, event: &str, message: &str) {
+        if self.json {
+            println!("{}", json!({ "event": event, "message": message }));
+        } else if event == "warning" {
+            eprintln!("warning: {message}");
+        } else {
+            eprintln!("{message}");
+        }
+    }
+
     /// Progress goes to stderr (humans) or as `{"event":"progress"}` lines.
     pub fn progress(&self, p: ProgressInfo) {
         if self.json {

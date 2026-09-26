@@ -64,6 +64,17 @@ pub fn picker(ui: &mut egui::Ui, p: &Palette, settings: &mut Settings, tile_widt
     });
 }
 
+/// The Fancy switch (smooth font, rounded shapes), next to the style tiles.
+pub fn fancy_toggle(ui: &mut egui::Ui, settings: &mut Settings) {
+    if ui
+        .checkbox(&mut settings.client_fancy, "Fancy")
+        .on_hover_text("Smooth font and rounded, smooth shapes everywhere in game.")
+        .changed()
+    {
+        settings.client_style_set = arctic_core::auth::now_secs();
+    }
+}
+
 /// A miniature menu in `style`, like the launcher theme tiles. Returns
 /// true when clicked.
 fn tile(ui: &mut egui::Ui, p: &Palette, style: ClientStyle, selected: bool, width: f32) -> bool {

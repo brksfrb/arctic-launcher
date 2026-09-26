@@ -115,13 +115,17 @@ pub fn play_button(ui: &mut Ui, p: &Palette, state: PlayState, size: Vec2) -> Re
         text_color,
     );
     let font = if label.len() > 10 { 16.0 } else { 22.0 };
-    painter.text(
-        rect.center() + vec2(12.0, 0.0),
-        Align2::CENTER_CENTER,
-        label,
-        FontId::proportional(font),
-        text_color,
-    );
+    // The bundled font has no bold face: draw the label a few times, a
+    // fraction of a pixel apart, for a bold weight.
+    for dx in BOLD_OFFSETS {
+        painter.text(
+            rect.center() + vec2(12.0 + dx, 0.0),
+            Align2::CENTER_CENTER,
+            label,
+            FontId::proportional(font),
+            text_color,
+        );
+    }
 
     if enabled {
         response.on_hover_cursor(CursorIcon::PointingHand)
@@ -129,6 +133,9 @@ pub fn play_button(ui: &mut Ui, p: &Palette, state: PlayState, size: Vec2) -> Re
         response
     }
 }
+
+/// Horizontal offsets that thicken the Play label into a bold weight.
+const BOLD_OFFSETS: [f32; 3] = [0.0, 0.5, 1.0];
 
 fn paint_progress_fill(
     painter: &egui::Painter,
@@ -445,4 +452,12 @@ pub fn text_field(text: &mut dyn egui::TextBuffer) -> egui::TextEdit<'_> {
         .margin(egui::Margin::symmetric(10, 8))
         .font(FontId::proportional(15.0))
         .min_size(vec2(0.0, FIELD_HEIGHT))
+}
+
+/// Dialogs are the color of an empty checkbox or slider track; lift those
+/// so unchecked boxes show.
+pub fn lift_controls(ui: &mut Ui, p: &Palette) {
+    let widgets = &mut ui.visuals_mut().widgets;
+    widgets.inactive.bg_fill = p.surface_hover;
+    widgets.inactive.bg_stroke = egui::Stroke::new(1.0, p.card_stroke);
 }

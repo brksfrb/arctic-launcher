@@ -46,13 +46,22 @@ impl ArcticApp {
             self.launcher_log = lines;
             self.launcher_log_seen = total;
         }
+        // A game log that's gone (profile switch) falls back to the newest.
+        if let LogSource::Game(id) = self.log_source
+            && self.runs.get(id).is_none()
+        {
+            self.log_source = self
+                .runs
+                .latest()
+                .map_or(LogSource::Launcher, |r| LogSource::Game(r.id));
+        }
         let source = self.log_source;
         let key = LogViewKey {
             source,
             min_level: self.log_min_level,
             query: self.log_search.trim().to_lowercase(),
             revision: match source {
-                LogSource::Game => self.game_log_rev,
+                LogSource::Game(id) => self.runs.get(id).map_or(0, |r| r.log_rev),
                 LogSource::Launcher => self.launcher_log_seen,
             },
         };
@@ -65,10 +74,7 @@ impl ArcticApp {
             .as_ref()
             .map(|(_, i)| i.clone())
             .unwrap_or_default();
-        let line = |i: usize| match source {
-            LogSource::Game => self.game_log.get(i),
-            LogSource::Launcher => self.launcher_log.get(i),
-        };
+        let line = |i: usize| self.log_line(source, i);
         if copy_requested {
             let text: Vec<&str> = indices
                 .iter()
@@ -83,11 +89,15 @@ impl ArcticApp {
             self.toasts
                 .push(Kind::Info, format!("Copied {count} lines"), "");
         }
-        let line = |i: usize| match source {
-            LogSource::Game => self.game_log.get(i),
-            LogSource::Launcher => self.launcher_log.get(i),
-        };
+        let line = |i: usize| self.log_line(source, i);
         console(ui, p, &indices, &line, self.log_follow, source);
+    }
+
+    fn log_line(&self, source: LogSource, i: usize) -> Option<&LogLine> {
+        match source {
+            LogSource::Game(id) => self.runs.get(id).and_then(|r| r.log.get(i)),
+            LogSource::Launcher => self.launcher_log.get(i),
+        }
     }
 
     fn filter_log(&self, key: &LogViewKey) -> Vec<usize> {
@@ -96,13 +106,18 @@ impl ArcticApp {
                 && (key.query.is_empty() || l.text.to_lowercase().contains(&key.query))
         };
         match key.source {
-            LogSource::Game => self
-                .game_log
-                .iter()
-                .enumerate()
-                .filter(|(_, l)| keep(l))
-                .map(|(i, _)| i)
-                .collect(),
+            LogSource::Game(id) => self
+                .runs
+                .get(id)
+                .map(|r| {
+                    r.log
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, l)| keep(l))
+                        .map(|(i, _)| i)
+                        .collect()
+                })
+                .unwrap_or_default(),
             LogSource::Launcher => self
                 .launcher_log
                 .iter()
@@ -118,7 +133,16 @@ impl ArcticApp {
         let p = self.palette();
         let mut copy = false;
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.log_source, LogSource::Game, "Minecraft");
+            // One entry per game run (newest last), then the launcher.
+            for run in &self.runs.list {
+                // A bullet the launcher's font has (● isn't in it).
+                let marker = if run.is_active() { "• " } else { "" };
+                ui.selectable_value(
+                    &mut self.log_source,
+                    LogSource::Game(run.id),
+                    format!("{marker}{}", run.title),
+                );
+            }
             ui.selectable_value(&mut self.log_source, LogSource::Launcher, "Launcher");
             ui.separator();
             for (level, name) in LEVELS {
@@ -132,17 +156,17 @@ impl ArcticApp {
             );
             ui.checkbox(&mut self.log_follow, "Auto-scroll");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if self.log_source == LogSource::Game
+                if let LogSource::Game(id) = self.log_source
                     && widgets::icon_button(ui, p, Icon::Trash, "Clear").clicked()
+                    && let Some(run) = self.runs.get_mut(id)
                 {
-                    self.game_log.clear();
-                    self.game_log_rev += 1;
+                    run.clear_log();
                 }
                 let file = match self.log_source {
-                    LogSource::Game => self
-                        .dirs
-                        .logs()
-                        .join(format!("game-{}.log", self.instance.id)),
+                    LogSource::Game(id) => self.runs.get(id).map_or_else(
+                        || self.dirs.logs().join("none"),
+                        |r| self.dirs.logs().join(format!("game-{}.log", r.instance_id)),
+                    ),
                     LogSource::Launcher => self.dirs.launcher_logs().join("launcher.log"),
                 };
                 if file.is_file()
@@ -184,7 +208,7 @@ fn console<'a>(
                 ui.set_min_height(height);
                 ui.centered_and_justified(|ui| {
                     let msg = match source {
-                        LogSource::Game => "No output yet. Launch the game to see its log here.",
+                        LogSource::Game(_) => "No output yet.",
                         LogSource::Launcher => "Nothing logged yet.",
                     };
                     ui.label(RichText::new(msg).color(p.muted));

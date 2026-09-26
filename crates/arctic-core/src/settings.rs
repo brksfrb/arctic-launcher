@@ -60,6 +60,9 @@ pub struct Settings {
     /// When `client_style` was picked (Unix seconds; 0 = never). The game
     /// adopts a newer pick, but keeps a style changed in game until then.
     pub client_style_set: u64,
+    /// Fancy mode of the Arctic Client: smooth font and rounded shapes.
+    /// Picked together with `client_style` (same timestamp).
+    pub client_fancy: bool,
 }
 
 /// How the Arctic Client styles Minecraft's menus.
@@ -144,6 +147,7 @@ impl Default for Settings {
             favorite_versions: Vec::new(),
             client_style: ClientStyle::Arctic,
             client_style_set: 0,
+            client_fancy: false,
         }
     }
 }

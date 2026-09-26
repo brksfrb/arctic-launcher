@@ -11,6 +11,7 @@ pub mod process;
 
 pub use process::{GameEvent, GameHandle, spawn, spawn_detached};
 
+use crate::proxy::ProxySettings;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -36,6 +37,11 @@ pub struct LaunchRequest<'a> {
     /// Must already be refreshed if it is a Microsoft account.
     pub account: &'a Account,
     pub settings: &'a Settings,
+    /// Where the game can switch accounts (a running launcher), if anywhere.
+    pub bridge: Option<&'a crate::bridge::BridgeInfo>,
+    /// Which copy of this instance this is (0 when it's the only one
+    /// running); later copies write their own log file.
+    pub copy: u32,
 }
 
 /// A fully resolved command line, ready to spawn.
@@ -45,19 +51,19 @@ pub struct LaunchPlan {
     pub args: Vec<String>,
     pub game_dir: PathBuf,
     pub log_file: PathBuf,
-    /// Access token, kept only to redact it from logs.
-    secret: String,
+    /// Access token and proxy password, kept only to redact them from logs.
+    secrets: Vec<String>,
 }
 
 impl LaunchPlan {
-    /// Command line safe to show or log (access token replaced).
+    /// Command line safe to show or log (access token and proxy password
+    /// replaced).
     pub fn redacted_command(&self) -> String {
         let redact = |a: &String| {
-            if !self.secret.is_empty() && self.secret != "0" && a.contains(&self.secret) {
-                a.replace(&self.secret, "<redacted>")
-            } else {
-                a.clone()
-            }
+            self.secrets
+                .iter()
+                .filter(|s| !s.is_empty() && s.as_str() != "0")
+                .fold(a.clone(), |arg, s| arg.replace(s.as_str(), "<redacted>"))
         };
         std::iter::once(self.java.display().to_string())
             .chain(self.args.iter().map(redact))
@@ -153,6 +159,16 @@ pub fn install(
 /// installer needs its client jar and Java), then the loader profile is
 /// layered on top and its extra libraries are downloaded.
 pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
+    // A proxy that is on but unusable must stop the launch: starting
+    // without it would quietly connect directly.
+    let proxy = ProxySettings::load(req.dirs);
+    if proxy.enabled
+        && let Err(why) = proxy.validate()
+    {
+        return Err(crate::Error::Other(format!(
+            "The proxy is on but its settings are incomplete: {why}"
+        )));
+    }
     let dirs = req.dirs;
     let game_dir = req.instance.game_dir(dirs);
     let java_override = req
@@ -190,13 +206,28 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 kind,
                 loaders::LoaderKind::Fabric | loaders::LoaderKind::Quilt
             ) {
-                arctic_mod::sync(&game_dir.join("mods"), &vanilla.id, req.instance.arctic_mod)?;
+                // An older Fabric Loader than the mod needs would stop the
+                // game at startup: play without the Arctic Client then.
+                let fits = kind != loaders::LoaderKind::Fabric
+                    || arctic_mod::loader_fits(&vanilla.id, loader_version);
+                if req.instance.arctic_mod && !fits {
+                    log::warn!(
+                        "Fabric Loader {loader_version} is too old for the Arctic Client on {}; starting without it",
+                        vanilla.id
+                    );
+                }
+                arctic_mod::sync(
+                    &game_dir.join("mods"),
+                    &vanilla.id,
+                    req.instance.arctic_mod && fits,
+                )?;
                 if req.instance.loader.kind().is_none() {
                     progress(ProgressInfo::stage("Checking performance mods"));
                     crate::mods::performance::sync(
                         &game_dir,
                         &vanilla.id,
                         req.instance.performance,
+                        req.instance.shaders,
                         progress,
                     )?;
                 }
@@ -209,6 +240,10 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         _ => vanilla,
     };
     let installation = install(dirs, version, &game_dir, java_override, progress)?;
+    if proxy.active().is_some() {
+        let hosts = game_dir.join(crate::proxy::HOSTS_FILE);
+        std::fs::write(&hosts, proxy.hosts_file()).map_err(|e| crate::Error::io(&hosts, e))?;
+    }
     Ok(plan(req, &installation))
 }
 
@@ -225,14 +260,14 @@ fn effective_loader(
         return Some((kind, version.to_owned()));
     }
     let client = instance.arctic_mod && arctic_mod::supports(game);
-    let fabric = (client || instance.performance)
+    let fabric = (client || instance.performance || instance.shaders)
         .then(|| arctic_mod::client_loader(dirs, game))
         .flatten();
     if fabric.is_none() {
         // Pure vanilla: make sure earlier Fabric runs left nothing behind.
         let game_dir = instance.game_dir(dirs);
         let _ = arctic_mod::sync(&game_dir.join("mods"), game, false);
-        let _ = crate::mods::performance::sync(&game_dir, game, false, &|_| {});
+        let _ = crate::mods::performance::sync(&game_dir, game, false, false, &|_| {});
     }
     fabric.map(|v| (loaders::LoaderKind::Fabric, v))
 }
@@ -245,13 +280,17 @@ fn share_cosmetics_session(req: &LaunchRequest, game_dir: &Path) {
         .inspect_err(|e| log::info!("Arctic cosmetics unavailable: {e}"))
         .ok();
     let settings = req.settings;
-    if let Err(e) = crate::cosmetics::write_mod_session(
-        game_dir,
-        &base,
-        token.as_deref(),
-        settings.client_style,
-        settings.client_style_set,
-    ) {
+    let proxy = ProxySettings::load(req.dirs);
+    let session = crate::cosmetics::ModSession {
+        base: &base,
+        token: token.as_deref(),
+        style: settings.client_style,
+        fancy: settings.client_fancy,
+        style_set: settings.client_style_set,
+        proxy: &proxy,
+        bridge: req.bridge,
+    };
+    if let Err(e) = crate::cosmetics::write_mod_session(game_dir, &session) {
         log::warn!("arctic session file: {e}");
     }
 }
@@ -259,6 +298,7 @@ fn share_cosmetics_session(req: &LaunchRequest, game_dir: &Path) {
 /// Build the command line for `req` from a finished installation.
 pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
     let settings = req.settings;
+    let proxy = ProxySettings::load(req.dirs);
     let env = if settings.fullscreen {
         RuleEnv::current()
     } else {
@@ -279,20 +319,30 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
             .chain(req.instance.jvm_args.split_whitespace())
             .map(str::to_owned)
             .chain(arctic_mod::jvm_flag())
+            .chain(proxy.active().map(|_| {
+                format!(
+                    "-Djdk.net.hosts.file={}",
+                    inst.game_dir.join(crate::proxy::HOSTS_FILE).display()
+                )
+            }))
             .collect(),
         logging_arg,
         fullscreen: settings.fullscreen,
         resolution: (settings.window_width, settings.window_height),
+        game_extra: proxy
+            .active()
+            .map(ProxySettings::game_args)
+            .unwrap_or_default(),
     };
     LaunchPlan {
         java: inst.java.clone(),
         args: args::build(&inst.version, &env, &vars, &opts),
         game_dir: inst.game_dir.clone(),
-        log_file: req
-            .dirs
-            .logs()
-            .join(format!("game-{}.log", req.instance.id)),
-        secret: identity.access_token,
+        log_file: req.dirs.logs().join(match req.copy {
+            0 => format!("game-{}.log", req.instance.id),
+            n => format!("game-{}-{}.log", req.instance.id, n + 1),
+        }),
+        secrets: vec![identity.access_token, proxy.password.clone()],
     }
 }
 
@@ -346,10 +396,22 @@ mod tests {
             args: vec!["--accessToken".into(), "SECRET123".into()],
             game_dir: PathBuf::new(),
             log_file: PathBuf::new(),
-            secret: "SECRET123".into(),
+            secrets: vec!["SECRET123".into(), String::new()],
         };
         let cmd = plan.redacted_command();
         assert!(!cmd.contains("SECRET123"));
         assert!(cmd.ends_with("--accessToken <redacted>"));
+    }
+
+    #[test]
+    fn redacts_proxy_password() {
+        let plan = LaunchPlan {
+            java: PathBuf::from("java"),
+            args: vec!["--proxyPass".into(), "hunter2".into()],
+            game_dir: PathBuf::new(),
+            log_file: PathBuf::new(),
+            secrets: vec!["tok".into(), "hunter2".into()],
+        };
+        assert!(plan.redacted_command().ends_with("--proxyPass <redacted>"));
     }
 }

@@ -12,7 +12,9 @@ use crate::loaders::LoaderKind;
 use crate::net::{agent, read_json_any_status};
 use crate::{Error, Result};
 
-const API: &str = "https://api.modrinth.com/v2";
+pub(super) const API: &str = "https://api.modrinth.com/v2";
+/// How long to wait for Modrinth's API (it can be slow).
+pub(super) const SLOW_API: std::time::Duration = std::time::Duration::from_secs(90);
 const DEFAULT_LIMIT: usize = 20;
 const MAX_LIMIT: usize = 100;
 
@@ -224,7 +226,7 @@ fn sort_index(sort: SortBy) -> &'static str {
 }
 
 fn search_facets(query: &SearchQuery) -> String {
-    let kind = if query.modpacks { "modpack" } else { "mod" };
+    let kind = query.project_type.id();
     let mut facets = vec![vec![format!("project_type:{kind}")]];
     if !query.game_version.trim().is_empty() {
         facets.push(vec![format!("versions:{}", query.game_version.trim())]);
@@ -266,6 +268,10 @@ pub(super) fn version_url(version_id: &str) -> String {
     format!("{API}/version/{}", encode(version_id))
 }
 
+pub(super) fn versions_url(ids: &[&str]) -> String {
+    format!("{API}/versions?ids={}", encode(&json_list(ids)))
+}
+
 pub(super) fn projects_url(ids: &[&str]) -> String {
     format!("{API}/projects?ids={}", encode(&json_list(ids)))
 }
@@ -288,6 +294,34 @@ pub(super) fn status_error(code: u16, what: &str) -> Option<Error> {
 /// GET a Modrinth API URL and parse its JSON. `what` names the resource in
 /// error messages ("project sodium").
 pub(super) fn get_api<T: DeserializeOwned>(url: &str, what: &str) -> Result<T> {
+    // Modrinth has off moments (502/503, slow answers): try a few times.
+    let mut attempt = 1;
+    loop {
+        match get_api_once(url, what) {
+            Err(e) if attempt < TRIES && retryable(&e) => {
+                log::info!("modrinth {what}: {e}; trying again");
+                std::thread::sleep(RETRY_WAIT * attempt);
+                attempt += 1;
+            }
+            result => return result,
+        }
+    }
+}
+
+const TRIES: u32 = 3;
+const RETRY_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Network trouble and "try later" answers are worth another go; "not
+/// found" and the like are not.
+fn retryable(e: &Error) -> bool {
+    match e {
+        Error::Http(_) => true,
+        Error::Other(msg) => msg.contains("having trouble") || msg.contains("rate limit"),
+        _ => false,
+    }
+}
+
+fn get_api_once<T: DeserializeOwned>(url: &str, what: &str) -> Result<T> {
     log::debug!("modrinth GET {url}");
     let mut resp = agent()
         .get(url)
@@ -295,6 +329,9 @@ pub(super) fn get_api<T: DeserializeOwned>(url: &str, what: &str) -> Result<T> {
         .header("Accept", "application/json")
         .config()
         .http_status_as_error(false)
+        // Modrinth's API sometimes takes tens of seconds to answer.
+        .timeout_recv_response(Some(SLOW_API))
+        .timeout_recv_body(Some(SLOW_API))
         .build()
         .call()?;
     if let Some(e) = status_error(resp.status().as_u16(), what) {
@@ -321,6 +358,14 @@ pub(super) fn project_versions(
 
 pub(super) fn version(version_id: &str) -> Result<Version> {
     get_api(&version_url(version_id), &format!("version {version_id}"))
+}
+
+/// Many versions at once; unknown ids are simply missing from the result.
+pub(super) fn versions(ids: &[&str]) -> Result<Vec<Version>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    get_api(&versions_url(ids), "versions")
 }
 
 pub(super) fn projects(ids: &[&str]) -> Result<Vec<Project>> {

@@ -6,6 +6,7 @@
 //! ├── profiles/<id>/              everything that belongs to one profile:
 //! │   ├── settings.json             settings (no secrets)
 //! │   ├── accounts.json             accounts (tokens; local only)
+//! │   ├── proxy.json                SOCKS5 proxy (may hold a password; local only)
 //! │   ├── instances/<id>/           instance.json + minecraft/ (worlds, mods…)
 //! │   └── logs/                     game logs
 //! ├── msa.json                    optional local Microsoft client config
@@ -121,6 +122,9 @@ impl DataDirs {
     }
     pub fn accounts_file(&self) -> PathBuf {
         self.profile_root.join("accounts.json")
+    }
+    pub fn proxy_file(&self) -> PathBuf {
+        self.profile_root.join("proxy.json")
     }
     pub fn msa_config_file(&self) -> PathBuf {
         self.root.join("msa.json")

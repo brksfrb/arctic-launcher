@@ -6,10 +6,13 @@
 //! too (untracked). Disabled mods are renamed to `*.jar.disabled`, which is
 //! what loaders ignore.
 
+mod exact;
 mod files;
+mod identify;
 mod index;
 pub mod modpack;
 mod modrinth;
+pub mod packs;
 pub mod performance;
 mod resolve;
 #[cfg(test)]
@@ -24,6 +27,8 @@ use crate::loaders::LoaderKind;
 use crate::net::{DownloadJob, download_all};
 use crate::{Error, Progress, ProgressInfo, Result};
 
+pub use exact::{ExactReport, Skipped, Wanted, install_exact};
+pub use identify::{Recognized, recognize};
 use index::ModIndex;
 use modrinth::{Project, Version};
 use resolve::{Planned, Target};
@@ -38,6 +43,27 @@ pub enum SortBy {
     Newest,
 }
 
+/// What kind of Modrinth project to search for.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ProjectType {
+    #[default]
+    Mod,
+    Modpack,
+    ResourcePack,
+    Shader,
+}
+
+impl ProjectType {
+    pub fn id(self) -> &'static str {
+        match self {
+            ProjectType::Mod => "mod",
+            ProjectType::Modpack => "modpack",
+            ProjectType::ResourcePack => "resourcepack",
+            ProjectType::Shader => "shader",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct SearchQuery {
     pub text: String,
@@ -46,8 +72,7 @@ pub struct SearchQuery {
     pub sort: SortBy,
     pub offset: usize,
     pub limit: usize,
-    /// Search modpacks instead of mods.
-    pub modpacks: bool,
+    pub project_type: ProjectType,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -138,6 +163,75 @@ pub fn install(
     let updated = record(&current, &mods, mods_dir)?;
     updated.save(index)?;
     Ok(mods)
+}
+
+/// Install several projects at once: looked up side by side (Modrinth can
+/// take seconds per answer), downloaded together. Returns what was
+/// installed and, for each project that couldn't be, why.
+pub fn install_many(
+    projects: &[&str],
+    game_version: &str,
+    loader: LoaderKind,
+    mods_dir: &Path,
+    index: &Path,
+    progress: Progress,
+) -> Result<(Vec<InstalledMod>, Vec<(String, crate::Error)>)> {
+    progress(ProgressInfo::stage("Finding mods"));
+    let loaders = modrinth::compatible_loaders(loader);
+    let target = Target {
+        loaders: &loaders,
+        game_version,
+        loader,
+    };
+    let current = ModIndex::load(index)?;
+    let installed = installed_projects(&current, mods_dir);
+    let results: Vec<(String, Result<Vec<Planned>>)> = std::thread::scope(|s| {
+        let handles: Vec<_> = projects
+            .iter()
+            .map(|project| {
+                let installed = &installed;
+                let loaders = &loaders;
+                s.spawn(move || {
+                    let source = resolve::Modrinth {
+                        loaders,
+                        game_version,
+                    };
+                    (
+                        (*project).to_owned(),
+                        resolve::resolve(project, target, installed, &source),
+                    )
+                })
+            })
+            .collect();
+        handles.into_iter().filter_map(|h| h.join().ok()).collect()
+    });
+    let mut failed = Vec::new();
+    let mut plan: Vec<Planned> = Vec::new();
+    for (project, result) in results {
+        match result {
+            Ok(planned) => {
+                for p in planned {
+                    match plan
+                        .iter_mut()
+                        .find(|q| q.version.project_id == p.version.project_id)
+                    {
+                        // Asked for directly somewhere: not just a dependency.
+                        Some(existing) => existing.dependency &= p.dependency,
+                        None => plan.push(p),
+                    }
+                }
+            }
+            Err(e) => failed.push((project, e)),
+        }
+    }
+    if plan.is_empty() {
+        return Ok((Vec::new(), failed));
+    }
+    let (mods, jobs) = prepare(&plan, mods_dir)?;
+    let mods = with_project_info(mods);
+    download_all("Downloading mods", jobs, progress)?;
+    record(&current, &mods, mods_dir)?.save(index)?;
+    Ok((mods, failed))
 }
 
 /// Jars in `mods_dir`, joined with the tracking info from `index`.

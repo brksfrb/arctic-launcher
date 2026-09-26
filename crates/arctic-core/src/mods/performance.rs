@@ -29,6 +29,9 @@ const RECHECK_SECS: u64 = 7 * 24 * 60 * 60;
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 struct State {
     game_version: String,
+    /// Iris was included (shaders on).
+    #[serde(default)]
+    shaders: bool,
     /// Unix seconds of the last successful check.
     checked: u64,
 }
@@ -41,36 +44,51 @@ fn state_path(game_dir: &Path) -> PathBuf {
     game_dir.join("arctic-performance-state.json")
 }
 
-/// Install (or update) the performance mods for `game_version`, or remove
-/// them when `enabled` is false. Offline, mods already installed for this
-/// version are kept.
-pub fn sync(game_dir: &Path, game_version: &str, enabled: bool, progress: Progress) -> Result<()> {
+/// Install (or update) the performance mods for `game_version` (and Iris
+/// when `shaders` is on), or remove them when neither is wanted. Offline,
+/// mods already installed for this version are kept.
+pub fn sync(
+    game_dir: &Path,
+    game_version: &str,
+    enabled: bool,
+    shaders: bool,
+    progress: Progress,
+) -> Result<()> {
     let state: State = load_json(&state_path(game_dir))?.unwrap_or_default();
-    if !enabled {
+    let mut wanted: Vec<(&str, &str)> = if enabled { MODS.to_vec() } else { Vec::new() };
+    if shaders {
+        wanted.push((super::packs::IRIS, "Iris"));
+    }
+    if wanted.is_empty() {
         return remove_all(game_dir);
     }
     let mods_dir = game_dir.join("mods");
     let index = index_path(game_dir);
-    if state.game_version != game_version {
+    if state.game_version != game_version || state.shaders != shaders {
         remove_all(game_dir)?;
     } else if crate::auth::now_secs().saturating_sub(state.checked) < RECHECK_SECS
         && all_present(&index, &mods_dir)?
     {
         return Ok(());
     }
-    let mut reached = false;
-    for (id, name) in MODS {
-        match super::install(
-            id,
-            game_version,
-            LoaderKind::Fabric,
-            &mods_dir,
-            &index,
-            progress,
-        ) {
-            Ok(_) => reached = true,
-            Err(crate::Error::Http(e)) => log::info!("{name}: can't reach Modrinth: {e}"),
-            Err(e) => {
+    let ids: Vec<&str> = wanted.iter().map(|(id, _)| *id).collect();
+    let (installed, failed) = super::install_many(
+        &ids,
+        game_version,
+        LoaderKind::Fabric,
+        &mods_dir,
+        &index,
+        progress,
+    )?;
+    let mut reached = !installed.is_empty();
+    for (id, e) in failed {
+        let name = wanted
+            .iter()
+            .find(|(i, _)| *i == id)
+            .map_or(id.as_str(), |(_, n)| n);
+        match e {
+            crate::Error::Http(e) => log::info!("{name}: can't reach Modrinth: {e}"),
+            e => {
                 // Usually "no version for this Minecraft yet".
                 reached = true;
                 log::info!("{name} skipped for {game_version}: {e}");
@@ -82,6 +100,7 @@ pub fn sync(game_dir: &Path, game_version: &str, enabled: bool, progress: Progre
             &state_path(game_dir),
             &State {
                 game_version: game_version.to_owned(),
+                shaders,
                 checked: crate::auth::now_secs(),
             },
         )?;
@@ -128,6 +147,14 @@ pub fn installed(game_dir: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// File names of the performance mods in `game_dir` (they're managed by
+/// the switch, not by the player).
+pub fn installed_files(game_dir: &Path) -> Vec<String> {
+    ModIndex::load(&index_path(game_dir))
+        .map(|i| i.mods.into_iter().map(|m| m.file_name).collect())
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,7 +185,7 @@ mod tests {
             .unwrap();
         assert_eq!(installed(dir.path()), vec!["Sodium".to_owned()]);
 
-        sync(dir.path(), "26.3", false, &|_| {}).unwrap();
+        sync(dir.path(), "26.3", false, false, &|_| {}).unwrap();
         assert!(!mods.join("sodium.jar").exists());
         assert!(mods.join("mine.jar").exists());
         assert!(installed(dir.path()).is_empty());
@@ -176,11 +203,12 @@ mod tests {
             .unwrap();
         let state = State {
             game_version: "26.3".into(),
+            shaders: false,
             checked: crate::auth::now_secs(),
         };
         save_json(&state_path(dir.path()), &state).unwrap();
         // Would fail (and log) if it tried Modrinth with a fake version.
-        sync(dir.path(), "26.3", true, &|_| {}).unwrap();
+        sync(dir.path(), "26.3", true, false, &|_| {}).unwrap();
         assert!(mods.join("sodium.jar").exists());
     }
 }

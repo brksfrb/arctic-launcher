@@ -40,6 +40,21 @@ pub(super) fn check_file_name(name: &str) -> Result<()> {
     }
 }
 
+/// A resource or shader pack file name: plain, and a `.zip`.
+pub(super) fn check_pack_name(name: &str) -> Result<()> {
+    let plain = !name.is_empty()
+        && !name.starts_with('.')
+        && !name.contains("..")
+        && !name
+            .chars()
+            .any(|c| matches!(c, '/' | '\\' | ':' | '\0') || c.is_control());
+    if plain && name.to_ascii_lowercase().ends_with(".zip") {
+        Ok(())
+    } else {
+        Err(Error::Other(format!("invalid pack file name: {name:?}")))
+    }
+}
+
 fn enabled_path(mods_dir: &Path, base: &str) -> PathBuf {
     mods_dir.join(base)
 }

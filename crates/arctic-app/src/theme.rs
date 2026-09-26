@@ -187,6 +187,8 @@ pub fn palette(mode: ThemeMode) -> &'static Palette {
 }
 
 const RADIUS: u8 = 6;
+const SMALL_TEXT: f32 = 12.0;
+const BODY_TEXT: f32 = 13.5;
 
 pub fn apply(ctx: &egui::Context, p: &Palette) {
     let (theme, mut v) = if p.dark {
@@ -233,6 +235,13 @@ pub fn apply(ctx: &egui::Context, p: &Palette) {
     ctx.style_mut_of(theme, |style| {
         style.spacing.item_spacing = egui::vec2(8.0, 8.0);
         style.spacing.button_padding = egui::vec2(12.0, 6.0);
+        // egui's small text (9 px) is too hard to read for notes and hints.
+        if let Some(small) = style.text_styles.get_mut(&egui::TextStyle::Small) {
+            small.size = SMALL_TEXT;
+        }
+        if let Some(body) = style.text_styles.get_mut(&egui::TextStyle::Body) {
+            body.size = BODY_TEXT;
+        }
     });
 }
 
