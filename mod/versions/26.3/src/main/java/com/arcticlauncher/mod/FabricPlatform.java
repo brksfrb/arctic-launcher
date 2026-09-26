@@ -4,6 +4,7 @@ import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.GameKey;
 import com.arcticlauncher.client.MenuAction;
 import com.arcticlauncher.client.Platform;
+import com.arcticlauncher.client.looks.Looks;
 import com.arcticlauncher.client.ui.Page;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.realmsclient.RealmsMainScreen;
@@ -158,16 +159,49 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
-	public void registerTexture(String hash, byte[] png) {
+	public void registerTexture(String hash, byte[] png, boolean cape) {
 		try {
 			NativeImage image = NativeImage.read(png);
+			int frames = cape ? Looks.capeFrames(image.getWidth(), image.getHeight()) : 1;
+			if (frames < 2) {
+				mc().execute(() -> {
+					register(hash, image);
+					ArcticClient.looks().textureReady(hash, 1);
+				});
+				return;
+			}
+			List<NativeImage> parts = splitFrames(image, frames);
+			image.close();
 			mc().execute(() -> {
-				mc().getTextureManager().register(GfxImpl.look(hash), new DynamicTexture(() -> "Arctic " + hash, image));
-				ArcticClient.looks().textureReady(hash);
+				for (int i = 0; i < parts.size(); i++) {
+					register(hash + "/" + i, parts.get(i));
+				}
+				ArcticClient.looks().textureReady(hash, parts.size());
 			});
 		} catch (Exception e) {
 			ArcticMod.LOG.debug("texture {}: {}", hash, e.toString());
 		}
+	}
+
+	private static void register(String key, NativeImage image) {
+		mc().getTextureManager().register(GfxImpl.look(key), new DynamicTexture(() -> "Arctic " + key, image));
+	}
+
+	/** An animated cape's stacked 2:1 frames as separate images. */
+	private static List<NativeImage> splitFrames(NativeImage strip, int frames) {
+		int w = strip.getWidth();
+		int h = strip.getHeight() / frames;
+		List<NativeImage> parts = new ArrayList<>();
+		for (int f = 0; f < frames; f++) {
+			NativeImage part = new NativeImage(w, h, true);
+			for (int y = 0; y < h; y++) {
+				for (int x = 0; x < w; x++) {
+					part.setPixel(x, y, strip.getPixel(x, f * h + y));
+				}
+			}
+			parts.add(part);
+		}
+		return parts;
 	}
 
 	@Override

@@ -18,5 +18,10 @@
     "id": "midnight",
     "name": "Midnight",
     "free": true
+  },
+  {
+    "id": "borealis",
+    "name": "Borealis",
+    "free": true
   }
 ]

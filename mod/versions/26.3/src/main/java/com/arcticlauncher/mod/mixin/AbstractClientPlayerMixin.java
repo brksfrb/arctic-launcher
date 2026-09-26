@@ -41,6 +41,7 @@ abstract class AbstractClientPlayerMixin {
 	}
 
 	private static Identifier ready(String hash) {
-		return ArcticClient.looks().texture(hash) ? GfxImpl.look(hash) : null;
+		// Animated capes show the current frame.
+		return ArcticClient.looks().texture(hash) ? GfxImpl.look(ArcticClient.looks().frame(hash)) : null;
 	}
 }

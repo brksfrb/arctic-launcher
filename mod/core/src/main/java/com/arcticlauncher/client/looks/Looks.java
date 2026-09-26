@@ -30,6 +30,9 @@ public final class Looks {
 	private static final long RETRY_MS = TimeUnit.MINUTES.toMillis(1);
 	private static final int BATCH = 100;
 	private static final Gson GSON = new Gson();
+	/** Animated capes: frame length and the most frames (as the launcher). */
+	private static final long CAPE_FRAME_MS = 125;
+	private static final int MAX_CAPE_FRAMES = 8;
 
 	private final Platform platform;
 	private final ClientConfig config;
@@ -45,7 +48,10 @@ public final class Looks {
 
 	private final Map<UUID, Look> players = new ConcurrentHashMap<UUID, Look>();
 	private final Set<UUID> pending = Collections.newSetFromMap(new ConcurrentHashMap<UUID, Boolean>());
-	private final Set<String> ready = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+	/** Texture hash → frame count (1 unless an animated cape). */
+	private final Map<String, Integer> ready = new ConcurrentHashMap<String, Integer>();
+	/** Hashes known to be capes, which may be animated. */
+	private final Set<String> capes = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
 	private final Set<String> loading = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
 	/** Bumped whenever something the menu shows changes. */
 	private final AtomicInteger version = new AtomicInteger();
@@ -94,7 +100,7 @@ public final class Looks {
 		if (hash == null) {
 			return false;
 		}
-		if (ready.contains(hash)) {
+		if (ready.containsKey(hash)) {
 			return true;
 		}
 		if (loading.add(hash)) {
@@ -108,16 +114,39 @@ public final class Looks {
 		return false;
 	}
 
-	/** The adapter registered a texture; it can be drawn now. */
-	public void textureReady(String hash) {
-		ready.add(hash);
+	/** The adapter registered a texture (with its frames); it can be drawn now. */
+	public void textureReady(String hash, int frames) {
+		ready.put(hash, Math.max(1, frames));
 		version.incrementAndGet();
+	}
+
+	/**
+	 * The texture to draw now for a ready hash: {@code hash}, or for an
+	 * animated cape {@code hash/frame}, cycling at 8 frames a second.
+	 */
+	public String frame(String hash) {
+		Integer frames = ready.get(hash);
+		if (frames == null || frames < 2) {
+			return hash;
+		}
+		long frame = (System.currentTimeMillis() / CAPE_FRAME_MS) % frames;
+		return hash + "/" + frame;
+	}
+
+	/** Frames in a cape image: 1 plain, more when animated, 0 if invalid. */
+	public static int capeFrames(int width, int height) {
+		int frame = width / 2;
+		if (frame == 0 || height % frame != 0) {
+			return 0;
+		}
+		int frames = height / frame;
+		return frames <= MAX_CAPE_FRAMES ? frames : 0;
 	}
 
 	private void loadTexture(final String hash) {
 		try {
 			byte[] png = Http.get(baseUrl + "/v1/textures/" + hash + ".png", null);
-			platform.registerTexture(hash, png);
+			platform.registerTexture(hash, png, capes.contains(hash));
 		} catch (Exception e) {
 			platform.log(false, "texture " + hash + ": " + e);
 			worker.schedule(new Runnable() {
@@ -159,11 +188,15 @@ public final class Looks {
 		}
 	}
 
-	private static Look parseLook(JsonObject o, long now) {
+	private Look parseLook(JsonObject o, long now) {
 		if (o == null) {
 			return new Look(null, false, null, now);
 		}
-		return new Look(string(o, "skin"), "slim".equals(string(o, "model")), string(o, "cape"), now);
+		String cape = string(o, "cape");
+		if (cape != null) {
+			capes.add(cape);
+		}
+		return new Look(string(o, "skin"), "slim".equals(string(o, "model")), cape, now);
 	}
 
 	private static String string(JsonObject o, String key) {
@@ -217,6 +250,7 @@ public final class Looks {
 			Preset[] items = GSON.fromJson(Http.getText(baseUrl + "/v1/catalog", null), Preset[].class);
 			presets = items == null ? Collections.<Preset>emptyList() : Collections.unmodifiableList(Arrays.asList(items));
 			for (Preset p : presets) {
+				capes.add(p.texture);
 				texture(p.texture);
 			}
 		} catch (Exception e) {

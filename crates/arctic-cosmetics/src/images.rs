@@ -4,6 +4,9 @@ use sha1::{Digest, Sha1};
 
 /// Largest upload accepted (a 512×256 HD cape is well under this).
 pub const MAX_PNG_BYTES: usize = 256 * 1024;
+/// Animated capes stack up to this many frames vertically (clients play
+/// them at 8 frames a second).
+pub const MAX_CAPE_FRAMES: u32 = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -24,15 +27,24 @@ pub fn check(png_bytes: &[u8], kind: Kind) -> Result<String, String> {
     let ok = match kind {
         // Classic 64×64 skins and legacy 64×32 ones.
         Kind::Skin => w == 64 && (h == 64 || h == 32),
-        // Capes are 2:1, from 64×32 up to 512×256 (HD capes).
-        Kind::Cape => w * 32 == h * 64 && (64..=512).contains(&w) && w.is_power_of_two(),
+        // Capes are 2:1 frames, from 64×32 up to 512×256 (HD capes),
+        // stacked vertically when animated.
+        Kind::Cape => {
+            let frame = w / 2;
+            (64..=512).contains(&w)
+                && w.is_power_of_two()
+                && h.is_multiple_of(frame)
+                && (1..=MAX_CAPE_FRAMES).contains(&(h / frame))
+        }
     };
     if !ok {
         return Err(format!(
             "a {w}×{h} image is not a valid {}",
             match kind {
                 Kind::Skin => "skin (64×64)",
-                Kind::Cape => "cape (64×32, or 128×64 up to 512×256)",
+                Kind::Cape => {
+                    "cape (64×32, or 128×64 up to 512×256; animated capes stack up to 8 frames)"
+                }
             }
         ));
     }
@@ -76,6 +88,11 @@ mod tests {
         assert!(check(&test_png(64, 32), Kind::Cape).is_ok());
         assert!(check(&test_png(128, 64), Kind::Cape).is_ok());
         assert!(check(&test_png(96, 48), Kind::Cape).is_err());
+        // Animated: frames stacked vertically, at most 8.
+        assert!(check(&test_png(64, 32 * 6), Kind::Cape).is_ok());
+        assert!(check(&test_png(128, 64 * 8), Kind::Cape).is_ok());
+        assert!(check(&test_png(64, 32 * 9), Kind::Cape).is_err());
+        assert!(check(&test_png(64, 48), Kind::Cape).is_err());
         assert!(check(b"nope", Kind::Cape).is_err());
     }
 

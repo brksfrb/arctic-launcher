@@ -196,7 +196,8 @@ async fn custom_capes_are_checked_but_not_restricted() {
     )
     .await;
     assert_eq!(s, StatusCode::OK);
-    let wrong = images::test_png(64, 64);
+    // Not 2:1 frames (64×64 would be a two-frame animated cape).
+    let wrong = images::test_png(64, 48);
     let (s, v) = call(
         &app,
         "PUT",

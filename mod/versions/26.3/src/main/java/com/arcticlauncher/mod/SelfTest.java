@@ -69,6 +69,8 @@ final class SelfTest {
 		boolean skin = look != null && (look.skin == null || ArcticClient.looks().texture(look.skin));
 		if (cape && skin) {
 			ArcticMod.LOG.info("selftest: look skin={} cape={} slim={}", look.skin, look.cape, look.slim);
+			ArcticMod.LOG.info("selftest: cape frame now {}", ArcticClient.looks().frame(look.cape));
+			TIMER.schedule(() -> ArcticMod.LOG.info("selftest: cape frame later {}", ArcticClient.looks().frame(look.cape)), 300, TimeUnit.MILLISECONDS);
 			tour();
 		} else if (attempt < 20) {
 			TIMER.schedule(() -> waitForLook(attempt + 1), 1, TimeUnit.SECONDS);

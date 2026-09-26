@@ -1,5 +1,5 @@
 //! Publish a look for the active account of a data dir, the way the
-//! launcher does: `look_smoke <data-dir> <skin.png> [slim]`
+//! launcher does: `look_smoke <data-dir> <skin.png> [slim|classic] [cape preset]`
 //! (set ARCTIC_COSMETICS_URL to a local server).
 use arctic_core::auth::AccountStore;
 use arctic_core::cosmetics::{self, CapeChoice, NewLook, Texture};
@@ -16,6 +16,7 @@ fn main() {
     } else {
         Variant::Classic
     };
+    let cape = args.next().unwrap_or_else(|| "aurora".into());
     let account = AccountStore::load(&dirs)
         .unwrap()
         .active()
@@ -30,7 +31,7 @@ fn main() {
         &token,
         &NewLook {
             skin: Some((Texture::Png(png), variant)),
-            cape: Some(CapeChoice::Preset("aurora".into())),
+            cape: Some(CapeChoice::Preset(cape.clone())),
         },
     )
     .unwrap();
@@ -45,6 +46,7 @@ fn main() {
     let look = cosmetics::set_look(&base, &token, &next).unwrap();
     println!("cape changed: {look:?}");
     next = NewLook::from_look(&look, &presets);
-    next.cape = Some(CapeChoice::Preset("aurora".into()));
+    // Finish on the chosen cape.
+    next.cape = Some(CapeChoice::Preset(cape));
     cosmetics::set_look(&base, &token, &next).unwrap();
 }
