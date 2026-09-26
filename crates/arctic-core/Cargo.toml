@@ -20,17 +20,24 @@ open = "5.4.4"
 png = "0.18.1"
 self-replace = "1.5.0"
 semver = "1.0.28"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+zeroize = "1.9"
+regex = "1.13"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sha1 = "0.11.0"
 sha2 = "0.11.0"
 thiserror = "2.0.21"
-ureq = { version = "3.4.2", features = ["json", "platform-verifier"] }
+ureq = { version = "3.4.2", features = ["json", "platform-verifier", "socks-proxy"] }
 uuid = { version = "1.26.1", features = ["v4", "serde"] }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 [target."cfg(windows)".dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_System_SystemInformation"] }
+windows-sys = { version = "0.61.2", features = ["Win32_System_SystemInformation", "Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Registry"] }
+
+[target."cfg(not(windows))".dependencies]
+aes-gcm = "0.10"
+getrandom = "0.3"
 
 [build-dependencies]
 serde_json = "1.0.151"

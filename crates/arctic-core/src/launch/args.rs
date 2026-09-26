@@ -15,6 +15,8 @@ pub struct JvmOptions {
     pub logging_arg: Option<String>,
     pub fullscreen: bool,
     pub resolution: (u32, u32),
+    /// Appended after the version's game arguments (e.g. `--proxyHost`).
+    pub game_extra: Vec<String>,
 }
 
 /// Placeholder values for `${name}` substitution.
@@ -66,6 +68,7 @@ pub fn build(
     if opts.fullscreen {
         args.push("--fullscreen".into());
     }
+    args.extend(opts.game_extra.iter().cloned());
     args
 }
 

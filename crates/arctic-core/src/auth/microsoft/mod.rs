@@ -57,7 +57,7 @@ pub fn refresh(cfg: &MsaConfig, account: &Account) -> Result<Account> {
     let AccountKind::Microsoft(session) = &account.kind else {
         return Ok(account.clone());
     };
-    let tokens = oauth::refresh(cfg, &session.refresh_token)?;
+    let tokens = oauth::refresh(cfg, &session.refresh_token.reveal())?;
     let refreshed = complete_login(tokens, cfg.is_live())?;
     Ok(Account {
         id: account.id.clone(),
@@ -78,8 +78,8 @@ fn complete_login(tokens: MsaTokens, live: bool) -> Result<Account> {
         username: profile.name,
         uuid: profile.id,
         kind: AccountKind::Microsoft(MicrosoftSession {
-            refresh_token,
-            access_token: mc.access_token,
+            refresh_token: crate::secret::Secret::new(refresh_token),
+            access_token: crate::secret::Secret::new(mc.access_token),
             expires_at: now_secs() + mc.expires_in,
             xuid: xsts.xuid,
         }),

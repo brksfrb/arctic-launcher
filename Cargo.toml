@@ -10,6 +10,11 @@ repository = "https://github.com/brksfrb/arctic-launcher"
 homepage = "https://arcticlauncher.com"
 authors = ["Arctic Launcher contributors"]
 
+# Dependencies (zip, inflate, JSON) optimized even in dev builds: reading
+# thousands of mod jars when importing is otherwise very slow.
+[profile.dev.package."*"]
+opt-level = 2
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

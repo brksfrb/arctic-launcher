@@ -92,7 +92,7 @@ impl ArcticApp {
             sort: search.sort,
             offset,
             limit: PAGE_SIZE,
-            modpacks: false,
+            project_type: arctic_core::mods::ProjectType::Mod,
         };
         self.tasks.mod_search(search.request, query);
     }

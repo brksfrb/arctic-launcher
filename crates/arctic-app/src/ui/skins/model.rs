@@ -1,9 +1,11 @@
 //! A textured 3D player model drawn with egui meshes: each body part is a
 //! box whose faces map to the standard 64×64 skin layout. Faces are
-//! back-face culled and painted far-to-near.
+//! back-face culled and painted far-to-near. Worn 3D cosmetics are drawn
+//! with it, placed exactly as the game places them.
 
 use std::f32::consts::PI;
 
+use arctic_core::cosmetic_models::Geometry;
 use arctic_core::skins::Variant;
 use eframe::egui::{self, Color32, Mesh, Pos2, Rect, TextureId, pos2};
 
@@ -50,7 +52,15 @@ struct Face {
     texture: TextureId,
 }
 
+/// A 3D cosmetic to draw: its geometry and texture.
+#[derive(Clone, Copy)]
+pub struct Worn<'a> {
+    pub geometry: &'a Geometry,
+    pub texture: TextureId,
+}
+
 /// Draw the player into `rect`. `cape` is a 64×32 cape texture.
+#[allow(clippy::too_many_arguments)]
 pub fn paint(
     painter: &egui::Painter,
     rect: Rect,
@@ -58,6 +68,7 @@ pub fn paint(
     variant: Variant,
     has_overlay: bool,
     cape: Option<TextureId>,
+    cosmetics: &[Worn],
     pose: Pose,
 ) {
     let scale = rect.height() / (HEIGHT + 6.0);
@@ -82,6 +93,9 @@ pub fn paint(
             32.0,
             &view,
         ));
+    }
+    for worn in cosmetics {
+        faces.extend(cosmetic_faces(worn, &view));
     }
     // One depth order for body and cape, so each hides the other correctly;
     // consecutive faces with the same texture share a mesh.
@@ -324,6 +338,221 @@ fn cape_part(swing: f32) -> Part {
     part
 }
 
+/// Draw one cosmetic on its own, turning slowly, fitted to `rect`.
+pub fn paint_cosmetic(painter: &egui::Painter, rect: Rect, worn: Worn, yaw: f32) {
+    let pose = Pose {
+        yaw,
+        pitch: 0.25,
+        swing: 0.0,
+    };
+    let view = |p: V3| rotate_view(p, pose);
+    let faces = cosmetic_faces(&worn, &view);
+    let (mut lo, mut hi) = ([f32::MAX; 2], [f32::MIN; 2]);
+    for c in faces.iter().flat_map(|f| f.corners) {
+        lo = [lo[0].min(c[0]), lo[1].min(c[1])];
+        hi = [hi[0].max(c[0]), hi[1].max(c[1])];
+    }
+    if faces.is_empty() {
+        return;
+    }
+    let size = (hi[0] - lo[0]).max(hi[1] - lo[1]).max(1.0);
+    let scale = rect.width().min(rect.height()) * 0.8 / size;
+    let mid = [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0];
+    let center = rect.center();
+    let project = |p: V3| {
+        pos2(
+            center.x + (p[0] - mid[0]) * scale,
+            center.y - (p[1] - mid[1]) * scale,
+        )
+    };
+    painter.add(mesh(&faces, &project));
+}
+
+/// Model height in Java model space: Bedrock y (feet at 0, up) is 24 - y there.
+const JAVA_HEIGHT: f32 = 24.0;
+type Mat = [[f32; 3]; 3];
+
+/// A bone's placement in Java model space: rotation, then translation.
+#[derive(Clone, Copy)]
+struct Placement {
+    rot: Mat,
+    at: V3,
+}
+
+impl Placement {
+    const IDENTITY: Self = Self {
+        rot: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+        at: [0.0; 3],
+    };
+
+    fn apply(&self, p: V3) -> V3 {
+        let r = &self.rot;
+        [
+            r[0][0] * p[0] + r[0][1] * p[1] + r[0][2] * p[2] + self.at[0],
+            r[1][0] * p[0] + r[1][1] * p[1] + r[1][2] * p[2] + self.at[1],
+            r[2][0] * p[0] + r[2][1] * p[1] + r[2][2] * p[2] + self.at[2],
+        ]
+    }
+
+    /// Like Minecraft's ModelPart: move to `offset`, then rotate Z·Y·X.
+    fn then(&self, offset: V3, degrees: V3) -> Self {
+        let at = self.apply(offset);
+        let [x, y, z] = degrees.map(f32::to_radians);
+        let rot = mul(&self.rot, &mul(&rot_z(z), &mul(&rot_y(y), &rot_x(x))));
+        Self { rot, at }
+    }
+}
+
+fn mul(a: &Mat, b: &Mat) -> Mat {
+    let mut out = [[0.0; 3]; 3];
+    for (i, row) in out.iter_mut().enumerate() {
+        for (j, cell) in row.iter_mut().enumerate() {
+            *cell = (0..3).map(|k| a[i][k] * b[k][j]).sum();
+        }
+    }
+    out
+}
+
+fn rot_x(a: f32) -> Mat {
+    let (s, c) = a.sin_cos();
+    [[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]]
+}
+
+fn rot_y(a: f32) -> Mat {
+    let (s, c) = a.sin_cos();
+    [[c, 0.0, s], [0.0, 1.0, 0.0], [-s, 0.0, c]]
+}
+
+fn rot_z(a: f32) -> Mat {
+    let (s, c) = a.sin_cos();
+    [[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]]
+}
+
+/// A bone's pivot in Java model space.
+fn java_pivot(pivot: [f32; 3]) -> V3 {
+    [pivot[0], JAVA_HEIGHT - pivot[1], pivot[2]]
+}
+
+/// Java model space to the preview's (y up, front toward +z), and back:
+/// a half turn around x, so the same map both ways.
+fn flip(p: V3) -> V3 {
+    [p[0], -p[1], -p[2]]
+}
+
+/// Visible faces of a cosmetic: each bone placed like the game's model
+/// parts, each cube's faces laid out with the preview's box UVs.
+fn cosmetic_faces(worn: &Worn, view: &impl Fn(V3) -> V3) -> Vec<Face> {
+    let g = worn.geometry;
+    let (tex_w, tex_h) = (g.texture_width as f32, g.texture_height as f32);
+    let mut faces = Vec::new();
+    // Roots first, then children once their parent is placed (depth <= bones).
+    let mut placed: Vec<(&str, Placement, V3)> = Vec::new();
+    for _ in 0..g.bones.len() {
+        for bone in &g.bones {
+            if placed.iter().any(|(n, _, _)| *n == bone.name) {
+                continue;
+            }
+            let parent = match &bone.parent {
+                None => Some((Placement::IDENTITY, [0.0; 3])),
+                Some(p) => placed
+                    .iter()
+                    .find(|(n, _, _)| n == p)
+                    .map(|(_, at, pivot)| (*at, *pivot)),
+            };
+            let Some((parent_at, parent_pivot)) = parent else {
+                continue;
+            };
+            let pivot = java_pivot(bone.pivot);
+            let offset = sub(pivot, parent_pivot);
+            let at = parent_at.then(offset, bone.rotation);
+            placed.push((&bone.name, at, pivot));
+            for cube in &bone.cubes {
+                faces.extend(cube_faces(
+                    cube,
+                    pivot,
+                    &at,
+                    worn.texture,
+                    tex_w,
+                    tex_h,
+                    view,
+                ));
+            }
+        }
+    }
+    faces
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cube_faces(
+    cube: &arctic_core::cosmetic_models::Cube,
+    pivot: V3,
+    at: &Placement,
+    texture: TextureId,
+    tex_w: f32,
+    tex_h: f32,
+    view: &impl Fn(V3) -> V3,
+) -> Vec<Face> {
+    let [w, h, d] = cube.size;
+    // The cube in the bone's Java space (y down), grown by `inflate`.
+    let min = [
+        cube.origin[0] - pivot[0] - cube.inflate,
+        JAVA_HEIGHT - cube.origin[1] - h - pivot[1] - cube.inflate,
+        cube.origin[2] - pivot[2] - cube.inflate,
+    ];
+    let max = [
+        min[0] + w + 2.0 * cube.inflate,
+        min[1] + h + 2.0 * cube.inflate,
+        min[2] + d + 2.0 * cube.inflate,
+    ];
+    // The same box in the preview's orientation, so its faces get the
+    // preview's (already correct) box-UV layout.
+    let (a, b) = (flip(min), flip(max));
+    let part = cuboid(
+        [a[0].min(b[0]), a[1].min(b[1]), a[2].min(b[2])],
+        [w, h, d],
+        (cube.uv[0], cube.uv[1]),
+        0.0,
+        [0.0; 3],
+        0.0,
+    );
+    let part = Part {
+        max: [a[0].max(b[0]), a[1].max(b[1]), a[2].max(b[2])],
+        ..part
+    };
+    let mut boxes = box_faces(&part);
+    if cube.mirror {
+        // Mirrored cubes swap their sides and flip every face sideways.
+        let (right, left) = (boxes[2].2, boxes[3].2);
+        boxes[2].2 = left;
+        boxes[3].2 = right;
+        for face in &mut boxes {
+            let uv = face.2;
+            face.2 = [uv[1], uv[0], uv[3], uv[2]];
+        }
+    }
+    let place = |p: V3| {
+        let world = at.apply(flip(p));
+        view([world[0], JAVA_HEIGHT - world[1], -world[2]])
+    };
+    let origin = place([0.0; 3]);
+    let mut out = Vec::new();
+    for (corners, normal, uv) in boxes {
+        let n = sub(place(normal), origin);
+        if n[2] <= 1e-4 {
+            continue;
+        }
+        let corners = corners.map(place);
+        let depth = corners.iter().map(|c| c[2]).sum::<f32>() / 4.0;
+        out.push(Face {
+            corners,
+            uv: uv.map(|(u, v)| pos2(u / tex_w, v / tex_h)),
+            depth,
+            texture,
+        });
+    }
+    out
+}
+
 /// Default idle pose: a gentle walk cycle.
 pub fn idle_swing(time: f64) -> f32 {
     ((time * 1.6).sin() as f32) * 0.35
@@ -408,5 +637,28 @@ mod tests {
     fn legacy_skins_skip_body_overlays() {
         assert_eq!(parts(Variant::Classic, true, 0.0).len(), 12);
         assert_eq!(parts(Variant::Slim, false, 0.0).len(), 7);
+    }
+
+    #[test]
+    fn a_halo_sits_above_the_head_facing_the_viewer() {
+        let geometry = Geometry::parse(
+            br#"{"minecraft:geometry":[{"description":{"texture_width":32,"texture_height":32},
+                "bones":[{"name":"head","pivot":[0,24,0],"cubes":[{"origin":[-4,34,-5],"size":[8,1,1],"uv":[0,0]}]}]}]}"#,
+        )
+        .unwrap();
+        let worn = Worn {
+            geometry: &geometry,
+            texture: TextureId::default(),
+        };
+        let view = |p: V3| p;
+        let faces = cosmetic_faces(&worn, &view);
+        assert!(!faces.is_empty());
+        // Above the head (top at 32), toward the front (+z in the preview).
+        for face in &faces {
+            for c in face.corners {
+                assert!((34.0..=35.0).contains(&c[1]), "{c:?}");
+                assert!((4.0..=5.0).contains(&c[2]), "{c:?}");
+            }
+        }
     }
 }

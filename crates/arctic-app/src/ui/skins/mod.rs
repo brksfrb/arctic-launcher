@@ -63,7 +63,7 @@ impl SkinTexture {
 
 /// Texture keys: `lib:<id>` library skin, `mc` Minecraft skin,
 /// `mccape:<id>` Minecraft cape, `askin:<hash>` Arctic skin,
-/// `acape:<hash>` Arctic cape.
+/// `acape:<hash>` Arctic cape, `acos:<hash>` Arctic cosmetic texture.
 #[derive(Default)]
 pub struct SkinsUi {
     loaded_for: Option<PathBuf>,
@@ -203,6 +203,9 @@ impl ArcticApp {
 
     /// Texture for a key (see `SkinsUi`), uploading on first use.
     pub(crate) fn skin_texture(&mut self, ctx: &egui::Context, key: &str) -> Option<&SkinTexture> {
+        if key == MANNEQUIN && !self.skins.textures.contains_key(key) {
+            self.skins.textures.insert(key.to_owned(), mannequin(ctx));
+        }
         if !self.skins.textures.contains_key(key) {
             if self.skins.failed.contains(key) {
                 return None;
@@ -227,6 +230,7 @@ impl ArcticApp {
         if let Some(hash) = key
             .strip_prefix("askin:")
             .or_else(|| key.strip_prefix("acape:"))
+            .or_else(|| key.strip_prefix("acos:"))
         {
             return self.arctic_state()?.png(hash).map(<[u8]>::to_vec);
         }
@@ -367,6 +371,9 @@ fn upload(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture> {
     if key.starts_with("mccape:") || key.starts_with("acape:") {
         return upload_cape(ctx, key, png);
     }
+    if key.starts_with("acos:") {
+        return upload_plain(ctx, key, png);
+    }
     let image = skins::decode(png).ok()?;
     let color = ColorImage::from_rgba_unmultiplied([64, 64], &image.rgba);
     let handle = ctx.load_texture(key, color, TextureOptions::NEAREST);
@@ -378,8 +385,74 @@ fn upload(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture> {
     })
 }
 
+/// Texture key of the plain figure shown when there's no skin yet.
+pub(crate) const MANNEQUIN: &str = "mannequin";
+
+/// A plain, featureless figure in the skin layout (so cosmetics can be
+/// previewed before any skin is chosen). Drawn in code: no bundled art.
+fn mannequin(ctx: &egui::Context) -> SkinTexture {
+    let mut rgba = vec![0u8; 64 * 64 * 4];
+    // (x, y, w, h, shade) of each base-layer region in the 64×64 layout.
+    let regions: [(usize, usize, usize, usize, u8); 6] = [
+        (0, 0, 32, 16, 196),   // head
+        (16, 16, 24, 16, 176), // body
+        (40, 16, 16, 16, 186), // right arm
+        (32, 48, 16, 16, 186), // left arm
+        (0, 16, 16, 16, 160),  // right leg
+        (16, 48, 16, 16, 160), // left leg
+    ];
+    for (x0, y0, w, h, shade) in regions {
+        for y in y0..y0 + h {
+            for x in x0..x0 + w {
+                let i = (y * 64 + x) * 4;
+                // A faint checker keeps the shape readable when turning.
+                let tint = if (x + y) % 2 == 0 { 0 } else { 8 };
+                rgba[i..i + 4].copy_from_slice(&[
+                    shade - tint,
+                    shade - tint + 6,
+                    shade - tint + 14,
+                    255,
+                ]);
+            }
+        }
+    }
+    let color = ColorImage::from_rgba_unmultiplied([64, 64], &rgba);
+    SkinTexture {
+        handle: ctx.load_texture(MANNEQUIN, color, TextureOptions::NEAREST),
+        overlay: false,
+        guessed: Variant::Classic,
+        frames: Vec::new(),
+    }
+}
+
+/// Largest cosmetic texture side (as the server and game allow).
+const MAX_COSMETIC_TEXTURE: u32 = 512;
+
+/// A cosmetic texture: any power-of-two PNG up to 512 on a side.
+fn upload_plain(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture> {
+    let (w, h) = arctic_core::cosmetics::png_size(png)?;
+    let side = |s: u32| (1..=MAX_COSMETIC_TEXTURE).contains(&s) && s.is_power_of_two();
+    if !side(w) || !side(h) {
+        return None;
+    }
+    let image = image::load_from_memory(png).ok()?.to_rgba8();
+    let size = [image.width() as usize, image.height() as usize];
+    let color = ColorImage::from_rgba_unmultiplied(size, image.as_raw());
+    let handle = ctx.load_texture(key, color, TextureOptions::NEAREST);
+    Some(SkinTexture {
+        handle,
+        overlay: false,
+        guessed: Variant::Classic,
+        frames: Vec::new(),
+    })
+}
+
 /// A cape texture; animated capes become one texture per frame.
 fn upload_cape(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture> {
+    // Only cape-sized images get decoded (a bad file could claim any size).
+    if !arctic_core::cosmetics::is_cape_png(png) {
+        return None;
+    }
     let image = image::load_from_memory(png).ok()?.to_rgba8();
     let (w, h) = image.dimensions();
     let count = arctic_core::cosmetics::cape_frames(w, h).unwrap_or(1);

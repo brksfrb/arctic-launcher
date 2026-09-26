@@ -8,11 +8,12 @@ use eframe::egui::{
 use arctic_core::instances::Instance;
 use arctic_core::versions::{VersionEntry, VersionKind, VersionManifest};
 
-use crate::app::{AddAccount, ArcticApp, LaunchState, ManifestState, Tab};
+use crate::app::{AddAccount, ArcticApp, ManifestState, Tab};
 use crate::art::avatar::paint_face;
 use crate::art::icons::{self, Icon};
 use crate::art::lerp_color;
 use crate::motion::{format_bytes, format_duration};
+use crate::runs::{Run, RunState};
 use crate::widgets::{self, PlayState};
 
 const PLAY_SIZE: [f32; 2] = [300.0, 62.0];
@@ -63,6 +64,46 @@ impl ArcticApp {
         });
         ui.add_space(10.0);
         self.launch_status(ui);
+        self.other_runs(ui);
+    }
+
+    /// The selected instance's game, while it's being prepared or runs.
+    fn selected_run(&self) -> Option<&Run> {
+        self.runs
+            .for_instance(&self.selected_instance().id)
+            .filter(|r| r.is_active())
+    }
+
+    /// Other games running at the same time, each with its log and a stop.
+    fn other_runs(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
+        let selected = self.selected_instance().id.clone();
+        let others: Vec<(crate::tasks::LaunchId, String, bool)> = self
+            .runs
+            .active()
+            .filter(|r| r.instance_id != selected)
+            .map(|r| (r.id, r.title.clone(), r.game().is_some()))
+            .collect();
+        if others.is_empty() {
+            return;
+        }
+        ui.add_space(14.0);
+        ui.label(RichText::new("ALSO RUNNING").small().color(p.muted));
+        let now = ui.input(|i| i.time);
+        for (id, title, started) in others {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(&title).color(p.text));
+                if widgets::icon_button(ui, p, Icon::Document, "View its log").clicked() {
+                    self.show_run_log(id, now);
+                }
+                if started
+                    && widgets::icon_button(ui, p, Icon::Stop, "Force close this game").clicked()
+                    && let Some(game) = self.runs.get(id).and_then(Run::game)
+                {
+                    game.kill();
+                }
+            });
+        }
     }
 
     /// Versions shown in pickers: releases, plus snapshots / old versions
@@ -415,8 +456,8 @@ impl ArcticApp {
     fn play_button(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         let label;
-        let state = match &self.launch {
-            LaunchState::Preparing { progress, .. } => {
+        let state = match self.selected_run().map(|r| &r.state) {
+            Some(RunState::Preparing { progress, .. }) => {
                 let fraction = (progress.bytes_total > 0)
                     .then(|| progress.bytes_done as f32 / progress.bytes_total as f32);
                 label = match fraction {
@@ -428,13 +469,13 @@ impl ArcticApp {
                     label: &label,
                 }
             }
-            LaunchState::Starting { .. } => PlayState::Progress {
+            Some(RunState::Starting { .. }) => PlayState::Progress {
                 fraction: None,
                 label: "Starting…",
             },
-            LaunchState::Running { .. } => PlayState::Running,
-            LaunchState::Idle if self.blocked_reason().is_some() => PlayState::Blocked,
-            LaunchState::Idle => PlayState::Ready,
+            Some(RunState::Running { .. }) => PlayState::Running,
+            _ if self.blocked_reason().is_some() => PlayState::Blocked,
+            _ => PlayState::Ready,
         };
         let response = widgets::play_button(ui, p, state, PLAY_SIZE.into());
         let now = ui.input(|i| i.time);
@@ -455,6 +496,18 @@ impl ArcticApp {
 
     fn quick_actions(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
+        if self.selected_run().is_some()
+            && widgets::tile_button(
+                ui,
+                p,
+                Icon::Plus,
+                "Play another copy (switch account first for a second player)",
+                PLAY_SIZE[1],
+            )
+            .clicked()
+        {
+            self.launch_another_copy();
+        }
         if widgets::tile_button(ui, p, Icon::Folder, "Open game folder", PLAY_SIZE[1]).clicked() {
             let dir = self.selected_instance().game_dir(&self.dirs);
             let _ = std::fs::create_dir_all(&dir);
@@ -476,7 +529,7 @@ impl ArcticApp {
         {
             let _ = open::that_detached(&log);
         }
-        if let LaunchState::Starting { game, .. } | LaunchState::Running { game, .. } = &self.launch
+        if let Some(game) = self.selected_run().and_then(Run::game)
             && widgets::tile_button(ui, p, Icon::Stop, "Force close Minecraft", PLAY_SIZE[1])
                 .clicked()
         {
@@ -498,8 +551,8 @@ impl ArcticApp {
 
     fn launch_status(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        let text = match &self.launch {
-            LaunchState::Preparing { progress, meter } if progress.bytes_total > 0 => {
+        let text = match self.selected_run().map(|r| &r.state) {
+            Some(RunState::Preparing { progress, meter }) if progress.bytes_total > 0 => {
                 let remaining = progress.bytes_total.saturating_sub(progress.bytes_done);
                 let mut parts = vec![
                     progress.stage.clone(),
@@ -518,10 +571,10 @@ impl ArcticApp {
                 }
                 parts.join("  ·  ")
             }
-            LaunchState::Preparing { progress, .. } => format!("{}…", progress.stage),
-            LaunchState::Starting { .. } => "Starting Minecraft…".into(),
-            LaunchState::Running { .. } => "Minecraft is running. Have fun!".into(),
-            LaunchState::Idle => match self.blocked_reason() {
+            Some(RunState::Preparing { progress, .. }) => format!("{}…", progress.stage),
+            Some(RunState::Starting { .. }) => "Starting Minecraft…".into(),
+            Some(RunState::Running { .. }) => "Minecraft is running. Have fun!".into(),
+            _ => match self.blocked_reason() {
                 Some(reason) => reason.into(),
                 None if self.selected_installed() => "Ready to play.".into(),
                 None => "This version will be downloaded when you press Play.".into(),

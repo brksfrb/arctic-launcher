@@ -15,6 +15,21 @@ pub fn total_memory_mb() -> Option<u64> {
 
 /// A sensible `-Xmx` for this machine: a quarter of RAM, between 2 and
 /// 8 GiB, rounded down to 512 MiB.
+/// This computer's network name, if known (no lookups).
+pub fn host_name() -> Option<String> {
+    let from_env = ["COMPUTERNAME", "HOSTNAME"]
+        .iter()
+        .find_map(|k| std::env::var(k).ok());
+    from_env
+        .or_else(|| std::fs::read_to_string("/etc/hostname").ok())
+        .map(|n| n.trim().to_owned())
+        .filter(|n| {
+            !n.is_empty()
+                && n.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
+        })
+}
+
 pub fn recommended_memory_mb(total_mb: Option<u64>) -> u32 {
     let Some(total) = total_mb else {
         return 4 * 1024;

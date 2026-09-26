@@ -1,5 +1,6 @@
 //! Vector art: backdrop scenery, logo, icons, avatars and the intro splash.
-//! No image files; everything is drawn with egui shapes.
+//! No image files; everything is drawn with egui shapes, except the brand
+//! mark, which is the app icon's own rasterizer rendered to a texture.
 
 pub mod avatar;
 pub mod flakes;
@@ -10,7 +11,10 @@ pub mod splash;
 use std::f32::consts::{PI, TAU};
 
 use eframe::egui::epaint::Mesh;
-use eframe::egui::{self, Align2, Color32, FontId, Painter, Pos2, Sense, Stroke, Ui, Vec2, vec2};
+use eframe::egui::{
+    self, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, TextureHandle, Ui, Vec2,
+    vec2,
+};
 
 use crate::theme::Palette;
 
@@ -93,7 +97,7 @@ pub fn logo(ui: &mut Ui, p: &Palette) {
     let center = rect.left_center() + vec2(22.0, 0.0);
     let t = ui.input(|i| i.time) as f32;
     glow(&painter, center, 26.0, p.accent, 0.8);
-    snowflake(&painter, center, 17.0, t * 0.15, p.accent);
+    brand_mark(ui.ctx(), &painter, center, 19.0, t * 0.15);
     painter.text(
         center + vec2(30.0, -9.0),
         Align2::LEFT_CENTER,
@@ -108,6 +112,39 @@ pub fn logo(ui: &mut Ui, p: &Palette) {
         FontId::proportional(11.0),
         p.muted,
     );
+}
+
+/// Texture resolution of the brand mark (sharp up to ~2x DPI at logo size).
+const MARK_TEXTURE: u32 = 160;
+/// Tip of the mark's arms, as a fraction of the icon's size.
+const MARK_TIP: f32 = 0.46;
+
+/// The Arctic mark (same art as the window and .exe icon), with its arms
+/// reaching `radius` from `center`, turned by `rotation` radians.
+pub fn brand_mark(
+    ctx: &egui::Context,
+    painter: &Painter,
+    center: Pos2,
+    radius: f32,
+    rotation: f32,
+) {
+    let id = egui::Id::new("arctic-brand-mark");
+    let texture = ctx
+        .data_mut(|d| d.get_temp::<TextureHandle>(id))
+        .unwrap_or_else(|| {
+            let rgba = crate::icon_raster::app_icon_rgba(MARK_TEXTURE);
+            let size = [MARK_TEXTURE as usize; 2];
+            let image = egui::ColorImage::from_rgba_unmultiplied(size, &rgba);
+            let handle = ctx.load_texture("arctic-brand-mark", image, egui::TextureOptions::LINEAR);
+            ctx.data_mut(|d| d.insert_temp(id, handle.clone()));
+            handle
+        });
+    let rect = Rect::from_center_size(center, Vec2::splat(radius / MARK_TIP));
+    let uv = Rect::from_min_max(Pos2::ZERO, egui::pos2(1.0, 1.0));
+    let mut mesh = Mesh::with_texture(texture.id());
+    mesh.add_rect_with_uv(rect, uv, Color32::WHITE);
+    mesh.rotate(egui::emath::Rot2::from_angle(rotation), center);
+    painter.add(egui::Shape::mesh(mesh));
 }
 
 #[cfg(test)]

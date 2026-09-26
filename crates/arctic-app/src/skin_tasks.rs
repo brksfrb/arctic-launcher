@@ -6,6 +6,7 @@ use std::collections::HashSet;
 
 use arctic_core::auth::microsoft::{self, MsaConfig};
 use arctic_core::auth::{Account, AccountKind, now_secs};
+use arctic_core::cosmetic_models;
 use arctic_core::cosmetics::{self, Look, NewLook, Preset};
 use arctic_core::skins::Variant;
 use arctic_core::skins::api::{self, Profile};
@@ -18,8 +19,10 @@ use crate::tasks::{Event, Tasks};
 pub struct ArcticState {
     pub presets: Vec<Preset>,
     pub look: Look,
-    /// (texture hash, PNG) for the presets and the current look.
+    /// (texture hash, PNG) for the presets, cosmetics and the current look.
     pub textures: Vec<(String, Vec<u8>)>,
+    /// 3D cosmetics with their parsed models (items that failed are left out).
+    pub items: Vec<(cosmetic_models::Item, cosmetic_models::Geometry)>,
 }
 
 impl ArcticState {
@@ -93,7 +96,7 @@ impl Tasks {
     }
 
     /// The account refreshed if needed (Microsoft tokens expire).
-    fn fresh_account(&self, account: Account) -> Result<Account> {
+    pub(crate) fn fresh_account(&self, account: Account) -> Result<Account> {
         if account.needs_refresh(now_secs()) {
             let cfg = MsaConfig::load(self.dirs())?;
             let fresh = microsoft::refresh(&cfg, &account)?;
@@ -107,7 +110,7 @@ impl Tasks {
     /// A valid Minecraft access token, refreshing the login if needed.
     fn fresh_token(&self, account: Account) -> Result<String> {
         match self.fresh_account(account)?.kind {
-            AccountKind::Microsoft(session) => Ok(session.access_token),
+            AccountKind::Microsoft(session) => Ok(session.access_token.reveal().to_string()),
             AccountKind::Offline => Err(Error::Other(
                 "Minecraft skins can only be changed on Microsoft accounts.".into(),
             )),
@@ -138,7 +141,21 @@ impl Tasks {
             Some(new) => cosmetics::set_look(&base, &token, &new)?,
             None => cosmetics::my_look(&base, &token)?,
         };
+        // 3D cosmetics are optional: an older server just has none.
+        let items: Vec<_> = cosmetic_models::catalog(&base)
+            .map(|c| c.cosmetics)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|item| {
+                let bytes = cosmetic_models::asset(&base, &item.model).ok()?;
+                let geometry = cosmetic_models::Geometry::parse(&bytes)
+                    .inspect_err(|e| log::warn!("cosmetic {}: {e}", item.id))
+                    .ok()?;
+                Some((item, geometry))
+            })
+            .collect();
         let mut wanted: Vec<String> = presets.iter().map(|p| p.texture.clone()).collect();
+        wanted.extend(items.iter().map(|(i, _)| i.texture.clone()));
         wanted.extend(look.skin.clone());
         wanted.extend(look.cape.clone());
         let mut seen = HashSet::new();
@@ -151,6 +168,7 @@ impl Tasks {
             presets,
             look,
             textures,
+            items,
         })
     }
 

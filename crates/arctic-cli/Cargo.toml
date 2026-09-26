@@ -10,6 +10,7 @@ authors.workspace = true
 
 [dependencies]
 arctic-core = { version = "0.2.0", path = "../arctic-core" }
+arctic-share = { version = "0.2.0", path = "../arctic-share" }
 clap = { version = "4.6.7", features = ["derive", "env"] }
 log = "0.4.34"
 serde = { version = "1.0.229", features = ["derive"] }

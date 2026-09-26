@@ -6,16 +6,23 @@
 
 pub mod arctic_mod;
 pub mod auth;
+pub mod bridge;
+pub mod cosmetic_models;
 pub mod cosmetics;
+pub mod crash;
 pub mod error;
 pub mod instances;
 pub mod java;
 pub mod launch;
 pub mod loaders;
+pub mod migrate;
 pub mod mods;
 pub mod net;
 pub mod profiles;
+pub mod proxy;
+pub mod secret;
 pub mod settings;
+pub mod sharing;
 pub mod skins;
 pub mod storage;
 pub mod system;

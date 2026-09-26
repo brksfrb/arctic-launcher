@@ -42,6 +42,34 @@ pub fn sync(mods_dir: &Path, game_version: &str, enabled: bool) -> Result<()> {
     }
 }
 
+/// The oldest Fabric Loader the mod for `game` runs on (its
+/// `fabric.mod.json` says `"fabricloader": ">=x"`).
+pub fn min_loader(game_version: &str) -> Option<String> {
+    let jar = jar_for(game_version)?;
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(jar)).ok()?;
+    let mut text = String::new();
+    std::io::Read::read_to_string(&mut zip.by_name("fabric.mod.json").ok()?, &mut text).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let range = json.pointer("/depends/fabricloader")?.as_str()?;
+    Some(range.trim_start_matches(">=").trim().to_owned())
+}
+
+/// Can the mod for `game` run on Fabric Loader `loader_version`?
+pub fn loader_fits(game_version: &str, loader_version: &str) -> bool {
+    min_loader(game_version).is_none_or(|min| at_least(loader_version, &min))
+}
+
+/// `a >= b`, comparing the numbers in the versions (`0.19.10` > `0.19.5`).
+pub fn at_least(a: &str, b: &str) -> bool {
+    let nums = |s: &str| -> Vec<u64> {
+        s.split(|c: char| !c.is_ascii_digit())
+            .filter(|p| !p.is_empty())
+            .filter_map(|p| p.parse().ok())
+            .collect()
+    };
+    nums(a) >= nums(b)
+}
+
 /// Fabric loader version for running the Arctic Client on `game`: the
 /// newest stable build, remembered so launches also work offline.
 pub fn client_loader(dirs: &crate::storage::DataDirs, game: &str) -> Option<String> {
@@ -96,7 +124,7 @@ mod tests {
         sync(&mods, "26.3", false).unwrap();
         assert!(!path.exists());
         // Unsupported versions never get it.
-        sync(&mods, "1.20.1", true).unwrap();
+        sync(&mods, "1.8.9", true).unwrap();
         assert!(!path.exists());
     }
 

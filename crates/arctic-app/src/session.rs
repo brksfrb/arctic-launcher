@@ -5,10 +5,11 @@ use std::collections::HashMap;
 use arctic_core::auth::AccountStore;
 use arctic_core::auth::avatar::{self, Face};
 use arctic_core::instances::{self, Instance};
+use arctic_core::proxy::ProxySettings;
 use arctic_core::settings::Settings;
 use arctic_core::storage::DataDirs;
 
-use crate::app::{AddAccount, ArcticApp, LaunchState};
+use crate::app::{AddAccount, ArcticApp};
 use crate::tasks::Tasks;
 use crate::toasts::{Kind, Toasts};
 
@@ -19,6 +20,7 @@ pub struct ProfileData {
     pub instance: Instance,
     pub custom_instances: Vec<Instance>,
     pub faces: HashMap<String, Face>,
+    pub proxy: ProxySettings,
 }
 
 impl ProfileData {
@@ -31,6 +33,14 @@ impl ProfileData {
         };
         if let Err(e) = dirs.ensure() {
             note("Could not create data folders", e);
+        }
+        // Before anything goes online: the proxy applies to all of it.
+        let proxy = ProxySettings::load(dirs);
+        if let Err(e) = arctic_core::net::set_proxy(proxy.enabled.then_some(&proxy)) {
+            note(
+                "The proxy settings can't be used, so the launcher stays offline",
+                e,
+            );
         }
         let settings = Settings::load(dirs).unwrap_or_else(|e| {
             note("Settings were unreadable, using defaults", e);
@@ -52,6 +62,7 @@ impl ProfileData {
             instance,
             custom_instances,
             faces,
+            proxy,
         }
     }
 }
@@ -73,7 +84,7 @@ fn load_faces(dirs: &DataDirs, accounts: &AccountStore, tasks: &Tasks) -> HashMa
 impl ArcticApp {
     /// Why switching profiles is not possible right now, if it isn't.
     pub(crate) fn profile_switch_blocked(&self) -> Option<&'static str> {
-        if !matches!(self.launch, LaunchState::Idle) {
+        if self.runs.any_active() {
             Some("Close Minecraft before switching profiles.")
         } else if !matches!(self.add_account, AddAccount::Closed) {
             Some("Finish adding the account first.")

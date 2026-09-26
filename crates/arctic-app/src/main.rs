@@ -3,14 +3,18 @@
 
 mod app;
 mod art;
+mod bridge_host;
 mod devshot;
 mod discord;
 mod fonts;
 mod gallery_tasks;
 mod icon_raster;
 mod logbook;
+mod migrate_tasks;
 mod motion;
+mod runs;
 mod session;
+mod share_tasks;
 mod single_instance;
 mod skin_tasks;
 mod startup;

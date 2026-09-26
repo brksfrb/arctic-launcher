@@ -15,22 +15,34 @@ fn main() {
     let mut code =
         String::from("/// (Minecraft version, jar) for every version the client covers.\n");
     code.push_str("const JARS: &[(&str, &[u8])] = &[\n");
+    // Debug builds skip a jar that isn't built yet (a version being added);
+    // release builds must have every one.
+    let release = std::env::var("PROFILE").as_deref() == Ok("release");
+    let mut built = Vec::new();
     for target in targets.as_array().expect("a list of targets") {
         let build = target["build"].as_str().expect("build version");
         let jar = mod_dir.join("dist").join(format!("arctic-mod-{build}.jar"));
         println!("cargo:rerun-if-changed={}", jar.display());
-        assert!(
-            jar.exists(),
-            "missing {} (run python mod/build.py)",
-            jar.display()
-        );
+        if !jar.exists() {
+            assert!(
+                !release,
+                "missing {} (run python mod/build.py)",
+                jar.display()
+            );
+            println!(
+                "cargo:warning=skipping Arctic Client {build}: {} isn't built",
+                jar.display()
+            );
+            continue;
+        }
+        built.push(target);
         for covered in target["covers"].as_array().expect("covers") {
             let covered = covered.as_str().expect("version");
             writeln!(code, "    ({covered:?}, JAR_{}),", ident(build)).unwrap();
         }
     }
     code.push_str("];\n");
-    for target in targets.as_array().unwrap() {
+    for target in built {
         let build = target["build"].as_str().unwrap();
         let path = mod_dir
             .join("dist")

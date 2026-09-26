@@ -31,6 +31,10 @@ pub enum Icon {
     Copy,
     External,
     Stop,
+    /// Arrow up out of a tray.
+    Share,
+    /// Arrow down into a tray.
+    Import,
 }
 
 /// Draw `icon` centered in `rect` (square-ish, ~16-24 px works best).
@@ -244,6 +248,25 @@ pub fn draw(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
                     vec2(-0.7, -0.35),
                     vec2(-0.2, -0.35),
                 ],
+                false,
+            );
+        }
+        Icon::Share | Icon::Import => {
+            let tray = [
+                vec2(-0.75, 0.05),
+                vec2(-0.75, 0.75),
+                vec2(0.75, 0.75),
+                vec2(0.75, 0.05),
+            ];
+            poly(&tray, false);
+            line(vec2(0.0, -0.8), vec2(0.0, 0.35));
+            let (tip, wing) = if icon == Icon::Share {
+                (-0.8, -0.45)
+            } else {
+                (0.35, 0.0)
+            };
+            poly(
+                &[vec2(-0.38, wing), vec2(0.0, tip), vec2(0.38, wing)],
                 false,
             );
         }

@@ -1,8 +1,9 @@
-//! First-run setup: look, account, memory and what to play first. Shown
-//! once per profile, on top of the normal window so theme changes preview
-//! live behind it.
+//! First-run setup: how the launcher looks and behaves, account, memory,
+//! how the game looks, and what to play first. Every default someone might
+//! wonder about is a choice here. Shown once per profile, on top of the
+//! normal window so theme changes preview live behind it.
 
-use arctic_core::settings::ThemeMode;
+use arctic_core::settings::{GameStartAction, ThemeMode};
 use arctic_core::system;
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontId, Id, Modal, Pos2, Rect, RichText, Sense, Stroke,
@@ -12,7 +13,7 @@ use eframe::egui::{
 use super::dialogs::option_tile;
 use crate::app::{AddAccount, ArcticApp, Tab};
 use crate::art::icons::Icon;
-use crate::art::{lerp_color, snowflake};
+use crate::art::{brand_mark, lerp_color};
 use crate::motion::eased;
 use crate::theme::{self, Palette};
 use crate::widgets;
@@ -21,6 +22,8 @@ const WIDTH: f32 = 500.0;
 /// Seconds a step takes to slide in.
 const STEP_TRANSITION: f32 = 0.22;
 const STEP_SLIDE: f32 = 18.0;
+/// Checkbox width, so hints line up with the label.
+const HINT_INDENT: f32 = 24.0;
 const THEMES: [(ThemeMode, &str); 3] = [
     (ThemeMode::Default, "Aurora"),
     (ThemeMode::Dark, "Dark"),
@@ -31,6 +34,7 @@ const THEMES: [(ThemeMode, &str); 3] = [
 enum Step {
     Welcome,
     Look,
+    Behavior,
     Account,
     Memory,
     Client,
@@ -38,9 +42,10 @@ enum Step {
 }
 
 impl Step {
-    const ALL: [Step; 6] = [
+    const ALL: [Step; 7] = [
         Step::Welcome,
         Step::Look,
+        Step::Behavior,
         Step::Account,
         Step::Memory,
         Step::Client,
@@ -55,6 +60,8 @@ impl Step {
 /// What to do after setup.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FirstPlay {
+    /// Bring instances over from other launchers.
+    Move,
     Vanilla,
     Modded,
     Later,
@@ -65,6 +72,8 @@ pub struct Onboarding {
     changed_at: f64,
     total_mb: Option<u64>,
     first: FirstPlay,
+    /// Other launchers and clients found on this PC.
+    others: Vec<&'static str>,
 }
 
 impl ArcticApp {
@@ -79,13 +88,32 @@ impl ArcticApp {
             self.settings.onboarded = true;
             return;
         }
+        self.settings.max_memory_mb = system::recommended_memory_mb(system::total_memory_mb());
+        self.start_onboarding();
+    }
+
+    /// Show setup from the start (first run, or "Run setup again" in
+    /// Settings, which keeps the current choices as the starting point).
+    pub(crate) fn start_onboarding(&mut self) {
         let total_mb = system::total_memory_mb();
-        self.settings.max_memory_mb = system::recommended_memory_mb(total_mb);
+        // Debug builds: `ARCTIC_DEVSHOT_ONBOARDING=<n>` opens step n (for screenshots).
+        let step = std::env::var("ARCTIC_DEVSHOT_ONBOARDING")
+            .ok()
+            .filter(|_| cfg!(debug_assertions))
+            .and_then(|n| n.parse::<usize>().ok())
+            .and_then(|n| Step::ALL.get(n).copied())
+            .unwrap_or(Step::Welcome);
+        let others = other_launchers();
         self.onboarding = Some(Onboarding {
-            step: Step::Welcome,
+            step,
             changed_at: 0.0,
             total_mb,
-            first: FirstPlay::Vanilla,
+            first: if others.is_empty() {
+                FirstPlay::Vanilla
+            } else {
+                FirstPlay::Move
+            },
+            others,
         });
     }
 
@@ -112,12 +140,14 @@ impl ArcticApp {
                 progress_dots(ui, p, step.index());
                 ui.add_space(14.0);
                 ui.scope(|ui| {
+                    widgets::lift_controls(ui, p);
                     ui.multiply_opacity(t);
                     ui.add_space((1.0 - t) * STEP_SLIDE);
                     ui.set_min_height(300.0);
                     match step {
                         Step::Welcome => welcome(ui, p, now),
                         Step::Look => self.look_step(ui),
+                        Step::Behavior => self.behavior_step(ui),
                         Step::Account => self.account_step(ui),
                         Step::Memory => self.memory_step(ui),
                         Step::Client => self.client_step(ui),
@@ -183,8 +213,66 @@ impl ArcticApp {
             }
         });
         ui.add_space(12.0);
-        ui.checkbox(&mut self.settings.animations, "Animated background");
+        ui.checkbox(&mut self.settings.animations, "Animated background")
+            .on_hover_text("Aurora, snowfall and shooting stars. Pauses while you play.");
         ui.checkbox(&mut self.settings.intro, "Intro animation on start");
+    }
+
+    fn behavior_step(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
+        heading(
+            ui,
+            p,
+            "How Arctic behaves",
+            "You can change these any time in Settings.",
+        );
+        ui.add_space(12.0);
+        ui.label(RichText::new("When the game starts").color(p.text));
+        ui.add_space(4.0);
+        let choices = [
+            (
+                GameStartAction::KeepOpen,
+                Icon::Play,
+                "Keep the launcher open",
+                "Handy for logs and switching instances.",
+            ),
+            (
+                GameStartAction::Minimize,
+                Icon::Layers,
+                "Minimize it",
+                "Out of the way while you play; it comes back when the game closes.",
+            ),
+        ];
+        for (action, icon, title, desc) in choices {
+            if option_tile(
+                ui,
+                p,
+                icon,
+                title,
+                desc,
+                true,
+                self.settings.on_game_start == action,
+            ) {
+                self.settings.on_game_start = action;
+            }
+            ui.add_space(6.0);
+        }
+        ui.add_space(6.0);
+        if cfg!(windows) {
+            ui.checkbox(
+                &mut self.settings.tray,
+                "Keep Arctic in the system tray when closed",
+            )
+            .on_hover_text("Reopens instantly. Quit from the tray icon.");
+        }
+        ui.checkbox(
+            &mut self.settings.start_maximized,
+            "Start the launcher maximized",
+        );
+        ui.checkbox(
+            &mut self.settings.check_updates_on_start,
+            "Check for launcher updates on start",
+        );
     }
 
     fn account_step(&mut self, ui: &mut egui::Ui) {
@@ -255,8 +343,6 @@ impl ArcticApp {
         let recommended = system::recommended_memory_mb(total);
         let max = total.map_or(16 * 1024, |t| (t as u32).saturating_sub(1024).max(2048));
         ui.spacing_mut().slider_width = WIDTH - 90.0;
-        // The dialog is the same color as the default slider track.
-        ui.visuals_mut().widgets.inactive.bg_fill = p.surface_hover;
         ui.add(
             egui::Slider::new(&mut self.settings.max_memory_mb, 1024..=max)
                 .trailing_fill(true)
@@ -291,21 +377,64 @@ impl ArcticApp {
         heading(
             ui,
             p,
-            "Your in-game style",
-            "The Arctic Client restyles Minecraft's menus. Press Right Shift in game for HUD widgets and capes.",
+            "How the game looks",
+            "The Arctic Client restyles Minecraft's menus. Press Right Shift in game for HUD widgets, features and capes.",
         );
         ui.add_space(12.0);
         super::client_style::picker(ui, p, &mut self.settings, (WIDTH - 24.0) / 3.0);
+        ui.add_space(10.0);
+        super::client_style::fancy_toggle(ui, &mut self.settings);
+        hint(
+            ui,
+            p,
+            "A smooth, sharp font and rounded buttons, switches and panels. Off keeps Minecraft's pixel look.",
+        );
+        ui.add_space(6.0);
+        let mut performance = self.instance.performance;
+        if ui
+            .checkbox(&mut performance, "Boost FPS with performance mods")
+            .changed()
+        {
+            let id = self.instance.id.clone();
+            self.update_instance(&id, |i| i.performance = performance);
+        }
+        hint(
+            ui,
+            p,
+            "Adds Sodium, Lithium and friends to Vanilla for much higher FPS. Your worlds aren't changed.",
+        );
     }
 
     fn start_step(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         heading(ui, p, "What do you want to play?", "");
         ui.add_space(10.0);
-        let Some(first) = self.onboarding.as_ref().map(|o| o.first) else {
+        let Some((first, others)) = self
+            .onboarding
+            .as_ref()
+            .map(|o| (o.first, o.others.clone()))
+        else {
             return;
         };
-        let choices = [
+        let found = match others.as_slice() {
+            [one] => format!("Found {one}. Copies; the originals stay as they are."),
+            [first, second] => format!("Found {first} and {second}. Originals stay as they are."),
+            [first, rest @ ..] => format!(
+                "Found {first} and {} more. Originals stay as they are.",
+                rest.len()
+            ),
+            [] => String::new(),
+        };
+        let mut choices = vec![];
+        if !others.is_empty() {
+            choices.push((
+                FirstPlay::Move,
+                Icon::Import,
+                "Bring my stuff over",
+                found.as_str(),
+            ));
+        }
+        choices.extend([
             (
                 FirstPlay::Vanilla,
                 Icon::Play,
@@ -324,7 +453,7 @@ impl ArcticApp {
                 "I'll decide later",
                 "Look around first.",
             ),
-        ];
+        ]);
         for (choice, icon, title, desc) in choices {
             if option_tile(ui, p, icon, title, desc, true, first == choice)
                 && let Some(o) = &mut self.onboarding
@@ -345,6 +474,10 @@ impl ArcticApp {
         self.settings.onboarded = true;
         self.persist_settings();
         match first {
+            FirstPlay::Move => {
+                self.set_tab(Tab::Instances, now);
+                self.open_migrate();
+            }
             FirstPlay::Vanilla => {
                 self.settings.last_instance = None;
                 self.set_tab(Tab::Play, now);
@@ -358,18 +491,35 @@ impl ArcticApp {
     }
 }
 
+/// Launchers and clients with something to bring over.
+fn other_launchers() -> Vec<&'static str> {
+    let scan = arctic_core::migrate::scan();
+    let mut names: Vec<&'static str> = Vec::new();
+    let found = scan
+        .instances
+        .iter()
+        .map(|f| f.launcher)
+        .chain(scan.clients.iter().map(|c| c.launcher));
+    for launcher in found {
+        if !names.contains(&launcher.name()) {
+            names.push(launcher.name());
+        }
+    }
+    names
+}
+
 fn welcome(ui: &mut egui::Ui, p: &Palette, now: f64) {
     ui.vertical_centered(|ui| {
         ui.add_space(18.0);
         let (rect, _) = ui.allocate_exact_size(vec2(120.0, 120.0), Sense::hover());
         let glow = Color32::from_rgba_unmultiplied(p.accent.r(), p.accent.g(), p.accent.b(), 28);
         ui.painter().circle_filled(rect.center(), 58.0, glow);
-        snowflake(
+        brand_mark(
+            ui.ctx(),
             ui.painter(),
             rect.center(),
-            46.0,
+            50.0,
             (now * 0.15) as f32,
-            p.accent,
         );
         ui.ctx().request_repaint();
         ui.add_space(14.0);
@@ -384,6 +534,14 @@ fn welcome(ui: &mut egui::Ui, p: &Palette, now: f64) {
             RichText::new("A fast, lightweight Minecraft launcher.\nLet's get you set up. It takes about a minute.")
                 .color(p.muted),
         );
+    });
+}
+
+/// A muted line under a switch, lined up with its label.
+fn hint(ui: &mut egui::Ui, p: &Palette, text: &str) {
+    ui.horizontal(|ui| {
+        ui.add_space(HINT_INDENT);
+        ui.label(RichText::new(text).small().color(p.muted));
     });
 }
 

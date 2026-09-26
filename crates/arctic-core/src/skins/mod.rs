@@ -97,13 +97,19 @@ pub fn decode(png_bytes: &[u8]) -> Result<SkinImage> {
     let mut decoder = png::Decoder::new(std::io::Cursor::new(png_bytes));
     decoder.set_transformations(png::Transformations::normalize_to_color8());
     let mut reader = decoder.read_info().map_err(|e| bad(e.to_string()))?;
+    // Check the declared size before allocating for it: a tiny file can
+    // claim to be gigapixels.
+    let (w, h) = (reader.info().width as usize, reader.info().height as usize);
+    if w != 64 || (h != 64 && h != 32) {
+        return Err(bad(format!("it is {w}×{h}, skins are 64×64")));
+    }
     let mut buf = vec![0; reader.output_buffer_size().unwrap_or(0)];
     let info = reader
         .next_frame(&mut buf)
         .map_err(|e| bad(e.to_string()))?;
     let (w, h) = (info.width as usize, info.height as usize);
-    if w != 64 || (h != 64 && h != 32) {
-        return Err(bad(format!("it is {w}×{h}, skins are 64×64")));
+    if buf.len() < w * h * info.color_type.samples() {
+        return Err(bad("the image is damaged".into()));
     }
     let channels = info.color_type.samples();
     if !(3..=4).contains(&channels) {

@@ -12,7 +12,7 @@ use arctic_core::versions::VersionManifest;
 use arctic_core::{Error, Result, instances};
 use serde_json::json;
 
-use super::{Ctx, resolve_version};
+use super::{Ctx, fresh_account, resolve_version};
 use crate::cli::LaunchArgs;
 use crate::output::parse_memory;
 
@@ -29,12 +29,20 @@ pub fn run(ctx: &Ctx, args: &LaunchArgs) -> Result<i32> {
     let account = pick_account(ctx, args)?;
 
     let progress = |p: ProgressInfo| ctx.out.progress(p);
+    // Staying attached keeps this process alive: it can switch accounts
+    // for the game too.
+    let bridge = args
+        .wait
+        .then(|| arctic_core::bridge::start(CliAccounts(ctx.dirs.clone())).ok())
+        .flatten();
     let req = LaunchRequest {
         dirs: &ctx.dirs,
         version: &entry,
         instance: &instance,
         account: &account,
         settings: &settings,
+        bridge: bridge.as_ref(),
+        copy: 0,
     };
     let plan = launch::prepare(&req, &progress)?;
     ctx.out.end_progress();
@@ -55,6 +63,47 @@ pub fn run(ctx: &Ctx, args: &LaunchArgs) -> Result<i32> {
         return Ok(0);
     }
     wait_for_game(ctx, &plan, &entry.id, &account.username)
+}
+
+/// The CLI's accounts for the in-game switcher: read from disk each time,
+/// refreshed and saved like `arctic launch` does.
+struct CliAccounts(arctic_core::storage::DataDirs);
+
+impl arctic_core::bridge::Accounts for CliAccounts {
+    fn list(&self) -> Vec<arctic_core::bridge::AccountEntry> {
+        let store = AccountStore::load(&self.0).unwrap_or_default();
+        store
+            .accounts
+            .iter()
+            .map(|a| arctic_core::bridge::AccountEntry {
+                id: a.id.clone(),
+                name: a.username.clone(),
+                uuid: a.uuid.clone(),
+                microsoft: a.is_microsoft(),
+                active: store.active.as_deref() == Some(a.id.as_str()),
+            })
+            .collect()
+    }
+
+    fn session(&self, id: &str) -> Result<arctic_core::bridge::SessionGrant> {
+        let mut store = AccountStore::load(&self.0)?;
+        let account = store
+            .accounts
+            .iter()
+            .find(|a| a.id == id)
+            .cloned()
+            .ok_or_else(|| Error::Other("no such account".into()))?;
+        let (fresh, changed) = auth::ensure_fresh(&self.0, &account)?;
+        if changed {
+            store.upsert(fresh.clone());
+            store.save(&self.0)?;
+        }
+        let base = arctic_core::cosmetics::base_url();
+        Ok(arctic_core::bridge::SessionGrant {
+            identity: fresh.identity(),
+            arctic_token: arctic_core::cosmetics::token_for(&self.0, &base, &fresh).ok(),
+        })
+    }
 }
 
 /// Stay attached: stream the parsed game log, return the game's exit code.
@@ -124,33 +173,15 @@ fn apply_overrides(settings: Settings, args: &LaunchArgs) -> Result<Settings> {
 /// `--offline NAME`, `--account QUERY`, or the active account. Microsoft
 /// sessions are refreshed (and saved) when needed.
 fn pick_account(ctx: &Ctx, args: &LaunchArgs) -> Result<Account> {
-    let mut store = AccountStore::load(&ctx.dirs)?;
     #[cfg(feature = "offline-accounts")]
     if let Some(name) = &args.offline {
         let account = offline::create(name)?;
         if args.save {
+            let mut store = AccountStore::load(&ctx.dirs)?;
             store.upsert(account.clone());
             store.save(&ctx.dirs)?;
         }
         return Ok(account);
     }
-    let account = match &args.account {
-        Some(query) => store.find(query).cloned().ok_or_else(|| {
-            Error::Other(format!(
-                "no account matches '{query}' (see `arctic accounts list`)"
-            ))
-        })?,
-        None => store.active().cloned().ok_or_else(|| {
-            Error::Other(
-                "no account selected: use --account NAME or sign in with `arctic accounts login`"
-                    .into(),
-            )
-        })?,
-    };
-    let (fresh, changed) = auth::ensure_fresh(&ctx.dirs, &account)?;
-    if changed {
-        store.upsert(fresh.clone());
-        store.save(&ctx.dirs)?;
-    }
-    Ok(fresh)
+    fresh_account(ctx, args.account.as_deref())
 }

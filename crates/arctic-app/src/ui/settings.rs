@@ -26,6 +26,7 @@ impl ArcticApp {
     pub(crate) fn settings_tab(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         widgets::page_header(ui, p, "Settings", "Changes are saved automatically.");
+        let mut performance = self.instance.performance;
         let s = &mut self.settings;
 
         section(ui, p, "Appearance", |ui| {
@@ -58,6 +59,12 @@ impl ArcticApp {
             );
             ui.add_space(4.0);
             super::client_style::picker(ui, p, s, super::client_style::SETTINGS_TILE_WIDTH);
+            ui.add_space(6.0);
+            super::client_style::fancy_toggle(ui, s);
+            ui.checkbox(&mut performance, "Boost FPS with performance mods")
+                .on_hover_text(
+                    "Vanilla: adds Sodium, Lithium, FerriteCore, ImmediatelyFast and EntityCulling. Other instances have their own switch.",
+                );
         });
 
         section(ui, p, "Memory", |ui| {
@@ -143,6 +150,32 @@ impl ArcticApp {
             ui.checkbox(&mut s.check_updates_on_start, "Check for updates on start");
         });
 
+        section(ui, p, "Network", |ui| self.network_section(ui, p));
+
+        section(ui, p, "Share & back up", |ui| {
+            ui.label(
+                RichText::new(
+                    "Your settings, instances (as mod lists) and HUD setups, as a code, text or file. Accounts and passwords are never included.",
+                )
+                .small()
+                .color(p.muted),
+            );
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                if widgets::button(ui, p, Some(Icon::Share), "Export profile", false).clicked() {
+                    self.open_share(None);
+                }
+                if widgets::button(ui, p, Some(Icon::Import), "Import", false).clicked() {
+                    self.open_share_import();
+                }
+                if widgets::button(ui, p, Some(Icon::Layers), "From another launcher", false)
+                    .clicked()
+                {
+                    self.open_migrate();
+                }
+            });
+        });
+
         ui.horizontal(|ui| {
             if widgets::button(ui, p, Some(Icon::Folder), "Open data folder", false).clicked()
                 && let Err(e) = open::that_detached(self.dirs.root())
@@ -153,6 +186,12 @@ impl ArcticApp {
                     e.to_string(),
                 );
             }
+            if widgets::button(ui, p, None, "Run setup again", false)
+                .on_hover_text("The first-run walkthrough, starting from your current choices")
+                .clicked()
+            {
+                self.start_onboarding();
+            }
             if widgets::button(ui, p, None, "Restore defaults", false).clicked() {
                 self.settings = Settings {
                     last_version: self.settings.last_version.clone(),
@@ -160,6 +199,10 @@ impl ArcticApp {
                 };
             }
         });
+        if performance != self.instance.performance {
+            let id = self.instance.id.clone();
+            self.update_instance(&id, |i| i.performance = performance);
+        }
     }
 }
 

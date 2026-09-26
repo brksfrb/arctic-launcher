@@ -152,7 +152,9 @@ impl ArcticApp {
             (Some(e), _) => Some(format!("lib:{}", e.id)),
             (None, Some(g)) => Some(format!("gal:{}", g.texture)),
             _ => current.skin_key.clone(),
-        };
+        }
+        // No skin yet: a plain figure, so a cape or cosmetics still show.
+        .or_else(|| Some(super::MANNEQUIN.to_owned()));
         let now = ui.input(|i| i.time);
         let cape = current
             .cape_key
@@ -163,6 +165,14 @@ impl ArcticApp {
             pitch: self.skins.pitch,
             swing: model::idle_swing(ui.input(|i| i.time)),
         };
+        let wearing = self.worn_cosmetics(&ctx);
+        let worn: Vec<model::Worn> = wearing
+            .iter()
+            .map(|(geometry, texture)| model::Worn {
+                geometry,
+                texture: *texture,
+            })
+            .collect();
         match key.as_deref().and_then(|k| self.skin_texture(&ctx, k)) {
             Some(tex) => {
                 let variant = entry
@@ -178,6 +188,7 @@ impl ArcticApp {
                     variant,
                     tex.overlay,
                     cape,
+                    &worn,
                     pose,
                 );
                 ctx.request_repaint();
@@ -202,6 +213,7 @@ impl ArcticApp {
             _ => self.current_actions(ui, &current),
         }
         self.arctic_capes_row(ui);
+        self.arctic_cosmetics_row(ui);
         self.minecraft_capes_row(ui);
     }
 
@@ -382,6 +394,78 @@ impl ArcticApp {
         }
     }
 
+    /// The Arctic cosmetics being worn, with textures (for the preview).
+    fn worn_cosmetics(
+        &mut self,
+        ctx: &egui::Context,
+    ) -> Vec<(arctic_core::cosmetic_models::Geometry, egui::TextureId)> {
+        let Some(state) = self.arctic_state().cloned() else {
+            return Vec::new();
+        };
+        state
+            .items
+            .iter()
+            .filter(|(item, _)| state.look.cosmetics.contains(&item.id))
+            .filter_map(|(item, geometry)| {
+                let texture = self.skin_texture(ctx, &format!("acos:{}", item.texture))?;
+                Some((geometry.clone(), texture.handle.id()))
+            })
+            .collect()
+    }
+
+    /// 3D cosmetics: click one to wear it (replacing the one in its slot)
+    /// or to take it off.
+    fn arctic_cosmetics_row(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
+        let Some(state) = self.arctic_state().cloned() else {
+            return;
+        };
+        if state.items.is_empty() {
+            return;
+        }
+        ui.add_space(10.0);
+        ui.label(RichText::new("COSMETICS").small().color(p.muted));
+        let ctx = ui.ctx().clone();
+        let yaw = (ui.input(|i| i.time) * 0.6) as f32;
+        let mut pick: Option<Vec<String>> = None;
+        ui.horizontal_wrapped(|ui| {
+            for (item, geometry) in &state.items {
+                let worn = state.look.cosmetics.contains(&item.id);
+                let texture = self
+                    .skin_texture(&ctx, &format!("acos:{}", item.texture))
+                    .map(|t| t.handle.id());
+                let tip = format!("{} · {}", item.name, slot_name(&item.slot));
+                if cosmetic_tile(ui, p, geometry, texture, &tip, worn, yaw) {
+                    // Keep the others; this item's slot gets it (or nothing).
+                    let slot_of = |id: &String| {
+                        state
+                            .items
+                            .iter()
+                            .find(|(i, _)| &i.id == id)
+                            .map(|(i, _)| i.slot.clone())
+                    };
+                    let mut next: Vec<String> = state
+                        .look
+                        .cosmetics
+                        .iter()
+                        .filter(|id| slot_of(id).as_deref() != Some(item.slot.as_str()))
+                        .cloned()
+                        .collect();
+                    if !worn {
+                        next.push(item.id.clone());
+                    }
+                    pick = Some(next);
+                }
+            }
+        });
+        ctx.request_repaint_after(std::time::Duration::from_millis(33));
+        if let Some(ids) = pick
+            && !self.skins.arctic_busy
+        {
+            self.change_look(|l| l.cosmetics = Some(ids));
+        }
+    }
+
     /// Official Minecraft capes the account owns (Microsoft only).
     fn minecraft_capes_row(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
@@ -536,6 +620,7 @@ impl ArcticApp {
                 variant,
                 tex.overlay,
                 None,
+                &[],
                 pose,
             );
         }
@@ -623,6 +708,56 @@ fn cape_tile(
         .rect_stroke(rect, CornerRadius::same(8), stroke, StrokeKind::Inside);
     response
         .on_hover_text(name)
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .clicked()
+}
+
+/// Words for a cosmetic slot.
+fn slot_name(slot: &str) -> &'static str {
+    match slot {
+        "head" => "Head",
+        "face" => "Face",
+        "back" => "Back",
+        "shoulders" => "Shoulders",
+        _ => "Body",
+    }
+}
+
+/// A cosmetic's tile: its model turning slowly; outlined while worn.
+fn cosmetic_tile(
+    ui: &mut egui::Ui,
+    p: &Palette,
+    geometry: &arctic_core::cosmetic_models::Geometry,
+    texture: Option<egui::TextureId>,
+    tip: &str,
+    worn: bool,
+    yaw: f32,
+) -> bool {
+    let (rect, response) = ui.allocate_exact_size(vec2(CAPE_TILE, CAPE_TILE * 1.3), Sense::click());
+    let hover = ui
+        .ctx()
+        .animate_bool(response.id.with("h"), response.hovered());
+    let fill = crate::art::lerp_color(p.surface, p.surface_hover, hover);
+    ui.painter()
+        .rect_filled(rect, egui::CornerRadius::same(8), fill);
+    if let Some(texture) = texture {
+        model::paint_cosmetic(
+            ui.painter(),
+            rect.shrink(6.0),
+            model::Worn { geometry, texture },
+            yaw,
+        );
+    }
+    if worn {
+        ui.painter().rect_stroke(
+            rect,
+            egui::CornerRadius::same(8),
+            egui::Stroke::new(2.0, p.accent),
+            egui::StrokeKind::Inside,
+        );
+    }
+    response
+        .on_hover_text(tip)
         .on_hover_cursor(egui::CursorIcon::PointingHand)
         .clicked()
 }

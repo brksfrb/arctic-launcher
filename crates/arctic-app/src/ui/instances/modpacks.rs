@@ -103,7 +103,7 @@ impl ArcticApp {
             text: search.text.trim().to_owned(),
             sort: search.sort,
             limit: PAGE_SIZE,
-            modpacks: true,
+            project_type: arctic_core::mods::ProjectType::Modpack,
             ..SearchQuery::default()
         };
         self.tasks.mod_search(search.request, query);

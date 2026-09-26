@@ -33,13 +33,14 @@ impl Kind {
 /// Optional button on a toast; returned to the app when clicked.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToastAction {
-    ShowLogs,
+    /// Open the Logs tab on this game run.
+    ShowLogs(crate::tasks::LaunchId),
 }
 
 impl ToastAction {
     fn label(&self) -> &'static str {
         match self {
-            ToastAction::ShowLogs => "View logs",
+            ToastAction::ShowLogs(_) => "View logs",
         }
     }
 }

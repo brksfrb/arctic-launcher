@@ -3,11 +3,21 @@
 pub mod accounts;
 pub mod instances;
 pub mod launch;
+pub mod looks;
+pub mod migrate;
 pub mod misc;
 pub mod mods;
+pub mod network;
+pub mod packs;
 pub mod profiles;
+pub mod settings;
+pub mod sharing;
+pub mod together;
 pub mod versions;
+pub mod worlds;
 
+use arctic_core::auth::{self, Account, AccountStore};
+use arctic_core::instances::Instance;
 use arctic_core::storage::DataDirs;
 use arctic_core::versions::{VersionEntry, VersionManifest};
 use arctic_core::{Error, Result};
@@ -21,6 +31,39 @@ pub struct Ctx {
     /// Layout scoped to the selected profile.
     pub dirs: DataDirs,
     pub out: Out,
+}
+
+/// The instance matching `query`, or Vanilla.
+pub fn instance_or_default(ctx: &Ctx, query: Option<&str>) -> Result<Instance> {
+    match query {
+        Some(q) => arctic_core::instances::find(&ctx.dirs, q),
+        None => arctic_core::instances::load_default(&ctx.dirs),
+    }
+}
+
+/// The account matching `query` (or the active one), with its Microsoft
+/// session refreshed and saved if it had expired.
+pub fn fresh_account(ctx: &Ctx, query: Option<&str>) -> Result<Account> {
+    let mut store = AccountStore::load(&ctx.dirs)?;
+    let account = match query {
+        Some(query) => store.find(query).cloned().ok_or_else(|| {
+            Error::Other(format!(
+                "no account matches '{query}' (see `arctic accounts list`)"
+            ))
+        })?,
+        None => store.active().cloned().ok_or_else(|| {
+            Error::Other(
+                "no account selected: use --account NAME or sign in with `arctic accounts login`"
+                    .into(),
+            )
+        })?,
+    };
+    let (fresh, changed) = auth::ensure_fresh(&ctx.dirs, &account)?;
+    if changed {
+        store.upsert(fresh.clone());
+        store.save(&ctx.dirs)?;
+    }
+    Ok(fresh)
 }
 
 /// `latest`, `latest-snapshot`, or an exact version id.

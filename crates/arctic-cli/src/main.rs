@@ -50,6 +50,11 @@ fn run(cli: &Cli, out: Out) -> Result<i32, (Out, arctic_core::Error)> {
         Ok(scoped) => scoped,
         Err(e) => return Err((out, e)),
     };
+    // The profile's proxy covers everything the CLI fetches, too.
+    let proxy = arctic_core::proxy::ProxySettings::load(&scoped);
+    if let Err(e) = arctic_core::net::set_proxy(proxy.enabled.then_some(&proxy)) {
+        return Err((out, e));
+    }
     let ctx = Ctx {
         root: dirs,
         dirs: scoped,
@@ -67,6 +72,21 @@ fn run(cli: &Cli, out: Out) -> Result<i32, (Out, arctic_core::Error)> {
         Command::Open(args) => commands::misc::open(&ctx, args),
         Command::Instances(cmd) => commands::instances::run(&ctx, cmd),
         Command::Mods(cmd) => commands::mods::run(&ctx, cmd),
+        Command::Together(cmd) => commands::together::run(&ctx, cmd),
+        Command::Proxy(cmd) => commands::network::proxy(&ctx, cmd),
+        Command::Worlds(cmd) => commands::worlds::run(&ctx, cmd),
+        Command::Packs(cmd) => commands::packs::run(&ctx, cmd),
+        Command::Migrate(cmd) => commands::migrate::run(&ctx, cmd),
+        Command::Settings(cmd) => commands::settings::run(&ctx, cmd),
+        Command::Share(args) => commands::sharing::share(&ctx, args),
+        Command::Import { source, instance } => {
+            commands::sharing::import(&ctx, source, instance.as_deref())
+        }
+        Command::Skin(cmd) => commands::looks::skin(&ctx, cmd),
+        Command::Look(cmd) => commands::looks::look(&ctx, cmd),
+        Command::Crash { file, instance } => {
+            commands::network::crash(&ctx, file.as_ref(), instance.as_deref())
+        }
     };
     result.map_err(|e| (ctx.out, e))
 }

@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         sort: SortBy::Relevance,
         offset: 0,
         limit: 5,
-        modpacks: false,
+        project_type: arctic_core::mods::ProjectType::Mod,
     })?;
     println!("search: {} total hits", page.total);
     for hit in &page.hits {

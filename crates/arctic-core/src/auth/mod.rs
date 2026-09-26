@@ -1,7 +1,8 @@
 //! Accounts: offline and Microsoft, plus the multi-account store.
 //!
-//! Tokens live only in `accounts.json` inside the local data dir and are
-//! never written anywhere else. TODO: encrypt at rest with Windows DPAPI.
+//! Tokens live only in `accounts.json` inside the local data dir, encrypted
+//! for this Windows user (see [`crate::secret`]), and stay encrypted in
+//! memory until the moment they're used.
 
 pub mod avatar;
 pub mod microsoft;
@@ -12,6 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::Result;
+use crate::secret::Secret;
 use crate::storage::{DataDirs, load_json, save_json};
 
 /// Refresh Minecraft tokens this long before they actually expire.
@@ -38,9 +40,9 @@ pub enum AccountKind {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MicrosoftSession {
     /// Microsoft (MSA) refresh token, used to mint new Minecraft tokens.
-    pub refresh_token: String,
+    pub refresh_token: Secret,
     /// Minecraft services access token passed to the game.
-    pub access_token: String,
+    pub access_token: Secret,
     /// Unix seconds when `access_token` expires.
     pub expires_at: u64,
     pub xuid: Option<String>,
@@ -90,7 +92,7 @@ impl Account {
             AccountKind::Microsoft(s) => LaunchIdentity {
                 username: self.username.clone(),
                 uuid: self.uuid.clone(),
-                access_token: s.access_token.clone(),
+                access_token: s.access_token.reveal().to_string(),
                 user_type: "msa",
                 xuid: s.xuid.clone().unwrap_or_else(|| "0".into()),
             },
@@ -108,7 +110,15 @@ pub struct AccountStore {
 
 impl AccountStore {
     pub fn load(dirs: &DataDirs) -> Result<Self> {
-        Ok(load_json(&dirs.accounts_file())?.unwrap_or_default())
+        let path = dirs.accounts_file();
+        let store: Self = load_json(&path)?.unwrap_or_default();
+        // Files from before encryption: save them encrypted right away.
+        let plain = std::fs::read_to_string(&path)
+            .is_ok_and(|text| crate::secret::has_plain(&text, &["refresh_token", "access_token"]));
+        if plain {
+            store.save(dirs)?;
+        }
+        Ok(store)
     }
 
     pub fn save(&self, dirs: &DataDirs) -> Result<()> {
@@ -200,8 +210,8 @@ mod tests {
             username: "Steve".into(),
             uuid: uuid.into(),
             kind: AccountKind::Microsoft(MicrosoftSession {
-                refresh_token: "r".into(),
-                access_token: "a".into(),
+                refresh_token: Secret::new("r"),
+                access_token: Secret::new("a"),
                 expires_at,
                 xuid: None,
             }),

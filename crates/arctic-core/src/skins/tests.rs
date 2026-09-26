@@ -45,6 +45,19 @@ fn rejects_wrong_sizes() {
 }
 
 #[test]
+fn refuses_damaged_or_oversized_files_without_allocating() {
+    // A tiny file claiming 60000×60000 must fail on the header alone.
+    let mut huge = png(64, 64, |_, _| [0; 4]);
+    huge[16..20].copy_from_slice(&60_000u32.to_be_bytes());
+    huge[20..24].copy_from_slice(&60_000u32.to_be_bytes());
+    assert!(decode(&huge).is_err());
+    // Image data cut short.
+    let mut cut = png(64, 64, |_, _| [9, 9, 9, 255]);
+    cut.truncate(cut.len() / 2);
+    assert!(decode(&cut).is_err());
+}
+
+#[test]
 fn guesses_slim_arms() {
     let classic = decode(&png(64, 64, |_, _| [5, 5, 5, 255])).unwrap();
     assert_eq!(classic.guess_variant(), Variant::Classic);
