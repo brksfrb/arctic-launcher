@@ -1,6 +1,13 @@
 package com.arcticlauncher.mod;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.User;
+import net.minecraft.world.entity.player.Player;
+//#if MC >= 1.21.9
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.MouseButtonInfo;
+//#endif
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.options.OptionsScreen;
 
@@ -46,6 +53,35 @@ public final class Compat {
 		return mc().gui.hud.isHidden();
 		//#else
 		return mc().options.hideGui;
+		//#endif
+	}
+
+	/** A left click on a screen, without going through the input handler. */
+	public static void click(Screen screen, double x, double y) {
+		//#if MC >= 1.21.9
+		MouseButtonEvent event = new MouseButtonEvent(x, y, new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0));
+		screen.mouseClicked(event, false);
+		screen.mouseReleased(event);
+		//#else
+		screen.mouseClicked(x, y, InputConstants.MOUSE_BUTTON_LEFT);
+		screen.mouseReleased(x, y, InputConstants.MOUSE_BUTTON_LEFT);
+		//#endif
+	}
+
+	public static void joinServer(String serverId) throws Exception {
+		User user = mc().getUser();
+		//#if MC >= 1.21.9
+		mc().services().sessionService().joinServer(user.getProfileId(), user.getAccessToken(), serverId);
+		//#else
+		mc().getMinecraftSessionService().joinServer(user.getProfileId(), user.getAccessToken(), serverId);
+		//#endif
+	}
+
+	public static String playerName(Player player) {
+		//#if MC >= 1.21.9
+		return player.getPlainTextName();
+		//#else
+		return player.getScoreboardName();
 		//#endif
 	}
 
