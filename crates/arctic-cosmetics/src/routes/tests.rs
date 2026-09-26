@@ -33,9 +33,12 @@ async fn app() -> Router {
     let store = Store::memory().unwrap();
     let catalog = Catalog::load(&assets).unwrap();
     catalog.register(&store, 0).unwrap();
+    let content = crate::content::Content::load(&assets).unwrap();
+    content.register(&store, 0).unwrap();
     router(Arc::new(AppState {
         store,
         catalog,
+        content,
         challenges: Challenges::default(),
         limiter: Limiter::new(1000, Duration::from_secs(60)),
         secret: b"test-secret-test-secret-test-secret".to_vec(),
@@ -157,6 +160,16 @@ async fn custom_skin_and_preset_cape_are_relayed() {
         "/v1/look",
         Some(&token),
         Some(json!({"cape": {"hash": bogus}})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    // A known texture of the wrong kind: a cape can't be worn as a skin.
+    let (s, _) = call(
+        &app,
+        "PUT",
+        "/v1/look",
+        Some(&token),
+        Some(json!({"skin": {"hash": cape_hash, "model": "classic"}})),
     )
     .await;
     assert_eq!(s, StatusCode::BAD_REQUEST);
@@ -397,4 +410,144 @@ async fn gallery_share_browse_use_report() {
     );
     let (_, page) = call(&app, "GET", "/v1/gallery", None, None).await;
     assert_eq!(page["total"], 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn cosmetics_are_worn_and_emotes_relayed() {
+    let app = app().await;
+    let token = microsoft_token(&app).await;
+    let (s, catalog) = call(&app, "GET", "/v1/cosmetics", None, None).await;
+    assert_eq!(s, StatusCode::OK);
+    let halo = catalog["cosmetics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["id"] == "halo")
+        .unwrap()
+        .clone();
+    let (s, _) = call(
+        &app,
+        "GET",
+        &format!("/v1/assets/{}", halo["model"].as_str().unwrap()),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "geometry is served by hash");
+    let (s, _) = call(
+        &app,
+        "GET",
+        &format!("/v1/textures/{}.png", halo["texture"].as_str().unwrap()),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "texture is served by hash");
+
+    let put = |body| call(&app, "PUT", "/v1/look", Some(&token), Some(body));
+    let (s, v) = put(json!({"cosmetics": ["halo", "frost_wings"]})).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    let (s, _) = put(json!({"cosmetics": ["nope"]})).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    // An older client changing the cape keeps the cosmetics on.
+    let (_, v) = put(json!({"cape": {"preset": "aurora"}})).await;
+    assert_eq!(v["cosmetics"], json!(["halo", "frost_wings"]));
+    let (_, found) = call(
+        &app,
+        "GET",
+        &format!("/v1/players?uuids={UUID}"),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(found[UUID]["cosmetics"], json!(["halo", "frost_wings"]));
+
+    // Emotes show for players on Arctic right now.
+    let (s, _) = call(
+        &app,
+        "POST",
+        "/v1/emote",
+        Some(&token),
+        Some(json!({"id": "wave"})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let (s, _) = call(
+        &app,
+        "POST",
+        "/v1/emote",
+        Some(&token),
+        Some(json!({"id": "nope"})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let emotes = format!("/v1/emotes?uuids={UUID}");
+    let (_, v) = call(&app, "GET", &emotes, None, None).await;
+    assert!(v.as_object().unwrap().is_empty(), "not checked in yet");
+    let (s, _) = call(
+        &app,
+        "POST",
+        "/v1/online",
+        Some(&token),
+        Some(json!({"as": UUID})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let (_, v) = call(&app, "GET", &emotes, None, None).await;
+    assert_eq!(v[UUID]["id"], "wave");
+    let (_, _) = call(
+        &app,
+        "POST",
+        "/v1/emote",
+        Some(&token),
+        Some(json!({"id": null})),
+    )
+    .await;
+    let (_, v) = call(&app, "GET", &emotes, None, None).await;
+    assert!(v.as_object().unwrap().is_empty(), "stopped");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn share_codes_round_trip() {
+    let app = app().await;
+    let token = microsoft_token(&app).await;
+    let bundle = json!({"arctic_share": 1, "kind": "hud", "data": {"hud": {}}});
+    let (s, _) = call(&app, "POST", "/v1/shares", None, Some(bundle.clone())).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+    let (s, v) = call(
+        &app,
+        "POST",
+        "/v1/shares",
+        Some(&token),
+        Some(bundle.clone()),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    let code = v["code"].as_str().unwrap().to_owned();
+    let (_, again) = call(
+        &app,
+        "POST",
+        "/v1/shares",
+        Some(&token),
+        Some(bundle.clone()),
+    )
+    .await;
+    assert_eq!(again["code"], code.as_str());
+    let pretty = format!("{}-{}", &code[..4], &code[4..]).to_uppercase();
+    let (s, back) = call(&app, "GET", &format!("/v1/shares/{pretty}"), None, None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(back, bundle);
+    let (s, _) = call(&app, "GET", "/v1/shares/nothere2", None, None).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    for bad in [
+        json!({"arctic_share": 1, "kind": "virus"}),
+        json!({"arctic_share": 2, "kind": "hud"}),
+        json!(["not", "an", "object"]),
+    ] {
+        let (s, _) = call(&app, "POST", "/v1/shares", Some(&token), Some(bad)).await;
+        assert_eq!(s, StatusCode::BAD_REQUEST);
+    }
+    let huge = json!({"arctic_share": 1, "kind": "profile", "data": "x".repeat(300_000)});
+    let (s, _) = call(&app, "POST", "/v1/shares", Some(&token), Some(huge)).await;
+    assert_eq!(s, StatusCode::PAYLOAD_TOO_LARGE);
 }

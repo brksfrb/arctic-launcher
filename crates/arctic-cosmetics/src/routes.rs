@@ -28,13 +28,14 @@ use crate::limit::Limiter;
 use crate::store::{Look, Store};
 
 /// Players per lookup request.
-const MAX_LOOKUP: usize = 100;
+pub(crate) const MAX_LOOKUP: usize = 100;
 /// Request body limit: two base64 textures and some JSON.
 const MAX_BODY: usize = 2 * images::MAX_PNG_BYTES * 4 / 3 + 4096;
 
 pub struct AppState {
     pub store: Store,
     pub catalog: Catalog,
+    pub content: crate::content::Content,
     pub challenges: Challenges,
     pub limiter: Limiter,
     pub secret: Vec<u8>,
@@ -58,7 +59,10 @@ pub fn router(state: Shared) -> Router {
         .route("/v1/auth/verify", post(verify))
         .route("/v1/auth/offline", post(offline))
         .route("/v1/look", get(my_look).put(set_look))
+        .route("/v1/online", post(online))
         .merge(gallery::routes())
+        .merge(content::routes())
+        .merge(shares::routes())
         .layer(DefaultBodyLimit::max(MAX_BODY))
         .layer(middleware::from_fn_with_state(state.clone(), rate_limit))
         .with_state(state)
@@ -152,9 +156,42 @@ async fn players(State(state): State<Shared>, Query(q): Query<PlayersQuery>) -> 
         .filter(|u| auth::is_uuid(u))
         .take(MAX_LOOKUP)
         .collect();
-    match state.store.looks(&uuids) {
+    match state.store.entries(&uuids, now()) {
         Ok(found) => Json(found.into_iter().collect::<HashMap<_, _>>()).into_response(),
         Err(e) => db_error("lookup", e),
+    }
+}
+
+#[derive(Deserialize)]
+struct OnlineBody {
+    /// The UUID the player has in their current world (`None` = left it).
+    #[serde(rename = "as")]
+    playing_as: Option<String>,
+}
+
+/// A signed-in client checks in every minute while in a world, and signs
+/// off when it leaves.
+async fn online(
+    State(state): State<Shared>,
+    headers: HeaderMap,
+    Json(body): Json<OnlineBody>,
+) -> Response {
+    let Some(uuid) = player(&state, &headers) else {
+        return error(StatusCode::UNAUTHORIZED, "sign in first");
+    };
+    let playing_as = match body.playing_as {
+        None => None,
+        Some(id) => {
+            let id = id.replace('-', "").to_ascii_lowercase();
+            if !auth::is_uuid(&id) {
+                return error(StatusCode::BAD_REQUEST, "not a UUID");
+            }
+            Some(id)
+        }
+    };
+    match state.store.check_in(&uuid, playing_as.as_deref(), now()) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => db_error("online", e),
     }
 }
 
@@ -282,9 +319,13 @@ enum CapePart {
 struct LookBody {
     skin: Option<SkinPart>,
     cape: Option<CapePart>,
+    /// Worn 3D cosmetics by catalog id; left out, the current ones stay.
+    cosmetics: Option<Vec<String>>,
 }
 
 /// Replace the player's whole look. `null` parts are cleared.
+/// (Worn cosmetics only change when `cosmetics` is given, so older
+/// clients that don't know them keep them on.)
 async fn set_look(
     State(state): State<Shared>,
     headers: HeaderMap,
@@ -294,14 +335,25 @@ async fn set_look(
         return error(StatusCode::UNAUTHORIZED, "sign in first");
     };
     let t = now();
+    let cosmetics = match body.cosmetics {
+        Some(ids) => match state.content.check_worn(&ids) {
+            Ok(ids) => ids,
+            Err(e) => return error(StatusCode::BAD_REQUEST, &e),
+        },
+        None => match state.store.look(&uuid) {
+            Ok(current) => current.cosmetics,
+            Err(e) => return db_error("look", e),
+        },
+    };
     let mut look = Look {
         model: "classic".into(),
+        cosmetics,
         ..Look::default()
     };
     if let Some(skin) = body.skin {
         let stored = match (&skin.png, &skin.hash) {
             (Some(png), _) => store_upload(&state, png, Kind::Skin, t),
-            (None, Some(hash)) => known_texture(&state, hash),
+            (None, Some(hash)) => known_texture(&state, hash, Kind::Skin),
             (None, None) => Err(Box::new(error(
                 StatusCode::BAD_REQUEST,
                 "skin needs png or hash",
@@ -328,7 +380,7 @@ async fn set_look(
             Ok(hash) => Some(hash),
             Err(r) => return *r,
         },
-        Some(CapePart::Known { hash }) => match known_texture(&state, &hash) {
+        Some(CapePart::Known { hash }) => match known_texture(&state, &hash, Kind::Cape) {
             Ok(hash) => Some(hash),
             Err(r) => return *r,
         },
@@ -339,11 +391,16 @@ async fn set_look(
     }
 }
 
-/// A texture that was uploaded before (so looks can be re-published by hash).
-fn known_texture(state: &AppState, hash: &str) -> Result<String, Box<Response>> {
+/// A texture that was uploaded before (so looks can be re-published by
+/// hash), and valid as `kind`: a cape can't be worn as a skin.
+fn known_texture(state: &AppState, hash: &str, kind: Kind) -> Result<String, Box<Response>> {
     let hash = hash.to_ascii_lowercase();
     match state.store.texture(&hash) {
-        Ok(Some(_)) => Ok(hash),
+        Ok(Some(png)) if images::check(&png, kind).is_ok() => Ok(hash),
+        Ok(Some(_)) => Err(Box::new(error(
+            StatusCode::BAD_REQUEST,
+            "that texture doesn't fit here",
+        ))),
         Ok(None) => Err(Box::new(error(StatusCode::BAD_REQUEST, "unknown texture"))),
         Err(e) => Err(Box::new(db_error("texture", e))),
     }
@@ -362,7 +419,9 @@ fn store_upload(state: &AppState, b64: &str, kind: Kind, t: u64) -> Result<Strin
     Ok(hash)
 }
 
+mod content;
 mod gallery;
+mod shares;
 
 #[cfg(test)]
 mod tests;

@@ -14,13 +14,15 @@ pub enum Kind {
     Cape,
 }
 
-/// Validate a PNG for `kind`; returns its SHA-1 (hex) on success.
+/// Validate a PNG for `kind`: the size must fit, and the whole image must
+/// decode, so every client can load what the server hands out. Returns its
+/// SHA-1 (hex) on success.
 pub fn check(png_bytes: &[u8], kind: Kind) -> Result<String, String> {
     if png_bytes.len() > MAX_PNG_BYTES {
         return Err("image is too large".into());
     }
     let decoder = png::Decoder::new(std::io::Cursor::new(png_bytes));
-    let reader = decoder
+    let mut reader = decoder
         .read_info()
         .map_err(|_| "not a PNG image".to_owned())?;
     let (w, h) = (reader.info().width, reader.info().height);
@@ -48,6 +50,14 @@ pub fn check(png_bytes: &[u8], kind: Kind) -> Result<String, String> {
             }
         ));
     }
+    // The size is known to be small now, so decoding the pixels is cheap.
+    let size = reader
+        .output_buffer_size()
+        .ok_or_else(|| "not a PNG image".to_owned())?;
+    let mut buf = vec![0; size];
+    reader
+        .next_frame(&mut buf)
+        .map_err(|_| "the PNG image is damaged".to_owned())?;
     Ok(hex::encode(Sha1::digest(png_bytes)))
 }
 
@@ -130,6 +140,24 @@ mod tests {
         assert!(check(&test_png(64, 32 * 9), Kind::Cape).is_err());
         assert!(check(&test_png(64, 48), Kind::Cape).is_err());
         assert!(check(b"nope", Kind::Cape).is_err());
+    }
+
+    #[test]
+    fn damaged_pixels_are_refused() {
+        let mut png = test_png(64, 64);
+        // Cut the image data short: the header still says 64×64.
+        png.truncate(png.len() / 2);
+        assert!(check(&png, Kind::Skin).is_err());
+    }
+
+    #[test]
+    fn huge_declared_sizes_are_refused_before_decoding() {
+        let mut png = test_png(64, 64);
+        // IHDR width/height live at bytes 16..24.
+        png[16..20].copy_from_slice(&60_000u32.to_be_bytes());
+        png[20..24].copy_from_slice(&60_000u32.to_be_bytes());
+        assert!(check(&png, Kind::Skin).is_err());
+        assert!(check(&png, Kind::Cape).is_err());
     }
 
     #[test]

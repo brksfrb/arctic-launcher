@@ -1,0 +1,25 @@
+{
+  "format_version": "1.12.0",
+  "minecraft:geometry": [
+    {
+      "description": { "identifier": "geometry.frost_wings", "texture_width": 64, "texture_height": 32 },
+      "bones": [
+        { "name": "body", "pivot": [0, 24, 0] },
+        {
+          "name": "wing_left",
+          "parent": "body",
+          "pivot": [2, 22, 2],
+          "rotation": [0, -30, 0],
+          "cubes": [ { "origin": [2, 10, 2], "size": [12, 12, 1], "uv": [0, 0] } ]
+        },
+        {
+          "name": "wing_right",
+          "parent": "body",
+          "pivot": [-2, 22, 2],
+          "rotation": [0, 30, 0],
+          "cubes": [ { "origin": [-14, 10, 2], "size": [12, 12, 1], "uv": [0, 16], "mirror": true } ]
+        }
+      ]
+    }
+  ]
+}

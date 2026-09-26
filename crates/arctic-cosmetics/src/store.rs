@@ -18,6 +18,9 @@ pub struct Look {
     /// `classic` or `slim` (only meaningful with a skin).
     pub model: String,
     pub cape: Option<String>,
+    /// Worn 3D cosmetics (catalog ids, one per slot).
+    #[serde(default)]
+    pub cosmetics: Vec<String>,
 }
 
 impl Store {
@@ -70,6 +73,8 @@ impl Store {
             db: Mutex::new(conn),
         };
         store.migrate_gallery_looks()?;
+        store.migrate_presence()?;
+        store.migrate_shares()?;
         Ok(store)
     }
 
@@ -121,13 +126,14 @@ impl Store {
         Ok(self
             .conn()
             .query_row(
-                "SELECT skin, model, cape FROM players WHERE uuid = ?1",
+                "SELECT skin, model, cape, cosmetics FROM players WHERE uuid = ?1",
                 [uuid],
                 |r| {
                     Ok(Look {
                         skin: r.get(0)?,
                         model: r.get(1)?,
                         cape: r.get(2)?,
+                        cosmetics: cosmetics_column(r.get(3)?),
                     })
                 },
             )
@@ -140,35 +146,18 @@ impl Store {
 
     pub fn set_look(&self, uuid: &str, look: &Look, now: u64) -> rusqlite::Result<()> {
         self.conn().execute(
-            "UPDATE players SET skin = ?2, model = ?3, cape = ?4, updated = ?5 WHERE uuid = ?1",
-            params![uuid, look.skin, look.model, look.cape, now as i64],
+            "UPDATE players SET skin = ?2, model = ?3, cape = ?4, cosmetics = ?5, updated = ?6
+             WHERE uuid = ?1",
+            params![
+                uuid,
+                look.skin,
+                look.model,
+                look.cape,
+                serde_json::to_string(&look.cosmetics).unwrap_or_default(),
+                now as i64
+            ],
         )?;
         Ok(())
-    }
-
-    /// Looks for many players; players without any are left out.
-    pub fn looks(&self, uuids: &[String]) -> rusqlite::Result<Vec<(String, Look)>> {
-        let conn = self.conn();
-        let mut stmt = conn.prepare_cached(
-            "SELECT skin, model, cape FROM players WHERE uuid = ?1
-             AND (skin IS NOT NULL OR cape IS NOT NULL)",
-        )?;
-        let mut out = Vec::new();
-        for uuid in uuids {
-            let look = stmt
-                .query_row([uuid], |r| {
-                    Ok(Look {
-                        skin: r.get(0)?,
-                        model: r.get(1)?,
-                        cape: r.get(2)?,
-                    })
-                })
-                .optional()?;
-            if let Some(look) = look {
-                out.push((uuid.clone(), look));
-            }
-        }
-        Ok(out)
     }
 
     /// Store a texture (no-op if it's already there).
@@ -189,6 +178,13 @@ impl Store {
     }
 }
 
+/// The `cosmetics` column: a JSON list of ids (NULL or broken = none).
+pub(crate) fn cosmetics_column(value: Option<String>) -> Vec<String> {
+    value
+        .and_then(|v| serde_json::from_str(&v).ok())
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,10 +199,13 @@ mod tests {
             skin: Some("s1".into()),
             model: "slim".into(),
             cape: None,
+            cosmetics: vec!["halo".into()],
         };
         s.set_look("a", &look, 2).unwrap();
         assert_eq!(s.look("a").unwrap(), look);
-        let many = s.looks(&["a".into(), "b".into(), "zzz".into()]).unwrap();
+        let many = s
+            .entries(&["a".into(), "b".into(), "zzz".into()], 2)
+            .unwrap();
         assert_eq!(many.len(), 1);
         // Name updates keep the look.
         s.touch("a", "Alicia", 3).unwrap();

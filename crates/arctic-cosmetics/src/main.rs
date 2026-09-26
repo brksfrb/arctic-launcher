@@ -12,10 +12,13 @@
 
 mod auth;
 mod catalog;
+mod content;
 mod gallery;
 mod images;
 mod limit;
+mod presence;
 mod routes;
+mod shares;
 mod store;
 
 use std::net::SocketAddr;
@@ -59,9 +62,19 @@ async fn run() -> Result<(), String> {
     catalog
         .register(&store, started)
         .map_err(|e| format!("registering presets: {e}"))?;
+    let content = content::Content::load(&assets)?;
+    content
+        .register(&store, started)
+        .map_err(|e| format!("registering cosmetics: {e}"))?;
+    log::info!(
+        "{} cosmetics, {} emotes",
+        content.cosmetics.len(),
+        content.emotes.len()
+    );
     let state = AppState {
         store,
         catalog,
+        content,
         challenges: auth::Challenges::default(),
         limiter: limit::Limiter::new(120, Duration::from_secs(60)),
         secret: secret.into_bytes(),

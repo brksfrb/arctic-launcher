@@ -1,0 +1,20 @@
+{
+  "format_version": "1.12.0",
+  "minecraft:geometry": [
+    {
+      "description": { "identifier": "geometry.halo", "texture_width": 32, "texture_height": 32 },
+      "bones": [
+        {
+          "name": "head",
+          "pivot": [0, 24, 0],
+          "cubes": [
+            { "origin": [-4, 34, -5], "size": [8, 1, 1], "uv": [0, 0] },
+            { "origin": [-4, 34, 4], "size": [8, 1, 1], "uv": [0, 0] },
+            { "origin": [4, 34, -4], "size": [1, 1, 8], "uv": [0, 0] },
+            { "origin": [-5, 34, -4], "size": [1, 1, 8], "uv": [0, 0] }
+          ]
+        }
+      ]
+    }
+  ]
+}

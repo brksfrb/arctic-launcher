@@ -66,7 +66,7 @@ async fn publish(
     };
     let texture = match (&body.png, &body.hash) {
         (Some(png), _) => store_upload(&state, png, Kind::Skin, now()),
-        (None, Some(hash)) => known_texture(&state, hash),
+        (None, Some(hash)) => known_texture(&state, hash, Kind::Skin),
         (None, None) => return error(StatusCode::BAD_REQUEST, "skin needs png or hash"),
     };
     let texture = match texture {

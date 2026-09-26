@@ -1,0 +1,13 @@
+{
+  "format_version": "1.8.0",
+  "animations": {
+    "animation.frost_wings.idle": {
+      "loop": true,
+      "animation_length": 2.0,
+      "bones": {
+        "wing_left": { "rotation": { "0.0": [0, 0, 0], "1.0": [0, -15, 0], "2.0": [0, 0, 0] } },
+        "wing_right": { "rotation": { "0.0": [0, 0, 0], "1.0": [0, 15, 0], "2.0": [0, 0, 0] } }
+      }
+    }
+  }
+}
