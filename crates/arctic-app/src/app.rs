@@ -200,6 +200,8 @@ impl ArcticApp {
         startup: StartupOptions,
     ) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
+        // Ctrl +/- would scale the whole UI; the layout isn't made for that.
+        cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
         let (tx, rx) = mpsc::channel();
         let dirs = profiles.scoped(&root);
         let tasks = Tasks::new(tx, cc.egui_ctx.clone(), dirs.clone());
