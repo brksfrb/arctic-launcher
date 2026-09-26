@@ -51,6 +51,41 @@ pub fn check(png_bytes: &[u8], kind: Kind) -> Result<String, String> {
     Ok(hex::encode(Sha1::digest(png_bytes)))
 }
 
+/// What an image looks like, as a hash of its size and RGBA pixels, so the
+/// same skin saved by different programs still matches. Fully transparent
+/// pixels count as one color (their hidden RGB varies between tools).
+pub fn pixel_key(png_bytes: &[u8]) -> Option<String> {
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(png_bytes));
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = decoder.read_info().ok()?;
+    let mut buf = vec![0; reader.output_buffer_size()?];
+    let info = reader.next_frame(&mut buf).ok()?;
+    let bytes = &buf[..info.buffer_size()];
+    let rgba: Vec<[u8; 4]> = match info.color_type {
+        png::ColorType::Rgba => bytes
+            .chunks_exact(4)
+            .map(|p| [p[0], p[1], p[2], p[3]])
+            .collect(),
+        png::ColorType::Rgb => bytes
+            .chunks_exact(3)
+            .map(|p| [p[0], p[1], p[2], 255])
+            .collect(),
+        png::ColorType::GrayscaleAlpha => bytes
+            .chunks_exact(2)
+            .map(|p| [p[0], p[0], p[0], p[1]])
+            .collect(),
+        png::ColorType::Grayscale => bytes.iter().map(|&v| [v, v, v, 255]).collect(),
+        png::ColorType::Indexed => return None,
+    };
+    let mut hasher = Sha1::new();
+    hasher.update(info.width.to_le_bytes());
+    hasher.update(info.height.to_le_bytes());
+    for p in rgba {
+        hasher.update(if p[3] == 0 { [0, 0, 0, 0] } else { p });
+    }
+    Some(hex::encode(hasher.finalize()))
+}
+
 /// Offline players' UUID, as the game derives it from the name.
 pub fn offline_uuid(name: &str) -> String {
     use md5::{Digest as _, Md5};
@@ -94,6 +129,15 @@ mod tests {
         assert!(check(&test_png(64, 32 * 9), Kind::Cape).is_err());
         assert!(check(&test_png(64, 48), Kind::Cape).is_err());
         assert!(check(b"nope", Kind::Cape).is_err());
+    }
+
+    #[test]
+    fn pixel_key_ignores_encoding_and_hidden_colors() {
+        let a = test_png(64, 64);
+        let b = test_png(64, 64);
+        assert_eq!(pixel_key(&a), pixel_key(&b));
+        assert_ne!(pixel_key(&a), pixel_key(&test_png(64, 32)));
+        assert_eq!(pixel_key(b"nope"), None);
     }
 
     #[test]

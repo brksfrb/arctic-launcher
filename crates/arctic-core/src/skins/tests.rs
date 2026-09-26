@@ -98,6 +98,31 @@ fn adding_the_same_skin_twice_keeps_one() {
 }
 
 #[test]
+fn dedupe_removes_copies_made_before_adding_checked() {
+    let dir = tempfile::tempdir().unwrap();
+    let bytes = png(64, 64, |x, _| [x as u8, 5, 5, 255]);
+    let other = png(64, 64, |_, _| [9, 9, 9, 255]);
+    // Three copies of one skin and one other, as older versions could leave.
+    let mut lib = Library::default();
+    for (i, b) in [&bytes, &other, &bytes, &bytes].iter().enumerate() {
+        let id = format!("s{i}");
+        std::fs::write(Library::png_path(dir.path(), &id), b).unwrap();
+        lib.skins.push(SkinEntry {
+            id,
+            name: "x".into(),
+            variant: Variant::Classic,
+            added: 0,
+        });
+    }
+    assert_eq!(lib.dedupe(dir.path()).unwrap(), 2);
+    let ids: Vec<&str> = lib.skins.iter().map(|s| s.id.as_str()).collect();
+    assert_eq!(ids, ["s0", "s1"]);
+    assert!(!Library::png_path(dir.path(), "s2").exists());
+    assert_eq!(Library::load(dir.path()).unwrap().skins.len(), 2);
+    assert_eq!(lib.dedupe(dir.path()).unwrap(), 0);
+}
+
+#[test]
 fn invalid_files_are_not_added() {
     let dir = tempfile::tempdir().unwrap();
     let mut lib = Library::default();

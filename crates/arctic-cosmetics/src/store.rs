@@ -66,9 +66,11 @@ impl Store {
                  PRIMARY KEY (item, reporter)
              );",
         )?;
-        Ok(Self {
+        let store = Self {
             db: Mutex::new(conn),
-        })
+        };
+        store.migrate_gallery_looks()?;
+        Ok(store)
     }
 
     pub(crate) fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {

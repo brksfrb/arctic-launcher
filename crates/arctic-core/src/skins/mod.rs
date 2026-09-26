@@ -190,6 +190,30 @@ impl Library {
         dir.join(format!("{id}.png"))
     }
 
+    /// Remove skins with the same pixels as an earlier one (older versions
+    /// could add copies). Returns how many were removed.
+    pub fn dedupe(&mut self, dir: &Path) -> Result<usize> {
+        let mut seen: Vec<Vec<u8>> = Vec::new();
+        let mut copies = Vec::new();
+        for entry in &self.skins {
+            let Some(image) = Self::read_png(dir, &entry.id)
+                .ok()
+                .and_then(|bytes| decode(&bytes).ok())
+            else {
+                continue;
+            };
+            if seen.contains(&image.rgba) {
+                copies.push(entry.id.clone());
+            } else {
+                seen.push(image.rgba);
+            }
+        }
+        for id in &copies {
+            self.remove(dir, id)?;
+        }
+        Ok(copies.len())
+    }
+
     /// The library skin with the same pixels as `png_bytes`, if any.
     pub fn find_same(&self, dir: &Path, png_bytes: &[u8]) -> Option<&SkinEntry> {
         let wanted = decode(png_bytes).ok()?;

@@ -92,7 +92,7 @@ async fn publish(
             json!({ "id": id, "name": name, "texture": texture, "model": model, "author": author }),
         )
         .into_response(),
-        Err(PublishError::Duplicate) => error(StatusCode::CONFLICT, "you already shared this skin"),
+        Err(PublishError::Duplicate) => error(StatusCode::CONFLICT, "this skin is already in the gallery"),
         Err(PublishError::TooMany) => error(
             StatusCode::FORBIDDEN,
             "you've shared the maximum number of skins",

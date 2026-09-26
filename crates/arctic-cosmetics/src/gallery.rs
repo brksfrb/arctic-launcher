@@ -88,6 +88,63 @@ impl Store {
         Ok(Page { items, total })
     }
 
+    /// Gallery items are unique by look (their pixels), whoever shares them.
+    /// Older databases get the column, and their duplicates are merged into
+    /// the earliest share.
+    pub(crate) fn migrate_gallery_looks(&self) -> rusqlite::Result<()> {
+        let has_column = {
+            let conn = self.conn();
+            let mut stmt = conn.prepare("SELECT name FROM pragma_table_info('gallery')")?;
+            let names = stmt
+                .query_map([], |r| r.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            names.iter().any(|n| n == "look")
+        };
+        if !has_column {
+            self.conn()
+                .execute_batch("ALTER TABLE gallery ADD COLUMN look TEXT")?;
+        }
+        let missing: Vec<(String, String)> = {
+            let conn = self.conn();
+            let mut stmt = conn.prepare("SELECT id, texture FROM gallery WHERE look IS NULL")?;
+            stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        for (id, texture) in missing {
+            let look = self.look_of(&texture)?;
+            self.conn().execute(
+                "UPDATE gallery SET look = ?1 WHERE id = ?2",
+                params![look, id],
+            )?;
+        }
+        let conn = self.conn();
+        let copies: Vec<String> = {
+            let mut stmt = conn.prepare(
+                "SELECT id FROM gallery g WHERE EXISTS (
+                     SELECT 1 FROM gallery o WHERE o.look = g.look
+                     AND (o.created < g.created OR (o.created = g.created AND o.id < g.id)))",
+            )?;
+            stmt.query_map([], |r| r.get(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        for id in &copies {
+            conn.execute("DELETE FROM gallery WHERE id = ?1", [id])?;
+            conn.execute("DELETE FROM gallery_reports WHERE item = ?1", [id])?;
+        }
+        if !copies.is_empty() {
+            log::info!("gallery: merged {} duplicate skins", copies.len());
+        }
+        conn.execute_batch("CREATE UNIQUE INDEX IF NOT EXISTS gallery_look ON gallery (look)")
+    }
+
+    /// The look key of a stored texture (its hash if it can't be decoded).
+    fn look_of(&self, texture: &str) -> rusqlite::Result<String> {
+        Ok(self
+            .texture(texture)?
+            .and_then(|png| crate::images::pixel_key(&png))
+            .unwrap_or_else(|| texture.to_owned()))
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn gallery_publish(
         &self,
@@ -99,8 +156,9 @@ impl Store {
         author_name: &str,
         now: u64,
     ) -> Result<(), PublishError> {
-        let conn = self.conn();
         let db = |e: rusqlite::Error| PublishError::Db(e.to_string());
+        let look = self.look_of(texture).map_err(db)?;
+        let conn = self.conn();
         let count: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM gallery WHERE author_uuid = ?1",
@@ -113,9 +171,9 @@ impl Store {
         }
         let inserted = conn
             .execute(
-                "INSERT OR IGNORE INTO gallery (id, texture, model, name, author_uuid, author_name, created)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                params![id, texture, model, name, author_uuid, author_name, now as i64],
+                "INSERT OR IGNORE INTO gallery (id, texture, model, name, author_uuid, author_name, created, look)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![id, texture, model, name, author_uuid, author_name, now as i64, look],
             )
             .map_err(db)?;
         if inserted == 0 {
@@ -220,6 +278,42 @@ mod tests {
         assert_eq!(found.total, 1);
         // LIKE wildcards in queries are ignored, not interpreted.
         assert_eq!(s.gallery_page(Sort::New, "%", 0, 10).unwrap().total, 2);
+    }
+
+    #[test]
+    fn one_entry_per_look_whoever_shares_it() {
+        let s = store();
+        s.touch("b", "Bob", 1).unwrap();
+        s.gallery_publish("1", "t1", "classic", "Mine", "a", "Alice", 10)
+            .unwrap();
+        assert_eq!(
+            s.gallery_publish("2", "t1", "classic", "Also mine", "b", "Bob", 20),
+            Err(PublishError::Duplicate)
+        );
+    }
+
+    #[test]
+    fn migration_merges_existing_duplicates() {
+        let s = store();
+        let png = crate::images::test_png(64, 64);
+        s.put_texture("h1", &png, 1).unwrap();
+        s.put_texture("h2", &png, 1).unwrap();
+        {
+            let conn = s.conn();
+            conn.execute_batch("DROP INDEX gallery_look").unwrap();
+            for (id, tex, t) in [("old", "h1", 10), ("new", "h2", 20)] {
+                conn.execute(
+                    "INSERT INTO gallery (id, texture, model, name, author_uuid, author_name, created)
+                     VALUES (?1, ?2, 'classic', 'x', 'a', 'Alice', ?3)",
+                    params![id, tex, t],
+                )
+                .unwrap();
+            }
+        }
+        s.migrate_gallery_looks().unwrap();
+        let page = s.gallery_page(Sort::New, "", 0, 10).unwrap();
+        assert_eq!(page.total, 1);
+        assert_eq!(page.items[0].id, "old");
     }
 
     #[test]
