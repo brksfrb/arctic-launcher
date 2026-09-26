@@ -1,16 +1,22 @@
-//! SQLite storage: players and what they have equipped.
+//! SQLite storage: each player's look (skin, model, cape) and the texture
+//! images, stored once per content hash.
 
 use std::path::Path;
 use std::sync::Mutex;
 
 use rusqlite::{Connection, OptionalExtension, params};
+use serde::Serialize;
 
 pub struct Store {
     db: Mutex<Connection>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-pub struct Equipped {
+/// What other players see. Texture fields are content hashes (SHA-1 hex).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct Look {
+    pub skin: Option<String>,
+    /// `classic` or `slim` (only meaningful with a skin).
+    pub model: String,
     pub cape: Option<String>,
 }
 
@@ -30,8 +36,16 @@ impl Store {
              CREATE TABLE IF NOT EXISTS players (
                  uuid TEXT PRIMARY KEY,
                  name TEXT NOT NULL,
+                 skin TEXT,
+                 model TEXT NOT NULL DEFAULT 'classic',
                  cape TEXT,
+                 key_hash TEXT,
                  updated INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS textures (
+                 sha1 TEXT PRIMARY KEY,
+                 png BLOB NOT NULL,
+                 created INTEGER NOT NULL
              );",
         )?;
         Ok(Self {
@@ -43,48 +57,106 @@ impl Store {
         self.db.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// Record a verified sign-in (keeps the latest name).
+    /// Record a verified player (keeps the latest name and any look).
     pub fn touch(&self, uuid: &str, name: &str, now: u64) -> rusqlite::Result<()> {
         self.conn().execute(
-            "INSERT INTO players (uuid, name, cape, updated) VALUES (?1, ?2, NULL, ?3)
+            "INSERT INTO players (uuid, name, updated) VALUES (?1, ?2, ?3)
              ON CONFLICT(uuid) DO UPDATE SET name = excluded.name",
             params![uuid, name, now as i64],
         )?;
         Ok(())
     }
 
-    pub fn equipped(&self, uuid: &str) -> rusqlite::Result<Equipped> {
-        let cape = self
+    /// Stored key hash for an offline player (`None` = unclaimed).
+    pub fn key_hash(&self, uuid: &str) -> rusqlite::Result<Option<String>> {
+        Ok(self
             .conn()
-            .query_row("SELECT cape FROM players WHERE uuid = ?1", [uuid], |r| {
-                r.get::<_, Option<String>>(0)
-            })
+            .query_row(
+                "SELECT key_hash FROM players WHERE uuid = ?1",
+                [uuid],
+                |r| r.get::<_, Option<String>>(0),
+            )
             .optional()?
-            .flatten();
-        Ok(Equipped { cape })
+            .flatten())
     }
 
-    pub fn set_cape(&self, uuid: &str, cape: Option<&str>, now: u64) -> rusqlite::Result<()> {
+    pub fn set_key_hash(&self, uuid: &str, hash: &str) -> rusqlite::Result<()> {
         self.conn().execute(
-            "UPDATE players SET cape = ?2, updated = ?3 WHERE uuid = ?1",
-            params![uuid, cape, now as i64],
+            "UPDATE players SET key_hash = ?2 WHERE uuid = ?1 AND key_hash IS NULL",
+            params![uuid, hash],
         )?;
         Ok(())
     }
 
-    /// Equipped cosmetics for many players; players without any are left out.
-    pub fn equipped_many(&self, uuids: &[String]) -> rusqlite::Result<Vec<(String, Equipped)>> {
+    pub fn look(&self, uuid: &str) -> rusqlite::Result<Look> {
+        Ok(self
+            .conn()
+            .query_row(
+                "SELECT skin, model, cape FROM players WHERE uuid = ?1",
+                [uuid],
+                |r| {
+                    Ok(Look {
+                        skin: r.get(0)?,
+                        model: r.get(1)?,
+                        cape: r.get(2)?,
+                    })
+                },
+            )
+            .optional()?
+            .unwrap_or_else(|| Look {
+                model: "classic".into(),
+                ..Look::default()
+            }))
+    }
+
+    pub fn set_look(&self, uuid: &str, look: &Look, now: u64) -> rusqlite::Result<()> {
+        self.conn().execute(
+            "UPDATE players SET skin = ?2, model = ?3, cape = ?4, updated = ?5 WHERE uuid = ?1",
+            params![uuid, look.skin, look.model, look.cape, now as i64],
+        )?;
+        Ok(())
+    }
+
+    /// Looks for many players; players without any are left out.
+    pub fn looks(&self, uuids: &[String]) -> rusqlite::Result<Vec<(String, Look)>> {
         let conn = self.conn();
-        let mut stmt =
-            conn.prepare_cached("SELECT cape FROM players WHERE uuid = ?1 AND cape IS NOT NULL")?;
+        let mut stmt = conn.prepare_cached(
+            "SELECT skin, model, cape FROM players WHERE uuid = ?1
+             AND (skin IS NOT NULL OR cape IS NOT NULL)",
+        )?;
         let mut out = Vec::new();
         for uuid in uuids {
-            let cape: Option<String> = stmt.query_row([uuid], |r| r.get(0)).optional()?;
-            if let Some(cape) = cape {
-                out.push((uuid.clone(), Equipped { cape: Some(cape) }));
+            let look = stmt
+                .query_row([uuid], |r| {
+                    Ok(Look {
+                        skin: r.get(0)?,
+                        model: r.get(1)?,
+                        cape: r.get(2)?,
+                    })
+                })
+                .optional()?;
+            if let Some(look) = look {
+                out.push((uuid.clone(), look));
             }
         }
         Ok(out)
+    }
+
+    /// Store a texture (no-op if it's already there).
+    pub fn put_texture(&self, sha1: &str, png: &[u8], now: u64) -> rusqlite::Result<()> {
+        self.conn().execute(
+            "INSERT OR IGNORE INTO textures (sha1, png, created) VALUES (?1, ?2, ?3)",
+            params![sha1, png, now as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn texture(&self, sha1: &str) -> rusqlite::Result<Option<Vec<u8>>> {
+        self.conn()
+            .query_row("SELECT png FROM textures WHERE sha1 = ?1", [sha1], |r| {
+                r.get(0)
+            })
+            .optional()
     }
 }
 
@@ -93,23 +165,41 @@ mod tests {
     use super::*;
 
     #[test]
-    fn equip_and_query() {
+    fn looks_round_trip() {
         let s = Store::memory().unwrap();
         s.touch("a", "Alice", 1).unwrap();
         s.touch("b", "Bob", 1).unwrap();
-        assert_eq!(s.equipped("a").unwrap().cape, None);
-        s.set_cape("a", Some("aurora"), 2).unwrap();
-        assert_eq!(s.equipped("a").unwrap().cape.as_deref(), Some("aurora"));
-        let many = s
-            .equipped_many(&["a".into(), "b".into(), "zzz".into()])
-            .unwrap();
+        assert_eq!(s.look("a").unwrap().skin, None);
+        let look = Look {
+            skin: Some("s1".into()),
+            model: "slim".into(),
+            cape: None,
+        };
+        s.set_look("a", &look, 2).unwrap();
+        assert_eq!(s.look("a").unwrap(), look);
+        let many = s.looks(&["a".into(), "b".into(), "zzz".into()]).unwrap();
         assert_eq!(many.len(), 1);
-        assert_eq!(many[0].0, "a");
-        s.set_cape("a", None, 3).unwrap();
-        assert!(s.equipped_many(&["a".into()]).unwrap().is_empty());
-        // Name updates keep the equipped cape.
-        s.set_cape("b", Some("glacier"), 4).unwrap();
-        s.touch("b", "Bobby", 5).unwrap();
-        assert_eq!(s.equipped("b").unwrap().cape.as_deref(), Some("glacier"));
+        // Name updates keep the look.
+        s.touch("a", "Alicia", 3).unwrap();
+        assert_eq!(s.look("a").unwrap(), look);
+    }
+
+    #[test]
+    fn offline_keys_are_claimed_once() {
+        let s = Store::memory().unwrap();
+        s.touch("o", "Steve", 1).unwrap();
+        assert_eq!(s.key_hash("o").unwrap(), None);
+        s.set_key_hash("o", "h1").unwrap();
+        s.set_key_hash("o", "h2").unwrap();
+        assert_eq!(s.key_hash("o").unwrap().as_deref(), Some("h1"));
+    }
+
+    #[test]
+    fn textures_dedupe() {
+        let s = Store::memory().unwrap();
+        s.put_texture("x", b"one", 1).unwrap();
+        s.put_texture("x", b"two", 2).unwrap();
+        assert_eq!(s.texture("x").unwrap().unwrap(), b"one");
+        assert_eq!(s.texture("y").unwrap(), None);
     }
 }

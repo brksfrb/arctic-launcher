@@ -80,8 +80,10 @@ pub enum Event {
     SkinAccount(String, Outcome<crate::skin_tasks::AccountSkin>),
     /// Another player's skin by name.
     PlayerSkin(String, Outcome<(Vec<u8>, arctic_core::skins::Variant)>),
-    /// Arctic capes for an account (account id, result).
-    ArcticCapes(String, Outcome<crate::skin_tasks::ArcticCapes>),
+    /// The Arctic look of an account (account id, result).
+    ArcticLook(String, Outcome<crate::skin_tasks::ArcticState>),
+    /// A picked cape image, or `None` if cancelled.
+    CapeFile(Outcome<Option<Vec<u8>>>),
     /// A picked skin file (name, bytes), or `None` if cancelled.
     SkinFile(Outcome<Option<(String, Vec<u8>)>>),
     /// A world import, backup or other world job finished (instance id, message).

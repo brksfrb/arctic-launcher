@@ -8,6 +8,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -21,18 +23,18 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.User;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.Identifier;
 
 /**
- * Talks to the Arctic cosmetics server. Lookups are batched and cached;
- * nothing here ever blocks the render thread.
+ * Arctic looks: every player picks their own skin and cape and publishes
+ * it; this shows everyone's. Lookups are batched and cached, and nothing
+ * here ever blocks the render thread.
  */
 public final class Cosmetics {
-	public static final String BASE_URL = System.getProperty("arctic.cosmetics.url", "https://cosmetics.arcticlauncher.com");
-
 	private static final long TTL_MS = TimeUnit.MINUTES.toMillis(10);
 	private static final long RETRY_MS = TimeUnit.MINUTES.toMillis(1);
 	private static final int BATCH = 100;
@@ -44,67 +46,89 @@ public final class Cosmetics {
 		return t;
 	});
 
-	/** Equipped cape of a player (null = none) and when we asked. */
-	private record Entry(String cape, long fetched) {}
+	/** A player's published look (texture hashes, null = none) and when we asked. */
+	public record Look(String skin, boolean slim, String cape, long fetched) {
+		boolean isEmpty() {
+			return skin == null && cape == null;
+		}
+	}
 
-	public record Item(String id, String name) {}
+	/** A preset cape everyone can wear. */
+	public record Preset(String id, String name, String texture) {}
 
-	private static final Map<UUID, Entry> PLAYERS = new ConcurrentHashMap<>();
+	private static final Map<UUID, Look> PLAYERS = new ConcurrentHashMap<>();
 	private static final Set<UUID> PENDING = ConcurrentHashMap.newKeySet();
 	private static final Map<String, Identifier> TEXTURES = new ConcurrentHashMap<>();
 	private static final Set<String> LOADING = ConcurrentHashMap.newKeySet();
 	/** Bumped whenever something the menu shows changes. */
 	private static final AtomicInteger VERSION = new AtomicInteger();
 
+	static volatile String baseUrl = System.getProperty("arctic.cosmetics.url", "https://cosmetics.arcticlauncher.com");
 	private static volatile String token;
 	private static volatile boolean busy;
-	private static volatile String status = "Not signed in";
-	private static volatile List<Item> catalog = List.of();
-	private static volatile String equipped;
+	private static volatile String status = "";
+	private static volatile List<Preset> presets = List.of();
 
 	private Cosmetics() {}
 
 	static void start() {
+		readLauncherSession();
 		WORKER.scheduleWithFixedDelay(Cosmetics::flushLookups, 1, 1, TimeUnit.SECONDS);
+	}
+
+	/** The launcher leaves a session in config/arctic-session.json. */
+	private static void readLauncherSession() {
+		Path path = FabricLoader.getInstance().getConfigDir().resolve("arctic-session.json");
+		try {
+			JsonObject session = GSON.fromJson(Files.readString(path), JsonObject.class);
+			if (System.getProperty("arctic.cosmetics.url") == null && session.has("url")) {
+				baseUrl = session.get("url").getAsString();
+			}
+			token = session.get("token").getAsString();
+		} catch (Exception e) {
+			ArcticMod.LOG.debug("no launcher session: {}", e.toString());
+		}
 	}
 
 	// ---- Rendering side -------------------------------------------------
 
-	/** Cape texture to show for a player, or null. Queues lookups as needed. */
-	public static Identifier capeFor(UUID player) {
-		if (!ArcticConfig.get().showCosmetics) {
+	/** The player's Arctic look, or null. Queues lookups as needed. */
+	public static Look lookFor(UUID player) {
+		if (!ArcticConfig.get().showCosmetics || ArcticConfig.get().hiddenPlayers.contains(player.toString())) {
 			return null;
 		}
-		Entry entry = PLAYERS.get(player);
-		long now = System.currentTimeMillis();
-		if (entry == null || now - entry.fetched() > TTL_MS) {
+		Look look = PLAYERS.get(player);
+		if (look == null || System.currentTimeMillis() - look.fetched() > TTL_MS) {
 			PENDING.add(player);
 		}
-		return entry == null || entry.cape() == null ? null : texture(entry.cape());
+		return look == null || look.isEmpty() ? null : look;
 	}
 
-	/** Texture for a cosmetic, starting a download on first use. */
-	public static Identifier texture(String id) {
-		Identifier loaded = TEXTURES.get(id);
-		if (loaded == null && LOADING.add(id)) {
-			WORKER.execute(() -> loadTexture(id));
+	/** Texture for a hash, starting a download on first use (null until ready). */
+	public static Identifier texture(String hash) {
+		if (hash == null) {
+			return null;
+		}
+		Identifier loaded = TEXTURES.get(hash);
+		if (loaded == null && LOADING.add(hash)) {
+			WORKER.execute(() -> loadTexture(hash));
 		}
 		return loaded;
 	}
 
-	private static void loadTexture(String id) {
+	private static void loadTexture(String hash) {
 		try {
-			byte[] png = send(request("/v1/textures/" + id + ".png").GET(), HttpResponse.BodyHandlers.ofByteArray());
+			byte[] png = send(request("/v1/textures/" + hash + ".png").GET(), HttpResponse.BodyHandlers.ofByteArray());
 			NativeImage image = NativeImage.read(png);
-			Identifier key = Identifier.fromNamespaceAndPath(ArcticMod.ID, "cape/" + id);
+			Identifier key = Identifier.fromNamespaceAndPath(ArcticMod.ID, "look/" + hash);
 			Minecraft.getInstance().execute(() -> {
-				Minecraft.getInstance().getTextureManager().register(key, new DynamicTexture(() -> "Arctic cape " + id, image));
-				TEXTURES.put(id, key);
+				Minecraft.getInstance().getTextureManager().register(key, new DynamicTexture(() -> "Arctic " + hash, image));
+				TEXTURES.put(hash, key);
 				VERSION.incrementAndGet();
 			});
 		} catch (Exception e) {
-			ArcticMod.LOG.debug("cape texture {}: {}", id, e.toString());
-			WORKER.schedule(() -> LOADING.remove(id), RETRY_MS, TimeUnit.MILLISECONDS);
+			ArcticMod.LOG.debug("texture {}: {}", hash, e.toString());
+			WORKER.schedule(() -> LOADING.remove(hash), RETRY_MS, TimeUnit.MILLISECONDS);
 		}
 	}
 
@@ -123,23 +147,28 @@ public final class Cosmetics {
 			String body = send(request("/v1/players?uuids=" + ids).GET(), HttpResponse.BodyHandlers.ofString());
 			JsonObject found = GSON.fromJson(body, JsonObject.class);
 			for (UUID player : batch) {
-				PLAYERS.put(player, new Entry(capeOf(found, compact(player)), now));
+				PLAYERS.put(player, parseLook(found == null ? null : found.getAsJsonObject(compact(player)), now));
 			}
+			VERSION.incrementAndGet();
 		} catch (Exception e) {
 			// Server unreachable: try these players again in a minute.
 			for (UUID player : batch) {
-				PLAYERS.put(player, new Entry(null, now - TTL_MS + RETRY_MS));
+				PLAYERS.put(player, new Look(null, false, null, now - TTL_MS + RETRY_MS));
 			}
-			ArcticMod.LOG.debug("cosmetics lookup: {}", e.toString());
+			ArcticMod.LOG.debug("look lookup: {}", e.toString());
 		}
 	}
 
-	private static String capeOf(JsonObject found, String uuid) {
-		if (found == null || !found.has(uuid)) {
-			return null;
+	private static Look parseLook(JsonObject o, long now) {
+		if (o == null) {
+			return new Look(null, false, null, now);
 		}
-		JsonElement cape = found.getAsJsonObject(uuid).get("cape");
-		return cape == null || cape.isJsonNull() ? null : cape.getAsString();
+		return new Look(string(o, "skin"), "slim".equals(string(o, "model")), string(o, "cape"), now);
+	}
+
+	private static String string(JsonObject o, String key) {
+		JsonElement e = o.get(key);
+		return e == null || e.isJsonNull() ? null : e.getAsString();
 	}
 
 	// ---- Menu side -------------------------------------------------------
@@ -160,55 +189,55 @@ public final class Cosmetics {
 		return status;
 	}
 
-	public static List<Item> catalog() {
-		return catalog;
+	public static List<Preset> presets() {
+		return presets;
 	}
 
-	public static String equipped() {
-		return equipped;
+	/** The local player's look (from the lookup cache). */
+	public static Look myLook() {
+		return PLAYERS.get(Minecraft.getInstance().getUser().getProfileId());
 	}
 
-	/** Prove who we are via Mojang's session server, then load the catalog. */
-	public static void signIn() {
+	/** Load presets; sign in through Mojang if the launcher gave no session. */
+	public static void open() {
 		if (busy) {
 			return;
 		}
 		setBusy(true, "Connecting to Arctic…");
 		WORKER.execute(() -> {
 			try {
-				loadCatalog();
-				User user = Minecraft.getInstance().getUser();
-				String serverId = GSON.fromJson(send(request("/v1/auth/challenge").POST(HttpRequest.BodyPublishers.noBody()), HttpResponse.BodyHandlers.ofString()), JsonObject.class).get("server_id").getAsString();
-				Minecraft.getInstance().services().sessionService().joinServer(user.getProfileId(), user.getAccessToken(), serverId);
-				JsonObject verify = new JsonObject();
-				verify.addProperty("name", user.getName());
-				verify.addProperty("server_id", serverId);
-				JsonObject session = GSON.fromJson(send(request("/v1/auth/verify").header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(verify.toString())), HttpResponse.BodyHandlers.ofString()), JsonObject.class);
-				token = session.get("token").getAsString();
-				JsonObject me = GSON.fromJson(send(authorized("/v1/me").GET(), HttpResponse.BodyHandlers.ofString()), JsonObject.class);
-				JsonElement cape = me.getAsJsonObject("equipped").get("cape");
-				equipped = cape == null || cape.isJsonNull() ? null : cape.getAsString();
-				setBusy(false, "Signed in as " + user.getName());
+				Preset[] items = GSON.fromJson(send(request("/v1/catalog").GET(), HttpResponse.BodyHandlers.ofString()), Preset[].class);
+				presets = items == null ? List.of() : List.of(items);
+				for (Preset p : presets) {
+					texture(p.texture());
+				}
+				if (token == null) {
+					signInWithMojang();
+				}
+				PENDING.add(Minecraft.getInstance().getUser().getProfileId());
+				setBusy(false, "");
 			} catch (com.mojang.authlib.exceptions.AuthenticationException e) {
-				setBusy(false, "Arctic cosmetics need a Microsoft account.");
+				setBusy(false, "Launch through Arctic Launcher to change your look.");
 			} catch (Exception e) {
-				ArcticMod.LOG.warn("Arctic sign-in failed: {}", e.toString());
+				ArcticMod.LOG.warn("Arctic: {}", e.toString());
 				setBusy(false, "Couldn't reach Arctic. Try again later.");
 			}
 		});
 	}
 
-	private static void loadCatalog() throws Exception {
-		Item[] items = GSON.fromJson(send(request("/v1/catalog").GET(), HttpResponse.BodyHandlers.ofString()), Item[].class);
-		catalog = items == null ? List.of() : List.of(items);
-		for (Item item : catalog) {
-			texture(item.id());
-		}
-		VERSION.incrementAndGet();
+	private static void signInWithMojang() throws Exception {
+		User user = Minecraft.getInstance().getUser();
+		String serverId = GSON.fromJson(send(request("/v1/auth/challenge").POST(HttpRequest.BodyPublishers.noBody()), HttpResponse.BodyHandlers.ofString()), JsonObject.class).get("server_id").getAsString();
+		Minecraft.getInstance().services().sessionService().joinServer(user.getProfileId(), user.getAccessToken(), serverId);
+		JsonObject verify = new JsonObject();
+		verify.addProperty("name", user.getName());
+		verify.addProperty("server_id", serverId);
+		JsonObject session = GSON.fromJson(send(request("/v1/auth/verify").header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(verify.toString())), HttpResponse.BodyHandlers.ofString()), JsonObject.class);
+		token = session.get("token").getAsString();
 	}
 
-	/** Equip a cape (or none) for the signed-in player. */
-	public static void equip(String cape) {
+	/** Wear a preset cape (null = none), keeping the current skin. */
+	public static void wearCape(String presetId) {
 		if (busy || token == null) {
 			return;
 		}
@@ -216,12 +245,22 @@ public final class Cosmetics {
 		WORKER.execute(() -> {
 			try {
 				JsonObject body = new JsonObject();
-				body.addProperty("cape", cape);
-				send(authorized("/v1/me/equipped").header("Content-Type", "application/json").PUT(HttpRequest.BodyPublishers.ofString(body.toString())), HttpResponse.BodyHandlers.ofString());
-				equipped = cape;
+				Look mine = myLook();
+				if (mine != null && mine.skin() != null) {
+					JsonObject skin = new JsonObject();
+					skin.addProperty("hash", mine.skin());
+					skin.addProperty("model", mine.slim() ? "slim" : "classic");
+					body.add("skin", skin);
+				}
+				if (presetId != null) {
+					JsonObject cape = new JsonObject();
+					cape.addProperty("preset", presetId);
+					body.add("cape", cape);
+				}
+				String response = send(authorized("/v1/look").header("Content-Type", "application/json").PUT(HttpRequest.BodyPublishers.ofString(body.toString())), HttpResponse.BodyHandlers.ofString());
 				UUID self = Minecraft.getInstance().getUser().getProfileId();
-				PLAYERS.put(self, new Entry(cape, System.currentTimeMillis()));
-				setBusy(false, cape == null ? "Cape removed" : "Cape equipped. Other Arctic players see it too.");
+				PLAYERS.put(self, parseLook(GSON.fromJson(response, JsonObject.class), System.currentTimeMillis()));
+				setBusy(false, presetId == null ? "Cape removed" : "Every Arctic player sees your new cape.");
 			} catch (Exception e) {
 				setBusy(false, "Couldn't save: " + e.getMessage());
 			}
@@ -237,7 +276,7 @@ public final class Cosmetics {
 	// ---- HTTP -------------------------------------------------------------
 
 	private static HttpRequest.Builder request(String path) {
-		return HttpRequest.newBuilder(URI.create(BASE_URL + path)).timeout(Duration.ofSeconds(10)).header("User-Agent", "arctic-mod/1");
+		return HttpRequest.newBuilder(URI.create(baseUrl + path)).timeout(Duration.ofSeconds(10)).header("User-Agent", "arctic-mod/1");
 	}
 
 	private static HttpRequest.Builder authorized(String path) {
@@ -252,7 +291,7 @@ public final class Cosmetics {
 		return response.body();
 	}
 
-	private static String compact(UUID uuid) {
+	static String compact(UUID uuid) {
 		return uuid.toString().replace("-", "");
 	}
 }

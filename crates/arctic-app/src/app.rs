@@ -590,7 +590,8 @@ impl ArcticApp {
             e @ (Event::SkinAccount(..)
             | Event::PlayerSkin(..)
             | Event::SkinFile(..)
-            | Event::ArcticCapes(..)) => self.on_skins_event(e),
+            | Event::ArcticLook(..)
+            | Event::CapeFile(..)) => self.on_skins_event(e),
             Event::UpdateChecked(result) => self.on_update_checked(result),
             Event::UpdateInstalled(result) => self.on_update_installed(result),
         }

@@ -182,6 +182,9 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 loaders::LoaderKind::Fabric | loaders::LoaderKind::Quilt
             ) {
                 arctic_mod::sync(&game_dir.join("mods"), &vanilla.id, req.instance.arctic_mod)?;
+                if req.instance.arctic_mod && arctic_mod::supports(&vanilla.id) {
+                    share_cosmetics_session(dirs, &game_dir, req.account);
+                }
             }
             profile
         }
@@ -189,6 +192,20 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
     };
     let installation = install(dirs, version, &game_dir, java_override, progress)?;
     Ok(plan(req, &installation))
+}
+
+/// Let the Arctic mod publish looks as this player. Best effort: without
+/// the cosmetics server the game still starts, and the mod can show looks.
+fn share_cosmetics_session(dirs: &DataDirs, game_dir: &Path, account: &Account) {
+    let base = crate::cosmetics::base_url();
+    match crate::cosmetics::token_for(dirs, &base, account) {
+        Ok(token) => {
+            if let Err(e) = crate::cosmetics::write_mod_session(game_dir, &base, &token) {
+                log::warn!("arctic session file: {e}");
+            }
+        }
+        Err(e) => log::info!("Arctic cosmetics unavailable: {e}"),
+    }
 }
 
 /// Build the command line for `req` from a finished installation.

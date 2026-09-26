@@ -141,18 +141,32 @@ the Minecraft services API with the account's access token. Legacy 64×32 skins 
 and cleaned the same way the game does. The 3D preview (`arctic-app/src/ui/skins/model.rs`)
 builds a textured mesh per body part, back-face culls and depth-sorts the faces.
 
-## Arctic mod and cosmetics
+## Arctic looks and the mod
 
-The Fabric mod (`mod/fabric`) replaces a player's cape texture with their Arctic cape, adds
-an Arctic button to the title and pause screens, and opens a menu to pick a cape. It looks
-players up in batches of 100 and caches the answers for 10 minutes. The launcher embeds the
-built jar (`mod/fabric/dist/`) and copies it into Fabric and Quilt instances of supported
-Minecraft versions before launch (`arctic_mod::sync`), unless the instance turns it off.
+A **look** is a skin (plus arm model) and a cape that the player picks locally. The launcher
+publishes it to the looks server (`arctic-cosmetics`), which stores textures by SHA-1 and
+relays each player's look to every Arctic client. Nothing is owned or unlocked: presets are
+just textures everyone may use, and custom images are allowed (size-checked: 64×64 skins,
+2:1 capes up to 512×256).
 
-Sign-in to the cosmetics server never sends a password or token to Arctic: the client asks
-for a challenge, calls Mojang's `session/minecraft/join` with it, and the server confirms
-with `hasJoined`, like a Minecraft server does. The server then issues an HMAC-signed token
-that expires after a week.
+The server only checks **who** publishes, so nobody can change someone else's look:
+
+- **Microsoft accounts:** the client asks for a challenge, calls Mojang's
+  `session/minecraft/join` with it, and the server confirms with `hasJoined`, like a
+  Minecraft server does. No password or token reaches Arctic.
+- **Offline accounts:** the first launcher to use a name claims it with a random key, kept
+  in the profile's `cosmetics.json`; later changes need the same key. The server derives
+  the UUID from the name exactly like the game, so a key can only claim an offline UUID.
+
+Both give an HMAC-signed token that expires after a week. Before launching a Fabric/Quilt
+instance with the mod, the launcher writes `config/arctic-session.json` so cape changes
+made in game publish as that player.
+
+The Fabric mod (`mod/fabric`) swaps in the player's Arctic skin (with the right arm model)
+and cape, looks players up in batches of 100, caches for 10 minutes, and adds an Arctic menu
+(title and pause screens) to pick a preset cape, hide all looks, or hide one player's look.
+The launcher embeds the built jar (`mod/fabric/dist/`) and copies it into Fabric and Quilt
+instances of supported Minecraft versions before launch (`arctic_mod::sync`).
 
 ## Platforms
 

@@ -10,6 +10,7 @@
 
 mod auth;
 mod catalog;
+mod images;
 mod limit;
 mod routes;
 mod store;
@@ -47,9 +48,17 @@ async fn run() -> Result<(), String> {
         .map_err(|e| format!("ARCTIC_COSMETICS_ADDR: {e}"))?;
     let db = PathBuf::from(env("ARCTIC_COSMETICS_DB", "cosmetics.db"));
     let assets = PathBuf::from(env("ARCTIC_COSMETICS_ASSETS", "assets"));
+    let store = store::Store::open(&db).map_err(|e| format!("database {}: {e}", db.display()))?;
+    let catalog = catalog::Catalog::load(&assets)?;
+    let started = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    catalog
+        .register(&store, started)
+        .map_err(|e| format!("registering presets: {e}"))?;
     let state = AppState {
-        store: store::Store::open(&db).map_err(|e| format!("database {}: {e}", db.display()))?,
-        catalog: catalog::Catalog::load(&assets)?,
+        store,
+        catalog,
         challenges: auth::Challenges::default(),
         limiter: limit::Limiter::new(120, Duration::from_secs(60)),
         secret: secret.into_bytes(),

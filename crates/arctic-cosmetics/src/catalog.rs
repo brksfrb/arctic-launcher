@@ -1,31 +1,32 @@
-//! Cosmetics on offer, loaded from `catalog.json` plus one PNG per item.
+//! Preset capes offered to everyone, loaded from `catalog.json` plus one
+//! PNG per preset. Presets are ordinary textures once registered; players
+//! can just as well upload their own.
 
-use std::collections::HashMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Item {
-    pub id: String,
-    pub name: String,
-    /// Everyone owns free items.
-    #[serde(default)]
-    pub free: bool,
+use crate::images::{self, Kind};
+use crate::store::Store;
+
+#[derive(Debug, Clone, Deserialize)]
+struct Item {
+    id: String,
+    name: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct PublicItem {
+pub struct Preset {
     pub id: String,
     pub name: String,
-    pub kind: &'static str,
-    pub free: bool,
+    /// Content hash, fetch it from `/v1/textures/<hash>.png`.
     pub texture: String,
+    #[serde(skip)]
+    png: Vec<u8>,
 }
 
 pub struct Catalog {
-    items: Vec<Item>,
-    textures: HashMap<String, Vec<u8>>,
+    presets: Vec<Preset>,
 }
 
 impl Catalog {
@@ -35,45 +36,39 @@ impl Catalog {
             .map_err(|e| format!("catalog.json: {e}"))?;
         let items: Vec<Item> =
             serde_json::from_str(&text).map_err(|e| format!("catalog.json: {e}"))?;
-        let mut textures = HashMap::new();
-        for item in &items {
-            if !item
-                .id
-                .bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
-            {
-                return Err(format!("bad cosmetic id {:?}", item.id));
-            }
+        let mut presets = Vec::with_capacity(items.len());
+        for item in items {
             let path = dir.join("capes").join(format!("{}.png", item.id));
             let png = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-            textures.insert(item.id.clone(), png);
+            let texture =
+                images::check(&png, Kind::Cape).map_err(|e| format!("{}: {e}", path.display()))?;
+            presets.push(Preset {
+                id: item.id,
+                name: item.name,
+                texture,
+                png,
+            });
         }
-        Ok(Self { items, textures })
+        Ok(Self { presets })
     }
 
-    pub fn public(&self) -> Vec<PublicItem> {
-        self.items
+    /// Make the preset textures downloadable.
+    pub fn register(&self, store: &Store, now: u64) -> rusqlite::Result<()> {
+        for p in &self.presets {
+            store.put_texture(&p.texture, &p.png, now)?;
+        }
+        Ok(())
+    }
+
+    pub fn presets(&self) -> &[Preset] {
+        &self.presets
+    }
+
+    /// Texture hash of a preset by id.
+    pub fn preset(&self, id: &str) -> Option<&str> {
+        self.presets
             .iter()
-            .map(|i| PublicItem {
-                id: i.id.clone(),
-                name: i.name.clone(),
-                kind: "cape",
-                free: i.free,
-                texture: format!("/v1/textures/{}.png", i.id),
-            })
-            .collect()
-    }
-
-    pub fn texture(&self, id: &str) -> Option<Vec<u8>> {
-        self.textures.get(id).cloned()
-    }
-
-    /// Items this player may equip. Paid items would be granted per player.
-    pub fn owned_by(&self, _uuid: &str) -> Vec<String> {
-        self.items
-            .iter()
-            .filter(|i| i.free)
-            .map(|i| i.id.clone())
-            .collect()
+            .find(|p| p.id == id)
+            .map(|p| p.texture.as_str())
     }
 }

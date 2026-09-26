@@ -353,13 +353,17 @@ name = "arctic-cosmetics"
 version = "0.2.0"
 dependencies = [
  "axum",
+ "base64 0.23.1",
  "env_logger",
  "hex",
  "hmac",
  "log",
+ "md-5",
+ "png",
  "rusqlite",
  "serde",
  "serde_json",
+ "sha1",
  "sha2",
  "tempfile",
  "tokio",

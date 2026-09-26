@@ -49,9 +49,11 @@ final class SelfTest {
 
 	private static void waitForCape(int attempt) {
 		UUID self = Minecraft.getInstance().getUser().getProfileId();
-		Identifier cape = Cosmetics.capeFor(self);
-		if (cape != null) {
-			ArcticMod.LOG.info("selftest: cape texture {}", cape);
+		Cosmetics.Look look = Cosmetics.lookFor(self);
+		Identifier skin = look == null ? null : Cosmetics.texture(look.skin());
+		Identifier cape = look == null ? null : Cosmetics.texture(look.cape());
+		if (cape != null && (look.skin() == null || skin != null)) {
+			ArcticMod.LOG.info("selftest: look skin={} cape={} slim={}", skin, cape, look.slim());
 			openMenu();
 		} else if (attempt < 20) {
 			TIMER.schedule(() -> waitForCape(attempt + 1), 1, TimeUnit.SECONDS);

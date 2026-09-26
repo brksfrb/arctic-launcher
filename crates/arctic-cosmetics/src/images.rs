@@ -1,0 +1,87 @@
+//! Checks for uploaded textures: real PNGs of the sizes the game uses.
+
+use sha1::{Digest, Sha1};
+
+/// Largest upload accepted (a 512×256 HD cape is well under this).
+pub const MAX_PNG_BYTES: usize = 256 * 1024;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    Skin,
+    Cape,
+}
+
+/// Validate a PNG for `kind`; returns its SHA-1 (hex) on success.
+pub fn check(png_bytes: &[u8], kind: Kind) -> Result<String, String> {
+    if png_bytes.len() > MAX_PNG_BYTES {
+        return Err("image is too large".into());
+    }
+    let decoder = png::Decoder::new(std::io::Cursor::new(png_bytes));
+    let reader = decoder
+        .read_info()
+        .map_err(|_| "not a PNG image".to_owned())?;
+    let (w, h) = (reader.info().width, reader.info().height);
+    let ok = match kind {
+        // Classic 64×64 skins and legacy 64×32 ones.
+        Kind::Skin => w == 64 && (h == 64 || h == 32),
+        // Capes are 2:1, from 64×32 up to 512×256 (HD capes).
+        Kind::Cape => w * 32 == h * 64 && (64..=512).contains(&w) && w.is_power_of_two(),
+    };
+    if !ok {
+        return Err(format!(
+            "a {w}×{h} image is not a valid {}",
+            match kind {
+                Kind::Skin => "skin (64×64)",
+                Kind::Cape => "cape (64×32, or 128×64 up to 512×256)",
+            }
+        ));
+    }
+    Ok(hex::encode(Sha1::digest(png_bytes)))
+}
+
+/// Offline players' UUID, as the game derives it from the name.
+pub fn offline_uuid(name: &str) -> String {
+    use md5::{Digest as _, Md5};
+    let digest = Md5::digest(format!("OfflinePlayer:{name}").as_bytes());
+    let mut bytes = [0u8; 16];
+    bytes.copy_from_slice(&digest);
+    bytes[6] = (bytes[6] & 0x0f) | 0x30;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    hex::encode(bytes)
+}
+
+#[cfg(test)]
+pub fn test_png(w: u32, h: u32) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut enc = png::Encoder::new(&mut out, w, h);
+    enc.set_color(png::ColorType::Rgba);
+    enc.set_depth(png::BitDepth::Eight);
+    let mut writer = enc.write_header().unwrap();
+    writer
+        .write_image_data(&vec![200u8; (w * h * 4) as usize])
+        .unwrap();
+    drop(writer);
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sizes() {
+        assert!(check(&test_png(64, 64), Kind::Skin).is_ok());
+        assert!(check(&test_png(64, 32), Kind::Skin).is_ok());
+        assert!(check(&test_png(128, 128), Kind::Skin).is_err());
+        assert!(check(&test_png(64, 32), Kind::Cape).is_ok());
+        assert!(check(&test_png(128, 64), Kind::Cape).is_ok());
+        assert!(check(&test_png(96, 48), Kind::Cape).is_err());
+        assert!(check(b"nope", Kind::Cape).is_err());
+    }
+
+    #[test]
+    fn offline_uuid_matches_the_game() {
+        // Java: UUID.nameUUIDFromBytes("OfflinePlayer:Notch".getBytes())
+        assert_eq!(offline_uuid("Notch"), "b50ad385829d3141a2167e7d7539ba7f");
+    }
+}
