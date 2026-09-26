@@ -33,7 +33,7 @@ final class CapeTile extends Widget {
 		int cx = x + (w - capeW) / 2;
 		if (texture != null && ArcticClient.looks().texture(texture)) {
 			// Cape front: (1,1) 10x16 of a 64x32 layout; presets are 2x.
-			g.texture("look:" + texture, cx, y + 5, capeW, capeH, 2f, 2f, 20, 32, 128, 64);
+			g.texture("look:" + ArcticClient.looks().frame(texture), cx, y + 5, capeW, capeH, 2f, 2f, 20, 32, 128, 64);
 		} else if (texture == null) {
 			Draw.centered(g, "-", x + w / 2, y + 5 + capeH / 2 - 4, s.muted, false);
 		}

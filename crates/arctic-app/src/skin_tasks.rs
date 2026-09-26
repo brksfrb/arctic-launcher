@@ -173,7 +173,11 @@ impl Tasks {
     /// Ask for a cape image; `None` when the dialog was cancelled.
     pub fn pick_cape_file(&self) {
         self.run(|t| {
-            let result = pick_png("Choose a cape image (64×32)", "Cape").map(|f| f.map(|(_, b)| b));
+            let result = pick_png(
+                "Choose a cape image (64×32, or up to 8 frames stacked for an animated cape)",
+                "Cape",
+            )
+            .map(|f| f.map(|(_, b)| b));
             t.send(Event::CapeFile(result));
         });
     }

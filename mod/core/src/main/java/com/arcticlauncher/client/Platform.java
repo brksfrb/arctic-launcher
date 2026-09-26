@@ -54,10 +54,12 @@ public interface Platform {
 
 	/**
 	 * Make a downloaded PNG drawable as {@code "look:" + hash}. Called off
-	 * the render thread; call {@code ArcticClient.looks().textureReady(hash)}
-	 * once it's registered.
+	 * the render thread; call {@code ArcticClient.looks().textureReady(hash,
+	 * frames)} once it's registered. A {@code cape} whose image stacks
+	 * several 2:1 frames (see {@code Looks.capeFrames}) is registered as
+	 * {@code hash + "/" + i} per frame instead.
 	 */
-	void registerTexture(String hash, byte[] png);
+	void registerTexture(String hash, byte[] png, boolean cape);
 
 	/** Mojang session join, to prove who we are to the Arctic server. */
 	void joinServer(String serverId) throws Exception;

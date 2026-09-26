@@ -153,10 +153,11 @@ impl ArcticApp {
             (None, Some(g)) => Some(format!("gal:{}", g.texture)),
             _ => current.skin_key.clone(),
         };
+        let now = ui.input(|i| i.time);
         let cape = current
             .cape_key
             .as_deref()
-            .and_then(|k| self.skin_texture(&ctx, k).map(|t| t.handle.id()));
+            .and_then(|k| self.skin_texture(&ctx, k).map(|t| t.id_at(now)));
         let pose = Pose {
             yaw: self.skins.yaw,
             pitch: self.skins.pitch,
@@ -341,10 +342,11 @@ impl ArcticApp {
             if cape_tile(ui, p, None, Icon::Close, "No cape", worn.is_none()) && worn.is_some() {
                 pick = Some(None);
             }
+            let now = ui.input(|i| i.time);
             for preset in &state.presets {
                 let tex = self
                     .skin_texture(&ctx, &format!("acape:{}", preset.texture))
-                    .map(|t| t.handle.id());
+                    .map(|t| animate(&ctx, t, now));
                 let active = worn.as_deref() == Some(preset.texture.as_str());
                 if cape_tile(ui, p, tex, Icon::Close, &preset.name, active) && !active {
                     pick = Some(Some(CapeChoice::Preset(preset.id.clone())));
@@ -356,7 +358,7 @@ impl ArcticApp {
             if let Some(hash) = custom {
                 let tex = self
                     .skin_texture(&ctx, &format!("acape:{hash}"))
-                    .map(|t| t.handle.id());
+                    .map(|t| animate(&ctx, t, now));
                 cape_tile(ui, p, tex, Icon::Close, "Your cape", true);
             }
             if cape_tile(
@@ -364,7 +366,7 @@ impl ArcticApp {
                 p,
                 None,
                 Icon::Plus,
-                "Use your own cape image (64×32 PNG)",
+                "Use your own cape image (64×32 PNG; stack up to 8 frames to animate it)",
                 false,
             ) {
                 upload = true;
@@ -572,6 +574,16 @@ impl ArcticApp {
 }
 
 /// Cape front, or an icon for "none"/"upload". Returns true when clicked.
+/// The frame to show now; keeps repainting while a cape is animated.
+fn animate(ctx: &egui::Context, texture: &super::SkinTexture, now: f64) -> egui::TextureId {
+    if texture.animated() {
+        ctx.request_repaint_after(std::time::Duration::from_secs_f64(
+            arctic_core::cosmetics::CAPE_FRAME_SECS,
+        ));
+    }
+    texture.id_at(now)
+}
+
 fn cape_tile(
     ui: &mut egui::Ui,
     p: &Palette,

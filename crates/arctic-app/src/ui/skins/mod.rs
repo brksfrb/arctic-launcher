@@ -42,6 +42,23 @@ pub struct SkinTexture {
     /// Has the second layer on body and limbs (not a legacy 64×32 skin).
     pub overlay: bool,
     pub guessed: Variant,
+    /// Animated capes: one texture per frame (`handle` is the first).
+    frames: Vec<TextureHandle>,
+}
+
+impl SkinTexture {
+    /// The texture to draw at `time` (seconds): animated capes cycle.
+    pub fn id_at(&self, time: f64) -> egui::TextureId {
+        if self.frames.is_empty() {
+            return self.handle.id();
+        }
+        let frame = (time / arctic_core::cosmetics::CAPE_FRAME_SECS) as usize % self.frames.len();
+        self.frames[frame].id()
+    }
+
+    pub fn animated(&self) -> bool {
+        !self.frames.is_empty()
+    }
 }
 
 /// Texture keys: `lib:<id>` library skin, `mc` Minecraft skin,
@@ -340,17 +357,10 @@ impl ArcticApp {
 }
 
 fn upload(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture> {
-    // Capes are 64×32 (or larger multiples); skins go through the skin decoder.
+    // Capes are 64×32 (or larger multiples, or stacked animation frames);
+    // skins go through the skin decoder.
     if key.starts_with("mccape:") || key.starts_with("acape:") {
-        let image = image::load_from_memory(png).ok()?.to_rgba8();
-        let size = [image.width() as usize, image.height() as usize];
-        let color = ColorImage::from_rgba_unmultiplied(size, image.as_raw());
-        let handle = ctx.load_texture(key, color, TextureOptions::NEAREST);
-        return Some(SkinTexture {
-            handle,
-            overlay: false,
-            guessed: Variant::Classic,
-        });
+        return upload_cape(ctx, key, png);
     }
     let image = skins::decode(png).ok()?;
     let color = ColorImage::from_rgba_unmultiplied([64, 64], &image.rgba);
@@ -359,5 +369,29 @@ fn upload(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture> {
         handle,
         overlay: !image.legacy,
         guessed: image.guess_variant(),
+        frames: Vec::new(),
+    })
+}
+
+/// A cape texture; animated capes become one texture per frame.
+fn upload_cape(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture> {
+    let image = image::load_from_memory(png).ok()?.to_rgba8();
+    let (w, h) = image.dimensions();
+    let count = arctic_core::cosmetics::cape_frames(w, h).unwrap_or(1);
+    let frame_h = h / count;
+    let frames: Vec<TextureHandle> = (0..count)
+        .map(|i| {
+            let frame = image::imageops::crop_imm(&image, 0, i * frame_h, w, frame_h).to_image();
+            let size = [w as usize, frame_h as usize];
+            let color = ColorImage::from_rgba_unmultiplied(size, frame.as_raw());
+            ctx.load_texture(format!("{key}#{i}"), color, TextureOptions::NEAREST)
+        })
+        .collect();
+    let handle = frames.first()?.clone();
+    Some(SkinTexture {
+        handle,
+        overlay: false,
+        guessed: Variant::Classic,
+        frames: if count > 1 { frames } else { Vec::new() },
     })
 }

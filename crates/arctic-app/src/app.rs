@@ -807,11 +807,15 @@ impl eframe::App for ArcticApp {
             self.set_tab(Tab::Instances, 0.0);
             self.inst.modpacks_open = true;
         }
-        if std::env::var("ARCTIC_DEVSHOT_PAGE").as_deref() == Ok("app-settings")
-            && cfg!(debug_assertions)
-            && self.tab != Tab::Settings
-        {
-            self.set_tab(Tab::Settings, 0.0);
+        if cfg!(debug_assertions) {
+            let tab = match std::env::var("ARCTIC_DEVSHOT_PAGE").as_deref() {
+                Ok("app-settings") => Some(Tab::Settings),
+                Ok("skins" | "gallery") => Some(Tab::Skins),
+                _ => None,
+            };
+            if let Some(tab) = tab.filter(|t| *t != self.tab) {
+                self.set_tab(tab, 0.0);
+            }
         }
         if let Some(id) = self.devshot.open_instance.take() {
             self.set_tab(Tab::Instances, 0.0);

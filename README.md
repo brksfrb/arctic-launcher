@@ -44,8 +44,8 @@
   forwarding: open your world to LAN and Arctic connects you directly (or through an
   encrypted relay when a direct link isn't possible).
 - **Wear any skin, any cape, free.** Pick a skin from your library (or copy a player's by
-  name), choose a cape or use your own image, and every Arctic player sees it, on any
-  account. Preview everything on a 3D model. Microsoft accounts can also change their real
+  name), choose a cape or use your own image (animated ones too), and every Arctic player
+  sees it, on any account. Preview everything on a 3D model. Microsoft accounts can also change their real
   Minecraft skin from here.
 - **Skin gallery.** Browse skins other players shared, search by name or creator, and wear
   one in a click. Share your own from your library.

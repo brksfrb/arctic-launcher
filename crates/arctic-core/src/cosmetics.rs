@@ -440,9 +440,34 @@ fn post<T: serde::de::DeserializeOwned>(url: &str, body: &serde_json::Value) -> 
     Ok(resp.body_mut().with_config().limit(MAX_BYTES).read_json()?)
 }
 
+/// Animated capes stack up to this many 2:1 frames vertically.
+pub const MAX_CAPE_FRAMES: u32 = 8;
+/// How long each frame of an animated cape shows (8 frames a second,
+/// matching the Arctic Client).
+pub const CAPE_FRAME_SECS: f64 = 0.125;
+
+/// Frames in a cape image of `width`×`height`: 1 for a plain cape, more
+/// for animated ones, `None` if it isn't a cape layout.
+pub fn cape_frames(width: u32, height: u32) -> Option<u32> {
+    let frame = width / 2;
+    if frame == 0 || !height.is_multiple_of(frame) {
+        return None;
+    }
+    Some(height / frame).filter(|n| (1..=MAX_CAPE_FRAMES).contains(n))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn counts_cape_frames() {
+        assert_eq!(cape_frames(64, 32), Some(1));
+        assert_eq!(cape_frames(128, 64 * 6), Some(6));
+        assert_eq!(cape_frames(64, 32 * 9), None);
+        assert_eq!(cape_frames(64, 48), None);
+        assert_eq!(cape_frames(0, 0), None);
+    }
 
     #[test]
     fn parses_looks() {
