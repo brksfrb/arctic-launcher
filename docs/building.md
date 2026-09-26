@@ -27,16 +27,16 @@ Run the launcher directly with `cargo run --release -p arctic-app`.
 
 ### The Arctic Client
 
-The launcher embeds `mod/dist/arctic-mod-<version>.jar`, which is committed, so the steps
-above don't need Java. The client is a shared core (`mod/core`, Java 8, no Minecraft code)
-plus one adapter per Minecraft version (`mod/versions/<version>`). To change it, you need
-JDK 25:
+The launcher embeds the jars in `mod/dist/`, which are committed, so the steps above don't
+need Java. The client is a shared core (`mod/core`, Java 8, no Minecraft code) plus one
+adapter source tree for every Fabric version (`mod/versions/fabric`), where version
+differences sit in `//#if MC >= 26.2` … `//#else` … `//#endif` blocks that the build
+resolves. `mod/targets.json` lists what gets built and which Minecraft versions each jar
+covers; the launcher reads the same file. To change the client, you need JDK 25:
 
 ```sh
-cd mod
-./gradlew -p core build          # checks the core still compiles for Java 8
-./gradlew -p versions/26.3 build
-cp versions/26.3/build/libs/arctic-mod-26.3-*.jar dist/arctic-mod-26.3.jar
+cd mod && ./gradlew -p core build   # checks the core still compiles for Java 8
+python mod/build.py                 # every target into mod/dist (or: python mod/build.py 26.2)
 ```
 
 Launch an instance with `ARCTIC_COSMETICS_URL=http://127.0.0.1:8080` set to point the

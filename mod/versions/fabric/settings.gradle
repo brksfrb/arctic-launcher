@@ -9,5 +9,6 @@ pluginManagement {
 	}
 }
 
-// Arctic Client for Minecraft 26.3 (Fabric). Build from mod/: ./gradlew -p versions/26.3 build
+// Arctic Client for every Fabric version of Minecraft. Build from mod/:
+// ./gradlew -p versions/fabric build -Pminecraft_version=26.3
 rootProject.name = 'arctic-mod'

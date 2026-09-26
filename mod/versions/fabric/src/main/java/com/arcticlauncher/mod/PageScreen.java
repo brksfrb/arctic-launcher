@@ -82,6 +82,6 @@ public final class PageScreen extends Screen {
 
 	@Override
 	public void onClose() {
-		minecraft.gui.setScreen(parent);
+		Compat.setScreen(parent);
 	}
 }

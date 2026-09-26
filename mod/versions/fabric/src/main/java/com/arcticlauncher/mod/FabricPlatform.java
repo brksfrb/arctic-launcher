@@ -116,17 +116,17 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public boolean hudHidden() {
-		return mc().gui.hud.isHidden() || mc().getDebugOverlay().showDebugScreen();
+		return Compat.hudHidden() || mc().getDebugOverlay().showDebugScreen();
 	}
 
 	@Override
 	public void openPage(Page page) {
-		mc().gui.setScreen(new PageScreen(page, mc().gui.screen()));
+		Compat.setScreen(new PageScreen(page, Compat.screen()));
 	}
 
 	@Override
 	public void closePage() {
-		if (mc().gui.screen() instanceof PageScreen screen) {
+		if (Compat.screen() instanceof PageScreen screen) {
 			screen.onClose();
 		}
 	}
@@ -134,16 +134,16 @@ final class FabricPlatform implements Platform {
 	@Override
 	public void action(MenuAction action) {
 		Minecraft mc = mc();
-		Screen parent = mc.gui.screen();
+		Screen parent = Compat.screen();
 		switch (action) {
-			case SINGLEPLAYER -> mc.gui.setScreen(new SelectWorldScreen(parent));
-			case MULTIPLAYER -> mc.gui.setScreen(mc.options.skipMultiplayerWarning
+			case SINGLEPLAYER -> Compat.setScreen(new SelectWorldScreen(parent));
+			case MULTIPLAYER -> Compat.setScreen(mc.options.skipMultiplayerWarning
 					? new JoinMultiplayerScreen(parent)
 					: new SafetyScreen(parent));
-			case REALMS -> mc.gui.setScreen(new RealmsMainScreen(parent));
-			case OPTIONS -> mc.gui.setScreen(new OptionsScreen(parent, mc.options));
-			case LANGUAGE -> mc.gui.setScreen(new LanguageSelectScreen(parent, mc.options, mc.getLanguageManager()));
-			case ACCESSIBILITY -> mc.gui.setScreen(new AccessibilityOptionsScreen(parent, mc.options));
+			case REALMS -> Compat.setScreen(new RealmsMainScreen(parent));
+			case OPTIONS -> Compat.setScreen(Compat.optionsScreen(parent));
+			case LANGUAGE -> Compat.setScreen(new LanguageSelectScreen(parent, mc.options, mc.getLanguageManager()));
+			case ACCESSIBILITY -> Compat.setScreen(new AccessibilityOptionsScreen(parent, mc.options));
 			case QUIT -> mc.stop();
 		}
 	}

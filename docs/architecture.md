@@ -176,7 +176,8 @@ The client is split so it can cover many Minecraft versions:
   the menu styles and the widget skins (`style`), the animated Arctic backdrop, the title
   menu, the Arctic menu (Right Shift) and the HUD editor (`menu`), the HUD widgets (`hud`),
   looks lookups and cape changes over plain HTTP (`looks`), and `config/arctic.json`.
-- `mod/versions/<version>` is a thin adapter: a `Platform` (game state, screens, textures,
+- `mod/versions/fabric` is a thin adapter, one source tree built for each target in
+  `mod/targets.json` (version differences are `//#if MC …` blocks, mostly in `Compat`): a `Platform` (game state, screens, textures,
   sign-in), a `Gfx` over that version's GUI renderer, a screen that hosts core pages, and
   mixins that replace the title screen, draw the HUD, count clicks, open the menu, restyle
   vanilla buttons, sliders, fields and checkboxes, and apply Arctic skins and capes.

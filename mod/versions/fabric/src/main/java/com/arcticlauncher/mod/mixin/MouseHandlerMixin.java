@@ -1,5 +1,6 @@
 package com.arcticlauncher.mod.mixin;
 
+import com.arcticlauncher.mod.Compat;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.mod.Input;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -16,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 abstract class MouseHandlerMixin {
 	@Inject(method = "onButton", at = @At("HEAD"))
 	private void arctic$click(long window, MouseButtonInfo info, int action, CallbackInfo ci) {
-		if (action == InputConstants.PRESS && Minecraft.getInstance().gui.screen() == null) {
+		if (action == InputConstants.PRESS && Compat.screen() == null) {
 			ArcticClient.mousePressed(Input.mouse(info.button()));
 		}
 	}

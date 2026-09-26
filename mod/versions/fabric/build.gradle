@@ -1,0 +1,162 @@
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+}
+
+// One source tree for every Fabric version of Minecraft. Pick the version
+// with -Pminecraft_version=1.21.11; code that differs between versions sits
+// in //#if MC >= 26.1 … //#else … //#endif blocks (see preprocess below).
+def mc = project.minecraft_version
+
+/** Minecraft version as numbers, for comparing (26.1.2 → [26, 1, 2]). */
+def parseVersion = { String v -> v.tokenize('.').collect { it as int } }
+
+def compareVersions = { String a, String b ->
+	def x = parseVersion(a)
+	def y = parseVersion(b)
+	for (int i = 0; i < Math.max(x.size(), y.size()); i++) {
+		int d = (i < x.size() ? x[i] : 0) <=> (i < y.size() ? y[i] : 0)
+		if (d != 0) {
+			return d
+		}
+	}
+	return 0
+}
+
+def atLeast = { String v -> compareVersions(mc, v) >= 0 }
+
+/** "MC >= 26.1 && MC < 26.3": comparisons joined by && or ||. */
+def evalCondition
+evalCondition = { String expr ->
+	if (expr.contains('||')) {
+		return expr.split(/\|\|/).any { evalCondition(it.trim()) }
+	}
+	return expr.split('&&').every { part ->
+		def m = part.trim() =~ /^MC\s*(>=|<=|==|!=|>|<)\s*([0-9.]+)$/
+		if (!m.matches()) {
+			throw new GradleException("bad //#if condition: ${part.trim()}")
+		}
+		int c = compareVersions(mc, m.group(2))
+		switch (m.group(1)) {
+			case '>=': return c >= 0
+			case '<=': return c <= 0
+			case '>': return c > 0
+			case '<': return c < 0
+			case '==': return c == 0
+			default: return c != 0
+		}
+	}
+}
+
+/** Keep the lines of active //#if branches; drop the rest. */
+def preprocessSource = { String text, String name ->
+	def out = new StringBuilder()
+	def stack = [] // each: [active, anyBranchTaken]
+	text.eachLine { line ->
+		def t = line.trim()
+		boolean outerActive = stack.every { it[0] }
+		if (t.startsWith('//#if ')) {
+			boolean on = outerActive && evalCondition(t.substring(6))
+			stack << [on, on]
+		} else if (t.startsWith('//#elif ')) {
+			def top = stack.last()
+			boolean parent = stack.size() == 1 || stack[0..-2].every { it[0] }
+			boolean on = parent && !top[1] && evalCondition(t.substring(8))
+			top[0] = on
+			top[1] = top[1] || on
+		} else if (t == '//#else') {
+			def top = stack.last()
+			boolean parent = stack.size() == 1 || stack[0..-2].every { it[0] }
+			top[0] = parent && !top[1]
+			top[1] = true
+		} else if (t == '//#endif') {
+			if (stack.isEmpty()) {
+				throw new GradleException("stray //#endif in ${name}")
+			}
+			stack.removeLast()
+		} else if (outerActive) {
+			out.append(line).append('\n')
+			return
+		}
+		// Keep line numbers stable for compiler errors.
+		out.append('\n')
+	}
+	if (!stack.isEmpty()) {
+		throw new GradleException("unclosed //#if in ${name}")
+	}
+	return out.toString()
+}
+
+def preprocessedJava = layout.buildDirectory.dir("preprocessed/${mc}/java")
+
+tasks.register('preprocessJava') {
+	inputs.dir 'src/main/java'
+	inputs.property 'minecraft_version', mc
+	outputs.dir preprocessedJava
+	doLast {
+		def outDir = preprocessedJava.get().asFile
+		project.delete(outDir)
+		def root = file('src/main/java')
+		root.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+			def rel = root.toPath().relativize(f.toPath()).toString()
+			def target = new File(outDir, rel)
+			target.parentFile.mkdirs()
+			target.text = preprocessSource(f.getText('UTF-8'), rel)
+		}
+	}
+}
+
+base {
+	archivesName = "arctic-mod-${mc}"
+}
+
+// The shared Arctic Client core is compiled into this adapter.
+sourceSets {
+	main {
+		java.srcDirs = [preprocessedJava, '../../core/src/main/java']
+		resources.srcDir '../../core/src/main/resources'
+	}
+}
+
+tasks.named('compileJava') {
+	dependsOn 'preprocessJava'
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${mc}"
+	// 26.1 and later ship unobfuscated; older versions use Mojang's names.
+	if (!atLeast('26.1')) {
+		mappings loom.officialMojangMappings()
+	}
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+}
+
+/** The Java the game runs on for this version. */
+def javaVersion = atLeast('26.1') ? 25 : atLeast('1.20.5') ? 21 : atLeast('1.18') ? 17 : atLeast('1.17') ? 16 : 8
+
+// The Minecraft versions this jar loads on (-Pcovers=26.1,26.1.1,26.1.2,
+// from targets.json); just the built version by default.
+def covers = (project.findProperty('covers') ?: mc).tokenize(',')
+def minecraftRange = '[' + covers.collect { '"' + it.trim() + '"' }.join(', ') + ']'
+
+processResources {
+	def props = [
+			version: project.version,
+			minecraft_range: minecraftRange,
+			java: javaVersion,
+	]
+	inputs.properties props
+	filesMatching(['fabric.mod.json', 'arctic.mixins.json']) {
+		expand props
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = javaVersion
+	it.options.encoding = 'UTF-8'
+	it.options.compilerArgs += ['-Xmaxerrs', '1000']
+}
+
+java {
+	sourceCompatibility = JavaVersion.toVersion(javaVersion)
+	targetCompatibility = JavaVersion.toVersion(javaVersion)
+}
