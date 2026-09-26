@@ -49,9 +49,11 @@
   Minecraft skin from here.
 - **Skin gallery.** Browse skins other players shared, search by name or creator, and wear
   one in a click. Share your own from your library.
-- **Arctic mod.** Shows everyone's Arctic looks in game and adds an Arctic menu to pick a
-  cape or hide someone's look. It's added to Fabric and Quilt instances automatically, and
-  you can turn it off per instance.
+- **Arctic Client.** Vanilla gets a fresh look: restyled menus (pick Arctic, Aurora or
+  Classic), HUD widgets like FPS, CPS, ping and keystrokes that you drag into place, and
+  everyone's Arctic looks in game. Press Right Shift in game for the Arctic menu. It's on
+  by default for Minecraft 26.3, comes to Fabric and Quilt instances too, and you can turn
+  it off per instance.
 - **Your accounts, side by side.** Sign in with Microsoft in the browser or with a short
   code. Keep several accounts and switch in one click.
 - **Profiles.** Keep completely separate setups on one PC, each with its own accounts,

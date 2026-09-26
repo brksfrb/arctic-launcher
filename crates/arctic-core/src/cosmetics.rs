@@ -407,9 +407,23 @@ fn sign_in_offline(base: &str, name: &str, key: &str) -> Result<Session> {
 
 /// Tell the Arctic mod in `game_dir` which session to use, so looks picked
 /// in game are published as this player.
-pub fn write_mod_session(game_dir: &Path, base: &str, token: &str) -> Result<()> {
+pub fn write_mod_session(
+    game_dir: &Path,
+    base: &str,
+    token: Option<&str>,
+    style: crate::settings::ClientStyle,
+    style_set: u64,
+) -> Result<()> {
     let path = game_dir.join("config").join("arctic-session.json");
-    save_json(&path, &serde_json::json!({ "url": base, "token": token }))
+    save_json(
+        &path,
+        &serde_json::json!({
+            "url": base,
+            "token": token,
+            "style": style.id(),
+            "style_set": style_set,
+        }),
+    )
 }
 
 fn get<T: serde::de::DeserializeOwned>(url: &str, token: Option<&str>) -> Result<T> {

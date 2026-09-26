@@ -48,6 +48,18 @@ impl ArcticApp {
             }
         });
 
+        section(ui, p, "Arctic Client", |ui| {
+            ui.label(
+                RichText::new(
+                    "How Minecraft's menus look in game. Press Right Shift in game for HUD widgets and capes.",
+                )
+                .small()
+                .color(p.muted),
+            );
+            ui.add_space(4.0);
+            super::client_style::picker(ui, p, s, super::client_style::SETTINGS_TILE_WIDTH);
+        });
+
         section(ui, p, "Memory", |ui| {
             memory_slider(
                 ui,

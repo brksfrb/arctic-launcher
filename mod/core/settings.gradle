@@ -1,0 +1,3 @@
+// Arctic Client's shared core: everything that doesn't touch Minecraft.
+// Version adapters under ../versions compile these sources in.
+rootProject.name = 'arctic-client-core'

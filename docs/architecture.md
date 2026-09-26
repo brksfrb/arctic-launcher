@@ -99,7 +99,7 @@ TODO: encrypt `accounts.json` at rest with Windows DPAPI.
 | `arctic-cli` | The `arctic` command |
 | `arctic-share` | Play together: peer-to-peer LAN tunnels (iroh) |
 | `arctic-cosmetics` | The Arctic cosmetics server (capes, sign-in via Mojang's session server) |
-| `mod/fabric` | The Arctic Fabric mod (Java, Gradle), bundled into the launcher as a jar |
+| `mod/` | The Arctic Client (Java, Gradle): a shared core plus per-version adapters, bundled into the launcher as jars |
 
 ## Instances and mod loaders (`instances`, `loaders`)
 
@@ -158,15 +158,31 @@ The server only checks **who** publishes, so nobody can change someone else's lo
   in the profile's `cosmetics.json`; later changes need the same key. The server derives
   the UUID from the name exactly like the game, so a key can only claim an offline UUID.
 
-Both give an HMAC-signed token that expires after a week. Before launching a Fabric/Quilt
-instance with the mod, the launcher writes `config/arctic-session.json` so cape changes
-made in game publish as that player.
+Both give an HMAC-signed token that expires after a week. Before launching with the
+client, the launcher writes `config/arctic-session.json` (server, token, and the menu style
+picked in the launcher) so cape changes made in game publish as that player.
 
-The Fabric mod (`mod/fabric`) swaps in the player's Arctic skin (with the right arm model)
-and cape, looks players up in batches of 100, caches for 10 minutes, and adds an Arctic menu
-(title and pause screens) to pick a preset cape, hide all looks, or hide one player's look.
-The launcher embeds the built jar (`mod/fabric/dist/`) and copies it into Fabric and Quilt
-instances of supported Minecraft versions before launch (`arctic_mod::sync`).
+## The Arctic Client (`mod/`)
+
+Vanilla instances run the Arctic Client on supported versions: Fabric plus the Arctic mod,
+installed quietly (`launch::effective_loader`); Fabric and Quilt instances get the mod too.
+The launcher embeds the built jars (`mod/dist/`) and copies the right one in before launch
+(`arctic_mod::sync`).
+
+The client is split so it can cover many Minecraft versions:
+
+- `mod/core` holds everything that doesn't touch Minecraft, compiled for Java 8 so the same
+  code runs down to 1.8.9: a small UI toolkit drawn from rectangles and text (`ui`, `gfx`),
+  the menu styles and the widget skins (`style`), the animated Arctic backdrop, the title
+  menu, the Arctic menu (Right Shift) and the HUD editor (`menu`), the HUD widgets (`hud`),
+  looks lookups and cape changes over plain HTTP (`looks`), and `config/arctic.json`.
+- `mod/versions/<version>` is a thin adapter: a `Platform` (game state, screens, textures,
+  sign-in), a `Gfx` over that version's GUI renderer, a screen that hosts core pages, and
+  mixins that replace the title screen, draw the HUD, count clicks, open the menu, restyle
+  vanilla buttons, sliders, fields and checkboxes, and apply Arctic skins and capes.
+
+Vanilla screens keep their own logic; only their widgets and backdrop are restyled, so
+adapters stay small. The Classic style turns restyling off and keeps the HUD.
 
 ## Platforms
 

@@ -1,6 +1,6 @@
 package com.arcticlauncher.mod.mixin;
 
-import com.arcticlauncher.mod.ArcticScreen;
+import com.arcticlauncher.mod.ArcticButton;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
@@ -18,6 +18,6 @@ abstract class TitleScreenMixin extends Screen {
 
 	@Inject(method = "init", at = @At("TAIL"))
 	private void arctic$button(CallbackInfo ci) {
-		addRenderableWidget(ArcticScreen.openButton(this));
+		addRenderableWidget(ArcticButton.create());
 	}
 }

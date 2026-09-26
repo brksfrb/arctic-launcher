@@ -1,0 +1,194 @@
+package com.arcticlauncher.mod;
+
+import com.arcticlauncher.client.ArcticClient;
+import com.arcticlauncher.client.GameKey;
+import com.arcticlauncher.client.MenuAction;
+import com.arcticlauncher.client.Platform;
+import com.arcticlauncher.client.ui.Page;
+import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.realmsclient.RealmsMainScreen;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.Options;
+import net.minecraft.client.User;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
+import net.minecraft.client.gui.screens.multiplayer.SafetyScreen;
+import net.minecraft.client.gui.screens.options.AccessibilityOptionsScreen;
+import net.minecraft.client.gui.screens.options.LanguageSelectScreen;
+import net.minecraft.client.gui.screens.options.OptionsScreen;
+import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+
+/** {@link Platform} for Minecraft 26.3. */
+final class FabricPlatform implements Platform {
+	private static Minecraft mc() {
+		return Minecraft.getInstance();
+	}
+
+	@Override
+	public String minecraftVersion() {
+		return FabricLoader.getInstance()
+				.getModContainer("minecraft")
+				.map(c -> c.getMetadata().getVersion().getFriendlyString())
+				.orElse("26.3");
+	}
+
+	@Override
+	public File configDir() {
+		return FabricLoader.getInstance().getConfigDir().toFile();
+	}
+
+	@Override
+	public void log(boolean warning, String message) {
+		if (warning) {
+			ArcticMod.LOG.warn(message);
+		} else {
+			ArcticMod.LOG.info(message);
+		}
+	}
+
+	@Override
+	public int fps() {
+		return mc().getFps();
+	}
+
+	@Override
+	public int ping() {
+		Minecraft mc = mc();
+		ClientPacketListener connection = mc.getConnection();
+		if (connection == null || mc.player == null || mc.hasSingleplayerServer()) {
+			return -1;
+		}
+		PlayerInfo info = connection.getPlayerInfo(mc.player.getUUID());
+		return info == null ? -1 : info.getLatency();
+	}
+
+	@Override
+	public boolean inWorld() {
+		return mc().level != null && mc().player != null;
+	}
+
+	@Override
+	public double[] position() {
+		LocalPlayer p = mc().player;
+		if (p == null) {
+			return null;
+		}
+		return new double[] {p.getX(), p.getY(), p.getZ(), p.getYRot()};
+	}
+
+	@Override
+	public boolean keyDown(GameKey key) {
+		return mapping(mc().options, key).isDown();
+	}
+
+	private static KeyMapping mapping(Options o, GameKey key) {
+		switch (key) {
+			case FORWARD:
+				return o.keyUp;
+			case BACK:
+				return o.keyDown;
+			case LEFT:
+				return o.keyLeft;
+			case RIGHT:
+				return o.keyRight;
+			case JUMP:
+				return o.keyJump;
+			case SNEAK:
+				return o.keyShift;
+			case ATTACK:
+				return o.keyAttack;
+			default:
+				return o.keyUse;
+		}
+	}
+
+	@Override
+	public boolean hudHidden() {
+		return mc().gui.hud.isHidden() || mc().getDebugOverlay().showDebugScreen();
+	}
+
+	@Override
+	public void openPage(Page page) {
+		mc().gui.setScreen(new PageScreen(page, mc().gui.screen()));
+	}
+
+	@Override
+	public void closePage() {
+		if (mc().gui.screen() instanceof PageScreen screen) {
+			screen.onClose();
+		}
+	}
+
+	@Override
+	public void action(MenuAction action) {
+		Minecraft mc = mc();
+		Screen parent = mc.gui.screen();
+		switch (action) {
+			case SINGLEPLAYER -> mc.gui.setScreen(new SelectWorldScreen(parent));
+			case MULTIPLAYER -> mc.gui.setScreen(mc.options.skipMultiplayerWarning
+					? new JoinMultiplayerScreen(parent)
+					: new SafetyScreen(parent));
+			case REALMS -> mc.gui.setScreen(new RealmsMainScreen(parent));
+			case OPTIONS -> mc.gui.setScreen(new OptionsScreen(parent, mc.options));
+			case LANGUAGE -> mc.gui.setScreen(new LanguageSelectScreen(parent, mc.options, mc.getLanguageManager()));
+			case ACCESSIBILITY -> mc.gui.setScreen(new AccessibilityOptionsScreen(parent, mc.options));
+			case QUIT -> mc.stop();
+		}
+	}
+
+	@Override
+	public UUID playerId() {
+		return mc().getUser().getProfileId();
+	}
+
+	@Override
+	public String playerName() {
+		return mc().getUser().getName();
+	}
+
+	@Override
+	public void registerTexture(String hash, byte[] png) {
+		try {
+			NativeImage image = NativeImage.read(png);
+			mc().execute(() -> {
+				mc().getTextureManager().register(GfxImpl.look(hash), new DynamicTexture(() -> "Arctic " + hash, image));
+				ArcticClient.looks().textureReady(hash);
+			});
+		} catch (Exception e) {
+			ArcticMod.LOG.debug("texture {}: {}", hash, e.toString());
+		}
+	}
+
+	@Override
+	public void joinServer(String serverId) throws Exception {
+		User user = mc().getUser();
+		mc().services().sessionService().joinServer(user.getProfileId(), user.getAccessToken(), serverId);
+	}
+
+	@Override
+	public List<Object[]> otherPlayers() {
+		List<Object[]> out = new ArrayList<>();
+		Minecraft mc = mc();
+		if (mc.level == null) {
+			return out;
+		}
+		UUID self = playerId();
+		for (AbstractClientPlayer p : mc.level.players()) {
+			if (!p.getUUID().equals(self)) {
+				out.add(new Object[] {p.getUUID(), p.getPlainTextName()});
+			}
+		}
+		return out;
+	}
+}

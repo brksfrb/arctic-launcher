@@ -25,19 +25,24 @@ This produces:
 
 Run the launcher directly with `cargo run --release -p arctic-app`.
 
-### The Arctic mod
+### The Arctic Client
 
-The launcher embeds `mod/fabric/dist/arctic-mod-<version>.jar`, which is committed, so the
-steps above don't need Java. To change the mod, you need JDK 25:
+The launcher embeds `mod/dist/arctic-mod-<version>.jar`, which is committed, so the steps
+above don't need Java. The client is a shared core (`mod/core`, Java 8, no Minecraft code)
+plus one adapter per Minecraft version (`mod/versions/<version>`). To change it, you need
+JDK 25:
 
 ```sh
-cd mod/fabric
-./gradlew build
-cp build/libs/arctic-mod-26.3-*.jar dist/arctic-mod-26.3.jar
+cd mod
+./gradlew -p core build          # checks the core still compiles for Java 8
+./gradlew -p versions/26.3 build
+cp versions/26.3/build/libs/arctic-mod-26.3-*.jar dist/arctic-mod-26.3.jar
 ```
 
-Launch a Fabric instance with `ARCTIC_COSMETICS_URL=http://127.0.0.1:8080` set to point the
-mod and the launcher at a local cosmetics server.
+Launch an instance with `ARCTIC_COSMETICS_URL=http://127.0.0.1:8080` set to point the
+client and the launcher at a local cosmetics server. Adding
+`-Darctic.selftest=true` to the instance's JVM arguments makes the client screenshot each
+of its screens and quit, which is handy after changing an adapter.
 
 ### The cosmetics server
 

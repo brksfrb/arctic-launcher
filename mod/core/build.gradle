@@ -1,0 +1,19 @@
+plugins {
+	id 'java-library'
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	// Every Minecraft version ships Gson; 2.2.4 is the oldest (1.8.9).
+	compileOnly 'com.google.code.gson:gson:2.2.4'
+}
+
+// The core runs on every supported Minecraft, down to 1.8.9 on Java 8.
+tasks.withType(JavaCompile).configureEach {
+	options.release = 8
+	options.encoding = 'UTF-8'
+	options.compilerArgs += ['-Xlint:-options']
+}

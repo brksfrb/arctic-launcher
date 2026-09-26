@@ -2,6 +2,7 @@
 
 mod about;
 mod accounts;
+mod client_style;
 mod dialogs;
 mod instances;
 mod logs;

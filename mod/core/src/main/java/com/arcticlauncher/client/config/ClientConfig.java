@@ -1,0 +1,77 @@
+package com.arcticlauncher.client.config;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
+
+/** Arctic Client settings, in {@code config/arctic.json}. */
+public final class ClientConfig {
+	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+
+	/** Show Arctic looks (skins and capes) at all. */
+	public boolean showCosmetics = true;
+	/** Players whose Arctic look you chose to hide (UUID strings). */
+	public Set<String> hiddenPlayers = new HashSet<String>();
+	/** Menu style id (see {@code Style}). */
+	public String style = "arctic";
+	/** When the launcher's style choice was last applied (its timestamp). */
+	public long styleFromLauncher;
+	/** HUD widget id → placement. */
+	public Map<String, HudSlot> hud = new LinkedHashMap<String, HudSlot>();
+
+	private transient File file;
+
+	public static ClientConfig load(File configDir) {
+		File file = new File(configDir, "arctic.json");
+		ClientConfig config = null;
+		if (file.isFile()) {
+			try {
+				String json = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+				config = GSON.fromJson(json, ClientConfig.class);
+			} catch (IOException e) {
+				config = null;
+			} catch (RuntimeException e) {
+				config = null;
+			}
+		}
+		if (config == null) {
+			config = new ClientConfig();
+		}
+		config.file = file;
+		config.fillDefaults();
+		return config;
+	}
+
+	private void fillDefaults() {
+		if (hiddenPlayers == null) {
+			hiddenPlayers = new HashSet<String>();
+		}
+		if (hud == null) {
+			hud = new LinkedHashMap<String, HudSlot>();
+		}
+		if (style == null) {
+			style = "arctic";
+		}
+	}
+
+	/** Save; returns an error message, or null. */
+	public String save() {
+		try {
+			File dir = file.getParentFile();
+			if (dir != null && !dir.isDirectory() && !dir.mkdirs()) {
+				return "could not create " + dir;
+			}
+			Files.write(file.toPath(), GSON.toJson(this).getBytes(StandardCharsets.UTF_8));
+			return null;
+		} catch (IOException e) {
+			return e.toString();
+		}
+	}
+}

@@ -15,7 +15,7 @@ pub const COSMETICS_URL_ENV: &str = "ARCTIC_COSMETICS_URL";
 /// (Minecraft version, jar) for every version the mod is built for.
 const JARS: &[(&str, &[u8])] = &[(
     "26.3",
-    include_bytes!("../../../mod/fabric/dist/arctic-mod-26.3.jar"),
+    include_bytes!("../../../mod/dist/arctic-mod-26.3.jar"),
 )];
 
 fn jar_for(game_version: &str) -> Option<&'static [u8]> {

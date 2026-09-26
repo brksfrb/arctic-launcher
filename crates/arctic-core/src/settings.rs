@@ -55,6 +55,45 @@ pub struct Settings {
     pub tray: bool,
     /// Versions starred in the version picker.
     pub favorite_versions: Vec<String>,
+    /// Menu style of the Arctic Client in game.
+    pub client_style: ClientStyle,
+    /// When `client_style` was picked (Unix seconds; 0 = never). The game
+    /// adopts a newer pick, but keeps a style changed in game until then.
+    pub client_style_set: u64,
+}
+
+/// How the Arctic Client styles Minecraft's menus.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ClientStyle {
+    /// Deep night blue with ice accents.
+    #[default]
+    Arctic,
+    /// Violet sky with northern-light greens.
+    Aurora,
+    /// Minecraft's own menus (the Arctic HUD still works).
+    Classic,
+}
+
+impl ClientStyle {
+    pub const ALL: [ClientStyle; 3] = [Self::Arctic, Self::Aurora, Self::Classic];
+
+    /// The id the Arctic mod knows the style by.
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Arctic => "arctic",
+            Self::Aurora => "aurora",
+            Self::Classic => "classic",
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Arctic => "Arctic",
+            Self::Aurora => "Aurora",
+            Self::Classic => "Classic",
+        }
+    }
 }
 
 /// What the launcher window does once the game window is up.
@@ -103,6 +142,8 @@ impl Default for Settings {
             onboarded: false,
             tray: true,
             favorite_versions: Vec::new(),
+            client_style: ClientStyle::Arctic,
+            client_style_set: 0,
         }
     }
 }
