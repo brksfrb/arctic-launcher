@@ -51,6 +51,10 @@ It listens on `0.0.0.0:8080` and stores data in `cosmetics.db`. For deployment t
 Dockerfile: `docker build -f crates/arctic-cosmetics/Dockerfile -t arctic-cosmetics .` (mount
 a volume at `/data`).
 
+Optional settings: `ARCTIC_COSMETICS_TRUST_PROXY=1` when it runs behind a reverse proxy
+(rate limits use `X-Forwarded-For`), and `ARCTIC_COSMETICS_ADMIN_KEY` to remove any gallery
+item with `DELETE /v1/gallery/{id}` and an `X-Admin-Key` header.
+
 ## Checks
 
 ```sh

@@ -655,7 +655,10 @@ impl ArcticApp {
             | Event::PlayerSkin(..)
             | Event::SkinFile(..)
             | Event::ArcticLook(..)
-            | Event::CapeFile(..)) => self.on_skins_event(e),
+            | Event::CapeFile(..)
+            | Event::Gallery(..)
+            | Event::GalleryTaken(..)
+            | Event::GalleryDone(..)) => self.on_skins_event(e),
             Event::UpdateChecked(result) => self.on_update_checked(result),
             Event::UpdateInstalled(result) => self.on_update_installed(result),
         }
@@ -685,6 +688,13 @@ impl ArcticApp {
                 }
                 match code {
                     Some(0) => {}
+                    // The game's own shutdown watchdog fired: quitting took too
+                    // long (typically network threads hanging without internet).
+                    Some(_) if self.shutdown_watchdog_fired() => self.toasts.push(
+                        Kind::Info,
+                        "Minecraft closed",
+                        "It was slow to shut down, which happens without internet.",
+                    ),
                     Some(c) => self.toasts.push_with_action(
                         Kind::Error,
                         "Minecraft closed unexpectedly",
@@ -695,6 +705,15 @@ impl ArcticApp {
                 }
             }
         }
+    }
+
+    /// The last game run ended with Minecraft's "Client shutdown" watchdog.
+    fn shutdown_watchdog_fired(&self) -> bool {
+        self.game_log
+            .iter()
+            .rev()
+            .take(400)
+            .any(|l| l.text.contains("Client shutdown from post-main"))
     }
 
     fn push_game_log(&mut self, lines: Vec<LogLine>) {

@@ -6,8 +6,8 @@ use eframe::egui::{
     self, Align2, CornerRadius, FontId, Rect, RichText, Sense, Stroke, StrokeKind, pos2, vec2,
 };
 
-use super::Selection;
 use super::model::{self, Pose};
+use super::{Selection, SkinsView};
 use crate::app::ArcticApp;
 use crate::art::icons::Icon;
 use crate::art::lerp_color;
@@ -45,7 +45,17 @@ impl ArcticApp {
             ui.add_space(12.0);
             theme::card(p).show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.vertical(|ui| self.library_panel(ui));
+                ui.vertical(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.selectable_value(&mut self.skins.view, SkinsView::Library, "My skins");
+                        ui.selectable_value(&mut self.skins.view, SkinsView::Gallery, "Gallery");
+                    });
+                    ui.add_space(6.0);
+                    match self.skins.view {
+                        SkinsView::Library => self.library_panel(ui),
+                        SkinsView::Gallery => self.gallery_panel(ui),
+                    }
+                });
             });
         });
     }
@@ -134,9 +144,14 @@ impl ArcticApp {
             self.skins.pitch = model::clamp_pitch(self.skins.pitch + d.y * 0.008);
         }
         let entry = self.selected_entry();
-        let key = match &entry {
-            Some(e) => Some(format!("lib:{}", e.id)),
-            None => current.skin_key.clone(),
+        let gallery_item = match &self.skins.selection {
+            Selection::Gallery(item) => Some(item.clone()),
+            _ => None,
+        };
+        let key = match (&entry, &gallery_item) {
+            (Some(e), _) => Some(format!("lib:{}", e.id)),
+            (None, Some(g)) => Some(format!("gal:{}", g.texture)),
+            _ => current.skin_key.clone(),
         };
         let cape = current
             .cape_key
@@ -152,6 +167,7 @@ impl ArcticApp {
                 let variant = entry
                     .as_ref()
                     .map(|e| e.variant)
+                    .or(gallery_item.as_ref().map(|g| g.variant()))
                     .or(current.variant)
                     .unwrap_or(tex.guessed);
                 model::paint(
@@ -179,9 +195,10 @@ impl ArcticApp {
         }
         ui.label(RichText::new("Drag to turn").small().color(p.muted));
         ui.add_space(6.0);
-        match entry {
-            Some(entry) => self.library_actions(ui, &entry),
-            None => self.current_actions(ui, &current),
+        match (entry, gallery_item) {
+            (Some(entry), _) => self.library_actions(ui, &entry),
+            (None, Some(item)) => self.gallery_actions(ui, &item),
+            _ => self.current_actions(ui, &current),
         }
         self.arctic_capes_row(ui);
         self.minecraft_capes_row(ui);
@@ -297,6 +314,9 @@ impl ArcticApp {
             if widgets::icon_button(ui, p, Icon::Trash, "Delete from library").clicked() {
                 self.remove_skin(&id);
             }
+        });
+        ui.horizontal(|ui| {
+            self.share_button(ui, entry);
         });
     }
 
@@ -475,7 +495,7 @@ impl ArcticApp {
     }
 
     /// Small 3D thumbnail with a name. Returns true when clicked.
-    fn skin_tile(
+    pub(super) fn skin_tile(
         &mut self,
         ui: &mut egui::Ui,
         key: &str,
@@ -539,7 +559,7 @@ impl ArcticApp {
                 .iter()
                 .find(|s| &s.id == id)
                 .cloned(),
-            Selection::Current => None,
+            _ => None,
         }
     }
 

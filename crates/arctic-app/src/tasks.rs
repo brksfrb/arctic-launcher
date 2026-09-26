@@ -90,6 +90,12 @@ pub enum Event {
     WorldsDone(String, Outcome<String>),
     /// A modpack install or import finished (`None` = file dialog cancelled).
     ModpackInstalled(Outcome<Option<Instance>>),
+    /// Gallery search results (request id, result).
+    Gallery(u64, Outcome<crate::gallery_tasks::GalleryResult>),
+    /// A gallery skin was downloaded: (name, PNG, model, wear it).
+    GalleryTaken(Outcome<(String, Vec<u8>, arctic_core::skins::Variant, bool)>),
+    /// A gallery share or report finished (message).
+    GalleryDone(Outcome<String>),
     /// Play-together session update.
     Share(arctic_share::SessionId, arctic_share::ShareEvent),
 }
