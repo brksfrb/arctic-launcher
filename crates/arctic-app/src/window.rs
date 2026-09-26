@@ -71,7 +71,9 @@ mod imp {
 mod imp {
     pub fn show() {}
     pub fn hide() {}
-    pub fn close() {}
 }
 
-pub use imp::{close, hide, show};
+/// Only the Windows tray closes the window from outside.
+#[cfg(windows)]
+pub use imp::close;
+pub use imp::{hide, show};
