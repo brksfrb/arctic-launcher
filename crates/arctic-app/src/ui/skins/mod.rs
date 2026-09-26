@@ -223,6 +223,13 @@ impl ArcticApp {
 
     fn add_skin(&mut self, name: &str, png: &[u8], variant: Option<Variant>) {
         let dir = self.skins_dir();
+        if let Some(existing) = self.skins.library.find_same(&dir, png) {
+            let id = existing.id.clone();
+            self.toasts
+                .push(Kind::Info, "Already in your library", existing.name.clone());
+            self.skins.selection = Selection::Library(id);
+            return;
+        }
         match self.skins.library.add(&dir, name, png, variant) {
             Ok(entry) => {
                 self.toasts

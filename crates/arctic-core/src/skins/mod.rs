@@ -190,7 +190,23 @@ impl Library {
         dir.join(format!("{id}.png"))
     }
 
-    /// Validate and store a skin file; returns the new entry.
+    /// The library skin with the same pixels as `png_bytes`, if any.
+    pub fn find_same(&self, dir: &Path, png_bytes: &[u8]) -> Option<&SkinEntry> {
+        let wanted = decode(png_bytes).ok()?;
+        self.find_image(dir, &wanted)
+    }
+
+    fn find_image(&self, dir: &Path, wanted: &SkinImage) -> Option<&SkinEntry> {
+        self.skins.iter().find(|entry| {
+            Self::read_png(dir, &entry.id)
+                .ok()
+                .and_then(|bytes| decode(&bytes).ok())
+                .is_some_and(|image| image.rgba == wanted.rgba)
+        })
+    }
+
+    /// Validate and store a skin file; returns the new entry, or the
+    /// existing one when the library already has this skin.
     pub fn add(
         &mut self,
         dir: &Path,
@@ -199,6 +215,9 @@ impl Library {
         variant: Option<Variant>,
     ) -> Result<SkinEntry> {
         let image = decode(png_bytes)?;
+        if let Some(existing) = self.find_image(dir, &image) {
+            return Ok(existing.clone());
+        }
         fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
         let id = uuid::Uuid::new_v4().simple().to_string();
         let path = Self::png_path(dir, &id);
