@@ -14,6 +14,6 @@ public final class ArcticMod implements ClientModInitializer {
 		ArcticConfig.load();
 		Cosmetics.start();
 		SelfTest.maybeStart();
-		LOG.info("Arctic ready (cosmetics at {})", Cosmetics.BASE_URL);
+		LOG.info("Arctic ready (looks from {})", Cosmetics.baseUrl);
 	}
 }

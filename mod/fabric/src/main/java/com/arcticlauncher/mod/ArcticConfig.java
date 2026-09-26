@@ -12,8 +12,10 @@ public final class ArcticConfig {
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 	private static ArcticConfig current = new ArcticConfig();
 
-	/** Show other players' Arctic capes (and your own). */
+	/** Show Arctic looks (skins and capes) at all. */
 	public boolean showCosmetics = true;
+	/** Players whose Arctic look you chose to hide (UUID strings). */
+	public java.util.Set<String> hiddenPlayers = new java.util.HashSet<>();
 
 	public static ArcticConfig get() {
 		return current;
@@ -31,6 +33,9 @@ public final class ArcticConfig {
 		try {
 			ArcticConfig loaded = GSON.fromJson(Files.readString(path), ArcticConfig.class);
 			if (loaded != null) {
+				if (loaded.hiddenPlayers == null) {
+					loaded.hiddenPlayers = new java.util.HashSet<>();
+				}
 				current = loaded;
 			}
 		} catch (IOException | RuntimeException e) {

@@ -41,11 +41,13 @@
 - **Play together.** Invite friends into your world with a code. No server, no port
   forwarding: open your world to LAN and Arctic connects you directly (or through an
   encrypted relay when a direct link isn't possible).
-- **Skins and capes.** Preview skins on a 3D model, keep a library, copy a player's skin
-  by name, and switch skins and capes without leaving the launcher.
-- **Arctic capes.** Free Arctic capes, visible to everyone playing with the Arctic mod,
-  plus an Arctic menu inside the game. The mod is added to Fabric and Quilt instances
-  automatically, and you can turn it off per instance.
+- **Wear any skin, any cape, free.** Pick a skin from your library (or copy a player's by
+  name), choose a cape or use your own image, and every Arctic player sees it, on any
+  account. Preview everything on a 3D model. Microsoft accounts can also change their real
+  Minecraft skin from here.
+- **Arctic mod.** Shows everyone's Arctic looks in game and adds an Arctic menu to pick a
+  cape or hide someone's look. It's added to Fabric and Quilt instances automatically, and
+  you can turn it off per instance.
 - **Your accounts, side by side.** Sign in with Microsoft in the browser or with a short
   code. Keep several accounts and switch in one click.
 - **Profiles.** Keep completely separate setups on one PC, each with its own accounts,
@@ -130,13 +132,13 @@ Each profile lives in `profiles/<name>/`. Worlds are inside
 
 **Where are my sign-in details stored?**
 Only on your computer, in your profile folder. They are sent only to Microsoft, Xbox and
-Mojang to sign you in. Arctic's own services (Arctic capes) never receive your password or
-tokens: they check who you are the same way a Minecraft server does.
+Mojang to sign you in. Arctic's own service for looks never receives your password or
+tokens: it checks who you are the same way a Minecraft server does.
 
 **What does Arctic connect to?**
 Mojang and Microsoft for the game and sign-in, Modrinth and the Fabric, Quilt, NeoForge
-and Forge servers for mods and loaders, GitHub for updates, and the Arctic cosmetics
-service for capes. Play together connects you directly to your friend, using a public
+and Forge servers for mods and loaders, GitHub for updates, and the Arctic looks service,
+which shares the skin and cape you picked with other Arctic players. Play together connects you directly to your friend, using a public
 relay only to set that up or when a direct link fails.
 
 **Does it need Java?**

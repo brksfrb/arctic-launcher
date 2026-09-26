@@ -1,30 +1,32 @@
-//! Skins tab: a 3D preview, the account's current skin and capes, and a
-//! local library of skins that can be applied with one click.
+//! Skins tab: your Arctic look (skin + cape, seen by every Arctic player,
+//! on any account), your Minecraft skin and capes (Microsoft accounts), a
+//! 3D preview and a local library of skins.
 
 mod model;
 mod panels;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+use arctic_core::cosmetics::{CapeChoice, NewLook, Texture};
 use arctic_core::skins::{self, Library, SkinEntry, Variant};
 use eframe::egui::{self, ColorImage, TextureHandle, TextureOptions};
 
 use crate::app::ArcticApp;
-use crate::skin_tasks::{AccountSkin, ArcticCapes, SkinChange};
+use crate::skin_tasks::{AccountSkin, ArcticState, SkinChange};
 use crate::tasks::Event;
 use crate::toasts::Kind;
 
 /// What the preview shows.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum Selection {
-    /// The account's active skin.
+    /// How other players see you right now.
     #[default]
     Current,
     Library(String),
 }
 
-/// A skin uploaded to the GPU.
+/// A skin or cape uploaded to the GPU.
 pub struct SkinTexture {
     pub handle: TextureHandle,
     /// Has the second layer on body and limbs (not a legacy 64×32 skin).
@@ -32,25 +34,28 @@ pub struct SkinTexture {
     pub guessed: Variant,
 }
 
+/// Texture keys: `lib:<id>` library skin, `mc` Minecraft skin,
+/// `mccape:<id>` Minecraft cape, `askin:<hash>` Arctic skin,
+/// `acape:<hash>` Arctic cape.
 #[derive(Default)]
 pub struct SkinsUi {
     loaded_for: Option<PathBuf>,
     pub library: Library,
     textures: HashMap<String, SkinTexture>,
     /// Keys whose PNG couldn't be read or decoded (not retried every frame).
-    failed: std::collections::HashSet<String>,
+    failed: HashSet<String>,
     pub selection: Selection,
-    /// Account id → its skin state (fetched when the tab opens).
+    /// Account id → Minecraft skin state (Microsoft accounts).
     pub account: HashMap<String, Result<AccountSkin, String>>,
     pub busy: bool,
+    /// Account id → Arctic look.
+    pub arctic: HashMap<String, Result<ArcticState, String>>,
+    pub arctic_busy: bool,
     pub player_name: String,
     pub looking_up: bool,
     pub yaw: f32,
     pub pitch: f32,
     pub renaming: Option<(String, String)>,
-    /// Account id → Arctic capes (fetched with the account's skin).
-    pub arctic: HashMap<String, Result<ArcticCapes, String>>,
-    pub arctic_busy: bool,
 }
 
 impl ArcticApp {
@@ -82,44 +87,31 @@ impl ArcticApp {
 
     pub(crate) fn skins_tab(&mut self, ui: &mut egui::Ui) {
         self.ensure_skin_library();
-        self.request_account_skin(false);
+        self.request_skin_state(false);
         self.skins_page(ui);
         self.accept_dropped_skins(ui.ctx());
     }
 
-    /// Fetch the active account's skin once (or again with `force`).
-    fn request_account_skin(&mut self, force: bool) {
+    /// Fetch the active account's Arctic look (and Minecraft skin) once, or
+    /// again with `force`.
+    fn request_skin_state(&mut self, force: bool) {
         let Some(account) = self.accounts.active().cloned() else {
             return;
         };
-        if !account.is_microsoft() || self.skins.busy {
-            return;
-        }
-        if !force && self.skins.account.contains_key(&account.id) {
-            return;
-        }
-        self.skins.busy = true;
-        self.tasks.skin_account(account.clone(), SkinChange::None);
-        if !self.skins.arctic.contains_key(&account.id) && !self.skins.arctic_busy {
+        if (force || !self.skins.arctic.contains_key(&account.id)) && !self.skins.arctic_busy {
             self.skins.arctic_busy = true;
-            self.tasks.arctic_capes(account, None, None);
+            self.tasks.arctic_look(account.clone(), None);
+        }
+        if account.is_microsoft()
+            && (force || !self.skins.account.contains_key(&account.id))
+            && !self.skins.busy
+        {
+            self.skins.busy = true;
+            self.tasks.skin_account(account, SkinChange::None);
         }
     }
 
-    /// Equip an Arctic cape (or none) for the active account.
-    fn equip_arctic_cape(&mut self, cape: Option<String>) {
-        let Some(account) = self.accounts.active().cloned() else {
-            return;
-        };
-        let token = match self.skins.arctic.get(&account.id) {
-            Some(Ok(state)) => Some(state.token.clone()),
-            _ => None,
-        };
-        self.skins.arctic_busy = true;
-        self.tasks.arctic_capes(account, token, Some(cape));
-    }
-
-    fn change_account_skin(&mut self, change: SkinChange) {
+    fn change_minecraft_skin(&mut self, change: SkinChange) {
         let Some(account) = self.accounts.active().cloned() else {
             return;
         };
@@ -127,7 +119,41 @@ impl ArcticApp {
         self.tasks.skin_account(account, change);
     }
 
-    /// Texture for a library entry or the current skin, uploading on first use.
+    pub(crate) fn arctic_state(&self) -> Option<&ArcticState> {
+        let account = self.accounts.active()?;
+        self.skins.arctic.get(&account.id)?.as_ref().ok()
+    }
+
+    /// Publish a new Arctic look built from the current one.
+    fn change_look(&mut self, edit: impl FnOnce(&mut NewLook)) {
+        let (Some(account), Some(state)) = (self.accounts.active().cloned(), self.arctic_state())
+        else {
+            return;
+        };
+        let mut look = state.current();
+        edit(&mut look);
+        self.skins.arctic_busy = true;
+        self.tasks.arctic_look(account, Some(look));
+    }
+
+    fn wear_skin(&mut self, entry: &SkinEntry) {
+        match Library::read_png(&self.skins_dir(), &entry.id) {
+            Ok(png) => {
+                let variant = entry.variant;
+                self.change_look(|l| l.skin = Some((Texture::Png(png), variant)));
+                self.skins.selection = Selection::Current;
+            }
+            Err(e) => self
+                .toasts
+                .push(Kind::Error, "Could not read skin", e.to_string()),
+        }
+    }
+
+    fn set_arctic_cape(&mut self, cape: Option<CapeChoice>) {
+        self.change_look(|l| l.cape = cape);
+    }
+
+    /// Texture for a key (see `SkinsUi`), uploading on first use.
     pub(crate) fn skin_texture(&mut self, ctx: &egui::Context, key: &str) -> Option<&SkinTexture> {
         if !self.skins.textures.contains_key(key) {
             if self.skins.failed.contains(key) {
@@ -147,28 +173,22 @@ impl ArcticApp {
         if let Some(id) = key.strip_prefix("lib:") {
             return Library::read_png(&self.skins_dir(), id).ok();
         }
-        let account = self.accounts.active()?;
-        if let Some(id) = key.strip_prefix("arctic:") {
-            return match self.skins.arctic.get(&account.id)? {
-                Ok(state) => state
-                    .textures
-                    .iter()
-                    .find(|(c, _)| c == id)
-                    .map(|(_, png)| png.clone()),
-                Err(_) => None,
-            };
+        if let Some(hash) = key
+            .strip_prefix("askin:")
+            .or_else(|| key.strip_prefix("acape:"))
+        {
+            return self.arctic_state()?.png(hash).map(<[u8]>::to_vec);
         }
-        match self.skins.account.get(&account.id)? {
-            Ok(state) if key == "current" => state.skin_png.clone(),
-            Ok(state) => {
-                let cape = key.strip_prefix("cape:")?;
-                state
-                    .capes
-                    .iter()
-                    .find(|(id, _)| id == cape)
-                    .map(|(_, png)| png.clone())
-            }
-            Err(_) => None,
+        let account = self.accounts.active()?;
+        let state = self.skins.account.get(&account.id)?.as_ref().ok()?;
+        match key.strip_prefix("mccape:") {
+            Some(cape) => state
+                .capes
+                .iter()
+                .find(|(id, _)| id == cape)
+                .map(|(_, png)| png.clone()),
+            None if key == "mc" => state.skin_png.clone(),
+            None => None,
         }
     }
 
@@ -204,9 +224,9 @@ impl ArcticApp {
         }
     }
 
-    fn apply_library_skin(&mut self, entry: &SkinEntry) {
+    fn set_minecraft_skin(&mut self, entry: &SkinEntry) {
         match Library::read_png(&self.skins_dir(), &entry.id) {
-            Ok(png) => self.change_account_skin(SkinChange::Upload(entry.variant, png)),
+            Ok(png) => self.change_minecraft_skin(SkinChange::Upload(entry.variant, png)),
             Err(e) => self
                 .toasts
                 .push(Kind::Error, "Could not read skin", e.to_string()),
@@ -233,18 +253,24 @@ impl ArcticApp {
         match event {
             Event::SkinAccount(account_id, result) => {
                 self.skins.busy = false;
-                // New textures for the current skin and capes.
-                self.skins.textures.retain(|k, _| k.starts_with("lib:"));
+                self.skins.textures.retain(|k, _| !k.starts_with("mc"));
                 self.skins.failed.clear();
                 if let Err(e) = &result {
                     self.toasts
-                        .push(Kind::Error, "Skin change failed", e.clone());
+                        .push(Kind::Error, "Minecraft skin change failed", e.clone());
                 }
                 self.skins.account.insert(account_id, result);
             }
-            Event::ArcticCapes(account_id, result) => {
+            Event::ArcticLook(account_id, result) => {
                 self.skins.arctic_busy = false;
-                self.skins.textures.retain(|k, _| !k.starts_with("arctic:"));
+                self.skins.failed.clear();
+                if let (Ok(_), Some(Ok(_))) = (&result, self.skins.arctic.get(&account_id)) {
+                    self.toasts.push(
+                        Kind::Success,
+                        "Look updated",
+                        "Every Arctic player sees it now.",
+                    );
+                }
                 self.skins.arctic.insert(account_id, result);
             }
             Event::PlayerSkin(name, result) => {
@@ -262,6 +288,13 @@ impl ArcticApp {
                 Ok(None) => {}
                 Err(e) => self.toasts.push(Kind::Error, "Could not read file", e),
             },
+            Event::CapeFile(result) => match result {
+                Ok(Some(bytes)) => {
+                    self.set_arctic_cape(Some(CapeChoice::Custom(Texture::Png(bytes))))
+                }
+                Ok(None) => {}
+                Err(e) => self.toasts.push(Kind::Error, "Could not read file", e),
+            },
             _ => {}
         }
     }
@@ -269,7 +302,7 @@ impl ArcticApp {
 
 fn upload(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture> {
     // Capes are 64×32 (or larger multiples); skins go through the skin decoder.
-    if key.starts_with("cape:") || key.starts_with("arctic:") {
+    if key.starts_with("mccape:") || key.starts_with("acape:") {
         let image = image::load_from_memory(png).ok()?.to_rgba8();
         let size = [image.width() as usize, image.height() as usize];
         let color = ColorImage::from_rgba_unmultiplied(size, image.as_raw());

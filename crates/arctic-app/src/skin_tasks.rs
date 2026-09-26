@@ -1,28 +1,43 @@
-//! Background jobs for the Skins tab: reading and changing the account's
-//! skin and cape, looking up other players and picking files.
+//! Background jobs for the Skins tab: the Arctic look (published to other
+//! Arctic players), the account's Minecraft skin and capes (Mojang, needs
+//! Microsoft), looking up other players and picking files.
+
+use std::collections::HashSet;
 
 use arctic_core::auth::microsoft::{self, MsaConfig};
 use arctic_core::auth::{Account, AccountKind, now_secs};
+use arctic_core::cosmetics::{self, Look, NewLook, Preset};
 use arctic_core::skins::Variant;
 use arctic_core::skins::api::{self, Profile};
 use arctic_core::{Error, Result};
 
-use arctic_core::cosmetics::{self, CatalogItem};
-
 use crate::tasks::{Event, Tasks};
 
-/// Arctic capes: what's offered and what the player wears.
+/// The player's Arctic look and the preset capes, textures included.
 #[derive(Debug, Clone)]
-pub struct ArcticCapes {
-    pub catalog: Vec<CatalogItem>,
-    /// (cape id, PNG)
+pub struct ArcticState {
+    pub presets: Vec<Preset>,
+    pub look: Look,
+    /// (texture hash, PNG) for the presets and the current look.
     pub textures: Vec<(String, Vec<u8>)>,
-    pub equipped: Option<String>,
-    /// Cosmetics session, reused for later changes.
-    pub token: String,
 }
 
-/// The signed-in player's skin state with textures downloaded.
+impl ArcticState {
+    pub fn png(&self, hash: &str) -> Option<&[u8]> {
+        self.textures
+            .iter()
+            .find(|(h, _)| h == hash)
+            .map(|(_, png)| png.as_slice())
+    }
+
+    /// The current look as something that can be published again, so one
+    /// part can change while the rest stays.
+    pub fn current(&self) -> NewLook {
+        NewLook::from_look(&self.look, &self.presets)
+    }
+}
+
+/// The account's Minecraft (Mojang) skin state with textures downloaded.
 #[derive(Debug, Clone)]
 pub struct AccountSkin {
     pub profile: Profile,
@@ -32,7 +47,7 @@ pub struct AccountSkin {
     pub capes: Vec<(String, Vec<u8>)>,
 }
 
-/// What to change before re-reading the profile.
+/// What to change on Mojang's side before re-reading the profile.
 #[derive(Debug, Clone)]
 pub enum SkinChange {
     None,
@@ -42,7 +57,7 @@ pub enum SkinChange {
 }
 
 impl Tasks {
-    /// Read (after optionally changing) the account's skin and capes.
+    /// Read (after optionally changing) the account's Minecraft skin and capes.
     pub fn skin_account(&self, account: Account, change: SkinChange) {
         self.run(move |t| {
             let id = account.id.clone();
@@ -77,74 +92,65 @@ impl Tasks {
         })
     }
 
-    /// A valid Minecraft access token, refreshing the login if needed.
-    fn fresh_token(&self, account: Account) -> Result<String> {
-        let account = if account.needs_refresh(now_secs()) {
+    /// The account refreshed if needed (Microsoft tokens expire).
+    fn fresh_account(&self, account: Account) -> Result<Account> {
+        if account.needs_refresh(now_secs()) {
             let cfg = MsaConfig::load(self.dirs())?;
             let fresh = microsoft::refresh(&cfg, &account)?;
             self.send(Event::AccountRefreshed(fresh.clone()));
-            fresh
+            Ok(fresh)
         } else {
-            account
-        };
-        match account.kind {
+            Ok(account)
+        }
+    }
+
+    /// A valid Minecraft access token, refreshing the login if needed.
+    fn fresh_token(&self, account: Account) -> Result<String> {
+        match self.fresh_account(account)?.kind {
             AccountKind::Microsoft(session) => Ok(session.access_token),
             AccountKind::Offline => Err(Error::Other(
-                "Skins can only be changed on Microsoft accounts.".into(),
+                "Minecraft skins can only be changed on Microsoft accounts.".into(),
             )),
         }
     }
 
-    /// Sign in to Arctic (or reuse `token`), optionally equip a cape, and
-    /// read the catalog and the equipped cape.
-    pub fn arctic_capes(
-        &self,
-        account: Account,
-        token: Option<String>,
-        equip: Option<Option<String>>,
-    ) {
+    /// Read (after optionally publishing a new one) the Arctic look.
+    pub fn arctic_look(&self, account: Account, change: Option<NewLook>) {
         self.run(move |t| {
             let id = account.id.clone();
             let result = t
-                .arctic_capes_blocking(account, token, equip)
+                .arctic_look_blocking(account, change)
                 .map_err(|e| e.to_string());
-            t.send(Event::ArcticCapes(id, result));
+            t.send(Event::ArcticLook(id, result));
         });
     }
 
-    fn arctic_capes_blocking(
+    fn arctic_look_blocking(
         &self,
         account: Account,
-        token: Option<String>,
-        equip: Option<Option<String>>,
-    ) -> Result<ArcticCapes> {
+        change: Option<NewLook>,
+    ) -> Result<ArcticState> {
         let base = cosmetics::base_url();
-        let catalog = cosmetics::catalog(&base)?;
-        let token = match token {
-            Some(t) => t,
-            None => {
-                let (uuid, name) = (account.uuid.clone(), account.username.clone());
-                let access = self.fresh_token(account)?;
-                cosmetics::sign_in(&base, &access, &uuid, &name)?
-            }
+        let presets = cosmetics::catalog(&base)?;
+        let account = self.fresh_account(account)?;
+        let token = cosmetics::token_for(self.dirs(), &base, &account)?;
+        let look = match change {
+            Some(new) => cosmetics::set_look(&base, &token, &new)?,
+            None => cosmetics::my_look(&base, &token)?,
         };
-        if let Some(cape) = &equip {
-            cosmetics::equip(&base, &token, cape.as_deref())?;
-        }
-        let me = cosmetics::me(&base, &token)?;
-        let textures = catalog
-            .iter()
-            .filter_map(|c| {
-                cosmetics::texture(&base, &c.id)
-                    .ok()
-                    .map(|png| (c.id.clone(), png))
-            })
+        let mut wanted: Vec<String> = presets.iter().map(|p| p.texture.clone()).collect();
+        wanted.extend(look.skin.clone());
+        wanted.extend(look.cape.clone());
+        let mut seen = HashSet::new();
+        let textures = wanted
+            .into_iter()
+            .filter(|h| seen.insert(h.clone()))
+            .filter_map(|h| cosmetics::texture(&base, &h).ok().map(|png| (h, png)))
             .collect();
-        Ok(ArcticCapes {
-            catalog,
+        Ok(ArcticState {
+            presets,
+            look,
             textures,
-            equipped: me.equipped.cape,
-            token,
         })
     }
 
@@ -159,18 +165,32 @@ impl Tasks {
     /// Ask for a skin file; `None` when the dialog was cancelled.
     pub fn pick_skin_file(&self) {
         self.run(|t| {
-            let picked = rfd::FileDialog::new()
-                .set_title("Choose a skin")
-                .add_filter("Minecraft skin", &["png"])
-                .pick_file();
-            let result = match picked {
-                None => Ok(None),
-                Some(path) => std::fs::read(&path)
-                    .map(|bytes| Some((file_stem(&path), bytes)))
-                    .map_err(|e| format!("Could not read {}: {e}", path.display())),
-            };
+            let result = pick_png("Choose a skin", "Minecraft skin");
             t.send(Event::SkinFile(result));
         });
+    }
+
+    /// Ask for a cape image; `None` when the dialog was cancelled.
+    pub fn pick_cape_file(&self) {
+        self.run(|t| {
+            let result = pick_png("Choose a cape image (64×32)", "Cape").map(|f| f.map(|(_, b)| b));
+            t.send(Event::CapeFile(result));
+        });
+    }
+}
+
+type Picked = std::result::Result<Option<(String, Vec<u8>)>, String>;
+
+fn pick_png(title: &str, filter: &str) -> Picked {
+    let picked = rfd::FileDialog::new()
+        .set_title(title)
+        .add_filter(filter, &["png"])
+        .pick_file();
+    match picked {
+        None => Ok(None),
+        Some(path) => std::fs::read(&path)
+            .map(|bytes| Some((file_stem(&path), bytes)))
+            .map_err(|e| format!("Could not read {}: {e}", path.display())),
     }
 }
 

@@ -1,5 +1,6 @@
 //! Layout of the Skins tab: preview with actions, capes and the library.
 
+use arctic_core::cosmetics::CapeChoice;
 use arctic_core::skins::{SkinEntry, Variant};
 use eframe::egui::{
     self, Align2, CornerRadius, FontId, Rect, RichText, Sense, Stroke, StrokeKind, pos2, vec2,
@@ -18,6 +19,14 @@ const PREVIEW: [f32; 2] = [300.0, 320.0];
 const TILE: [f32; 2] = [118.0, 158.0];
 const CAPE_TILE: f32 = 54.0;
 
+/// What "you" look like to others: Arctic skin first, then Minecraft's.
+struct CurrentLook {
+    skin_key: Option<String>,
+    variant: Option<Variant>,
+    cape_key: Option<String>,
+    arctic_skin: bool,
+}
+
 impl ArcticApp {
     pub(super) fn skins_page(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
@@ -25,7 +34,7 @@ impl ArcticApp {
             ui,
             p,
             "Skins",
-            "Change how you look in game. Everyone sees your skin, on every server.",
+            "Your look is shown to every Arctic player, on any account. Everything is free.",
         );
         self.account_notice(ui, p);
         ui.horizontal_top(|ui| {
@@ -42,69 +51,104 @@ impl ArcticApp {
     }
 
     fn account_notice(&mut self, ui: &mut egui::Ui, p: &Palette) {
-        let text = match self.accounts.active() {
-            None => {
-                "Add a Microsoft account to change your skin. You can still collect skins below."
-            }
-            Some(a) if !a.is_microsoft() => {
-                "Offline accounts can't change skins. You can still collect skins below."
-            }
-            Some(a) => match self.skins.account.get(&a.id) {
-                Some(Err(e)) => {
-                    let e = e.clone();
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new(e).color(p.error));
-                        if ui.link("Retry").clicked() {
-                            self.request_account_skin(true);
-                        }
-                    });
-                    ui.add_space(6.0);
-                    return;
-                }
-                _ => return,
-            },
+        let Some(account) = self.accounts.active() else {
+            ui.label(
+                RichText::new("Add an account to wear skins. You can still collect them below.")
+                    .color(p.muted),
+            );
+            ui.add_space(6.0);
+            return;
         };
-        ui.label(RichText::new(text).color(p.muted));
-        ui.add_space(6.0);
+        let error = self
+            .skins
+            .arctic
+            .get(&account.id)
+            .and_then(|r| r.as_ref().err().cloned());
+        if let Some(e) = error {
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(format!("Arctic looks are unavailable: {e}")).color(p.error),
+                );
+                if ui.link("Retry").clicked() {
+                    self.request_skin_state(true);
+                }
+            });
+            ui.add_space(6.0);
+        }
+    }
+
+    fn current_look(&self) -> CurrentLook {
+        let arctic = self.arctic_state();
+        let mc = self
+            .accounts
+            .active()
+            .and_then(|a| self.skins.account.get(&a.id))
+            .and_then(|r| r.as_ref().ok());
+        let arctic_skin = arctic.and_then(|s| s.look.skin.clone());
+        let (skin_key, variant) = match (&arctic_skin, mc) {
+            (Some(hash), _) => (
+                Some(format!("askin:{hash}")),
+                arctic.map(|s| s.look.variant()),
+            ),
+            (None, Some(mc)) if mc.skin_png.is_some() => (
+                Some("mc".to_owned()),
+                mc.profile.active_skin().map(|s| s.variant()),
+            ),
+            _ => (None, None),
+        };
+        let cape_key = match arctic.and_then(|s| s.look.cape.clone()) {
+            Some(hash) => Some(format!("acape:{hash}")),
+            None => mc
+                .and_then(|m| m.profile.active_cape())
+                .map(|c| format!("mccape:{}", c.id)),
+        };
+        CurrentLook {
+            skin_key,
+            variant,
+            cape_key,
+            arctic_skin: arctic_skin.is_some(),
+        }
     }
 
     fn preview_panel(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        // Without a current skin to show, preview the newest library skin.
+        let ctx = ui.ctx().clone();
+        let current = self.current_look();
+        // Nothing worn yet: preview the newest library skin.
         if self.skins.selection == Selection::Current
-            && self.skin_png("current").is_none()
-            && !self.skins.busy
+            && current.skin_key.is_none()
+            && !self.skins.arctic_busy
             && let Some(first) = self.skins.library.skins.first()
         {
             self.skins.selection = Selection::Library(first.id.clone());
         }
-        let ctx = ui.ctx().clone();
         let (rect, response) = ui.allocate_exact_size(PREVIEW.into(), Sense::drag());
         if response.dragged() {
             let d = response.drag_delta();
             self.skins.yaw += d.x * 0.012;
             self.skins.pitch = model::clamp_pitch(self.skins.pitch + d.y * 0.008);
         }
-        let key = match &self.skins.selection {
-            Selection::Current => "current".to_owned(),
-            Selection::Library(id) => format!("lib:{id}"),
-        };
         let entry = self.selected_entry();
-        let current_variant = self.current_profile_variant();
-        let cape = self
-            .active_cape_key()
-            .and_then(|k| self.skin_texture(&ctx, &k).map(|t| t.handle.id()));
-        let time = ui.input(|i| i.time);
+        let key = match &entry {
+            Some(e) => Some(format!("lib:{}", e.id)),
+            None => current.skin_key.clone(),
+        };
+        let cape = current
+            .cape_key
+            .as_deref()
+            .and_then(|k| self.skin_texture(&ctx, k).map(|t| t.handle.id()));
         let pose = Pose {
             yaw: self.skins.yaw,
             pitch: self.skins.pitch,
-            swing: model::idle_swing(time),
+            swing: model::idle_swing(ui.input(|i| i.time)),
         };
-        match self.skin_texture(&ctx, &key) {
+        match key.as_deref().and_then(|k| self.skin_texture(&ctx, k)) {
             Some(tex) => {
                 let variant = entry
                     .as_ref()
-                    .map_or(current_variant.unwrap_or(tex.guessed), |e| e.variant);
+                    .map(|e| e.variant)
+                    .or(current.variant)
+                    .unwrap_or(tex.guessed);
                 model::paint(
                     ui.painter(),
                     rect,
@@ -117,11 +161,8 @@ impl ArcticApp {
                 ctx.request_repaint();
             }
             None => {
-                let text = if self.skins.busy {
-                    "Loading skin…"
-                } else {
-                    "Default skin"
-                };
+                let busy = self.skins.arctic_busy || self.skins.busy;
+                let text = if busy { "Loading…" } else { "No skin yet" };
                 ui.painter().text(
                     rect.center(),
                     Align2::CENTER_CENTER,
@@ -135,94 +176,55 @@ impl ArcticApp {
         ui.add_space(6.0);
         match entry {
             Some(entry) => self.library_actions(ui, &entry),
-            None => self.current_actions(ui),
+            None => self.current_actions(ui, &current),
         }
-        self.capes_row(ui);
         self.arctic_capes_row(ui);
+        self.minecraft_capes_row(ui);
     }
 
-    /// Arctic capes: seen by other players using the Arctic mod.
-    fn arctic_capes_row(&mut self, ui: &mut egui::Ui) {
+    fn current_actions(&mut self, ui: &mut egui::Ui, current: &CurrentLook) {
         let p = self.palette();
-        let Some(account) = self.accounts.active().filter(|a| a.is_microsoft()) else {
-            return;
+        ui.label(RichText::new("Your look").size(18.0).strong().color(p.text));
+        let source = if current.arctic_skin {
+            "Arctic skin"
+        } else if current.skin_key.is_some() {
+            "Your Minecraft skin"
+        } else {
+            "Pick a skin from your library and press Wear."
         };
-        ui.add_space(10.0);
         ui.horizontal(|ui| {
-            ui.label(RichText::new("ARCTIC CAPES").small().color(p.muted));
-            if self.skins.arctic_busy {
-                ui.spinner();
-            }
-        });
-        let state = match self.skins.arctic.get(&account.id) {
-            Some(Ok(state)) => state.clone(),
-            Some(Err(_)) => {
-                ui.label(
-                    RichText::new("Arctic capes are unavailable right now.")
-                        .small()
-                        .color(p.muted),
-                );
-                return;
-            }
-            None => return,
-        };
-        let ctx = ui.ctx().clone();
-        let mut pick: Option<Option<String>> = None;
-        ui.horizontal_wrapped(|ui| {
-            let none = state.equipped.is_none();
-            if cape_tile(ui, p, None, "No Arctic cape", none) && !none {
-                pick = Some(None);
-            }
-            for item in &state.catalog {
-                let tex = self
-                    .skin_texture(&ctx, &format!("arctic:{}", item.id))
-                    .map(|t| t.handle.id());
-                let active = state.equipped.as_deref() == Some(item.id.as_str());
-                if cape_tile(ui, p, tex, &item.name, active) && !active {
-                    pick = Some(Some(item.id.clone()));
-                }
-            }
-        });
-        ui.label(
-            RichText::new("Shown to players with the Arctic mod, over your Minecraft cape.")
-                .small()
-                .color(p.muted),
-        );
-        if let Some(choice) = pick
-            && !self.skins.arctic_busy
-        {
-            self.equip_arctic_cape(choice);
-        }
-    }
-
-    fn current_actions(&mut self, ui: &mut egui::Ui) {
-        let p = self.palette();
-        ui.label(RichText::new("Your skin").size(18.0).strong().color(p.text));
-        let can_change = self.can_change_skin();
-        ui.horizontal(|ui| {
-            if let Some(v) = self.current_profile_variant() {
-                ui.label(RichText::new(v.label()).color(p.muted));
-            }
-            if self.skins.busy {
+            ui.label(RichText::new(source).color(p.muted));
+            if self.skins.arctic_busy || self.skins.busy {
                 ui.spinner();
             }
         });
         ui.horizontal(|ui| {
-            if let Some(png) = self.skin_png("current")
+            if let Some(key) = &current.skin_key
+                && let Some(png) = self.skin_png(key)
                 && widgets::button(ui, p, Some(Icon::Plus), "Save to library", false).clicked()
             {
                 let name = self
                     .accounts
                     .active()
                     .map_or("Skin".to_owned(), |a| a.username.clone());
-                let variant = self.current_profile_variant();
-                self.add_skin(&name, &png, variant);
+                self.add_skin(&name, &png, current.variant);
             }
-            let reset = ui
-                .add_enabled_ui(can_change, |ui| ui.button("Reset to default"))
-                .inner;
-            if reset.clicked() {
-                self.change_account_skin(SkinChange::Reset);
+            let can = self.arctic_state().is_some() && !self.skins.arctic_busy;
+            if current.arctic_skin
+                && ui
+                    .add_enabled(can, egui::Button::new("Stop wearing"))
+                    .on_hover_text("Go back to your Minecraft skin for Arctic players")
+                    .clicked()
+            {
+                self.change_look(|l| l.skin = None);
+            }
+            if self.can_change_minecraft_skin()
+                && ui
+                    .button("Reset Minecraft skin")
+                    .on_hover_text("Go back to the default Minecraft skin (seen by everyone)")
+                    .clicked()
+            {
+                self.change_minecraft_skin(SkinChange::Reset);
             }
         });
     }
@@ -237,8 +239,7 @@ impl ArcticApp {
                         .char_limit(48)
                         .desired_width(f32::INFINITY),
                 );
-                let done = field.lost_focus();
-                if done {
+                if field.lost_focus() {
                     let trimmed = name.trim().to_owned();
                     if !trimmed.is_empty() {
                         self.update_skin(&id, |e| e.name = trimmed);
@@ -270,17 +271,23 @@ impl ArcticApp {
         });
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            let can = self.can_change_skin();
-            let apply = ui
+            let can = self.arctic_state().is_some() && !self.skins.arctic_busy;
+            let wear = ui
                 .add_enabled_ui(can, |ui| {
-                    widgets::button(ui, p, Some(Icon::Check), "Use this skin", true)
+                    widgets::button(ui, p, Some(Icon::Check), "Wear", true)
                 })
-                .inner;
-            if apply.clicked() {
-                self.apply_library_skin(entry);
+                .inner
+                .on_hover_text("Every Arctic player sees you with this skin");
+            if wear.clicked() {
+                self.wear_skin(entry);
             }
-            if self.skins.busy {
-                ui.spinner();
+            if self.can_change_minecraft_skin()
+                && ui
+                    .button("Set as Minecraft skin")
+                    .on_hover_text("Changes your real Minecraft skin, seen by everyone")
+                    .clicked()
+            {
+                self.set_minecraft_skin(entry);
             }
             if widgets::icon_button(ui, p, Icon::Trash, "Delete from library").clicked() {
                 self.remove_skin(&id);
@@ -288,7 +295,68 @@ impl ArcticApp {
         });
     }
 
-    fn capes_row(&mut self, ui: &mut egui::Ui) {
+    /// Arctic capes: presets, your own image, or none.
+    fn arctic_capes_row(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
+        let Some(state) = self.arctic_state().cloned() else {
+            return;
+        };
+        ui.add_space(10.0);
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("CAPE").small().color(p.muted));
+            if self.skins.arctic_busy {
+                ui.spinner();
+            }
+        });
+        let ctx = ui.ctx().clone();
+        let worn = state.look.cape.clone();
+        let mut pick: Option<Option<CapeChoice>> = None;
+        let mut upload = false;
+        ui.horizontal_wrapped(|ui| {
+            if cape_tile(ui, p, None, Icon::Close, "No cape", worn.is_none()) && worn.is_some() {
+                pick = Some(None);
+            }
+            for preset in &state.presets {
+                let tex = self
+                    .skin_texture(&ctx, &format!("acape:{}", preset.texture))
+                    .map(|t| t.handle.id());
+                let active = worn.as_deref() == Some(preset.texture.as_str());
+                if cape_tile(ui, p, tex, Icon::Close, &preset.name, active) && !active {
+                    pick = Some(Some(CapeChoice::Preset(preset.id.clone())));
+                }
+            }
+            let custom = worn
+                .as_ref()
+                .filter(|h| !state.presets.iter().any(|p| &p.texture == *h));
+            if let Some(hash) = custom {
+                let tex = self
+                    .skin_texture(&ctx, &format!("acape:{hash}"))
+                    .map(|t| t.handle.id());
+                cape_tile(ui, p, tex, Icon::Close, "Your cape", true);
+            }
+            if cape_tile(
+                ui,
+                p,
+                None,
+                Icon::Plus,
+                "Use your own cape image (64×32 PNG)",
+                false,
+            ) {
+                upload = true;
+            }
+        });
+        if upload && !self.skins.arctic_busy {
+            self.tasks.pick_cape_file();
+        }
+        if let Some(choice) = pick
+            && !self.skins.arctic_busy
+        {
+            self.set_arctic_cape(choice);
+        }
+    }
+
+    /// Official Minecraft capes the account owns (Microsoft only).
+    fn minecraft_capes_row(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         let Some(Ok(state)) = self
             .accounts
@@ -308,18 +376,19 @@ impl ArcticApp {
             .collect();
         let none_active = !capes.iter().any(|c| c.2);
         ui.add_space(10.0);
-        ui.label(RichText::new("CAPE").small().color(p.muted));
+        ui.label(RichText::new("MINECRAFT CAPES").small().color(p.muted));
         let ctx = ui.ctx().clone();
         let mut pick: Option<Option<String>> = None;
         ui.horizontal_wrapped(|ui| {
-            if cape_tile(ui, p, None, "No cape", none_active) && !none_active {
+            if cape_tile(ui, p, None, Icon::Close, "No Minecraft cape", none_active) && !none_active
+            {
                 pick = Some(None);
             }
             for (id, alias, active) in &capes {
                 let tex = self
-                    .skin_texture(&ctx, &format!("cape:{id}"))
+                    .skin_texture(&ctx, &format!("mccape:{id}"))
                     .map(|t| t.handle.id());
-                if cape_tile(ui, p, tex, alias, *active) && !active {
+                if cape_tile(ui, p, tex, Icon::Close, alias, *active) && !active {
                     pick = Some(Some(id.clone()));
                 }
             }
@@ -327,7 +396,7 @@ impl ArcticApp {
         if let Some(choice) = pick
             && !self.skins.busy
         {
-            self.change_account_skin(SkinChange::Cape(choice));
+            self.change_minecraft_skin(SkinChange::Cape(choice));
         }
     }
 
@@ -367,18 +436,12 @@ impl ArcticApp {
         });
         ui.add_space(8.0);
         let entries = self.skins.library.skins.clone();
-        let show_current = self.skin_png("current").is_some();
+        let current = self.current_look();
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(10.0, 10.0);
-            if show_current {
-                let variant = self.current_profile_variant();
-                if self.skin_tile(
-                    ui,
-                    "current",
-                    "Current",
-                    variant,
-                    self.skins.selection == Selection::Current,
-                ) {
+            if let Some(key) = &current.skin_key {
+                let selected = self.skins.selection == Selection::Current;
+                if self.skin_tile(ui, key, "You", current.variant, selected) {
                     self.skins.selection = Selection::Current;
                 }
             }
@@ -475,32 +538,7 @@ impl ArcticApp {
         }
     }
 
-    fn current_profile_variant(&self) -> Option<Variant> {
-        let a = self.accounts.active()?;
-        match self.skins.account.get(&a.id)? {
-            Ok(state) => state.profile.active_skin().map(|s| s.variant()),
-            Err(_) => None,
-        }
-    }
-
-    fn active_cape_key(&self) -> Option<String> {
-        let a = self.accounts.active()?;
-        // An Arctic cape shows over the Minecraft one, like in game.
-        if let Some(Ok(arctic)) = self.skins.arctic.get(&a.id)
-            && let Some(id) = &arctic.equipped
-        {
-            return Some(format!("arctic:{id}"));
-        }
-        match self.skins.account.get(&a.id)? {
-            Ok(state) => state
-                .profile
-                .active_cape()
-                .map(|c| format!("cape:{}", c.id)),
-            Err(_) => None,
-        }
-    }
-
-    fn can_change_skin(&self) -> bool {
+    fn can_change_minecraft_skin(&self) -> bool {
         !self.skins.busy
             && self.accounts.active().is_some_and(|a| {
                 a.is_microsoft() && matches!(self.skins.account.get(&a.id), Some(Ok(_)))
@@ -508,11 +546,12 @@ impl ArcticApp {
     }
 }
 
-/// Cape front, or an empty slot for "No cape". Returns true when clicked.
+/// Cape front, or an icon for "none"/"upload". Returns true when clicked.
 fn cape_tile(
     ui: &mut egui::Ui,
     p: &Palette,
     texture: Option<egui::TextureId>,
+    empty_icon: Icon,
     name: &str,
     active: bool,
 ) -> bool {
@@ -528,13 +567,14 @@ fn cape_tile(
     let inner = rect.shrink2(vec2(12.0, 8.0));
     match texture {
         Some(tex) => {
-            // Cape front: (1,1) 10×16 in a 64×32 texture.
+            // Cape front: (1,1) 10×16 of the 64×32 layout (UVs scale with HD capes).
             let uv =
                 Rect::from_min_max(pos2(1.0 / 64.0, 1.0 / 32.0), pos2(11.0 / 64.0, 17.0 / 32.0));
             ui.painter().image(tex, inner, uv, egui::Color32::WHITE);
         }
         None => {
-            icon_close(ui, p, inner);
+            let r = Rect::from_center_size(inner.center(), vec2(16.0, 16.0));
+            crate::art::icons::draw(ui.painter(), empty_icon, r, p.muted);
         }
     }
     let stroke = if active {
@@ -548,9 +588,4 @@ fn cape_tile(
         .on_hover_text(name)
         .on_hover_cursor(egui::CursorIcon::PointingHand)
         .clicked()
-}
-
-fn icon_close(ui: &egui::Ui, p: &Palette, rect: Rect) {
-    let r = Rect::from_center_size(rect.center(), vec2(16.0, 16.0));
-    crate::art::icons::draw(ui.painter(), Icon::Close, r, p.muted);
 }
