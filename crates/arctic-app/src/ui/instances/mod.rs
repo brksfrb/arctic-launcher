@@ -306,6 +306,14 @@ impl ArcticApp {
                 self.create_form_defaults();
             }
             Event::ModSearch(request, result) => {
+                if let Ok(page) = &result {
+                    for hit in &page.hits {
+                        crate::fonts::ensure_for(
+                            ctx,
+                            &format!("{}{}{}", hit.title, hit.description, hit.author),
+                        );
+                    }
+                }
                 if request == self.inst.search.request {
                     self.inst.search.loading = false;
                     self.inst.search.results = Some(result);

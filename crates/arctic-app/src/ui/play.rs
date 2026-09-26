@@ -49,11 +49,8 @@ impl ArcticApp {
         ui.add_space(22.0);
         ui.horizontal(|ui| {
             self.play_button(ui);
-            ui.add_space(8.0);
-            ui.vertical(|ui| {
-                ui.add_space(8.0);
-                ui.horizontal(|ui| self.quick_actions(ui));
-            });
+            ui.add_space(4.0);
+            self.quick_actions(ui);
         });
         ui.add_space(10.0);
         self.launch_status(ui);
@@ -413,7 +410,7 @@ impl ArcticApp {
 
     fn quick_actions(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        if widgets::icon_button(ui, p, Icon::Folder, "Open game folder").clicked() {
+        if widgets::tile_button(ui, p, Icon::Folder, "Open game folder", PLAY_SIZE[1]).clicked() {
             let dir = self.selected_instance().game_dir(&self.dirs);
             let _ = std::fs::create_dir_all(&dir);
             if let Err(e) = open::that_detached(&dir) {
@@ -429,12 +426,14 @@ impl ArcticApp {
             .logs()
             .join(format!("game-{}.log", self.selected_instance().id));
         if log.is_file()
-            && widgets::icon_button(ui, p, Icon::Document, "Open last game log").clicked()
+            && widgets::tile_button(ui, p, Icon::Document, "Open last game log", PLAY_SIZE[1])
+                .clicked()
         {
             let _ = open::that_detached(&log);
         }
         if let LaunchState::Starting { game, .. } | LaunchState::Running { game, .. } = &self.launch
-            && widgets::icon_button(ui, p, Icon::Stop, "Force close Minecraft").clicked()
+            && widgets::tile_button(ui, p, Icon::Stop, "Force close Minecraft", PLAY_SIZE[1])
+                .clicked()
         {
             game.kill();
         }

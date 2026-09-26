@@ -182,6 +182,34 @@ pub fn icon_button(ui: &mut Ui, p: &Palette, icon: Icon, tooltip: &str) -> Respo
         .on_hover_cursor(CursorIcon::PointingHand)
 }
 
+/// Square icon button with a visible tile, sized to sit next to a big
+/// button (e.g. the Play button's quick actions).
+pub fn tile_button(ui: &mut Ui, p: &Palette, icon: Icon, tooltip: &str, size: f32) -> Response {
+    let (rect, response) = ui.allocate_exact_size(vec2(size, size), Sense::click());
+    let hover = ui
+        .ctx()
+        .animate_bool(response.id.with("h"), response.hovered());
+    let radius = CornerRadius::same(12);
+    ui.painter()
+        .rect_filled(rect, radius, lerp_color(p.surface, p.surface_hover, hover));
+    ui.painter().rect_stroke(
+        rect,
+        radius,
+        egui::Stroke::new(1.0, lerp_color(p.card_stroke, p.accent, hover * 0.6)),
+        egui::StrokeKind::Inside,
+    );
+    let icon_rect = egui::Rect::from_center_size(rect.center(), vec2(size * 0.36, size * 0.36));
+    icons::draw(
+        ui.painter(),
+        icon,
+        icon_rect,
+        lerp_color(p.muted, p.text, hover),
+    );
+    response
+        .on_hover_text(tooltip)
+        .on_hover_cursor(CursorIcon::PointingHand)
+}
+
 /// Text button with a leading icon; `primary` uses the accent color.
 pub fn button(
     ui: &mut Ui,
