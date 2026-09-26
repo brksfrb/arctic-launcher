@@ -1,5 +1,6 @@
 package com.arcticlauncher.client.hud;
 
+import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.config.HudSlot;
 import com.arcticlauncher.client.gfx.Gfx;
@@ -17,6 +18,8 @@ import java.util.Map;
 public final class Hud {
 	public static final int MARGIN = 4;
 	public static final int GAP = 2;
+	/** Stacks stop above the hotbar and chat, then continue in a new column. */
+	private static final int BOTTOM_RESERVE = 64;
 	public static final float MIN_SCALE = 0.5f;
 	public static final float MAX_SCALE = 2.5f;
 
@@ -26,7 +29,13 @@ public final class Hud {
 
 	public Hud(ClientConfig config) {
 		this.config = config;
-		widgets = Collections.unmodifiableList(Widgets.all(cps));
+		List<HudWidget> all = new ArrayList<HudWidget>();
+		for (HudWidget w : Widgets.all(cps)) {
+			if (!w.needsGame() || ArcticClient.platform().hasFeatures()) {
+				all.add(w);
+			}
+		}
+		widgets = Collections.unmodifiableList(all);
 	}
 
 	public List<HudWidget> widgets() {
@@ -55,8 +64,9 @@ public final class Hud {
 	/** Every shown widget's rectangle {x, y, w, h}, in drawing order. */
 	public Map<HudWidget, int[]> layout(Gfx g) {
 		Map<HudWidget, int[]> rects = new IdentityHashMap<HudWidget, int[]>();
-		int left = MARGIN;
-		int right = MARGIN;
+		Stack left = new Stack();
+		Stack right = new Stack();
+		int bottom = Math.max(MARGIN + 20, g.height() - BOTTOM_RESERVE);
 		for (HudWidget w : widgets) {
 			HudSlot slot = slot(w);
 			if (!slot.enabled) {
@@ -69,20 +79,39 @@ public final class Hud {
 			if (slot.placed) {
 				x = anchored(slot.ax, slot.dx, g.width(), ww);
 				y = anchored(slot.ay, slot.dy, g.height(), hh);
-			} else if (w.column == HudWidget.Column.LEFT) {
-				x = MARGIN;
-				y = left;
-				left += hh + GAP;
 			} else {
-				x = g.width() - MARGIN - ww;
-				y = right;
-				right += hh + GAP;
+				Stack stack = w.column == HudWidget.Column.LEFT ? left : right;
+				stack.fit(hh, bottom);
+				x = w.column == HudWidget.Column.LEFT ? stack.x : g.width() - stack.x - ww;
+				y = stack.y;
+				stack.take(ww, hh);
 			}
 			x = Math.max(0, Math.min(g.width() - ww, x));
 			y = Math.max(0, Math.min(g.height() - hh, y));
 			rects.put(w, new int[] {x, y, ww, hh});
 		}
 		return rects;
+	}
+
+	/** Where the next unmoved widget goes in a column (x from its screen edge). */
+	private static final class Stack {
+		int x = MARGIN;
+		int y = MARGIN;
+		int widest;
+
+		/** Start a new column when this widget would reach the bottom. */
+		void fit(int h, int bottom) {
+			if (y > MARGIN && y + h > bottom) {
+				x += widest + GAP;
+				y = MARGIN;
+				widest = 0;
+			}
+		}
+
+		void take(int w, int h) {
+			y += h + GAP;
+			widest = Math.max(widest, w);
+		}
 	}
 
 	private static int anchored(int anchor, int offset, int screen, int size) {

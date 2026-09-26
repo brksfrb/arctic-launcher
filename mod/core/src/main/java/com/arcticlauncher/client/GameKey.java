@@ -8,6 +8,7 @@ public enum GameKey {
 	RIGHT,
 	JUMP,
 	SNEAK,
+	SPRINT,
 	ATTACK,
 	USE
 }

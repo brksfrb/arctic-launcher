@@ -94,6 +94,15 @@ public final class GfxImpl implements Gfx {
 	}
 
 	@Override
+	public void item(Object stack, int x, int y) {
+		//#if MC >= 26.1
+		net.minecraft.world.item.ItemStack item = (net.minecraft.world.item.ItemStack) stack;
+		g.item(item, x, y);
+		g.itemDecorations(font, item, x, y);
+		//#endif
+	}
+
+	@Override
 	public void push() {
 		//#if MC >= 1.21.6
 		g.pose().pushMatrix();

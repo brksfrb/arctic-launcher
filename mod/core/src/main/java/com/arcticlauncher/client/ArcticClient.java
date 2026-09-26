@@ -102,6 +102,15 @@ public final class ArcticClient {
 		}
 	}
 
+	/** Draw the custom crosshair; false to let the game draw its own. */
+	public static boolean renderCrosshair(Gfx g) {
+		if (!config.crosshair.enabled || !platform.hasFeatures()) {
+			return false;
+		}
+		com.arcticlauncher.client.hud.Crosshair.render(g, config.crosshair, g.width() / 2, g.height() / 2);
+		return true;
+	}
+
 	/** Every client tick (20 a second). */
 	public static void tick(boolean screenOpen) {
 		if (platform.inWorld()) {

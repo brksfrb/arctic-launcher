@@ -35,6 +35,15 @@ public final class ClientConfig {
 	public String zoomKey = "key.keyboard.c";
 	public String freelookKey = "key.keyboard.left.alt";
 	public String fullbrightKey = "key.keyboard.unknown";
+	/** Press sprint/sneak once to keep sprinting/sneaking. */
+	public boolean toggleSprint;
+	public boolean toggleSneak;
+	/** View: chat timestamps, stacked repeats, lower fire, no rain. */
+	public boolean chatTimestamps;
+	public boolean chatStack = true;
+	public boolean lowFire;
+	public boolean clearWeather;
+	public CrosshairConfig crosshair = new CrosshairConfig();
 
 	private transient File file;
 
@@ -78,6 +87,9 @@ public final class ClientConfig {
 		}
 		if (freelookKey == null) {
 			freelookKey = "key.keyboard.left.alt";
+		}
+		if (crosshair == null) {
+			crosshair = new CrosshairConfig();
 		}
 		if (fullbrightKey == null) {
 			fullbrightKey = "key.keyboard.unknown";

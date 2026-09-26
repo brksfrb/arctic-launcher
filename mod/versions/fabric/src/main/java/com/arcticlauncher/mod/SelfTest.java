@@ -49,6 +49,10 @@ final class SelfTest {
 	private SelfTest() {}
 
 	static void maybeStart() {
+		if (WorldTest.requested()) {
+			WorldTest.start();
+			return;
+		}
 		if (!Boolean.getBoolean("arctic.selftest")) {
 			return;
 		}
@@ -98,6 +102,8 @@ final class SelfTest {
 				},
 				() -> open("hud", "menu-hud"),
 				() -> open("features", "menu-features"),
+				() -> open("view", "menu-view"),
+				() -> open("crosshair", "menu-crosshair"),
 				() -> open("looks", "menu-looks"),
 				() -> open("style", "menu-style"),
 				() -> {

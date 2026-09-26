@@ -108,6 +108,8 @@ final class FabricPlatform implements Platform {
 				return o.keyJump;
 			case SNEAK:
 				return o.keyShift;
+			case SPRINT:
+				return o.keySprint;
 			case ATTACK:
 				return o.keyAttack;
 			default:
@@ -186,6 +188,41 @@ final class FabricPlatform implements Platform {
 	@Override
 	public boolean hasFeatures() {
 		return Compat.FEATURES;
+	}
+
+	@Override
+	public boolean physicalKeyDown(GameKey key) {
+		return Compat.keyDown(mapping(mc().options, key).saveString());
+	}
+
+	@Override
+	public void setKeyDown(GameKey key, boolean down) {
+		mapping(mc().options, key).setDown(down);
+	}
+
+	@Override
+	public int hurtTime() {
+		return GameInfo.hurtTime();
+	}
+
+	@Override
+	public List<Object[]> armor() {
+		return GameInfo.armor();
+	}
+
+	@Override
+	public List<Object[]> effects() {
+		return GameInfo.effects();
+	}
+
+	@Override
+	public Object[] heldItem() {
+		return GameInfo.heldItem();
+	}
+
+	@Override
+	public Object[] target() {
+		return GameInfo.target();
 	}
 
 	@Override
