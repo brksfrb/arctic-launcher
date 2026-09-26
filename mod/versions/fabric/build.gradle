@@ -1,5 +1,7 @@
 plugins {
-	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	// 26.1+ ship unobfuscated; older versions need Loom's remapping flavor.
+	id 'net.fabricmc.fabric-loom' version "${loom_version}" apply false
+	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}" apply false
 }
 
 // One source tree for every Fabric version of Minecraft. Pick the version
@@ -23,6 +25,8 @@ def compareVersions = { String a, String b ->
 }
 
 def atLeast = { String v -> compareVersions(mc, v) >= 0 }
+
+apply plugin: atLeast('26.1') ? 'net.fabricmc.fabric-loom' : 'net.fabricmc.fabric-loom-remap'
 
 /** "MC >= 26.1 && MC < 26.3": comparisons joined by && or ||. */
 def evalCondition
@@ -86,12 +90,35 @@ def preprocessSource = { String text, String name ->
 	return out.toString()
 }
 
+/**
+ * Names Minecraft renamed, as [condition, today's name, the name then]:
+ * sources use today's names and older builds get the old ones.
+ */
+def renames = [
+		['MC < 26.1', 'GuiGraphicsExtractor', 'GuiGraphics'],
+		['MC < 26.1', 'extractRenderState', 'render'],
+		['MC < 26.1', 'extractBackground', 'renderBackground'],
+		['MC < 26.1', 'extractPanorama', 'renderPanorama'],
+		['MC < 26.1', 'extractDefaultSprite', 'renderDefaultSprite'],
+		['MC < 26.1', 'extractWidgetRenderState', 'renderWidget'],
+		['MC < 26.1', 'extractContents', 'renderContents'],
+		['MC < 1.21.11', 'Identifier', 'ResourceLocation'],
+]
+
+def applyRenames = { String text ->
+	renames.findAll { evalCondition(it[0]) }.inject(text) { t, r ->
+		t.replaceAll('(?<![A-Za-z0-9_])' + r[1] + '(?![A-Za-z0-9_])', r[2])
+	}
+}
+
 def preprocessedJava = layout.buildDirectory.dir("preprocessed/${mc}/java")
 
 tasks.register('preprocessJava') {
 	inputs.dir 'src/main/java'
 	inputs.property 'minecraft_version', mc
 	outputs.dir preprocessedJava
+	// Cheap, and the rules above live in this script: always regenerate.
+	outputs.upToDateWhen { false }
 	doLast {
 		def outDir = preprocessedJava.get().asFile
 		project.delete(outDir)
@@ -100,7 +127,7 @@ tasks.register('preprocessJava') {
 			def rel = root.toPath().relativize(f.toPath()).toString()
 			def target = new File(outDir, rel)
 			target.parentFile.mkdirs()
-			target.text = preprocessSource(f.getText('UTF-8'), rel)
+			target.text = applyRenames(preprocessSource(f.getText('UTF-8'), rel))
 		}
 	}
 }
@@ -127,7 +154,11 @@ dependencies {
 	if (!atLeast('26.1')) {
 		mappings loom.officialMojangMappings()
 	}
-	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	if (atLeast('26.1')) {
+		implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	} else {
+		modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	}
 }
 
 /** The Java the game runs on for this version. */

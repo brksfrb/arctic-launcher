@@ -20,7 +20,11 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 @Mixin(Checkbox.class)
 abstract class CheckboxMixin {
 	@Redirect(
+			//#if MC >= 1.21.11
 			method = "extractContents",
+			//#else
+			method = "extractWidgetRenderState",
+			//#endif
 			at = @At(value = "INVOKE", target = Compat.BLIT_SPRITE_TINTED, ordinal = 0))
 	private void arctic$box(GuiGraphicsExtractor g, RenderPipeline pipeline, Identifier sprite, int x, int y, int w, int h, int color) {
 		if (!ArcticClient.restyles()) {

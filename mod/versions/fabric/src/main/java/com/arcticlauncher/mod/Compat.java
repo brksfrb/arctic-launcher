@@ -50,10 +50,10 @@ public final class Compat {
 	}
 
 	public static Screen optionsScreen(Screen parent) {
-		//#if MC >= 26.3
-		return new OptionsScreen(parent, mc().options);
-		//#else
+		//#if MC >= 26.1 && MC < 26.3
 		return new OptionsScreen(parent, mc().options, false);
+		//#else
+		return new OptionsScreen(parent, mc().options);
 		//#endif
 	}
 }
