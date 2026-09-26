@@ -70,22 +70,39 @@ impl TryFrom<XboxResponse> for XboxToken {
     }
 }
 
-pub(super) fn xbox_live(msa_access_token: &str) -> Result<XboxToken> {
-    let body = json!({
-        "Properties": {
-            "AuthMethod": "RPS",
-            "SiteName": "user.auth.xboxlive.com",
-            "RpsTicket": format!("d={msa_access_token}"),
-        },
-        "RelyingParty": "http://auth.xboxlive.com",
-        "TokenType": "JWT",
-    });
-    let mut resp = agent()
-        .post(XBL_URL)
-        .header("Accept", "application/json")
-        .send_json(&body)?;
-    let parsed: XboxResponse = resp.body_mut().read_json()?;
-    parsed.try_into()
+/// Xbox Live user token. Identity-platform tokens are sent as `d=<token>`;
+/// login.live.com tokens use `t=`, with the other forms as fallbacks.
+pub(super) fn xbox_live(msa_access_token: &str, live: bool) -> Result<XboxToken> {
+    let prefixes: &[&str] = if live { &["t=", "d=", ""] } else { &["d="] };
+    let mut last = None;
+    for prefix in prefixes {
+        let body = json!({
+            "Properties": {
+                "AuthMethod": "RPS",
+                "SiteName": "user.auth.xboxlive.com",
+                "RpsTicket": format!("{prefix}{msa_access_token}"),
+            },
+            "RelyingParty": "http://auth.xboxlive.com",
+            "TokenType": "JWT",
+        });
+        let mut resp = agent()
+            .post(XBL_URL)
+            .header("Accept", "application/json")
+            .config()
+            .http_status_as_error(false)
+            .build()
+            .send_json(&body)?;
+        let status = resp.status().as_u16();
+        if (200..300).contains(&status) {
+            let parsed: XboxResponse = resp.body_mut().read_json()?;
+            return parsed.try_into();
+        }
+        last = Some(status);
+    }
+    Err(Error::Auth(format!(
+        "Xbox Live sign-in failed (HTTP {})",
+        last.unwrap_or(0)
+    )))
 }
 
 pub(super) fn xsts(xbl_token: &str) -> Result<XboxToken> {

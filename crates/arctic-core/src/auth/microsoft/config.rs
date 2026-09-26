@@ -14,6 +14,14 @@ pub struct MsaConfig {
 }
 
 impl MsaConfig {
+    /// Older "title" client IDs (16 hex digits starting with zeros) sign in
+    /// through login.live.com with the Xbox service scope instead of the
+    /// Microsoft identity platform.
+    pub fn is_live(&self) -> bool {
+        let id = self.client_id.trim();
+        id.len() == 16 && id.starts_with("00000000") && id.bytes().all(|b| b.is_ascii_hexdigit())
+    }
+
     /// Lookup order: `ARCTIC_MSA_CLIENT_ID` env var → `<data>/msa.json` →
     /// value baked in at compile time (CI release builds set the same env var).
     pub fn load(dirs: &DataDirs) -> Result<Self> {
