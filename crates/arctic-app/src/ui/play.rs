@@ -78,15 +78,21 @@ impl ArcticApp {
     /// Instance name + subtitle; click to pick another instance.
     fn instance_switcher(&mut self, ui: &mut egui::Ui, instance: &Instance) {
         let p = self.palette();
+        // Painted behind the text once we know the hover state (last frame's).
+        let bg = ui.painter().add(egui::Shape::Noop);
         let response = ui
             .vertical(|ui| {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new(&instance.name)
-                            .size(22.0)
-                            .strong()
-                            .color(p.text),
+                    // Not selectable, so a click anywhere opens the switcher.
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(&instance.name)
+                                .size(22.0)
+                                .strong()
+                                .color(p.text),
+                        )
+                        .selectable(false),
                     );
                     let (r, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
                     icons::draw(ui.painter(), Icon::ChevronDown, r, p.muted);
@@ -96,12 +102,25 @@ impl ArcticApp {
                 } else {
                     format!("{} instance", instance.loader.label())
                 };
-                ui.label(RichText::new(subtitle).color(p.muted));
+                ui.add(egui::Label::new(RichText::new(subtitle).color(p.muted)).selectable(false));
             })
             .response
             .interact(Sense::click())
             .on_hover_text("Switch instance")
             .on_hover_cursor(CursorIcon::PointingHand);
+        let hover = ui
+            .ctx()
+            .animate_bool(response.id.with("switch_h"), response.hovered());
+        if hover > 0.0 {
+            ui.painter().set(
+                bg,
+                egui::Shape::rect_filled(
+                    response.rect.expand2(vec2(8.0, 4.0)),
+                    CornerRadius::same(10),
+                    p.surface_hover.gamma_multiply(hover),
+                ),
+            );
+        }
         let mut all = vec![self.instance.clone()];
         all.extend(self.custom_instances.iter().cloned());
         let mut pick = None;

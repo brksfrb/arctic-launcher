@@ -22,6 +22,7 @@ pub enum Icon {
     Trash,
     Check,
     ChevronDown,
+    ChevronLeft,
     Close,
     Copy,
     External,
@@ -180,6 +181,10 @@ pub fn draw(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
         ),
         Icon::ChevronDown => poly(
             &[vec2(-0.55, -0.2), vec2(0.0, 0.32), vec2(0.55, -0.2)],
+            false,
+        ),
+        Icon::ChevronLeft => poly(
+            &[vec2(0.2, -0.55), vec2(-0.32, 0.0), vec2(0.2, 0.55)],
             false,
         ),
         Icon::Close => {

@@ -27,7 +27,7 @@ impl ArcticApp {
         let Some(instance) = self.instance_by_id(id).cloned() else {
             return;
         };
-        if ui.link("‹ All instances").clicked() {
+        if widgets::button(ui, p, Some(Icon::ChevronLeft), "All instances", false).clicked() {
             self.inst.open = None;
             return;
         }
