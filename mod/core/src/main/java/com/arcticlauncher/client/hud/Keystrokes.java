@@ -3,7 +3,6 @@ package com.arcticlauncher.client.hud;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.GameKey;
 import com.arcticlauncher.client.Keys;
-import com.arcticlauncher.client.config.HudSlot;
 import com.arcticlauncher.client.gfx.Draw;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Style;
@@ -19,7 +18,7 @@ final class Keystrokes extends HudWidget {
 	private final Cps cps;
 
 	Keystrokes(Cps cps) {
-		super("keystrokes", "Keystrokes", "Movement keys and mouse buttons", new HudSlot(true, 1f, 0.35f));
+		super("keystrokes", "Keystrokes", "Movement keys and mouse buttons", true, Column.RIGHT);
 		this.cps = cps;
 	}
 

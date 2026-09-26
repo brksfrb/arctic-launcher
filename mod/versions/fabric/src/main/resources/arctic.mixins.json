@@ -14,7 +14,11 @@
 		"MouseHandlerMixin",
 		"PauseScreenMixin",
 		"ScreenMixin",
-		"TitleScreenMixin"
+		"TitleScreenMixin",
+		"MinecraftTickMixin",
+		"EntityTurnMixin"<% if (features) { %>,
+		"CameraMixin",
+		"LightmapMixin"<% } %>
 	],
 	"injectors": {
 		"defaultRequire": 1

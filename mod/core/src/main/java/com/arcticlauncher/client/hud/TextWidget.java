@@ -1,6 +1,5 @@
 package com.arcticlauncher.client.hud;
 
-import com.arcticlauncher.client.config.HudSlot;
 import com.arcticlauncher.client.gfx.Draw;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Style;
@@ -15,17 +14,19 @@ public abstract class TextWidget extends HudWidget {
 	/** The widest value expected, so the pill doesn't jitter. */
 	private final String sample;
 
-	protected TextWidget(String id, String label, String description, String sample, HudSlot defaults) {
-		super(id, label, description, defaults);
+	protected TextWidget(String id, String label, String description, String sample, boolean onByDefault) {
+		super(id, label, description, onByDefault, Column.LEFT);
 		this.label = label;
 		this.sample = sample;
 	}
 
 	protected abstract String value(boolean preview);
 
+	/** Fits the widest expected value, and grows if a value is wider (FPS 1000+). */
 	@Override
 	public int width(Gfx g) {
-		return PAD * 2 + g.textWidth(label) + GAP + g.textWidth(sample);
+		int value = Math.max(g.textWidth(sample), g.textWidth(value(false)));
+		return PAD * 2 + g.textWidth(label) + GAP + value;
 	}
 
 	@Override

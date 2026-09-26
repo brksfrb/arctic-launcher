@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.CameraType;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
@@ -85,7 +86,7 @@ final class FabricPlatform implements Platform {
 		if (p == null) {
 			return null;
 		}
-		return new double[] {p.getX(), p.getY(), p.getZ(), p.getYRot()};
+		return new double[] {p.getX(), p.getY(), p.getZ(), p.getYRot(), p.getXRot()};
 	}
 
 	@Override
@@ -112,6 +113,79 @@ final class FabricPlatform implements Platform {
 			default:
 				return o.keyUse;
 		}
+	}
+
+	@Override
+	public String biome() {
+		Minecraft mc = mc();
+		if (mc.level == null || mc.player == null) {
+			return null;
+		}
+		String id = Compat.biomeId(mc.level, mc.player.blockPosition());
+		return id == null ? null : title(id);
+	}
+
+	/** "snowy_plains" → "Snowy Plains". */
+	private static String title(String id) {
+		StringBuilder out = new StringBuilder();
+		for (String word : id.split("_")) {
+			if (!word.isEmpty()) {
+				out.append(out.length() == 0 ? "" : " ").append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+			}
+		}
+		return out.toString();
+	}
+
+	@Override
+	public String server() {
+		Minecraft mc = mc();
+		if (mc.level == null) {
+			return null;
+		}
+		if (mc.hasSingleplayerServer() || mc.getCurrentServer() == null) {
+			return "Singleplayer";
+		}
+		return mc.getCurrentServer().ip;
+	}
+
+	@Override
+	public long dayTime() {
+		return mc().level == null ? -1 : Compat.dayTime(mc().level);
+	}
+
+	@Override
+	public boolean isKeyDown(String key) {
+		return Compat.keyDown(key);
+	}
+
+	@Override
+	public String keyLabel(String key) {
+		return Compat.keyLabel(key);
+	}
+
+	@Override
+	public String keyName(int nativeKey) {
+		return Compat.keyName(nativeKey);
+	}
+
+	/** The camera before Freelook switched to third person. */
+	private CameraType before;
+
+	@Override
+	public void setThirdPerson(boolean on) {
+		Options options = mc().options;
+		if (on) {
+			before = options.getCameraType();
+			options.setCameraType(CameraType.THIRD_PERSON_BACK);
+		} else if (before != null) {
+			options.setCameraType(before);
+			before = null;
+		}
+	}
+
+	@Override
+	public boolean hasFeatures() {
+		return Compat.FEATURES;
 	}
 
 	@Override
@@ -184,7 +258,7 @@ final class FabricPlatform implements Platform {
 	}
 
 	private static void register(String key, NativeImage image) {
-		mc().getTextureManager().register(GfxImpl.look(key), new DynamicTexture(() -> "Arctic " + key, image));
+		mc().getTextureManager().register(GfxImpl.look(key), Compat.texture("Arctic " + key, image));
 	}
 
 	/** An animated cape's stacked 2:1 frames as separate images. */

@@ -253,6 +253,7 @@ public final class Looks {
 				capes.add(p.texture);
 				texture(p.texture);
 			}
+			platform.log(false, "Arctic capes: " + presets.size() + " from " + baseUrl);
 		} catch (Exception e) {
 			platform.log(true, "Arctic catalog: " + e);
 			setBusy(false, "Couldn't reach Arctic. Try again later.");

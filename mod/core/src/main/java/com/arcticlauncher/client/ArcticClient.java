@@ -2,6 +2,7 @@ package com.arcticlauncher.client;
 
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.config.Session;
+import com.arcticlauncher.client.feature.Features;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.hud.Hud;
 import com.arcticlauncher.client.looks.Looks;
@@ -23,6 +24,7 @@ public final class ArcticClient {
 	private static ClientConfig config;
 	private static Hud hud;
 	private static Looks looks;
+	private static Features features;
 
 	private ArcticClient() {}
 
@@ -32,6 +34,7 @@ public final class ArcticClient {
 		Session session = Session.read(p.configDir());
 		applyLauncherStyle(session);
 		hud = new Hud(config);
+		features = new Features(p, config);
 		looks = new Looks(p, config, serverUrl(session), session.token);
 		looks.start();
 		p.log(false, "Arctic Client ready: style " + config.style + ", looks from " + looks.baseUrl());
@@ -77,6 +80,10 @@ public final class ArcticClient {
 		return looks;
 	}
 
+	public static Features features() {
+		return features;
+	}
+
 	public static Style style() {
 		return Style.byId(config.style);
 	}
@@ -92,6 +99,13 @@ public final class ArcticClient {
 	public static void renderHud(Gfx g) {
 		if (platform.inWorld() && !platform.hudHidden()) {
 			hud.render(g, style(), false);
+		}
+	}
+
+	/** Every client tick (20 a second). */
+	public static void tick(boolean screenOpen) {
+		if (platform.inWorld()) {
+			features.tick(screenOpen);
 		}
 	}
 

@@ -12,6 +12,7 @@ import com.arcticlauncher.client.looks.Preset;
 import com.arcticlauncher.client.style.Skin;
 import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Button;
+import com.arcticlauncher.client.ui.KeyButton;
 import com.arcticlauncher.client.ui.Page;
 import com.arcticlauncher.client.ui.Toggle;
 import java.util.List;
@@ -20,6 +21,7 @@ import java.util.List;
 public final class ArcticMenu extends Page {
 	private enum Tab {
 		HUD("HUD", "Choose what shows on screen."),
+		FEATURES("Features", "Hold a key to zoom or look around freely."),
 		LOOKS("Looks", "Every Arctic player sees your cape."),
 		STYLE("Style", "How Minecraft's menus look.");
 
@@ -35,6 +37,8 @@ public final class ArcticMenu extends Page {
 	private static final int SIDEBAR = 92;
 	private static final int PAD = 10;
 	private static final int ROW = 24;
+	private static final int HUD_ROW = 18;
+	private static final int KEY_W = 76;
 	private static final int MAX_NEARBY = 3;
 	/** Remembered while the game runs. */
 	private static Tab tab = Tab.HUD;
@@ -43,7 +47,12 @@ public final class ArcticMenu extends Page {
 	private int py;
 	private int pw;
 	private int ph;
-	private int seenLooks = -1;
+	/** What the Looks tab showed at its last build (rebuild only on change). */
+	private String shownLooks = "";
+	/** Key buttons on the Features tab, which take the next key press. */
+	private final java.util.List<KeyButton> keyButtons = new java.util.ArrayList<KeyButton>();
+	/** The cape list was asked for once since this menu opened. */
+	private boolean requestedCapes;
 
 	/** Open on a tab next time ("hud", "looks" or "style"). */
 	public static void showTab(String name) {
@@ -78,7 +87,13 @@ public final class ArcticMenu extends Page {
 		px = (width - pw) / 2;
 		py = (height - ph) / 2;
 		int y = py + 34;
+		if (tab == Tab.FEATURES && !ArcticClient.platform().hasFeatures()) {
+			tab = Tab.HUD;
+		}
 		for (final Tab t : Tab.values()) {
+			if (t == Tab.FEATURES && !ArcticClient.platform().hasFeatures()) {
+				continue;
+			}
 			add(new Button(t.title, new Runnable() {
 				@Override
 				public void run() {
@@ -94,8 +109,11 @@ public final class ArcticMenu extends Page {
 				close();
 			}
 		})).bounds(px + 8, py + ph - 28, SIDEBAR - 16, 20);
+		keyButtons.clear();
 		if (tab == Tab.HUD) {
 			buildHud();
+		} else if (tab == Tab.FEATURES) {
+			buildFeatures();
 		} else if (tab == Tab.LOOKS) {
 			buildLooks();
 		} else {
@@ -112,10 +130,14 @@ public final class ArcticMenu extends Page {
 				ArcticClient.platform().openPage(new HudEditor());
 			}
 		}).primary()).bounds(contentX() + contentW() - 80, py + 10, 80, 18);
-		int y = contentTop();
+		// Two columns of switches; the editor places what's on.
+		int colW = (contentW() - 6) / 2;
+		int i = 0;
 		for (HudWidget w : ArcticClient.hud().widgets()) {
 			final HudSlot slot = ArcticClient.hud().slot(w);
-			add(new Toggle(w.name, w.description, new Toggle.Binding() {
+			int x = contentX() + (i % 2) * (colW + 6);
+			int y = contentTop() + (i / 2) * (HUD_ROW + 2);
+			add(new Toggle(w.name, null, new Toggle.Binding() {
 				@Override
 				public boolean get() {
 					return slot.enabled;
@@ -126,20 +148,122 @@ public final class ArcticMenu extends Page {
 					slot.enabled = on;
 					ArcticClient.saveConfig();
 				}
-			})).bounds(contentX(), y, contentW(), ROW);
-			y += ROW + 2;
+			})).bounds(x, y, colW, HUD_ROW);
+			i++;
 		}
+	}
+
+	// ---- Features --------------------------------------------------------------
+
+	private void buildFeatures() {
+		final ClientConfig c = ArcticClient.config();
+		int y = contentTop();
+		feature(y, "Zoom", "Hold to zoom in, like a spyglass", new Toggle.Binding() {
+			@Override
+			public boolean get() {
+				return c.zoomEnabled;
+			}
+
+			@Override
+			public void set(boolean on) {
+				c.zoomEnabled = on;
+				ArcticClient.saveConfig();
+			}
+		}, new KeyButton.Binding() {
+			@Override
+			public String get() {
+				return c.zoomKey;
+			}
+
+			@Override
+			public void set(String key) {
+				c.zoomKey = key;
+			}
+		});
+		y += ROW + 4;
+		feature(y, "Freelook", "Hold to look around without turning", new Toggle.Binding() {
+			@Override
+			public boolean get() {
+				return c.freelookEnabled;
+			}
+
+			@Override
+			public void set(boolean on) {
+				c.freelookEnabled = on;
+				ArcticClient.saveConfig();
+			}
+		}, new KeyButton.Binding() {
+			@Override
+			public String get() {
+				return c.freelookKey;
+			}
+
+			@Override
+			public void set(String key) {
+				c.freelookKey = key;
+			}
+		});
+		y += ROW + 4;
+		feature(y, "Fullbright", "See in the dark; the key switches it", new Toggle.Binding() {
+			@Override
+			public boolean get() {
+				return c.fullbright;
+			}
+
+			@Override
+			public void set(boolean on) {
+				c.fullbright = on;
+				ArcticClient.saveConfig();
+			}
+		}, new KeyButton.Binding() {
+			@Override
+			public String get() {
+				return c.fullbrightKey;
+			}
+
+			@Override
+			public void set(String key) {
+				c.fullbrightKey = key;
+			}
+		});
+	}
+
+	/** A switch with a key button beside it. */
+	private void feature(int y, String name, String hint, Toggle.Binding on, KeyButton.Binding key) {
+		add(new Toggle(name, hint, on)).bounds(contentX(), y, contentW() - KEY_W - 6, ROW);
+		KeyButton button = add(new KeyButton(key));
+		button.bounds(contentX() + contentW() - KEY_W, y + 3, KEY_W, ROW - 6);
+		keyButtons.add(button);
+	}
+
+	@Override
+	public boolean keyPressed(int key, int nativeKey) {
+		for (KeyButton b : keyButtons) {
+			if (b.keyPressed(key, nativeKey)) {
+				return true;
+			}
+		}
+		return super.keyPressed(key, nativeKey);
 	}
 
 	// ---- Looks -----------------------------------------------------------------
 
 	private void buildLooks() {
 		Looks looks = ArcticClient.looks();
-		seenLooks = looks.version();
-		if (looks.presets().isEmpty() && !looks.busy()) {
+		if (!requestedCapes && looks.presets().isEmpty() && !looks.busy()) {
+			requestedCapes = true;
 			looks.open();
 		}
+		shownLooks = looksState();
 		int bottom = capes(looks);
+		if (looks.presets().isEmpty() && !looks.busy()) {
+			add(new Button("Try again", new Runnable() {
+				@Override
+				public void run() {
+					ArcticClient.looks().open();
+				}
+			})).bounds(contentX() + contentW() - 80, py + 10, 80, 18);
+		}
 		final ClientConfig config = ArcticClient.config();
 		add(new Toggle("Show Arctic looks", "Other players' Arctic skins and capes", new Toggle.Binding() {
 			@Override
@@ -229,9 +353,22 @@ public final class ArcticMenu extends Page {
 		}
 	}
 
+	/** Everything the Looks tab shows; lookups in the background don't count. */
+	private static String looksState() {
+		Looks looks = ArcticClient.looks();
+		Look mine = looks.myLook();
+		StringBuilder state = new StringBuilder();
+		state.append(looks.busy()).append('|').append(looks.signedIn()).append('|').append(looks.status());
+		state.append('|').append(mine == null ? null : mine.cape);
+		for (Preset p : looks.presets()) {
+			state.append('|').append(p.id);
+		}
+		return state.toString();
+	}
+
 	@Override
 	public void tick() {
-		if (tab == Tab.LOOKS && seenLooks != ArcticClient.looks().version()) {
+		if (tab == Tab.LOOKS && !shownLooks.equals(looksState())) {
 			rebuild();
 		}
 	}

@@ -1,7 +1,9 @@
 package com.arcticlauncher.mod;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.User;
 import net.minecraft.world.entity.player.Player;
 //#if MC >= 1.21.9
@@ -20,12 +22,75 @@ public final class Compat {
 	//#if MC >= 26.3
 	public static final String BLIT_SPRITE_TINTED = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;blitSprite(Lcom/mojang/renderpearl/api/pipeline/RenderPipeline;Lnet/minecraft/resources/Identifier;IIIII)V";
 	public static final String BLIT_SPRITE = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;blitSprite(Lcom/mojang/renderpearl/api/pipeline/RenderPipeline;Lnet/minecraft/resources/Identifier;IIII)V";
-	//#else
+	//#elif MC >= 1.21.6
 	public static final String BLIT_SPRITE_TINTED = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;blitSprite(Lcom/mojang/blaze3d/pipeline/RenderPipeline;Lnet/minecraft/resources/Identifier;IIIII)V";
 	public static final String BLIT_SPRITE = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;blitSprite(Lcom/mojang/blaze3d/pipeline/RenderPipeline;Lnet/minecraft/resources/Identifier;IIII)V";
+	//#else
+	// Before 1.21.6 sprites take a RenderType function instead of a pipeline.
+	public static final String BLIT_SPRITE_TINTED = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;blitSprite(Ljava/util/function/Function;Lnet/minecraft/resources/Identifier;IIIII)V";
+	public static final String BLIT_SPRITE = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;blitSprite(Ljava/util/function/Function;Lnet/minecraft/resources/Identifier;IIII)V";
+	//#endif
+
+	/** Zoom, Freelook and Fullbright hooks exist for this version. */
+	//#if MC >= 26.3
+	public static final boolean FEATURES = true;
+	//#else
+	public static final boolean FEATURES = false;
 	//#endif
 
 	private Compat() {}
+
+	// ---- Keys --------------------------------------------------------------------
+
+	/** Is a keyboard key (by Minecraft name) held? */
+	public static boolean keyDown(String name) {
+		InputConstants.Key key = InputConstants.getKey(name);
+		if (key.getType() == InputConstants.Type.MOUSE) {
+			return false;
+		}
+		//#if MC >= 26.3
+		return InputConstants.isKeyDown(key.getValue());
+		//#elif MC >= 1.21.9
+		return InputConstants.isKeyDown(mc().getWindow(), key.getValue());
+		//#else
+		return InputConstants.isKeyDown(mc().getWindow().getWindow(), key.getValue());
+		//#endif
+	}
+
+	/** The Minecraft name of a keyboard key code, like "key.keyboard.c". */
+	public static String keyName(int code) {
+		//#if MC >= 26.3
+		return InputConstants.Type.KEYBOARD.getOrCreate(code).getName();
+		//#else
+		return InputConstants.Type.KEYSYM.getOrCreate(code).getName();
+		//#endif
+	}
+
+	public static String keyLabel(String name) {
+		return InputConstants.getKey(name).getDisplayName().getString();
+	}
+
+	// ---- World -------------------------------------------------------------------
+
+	/** World time in ticks (26.1 moved day time to world clocks; game time is close). */
+	public static long dayTime(net.minecraft.world.level.Level level) {
+		//#if MC >= 26.1
+		return level.getLevelData().getGameTime();
+		//#else
+		return level.getDayTime();
+		//#endif
+	}
+
+	/** The biome's id path, like "snowy_plains". */
+	public static String biomeId(net.minecraft.world.level.Level level, net.minecraft.core.BlockPos pos) {
+		return level.getBiome(pos).unwrapKey()
+				//#if MC >= 1.21.11
+				.map(key -> key.identifier().getPath())
+				//#else
+				.map(key -> key.location().getPath())
+				//#endif
+				.orElse(null);
+	}
 
 	private static Minecraft mc() {
 		return Minecraft.getInstance();
@@ -53,6 +118,15 @@ public final class Compat {
 		return mc().gui.hud.isHidden();
 		//#else
 		return mc().options.hideGui;
+		//#endif
+	}
+
+	/** A GPU texture for an image (named for debugging where supported). */
+	public static DynamicTexture texture(String name, NativeImage image) {
+		//#if MC >= 1.21.5
+		return new DynamicTexture(() -> name, image);
+		//#else
+		return new DynamicTexture(image);
 		//#endif
 	}
 

@@ -70,7 +70,7 @@ public final class PageScreen extends Screen {
 
 	@Override
 	public boolean keyPressed(KeyEvent event) {
-		return page.keyPressed(Input.key(event.key()));
+		return page.keyPressed(Input.key(event.key()), event.key());
 	}
 	//#else
 	@Override
@@ -95,7 +95,7 @@ public final class PageScreen extends Screen {
 
 	@Override
 	public boolean keyPressed(int key, int scancode, int modifiers) {
-		return page.keyPressed(Input.key(key));
+		return page.keyPressed(Input.key(key), key);
 	}
 	//#endif
 

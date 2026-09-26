@@ -6,7 +6,11 @@ import java.io.InputStream;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+//#if MC >= 1.21.6
 import net.minecraft.client.renderer.RenderPipelines;
+//#else
+import net.minecraft.client.renderer.RenderType;
+//#endif
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.Identifier;
 
@@ -37,7 +41,7 @@ public final class GfxImpl implements Gfx {
 			iconLoaded = true;
 			try (InputStream in = GfxImpl.class.getResourceAsStream("/assets/arctic/icon.png")) {
 				NativeImage image = NativeImage.read(in);
-				Minecraft.getInstance().getTextureManager().register(ICON, new DynamicTexture(() -> "Arctic icon", image));
+				Minecraft.getInstance().getTextureManager().register(ICON, Compat.texture("Arctic icon", image));
 			} catch (Exception e) {
 				ArcticMod.LOG.warn("Arctic icon: {}", e.toString());
 			}
@@ -82,27 +86,47 @@ public final class GfxImpl implements Gfx {
 	@Override
 	public void texture(String key, int x, int y, int w, int h, float u, float v, int regionW, int regionH, int texW, int texH) {
 		Identifier id = key.startsWith("look:") ? look(key.substring(5)) : icon();
+		//#if MC >= 1.21.6
 		g.blit(RenderPipelines.GUI_TEXTURED, id, x, y, u, v, w, h, regionW, regionH, texW, texH);
+		//#else
+		g.blit(RenderType::guiTextured, id, x, y, u, v, w, h, regionW, regionH, texW, texH);
+		//#endif
 	}
 
 	@Override
 	public void push() {
+		//#if MC >= 1.21.6
 		g.pose().pushMatrix();
+		//#else
+		g.pose().pushPose();
+		//#endif
 	}
 
 	@Override
 	public void pop() {
+		//#if MC >= 1.21.6
 		g.pose().popMatrix();
+		//#else
+		g.pose().popPose();
+		//#endif
 	}
 
 	@Override
 	public void translate(float x, float y) {
+		//#if MC >= 1.21.6
 		g.pose().translate(x, y);
+		//#else
+		g.pose().translate(x, y, 0);
+		//#endif
 	}
 
 	@Override
 	public void scale(float s) {
+		//#if MC >= 1.21.6
 		g.pose().scale(s, s);
+		//#else
+		g.pose().scale(s, s, 1);
+		//#endif
 	}
 
 	@Override

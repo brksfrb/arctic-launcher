@@ -174,7 +174,9 @@ The client is split so it can cover many Minecraft versions:
 - `mod/core` holds everything that doesn't touch Minecraft, compiled for Java 8 so the same
   code runs down to 1.8.9: a small UI toolkit drawn from rectangles and text (`ui`, `gfx`),
   the menu styles and the widget skins (`style`), the animated Arctic backdrop, the title
-  menu, the Arctic menu (Right Shift) and the HUD editor (`menu`), the HUD widgets (`hud`),
+  menu, the Arctic menu (Right Shift) and the HUD editor (`menu`), the HUD widgets (`hud`:
+  unmoved widgets stack in a column, moved ones pin to the nearest screen edge), Zoom,
+  Freelook and Fullbright (`feature`, with keys stored by Minecraft key name),
   looks lookups and cape changes over plain HTTP (`looks`), and `config/arctic.json`.
 - `mod/versions/fabric` is a thin adapter, one source tree built for each target in
   `mod/targets.json` (version differences are `//#if MC …` blocks, mostly in `Compat`): a `Platform` (game state, screens, textures,

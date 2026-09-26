@@ -50,8 +50,9 @@
 - **Skin gallery.** Browse skins other players shared, search by name or creator, and wear
   one in a click. Share your own from your library.
 - **Arctic Client.** Vanilla gets a fresh look: restyled menus (pick Arctic, Aurora or
-  Classic), HUD widgets like FPS, CPS, ping and keystrokes that you drag into place, and
-  everyone's Arctic looks in game. Press Right Shift in game for the Arctic menu. It's on
+  Classic), a dozen HUD widgets (FPS, CPS, ping, keystrokes, coordinates, speed, biome and
+  more) that line up on their own and snap into place when you move them, Zoom, Freelook
+  and Fullbright, and everyone's Arctic looks in game. Press Right Shift in game for the Arctic menu. It's on
   by default for Minecraft 1.21.6 and newer, comes to Fabric and Quilt instances too, and you can turn
   it off per instance.
 - **Performance, built in.** One switch adds Sodium, Lithium, FerriteCore, ImmediatelyFast

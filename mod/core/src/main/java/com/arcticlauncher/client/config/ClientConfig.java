@@ -14,6 +14,7 @@ import java.util.Set;
 /** Arctic Client settings, in {@code config/arctic.json}. */
 public final class ClientConfig {
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+	private static final int HUD_VERSION = 2;
 
 	/** Show Arctic looks (skins and capes) at all. */
 	public boolean showCosmetics = true;
@@ -25,6 +26,15 @@ public final class ClientConfig {
 	public long styleFromLauncher;
 	/** HUD widget id → placement. */
 	public Map<String, HudSlot> hud = new LinkedHashMap<String, HudSlot>();
+	/** Layout format of {@link #hud}; older layouts are reset. */
+	public int hudVersion = HUD_VERSION;
+	/** Features: Fullbright (on/off), and the keys (Minecraft key names). */
+	public boolean fullbright;
+	public boolean zoomEnabled = true;
+	public boolean freelookEnabled = true;
+	public String zoomKey = "key.keyboard.c";
+	public String freelookKey = "key.keyboard.left.alt";
+	public String fullbrightKey = "key.keyboard.unknown";
 
 	private transient File file;
 
@@ -58,6 +68,19 @@ public final class ClientConfig {
 		}
 		if (style == null) {
 			style = "arctic";
+		}
+		if (hudVersion < HUD_VERSION) {
+			hud.clear();
+			hudVersion = HUD_VERSION;
+		}
+		if (zoomKey == null) {
+			zoomKey = "key.keyboard.c";
+		}
+		if (freelookKey == null) {
+			freelookKey = "key.keyboard.left.alt";
+		}
+		if (fullbrightKey == null) {
+			fullbrightKey = "key.keyboard.unknown";
 		}
 	}
 

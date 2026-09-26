@@ -22,7 +22,11 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 abstract class GuiMixin {
 	@ModifyVariable(method = "setScreen", at = @At("HEAD"), argsOnly = true)
 	private Screen arctic$title(Screen screen) {
-		if (screen instanceof TitleScreen && ArcticClient.restyles()) {
+		// No screen outside a world means the title screen: vanilla builds its
+		// own inside setScreen, after this point, so catch that case too.
+		boolean title = screen instanceof TitleScreen
+				|| (screen == null && net.minecraft.client.Minecraft.getInstance().level == null);
+		if (title && ArcticClient.restyles()) {
 			return new PageScreen(ArcticClient.titleMenu(), null);
 		}
 		return screen;

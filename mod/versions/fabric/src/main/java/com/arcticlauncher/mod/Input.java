@@ -27,6 +27,7 @@ public final class Input {
 			case InputConstants.KEY_ESCAPE -> Keys.ESCAPE;
 			case InputConstants.KEY_RETURN -> Keys.ENTER;
 			case InputConstants.KEY_RSHIFT -> Keys.RIGHT_SHIFT;
+			case InputConstants.KEY_BACKSPACE -> Keys.BACKSPACE;
 			default -> UNKNOWN;
 		};
 	}

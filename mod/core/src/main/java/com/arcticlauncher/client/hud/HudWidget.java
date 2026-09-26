@@ -1,21 +1,28 @@
 package com.arcticlauncher.client.hud;
 
-import com.arcticlauncher.client.config.HudSlot;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Style;
 
 /** One HUD element (FPS, keystrokes, …), drawn at its own top-left. */
 public abstract class HudWidget {
+	/** Which side a widget stacks on until the player moves it. */
+	public enum Column {
+		LEFT,
+		RIGHT
+	}
+
 	public final String id;
 	public final String name;
 	public final String description;
-	final HudSlot defaults;
+	final boolean onByDefault;
+	final Column column;
 
-	protected HudWidget(String id, String name, String description, HudSlot defaults) {
+	protected HudWidget(String id, String name, String description, boolean onByDefault, Column column) {
 		this.id = id;
 		this.name = name;
 		this.description = description;
-		this.defaults = defaults;
+		this.onByDefault = onByDefault;
+		this.column = column;
 	}
 
 	public abstract int width(Gfx g);
