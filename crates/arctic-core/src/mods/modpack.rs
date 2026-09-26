@@ -313,7 +313,11 @@ mod tests {
         assert!(download_jobs(&index(&foreign), Path::new("game")).is_err());
         assert!(check_url("http://cdn.modrinth.com/x").is_err());
         assert!(check_url("https://cdn.modrinth.com.evil.example/x").is_err());
-        assert!(safe_relative("C:/Windows/x").is_err());
+        // A drive path is absolute on Windows (and harmless elsewhere).
+        if cfg!(windows) {
+            assert!(safe_relative("C:/Windows/x").is_err());
+        }
+        assert!(safe_relative("/etc/passwd").is_err());
     }
 
     #[test]
