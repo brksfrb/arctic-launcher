@@ -12,8 +12,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
-import net.minecraft.client.input.MouseButtonEvent;
+//#if MC >= 26.3
 import net.minecraft.client.input.MouseButtonInfo;
+//#endif
 
 /**
  * Development check, only with {@code -Darctic.selftest=true}: loads the
@@ -115,21 +116,17 @@ final class SelfTest {
 		double scale = mc.getWindow().getGuiScale();
 		double x = (w / 2 - 90) * scale;
 		double y = (h / 4 + 138) * scale;
-		long window = mc.getWindow().handle();
-		//#if MC >= 26.3
-		mc.mouseHandler.onMove(window, x, y, 0, 0);
-		mc.mouseHandler.onMove(window, x, y, 0, 0);
-		//#endif
 		ArcticMod.LOG.info("selftest: clicking at gui ({}, {}) on {}", x / scale, y / scale, name(Compat.screen()));
-		MouseButtonInfo left = new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0);
 		//#if MC >= 26.3
+		long window = mc.getWindow().handle();
+		mc.mouseHandler.onMove(window, x, y, 0, 0);
+		mc.mouseHandler.onMove(window, x, y, 0, 0);
+		MouseButtonInfo left = new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0);
 		mc.mouseHandler.onButton(window, left, InputConstants.PRESS);
 		mc.mouseHandler.onButton(window, left, InputConstants.RELEASE);
 		//#else
-		// Older versions keep onButton private: click the screen directly.
-		MouseButtonEvent click = new MouseButtonEvent(x / scale, y / scale, left);
-		Compat.screen().mouseClicked(click, false);
-		Compat.screen().mouseReleased(click);
+		// Older versions keep the input handler private: click the screen directly.
+		Compat.click(Compat.screen(), x / scale, y / scale);
 		//#endif
 		later(() -> {
 			ArcticMod.LOG.info("selftest: after click the screen is {}", name(Compat.screen()));

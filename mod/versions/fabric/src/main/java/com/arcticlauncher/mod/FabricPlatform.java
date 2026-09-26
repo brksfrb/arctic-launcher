@@ -206,8 +206,7 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public void joinServer(String serverId) throws Exception {
-		User user = mc().getUser();
-		mc().services().sessionService().joinServer(user.getProfileId(), user.getAccessToken(), serverId);
+		Compat.joinServer(serverId);
 	}
 
 	@Override
@@ -220,7 +219,7 @@ final class FabricPlatform implements Platform {
 		UUID self = playerId();
 		for (AbstractClientPlayer p : mc.level.players()) {
 			if (!p.getUUID().equals(self)) {
-				out.add(new Object[] {p.getUUID(), p.getPlainTextName()});
+				out.add(new Object[] {p.getUUID(), Compat.playerName(p)});
 			}
 		}
 		return out;
