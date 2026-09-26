@@ -47,17 +47,17 @@ public final class PageScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-		return page.mouseClicked(event.x(), event.y(), event.button());
+		return page.mouseClicked(event.x(), event.y(), Input.mouse(event.button()));
 	}
 
 	@Override
 	public boolean mouseReleased(MouseButtonEvent event) {
-		return page.mouseReleased(event.x(), event.y(), event.button());
+		return page.mouseReleased(event.x(), event.y(), Input.mouse(event.button()));
 	}
 
 	@Override
 	public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
-		return page.mouseDragged(event.x(), event.y(), event.button());
+		return page.mouseDragged(event.x(), event.y(), Input.mouse(event.button()));
 	}
 
 	@Override
@@ -67,7 +67,7 @@ public final class PageScreen extends Screen {
 
 	@Override
 	public boolean keyPressed(KeyEvent event) {
-		return page.keyPressed(event.key());
+		return page.keyPressed(Input.key(event.key()));
 	}
 
 	@Override
