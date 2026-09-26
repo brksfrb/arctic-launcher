@@ -70,7 +70,7 @@ impl ArcticApp {
         });
 
         section(ui, p, "Game window", |ui| {
-            ui.horizontal(|ui| {
+            widgets::field_row(ui, |ui| {
                 ui.label("Resolution");
                 ui.add(egui::DragValue::new(&mut s.window_width).range(320..=MAX_RESOLUTION));
                 ui.label("×");
@@ -86,7 +86,7 @@ impl ArcticApp {
                     });
             });
             ui.checkbox(&mut s.fullscreen, "Start in fullscreen");
-            ui.horizontal(|ui| {
+            widgets::field_row(ui, |ui| {
                 ui.label("When the game starts");
                 ui.selectable_value(
                     &mut s.on_game_start,
@@ -111,7 +111,7 @@ impl ArcticApp {
                     .small()
                     .color(p.muted),
             );
-            ui.horizontal(|ui| {
+            widgets::field_row(ui, |ui| {
                 ui.label("Extra JVM arguments");
                 ui.add(widgets::text_field(&mut s.extra_jvm_args).desired_width(320.0));
             });
@@ -119,7 +119,7 @@ impl ArcticApp {
         });
 
         section(ui, p, "Updates", |ui| {
-            ui.horizontal(|ui| {
+            widgets::field_row(ui, |ui| {
                 ui.label("Channel");
                 ui.selectable_value(&mut s.update_channel, UpdateChannel::Stable, "Stable");
                 ui.selectable_value(&mut s.update_channel, UpdateChannel::Beta, "Beta");
@@ -240,7 +240,7 @@ fn java_override(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) {
     }
     if let Some(path) = &mut s.java_override {
         let mut text = path.display().to_string();
-        ui.horizontal(|ui| {
+        widgets::field_row(ui, |ui| {
             ui.label("Path to javaw.exe");
             if ui
                 .add(widgets::text_field(&mut text).desired_width(320.0))

@@ -397,11 +397,24 @@ fn paint_emblem_with_hover(
     );
 }
 
+/// Height of text fields, and of controls placed next to them.
+pub const FIELD_HEIGHT: f32 = 36.0;
+
+/// A row as tall as a text field, with its contents vertically centered
+/// (so a label lines up with the field next to it).
+pub fn field_row<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> egui::InnerResponse<R> {
+    ui.allocate_ui_with_layout(
+        vec2(ui.available_width(), FIELD_HEIGHT),
+        egui::Layout::left_to_right(egui::Align::Center),
+        add,
+    )
+}
+
 /// Roomy single-line text field used everywhere (taller than egui's
 /// default, with comfortable padding and a slightly larger font).
 pub fn text_field(text: &mut dyn egui::TextBuffer) -> egui::TextEdit<'_> {
     egui::TextEdit::singleline(text)
         .margin(egui::Margin::symmetric(10, 8))
         .font(FontId::proportional(15.0))
-        .min_size(vec2(0.0, 36.0))
+        .min_size(vec2(0.0, FIELD_HEIGHT))
 }

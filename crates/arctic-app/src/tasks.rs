@@ -88,6 +88,8 @@ pub enum Event {
     SkinFile(Outcome<Option<(String, Vec<u8>)>>),
     /// A world import, backup or other world job finished (instance id, message).
     WorldsDone(String, Outcome<String>),
+    /// A modpack install or import finished (`None` = file dialog cancelled).
+    ModpackInstalled(Outcome<Option<Instance>>),
     /// Play-together session update.
     Share(arctic_share::SessionId, arctic_share::ShareEvent),
 }
@@ -249,6 +251,38 @@ impl Tasks {
         self.run(move |t| {
             let result = mods::search(&query).map_err(|e| e.to_string());
             t.send(Event::ModSearch(request, result));
+        });
+    }
+
+    /// Install a Modrinth modpack as a new instance.
+    pub fn install_modpack(&self, project_id: String) {
+        self.run(move |t| {
+            let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
+            let result = mods::modpack::install_from_modrinth(&t.dirs, &project_id, &progress)
+                .map(Some)
+                .map_err(|e| e.to_string());
+            t.send(Event::ModpackInstalled(result));
+        });
+    }
+
+    /// Ask for a `.mrpack` file and install it as a new instance.
+    pub fn import_modpack_file(&self) {
+        self.run(|t| {
+            let picked = rfd::FileDialog::new()
+                .set_title("Choose a modpack")
+                .add_filter("Modrinth modpack", &["mrpack"])
+                .pick_file();
+            let result = match picked {
+                None => Ok(None),
+                Some(path) => {
+                    let progress =
+                        |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
+                    mods::modpack::install_file(&t.dirs, &path, &progress)
+                        .map(Some)
+                        .map_err(|e| e.to_string())
+                }
+            };
+            t.send(Event::ModpackInstalled(result));
         });
     }
 

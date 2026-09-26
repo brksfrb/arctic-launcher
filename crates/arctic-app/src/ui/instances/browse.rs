@@ -15,7 +15,7 @@ use crate::widgets;
 const PAGE_SIZE: usize = 20;
 /// Seconds after the last keystroke before searching.
 const SEARCH_DELAY: f64 = 0.35;
-const SORTS: [(SortBy, &str); 4] = [
+pub(super) const SORTS: [(SortBy, &str); 4] = [
     (SortBy::Relevance, "Relevance"),
     (SortBy::Downloads, "Most downloads"),
     (SortBy::Updated, "Recently updated"),
@@ -56,13 +56,7 @@ impl ArcticApp {
                 }
             }
             let before = self.inst.search.sort;
-            egui::ComboBox::from_id_salt("mod_sort")
-                .selected_text(SORTS.iter().find(|s| s.0 == before).map_or("", |s| s.1))
-                .show_ui(ui, |ui| {
-                    for (sort, name) in SORTS {
-                        ui.selectable_value(&mut self.inst.search.sort, sort, name);
-                    }
-                });
+            sort_combo(ui, "mod_sort", &mut self.inst.search.sort);
             search |= self.inst.search.sort != before;
             search |= widgets::button(ui, p, None, "Search", true).clicked();
         });
@@ -98,6 +92,7 @@ impl ArcticApp {
             sort: search.sort,
             offset,
             limit: PAGE_SIZE,
+            modpacks: false,
         };
         self.tasks.mod_search(search.request, query);
     }
@@ -191,8 +186,29 @@ impl ArcticApp {
     }
 }
 
+/// Sort dropdown, as tall as the search field next to it.
+pub(super) fn sort_combo(ui: &mut egui::Ui, id: &str, sort: &mut SortBy) {
+    ui.scope(|ui| {
+        ui.spacing_mut().interact_size.y = widgets::FIELD_HEIGHT;
+        ui.spacing_mut().button_padding.y = 9.0;
+        egui::ComboBox::from_id_salt(id)
+            .width(170.0)
+            .selected_text(sort_label(*sort))
+            .show_ui(ui, |ui| {
+                for (value, name) in SORTS {
+                    ui.selectable_value(sort, value, name);
+                }
+            });
+    });
+}
+
+/// Label for a sort order.
+pub(super) fn sort_label(sort: SortBy) -> &'static str {
+    SORTS.iter().find(|s| s.0 == sort).map_or("", |s| s.1)
+}
+
 /// 1234567 → "1.2M".
-fn compact(n: u64) -> String {
+pub(super) fn compact(n: u64) -> String {
     match n {
         0..1_000 => n.to_string(),
         1_000..1_000_000 => format!("{:.1}K", n as f64 / 1e3),

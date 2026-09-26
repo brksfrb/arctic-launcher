@@ -53,6 +53,7 @@ fn search_url_encodes_query_facets_and_clamps_limit() {
         sort: SortBy::Downloads,
         offset: 40,
         limit: 500,
+        modpacks: false,
     };
     let url = modrinth::search_url(&q);
     let facets = encode(r#"[["project_type:mod"],["versions:1.21.4"],["categories:fabric"]]"#);

@@ -70,6 +70,7 @@ fn search(ctx: &Ctx, inst: &Instance, text: &str, limit: usize) -> Result<()> {
         sort: SortBy::Relevance,
         offset: 0,
         limit,
+        modpacks: false,
     })?;
     for hit in page.hits {
         ctx.out.emit(

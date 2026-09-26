@@ -224,7 +224,8 @@ fn sort_index(sort: SortBy) -> &'static str {
 }
 
 fn search_facets(query: &SearchQuery) -> String {
-    let mut facets = vec![vec!["project_type:mod".to_string()]];
+    let kind = if query.modpacks { "modpack" } else { "mod" };
+    let mut facets = vec![vec![format!("project_type:{kind}")]];
     if !query.game_version.trim().is_empty() {
         facets.push(vec![format!("versions:{}", query.game_version.trim())]);
     }

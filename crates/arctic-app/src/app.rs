@@ -589,6 +589,7 @@ impl ArcticApp {
             | Event::ModIcon(..)) => self.on_instances_event(e, ctx),
             Event::Share(id, event) => self.on_share_event(id, event),
             Event::WorldsDone(id, result) => self.on_worlds_done(id, result),
+            Event::ModpackInstalled(result) => self.on_modpack_installed(result),
             e @ (Event::SkinAccount(..)
             | Event::PlayerSkin(..)
             | Event::SkinFile(..)
@@ -717,9 +718,20 @@ impl eframe::App for ArcticApp {
         self.splash.show(&ctx, self.palette());
         self.autosave_settings(&ctx);
         self.pace_scenery(&ctx);
+        if std::env::var("ARCTIC_DEVSHOT_PAGE").as_deref() == Ok("modpacks")
+            && cfg!(debug_assertions)
+            && !self.inst.modpacks_open
+            && self.tab != Tab::Instances
+        {
+            self.set_tab(Tab::Instances, 0.0);
+            self.inst.modpacks_open = true;
+        }
         if let Some(id) = self.devshot.open_instance.take() {
             self.set_tab(Tab::Instances, 0.0);
             self.open_instance(&id);
+            if std::env::var("ARCTIC_DEVSHOT_PAGE").as_deref() == Ok("settings") {
+                self.inst.page = crate::ui::InstancePage::Settings;
+            }
         }
         self.devshot.update(&ctx);
     }

@@ -5,6 +5,7 @@ mod browse;
 mod create;
 mod detail;
 mod icon_picker;
+mod modpacks;
 mod mods_page;
 mod worlds;
 
@@ -93,6 +94,10 @@ pub struct InstancesUi {
     pub worlds: Option<(String, Vec<arctic_core::worlds::World>)>,
     pub worlds_busy: bool,
     pub import: Option<worlds::ImportDialog>,
+    /// The modpack browser is open (instead of the grid).
+    pub modpacks_open: bool,
+    /// Project being installed ("" for an imported file).
+    pub pack_installing: Option<String>,
 }
 
 impl ArcticApp {
@@ -135,6 +140,10 @@ impl ArcticApp {
     }
 
     pub(crate) fn instances_tab(&mut self, ui: &mut egui::Ui) {
+        if self.inst.modpacks_open {
+            self.modpacks_page(ui);
+            return;
+        }
         if let Some(id) = self.inst.open.clone() {
             if self.instance_by_id(&id).is_some() {
                 self.instance_page(ui, &id);
@@ -159,6 +168,9 @@ impl ArcticApp {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                 if widgets::button(ui, p, Some(Icon::Plus), "New instance", true).clicked() {
                     self.open_create_dialog();
+                }
+                if widgets::button(ui, p, Some(Icon::Layers), "Modpacks", false).clicked() {
+                    self.inst.modpacks_open = true;
                 }
             });
         });
