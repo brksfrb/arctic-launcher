@@ -12,6 +12,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
 
 /**
@@ -26,7 +27,6 @@ final class SelfTest {
 			"net.minecraft.client.player.AbstractClientPlayer",
 			"net.minecraft.client.gui.screens.PauseScreen",
 			"net.minecraft.client.gui.screens.TitleScreen",
-			"net.minecraft.client.gui.Hud",
 			"net.minecraft.client.gui.components.AbstractSliderButton",
 			"net.minecraft.client.gui.components.EditBox",
 			"net.minecraft.client.gui.components.Checkbox",
@@ -93,7 +93,7 @@ final class SelfTest {
 					later(() -> shot("hud-editor"));
 				},
 				() -> {
-					Minecraft.getInstance().gui.setScreen(null);
+					Compat.setScreen(null);
 					ArcticClient.platform().action(MenuAction.OPTIONS);
 					later(() -> shot("options"));
 				},
@@ -116,14 +116,23 @@ final class SelfTest {
 		double x = (w / 2 - 90) * scale;
 		double y = (h / 4 + 138) * scale;
 		long window = mc.getWindow().handle();
+		//#if MC >= 26.3
 		mc.mouseHandler.onMove(window, x, y, 0, 0);
 		mc.mouseHandler.onMove(window, x, y, 0, 0);
-		ArcticMod.LOG.info("selftest: clicking at gui ({}, {}) on {}", x / scale, y / scale, name(mc.gui.screen()));
+		//#endif
+		ArcticMod.LOG.info("selftest: clicking at gui ({}, {}) on {}", x / scale, y / scale, name(Compat.screen()));
 		MouseButtonInfo left = new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0);
+		//#if MC >= 26.3
 		mc.mouseHandler.onButton(window, left, InputConstants.PRESS);
 		mc.mouseHandler.onButton(window, left, InputConstants.RELEASE);
+		//#else
+		// Older versions keep onButton private: click the screen directly.
+		MouseButtonEvent click = new MouseButtonEvent(x / scale, y / scale, left);
+		Compat.screen().mouseClicked(click, false);
+		Compat.screen().mouseReleased(click);
+		//#endif
 		later(() -> {
-			ArcticMod.LOG.info("selftest: after click the screen is {}", name(Minecraft.getInstance().gui.screen()));
+			ArcticMod.LOG.info("selftest: after click the screen is {}", name(Compat.screen()));
 			shot("after-click");
 		});
 	}
@@ -134,7 +143,7 @@ final class SelfTest {
 
 	private static void open(String tab, String name) {
 		ArcticMenu.showTab(tab);
-		Minecraft.getInstance().gui.setScreen(null);
+		Compat.setScreen(null);
 		ArcticClient.platform().openPage(new ArcticMenu());
 		later(() -> shot(name));
 	}
@@ -144,7 +153,12 @@ final class SelfTest {
 	}
 
 	private static void shot(String name) {
-		Screenshot.grab(Minecraft.getInstance(), false);
+		Minecraft mc = Minecraft.getInstance();
+		//#if MC >= 26.2
+		Screenshot.grab(mc, false);
+		//#else
+		Screenshot.grab(mc.gameDirectory, mc.getMainRenderTarget(), message -> {});
+		//#endif
 		ArcticMod.LOG.info("selftest: screenshot {}", name);
 	}
 }

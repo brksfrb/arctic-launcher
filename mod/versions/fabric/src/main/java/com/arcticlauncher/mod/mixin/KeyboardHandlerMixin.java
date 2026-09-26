@@ -1,5 +1,6 @@
 package com.arcticlauncher.mod.mixin;
 
+import com.arcticlauncher.mod.Compat;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.mod.Input;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -17,7 +18,7 @@ abstract class KeyboardHandlerMixin {
 	@Inject(method = "keyPress", at = @At("HEAD"), cancellable = true)
 	private void arctic$key(long window, int action, KeyEvent event, CallbackInfo ci) {
 		if (action == InputConstants.PRESS
-				&& Minecraft.getInstance().gui.screen() == null
+				&& Compat.screen() == null
 				&& ArcticClient.keyPressed(Input.key(event.key()))) {
 			ci.cancel();
 		}
