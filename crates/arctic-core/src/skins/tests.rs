@@ -80,6 +80,24 @@ fn library_add_update_remove() {
 }
 
 #[test]
+fn adding_the_same_skin_twice_keeps_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut lib = Library::default();
+    let bytes = png(64, 64, |x, _| [x as u8, 5, 5, 255]);
+    let first = lib.add(dir.path(), "One", &bytes, None).unwrap();
+    assert_eq!(
+        lib.find_same(dir.path(), &bytes).map(|e| e.id.as_str()),
+        Some(first.id.as_str())
+    );
+    let again = lib.add(dir.path(), "Two", &bytes, None).unwrap();
+    assert_eq!(again.id, first.id);
+    assert_eq!(lib.skins.len(), 1);
+    let other = png(64, 64, |_, _| [9, 9, 9, 255]);
+    lib.add(dir.path(), "Other", &other, None).unwrap();
+    assert_eq!(lib.skins.len(), 2);
+}
+
+#[test]
 fn invalid_files_are_not_added() {
     let dir = tempfile::tempdir().unwrap();
     let mut lib = Library::default();
