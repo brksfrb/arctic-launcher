@@ -46,6 +46,24 @@ impl Store {
                  sha1 TEXT PRIMARY KEY,
                  png BLOB NOT NULL,
                  created INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS gallery (
+                 id TEXT PRIMARY KEY,
+                 texture TEXT NOT NULL,
+                 model TEXT NOT NULL,
+                 name TEXT NOT NULL,
+                 author_uuid TEXT NOT NULL,
+                 author_name TEXT NOT NULL,
+                 created INTEGER NOT NULL,
+                 downloads INTEGER NOT NULL DEFAULT 0,
+                 reports INTEGER NOT NULL DEFAULT 0,
+                 hidden INTEGER NOT NULL DEFAULT 0
+             );
+             CREATE UNIQUE INDEX IF NOT EXISTS gallery_unique ON gallery (texture, author_uuid);
+             CREATE TABLE IF NOT EXISTS gallery_reports (
+                 item TEXT NOT NULL,
+                 reporter TEXT NOT NULL,
+                 PRIMARY KEY (item, reporter)
              );",
         )?;
         Ok(Self {
@@ -53,7 +71,7 @@ impl Store {
         })
     }
 
-    fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {
+    pub(crate) fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {
         self.db.lock().unwrap_or_else(|e| e.into_inner())
     }
 
@@ -65,6 +83,15 @@ impl Store {
             params![uuid, name, now as i64],
         )?;
         Ok(())
+    }
+
+    /// A signed-in player's current name.
+    pub fn author_name(&self, uuid: &str) -> rusqlite::Result<Option<String>> {
+        self.conn()
+            .query_row("SELECT name FROM players WHERE uuid = ?1", [uuid], |r| {
+                r.get(0)
+            })
+            .optional()
     }
 
     /// Stored key hash for an offline player (`None` = unclaimed).

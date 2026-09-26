@@ -176,6 +176,130 @@ fn server_error(resp: &mut ureq::http::Response<ureq::Body>, status: u16) -> Str
     }
 }
 
+// ---- Gallery ------------------------------------------------------------
+
+/// A skin shared to the community gallery.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct GalleryItem {
+    pub id: String,
+    pub name: String,
+    /// Texture hash.
+    pub texture: String,
+    pub model: String,
+    pub author: String,
+    #[serde(default)]
+    pub downloads: i64,
+}
+
+impl GalleryItem {
+    pub fn variant(&self) -> Variant {
+        if self.model == "slim" {
+            Variant::Slim
+        } else {
+            Variant::Classic
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+pub struct GalleryPage {
+    pub items: Vec<GalleryItem>,
+    pub total: i64,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum GallerySort {
+    #[default]
+    Popular,
+    New,
+}
+
+/// Browse the gallery (`query` matches names and authors).
+pub fn gallery(base: &str, sort: GallerySort, query: &str, offset: usize) -> Result<GalleryPage> {
+    let sort = match sort {
+        GallerySort::Popular => "popular",
+        GallerySort::New => "new",
+    };
+    // Percent-encode the UTF-8 bytes of everything but letters and digits.
+    let q: String = query
+        .trim()
+        .bytes()
+        .map(|b| {
+            if b.is_ascii_alphanumeric() {
+                (b as char).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
+        .collect();
+    get(
+        &format!("{base}/v1/gallery?sort={sort}&q={q}&offset={offset}&limit=24"),
+        None,
+    )
+}
+
+/// Count a use of a gallery skin and get its texture hash.
+pub fn gallery_use(base: &str, id: &str) -> Result<String> {
+    #[derive(Deserialize)]
+    struct Used {
+        texture: String,
+    }
+    let used: Used = post(
+        &format!("{base}/v1/gallery/{}/use", url_segment(id)),
+        &serde_json::json!({}),
+    )?;
+    Ok(used.texture)
+}
+
+/// Share a skin to the gallery.
+pub fn gallery_share(
+    base: &str,
+    token: &str,
+    png: &[u8],
+    variant: Variant,
+    name: &str,
+) -> Result<()> {
+    let mut resp = agent()
+        .post(&format!("{base}/v1/gallery"))
+        .header("Authorization", &format!("Bearer {token}"))
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .send_json(serde_json::json!({
+            "png": STANDARD.encode(png),
+            "model": variant.api_name(),
+            "name": name,
+        }))?;
+    let status = resp.status().as_u16();
+    if (200..300).contains(&status) {
+        Ok(())
+    } else {
+        Err(Error::Other(server_error(&mut resp, status)))
+    }
+}
+
+/// Report a gallery skin (hidden after several reports).
+pub fn gallery_report(base: &str, token: &str, id: &str) -> Result<()> {
+    let mut resp = agent()
+        .post(&format!("{base}/v1/gallery/{}/report", url_segment(id)))
+        .header("Authorization", &format!("Bearer {token}"))
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .send_empty()?;
+    let status = resp.status().as_u16();
+    if (200..300).contains(&status) {
+        Ok(())
+    } else {
+        Err(Error::Other(server_error(&mut resp, status)))
+    }
+}
+
+/// Gallery ids are hex; anything else can't reach another path.
+fn url_segment(id: &str) -> String {
+    id.chars().filter(|c| c.is_ascii_hexdigit()).collect()
+}
+
 // ---- Sign-in ------------------------------------------------------------
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

@@ -41,6 +41,7 @@ async fn app() -> Router {
         secret: b"test-secret-test-secret-test-secret".to_vec(),
         session_url: fake_session().await,
         trust_proxy: false,
+        admin_key: Some("admin-key-admin-key".into()),
     }))
 }
 
@@ -320,4 +321,79 @@ fn forwarded_ip_uses_the_proxy_hop() {
     h.insert("x-forwarded-for", "6.6.6.6, 10.0.0.7".parse().unwrap());
     assert_eq!(forwarded_ip(&h), Some("10.0.0.7".parse().unwrap()));
     assert_eq!(forwarded_ip(&HeaderMap::new()), None);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn gallery_share_browse_use_report() {
+    let app = app().await;
+    let token = microsoft_token(&app).await;
+    let skin = images::test_png(64, 64);
+    let (s, item) = call(
+        &app,
+        "POST",
+        "/v1/gallery",
+        Some(&token),
+        Some(json!({"png": b64(&skin), "model": "slim", "name": "Ice Knight"})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{item}");
+    assert_eq!(item["author"], "Notch");
+    let id = item["id"].as_str().unwrap().to_owned();
+    let (s, _) = call(
+        &app,
+        "POST",
+        "/v1/gallery",
+        Some(&token),
+        Some(json!({"png": b64(&skin), "name": "Again"})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::CONFLICT);
+    let (s, _) = call(
+        &app,
+        "POST",
+        "/v1/gallery",
+        None,
+        Some(json!({"png": b64(&skin), "name": "x"})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+
+    let (_, page) = call(&app, "GET", "/v1/gallery?sort=new&q=knight", None, None).await;
+    assert_eq!(page["total"], 1);
+    let (s, used) = call(&app, "POST", &format!("/v1/gallery/{id}/use"), None, None).await;
+    assert_eq!(s, StatusCode::OK);
+    let (s, _) = call(
+        &app,
+        "GET",
+        &format!("/v1/textures/{}.png", used["texture"].as_str().unwrap()),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let (_, page) = call(&app, "GET", "/v1/gallery", None, None).await;
+    assert_eq!(page["items"][0]["downloads"], 1);
+
+    let (s, _) = call(
+        &app,
+        "POST",
+        &format!("/v1/gallery/{id}/report"),
+        Some(&token),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    // Admin removal.
+    let req = Request::builder()
+        .method("DELETE")
+        .uri(format!("/v1/gallery/{id}"))
+        .header("x-admin-key", "admin-key-admin-key")
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::OK
+    );
+    let (_, page) = call(&app, "GET", "/v1/gallery", None, None).await;
+    assert_eq!(page["total"], 0);
 }

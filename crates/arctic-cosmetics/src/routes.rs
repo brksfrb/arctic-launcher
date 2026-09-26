@@ -42,6 +42,8 @@ pub struct AppState {
     /// Behind a reverse proxy: take the client address from
     /// `X-Forwarded-For` instead of the connection.
     pub trust_proxy: bool,
+    /// `ARCTIC_COSMETICS_ADMIN_KEY`: lets you remove any gallery item.
+    pub admin_key: Option<String>,
 }
 
 type Shared = Arc<AppState>;
@@ -56,6 +58,7 @@ pub fn router(state: Shared) -> Router {
         .route("/v1/auth/verify", post(verify))
         .route("/v1/auth/offline", post(offline))
         .route("/v1/look", get(my_look).put(set_look))
+        .merge(gallery::routes())
         .layer(DefaultBodyLimit::max(MAX_BODY))
         .layer(middleware::from_fn_with_state(state.clone(), rate_limit))
         .with_state(state)
@@ -358,6 +361,8 @@ fn store_upload(state: &AppState, b64: &str, kind: Kind, t: u64) -> Result<Strin
         .map_err(|e| Box::new(db_error("texture", e)))?;
     Ok(hash)
 }
+
+mod gallery;
 
 #[cfg(test)]
 mod tests;

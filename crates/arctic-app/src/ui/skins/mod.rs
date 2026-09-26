@@ -2,6 +2,7 @@
 //! on any account), your Minecraft skin and capes (Microsoft accounts), a
 //! 3D preview and a local library of skins.
 
+mod gallery;
 mod model;
 mod panels;
 
@@ -24,6 +25,15 @@ pub enum Selection {
     #[default]
     Current,
     Library(String),
+    Gallery(arctic_core::cosmetics::GalleryItem),
+}
+
+/// Which list the right side shows.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SkinsView {
+    #[default]
+    Library,
+    Gallery,
 }
 
 /// A skin or cape uploaded to the GPU.
@@ -56,6 +66,8 @@ pub struct SkinsUi {
     pub yaw: f32,
     pub pitch: f32,
     pub renaming: Option<(String, String)>,
+    pub view: SkinsView,
+    pub gallery: gallery::GalleryUi,
 }
 
 impl ArcticApp {
@@ -75,7 +87,15 @@ impl ArcticApp {
             .filter(|_| cfg!(debug_assertions))
             .and_then(|v| v.parse().ok())
             .unwrap_or(0.5);
+        let view = if cfg!(debug_assertions)
+            && std::env::var("ARCTIC_DEVSHOT_PAGE").as_deref() == Ok("gallery")
+        {
+            SkinsView::Gallery
+        } else {
+            SkinsView::Library
+        };
         self.skins = SkinsUi {
+            view,
             yaw,
             pitch: 0.12,
             ..SkinsUi::default()
@@ -178,6 +198,9 @@ impl ArcticApp {
     fn skin_png(&self, key: &str) -> Option<Vec<u8>> {
         if let Some(id) = key.strip_prefix("lib:") {
             return Library::read_png(&self.skins_dir(), id).ok();
+        }
+        if let Some(hash) = key.strip_prefix("gal:") {
+            return self.skins.gallery.pngs.get(hash).cloned();
         }
         if let Some(hash) = key
             .strip_prefix("askin:")
@@ -294,6 +317,9 @@ impl ArcticApp {
                 Ok(None) => {}
                 Err(e) => self.toasts.push(Kind::Error, "Could not read file", e),
             },
+            e @ (Event::Gallery(..) | Event::GalleryTaken(..) | Event::GalleryDone(..)) => {
+                self.on_gallery_event(e)
+            }
             Event::CapeFile(result) => match result {
                 Ok(Some(bytes)) => {
                     self.set_arctic_cape(Some(CapeChoice::Custom(Texture::Png(bytes))))

@@ -47,6 +47,8 @@
   name), choose a cape or use your own image, and every Arctic player sees it, on any
   account. Preview everything on a 3D model. Microsoft accounts can also change their real
   Minecraft skin from here.
+- **Skin gallery.** Browse skins other players shared, search by name or creator, and wear
+  one in a click. Share your own from your library.
 - **Arctic mod.** Shows everyone's Arctic looks in game and adds an Arctic menu to pick a
   cape or hide someone's look. It's added to Fabric and Quilt instances automatically, and
   you can turn it off per instance.
