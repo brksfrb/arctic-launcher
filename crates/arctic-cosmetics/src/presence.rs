@@ -5,7 +5,7 @@
 //! lookup marks a player as on Arctic only if someone checked in as
 //! exactly that UUID moments ago, so a player who switched clients, or
 //! anyone else using the same name, doesn't get the snowflake. Where you
-//! play is never sent.
+//! play is sent only if you let friends see it (and only friends do).
 
 use rusqlite::{OptionalExtension, params};
 use serde::Serialize;

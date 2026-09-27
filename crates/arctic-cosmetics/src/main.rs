@@ -12,14 +12,18 @@
 
 mod auth;
 mod catalog;
+mod chat;
 mod content;
+mod friends;
 mod gallery;
 mod images;
 mod limit;
+mod listing;
 mod presence;
 mod routes;
 mod shares;
 mod store;
+mod voice;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -30,6 +34,8 @@ use routes::AppState;
 
 const SESSION_URL: &str = "https://sessionserver.mojang.com/session/minecraft/hasJoined";
 const MIN_SECRET_LEN: usize = 32;
+/// How often listed servers are pinged.
+const SERVER_PING_EVERY: Duration = Duration::from_secs(10 * 60);
 
 #[tokio::main]
 async fn main() {
@@ -71,6 +77,11 @@ async fn run() -> Result<(), String> {
         content.cosmetics.len(),
         content.emotes.len()
     );
+    let seeds = listing::load_seed(&assets)?;
+    let seeded = store
+        .listing_seed(&seeds, started)
+        .map_err(|e| format!("registering servers: {e}"))?;
+    log::info!("{seeded} curated servers");
     let state = AppState {
         store,
         catalog,
@@ -84,7 +95,9 @@ async fn run() -> Result<(), String> {
             .ok()
             .filter(|k| k.len() >= 16),
     };
-    let app = routes::router(Arc::new(state));
+    let state = Arc::new(state);
+    tokio::spawn(routes::server_pinger(state.clone(), SERVER_PING_EVERY));
+    let app = routes::router(state);
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .map_err(|e| format!("bind {addr}: {e}"))?;

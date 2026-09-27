@@ -12,7 +12,14 @@ pub const MAX_BYTES: usize = 256 * 1024;
 /// Codes one player can create per day.
 pub const MAX_PER_DAY: i64 = 100;
 /// Kinds of bundle clients know how to use.
-pub const KINDS: &[&str] = &["instance", "hud", "crosshair", "client", "profile"];
+pub const KINDS: &[&str] = &[
+    "instance",
+    "hud",
+    "crosshair",
+    "client",
+    "profile",
+    "options",
+];
 /// No look-alike characters (0/o, 1/l/i).
 const ALPHABET: &[u8] = b"abcdefghjkmnpqrstuvwxyz23456789";
 pub const CODE_LEN: usize = 8;

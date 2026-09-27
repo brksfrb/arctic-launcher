@@ -63,6 +63,8 @@ pub fn router(state: Shared) -> Router {
         .merge(gallery::routes())
         .merge(content::routes())
         .merge(shares::routes())
+        .merge(servers::routes())
+        .merge(friends::routes())
         .layer(DefaultBodyLimit::max(MAX_BODY))
         .layer(middleware::from_fn_with_state(state.clone(), rate_limit))
         .with_state(state)
@@ -167,6 +169,9 @@ struct OnlineBody {
     /// The UUID the player has in their current world (`None` = left it).
     #[serde(rename = "as")]
     playing_as: Option<String>,
+    /// The server address, only when the player lets friends see it.
+    #[serde(default)]
+    server: Option<String>,
 }
 
 /// A signed-in client checks in every minute while in a world, and signs
@@ -189,7 +194,17 @@ async fn online(
             Some(id)
         }
     };
-    match state.store.check_in(&uuid, playing_as.as_deref(), now()) {
+    // Singleplayer, or not saying: nothing is kept.
+    let server = body
+        .server
+        .as_deref()
+        .filter(|_| playing_as.is_some())
+        .and_then(crate::listing::clean_address);
+    match state
+        .store
+        .check_in(&uuid, playing_as.as_deref(), now())
+        .and_then(|()| state.store.set_server(&uuid, server.as_deref()))
+    {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => db_error("online", e),
     }
@@ -420,8 +435,12 @@ fn store_upload(state: &AppState, b64: &str, kind: Kind, t: u64) -> Result<Strin
 }
 
 mod content;
+mod friends;
 mod gallery;
+mod servers;
 mod shares;
+
+pub use servers::pinger as server_pinger;
 
 #[cfg(test)]
 mod tests;

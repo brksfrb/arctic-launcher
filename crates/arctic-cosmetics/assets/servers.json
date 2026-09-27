@@ -1,0 +1,13 @@
+[
+  {"address": "mc.hypixel.net", "name": "Hypixel", "tags": ["minigames", "skyblock", "bedwars"]},
+  {"address": "play.cubecraft.net", "name": "CubeCraft", "tags": ["minigames", "eggwars", "skyblock"]},
+  {"address": "2b2t.org", "name": "2b2t", "tags": ["anarchy", "survival"]},
+  {"address": "donutsmp.net", "name": "DonutSMP", "tags": ["smp", "survival", "economy"]},
+  {"address": "play.wynncraft.com", "name": "Wynncraft", "tags": ["mmorpg", "rpg"]},
+  {"address": "play.manacube.com", "name": "ManaCube", "tags": ["minigames", "parkour", "skyblock"]},
+  {"address": "blocksmc.com", "name": "BlocksMC", "tags": ["minigames", "bedwars", "skywars"]},
+  {"address": "jartexnetwork.com", "name": "JartexNetwork", "tags": ["minigames", "prison", "skyblock"]},
+  {"address": "play.pika-network.net", "name": "PikaNetwork", "tags": ["minigames", "bedwars", "survival"]},
+  {"address": "minehut.com", "name": "Minehut", "tags": ["community", "player-servers"]},
+  {"address": "play.purpleprison.net", "name": "Purple Prison", "tags": ["prison"]}
+]

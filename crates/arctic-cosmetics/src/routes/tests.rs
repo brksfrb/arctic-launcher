@@ -551,3 +551,144 @@ async fn share_codes_round_trip() {
     let (s, _) = call(&app, "POST", "/v1/shares", Some(&token), Some(huge)).await;
     assert_eq!(s, StatusCode::PAYLOAD_TOO_LARGE);
 }
+
+/// A tiny Minecraft server: answers status with `motd`, and logins with an
+/// encryption request (premium).
+fn fake_minecraft(motd: std::sync::Arc<std::sync::Mutex<String>>) -> u16 {
+    use std::io::{Read, Write};
+    fn var_int(r: &mut impl Read) -> usize {
+        let (mut v, mut shift) = (0usize, 0);
+        loop {
+            let mut b = [0u8];
+            r.read_exact(&mut b).unwrap();
+            v |= usize::from(b[0] & 0x7f) << shift;
+            if b[0] & 0x80 == 0 {
+                return v;
+            }
+            shift += 7;
+        }
+    }
+    fn packet(r: &mut impl Read) -> Vec<u8> {
+        let len = var_int(r);
+        let mut buf = vec![0; len];
+        r.read_exact(&mut buf).unwrap();
+        buf
+    }
+    fn send(w: &mut impl Write, body: &[u8]) {
+        let mut out = Vec::new();
+        let mut n = body.len();
+        loop {
+            if n < 0x80 {
+                out.push(n as u8);
+                break;
+            }
+            out.push((n as u8 & 0x7f) | 0x80);
+            n >>= 7;
+        }
+        out.extend_from_slice(body);
+        w.write_all(&out).unwrap();
+    }
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().take(2) {
+            let mut s = stream.unwrap();
+            let handshake = packet(&mut s);
+            if *handshake.last().unwrap() == 1 {
+                packet(&mut s);
+                let text = motd.lock().unwrap().clone();
+                let json = json!({"description": text, "players": {"online": 2, "max": 20},
+                    "version": {"name": "1.21.8", "protocol": 772}})
+                .to_string();
+                assert!(json.len() < 0x80);
+                let mut body = vec![0, json.len() as u8];
+                body.extend_from_slice(json.as_bytes());
+                send(&mut s, &body);
+                let ping = packet(&mut s);
+                send(&mut s, &ping);
+            } else {
+                packet(&mut s);
+                send(&mut s, &[1, 0]);
+            }
+        }
+    });
+    port
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn servers_submit_verify_and_review() {
+    let app = app().await;
+    let token = microsoft_token(&app).await;
+    let (s, list) = call(&app, "GET", "/v1/servers", None, None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert!(list["servers"].as_array().unwrap().is_empty());
+
+    // The code isn't known until submitting: the MOTD is filled in after.
+    let motd = std::sync::Arc::new(std::sync::Mutex::new(String::from("Welcome!")));
+    let port = fake_minecraft(motd.clone());
+    let submission = json!({"address": format!("127.0.0.1:{port}"), "name": "Test SMP", "tags": ["SMP", "bad tag"]});
+    let (s, _) = call(&app, "POST", "/v1/servers", None, Some(submission.clone())).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+    let (s, v) = call(&app, "POST", "/v1/servers", Some(&token), Some(submission)).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    let id = v["id"].as_str().unwrap().to_owned();
+    *motd.lock().unwrap() = format!("Welcome! {}", v["code"].as_str().unwrap());
+    let (s, v) = call(
+        &app,
+        "POST",
+        &format!("/v1/servers/{id}/verify"),
+        Some(&token),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(v["state"], "pending");
+
+    // Waiting for review: not public yet; admins see it, premium detected.
+    let (_, list) = call(&app, "GET", "/v1/servers", None, None).await;
+    assert!(list["servers"].as_array().unwrap().is_empty());
+    let (s, _) = call(&app, "GET", "/v1/admin/servers", None, None).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let admin = |method: &'static str, uri: String, body: Option<serde_json::Value>| {
+        let app = app.clone();
+        async move {
+            let mut req = Request::builder()
+                .method(method)
+                .uri(uri)
+                .header("x-admin-key", "admin-key-admin-key");
+            let req = match body {
+                Some(b) => {
+                    req = req.header("content-type", "application/json");
+                    req.body(Body::from(b.to_string()))
+                }
+                None => req.body(Body::empty()),
+            }
+            .unwrap();
+            let resp = app.oneshot(req).await.unwrap();
+            let status = resp.status();
+            let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+                .await
+                .unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&bytes).unwrap_or_default(),
+            )
+        }
+    };
+    let (s, pending) = admin("GET", "/v1/admin/servers".into(), None).await;
+    assert_eq!(s, StatusCode::OK);
+    let entry = &pending["servers"][0];
+    assert_eq!(entry["id"], id.as_str());
+    assert_eq!(entry["cracked"], false);
+    assert_eq!(entry["players"], 2);
+    let (s, _) = admin(
+        "POST",
+        format!("/v1/admin/servers/{id}"),
+        Some(json!({"action": "approve"})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let (_, list) = call(&app, "GET", "/v1/servers", None, None).await;
+    assert_eq!(list["servers"][0]["name"], "Test SMP");
+    assert!(list["servers"][0].get("code").is_none());
+}

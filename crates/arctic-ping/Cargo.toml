@@ -1,0 +1,17 @@
+[package]
+name = "arctic-ping"
+description = "Minecraft server list ping (with SRV lookups and SOCKS5), shared by the Arctic launcher and server."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+base64 = "0.23.1"
+serde_json = "1.0.151"
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_NetworkManagement_Dns"] }

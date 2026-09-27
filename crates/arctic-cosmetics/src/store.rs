@@ -75,6 +75,10 @@ impl Store {
         store.migrate_gallery_looks()?;
         store.migrate_presence()?;
         store.migrate_shares()?;
+        store.migrate_listing()?;
+        store.migrate_friends()?;
+        store.migrate_chat()?;
+        store.migrate_voice()?;
         Ok(store)
     }
 
@@ -117,6 +121,15 @@ impl Store {
     pub fn set_key_hash(&self, uuid: &str, hash: &str) -> rusqlite::Result<()> {
         self.conn().execute(
             "UPDATE players SET key_hash = ?2 WHERE uuid = ?1 AND key_hash IS NULL",
+            params![uuid, hash],
+        )?;
+        Ok(())
+    }
+
+    /// Move an offline name to a new key (recovery on a new PC).
+    pub fn replace_key_hash(&self, uuid: &str, hash: &str) -> rusqlite::Result<()> {
+        self.conn().execute(
+            "UPDATE players SET key_hash = ?2 WHERE uuid = ?1",
             params![uuid, hash],
         )?;
         Ok(())

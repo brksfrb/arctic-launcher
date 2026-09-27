@@ -10,6 +10,7 @@ authors.workspace = true
 publish = false
 
 [dependencies]
+arctic-ping = { path = "../arctic-ping" }
 axum = "0.8.9"
 base64 = "0.23.1"
 hex = "0.4.3"
