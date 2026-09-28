@@ -1,6 +1,6 @@
 //! PvP clients: their own mods for each version (LabyMod, Lunar, Feather)
-//! and their HUD setups (LabyMod, Lunar). The clients themselves aren't
-//! carried over; the Arctic Client takes their place.
+//! and their HUD setups (LabyMod, Lunar, Badlion, Feather). The clients
+//! themselves aren't carried over; the Arctic Client takes their place.
 
 use std::path::{Path, PathBuf};
 
@@ -131,35 +131,48 @@ pub fn lunar(scan: &mut Scan) {
 }
 
 pub fn feather(scan: &mut Scan) {
-    let Some(root) = app_data().map(|d| d.join(".feather")) else {
-        return;
-    };
-    if !root.is_dir() {
+    let homes: Vec<PathBuf> = [dirs::home_dir(), app_data()]
+        .into_iter()
+        .flatten()
+        .collect();
+    let hud_roots = hud::feather::roots(dot_minecraft().as_deref(), &homes);
+    let own_mods = app_data()
+        .map(|d| d.join(".feather"))
+        .filter(|d| d.is_dir());
+    if own_mods.is_none() && hud_roots.is_empty() {
         return;
     }
     let before = scan.instances.len();
-    if let Some(game_dir) = dot_minecraft() {
+    if let (Some(root), Some(game_dir)) = (&own_mods, dot_minecraft()) {
         for mods in subdirs(&root.join("user-mods")) {
             if let Some(f) = client_mods(Launcher::Feather, &mods, &game_dir) {
                 scan.instances.push(f);
             }
         }
     }
-    let note = if scan.instances.len() == before {
-        "No mods of your own (worlds and packs are in .minecraft)"
-    } else {
-        "Feather's HUD and mod settings use a private format and aren't read"
-    };
-    scan.seen.push((Launcher::Feather, note.into()));
+    for root in &hud_roots {
+        hud::feather::scan(root, scan);
+    }
+    if scan.instances.len() == before {
+        scan.seen.push((
+            Launcher::Feather,
+            "No mods of your own (worlds and packs are in .minecraft)".into(),
+        ));
+    }
 }
 
 pub fn badlion(scan: &mut Scan) {
-    let installed = dot_minecraft().is_some_and(|m| m.join("BLClient-Mod-Profiles").is_dir())
+    let Some(mc) = dot_minecraft() else {
+        return;
+    };
+    let before = scan.clients.len();
+    hud::badlion::scan(&mc, scan);
+    let installed = scan.clients.len() > before
         || app_data().is_some_and(|d| d.join("Badlion Client").is_dir());
     if installed {
         scan.seen.push((
             Launcher::Badlion,
-            "Badlion keeps worlds and packs in .minecraft (import Minecraft Launcher's \"Latest release\"); its mod profiles use a private format and aren't read".into(),
+            "Badlion keeps worlds and packs in .minecraft (import Minecraft Launcher's \"Latest release\")".into(),
         ));
     }
 }

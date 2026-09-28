@@ -208,7 +208,7 @@ public final class Hud {
 		g.push();
 		g.translate(rect[0], rect[1]);
 		g.scale(slot(w).scale);
-		w.background = slot(w).background;
+		w.use(slot(w));
 		w.render(g, s, preview);
 		g.pop();
 	}

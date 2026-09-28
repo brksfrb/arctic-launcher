@@ -47,6 +47,7 @@ fn parse_tab(name: &str) -> Option<Tab> {
         "skins" => Some(Tab::Skins),
         "together" => Some(Tab::Together),
         "logs" => Some(Tab::Logs),
+        "screenshots" => Some(Tab::Screenshots),
         "settings" => Some(Tab::Settings),
         "about" => Some(Tab::About),
         _ => None,

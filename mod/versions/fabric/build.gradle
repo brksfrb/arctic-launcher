@@ -103,6 +103,19 @@ def renames = [
 		['MC < 26.1', 'extractWidgetRenderState', 'renderWidget'],
 		['MC < 26.1', 'extractContents', 'renderContents'],
 		['MC < 1.21.11', 'Identifier', 'ResourceLocation'],
+		// Before 1.20 there was no GuiGraphics: a stand-in wraps the PoseStack.
+		['MC < 1.20', 'net.minecraft.client.gui.GuiGraphics', 'com.arcticlauncher.mod.compat.GuiGraphics'],
+		// Map colors were "material colors" before 1.20.
+		['MC < 1.20', 'MapColor', 'MaterialColor'],
+		// The key binds had no screen of their own before 1.18 (they were the Controls screen).
+		['MC < 1.18', 'KeyBindsScreen', 'ControlsScreen'],
+		['MC < 1.17', 'addRenderableWidget', 'addButton'],
+		// Before 1.16 texts were mutable Components, and packs "unopened packs".
+		['MC < 1.16', 'MutableComponent', 'Component'],
+		['MC < 1.16', 'net.minecraft.server.packs.repository.Pack', 'net.minecraft.server.packs.repository.UnopenedPack'],
+		// The static registries moved to BuiltInRegistries in 1.19.3.
+		['MC < 1.19.3', 'net.minecraft.core.registries.BuiltInRegistries', 'net.minecraft.core.Registry'],
+		['MC < 1.19.3', 'BuiltInRegistries', 'Registry'],
 ]
 
 def applyRenames = { String text ->
@@ -169,20 +182,55 @@ def javaVersion = atLeast('26.1') ? 25 : atLeast('1.20.5') ? 21 : atLeast('1.18'
 def covers = (project.findProperty('covers') ?: mc).tokenize(',')
 def minecraftRange = '[' + covers.collect { '"' + it.trim() + '"' }.join(', ') + ']'
 
+// The oldest Fabric Loader that can actually load this jar: the compile-time
+// loader_version for 1.21.6+ (already required), a much older one below that
+// so players on old Minecraft aren't forced onto a needlessly new loader.
+def loaderMin = atLeast('1.21.6') ? project.loader_version : '0.16.9'
+
 processResources {
 	def props = [
 			version: project.version,
 			minecraft_range: minecraftRange,
 			java: javaVersion,
-			// Zoom, Freelook and Fullbright hooks (see Compat.FEATURES).
-			features: atLeast('26.3'),
+			loader_min: loaderMin,
+			// Zoom, Freelook, Fullbright and the rest (see Compat.FEATURES): 1.20+ for now.
+			features: atLeast('1.20'),
+			// Minecraft's own buttons, sliders, checkboxes and text boxes in the Arctic style (1.20+ for now).
+			restyleWidgets: atLeast('1.20'),
+			// Screen gained a generic renderPanorama hook in 1.20.6; before that
+			// only TitleScreen draws one, so ScreenMixin has nothing to attach to.
+			panoramaHook: atLeast('1.20.6'),
+			// Before 26.1 zoom's FOV multiplier is applied on GameRenderer, not Camera.
+			oldCamera: !atLeast('26.1'),
+			// Needs the FreeType font code of 26.1+ (older versions use STB).
+			smoothFont: atLeast('26.1'),
+			cosmetics: atLeast('26.1'),
+			accountSwitch: atLeast('26.1'),
+			// Scoreboard tweaks, hit color, the minimap, duels, toasts: 1.20+ for now.
+			extras: atLeast('1.20'),
+			// Simple Voice Chat's payloads need the CustomPacketPayload/StreamCodec system (1.20.5+);
+			// before that payloads were raw FriendlyByteBuf + channel ResourceLocation, no equivalent hook.
+			svc: atLeast('1.20.5'),
+			// Block outline: 26.1 draws it another way.
+			outline: atLeast('26.2'),
+			// Replays (recording and watching): ported version by version.
+			replay: atLeast('1.16'),
+			// Before 26.1 a replay grabs finished frames where the window shows them.
+			replayWindow: atLeast('1.16') && !atLeast('26.1'),
+			// Self-tests make worlds through the Create World screen before 1.19.4.
+			oldWorldCreation: !atLeast('1.19.4'),
+			// Server names were looked up by ServerNameResolver from 1.17; before, by
+			// the connect screen and the server list themselves (hooked separately).
+			resolver: atLeast('1.17'),
+			// Toast slots were tracked from 1.19.
+			toastSlots: atLeast('1.19'),
 	]
 	inputs.properties props
 	filesMatching(['fabric.mod.json', 'arctic.mixins.json']) {
 		expand props
 	}
 	// The smooth font pack is a game feature; older builds leave it out.
-	if (!atLeast('26.3')) {
+	if (!atLeast('26.1')) {
 		exclude 'resourcepacks/**'
 	}
 }

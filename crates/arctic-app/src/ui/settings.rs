@@ -39,6 +39,13 @@ impl ArcticApp {
                 }
             });
             ui.add_space(6.0);
+            widgets::field_row(ui, |ui| {
+                use arctic_core::settings::Backdrop;
+                ui.label("Background");
+                ui.selectable_value(&mut s.backdrop, Backdrop::Scenery, "Arctic scenery");
+                ui.selectable_value(&mut s.backdrop, Backdrop::Picture, "Your screenshot")
+                    .on_hover_text("Your newest screenshot, or the version's title screen");
+            });
             ui.checkbox(&mut s.animations, "Animated background")
                 .on_hover_text("Aurora, snowfall and shooting stars. Pauses while you play.");
             ui.checkbox(&mut s.intro, "Intro animation on start");
@@ -63,7 +70,7 @@ impl ArcticApp {
             super::client_style::fancy_toggle(ui, s);
             ui.checkbox(&mut performance, "Boost FPS with performance mods")
                 .on_hover_text(
-                    "Vanilla: adds Sodium, Lithium, FerriteCore, ImmediatelyFast and EntityCulling. Other instances have their own switch.",
+                    "Vanilla: adds Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling and ModernFix. Other instances have their own switch.",
                 );
         });
 
@@ -151,6 +158,12 @@ impl ArcticApp {
         });
 
         section(ui, p, "Network", |ui| self.network_section(ui, p));
+
+        section(ui, p, "Voice chat", |ui| self.voice_section(ui, p));
+
+        section(ui, p, "Game settings for new instances", |ui| {
+            self.game_defaults_section(ui, p)
+        });
 
         section(ui, p, "Share & back up", |ui| {
             ui.label(

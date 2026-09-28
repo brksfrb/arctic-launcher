@@ -1,6 +1,6 @@
 package com.arcticlauncher.mod.mixin;
 
-//#if MC >= 26.3
+//#if MC >= 26.1
 import com.arcticlauncher.mod.ArcticPacks;
 import java.util.Arrays;
 import net.minecraft.client.resources.ClientPackSource;

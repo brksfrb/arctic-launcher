@@ -65,6 +65,9 @@ impl ArcticApp {
         ui.add_space(10.0);
         self.launch_status(ui);
         self.other_runs(ui);
+        self.worlds_section(ui);
+        self.servers_section(ui);
+        self.discover_dialog(&ui.ctx().clone());
     }
 
     /// The selected instance's game, while it's being prepared or runs.
@@ -469,10 +472,15 @@ impl ArcticApp {
                     label: &label,
                 }
             }
-            Some(RunState::Starting { .. }) => PlayState::Progress {
-                fraction: None,
-                label: "Starting…",
-            },
+            Some(RunState::Starting { .. }) => {
+                // No percentage: nothing is downloading, the game is loading.
+                ui.ctx()
+                    .request_repaint_after(std::time::Duration::from_millis(250));
+                PlayState::Progress {
+                    fraction: None,
+                    label: "Starting…",
+                }
+            }
             Some(RunState::Running { .. }) => PlayState::Running,
             _ if self.blocked_reason().is_some() => PlayState::Blocked,
             _ => PlayState::Ready,
@@ -572,7 +580,9 @@ impl ArcticApp {
                 parts.join("  ·  ")
             }
             Some(RunState::Preparing { progress, .. }) => format!("{}…", progress.stage),
-            Some(RunState::Starting { .. }) => "Starting Minecraft…".into(),
+            Some(RunState::Starting { stage, since, .. }) => {
+                format!("{}…  ·  {} s", stage.label(), since.elapsed().as_secs())
+            }
             Some(RunState::Running { .. }) => "Minecraft is running. Have fun!".into(),
             _ => match self.blocked_reason() {
                 Some(reason) => reason.into(),

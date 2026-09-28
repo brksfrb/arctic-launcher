@@ -1,6 +1,10 @@
-//! Skins tab: your Arctic look (skin + cape, seen by every Arctic player,
-//! on any account), your Minecraft skin and capes (Microsoft accounts), a
-//! 3D preview and a local library of skins.
+//! Cosmetics tab: your Arctic look (skin, cape and 3D cosmetics, seen by
+//! every Arctic player, on any account), your Minecraft skin and capes
+//! (Microsoft accounts), a 3D preview and a local library of skins.
+//!
+//! Clicking something wears it at once: the preview shows it right away
+//! (`trying`) while the look is saved in the background; clicks made while
+//! a save is still going are queued, and only the newest one is sent.
 
 mod gallery;
 mod model;
@@ -18,17 +22,27 @@ use crate::skin_tasks::{AccountSkin, ArcticState, SkinChange};
 use crate::tasks::Event;
 use crate::toasts::Kind;
 
-/// What the preview shows.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum Selection {
-    /// How other players see you right now.
+/// The part of the tab on the right.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Section {
     #[default]
-    Current,
-    Library(String),
-    Gallery(arctic_core::cosmetics::GalleryItem),
+    Skins,
+    Capes,
+    Cosmetics,
 }
 
-/// Which list the right side shows.
+/// A change shown in the preview before the server has confirmed it.
+/// `Some(None)` means "taken off".
+#[derive(Debug, Clone, Default)]
+pub struct Trying {
+    /// Texture key and arm model.
+    pub skin: Option<Option<(String, Variant)>>,
+    /// Texture key.
+    pub cape: Option<Option<String>>,
+    pub cosmetics: Option<Vec<String>>,
+}
+
+/// Which skins the Skins section lists.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum SkinsView {
     #[default]
@@ -71,7 +85,18 @@ pub struct SkinsUi {
     textures: HashMap<String, SkinTexture>,
     /// Keys whose PNG couldn't be read or decoded (not retried every frame).
     failed: HashSet<String>,
-    pub selection: Selection,
+    pub section: Section,
+    pub trying: Trying,
+    /// The newest look asked for (sent or queued): later clicks build on it.
+    intended: Option<NewLook>,
+    /// Asked for while a save was still going; sent when it finishes.
+    queued: Option<NewLook>,
+    /// When the last save finished (for the "Saved" note).
+    pub saved_at: Option<f64>,
+    /// Library skin id -> the hash the server would store it under.
+    lib_hashes: HashMap<String, String>,
+    /// The frame this tab was last drawn in (to notice it being reopened).
+    last_pass: u64,
     /// Account id → Minecraft skin state (Microsoft accounts).
     pub account: HashMap<String, Result<AccountSkin, String>>,
     pub busy: bool,
@@ -135,6 +160,12 @@ impl ArcticApp {
 
     pub(crate) fn skins_tab(&mut self, ui: &mut egui::Ui) {
         self.ensure_skin_library();
+        // Opened again: start from what you're wearing, not half-done edits.
+        let pass = ui.ctx().cumulative_pass_nr();
+        if pass > self.skins.last_pass + 1 {
+            self.skins.renaming = None;
+        }
+        self.skins.last_pass = pass;
         self.request_skin_state(false);
         self.skins_page(ui);
         self.accept_dropped_skins(ui.ctx());
@@ -148,7 +179,7 @@ impl ArcticApp {
         };
         if (force || !self.skins.arctic.contains_key(&account.id)) && !self.skins.arctic_busy {
             self.skins.arctic_busy = true;
-            self.tasks.arctic_look(account.clone(), None);
+            self.tasks.arctic_look(account.clone(), None, None);
         }
         if account.is_microsoft()
             && (force || !self.skins.account.contains_key(&account.id))
@@ -172,24 +203,41 @@ impl ArcticApp {
         self.skins.arctic.get(&account.id)?.as_ref().ok()
     }
 
-    /// Publish a new Arctic look built from the current one.
-    fn change_look(&mut self, edit: impl FnOnce(&mut NewLook)) {
-        let (Some(account), Some(state)) = (self.accounts.active().cloned(), self.arctic_state())
-        else {
+    /// Wear a change right away (`show` puts it in the preview) and save it:
+    /// now, or after the save in progress (only the newest change is sent).
+    fn change_look(&mut self, edit: impl FnOnce(&mut NewLook), show: impl FnOnce(&mut Trying)) {
+        let (Some(account), Some(state)) = (
+            self.accounts.active().cloned(),
+            self.arctic_state().cloned(),
+        ) else {
             return;
         };
-        let mut look = state.current();
+        let mut look = self
+            .skins
+            .intended
+            .clone()
+            .unwrap_or_else(|| state.current());
         edit(&mut look);
-        self.skins.arctic_busy = true;
-        self.tasks.arctic_look(account, Some(look));
+        show(&mut self.skins.trying);
+        self.skins.intended = Some(look.clone());
+        self.skins.saved_at = None;
+        if self.skins.arctic_busy {
+            self.skins.queued = Some(look);
+        } else {
+            self.skins.arctic_busy = true;
+            self.tasks.arctic_look(account, Some(look), Some(state));
+        }
     }
 
     fn wear_skin(&mut self, entry: &SkinEntry) {
         match Library::read_png(&self.skins_dir(), &entry.id) {
             Ok(png) => {
                 let variant = entry.variant;
-                self.change_look(|l| l.skin = Some((Texture::Png(png), variant)));
-                self.skins.selection = Selection::Current;
+                let key = format!("lib:{}", entry.id);
+                self.change_look(
+                    |l| l.skin = Some((Texture::Png(png), variant)),
+                    |t| t.skin = Some(Some((key, variant))),
+                );
             }
             Err(e) => self
                 .toasts
@@ -197,8 +245,30 @@ impl ArcticApp {
         }
     }
 
-    fn set_arctic_cape(&mut self, cape: Option<CapeChoice>) {
-        self.change_look(|l| l.cape = cape);
+    /// Back to the Minecraft skin (for Arctic players too).
+    fn stop_wearing_skin(&mut self) {
+        self.change_look(|l| l.skin = None, |t| t.skin = Some(None));
+    }
+
+    /// `key`: the cape's texture key for the preview (`None`: no cape).
+    fn set_arctic_cape(&mut self, cape: Option<CapeChoice>, key: Option<String>) {
+        self.change_look(|l| l.cape = cape, |t| t.cape = Some(key));
+    }
+
+    fn set_cosmetics(&mut self, ids: Vec<String>) {
+        let shown = ids.clone();
+        self.change_look(|l| l.cosmetics = Some(ids), |t| t.cosmetics = Some(shown));
+    }
+
+    /// The server's hash for a library skin (worked out once).
+    fn library_hash(&mut self, id: &str) -> Option<String> {
+        if !self.skins.lib_hashes.contains_key(id) {
+            let png = Library::read_png(&self.skins_dir(), id).ok()?;
+            self.skins
+                .lib_hashes
+                .insert(id.to_owned(), arctic_core::cosmetics::texture_hash(&png));
+        }
+        self.skins.lib_hashes.get(id).cloned()
     }
 
     /// Texture for a key (see `SkinsUi`), uploading on first use.
@@ -247,24 +317,26 @@ impl ArcticApp {
         }
     }
 
-    fn add_skin(&mut self, name: &str, png: &[u8], variant: Option<Variant>) {
+    /// Add a skin to the library (or find it there); its entry.
+    fn add_skin(&mut self, name: &str, png: &[u8], variant: Option<Variant>) -> Option<SkinEntry> {
         let dir = self.skins_dir();
         if let Some(existing) = self.skins.library.find_same(&dir, png) {
-            let id = existing.id.clone();
+            let existing = existing.clone();
             self.toasts
                 .push(Kind::Info, "Already in your library", existing.name.clone());
-            self.skins.selection = Selection::Library(id);
-            return;
+            return Some(existing);
         }
         match self.skins.library.add(&dir, name, png, variant) {
             Ok(entry) => {
                 self.toasts
                     .push(Kind::Success, format!("Added {}", entry.name), "");
-                self.skins.selection = Selection::Library(entry.id);
+                Some(entry)
             }
-            Err(e) => self
-                .toasts
-                .push(Kind::Error, "Could not add skin", e.to_string()),
+            Err(e) => {
+                self.toasts
+                    .push(Kind::Error, "Could not add skin", e.to_string());
+                None
+            }
         }
     }
 
@@ -275,7 +347,7 @@ impl ArcticApp {
                 .push(Kind::Error, "Could not delete skin", e.to_string());
         }
         self.skins.textures.remove(&format!("lib:{id}"));
-        self.skins.selection = Selection::Current;
+        self.skins.lib_hashes.remove(id);
     }
 
     fn update_skin(&mut self, id: &str, change: impl FnOnce(&mut SkinEntry)) {
@@ -307,7 +379,47 @@ impl ArcticApp {
                 }
             };
             let name = crate::skin_tasks::file_stem(file.path());
-            self.add_skin(&name, &bytes, None);
+            let _ = self.add_skin(&name, &bytes, None);
+        }
+    }
+
+    /// A load or save came back: show the server's look, or send the change
+    /// that was queued meanwhile.
+    fn on_look_saved(&mut self, account_id: String, result: Result<ArcticState, String>) {
+        self.skins.arctic_busy = false;
+        self.skins.failed.clear();
+        let had_look = self
+            .skins
+            .arctic
+            .get(&account_id)
+            .is_some_and(Result::is_ok);
+        let queued = self.skins.queued.take();
+        match result {
+            Err(e) if had_look => {
+                // A save failed: back to the look the server has.
+                self.skins.intended = None;
+                self.skins.trying = Trying::default();
+                self.toasts.push(Kind::Error, "Couldn't save your look", e);
+            }
+            result => {
+                let ok = result.is_ok();
+                self.skins.arctic.insert(account_id.clone(), result);
+                let active = self.accounts.active().cloned();
+                let state = self.arctic_state().cloned();
+                match (queued, active, state) {
+                    (Some(next), Some(account), Some(state)) if ok && account.id == account_id => {
+                        self.skins.arctic_busy = true;
+                        self.tasks.arctic_look(account, Some(next), Some(state));
+                    }
+                    _ => {
+                        self.skins.intended = None;
+                        self.skins.trying = Trying::default();
+                        if ok && had_look {
+                            self.skins.saved_at = Some(now_secs_f64());
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -323,30 +435,21 @@ impl ArcticApp {
                 }
                 self.skins.account.insert(account_id, result);
             }
-            Event::ArcticLook(account_id, result) => {
-                self.skins.arctic_busy = false;
-                self.skins.failed.clear();
-                if let (Ok(_), Some(Ok(_))) = (&result, self.skins.arctic.get(&account_id)) {
-                    self.toasts.push(
-                        Kind::Success,
-                        "Look updated",
-                        "Every Arctic player sees it now.",
-                    );
-                }
-                self.skins.arctic.insert(account_id, result);
-            }
+            Event::ArcticLook(account_id, result) => self.on_look_saved(account_id, result),
             Event::PlayerSkin(name, result) => {
                 self.skins.looking_up = false;
                 match result {
                     Ok((png, variant)) => {
-                        self.add_skin(&name, &png, Some(variant));
+                        let _ = self.add_skin(&name, &png, Some(variant));
                         self.skins.player_name.clear();
                     }
                     Err(e) => self.toasts.push(Kind::Error, "Could not get skin", e),
                 }
             }
             Event::SkinFile(result) => match result {
-                Ok(Some((name, bytes))) => self.add_skin(&name, &bytes, None),
+                Ok(Some((name, bytes))) => {
+                    let _ = self.add_skin(&name, &bytes, None);
+                }
                 Ok(None) => {}
                 Err(e) => self.toasts.push(Kind::Error, "Could not read file", e),
             },
@@ -355,7 +458,9 @@ impl ArcticApp {
             }
             Event::CapeFile(result) => match result {
                 Ok(Some(bytes)) => {
-                    self.set_arctic_cape(Some(CapeChoice::Custom(Texture::Png(bytes))))
+                    // Shown by its hash once saved; until then the old cape stays.
+                    self.set_arctic_cape(Some(CapeChoice::Custom(Texture::Png(bytes))), None);
+                    self.skins.trying.cape = None;
                 }
                 Ok(None) => {}
                 Err(e) => self.toasts.push(Kind::Error, "Could not read file", e),
@@ -472,4 +577,11 @@ fn upload_cape(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture
         guessed: Variant::Classic,
         frames: if count > 1 { frames } else { Vec::new() },
     })
+}
+
+/// Seconds since the Unix epoch, for "saved just now" notes.
+fn now_secs_f64() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0.0, |d| d.as_secs_f64())
 }

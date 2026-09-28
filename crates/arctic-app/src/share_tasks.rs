@@ -127,6 +127,19 @@ fn import(
                 settings_changed: false,
             })
         }
+        Bundle::Options(defaults) => {
+            defaults.save(dirs)?;
+            Ok(Imported {
+                title: "Default game settings saved".into(),
+                detail: format!(
+                    "{} settings go into every new instance's first start.",
+                    defaults.values.len()
+                ),
+                warnings: Vec::new(),
+                open: None,
+                settings_changed: true,
+            })
+        }
         Bundle::Profile(pack) => {
             let report = pack.import(dirs, progress)?;
             let mut warnings = skipped(&report.skipped_mods);

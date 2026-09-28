@@ -25,6 +25,28 @@ public final class HudSlot {
 	/** Draw the widget's backdrop panel. */
 	public boolean background = true;
 
+	// ---- How it looks (Lunar-like by default: flat black box, white shadowed text) ----
+
+	/** Label formats: "FPS: 144", "144 FPS", just "144". */
+	public static final int LABEL_BEFORE = 0;
+	public static final int LABEL_AFTER = 1;
+	public static final int LABEL_NONE = 2;
+
+	public int textColor = 0xFFFFFFFF;
+	/** The label's own color; 0 = the text color. */
+	public int labelColor;
+	public int backgroundColor = 0x6F000000;
+	public boolean border;
+	public int borderColor = 0xA0FFFFFF;
+	public boolean shadow = true;
+	/** Text cycles through the rainbow. */
+	public boolean chroma;
+	/** "[FPS: 144]". */
+	public boolean brackets;
+	public int labelMode = LABEL_BEFORE;
+	/** Rounded box corners (0 = square). */
+	public int radius;
+
 	public HudSlot() {}
 
 	public HudSlot(boolean enabled) {
@@ -40,6 +62,16 @@ public final class HudSlot {
 		c.dy = dy;
 		c.scale = scale;
 		c.background = background;
+		c.textColor = textColor;
+		c.labelColor = labelColor;
+		c.backgroundColor = backgroundColor;
+		c.border = border;
+		c.borderColor = borderColor;
+		c.shadow = shadow;
+		c.chroma = chroma;
+		c.brackets = brackets;
+		c.labelMode = labelMode;
+		c.radius = radius;
 		return c;
 	}
 }

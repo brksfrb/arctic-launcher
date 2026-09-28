@@ -6,6 +6,8 @@
 
 pub mod avatar;
 pub mod microsoft;
+/// Offline (username-only) accounts: only in builds with the `offline-accounts` feature.
+#[cfg(any(feature = "offline-accounts", test))]
 pub mod offline;
 
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -33,6 +35,7 @@ pub struct Account {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AccountKind {
+    #[cfg(any(feature = "offline-accounts", test))]
     Offline,
     Microsoft(MicrosoftSession),
 }
@@ -66,6 +69,7 @@ impl Account {
 
     pub fn kind_label(&self) -> &'static str {
         match self.kind {
+            #[cfg(any(feature = "offline-accounts", test))]
             AccountKind::Offline => "Offline",
             AccountKind::Microsoft(_) => "Microsoft",
         }
@@ -74,6 +78,7 @@ impl Account {
     /// True when a Microsoft token is expired or about to expire.
     pub fn needs_refresh(&self, now: u64) -> bool {
         match &self.kind {
+            #[cfg(any(feature = "offline-accounts", test))]
             AccountKind::Offline => false,
             AccountKind::Microsoft(s) => now + REFRESH_MARGIN_SECS >= s.expires_at,
         }
@@ -82,6 +87,7 @@ impl Account {
     pub fn identity(&self) -> LaunchIdentity {
         match &self.kind {
             // Offline sessions have no token; the game accepts any placeholder.
+            #[cfg(any(feature = "offline-accounts", test))]
             AccountKind::Offline => LaunchIdentity {
                 username: self.username.clone(),
                 uuid: self.uuid.clone(),
@@ -104,8 +110,21 @@ impl Account {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AccountStore {
+    /// Entries this build can't read (offline accounts in a build without
+    /// them) are skipped rather than failing the whole list.
+    #[serde(deserialize_with = "readable_accounts")]
     pub accounts: Vec<Account>,
     pub active: Option<String>,
+}
+
+fn readable_accounts<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> std::result::Result<Vec<Account>, D::Error> {
+    let raw: Vec<serde_json::Value> = Deserialize::deserialize(d)?;
+    Ok(raw
+        .into_iter()
+        .filter_map(|v| serde_json::from_value(v).ok())
+        .collect())
 }
 
 impl AccountStore {

@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicBool;
 use arctic_core::auth::AccountStore;
 use arctic_core::auth::microsoft::{self, MsaConfig};
 #[cfg(feature = "offline-accounts")]
+#[cfg(feature = "offline-accounts")]
 use arctic_core::auth::offline;
 use arctic_core::{Error, Result};
 use serde_json::json;

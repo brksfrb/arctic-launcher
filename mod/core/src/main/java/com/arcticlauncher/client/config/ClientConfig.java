@@ -35,15 +35,73 @@ public final class ClientConfig {
 	public String zoomKey = "key.keyboard.c";
 	public String freelookKey = "key.keyboard.left.alt";
 	public String fullbrightKey = "key.keyboard.unknown";
+	/** Opens the emote wheel. */
+	public String emoteKey = "key.keyboard.b";
+	/** Streamer mode: your name, skin and the server are hidden on your screen. */
+	public boolean streamerMode;
+	/** What your name shows as in streamer mode. */
+	public String streamerName = "Streamer";
+	/** Switches streamer mode. */
+	public String streamerKey = "key.keyboard.unknown";
+	/** Drops a waypoint where you stand. */
+	public String waypointKey = "key.keyboard.unknown";
+	/** Starts, stops and clears the stopwatch widget. */
+	public String stopwatchKey = "key.keyboard.unknown";
+	/** Hold to talk (voice chat in push-to-talk mode). */
+	public String voiceKey = "key.keyboard.v";
 	/** Press sprint/sneak once to keep sprinting/sneaking. */
 	public boolean toggleSprint;
 	public boolean toggleSneak;
 	/** View: chat timestamps, stacked repeats, lower fire, no rain. */
 	public boolean chatTimestamps;
 	public boolean chatStack = true;
+	/** Chat lines that say your name are marked, with a soft ping. */
+	public boolean chatMentions = true;
 	public boolean lowFire;
 	public boolean clearWeather;
+	/** Fancy style: smooth font and smooth rounded shapes. */
+	public boolean fancy;
+	/** The pause menu's leave button needs a second click. */
+	public boolean confirmLeave = true;
+	/** SOCKS5 proxy for server connections and Arctic's web requests. */
+	public ProxyConfig proxy = new ProxyConfig();
+	/** When the launcher's proxy choice was last applied (its timestamp). */
+	public long proxyFromLauncher;
 	public CrosshairConfig crosshair = new CrosshairConfig();
+	/** Keys that send a message or command. */
+	public java.util.List<QuickMessage> quickMessages = new java.util.ArrayList<QuickMessage>();
+	/** Say this when a minigame ends (Auto GG). */
+	public boolean autoGg;
+	public String autoGgMessage = "gg";
+	/** {x} {y} {z}... also work in chat you type. */
+	public boolean chatPlaceholders = true;
+	/** Scoreboard: its red numbers, its dark background, or none of it. */
+	public boolean scoreboardNumbers = true;
+	public boolean scoreboardBackground = true;
+	public boolean scoreboardHidden;
+	/** Block outline color (ARGB, 0 = the game's) and thickness (1 = the game's). */
+	public int outlineColor;
+	public float outlineWidth = 1f;
+	/** The tint on hurt mobs and players (RGB, 0 = the game's red). */
+	public int hitColor;
+	/** Time of day on your screen (ticks, 6000 = noon), or -1 for the server's. */
+	public int timeLock = -1;
+	/** A pop-up when armor or the held tool is about to break. */
+	public boolean durabilityWarning = true;
+	/** A pop-up with your coordinates when you die. */
+	public boolean deathNotice = true;
+	/** New screenshots go straight onto the clipboard. */
+	public boolean copyScreenshots;
+	/** The HUD style preset last applied to every widget (see HudStyles). */
+	public String hudStyle = "clean";
+	/** Waypoints drawn where they are in the world (not just on the Compass). */
+	public boolean waypointsInWorld = true;
+	/** Every session records quietly; the replay key keeps it (otherwise it's deleted on leaving). */
+	public boolean replayRecording = true;
+	/** Saves the session so far as a replay, with a moment marked at the press. */
+	public String replayKey = "key.keyboard.f9";
+	/** How far back a saved moment reaches (seconds), for 2D clips. */
+	public int clipSeconds = 30;
 
 	private transient File file;
 
@@ -91,9 +149,40 @@ public final class ClientConfig {
 		if (crosshair == null) {
 			crosshair = new CrosshairConfig();
 		}
+		if (waypointKey == null) {
+			waypointKey = "key.keyboard.unknown";
+		}
+		if (stopwatchKey == null) {
+			stopwatchKey = "key.keyboard.unknown";
+		}
+		if (autoGgMessage == null) {
+			autoGgMessage = "gg";
+		}
+		if (quickMessages == null) {
+			quickMessages = new java.util.ArrayList<QuickMessage>();
+		}
 		if (fullbrightKey == null) {
 			fullbrightKey = "key.keyboard.unknown";
 		}
+		if (emoteKey == null) {
+			emoteKey = "key.keyboard.b";
+		}
+		if (streamerKey == null) {
+			streamerKey = "key.keyboard.unknown";
+		}
+		if (voiceKey == null) {
+			voiceKey = "key.keyboard.v";
+		}
+		if (replayKey == null) {
+			replayKey = "key.keyboard.f9";
+		}
+		if (clipSeconds <= 0) {
+			clipSeconds = 30;
+		}
+		if (proxy == null) {
+			proxy = new ProxyConfig();
+		}
+		proxy.fillDefaults();
 	}
 
 	/** Save; returns an error message, or null. */

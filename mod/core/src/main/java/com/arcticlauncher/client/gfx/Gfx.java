@@ -7,6 +7,9 @@ package com.arcticlauncher.client.gfx;
 public interface Gfx {
 	int width();
 
+	/** Screen pixels per GUI pixel (the GUI scale). */
+	float pixelScale();
+
 	int height();
 
 	void fill(int x0, int y0, int x1, int y1, int color);
@@ -19,8 +22,9 @@ public interface Gfx {
 	int textWidth(String text);
 
 	/**
-	 * Draw part of a texture: {@code "icon"} (the Arctic snowflake) or
-	 * {@code "look:<hash>"} (a downloaded look texture).
+	 * Draw part of a texture: {@code "icon"} (the Arctic snowflake),
+	 * {@code "look:<hash>"} (a downloaded look texture) or
+	 * {@code "asset:<name>"} ({@code assets/arctic/<name>.png} in the jar).
 	 */
 	void texture(String key, int x, int y, int w, int h, float u, float v, int regionW, int regionH, int texW, int texH);
 
@@ -29,6 +33,12 @@ public interface Gfx {
 
 	/** A GUI sprite from the game's atlas (like an effect icon); {@code sprite} is the game's id. */
 	void sprite(Object sprite, int x, int y, int w, int h);
+
+	/**
+	 * The local player's model in the box (x0, y0)-(x1, y1), looking toward
+	 * the mouse, with everything they wear. Nothing outside a world.
+	 */
+	void player(int x0, int y0, int x1, int y1, int scale, int mouseX, int mouseY);
 
 	void push();
 

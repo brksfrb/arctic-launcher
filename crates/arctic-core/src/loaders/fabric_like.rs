@@ -1,4 +1,5 @@
-//! Fabric (meta.fabricmc.net v2) and Quilt (meta.quiltmc.org v3).
+//! Fabric (meta.fabricmc.net v2, and Legacy Fabric's meta.legacyfabric.net
+//! v2 for Minecraft older than 1.14) and Quilt (meta.quiltmc.org v3).
 //!
 //! Both publish ready-made launcher profiles, so installing is just
 //! fetching (and caching) one JSON document; its Maven libraries are
@@ -18,6 +19,8 @@ use crate::{Error, Result};
 
 const FABRIC_META: &str = "https://meta.fabricmc.net/v2";
 const QUILT_META: &str = "https://meta.quiltmc.org/v3";
+/// Fabric Loader on Minecraft 1.13.2 and older (same API as Fabric's).
+const LEGACY_FABRIC_META: &str = "https://meta.legacyfabric.net/v2";
 
 #[derive(Debug, Deserialize)]
 struct GameEntry {
@@ -36,23 +39,40 @@ struct LoaderInfo {
     stable: Option<bool>,
 }
 
-/// (meta base URL, profile id prefix)
-fn meta(kind: LoaderKind) -> (&'static str, &'static str) {
+/// Minecraft older than 1.14: Fabric comes from Legacy Fabric there.
+pub fn is_legacy_fabric(game: &str) -> bool {
+    game.starts_with("1.") && compare_versions(game, "1.14").is_lt()
+}
+
+/// (meta base URL, profile id prefix) for a loader on a Minecraft version.
+fn meta(kind: LoaderKind, game: &str) -> (&'static str, &'static str) {
     match kind {
         LoaderKind::Quilt => (QUILT_META, "quilt-loader"),
+        _ if is_legacy_fabric(game) => (LEGACY_FABRIC_META, "fabric-loader"),
         _ => (FABRIC_META, "fabric-loader"),
     }
 }
 
 pub fn game_versions(kind: LoaderKind) -> Result<Vec<String>> {
-    let (base, _) = meta(kind);
+    let (base, _) = meta(kind, "");
     let entries: Vec<GameEntry> =
         get_json(&format!("{base}/versions/game")).map_err(|e| unreachable_meta(kind, &e))?;
-    Ok(entries.into_iter().map(|e| e.version).collect())
+    let mut versions: Vec<String> = entries.into_iter().map(|e| e.version).collect();
+    if kind == LoaderKind::Fabric {
+        // Plus the old releases Legacy Fabric covers (best effort).
+        let legacy: Vec<GameEntry> =
+            get_json(&format!("{LEGACY_FABRIC_META}/versions/game")).unwrap_or_default();
+        for e in legacy {
+            if is_legacy_fabric(&e.version) && !versions.contains(&e.version) {
+                versions.push(e.version);
+            }
+        }
+    }
+    Ok(versions)
 }
 
 pub fn loader_versions(kind: LoaderKind, game_version: &str) -> Result<Vec<LoaderVersion>> {
-    let (base, _) = meta(kind);
+    let (base, _) = meta(kind, game_version);
     let url = format!("{base}/versions/loader/{}", encode_segment(game_version));
     let entries: Vec<LoaderEntry> = get_json(&url).map_err(|e| unreachable_meta(kind, &e))?;
     Ok(to_loader_versions(entries))
@@ -82,8 +102,8 @@ pub fn install(
     loader_version: &str,
     vanilla: &VersionJson,
 ) -> Result<VersionJson> {
-    let (base, prefix) = meta(kind);
     let game = vanilla.id.as_str();
+    let (base, prefix) = meta(kind, game);
     let expected_id = format!("{prefix}-{loader_version}-{game}");
     if let Some(profile) = load_saved_profile(dirs, &expected_id) {
         return Ok(merge(vanilla.clone(), profile));
@@ -190,5 +210,17 @@ mod tests {
         assert_eq!(merged.id, "fabric-loader-0.16.10-1.21.4");
         assert!(merged.main_class.ends_with("KnotClient"));
         assert_eq!(merged.kind, "release");
+    }
+
+    #[test]
+    fn old_minecraft_uses_legacy_fabric() {
+        assert!(is_legacy_fabric("1.8.9"));
+        assert!(is_legacy_fabric("1.12.2"));
+        assert!(is_legacy_fabric("1.13.2"));
+        assert!(!is_legacy_fabric("1.14"));
+        assert!(!is_legacy_fabric("1.20.1"));
+        assert!(!is_legacy_fabric("26.3"));
+        assert_eq!(meta(LoaderKind::Fabric, "1.8.9").0, LEGACY_FABRIC_META);
+        assert_eq!(meta(LoaderKind::Fabric, "1.21.4").0, FABRIC_META);
     }
 }

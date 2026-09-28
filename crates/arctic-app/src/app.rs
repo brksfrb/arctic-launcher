@@ -37,18 +37,20 @@ pub enum Tab {
     Instances,
     Skins,
     Together,
+    Screenshots,
     Logs,
     Settings,
     About,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 8] = [
+    pub const ALL: [Tab; 9] = [
         Tab::Play,
         Tab::Accounts,
         Tab::Instances,
         Tab::Skins,
         Tab::Together,
+        Tab::Screenshots,
         Tab::Logs,
         Tab::Settings,
         Tab::About,
@@ -72,6 +74,7 @@ pub enum ManifestState {
 pub enum AddAccount {
     Closed,
     Choose,
+    #[cfg(feature = "offline-accounts")]
     Offline {
         name: String,
     },
@@ -125,7 +128,11 @@ pub struct ArcticApp {
     pub(crate) proxy: arctic_core::proxy::ProxySettings,
     pub(crate) network: crate::ui::NetworkUi,
     /// Answers the running game's account switcher.
-    bridge: crate::bridge_host::BridgeHost,
+    pub(crate) bridge: crate::bridge_host::BridgeHost,
+    /// The running sign-in was started from the game (it's told how it went).
+    pub(crate) login_from_game: bool,
+    pub(crate) voice: crate::voice::VoiceHub,
+    pub(crate) voice_ui: crate::ui::VoiceSettingsUi,
     pub(crate) accounts: AccountStore,
     faces: HashMap<String, Face>,
     pub(crate) instance: Instance,
@@ -158,10 +165,20 @@ pub struct ArcticApp {
     splash: Splash,
     applied_theme: Option<ThemeMode>,
     theme_fade: Option<crate::theme_fade::ThemeFade>,
+    /// Your own Minecraft behind the launcher (see `Settings::backdrop`).
+    pub(crate) world_backdrop: crate::art::world::WorldBackdrop,
+    /// The Play tab's recent worlds.
+    pub(crate) recent_worlds: crate::ui::play_worlds::RecentWorlds,
     discord: crate::discord::Discord,
     pub(crate) onboarding: Option<crate::ui::Onboarding>,
     pub(crate) together: crate::ui::TogetherUi,
     pub(crate) sharing: crate::ui::ShareUi,
+    pub(crate) shots: crate::ui::ScreenshotsUi,
+    pub(crate) servers: crate::ui::ServersUi,
+    pub(crate) discover: crate::ui::DiscoverUi,
+    pub(crate) friends: crate::ui::FriendsUi,
+    pub(crate) chat: crate::ui::ChatUi,
+    pub(crate) game_defaults: crate::ui::DefaultsUi,
     pub(crate) migrate: Option<crate::ui::MigrateUi>,
     pub(crate) skins: crate::ui::SkinsUi,
     devshot: crate::devshot::DevShot,
@@ -186,6 +203,7 @@ impl ArcticApp {
         forwarded: std::sync::mpsc::Receiver<Vec<String>>,
     ) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
+        crate::fonts::install_ui(&cc.egui_ctx);
         // Ctrl +/- would scale the whole UI; the layout isn't made for that.
         cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
         let (tx, rx) = mpsc::channel();
@@ -195,6 +213,8 @@ impl ArcticApp {
         let tasks = tasks.with_bridge(bridge.info.clone());
         let mut toasts = Toasts::default();
         let data = ProfileData::load(&dirs, &tasks, &mut toasts);
+        let voice = crate::voice::VoiceHub::new(dirs.clone(), data.settings.voice.clone());
+        bridge.set_voice(voice.clone());
         tasks.load_manifest();
         let update = if data.settings.check_updates_on_start {
             tasks.check_update(data.settings.update_channel);
@@ -207,10 +227,18 @@ impl ArcticApp {
             splash: Splash::new(intro),
             applied_theme: None,
             theme_fade: None,
+            world_backdrop: Default::default(),
+            recent_worlds: Default::default(),
             discord: crate::discord::Discord::new(),
             onboarding: None,
             together: crate::ui::TogetherUi::default(),
             sharing: crate::ui::ShareUi::default(),
+            shots: crate::ui::ScreenshotsUi::default(),
+            servers: crate::ui::ServersUi::default(),
+            discover: crate::ui::DiscoverUi::default(),
+            friends: crate::ui::FriendsUi::default(),
+            chat: crate::ui::ChatUi::default(),
+            game_defaults: crate::ui::DefaultsUi::default(),
             migrate: None,
             skins: crate::ui::SkinsUi::default(),
             devshot: crate::devshot::DevShot::from_env(),
@@ -227,6 +255,9 @@ impl ArcticApp {
             proxy: Default::default(),
             network: Default::default(),
             bridge,
+            login_from_game: false,
+            voice,
+            voice_ui: crate::ui::VoiceSettingsUi::default(),
             root,
             profiles,
             dirs,
@@ -383,6 +414,7 @@ impl ArcticApp {
             format!("Signed in as {}", account.username),
             "",
         );
+        self.offer_profile_link(&account);
         self.accounts.upsert(account);
         self.save_accounts();
     }
@@ -441,16 +473,36 @@ impl ArcticApp {
 
     /// Start preparing + launching the selected version for the active account.
     pub(crate) fn launch_selected(&mut self) {
-        self.launch_selected_as(false);
+        self.launch_selected_as(false, None);
+    }
+
+    /// Start the selected instance straight into a server or world.
+    pub(crate) fn launch_into(&mut self, target: arctic_core::launch::QuickPlay) {
+        if let arctic_core::launch::QuickPlay::Server(address) = &target {
+            self.friends.my_server = Some(address.clone());
+        }
+        if let arctic_core::launch::QuickPlay::Duel { friend, .. } = &target {
+            let who = friend.as_ref().map_or("a friend", |f| f.1.as_str());
+            self.toasts.push(
+                crate::toasts::Kind::Info,
+                "Starting a duel",
+                format!("The game makes an arena and invites {who}."),
+            );
+        }
+        self.launch_selected_as(false, Some(target));
     }
 
     /// Start the selected instance again while it runs (a second account,
     /// say); each copy gets its own log.
     pub(crate) fn launch_another_copy(&mut self) {
-        self.launch_selected_as(true);
+        self.launch_selected_as(true, None);
     }
 
-    fn launch_selected_as(&mut self, another_copy: bool) {
+    fn launch_selected_as(
+        &mut self,
+        another_copy: bool,
+        quick_play: Option<arctic_core::launch::QuickPlay>,
+    ) {
         let ManifestState::Ready(manifest) = &self.manifest else {
             return;
         };
@@ -509,8 +561,9 @@ impl ArcticApp {
             ),
         );
         self.log_source = LogSource::Game(id);
+        let start = crate::tasks::StartAt { copy, quick_play };
         self.tasks
-            .launch(id, version, instance, account, self.settings.clone(), copy);
+            .launch(id, version, instance, account, self.settings.clone(), start);
     }
 
     /// Tray icon, close-to-tray and starts forwarded from other processes.
@@ -639,9 +692,20 @@ impl ArcticApp {
             Event::LoginFinished(attempt, _) if !self.is_current_login(attempt) => {}
             Event::LoginFinished(_, Ok(account)) => {
                 self.add_account = AddAccount::Closed;
+                if std::mem::take(&mut self.login_from_game) {
+                    self.bridge
+                        .set_login_status("done", Some(&account.username), None);
+                }
                 self.add_signed_in(account);
+                self.bridge.update(&self.accounts, &self.tasks);
             }
-            Event::LoginFinished(_, Err(e)) => self.add_account = AddAccount::Failed(e),
+            Event::LoginFinished(_, Err(e)) => {
+                if std::mem::take(&mut self.login_from_game) {
+                    self.bridge
+                        .set_login_status("failed", None, Some(e.as_str()));
+                }
+                self.add_account = AddAccount::Failed(e);
+            }
             Event::Face(uuid, face) => {
                 self.faces.insert(uuid, face);
             }
@@ -660,12 +724,36 @@ impl ArcticApp {
             Event::MigrateProgress(label, p) => self.on_migrate_progress(label, p),
             Event::MigrateItemDone(outcome) => self.on_migrate_item(outcome),
             Event::MigrateFinished => self.on_migrate_finished(),
+            Event::PackSearch(request, result) => self.on_pack_search(request, result),
+            Event::PackInstalled(instance, project, result) => {
+                self.on_pack_installed(instance, project, result)
+            }
+            Event::ServerList(request, list) => self.on_server_list(ctx, request, list),
+            Event::ServerStatus(request, address, status) => {
+                self.on_server_status(ctx, request, address, status)
+            }
+            Event::Friends(result) => self.on_friends(result),
+            Event::FriendDone(result) => self.on_friend_done(result),
+            #[cfg(feature = "offline-accounts")]
+            Event::RecoveryCode(result) => self.on_recovery_code(result),
+            Event::ChatHistory(friend, result) => self.on_chat_history(friend, result),
+            Event::ChatSent(result) => self.on_chat_sent(result),
+            Event::ChatImage(id, result) => self.on_chat_image(ctx, id, result),
+            Event::ChatNew(after, result) => self.on_chat_new(after, result),
+            Event::PublicServers(list) => self.on_public_servers(list),
+            Event::ServerSubmitted(result) => self.on_server_submitted(result),
+            Event::ServerVerified(result) => self.on_server_verified(result),
+            Event::Screenshots(list) => self.on_screenshot_list(list),
+            Event::ScreenshotThumb(path, result) => self.on_screenshot_thumb(ctx, path, result),
+            Event::ScreenshotCopied(result) => self.on_screenshot_copied(ctx, result),
             Event::AddAccountFromGame => {
-                crate::window::show();
-                self.set_tab(Tab::Accounts, now);
-                if matches!(self.add_account, AddAccount::Closed) {
-                    self.add_account = AddAccount::Choose;
+                // Straight to Microsoft's sign-in in the browser; the game
+                // follows along over the bridge, the launcher stays hidden.
+                if !matches!(self.add_account, AddAccount::Microsoft { .. }) {
+                    self.start_login(true);
                 }
+                self.login_from_game = true;
+                self.bridge.set_login_status("waiting", None, None);
             }
             Event::ShareCode(result) => self.on_share_code(result, ctx),
             Event::ShareSaved(result) => self.on_share_saved(result),
@@ -759,6 +847,14 @@ impl eframe::App for ArcticApp {
         self.splash.show(&ctx, self.palette());
         self.autosave_settings(&ctx);
         self.pace_scenery(&ctx);
+        if let Some(muted) = self.voice.take_muted() {
+            self.settings.voice.muted = muted;
+            self.persist_settings();
+        }
+        self.voice
+            .update(&self.dirs, &self.settings.voice, self.accounts.active());
+        self.voice.tick();
+        self.together_bridge();
         if std::env::var("ARCTIC_DEVSHOT_PAGE").as_deref() == Ok("modpacks")
             && cfg!(debug_assertions)
             && !self.inst.modpacks_open
@@ -777,11 +873,35 @@ impl eframe::App for ArcticApp {
                 self.set_tab(tab, 0.0);
             }
         }
+        if let Some(tab) = self
+            .devshot
+            .open_tab
+            .take()
+            .and_then(|i| Tab::ALL.get(i).copied())
+        {
+            self.set_tab(tab, 0.0);
+        }
         if let Some(id) = self.devshot.open_instance.take() {
             self.set_tab(Tab::Instances, 0.0);
             self.open_instance(&id);
-            if std::env::var("ARCTIC_DEVSHOT_PAGE").as_deref() == Ok("settings") {
-                self.inst.page = crate::ui::InstancePage::Settings;
+            match std::env::var("ARCTIC_DEVSHOT_PAGE").as_deref() {
+                Ok("settings") => self.inst.page = crate::ui::InstancePage::Settings,
+                Ok("replays") => self.inst.page = crate::ui::InstancePage::Replays,
+                _ => {}
+            }
+        }
+        if matches!(self.manifest, ManifestState::Ready(_)) {
+            if let Some(address) = self.devshot.join.take() {
+                self.launch_into(arctic_core::launch::QuickPlay::Server(address));
+            } else if let Some(how) = self.devshot.launch.take() {
+                if how == "duel" {
+                    self.launch_into(arctic_core::launch::QuickPlay::Duel {
+                        kit: "sword".into(),
+                        friend: None,
+                    });
+                } else {
+                    self.launch_selected();
+                }
             }
         }
         self.devshot_share();

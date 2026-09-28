@@ -20,13 +20,32 @@ impl ArcticApp {
         let ctx = ui.ctx().clone();
         let now = ctx.input(|i| i.time);
         let backdrop = ctx.layer_painter(egui::LayerId::background());
-        scenery::paint(
-            &backdrop,
-            ctx.content_rect(),
-            &p.scene,
-            now as f32,
-            self.settings.animations,
-        );
+        let mut painted = false;
+        if self.settings.backdrop == arctic_core::settings::Backdrop::Picture {
+            let instance = self.selected_instance();
+            let game_dir = instance.game_dir(&self.dirs);
+            let version = instance
+                .version
+                .clone()
+                .or_else(|| self.settings.last_version.clone());
+            self.world_backdrop
+                .want(&ctx, &self.dirs, game_dir, version);
+            if !self.world_backdrop.missing() {
+                self.world_backdrop
+                    .paint(&backdrop, ctx.content_rect(), p.bg);
+                painted = true;
+            }
+        }
+        // No picture yet (a new player): the painted arctic night.
+        if !painted {
+            scenery::paint(
+                &backdrop,
+                ctx.content_rect(),
+                &p.scene,
+                now as f32,
+                self.settings.animations,
+            );
+        }
 
         let nav = egui::Panel::left("nav")
             .resizable(false)
@@ -65,6 +84,7 @@ impl ArcticApp {
                         Tab::Instances => self.instances_tab(ui),
                         Tab::Skins => self.skins_tab(ui),
                         Tab::Together => self.together_tab(ui),
+                        Tab::Screenshots => self.screenshots_tab(ui),
                         Tab::Logs => self.logs_tab(ui),
                         Tab::Settings => self.settings_tab(ui),
                         Tab::About => self.about_tab(ui),
@@ -79,9 +99,13 @@ impl ArcticApp {
         self.import_worlds_dialog(&ctx);
         self.share_dialogs(&ctx);
         self.migrate_dialog(&ctx);
+        self.friends_tick(now, self.tab == Tab::Together);
+        self.chat_tick(now, self.tab == Tab::Together);
         if let Some(action) = self.toasts.show(&ctx, p) {
             match action {
                 ToastAction::ShowLogs(id) => self.show_run_log(id, now),
+                ToastAction::OpenFriends => self.set_tab(Tab::Together, now),
+                ToastAction::LinkAccount { into, other } => self.link_accounts(&into, &other),
             }
         }
     }

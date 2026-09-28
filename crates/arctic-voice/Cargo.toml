@@ -1,0 +1,17 @@
+[package]
+name = "arctic-voice"
+description = "Arctic Launcher proximity voice chat: capture, Opus, spatial mixing."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+aes-gcm = "0.10.3"
+cpal = "0.18.2"
+getrandom = "0.3.4"
+log = "0.4.34"
+opus = "0.4.0"

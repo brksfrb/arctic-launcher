@@ -27,12 +27,7 @@ impl ArcticApp {
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
-                widgets::page_header(
-                    ui,
-                    p,
-                    "Modpacks",
-                    "Install a whole pack in one click. Each one becomes its own instance.",
-                );
+                widgets::page_header(ui, p, "Modpacks", "Search modpacks on Modrinth");
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                 let busy = self.inst.pack_installing.is_some();

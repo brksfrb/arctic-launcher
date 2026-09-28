@@ -17,8 +17,8 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 
 [features]
-# Offline (username-only) accounts. Off in release builds for now.
-offline-accounts = []
+# Offline (username-only) accounts. Left out of release builds entirely for now.
+offline-accounts = ["arctic-core/offline-accounts"]
 
 [[bin]]
 name = "arctic"

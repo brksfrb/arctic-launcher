@@ -6,10 +6,11 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 
 use arctic_core::instances::Instance;
+use arctic_core::launch::QuickPlay;
 use arctic_core::worlds::{self, Source, World};
 use eframe::egui::{self, CornerRadius, Id, Modal, RichText, Sense, vec2};
 
-use crate::app::ArcticApp;
+use crate::app::{ArcticApp, Tab};
 use crate::art::icons::{self, Icon};
 use crate::motion::format_bytes;
 use crate::theme;
@@ -147,6 +148,13 @@ impl ArcticApp {
                 }
                 if widgets::icon_button(ui, p, Icon::Folder, "Open world folder").clicked() {
                     let _ = open::that_detached(&world.path);
+                }
+                if widgets::icon_button(ui, p, Icon::Play, "Play this world (1.20+)").clicked() {
+                    self.settings.last_instance =
+                        (!instance.is_default()).then(|| instance.id.clone());
+                    let now = ui.input(|i| i.time);
+                    self.set_tab(Tab::Play, now);
+                    self.launch_into(QuickPlay::World(world.folder.clone()));
                 }
             });
         });
@@ -299,7 +307,7 @@ fn world_icon_uri(ctx: &egui::Context, path: &std::path::Path) -> Option<String>
 }
 
 /// "3 days ago"
-fn ago(time: Option<SystemTime>) -> String {
+pub(super) fn ago(time: Option<SystemTime>) -> String {
     let Some(secs) = time.and_then(|t| t.elapsed().ok()).map(|d| d.as_secs()) else {
         return "never played".into();
     };

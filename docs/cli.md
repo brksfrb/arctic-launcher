@@ -63,6 +63,8 @@ Downloads whatever is missing, then starts Minecraft.
 | `-m, --memory <SIZE>` | Max heap, e.g. `4G`, `6144M`, `6144` |
 | `--width <PX>` / `--height <PX>` | Window size |
 | `--fullscreen` | Start fullscreen |
+| `--server <ADDRESS>` | Join this server right away (`host` or `host:port`) |
+| `--world <FOLDER>` | Open this singleplayer world right away (Minecraft 1.20+) |
 | `--java <PATH>` | Use this `java(w).exe` instead of the managed runtime |
 | `-w, --wait` | Stay attached: print the game log, exit with the game's code |
 | `--dry-run` | Prepare everything and print the command line (token redacted) |
@@ -175,11 +177,24 @@ A code (`abcd-efgh`) is stored on the Arctic server and needs a signed-in accoun
 (`arctic1.…`) and `.json` files work without it. Accounts, the proxy, Java paths and JVM
 arguments are never included, and everything imported is checked value by value first.
 
-### `arctic worlds`, `skin`, `look`, `proxy`, `settings`, `crash`, `together`
+### `arctic worlds`, `waypoints`, `servers`, `friends`, `defaults`, `skin`, `look`, `proxy`, `settings`, `crash`, `together`
 
 ```text
 arctic worlds list|sources [--instance <I>]
+arctic servers list [--instance <I>] [--no-ping] | ping <ADDRESS> | add <ADDRESS> [--name N] [--instance <I>]
+arctic servers browse [--premium|--cracked] [--random]
+arctic servers submit <ADDRESS> --name N [--description D] [--tag T]... | verify <ID>
+arctic servers review [--state pending] [--approve|--reject|--remove <ID>]   (needs ARCTIC_ADMIN_KEY)
+arctic friends list | add <CODE|NAME> | accept <NAME> | remove <NAME> [--account A]
+arctic friends recovery | restore <RECOVERY_CODE> [--account A]
+arctic friends chat <NAME> [--send TEXT]
+arctic defaults show | set <KEY> <VALUE> | unset <KEY> | capture [--instance I] | apply [--instance I] | clear
+arctic share options   (default game settings as a code)
+arctic friends invite <NAME> --server <ADDRESS> | --together <CODE>
+arctic friends profile [--name N] [--share-online B] [--share-server B] [--invites B] [--show-accounts B] [--link ACCOUNT] [--unlink ACCOUNT]
 arctic worlds import <FOLDER_OR_ZIP> | backup <WORLD> | remove <WORLD> [--instance <I>]
+arctic waypoints list [--world W] | add <NAME> <X> <Y> <Z> --world W [--dim D] | remove <NAME> --world W [--instance <I>]
+    (W is a server address, or sp:<world name>; the game's Compass and Minimap show them)
 arctic skin show | set <PNG> [--model classic|slim] | reset | cape <NAME|none>
 arctic look show | skin <PNG|none> | cape <PRESET|PNG|none> | wear [IDS...]
 arctic proxy show | set <HOST> [PORT] [--username U] [--password P] | off | test

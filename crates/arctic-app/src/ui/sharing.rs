@@ -24,6 +24,8 @@ pub enum ShareKind {
     Crosshair,
     Client,
     Profile,
+    /// Default game settings.
+    Options,
 }
 
 impl ShareKind {
@@ -89,6 +91,15 @@ impl ArcticApp {
         } else {
             ShareKind::Profile
         };
+        self.open_share_kind(instance, kind);
+    }
+
+    /// Share the default game settings.
+    pub(crate) fn open_share_defaults(&mut self) {
+        self.open_share_kind(None, ShareKind::Options);
+    }
+
+    fn open_share_kind(&mut self, instance: Option<String>, kind: ShareKind) {
         let built = self.build_share(instance.as_deref(), kind);
         self.sharing.export = Some(ExportState {
             instance,
@@ -114,6 +125,16 @@ impl ArcticApp {
     ) -> Result<(Bundle, Vec<String>), String> {
         let found = instance.and_then(|id| self.instance_by_id(id)).cloned();
         let result = match (kind, found) {
+            (ShareKind::Options, _) => arctic_core::game_defaults::Defaults::load(&self.dirs)
+                .and_then(|d| {
+                    if d.is_empty() {
+                        Err(arctic_core::Error::Other(
+                            "No default game settings yet.".into(),
+                        ))
+                    } else {
+                        Ok((Bundle::Options(d), Vec::new()))
+                    }
+                }),
             (ShareKind::Profile, _) => {
                 ProfilePack::export(&self.dirs).map(|(p, left)| (Bundle::Profile(p), left))
             }
@@ -461,6 +482,13 @@ impl ArcticApp {
                         Some("Close that game first; it saves its own settings when it quits.");
                 }
             }
+            Bundle::Options(_) => {
+                ui.label(
+                    RichText::new("These become your default game settings: every new instance starts with them. Your instances keep theirs.")
+                        .small()
+                        .color(p.muted),
+                );
+            }
             Bundle::Profile(_) => {
                 ui.label(
                     RichText::new("Your launcher settings change to these. New instances are added; yours with the same names stay as they are.")
@@ -567,6 +595,7 @@ impl ArcticApp {
         match result {
             Ok(done) => {
                 self.sharing.import = None;
+                self.reload_game_defaults();
                 if done.settings_changed {
                     self.reload_after_import();
                 } else {

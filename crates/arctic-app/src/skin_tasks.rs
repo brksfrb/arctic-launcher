@@ -4,13 +4,15 @@
 
 use std::collections::HashSet;
 
+#[cfg(feature = "offline-accounts")]
+use arctic_core::Error;
+use arctic_core::Result;
 use arctic_core::auth::microsoft::{self, MsaConfig};
 use arctic_core::auth::{Account, AccountKind, now_secs};
 use arctic_core::cosmetic_models;
-use arctic_core::cosmetics::{self, Look, NewLook, Preset};
+use arctic_core::cosmetics::{self, CapeChoice, Look, NewLook, Preset, Texture};
 use arctic_core::skins::Variant;
 use arctic_core::skins::api::{self, Profile};
-use arctic_core::{Error, Result};
 
 use crate::tasks::{Event, Tasks};
 
@@ -111,6 +113,7 @@ impl Tasks {
     fn fresh_token(&self, account: Account) -> Result<String> {
         match self.fresh_account(account)?.kind {
             AccountKind::Microsoft(session) => Ok(session.access_token.reveal().to_string()),
+            #[cfg(feature = "offline-accounts")]
             AccountKind::Offline => Err(Error::Other(
                 "Minecraft skins can only be changed on Microsoft accounts.".into(),
             )),
@@ -118,14 +121,61 @@ impl Tasks {
     }
 
     /// Read (after optionally publishing a new one) the Arctic look.
-    pub fn arctic_look(&self, account: Account, change: Option<NewLook>) {
+    /// Load the Arctic look, or publish `change`. With `known` (the state
+    /// shown now) a change only saves the look and fetches textures that
+    /// aren't there yet, so trying things on stays quick.
+    pub fn arctic_look(
+        &self,
+        account: Account,
+        change: Option<NewLook>,
+        known: Option<ArcticState>,
+    ) {
         self.run(move |t| {
             let id = account.id.clone();
-            let result = t
-                .arctic_look_blocking(account, change)
-                .map_err(|e| e.to_string());
+            let result = match (change, known) {
+                (Some(change), Some(known)) => t.save_look_blocking(account, change, known),
+                (change, _) => t.arctic_look_blocking(account, change),
+            }
+            .map_err(|e| e.to_string());
             t.send(Event::ArcticLook(id, result));
         });
+    }
+
+    fn save_look_blocking(
+        &self,
+        account: Account,
+        change: NewLook,
+        known: ArcticState,
+    ) -> Result<ArcticState> {
+        let base = cosmetics::base_url();
+        let account = self.fresh_account(account)?;
+        let token = cosmetics::token_for(self.dirs(), &base, &account)?;
+        // What's uploaded now is already here: no need to download it back.
+        let mut textures = known.textures;
+        let uploaded = [
+            change.skin.as_ref().map(|(t, _)| t),
+            change.cape.as_ref().and_then(|c| match c {
+                CapeChoice::Custom(t) => Some(t),
+                CapeChoice::Preset(_) => None,
+            }),
+        ];
+        for texture in uploaded.into_iter().flatten() {
+            if let Texture::Png(png) = texture {
+                textures.push((cosmetics::texture_hash(png), png.clone()));
+            }
+        }
+        let look = cosmetics::set_look(&base, &token, &change)?;
+        for hash in look.skin.iter().chain(look.cape.iter()) {
+            if !textures.iter().any(|(h, _)| h == hash) {
+                textures.push((hash.clone(), cosmetics::texture(&base, hash)?));
+            }
+        }
+        Ok(ArcticState {
+            presets: known.presets,
+            look,
+            textures,
+            items: known.items,
+        })
     }
 
     fn arctic_look_blocking(

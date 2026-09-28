@@ -82,7 +82,11 @@ impl ArcticApp {
                 ui.selectable_value(&mut self.inst.page, InstancePage::Mods, "Mods");
                 ui.selectable_value(&mut self.inst.page, InstancePage::Browse, "Browse mods");
             }
+            ui.selectable_value(&mut self.inst.page, InstancePage::Packs, "Packs & shaders");
             ui.selectable_value(&mut self.inst.page, InstancePage::Worlds, "Worlds");
+            if instance.arctic_mod {
+                ui.selectable_value(&mut self.inst.page, InstancePage::Replays, "Replays");
+            }
             ui.selectable_value(&mut self.inst.page, InstancePage::Settings, "Settings");
         });
         ui.add_space(10.0);
@@ -90,6 +94,8 @@ impl ArcticApp {
             (InstancePage::Mods, true) => self.mods_page(ui, &instance),
             (InstancePage::Browse, true) => self.browse_page(ui, &instance),
             (InstancePage::Worlds, _) => self.worlds_page(ui, &instance),
+            (InstancePage::Replays, _) => self.replays_page(ui, &instance),
+            (InstancePage::Packs, _) => self.packs_page(ui, &instance),
             _ => self.instance_settings(ui, &instance),
         }
     }
@@ -317,7 +323,7 @@ impl ArcticApp {
             ui.label(RichText::new("Performance").size(17.0).strong().color(p.text));
             ui.label(
                 RichText::new(
-                    "Adds Sodium, Lithium, FerriteCore, ImmediatelyFast and EntityCulling for much higher FPS. Downloaded from Modrinth for your version; ones not updated yet are skipped.",
+                    "Adds Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling and ModernFix for much higher FPS and faster starts. Downloaded from Modrinth for your version; ones not updated yet are skipped.",
                 )
                 .color(p.muted),
             );

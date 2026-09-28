@@ -1,5 +1,7 @@
 # Build output
 /target/
+# The Arctic Client's jars (their pack, mod/dist/arctic-client.pack, is committed)
+/mod/dist/*.jar
 **/*.rs.bk
 
 # Local configuration and secrets — never commit these
@@ -32,3 +34,4 @@ AGENTS.md
 *.iml
 .DS_Store
 Thumbs.db
+__pycache__/

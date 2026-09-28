@@ -37,7 +37,7 @@ final class CapeTile extends Widget {
 		} else if (texture == null) {
 			Draw.centered(g, "-", x + w / 2, y + 5 + capeH / 2 - 4, s.muted, false);
 		}
-		Draw.centered(g, Draw.fit(g, name, w - 4), x + w / 2, y + h - 11, worn ? s.accent : s.text, false);
+		Draw.centered(g, Draw.fitCentered(g, name, w - 4, x + w / 2, y + h - 11), x + w / 2, y + h - 11, worn ? s.accent : s.text, false);
 	}
 
 	@Override

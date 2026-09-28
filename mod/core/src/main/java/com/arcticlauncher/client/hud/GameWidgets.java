@@ -85,9 +85,9 @@ final class GameWidgets {
 		private static List<Object[]> rows(boolean preview) {
 			List<Object[]> rows = platform().armor();
 			if (rows.isEmpty() && preview) {
-				// Sample durabilities, so the editor shows what it will look like.
-				return Arrays.asList(new Object[] {null, "363"}, new Object[] {null, "528"},
-						new Object[] {null, "495"}, new Object[] {null, "429"});
+				// A diamond set at full durability, so the editor shows what it will look like.
+				return Arrays.asList(sample("diamond_helmet", "363"), sample("diamond_chestplate", "528"),
+						sample("diamond_leggings", "495"), sample("diamond_boots", "429"));
 			}
 			return rows;
 		}
@@ -117,17 +117,21 @@ final class GameWidgets {
 					placeholderIcon(g, PAD, y, s);
 				}
 				if (row[1] != null) {
-					g.text((String) row[1], PAD + ICON + 3, y + 4, s.text, shadow());
+					g.text((String) row[1], PAD + ICON + 3, y + 4, text(), shadow());
 				}
 				y += ROW;
 			}
 		}
 	}
 
+	private static Object[] sample(String item, String text) {
+		return new Object[] {platform().sampleItem("minecraft:" + item), text};
+	}
+
 	/** A stand-in item icon for the editor: a small tinted square. */
 	private static void placeholderIcon(Gfx g, int x, int y, Style s) {
-		Draw.round(g, x + 2, y + 2, x + ICON - 2, y + ICON - 2, 2, Draw.alpha(s.accent, 0.45f));
-		Draw.outline(g, x + 2, y + 2, x + ICON - 2, y + ICON - 2, 2, Draw.alpha(s.accent, 0.8f));
+		Draw.round(g, x + 2, y + 2, x + ICON - 2, y + ICON - 2, 2, Draw.alpha(0xFFFFFFFF, 0.3f));
+		Draw.outline(g, x + 2, y + 2, x + ICON - 2, y + ICON - 2, 2, Draw.alpha(0xFFFFFFFF, 0.6f));
 	}
 
 	/** Active potion effects with their icon and time left. */
@@ -148,8 +152,8 @@ final class GameWidgets {
 			List<Object[]> rows = platform().effects();
 			if (rows.isEmpty() && preview) {
 				List<Object[]> sample = new ArrayList<Object[]>();
-				sample.add(new Object[] {"Speed II", "1:30", 0xFF7CAFC6});
-				sample.add(new Object[] {"Night Vision", "4:52", 0xFF1F1FA1});
+				sample.add(new Object[] {"Speed II", "1:30", 0xFF7CAFC6, platform().effectSprite("minecraft:speed")});
+				sample.add(new Object[] {"Night Vision", "4:52", 0xFF1F1FA1, platform().effectSprite("minecraft:night_vision")});
 				return sample;
 			}
 			return rows;
@@ -185,9 +189,9 @@ final class GameWidgets {
 				} else {
 					Draw.round(g, PAD + 1, y + 2, PAD + EFFECT_ICON - 1, y + EFFECT_ICON, 2, 0xFF000000 | (Integer) r[2]);
 				}
-				g.text((String) r[0], PAD + EFFECT_ICON + 3, y + 2, s.text, shadow());
+				g.text((String) r[0], PAD + EFFECT_ICON + 3, y + 2, text(), shadow());
 				String time = (String) r[1];
-				g.text(time, w - PAD - g.textWidth(time), y + 2, s.muted, shadow());
+				g.text(time, w - PAD - g.textWidth(time), y + 2, muted(), shadow());
 				y += LINE;
 			}
 		}
@@ -222,12 +226,17 @@ final class GameWidgets {
 			}
 			panel(g, s, 0, 0, width(g), height());
 			if (held == null) {
-				placeholderIcon(g, PAD, PAD / 2, s);
-				g.text("64", PAD + ICON + 3, PAD / 2 + 4, s.text, shadow());
+				Object arrow = platform().sampleItem("minecraft:arrow");
+				if (arrow != null) {
+					g.item(arrow, PAD, PAD / 2);
+				} else {
+					placeholderIcon(g, PAD, PAD / 2, s);
+				}
+				g.text("64", PAD + ICON + 3, PAD / 2 + 4, text(), shadow());
 				return;
 			}
 			g.item(held[0], PAD, PAD / 2);
-			g.text(String.valueOf(held[1]), PAD + ICON + 3, PAD / 2 + 4, s.text, shadow());
+			g.text(String.valueOf(held[1]), PAD + ICON + 3, PAD / 2 + 4, text(), shadow());
 		}
 	}
 
@@ -267,11 +276,11 @@ final class GameWidgets {
 			float health = (Float) t[1];
 			float max = Math.max(1f, (Float) t[2]);
 			panel(g, s, 0, 0, W, H);
-			g.text(Draw.fit(g, (String) t[0], W - 50), PAD, PAD, s.text, shadow());
+			g.text(Draw.fit(g, (String) t[0], W - 50), PAD, PAD, text(), shadow());
 			String hp = String.format(Locale.ROOT, "%.1f / %.0f", health, max);
-			g.text(hp, W - PAD - g.textWidth(hp), PAD, s.muted, shadow());
+			g.text(hp, W - PAD - g.textWidth(hp), PAD, muted(), shadow());
 			int barY = H - PAD - 5;
-			Draw.round(g, PAD, barY, W - PAD, barY + 5, 1, Draw.alpha(s.muted, 0.35f));
+			Draw.round(g, PAD, barY, W - PAD, barY + 5, 1, Draw.alpha(muted(), 0.35f));
 			int filled = Math.round((W - PAD * 2) * Math.max(0f, Math.min(1f, health / max)));
 			float ratio = health / max;
 			int color = ratio > 0.5f ? 0xFF4ADE80 : ratio > 0.25f ? 0xFFFACC15 : 0xFFF87171;

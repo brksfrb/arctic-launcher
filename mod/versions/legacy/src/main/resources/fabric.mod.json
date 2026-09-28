@@ -1,0 +1,23 @@
+{
+	"schemaVersion": 1,
+	"id": "arctic",
+	"version": "${version}",
+	"name": "Arctic Client",
+	"description": "Arctic Launcher's client: Arctic menus, HUD widgets, friends and more.",
+	"authors": ["Arctic Launcher contributors"],
+	"contact": {
+		"homepage": "https://arcticlauncher.com",
+		"sources": "https://github.com/brksfrb/arctic-launcher"
+	},
+	"license": "GPL-3.0-or-later",
+	"icon": "assets/arctic/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": ["com.arcticlauncher.legacy.ArcticLegacy"]
+	},
+	"mixins": ["arctic-legacy.mixins.json"],
+	"depends": {
+		"fabricloader": ">=0.16.0",
+		"minecraft": ${minecraft_range}
+	}
+}

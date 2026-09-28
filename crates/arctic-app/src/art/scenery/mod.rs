@@ -19,7 +19,9 @@ const STAR_COUNT: u32 = 90;
 /// Stars live in the upper part of the sky only (fraction of height).
 const STAR_BAND: f32 = 0.42;
 const AURORA_STEP: f32 = 8.0;
-const SHOOTING_PERIOD: f32 = 9.0;
+/// Two independent streams of shooting stars, each firing once per period at
+/// a random moment: together about one every three seconds, never regular.
+const SHOOTING_PERIODS: [f32; 2] = [5.0, 7.0];
 const SHOOTING_DURATION: f32 = 0.9;
 const MOON_RADIUS: f32 = 20.0;
 
@@ -63,7 +65,9 @@ pub fn paint(painter: &Painter, rect: Rect, scene: &Scene, time: f32, animated: 
     if scene.star_strength > 0.0 {
         stars(painter, rect, t, scene);
         if animated {
-            shooting_star(painter, rect, t, scene);
+            for (stream, period) in SHOOTING_PERIODS.into_iter().enumerate() {
+                shooting_star(painter, rect, t, period, stream as u32, scene);
+            }
         }
     }
     celestial(painter, rect, scene);
@@ -127,21 +131,29 @@ fn stars(painter: &Painter, rect: Rect, t: f32, scene: &Scene) {
     }
 }
 
-/// Every few seconds a short streak crosses the upper sky.
-fn shooting_star(painter: &Painter, rect: Rect, t: f32, scene: &Scene) {
-    let cycle = (t / SHOOTING_PERIOD).floor();
-    let seed = cycle as u32;
-    let start = cycle * SHOOTING_PERIOD + hash01(seed, 20) * (SHOOTING_PERIOD - SHOOTING_DURATION);
+/// A short streak somewhere in the upper sky, heading down-left or down-right.
+fn shooting_star(painter: &Painter, rect: Rect, t: f32, period: f32, stream: u32, scene: &Scene) {
+    let cycle = (t / period).floor();
+    let seed = (cycle as u32).wrapping_mul(2).wrapping_add(stream * 7919);
+    let start = cycle * period + hash01(seed, 20) * (period - SHOOTING_DURATION);
     let progress = (t - start) / SHOOTING_DURATION;
     if !(0.0..1.0).contains(&progress) {
         return;
     }
     let origin = pos2(
-        rect.left() + rect.width() * (0.3 + 0.65 * hash01(seed, 21)),
-        rect.top() + rect.height() * (0.04 + 0.2 * hash01(seed, 22)),
+        rect.left() + rect.width() * (0.05 + 0.9 * hash01(seed, 21)),
+        rect.top() + rect.height() * (0.03 + 0.3 * hash01(seed, 22)),
     );
-    let dir = vec2(-0.87, 0.5);
-    let travel = rect.width() * 0.22;
+    // Down at 20-40 degrees, to either side (heading inward from the edges).
+    let angle = (20.0 + 20.0 * hash01(seed, 23)).to_radians();
+    let side = if origin.x > rect.center().x {
+        -1.0
+    } else {
+        1.0
+    };
+    let side = if hash01(seed, 24) < 0.25 { -side } else { side };
+    let dir = vec2(side * angle.cos(), angle.sin());
+    let travel = rect.width() * (0.14 + 0.12 * hash01(seed, 25));
     let head = origin + dir * travel * progress;
     let fade = (1.0 - progress) * progress.min(0.15) / 0.15;
     let tail = head - dir * (60.0 + 40.0 * progress);

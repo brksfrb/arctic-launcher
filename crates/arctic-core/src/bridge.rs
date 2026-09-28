@@ -45,11 +45,55 @@ pub struct SessionGrant {
 pub trait Accounts: Send + Sync + 'static {
     fn list(&self) -> Vec<AccountEntry>;
     fn session(&self, id: &str) -> Result<SessionGrant>;
-    /// Start adding an account (the launcher shows its sign-in). Signing in
-    /// happens there, never in the game.
+    /// Start adding an account: the launcher opens Microsoft's sign-in in
+    /// the browser. Credentials never go through the game.
     fn add(&self) -> Result<()> {
         Err(crate::Error::Other(
             "add accounts in Arctic Launcher (or with `arctic accounts login`)".into(),
+        ))
+    }
+    /// Put a screenshot (a `.png` in a game's `screenshots` folder) on the
+    /// clipboard as a picture, which the game itself can't always do.
+    fn copy_image(&self, _path: &str) -> Result<()> {
+        Err(crate::Error::Other(
+            "copying pictures needs Arctic Launcher".into(),
+        ))
+    }
+
+    /// How the last [`Accounts::add`] is going (JSON): `{"state": "idle" |
+    /// "waiting" | "done" | "failed", "name"?, "message"?}`.
+    fn login(&self) -> String {
+        r#"{"state":"idle"}"#.to_owned()
+    }
+
+    /// A small PNG of a web image (Modrinth icons are often WebP, which the
+    /// game can't read). Only Modrinth's CDN is fetched.
+    fn icon(&self, _url: &str) -> Result<Vec<u8>> {
+        Err(crate::Error::Other(
+            "icons come from Arctic Launcher".into(),
+        ))
+    }
+
+    /// Proximity voice chat: the game reports where everyone is (JSON);
+    /// the answer says who's speaking. Only the launcher does voice.
+    fn voice(&self, _state: &[u8]) -> Result<String> {
+        Err(crate::Error::Other(
+            "voice chat runs in Arctic Launcher".into(),
+        ))
+    }
+
+    /// FFmpeg for replay videos (JSON): `{"state": "ready" | "missing" |
+    /// "downloading" | "failed" | "unavailable", "path"?, "progress"?, "error"?}`.
+    /// `start` asks for the download.
+    fn ffmpeg(&self, _start: bool) -> String {
+        r#"{"state":"unavailable"}"#.to_owned()
+    }
+
+    /// Play together from the game: `{"action": "host" | "join" | "stop" |
+    /// "status", "code": …}`; the answer is the current state.
+    fn together(&self, _request: &[u8]) -> Result<String> {
+        Err(crate::Error::Other(
+            "play together runs in Arctic Launcher".into(),
         ))
     }
 }
@@ -57,7 +101,8 @@ pub trait Accounts: Send + Sync + 'static {
 const READ_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_HEADER_LINES: usize = 64;
 const MAX_LINE: usize = 8 * 1024;
-const MAX_BODY: usize = 4 * 1024;
+/// Voice state lists nearby players, so bodies can be a few KB.
+const MAX_BODY: usize = 32 * 1024;
 
 /// Start the bridge on a random local port.
 pub fn start(accounts: impl Accounts) -> Result<BridgeInfo> {
@@ -92,6 +137,7 @@ struct Request {
     method: String,
     path: String,
     authorized: bool,
+    body: Vec<u8>,
 }
 
 fn serve(stream: TcpStream, accounts: &dyn Accounts, secret: &str) -> std::io::Result<()> {
@@ -137,16 +183,16 @@ fn read_request(reader: &mut impl BufRead, secret: &str) -> std::io::Result<Requ
             length = value.parse().map_err(|_| bad())?;
         }
     }
-    // Bodies aren't used; read (a little of) it so the client isn't cut off.
     if length > MAX_BODY {
         return Err(bad());
     }
-    let mut sink = vec![0u8; length];
-    reader.read_exact(&mut sink)?;
+    let mut body = vec![0u8; length];
+    reader.read_exact(&mut body)?;
     Ok(Request {
         method,
         path,
         authorized,
+        body,
     })
 }
 
@@ -177,8 +223,43 @@ fn respond(request: &Request, accounts: &dyn Accounts) -> (&'static str, String)
             "200 OK",
             serde_json::to_string(&accounts.list()).unwrap_or_default(),
         ),
+        ("GET", "/v1/accounts/login") => ("200 OK", accounts.login()),
         ("POST", "/v1/accounts/add") => match accounts.add() {
             Ok(()) => ("200 OK", "{}".to_owned()),
+            Err(e) => error("501 Not Implemented", &e.to_string()),
+        },
+        ("POST", "/v1/clipboard") => {
+            let path = serde_json::from_slice::<serde_json::Value>(&request.body)
+                .ok()
+                .and_then(|v| v.get("path").and_then(|p| p.as_str()).map(str::to_owned));
+            match path.map(|p| accounts.copy_image(&p)) {
+                Some(Ok(())) => ("200 OK", "{}".to_owned()),
+                Some(Err(e)) => error("400 Bad Request", &e.to_string()),
+                None => error("400 Bad Request", "no path"),
+            }
+        }
+        ("POST", "/v1/icon") => {
+            let url = serde_json::from_slice::<serde_json::Value>(&request.body)
+                .ok()
+                .and_then(|v| v.get("url").and_then(|u| u.as_str()).map(str::to_owned));
+            match url.map(|u| accounts.icon(&u)) {
+                Some(Ok(png)) => {
+                    use base64::Engine as _;
+                    let data = base64::engine::general_purpose::STANDARD.encode(png);
+                    ("200 OK", serde_json::json!({ "png": data }).to_string())
+                }
+                Some(Err(e)) => error("502 Bad Gateway", &e.to_string()),
+                None => error("400 Bad Request", "no url"),
+            }
+        }
+        ("GET", "/v1/ffmpeg") => ("200 OK", accounts.ffmpeg(false)),
+        ("POST", "/v1/ffmpeg") => ("200 OK", accounts.ffmpeg(true)),
+        ("POST", "/v1/voice") => match accounts.voice(&request.body) {
+            Ok(reply) => ("200 OK", reply),
+            Err(e) => error("501 Not Implemented", &e.to_string()),
+        },
+        ("POST", "/v1/together") => match accounts.together(&request.body) {
+            Ok(reply) => ("200 OK", reply),
             Err(e) => error("501 Not Implemented", &e.to_string()),
         },
         ("POST", path) => {

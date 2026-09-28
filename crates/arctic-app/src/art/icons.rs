@@ -31,6 +31,8 @@ pub enum Icon {
     Copy,
     External,
     Stop,
+    /// A picture: a frame with a mountain and a sun.
+    Image,
     /// Arrow up out of a tray.
     Share,
     /// Arrow down into a tray.
@@ -250,6 +252,21 @@ pub fn draw(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
                 ],
                 false,
             );
+        }
+        Icon::Image => {
+            let frame = Rect::from_center_size(c, vec2(1.6, 1.2) * s);
+            painter.rect_stroke(frame, 2.0, stroke, eframe::egui::StrokeKind::Middle);
+            poly(
+                &[
+                    vec2(-0.6, 0.45),
+                    vec2(-0.15, -0.1),
+                    vec2(0.15, 0.2),
+                    vec2(0.35, 0.0),
+                    vec2(0.65, 0.45),
+                ],
+                false,
+            );
+            painter.circle_filled(c + vec2(0.4, -0.3) * s, 0.13 * s, color);
         }
         Icon::Share | Icon::Import => {
             let tray = [

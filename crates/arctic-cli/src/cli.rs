@@ -83,6 +83,20 @@ pub enum Command {
     /// An instance's singleplayer worlds: list, import, back up, remove.
     #[command(subcommand)]
     Worlds(WorldsCommand),
+    /// Arctic Client waypoints (per world; the game shows them on its Compass).
+    #[command(subcommand)]
+    Waypoints(WaypointsCommand),
+    /// Saved multiplayer servers: who's online, ping and MOTD. Join one
+    /// with `arctic launch --server <address>`.
+    #[command(subcommand)]
+    Servers(ServersCommand),
+    /// Friends: who's online and where, requests, invites, your profile.
+    #[command(subcommand)]
+    Friends(FriendsCommand),
+    /// Default game settings (FOV, render distance, volumes, keys…) that
+    /// every new instance starts with.
+    #[command(subcommand)]
+    Defaults(DefaultsCommand),
     /// Your Minecraft skin and capes (what every server shows).
     #[command(subcommand)]
     Skin(SkinCommand),
@@ -215,6 +229,242 @@ impl WorldsCommand {
             | Self::Remove { instance, .. } => instance.as_deref(),
         }
     }
+}
+
+#[derive(Debug, Subcommand)]
+pub enum WaypointsCommand {
+    /// Every waypoint, or one world's.
+    List {
+        /// A server address, or `sp:` + a singleplayer world's name.
+        #[arg(long)]
+        world: Option<String>,
+        #[arg(long)]
+        instance: Option<String>,
+    },
+    /// Add a waypoint.
+    Add {
+        name: String,
+        #[arg(allow_hyphen_values = true)]
+        x: i32,
+        #[arg(allow_hyphen_values = true)]
+        y: i32,
+        #[arg(allow_hyphen_values = true)]
+        z: i32,
+        /// A server address, or `sp:` + a singleplayer world's name.
+        #[arg(long)]
+        world: String,
+        /// overworld (default), the_nether, the_end, …
+        #[arg(long)]
+        dim: Option<String>,
+        #[arg(long)]
+        instance: Option<String>,
+    },
+    /// Remove a waypoint by name.
+    Remove {
+        name: String,
+        #[arg(long)]
+        world: String,
+        #[arg(long)]
+        instance: Option<String>,
+    },
+}
+
+impl WaypointsCommand {
+    pub fn instance(&self) -> Option<&str> {
+        match self {
+            Self::List { instance, .. }
+            | Self::Add { instance, .. }
+            | Self::Remove { instance, .. } => instance.as_deref(),
+        }
+    }
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DefaultsCommand {
+    Show,
+    /// Set one `options.txt` key (`fov 1.0`, `renderDistance 16`,
+    /// `soundCategory_music 0.0`, `autoJump false`).
+    Set {
+        key: String,
+        value: String,
+    },
+    /// Leave a key at the game's own default.
+    Unset {
+        key: String,
+    },
+    /// Use an instance's current settings as the defaults.
+    Capture {
+        #[arg(long)]
+        instance: Option<String>,
+    },
+    /// Put the defaults into an existing instance now.
+    Apply {
+        #[arg(long)]
+        instance: Option<String>,
+    },
+    Clear,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum FriendsCommand {
+    /// Friends with who's online and where, plus requests and invites.
+    List {
+        #[arg(short, long)]
+        account: Option<String>,
+    },
+    /// Ask someone to be friends: their friend code, or a Microsoft
+    /// account's name.
+    Add {
+        name: String,
+        #[arg(short, long)]
+        account: Option<String>,
+    },
+    Accept {
+        name: String,
+        #[arg(short, long)]
+        account: Option<String>,
+    },
+    /// Unfriend, decline or cancel a request.
+    Remove {
+        name: String,
+        #[arg(short, long)]
+        account: Option<String>,
+    },
+    /// Invite a friend to a server or your play-together world.
+    Invite {
+        name: String,
+        #[arg(long, conflicts_with = "together")]
+        server: Option<String>,
+        #[arg(long)]
+        together: Option<String>,
+        #[arg(short, long)]
+        account: Option<String>,
+    },
+    /// Show the chat with a friend, or send them a message.
+    Chat {
+        name: String,
+        /// Send this instead of showing the chat.
+        #[arg(long)]
+        send: Option<String>,
+        #[arg(short, long)]
+        account: Option<String>,
+    },
+    /// Make a recovery code for moving offline accounts to another PC
+    /// (shown once).
+    Recovery {
+        #[arg(short, long)]
+        account: Option<String>,
+    },
+    /// On a new PC: bring an offline account's profile over.
+    Restore {
+        code: String,
+        #[arg(short, long)]
+        account: Option<String>,
+    },
+    /// Show or change your profile: name, privacy, linked accounts.
+    Profile {
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long, value_name = "true|false")]
+        share_online: Option<bool>,
+        #[arg(long, value_name = "true|false")]
+        share_server: Option<bool>,
+        #[arg(long, value_name = "true|false")]
+        invites: Option<bool>,
+        #[arg(long, value_name = "true|false")]
+        show_accounts: Option<bool>,
+        /// Link another of your saved accounts into this profile.
+        #[arg(long, value_name = "ACCOUNT")]
+        link: Option<String>,
+        /// Take an account out of this profile.
+        #[arg(long, value_name = "ACCOUNT")]
+        unlink: Option<String>,
+        #[arg(short, long)]
+        account: Option<String>,
+    },
+}
+
+impl FriendsCommand {
+    pub fn account(&self) -> Option<&str> {
+        match self {
+            Self::List { account }
+            | Self::Add { account, .. }
+            | Self::Accept { account, .. }
+            | Self::Remove { account, .. }
+            | Self::Invite { account, .. }
+            | Self::Recovery { account }
+            | Self::Chat { account, .. }
+            | Self::Restore { account, .. }
+            | Self::Profile { account, .. } => account.as_deref(),
+        }
+    }
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ServersCommand {
+    /// The instance's server list (as in Minecraft), each pinged.
+    List {
+        #[arg(long)]
+        instance: Option<String>,
+        /// Only list them; don't contact the servers.
+        #[arg(long)]
+        no_ping: bool,
+    },
+    /// Ping any server address (`host` or `host:port`).
+    Ping { address: String },
+    /// The public server list: shuffled every time, nothing paid or pinned.
+    Browse {
+        /// Only servers that need a Microsoft account.
+        #[arg(long, conflicts_with = "cracked")]
+        premium: bool,
+        /// Only servers that let any name in.
+        #[arg(long)]
+        cracked: bool,
+        /// Pick one at random for me.
+        #[arg(long)]
+        random: bool,
+    },
+    /// Add a server to an instance's multiplayer list.
+    Add {
+        address: String,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        instance: Option<String>,
+    },
+    /// List your own server publicly: prints a code to put in its MOTD.
+    Submit {
+        address: String,
+        #[arg(long)]
+        name: String,
+        #[arg(long, default_value = "")]
+        description: String,
+        /// Up to 5 (`--tag smp --tag pvp`).
+        #[arg(long = "tag")]
+        tags: Vec<String>,
+        /// Sign in to Arctic as this account (default: the active one).
+        #[arg(short, long)]
+        account: Option<String>,
+    },
+    /// Check that your submission's code is in the MOTD (then it waits
+    /// for approval).
+    Verify {
+        id: String,
+        #[arg(short, long)]
+        account: Option<String>,
+    },
+    /// Admin: review submissions (needs ARCTIC_ADMIN_KEY).
+    Review {
+        /// Which to list: pending, unverified, listed, curated, rejected.
+        #[arg(long, default_value = "pending")]
+        state: String,
+        #[arg(long, value_name = "ID")]
+        approve: Option<String>,
+        #[arg(long, value_name = "ID")]
+        reject: Option<String>,
+        #[arg(long, value_name = "ID")]
+        remove: Option<String>,
+    },
 }
 
 /// Arm width for a skin (guessed from the image when left out).
@@ -373,6 +623,8 @@ pub enum ShareWhat {
     Client,
     /// Launcher settings, every instance and its client settings.
     Profile,
+    /// Your default game settings for new instances.
+    Options,
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -567,6 +819,18 @@ pub struct LaunchArgs {
     /// Start in fullscreen.
     #[arg(long)]
     pub fullscreen: bool,
+
+    /// Join this server right away (`host` or `host:port`).
+    #[arg(long, value_name = "ADDRESS", conflicts_with = "world")]
+    pub server: Option<String>,
+
+    /// Open this world right away (its folder name in `saves`; 1.20+).
+    #[arg(long, value_name = "FOLDER")]
+    pub world: Option<String>,
+
+    /// Watch this replay (an .mcpr file) once the game is up (Arctic Client).
+    #[arg(long, value_name = "FILE", conflicts_with_all = ["server", "world"])]
+    pub replay: Option<std::path::PathBuf>,
 
     /// Use this java executable instead of the managed runtime.
     #[arg(long, value_name = "PATH")]

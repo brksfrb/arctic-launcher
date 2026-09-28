@@ -114,6 +114,7 @@ fn run_case(dirs: &DataDirs, manifest: &VersionManifest, case: &str) -> BoxResul
             settings: &settings,
             bridge: None,
             copy: 0,
+            quick_play: None,
         },
         &progress,
     )?;

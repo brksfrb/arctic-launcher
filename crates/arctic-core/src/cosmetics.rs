@@ -122,6 +122,13 @@ pub fn catalog(base: &str) -> Result<Vec<Preset>> {
     get(&format!("{base}/v1/catalog"), None)
 }
 
+/// The name the server stores a PNG under (its SHA-1), so an uploaded or
+/// library image can be matched to a look without asking the server.
+pub fn texture_hash(png: &[u8]) -> String {
+    use sha1::Digest;
+    hex::encode(sha1::Sha1::digest(png))
+}
+
 /// A texture by hash (PNG).
 pub fn texture(base: &str, hash: &str) -> Result<Vec<u8>> {
     if hash.len() != 40 || !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -361,6 +368,7 @@ pub fn token_for(dirs: &DataDirs, base: &str, account: &Account) -> Result<Strin
             &account.uuid,
             &account.username,
         )?,
+        #[cfg(any(feature = "offline-accounts", test))]
         AccountKind::Offline => {
             let key = entry
                 .key
@@ -382,6 +390,39 @@ pub fn token_for(dirs: &DataDirs, base: &str, account: &Account) -> Result<Strin
     entry.server = base.to_owned();
     save_json(&path, &creds)?;
     Ok(session.token)
+}
+
+/// An offline account on a new PC: the profile's recovery code moves its
+/// name to a fresh key made here, and signs it in.
+pub fn recover_offline(dirs: &DataDirs, base: &str, account: &Account, code: &str) -> Result<()> {
+    if account.is_microsoft() {
+        return Err(Error::Other(
+            "Microsoft accounts don't need recovering".into(),
+        ));
+    }
+    let key =
+        uuid::Uuid::new_v4().simple().to_string() + &uuid::Uuid::new_v4().simple().to_string();
+    let mut resp = agent()
+        .post(&format!("{base}/v1/profile/recover"))
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .send_json(
+            serde_json::json!({ "code": code.trim(), "name": account.username, "key": key }),
+        )?;
+    let status = resp.status().as_u16();
+    if !(200..300).contains(&status) {
+        return Err(Error::Other(server_error(&mut resp, status)));
+    }
+    let session: Session = resp.body_mut().with_config().limit(MAX_BYTES).read_json()?;
+    let path = credentials_path(dirs);
+    let mut creds: Credentials = load_json(&path)?.unwrap_or_default();
+    let entry = creds.accounts.entry(account.uuid.clone()).or_default();
+    entry.key = Some(key);
+    entry.token = Some(session.token);
+    entry.expires = session.expires;
+    entry.server = base.to_owned();
+    save_json(&path, &creds)
 }
 
 #[derive(Deserialize)]
@@ -418,6 +459,7 @@ fn sign_in_microsoft(base: &str, access_token: &str, uuid: &str, name: &str) -> 
     )
 }
 
+#[cfg(any(feature = "offline-accounts", test))]
 fn sign_in_offline(base: &str, name: &str, key: &str) -> Result<Session> {
     let mut resp = agent()
         .post(&format!("{base}/v1/auth/offline"))
@@ -443,6 +485,12 @@ pub struct ModSession<'a> {
     pub proxy: &'a crate::proxy::ProxySettings,
     /// In-game account switching, while the launcher runs.
     pub bridge: Option<&'a crate::bridge::BridgeInfo>,
+    /// The game may tell the Arctic server (for friends) which server it's on.
+    pub share_server: bool,
+    /// A duel to start from the title screen (see `QuickPlay::Duel`).
+    pub duel: Option<serde_json::Value>,
+    /// A replay to watch from the title screen (see `QuickPlay::Replay`).
+    pub replay: Option<serde_json::Value>,
 }
 
 /// Write the session file for the Arctic mod in `game_dir`.
@@ -455,6 +503,9 @@ pub fn write_mod_session(game_dir: &Path, session: &ModSession) -> Result<()> {
         style_set,
         proxy,
         bridge,
+        share_server,
+        duel,
+        replay,
     } = session;
     let path = game_dir.join("config").join("arctic-session.json");
     save_json(
@@ -476,6 +527,9 @@ pub fn write_mod_session(game_dir: &Path, session: &ModSession) -> Result<()> {
                 "set": proxy.set,
             },
             "bridge": bridge,
+            "share_server": share_server,
+            "duel": duel,
+            "replay": replay,
         }),
     )
 }
@@ -543,6 +597,16 @@ mod tests {
             .unwrap();
         drop(writer);
         out
+    }
+
+    #[test]
+    fn texture_hash_is_the_sha1_the_server_names_it_by() {
+        // SHA-1 of the empty input.
+        assert_eq!(
+            texture_hash(b""),
+            "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+        );
+        assert_eq!(texture_hash(&png(64, 64)).len(), 40);
     }
 
     #[test]

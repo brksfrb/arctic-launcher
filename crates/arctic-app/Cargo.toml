@@ -11,24 +11,28 @@ authors.workspace = true
 [dependencies]
 arctic-core = { version = "0.2.0", path = "../arctic-core" }
 arctic-share = { version = "0.2.0", path = "../arctic-share" }
+arctic-voice = { version = "0.2.0", path = "../arctic-voice" }
 # glow (OpenGL) instead of the default wgpu backend keeps the binary small.
 eframe = { version = "0.36.2", default-features = false, features = ["accesskit", "default_fonts", "glow", "links", "wayland", "x11"] }
-egui_extras = { version = "0.36", default-features = false, features = ["image"] }
+egui_extras = { version = "0.36", default-features = false, features = ["file", "image"] }
 discord-rich-presence = "1.1.0"
+arboard = { version = "3.6.1", default-features = false, features = ["image-data"] }
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 log = "0.4.34"
 open = "5.4.4"
 rfd = "0.17.2"
 raw-window-handle = "0.6"
+serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 uuid = { version = "1.26.1", features = ["v4"] }
 
 [dev-dependencies]
+aes-gcm = "0.10.3"
 tempfile = "3.27.0"
 
 [features]
-# Offline (username-only) accounts. Off in release builds for now.
-offline-accounts = []
+# Offline (username-only) accounts. Left out of release builds entirely for now.
+offline-accounts = ["arctic-core/offline-accounts"]
 
 [[bin]]
 name = "arctic-launcher"
@@ -40,3 +44,5 @@ winresource = "0.1.31"
 [target."cfg(windows)".dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_WindowsAndMessaging"] }
 tray-icon = { version = "0.25.1", default-features = false }
+# Windows' own H.264 encoder, for replay videos without FFmpeg.
+windows = { version = "0.62.2", features = ["Win32_Media_MediaFoundation", "Win32_System_Com"] }

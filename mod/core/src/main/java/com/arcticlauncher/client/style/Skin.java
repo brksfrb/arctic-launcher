@@ -71,11 +71,12 @@ public final class Skin {
 	/** An on/off switch; {@code t} animates from off (0) to on (1). */
 	public static void toggle(Gfx g, Style s, int x, int y, int w, int h, float t, boolean hovered) {
 		int track = Draw.mix(s.field, Draw.alpha(s.accent, 0.85f), t);
-		Draw.round(g, x, y, x + w, y + h, 3, track);
-		Draw.outline(g, x, y, x + w, y + h, 3, hovered ? s.accent : s.border);
+		int radius = Draw.fancy ? Draw.PILL : 3;
+		Draw.round(g, x, y, x + w, y + h, radius, track);
+		Draw.outline(g, x, y, x + w, y + h, radius, hovered ? s.accent : s.border);
 		int knob = h - 4;
 		int kx = x + 2 + Math.round((w - 4 - knob) * t);
-		Draw.round(g, kx, y + 2, kx + knob, y + 2 + knob, 2, t > 0.5f ? s.onAccent : s.muted);
+		Draw.round(g, kx, y + 2, kx + knob, y + 2 + knob, Draw.fancy ? Draw.PILL : 2, t > 0.5f ? s.onAccent : s.muted);
 	}
 
 	/** A translucent panel with a faint border. */

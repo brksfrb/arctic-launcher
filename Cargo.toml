@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/arctic-core", "crates/arctic-ping", "crates/arctic-app", "crates/arctic-cli", "crates/arctic-share", "crates/arctic-cosmetics"]
+members = ["crates/arctic-core", "crates/arctic-ping", "crates/arctic-voice", "crates/arctic-app", "crates/arctic-cli", "crates/arctic-share", "crates/arctic-cosmetics"]
 
 [workspace.package]
 version = "0.2.0"
@@ -15,8 +15,28 @@ authors = ["Arctic Launcher contributors"]
 [profile.dev.package."*"]
 opt-level = 2
 
+# Release: small (a lightweight launcher), but full speed where it counts:
+# hashing and unpacking game files, decoding images, drawing and text.
 [profile.release]
-lto = "thin"
+lto = "fat"
 codegen-units = 1
 strip = true
-opt-level = 3
+opt-level = "s"
+
+[profile.release.package]
+sha1 = { opt-level = 3 }
+sha2 = { opt-level = 3 }
+lzma-rs = { opt-level = 3 }
+miniz_oxide = { opt-level = 3 }
+flate2 = { opt-level = 3 }
+zip = { opt-level = 3 }
+image = { opt-level = 3 }
+png = { opt-level = 3 }
+zune-jpeg = { opt-level = 3 }
+image-webp = { opt-level = 3 }
+epaint = { opt-level = 3 }
+egui_glow = { opt-level = 3 }
+vello_cpu = { opt-level = 3 }
+fearless_simd = { opt-level = 3 }
+skrifa = { opt-level = 3 }
+harfrust = { opt-level = 3 }

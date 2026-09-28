@@ -5,10 +5,11 @@
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
-use std::time::SystemTime;
+use std::time::{Instant, SystemTime};
 
 use arctic_core::crash::{self, Diagnosis};
 use arctic_core::launch::logparse::{Level, LogLine};
+use arctic_core::launch::startup::Stage;
 use arctic_core::launch::{GameEvent, GameHandle};
 use arctic_core::settings::GameStartAction;
 use eframe::egui;
@@ -31,6 +32,9 @@ pub enum RunState {
     /// Process started, waiting for the game window.
     Starting {
         game: GameHandle,
+        /// What the game's log says it's doing.
+        stage: Stage,
+        since: Instant,
     },
     Running {
         game: GameHandle,
@@ -62,7 +66,7 @@ impl Run {
     /// The game process, once it's started and until it exits.
     pub fn game(&self) -> Option<&GameHandle> {
         match &self.state {
-            RunState::Starting { game } | RunState::Running { game } => Some(game),
+            RunState::Starting { game, .. } | RunState::Running { game } => Some(game),
             _ => None,
         }
     }
@@ -219,12 +223,19 @@ impl ArcticApp {
         result: Result<GameHandle, String>,
         ctx: &egui::Context,
     ) {
-        let Some(run) = self.runs.get_mut(id) else {
+        if self.runs.get(id).is_none() {
             return;
-        };
+        }
         match result {
             Ok(game) => {
-                run.state = RunState::Starting { game };
+                let Some(run) = self.runs.get_mut(id) else {
+                    return;
+                };
+                run.state = RunState::Starting {
+                    game,
+                    stage: Stage::Java,
+                    since: Instant::now(),
+                };
                 let early = std::mem::take(&mut run.early);
                 // Replay events from a game that was faster than our bookkeeping.
                 for event in early {
@@ -232,7 +243,9 @@ impl ArcticApp {
                 }
             }
             Err(e) => {
-                run.state = RunState::Ended;
+                if let Some(run) = self.runs.get_mut(id) {
+                    run.state = RunState::Ended;
+                }
                 self.toasts.push(Kind::Error, "Launch failed", e);
             }
         }
@@ -248,7 +261,7 @@ impl ArcticApp {
         }
         match event {
             GameEvent::WindowReady => {
-                if let RunState::Starting { game } =
+                if let RunState::Starting { game, .. } =
                     std::mem::replace(&mut run.state, RunState::Ended)
                 {
                     run.state = RunState::Running { game };
@@ -260,7 +273,12 @@ impl ArcticApp {
                     self.minimized_for_game = true;
                 }
             }
-            GameEvent::Output(lines) => run.push_log(lines),
+            GameEvent::Output(lines) => {
+                if let RunState::Starting { stage, .. } = &mut run.state {
+                    *stage = lines.iter().fold(*stage, |s, l| s.advance(&l.text));
+                }
+                run.push_log(lines);
+            }
             GameEvent::Exited { code } => {
                 run.state = RunState::Ended;
                 let watchdog = run.shutdown_watchdog_fired();
