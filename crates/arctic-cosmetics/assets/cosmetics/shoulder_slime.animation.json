@@ -1,0 +1,35 @@
+{
+ "format_version": "1.8.0",
+ "animations": {
+  "animation.shoulder_slime.idle": {
+   "loop": true,
+   "animation_length": 1.2,
+   "bones": {
+    "slime": {
+     "position": {
+      "0.0": [
+       0,
+       0,
+       0
+      ],
+      "0.3": [
+       0,
+       0.6,
+       0
+      ],
+      "0.6": [
+       0,
+       0,
+       0
+      ],
+      "1.2": [
+       0,
+       0,
+       0
+      ]
+     }
+    }
+   }
+  }
+ }
+}

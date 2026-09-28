@@ -1,0 +1,104 @@
+{
+ "format_version": "1.12.0",
+ "minecraft:geometry": [
+  {
+   "description": {
+    "identifier": "geometry.sunglasses",
+    "texture_width": 64,
+    "texture_height": 16
+   },
+   "bones": [
+    {
+     "name": "head",
+     "pivot": [
+      0,
+      24,
+      0
+     ],
+     "cubes": [
+      {
+       "origin": [
+        1,
+        27,
+        -5
+       ],
+       "size": [
+        3,
+        2,
+        1
+       ],
+       "uv": [
+        20,
+        0
+       ]
+      },
+      {
+       "origin": [
+        -4,
+        27,
+        -5
+       ],
+       "size": [
+        3,
+        2,
+        1
+       ],
+       "uv": [
+        28,
+        0
+       ]
+      },
+      {
+       "origin": [
+        -1,
+        28,
+        -5
+       ],
+       "size": [
+        2,
+        1,
+        1
+       ],
+       "uv": [
+        36,
+        0
+       ]
+      },
+      {
+       "origin": [
+        4,
+        28,
+        -4
+       ],
+       "size": [
+        1,
+        1,
+        4
+       ],
+       "uv": [
+        0,
+        0
+       ]
+      },
+      {
+       "origin": [
+        -5,
+        28,
+        -4
+       ],
+       "size": [
+        1,
+        1,
+        4
+       ],
+       "uv": [
+        10,
+        0
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

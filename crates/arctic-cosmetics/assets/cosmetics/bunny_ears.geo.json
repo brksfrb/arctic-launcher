@@ -1,0 +1,86 @@
+{
+ "format_version": "1.12.0",
+ "minecraft:geometry": [
+  {
+   "description": {
+    "identifier": "geometry.bunny_ears",
+    "texture_width": 64,
+    "texture_height": 16
+   },
+   "bones": [
+    {
+     "name": "head",
+     "pivot": [
+      0,
+      24,
+      0
+     ]
+    },
+    {
+     "name": "ear_left",
+     "pivot": [
+      2,
+      32,
+      0
+     ],
+     "parent": "head",
+     "rotation": [
+      0,
+      0,
+      -12
+     ],
+     "cubes": [
+      {
+       "origin": [
+        1,
+        32,
+        -1
+       ],
+       "size": [
+        2,
+        7,
+        1
+       ],
+       "uv": [
+        0,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "name": "ear_right",
+     "pivot": [
+      -2,
+      32,
+      0
+     ],
+     "parent": "head",
+     "rotation": [
+      0,
+      0,
+      12
+     ],
+     "cubes": [
+      {
+       "origin": [
+        -3,
+        32,
+        -1
+       ],
+       "size": [
+        2,
+        7,
+        1
+       ],
+       "uv": [
+        6,
+        0
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

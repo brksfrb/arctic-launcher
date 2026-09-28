@@ -298,6 +298,14 @@ mod tests {
         "bones":{"rightArm":{"rotation":{"0.0":[0,0,0],"1.0":[0,0,-150]}}}}}}"#;
 
     #[test]
+    fn the_bundled_cosmetics_and_emotes_load() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
+        let content = Content::load(&dir).unwrap();
+        assert!(content.cosmetics.len() >= 17, "{}", content.cosmetics.len());
+        assert!(content.emotes.len() >= 6, "{}", content.emotes.len());
+    }
+
+    #[test]
     fn loads_cosmetics_and_emotes() {
         let dir = tempfile::tempdir().unwrap();
         let d = dir.path();

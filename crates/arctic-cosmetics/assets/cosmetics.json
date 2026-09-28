@@ -1,4 +1,19 @@
 [
-  { "id": "halo", "name": "Halo", "slot": "head" },
-  { "id": "frost_wings", "name": "Frost Wings", "slot": "back" }
+  {"id": "halo", "name": "Halo", "slot": "head"},
+  {"id": "frost_wings", "name": "Frost Wings", "slot": "back"},
+  {"id": "top_hat", "name": "Top Hat", "slot": "head"},
+  {"id": "crown", "name": "Crown", "slot": "head"},
+  {"id": "party_hat", "name": "Party Hat", "slot": "head"},
+  {"id": "cat_ears", "name": "Cat Ears", "slot": "head"},
+  {"id": "bunny_ears", "name": "Bunny Ears", "slot": "head"},
+  {"id": "viking_helmet", "name": "Viking Helmet", "slot": "head"},
+  {"id": "santa_hat", "name": "Santa Hat", "slot": "head"},
+  {"id": "headphones", "name": "Headphones", "slot": "head"},
+  {"id": "sunglasses", "name": "Sunglasses", "slot": "face"},
+  {"id": "glasses_3d", "name": "3D Glasses", "slot": "face"},
+  {"id": "mustache", "name": "Mustache", "slot": "face"},
+  {"id": "backpack", "name": "Backpack", "slot": "back"},
+  {"id": "dragon_wings", "name": "Dragon Wings", "slot": "back"},
+  {"id": "shoulder_slime", "name": "Shoulder Slime", "slot": "shoulders"},
+  {"id": "scarf", "name": "Scarf", "slot": "body"}
 ]
