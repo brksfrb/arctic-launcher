@@ -1,7 +1,7 @@
 # Microsoft sign-in (for builders)
 
-This is for people building Arctic Launcher themselves. Official releases already
-include an approved client ID.
+This is for people building Arctic Launcher themselves. Official releases carry Arctic's
+own client ID; Minecraft sign-in works with it once Mojang approves it (step 2).
 
 Microsoft sign-in needs an Azure application (client) ID. It is **not** stored in the
 repository.
@@ -27,7 +27,8 @@ them. Until then, login fails at the last step with *"Minecraft services rejecte
 (HTTP 403).
 
 Request access through Mojang's app review form (<https://aka.ms/mce-reviewappid>) with your
-client ID. Approval can take a while.
+client ID. Approval can take a while. It's for the client ID, not a build: once approved,
+every build that already carries that ID can sign in, with nothing to rebuild.
 
 ## 3. Give the client ID to the launcher
 

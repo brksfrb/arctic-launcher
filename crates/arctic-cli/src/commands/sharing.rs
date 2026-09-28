@@ -74,6 +74,15 @@ fn build(ctx: &Ctx, args: &ShareArgs) -> Result<(Bundle, Vec<String>)> {
             let (pack, left_out) = ProfilePack::export(&ctx.dirs)?;
             Ok((Bundle::Profile(pack), left_out))
         }
+        ShareWhat::Options => {
+            let defaults = arctic_core::game_defaults::Defaults::load(&ctx.dirs)?;
+            if defaults.is_empty() {
+                return Err(Error::Other(
+                    "no default game settings yet: `arctic defaults capture` or `arctic defaults set`".into(),
+                ));
+            }
+            Ok((Bundle::Options(defaults), Vec::new()))
+        }
     }
 }
 
@@ -110,6 +119,18 @@ fn apply(
             ctx.out.emit(
                 json!({"event": "imported", "kind": part_kind(part.part), "instance": target.id}),
                 || format!("Applied to {}. Close its game first if it's running; it takes effect on the next start.", target.name),
+            );
+        }
+        Bundle::Options(defaults) => {
+            defaults.save(&ctx.dirs)?;
+            ctx.out.emit(
+                json!({"event": "imported", "kind": "options", "count": defaults.values.len()}),
+                || {
+                    format!(
+                        "Saved {} default game settings; new instances start with them.",
+                        defaults.values.len()
+                    )
+                },
             );
         }
         Bundle::Profile(pack) => {

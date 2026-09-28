@@ -50,15 +50,24 @@
 - **Skin gallery.** Browse skins other players shared, search by name or creator, and wear
   one in a click. Share your own from your library.
 - **Arctic Client.** Vanilla gets a fresh look: restyled menus (pick Arctic, Aurora or
-  Classic), a dozen HUD widgets (FPS, CPS, ping, keystrokes, coordinates, speed, biome and
-  armor, effects, target health, reach and combo) that line up on their own and snap into
-  place when you move them, Zoom, Freelook, Fullbright, Toggle Sprint and Sneak, a
-  crosshair editor, a smooth font, chat timestamps, low fire, clear weather, and everyone's
-  Arctic looks in game. Press Right Shift in game for the Arctic menu. It's on
+  Classic), over thirty HUD widgets (FPS, CPS, ping, TPS, keystrokes, coordinates, speed,
+  armor, effects, target health, reach, combo, a compass, a minimap, a stopwatch, item
+  counts and more) that line up on their own and snap into place when you move them,
+  Zoom, Freelook, Fullbright, Toggle Sprint and Sneak, a crosshair editor (your own picture
+  too, colored by what you aim at), a smooth font, chat timestamps and mentions, quick
+  chat keys with {x} {y} {z}, waypoints, your own time of day, block outline and hit
+  color, scoreboard tweaks, a streamer mode, and everyone's Arctic looks in game. Press Right Shift in game for the Arctic menu. It's on
   by default for Minecraft 1.21.6 and newer, comes to Fabric and Quilt instances too, and you can turn
   it off per instance.
-- **Performance, built in.** One switch adds Sodium, Lithium, FerriteCore, ImmediatelyFast
-  and EntityCulling to Vanilla for much higher FPS, fetched from Modrinth for your version.
+- **Friends, chat and voice.** Add friends with a code, see who's online and where, invite
+  them to your server, chat and send screenshots from the launcher or in game, and talk
+  with proximity voice chat (it also works with Simple Voice Chat servers).
+- **Duels in two clicks.** Start a duel from the in-game Friends tab: Arctic makes a flat
+  arena with a kit and shares it through Play together; your friend joins from the invite.
+- **Resource packs without a restart.** Search Modrinth from the in-game menu and a pack
+  is on a second later.
+- **Performance, built in.** One switch adds Sodium, Lithium, FerriteCore, ImmediatelyFast,
+  EntityCulling and ModernFix to Vanilla for much higher FPS, fetched from Modrinth for your version.
   It's on by default and works on any version Fabric supports.
 - **Your accounts, side by side.** Sign in with Microsoft in the browser or with a short
   code. Keep several accounts and switch in one click.

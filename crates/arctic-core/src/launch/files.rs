@@ -48,12 +48,8 @@ pub fn resolve_libraries(dirs: &DataDirs, version: &VersionJson, env: &RuleEnv) 
             }
         }
         if let Some(classifier) = native_classifier(lib, env)
-            && let Some(artifact) = lib
-                .downloads
-                .as_ref()
-                .and_then(|d| d.classifiers.as_ref())
-                .and_then(|c| c.get(&classifier))
-            && let Some(job) = library_job(dirs, lib, artifact, Some(&classifier))
+            && let Some(artifact) = native_artifact(lib, &classifier)
+            && let Some(job) = library_job(dirs, lib, &artifact, Some(&classifier))
             && seen.insert(job.dest.clone())
         {
             out.natives.push(NativeJar {
@@ -85,6 +81,22 @@ fn main_artifact(lib: &Library) -> Option<Artifact> {
         path: Some(path),
         sha1: lib.sha1.clone(),
         size: lib.size,
+    })
+}
+
+/// The natives jar: the explicit `downloads.classifiers` entry, or one
+/// derived from a Maven `url` + `name` + classifier (Legacy Fabric's LWJGL 2).
+fn native_artifact(lib: &Library, classifier: &str) -> Option<Artifact> {
+    if let Some(downloads) = &lib.downloads {
+        return downloads.classifiers.as_ref()?.get(classifier).cloned();
+    }
+    let base = lib.url.as_deref().unwrap_or(MOJANG_LIBRARIES);
+    let path = maven_path(&format!("{}:{classifier}", lib.name))?;
+    Some(Artifact {
+        url: format!("{}/{path}", base.trim_end_matches('/')),
+        path: Some(path),
+        sha1: None,
+        size: None,
     })
 }
 
@@ -333,6 +345,34 @@ mod tests {
             libs.jobs[1]
                 .url
                 .starts_with("https://libraries.minecraft.net/org/ow2/asm/asm/9.7/")
+        );
+    }
+
+    #[test]
+    fn maven_style_natives_resolve() {
+        let dirs = DataDirs::new("root");
+        let v: VersionJson = serde_json::from_str(
+            r#"{"id":"x","mainClass":"M","libraries":[
+                {"name":"org.lwjgl.lwjgl:lwjgl-platform:2.9.4+legacyfabric.17","url":"https://maven.legacyfabric.net/",
+                 "extract":{"exclude":["META-INF/"]},"natives":{"windows":"natives-windows"}}]}"#,
+        )
+        .unwrap();
+        let env = RuleEnv {
+            os: "windows",
+            arch: "x86_64",
+            ..RuleEnv::current()
+        };
+        let libs = resolve_libraries(&dirs, &v, &env);
+        assert_eq!(libs.natives.len(), 1);
+        assert!(libs.classpath.is_empty());
+        let job = libs
+            .jobs
+            .iter()
+            .find(|j| j.dest == libs.natives[0].path)
+            .unwrap();
+        assert_eq!(
+            job.url,
+            "https://maven.legacyfabric.net/org/lwjgl/lwjgl/lwjgl-platform/2.9.4+legacyfabric.17/lwjgl-platform-2.9.4+legacyfabric.17-natives-windows.jar"
         );
     }
 

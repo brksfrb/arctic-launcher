@@ -72,6 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             settings: &settings,
             bridge: None,
             copy: 0,
+            quick_play: None,
         },
         &progress,
     )?;

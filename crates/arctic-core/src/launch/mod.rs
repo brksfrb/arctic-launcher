@@ -8,6 +8,7 @@ pub mod args;
 pub mod files;
 pub mod logparse;
 pub mod process;
+pub mod startup;
 
 pub use process::{GameEvent, GameHandle, spawn, spawn_detached};
 
@@ -42,6 +43,57 @@ pub struct LaunchRequest<'a> {
     /// Which copy of this instance this is (0 when it's the only one
     /// running); later copies write their own log file.
     pub copy: u32,
+    /// Where the game goes straight after starting, if anywhere.
+    pub quick_play: Option<QuickPlay>,
+}
+
+/// Skip the title screen: join a server or open a world right away.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QuickPlay {
+    /// A server address as typed in the game.
+    Server(String),
+    /// A world's folder name in `saves`.
+    World(String),
+    /// Start a duel from the title screen (Arctic Client): a flat arena
+    /// with this kit, shared through Play together, with this friend
+    /// (Arctic id, name) invited.
+    Duel {
+        kit: String,
+        friend: Option<(String, String)>,
+    },
+    /// Watch a replay (an `.mcpr` file) from the title screen (Arctic Client).
+    Replay(PathBuf),
+}
+
+impl QuickPlay {
+    /// What the Arctic Client reads from its session file for a replay.
+    pub fn replay_json(&self) -> Option<serde_json::Value> {
+        let QuickPlay::Replay(file) = self else {
+            return None;
+        };
+        Some(serde_json::json!({ "file": file, "at": unix_now() }))
+    }
+
+    /// What the Arctic Client reads from its session file for a duel.
+    pub fn duel_json(&self) -> Option<serde_json::Value> {
+        let QuickPlay::Duel { kit, friend } = self else {
+            return None;
+        };
+        let now = unix_now();
+        Some(serde_json::json!({
+            "kit": kit,
+            "friend": friend.as_ref().map(|f| &f.0),
+            "friend_name": friend.as_ref().map(|f| &f.1),
+            "at": now,
+        }))
+    }
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 /// A fully resolved command line, ready to spawn.
@@ -171,6 +223,17 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
     }
     let dirs = req.dirs;
     let game_dir = req.instance.game_dir(dirs);
+    let mut timer = StepTimer::new();
+    // The Arctic session (a network round trip) is fetched while the game files are checked.
+    let mut share_session = false;
+    // First start of this game folder: the profile's default game settings.
+    match crate::game_defaults::Defaults::load(dirs)
+        .and_then(|d| d.apply_if_new(&game_dir, Some(&req.version.id)))
+    {
+        Ok(true) => log::info!("applied default game settings to {}", game_dir.display()),
+        Ok(false) => {}
+        Err(e) => log::warn!("default game settings: {e}"),
+    }
     let java_override = req
         .instance
         .java_path
@@ -178,7 +241,9 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         .or_else(|| req.settings.java_override.clone());
     progress(ProgressInfo::stage("Reading version"));
     let vanilla = load_version(dirs, req.version, &|_| {})?;
+    timer.step("read version");
     let loader = effective_loader(dirs, req.instance, &vanilla.id);
+    timer.step("pick loader");
     let version = match loader
         .as_ref()
         .map(|(k, v)| (Some(*k), Some(v.as_str())))
@@ -192,6 +257,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 java_override.clone(),
                 progress,
             )?;
+            timer.step("vanilla files");
             let stage = format!("Installing {} {loader_version}", kind.label());
             progress(ProgressInfo::stage(&stage));
             let profile = loaders::install_profile(
@@ -202,6 +268,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 &base.java,
                 progress,
             )?;
+            timer.step("loader profile");
             if matches!(
                 kind,
                 loaders::LoaderKind::Fabric | loaders::LoaderKind::Quilt
@@ -221,6 +288,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                     &vanilla.id,
                     req.instance.arctic_mod && fits,
                 )?;
+                timer.step("arctic client");
                 if req.instance.loader.kind().is_none() {
                     progress(ProgressInfo::stage("Checking performance mods"));
                     crate::mods::performance::sync(
@@ -230,21 +298,63 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                         req.instance.shaders,
                         progress,
                     )?;
+                    timer.step("performance mods");
                 }
-                if req.instance.arctic_mod && arctic_mod::supports(&vanilla.id) {
-                    share_cosmetics_session(req, &game_dir);
-                }
+                share_session = req.instance.arctic_mod && arctic_mod::supports(&vanilla.id);
             }
             profile
         }
         _ => vanilla,
     };
-    let installation = install(dirs, version, &game_dir, java_override, progress)?;
+    let installation = std::thread::scope(|scope| {
+        let session =
+            share_session.then(|| scope.spawn(|| share_cosmetics_session(req, &game_dir)));
+        let installed = install(dirs, version, &game_dir, java_override, progress);
+        if let Some(handle) = session {
+            let _ = handle.join();
+        }
+        installed
+    })?;
+    timer.step("game files + arctic session");
+    timer.done();
     if proxy.active().is_some() {
         let hosts = game_dir.join(crate::proxy::HOSTS_FILE);
         std::fs::write(&hosts, proxy.hosts_file()).map_err(|e| crate::Error::io(&hosts, e))?;
     }
     Ok(plan(req, &installation))
+}
+
+/// How long each part of getting ready took, logged when done (to find slow starts).
+struct StepTimer {
+    start: std::time::Instant,
+    last: std::time::Instant,
+    steps: Vec<String>,
+}
+
+impl StepTimer {
+    fn new() -> Self {
+        let now = std::time::Instant::now();
+        Self {
+            start: now,
+            last: now,
+            steps: Vec::new(),
+        }
+    }
+
+    fn step(&mut self, name: &str) {
+        let now = std::time::Instant::now();
+        self.steps
+            .push(format!("{name} {}ms", (now - self.last).as_millis()));
+        self.last = now;
+    }
+
+    fn done(&self) {
+        log::info!(
+            "ready to start in {}ms: {}",
+            self.start.elapsed().as_millis(),
+            self.steps.join(", ")
+        );
+    }
 }
 
 /// The loader to launch with. Vanilla instances run on Fabric, invisible
@@ -287,8 +397,11 @@ fn share_cosmetics_session(req: &LaunchRequest, game_dir: &Path) {
         style: settings.client_style,
         fancy: settings.client_fancy,
         style_set: settings.client_style_set,
+        share_server: settings.share_server_with_friends,
         proxy: &proxy,
         bridge: req.bridge,
+        duel: req.quick_play.as_ref().and_then(QuickPlay::duel_json),
+        replay: req.quick_play.as_ref().and_then(QuickPlay::replay_json),
     };
     if let Err(e) = crate::cosmetics::write_mod_session(game_dir, &session) {
         log::warn!("arctic session file: {e}");
@@ -299,13 +412,20 @@ fn share_cosmetics_session(req: &LaunchRequest, game_dir: &Path) {
 pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
     let settings = req.settings;
     let proxy = ProxySettings::load(req.dirs);
-    let env = if settings.fullscreen {
+    let mut env = if settings.fullscreen {
         RuleEnv::current()
     } else {
         RuleEnv::current().with_feature("has_custom_resolution")
     };
     let identity = req.account.identity();
-    let vars = placeholders(req, inst, &identity);
+    let mut vars = placeholders(req, inst, &identity);
+    let mut game_extra = proxy
+        .active()
+        .map(ProxySettings::game_args)
+        .unwrap_or_default();
+    if let Some(quick) = &req.quick_play {
+        quick_play(quick, &inst.version, &mut env, &mut vars, &mut game_extra);
+    }
     let logging_arg = inst.logging.as_ref().map(|(path, template)| {
         let vars = HashMap::from([("path", path.display().to_string())]);
         substitute(template, &vars)
@@ -329,10 +449,7 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
         logging_arg,
         fullscreen: settings.fullscreen,
         resolution: (settings.window_width, settings.window_height),
-        game_extra: proxy
-            .active()
-            .map(ProxySettings::game_args)
-            .unwrap_or_default(),
+        game_extra,
     };
     LaunchPlan {
         java: inst.java.clone(),
@@ -344,6 +461,61 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
         }),
         secrets: vec![identity.access_token, proxy.password.clone()],
     }
+}
+
+/// Versions from 1.20 take `--quickPlay*`; older ones only know
+/// `--server`/`--port` (and can't open a world directly).
+fn quick_play(
+    quick: &QuickPlay,
+    version: &VersionJson,
+    env: &mut RuleEnv,
+    vars: &mut Placeholders,
+    game_extra: &mut Vec<String>,
+) {
+    let (feature, key, value) = match quick {
+        QuickPlay::Server(address) => {
+            ("is_quick_play_multiplayer", "quickPlayMultiplayer", address)
+        }
+        QuickPlay::World(folder) => (
+            "is_quick_play_singleplayer",
+            "quickPlaySingleplayer",
+            folder,
+        ),
+        // The game starts at its title screen; the Arctic Client does the rest.
+        QuickPlay::Duel { .. } | QuickPlay::Replay(_) => return,
+    };
+    if takes_placeholder(version, key) {
+        env.features.insert(feature);
+        vars.insert(key, value.clone());
+        return;
+    }
+    match quick {
+        QuickPlay::Server(address) => {
+            if let Some(a) = crate::servers::Address::parse(address) {
+                game_extra.extend([
+                    "--server".into(),
+                    a.host,
+                    "--port".into(),
+                    a.port.to_string(),
+                ]);
+            }
+        }
+        QuickPlay::World(_) => log::info!("this version can't open a world directly"),
+        QuickPlay::Duel { .. } | QuickPlay::Replay(_) => {}
+    }
+}
+
+fn takes_placeholder(version: &VersionJson, key: &str) -> bool {
+    use crate::versions::model::Argument;
+    let needle = format!("${{{key}}}");
+    version.arguments.as_ref().is_some_and(|a| {
+        a.game.iter().any(|arg| match arg {
+            Argument::Plain(s) => s.contains(&needle),
+            Argument::Conditional { value, .. } => {
+                value.values().into_iter().any(|s| s.contains(&needle))
+            }
+        })
+    })
 }
 
 fn placeholders(
@@ -388,6 +560,38 @@ fn placeholders(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quick_play_uses_the_versions_own_flags() {
+        let modern: VersionJson = serde_json::from_str(
+            r#"{"id":"1.21","mainClass":"M","arguments":{"jvm":[],"game":[
+                {"rules":[{"action":"allow","features":{"is_quick_play_multiplayer":true}}],
+                 "value":["--quickPlayMultiplayer","${quickPlayMultiplayer}"]}]}}"#,
+        )
+        .unwrap();
+        let old: VersionJson =
+            serde_json::from_str(r#"{"id":"1.8.9","mainClass":"M","minecraftArguments":"--x"}"#)
+                .unwrap();
+        let join = QuickPlay::Server("play.example.net:25570".into());
+        let (mut env, mut vars, mut extra) = (RuleEnv::current(), Placeholders::new(), Vec::new());
+        quick_play(&join, &modern, &mut env, &mut vars, &mut extra);
+        assert!(env.features.contains("is_quick_play_multiplayer"));
+        assert_eq!(vars["quickPlayMultiplayer"], "play.example.net:25570");
+        assert!(extra.is_empty());
+
+        let (mut env, mut vars) = (RuleEnv::current(), Placeholders::new());
+        quick_play(&join, &old, &mut env, &mut vars, &mut extra);
+        assert_eq!(extra, ["--server", "play.example.net", "--port", "25570"]);
+        extra.clear();
+        quick_play(
+            &QuickPlay::World("w".into()),
+            &old,
+            &mut env,
+            &mut vars,
+            &mut extra,
+        );
+        assert!(extra.is_empty() && vars.is_empty());
+    }
 
     #[test]
     fn redacts_access_token() {

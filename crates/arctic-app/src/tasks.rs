@@ -48,7 +48,7 @@ pub type LoginAttempt = u64;
 /// Identifies one launch, so game events can be matched to it.
 pub type LaunchId = u64;
 
-type Outcome<T> = std::result::Result<T, String>;
+pub(crate) type Outcome<T> = std::result::Result<T, String>;
 
 pub enum Event {
     Manifest(Outcome<VersionManifest>),
@@ -104,6 +104,35 @@ pub enum Event {
     MigrateProgress(String, ProgressSnapshot),
     MigrateItemDone(crate::migrate_tasks::Outcome),
     MigrateFinished,
+    /// Pack search results for request id.
+    PackSearch(u64, Outcome<SearchPage>),
+    /// (instance id, project id, result)
+    PackInstalled(String, String, Outcome<crate::pack_tasks::PackDone>),
+    /// The selected instance's server list (refresh request id).
+    ServerList(u64, Outcome<Vec<arctic_core::servers::Server>>),
+    /// (request id, address, status)
+    ServerStatus(u64, String, Outcome<arctic_core::servers::Status>),
+    /// Profile and friends (refresh).
+    Friends(Outcome<crate::friend_tasks::FriendsView>),
+    /// A friends action finished (what to say, or empty).
+    FriendDone(Outcome<String>),
+    /// (friend profile, conversation)
+    ChatHistory(String, Outcome<Vec<arctic_core::friends::Message>>),
+    ChatSent(Outcome<arctic_core::friends::Message>),
+    /// (attachment id, PNG)
+    ChatImage(String, Outcome<Vec<u8>>),
+    /// (polled after this id, new messages)
+    ChatNew(i64, Outcome<Vec<arctic_core::friends::Message>>),
+    /// A new recovery code (shown once; offline accounts only).
+    #[cfg(feature = "offline-accounts")]
+    RecoveryCode(Outcome<String>),
+    PublicServers(Outcome<Vec<arctic_core::servers::public::PublicServer>>),
+    ServerSubmitted(Outcome<arctic_core::servers::public::Submitted>),
+    /// The submission's state after the MOTD check.
+    ServerVerified(Outcome<String>),
+    Screenshots(Vec<arctic_core::screenshots::Shot>),
+    ScreenshotThumb(PathBuf, Outcome<Vec<u8>>),
+    ScreenshotCopied(Outcome<egui::ColorImage>),
     /// The game asked to add an account (show the sign-in).
     AddAccountFromGame,
     /// A share code was made.
@@ -126,6 +155,14 @@ pub struct Tasks {
     dirs: DataDirs,
     /// The in-game account switcher's bridge, passed to launched games.
     bridge: Option<Arc<arctic_core::bridge::BridgeInfo>>,
+}
+
+/// How a game starts beyond its instance: which copy it is, and where it
+/// goes right away.
+#[derive(Debug, Clone, Default)]
+pub struct StartAt {
+    pub copy: u32,
+    pub quick_play: Option<arctic_core::launch::QuickPlay>,
 }
 
 impl Tasks {
@@ -193,10 +230,10 @@ impl Tasks {
         instance: Instance,
         account: Account,
         settings: Settings,
-        copy: u32,
+        start: StartAt,
     ) {
         self.run(move |t| {
-            let result = t.launch_blocking(id, &version, &instance, account, &settings, copy);
+            let result = t.launch_blocking(id, &version, &instance, account, &settings, start);
             let result = result.map(|(game, log)| (game, log, version.id.clone()));
             t.send(Event::Launched(id, result.map_err(|e| e.to_string())));
         });
@@ -209,7 +246,7 @@ impl Tasks {
         instance: &Instance,
         account: Account,
         settings: &Settings,
-        copy: u32,
+        start: StartAt,
     ) -> Result<(GameHandle, PathBuf)> {
         let progress =
             |p: ProgressInfo| self.send(Event::LaunchProgress(id, ProgressSnapshot::from(p)));
@@ -229,7 +266,8 @@ impl Tasks {
             account: &account,
             settings,
             bridge: self.bridge.as_deref(),
-            copy,
+            copy: start.copy,
+            quick_play: start.quick_play,
         };
         let plan = launch::prepare(&req, &progress)?;
         let (tx, ctx) = (self.tx.clone(), self.ctx.clone());

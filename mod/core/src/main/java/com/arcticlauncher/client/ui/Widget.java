@@ -12,6 +12,10 @@ public abstract class Widget {
 	public int w;
 	public int h;
 	public boolean enabled = true;
+	/** Hidden widgets are neither drawn nor clicked. */
+	public boolean visible = true;
+	/** When set ({x0, y0, x1, y1}), drawn and clicked only inside it (a scrolling list). */
+	public int[] clip;
 	/** Hover animation, 0..1. */
 	protected float hover;
 	private long lastFrame;
@@ -25,7 +29,17 @@ public abstract class Widget {
 	}
 
 	public boolean contains(double mx, double my) {
-		return mx >= x && my >= y && mx < x + w && my < y + h;
+		return mx >= x && my >= y && mx < x + w && my < y + h && inClip(mx, my);
+	}
+
+	/** Inside the clip box (or no clip); also false when scrolled fully out of it. */
+	protected final boolean inClip(double mx, double my) {
+		return clip == null || (mx >= clip[0] && my >= clip[1] && mx < clip[2] && my < clip[3]);
+	}
+
+	/** Some of it shows inside the clip box. */
+	public boolean onScreen() {
+		return clip == null || (y + h > clip[1] && y < clip[3]);
 	}
 
 	public final void render(Gfx g, Style s, int mx, int my) {

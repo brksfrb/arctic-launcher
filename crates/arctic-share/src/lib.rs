@@ -9,6 +9,7 @@
 mod guest;
 mod host;
 pub mod lan;
+pub mod voice;
 
 use std::path::Path;
 use std::str::FromStr;

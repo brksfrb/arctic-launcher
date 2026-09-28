@@ -7,6 +7,8 @@ mod detail;
 mod icon_picker;
 mod modpacks;
 mod mods_page;
+mod packs;
+mod replays;
 mod worlds;
 
 use std::collections::{HashMap, HashSet};
@@ -48,7 +50,9 @@ pub enum InstancePage {
     #[default]
     Mods,
     Browse,
+    Packs,
     Worlds,
+    Replays,
     Settings,
 }
 
@@ -94,11 +98,15 @@ pub struct InstancesUi {
     /// Worlds of the open instance.
     pub worlds: Option<(String, Vec<arctic_core::worlds::World>)>,
     pub worlds_busy: bool,
+    /// Replays of the open instance.
+    pub replays: Option<(String, Vec<arctic_core::replays::Replay>)>,
     pub import: Option<worlds::ImportDialog>,
     /// The modpack browser is open (instead of the grid).
     pub modpacks_open: bool,
     /// Project being installed ("" for an imported file).
     pub pack_installing: Option<String>,
+    /// Resource packs and shaders page.
+    pub packs: packs::PacksUi,
 }
 
 impl ArcticApp {
@@ -159,12 +167,7 @@ impl ArcticApp {
         let p = self.palette();
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
-                widgets::page_header(
-                    ui,
-                    p,
-                    "Instances",
-                    "Separate game folders, each with its own version, mods and snowflake.",
-                );
+                widgets::page_header(ui, p, "Instances", "Separate game folders, each with its own version, mods and snowflake.");
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                 if widgets::button(ui, p, Some(Icon::Plus), "New instance", true).clicked() {

@@ -15,6 +15,8 @@ use crate::cli::{LookCommand, SkinCommand, SkinModel};
 
 pub fn skin(ctx: &Ctx, command: &SkinCommand) -> Result<i32> {
     let account = fresh_account(ctx, command.account())?;
+    // Always Microsoft in builds without offline accounts.
+    #[allow(irrefutable_let_patterns)]
     let AccountKind::Microsoft(session) = &account.kind else {
         return Err(Error::Other(
             "Minecraft skins can only be changed on Microsoft accounts (try `arctic look`)".into(),

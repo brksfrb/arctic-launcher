@@ -1,0 +1,43 @@
+{
+	"required": true,
+	"package": "com.arcticlauncher.legacy.mixin",
+	"compatibilityLevel": "JAVA_8",
+	"client": [
+		"MinecraftClientMixin",
+		"KeyBindingMixin",
+		"InGameHudMixin",
+		"ChatHudMixin",
+		"ClientPlayerEntityMixin",
+		"ClientPlayNetworkHandlerMixin",
+		"GameRendererMixin",
+		"EntityMixin",
+		"ClientPlayerInteractionManagerMixin",
+		"WorldMixin",
+		"PlayerListHudMixin",
+		"AbstractClientPlayerEntityMixin",
+		"TextRendererMixin",
+		"ButtonWidgetMixin",
+		"OptionSliderWidgetMixin",
+		"GameMenuScreenMixin",
+		"HeldItemRendererMixin",
+		"WorldRendererMixin",
+		"LivingEntityRendererMixin",
+		"ScoreboardHudMixin",
+		"PlayerInventoryMixin",
+		"ScreenMouseMixin",
+		"NetworkStateAccess",
+		"ClientConnectionReplayMixin",
+		"ClientTickTrackerMixin",
+		"MinecraftClientReplayMixin",
+		"ClientConnectionProxyMixin",
+		"ServerLookupMixin",
+		"ServerListPingerProxyMixin",
+		"ServerAddressMixin",
+		"ClientPlayerSwingMixin"<% if (achievements) { %>,
+		"AchievementNotificationAccess"<% } else { %>,
+		"ToastsAccess"<% } %>
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

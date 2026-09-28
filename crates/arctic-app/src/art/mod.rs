@@ -7,6 +7,7 @@ pub mod flakes;
 pub mod icons;
 pub mod scenery;
 pub mod splash;
+pub mod world;
 
 use std::f32::consts::{PI, TAU};
 

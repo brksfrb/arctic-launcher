@@ -16,7 +16,7 @@ mod forge_meta;
 mod installer;
 mod legacy_forge;
 mod processors;
-mod util;
+pub(crate) mod util;
 
 use crate::storage::DataDirs;
 use crate::versions::VersionJson;

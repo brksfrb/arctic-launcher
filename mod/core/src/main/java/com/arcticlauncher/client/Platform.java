@@ -84,6 +84,70 @@ public interface Platform {
 	/** The held item and how many of it you carry: {stack, total}, or null. */
 	Object[] heldItem();
 
+	/**
+	 * Bake a cosmetic (its model and PNG texture) for drawing, on the render
+	 * thread; then call {@code Cosmetics.ready(id)}.
+	 */
+	default void registerCosmetic(String id, com.arcticlauncher.client.looks.Geometry geometry, byte[] png) {}
+
+	/** The local player is moving (walking, jumping, sneaking): stops emotes. */
+	default boolean localMoving() {
+		return false;
+	}
+
+	/**
+	 * The local player's UUID in the current world (on offline-mode servers
+	 * the one derived from the name), or null outside a world.
+	 */
+	default java.util.UUID worldPlayerId() {
+		return null;
+	}
+
+	/** Run on the game's main thread. */
+	default void runOnGameThread(Runnable r) {
+		r.run();
+	}
+
+	/**
+	 * Play as another account from now on (outside a world). Returns why it
+	 * couldn't, or null when done.
+	 */
+	default String switchAccount(String name, java.util.UUID uuid, String accessToken, String xuid, boolean microsoft) {
+		return "not supported on this version yet";
+	}
+
+	/** Ctrl (Cmd on macOS) is held. */
+	default boolean controlDown() {
+		return false;
+	}
+
+	/** Put text on the clipboard. */
+	default void setClipboard(String text) {}
+
+	/** Text on the clipboard ("" if none). */
+	default String clipboard() {
+		return "";
+	}
+
+	/** Typing starts or stops (some versions only deliver text while it's on). */
+	default void textInput(Object owner, boolean on) {}
+
+	/**
+	 * The proxy changed (null = off): route new server connections through
+	 * it and answer its login prompts.
+	 */
+	default void proxyChanged(com.arcticlauncher.client.config.ProxyConfig proxy) {}
+
+	/** A stack of the item with this id (like "minecraft:arrow") for editor previews, or null. */
+	default Object sampleItem(String id) {
+		return null;
+	}
+
+	/** The HUD icon sprite of the effect with this id (like "minecraft:speed"), or null. */
+	default Object effectSprite(String id) {
+		return null;
+	}
+
 	/** The creature you're aiming at or just hit: {name, health, max health}, or null. */
 	Object[] target();
 
@@ -119,6 +183,165 @@ public interface Platform {
 	/** Mojang session join, to prove who we are to the Arctic server. */
 	void joinServer(String serverId) throws Exception;
 
-	/** Other players in the world: {uuid, name}. */
+	/** What you're aiming at: 0 nothing, 1 a player, 2 a hostile mob, 3 another creature. */
+	default int aimKind() {
+		return 0;
+	}
+
+	/**
+	 * Whether this version can talk to Simple Voice Chat servers (and the
+	 * Simple Voice Chat mod itself isn't installed).
+	 */
+	default boolean canSimpleVoiceChat() {
+		return false;
+	}
+
+	/** Ask the server for a Simple Voice Chat secret (it answers through {@code VoiceLink}). */
+	default void requestSimpleVoiceChat() {}
+
+	/** The current game connection (changes on every join or server switch), or null. */
+	default Object connectionKey() {
+		return null;
+	}
+
+	/** The world you're in: the server address, or "sp:" + the world's name; null in menus. */
+	default String worldKey() {
+		return null;
+	}
+
+	/** The dimension you're in ("overworld", "the_nether", "the_end", …). */
+	default String dimension() {
+		return "overworld";
+	}
+
+	/** This version has the minimap. */
+	default boolean minimapWorks() {
+		return false;
+	}
+
+	/** Worn armor and held items that wear out: {name, left, max, slot}. */
+	default java.util.List<Object[]> durability() {
+		return java.util.Collections.emptyList();
+	}
+
+	/** A short, quiet ping (someone mentioned you). */
+	default void mentionSound() {}
+
+	/** The minimap's texture key, redrawn when due; null where there's none. */
+	default String minimap() {
+		return null;
+	}
+
+	/** The game's resource pack folder, or null. */
+	default java.io.File resourcePackDir() {
+		return null;
+	}
+
+	/** Turn on a pack from the resource pack folder (by file name) and reload. */
+	default void enableResourcePack(String fileName) {}
+
+	/** This version can make a duel world and open it to LAN. */
+	default boolean canDuel() {
+		return false;
+	}
+
+	/** Leave any world and make a flat duel world (with cheats on). */
+	default void createDuelWorld() {}
+
+	/** In a world you host yourself (singleplayer, not a server). */
+	default boolean inSingleplayerWorld() {
+		return false;
+	}
+
+	/** Open the world you're in to LAN; true when it's open. */
+	default boolean openToLan() {
+		return false;
+	}
+
+	/** Tint hurt mobs with this color (RGB; 0 = the game's red). */
+	default void setHitColor(int rgb) {}
+
+	/** Hit color works on this version. */
+	default boolean hitColorWorks() {
+		return false;
+	}
+
+	/** The block outline settings work on this version. */
+	default boolean outlineTweaks() {
+		return false;
+	}
+
+	/** The scoreboard switches work on this version. */
+	default boolean scoreboardTweaks() {
+		return false;
+	}
+
+	/** Where Minecraft's own toasts end (GUI pixels from the top), 0 when none show. */
+	default int toastsBottom() {
+		return 0;
+	}
+
+	/** Light where you stand: {block light, sky light}, or null. */
+	default int[] light() {
+		return null;
+	}
+
+	/** How many items whose id contains {@code idPart} you carry, or -1. */
+	default int countItems(String idPart) {
+		return -1;
+	}
+
+	/** Hunger and saturation: {food 0-20, saturation}, or null. */
+	default float[] food() {
+		return null;
+	}
+
+	/** The top resource pack you picked, or null for none. */
+	default String resourcePack() {
+		return null;
+	}
+
+	/** You're dead (the death screen). */
+	default boolean dead() {
+		return false;
+	}
+
+	/** Send a chat message, or a command when it starts with "/". */
+	default void sendChat(String text) {}
+
+	/** Players online on the server (the tab list), or -1 when not connected. */
+	default int playerCount() {
+		return -1;
+	}
+
+	/** Other players in the world: {uuid, name, x, y, z}. */
 	List<Object[]> otherPlayers();
+
+	/**
+	 * Leave the current world (if any) and join a server. False where this
+	 * version can't (the player joins from the multiplayer list instead).
+	 */
+	boolean connectTo(String address);
+
+	/**
+	 * The camera this frame: {x, y, z, yaw, pitch, vertical FOV in degrees},
+	 * or null outside a world (for drawing things where they are in the world).
+	 */
+	default double[] camera() {
+		return null;
+	}
+
+	/**
+	 * The resource packs you have: turned-on ones first (top pack first),
+	 * then the rest. Arctic's own hidden packs aren't listed. Game thread.
+	 */
+	default java.util.List<com.arcticlauncher.client.packs.PackInfo> resourcePacks() {
+		return java.util.Collections.emptyList();
+	}
+
+	/** Turn on exactly these packs (top first) and reload the game's resources. Game thread. */
+	default void setResourcePacks(java.util.List<String> enabledTopFirst) {}
+
+	/** Leave the world or server you're in, back to the title screen (game thread). */
+	void leaveWorld();
 }

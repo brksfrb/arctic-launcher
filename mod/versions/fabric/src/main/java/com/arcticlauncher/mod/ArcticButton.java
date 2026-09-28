@@ -9,8 +9,15 @@ public final class ArcticButton {
 	private ArcticButton() {}
 
 	public static Button create() {
-		return Button.builder(Component.literal("Arctic"), b -> ArcticClient.platform().openPage(ArcticClient.arcticMenu()))
+		//#if MC >= 1.19.3
+		return Button.builder(com.arcticlauncher.mod.Compat.literal("Arctic"), b -> ArcticClient.platform().openPage(ArcticClient.arcticMenu()))
 				.bounds(4, 4, 64, 20)
 				.build();
+		//#elif MC >= 1.16
+		return new Button(4, 4, 64, 20, com.arcticlauncher.mod.Compat.literal("Arctic"), b -> ArcticClient.platform().openPage(ArcticClient.arcticMenu()));
+		//#else
+		// Before 1.16 button labels were plain strings.
+		return new Button(4, 4, 64, 20, "Arctic", b -> ArcticClient.platform().openPage(ArcticClient.arcticMenu()));
+		//#endif
 	}
 }

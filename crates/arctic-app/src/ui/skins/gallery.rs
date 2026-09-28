@@ -1,14 +1,13 @@
-//! The community skin gallery inside the Skins tab: browse, preview, add
-//! to your library or wear, report; and share your own skins.
+//! The community skin gallery inside the Cosmetics tab: browse, wear with a
+//! click (it's added to your library too), add or report from the
+//! right-click menu; and share your own skins.
 
 use std::collections::HashMap;
 
 use arctic_core::cosmetics::{GalleryItem, GallerySort};
 use eframe::egui::{self, RichText, vec2};
 
-use super::Selection;
 use crate::app::ArcticApp;
-use crate::art::icons::Icon;
 use crate::gallery_tasks::GalleryResult;
 use crate::tasks::Event;
 use crate::toasts::Kind;
@@ -90,21 +89,44 @@ impl ArcticApp {
             }
             Some(Ok(items)) => items.clone(),
         };
+        let can_wear = self.arctic_state().is_some() && !self.skins.gallery.busy;
+        let trying = match &self.skins.trying.skin {
+            Some(Some((key, _))) => Some(key.clone()),
+            _ => None,
+        };
+        let mut wear: Option<GalleryItem> = None;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(10.0, 10.0);
             for item in &items {
-                let selected = self.skins.selection == Selection::Gallery(item.clone());
-                if self.skin_tile(
-                    ui,
-                    &format!("gal:{}", item.texture),
-                    &item.name,
-                    Some(item.variant()),
-                    selected,
-                ) {
-                    self.skins.selection = Selection::Gallery(item.clone());
+                let key = format!("gal:{}", item.texture);
+                let worn = trying.as_deref() == Some(key.as_str());
+                let tile = self
+                    .skin_tile(ui, &key, &item.name, Some(item.variant()), worn)
+                    .on_hover_text(format!(
+                        "by {} · used {} times",
+                        item.author, item.downloads
+                    ));
+                if tile.clicked() && can_wear && !worn {
+                    wear = Some(item.clone());
                 }
+                tile.context_menu(|ui| self.gallery_menu(ui, item));
             }
         });
+        ui.add_space(6.0);
+        ui.label(
+            RichText::new(
+                "Click a skin to wear it (it's saved to your library). Right-click for more.",
+            )
+            .small()
+            .color(p.muted),
+        );
+        if let Some(item) = wear {
+            // Shown at once; worn for real once it's in the library.
+            let key = format!("gal:{}", item.texture);
+            self.skins.trying.skin = Some(Some((key, item.variant())));
+            self.skins.gallery.busy = true;
+            self.tasks.gallery_take(item, true);
+        }
     }
 
     fn run_gallery_search(&mut self) {
@@ -115,58 +137,33 @@ impl ArcticApp {
             .gallery_search(g.request, g.sort, g.query.trim().to_owned());
     }
 
-    /// Actions under the preview for a gallery skin.
-    pub(super) fn gallery_actions(&mut self, ui: &mut egui::Ui, item: &GalleryItem) {
-        let p = self.palette();
-        ui.label(RichText::new(&item.name).size(18.0).strong().color(p.text));
-        ui.label(
-            RichText::new(format!(
-                "by {} · used {} times",
-                item.author, item.downloads
-            ))
-            .color(p.muted),
-        );
-        ui.add_space(4.0);
+    /// A gallery skin's right-click menu.
+    fn gallery_menu(&mut self, ui: &mut egui::Ui, item: &GalleryItem) {
         let busy = self.skins.gallery.busy;
-        ui.horizontal(|ui| {
-            let can_wear = self.arctic_state().is_some() && !busy;
-            let wear = ui
-                .add_enabled_ui(can_wear, |ui| {
-                    widgets::button(ui, p, Some(Icon::Check), "Wear", true)
-                })
-                .inner;
-            if wear.clicked() {
-                self.skins.gallery.busy = true;
-                self.tasks.gallery_take(item.clone(), true);
-            }
-            let add = ui
-                .add_enabled_ui(!busy, |ui| {
-                    widgets::button(ui, p, Some(Icon::Plus), "Add to library", false)
-                })
-                .inner;
-            if add.clicked() {
-                self.skins.gallery.busy = true;
-                self.tasks.gallery_take(item.clone(), false);
-            }
-            if busy {
-                ui.spinner();
-            }
-        });
+        if ui
+            .add_enabled(!busy, egui::Button::new("Add to library"))
+            .clicked()
+        {
+            self.skins.gallery.busy = true;
+            self.tasks.gallery_take(item.clone(), false);
+            ui.close();
+        }
         if let Some(account) = self.accounts.active().cloned()
-            && ui.link("Report this skin").clicked()
+            && ui.button("Report this skin").clicked()
         {
             self.tasks.gallery_report(account, item.id.clone());
+            ui.close();
         }
     }
 
-    /// "Share to gallery" for a library skin.
+    /// "Share to gallery" for a library skin; true when clicked.
     pub(super) fn share_button(
         &mut self,
         ui: &mut egui::Ui,
         entry: &arctic_core::skins::SkinEntry,
-    ) {
+    ) -> bool {
         let Some(account) = self.accounts.active().cloned() else {
-            return;
+            return false;
         };
         let enabled = self.arctic_state().is_some() && !self.skins.gallery.busy;
         let share = ui
@@ -178,7 +175,9 @@ impl ArcticApp {
             self.skins.gallery.busy = true;
             self.tasks
                 .gallery_share(account, png, entry.variant, entry.name.clone());
+            return true;
         }
+        false
     }
 
     pub(super) fn on_gallery_event(&mut self, event: Event) {
@@ -198,21 +197,15 @@ impl ArcticApp {
                 g.busy = false;
                 match result {
                     Ok((name, png, variant, wear)) => {
-                        self.add_skin(&name, &png, Some(variant));
-                        if wear
-                            && let Selection::Library(id) = self.skins.selection.clone()
-                            && let Some(entry) = self
-                                .skins
-                                .library
-                                .skins
-                                .iter()
-                                .find(|s| s.id == id)
-                                .cloned()
-                        {
+                        let entry = self.add_skin(&name, &png, Some(variant));
+                        if wear && let Some(entry) = entry {
                             self.wear_skin(&entry);
                         }
                     }
-                    Err(e) => self.toasts.push(Kind::Error, "Could not get skin", e),
+                    Err(e) => {
+                        self.skins.trying.skin = None;
+                        self.toasts.push(Kind::Error, "Could not get skin", e);
+                    }
                 }
             }
             Event::GalleryDone(result) => {

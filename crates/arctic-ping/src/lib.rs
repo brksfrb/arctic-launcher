@@ -60,6 +60,9 @@ pub struct Status {
     pub players: Vec<String>,
     /// Message of the day, formatting codes removed.
     pub motd: String,
+    /// The same with its colors, as `§x` codes (JSON colors turned into
+    /// them; hex colors as `§#rrggbb`), for drawing it like the game does.
+    pub motd_formatted: String,
     pub icon: Option<Vec<u8>>,
     /// Round trip in milliseconds (0 when the server didn't answer the ping).
     pub ping_ms: u32,
@@ -125,6 +128,7 @@ pub fn parse_status(json: &str, ping_ms: u32) -> Result<Status> {
         max: count("max"),
         players: sample,
         motd: tidy_motd(&component_text(&v["description"])),
+        motd_formatted: tidy_formatted(&component_codes(&v["description"])),
         icon,
         ping_ms,
     })
@@ -165,13 +169,92 @@ pub(crate) fn component_text(v: &Value) -> String {
     out
 }
 
-/// Remove `§x` formatting codes.
+/// Chat component text with its colors as `§` codes.
+pub(crate) fn component_codes(v: &Value) -> String {
+    fn code(color: &str) -> Option<String> {
+        const NAMES: [&str; 16] = [
+            "black",
+            "dark_blue",
+            "dark_green",
+            "dark_aqua",
+            "dark_red",
+            "dark_purple",
+            "gold",
+            "gray",
+            "dark_gray",
+            "blue",
+            "green",
+            "aqua",
+            "red",
+            "light_purple",
+            "yellow",
+            "white",
+        ];
+        if let Some(i) = NAMES.iter().position(|n| *n == color) {
+            return Some(format!("§{i:x}"));
+        }
+        let hex = color.strip_prefix('#')?;
+        (hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit())).then(|| format!("§{color}"))
+    }
+    fn walk(v: &Value, out: &mut String, inherited: &str, depth: usize) {
+        if depth > 32 {
+            return;
+        }
+        match v {
+            Value::String(s) => out.push_str(s),
+            Value::Array(items) => items
+                .iter()
+                .for_each(|i| walk(i, out, inherited, depth + 1)),
+            Value::Object(map) => {
+                let own = map.get("color").and_then(Value::as_str).and_then(code);
+                let color = own.as_deref().unwrap_or(inherited);
+                if own.is_some() {
+                    out.push_str(color);
+                }
+                if let Some(t) = map.get("text").and_then(Value::as_str) {
+                    out.push_str(t);
+                } else if let Some(t) = map.get("translate").and_then(Value::as_str) {
+                    out.push_str(t);
+                }
+                if let Some(extra) = map.get("extra") {
+                    walk(extra, out, color, depth + 1);
+                }
+                if own.is_some() {
+                    // Back to the parent's color for what follows.
+                    out.push_str(if inherited.is_empty() {
+                        "§r"
+                    } else {
+                        inherited
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut out = String::new();
+    walk(v, &mut out, "", 0);
+    out
+}
+
+/// At most two non-empty lines, formatting kept.
+fn tidy_formatted(s: &str) -> String {
+    s.lines()
+        .filter(|l| !strip_codes(l).trim().is_empty())
+        .map(str::trim)
+        .take(2)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Remove `§x` formatting codes (and `§#rrggbb` hex colors).
 fn strip_codes(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars();
     while let Some(c) = chars.next() {
         if c == '§' {
-            chars.next();
+            if chars.next() == Some('#') {
+                chars.by_ref().take(6).for_each(drop);
+            }
         } else {
             out.push(c);
         }
@@ -210,6 +293,7 @@ mod tests {
         assert_eq!((s.online, s.max), (3, 100));
         assert_eq!(s.players, vec!["Alice", "Bob_2"]);
         assert_eq!(s.motd, "Welcome home\nline two");
+        assert_eq!(s.motd_formatted, "§bWelcome home\nline two");
         assert_eq!(s.icon.as_deref(), Some(&b"\x89PNG\r\n\x1a\n"[..]));
         assert_eq!(s.ping_ms, 42);
         let plain = parse_status(r#"{"description":"Hi","players":{}}"#, 0).unwrap();

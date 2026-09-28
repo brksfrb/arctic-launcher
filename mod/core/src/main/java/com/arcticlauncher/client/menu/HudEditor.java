@@ -7,32 +7,48 @@ import com.arcticlauncher.client.gfx.Draw;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.hud.Hud;
 import com.arcticlauncher.client.hud.HudWidget;
+import com.arcticlauncher.client.style.Skin;
 import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Button;
 import com.arcticlauncher.client.ui.Page;
-import com.arcticlauncher.client.ui.Toggle;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
- * The HUD editor over the real game: a drawer lists every widget (switch
- * it on and it slots into place) and edits the selected one; widgets on
- * screen drag and snap, and dropping one on the drawer hides it.
+ * Right Shift in a world: your HUD, live and movable. Drag a widget to move
+ * it (it snaps to edges and to other widgets), drag its bottom-right corner
+ * or scroll on it to resize it, right-click it for its settings. The bar in the middle opens Mods and the
+ * other Arctic screens; drop a widget on the bar to take it off the HUD.
  */
 public final class HudEditor extends Page {
-	private static final int SNAP = 5;
 	private static final float SCALE_STEP = 0.1f;
-	private static final int DRAWER_W = 150;
-	private static final int PAD = 6;
-	private static final int ROW = 24;
-	private static final int FOOTER = 28;
-	/** How far the mouse moves before a click becomes a drag. */
 	private static final int DRAG_START = 3;
+	private static final float FADE_SPEED = 6f;
+	private static final int HIGHLIGHT = Hud.GAP / 2;
+	private static final int BAR_W = 300;
+	private static final int BAR_H = 74;
+	private static final int MODS_H = 24;
+	private static final int SMALL_H = 16;
+	private static final int GAP = 4;
+	private static final int PAD = 8;
+	private static final int MENU_W = 96;
+	/** The resize corner: this many pixels in from a widget's bottom-right. */
+	private static final int HANDLE = 6;
+	/** Space either side of the help line inside its dark box. */
+	private static final int HINT_PAD = 8;
+	private static final float SCALE_SNAP = 0.05f;
+	private static final String[][] SHORTCUTS = {
+			{"Waypoints", "waypoints"}, {"Replays", "replays"}, {"Packs", "packs"}, {"Looks", "looks"}, {"Friends", "friends"},
+	};
 
-	private static boolean drawerOpen = true;
-	private int scroll;
-	private HudWidget selected;
+	private int bx;
+	private int by;
+	/** Bar opacity: 1 normally, faded while dragging. */
+	private float shown = 1f;
+	private long lastFrame;
+
+	/** Being dragged. */
 	private HudWidget dragging;
 	private boolean moved;
 	private int pressX;
@@ -41,15 +57,29 @@ public final class HudEditor extends Page {
 	private int grabY;
 	private int mouseX;
 	private int mouseY;
-	/** Rectangles from the last frame, for hit tests between frames. */
+	/** Being resized from its corner: its top-left and unscaled size. */
+	private HudWidget resizing;
+	private int resizeX;
+	private int resizeY;
+	private float baseW;
+	private float baseH;
+	/** Right-click menu for this widget, at (menuX, menuY). */
+	private HudWidget menuFor;
+	private int menuX;
+	private int menuY;
+
+	private final List<Button> barButtons = new ArrayList<Button>();
 	private Map<HudWidget, int[]> rects = new java.util.HashMap<HudWidget, int[]>();
-	private final List<Integer> guidesX = new ArrayList<Integer>();
-	private final List<Integer> guidesY = new ArrayList<Integer>();
-	private int listTop;
-	private int listBottom;
+	private final Snapper snapper = new Snapper();
 
 	@Override
 	public boolean dimWorld() {
+		return false;
+	}
+
+	/** The widgets are where they'll be on the HUD: no easing in. */
+	@Override
+	protected boolean animatesIn() {
 		return false;
 	}
 
@@ -60,176 +90,133 @@ public final class HudEditor extends Page {
 
 	@Override
 	protected void build() {
-		if (!drawerOpen) {
-			add(new Button(">", () -> {
-				drawerOpen = true;
-				rebuild();
-			})).bounds(0, height / 2 - 14, 12, 28);
-			return;
-		}
-		add(new Button("<", () -> {
-			drawerOpen = false;
-			rebuild();
-		})).bounds(DRAWER_W - 18, 6, 14, 14);
-		int y = 24;
-		if (selected != null && ArcticClient.hud().slot(selected).enabled) {
-			y = buildSelected(y);
-		}
-		listTop = y + 18;
-		listBottom = height - FOOTER;
-		buildList();
-		int half = (DRAWER_W - PAD * 2 - 4) / 2;
-		add(new Button("Reset all", () -> {
-			ArcticClient.hud().reset();
-			selected = null;
-			rebuild();
-		})).bounds(PAD, height - FOOTER + 5, half, 18);
-		add(new Button("Done", this::close).primary()).bounds(PAD + half + 4, height - FOOTER + 5, half, 18);
-	}
-
-	/** Size, background, reset and hide for the selected widget. */
-	private int buildSelected(int y) {
-		final HudSlot slot = ArcticClient.hud().slot(selected);
-		int x = PAD;
-		int w = DRAWER_W - PAD * 2;
-		y += 12;
-		add(new Button("-", () -> resize(slot, -SCALE_STEP))).bounds(x + w - 58, y, 16, 16);
-		add(new Button("+", () -> resize(slot, SCALE_STEP))).bounds(x + w - 16, y, 16, 16);
-		y += 20;
-		add(new Toggle("Background", null, new Toggle.Binding() {
-			@Override
-			public boolean get() {
-				return slot.background;
+		bx = (width - BAR_W) / 2;
+		by = (height - BAR_H) / 2;
+		barButtons.clear();
+		Button mods = new Button("Mods", Menus::mods).primary();
+		add(mods).bounds(bx + PAD, by + 22, BAR_W - PAD * 2, MODS_H);
+		barButtons.add(mods);
+		java.util.List<String[]> shortcuts = new java.util.ArrayList<String[]>();
+		for (String[] shortcut : SHORTCUTS) {
+			// Not every version can play replays.
+			if (!"replays".equals(shortcut[1]) || com.arcticlauncher.client.replay.Replays.canWatch()) {
+				shortcuts.add(shortcut);
 			}
-
-			@Override
-			public void set(boolean on) {
-				slot.background = on;
-				ArcticClient.saveConfig();
-			}
-		})).bounds(x, y, w, 18);
-		y += 22;
-		int half = (w - 4) / 2;
-		add(new Button("Reset spot", () -> {
-			slot.placed = false;
-			ArcticClient.saveConfig();
-		})).bounds(x, y, half, 16);
-		add(new Button("Hide", () -> {
-			slot.enabled = false;
-			slot.placed = false;
-			selected = null;
-			ArcticClient.saveConfig();
-			rebuild();
-		})).bounds(x + half + 4, y, w - half - 4, 16);
-		return y + 20;
-	}
-
-	private void resize(HudSlot slot, float step) {
-		float next = Math.round((slot.scale + step) * 10) / 10f;
-		slot.scale = Math.max(Hud.MIN_SCALE, Math.min(Hud.MAX_SCALE, next));
-		ArcticClient.saveConfig();
-	}
-
-	/** Every widget with its description and switch, scrolled. */
-	private void buildList() {
-		List<HudWidget> all = ArcticClient.hud().widgets();
-		int visible = Math.max(1, (listBottom - listTop) / ROW);
-		scroll = Math.max(0, Math.min(scroll, Math.max(0, all.size() - visible)));
-		int y = listTop;
-		for (int i = scroll; i < all.size() && y + ROW <= listBottom; i++) {
-			final HudWidget w = all.get(i);
-			final HudSlot slot = ArcticClient.hud().slot(w);
-			add(new Toggle(w.name, w.description, new Toggle.Binding() {
-				@Override
-				public boolean get() {
-					return slot.enabled;
-				}
-
-				@Override
-				public void set(boolean on) {
-					slot.enabled = on;
-					if (on) {
-						slot.placed = false; // slot it into its column
-						selected = w;
-					} else if (selected == w) {
-						selected = null;
-					}
-					ArcticClient.saveConfig();
-					rebuild();
-				}
-			})).bounds(PAD - 2, y, DRAWER_W - PAD * 2 + 4, ROW - 2);
-			y += ROW;
+		}
+		int n = shortcuts.size();
+		int sw = (BAR_W - PAD * 2 - GAP * (n - 1)) / n;
+		for (int i = 0; i < n; i++) {
+			final String id = shortcuts.get(i)[1];
+			Button b = new Button(shortcuts.get(i)[0], () -> Menus.open(id, this));
+			add(b).bounds(bx + PAD + i * (sw + GAP), by + 22 + MODS_H + GAP, sw, SMALL_H);
+			barButtons.add(b);
+		}
+		if (menuFor != null) {
+			buildMenu();
 		}
 	}
 
-	private boolean inDrawer(double mx) {
-		return drawerOpen && mx < DRAWER_W;
+	/** Right-click on a widget: its settings, or take it off. */
+	private void buildMenu() {
+		final HudWidget w = menuFor;
+		int x = Math.min(menuX, width - MENU_W - 2);
+		int y = Math.min(menuY, height - 42);
+		add(new Button("Settings", () -> {
+			menuFor = null;
+			Menus.open("hud." + w.id, this);
+		})).bounds(x, y, MENU_W, 18);
+		add(new Button("Remove", () -> {
+			hide(w);
+			menuFor = null;
+			rebuild();
+		})).bounds(x, y + 20, MENU_W, 18);
+	}
+
+	private boolean inBar(double mx, double my) {
+		return mx >= bx && my >= by && mx < bx + BAR_W && my < by + BAR_H;
+	}
+
+	@Override
+	public void render(Gfx g, int mx, int my) {
+		long now = System.nanoTime();
+		float dt = lastFrame == 0 ? 0f : Math.min(0.1f, (now - lastFrame) / 1e9f);
+		lastFrame = now;
+		float target = dragging != null && moved ? 0.25f : 1f;
+		shown += (target - shown) * Math.min(1f, dt * FADE_SPEED);
+		for (Button b : barButtons) {
+			b.visible = shown > 0.5f;
+		}
+		super.render(g, mx, my);
 	}
 
 	@Override
 	protected void drawBehind(Gfx g, Style s, int mx, int my) {
 		Hud hud = ArcticClient.hud();
-		guidesX.clear();
-		guidesY.clear();
+		snapper.clear();
 		if (dragging != null && moved) {
 			placeDragged(g, hud);
 		}
+		if (resizing != null) {
+			resize(g, hud);
+		}
 		rects = hud.layout(g);
 		for (Map.Entry<HudWidget, int[]> e : hud.sorted(rects)) {
-			drawWidget(g, s, hud, e.getKey(), e.getValue(), mx, my);
+			HudWidget w = e.getKey();
+			int[] r = e.getValue();
+			boolean over = w == dragging || w == resizing || w == menuFor || (dragging == null && resizing == null && !inBar(mx, my) && inside(r, mx, my));
+			// One pixel out: half the gap between stacked widgets, so boxes touch but never overlap.
+			int o = HIGHLIGHT;
+			g.fill(r[0] - o, r[1] - o, r[0] + r[2] + o, r[1] + r[3] + o, Draw.alpha(0xFFFFFFFF, over ? 0.12f : 0.04f));
+			Draw.outline(g, r[0] - o, r[1] - o, r[0] + r[2] + o, r[1] + r[3] + o, 1, Draw.alpha(0xFFFFFFFF, over ? 0.9f : 0.3f));
+			hud.draw(g, s, w, r, true);
+			if (over) {
+				// The resize corner: a small triangle at the bottom-right.
+				int cx = r[0] + r[2] + o;
+				int cy = r[1] + r[3] + o;
+				for (int k = 0; k < HANDLE; k++) {
+					g.fill(cx - k - 1, cy - HANDLE + k, cx, cy - HANDLE + k + 1, s.accent);
+				}
+			}
 		}
-		int guide = Draw.alpha(s.accent, 0.7f);
-		for (int x : guidesX) {
-			g.fill(x, 0, x + 1, height, guide);
-		}
-		for (int y : guidesY) {
-			g.fill(0, y, width, y + 1, guide);
-		}
-		if (drawerOpen) {
-			drawDrawer(g, s, mx);
-		}
+		snapper.draw(g, s, width, height);
+		drawBar(g, s, mx, my);
+		String help = "Drag to move  ·  drag the corner (or scroll) to resize  ·  right-click for settings";
+		int hw = g.textWidth(help) / 2 + HINT_PAD;
+		int hy = height - 14;
+		Draw.round(g, width / 2 - hw, hy - 5, width / 2 + hw, hy + 13, 4, Draw.alpha(0xC0000000, shown));
+		Draw.centered(g, help, width / 2, hy, Draw.alpha(0xFFFFFFFF, shown), false);
 	}
 
-	private void drawWidget(Gfx g, Style s, Hud hud, HudWidget w, int[] r, int mx, int my) {
-		boolean over = w == dragging || (dragging == null && !inDrawer(mx) && inside(r, mx, my));
-		boolean chosen = w == selected;
-		float fill = chosen ? 0.25f : over ? 0.18f : 0.06f;
-		float line = chosen || over ? 0.95f : 0.35f;
-		Draw.round(g, r[0] - 2, r[1] - 2, r[0] + r[2] + 2, r[1] + r[3] + 2, 2, Draw.alpha(s.accent, fill));
-		Draw.outline(g, r[0] - 2, r[1] - 2, r[0] + r[2] + 2, r[1] + r[3] + 2, 2, Draw.alpha(s.accent, line));
-		hud.draw(g, s, w, r, true);
-	}
-
-	private void drawDrawer(Gfx g, Style s, int mx) {
-		boolean dropping = dragging != null && moved && inDrawer(mx);
-		// Solid, so widgets underneath don't show through the list.
-		Draw.round(g, -4, -4, DRAWER_W, height + 4, 3, 0xFF000000 | (s.panel & 0xFFFFFF));
-		Draw.outline(g, -4, -4, DRAWER_W, height + 4, 3, s.border);
-		if (dropping) {
-			Draw.round(g, 2, 2, DRAWER_W - 2, height - 2, 3, Draw.alpha(s.accent, 0.18f));
-			Draw.centered(g, "Drop here to hide", DRAWER_W / 2, height / 2, s.accent, false);
+	private void drawBar(Gfx g, Style s, int mx, int my) {
+		boolean removing = dragging != null && moved && inBar(mx, my);
+		float a = removing ? 1f : shown;
+		Skin.panel(g, s, bx, by, bx + BAR_W, by + BAR_H);
+		if (removing) {
+			Draw.outline(g, bx, by, bx + BAR_W, by + BAR_H, 2, s.accent);
+			Draw.centered(g, "Drop here to take it off", bx + BAR_W / 2, by + BAR_H / 2 - 4, s.accent, false);
 			return;
 		}
-		g.text("§lHUD", PAD, 9, s.text, false);
-		if (selected != null && ArcticClient.hud().slot(selected).enabled) {
-			HudSlot slot = ArcticClient.hud().slot(selected);
-			g.text(Draw.fit(g, selected.name, DRAWER_W - PAD * 2), PAD, 26, s.accent, false);
-			g.text("Size", PAD + 2, 40, s.text, false);
-			Draw.centered(g, Math.round(slot.scale * 100) + "%", PAD + (DRAWER_W - PAD * 2) - 29, 40, s.text, false);
-		} else {
-			g.text(Draw.fit(g, "Click a widget to change it", DRAWER_W - PAD * 2), PAD, 26, s.muted, false);
+		if (a < 0.5f) {
+			return;
 		}
-		g.fill(PAD, listTop - 4, DRAWER_W - PAD, listTop - 3, s.border);
-		List<HudWidget> all = ArcticClient.hud().widgets();
-		int visible = Math.max(1, (listBottom - listTop) / ROW);
-		if (all.size() > visible) {
-			// A thin scroll bar beside the list.
-			int track = listBottom - listTop;
-			int bar = Math.max(12, track * visible / all.size());
-			int top = listTop + (track - bar) * scroll / Math.max(1, all.size() - visible);
-			g.fill(DRAWER_W - 3, top, DRAWER_W - 1, top + bar, Draw.alpha(s.accent, 0.6f));
-		}
-		g.fill(PAD, height - FOOTER, DRAWER_W - PAD, height - FOOTER + 1, s.border);
+		g.texture("icon", bx + PAD, by + 6, 12, 12, 0, 0, 256, 256, 256, 256);
+		g.text("§lArctic", bx + PAD + 16, by + 8, s.text, false);
+		String version = ArcticClient.platform().minecraftVersion();
+		g.text(version, bx + BAR_W - PAD - g.textWidth(version), by + 8, s.muted, false);
+	}
+
+	/** Scale the widget so its bottom-right corner follows the mouse (top-left stays). */
+	private void resize(Gfx g, Hud hud) {
+		float k = Math.max((mouseX - resizeX) / baseW, (mouseY - resizeY) / baseH);
+		k = Math.round(k / SCALE_SNAP) * SCALE_SNAP;
+		k = Math.max(Hud.MIN_SCALE, Math.min(Hud.MAX_SCALE, k));
+		hud.slot(resizing).scale = k;
+		int[] rect = {resizeX, resizeY, Math.round(baseW * k), Math.round(baseH * k)};
+		hud.place(g, resizing, rect, resizeX, resizeY);
+	}
+
+	private static boolean onHandle(int[] r, double mx, double my) {
+		return mx >= r[0] + r[2] - HANDLE && mx <= r[0] + r[2] + 2 && my >= r[1] + r[3] - HANDLE && my <= r[1] + r[3] + 2;
 	}
 
 	/** Follow the mouse, snapping to the screen and the other widgets. */
@@ -238,75 +225,22 @@ public final class HudEditor extends Page {
 		if (me == null) {
 			return;
 		}
-		int x = mouseX - grabX;
-		int y = mouseY - grabY;
 		List<int[]> others = new ArrayList<int[]>();
 		for (Map.Entry<HudWidget, int[]> e : rects.entrySet()) {
 			if (e.getKey() != dragging) {
 				others.add(e.getValue());
 			}
 		}
-		x = snapX(x, me[2], others);
-		y = snapY(y, me[3], others);
+		int x = snapper.x(mouseX - grabX, me[2], width, others);
+		int y = snapper.y(mouseY - grabY, me[3], height, others);
 		hud.place(g, dragging, me, x, y);
-	}
-
-	/** Candidate left edges: screen edges and center, and other widgets' edges. */
-	private int snapX(int x, int w, List<int[]> others) {
-		List<int[]> c = new ArrayList<int[]>(); // {left, guide}
-		c.add(new int[] {Hud.MARGIN, Hud.MARGIN});
-		c.add(new int[] {width - Hud.MARGIN - w, width - Hud.MARGIN});
-		c.add(new int[] {(width - w) / 2, width / 2});
-		for (int[] o : others) {
-			c.add(new int[] {o[0], o[0]});
-			c.add(new int[] {o[0] + o[2] - w, o[0] + o[2]});
-			c.add(new int[] {o[0] + o[2] + Hud.GAP, o[0] + o[2]});
-			c.add(new int[] {o[0] - w - Hud.GAP, o[0]});
-		}
-		return snap(x, c, guidesX);
-	}
-
-	private int snapY(int y, int h, List<int[]> others) {
-		List<int[]> c = new ArrayList<int[]>();
-		c.add(new int[] {Hud.MARGIN, Hud.MARGIN});
-		c.add(new int[] {height - Hud.MARGIN - h, height - Hud.MARGIN});
-		c.add(new int[] {(height - h) / 2, height / 2});
-		for (int[] o : others) {
-			c.add(new int[] {o[1], o[1]});
-			c.add(new int[] {o[1] + o[3] - h, o[1] + o[3]});
-			c.add(new int[] {o[1] + o[3] + Hud.GAP, o[1] + o[3]});
-			c.add(new int[] {o[1] - h - Hud.GAP, o[1]});
-		}
-		return snap(y, c, guidesY);
-	}
-
-	/** The closest candidate within reach, recording its guide line. */
-	private static int snap(int pos, List<int[]> candidates, List<Integer> guides) {
-		int best = pos;
-		int bestDist = SNAP + 1;
-		int guide = -1;
-		for (int[] c : candidates) {
-			int d = Math.abs(c[0] - pos);
-			if (d < bestDist) {
-				best = c[0];
-				bestDist = d;
-				guide = c[1];
-			}
-		}
-		if (guide >= 0) {
-			guides.add(guide);
-		}
-		return best;
 	}
 
 	private static boolean inside(int[] r, double mx, double my) {
 		return mx >= r[0] && my >= r[1] && mx < r[0] + r[2] && my < r[1] + r[3];
 	}
 
-	private HudWidget widgetAt(double mx, double my) {
-		if (inDrawer(mx)) {
-			return null;
-		}
+	private HudWidget placedAt(double mx, double my) {
 		HudWidget found = null;
 		for (HudWidget w : ArcticClient.hud().widgets()) {
 			int[] r = rects.get(w);
@@ -322,53 +256,60 @@ public final class HudEditor extends Page {
 		if (super.mouseClicked(mx, my, button)) {
 			return true;
 		}
-		HudWidget w = widgetAt(mx, my);
+		if (menuFor != null) {
+			menuFor = null;
+			rebuild();
+		}
+		if (inBar(mx, my)) {
+			return true;
+		}
+		HudWidget w = placedAt(mx, my);
 		if (w == null) {
-			if (!inDrawer(mx) && selected != null) {
-				selected = null;
-				rebuild();
-			}
 			return false;
 		}
 		if (button == Keys.MOUSE_RIGHT) {
-			hide(w);
+			menuFor = w;
+			menuX = (int) mx;
+			menuY = (int) my;
+			rebuild();
 			return true;
 		}
 		int[] r = rects.get(w);
+		if (onHandle(r, mx, my)) {
+			float scale = ArcticClient.hud().slot(w).scale;
+			resizing = w;
+			resizeX = r[0];
+			resizeY = r[1];
+			baseW = Math.max(1f, r[2] / scale);
+			baseH = Math.max(1f, r[3] / scale);
+			mouseX = (int) mx;
+			mouseY = (int) my;
+			return true;
+		}
 		dragging = w;
 		moved = false;
 		pressX = (int) mx;
 		pressY = (int) my;
 		grabX = (int) mx - r[0];
 		grabY = (int) my - r[1];
-		mouseX = (int) mx;
-		mouseY = (int) my;
-		if (selected != w) {
-			selected = w;
-			rebuild();
-		}
+		mouseX = pressX;
+		mouseY = pressY;
 		return true;
-	}
-
-	private void hide(HudWidget w) {
-		HudSlot slot = ArcticClient.hud().slot(w);
-		slot.enabled = false;
-		slot.placed = false;
-		if (selected == w) {
-			selected = null;
-		}
-		ArcticClient.saveConfig();
-		rebuild();
 	}
 
 	@Override
 	public boolean mouseDragged(double mx, double my, int button) {
+		if (resizing != null) {
+			mouseX = (int) mx;
+			mouseY = (int) my;
+			return true;
+		}
 		if (dragging == null) {
 			return super.mouseDragged(mx, my, button);
 		}
 		mouseX = (int) mx;
 		mouseY = (int) my;
-		if (Math.abs(mx - pressX) > DRAG_START || Math.abs(my - pressY) > DRAG_START) {
+		if (!moved && (Math.abs(mx - pressX) > DRAG_START || Math.abs(my - pressY) > DRAG_START)) {
 			moved = true;
 		}
 		return true;
@@ -376,33 +317,48 @@ public final class HudEditor extends Page {
 
 	@Override
 	public boolean mouseReleased(double mx, double my, int button) {
+		if (resizing != null) {
+			resizing = null;
+			ArcticClient.saveConfig();
+			return true;
+		}
 		if (dragging == null) {
 			return super.mouseReleased(mx, my, button);
 		}
 		HudWidget w = dragging;
-		boolean dropped = moved && inDrawer(mx);
+		boolean wasMoved = moved;
 		dragging = null;
 		moved = false;
-		if (dropped) {
+		if (wasMoved && inBar(mx, my)) {
 			hide(w);
-		} else {
-			ArcticClient.saveConfig();
 		}
+		ArcticClient.saveConfig();
 		return true;
+	}
+
+	private void hide(HudWidget w) {
+		HudSlot slot = ArcticClient.hud().slot(w);
+		slot.enabled = false;
+		slot.placed = false;
+		ArcticClient.saveConfig();
 	}
 
 	@Override
 	public boolean mouseScrolled(double mx, double my, double amount) {
-		if (inDrawer(mx)) {
-			scroll += amount > 0 ? -1 : 1;
-			rebuild();
-			return true;
-		}
-		HudWidget w = widgetAt(mx, my);
+		HudWidget w = placedAt(mx, my);
 		if (w == null) {
 			return false;
 		}
-		resize(ArcticClient.hud().slot(w), amount > 0 ? SCALE_STEP : -SCALE_STEP);
+		HudSlot slot = ArcticClient.hud().slot(w);
+		float next = Math.round((slot.scale + (amount > 0 ? SCALE_STEP : -SCALE_STEP)) * 10) / 10f;
+		slot.scale = Math.max(Hud.MIN_SCALE, Math.min(Hud.MAX_SCALE, next));
+		ArcticClient.saveConfig();
+		return true;
+	}
+
+	@Override
+	protected boolean rightShift() {
+		close();
 		return true;
 	}
 

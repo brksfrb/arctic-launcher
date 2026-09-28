@@ -1,7 +1,9 @@
-//! Fallback fonts for scripts egui's built-in fonts don't cover (Chinese,
-//! Japanese, Korean, …). They come from the system and are only loaded
-//! the first time such text shows up, so nothing is bundled and nothing
-//! extra sits in memory for people who never see it.
+//! Fonts. The interface uses the system's own UI font (Segoe UI on
+//! Windows) so the launcher reads like a native app rather than a stock
+//! toolkit demo; headings use its semibold weight. Fallback fonts for
+//! scripts those don't cover (Chinese, Japanese, Korean, …) come from the
+//! system too, loaded the first time such text shows up, so nothing is
+//! bundled and nothing extra sits in memory for people who never see it.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -9,6 +11,78 @@ use eframe::egui::{self, FontData, FontFamily};
 use eframe::epaint::text::{FontInsert, FontPriority, InsertFontFamily};
 
 static REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// The font family for headings (semibold); plain text uses Proportional.
+pub const HEADING: &str = "heading";
+
+/// System UI fonts: (regular candidates, semibold candidates), first found wins.
+fn ui_fonts() -> (&'static [&'static str], &'static [&'static str]) {
+    if cfg!(windows) {
+        (
+            &[
+                r"C:\Windows\Fonts\SegUIVar.ttf",
+                r"C:\Windows\Fonts\segoeui.ttf",
+            ],
+            &[
+                r"C:\Windows\Fonts\seguisb.ttf",
+                r"C:\Windows\Fonts\segoeuib.ttf",
+            ],
+        )
+    } else {
+        (
+            &[
+                "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+                "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            ],
+            &[
+                "/usr/share/fonts/truetype/noto/NotoSans-SemiBold.ttf",
+                "/usr/share/fonts/noto/NotoSans-SemiBold.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            ],
+        )
+    }
+}
+
+fn first_readable(paths: &[&str]) -> Option<Vec<u8>> {
+    paths.iter().find_map(|p| std::fs::read(p).ok())
+}
+
+/// Use the system UI font for text and its semibold for headings. Without
+/// them (unusual systems), egui's built-in font stays and headings use it too.
+pub fn install_ui(ctx: &egui::Context) {
+    let (regular, semibold) = ui_fonts();
+    let mut fonts = egui::FontDefinitions::default();
+    if let Some(bytes) = first_readable(regular) {
+        fonts.font_data.insert(
+            "ui".into(),
+            std::sync::Arc::new(FontData::from_owned(bytes)),
+        );
+        if let Some(list) = fonts.families.get_mut(&FontFamily::Proportional) {
+            list.insert(0, "ui".into());
+        }
+    }
+    let heading = FontFamily::Name(HEADING.into());
+    let mut heading_list = fonts
+        .families
+        .get(&FontFamily::Proportional)
+        .cloned()
+        .unwrap_or_default();
+    if let Some(bytes) = first_readable(semibold) {
+        fonts.font_data.insert(
+            "ui-semibold".into(),
+            std::sync::Arc::new(FontData::from_owned(bytes)),
+        );
+        heading_list.insert(0, "ui-semibold".into());
+    }
+    fonts.families.insert(heading, heading_list);
+    ctx.set_fonts(fonts);
+}
+
+/// Heading text at `size`.
+pub fn heading(size: f32) -> egui::FontId {
+    egui::FontId::new(size, FontFamily::Name(HEADING.into()))
+}
 
 /// (path, face index in a collection) of system fonts to try, in order.
 fn candidates() -> &'static [(&'static str, u32)] {

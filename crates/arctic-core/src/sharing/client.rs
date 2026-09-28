@@ -20,7 +20,7 @@ const MAX_HUD_VERSION: i64 = 100;
 const MIN_SCALE: f64 = 0.5;
 const MAX_SCALE: f64 = 2.5;
 const STYLES: [&str; 3] = ["arctic", "aurora", "classic"];
-const CROSSHAIR_STYLES: [&str; 4] = ["cross", "dot", "circle", "cross-dot"];
+const CROSSHAIR_STYLES: [&str; 5] = ["cross", "dot", "circle", "cross-dot", "image"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Rule {

@@ -42,7 +42,8 @@ jobs:
 
       - name: Build
         env:
-          # Azure client ID for Microsoft sign-in (see docs/microsoft-auth.md).
+          # Arctic's own Azure client ID (see docs/microsoft-auth.md). Minecraft
+          # sign-in works once Mojang has approved it; no rebuild needed then.
           ARCTIC_MSA_CLIENT_ID: ${{ secrets.ARCTIC_MSA_CLIENT_ID }}
         run: cargo build --release -p arctic-app -p arctic-cli
 

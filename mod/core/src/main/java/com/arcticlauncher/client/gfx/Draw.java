@@ -6,8 +6,20 @@ public final class Draw {
 	private static final int[][] CORNERS = {{}, {1}, {2, 1}, {3, 1, 1}, {4, 2, 1, 1}};
 
 	public static final int LINE = 9;
+	/** Fancy style: radii grow by this, and shapes are drawn smooth. */
+	private static final float FANCY_RADIUS = 2f;
+	/** A radius this large means a pill (fully round ends). */
+	public static final int PILL = 99;
+
+	/** Fancy style on: smooth, rounder shapes. Set each frame from the config. */
+	public static boolean fancy;
 
 	private Draw() {}
+
+	private static float fancyRadius(int radius, int w, int h) {
+		float max = Math.min(w, h) / 2f;
+		return radius >= PILL ? max : Math.min(max, radius * FANCY_RADIUS);
+	}
 
 	private static int[] corner(int radius, int w, int h) {
 		int r = Math.max(0, Math.min(radius, Math.min(4, Math.min(w, h) / 2)));
@@ -16,6 +28,10 @@ public final class Draw {
 
 	/** Filled rectangle with pixel-rounded corners; rows never overlap. */
 	public static void round(Gfx g, int x0, int y0, int x1, int y1, int radius, int color) {
+		if (fancy) {
+			Smooth.round(g, x0, y0, x1, y1, fancyRadius(radius, x1 - x0, y1 - y0), color);
+			return;
+		}
 		int[] in = corner(radius, x1 - x0, y1 - y0);
 		int r = in.length;
 		for (int i = 0; i < r; i++) {
@@ -27,6 +43,10 @@ public final class Draw {
 
 	/** One-pixel outline following {@link #round}'s shape. */
 	public static void outline(Gfx g, int x0, int y0, int x1, int y1, int radius, int color) {
+		if (fancy) {
+			Smooth.outline(g, x0, y0, x1, y1, fancyRadius(radius, x1 - x0, y1 - y0), color);
+			return;
+		}
 		int[] in = corner(radius, x1 - x0, y1 - y0);
 		int r = in.length;
 		int top = r == 0 ? 0 : in[0];
@@ -57,6 +77,10 @@ public final class Draw {
 
 	/** A filled disc (pixel circle). */
 	public static void disc(Gfx g, int cx, int cy, int radius, int color) {
+		if (fancy) {
+			Smooth.disc(g, cx, cy, radius, color);
+			return;
+		}
 		for (int dy = -radius; dy < radius; dy++) {
 			double yc = dy + 0.5;
 			int half = (int) Math.round(Math.sqrt(Math.max(0, radius * radius - yc * yc)));
@@ -90,6 +114,23 @@ public final class Draw {
 			end--;
 		}
 		return text.substring(0, end) + dots;
+	}
+
+	/**
+	 * {@link #fit(Gfx, String, int)} for a line drawn at (x, y): when it's
+	 * shortened, hovering it shows the whole text.
+	 */
+	public static String fit(Gfx g, String text, int maxWidth, int x, int y) {
+		String shown = fit(g, text, maxWidth);
+		if (!shown.equals(text)) {
+			com.arcticlauncher.client.ui.Hints.offer(text, x, y - 1, maxWidth, 10);
+		}
+		return shown;
+	}
+
+	/** {@link #fit(Gfx, String, int, int, int)} for a line centered on {@code cx}. */
+	public static String fitCentered(Gfx g, String text, int maxWidth, int cx, int y) {
+		return fit(g, text, maxWidth, cx - maxWidth / 2, y);
 	}
 
 	/** Color with its alpha multiplied by {@code a} (0..1). */

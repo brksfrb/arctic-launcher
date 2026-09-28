@@ -1,6 +1,6 @@
+//#if MC >= 1.20
 package com.arcticlauncher.mod.mixin;
 
-//#if MC >= 26.3
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.mod.GameInfo;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;

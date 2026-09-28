@@ -35,12 +35,18 @@ impl Kind {
 pub enum ToastAction {
     /// Open the Logs tab on this game run.
     ShowLogs(crate::tasks::LaunchId),
+    /// Open the Friends page (an invite came in).
+    OpenFriends,
+    /// Link a newly added account into the profile of `into`.
+    LinkAccount { into: String, other: String },
 }
 
 impl ToastAction {
     fn label(&self) -> &'static str {
         match self {
             ToastAction::ShowLogs(_) => "View logs",
+            ToastAction::OpenFriends => "Open",
+            ToastAction::LinkAccount { .. } => "Link",
         }
     }
 }

@@ -1,6 +1,8 @@
 //! Command implementations. Each returns the process exit code.
 
 pub mod accounts;
+pub mod defaults;
+pub mod friends;
 pub mod instances;
 pub mod launch;
 pub mod looks;
@@ -10,10 +12,12 @@ pub mod mods;
 pub mod network;
 pub mod packs;
 pub mod profiles;
+pub mod servers;
 pub mod settings;
 pub mod sharing;
 pub mod together;
 pub mod versions;
+pub mod waypoints;
 pub mod worlds;
 
 use arctic_core::auth::{self, Account, AccountStore};

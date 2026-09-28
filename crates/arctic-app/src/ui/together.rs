@@ -34,20 +34,58 @@ pub struct TogetherUi {
     /// Session whose events we still care about.
     current: SessionId,
     pub session: Session,
-    code_input: String,
+    pub(crate) code_input: String,
     port_input: String,
     error: Option<String>,
 }
 
+impl TogetherUi {
+    /// The invite code while hosting.
+    pub(crate) fn hosting_code(&self) -> Option<String> {
+        match &self.session {
+            Session::Hosting { code, .. } => Some(code.clone()),
+            _ => None,
+        }
+    }
+}
+
 impl ArcticApp {
+    /// Requests from the game (a duel), and the state it reads back.
+    pub(crate) fn together_bridge(&mut self) {
+        use crate::bridge_host::TogetherRequest;
+        match self.bridge.take_together_request() {
+            Some(TogetherRequest::Host) if self.together.hosting_code().is_none() => {
+                self.stop_together();
+                self.start_hosting();
+            }
+            Some(TogetherRequest::Join(code)) => {
+                self.stop_together();
+                self.together.code_input = code;
+                self.start_joining();
+            }
+            Some(TogetherRequest::Stop) => self.stop_together(),
+            _ => {}
+        }
+        self.bridge
+            .set_together_status(together_status_json(&self.together));
+    }
+
     pub(crate) fn together_tab(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        widgets::page_header(
-            ui,
-            p,
-            "Play together",
-            "Invite friends into your world. No server and no port forwarding.",
+        widgets::page_header(ui, p, "Friends", "");
+        self.friends_card(ui);
+        ui.add_space(16.0);
+        ui.label(
+            RichText::new("Play together")
+                .size(18.0)
+                .strong()
+                .color(p.text),
         );
+        ui.label(
+            RichText::new("Invite friends into your world. No server and no port forwarding.")
+                .color(p.muted),
+        );
+        ui.add_space(8.0);
         if let Some(error) = self.together.error.clone() {
             ui.label(RichText::new(error).color(p.error));
             ui.add_space(6.0);
@@ -263,7 +301,7 @@ impl ArcticApp {
         self.together.service.as_ref()
     }
 
-    fn start_hosting(&mut self) {
+    pub(crate) fn start_hosting(&mut self) {
         let port = match self.together.port_input.trim() {
             "" => None,
             text => match text.parse::<u16>() {
@@ -289,7 +327,7 @@ impl ArcticApp {
         }
     }
 
-    fn start_joining(&mut self) {
+    pub(crate) fn start_joining(&mut self) {
         let code = self.together.code_input.trim().to_owned();
         self.together.error = None;
         let Some(service) = self.share_service() else {
@@ -304,7 +342,7 @@ impl ArcticApp {
         }
     }
 
-    fn stop_together(&mut self) {
+    pub(crate) fn stop_together(&mut self) {
         if let Some(service) = &self.together.service {
             service.stop();
         }
@@ -354,6 +392,33 @@ impl ArcticApp {
             }
         }
     }
+}
+
+/// Play together's state for the game: `{"state": "idle" | "starting" |
+/// "hosting" | "joining" | "joined", "code", "guests", "port", "error"}`.
+fn together_status_json(t: &TogetherUi) -> String {
+    let mut out = match &t.session {
+        Session::Idle => serde_json::json!({"state": "idle"}),
+        Session::Starting => serde_json::json!({"state": "starting"}),
+        Session::Hosting {
+            code,
+            world,
+            guests,
+        } => serde_json::json!({
+            "state": "hosting",
+            "code": code,
+            "guests": guests,
+            "world": world.as_ref().map(|w| w.motd.clone()),
+        }),
+        Session::Joining => serde_json::json!({"state": "joining"}),
+        Session::Joined { motd, port } => {
+            serde_json::json!({"state": "joined", "motd": motd, "port": port})
+        }
+    };
+    if let Some(e) = &t.error {
+        out["error"] = serde_json::json!(e);
+    }
+    out.to_string()
 }
 
 fn card_title(ui: &mut egui::Ui, p: &Palette, title: &str) {

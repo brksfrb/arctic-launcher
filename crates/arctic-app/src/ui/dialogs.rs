@@ -1,6 +1,7 @@
 //! Modal dialogs: add account (Microsoft browser / code, offline) and
 //! remove-account confirmation.
 
+#[cfg(feature = "offline-accounts")]
 use arctic_core::auth::offline;
 use eframe::egui::{
     self, Align2, CornerRadius, FontId, Id, Modal, RichText, Sense, Stroke, StrokeKind, vec2,
@@ -18,6 +19,7 @@ const DIALOG_WIDTH: f32 = 420.0;
 enum Choice {
     Browser,
     Code,
+    #[cfg(feature = "offline-accounts")]
     Offline,
 }
 
@@ -40,6 +42,7 @@ impl ArcticApp {
                 ui.add_space(10.0);
                 match &self.add_account {
                     AddAccount::Choose => self.choose_view(ui),
+                    #[cfg(feature = "offline-accounts")]
                     AddAccount::Offline { .. } => self.offline_view(ui),
                     AddAccount::Microsoft { .. } => self.microsoft_view(ui),
                     AddAccount::Failed(e) => {
@@ -67,6 +70,7 @@ impl ArcticApp {
         } else {
             Some("Microsoft sign-in isn't available in this build")
         };
+        #[cfg_attr(not(feature = "offline-accounts"), allow(unused_mut))]
         let mut options = vec![
             (
                 Choice::Browser,
@@ -83,7 +87,8 @@ impl ArcticApp {
                 ms_note,
             ),
         ];
-        if cfg!(feature = "offline-accounts") {
+        #[cfg(feature = "offline-accounts")]
+        {
             options.push((
                 Choice::Offline,
                 Icon::User,
@@ -105,6 +110,7 @@ impl ArcticApp {
                 match choice {
                     Choice::Browser => self.start_login(true),
                     Choice::Code => self.start_login(false),
+                    #[cfg(feature = "offline-accounts")]
                     Choice::Offline => {
                         self.add_account = AddAccount::Offline {
                             name: String::new(),
@@ -116,6 +122,7 @@ impl ArcticApp {
         }
     }
 
+    #[cfg(feature = "offline-accounts")]
     fn offline_view(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         let AddAccount::Offline { name } = &mut self.add_account else {
@@ -166,6 +173,7 @@ impl ArcticApp {
                     format!("Added {}", account.username),
                     "Offline account",
                 );
+                self.offer_profile_link(&account);
                 self.accounts.upsert(account);
                 self.save_accounts();
             }

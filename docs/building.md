@@ -27,17 +27,30 @@ Run the launcher directly with `cargo run --release -p arctic-app`.
 
 ### The Arctic Client
 
-The launcher embeds the jars in `mod/dist/`, which are committed, so the steps above don't
-need Java. The client is a shared core (`mod/core`, Java 8, no Minecraft code) plus one
+The launcher embeds `mod/dist/arctic-client.pack` (all the client's jars in one ~1 MB file),
+which is committed, so the steps above don't need Java. The client is a shared core (`mod/core`, Java 8, no Minecraft code) plus one
 adapter source tree for every Fabric version (`mod/versions/fabric`), where version
 differences sit in `//#if MC >= 26.2` … `//#else` … `//#endif` blocks that the build
 resolves. `mod/targets.json` lists what gets built and which Minecraft versions each jar
 covers; the launcher reads the same file. To change the client, you need JDK 25:
 
 ```sh
-cd mod && ./gradlew -p core build   # checks the core still compiles for Java 8
-python mod/build.py                 # every target into mod/dist (or: python mod/build.py 26.2)
+cd mod && ./gradlew -p core build   # the core's tests, and that it still compiles for Java 8
+python mod/check.py                 # every target compiles and its mixins fit (or: python mod/check.py 1.16.5)
+python mod/build.py                 # every target, then the pack (or: python mod/build.py 26.2)
 ```
+
+`check.py` is what CI runs for every target on each push: it compiles the adapter for that
+version and checks each mixin hook against that version's game jar, so a shared change
+that breaks an old version fails there instead of at someone's game start. Versions 1.8.9
+to 1.12.2 build from `mod/versions/legacy` (Legacy Fabric) instead.
+
+Old versions differ in small ways that the adapter hides behind helpers in `Compat`
+(entity rotation fields before 1.17, button labels that were plain strings before 1.16,
+and so on), `compat/GuiGraphics` (drawing before 1.20) and `compat/KeyCodes` (key codes),
+plus a few renames in `versions/fabric/build.gradle`. Use those rather than the game's API
+directly in shared code, and the older targets keep compiling. Features a version can't
+support are switched off per version in `build.gradle`'s mixin config properties.
 
 Launch an instance with `ARCTIC_COSMETICS_URL=http://127.0.0.1:8080` set to point the
 client and the launcher at a local cosmetics server. Adding

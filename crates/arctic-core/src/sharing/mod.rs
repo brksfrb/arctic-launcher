@@ -39,6 +39,8 @@ pub enum Bundle {
     /// A HUD layout, a crosshair, or all client settings.
     Client(ClientPart),
     Profile(ProfilePack),
+    /// Default game settings for new instances.
+    Options(crate::game_defaults::Defaults),
 }
 
 /// What someone pasted.
@@ -59,6 +61,7 @@ impl Bundle {
                 Part::All => "client",
             },
             Bundle::Profile(_) => "profile",
+            Bundle::Options(_) => "options",
         }
     }
 
@@ -67,6 +70,7 @@ impl Bundle {
             Bundle::Instance(i) => serde_json::to_value(i).unwrap_or(Value::Null),
             Bundle::Client(c) => Value::Object(c.values.clone()),
             Bundle::Profile(p) => serde_json::to_value(p).unwrap_or(Value::Null),
+            Bundle::Options(d) => serde_json::to_value(&d.values).unwrap_or(Value::Null),
         };
         json!({ "arctic_share": FORMAT, "kind": self.kind(), "data": data })
     }
@@ -95,6 +99,12 @@ impl Bundle {
                     .map_err(parse_err)?
                     .check()?,
             )),
+            Some("options") => {
+                let values = serde_json::from_value(data).map_err(parse_err)?;
+                Ok(Bundle::Options(
+                    crate::game_defaults::Defaults { values }.checked(),
+                ))
+            }
             Some("hud") => Ok(Bundle::Client(ClientPart::check(Part::Hud, &data)?)),
             Some("crosshair") => Ok(Bundle::Client(ClientPart::check(Part::Crosshair, &data)?)),
             Some("client") => Ok(Bundle::Client(ClientPart::check(Part::All, &data)?)),
@@ -125,6 +135,7 @@ impl Bundle {
         match self {
             Bundle::Instance(i) => format!("Instance {}", i.summary()),
             Bundle::Profile(p) => p.summary(),
+            Bundle::Options(d) => format!("Default game settings ({} of them)", d.values.len()),
             Bundle::Client(c) => match (c.part, c.widgets_on()) {
                 (Part::Hud, Some(n)) => format!("A HUD layout ({n} widgets on)"),
                 (Part::Hud, None) => "A HUD layout".into(),

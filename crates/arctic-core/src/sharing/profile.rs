@@ -44,6 +44,9 @@ pub struct ProfilePack {
     pub vanilla: Option<InstancePack>,
     #[serde(default)]
     pub instances: Vec<InstancePack>,
+    /// Default game settings for new instances.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub options: std::collections::BTreeMap<String, String>,
 }
 
 /// What an import did.
@@ -81,6 +84,7 @@ impl ProfilePack {
                 settings,
                 vanilla: Some(vanilla.pack),
                 instances: packs,
+                options: crate::game_defaults::Defaults::load(dirs)?.values,
             },
             left_out,
         ))
@@ -111,10 +115,16 @@ impl ProfilePack {
                 Ok(i)
             })
             .collect::<Result<Vec<_>>>()?;
+        let options = crate::game_defaults::Defaults {
+            values: self.options,
+        }
+        .checked()
+        .values;
         Ok(Self {
             settings,
             vanilla,
             instances,
+            options,
         })
     }
 
@@ -137,6 +147,12 @@ impl ProfilePack {
             updated.client_style_set = crate::auth::now_secs();
         }
         updated.save(dirs)?;
+        if !self.options.is_empty() {
+            crate::game_defaults::Defaults {
+                values: self.options.clone(),
+            }
+            .save(dirs)?;
+        }
         let mut report = ProfileReport::default();
         if let Some(pack) = &self.vanilla {
             let default = instances::load_default(dirs)?;

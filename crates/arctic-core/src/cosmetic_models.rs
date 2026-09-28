@@ -206,6 +206,23 @@ impl Geometry {
 mod tests {
     use super::*;
 
+    #[test]
+    fn the_bundled_cosmetics_parse() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../arctic-cosmetics/assets/cosmetics");
+        let mut models = 0;
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.to_string_lossy().ends_with(".geo.json") {
+                let geo = Geometry::parse(&std::fs::read(&path).unwrap())
+                    .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+                assert!(!geo.bones.is_empty(), "{}", path.display());
+                models += 1;
+            }
+        }
+        assert!(models >= 17, "{models}");
+    }
+
     const HALO: &str = r#"{"minecraft:geometry":[{"description":{"texture_width":32,"texture_height":32},
         "bones":[{"name":"head","pivot":[0,24,0],"cubes":[{"origin":[-4,34,-5],"size":[8,1,1],"uv":[0,0]}]}]}]}"#;
 

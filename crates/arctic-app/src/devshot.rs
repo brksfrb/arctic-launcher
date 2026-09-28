@@ -13,6 +13,12 @@ pub struct DevShot {
     requested: bool,
     /// `ARCTIC_DEVSHOT_INSTANCE`: open this instance's page first.
     pub open_instance: Option<String>,
+    /// `ARCTIC_DEVSHOT_TAB`: open this tab first (its position in the sidebar, from 0).
+    pub open_tab: Option<usize>,
+    /// `ARCTIC_DEVSHOT_JOIN`: start the selected instance into this server.
+    pub join: Option<String>,
+    /// `ARCTIC_DEVSHOT_LAUNCH`: start the selected instance (`duel`: into a duel).
+    pub launch: Option<String>,
 }
 
 impl DevShot {
@@ -30,6 +36,11 @@ impl DevShot {
             delay,
             requested: false,
             open_instance: std::env::var("ARCTIC_DEVSHOT_INSTANCE").ok(),
+            open_tab: std::env::var("ARCTIC_DEVSHOT_TAB")
+                .ok()
+                .and_then(|v| v.parse().ok()),
+            join: std::env::var("ARCTIC_DEVSHOT_JOIN").ok(),
+            launch: std::env::var("ARCTIC_DEVSHOT_LAUNCH").ok(),
         }
     }
 

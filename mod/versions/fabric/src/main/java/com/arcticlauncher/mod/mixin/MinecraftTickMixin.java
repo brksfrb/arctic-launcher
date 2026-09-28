@@ -14,5 +14,12 @@ abstract class MinecraftTickMixin {
 	@Inject(method = "tick", at = @At("HEAD"))
 	private void arctic$tick(CallbackInfo ci) {
 		ArcticClient.tick(Compat.screen() != null);
+		com.arcticlauncher.mod.DisconnectConfirm.tick();
+		//#if MC >= 1.16
+		com.arcticlauncher.mod.replay.ReplayRecording.tick();
+		//#endif
+		//#if MC >= 26.1
+		com.arcticlauncher.mod.ArcticPacks.checkFontScale();
+		//#endif
 	}
 }

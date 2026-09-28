@@ -14,8 +14,14 @@ public final class TitleMenu extends Page {
 	private static final int BUTTON_H = 20;
 	private static final int GAP = 4;
 	private static final int ICON = 24;
-	private static final float WORDMARK_SCALE = 2.5f;
-	private static final String WORDMARK = "§lARCTIC";
+	/**
+	 * The wordmark is a picture made for each GUI scale (1–8) and drawn one
+	 * image pixel per screen pixel: scaled-up text blurs into gray edges.
+	 * Sizes of {@code assets/arctic/wordmark-<scale>.png}.
+	 */
+	private static final int[][] WORDMARK = {
+		{88, 18}, {175, 37}, {263, 55}, {351, 74}, {438, 92}, {526, 111}, {613, 129}, {701, 147},
+	};
 
 	@Override
 	public boolean ownBackground() {
@@ -55,12 +61,20 @@ public final class TitleMenu extends Page {
 		add(new Button("Arctic", new Runnable() {
 			@Override
 			public void run() {
-				ArcticClient.platform().openPage(new ArcticMenu());
+				ArcticClient.platform().openPage(Menus.page("mods"));
 			}
 		})).bounds(left + third + GAP, y, third, BUTTON_H);
 		add(new Button("Quit", run(MenuAction.QUIT))).bounds(left + (third + GAP) * 2, y, BUTTON_W - (third + GAP) * 2, BUTTON_H);
 		corner("Accessibility", MenuAction.ACCESSIBILITY, width - 6);
 		corner("Language", MenuAction.LANGUAGE, width - 6 - 76 - GAP);
+		int right = width - 6 - (76 + GAP) * 2;
+		if (com.arcticlauncher.client.replay.Replays.canWatch()) {
+			add(new Button("Replays", () -> ArcticClient.platform().openPage(Menus.page("replays")))).bounds(right - 76, 6, 76, 16);
+			right -= 76 + GAP;
+		}
+		if (ArcticClient.platform().hasFeatures()) {
+			add(new Button("Edit HUD", () -> ArcticClient.platform().openPage(new HudEditor()))).bounds(right - 76, 6, 76, 16);
+		}
 	}
 
 	/** A small button in the top-right corner, right edge at {@code right}. */
@@ -82,10 +96,18 @@ public final class TitleMenu extends Page {
 	protected void drawBehind(Gfx g, Style s, int mx, int my) {
 		int top = logoTop();
 		g.texture("icon", width / 2 - ICON / 2, top, ICON, ICON, 0, 0, 256, 256, 256, 256);
-		int wordW = Math.round(g.textWidth(WORDMARK) * WORDMARK_SCALE);
-		Draw.big(g, WORDMARK, width / 2 - wordW / 2, top + ICON + 4, WORDMARK_SCALE, s.text);
+		float ps = g.pixelScale();
+		int scale = Math.max(1, Math.min(WORDMARK.length, Math.round(ps)));
+		int w = WORDMARK[scale - 1][0];
+		int h = WORDMARK[scale - 1][1];
+		int wordTop = top + ICON + 6;
+		g.push();
+		g.scale(1f / ps);
+		g.texture("asset:wordmark-" + scale, Math.round(width * ps / 2f - w / 2f), Math.round(wordTop * ps), w, h, 0, 0,
+				w, h, w, h);
+		g.pop();
 		String sub = "Minecraft " + ArcticClient.platform().minecraftVersion();
-		Draw.centered(g, sub, width / 2, top + ICON + 8 + Math.round(8 * WORDMARK_SCALE), s.accent, true);
+		Draw.centered(g, sub, width / 2, wordTop + Math.round(h / ps) + 5, s.accent, true);
 	}
 
 	@Override

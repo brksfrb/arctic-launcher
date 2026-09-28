@@ -16,6 +16,7 @@ use crate::storage::{load_json, save_json};
 /// (Modrinth project id, name). Each is skipped if it has no build yet
 /// for the version; required dependencies come along automatically.
 pub const MODS: &[(&str, &str)] = &[
+    ("nmDcB62a", "ModernFix"),
     ("AANobbMI", "Sodium"),
     ("gvQqBUqZ", "Lithium"),
     ("uXXizFIs", "FerriteCore"),
@@ -44,6 +45,73 @@ fn state_path(game_dir: &Path) -> PathBuf {
     game_dir.join("arctic-performance-state.json")
 }
 
+/// Where another game version's set waits while this one is in use, so
+/// switching back is a move instead of a new download.
+fn stash_dir(game_dir: &Path, game_version: &str, shaders: bool) -> PathBuf {
+    let key = if shaders {
+        format!("{game_version}-shaders")
+    } else {
+        game_version.to_owned()
+    };
+    game_dir.join(".arctic").join("performance").join(key)
+}
+
+/// Move the current set (files, index, state) out of the way, into its stash.
+fn stash(game_dir: &Path, state: &State) -> Result<()> {
+    let index = index_path(game_dir);
+    if state.game_version.is_empty() || !index.exists() {
+        return Ok(());
+    }
+    let to = stash_dir(game_dir, &state.game_version, state.shaders);
+    if to.exists() {
+        std::fs::remove_dir_all(&to).map_err(|e| crate::Error::io(&to, e))?;
+    }
+    std::fs::create_dir_all(&to).map_err(|e| crate::Error::io(&to, e))?;
+    let mods_dir = game_dir.join("mods");
+    for m in ModIndex::load(&index)?.mods {
+        let from = mods_dir.join(&m.file_name);
+        if from.exists() {
+            std::fs::rename(&from, to.join(&m.file_name))
+                .map_err(|e| crate::Error::io(&from, e))?;
+        }
+    }
+    for file in [index, state_path(game_dir)] {
+        if let Some(name) = file.file_name() {
+            std::fs::rename(&file, to.join(name)).map_err(|e| crate::Error::io(&file, e))?;
+        }
+    }
+    Ok(())
+}
+
+/// Bring back a stashed set for this version if it's complete and recent;
+/// true when it's in place.
+fn unstash(game_dir: &Path, game_version: &str, shaders: bool) -> Result<bool> {
+    let from = stash_dir(game_dir, game_version, shaders);
+    let index = from.join("arctic-performance.json");
+    let Some(state) = load_json::<State>(&from.join("arctic-performance-state.json"))? else {
+        return Ok(false);
+    };
+    if !index.exists()
+        || crate::auth::now_secs().saturating_sub(state.checked) >= RECHECK_SECS
+        || !all_present(&index, &from)?
+    {
+        return Ok(false);
+    }
+    let mods_dir = game_dir.join("mods");
+    std::fs::create_dir_all(&mods_dir).map_err(|e| crate::Error::io(&mods_dir, e))?;
+    for m in ModIndex::load(&index)?.mods {
+        let file = from.join(&m.file_name);
+        std::fs::rename(&file, mods_dir.join(&m.file_name))
+            .map_err(|e| crate::Error::io(&file, e))?;
+    }
+    std::fs::rename(&index, index_path(game_dir)).map_err(|e| crate::Error::io(&index, e))?;
+    let state_file = from.join("arctic-performance-state.json");
+    std::fs::rename(&state_file, state_path(game_dir))
+        .map_err(|e| crate::Error::io(&state_file, e))?;
+    let _ = std::fs::remove_dir_all(&from);
+    Ok(true)
+}
+
 /// Install (or update) the performance mods for `game_version` (and Iris
 /// when `shaders` is on), or remove them when neither is wanted. Offline,
 /// mods already installed for this version are kept.
@@ -65,7 +133,12 @@ pub fn sync(
     let mods_dir = game_dir.join("mods");
     let index = index_path(game_dir);
     if state.game_version != game_version || state.shaders != shaders {
+        // Another version's set: keep it for later, and bring back this one's if we have it.
+        stash(game_dir, &state)?;
         remove_all(game_dir)?;
+        if unstash(game_dir, game_version, shaders)? {
+            return Ok(());
+        }
     } else if crate::auth::now_secs().saturating_sub(state.checked) < RECHECK_SECS
         && all_present(&index, &mods_dir)?
     {
@@ -210,5 +283,51 @@ mod tests {
         // Would fail (and log) if it tried Modrinth with a fake version.
         sync(dir.path(), "26.3", true, false, &|_| {}).unwrap();
         assert!(mods.join("sodium.jar").exists());
+    }
+
+    /// Put a checked set for `version` in place, as a finished install would.
+    fn installed_set(game_dir: &Path, version: &str, file: &str) {
+        let mods = game_dir.join("mods");
+        std::fs::create_dir_all(&mods).unwrap();
+        std::fs::write(mods.join(file), version.as_bytes()).unwrap();
+        ModIndex::default()
+            .with(tracked(file))
+            .save(&index_path(game_dir))
+            .unwrap();
+        let state = State {
+            game_version: version.into(),
+            shaders: false,
+            checked: crate::auth::now_secs(),
+        };
+        save_json(&state_path(game_dir), &state).unwrap();
+    }
+
+    #[test]
+    fn switching_versions_back_reuses_the_earlier_set() {
+        let dir = tempfile::tempdir().unwrap();
+        let mods = dir.path().join("mods");
+        installed_set(dir.path(), "26.2", "sodium-26.2.jar");
+        // To 26.3: the 26.2 set is stashed (26.3's has to be downloaded; fake it).
+        stash(
+            dir.path(),
+            &load_json(&state_path(dir.path())).unwrap().unwrap(),
+        )
+        .unwrap();
+        assert!(!mods.join("sodium-26.2.jar").exists());
+        installed_set(dir.path(), "26.3", "sodium-26.3.jar");
+        // Back to 26.2 through sync: no network, the stashed set returns.
+        sync(dir.path(), "26.2", true, false, &|_| {}).unwrap();
+        assert_eq!(
+            std::fs::read(mods.join("sodium-26.2.jar")).unwrap(),
+            b"26.2"
+        );
+        assert!(!mods.join("sodium-26.3.jar").exists());
+        assert!(
+            stash_dir(dir.path(), "26.3", false)
+                .join("sodium-26.3.jar")
+                .exists()
+        );
+        let state: State = load_json(&state_path(dir.path())).unwrap().unwrap();
+        assert_eq!(state.game_version, "26.2");
     }
 }

@@ -54,6 +54,8 @@ pub fn login_with_browser(cfg: &MsaConfig, cancel: &AtomicBool) -> Result<Accoun
 
 /// Mint a fresh Minecraft token from the stored MSA refresh token.
 pub fn refresh(cfg: &MsaConfig, account: &Account) -> Result<Account> {
+    // Always Microsoft in builds without offline accounts.
+    #[allow(irrefutable_let_patterns)]
     let AccountKind::Microsoft(session) = &account.kind else {
         return Ok(account.clone());
     };

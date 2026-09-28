@@ -4,9 +4,10 @@ use std::sync::mpsc;
 
 use arctic_core::ProgressInfo;
 #[cfg(feature = "offline-accounts")]
+#[cfg(feature = "offline-accounts")]
 use arctic_core::auth::offline;
 use arctic_core::auth::{self, Account, AccountStore};
-use arctic_core::launch::{self, GameEvent, LaunchRequest};
+use arctic_core::launch::{self, GameEvent, LaunchRequest, QuickPlay};
 use arctic_core::settings::Settings;
 use arctic_core::versions::VersionManifest;
 use arctic_core::{Error, Result, instances};
@@ -43,6 +44,7 @@ pub fn run(ctx: &Ctx, args: &LaunchArgs) -> Result<i32> {
         settings: &settings,
         bridge: bridge.as_ref(),
         copy: 0,
+        quick_play: quick_play(args)?,
     };
     let plan = launch::prepare(&req, &progress)?;
     ctx.out.end_progress();
@@ -63,6 +65,25 @@ pub fn run(ctx: &Ctx, args: &LaunchArgs) -> Result<i32> {
         return Ok(0);
     }
     wait_for_game(ctx, &plan, &entry.id, &account.username)
+}
+
+fn quick_play(args: &LaunchArgs) -> Result<Option<QuickPlay>> {
+    if let Some(address) = &args.server {
+        if arctic_core::servers::Address::parse(address).is_none() {
+            return Err(Error::Other(format!(
+                "\"{address}\" isn't a server address"
+            )));
+        }
+        return Ok(Some(QuickPlay::Server(address.trim().to_owned())));
+    }
+    if let Some(file) = &args.replay {
+        let file = std::path::absolute(file).map_err(|e| Error::Other(e.to_string()))?;
+        if !file.is_file() {
+            return Err(Error::Other(format!("no replay at {}", file.display())));
+        }
+        return Ok(Some(QuickPlay::Replay(file)));
+    }
+    Ok(args.world.clone().map(QuickPlay::World))
 }
 
 /// The CLI's accounts for the in-game switcher: read from disk each time,

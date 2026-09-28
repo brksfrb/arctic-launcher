@@ -115,17 +115,13 @@ pub fn play_button(ui: &mut Ui, p: &Palette, state: PlayState, size: Vec2) -> Re
         text_color,
     );
     let font = if label.len() > 10 { 16.0 } else { 22.0 };
-    // The bundled font has no bold face: draw the label a few times, a
-    // fraction of a pixel apart, for a bold weight.
-    for dx in BOLD_OFFSETS {
-        painter.text(
-            rect.center() + vec2(12.0 + dx, 0.0),
-            Align2::CENTER_CENTER,
-            label,
-            FontId::proportional(font),
-            text_color,
-        );
-    }
+    painter.text(
+        rect.center() + vec2(12.0, 0.0),
+        Align2::CENTER_CENTER,
+        label,
+        crate::fonts::heading(font),
+        text_color,
+    );
 
     if enabled {
         response.on_hover_cursor(CursorIcon::PointingHand)
@@ -133,9 +129,6 @@ pub fn play_button(ui: &mut Ui, p: &Palette, state: PlayState, size: Vec2) -> Re
         response
     }
 }
-
-/// Horizontal offsets that thicken the Play label into a bold weight.
-const BOLD_OFFSETS: [f32; 3] = [0.0, 0.5, 1.0];
 
 fn paint_progress_fill(
     painter: &egui::Painter,
@@ -300,7 +293,11 @@ pub fn hover_card(ui: &mut Ui, p: &Palette, size: Vec2, selected: bool) -> (Rect
 
 /// Heading + optional subtitle used at the top of every tab.
 pub fn page_header(ui: &mut Ui, p: &Palette, title: &str, subtitle: &str) {
-    ui.label(egui::RichText::new(title).size(30.0).strong().color(p.text));
+    ui.label(
+        egui::RichText::new(title)
+            .font(crate::fonts::heading(30.0))
+            .color(p.text),
+    );
     if !subtitle.is_empty() {
         ui.label(egui::RichText::new(subtitle).color(p.muted));
     }
@@ -460,4 +457,74 @@ pub fn lift_controls(ui: &mut Ui, p: &Palette) {
     let widgets = &mut ui.visuals_mut().widgets;
     widgets.inactive.bg_fill = p.surface_hover;
     widgets.inactive.bg_stroke = egui::Stroke::new(1.0, p.card_stroke);
+}
+
+/// Minecraft's 16 text colors, for `§0`..`§f`.
+const MC_COLORS: [u32; 16] = [
+    0x000000, 0x0000aa, 0x00aa00, 0x00aaaa, 0xaa0000, 0xaa00aa, 0xffaa00, 0xaaaaaa, 0x555555,
+    0x5555ff, 0x55ff55, 0x55ffff, 0xff5555, 0xff55ff, 0xffff55, 0xffffff,
+];
+
+/// Text with Minecraft `§` color codes (and `§#rrggbb`), colored like the
+/// game draws it; text before any code (or after `§r`) uses `plain`.
+pub fn mc_text(text: &str, plain: Color32, font: FontId) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    let mut color = plain;
+    let mut run = String::new();
+    let mut chars = text.chars().peekable();
+    let flush = |job: &mut egui::text::LayoutJob, run: &mut String, color: Color32| {
+        if !run.is_empty() {
+            job.append(run, 0.0, egui::TextFormat::simple(font.clone(), color));
+            run.clear();
+        }
+    };
+    while let Some(c) = chars.next() {
+        if c != '§' {
+            run.push(c);
+            continue;
+        }
+        let Some(code) = chars.next() else {
+            break;
+        };
+        if code == '#' {
+            let hex: String = chars.by_ref().take(6).collect();
+            if let Ok(v) = u32::from_str_radix(&hex, 16) {
+                flush(&mut job, &mut run, color);
+                color = Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8);
+            }
+            continue;
+        }
+        if let Some(i) = code.to_digit(16) {
+            flush(&mut job, &mut run, color);
+            let v = MC_COLORS[i as usize];
+            color = Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8);
+        } else if code == 'r' {
+            flush(&mut job, &mut run, color);
+            color = plain;
+        }
+        // Bold, italic and the rest are left out.
+    }
+    flush(&mut job, &mut run, color);
+    job
+}
+
+/// A `file://` URI egui's loader reads back as `path`. On Windows it needs
+/// `file:///C:/…`: with two slashes, `C:` is taken for a network host.
+pub fn file_uri(path: &std::path::Path) -> String {
+    let path = path.to_string_lossy();
+    if cfg!(windows) {
+        format!("file:///{}", path.replace('\\', "/"))
+    } else {
+        format!("file://{path}")
+    }
+}
+
+#[cfg(test)]
+mod file_uri_tests {
+    #[cfg(windows)]
+    #[test]
+    fn windows_paths_get_three_slashes() {
+        let uri = super::file_uri(std::path::Path::new(r"C:\Users\a b\shot.png"));
+        assert_eq!(uri, "file:///C:/Users/a b/shot.png");
+    }
 }

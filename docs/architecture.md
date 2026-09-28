@@ -151,14 +151,9 @@ just textures everyone may use, and custom images are allowed (size-checked: 64Ã
 
 The server only checks **who** publishes, so nobody can change someone else's look:
 
-- **Microsoft accounts:** the client asks for a challenge, calls Mojang's
-  `session/minecraft/join` with it, and the server confirms with `hasJoined`, like a
-  Minecraft server does. No password or token reaches Arctic.
-- **Offline accounts:** the first launcher to use a name claims it with a random key, kept
-  in the profile's `cosmetics.json`; later changes need the same key. The server derives
-  the UUID from the name exactly like the game, so a key can only claim an offline UUID.
-
-Both give an HMAC-signed token that expires after a week. Before launching with the
+The client asks for a challenge, calls Mojang's `session/minecraft/join` with it, and the
+server confirms with `hasJoined`, like a Minecraft server does. No password or token reaches
+Arctic. That gives an HMAC-signed token that expires after a week. Before launching with the
 client, the launcher writes `config/arctic-session.json` (server, token, and the menu style
 picked in the launcher) so cape changes made in game publish as that player.
 
@@ -166,8 +161,10 @@ picked in the launcher) so cape changes made in game publish as that player.
 
 Vanilla instances run the Arctic Client on supported versions: Fabric plus the Arctic mod,
 installed quietly (`launch::effective_loader`); Fabric and Quilt instances get the mod too.
-The launcher embeds the built jars (`mod/dist/`) and copies the right one in before launch
-(`arctic_mod::sync`).
+The launcher embeds `mod/dist/arctic-client.pack`: every target's jar, with each file
+stored once and LZMA-compressed together (about 1 MB for all versions, against about 24 MB
+of jars; most files are the same in every version). Before launch it rebuilds the jar the
+game needs from it and copies it in (`arctic_mod::sync`).
 
 The client is split so it can cover many Minecraft versions:
 

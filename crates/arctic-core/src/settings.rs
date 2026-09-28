@@ -46,6 +46,8 @@ pub struct Settings {
     /// Open the launcher window maximized.
     pub start_maximized: bool,
     pub theme: ThemeMode,
+    /// What's behind the launcher.
+    pub backdrop: Backdrop,
     pub on_game_start: GameStartAction,
     /// Show what you're playing on Discord.
     pub discord_presence: bool,
@@ -63,6 +65,51 @@ pub struct Settings {
     /// Fancy mode of the Arctic Client: smooth font and rounded shapes.
     /// Picked together with `client_style` (same timestamp).
     pub client_fancy: bool,
+    /// Friends may see which server you're on (last known from the Arctic
+    /// server; until then, the game doesn't say).
+    pub share_server_with_friends: bool,
+    /// Proximity voice chat.
+    pub voice: VoiceSettings,
+}
+
+/// Proximity voice chat: off until turned on.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VoiceSettings {
+    pub enabled: bool,
+    /// Push-to-talk (the key is set in game); otherwise voice activation.
+    pub push_to_talk: bool,
+    /// Voice activation threshold, dBFS.
+    pub threshold_db: f32,
+    /// Device names; `None` = the system default.
+    pub input: Option<String>,
+    pub output: Option<String>,
+    /// Everyone's volume and your microphone's (1 = unchanged).
+    pub volume: f32,
+    pub mic_gain: f32,
+    /// Only hear (and be heard by) friends.
+    pub friends_only: bool,
+    /// Players (UUIDs) you muted.
+    pub muted: Vec<String>,
+    /// Also talk with Simple Voice Chat players on servers that run it.
+    pub simple_voice_chat: bool,
+}
+
+impl Default for VoiceSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            push_to_talk: false,
+            threshold_db: -45.0,
+            input: None,
+            output: None,
+            volume: 1.0,
+            mic_gain: 1.0,
+            friends_only: false,
+            muted: Vec::new(),
+            simple_voice_chat: false,
+        }
+    }
 }
 
 /// How the Arctic Client styles Minecraft's menus.
@@ -109,6 +156,20 @@ pub enum GameStartAction {
     Minimize,
 }
 
+/// The launcher's background.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Backdrop {
+    /// The painted arctic night (aurora, mountains, snow).
+    // "world" was saved by a test build that made the picture the default.
+    #[default]
+    #[serde(alias = "world")]
+    Scenery,
+    /// Your own Minecraft: the newest screenshot from the instance, or the
+    /// title screen panorama of its version, dimmed.
+    Picture,
+}
+
 /// Launcher color theme.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -140,6 +201,7 @@ impl Default for Settings {
             intro: true,
             start_maximized: false,
             theme: ThemeMode::Default,
+            backdrop: Backdrop::Scenery,
             on_game_start: GameStartAction::KeepOpen,
             discord_presence: true,
             onboarded: false,
@@ -148,6 +210,8 @@ impl Default for Settings {
             client_style: ClientStyle::Arctic,
             client_style_set: 0,
             client_fancy: false,
+            share_server_with_friends: false,
+            voice: VoiceSettings::default(),
         }
     }
 }

@@ -9,6 +9,12 @@ repositories {
 dependencies {
 	// Every Minecraft version ships Gson; 2.2.4 is the oldest (1.8.9).
 	compileOnly 'com.google.code.gson:gson:2.2.4'
+	// The proxy's SOCKS5 handler; 4.0.23 is what 1.8.9 ships (every later version has 4.0 or 4.1).
+	compileOnly 'io.netty:netty-all:4.0.23.Final'
+	testImplementation 'io.netty:netty-all:4.0.23.Final'
+	testImplementation 'com.google.code.gson:gson:2.2.4'
+	testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 // The core runs on every supported Minecraft, down to 1.8.9 on Java 8.
@@ -16,4 +22,8 @@ tasks.withType(JavaCompile).configureEach {
 	options.release = 8
 	options.encoding = 'UTF-8'
 	options.compilerArgs += ['-Xlint:-options']
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
 }

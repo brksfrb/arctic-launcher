@@ -42,6 +42,6 @@ The whole app is one small executable, so an update is a single download plus a 
 
 | Secret | Purpose |
 |---|---|
-| `ARCTIC_MSA_CLIENT_ID` (optional) | Baked into release builds as the default Azure client ID |
+| `ARCTIC_MSA_CLIENT_ID` | Arctic's own Azure client ID, baked into release builds (sign-in works once Mojang approves it) |
 
 TODO: Authenticode code signing (keep the certificate in CI secrets; never commit `.pfx`).

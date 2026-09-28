@@ -165,6 +165,9 @@ pub fn install(
     Ok(mods)
 }
 
+/// A project that couldn't be installed, and why.
+pub type Failed = (String, crate::Error);
+
 /// Install several projects at once: looked up side by side (Modrinth can
 /// take seconds per answer), downloaded together. Returns what was
 /// installed and, for each project that couldn't be, why.
@@ -175,7 +178,7 @@ pub fn install_many(
     mods_dir: &Path,
     index: &Path,
     progress: Progress,
-) -> Result<(Vec<InstalledMod>, Vec<(String, crate::Error)>)> {
+) -> Result<(Vec<InstalledMod>, Vec<Failed>)> {
     progress(ProgressInfo::stage("Finding mods"));
     let loaders = modrinth::compatible_loaders(loader);
     let target = Target {

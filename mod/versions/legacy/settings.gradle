@@ -1,0 +1,18 @@
+pluginManagement {
+	repositories {
+		maven {
+			name = 'Fabric'
+			url = 'https://maven.fabricmc.net/'
+		}
+		maven {
+			name = 'Legacy Fabric'
+			url = 'https://maven.legacyfabric.net/'
+		}
+		mavenCentral()
+		gradlePluginPortal()
+	}
+}
+
+// Arctic Client for old Minecraft (1.8.9 – 1.13.2) on Legacy Fabric. Build from mod/:
+// ./gradlew -p versions/legacy build -Pminecraft_version=1.8.9
+rootProject.name = 'arctic-mod-legacy'

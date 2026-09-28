@@ -3,7 +3,7 @@ package com.arcticlauncher.mod;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.MenuAction;
 import com.arcticlauncher.client.looks.Look;
-import com.arcticlauncher.client.menu.ArcticMenu;
+import com.arcticlauncher.client.menu.Menus;
 import com.arcticlauncher.client.menu.HudEditor;
 import com.mojang.blaze3d.platform.InputConstants;
 import java.util.UUID;
@@ -49,8 +49,39 @@ final class SelfTest {
 	private SelfTest() {}
 
 	static void maybeStart() {
+		//#if MC >= 1.16
+		if (ReplayTest.requested()) {
+			ReplayTest.start();
+			return;
+		}
+		//#else
+		// No replays on this version yet: the replay test runs the world test.
+		if ("replay".equals(System.getProperty("arctic.selftest"))) {
+			WorldTest.start();
+			return;
+		}
+		//#endif
 		if (WorldTest.requested()) {
 			WorldTest.start();
+			return;
+		}
+		if ("duel".equals(System.getProperty("arctic.selftest"))) {
+			// A duel through the launcher: world, kit, LAN, a play-together code.
+			TIMER.schedule(() -> Minecraft.getInstance().execute(() -> {
+				ArcticMod.LOG.info("dueltest: available {}", ArcticClient.duel().available());
+				ArcticClient.duel().start("uhc", null, null);
+			}), 12, TimeUnit.SECONDS);
+			TIMER.schedule(() -> Minecraft.getInstance().execute(() -> {
+				ArcticMod.LOG.info("dueltest: hosting {} code {}", ArcticClient.duel().hosting(), ArcticClient.duel().code());
+				shot("duel");
+				Menus.select("friends");
+				ArcticClient.platform().openPage(Menus.selected());
+			}), 60, TimeUnit.SECONDS);
+			TIMER.schedule(() -> Minecraft.getInstance().execute(() -> shot("duel-menu")), 63, TimeUnit.SECONDS);
+			TIMER.schedule(() -> Minecraft.getInstance().execute(() -> {
+				ArcticMod.LOG.info("dueltest: done");
+				Minecraft.getInstance().stop();
+			}), 66, TimeUnit.SECONDS);
 			return;
 		}
 		if (!Boolean.getBoolean("arctic.selftest")) {
@@ -74,7 +105,7 @@ final class SelfTest {
 	}
 
 	private static void waitForLook(int attempt) {
-		UUID self = Minecraft.getInstance().getUser().getProfileId();
+		UUID self = ArcticClient.platform().playerId();
 		Look look = ArcticClient.looks().lookFor(self);
 		boolean cape = look != null && ArcticClient.looks().texture(look.cape);
 		boolean skin = look != null && (look.skin == null || ArcticClient.looks().texture(look.skin));
@@ -100,20 +131,98 @@ final class SelfTest {
 					Compat.setScreen(new PageScreen(ArcticClient.titleMenu(), null));
 					soon(SelfTest::clickOptions);
 				},
-				() -> open("hud", "menu-hud"),
-				() -> open("features", "menu-features"),
-				() -> open("view", "menu-view"),
+				() -> open("mods", "menu-mods"),
+				() -> open("hud.fps", "menu-hud-fps"),
+				() -> open("hud.keystrokes", "menu-hud-keystrokes"),
 				() -> open("crosshair", "menu-crosshair"),
+				() -> open("packs", "menu-packs"),
 				() -> open("looks", "menu-looks"),
 				() -> open("style", "menu-style"),
+				() -> {
+					// Account tab: Tab focuses the address box, then type into it.
+					Menus.select("account");
+					Compat.setScreen(null);
+					ArcticClient.platform().openPage(Menus.selected());
+					soon(() -> {
+						com.arcticlauncher.client.ui.Page page = ((PageScreen) Compat.screen()).page();
+						page.keyPressed(com.arcticlauncher.client.Keys.TAB, 0);
+						for (char c : "proxy.example".toCharArray()) {
+							page.charTyped(c);
+						}
+						page.keyPressed(com.arcticlauncher.client.Keys.TAB, 0);
+						page.charTyped('9');
+						soon(() -> shot("menu-account"));
+					});
+				},
 				() -> {
 					ArcticClient.platform().openPage(new HudEditor());
 					later(() -> shot("hud-editor"));
 				},
 				() -> {
+					// The HUD as text, back through the checks, into a fresh config.
+					com.google.gson.JsonObject bundle = com.arcticlauncher.client.share.Shares.bundle("hud", ArcticClient.config());
+					String text = com.arcticlauncher.client.share.Shares.toText(bundle);
+					try {
+						com.arcticlauncher.client.config.ClientConfig copy = new com.arcticlauncher.client.config.ClientConfig();
+						String done = com.arcticlauncher.client.share.Shares.apply(com.arcticlauncher.client.share.Shares.parse(text), copy);
+						ArcticMod.LOG.info("selftest: share text {} chars -> {} ({} widgets, same {})", text.length(), done, copy.hud.size(),
+								copy.hud.size() == ArcticClient.config().hud.size());
+					} catch (Exception e) {
+						ArcticMod.LOG.error("selftest: FAILED share text round trip", e);
+					}
+					// A code from the server, then used again from the "Use a code" page.
+					com.arcticlauncher.client.share.ShareService.share("hud");
+					TIMER.schedule(() -> Minecraft.getInstance().execute(() -> {
+						java.util.regex.Matcher m = java.util.regex.Pattern.compile("[a-z0-9]{4}-[a-z0-9]{4}")
+								.matcher(com.arcticlauncher.client.share.ShareService.status());
+						String code = m.find() ? m.group() : "";
+						int before = ArcticClient.config().hud.size();
+						ArcticMod.LOG.info("selftest: share gave {} ({})", code, com.arcticlauncher.client.share.ShareService.status());
+						ArcticClient.config().hud.clear();
+						ArcticClient.platform().openPage(new com.arcticlauncher.client.menu.SharePage());
+						com.arcticlauncher.client.share.ShareService.use(code, () -> ArcticMod.LOG.info(
+								"selftest: share code applied, {} of {} widgets back", ArcticClient.config().hud.size(), before));
+						soon(() -> shot("share-use"));
+					}), 1, TimeUnit.SECONDS);
+				},
+				() -> {
 					Compat.setScreen(null);
 					ArcticClient.platform().action(MenuAction.OPTIONS);
 					later(() -> shot("options"));
+				},
+				() -> {
+					// Switch accounts on the title screen through the launcher's bridge.
+					Menus.select("account");
+					Compat.setScreen(null);
+					ArcticClient.platform().openPage(Menus.selected());
+					ArcticMod.LOG.info("selftest: bridge available {}", ArcticClient.accounts().available());
+					TIMER.schedule(() -> Minecraft.getInstance().execute(() -> {
+						shot("menu-accounts");
+						for (com.arcticlauncher.client.account.AccountSwitcher.Entry e : ArcticClient.accounts().accounts()) {
+							if (!e.name.equals(Minecraft.getInstance().getUser().getName())) {
+								ArcticClient.accounts().switchTo(e);
+								break;
+							}
+						}
+					}), 3, TimeUnit.SECONDS);
+					TIMER.schedule(() -> Minecraft.getInstance().execute(() -> {
+						ArcticMod.LOG.info("selftest: after switching, playing as {} ({})", Minecraft.getInstance().getUser().getName(),
+								ArcticClient.accounts().status());
+						Compat.setScreen(new PageScreen(ArcticClient.titleMenu(), null));
+					}), 6, TimeUnit.SECONDS);
+					TIMER.schedule(() -> Minecraft.getInstance().execute(() -> shot("title-after-switch")), 8, TimeUnit.SECONDS);
+				},
+				() -> {
+					// Right Shift over a vanilla screen opens the Arctic menu.
+					//#if MC >= 26.3
+					Minecraft mc = Minecraft.getInstance();
+					mc.keyboardHandler.keyPress(mc.getWindow().handle(), com.arcticlauncher.mod.compat.KeyCodes.PRESS,
+							new net.minecraft.client.input.KeyEvent(com.arcticlauncher.mod.compat.KeyCodes.RIGHT_SHIFT, 0, 0));
+					ArcticMod.LOG.info("selftest: right shift over options opened {}",
+							Compat.screen() instanceof PageScreen ? ((PageScreen) Compat.screen()).page().getClass().getSimpleName()
+									: name(Compat.screen()));
+					soon(() -> shot("right-shift"));
+					//#endif
 				},
 				() -> {
 					// Leaving a world or a menu ends in setScreen(null): must be Arctic's title.
@@ -150,9 +259,9 @@ final class SelfTest {
 		long window = mc.getWindow().handle();
 		mc.mouseHandler.onMove(window, x, y, 0, 0);
 		mc.mouseHandler.onMove(window, x, y, 0, 0);
-		MouseButtonInfo left = new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0);
-		mc.mouseHandler.onButton(window, left, InputConstants.PRESS);
-		mc.mouseHandler.onButton(window, left, InputConstants.RELEASE);
+		MouseButtonInfo left = new MouseButtonInfo(com.arcticlauncher.mod.compat.KeyCodes.MOUSE_LEFT, 0);
+		mc.mouseHandler.onButton(window, left, com.arcticlauncher.mod.compat.KeyCodes.PRESS);
+		mc.mouseHandler.onButton(window, left, com.arcticlauncher.mod.compat.KeyCodes.RELEASE);
 		//#else
 		// Older versions keep the input handler private: click the screen directly.
 		Compat.click(Compat.screen(), x / scale, y / scale);
@@ -168,9 +277,9 @@ final class SelfTest {
 	}
 
 	private static void open(String tab, String name) {
-		ArcticMenu.showTab(tab);
+		Menus.select(tab);
 		Compat.setScreen(null);
-		ArcticClient.platform().openPage(new ArcticMenu());
+		ArcticClient.platform().openPage(Menus.selected());
 		later(() -> shot(name));
 	}
 
@@ -188,7 +297,11 @@ final class SelfTest {
 		//#if MC >= 26.2
 		Screenshot.grab(mc, false);
 		//#else
+		//#if MC >= 1.17
 		Screenshot.grab(mc.gameDirectory, mc.getMainRenderTarget(), message -> {});
+		//#else
+		Screenshot.grab(mc.gameDirectory, mc.getWindow().getWidth(), mc.getWindow().getHeight(), mc.getMainRenderTarget(), message -> {});
+		//#endif
 		//#endif
 		ArcticMod.LOG.info("selftest: screenshot {}", name);
 	}

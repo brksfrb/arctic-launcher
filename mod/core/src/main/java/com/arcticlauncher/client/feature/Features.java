@@ -12,6 +12,12 @@ public final class Features {
 	/** Gamma while Fullbright is on (vanilla's slider tops out at 1). */
 	public static final double FULLBRIGHT_GAMMA = 16.0;
 	private static final float ZOOM_FACTOR = 0.25f;
+	/** Scrolling while zoomed: each notch multiplies the view by this. */
+	private static final float SCROLL_STEP = 0.8f;
+	private static final float MIN_FACTOR = 0.03f;
+	private static final float MAX_FACTOR = 0.6f;
+	/** How far zoom goes this time (the wheel changes it; back to normal on release). */
+	private float factor = ZOOM_FACTOR;
 	private static final float ZOOM_SPEED = 12f;
 	/** Mouse-to-degrees factor, as vanilla turns the player. */
 	private static final double TURN_SCALE = 0.15;
@@ -26,10 +32,14 @@ public final class Features {
 	private long lastFrame;
 
 	private boolean freelook;
+	/** The server we last said bans Freelook (said once per server). */
+	private String toldFreelookBanned;
 	private float lookYaw;
 	private float lookPitch;
 
 	private boolean fullbrightKeyWasDown;
+	private boolean streamerKeyWasDown;
+	private boolean emoteKeyWasDown;
 	/** Held keys simulated by the self-test (no keyboard there). */
 	private boolean simulatedZoom;
 	private boolean simulatedLook;
@@ -53,6 +63,14 @@ public final class Features {
 		boolean inGame = !screenOpen && platform.hasFeatures();
 		zooming = inGame && config.zoomEnabled && (simulatedZoom || down(config.zoomKey));
 		boolean wantLook = inGame && config.freelookEnabled && (simulatedLook || down(config.freelookKey));
+		if (wantLook && !ServerRules.allowed(ServerRules.FREELOOK, platform.server())) {
+			wantLook = false;
+			String server = platform.server();
+			if (!server.equals(toldFreelookBanned)) {
+				toldFreelookBanned = server;
+				com.arcticlauncher.client.notice.Notices.post("Freelook is off here", "This server's rules don't allow it");
+			}
+		}
 		if (wantLook != freelook) {
 			setFreelook(wantLook);
 		}
@@ -62,6 +80,20 @@ public final class Features {
 			config.save();
 		}
 		fullbrightKeyWasDown = fullbrightDown;
+		boolean streamerDown = inGame && down(config.streamerKey);
+		if (streamerDown && !streamerKeyWasDown) {
+			config.streamerMode = !config.streamerMode;
+			config.save();
+			com.arcticlauncher.client.notice.Notices.post(
+					config.streamerMode ? "Streamer mode on" : "Streamer mode off",
+					config.streamerMode ? "Your name, skin and the server are hidden on screen." : "");
+		}
+		streamerKeyWasDown = streamerDown;
+		boolean emoteDown = !screenOpen && down(config.emoteKey);
+		if (emoteDown && !emoteKeyWasDown) {
+			platform.openPage(new com.arcticlauncher.client.menu.EmoteWheel());
+		}
+		emoteKeyWasDown = emoteDown;
 	}
 
 	private boolean down(String key) {
@@ -136,12 +168,28 @@ public final class Features {
 		float target = zooming ? 1f : 0f;
 		float step = dt * ZOOM_SPEED * Math.max(0.15f, Math.abs(target - zoom));
 		zoom = zoom < target ? Math.min(target, zoom + step) : Math.max(target, zoom - step);
-		return 1f - (1f - ZOOM_FACTOR) * zoom;
+		if (!zooming && zoom == 0f) {
+			factor = ZOOM_FACTOR;
+		}
+		return 1f - (1f - factor) * zoom;
 	}
 
 	/** Slower mouse while zoomed, so aiming stays controllable. */
 	public double sensitivityMultiplier() {
-		return 1.0 - (1.0 - ZOOM_FACTOR) * zoom;
+		return 1.0 - (1.0 - factor) * zoom;
+	}
+
+	/**
+	 * The mouse wheel while playing: while zooming it zooms further in or
+	 * out (and the hotbar doesn't scroll). True when used.
+	 */
+	public boolean scroll(double amount) {
+		if (!zooming || amount == 0) {
+			return false;
+		}
+		float next = amount > 0 ? factor * SCROLL_STEP : factor / SCROLL_STEP;
+		factor = Math.max(MIN_FACTOR, Math.min(MAX_FACTOR, next));
+		return true;
 	}
 
 	// ---- Freelook --------------------------------------------------------------
