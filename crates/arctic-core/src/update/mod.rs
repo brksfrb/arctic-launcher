@@ -29,7 +29,11 @@ pub const GITHUB_REPO: &str = "brksfrb/arctic-launcher";
 /// Release asset of the launcher for this platform.
 #[cfg(windows)]
 pub const PLATFORM_ASSET: &str = "arctic-launcher-windows-x64.exe";
-#[cfg(not(windows))]
+/// macOS: the launcher program inside `Arctic Launcher.app` (Apple Silicon
+/// and Intel in one), which an update replaces.
+#[cfg(target_os = "macos")]
+pub const PLATFORM_ASSET: &str = "arctic-launcher-macos";
+#[cfg(not(any(windows, target_os = "macos")))]
 pub const PLATFORM_ASSET: &str = "arctic-launcher-linux-x64";
 const REQUIRED_MARKER: &str = "<!-- arctic:required -->";
 const MIN_SUPPORTED_PREFIX: &str = "<!-- arctic:min-supported=";

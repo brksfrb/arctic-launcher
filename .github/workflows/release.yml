@@ -3,6 +3,8 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # By hand: build everything (test builds, like the Mac app) without publishing.
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -35,6 +37,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Check tag matches Cargo version
+        if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
           version=$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)
@@ -62,8 +65,47 @@ jobs:
           name: ${{ matrix.os }}
           path: dist/*
 
+  # One app for Apple Silicon and Intel Macs.
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check tag matches Cargo version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version=$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)
+          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME != v$version"; exit 1; }
+
+      - name: Test
+        run: cargo test --workspace
+
+      - name: Build
+        env:
+          ARCTIC_MSA_CLIENT_ID: ${{ secrets.ARCTIC_MSA_CLIENT_ID }}
+        run: |
+          cargo build --release -p arctic-app -p arctic-cli --target aarch64-apple-darwin
+          cargo build --release -p arctic-app -p arctic-cli --target x86_64-apple-darwin
+
+      - name: Package
+        run: |
+          version=$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)
+          bash packaging/macos/make-app.sh "$version"
+          mkdir mac-dist
+          cp dist/arctic-launcher-macos.zip dist/arctic-launcher-macos dist/arctic-macos mac-dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: mac-dist/*
+
   publish:
-    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build, macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -75,7 +117,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          chmod +x dist/*linux*
+          chmod +x dist/*linux* dist/arctic-launcher-macos dist/arctic-macos
           # Checksums, so a download can be checked: a file next to the
           # downloads and a table at the top of the notes.
           (cd dist && sha256sum -- * > SHA256SUMS.txt)
