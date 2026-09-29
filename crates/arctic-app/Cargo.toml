@@ -31,7 +31,8 @@ aes-gcm = "0.10.3"
 tempfile = "3.27.0"
 
 [features]
-# Offline (username-only) accounts. Left out of release builds entirely for now.
+default = ["offline-accounts"]
+# Offline (username-only) accounts (on by default; `--no-default-features` leaves them out).
 offline-accounts = ["arctic-core/offline-accounts"]
 
 [[bin]]

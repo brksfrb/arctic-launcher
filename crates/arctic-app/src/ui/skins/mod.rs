@@ -93,6 +93,8 @@ pub struct SkinsUi {
     queued: Option<NewLook>,
     /// When the last save finished (for the "Saved" note).
     pub saved_at: Option<f64>,
+    /// A skin the game picked before the look had loaded (worn once it has).
+    from_game: Option<Option<String>>,
     /// Library skin id -> the hash the server would store it under.
     lib_hashes: HashMap<String, String>,
     /// The frame this tab was last drawn in (to notice it being reopened).
@@ -242,6 +244,41 @@ impl ArcticApp {
             Err(e) => self
                 .toasts
                 .push(Kind::Error, "Could not read skin", e.to_string()),
+        }
+    }
+
+    /// The game's skin picker chose a library skin (`None`: the Minecraft skin).
+    pub(crate) fn wear_skin_from_game(&mut self, id: Option<String>) {
+        let Some(id) = id else {
+            if self.arctic_state().is_none() {
+                self.skins.from_game = Some(None);
+            }
+            self.stop_wearing_skin();
+            return;
+        };
+        self.ensure_skin_library();
+        if self.arctic_state().is_none() {
+            // The look isn't loaded yet (the Cosmetics tab never opened): load
+            // it, then wear this.
+            if let Some(account) = self.accounts.active().cloned()
+                && !self.skins.arctic_busy
+            {
+                self.skins.arctic_busy = true;
+                self.tasks.arctic_look(account, None, None);
+            }
+            self.skins.from_game = Some(Some(id));
+            return;
+        }
+        let entry = self
+            .skins
+            .library
+            .skins
+            .iter()
+            .find(|s| s.id == id)
+            .cloned();
+        match entry {
+            Some(entry) => self.wear_skin(&entry),
+            None => log::warn!("the game picked skin {id}, which isn't in the library"),
         }
     }
 
@@ -416,6 +453,9 @@ impl ArcticApp {
                         self.skins.trying = Trying::default();
                         if ok && had_look {
                             self.skins.saved_at = Some(now_secs_f64());
+                        }
+                        if ok && let Some(picked) = self.skins.from_game.take() {
+                            self.wear_skin_from_game(picked);
                         }
                     }
                 }

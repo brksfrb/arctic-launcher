@@ -91,7 +91,7 @@ public final class Features {
 		streamerKeyWasDown = streamerDown;
 		boolean emoteDown = !screenOpen && down(config.emoteKey);
 		if (emoteDown && !emoteKeyWasDown) {
-			platform.openPage(new com.arcticlauncher.client.menu.EmoteWheel());
+			platform.openPage(new com.arcticlauncher.client.menu.EmoteWheel(config.emoteWheelHold));
 		}
 		emoteKeyWasDown = emoteDown;
 	}

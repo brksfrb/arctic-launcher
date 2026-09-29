@@ -89,6 +89,18 @@ pub trait Accounts: Send + Sync + 'static {
         r#"{"state":"unavailable"}"#.to_owned()
     }
 
+    /// The launcher's skin library (JSON): `[{"id", "name", "slim", "png"}]`,
+    /// `png` in base64, for the game's skin picker.
+    fn skins(&self) -> Result<String> {
+        Err(crate::Error::Other("skins live in Arctic Launcher".into()))
+    }
+
+    /// Wear a library skin (`None`: back to the Minecraft skin) as the
+    /// Arctic look, the same as picking it in the launcher.
+    fn wear_skin(&self, _id: Option<&str>) -> Result<()> {
+        Err(crate::Error::Other("skins live in Arctic Launcher".into()))
+    }
+
     /// Play together from the game: `{"action": "host" | "join" | "stop" |
     /// "status", "code": …}`; the answer is the current state.
     fn together(&self, _request: &[u8]) -> Result<String> {
@@ -258,6 +270,19 @@ fn respond(request: &Request, accounts: &dyn Accounts) -> (&'static str, String)
             Ok(reply) => ("200 OK", reply),
             Err(e) => error("501 Not Implemented", &e.to_string()),
         },
+        ("GET", "/v1/skins") => match accounts.skins() {
+            Ok(list) => ("200 OK", list),
+            Err(e) => error("501 Not Implemented", &e.to_string()),
+        },
+        ("POST", "/v1/skins/wear") => {
+            let body =
+                serde_json::from_slice::<serde_json::Value>(&request.body).unwrap_or_default();
+            let id = body.get("id").and_then(|v| v.as_str());
+            match accounts.wear_skin(id) {
+                Ok(()) => ("200 OK", "{}".to_owned()),
+                Err(e) => error("400 Bad Request", &e.to_string()),
+            }
+        }
         ("POST", "/v1/together") => match accounts.together(&request.body) {
             Ok(reply) => ("200 OK", reply),
             Err(e) => error("501 Not Implemented", &e.to_string()),

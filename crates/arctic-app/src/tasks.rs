@@ -135,6 +135,8 @@ pub enum Event {
     ScreenshotCopied(Outcome<egui::ColorImage>),
     /// The game asked to add an account (show the sign-in).
     AddAccountFromGame,
+    /// The game's skin picker: wear this library skin (`None`: the Minecraft skin).
+    WearSkinFromGame(Option<String>),
     /// A share code was made.
     ShareCode(Outcome<String>),
     /// A share file was saved (`None` = cancelled).

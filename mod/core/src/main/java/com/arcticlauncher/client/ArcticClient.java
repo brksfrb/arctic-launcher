@@ -41,6 +41,7 @@ public final class ArcticClient {
 	private ArcticClient() {}
 
 	private static com.arcticlauncher.client.account.AccountSwitcher accounts;
+	private static com.arcticlauncher.client.looks.LauncherSkins launcherSkins;
 
 	public static void init(Platform p) {
 		com.arcticlauncher.client.looks.OsTrust.installDefault();
@@ -59,6 +60,7 @@ public final class ArcticClient {
 		social = new com.arcticlauncher.client.social.Social(p, looks);
 		social.start();
 		accounts = new com.arcticlauncher.client.account.AccountSwitcher(p, session.bridgePort, session.bridgeSecret);
+		launcherSkins = new com.arcticlauncher.client.looks.LauncherSkins(p, session.bridgePort, session.bridgeSecret);
 		voice = new com.arcticlauncher.client.voice.VoiceLink(p, session.bridgePort, session.bridgeSecret);
 		voice.start();
 		packs = new com.arcticlauncher.client.packs.PackBrowser(p, p.configDir());
@@ -118,6 +120,11 @@ public final class ArcticClient {
 
 	public static Platform platform() {
 		return platform;
+	}
+
+	/** Your launcher's skin library, to pick a skin in game. */
+	public static com.arcticlauncher.client.looks.LauncherSkins launcherSkins() {
+		return launcherSkins;
 	}
 
 	/** Switching accounts in game (through the launcher). */

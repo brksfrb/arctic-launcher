@@ -88,6 +88,8 @@ public final class Cosmetics {
 	private volatile List<Item> items = Collections.emptyList();
 	private volatile List<Emote> emotes = Collections.emptyList();
 	private volatile boolean catalogAsked;
+	/** When the catalog last loaded (0: never). */
+	private volatile long catalogAt;
 	private final Map<UUID, Playing> playing = new ConcurrentHashMap<UUID, Playing>();
 	private final Map<UUID, Long> watched = new ConcurrentHashMap<UUID, Long>();
 
@@ -113,6 +115,8 @@ public final class Cosmetics {
 				return i;
 			}
 		}
+		// Someone wears a cosmetic added since the catalog loaded.
+		refreshAfter(MISSING_RETRY_MS);
 		return null;
 	}
 
@@ -240,7 +244,20 @@ public final class Cosmetics {
 
 	// ---- Loading --------------------------------------------------------------------
 
+	/** New cosmetics show up without a restart: the catalog is asked again this often. */
+	private static final long CATALOG_TTL_MS = java.util.concurrent.TimeUnit.MINUTES.toMillis(10);
+	/** Sooner when something unknown is worn (at most this often). */
+	private static final long MISSING_RETRY_MS = java.util.concurrent.TimeUnit.SECONDS.toMillis(30);
+
+	private void refreshAfter(long ageMs) {
+		if (catalogAsked && catalogAt > 0 && System.currentTimeMillis() - catalogAt > ageMs) {
+			catalogAsked = false;
+			askCatalog();
+		}
+	}
+
 	private void askCatalog() {
+		refreshAfterTtl();
 		if (catalogAsked) {
 			return;
 		}
@@ -288,9 +305,46 @@ public final class Cosmetics {
 				moves.add(new Emote(id, Looks.cleanName(Looks.stringField(o, "name")), file));
 			}
 		}
-		items = Collections.unmodifiableList(found);
-		emotes = Collections.unmodifiableList(moves);
+		items = Collections.unmodifiableList(keepLoaded(found));
+		emotes = Collections.unmodifiableList(keepLoadedEmotes(moves));
+		catalogAt = System.currentTimeMillis();
 		platform.log(false, "Arctic cosmetics: " + found.size() + " items, " + moves.size() + " emotes");
+	}
+
+	private void refreshAfterTtl() {
+		if (catalogAsked && catalogAt > 0 && System.currentTimeMillis() - catalogAt > CATALOG_TTL_MS) {
+			catalogAsked = false;
+		}
+	}
+
+	/** Items already loaded stay (their model is baked); only new or changed ones load. */
+	private List<Item> keepLoaded(List<Item> fresh) {
+		List<Item> out = new ArrayList<Item>(fresh.size());
+		for (Item f : fresh) {
+			Item kept = null;
+			for (Item old : items) {
+				if (old.id.equals(f.id) && old.model.equals(f.model) && old.texture.equals(f.texture)
+						&& (old.animation == null ? f.animation == null : old.animation.equals(f.animation))) {
+					kept = old;
+				}
+			}
+			out.add(kept != null ? kept : f);
+		}
+		return out;
+	}
+
+	private List<Emote> keepLoadedEmotes(List<Emote> fresh) {
+		List<Emote> out = new ArrayList<Emote>(fresh.size());
+		for (Emote f : fresh) {
+			Emote kept = null;
+			for (Emote old : emotes) {
+				if (old.id.equals(f.id) && old.file.equals(f.file)) {
+					kept = old;
+				}
+			}
+			out.add(kept != null ? kept : f);
+		}
+		return out;
 	}
 
 	private void load(Item item) {

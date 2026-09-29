@@ -31,6 +31,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class Looks {
 	private static final long TTL_MS = TimeUnit.MINUTES.toMillis(10);
+	/** Your own look, changed in the launcher, shows in the game this soon. */
+	private static final long OWN_TTL_MS = TimeUnit.SECONDS.toMillis(15);
 	private static final long RETRY_MS = TimeUnit.MINUTES.toMillis(1);
 	private static final int BATCH = 100;
 	private static final Gson GSON = new Gson();
@@ -222,6 +224,11 @@ public final class Looks {
 		platform.registerTexture(hash, png, false);
 	}
 
+	/** Ask for your own look again soon (it was changed elsewhere). */
+	public void refreshOwn() {
+		pending.add(platform.playerId());
+	}
+
 	/** A registered texture (a look, a chat picture…) can be drawn. */
 	public boolean isReady(String hash) {
 		return ready.containsKey(hash);
@@ -239,7 +246,8 @@ public final class Looks {
 			return null;
 		}
 		Look look = players.get(player);
-		if (look == null || System.currentTimeMillis() - look.fetched > TTL_MS) {
+		long ttl = player.equals(platform.playerId()) ? OWN_TTL_MS : TTL_MS;
+		if (look == null || System.currentTimeMillis() - look.fetched > ttl) {
 			pending.add(player);
 		}
 		return look == null || look.isEmpty() ? null : look;

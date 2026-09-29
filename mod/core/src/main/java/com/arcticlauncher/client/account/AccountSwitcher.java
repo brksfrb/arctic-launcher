@@ -51,6 +51,8 @@ public final class AccountSwitcher {
 	/** How long a browser sign-in may take. */
 	private static final long SIGN_IN_MS = 10 * 60 * 1000L;
 	private static final long POLL_MS = 1500;
+	/** How long a session renewal may hold up joining a server. */
+	private static final long RENEW_MS = 15_000;
 
 	public AccountSwitcher(Platform platform, int port, String secret) {
 		this.platform = platform;
@@ -197,6 +199,64 @@ public final class AccountSwitcher {
 				}
 			}
 		});
+	}
+
+	/**
+	 * The server said the game's session is no longer valid (it expired while
+	 * the game ran): get a fresh one for the same account from the launcher
+	 * and use it. Blocks (call it off the game thread); true if it worked.
+	 */
+	public boolean renewSession() {
+		if (!available()) {
+			return false;
+		}
+		try {
+			String me = platform.playerName();
+			Entry mine = null;
+			List<Entry> list = parse(GSON.fromJson(Http.getText(bridgeUrl + "/v1/accounts", secret), JsonElement.class));
+			for (Entry e : list) {
+				if (e.name.equalsIgnoreCase(me)) {
+					mine = e;
+				}
+			}
+			if (mine == null) {
+				return false;
+			}
+			JsonElement reply = GSON.fromJson(Http.send("POST", bridgeUrl + "/v1/accounts/" + mine.id + "/session", secret, "{}"),
+					JsonElement.class);
+			JsonObject o = reply != null && reply.isJsonObject() ? reply.getAsJsonObject() : new JsonObject();
+			final String name = text(o, "name");
+			final UUID uuid = uuid(text(o, "uuid"));
+			final String token = text(o, "access_token");
+			final String xuid = text(o, "xuid");
+			final boolean microsoft = "msa".equals(text(o, "user_type"));
+			final String arcticToken = text(o, "arctic_token");
+			if (!validName(name) || uuid == null || token == null || token.isEmpty()) {
+				return false;
+			}
+			final String[] problem = {"timed out"};
+			final java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+			platform.runOnGameThread(new Runnable() {
+				@Override
+				public void run() {
+					problem[0] = platform.switchAccount(name, uuid, token, xuid, microsoft);
+					if (problem[0] == null) {
+						ArcticClient.looks().useSession(arcticToken);
+					}
+					done.countDown();
+				}
+			});
+			done.await(RENEW_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
+			if (problem[0] != null) {
+				platform.log(true, "session renewal: " + problem[0]);
+				return false;
+			}
+			platform.log(false, "session renewed for " + name);
+			return true;
+		} catch (Exception e) {
+			platform.log(true, "session renewal: " + e);
+			return false;
+		}
 	}
 
 	private void apply(JsonElement reply, final String rejoin) {

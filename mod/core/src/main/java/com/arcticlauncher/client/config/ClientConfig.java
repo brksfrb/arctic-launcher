@@ -37,6 +37,8 @@ public final class ClientConfig {
 	public String fullbrightKey = "key.keyboard.unknown";
 	/** Opens the emote wheel. */
 	public String emoteKey = "key.keyboard.b";
+	/** The emote wheel stays open while its key is held (let go to play); off: press to open, click to play. */
+	public boolean emoteWheelHold = true;
 	/** Streamer mode: your name, skin and the server are hidden on your screen. */
 	public boolean streamerMode;
 	/** What your name shows as in streamer mode. */
