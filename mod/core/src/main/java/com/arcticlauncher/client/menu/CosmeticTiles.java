@@ -36,6 +36,10 @@ final class CosmeticTiles {
 
 		@Override
 		protected void draw(Gfx g, Style s, int mx, int my, float dt) {
+			if (contains(mx, my)) {
+				// Try it on: you on the right wear it while it's pointed at.
+				ArcticClient.looks().tryOn(after());
+			}
 			Skin.button(g, s, x, y, w, h, enabled, worn ? 1f : hover);
 			if (worn) {
 				Draw.outline(g, x, y, x + w, y + h, 2, s.accent);
@@ -49,12 +53,17 @@ final class CosmeticTiles {
 			if (!enabled || button != Keys.MOUSE_LEFT) {
 				return false;
 			}
+			ArcticClient.looks().wearCosmetics(after());
+			return true;
+		}
+
+		/** What you'd wear after clicking this: the rest, plus this in its slot (or nothing there). */
+		private List<String> after() {
 			Look mine = ArcticClient.looks().myLook();
 			List<String> next = new ArrayList<String>();
 			Cosmetics cosmetics = ArcticClient.looks().cosmetics();
 			for (String id : mine == null ? new ArrayList<String>() : mine.cosmetics) {
 				Cosmetics.Item other = cosmetics.item(id);
-				// Keep the rest; the slot this goes in gets the new item (or none).
 				if (other != null && !other.slot.equals(item.slot)) {
 					next.add(id);
 				}
@@ -62,13 +71,14 @@ final class CosmeticTiles {
 			if (!worn) {
 				next.add(item.id);
 			}
-			ArcticClient.looks().wearCosmetics(next);
-			return true;
+			return next;
 		}
 	}
 
 	/** One emote: click to play it. */
 	static final class EmoteTile extends Widget {
+		/** The emote being previewed on you (by hovering), across tiles. */
+		private static Cosmetics.Emote previewing;
 		private final Cosmetics.Emote emote;
 
 		EmoteTile(Cosmetics.Emote emote) {
@@ -77,6 +87,16 @@ final class CosmeticTiles {
 
 		@Override
 		protected void draw(Gfx g, Style s, int mx, int my, float dt) {
+			java.util.UUID me = ArcticClient.platform().worldPlayerId();
+			boolean over = contains(mx, my);
+			if (me != null && over && previewing != emote) {
+				// Pointed at: you on the right do it (only you see a preview).
+				previewing = emote;
+				ArcticClient.looks().cosmetics().playLocal(me, emote);
+			} else if (me != null && !over && previewing == emote) {
+				previewing = null;
+				ArcticClient.looks().cosmetics().playLocal(me, null);
+			}
 			Skin.button(g, s, x, y, w, h, enabled, hover);
 			Draw.centered(g, Draw.fitCentered(g, emote.name, w - 6, x + w / 2, y + (h - 8) / 2), x + w / 2, y + (h - 8) / 2, s.text, false);
 		}
@@ -86,6 +106,7 @@ final class CosmeticTiles {
 			if (!enabled || button != Keys.MOUSE_LEFT) {
 				return false;
 			}
+			previewing = null;
 			ArcticClient.looks().playEmote(emote);
 			return true;
 		}
@@ -98,7 +119,8 @@ final class CosmeticTiles {
 		List<Cosmetics.Item> items = cosmetics.items();
 		int cols = Math.max(1, w / 110);
 		int tileW = (w - (cols - 1) * GAP) / cols;
-		boolean canWear = ArcticClient.looks().signedIn() && !ArcticClient.looks().busy();
+		// Clicks while a save is going are queued (the newest is sent next).
+		boolean canWear = ArcticClient.looks().signedIn();
 		for (int i = 0; i < items.size(); i++) {
 			Cosmetics.Item item = items.get(i);
 			boolean worn = mine != null && mine.cosmetics.contains(item.id);

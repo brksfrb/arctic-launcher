@@ -161,6 +161,27 @@ impl ArcticApp {
 
         section(ui, p, "Voice chat", |ui| self.voice_section(ui, p));
 
+        section(ui, p, "Shared between instances", |ui| {
+            ui.label(
+                RichText::new(
+                    "Kept the same in every instance of this profile: whatever you changed last is used everywhere, from the next start.",
+                )
+                .small()
+                .color(p.muted),
+            );
+            ui.add_space(4.0);
+            let shared = &mut self.settings.shared;
+            ui.checkbox(&mut shared.servers, "Server list");
+            ui.checkbox(
+                &mut shared.client,
+                "Arctic Client settings (HUD, crosshair, keys, waypoints)",
+            );
+            ui.checkbox(
+                &mut shared.game,
+                "Minecraft settings (keys, video, sound, FOV)",
+            );
+        });
+
         section(ui, p, "Game settings for new instances", |ui| {
             self.game_defaults_section(ui, p)
         });

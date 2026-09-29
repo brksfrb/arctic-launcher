@@ -81,8 +81,14 @@ and saved as `capes/<id>.png`.
 
 ### Size and layout
 
-- Standard **64×32**, or HD: **128×64** (recommended, it's what Arctic's own capes use),
-  256×128 or 512×256. Width is always twice the height.
+- Make capes **HD**: **128×64** (the back is 20×32 px) for most, **256×128** (40×64 px) for
+  showpieces and animated ones. 512×256 also works. Plain 64×32 is vanilla's size and only
+  leaves a 10×16 back, too little for a design; don't use it. Width is always twice the height.
+- **Real pixel art at the final size**: every pixel placed on purpose. Don't generate a picture
+  and shrink it; that gives speckled noise. Use 10–16 colors, clean shapes and outlines, soft
+  shading with 2–4 tones per color, and no dithering or random dots.
+- **Each cape its own design**: its own border (or none), motif and colors. Don't reuse one
+  frame template for every cape.
 - Minecraft's cape layout (at 64×32; double every number for 128×64):
   - **back** (what others see): x 1–10, y 1–16 (10×16)
   - **front** (against the player's back): x 12–21, y 1–16
@@ -94,7 +100,8 @@ and saved as `capes/<id>.png`.
 ### Animated capes
 
 - Stack **2 to 8 frames** vertically in one PNG: each frame is a full cape image (height =
-  width ÷ 2), so a 6-frame 128×64 cape is **128×384**.
+  width ÷ 2), so a 6-frame 128×64 cape is **128×384** and an 8-frame 256×128 one is
+  **256×1024**. Frames should differ in motion (light moving, snow falling), not just flicker.
 - Frames play at **8 per second** (0.125 s each), looping. Make the last frame lead smoothly
   back into the first.
 - Keep the motion slow: shimmer, a drifting aurora, falling snow, a pulse. Avoid fast flashing.

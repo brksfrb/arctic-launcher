@@ -153,7 +153,7 @@ pub fn install(
     progress: Progress,
 ) -> Result<Installation> {
     fs::create_dir_all(game_dir).at(game_dir)?;
-    let libs = files::resolve_libraries(dirs, &version, &RuleEnv::current());
+    let libs = files::resolve_libraries(dirs, &version, &RuleEnv::for_version(&version));
     let client = files::client_job(dirs, &version)?;
     let client_jar = client.dest.clone();
     let logging = files::logging_job(dirs, &version);
@@ -163,7 +163,12 @@ pub fn install(
     let (runtime, assets) = std::thread::scope(|scope| {
         let runtime = scope.spawn(|| match &java_override {
             Some(_) => Ok(None),
-            None => java::plan_runtime(dirs, java::component_for(&version)).map(Some),
+            None => java::plan_runtime_for(
+                dirs,
+                java::component_for(&version),
+                crate::versions::rules::needs_rosetta(&version),
+            )
+            .map(Some),
         });
         let assets = files::plan_assets(dirs, &version, game_dir);
         let runtime = runtime
@@ -233,6 +238,14 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         Ok(true) => log::info!("applied default game settings to {}", game_dir.display()),
         Ok(false) => {}
         Err(e) => log::warn!("default game settings: {e}"),
+    }
+    // What the profile's instances share: the newest copies, into this one.
+    if let Err(e) = crate::shared::sync(
+        dirs,
+        req.settings.shared,
+        Some((req.instance, &req.version.id)),
+    ) {
+        log::warn!("sharing between instances: {e}");
     }
     let java_override = req
         .instance
@@ -413,9 +426,9 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
     let settings = req.settings;
     let proxy = ProxySettings::load(req.dirs);
     let mut env = if settings.fullscreen {
-        RuleEnv::current()
+        RuleEnv::for_version(&inst.version)
     } else {
-        RuleEnv::current().with_feature("has_custom_resolution")
+        RuleEnv::for_version(&inst.version).with_feature("has_custom_resolution")
     };
     let identity = req.account.identity();
     let mut vars = placeholders(req, inst, &identity);

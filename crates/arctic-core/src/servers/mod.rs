@@ -15,7 +15,8 @@ pub use arctic_ping::{Address, DEFAULT_PORT, Status};
 use crate::proxy::ProxySettings;
 use crate::{Error, Result};
 
-const SERVERS_FILE: &str = "servers.dat";
+/// The multiplayer list in a game folder.
+pub const SERVERS_FILE: &str = "servers.dat";
 /// Largest servers.dat read (icons are stored inline).
 const MAX_FILE: u64 = 16 * 1024 * 1024;
 
@@ -71,6 +72,51 @@ pub fn list(game_dir: &Path) -> Result<Vec<Server>> {
             })
         })
         .collect())
+}
+
+/// One server list made from several `servers.dat` files: every server
+/// once (by address), in the order first seen, entries kept as the game
+/// wrote them. Written to `into`; returns how many servers it holds.
+pub fn merge_files(sources: &[std::path::PathBuf], into: &Path) -> Result<usize> {
+    let mut merged: Vec<nbt::Tag> = Vec::new();
+    for path in sources {
+        let Ok(data) = std::fs::read(path) else {
+            continue;
+        };
+        if data.len() as u64 > MAX_FILE {
+            continue;
+        }
+        let Some(root) = nbt::read_root(&data) else {
+            continue;
+        };
+        for entry in root
+            .get("servers")
+            .and_then(nbt::Tag::as_list)
+            .unwrap_or(&[])
+        {
+            let Some(ip) = entry.get("ip").and_then(nbt::Tag::as_str) else {
+                continue;
+            };
+            let ip = ip.trim();
+            let known = merged.iter().any(|e| {
+                e.get("ip")
+                    .and_then(nbt::Tag::as_str)
+                    .is_some_and(|other| other.trim().eq_ignore_ascii_case(ip))
+            });
+            if !ip.is_empty() && !known {
+                merged.push(entry.clone());
+            }
+        }
+    }
+    let count = merged.len();
+    let root = nbt::Tag::Compound(vec![("servers".into(), nbt::Tag::List(merged))]);
+    if let Some(dir) = into.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
+    }
+    let tmp = into.with_extension("dat.arctic-tmp");
+    std::fs::write(&tmp, nbt::write_root(&root)).map_err(|e| Error::io(&tmp, e))?;
+    std::fs::rename(&tmp, into).map_err(|e| Error::io(into, e))?;
+    Ok(count)
 }
 
 /// Add a server to the end of the game's multiplayer list (as the game

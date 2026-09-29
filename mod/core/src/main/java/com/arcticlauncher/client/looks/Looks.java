@@ -33,6 +33,10 @@ public final class Looks {
 	private static final long TTL_MS = TimeUnit.MINUTES.toMillis(10);
 	/** Your own look, changed in the launcher, shows in the game this soon. */
 	private static final long OWN_TTL_MS = TimeUnit.SECONDS.toMillis(15);
+	/** While the Looks menu is open, sooner. */
+	private static final long OWN_TTL_OPEN_MS = TimeUnit.SECONDS.toMillis(2);
+	/** A try-on lasts this long unless it's asked for again (every frame while hovered). */
+	private static final long TRY_ON_MS = 150;
 	private static final long RETRY_MS = TimeUnit.MINUTES.toMillis(1);
 	private static final int BATCH = 100;
 	private static final Gson GSON = new Gson();
@@ -224,6 +228,27 @@ public final class Looks {
 		platform.registerTexture(hash, png, false);
 	}
 
+	private volatile java.util.List<String> tryOn;
+	private volatile long tryOnUntil;
+	private volatile long menuOpenUntil;
+	/** Cosmetics picked while a save was going; sent when it finishes (only the newest). */
+	private volatile java.util.List<String> nextCosmetics;
+
+	private boolean isMe(UUID player) {
+		return player.equals(platform.playerId()) || player.equals(platform.worldPlayerId());
+	}
+
+	/** Show these cosmetics on you for a moment (call every frame while previewing). */
+	public void tryOn(java.util.List<String> ids) {
+		tryOn = ids;
+		tryOnUntil = System.currentTimeMillis() + TRY_ON_MS;
+	}
+
+	/** The Looks menu is showing: pick up changes made in the launcher quickly. */
+	public void menuOpen() {
+		menuOpenUntil = System.currentTimeMillis() + OWN_TTL_OPEN_MS * 2;
+	}
+
 	/** Ask for your own look again soon (it was changed elsewhere). */
 	public void refreshOwn() {
 		pending.add(platform.playerId());
@@ -246,9 +271,17 @@ public final class Looks {
 			return null;
 		}
 		Look look = players.get(player);
-		long ttl = player.equals(platform.playerId()) ? OWN_TTL_MS : TTL_MS;
-		if (look == null || System.currentTimeMillis() - look.fetched > ttl) {
+		boolean mine = isMe(player);
+		long now = System.currentTimeMillis();
+		long ttl = !mine ? TTL_MS : now < menuOpenUntil ? OWN_TTL_OPEN_MS : OWN_TTL_MS;
+		if (look == null || now - look.fetched > ttl) {
 			pending.add(player);
+		}
+		// Hovering a cosmetic in the Looks menu: shown on you, only here.
+		java.util.List<String> trying = tryOn;
+		if (mine && trying != null && now < tryOnUntil) {
+			return look == null ? new Look(null, false, null, trying, true, now)
+					: new Look(look.skin, look.slim, look.cape, trying, look.arctic, look.fetched);
 		}
 		return look == null || look.isEmpty() ? null : look;
 	}
@@ -321,18 +354,36 @@ public final class Looks {
 
 	/** Wear these cosmetics (catalog ids, one per slot), keeping the skin and cape. */
 	public void wearCosmetics(final List<String> ids) {
-		if (busy || token == null) {
+		if (token == null) {
+			return;
+		}
+		// Shown on you right away; the server catches up.
+		Look mine = myLook();
+		UUID me = platform.playerId();
+		long now = System.currentTimeMillis();
+		players.put(me, mine == null ? new Look(null, false, null, ids, true, now)
+				: new Look(mine.skin, mine.slim, mine.cape, ids, mine.arctic, now));
+		version.incrementAndGet();
+		if (busy) {
+			nextCosmetics = ids;
 			return;
 		}
 		setBusy(true, "Saving...");
 		worker.execute(new Runnable() {
 			@Override
 			public void run() {
+				List<String> sending = ids;
 				try {
-					putLook(KEEP_CAPE, ids);
+					while (sending != null) {
+						putLook(KEEP_CAPE, sending);
+						sending = nextCosmetics;
+						nextCosmetics = null;
+					}
 					setBusy(false, "Every Arctic player sees your cosmetics.");
 				} catch (Throwable t) {
 					survive(t, "Arctic look");
+					nextCosmetics = null;
+					pending.add(platform.playerId());
 					setBusy(false, "Couldn't save: " + t.getMessage());
 				}
 			}
