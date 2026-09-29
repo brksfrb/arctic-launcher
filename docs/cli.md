@@ -78,8 +78,16 @@ automatically when needed.
 ```text
 arctic instances list
 arctic instances create <NAME> [--version <VERSION>] [--loader <LOADER>] [--loader-version <V>]
+arctic instances show <INSTANCE>
+arctic instances edit <INSTANCE> [--name N] [--version V] [--loader L] [--loader-version V]
+    [--memory 4G|default] [--icon classic|stellar|dendrite|plate|star|crystal] [--color #rrggbb|default]
+    [--arctic-client on|off] [--java PATH|default] [--jvm-args "FLAGS"] [--performance on|off] [--shaders on|off]
 arctic instances remove <INSTANCE>
 ```
+
+`edit` changes only what's given. Changing the version or loader picks the newest stable
+loader build unless `--loader-version` says otherwise. The Vanilla instance follows the
+version picked to play, so its version and loader can't be pinned (make another instance).
 
 `--loader` is `vanilla` (default), `fabric`, `quilt`, `neoforge` or `forge`. Without
 `--loader-version`, the newest stable loader build for that Minecraft version is used.
@@ -114,6 +122,47 @@ Installed Sodium 0.6.13 (dependency)
 JSON: `search` prints `{"id","slug","title","author","downloads","description"}`,
 `install` prints one `{"event":"installed",...}` per file, `list` prints
 `{"file","enabled","title","size"}`.
+
+### `arctic modpacks`
+
+```text
+arctic modpacks search [QUERY] [-n <LIMIT>]
+arctic modpacks install <SLUG_OR_ID | FILE.mrpack>
+```
+
+Each modpack becomes a new instance with its loader, mods and config.
+
+```text
+arctic modpacks install fabulously-optimized
+Installed Fabulously Optimized (Fabric 26.3). Start it with: arctic launch --instance fabulously-optimized
+```
+
+### `arctic skins`
+
+Your skin library (the skins in the launcher's Cosmetics tab) and the community gallery.
+
+```text
+arctic skins list
+arctic skins add <PNG> [--name N] [--model classic|slim]
+arctic skins rename <SKIN> <NAME> | model <SKIN> classic|slim | remove <SKIN> | export <SKIN> <PNG>
+arctic skins wear <SKIN|none> [--account A]      (your Arctic look; `none` = your Minecraft skin)
+arctic skins gallery [QUERY] [--new] [--page N]
+arctic skins take <GALLERY_ID> [--wear] | share <SKIN> [--name N] | report <GALLERY_ID>
+```
+
+`SKIN` is a library skin's id (or its first characters) or name.
+
+### `arctic screenshots`, `replays`, `logs`
+
+```text
+arctic screenshots list [--instance I] [-n N] | remove <FILE>
+arctic replays list [--instance I] | remove <NAME> [--instance I]
+arctic logs [--instance I | --launcher] [-n N] [--level warn|error] [--follow] [--path]
+```
+
+Removed screenshots and replays go to a `.trash` folder next to them. Watch a replay with
+`arctic launch --instance I --replay FILE`. `logs` shows an instance's last game log
+(`--follow` keeps printing new lines while the game runs).
 
 ### `arctic accounts`
 
