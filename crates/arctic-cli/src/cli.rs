@@ -71,6 +71,9 @@ pub enum Command {
     /// Find and manage mods from Modrinth in an instance.
     #[command(subcommand)]
     Mods(ModsCommand),
+    /// Modpacks from Modrinth (or a .mrpack file), each installed as a new instance.
+    #[command(subcommand)]
+    Modpacks(ModpacksCommand),
     /// Play together without a server (peer to peer).
     #[command(subcommand)]
     Together(TogetherCommand),
@@ -103,6 +106,17 @@ pub enum Command {
     /// Your Arctic look: skin, cape and cosmetics other Arctic players see.
     #[command(subcommand)]
     Look(LookCommand),
+    /// Your skin library (the Cosmetics tab's skins) and the community gallery.
+    #[command(subcommand)]
+    Skins(SkinsCommand),
+    /// Screenshots from every instance.
+    #[command(subcommand)]
+    Screenshots(ScreenshotsCommand),
+    /// Saved replays (Arctic Client). Watch one with `arctic launch --replay FILE`.
+    #[command(subcommand)]
+    Replays(ReplaysCommand),
+    /// Show an instance's last game log, or the launcher's.
+    Logs(LogsArgs),
     /// Bring instances and HUD setups over from other launchers and clients.
     #[command(subcommand)]
     Migrate(MigrateCommand),
@@ -706,11 +720,239 @@ pub enum InstancesCommand {
         #[arg(long)]
         loader_version: Option<String>,
     },
+    /// Show an instance's settings.
+    Show {
+        /// Instance id or name.
+        instance: String,
+    },
+    /// Change an instance: name, version, loader, memory, icon, Java...
+    Edit(InstanceEditArgs),
     /// Move an instance to the trash (instances/.trash).
     Remove {
         /// Instance id or name.
         instance: String,
     },
+}
+
+#[derive(Debug, Args)]
+pub struct InstanceEditArgs {
+    /// Instance id or name.
+    pub instance: String,
+    /// New name.
+    #[arg(long)]
+    pub name: Option<String>,
+    /// Minecraft version, `latest` or `latest-snapshot`.
+    #[arg(long)]
+    pub version: Option<String>,
+    #[arg(long, value_enum)]
+    pub loader: Option<LoaderArg>,
+    /// Loader version (default: newest stable for the version).
+    #[arg(long)]
+    pub loader_version: Option<String>,
+    /// Maximum memory, like `4G` or `6144M`; `default` uses the launcher setting.
+    #[arg(long)]
+    pub memory: Option<String>,
+    /// Icon shape.
+    #[arg(long, value_enum)]
+    pub icon: Option<IconArg>,
+    /// Icon color as `#rrggbb`, or `default` for the theme's.
+    #[arg(long)]
+    pub color: Option<String>,
+    /// Arctic Client (Fabric and Quilt instances).
+    #[arg(long, value_enum)]
+    pub arctic_client: Option<Switch>,
+    /// Java executable, or `default` for the launcher's choice.
+    #[arg(long)]
+    pub java: Option<String>,
+    /// Extra JVM flags (after the launcher-wide ones); an empty value clears them.
+    #[arg(long, allow_hyphen_values = true)]
+    pub jvm_args: Option<String>,
+    /// Vanilla instances: performance mods (Sodium, Lithium, ...).
+    #[arg(long, value_enum)]
+    pub performance: Option<Switch>,
+    /// Vanilla instances: Iris, so shader packs work.
+    #[arg(long, value_enum)]
+    pub shaders: Option<Switch>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum Switch {
+    On,
+    Off,
+}
+
+impl Switch {
+    pub fn on(self) -> bool {
+        self == Switch::On
+    }
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+pub enum IconArg {
+    Classic,
+    Stellar,
+    Dendrite,
+    Plate,
+    Star,
+    Crystal,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ModpacksCommand {
+    /// Search Modrinth for modpacks.
+    Search {
+        #[arg(default_value = "")]
+        query: String,
+        #[arg(short = 'n', long, default_value_t = 10)]
+        limit: usize,
+    },
+    /// Install a modpack as a new instance: a Modrinth slug or project id, or a .mrpack file.
+    Install { pack: String },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SkinsCommand {
+    /// List your skin library.
+    List,
+    /// Add a skin PNG to the library.
+    Add {
+        file: std::path::PathBuf,
+        /// Name in the library (default: the file's name).
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long, value_enum)]
+        model: Option<SkinModel>,
+    },
+    /// Rename a library skin.
+    Rename {
+        /// Skin id or name.
+        skin: String,
+        name: String,
+    },
+    /// Set a library skin's arm model.
+    Model {
+        /// Skin id or name.
+        skin: String,
+        #[arg(value_enum)]
+        model: SkinModel,
+    },
+    /// Remove a skin from the library.
+    Remove {
+        /// Skin id or name.
+        skin: String,
+    },
+    /// Save a library skin as a PNG file.
+    Export {
+        /// Skin id or name.
+        skin: String,
+        file: std::path::PathBuf,
+    },
+    /// Wear a library skin as your Arctic look (`none`: your Minecraft skin).
+    Wear {
+        /// Skin id or name, or `none`.
+        skin: String,
+        #[arg(long)]
+        account: Option<String>,
+    },
+    /// Browse the community gallery.
+    Gallery {
+        /// Search names and authors.
+        #[arg(default_value = "")]
+        query: String,
+        /// Newest first instead of most used.
+        #[arg(long)]
+        new: bool,
+        /// Page (24 skins each), from 1.
+        #[arg(long, default_value_t = 1)]
+        page: usize,
+    },
+    /// Add a gallery skin to your library (`--wear` also puts it on).
+    Take {
+        /// Gallery id (from `arctic skins gallery`).
+        id: String,
+        #[arg(long)]
+        wear: bool,
+        #[arg(long)]
+        account: Option<String>,
+    },
+    /// Share a library skin to the community gallery.
+    Share {
+        /// Skin id or name.
+        skin: String,
+        /// Name shown in the gallery (default: the library name).
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        account: Option<String>,
+    },
+    /// Report a gallery skin (hidden after several reports).
+    Report {
+        id: String,
+        #[arg(long)]
+        account: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ScreenshotsCommand {
+    /// List screenshots, newest first.
+    List {
+        /// Only this instance's.
+        #[arg(short, long)]
+        instance: Option<String>,
+        #[arg(short = 'n', long)]
+        limit: Option<usize>,
+    },
+    /// Move a screenshot to its folder's .trash.
+    Remove {
+        /// File name (like `2026-09-28_14.35.51.png`) or path.
+        file: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ReplaysCommand {
+    /// List an instance's replays, newest first.
+    List {
+        /// Instance id or name (default: Vanilla).
+        #[arg(short, long)]
+        instance: Option<String>,
+    },
+    /// Move a replay to the replays folder's .trash.
+    Remove {
+        /// Replay name (without .mcpr) or path.
+        replay: String,
+        #[arg(short, long)]
+        instance: Option<String>,
+    },
+}
+
+#[derive(Debug, Args)]
+pub struct LogsArgs {
+    /// Instance whose last game log to show (default: Vanilla).
+    #[arg(short, long)]
+    pub instance: Option<String>,
+    /// The launcher's own log instead.
+    #[arg(long, conflicts_with = "instance")]
+    pub launcher: bool,
+    /// Only the last N lines.
+    #[arg(short = 'n', long)]
+    pub lines: Option<usize>,
+    /// Only warnings and errors (`warn`) or errors (`error`).
+    #[arg(long, value_enum)]
+    pub level: Option<LogLevelArg>,
+    /// Keep printing new lines as they're written.
+    #[arg(short, long)]
+    pub follow: bool,
+    /// Print the log file's path instead.
+    #[arg(long)]
+    pub path: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum LogLevelArg {
+    Warn,
+    Error,
 }
 
 #[derive(Debug, Subcommand)]
