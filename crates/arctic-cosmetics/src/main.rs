@@ -16,6 +16,7 @@ mod chat;
 mod content;
 mod friends;
 mod gallery;
+mod gallery_seed;
 mod images;
 mod limit;
 mod listing;
@@ -82,6 +83,11 @@ async fn run() -> Result<(), String> {
         .listing_seed(&seeds, started)
         .map_err(|e| format!("registering servers: {e}"))?;
     log::info!("{seeded} curated servers");
+    let skins = gallery_seed::load(&assets)?;
+    let seeded = store
+        .gallery_seed(&skins, started)
+        .map_err(|e| format!("registering gallery skins: {e}"))?;
+    log::info!("{} gallery skins ({seeded} new)", skins.len());
     let state = AppState {
         store,
         catalog,

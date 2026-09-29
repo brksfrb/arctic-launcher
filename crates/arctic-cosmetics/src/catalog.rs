@@ -21,8 +21,22 @@ pub struct Preset {
     pub name: String,
     /// Content hash, fetch it from `/v1/textures/<hash>.png`.
     pub texture: String,
+    /// Animation frames stacked in the image (1: a still cape).
+    pub frames: u32,
     #[serde(skip)]
     png: Vec<u8>,
+}
+
+/// Frames in a cape image: each is half as tall as the image is wide.
+fn frames(png: &[u8]) -> u32 {
+    let Ok(reader) = png::Decoder::new(std::io::Cursor::new(png)).read_info() else {
+        return 1;
+    };
+    let (w, h) = (reader.info().width, reader.info().height);
+    if w < 2 {
+        return 1;
+    }
+    (h / (w / 2)).max(1)
 }
 
 pub struct Catalog {
@@ -46,6 +60,7 @@ impl Catalog {
                 id: item.id,
                 name: item.name,
                 texture,
+                frames: frames(&png),
                 png,
             });
         }
@@ -70,5 +85,25 @@ impl Catalog {
             .iter()
             .find(|p| p.id == id)
             .map(|p| p.texture.as_str())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_bundled_capes_load() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
+        let catalog = Catalog::load(&dir).unwrap();
+        assert!(!catalog.presets().is_empty());
+        // Borealis is the animated one: 6 frames of 128x64.
+        let borealis = catalog
+            .presets()
+            .iter()
+            .find(|p| p.id == "borealis")
+            .unwrap();
+        assert_eq!(borealis.frames, 6);
+        assert!(catalog.presets().iter().any(|p| p.frames == 1));
     }
 }

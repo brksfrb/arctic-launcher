@@ -50,6 +50,64 @@ struct Face {
     uv: [Pos2; 4],
     depth: f32,
     texture: TextureId,
+    /// Texels across and down (how finely it's cut up for depth sorting).
+    cells: [u16; 2],
+}
+
+/// Faces are cut into pieces at most this many texels wide before sorting.
+const MAX_CELLS: u16 = 16;
+
+impl Face {
+    /// Texels across and down, from texture-pixel corners (tl, tr, br, bl).
+    fn cells_of(uv_px: &[(f32, f32); 4]) -> [u16; 2] {
+        let across = (uv_px[1].0 - uv_px[0].0)
+            .abs()
+            .max((uv_px[1].1 - uv_px[0].1).abs());
+        let down = (uv_px[3].1 - uv_px[0].1)
+            .abs()
+            .max((uv_px[3].0 - uv_px[0].0).abs());
+        let cells = |n: f32| (n.round() as u16).clamp(1, MAX_CELLS);
+        [cells(across), cells(down)]
+    }
+
+    /// The face cut into its texels. Sorting whole faces by their middle
+    /// lets a big face (the head's side) cover a small cube in front of it
+    /// (a helmet's horn); texel-sized pieces sort (nearly) right.
+    fn cut(&self) -> impl Iterator<Item = Face> + '_ {
+        let [nu, nv] = self.cells;
+        let [tl, tr, br, bl] = self.corners;
+        let [utl, utr, ubr, ubl] = self.uv;
+        let at = move |s: f32, t: f32| -> (V3, Pos2) {
+            let top = lerp3(tl, tr, s);
+            let bottom = lerp3(bl, br, s);
+            let uv_top = utl + (utr - utl) * s;
+            let uv_bottom = ubl + (ubr - ubl) * s;
+            (lerp3(top, bottom, t), uv_top + (uv_bottom - uv_top) * t)
+        };
+        (0..nv).flat_map(move |j| {
+            (0..nu).map(move |i| {
+                let (s0, s1) = (i as f32 / nu as f32, (i + 1) as f32 / nu as f32);
+                let (t0, t1) = (j as f32 / nv as f32, (j + 1) as f32 / nv as f32);
+                let points = [at(s0, t0), at(s1, t0), at(s1, t1), at(s0, t1)];
+                let corners = points.map(|p| p.0);
+                Face {
+                    corners,
+                    uv: points.map(|p| p.1),
+                    depth: corners.iter().map(|c| c[2]).sum::<f32>() / 4.0,
+                    texture: self.texture,
+                    cells: [1, 1],
+                }
+            })
+        })
+    }
+}
+
+fn lerp3(a: V3, b: V3, t: f32) -> V3 {
+    [
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+    ]
 }
 
 /// A 3D cosmetic to draw: its geometry and texture.
@@ -97,8 +155,9 @@ pub fn paint(
     for worn in cosmetics {
         faces.extend(cosmetic_faces(worn, &view));
     }
-    // One depth order for body and cape, so each hides the other correctly;
-    // consecutive faces with the same texture share a mesh.
+    // One depth order for body, cape and cosmetics, so each hides the others
+    // correctly; consecutive faces with the same texture share a mesh.
+    let mut faces: Vec<Face> = faces.iter().flat_map(Face::cut).collect();
     faces.sort_by(|a, b| a.depth.total_cmp(&b.depth));
     for run in faces.chunk_by(|a, b| a.texture == b.texture) {
         painter.add(mesh(run, &project));
@@ -141,12 +200,14 @@ fn build_faces(
                 continue;
             }
             let depth = corners.iter().map(|c| c[2]).sum::<f32>() / 4.0;
+            let cells = Face::cells_of(&uv);
             let uv = uv.map(|(u, v)| pos2(u / tex_w, v / tex_h));
             faces.push(Face {
                 corners,
                 uv,
                 depth,
                 texture,
+                cells,
             });
         }
     }
@@ -548,6 +609,7 @@ fn cube_faces(
             uv: uv.map(|(u, v)| pos2(u / tex_w, v / tex_h)),
             depth,
             texture,
+            cells: Face::cells_of(&uv),
         });
     }
     out

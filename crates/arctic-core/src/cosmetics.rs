@@ -43,6 +43,13 @@ pub struct Preset {
     pub name: String,
     /// Texture hash.
     pub texture: String,
+    /// Animation frames (1: a still cape; older servers don't say).
+    #[serde(default = "one_frame")]
+    pub frames: u32,
+}
+
+fn one_frame() -> u32 {
+    1
 }
 
 /// A published look; textures are hashes (`texture()` fetches them).
