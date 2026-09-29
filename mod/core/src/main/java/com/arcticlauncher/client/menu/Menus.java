@@ -70,9 +70,9 @@ public final class Menus {
 		selectedId = mapped;
 	}
 
-	/** Looks on a page (0 capes, 1 cosmetics, 2 emotes). */
+	/** Looks on a page (0 skins, 1 capes, 2 cosmetics, 3 emotes). */
 	public static void selectLooks(int page) {
-		LooksTab.page = Math.max(0, Math.min(2, page));
+		LooksTab.page = Math.max(0, Math.min(3, page));
 		selectedId = "looks";
 	}
 

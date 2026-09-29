@@ -48,8 +48,18 @@ final class WorldTest {
 		return t;
 	});
 
+	private static java.util.concurrent.ScheduledFuture<?> unpauser;
+
 	static void start() {
 		ArcticMod.LOG.info("worldtest: scheduled");
+		// The test window may lose focus: close the pause menu that brings,
+		// rather than changing the player's "pause on lost focus" option.
+		// Until the tour starts: it opens the pause menu itself later.
+		unpauser = TIMER.scheduleAtFixedRate(() -> run(() -> {
+			if (Compat.screen() instanceof net.minecraft.client.gui.screens.PauseScreen) {
+				Compat.setScreen(null);
+			}
+		}), 1, 1, TimeUnit.SECONDS);
 		TIMER.schedule(() -> run(() -> createTestWorld(WorldTest::tour)), 10, TimeUnit.SECONDS);
 	}
 
@@ -152,9 +162,10 @@ final class WorldTest {
 	}
 
 	private static void tour() {
+		if (unpauser != null) {
+			unpauser.cancel(false);
+		}
 		ClientConfig c = ArcticClient.config();
-		// The test window may lose focus; keep the game running and unpaused.
-		Minecraft.getInstance().options.pauseOnLostFocus = false;
 		for (HudWidget w : ArcticClient.hud().widgets()) {
 			HudSlot slot = ArcticClient.hud().slot(w);
 			slot.enabled = true;
@@ -250,7 +261,7 @@ final class WorldTest {
 					// and wear-state calls themselves are version-independent.
 					ArcticClient.looks().cosmetics().items();
 					ArcticClient.looks().cosmetics().emotes();
-					TIMER.schedule(() -> run(() -> ArcticClient.looks().wearCosmetics(java.util.Arrays.asList("halo", "frost_wings"))),
+					TIMER.schedule(() -> run(() -> ArcticClient.looks().wearCosmetics(java.util.Arrays.asList("crown", "glasses_3d"))),
 							2, TimeUnit.SECONDS);
 				},
 				() -> {
@@ -278,7 +289,7 @@ final class WorldTest {
 							TimeUnit.SECONDS);
 				},
 				() -> {
-					com.arcticlauncher.client.menu.Menus.selectLooks(1);
+					com.arcticlauncher.client.menu.Menus.selectLooks(2);
 					ArcticClient.platform().openPage(com.arcticlauncher.client.menu.Menus.selected());
 					TIMER.schedule(() -> run(() -> shot("menu-cosmetics")), 2, TimeUnit.SECONDS);
 					TIMER.schedule(() -> run(() -> {
@@ -286,7 +297,13 @@ final class WorldTest {
 						ArcticClient.platform().openPage(new com.arcticlauncher.client.menu.EmoteWheel());
 					}), 3, TimeUnit.SECONDS);
 					TIMER.schedule(() -> run(() -> shot("emote-wheel")), 4, TimeUnit.SECONDS);
-					TIMER.schedule(() -> run(() -> Compat.setScreen(null)), 5, TimeUnit.SECONDS);
+					TIMER.schedule(() -> run(() -> {
+						Compat.setScreen(null);
+						com.arcticlauncher.client.menu.Menus.selectLooks(0);
+						ArcticClient.platform().openPage(com.arcticlauncher.client.menu.Menus.selected());
+					}), 4500, TimeUnit.MILLISECONDS);
+					TIMER.schedule(() -> run(() -> shot("menu-skins")), 6500, TimeUnit.MILLISECONDS);
+					TIMER.schedule(() -> run(() -> Compat.setScreen(null)), 7500, TimeUnit.MILLISECONDS);
 				},
 				() -> {
 					// The tab list badge: our own entry, once we've checked in.

@@ -23,7 +23,9 @@ import net.minecraft.world.item.ItemStack;
  */
 public final class GameInfo {
 	private static final int TICKS_PER_SECOND = 20;
-	private static final long TARGET_MEMORY_MS = 5000;
+	// Long enough to bridge a missed aim mid-fight, short enough to go away
+	// right after (it lingered 5 s).
+	private static final long TARGET_MEMORY_MS = 1500;
 	private static final String[] ROMAN = {"", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"};
 
 	private GameInfo() {}

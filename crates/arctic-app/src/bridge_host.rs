@@ -105,6 +105,30 @@ impl bridge::Accounts for AppAccounts {
         Ok(())
     }
 
+    fn skins(&self) -> arctic_core::Result<String> {
+        let dirs = self
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .tasks
+            .dirs()
+            .clone();
+        arctic_core::skins::Library::for_game(&arctic_core::skins::Library::dir(
+            dirs.profile_root(),
+        ))
+    }
+
+    fn wear_skin(&self, id: Option<&str>) -> arctic_core::Result<()> {
+        let tasks = self
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .tasks
+            .clone();
+        tasks.send(crate::tasks::Event::WearSkinFromGame(id.map(str::to_owned)));
+        Ok(())
+    }
+
     fn ffmpeg(&self, start: bool) -> String {
         use arctic_core::ffmpeg;
         let dirs = self

@@ -15,9 +15,9 @@ import com.arcticlauncher.client.ui.Button;
 import com.arcticlauncher.client.ui.KeyButton;
 import com.arcticlauncher.client.ui.Toggle;
 
-/** Looks: capes, cosmetics and emotes, with you (live) on the right. */
+/** Looks: skins, capes, cosmetics and emotes, with you (live) on the right. */
 final class LooksTab implements MenuTab {
-	private static final String[] PAGES = {"Capes", "Cosmetics", "Emotes"};
+	private static final String[] PAGES = {"Skins", "Capes", "Cosmetics", "Emotes"};
 	private static final int PAGE_BAR = 20;
 	private static final int PREVIEW = 90;
 	private static final int ROW = 24;
@@ -74,11 +74,15 @@ final class LooksTab implements MenuTab {
 		int listTop = top + PAGE_BAR;
 		int listW = w - PREVIEW - 8;
 		CosmeticTiles.Host tiles = host::add;
-		if (page == 1) {
-			CosmeticTiles.cosmetics(tiles, x, listTop, listW);
+		if (page == 0) {
+			skins(host, looks, listTop, listW);
 			return;
 		}
 		if (page == 2) {
+			CosmeticTiles.cosmetics(tiles, x, listTop, listW);
+			return;
+		}
+		if (page == 3) {
 			int end = CosmeticTiles.emotes(tiles, x, listTop, listW);
 			final ClientConfig c = ArcticClient.config();
 			KeyButton wheelKey = new KeyButton(Form.key(() -> c.emoteKey, k -> {
@@ -88,6 +92,11 @@ final class LooksTab implements MenuTab {
 			host.listenKeys(wheelKey);
 			wheelKeyY = end + 6;
 			host.add(wheelKey).bounds(x + 80, wheelKeyY, KEY_W, 18);
+			host.add(new Toggle("Hold to open", "Let go of the key to play the emote you point at",
+					Form.binding(() -> c.emoteWheelHold, on -> {
+						c.emoteWheelHold = on;
+						ArcticClient.saveConfig();
+					}))).bounds(x, wheelKeyY + 22, listW, ROW);
 			return;
 		}
 		int end = capes(host, looks, listTop, listW);
@@ -99,6 +108,38 @@ final class LooksTab implements MenuTab {
 		host.add(new Toggle("Show Arctic looks", "Other players' Arctic skins, capes and cosmetics",
 				Form.binding(() -> config.showCosmetics, on -> config.showCosmetics = on))).bounds(x, end + 8, listW, ROW);
 		nearby(host, end + 8 + ROW + 4, listW);
+	}
+
+	/** Your launcher's skins (and your Minecraft skin); a click wears one. */
+	private void skins(Host host, Looks looks, int y0, int listW) {
+		com.arcticlauncher.client.looks.LauncherSkins library = ArcticClient.launcherSkins();
+		if (!library.available()) {
+			host.add(new com.arcticlauncher.client.ui.Label("Open the game from Arctic Launcher to change skins", com.arcticlauncher.client.ui.Label.Kind.MUTED))
+					.bounds(x, y0, listW, 18);
+			return;
+		}
+		if (!library.loaded()) {
+			library.refresh();
+		}
+		Look mine = looks.myLook();
+		String worn = mine == null ? null : mine.skin;
+		List<com.arcticlauncher.client.looks.LauncherSkins.Skin> list = library.skins();
+		int count = list.size() + 1;
+		int cols = Math.max(1, listW / TILE_W);
+		int tileW = (listW - (cols - 1) * 4) / cols;
+		for (int i = 0; i < count; i++) {
+			com.arcticlauncher.client.looks.LauncherSkins.Skin skin = i == 0 ? null : list.get(i - 1);
+			boolean isWorn = skin == null ? worn == null : skin.texture.equals(worn);
+			SkinTile tile = new SkinTile(skin == null ? null : skin.id, skin == null ? "Minecraft" : skin.name,
+					skin == null ? null : skin.texture, isWorn);
+			host.add(tile).bounds(x + (i % cols) * (tileW + 4), y0 + (i / cols) * (TILE_H + 4), tileW, TILE_H);
+		}
+		int end = y0 + ((count + cols - 1) / cols) * (TILE_H + 4);
+		String note = library.problem() != null ? library.problem()
+				: list.isEmpty() && library.loaded() ? "Add skins in Arctic Launcher's Cosmetics tab" : null;
+		if (note != null) {
+			host.add(new com.arcticlauncher.client.ui.Label(note, com.arcticlauncher.client.ui.Label.Kind.MUTED)).bounds(x, end, listW, 18);
+		}
 	}
 
 	/** The cape grid; returns its bottom edge. */
@@ -171,7 +212,8 @@ final class LooksTab implements MenuTab {
 		Look mine = looks.myLook();
 		StringBuilder state = new StringBuilder();
 		state.append(looks.busy()).append('|').append(looks.signedIn()).append('|').append(looks.status());
-		state.append('|').append(mine == null ? null : mine.cape);
+		state.append('|').append(mine == null ? null : mine.cape).append('|').append(mine == null ? null : mine.skin);
+		state.append('|').append(ArcticClient.launcherSkins().loaded()).append('|').append(ArcticClient.launcherSkins().skins().size());
 		for (Preset p : looks.presets()) {
 			state.append('|').append(p.id);
 		}

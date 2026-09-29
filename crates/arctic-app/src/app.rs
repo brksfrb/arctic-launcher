@@ -746,6 +746,7 @@ impl ArcticApp {
             Event::Screenshots(list) => self.on_screenshot_list(list),
             Event::ScreenshotThumb(path, result) => self.on_screenshot_thumb(ctx, path, result),
             Event::ScreenshotCopied(result) => self.on_screenshot_copied(ctx, result),
+            Event::WearSkinFromGame(id) => self.wear_skin_from_game(id),
             Event::AddAccountFromGame => {
                 // Straight to Microsoft's sign-in in the browser; the game
                 // follows along over the bridge, the launcher stays hidden.

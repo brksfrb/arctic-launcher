@@ -293,6 +293,27 @@ impl Library {
         let path = Self::png_path(dir, id);
         fs::read(&path).map_err(|e| Error::io(&path, e))
     }
+
+    /// The library for the game's skin picker (JSON):
+    /// `[{"id", "name", "slim", "png"}]`, each PNG in base64.
+    pub fn for_game(dir: &Path) -> Result<String> {
+        use base64::Engine as _;
+        let library = Self::load(dir)?;
+        let list: Vec<serde_json::Value> = library
+            .skins
+            .iter()
+            .filter_map(|skin| {
+                let png = Self::read_png(dir, &skin.id).ok()?;
+                Some(serde_json::json!({
+                    "id": skin.id,
+                    "name": skin.name,
+                    "slim": skin.variant == Variant::Slim,
+                    "png": base64::engine::general_purpose::STANDARD.encode(png),
+                }))
+            })
+            .collect();
+        Ok(serde_json::Value::Array(list).to_string())
+    }
 }
 
 #[cfg(test)]
