@@ -29,6 +29,7 @@ pub mod screenshots;
 pub mod secret;
 pub mod servers;
 pub mod settings;
+pub mod shared;
 pub mod sharing;
 pub mod skins;
 pub mod storage;

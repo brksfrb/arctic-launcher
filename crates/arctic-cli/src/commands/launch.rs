@@ -64,7 +64,12 @@ pub fn run(ctx: &Ctx, args: &LaunchArgs) -> Result<i32> {
         );
         return Ok(0);
     }
-    wait_for_game(ctx, &plan, &entry.id, &account.username)
+    let code = wait_for_game(ctx, &plan, &entry.id, &account.username);
+    // What the game changed goes to the profile's other instances.
+    if let Err(e) = arctic_core::shared::sync(&ctx.dirs, settings.shared, None) {
+        log::warn!("sharing between instances: {e}");
+    }
+    code
 }
 
 fn quick_play(args: &LaunchArgs) -> Result<Option<QuickPlay>> {

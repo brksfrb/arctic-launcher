@@ -1,0 +1,104 @@
+{
+  "format_version": "1.12.0",
+  "minecraft:geometry": [
+    {
+      "description": {
+        "identifier": "geometry.mint_scarf",
+        "texture_width": 32,
+        "texture_height": 16
+      },
+      "bones": [
+        {
+          "name": "body",
+          "pivot": [
+            0,
+            24,
+            0
+          ],
+          "cubes": [
+            {
+              "origin": [
+                -4,
+                21.5,
+                -3.5
+              ],
+              "size": [
+                8,
+                2,
+                1
+              ],
+              "uv": [
+                6,
+                0
+              ]
+            },
+            {
+              "origin": [
+                -4,
+                21.5,
+                2.5
+              ],
+              "size": [
+                8,
+                2,
+                1
+              ],
+              "uv": [
+                0,
+                6
+              ]
+            },
+            {
+              "origin": [
+                -3,
+                16.5,
+                -3.5
+              ],
+              "size": [
+                2,
+                5,
+                1
+              ],
+              "uv": [
+                0,
+                0
+              ]
+            },
+            {
+              "origin": [
+                -3,
+                16.5,
+                -4
+              ],
+              "size": [
+                2,
+                1,
+                1
+              ],
+              "uv": [
+                18,
+                6
+              ]
+            },
+            {
+              "origin": [
+                -1,
+                21.5,
+                -4
+              ],
+              "size": [
+                2,
+                1,
+                1
+              ],
+              "uv": [
+                24,
+                6
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

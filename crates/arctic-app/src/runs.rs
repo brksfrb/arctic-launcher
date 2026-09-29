@@ -281,6 +281,13 @@ impl ArcticApp {
             }
             GameEvent::Exited { code } => {
                 run.state = RunState::Ended;
+                // What the game changed goes to the profile's other instances.
+                let (dirs, shared) = (self.dirs.clone(), self.settings.shared);
+                std::thread::spawn(move || {
+                    if let Err(e) = arctic_core::shared::sync(&dirs, shared, None) {
+                        log::warn!("sharing between instances: {e}");
+                    }
+                });
                 let watchdog = run.shutdown_watchdog_fired();
                 let title = run.title.clone();
                 let diagnosis = matches!(code, Some(c) if c != 0 && !watchdog)

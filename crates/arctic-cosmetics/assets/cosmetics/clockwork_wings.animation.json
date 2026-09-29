@@ -1,0 +1,49 @@
+{
+  "format_version": "1.8.0",
+  "animations": {
+    "animation.clockwork_wings.idle": {
+      "loop": true,
+      "animation_length": 3,
+      "bones": {
+        "left_wing": {
+          "rotation": {
+            "0.0": [
+              0,
+              -7,
+              0
+            ],
+            "1.5": [
+              0,
+              7,
+              0
+            ],
+            "3.0": [
+              0,
+              -7,
+              0
+            ]
+          }
+        },
+        "right_wing": {
+          "rotation": {
+            "0.0": [
+              0,
+              7,
+              0
+            ],
+            "1.5": [
+              0,
+              -7,
+              0
+            ],
+            "3.0": [
+              0,
+              7,
+              0
+            ]
+          }
+        }
+      }
+    }
+  }
+}

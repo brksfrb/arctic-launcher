@@ -138,10 +138,21 @@ impl ArcticApp {
         } else {
             SkinsView::Library
         };
+        // Debug builds: ARCTIC_DEVSHOT_SECTION picks the section (screenshots).
+        let section = match std::env::var("ARCTIC_DEVSHOT_SECTION")
+            .ok()
+            .filter(|_| cfg!(debug_assertions))
+            .as_deref()
+        {
+            Some("capes") => Section::Capes,
+            Some("cosmetics") => Section::Cosmetics,
+            _ => Section::default(),
+        };
         self.skins = SkinsUi {
             view,
             yaw,
             pitch: 0.12,
+            section,
             ..SkinsUi::default()
         };
         match Library::load(&dir) {

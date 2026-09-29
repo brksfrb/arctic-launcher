@@ -1,0 +1,30 @@
+{
+  "format_version": "1.8.0",
+  "animations": {
+    "animation.moon_halo.idle": {
+      "loop": true,
+      "animation_length": 3,
+      "bones": {
+        "head": {
+          "position": {
+            "0.0": [
+              0,
+              0,
+              0
+            ],
+            "1.5": [
+              0,
+              0.3,
+              0
+            ],
+            "3.0": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      }
+    }
+  }
+}

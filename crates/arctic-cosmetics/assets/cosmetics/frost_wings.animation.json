@@ -3,10 +3,46 @@
   "animations": {
     "animation.frost_wings.idle": {
       "loop": true,
-      "animation_length": 2.0,
+      "animation_length": 3,
       "bones": {
-        "wing_left": { "rotation": { "0.0": [0, 0, 0], "1.0": [0, -15, 0], "2.0": [0, 0, 0] } },
-        "wing_right": { "rotation": { "0.0": [0, 0, 0], "1.0": [0, 15, 0], "2.0": [0, 0, 0] } }
+        "left_wing": {
+          "rotation": {
+            "0.0": [
+              0,
+              -7,
+              0
+            ],
+            "1.5": [
+              0,
+              7,
+              0
+            ],
+            "3.0": [
+              0,
+              -7,
+              0
+            ]
+          }
+        },
+        "right_wing": {
+          "rotation": {
+            "0.0": [
+              0,
+              7,
+              0
+            ],
+            "1.5": [
+              0,
+              -7,
+              0
+            ],
+            "3.0": [
+              0,
+              7,
+              0
+            ]
+          }
+        }
       }
     }
   }

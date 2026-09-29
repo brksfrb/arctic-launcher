@@ -70,6 +70,8 @@ pub struct Settings {
     pub share_server_with_friends: bool,
     /// Proximity voice chat.
     pub voice: VoiceSettings,
+    /// What this profile's instances share (server list, client and game settings).
+    pub shared: crate::shared::SharedSettings,
 }
 
 /// Proximity voice chat: off until turned on.
@@ -212,6 +214,7 @@ impl Default for Settings {
             client_fancy: false,
             share_server_with_friends: false,
             voice: VoiceSettings::default(),
+            shared: crate::shared::SharedSettings::default(),
         }
     }
 }

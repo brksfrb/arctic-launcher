@@ -1,27 +1,31 @@
 [
-  {
-    "id": "aurora",
-    "name": "Aurora",
-    "free": true
-  },
-  {
-    "id": "snowflake",
-    "name": "Snowflake",
-    "free": true
-  },
-  {
-    "id": "glacier",
-    "name": "Glacier",
-    "free": true
-  },
-  {
-    "id": "midnight",
-    "name": "Midnight",
-    "free": true
-  },
-  {
-    "id": "borealis",
-    "name": "Borealis",
-    "free": true
-  }
+  {"id": "aurora", "name": "Aurora", "free": true},
+  {"id": "snowflake", "name": "Snowflake", "free": true},
+  {"id": "glacier", "name": "Glacier", "free": true},
+  {"id": "midnight", "name": "Midnight", "free": true},
+  {"id": "borealis", "name": "Borealis", "free": true},
+  {"id": "aurora_veil", "name": "Aurora Veil", "free": true},
+  {"id": "glacier_crest", "name": "Glacier Crest", "free": true},
+  {"id": "snowfall_bloom", "name": "Snowfall Bloom", "free": true},
+  {"id": "polar_horizon", "name": "Polar Horizon", "free": true},
+  {"id": "moonlit_pines", "name": "Moonlit Pines", "free": true},
+  {"id": "crystal_shard", "name": "Crystal Shard", "free": true},
+  {"id": "copper_compass", "name": "Copper Compass", "free": true},
+  {"id": "ember_forge", "name": "Ember Forge", "free": true},
+  {"id": "tidal_wave", "name": "Tidal Wave", "free": true},
+  {"id": "moss_rune", "name": "Moss Rune", "free": true},
+  {"id": "royal_amethyst", "name": "Royal Amethyst", "free": true},
+  {"id": "cloud_sailing", "name": "Cloud Sailing", "free": true},
+  {"id": "starlight_patchwork", "name": "Starlight Patchwork", "free": true},
+  {"id": "raven_wing", "name": "Raven Wing", "free": true},
+  {"id": "cobalt_circuit", "name": "Cobalt Circuit", "free": true},
+  {"id": "sunrise_peak", "name": "Sunrise Peak", "free": true},
+  {"id": "living_aurora", "name": "Living Aurora", "free": true},
+  {"id": "quiet_snow", "name": "Quiet Snow", "free": true},
+  {"id": "glacial_heartbeat", "name": "Glacial Heartbeat", "free": true},
+  {"id": "starlit_orbit", "name": "Starlit Orbit", "free": true},
+  {"id": "ember_breath", "name": "Ember Breath", "free": true},
+  {"id": "ocean_current", "name": "Ocean Current", "free": true},
+  {"id": "rune_awaken", "name": "Rune Awaken", "free": true},
+  {"id": "prism_shimmer", "name": "Prism Shimmer", "free": true}
 ]

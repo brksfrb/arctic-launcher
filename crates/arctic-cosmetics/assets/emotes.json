@@ -4,5 +4,11 @@
   {"id": "clap", "name": "Clap"},
   {"id": "cheer", "name": "Cheer"},
   {"id": "dance", "name": "Dance"},
-  {"id": "facepalm", "name": "Facepalm"}
+  {"id": "facepalm", "name": "Facepalm"},
+  {"id": "arctic_salute", "name": "Arctic Salute"},
+  {"id": "warm_hands", "name": "Warm Hands"},
+  {"id": "snow_shuffle", "name": "Snow Shuffle"},
+  {"id": "stargaze", "name": "Stargaze"},
+  {"id": "victory_twirl", "name": "Victory Twirl"},
+  {"id": "summit_balance", "name": "Summit Balance"}
 ]

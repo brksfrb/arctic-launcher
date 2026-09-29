@@ -1,0 +1,104 @@
+{
+  "format_version": "1.12.0",
+  "minecraft:geometry": [
+    {
+      "description": {
+        "identifier": "geometry.moon_halo",
+        "texture_width": 32,
+        "texture_height": 32
+      },
+      "bones": [
+        {
+          "name": "head",
+          "pivot": [
+            0,
+            24,
+            0
+          ],
+          "cubes": [
+            {
+              "origin": [
+                -6,
+                34.5,
+                -6
+              ],
+              "size": [
+                12,
+                1,
+                1
+              ],
+              "uv": [
+                0,
+                22
+              ]
+            },
+            {
+              "origin": [
+                -6,
+                34.5,
+                5
+              ],
+              "size": [
+                12,
+                1,
+                1
+              ],
+              "uv": [
+                0,
+                24
+              ]
+            },
+            {
+              "origin": [
+                -6,
+                34.5,
+                -5
+              ],
+              "size": [
+                1,
+                1,
+                10
+              ],
+              "uv": [
+                0,
+                0
+              ]
+            },
+            {
+              "origin": [
+                5,
+                34.5,
+                -5
+              ],
+              "size": [
+                1,
+                1,
+                10
+              ],
+              "uv": [
+                0,
+                11
+              ]
+            },
+            {
+              "origin": [
+                -1,
+                35.5,
+                -6
+              ],
+              "size": [
+                2,
+                1,
+                1
+              ],
+              "uv": [
+                26,
+                24
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

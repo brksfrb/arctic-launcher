@@ -191,6 +191,7 @@ final class LooksTab implements MenuTab {
 	/** You, live, wearing your cosmetics (and playing emotes). */
 	@Override
 	public void draw(Gfx g, Style s, int mx, int my) {
+		ArcticClient.looks().menuOpen();
 		int x1 = x + w;
 		int x0 = x1 - PREVIEW;
 		int y0 = top;
@@ -213,6 +214,7 @@ final class LooksTab implements MenuTab {
 		StringBuilder state = new StringBuilder();
 		state.append(looks.busy()).append('|').append(looks.signedIn()).append('|').append(looks.status());
 		state.append('|').append(mine == null ? null : mine.cape).append('|').append(mine == null ? null : mine.skin);
+		state.append('|').append(mine == null ? null : mine.cosmetics);
 		state.append('|').append(ArcticClient.launcherSkins().loaded()).append('|').append(ArcticClient.launcherSkins().skins().size());
 		for (Preset p : looks.presets()) {
 			state.append('|').append(p.id);
