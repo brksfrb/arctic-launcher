@@ -41,6 +41,7 @@ async fn app() -> Router {
         content,
         challenges: Challenges::default(),
         limiter: Limiter::new(1000, Duration::from_secs(60)),
+        read_limiter: Limiter::new(1000, Duration::from_secs(60)),
         secret: b"test-secret-test-secret-test-secret".to_vec(),
         session_url: fake_session().await,
         trust_proxy: false,

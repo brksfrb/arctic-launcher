@@ -37,7 +37,11 @@ pub struct AppState {
     pub catalog: Catalog,
     pub content: crate::content::Content,
     pub challenges: Challenges,
+    /// Changes (saving a look, sharing...), per client.
     pub limiter: Limiter,
+    /// Reads (textures, models, lists...): a game or the launcher's
+    /// Cosmetics tab asks for many at once, so a much higher ceiling.
+    pub read_limiter: Limiter,
     pub secret: Vec<u8>,
     pub session_url: String,
     /// Behind a reverse proxy: take the client address from
@@ -86,22 +90,56 @@ fn db_error(what: &str, e: rusqlite::Error) -> Response {
 }
 
 async fn rate_limit(State(state): State<Shared>, request: Request, next: Next) -> Response {
-    let forwarded = state
-        .trust_proxy
-        .then(|| forwarded_ip(request.headers()))
-        .flatten();
-    let ip = forwarded.or_else(|| {
-        request
-            .extensions()
-            .get::<ConnectInfo<SocketAddr>>()
-            .map(|c| c.0.ip())
-    });
+    let peer = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|c| c.0.ip());
+    // Behind a reverse proxy (on this machine or its network) every request
+    // comes from the proxy: the player's address is in its headers.
+    let proxied = state.trust_proxy || peer.is_some_and(is_local);
+    let ip = proxied
+        .then(|| client_ip(request.headers()))
+        .flatten()
+        .or(peer);
+    let reading = matches!(
+        *request.method(),
+        axum::http::Method::GET | axum::http::Method::HEAD
+    );
+    let limiter = if reading {
+        &state.read_limiter
+    } else {
+        &state.limiter
+    };
     if let Some(ip) = ip
-        && !state.limiter.allow(ip)
+        && !limiter.allow(ip)
     {
         return error(StatusCode::TOO_MANY_REQUESTS, "slow down");
     }
     next.run(request).await
+}
+
+/// Loopback or a private network: a proxy in front of us, not a player.
+fn is_local(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => v4.is_loopback() || v4.is_private() || v4.is_link_local(),
+        std::net::IpAddr::V6(v6) => {
+            v6.is_loopback()
+                || (v6.segments()[0] & 0xfe00) == 0xfc00
+                || v6
+                    .to_ipv4_mapped()
+                    .is_some_and(|v4| v4.is_loopback() || v4.is_private())
+        }
+    }
+}
+
+/// The player's address from the proxy headers: Cloudflare's
+/// `CF-Connecting-IP`, else the last hop in `X-Forwarded-For`.
+fn client_ip(headers: &HeaderMap) -> Option<std::net::IpAddr> {
+    headers
+        .get("cf-connecting-ip")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.trim().parse().ok())
+        .or_else(|| forwarded_ip(headers))
 }
 
 /// The original client address set by a trusted proxy (the last hop it
@@ -444,3 +482,21 @@ pub use servers::pinger as server_pinger;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod client_ip_tests {
+    use super::*;
+
+    #[test]
+    fn players_are_told_apart_behind_the_proxy() {
+        assert!(is_local("172.18.0.5".parse().unwrap()));
+        assert!(is_local("127.0.0.1".parse().unwrap()));
+        assert!(is_local("fd00::1".parse().unwrap()));
+        assert!(!is_local("188.114.96.0".parse().unwrap()));
+        let mut h = HeaderMap::new();
+        h.insert("x-forwarded-for", "1.2.3.4, 188.114.96.0".parse().unwrap());
+        assert_eq!(client_ip(&h), Some("188.114.96.0".parse().unwrap()));
+        h.insert("cf-connecting-ip", "5.6.7.8".parse().unwrap());
+        assert_eq!(client_ip(&h), Some("5.6.7.8".parse().unwrap()));
+    }
+}

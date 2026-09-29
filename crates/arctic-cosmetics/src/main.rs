@@ -94,6 +94,7 @@ async fn run() -> Result<(), String> {
         content,
         challenges: auth::Challenges::default(),
         limiter: limit::Limiter::new(120, Duration::from_secs(60)),
+        read_limiter: limit::Limiter::new(1500, Duration::from_secs(60)),
         secret: secret.into_bytes(),
         session_url: env("ARCTIC_SESSION_URL", SESSION_URL),
         trust_proxy: env("ARCTIC_COSMETICS_TRUST_PROXY", "0") == "1",
