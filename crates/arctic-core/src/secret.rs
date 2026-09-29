@@ -409,11 +409,15 @@ mod tests {
     fn plain_values_from_old_files_still_load() {
         let s: Secret = serde_json::from_str("\"old-plain-token\"").unwrap();
         assert_eq!(&*s.reveal(), "old-plain-token");
+        let fields = ["refresh_token", "access_token"];
+        // A plain value anywhere: the file gets saved again, encrypted.
         let json = r#"{"accounts":[{"kind":{"refresh_token":"abc","access_token":"dpapi:xyz"}}]}"#;
-        assert_eq!(
-            has_plain(json, &["refresh_token", "access_token"]),
-            cfg!(windows)
+        assert!(has_plain(json, &fields));
+        // Everything in the current form: left alone.
+        let sealed = format!(
+            r#"{{"accounts":[{{"kind":{{"refresh_token":"{PREFIX}abc","access_token":""}}}}]}}"#
         );
+        assert!(!has_plain(&sealed, &fields));
     }
 
     #[test]
