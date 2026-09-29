@@ -29,7 +29,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      - run: cargo test --workspace --no-fail-fast
 
   # The in-game client: its shared core's tests, then every Minecraft target compiled and
   # its mixin hooks checked against that version's game jar (no game is started).
