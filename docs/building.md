@@ -5,8 +5,9 @@
 - [Rust](https://rustup.rs), stable toolchain
 - **Windows:** the MSVC toolchain (Visual Studio Build Tools). The Windows SDK's resource
   compiler embeds the app icon; without it the build still succeeds with a default icon.
-- **Linux:** a C toolchain (`build-essential`). The window uses X11 or Wayland through
-  OpenGL, loaded at runtime.
+- **Linux:** a C toolchain (`build-essential`) and ALSA headers (`libasound2-dev`, for voice
+  chat). The window uses X11 or Wayland through OpenGL, loaded at runtime.
+- **macOS:** Xcode Command Line Tools and CMake (`brew install cmake`).
 
 ## Build
 
@@ -24,6 +25,19 @@ This produces:
 | Command line | `target/release/arctic.exe` | `target/release/arctic` |
 
 Run the launcher directly with `cargo run --release -p arctic-app`.
+
+**macOS app:** build both kinds of Mac, then make the universal, ad-hoc signed
+`Arctic Launcher.app` (zipped in `dist/`):
+
+```sh
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+cargo build --release -p arctic-app -p arctic-cli --target aarch64-apple-darwin
+cargo build --release -p arctic-app -p arctic-cli --target x86_64-apple-darwin
+packaging/macos/make-app.sh 0.2.0
+```
+
+On Apple Silicon, Minecraft versions before 1.19 (whose graphics libraries have no arm64 build)
+run through Rosetta with Intel Java; newer ones run natively.
 
 ### The Arctic Client
 
