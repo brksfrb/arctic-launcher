@@ -50,6 +50,16 @@ impl RuleEnv {
         }
     }
 
+    /// The platform `version` runs as: Apple Silicon Macs run versions
+    /// without arm64 graphics libraries as Intel (through Rosetta).
+    pub fn for_version(version: &crate::versions::VersionJson) -> Self {
+        let mut env = Self::current();
+        if needs_rosetta(version) {
+            env.arch = "x86_64";
+        }
+        env
+    }
+
     pub fn with_feature(mut self, feature: &'static str) -> Self {
         self.features.insert(feature);
         self
@@ -64,6 +74,29 @@ pub fn current_os() -> &'static str {
     } else {
         "linux"
     }
+}
+
+/// Apple Silicon only: `version`'s graphics libraries (LWJGL) have no
+/// arm64 build (Minecraft before 1.19), so it runs as an Intel game
+/// through Rosetta: Intel Java and Intel natives.
+pub fn needs_rosetta(version: &crate::versions::VersionJson) -> bool {
+    cfg!(all(target_os = "macos", target_arch = "aarch64")) && !has_arm64_mac_natives(version)
+}
+
+/// LWJGL 3.3+ (or an explicit `natives-macos-arm64` library) runs natively
+/// on Apple Silicon.
+fn has_arm64_mac_natives(version: &crate::versions::VersionJson) -> bool {
+    version.libraries.iter().any(|lib| {
+        lib.name.contains("natives-macos-arm64")
+            || lib
+                .name
+                .strip_prefix("org.lwjgl:lwjgl:")
+                .and_then(|v| {
+                    let mut parts = v.split(['.', ':', '-']).map(|p| p.parse::<u32>().ok());
+                    Some((parts.next()??, parts.next()??))
+                })
+                .is_some_and(|(major, minor)| (major, minor) >= (3, 3))
+    })
 }
 
 pub fn current_arch() -> &'static str {
@@ -149,5 +182,30 @@ mod tests {
         assert!(!rules_allow(Some(&rules), &env("windows")));
         let with = env("windows").with_feature("has_custom_resolution");
         assert!(rules_allow(Some(&rules), &with));
+    }
+
+    #[test]
+    fn lwjgl_3_3_and_newer_have_apple_silicon_natives() {
+        let version = |libs: &str| -> crate::versions::VersionJson {
+            serde_json::from_str(&format!(
+                r#"{{"id":"x","mainClass":"M","libraries":[{libs}]}}"#
+            ))
+            .unwrap()
+        };
+        assert!(has_arm64_mac_natives(&version(
+            r#"{"name":"org.lwjgl:lwjgl:3.3.1"}"#
+        )));
+        assert!(has_arm64_mac_natives(&version(
+            r#"{"name":"org.lwjgl:lwjgl:3.10.0"}"#
+        )));
+        assert!(!has_arm64_mac_natives(&version(
+            r#"{"name":"org.lwjgl:lwjgl:3.2.2"}"#
+        )));
+        assert!(!has_arm64_mac_natives(&version(
+            r#"{"name":"org.lwjgl.lwjgl:lwjgl:2.9.4-nightly-20150209"}"#
+        )));
+        assert!(has_arm64_mac_natives(&version(
+            r#"{"name":"org.lwjgl:lwjgl-glfw:3.3.1:natives-macos-arm64"}"#
+        )));
     }
 }

@@ -80,10 +80,17 @@ struct RawDownload {
 
 /// Mojang platform key for the host.
 pub fn platform_key() -> &'static str {
-    match (
-        crate::versions::rules::current_os(),
-        crate::versions::rules::current_arch(),
-    ) {
+    platform_key_for(false)
+}
+
+/// `rosetta`: an Apple Silicon Mac running an Intel game gets Intel Java.
+fn platform_key_for(rosetta: bool) -> &'static str {
+    let arch = if rosetta {
+        "x86_64"
+    } else {
+        crate::versions::rules::current_arch()
+    };
+    match (crate::versions::rules::current_os(), arch) {
         ("windows", "x86") => "windows-x86",
         ("windows", "arm64") => "windows-arm64",
         ("windows", _) => "windows-x64",
@@ -104,10 +111,18 @@ pub fn component_for(version: &VersionJson) -> &str {
 }
 
 /// Path of the java launcher inside an installed runtime. `javaw` on Windows
-/// so no console window appears next to the game.
+/// so no console window appears next to the game; on macOS Mojang's
+/// runtimes are app bundles (`jre.bundle/Contents/Home`).
 pub fn java_executable(runtime_dir: &Path) -> PathBuf {
     if cfg!(windows) {
         runtime_dir.join("bin").join("javaw.exe")
+    } else if cfg!(target_os = "macos") {
+        runtime_dir
+            .join("jre.bundle")
+            .join("Contents")
+            .join("Home")
+            .join("bin")
+            .join("java")
     } else {
         runtime_dir.join("bin").join("java")
     }
@@ -149,7 +164,17 @@ impl RuntimePlan {
 /// Fast path: if the installed runtime matches the (cached) index entry, or
 /// the index is unreachable, no jobs are returned.
 pub fn plan_runtime(dirs: &DataDirs, component: &str) -> Result<RuntimePlan> {
-    let dir = dirs.runtimes().join(component);
+    plan_runtime_for(dirs, component, false)
+}
+
+/// [`plan_runtime`]; `rosetta`: the Intel build, for an Intel game on an
+/// Apple Silicon Mac (kept apart from the arm64 one).
+pub fn plan_runtime_for(dirs: &DataDirs, component: &str, rosetta: bool) -> Result<RuntimePlan> {
+    let dir = if rosetta {
+        dirs.runtimes().join(format!("{component}-x64"))
+    } else {
+        dirs.runtimes().join(component)
+    };
     let java = java_executable(&dir);
     let installed_sha = fs::read_to_string(dir.join(MARKER)).ok();
     let up_to_date = |dir: PathBuf, java: PathBuf| RuntimePlan {
@@ -161,7 +186,7 @@ pub fn plan_runtime(dirs: &DataDirs, component: &str) -> Result<RuntimePlan> {
     };
 
     let build = match fetch_index(dirs) {
-        Ok(index) => find_build(&index, component)?,
+        Ok(index) => find_build(&index, component, rosetta)?,
         Err(e) if installed_sha.is_some() && java.is_file() => {
             log::warn!("runtime index unavailable, using installed {component}: {e}");
             return Ok(up_to_date(dir, java));
@@ -217,16 +242,16 @@ fn is_fresh(path: &Path, max_age: Duration) -> bool {
         .is_some_and(|age| age < max_age)
 }
 
-fn find_build(index: &RuntimeIndex, component: &str) -> Result<RuntimeBuild> {
+fn find_build(index: &RuntimeIndex, component: &str, rosetta: bool) -> Result<RuntimeBuild> {
+    let platform = platform_key_for(rosetta);
     index
-        .get(platform_key())
+        .get(platform)
         .and_then(|components| components.get(component))
         .and_then(|builds| builds.first())
         .cloned()
         .ok_or_else(|| {
             Error::Other(format!(
-                "Mojang provides no '{component}' Java runtime for {}",
-                platform_key()
+                "Mojang provides no '{component}' Java runtime for {platform}"
             ))
         })
 }
@@ -347,7 +372,7 @@ mod tests {
     #[test]
     fn missing_component_is_a_clear_error() {
         let index: RuntimeIndex = HashMap::new();
-        let err = find_build(&index, "java-runtime-delta").unwrap_err();
+        let err = find_build(&index, "java-runtime-delta", false).unwrap_err();
         assert!(err.to_string().contains("java-runtime-delta"));
     }
 }

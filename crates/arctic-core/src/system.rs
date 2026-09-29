@@ -53,7 +53,19 @@ mod imp {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+mod imp {
+    /// `sysctl -n hw.memsize`: the installed memory in bytes.
+    pub fn total_memory_bytes() -> Option<u64> {
+        let out = std::process::Command::new("/usr/sbin/sysctl")
+            .args(["-n", "hw.memsize"])
+            .output()
+            .ok()?;
+        String::from_utf8_lossy(&out.stdout).trim().parse().ok()
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 mod imp {
     pub fn total_memory_bytes() -> Option<u64> {
         let text = std::fs::read_to_string("/proc/meminfo").ok()?;
@@ -62,7 +74,7 @@ mod imp {
 }
 
 /// `MemTotal:  16318376 kB` → bytes.
-#[cfg_attr(windows, allow(dead_code))]
+#[cfg_attr(any(windows, target_os = "macos"), allow(dead_code))]
 fn parse_meminfo(text: &str) -> Option<u64> {
     let line = text.lines().find(|l| l.starts_with("MemTotal:"))?;
     let kb: u64 = line.split_whitespace().nth(1)?.parse().ok()?;

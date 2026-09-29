@@ -59,6 +59,10 @@ fn main() -> eframe::Result {
     if args.first().map(String::as_str) == Some(video_encoder::SWITCH) {
         std::process::exit(video_encoder::run(&args[1..]));
     }
+    // Packaging (the macOS app icon): `--write-icon <out.png> <size>`.
+    if args.first().map(String::as_str) == Some("--write-icon") {
+        std::process::exit(write_icon(&args[1..]));
+    }
     // Already running (maybe hidden in the tray): hand over and exit.
     let forwarded = match single_instance::claim(dirs.root(), &args) {
         single_instance::Claim::Forwarded => return Ok(()),
@@ -114,4 +118,27 @@ fn main() -> eframe::Result {
             )))
         }),
     )
+}
+
+/// Save the app icon as a PNG of `size`×`size` pixels (for packaging).
+fn write_icon(args: &[String]) -> i32 {
+    let (Some(out), Some(size)) = (
+        args.first(),
+        args.get(1).and_then(|s| s.parse::<u32>().ok()),
+    ) else {
+        eprintln!("usage: --write-icon <out.png> <size>");
+        return 2;
+    };
+    let size = size.clamp(16, 2048);
+    let Some(image) = image::RgbaImage::from_raw(size, size, icon_raster::app_icon_rgba(size))
+    else {
+        return 1;
+    };
+    match image.save(out) {
+        Ok(()) => 0,
+        Err(e) => {
+            eprintln!("{out}: {e}");
+            1
+        }
+    }
 }
