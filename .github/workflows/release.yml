@@ -29,6 +29,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+      - name: Linux libraries (voice chat's ALSA)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
       - uses: Swatinem/rust-cache@v2
 
       - name: Check tag matches Cargo version
@@ -73,6 +76,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           chmod +x dist/*linux*
+          # Checksums, so a download can be checked: a file next to the
+          # downloads and a table at the top of the notes.
+          (cd dist && sha256sum -- * > SHA256SUMS.txt)
+          {
+            echo "### SHA-256"
+            echo
+            echo "| File | SHA-256 |"
+            echo "|---|---|"
+            while read -r hash name; do name=${name#\*}; echo "| \`$name\` | \`$hash\` |"; done < dist/SHA256SUMS.txt
+            echo
+            echo "Check a download: \`Get-FileHash <file>\` (PowerShell) or \`sha256sum -c SHA256SUMS.txt\` (Linux)."
+          } > notes.md
           prerelease=""
           case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" dist/* --title "Arctic Launcher $GITHUB_REF_NAME" --generate-notes $prerelease
+          gh release create "$GITHUB_REF_NAME" dist/* --title "Arctic Launcher $GITHUB_REF_NAME" --notes-file notes.md --generate-notes $prerelease
