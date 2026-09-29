@@ -107,7 +107,15 @@ final class CosmeticTiles {
 			host.add(tile).bounds(x + (i % cols) * (tileW + GAP), top + (i / cols) * (TILE_H + GAP), tileW, TILE_H);
 		}
 		int rows = (items.size() + cols - 1) / cols;
-		return top + rows * (TILE_H + GAP);
+		int end = top + rows * (TILE_H + GAP);
+		if (mine != null && !mine.cosmetics.isEmpty()) {
+			com.arcticlauncher.client.ui.Button off = new com.arcticlauncher.client.ui.Button("Remove all",
+					() -> ArcticClient.looks().wearCosmetics(java.util.Collections.<String>emptyList()));
+			off.enabled = canWear;
+			host.add(off).bounds(x, end, 90, 18);
+			end += 18 + GAP;
+		}
+		return end;
 	}
 
 	/** The emotes grid; returns its bottom edge. */

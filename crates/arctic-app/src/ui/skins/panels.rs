@@ -544,20 +544,44 @@ impl ArcticApp {
         };
         let mut pick: Option<(Option<CapeChoice>, Option<String>)> = None;
         let mut upload = false;
+        let now = ui.input(|i| i.time);
+        let (animated, still): (Vec<_>, Vec<_>) = state.presets.iter().partition(|c| c.frames > 1);
+        // Tiles for these presets; the one clicked, if any.
+        type Picked = Option<(Option<CapeChoice>, Option<String>)>;
+        let mut presets = |ui: &mut egui::Ui, list: &[&arctic_core::cosmetics::Preset]| -> Picked {
+            let mut clicked = None;
+            for preset in list {
+                let key = format!("acape:{}", preset.texture);
+                let tex = self.skin_texture(&ctx, &key).map(|t| animate(&ctx, t, now));
+                let active = worn.as_deref() == Some(preset.texture.as_str());
+                if cape_tile(ui, p, tex, Icon::Close, &preset.name, active) && !active {
+                    clicked = Some((Some(CapeChoice::Preset(preset.id.clone())), Some(key)));
+                }
+            }
+            clicked
+        };
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(10.0, 10.0);
             if cape_tile(ui, p, None, Icon::Close, "No cape", worn.is_none()) && worn.is_some() {
                 pick = Some((None, None));
             }
-            let now = ui.input(|i| i.time);
-            for preset in &state.presets {
-                let key = format!("acape:{}", preset.texture);
-                let tex = self.skin_texture(&ctx, &key).map(|t| animate(&ctx, t, now));
-                let active = worn.as_deref() == Some(preset.texture.as_str());
-                if cape_tile(ui, p, tex, Icon::Close, &preset.name, active) && !active {
-                    pick = Some((Some(CapeChoice::Preset(preset.id.clone())), Some(key)));
-                }
+            if let Some(clicked) = presets(ui, &still) {
+                pick = Some(clicked);
             }
+        });
+        if !animated.is_empty() {
+            ui.add_space(4.0);
+            ui.label(RichText::new("ANIMATED").small().color(p.muted));
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = vec2(10.0, 10.0);
+                if let Some(clicked) = presets(ui, &animated) {
+                    pick = Some(clicked);
+                }
+            });
+        }
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = vec2(10.0, 10.0);
             let custom = worn
                 .as_ref()
                 .filter(|h| !state.presets.iter().any(|p| &p.texture == *h));
@@ -721,11 +745,18 @@ impl ArcticApp {
         }
         ctx.request_repaint_after(std::time::Duration::from_millis(33));
         ui.add_space(6.0);
-        ui.label(
-            RichText::new("One per slot. Click a worn one to take it off.")
-                .small()
-                .color(p.muted),
-        );
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new("One per slot. Click a worn one to take it off.")
+                    .small()
+                    .color(p.muted),
+            );
+            if !worn_ids.is_empty()
+                && widgets::button(ui, p, Some(Icon::Close), "Remove all", false).clicked()
+            {
+                pick = Some(Vec::new());
+            }
+        });
         if let Some(ids) = pick {
             self.set_cosmetics(ids);
         }
