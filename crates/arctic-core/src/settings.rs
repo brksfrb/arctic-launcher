@@ -70,6 +70,8 @@ pub struct Settings {
     pub share_server_with_friends: bool,
     /// Quitting the launcher also closes games it started (off: they keep running).
     pub exit_games_with_launcher: bool,
+    /// Mentions of Arctic's supporter (About, playing together).
+    pub show_sponsor: bool,
     /// Proximity voice chat.
     pub voice: VoiceSettings,
     /// What this profile's instances share (server list, client and game settings).
@@ -216,6 +218,7 @@ impl Default for Settings {
             client_fancy: false,
             share_server_with_friends: false,
             exit_games_with_launcher: false,
+            show_sponsor: true,
             voice: VoiceSettings::default(),
             shared: crate::shared::SharedSettings::default(),
         }

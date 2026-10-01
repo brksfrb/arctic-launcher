@@ -539,7 +539,9 @@ impl ArcticApp {
             .active()
             .filter(|r| r.instance_id == instance.id)
             .count() as u32;
-        if copy > 0 && !another_copy {
+        // Vanilla on another version is a different game, not another copy.
+        let same = instance.is_default().then_some(version.id.as_str());
+        if self.runs.active_for(&instance.id, same).is_some() && !another_copy {
             self.toasts.push(
                 Kind::Info,
                 format!("{} is already running", instance.name),
@@ -553,6 +555,7 @@ impl ArcticApp {
         );
         let id = self.runs.start(
             &instance.id,
+            &version.id,
             format!("{} · {}", instance.name, version.id),
             instance.game_dir(&self.dirs),
         );

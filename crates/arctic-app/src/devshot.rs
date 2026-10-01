@@ -7,6 +7,11 @@ use std::path::PathBuf;
 
 use eframe::egui;
 
+/// Debug builds and developer builds (made with `ARCTIC_DEV_PACK`).
+pub fn enabled() -> bool {
+    cfg!(debug_assertions) || option_env!("ARCTIC_DEV_PACK").is_some()
+}
+
 #[derive(Default)]
 pub struct DevShot {
     path: Option<PathBuf>,
@@ -24,7 +29,7 @@ pub struct DevShot {
 
 impl DevShot {
     pub fn from_env() -> Self {
-        if !cfg!(debug_assertions) && option_env!("ARCTIC_DEV_PACK").is_none() {
+        if !enabled() {
             return Self::default();
         }
         let path = std::env::var_os("ARCTIC_DEVSHOT").map(PathBuf::from);

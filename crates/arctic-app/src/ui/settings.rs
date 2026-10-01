@@ -59,6 +59,10 @@ impl ArcticApp {
                 "Close Minecraft when Arctic quits",
             )
             .on_hover_text("Off: games keep running after the launcher closes.");
+            ui.checkbox(&mut s.show_sponsor, "Show supporter mentions")
+                .on_hover_text(
+                    "A small \"Supported by Flash Hosting\" in About and Play together.",
+                );
         });
 
         section(ui, p, "Arctic Client", |ui| {

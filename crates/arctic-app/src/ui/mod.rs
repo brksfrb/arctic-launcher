@@ -39,6 +39,7 @@ mod settings;
 mod sharing;
 pub use sharing::ShareUi;
 mod skins;
+mod sponsor;
 pub use skins::SkinsUi;
 mod together;
 pub use together::TogetherUi;
