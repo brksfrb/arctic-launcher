@@ -8,9 +8,6 @@ use arctic_core::servers;
 
 use crate::tasks::{Event, Tasks};
 
-/// Servers pinged at once.
-const PARALLEL: usize = 8;
-
 impl Tasks {
     /// `request` tells answers for an older refresh (another instance) apart.
     pub fn servers_refresh(&self, request: u64, game_dir: PathBuf) {
@@ -23,16 +20,10 @@ impl Tasks {
             t.send(Event::ServerList(request, list));
             let proxy = ProxySettings::load(t.dirs());
             let proxy = proxy.active();
-            for chunk in addresses.chunks(PARALLEL) {
-                std::thread::scope(|s| {
-                    for address in chunk {
-                        s.spawn(move || {
-                            let status = servers::ping(address, proxy).map_err(|e| e.to_string());
-                            t.send(Event::ServerStatus(request, address.clone(), status));
-                        });
-                    }
-                });
-            }
+            servers::ping_each(&addresses, proxy, |i, status| {
+                let status = status.map_err(|e| e.to_string());
+                t.send(Event::ServerStatus(request, addresses[i].clone(), status));
+            });
         });
     }
 }

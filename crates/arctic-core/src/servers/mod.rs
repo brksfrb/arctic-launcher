@@ -179,6 +179,17 @@ pub fn ping(address: &str, proxy: Option<&ProxySettings>) -> Result<Status> {
     arctic_ping::ping(address, proxy.map(socks)).map_err(|e| Error::Other(e.0))
 }
 
+/// Ping many servers at once, calling `done(index, result)` as each answers.
+pub fn ping_each(
+    addresses: &[String],
+    proxy: Option<&ProxySettings>,
+    done: impl Fn(usize, Result<Status>) + Sync,
+) {
+    arctic_ping::ping_each(addresses, proxy.map(socks), |i, r| {
+        done(i, r.map_err(|e| Error::Other(e.0)));
+    });
+}
+
 /// Ping many servers at once; results come back in the same order.
 pub fn ping_all(addresses: &[String], proxy: Option<&ProxySettings>) -> Vec<Result<Status>> {
     arctic_ping::ping_all(addresses, proxy.map(socks))

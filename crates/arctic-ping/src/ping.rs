@@ -10,6 +10,12 @@ use crate::address::Address;
 use crate::{Error, Result, Socks};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
+/// How long an address gets when another one is left to try (a dead IPv6
+/// route shouldn't cost the whole timeout before IPv4 gets a go).
+const TRY_NEXT_AFTER: Duration = Duration::from_millis(1500);
+/// How long to wait for the latency answer once the status is in: some
+/// servers never answer it, and the status shouldn't wait on them.
+const PING_WAIT: Duration = Duration::from_secs(2);
 /// Protocol number sent in the handshake; servers answer status for any.
 const STATUS_PROTOCOL: i32 = 772;
 /// Largest status response accepted (favicons make them tens of KB).
@@ -42,6 +48,9 @@ pub fn status_json(address: &Address, proxy: Option<Socks>) -> Result<(String, u
     let json = String::from_utf8_lossy(json).into_owned();
 
     let mut ping = vec![1];
+    stream
+        .set_read_timeout(Some(PING_WAIT))
+        .map_err(net_error)?;
     let started = Instant::now();
     ping.extend_from_slice(&0x4172_6374_6963_u64.to_be_bytes());
     send(&mut stream, &ping)?;
@@ -133,12 +142,18 @@ fn connect(address: &Address, proxy: Option<Socks>) -> Result<TcpStream> {
         Some(proxy) => socks5(proxy, address),
         None => {
             let target = address.redirected();
-            let addrs = (target.host.as_str(), target.port)
+            let addrs: Vec<_> = (target.host.as_str(), target.port)
                 .to_socket_addrs()
-                .map_err(|_| Error("couldn't find that server (check the address)".into()))?;
+                .map_err(|_| Error("couldn't find that server (check the address)".into()))?
+                .collect();
             let mut last = None;
-            for addr in addrs {
-                match TcpStream::connect_timeout(&addr, TIMEOUT) {
+            for (i, addr) in addrs.iter().enumerate() {
+                let wait = if i + 1 < addrs.len() {
+                    TRY_NEXT_AFTER
+                } else {
+                    TIMEOUT
+                };
+                match TcpStream::connect_timeout(addr, wait) {
                     Ok(s) => return Ok(s),
                     Err(e) => last = Some(e),
                 }
