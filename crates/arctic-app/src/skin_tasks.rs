@@ -191,29 +191,32 @@ impl Tasks {
             Some(new) => cosmetics::set_look(&base, &token, &new)?,
             None => cosmetics::my_look(&base, &token)?,
         };
+        // Models and textures never change once uploaded (they're named by
+        // their hash): kept on disk, and fetched several at a time.
+        let cache = self.dirs().cache().join("arctic-looks");
         // 3D cosmetics are optional: an older server just has none.
-        let items: Vec<_> = cosmetic_models::catalog(&base)
+        let catalog = cosmetic_models::catalog(&base)
             .map(|c| c.cosmetics)
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|item| {
-                let bytes = cosmetic_models::asset(&base, &item.model).ok()?;
-                let geometry = cosmetic_models::Geometry::parse(&bytes)
-                    .inspect_err(|e| log::warn!("cosmetic {}: {e}", item.id))
-                    .ok()?;
-                Some((item, geometry))
-            })
-            .collect();
+            .unwrap_or_default();
+        let items: Vec<_> = in_parallel(catalog, |item| {
+            let bytes = cached(&cache, &item.model, || {
+                cosmetic_models::asset(&base, &item.model)
+            })?;
+            let geometry = cosmetic_models::Geometry::parse(&bytes)
+                .inspect_err(|e| log::warn!("cosmetic {}: {e}", item.id))
+                .ok()?;
+            Some((item, geometry))
+        });
         let mut wanted: Vec<String> = presets.iter().map(|p| p.texture.clone()).collect();
         wanted.extend(items.iter().map(|(i, _)| i.texture.clone()));
         wanted.extend(look.skin.clone());
         wanted.extend(look.cape.clone());
         let mut seen = HashSet::new();
-        let textures = wanted
-            .into_iter()
-            .filter(|h| seen.insert(h.clone()))
-            .filter_map(|h| cosmetics::texture(&base, &h).ok().map(|png| (h, png)))
-            .collect();
+        wanted.retain(|h| seen.insert(h.clone()));
+        let textures = in_parallel(wanted, |h| {
+            let png = cached(&cache, &h, || cosmetics::texture(&base, &h))?;
+            Some((h, png))
+        });
         Ok(ArcticState {
             presets,
             look,
@@ -270,4 +273,54 @@ pub fn file_stem(path: &std::path::Path) -> String {
     path.file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "Skin".into())
+}
+
+/// How many looks-server downloads run at once.
+const PARALLEL_DOWNLOADS: usize = 8;
+
+/// `f` over `items` on a few threads; results in the items' order, failures left out.
+pub(crate) fn in_parallel<T: Send, R: Send>(
+    items: Vec<T>,
+    f: impl Fn(T) -> Option<R> + Sync,
+) -> Vec<R> {
+    let jobs = std::sync::Mutex::new(items.into_iter().enumerate());
+    let done = std::sync::Mutex::new(Vec::new());
+    std::thread::scope(|scope| {
+        for _ in 0..PARALLEL_DOWNLOADS {
+            scope.spawn(|| {
+                loop {
+                    let next = jobs.lock().ok().and_then(|mut j| j.next());
+                    let Some((i, item)) = next else { break };
+                    if let Some(result) = f(item)
+                        && let Ok(mut done) = done.lock()
+                    {
+                        done.push((i, result));
+                    }
+                }
+            });
+        }
+    });
+    let mut done = done.into_inner().unwrap_or_default();
+    done.sort_by_key(|(i, _)| *i);
+    done.into_iter().map(|(_, r)| r).collect()
+}
+
+/// A file named by its hash: from the disk cache, else downloaded (and kept
+/// when its SHA-1 is that hash, as textures' are).
+pub(crate) fn cached(
+    dir: &std::path::Path,
+    hash: &str,
+    get: impl FnOnce() -> Result<Vec<u8>>,
+) -> Option<Vec<u8>> {
+    let valid = hash.len() == 40 && hash.bytes().all(|b| b.is_ascii_hexdigit());
+    let path = dir.join(hash);
+    if valid && let Ok(bytes) = std::fs::read(&path) {
+        return Some(bytes);
+    }
+    let bytes = get().ok()?;
+    if valid && cosmetics::texture_hash(&bytes) == hash.to_ascii_lowercase() {
+        let _ = std::fs::create_dir_all(dir);
+        let _ = std::fs::write(&path, &bytes);
+    }
+    Some(bytes)
 }

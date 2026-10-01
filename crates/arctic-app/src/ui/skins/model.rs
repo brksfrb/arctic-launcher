@@ -406,26 +406,42 @@ pub fn paint_cosmetic(painter: &egui::Painter, rect: Rect, worn: Worn, yaw: f32)
         pitch: 0.25,
         swing: 0.0,
     };
-    let view = |p: V3| rotate_view(p, pose);
-    let faces = cosmetic_faces(&worn, &view);
-    let (mut lo, mut hi) = ([f32::MAX; 2], [f32::MIN; 2]);
-    for c in faces.iter().flat_map(|f| f.corners) {
-        lo = [lo[0].min(c[0]), lo[1].min(c[1])];
-        hi = [hi[0].max(c[0]), hi[1].max(c[1])];
-    }
-    if faces.is_empty() {
+    // Turned around its own middle (not the wearer's), and sized from the
+    // sphere around it, so it stays put and keeps its size while it turns.
+    let corners: Vec<V3> = cosmetic_faces(&worn, &|p| p)
+        .iter()
+        .flat_map(|f| f.corners)
+        .collect();
+    if corners.is_empty() {
         return;
     }
-    let size = (hi[0] - lo[0]).max(hi[1] - lo[1]).max(1.0);
-    let scale = rect.width().min(rect.height()) * 0.8 / size;
-    let mid = [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0];
-    let center = rect.center();
-    let project = |p: V3| {
-        pos2(
-            center.x + (p[0] - mid[0]) * scale,
-            center.y - (p[1] - mid[1]) * scale,
+    let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
+    for c in &corners {
+        for i in 0..3 {
+            lo[i] = lo[i].min(c[i]);
+            hi[i] = hi[i].max(c[i]);
+        }
+    }
+    let mid: V3 = std::array::from_fn(|i| (lo[i] + hi[i]) / 2.0);
+    let radius = corners
+        .iter()
+        .map(|c| (0..3).map(|i| (c[i] - mid[i]).powi(2)).sum::<f32>().sqrt())
+        .fold(0.5, f32::max);
+    // rotate_view turns around HEIGHT / 2; move the middle there first.
+    let view = |p: V3| {
+        rotate_view(
+            [p[0] - mid[0], p[1] - mid[1] + HEIGHT / 2.0, p[2] - mid[2]],
+            pose,
         )
     };
+    let mut faces: Vec<Face> = cosmetic_faces(&worn, &view)
+        .iter()
+        .flat_map(Face::cut)
+        .collect();
+    faces.sort_by(|a, b| a.depth.total_cmp(&b.depth));
+    let scale = rect.width().min(rect.height()) * 0.9 / (2.0 * radius);
+    let center = rect.center();
+    let project = |p: V3| pos2(center.x + p[0] * scale, center.y - p[1] * scale);
     painter.add(mesh(&faces, &project));
 }
 
