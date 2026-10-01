@@ -861,4 +861,19 @@ public final class LegacyPlatform implements Platform {
 			}
 		});
 	}
+
+	@Override
+	public double fovDegrees() {
+		return net.minecraft.client.MinecraftClient.getInstance().options.fov;
+	}
+
+	@Override
+	public boolean smoothCamera() {
+		return net.minecraft.client.MinecraftClient.getInstance().options.smoothCameraEnabled;
+	}
+
+	@Override
+	public void smoothCamera(boolean on) {
+		net.minecraft.client.MinecraftClient.getInstance().options.smoothCameraEnabled = on;
+	}
 }

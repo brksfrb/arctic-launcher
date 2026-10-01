@@ -344,4 +344,17 @@ public interface Platform {
 
 	/** Leave the world or server you're in, back to the title screen (game thread). */
 	void leaveWorld();
+
+	/** The player's field of view setting, in degrees. */
+	default double fovDegrees() {
+		return 70;
+	}
+
+	/** Whether the game's smooth (cinematic) camera is on. */
+	default boolean smoothCamera() {
+		return false;
+	}
+
+	/** Turn the game's smooth (cinematic) camera on or off. */
+	default void smoothCamera(boolean on) {}
 }

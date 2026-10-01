@@ -29,6 +29,8 @@ public final class Features {
 
 	private boolean zooming;
 	private float zoom;
+	/** The smooth camera setting from before zooming, restored after. */
+	private boolean smoothCameraBefore;
 	private long lastFrame;
 
 	private boolean freelook;
@@ -61,7 +63,11 @@ public final class Features {
 			combat.tick(platform.hurtTime());
 		}
 		boolean inGame = !screenOpen && platform.hasFeatures();
+		boolean wasZooming = zooming;
 		zooming = inGame && config.zoomEnabled && (simulatedZoom || down(config.zoomKey));
+		if (zooming != wasZooming) {
+			smoothCameraWhileZoomed(zooming);
+		}
 		boolean wantLook = inGame && config.freelookEnabled && (simulatedLook || down(config.freelookKey));
 		if (wantLook && !ServerRules.allowed(ServerRules.FREELOOK, platform.server())) {
 			wantLook = false;
@@ -174,9 +180,31 @@ public final class Features {
 		return 1f - (1f - factor) * zoom;
 	}
 
-	/** Slower mouse while zoomed, so aiming stays controllable. */
+	/**
+	 * Slower mouse while zoomed, by how much smaller things move on screen:
+	 * the ratio of the zoomed and normal views' half-angle tangents (not the
+	 * angles themselves, which turns too fast when zoomed far in).
+	 */
 	public double sensitivityMultiplier() {
-		return 1.0 - (1.0 - factor) * zoom;
+		if (zoom <= 0f) {
+			return 1.0;
+		}
+		double fov = Math.toRadians(Math.max(1.0, Math.min(170.0, platform.fovDegrees())));
+		double zoomedFov = fov * (1.0 - (1.0 - factor) * zoom);
+		return Math.tan(zoomedFov / 2) / Math.tan(fov / 2);
+	}
+
+	/** While zoomed, the smooth (cinematic) camera like OptiFine's zoom; the player's own setting comes back after. */
+	private void smoothCameraWhileZoomed(boolean on) {
+		if (!config.zoomSmoothCamera) {
+			return;
+		}
+		if (on) {
+			smoothCameraBefore = platform.smoothCamera();
+			platform.smoothCamera(true);
+		} else {
+			platform.smoothCamera(smoothCameraBefore);
+		}
 	}
 
 	/**

@@ -38,6 +38,8 @@ public final class Notices {
 		Runnable onAction;
 		/** Where the button was last drawn: {x0, y0, x1, y1}. */
 		int[] button;
+		/** Where the notice was last drawn: a click on it (off the button) closes it. */
+		int[] card;
 		long shownAt;
 
 		Notice(String title, String body, String image, int imageW, int imageH) {
@@ -77,18 +79,30 @@ public final class Notices {
 		}
 	}
 
-	/** A click at GUI coordinates (while a screen frees the mouse): true if it hit a notice's button. */
+	/**
+	 * A click at GUI coordinates (while a screen frees the mouse): a notice's
+	 * button runs it; anywhere else on a notice closes it. True if it hit one.
+	 */
 	public static synchronized boolean click(double mx, double my) {
-		for (Notice n : QUEUE) {
+		for (int i = 0; i < QUEUE.size(); i++) {
+			Notice n = QUEUE.get(i);
 			int[] b = n.button;
-			if (b != null && n.onAction != null && mx >= b[0] && mx < b[2] && my >= b[1] && my < b[3]) {
+			if (b != null && n.onAction != null && inside(b, mx, my)) {
 				Runnable run = n.onAction;
 				n.onAction = null;
 				run.run();
 				return true;
 			}
+			if (n.card != null && inside(n.card, mx, my)) {
+				QUEUE.remove(i);
+				return true;
+			}
 		}
 		return false;
+	}
+
+	private static boolean inside(int[] r, double mx, double my) {
+		return mx >= r[0] && mx < r[2] && my >= r[1] && my < r[3];
 	}
 
 	/** Change a notice's button text after its click ("Copied"). */
@@ -139,12 +153,15 @@ public final class Notices {
 		int x = g.width() - MARGIN - Math.round(WIDTH * (0.3f + 0.7f * slide));
 		Draw.round(g, x, y, x + WIDTH, y + h, 4, Draw.alpha(0xF0000000 | (s.panel & 0xFFFFFF), alpha));
 		Draw.outline(g, x, y, x + WIDTH, y + h, 4, Draw.alpha(s.accent, alpha));
+		n.card = new int[] {x, y, x + WIDTH, y + h};
+		// A close mark in the corner (the whole card closes on click).
+		Draw.centered(g, "×", x + WIDTH - 7, y + 3, Draw.alpha(s.muted, alpha), false);
 		int ty = y + PAD;
 		if (imgH > 0) {
 			g.texture(n.image, x + PAD, ty, imgW, imgH, 0, 0, n.imageW, n.imageH, n.imageW, n.imageH);
 			ty += imgH + 3;
 		}
-		g.text(Draw.fit(g, n.title, WIDTH - PAD * 2), x + PAD, ty, Draw.alpha(s.text, alpha), false);
+		g.text(Draw.fit(g, n.title, WIDTH - PAD * 2 - 8), x + PAD, ty, Draw.alpha(s.text, alpha), false);
 		ty += LINE;
 		if (!n.body.isEmpty()) {
 			for (String l : lines) {

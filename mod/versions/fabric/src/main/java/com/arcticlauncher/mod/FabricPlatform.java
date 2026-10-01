@@ -889,4 +889,23 @@ final class FabricPlatform implements Platform {
 		}
 		return out;
 	}
+
+	@Override
+	public double fovDegrees() {
+		//#if MC >= 1.19
+		return Minecraft.getInstance().options.fov().get();
+		//#else
+		return Minecraft.getInstance().options.fov;
+		//#endif
+	}
+
+	@Override
+	public boolean smoothCamera() {
+		return Minecraft.getInstance().options.smoothCamera;
+	}
+
+	@Override
+	public void smoothCamera(boolean on) {
+		Minecraft.getInstance().options.smoothCamera = on;
+	}
 }
