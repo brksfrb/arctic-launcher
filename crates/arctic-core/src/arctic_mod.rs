@@ -114,6 +114,9 @@ fn pack() -> Option<&'static Pack> {
     static PACKED: OnceLock<Option<Pack>> = OnceLock::new();
     PACKED
         .get_or_init(|| {
+            if let Some(dev) = dev_pack() {
+                return Some(dev);
+            }
             let pack = Pack::unpack(PACK);
             if pack.is_none() && !PACK.is_empty() {
                 log::error!("the bundled Arctic Client is damaged");
@@ -121,6 +124,21 @@ fn pack() -> Option<&'static Pack> {
             pack
         })
         .as_ref()
+}
+
+/// Developer builds (made with `ARCTIC_DEV_PACK=1`) use an `arctic-client.pack`
+/// next to the launcher when there is one, so a change to the mod needs only
+/// `python mod/build.py`, not a launcher rebuild. Release builds never do.
+fn dev_pack() -> Option<Pack> {
+    option_env!("ARCTIC_DEV_PACK")?;
+    let path = std::env::current_exe().ok()?.with_file_name("arctic-client.pack");
+    let bytes = fs::read(&path).ok()?;
+    let pack = Pack::unpack(&bytes);
+    match &pack {
+        Some(_) => log::info!("using the Arctic Client from {}", path.display()),
+        None => log::warn!("{} is damaged; using the bundled Arctic Client", path.display()),
+    }
+    pack
 }
 
 /// Jars rebuilt so far, by build target.
