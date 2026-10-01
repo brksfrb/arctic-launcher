@@ -6,6 +6,7 @@
 //! (`trying`) while the look is saved in the background; clicks made while
 //! a save is still going are queued, and only the newest one is sent.
 
+mod cards;
 mod gallery;
 mod model;
 mod panels;
@@ -22,13 +23,24 @@ use crate::skin_tasks::{AccountSkin, ArcticState, SkinChange};
 use crate::tasks::Event;
 use crate::toasts::Kind;
 
-/// The part of the tab on the right.
+/// The category picked in the rail on the right.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Section {
     #[default]
     Skins,
     Capes,
-    Cosmetics,
+    /// 3D cosmetics of one slot (`head`, `face`...).
+    Slot(&'static str),
+}
+
+/// Something pointed at in a list, shown on the preview (not saved).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Hover {
+    Skin(String, Variant),
+    /// Texture key; `None`: no cape.
+    Cape(Option<String>),
+    /// The cosmetics that would be worn after a click.
+    Cosmetics(Vec<String>),
 }
 
 /// A change shown in the preview before the server has confirmed it.
@@ -112,6 +124,14 @@ pub struct SkinsUi {
     pub renaming: Option<(String, String)>,
     pub view: SkinsView,
     pub gallery: gallery::GalleryUi,
+    /// Filters the list shown (skins, capes or cosmetics by name).
+    pub search: String,
+    /// Pointed at in the lists this frame (the preview shows it next frame).
+    pub hover: Option<Hover>,
+    /// Preview zoom (0 = not set yet: 1).
+    pub zoom: f32,
+    /// When the preview was last dragged (it turns by itself after a while).
+    pub dragged_at: f64,
 }
 
 impl ArcticApp {
@@ -145,7 +165,7 @@ impl ArcticApp {
             .as_deref()
         {
             Some("capes") => Section::Capes,
-            Some("cosmetics") => Section::Cosmetics,
+            Some("cosmetics") => Section::Slot("head"),
             _ => Section::default(),
         };
         self.skins = SkinsUi {
