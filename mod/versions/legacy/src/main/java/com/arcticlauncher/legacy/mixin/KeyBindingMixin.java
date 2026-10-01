@@ -24,6 +24,7 @@ abstract class KeyBindingMixin {
 			return;
 		}
 		if (MinecraftClient.getInstance().currentScreen == null && ArcticClient.keyPressed(LegacyKeys.core(code))) {
+			LegacyKeys.used(code, org.lwjgl.input.Keyboard.getEventNanoseconds());
 			ci.cancel();
 		}
 	}

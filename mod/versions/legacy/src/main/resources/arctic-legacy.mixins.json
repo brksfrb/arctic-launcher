@@ -33,7 +33,9 @@
 		"ServerLookupMixin",
 		"ServerListPingerProxyMixin",
 		"ServerAddressMixin",
-		"ClientPlayerSwingMixin"<% if (achievements) { %>,
+		"ClientPlayerSwingMixin"<% if (mc18) { %>,
+		"SignUpdateMixin",
+		"ScreenKeyEventMixin"<% } %><% if (achievements) { %>,
 		"AchievementNotificationAccess"<% } else { %>,
 		"ToastsAccess"<% } %>
 	],

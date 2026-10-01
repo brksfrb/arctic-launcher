@@ -155,6 +155,8 @@ processResources {
 			minecraft_range: minecraftRange,
 			// 1.8's achievement pop-up; 1.12 replaced it with toasts.
 			achievements: !atLeast('1.12'),
+			// 1.8-only fixes (sign update chat spam, key presses reaching new screens).
+			mc18: !atLeast('1.9'),
 	]
 	inputs.properties props
 	filesMatching(['fabric.mod.json', 'arctic-legacy.mixins.json']) {

@@ -50,6 +50,21 @@ public final class LegacyKeys {
 	private LegacyKeys() {}
 
 	/** LWJGL 2 code for a modern key name; 0 for none/unknown. */
+	/** The key press Arctic last used while playing (its key and time), so the screen it opened doesn't get it too. */
+	private static int usedKey = -1;
+	private static long usedAt;
+
+	/** Arctic used this key press (the current keyboard event). */
+	public static void used(int key, long nanos) {
+		usedKey = key;
+		usedAt = nanos;
+	}
+
+	/** Whether this key press is the one Arctic already used. */
+	public static boolean usedByArctic(int key, long nanos) {
+		return key == usedKey && nanos == usedAt;
+	}
+
 	public static int code(String name) {
 		if (name == null) {
 			return 0;
