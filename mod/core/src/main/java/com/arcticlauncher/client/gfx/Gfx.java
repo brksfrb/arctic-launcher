@@ -51,4 +51,13 @@ public interface Gfx {
 	void scissor(int x0, int y0, int x1, int y1);
 
 	void endScissor();
+
+	/**
+	 * A filled rounded rectangle in physical pixels (under a 1/{@link #pixelScale}
+	 * transform), drawn as a few pieces if this renderer can; false to have
+	 * it drawn row by row instead.
+	 */
+	default boolean roundedFill(int x0, int y0, int x1, int y1, int radius, int color) {
+		return false;
+	}
 }

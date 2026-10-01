@@ -27,9 +27,7 @@ public final class CosmeticsLayer extends RenderLayer<AvatarRenderState, PlayerM
 
 	/** The player a render state is for (by entity id), or null. */
 	public static UUID player(AvatarRenderState state) {
-		Minecraft mc = Minecraft.getInstance();
-		Entity entity = mc.level == null ? null : mc.level.getEntity(state.id);
-		return entity == null ? null : entity.getUUID();
+		return ((AvatarIdentity) state).arctic$uuid();
 	}
 
 	@Override

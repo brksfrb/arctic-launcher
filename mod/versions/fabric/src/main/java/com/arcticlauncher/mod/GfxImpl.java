@@ -95,6 +95,27 @@ public final class GfxImpl implements Gfx {
 		g.fill(x0, y0, x1, y1, color);
 	}
 
+	//#if MC >= 26.1
+	@Override
+	public boolean roundedFill(int x0, int y0, int x1, int y1, int r, int color) {
+		Identifier corners = r < 1 ? null : RoundedCorners.texture(r);
+		if (corners == null) {
+			return false;
+		}
+		int size = 2 * r;
+		g.fill(x0 + r, y0, x1 - r, y1, color);
+		if (y1 - r > y0 + r) {
+			g.fill(x0, y0 + r, x0 + r, y1 - r, color);
+			g.fill(x1 - r, y0 + r, x1, y1 - r, color);
+		}
+		g.blit(RenderPipelines.GUI_TEXTURED, corners, x0, y0, 0, 0, r, r, r, r, size, size, color);
+		g.blit(RenderPipelines.GUI_TEXTURED, corners, x1 - r, y0, r, 0, r, r, r, r, size, size, color);
+		g.blit(RenderPipelines.GUI_TEXTURED, corners, x0, y1 - r, 0, r, r, r, r, r, size, size, color);
+		g.blit(RenderPipelines.GUI_TEXTURED, corners, x1 - r, y1 - r, r, r, r, r, r, r, size, size, color);
+		return true;
+	}
+	//#endif
+
 	@Override
 	public void gradient(int x0, int y0, int x1, int y1, int top, int bottom) {
 		g.fillGradient(x0, y0, x1, y1, top, bottom);

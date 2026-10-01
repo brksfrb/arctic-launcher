@@ -1,15 +1,35 @@
 {
   "providers": [
-    { "type": "space", "advances": { " ": 2.5 } },
-    { "type": "reference", "id": "minecraft:include/space" },
+    {
+      "type": "space",
+      "advances": {
+        " ": 2.5
+      }
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:include/space"
+    },
     {
       "type": "ttf",
       "file": "arctic:inter.ttf",
       "size": 8.5,
-      "oversample": 5.0,
-      "shift": [0.0, 0.0]
+      "oversample": 1.0,
+      "shift": [
+        0.0,
+        0.0
+      ]
     },
-    { "type": "reference", "id": "minecraft:include/default", "filter": { "uniform": false } },
-    { "type": "reference", "id": "minecraft:include/unifont" }
+    {
+      "type": "reference",
+      "id": "minecraft:include/default",
+      "filter": {
+        "uniform": false
+      }
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:include/unifont"
+    }
   ]
 }

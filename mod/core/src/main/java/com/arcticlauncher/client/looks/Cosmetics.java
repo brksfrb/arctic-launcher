@@ -92,6 +92,8 @@ public final class Cosmetics {
 	private volatile long catalogAt;
 	private final Map<UUID, Playing> playing = new ConcurrentHashMap<UUID, Playing>();
 	private final Map<UUID, Long> watched = new ConcurrentHashMap<UUID, Long>();
+	/** How stale a player's "on screen" time may get before it's refreshed. */
+	private static final long WATCH_REFRESH_MS = 250;
 
 	Cosmetics(Platform platform, String baseUrl, ScheduledExecutorService worker) {
 		this.platform = platform;
@@ -159,7 +161,9 @@ public final class Cosmetics {
 
 	/** The emote a player is playing now (and keep watching them for changes). */
 	public Playing playingFor(UUID player) {
-		watched.put(player, System.currentTimeMillis());
+		if (playing.isEmpty()) {
+			return null;
+		}
 		Playing p = playing.get(player);
 		if (p == null) {
 			return null;
@@ -173,6 +177,18 @@ public final class Cosmetics {
 			return null;
 		}
 		return p;
+	}
+
+	/**
+	 * A player is on screen, so their emotes are polled. Called for every
+	 * player every frame; the map is only written a few times a second.
+	 */
+	public void watch(UUID player) {
+		long now = System.currentTimeMillis();
+		Long seen = watched.get(player);
+		if (seen == null || now - seen > WATCH_REFRESH_MS) {
+			watched.put(player, now);
+		}
 	}
 
 	/** Play (or with null, stop) an emote as the local player, whose in-world UUID is {@code me}. */
