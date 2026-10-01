@@ -863,14 +863,14 @@ impl eframe::App for ArcticApp {
         self.voice.tick();
         self.together_bridge();
         if std::env::var("ARCTIC_DEVSHOT_PAGE").as_deref() == Ok("modpacks")
-            && cfg!(debug_assertions)
+            && crate::devshot::enabled()
             && !self.inst.modpacks_open
             && self.tab != Tab::Instances
         {
             self.set_tab(Tab::Instances, 0.0);
             self.inst.modpacks_open = true;
         }
-        if cfg!(debug_assertions) {
+        if crate::devshot::enabled() {
             let tab = match std::env::var("ARCTIC_DEVSHOT_PAGE").as_deref() {
                 Ok("app-settings") => Some(Tab::Settings),
                 Ok("skins" | "gallery") => Some(Tab::Skins),

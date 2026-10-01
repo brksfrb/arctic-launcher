@@ -148,10 +148,10 @@ impl ArcticApp {
         // Debug builds: ARCTIC_DEVSHOT_YAW turns the preview (screenshots).
         let yaw = std::env::var("ARCTIC_DEVSHOT_YAW")
             .ok()
-            .filter(|_| cfg!(debug_assertions))
+            .filter(|_| crate::devshot::enabled())
             .and_then(|v| v.parse().ok())
             .unwrap_or(0.5);
-        let view = if cfg!(debug_assertions)
+        let view = if crate::devshot::enabled()
             && std::env::var("ARCTIC_DEVSHOT_PAGE").as_deref() == Ok("gallery")
         {
             SkinsView::Gallery
@@ -161,7 +161,7 @@ impl ArcticApp {
         // Debug builds: ARCTIC_DEVSHOT_SECTION picks the section (screenshots).
         let section = match std::env::var("ARCTIC_DEVSHOT_SECTION")
             .ok()
-            .filter(|_| cfg!(debug_assertions))
+            .filter(|_| crate::devshot::enabled())
             .as_deref()
         {
             Some("capes") => Section::Capes,

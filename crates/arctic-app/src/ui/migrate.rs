@@ -91,7 +91,7 @@ impl ArcticApp {
             });
         }
         // Debug screenshots: `ARCTIC_DEVSHOT_MIGRATE_PICK=meteor,lunar:Default`.
-        if cfg!(debug_assertions)
+        if crate::devshot::enabled()
             && let Ok(picks) = std::env::var("ARCTIC_DEVSHOT_MIGRATE_PICK")
         {
             let keys = merged

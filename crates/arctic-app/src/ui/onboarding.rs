@@ -99,7 +99,7 @@ impl ArcticApp {
         // Debug builds: `ARCTIC_DEVSHOT_ONBOARDING=<n>` opens step n (for screenshots).
         let step = std::env::var("ARCTIC_DEVSHOT_ONBOARDING")
             .ok()
-            .filter(|_| cfg!(debug_assertions))
+            .filter(|_| crate::devshot::enabled())
             .and_then(|n| n.parse::<usize>().ok())
             .and_then(|n| Step::ALL.get(n).copied())
             .unwrap_or(Step::Welcome);
@@ -380,15 +380,36 @@ impl ArcticApp {
             "How the game looks",
             "The Arctic Client restyles Minecraft's menus. Press Right Shift in game for HUD widgets, features and capes.",
         );
-        ui.add_space(12.0);
-        super::client_style::picker(ui, p, &mut self.settings, (WIDTH - 24.0) / 3.0);
         ui.add_space(10.0);
-        super::client_style::fancy_toggle(ui, &mut self.settings);
-        hint(
-            ui,
-            p,
-            "A smooth, sharp font and rounded buttons, switches and panels. Off keeps Minecraft's pixel look.",
-        );
+        let mut client = self.instance.arctic_mod;
+        if ui
+            .checkbox(&mut client, "Play with the Arctic Client")
+            .changed()
+        {
+            let id = self.instance.id.clone();
+            self.update_instance(&id, |i| i.arctic_mod = client);
+        }
+        if !client {
+            ui.label(
+                RichText::new(
+                    "Pure vanilla: no cosmetics or capes, no playing together with friends, no Arctic menu or HUD in game.                      Turn it back on any time in Instances → Vanilla.",
+                )
+                .small()
+                .color(p.warn),
+            );
+            ui.add_space(6.0);
+        }
+        ui.add_enabled_ui(client, |ui| {
+            ui.add_space(6.0);
+            super::client_style::picker(ui, p, &mut self.settings, (WIDTH - 24.0) / 3.0);
+            ui.add_space(10.0);
+            super::client_style::fancy_toggle(ui, &mut self.settings);
+            hint(
+                ui,
+                p,
+                "A smooth, sharp font and rounded buttons, switches and panels. Off keeps Minecraft's pixel look.",
+            );
+        });
         ui.add_space(6.0);
         let mut performance = self.instance.performance;
         if ui
@@ -425,6 +446,11 @@ impl ArcticApp {
             ),
             [] => String::new(),
         };
+        let vanilla = if self.instance.arctic_mod {
+            "The latest Minecraft release, with the Arctic Client."
+        } else {
+            "The latest Minecraft release, pure vanilla."
+        };
         let mut choices = vec![];
         if !others.is_empty() {
             choices.push((
@@ -435,12 +461,7 @@ impl ArcticApp {
             ));
         }
         choices.extend([
-            (
-                FirstPlay::Vanilla,
-                Icon::Play,
-                "Vanilla",
-                "The latest Minecraft release, with the Arctic Client.",
-            ),
+            (FirstPlay::Vanilla, Icon::Play, "Vanilla", vanilla),
             (
                 FirstPlay::Modded,
                 Icon::Layers,
