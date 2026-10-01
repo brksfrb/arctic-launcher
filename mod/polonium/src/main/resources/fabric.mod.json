@@ -11,6 +11,9 @@
 	},
 	"license": "GPL-3.0-or-later",
 	"environment": "client",
+	"entrypoints": {
+		"client": ["com.arcticlauncher.polonium.bench.CrowdBench"]
+	},
 	"mixins": ["polonium.mixins.json"],
 	"depends": {
 		"fabricloader": ">=${loader_min}",

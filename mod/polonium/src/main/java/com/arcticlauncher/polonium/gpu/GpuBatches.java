@@ -39,7 +39,7 @@ import org.slf4j.LoggerFactory;
  *
  * Render thread only.
  */
-public final class GpuBatches {
+public final class GpuBatches implements GpuFeature {
 	private static final Logger LOG = LoggerFactory.getLogger("Polonium");
 	/** Shaders mods replace the entity pipelines with their own; leave them to it. */
 	private static final boolean SHADER_MOD = loaded("iris", "oculus");
@@ -119,6 +119,7 @@ public final class GpuBatches {
 	}
 
 	/** The game is about to prepare a group of model submits. */
+	@Override
 	public void beginGroup(boolean strictlyOrdered) {
 		this.strictlyOrdered = strictlyOrdered;
 		List<Batch> group = new ArrayList<>();
@@ -126,6 +127,7 @@ public final class GpuBatches {
 		current = group;
 	}
 
+	@Override
 	public void endGroup() {
 		current = null;
 	}
@@ -174,6 +176,7 @@ public final class GpuBatches {
 	}
 
 	/** Draw this group's batches (the game draws the rest of the group after). */
+	@Override
 	public void executeGroup(int groupIndex) {
 		if (groupIndex < 0 || groupIndex >= groups.size() || groups.get(groupIndex).isEmpty()) {
 			return;
@@ -296,6 +299,7 @@ public final class GpuBatches {
 	}
 
 	/** The frame's draws are done: get ready for the next. */
+	@Override
 	public void endFrame() {
 		int entities = 0;
 		int draws = 0;

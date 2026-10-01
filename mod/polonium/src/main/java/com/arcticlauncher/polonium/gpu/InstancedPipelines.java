@@ -26,8 +26,13 @@ import org.jspecify.annotations.Nullable;
  * depth, culling and textures, so pixels come out the same.
  */
 final class InstancedPipelines {
-	private static final BindGroupLayout INSTANCES = BindGroupLayout.builder()
+	/** Instanced meshes: where each draw's entities start, and every entity's data. */
+	static final BindGroupLayout INSTANCES = BindGroupLayout.builder()
 			.withUniform("PoloniumDraw", UniformType.UNIFORM_BUFFER)
+			.withUniform("PoloniumInstances", UniformType.TEXEL_BUFFER, GpuFormat.RGBA32_FLOAT)
+			.build();
+	/** Streams whose vertices name their own entity: only the entities' data. */
+	static final BindGroupLayout ENTITY_DATA = BindGroupLayout.builder()
 			.withUniform("PoloniumInstances", UniformType.TEXEL_BUFFER, GpuFormat.RGBA32_FLOAT)
 			.build();
 	/** Twins by original pipeline, then by vertex shader. */
@@ -44,10 +49,15 @@ final class InstancedPipelines {
 	}
 
 	static RenderPipeline twin(RenderPipeline original, Identifier vertexShader) {
+		return twin(original, vertexShader, ModelMesh.FORMAT, INSTANCES);
+	}
+
+	/** {@code original} with this vertex shader, vertex format and extra bind group. */
+	static RenderPipeline twin(RenderPipeline original, Identifier vertexShader, VertexFormat format, BindGroupLayout layout) {
 		Map<Identifier, RenderPipeline> twins = TWINS.computeIfAbsent(original, p -> new java.util.HashMap<>());
 		RenderPipeline twin = twins.get(vertexShader);
 		if (twin == null) {
-			twin = create(original, vertexShader);
+			twin = create(original, vertexShader, format, layout);
 			// Compiled now: a shader that doesn't compile would otherwise draw nothing, silently.
 			if (!RenderSystem.getDevice().precompilePipeline(twin).isValid()) {
 				throw new IllegalStateException("the GPU couldn't compile Polonium's version of " + original.getLocation());
@@ -57,11 +67,11 @@ final class InstancedPipelines {
 		return twin;
 	}
 
-	private static RenderPipeline create(RenderPipeline original, Identifier vertexShader) {
+	private static RenderPipeline create(RenderPipeline original, Identifier vertexShader, VertexFormat format, BindGroupLayout layout) {
 		List<BindGroupLayout> layouts = new ArrayList<>(original.getBindGroupLayouts());
-		layouts.add(INSTANCES);
+		layouts.add(layout);
 		VertexFormat[] bindings = original.getVertexFormatBindings().clone();
-		bindings[0] = ModelMesh.FORMAT;
+		bindings[0] = format;
 		Identifier location = Identifier.fromNamespaceAndPath("polonium",
 				"instanced/" + original.getLocation().getNamespace() + "/" + original.getLocation().getPath() + "/" + vertexShader.getPath());
 		try {

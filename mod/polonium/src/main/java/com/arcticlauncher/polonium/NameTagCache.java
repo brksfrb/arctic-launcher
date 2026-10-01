@@ -1,10 +1,5 @@
 package com.arcticlauncher.polonium;
 
-import java.util.ArrayList;
-import java.util.IdentityHashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 import net.minecraft.client.gui.Font;
@@ -12,34 +7,36 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 
 /**
- * Laid-out name tags, kept while their text stays the same object ({@link
- * NameTags} keeps it the same while it doesn't change). A tag is laid out
- * once per way it's drawn (its see-through and normal passes have different
- * colors) and then reused frame after frame. Tags not drawn for a while are
- * dropped; everything is dropped when fonts reload (glyphs point into the
- * font textures). Obfuscated text changes every frame, so it's never kept.
- * Render thread only.
+ * Laid-out name tags, kept on the text object itself while it stays the same
+ * ({@link NameTags} keeps it the same while it doesn't change), so finding a
+ * tag's layout is a field read, not a lookup. A tag is laid out once per way
+ * it's drawn (its see-through and normal passes have different colors) and
+ * reused frame after frame. New fonts make every kept layout stale (glyphs
+ * point into the font textures). Obfuscated text changes every frame, so
+ * it's never kept. Render thread only.
  */
 public final class NameTagCache {
-	/** Tags not drawn for this many frames are dropped. */
-	private static final int IDLE_FRAMES = 120;
-	private static final Map<Component, List<Entry>> KEPT = new IdentityHashMap<>();
-	private static long frame;
+	/** Bumped when fonts reload: layouts from an older generation are stale. */
+	private static int generation;
 
-	private static final class Entry {
-		final float x;
-		final float y;
-		final int color;
-		final int backgroundColor;
-		final Font.PreparedText prepared;
-		long lastUsed;
+	/** Room on a text for its kept layouts (added to MutableComponent by a mixin). */
+	public interface Holder {
+		Kept polonium$layouts();
 
-		Entry(float x, float y, int color, int backgroundColor, Font.PreparedText prepared) {
-			this.x = x;
-			this.y = y;
-			this.color = color;
-			this.backgroundColor = backgroundColor;
-			this.prepared = prepared;
+		void polonium$layouts(Kept kept);
+	}
+
+	/** A text's layouts (two ways it's drawn are kept; more are rare and laid out again). */
+	public static final class Kept {
+		final int generation;
+		final boolean obfuscated;
+		float x0, y0, x1, y1;
+		int color0, background0, color1, background1;
+		Font.PreparedText layout0, layout1;
+
+		Kept(int generation, boolean obfuscated) {
+			this.generation = generation;
+			this.obfuscated = obfuscated;
 		}
 	}
 
@@ -48,47 +45,46 @@ public final class NameTagCache {
 	/** The laid-out text: kept, if this text was laid out the same way before, else laid out now. */
 	public static Font.PreparedText get(Component text, float x, float y, int color, int backgroundColor,
 			Supplier<Font.PreparedText> layout) {
-		List<Entry> entries = KEPT.get(text);
-		if (entries != null) {
-			for (Entry entry : entries) {
-				if (entry.x == x && entry.y == y && entry.color == color && entry.backgroundColor == backgroundColor) {
-					entry.lastUsed = frame;
-					return entry.prepared;
-				}
-			}
+		if (!(text instanceof Holder holder)) {
+			return layout.get();
+		}
+		Kept kept = holder.polonium$layouts();
+		if (kept == null || kept.generation != generation) {
+			kept = new Kept(generation, isObfuscated(text));
+			holder.polonium$layouts(kept);
+		}
+		if (kept.obfuscated) {
+			return layout.get();
+		}
+		if (kept.layout0 != null && kept.x0 == x && kept.y0 == y && kept.color0 == color && kept.background0 == backgroundColor) {
+			return kept.layout0;
+		}
+		if (kept.layout1 != null && kept.x1 == x && kept.y1 == y && kept.color1 == color && kept.background1 == backgroundColor) {
+			return kept.layout1;
 		}
 		Font.PreparedText prepared = layout.get();
-		if (entries == null) {
-			if (isObfuscated(text)) {
-				return prepared;
-			}
-			entries = new ArrayList<>(2);
-			KEPT.put(text, entries);
+		if (kept.layout0 == null) {
+			kept.layout0 = prepared;
+			kept.x0 = x;
+			kept.y0 = y;
+			kept.color0 = color;
+			kept.background0 = backgroundColor;
+		} else {
+			kept.layout1 = prepared;
+			kept.x1 = x;
+			kept.y1 = y;
+			kept.color1 = color;
+			kept.background1 = backgroundColor;
 		}
-		Entry entry = new Entry(x, y, color, backgroundColor, prepared);
-		entry.lastUsed = frame;
-		entries.add(entry);
 		return prepared;
 	}
 
-	/** A new frame: now and then, drop tags no longer drawn. */
-	public static void newFrame() {
-		frame++;
-		if (frame % IDLE_FRAMES == 0) {
-			Iterator<List<Entry>> it = KEPT.values().iterator();
-			while (it.hasNext()) {
-				List<Entry> entries = it.next();
-				entries.removeIf(entry -> frame - entry.lastUsed > IDLE_FRAMES);
-				if (entries.isEmpty()) {
-					it.remove();
-				}
-			}
-		}
-	}
+	/** A new frame (kept for the frame hook; layouts live on their texts). */
+	public static void newFrame() {}
 
 	/** New fonts: every kept layout is stale. */
 	public static void clear() {
-		KEPT.clear();
+		generation++;
 	}
 
 	private static boolean isObfuscated(Component text) {
