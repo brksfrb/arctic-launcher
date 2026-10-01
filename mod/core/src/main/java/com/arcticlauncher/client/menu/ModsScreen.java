@@ -149,6 +149,11 @@ final class ModsScreen extends Page {
 		return scroll != null && scroll.wheel(mx, my, amount);
 	}
 
+	@Override
+	protected boolean typesAnywhere() {
+		return true;
+	}
+
 	/** Typing anywhere starts a search (like Lunar's). */
 	@Override
 	public boolean charTyped(int codepoint) {

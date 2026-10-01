@@ -26,6 +26,8 @@ public abstract class Page {
 	private Widget pressed;
 	/** The text box being typed in, if any. */
 	private TextField focused;
+	/** The game's text input is on for the page itself (see {@link #typesAnywhere}). */
+	private boolean listening;
 
 	/** Lay out for a screen size (also on resize). */
 	public final void init(int width, int height) {
@@ -38,6 +40,25 @@ public abstract class Page {
 		build();
 		if (keep != null && widgets.contains(keep)) {
 			focus(keep);
+		}
+		if (focused == null) {
+			listen(typesAnywhere());
+		}
+	}
+
+	/**
+	 * Typing anywhere on the page goes to a text box (a search). Newer
+	 * versions only send typed characters while something asked for text
+	 * input, so such pages keep it on while nothing else has it.
+	 */
+	protected boolean typesAnywhere() {
+		return false;
+	}
+
+	private void listen(boolean on) {
+		if (listening != on) {
+			listening = on;
+			ArcticClient.platform().textInput(this, on);
 		}
 	}
 
@@ -53,8 +74,11 @@ public abstract class Page {
 		}
 		focused = field;
 		if (field != null) {
+			listen(false);
 			field.focused = true;
 			ArcticClient.platform().textInput(field, true);
+		} else {
+			listen(typesAnywhere());
 		}
 	}
 
@@ -70,6 +94,7 @@ public abstract class Page {
 	/** The page is going away: stop typing. */
 	public void removed() {
 		focus(null);
+		listen(false);
 	}
 
 	/** Tab: the next text box on the page. */
