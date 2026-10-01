@@ -225,6 +225,7 @@ public final class Replays {
 		viewer = null;
 		if (v != null) {
 			ReplayClock.stop();
+			backend.cleanView(false);
 		}
 	}
 

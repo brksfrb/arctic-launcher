@@ -41,6 +41,8 @@ public final class ClientConfig {
 	public String emoteKey = "key.keyboard.b";
 	/** The emote wheel stays open while its key is held (let go to play); off: press to open, click to play. */
 	public boolean emoteWheelHold = true;
+	/** The camera goes to third person while your own emote plays, so you see it. */
+	public boolean emoteThirdPerson = true;
 	/** Streamer mode: your name, skin and the server are hidden on your screen. */
 	public boolean streamerMode;
 	/** What your name shows as in streamer mode. */
