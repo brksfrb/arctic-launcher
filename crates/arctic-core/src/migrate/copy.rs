@@ -513,24 +513,48 @@ fn arctic_ready(
     }
 }
 
-/// The exact loader version, or the newest stable one for "latest".
+/// The loader version asked for, or the newest stable one for "latest".
 fn loader_version(kind: LoaderKind, wanted: Option<&str>, game: &str) -> Result<String> {
     let available = loaders::loader_versions(kind, game)?;
-    match wanted {
-        Some(v) if available.iter().any(|a| a.id == v) => Ok(v.to_owned()),
-        Some(v) => Err(Error::Other(format!(
-            "{} {v} for Minecraft {game} isn't available to download",
-            kind.label()
-        ))),
-        None => available
+    let Some(wanted) = wanted else {
+        return available
             .iter()
             .find(|a| a.stable)
             .or_else(|| available.first())
             .map(|a| a.id.clone())
             .ok_or_else(|| {
                 Error::Other(format!("{} doesn't support Minecraft {game}", kind.label()))
-            }),
-    }
+            });
+    };
+    let bare = bare_loader_version(wanted, game);
+    available
+        .iter()
+        .find(|a| bare_loader_version(&a.id, game) == bare)
+        .map(|a| a.id.clone())
+        .ok_or_else(|| {
+            Error::Other(format!(
+                "{} {wanted} for Minecraft {game} isn't available to download",
+                kind.label()
+            ))
+        })
+}
+
+/// Launchers write one loader version several ways: `11.15.1.2318`,
+/// `11.15.1.2318-1.8.9`, `1.8.9-11.15.1.2318-1.8.9`, `forge-11.15.1.2318`.
+/// This is the part they share.
+fn bare_loader_version<'a>(version: &'a str, game: &str) -> &'a str {
+    let v = version.trim();
+    let v = ["forge-", "neoforge-", "fabric-loader-", "quilt-loader-"]
+        .iter()
+        .find_map(|p| v.strip_prefix(p))
+        .unwrap_or(v);
+    let v = v
+        .strip_prefix(game)
+        .and_then(|r| r.strip_prefix('-'))
+        .unwrap_or(v);
+    v.strip_suffix(game)
+        .and_then(|r| r.strip_suffix('-'))
+        .unwrap_or(v)
 }
 
 fn fill(
@@ -672,4 +696,30 @@ fn rename_world(dest: &Path, renames: &HashMap<String, String>) -> PathBuf {
         parts[1] = new.clone();
     }
     parts.iter().collect()
+}
+
+#[cfg(test)]
+mod loader_version_tests {
+    use super::bare_loader_version;
+
+    #[test]
+    fn every_way_of_writing_a_loader_version_matches() {
+        for written in [
+            "11.15.1.2318",
+            "11.15.1.2318-1.8.9",
+            "1.8.9-11.15.1.2318-1.8.9",
+            "forge-11.15.1.2318",
+        ] {
+            assert_eq!(
+                bare_loader_version(written, "1.8.9"),
+                "11.15.1.2318",
+                "{written}"
+            );
+        }
+        assert_eq!(bare_loader_version("47.4.10", "1.20.1"), "47.4.10");
+        assert_ne!(
+            bare_loader_version("11.15.1.2318", "1.8.9"),
+            bare_loader_version("11.15.1.1902", "1.8.9")
+        );
+    }
 }
