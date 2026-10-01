@@ -71,20 +71,24 @@ impl ArcticApp {
     }
 
     /// The selected instance's game, while it's being prepared or runs.
+    /// The selected instance's running game (for Vanilla, on the picked version).
     fn selected_run(&self) -> Option<&Run> {
-        self.runs
-            .for_instance(&self.selected_instance().id)
-            .filter(|r| r.is_active())
+        let instance = self.selected_instance();
+        let version = instance
+            .is_default()
+            .then_some(self.settings.last_version.as_deref())
+            .flatten();
+        self.runs.active_for(&instance.id, version)
     }
 
     /// Other games running at the same time, each with its log and a stop.
     fn other_runs(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        let selected = self.selected_instance().id.clone();
+        let selected = self.selected_run().map(|r| r.id);
         let others: Vec<(crate::tasks::LaunchId, String, bool)> = self
             .runs
             .active()
-            .filter(|r| r.instance_id != selected)
+            .filter(|r| Some(r.id) != selected)
             .map(|r| (r.id, r.title.clone(), r.game().is_some()))
             .collect();
         if others.is_empty() {

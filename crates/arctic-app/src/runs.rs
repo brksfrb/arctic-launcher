@@ -46,6 +46,8 @@ pub enum RunState {
 pub struct Run {
     pub id: LaunchId,
     pub instance_id: String,
+    /// The Minecraft version it runs (Vanilla can run several at once).
+    pub version: String,
     /// "Vanilla · 26.3", for lists and the Logs tab.
     pub title: String,
     pub state: RunState,
@@ -132,13 +134,20 @@ pub struct Runs {
 
 impl Runs {
     /// Start tracking a launch; an older, finished run of the instance goes.
-    pub fn start(&mut self, instance_id: &str, title: String, game_dir: PathBuf) -> LaunchId {
+    pub fn start(
+        &mut self,
+        instance_id: &str,
+        version: &str,
+        title: String,
+        game_dir: PathBuf,
+    ) -> LaunchId {
         self.next_id += 1;
         self.list
             .retain(|r| r.is_active() || r.instance_id != instance_id);
         self.list.push(Run {
             id: self.next_id,
             instance_id: instance_id.to_owned(),
+            version: version.to_owned(),
             title,
             state: RunState::Preparing {
                 progress: ProgressSnapshot {
@@ -170,6 +179,13 @@ impl Runs {
             .iter()
             .rev()
             .find(|r| r.instance_id == instance_id)
+    }
+
+    /// The newest running copy of an instance, of `version` when given.
+    pub fn active_for(&self, instance_id: &str, version: Option<&str>) -> Option<&Run> {
+        self.list.iter().rev().find(|r| {
+            r.is_active() && r.instance_id == instance_id && version.is_none_or(|v| r.version == v)
+        })
     }
 
     pub fn active(&self) -> impl Iterator<Item = &Run> {
@@ -370,8 +386,8 @@ mod tests {
     #[test]
     fn one_run_per_instance_and_old_logs_make_way() {
         let mut runs = Runs::default();
-        let a = runs.start("vanilla", "Vanilla · 26.3".into(), PathBuf::new());
-        let b = runs.start("pack", "Pack · 1.21.6".into(), PathBuf::new());
+        let a = runs.start("vanilla", "26.3", "Vanilla · 26.3".into(), PathBuf::new());
+        let b = runs.start("pack", "1.21.6", "Pack · 1.21.6".into(), PathBuf::new());
         assert!(runs.instance_active("vanilla") && runs.instance_active("pack"));
         assert_eq!(runs.active().count(), 2);
         assert!(!runs.any_game(), "still preparing");
@@ -382,7 +398,7 @@ mod tests {
             a,
             "finished runs keep their log"
         );
-        let a2 = runs.start("vanilla", "Vanilla · 26.3".into(), PathBuf::new());
+        let a2 = runs.start("vanilla", "26.3", "Vanilla · 26.3".into(), PathBuf::new());
         assert!(
             runs.get(a).is_none(),
             "the old finished run of the same instance goes"
@@ -393,9 +409,26 @@ mod tests {
     }
 
     #[test]
+    fn vanilla_runs_tell_versions_apart() {
+        let mut runs = Runs::default();
+        let a = runs.start("vanilla", "26.3", "Vanilla · 26.3".into(), PathBuf::new());
+        let b = runs.start("vanilla", "1.8.9", "Vanilla · 1.8.9".into(), PathBuf::new());
+        assert_eq!(runs.active_for("vanilla", Some("26.3")).unwrap().id, a);
+        assert_eq!(runs.active_for("vanilla", Some("1.8.9")).unwrap().id, b);
+        assert!(runs.active_for("vanilla", Some("1.21.1")).is_none());
+        assert_eq!(runs.active_for("vanilla", None).unwrap().id, b);
+        runs.get_mut(b).unwrap().state = RunState::Ended;
+        assert_eq!(
+            runs.active_for("vanilla", None).unwrap().id,
+            a,
+            "an older copy still running counts"
+        );
+    }
+
+    #[test]
     fn logs_are_capped() {
         let mut runs = Runs::default();
-        let id = runs.start("x", "X".into(), PathBuf::new());
+        let id = runs.start("x", "1.0", "X".into(), PathBuf::new());
         let run = runs.get_mut(id).unwrap();
         run.push_log((0..LOG_LINES + 10).map(|i| LogLine {
             level: Level::Info,

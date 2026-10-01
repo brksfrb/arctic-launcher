@@ -47,6 +47,8 @@ impl ArcticApp {
                     ui.ctx().open_url(egui::OpenUrl::new_tab(DISCORD));
                 }
             });
+            ui.add_space(6.0);
+            self.sponsor_credit(ui);
             ui.add_space(8.0);
             ui.label(
                 RichText::new(

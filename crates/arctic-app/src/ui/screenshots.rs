@@ -185,27 +185,34 @@ impl ArcticApp {
         let modal = Modal::new(Id::new("shot_preview"))
             .frame(super::instances::dialog_frame(p))
             .show(ctx, |ui| {
-                let max = ctx.content_rect().size() * 0.8;
-                ui.add(
+                // As large as the window allows (room left for the bar below),
+                // keeping the shot's shape.
+                let room = ctx.content_rect().size() * vec2(0.9, 0.82) - vec2(0.0, 60.0);
+                let image = ui.add(
                     egui::Image::new(uri.clone())
-                        .max_size(max)
+                        .fit_to_exact_size(room)
                         .corner_radius(CornerRadius::same(8)),
                 );
+                ui.set_max_width(image.rect.width().max(480.0));
                 ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    let name = shot
-                        .path
-                        .file_name()
-                        .map(|n| n.to_string_lossy().into_owned())
-                        .unwrap_or_default();
-                    ui.label(
+                let name = shot
+                    .path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                ui.add(
+                    egui::Label::new(
                         RichText::new(format!(
                             "{name} · {} · {}",
                             shot.instance_name,
                             when(shot.taken)
                         ))
                         .color(p.muted),
-                    );
+                    )
+                    .truncate(),
+                );
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if widgets::button(ui, p, None, "Close", false).clicked() {
                             close = true;
@@ -249,6 +256,13 @@ impl ArcticApp {
 
     pub(crate) fn on_screenshot_list(&mut self, shots: Vec<Shot>) {
         self.shots.loading = false;
+        // Debug and developer builds: ARCTIC_DEVSHOT_PAGE=shot opens the newest (screenshots).
+        if crate::devshot::enabled()
+            && std::env::var("ARCTIC_DEVSHOT_PAGE").as_deref() == Ok("shot")
+            && self.shots.shots.is_none()
+        {
+            self.shots.open = shots.first().cloned();
+        }
         self.shots.shots = Some(shots);
     }
 
