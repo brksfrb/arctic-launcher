@@ -398,7 +398,7 @@ impl ArcticApp {
     /// opens a sharing dialog once (for screenshots).
     pub(crate) fn devshot_share(&mut self) {
         static OPENED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-        if !cfg!(debug_assertions) || OPENED.load(std::sync::atomic::Ordering::Relaxed) {
+        if !crate::devshot::enabled() || OPENED.load(std::sync::atomic::Ordering::Relaxed) {
             return;
         }
         let Ok(what) = std::env::var("ARCTIC_DEVSHOT_SHARE") else {
