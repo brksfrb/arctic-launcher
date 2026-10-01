@@ -263,7 +263,8 @@ public final class Looks {
 
 	/** The player's Arctic look, or null. Queues lookups as needed. */
 	public Look lookFor(UUID player) {
-		if (!config.showCosmetics || config.hiddenPlayers.contains(player.toString())) {
+		// Asked for every player every frame: the UUID's text only when someone is hidden.
+		if (!config.showCosmetics || !config.hiddenPlayers.isEmpty() && config.hiddenPlayers.contains(player.toString())) {
 			return null;
 		}
 		// Streamer mode: nothing on you that viewers could recognise.

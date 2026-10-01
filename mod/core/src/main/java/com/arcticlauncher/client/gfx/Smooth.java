@@ -26,6 +26,12 @@ final class Smooth {
 		int bx = Math.round(x1 * s);
 		int by = Math.round(y1 * s);
 		float r = Math.min(radius * s, Math.min(bx - ax, by - ay) / 2f);
+		// Row by row is ~50 rectangles a panel; the GUI renderer checks each
+		// new one against the rest, which shows up with a busy HUD.
+		if (g.roundedFill(ax, ay, bx, by, (int) Math.floor(r), color)) {
+			g.pop();
+			return;
+		}
 		int rows = (int) Math.ceil(r);
 		for (int i = 0; i < rows; i++) {
 			span(g, ax, bx, ay + i, inset(r, i), color);

@@ -4,6 +4,7 @@ package com.arcticlauncher.mod.mixin;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.voice.VoiceLink;
 import com.arcticlauncher.mod.Compat;
+import com.arcticlauncher.mod.cosmetic.AvatarIdentity;
 import com.arcticlauncher.mod.cosmetic.CosmeticsLayer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.network.chat.Component;
@@ -23,6 +24,19 @@ abstract class AvatarRendererMixin {
 	private void arctic$cosmetics(EntityRendererProvider.Context context, boolean slim, CallbackInfo ci) {
 		AvatarRenderer renderer = (AvatarRenderer) (Object) this;
 		((LivingEntityRendererAccess) this).arctic$addLayer(new CosmeticsLayer(renderer));
+	}
+
+	/** Who this is, kept on the state (see {@link AvatarIdentity}), and seen for emote updates. */
+	@Inject(method = "extractRenderState(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V",
+			at = @At("TAIL"))
+	private void arctic$identify(Avatar entity, AvatarRenderState state, float partialTick, CallbackInfo ci) {
+		// Only players can be Arctic players: mannequins and other player-shaped
+		// entities skip the looks, emotes and cosmetics work (a crowd of them adds up).
+		java.util.UUID id = entity instanceof net.minecraft.world.entity.player.Player ? entity.getUUID() : null;
+		((AvatarIdentity) state).arctic$setUuid(id);
+		if (id != null && ArcticClient.looks() != null) {
+			ArcticClient.looks().cosmetics().watch(id);
+		}
 	}
 
 	/** A speaker before the name of a player talking in voice chat. */

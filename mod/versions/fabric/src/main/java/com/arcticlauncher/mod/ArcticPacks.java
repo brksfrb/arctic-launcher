@@ -80,7 +80,9 @@ public final class ArcticPacks implements RepositorySource {
 		if (slot == null) {
 			return error;
 		}
-		FreeType.FT_Outline_EmboldenXY(slot.outline(), EMBOLDEN_X, EMBOLDEN_Y);
+		// The same weight at every size: titles are rasterized several times larger.
+		float size = emboldenScale(face);
+		FreeType.FT_Outline_EmboldenXY(slot.outline(), Math.round(EMBOLDEN_X * size), Math.round(EMBOLDEN_Y * size));
 		return FreeType.FT_Render_Glyph(slot, FT_RENDER_MODE_NORMAL);
 	}
 
@@ -88,15 +90,51 @@ public final class ArcticPacks implements RepositorySource {
 		return FONT_FILE.equals(file);
 	}
 
+	/** The smooth font's size in the pack's font files. */
+	private static final float FONT_SIZE = 8.5f;
+	/** Copies of the smooth font rasterized larger, for text drawn scaled up. */
+	public static final Identifier TITLE_FONT = Identifier.fromNamespaceAndPath("arctic", "title");
+	public static final Identifier SUBTITLE_FONT = Identifier.fromNamespaceAndPath("arctic", "subtitle");
+
+	/** How much larger than chat text this face is rasterized (1 for chat, 4 for titles). */
+	private static float emboldenScale(FT_Face face) {
+		org.lwjgl.util.freetype.FT_Size size = face.size();
+		int scale = Math.max(1, loadedOversample);
+		if (size == null) {
+			return 1;
+		}
+		return Math.max(1, size.metrics().x_ppem() / (FONT_SIZE * scale));
+	}
+
+	/**
+	 * Titles and subtitles are drawn 4× and 2× larger than chat text, so the
+	 * GUI-scale glyphs came out blocky. With the smooth font on, their text
+	 * uses a copy of the font rasterized at that size (text that picks its
+	 * own font keeps it).
+	 */
+	public static Component sharpScaled(Component text, Identifier font) {
+		if (text == null || !smoothFontCached()
+				|| !(text.getStyle().getFont() instanceof net.minecraft.network.chat.FontDescription.Resource r)
+				|| !r.id().equals(Identifier.withDefaultNamespace("default"))) {
+			return text;
+		}
+		return Component.empty()
+				.withStyle(style -> style.withFont(new net.minecraft.network.chat.FontDescription.Resource(font)))
+				.append(text);
+	}
+
 	/**
 	 * Oversample for loading the font now: the GUI scale, so each glyph
 	 * texel lands on one screen pixel. Scaled glyphs (bigger or smaller)
 	 * look uneven: strokes blur or thin out depending on where they fall.
 	 */
-	public static float fontOversample() {
+	public static float fontOversample(float multiple) {
 		int scale = guiScale();
-		loadedOversample = scale;
-		return scale;
+		if (multiple <= 1) {
+			loadedOversample = scale;
+			return scale;
+		}
+		return scale * multiple;
 	}
 
 	/** About half a GUI pixel, rounded to whole screen pixels (at least one). */
