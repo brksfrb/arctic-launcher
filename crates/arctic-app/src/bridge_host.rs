@@ -230,18 +230,22 @@ impl bridge::Accounts for AppAccounts {
         if !is_png || !in_screenshots || !path.is_file() {
             return Err(arctic_core::Error::Other("not a screenshot".into()));
         }
-        let img = image::open(path)
-            .map_err(|e| arctic_core::Error::Other(format!("couldn't read it: {e}")))?
-            .to_rgba8();
+        // The game may still be writing the file, and another app may hold the
+        // clipboard for a moment (clipboard history, chat apps): try again
+        // for a little while before giving up.
+        let img = retry(|| image::open(path).map(|i| i.to_rgba8()))
+            .map_err(|e| arctic_core::Error::Other(format!("couldn't read it: {e}")))?;
         let (width, height) = img.dimensions();
-        let picture = arboard::ImageData {
-            width: width as usize,
-            height: height as usize,
-            bytes: std::borrow::Cow::Owned(img.into_raw()),
-        };
-        arboard::Clipboard::new()
-            .and_then(|mut c| c.set_image(picture))
-            .map_err(|e| arctic_core::Error::Other(format!("clipboard: {e}")))
+        let bytes = img.into_raw();
+        retry(|| {
+            let picture = arboard::ImageData {
+                width: width as usize,
+                height: height as usize,
+                bytes: std::borrow::Cow::Borrowed(&bytes),
+            };
+            arboard::Clipboard::new().and_then(|mut c| c.set_image(picture))
+        })
+        .map_err(|e| arctic_core::Error::Other(format!("clipboard: {e}")))
     }
 
     fn login(&self) -> String {
@@ -343,5 +347,24 @@ impl BridgeHost {
         shared.accounts = store.accounts.clone();
         shared.active = store.active.clone();
         shared.tasks = tasks.clone();
+    }
+}
+
+/// How many times, and how far apart, a screenshot copy is tried.
+const COPY_ATTEMPTS: u32 = 10;
+const COPY_RETRY: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// `f`, tried up to [`COPY_ATTEMPTS`] times; the last error if none worked.
+fn retry<T, E>(mut f: impl FnMut() -> Result<T, E>) -> Result<T, E> {
+    let mut attempt = 1;
+    loop {
+        match f() {
+            Ok(value) => return Ok(value),
+            Err(e) if attempt >= COPY_ATTEMPTS => return Err(e),
+            Err(_) => {
+                attempt += 1;
+                std::thread::sleep(COPY_RETRY);
+            }
+        }
     }
 }

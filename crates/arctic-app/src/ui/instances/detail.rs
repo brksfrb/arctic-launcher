@@ -330,7 +330,11 @@ impl ArcticApp {
             let mut on = instance.performance;
             if ui.checkbox(&mut on, "Boost FPS with performance mods").changed() {
                 let id = instance.id.clone();
-                self.update_instance(&id, |i| i.performance = on);
+                if on {
+                    self.update_instance(&id, |i| i.performance = true);
+                } else {
+                    self.performance_off_confirm = Some(id);
+                }
             }
             let installed =
                 arctic_core::mods::performance::installed(&instance.game_dir(&self.dirs));
