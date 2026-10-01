@@ -13,7 +13,7 @@
   <a href="https://github.com/brksfrb/arctic-launcher/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/brksfrb/arctic-launcher?style=flat-square&color=38bdf8"></a>
   <a href="https://github.com/brksfrb/arctic-launcher/actions/workflows/ci.yml"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/brksfrb/arctic-launcher/ci.yml?branch=main&style=flat-square"></a>
   <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-7dd3fc?style=flat-square"></a>
-  <img alt="Windows and Linux" src="https://img.shields.io/badge/platforms-Windows%20%7C%20Linux-0ea5e9?style=flat-square">
+  <img alt="Windows, macOS and Linux" src="https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-0ea5e9?style=flat-square">
 </p>
 
 <p align="center">
@@ -38,8 +38,11 @@
 - **Mods in a click.** Create Fabric, Quilt, NeoForge or Forge instances, then search
   Modrinth and install mods with their dependencies, or install a whole modpack in one
   click. Each instance keeps its own version, mods, worlds and Java settings.
-- **Bring your worlds.** Import worlds from the Minecraft Launcher, Prism Launcher, other
-  instances or a .zip, and back them up with one click.
+- **Bring your stuff over.** Arctic finds what you have in the Minecraft Launcher, Prism,
+  MultiMC, the Modrinth App, CurseForge, ATLauncher, GDLauncher, TLauncher, Lunar, Badlion,
+  Feather and LabyMod and copies your instances, worlds, servers and settings (the
+  originals stay as they are). Import single worlds from a folder or a .zip, and back them
+  up with one click.
 - **Play together.** Invite friends into your world with a code. No server, no port
   forwarding: open your world to LAN and Arctic connects you directly (or through an
   encrypted relay when a direct link isn't possible).
@@ -47,6 +50,8 @@
   name), choose a cape or use your own image (animated ones too), and every Arctic player
   sees it, on any account. Preview everything on a 3D model. Microsoft accounts can also change their real
   Minecraft skin from here.
+- **Cosmetics and emotes, free.** Hats, headphones, back items, shoulder pets and more, plus
+  emotes from a wheel in game. Every Arctic player sees them.
 - **Skin gallery.** Browse skins other players shared, search by name or creator, and wear
   one in a click. Share your own from your library.
 - **Arctic Client.** Vanilla gets a fresh look: restyled menus (pick Arctic, Aurora or
@@ -57,8 +62,11 @@
   too, colored by what you aim at), a smooth font, chat timestamps and mentions, quick
   chat keys with {x} {y} {z}, waypoints, your own time of day, block outline and hit
   color, scoreboard tweaks, a streamer mode, and everyone's Arctic looks in game. Press Right Shift in game for the Arctic menu. It's on
-  by default for Minecraft 1.21.6 and newer, comes to Fabric and Quilt instances too, and you can turn
-  it off per instance.
+  by default for Vanilla from 1.8.9 up to the newest release (1.8.9, 1.9.4, 1.10.2,
+  1.11.2, 1.12.2 and 1.15.2 onward), comes to Fabric and Quilt instances too, and you can turn
+  it off per instance, or choose pure vanilla during setup.
+- **Replays.** The Arctic Client keeps the last minutes of your game; save them when
+  something happens, then watch from any angle in 3D, seek around, or export a video.
 - **Friends, chat and voice.** Add friends with a code, see who's online and where, invite
   them to your server, chat and send screenshots from the launcher or in game, and talk
   with proximity voice chat (it also works with Simple Voice Chat servers).
@@ -70,11 +78,15 @@
   EntityCulling and ModernFix to Vanilla for much higher FPS, fetched from Modrinth for your version.
   It's on by default and works on any version Fabric supports.
 - **Your accounts, side by side.** Sign in with Microsoft in the browser or with a short
-  code. Keep several accounts and switch in one click.
+  code. Keep several accounts and switch in one click. Sign-ins stay on your PC, encrypted
+  for your user account, and never leave it except to Microsoft and Mojang.
 - **Profiles.** Keep completely separate setups on one PC, each with its own accounts,
   settings, instances and worlds. Switch from the top of the sidebar.
+- **Screenshots in one place.** Every instance's screenshots, newest first: open, copy,
+  or send one to a friend.
 - **Live logs.** Minecraft's output appears inside the launcher, readable, searchable and
   filterable by warnings or errors.
+- **Proxy.** Send the launcher and the game through a SOCKS5 proxy.
 - **Made to look at.** An animated arctic night with aurora, snowfall and shooting stars.
   Aurora, Dark and Light themes.
 - **Discord status.** Friends see what you're playing. Turn it off in Settings.
@@ -94,6 +106,16 @@
 
 Windows may show a SmartScreen prompt for new apps. Choose **More info → Run anyway**.
 
+### macOS
+
+1. Download **`arctic-launcher-macos.zip`** from the
+   [latest release](https://github.com/brksfrb/arctic-launcher/releases/latest) and unzip it.
+2. Move **Arctic Launcher** to Applications and open it. It runs on Apple Silicon and Intel
+   Macs.
+
+The app isn't notarized by Apple yet, so the first time macOS asks: right-click the app,
+choose **Open**, then **Open** again.
+
 ### Linux
 
 1. Download **`arctic-launcher-linux-x64`** from the
@@ -109,7 +131,7 @@ Works on X11 and Wayland desktops with OpenGL.
 
 ### Command line tool (optional)
 
-Grab `arctic-windows-x64.exe` or `arctic-linux-x64` from the same release and put it on
+Grab `arctic-windows-x64.exe`, `arctic-macos` or `arctic-linux-x64` from the same release and put it on
 your `PATH` as `arctic`. See the [command line guide](docs/cli.md).
 
 ## Getting started
@@ -147,12 +169,14 @@ Everything also works with `--json` for scripts. Full reference:
 ## FAQ
 
 **Where are my files?**
-Windows: `%LOCALAPPDATA%\ArcticLauncher`. Linux: `~/.local/share/ArcticLauncher`.
+Windows: `%LOCALAPPDATA%\ArcticLauncher`. macOS: `~/Library/Application Support/ArcticLauncher`.
+Linux: `~/.local/share/ArcticLauncher`.
 Each profile lives in `profiles/<name>/`. Worlds are inside
 `instances/vanilla/minecraft/saves`. `arctic paths` prints them all.
 
 **Where are my sign-in details stored?**
-Only on your computer, in your profile folder. They are sent only to Microsoft, Xbox and
+Only on your computer, in your profile folder, encrypted so that only your user account on
+that PC can read them (a copied file is useless elsewhere). They are sent only to Microsoft, Xbox and
 Mojang to sign you in. Arctic's own service for looks never receives your password or
 tokens: it checks who you are the same way a Minecraft server does.
 
@@ -177,10 +201,19 @@ Yes, both of you need Arctic Launcher, the same Minecraft version and the same m
 No. Arctic Launcher is an independent project, not approved by or associated with Mojang
 or Microsoft.
 
+<p align="center">
+  <img src="docs/assets/cosmetics.webp" alt="Skins, capes and cosmetics" width="900">
+</p>
+
 ## Building from source
 
 See [docs/building.md](docs/building.md). The architecture overview is in
 [docs/architecture.md](docs/architecture.md).
+
+## Supported by
+
+Arctic is supported by [Flash Hosting](https://flashhosting.net), game servers for when
+your world needs to stay up while you're offline.
 
 ## License
 
