@@ -66,6 +66,24 @@ Later batches can be any size. The client handles up to 500 cosmetics and 200 ca
 They show in the gallery as made by **Arctic**, and each is added once (editing the list later
 won't duplicate them). The same skin image can't be added twice.
 
+### Variety (don't make one skin 40 times)
+
+A gallery where every skin is "a person in a blue-ish outfit" looks like one skin recolored.
+Spread a batch across:
+
+- **Who**: different skin tones, ages, hair styles and lengths, beards, glasses, and faces
+  with different expressions. Not every character is a young adult with brown hair.
+- **What**: jobs (chef, pilot, knight, scientist, farmer), fantasy (wizard, elf, robot,
+  vampire), animals and mob-like creatures (fox, penguin, frog, axolotl), casual outfits
+  (hoodie, streetwear, pajamas), seasonal (winter, beach, Halloween).
+- **Palette**: each skin gets its own 2–3 main colors. Across the batch use every hue, not
+  only blues and teals. Warm, dark, pastel and bright skins should all be there.
+- **Silhouette**: hoods, hats, big hair, helmets, capes-in-the-skin, armor shoulders (all in
+  the overlay layer) so skins differ even as thumbnails.
+
+Quality: shade every body part (3–4 tones, light from above), give clothes folds and seams,
+faces clear eyes that read at a distance. No noise textures and no smooth gradients.
+
 ## Capes
 
 A cape is one PNG in Minecraft's cape layout, listed in `catalog.json`:
@@ -185,7 +203,34 @@ in `cosmetics.json`, with `cosmetics/ice_crown.geo.json` and `cosmetics/ice_crow
 - Seen from the front, side and back, nothing pokes into the head or body (the launcher
   preview and the game draw it exactly where the numbers say).
 - Every visible face is painted (no transparent or default-grey faces).
-- It reads at small size: bold shapes and 2–4 colors beat detail.
+- It reads at small size: a clear silhouette first, detail second.
+
+### What makes one look good (the quality bar)
+
+A few flat-colored boxes stuck together is the failure to avoid. Look at vanilla's mobs: their
+models are simple, but every face is carefully painted. Detail lives in the **texture** far more
+than in the cube count.
+
+- **Paint every face like a skin.** 3–5 tones per material (shadow, base, light, highlight),
+  darker toward the bottom and the back, lighter where light hits the top, a 1 px darker rim
+  on edges. Add material texture: wood grain, fur strands, stitching, metal rivets, gem facets.
+  No face should be a single flat color unless it's under 2×2 px.
+- **Build a stepped silhouette.** Curves come from stacking smaller cubes in steps (a round hat
+  crown is 3–4 layers, each 1 px narrower), not from one big box. A wing is several feathers of
+  different lengths, not one slab.
+- **Use child bones to angle pieces.** Tilted feathers, a slightly crooked brim, ears angled
+  outward, a tail curving up: small rotations (5–30°) make it feel organic instead of rigid.
+- **Use `inflate` for layers:** a band around a hat, a fur trim, a strap over a backpack.
+- **Size the cube count to the piece:** glasses 6–15 cubes, hats and crowns 15–40, wings and
+  pets 30–80. Anything under ~8 cubes (except glasses and small face pieces) is probably too plain.
+- **Give it one focal point:** a gem, a buckle, glowing eyes, a feather. Everything else
+  supports it.
+- **Match colors to a theme** (frost, aurora, ember, forest…) with one accent color; avoid
+  rainbow mixes of unrelated saturated colors.
+- **Make living things move.** Wings, tails, ears and pets should have an idle animation.
+
+Before handing a set over, look at each piece in Blockbench next to a player model at normal
+zoom. If it looks like a placeholder, it is one.
 
 ## Emotes
 
