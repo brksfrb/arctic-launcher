@@ -4,6 +4,7 @@ use arctic_core::auth::Account;
 use arctic_core::cosmetics::{self, GalleryItem, GalleryPage, GallerySort};
 use arctic_core::skins::Variant;
 
+use crate::skin_tasks::{cached, in_parallel};
 use crate::tasks::{Event, Tasks};
 
 /// A gallery page with every skin's texture.
@@ -18,17 +19,14 @@ impl Tasks {
     pub fn gallery_search(&self, request: u64, sort: GallerySort, query: String) {
         self.run(move |t| {
             let base = cosmetics::base_url();
+            let cache = t.dirs().cache().join("arctic-looks");
             let result = cosmetics::gallery(&base, sort, &query, 0)
                 .map(|page| {
-                    let textures = page
-                        .items
-                        .iter()
-                        .filter_map(|i| {
-                            cosmetics::texture(&base, &i.texture)
-                                .ok()
-                                .map(|png| (i.texture.clone(), png))
-                        })
-                        .collect();
+                    let hashes = page.items.iter().map(|i| i.texture.clone()).collect();
+                    let textures = in_parallel(hashes, |hash: String| {
+                        let png = cached(&cache, &hash, || cosmetics::texture(&base, &hash))?;
+                        Some((hash, png))
+                    });
                     GalleryResult { page, textures }
                 })
                 .map_err(|e| friendly(&e.to_string()));
@@ -40,8 +38,14 @@ impl Tasks {
     pub fn gallery_take(&self, item: GalleryItem, wear: bool) {
         self.run(move |t| {
             let base = cosmetics::base_url();
+            let cache = t.dirs().cache().join("arctic-looks");
             let result = cosmetics::gallery_use(&base, &item.id)
-                .and_then(|hash| cosmetics::texture(&base, &hash))
+                .and_then(
+                    |hash| match cached(&cache, &hash, || cosmetics::texture(&base, &hash)) {
+                        Some(png) => Ok(png),
+                        None => cosmetics::texture(&base, &hash),
+                    },
+                )
                 .map(|png| (item.name.clone(), png, item.variant(), wear))
                 .map_err(|e| friendly(&e.to_string()));
             t.send(Event::GalleryTaken(result));
