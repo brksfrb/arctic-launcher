@@ -51,6 +51,15 @@ public abstract class HudWidget {
 		}
 	}
 
+	/** A fill in the panels' shape: rounded when the style's panels are. */
+	protected void shape(Gfx g, int x0, int y0, int x1, int y1, int color) {
+		if (look.radius > 0) {
+			com.arcticlauncher.client.gfx.Draw.round(g, x0, y0, x1, y1, look.radius, color);
+		} else {
+			g.fill(x0, y0, x1, y1, color);
+		}
+	}
+
 	protected boolean background() {
 		return look.background;
 	}

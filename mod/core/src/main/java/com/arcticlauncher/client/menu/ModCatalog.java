@@ -62,6 +62,9 @@ final class ModCatalog {
 				.settings((host, f) -> {
 					f.section("Key");
 					f.key("Zoom key", "Hold it to zoom; scroll while zooming to go further", Form.key(() -> c.zoomKey, k -> c.zoomKey = k));
+					f.section("Feel");
+					f.toggle("Smooth camera while zoomed", "Like OptiFine's zoom: the view glides instead of snapping",
+							() -> c.zoomSmoothCamera, on -> c.zoomSmoothCamera = on);
 				}));
 		out.add(new Mod("freelook", "Freelook", "Hold a key to look around without turning", "freelook", Category.GAMEPLAY, "perspective 360")
 				.toggle(() -> c.freelookEnabled, on -> c.freelookEnabled = on)

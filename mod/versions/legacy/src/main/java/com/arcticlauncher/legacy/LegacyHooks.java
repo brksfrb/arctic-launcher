@@ -108,7 +108,7 @@ public final class LegacyHooks {
 		ArcticClient.chatLine(text);
 		Text out = message;
 		if (c.chatMentions && Mentions.mentions(text, ArcticClient.platform().playerName())) {
-			out = new LiteralText("§e» ").append(out);
+			out = new LiteralText("§e» §r").append(out);
 			ArcticClient.platform().mentionSound();
 		}
 		if (c.chatTimestamps) {

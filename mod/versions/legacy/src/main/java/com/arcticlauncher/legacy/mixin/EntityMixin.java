@@ -14,7 +14,9 @@ abstract class EntityMixin {
 	@Inject(method = "increaseTransforms", at = @At("HEAD"), cancellable = true)
 	private void arctic$turn(float yaw, float pitch, CallbackInfo ci) {
 		if ((Object) this == MinecraftClient.getInstance().player && ArcticClient.features() != null
-				&& ArcticClient.features().turn(yaw, pitch)) {
+				// 1.8.9 subtracts the pitch change (its mouse Y points up); newer
+				// versions add it, which is what the shared freelook expects.
+				&& ArcticClient.features().turn(yaw, -pitch)) {
 			ci.cancel();
 		}
 	}

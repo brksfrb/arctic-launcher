@@ -74,12 +74,16 @@ abstract class ChatComponentMixin {
 			arctic$repeats = 1;
 		}
 		if (c.chatMentions && com.arcticlauncher.client.feature.Mentions.mentions(text, ArcticClient.platform().playerName())) {
-			out = com.arcticlauncher.mod.Compat.literal("» ").withStyle(ChatFormatting.YELLOW).append(out);
+			// Side by side under a plain parent: as the parent, the marker's color
+			// would spread to every part of the message without its own.
+			out = com.arcticlauncher.mod.Compat.empty()
+					.append(com.arcticlauncher.mod.Compat.literal("» ").withStyle(ChatFormatting.YELLOW)).append(out);
 			ArcticClient.platform().mentionSound();
 		}
 		if (c.chatTimestamps) {
 			String time = new SimpleDateFormat("HH:mm").format(new Date());
-			out = com.arcticlauncher.mod.Compat.literal("[" + time + "] ").withStyle(ChatFormatting.DARK_GRAY).append(out);
+			out = com.arcticlauncher.mod.Compat.empty()
+					.append(com.arcticlauncher.mod.Compat.literal("[" + time + "] ").withStyle(ChatFormatting.DARK_GRAY)).append(out);
 		}
 		return out;
 	}

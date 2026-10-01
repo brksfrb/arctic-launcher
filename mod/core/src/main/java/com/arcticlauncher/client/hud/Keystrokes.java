@@ -78,7 +78,8 @@ final class Keystrokes extends HudWidget {
 	private void key(Gfx g, Style s, int x, int y, int w, int h, String label, String small, float lit) {
 		panel(g, s, x, y, x + w, y + h);
 		if (lit > 0f) {
-			g.fill(x, y, x + w, y + h, Draw.alpha(PRESSED, lit * 0.9f));
+			// The key's own shape, rounded like its panel.
+			shape(g, x, y, x + w, y + h, Draw.alpha(PRESSED, lit * 0.9f));
 		}
 		int color = Draw.mix(text(), PRESSED_TEXT, lit);
 		boolean shadow = shadow() && lit < 0.5f;

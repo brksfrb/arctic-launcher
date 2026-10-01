@@ -33,6 +33,8 @@ public final class ClientConfig {
 	public boolean zoomEnabled = true;
 	public boolean freelookEnabled = true;
 	public String zoomKey = "key.keyboard.c";
+	/** OptiFine-style smooth (cinematic) camera while zoomed. */
+	public boolean zoomSmoothCamera = true;
 	public String freelookKey = "key.keyboard.left.alt";
 	public String fullbrightKey = "key.keyboard.unknown";
 	/** Opens the emote wheel. */
