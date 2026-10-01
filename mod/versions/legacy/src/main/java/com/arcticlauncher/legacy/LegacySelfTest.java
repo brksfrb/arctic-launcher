@@ -33,6 +33,10 @@ final class LegacySelfTest {
 			LegacyReplayTest.start();
 			return;
 		}
+		if (LegacyKeysTest.requested()) {
+			LegacyKeysTest.start();
+			return;
+		}
 		if (LegacyWorldTest.requested()) {
 			LegacyWorldTest.start();
 			return;
