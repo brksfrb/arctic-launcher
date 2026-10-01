@@ -1,6 +1,7 @@
-//! Debug builds only: `ARCTIC_DEVSHOT=out.png` saves a screenshot of the
-//! window after `ARCTIC_DEVSHOT_DELAY` seconds (default 4) and closes the
-//! app. Lets UI changes be checked without a visible desktop.
+//! Debug and developer (`ARCTIC_DEV_PACK`) builds only:
+//! `ARCTIC_DEVSHOT=out.png` saves a screenshot of the window after
+//! `ARCTIC_DEVSHOT_DELAY` seconds (default 4) and closes the app. Lets UI
+//! changes be checked without a visible desktop.
 
 use std::path::PathBuf;
 
@@ -23,7 +24,7 @@ pub struct DevShot {
 
 impl DevShot {
     pub fn from_env() -> Self {
-        if !cfg!(debug_assertions) {
+        if !cfg!(debug_assertions) && option_env!("ARCTIC_DEV_PACK").is_none() {
             return Self::default();
         }
         let path = std::env::var_os("ARCTIC_DEVSHOT").map(PathBuf::from);

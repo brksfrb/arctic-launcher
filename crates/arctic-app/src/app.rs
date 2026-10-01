@@ -141,6 +141,8 @@ pub struct ArcticApp {
     pub(crate) installed: HashSet<String>,
     pub(crate) add_account: AddAccount,
     pub(crate) remove_confirm: Option<String>,
+    /// Instance whose performance mods are about to be turned off (asks first).
+    pub(crate) performance_off_confirm: Option<String>,
     pub(crate) profile_dialog: ProfileDialog,
     /// Instances tab state (pages, mod browser, create dialog).
     pub(crate) inst: InstancesUi,
@@ -271,6 +273,7 @@ impl ArcticApp {
             manifest: ManifestState::Loading,
             add_account: AddAccount::Closed,
             remove_confirm: None,
+            performance_off_confirm: None,
             profile_dialog: ProfileDialog::Closed,
             inst: InstancesUi::default(),
             update,
@@ -911,6 +914,13 @@ impl eframe::App for ArcticApp {
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.cancel_login();
+        if self.settings.exit_games_with_launcher {
+            for run in self.runs.active() {
+                if let Some(game) = run.game() {
+                    game.terminate();
+                }
+            }
+        }
         if self.settings != self.saved_settings {
             let _ = self.settings.save(&self.dirs);
         }

@@ -370,8 +370,13 @@ impl ArcticApp {
                 VersionView::Favorites => self.settings.favorite_versions.contains(id),
             })
             .collect();
+        // The same height on every tab (Installed and Favorites are often short
+        // lists), growing with the window.
+        let height = (ui.ctx().content_rect().height() * 0.55).clamp(300.0, 520.0);
         egui::ScrollArea::vertical()
-            .max_height(300.0)
+            .max_height(height)
+            .min_scrolled_height(height)
+            .auto_shrink([false, false])
             .show(ui, |ui| {
                 if rows.is_empty() {
                     let text = if self.version_view == VersionView::Favorites {

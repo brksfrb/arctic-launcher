@@ -131,12 +131,17 @@ fn pack() -> Option<&'static Pack> {
 /// `python mod/build.py`, not a launcher rebuild. Release builds never do.
 fn dev_pack() -> Option<Pack> {
     option_env!("ARCTIC_DEV_PACK")?;
-    let path = std::env::current_exe().ok()?.with_file_name("arctic-client.pack");
+    let path = std::env::current_exe()
+        .ok()?
+        .with_file_name("arctic-client.pack");
     let bytes = fs::read(&path).ok()?;
     let pack = Pack::unpack(&bytes);
     match &pack {
         Some(_) => log::info!("using the Arctic Client from {}", path.display()),
-        None => log::warn!("{} is damaged; using the bundled Arctic Client", path.display()),
+        None => log::warn!(
+            "{} is damaged; using the bundled Arctic Client",
+            path.display()
+        ),
     }
     pack
 }

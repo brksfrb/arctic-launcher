@@ -266,6 +266,39 @@ impl ArcticApp {
             self.remove_confirm = None;
         }
     }
+
+    /// "Turn off performance mods?": asked before the switch goes off.
+    pub(crate) fn performance_off_dialog(&mut self, ctx: &egui::Context) {
+        let Some(id) = self.performance_off_confirm.clone() else {
+            return;
+        };
+        let p = self.palette();
+        let modal = Modal::new(Id::new("performance_off"))
+            .frame(dialog_frame(p))
+            .show(ctx, |ui| {
+                ui.set_width(380.0);
+                ui.label(RichText::new("Turn off performance mods?").size(20.0).strong());
+                ui.label(
+                    RichText::new(
+                        "Sodium, Lithium and the rest are removed from this instance. Expect much lower FPS and slower starts. You can turn them back on any time.",
+                    )
+                    .color(p.muted),
+                );
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Keep them").clicked() {
+                        self.performance_off_confirm = None;
+                    }
+                    if widgets::button(ui, p, None, "Turn off", true).clicked() {
+                        self.update_instance(&id, |i| i.performance = false);
+                        self.performance_off_confirm = None;
+                    }
+                });
+            });
+        if modal.should_close() {
+            self.performance_off_confirm = None;
+        }
+    }
 }
 
 pub(super) fn dialog_frame(p: &Palette) -> egui::Frame {

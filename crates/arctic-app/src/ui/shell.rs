@@ -94,6 +94,7 @@ impl ArcticApp {
         self.onboarding_dialog(&ctx);
         self.add_account_dialog(&ctx);
         self.remove_account_dialog(&ctx);
+        self.performance_off_dialog(&ctx);
         self.profile_dialogs(&ctx);
         self.create_instance_dialog(&ctx);
         self.import_worlds_dialog(&ctx);

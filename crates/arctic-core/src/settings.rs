@@ -68,6 +68,8 @@ pub struct Settings {
     /// Friends may see which server you're on (last known from the Arctic
     /// server; until then, the game doesn't say).
     pub share_server_with_friends: bool,
+    /// Quitting the launcher also closes games it started (off: they keep running).
+    pub exit_games_with_launcher: bool,
     /// Proximity voice chat.
     pub voice: VoiceSettings,
     /// What this profile's instances share (server list, client and game settings).
@@ -213,6 +215,7 @@ impl Default for Settings {
             client_style_set: 0,
             client_fancy: false,
             share_server_with_friends: false,
+            exit_games_with_launcher: false,
             voice: VoiceSettings::default(),
             shared: crate::shared::SharedSettings::default(),
         }

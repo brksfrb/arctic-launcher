@@ -54,6 +54,11 @@ impl ArcticApp {
                 ui.checkbox(&mut s.tray, "Keep Arctic in the system tray when closed")
                     .on_hover_text("Reopens instantly. Quit from the tray icon.");
             }
+            ui.checkbox(
+                &mut s.exit_games_with_launcher,
+                "Close Minecraft when Arctic quits",
+            )
+            .on_hover_text("Off: games keep running after the launcher closes.");
         });
 
         section(ui, p, "Arctic Client", |ui| {
@@ -235,7 +240,11 @@ impl ArcticApp {
         });
         if performance != self.instance.performance {
             let id = self.instance.id.clone();
-            self.update_instance(&id, |i| i.performance = performance);
+            if performance {
+                self.update_instance(&id, |i| i.performance = true);
+            } else {
+                self.performance_off_confirm = Some(id);
+            }
         }
     }
 }

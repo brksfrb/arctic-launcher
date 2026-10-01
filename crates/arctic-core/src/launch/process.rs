@@ -44,6 +44,12 @@ impl GameHandle {
         self.pid
     }
 
+    /// End the game now, without waiting for the watcher (the launcher is
+    /// quitting and its threads go with it).
+    pub fn terminate(&self) {
+        terminate(self.pid);
+    }
+
     /// Ask the watcher to terminate the game (Force close).
     pub fn kill(&self) {
         self.kill.store(true, Ordering::Relaxed);
@@ -120,6 +126,33 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
         .spawn()
         .at(&plan.java)?;
     Ok(child.id())
+}
+
+/// End process `pid` (and, on Windows, what it started).
+pub fn terminate(pid: u32) {
+    let mut cmd = if cfg!(windows) {
+        let mut c = Command::new("taskkill");
+        c.args(["/PID", &pid.to_string(), "/T", "/F"]);
+        c
+    } else {
+        let mut c = Command::new("kill");
+        c.arg(pid.to_string());
+        c
+    };
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // CREATE_NO_WINDOW: no console flashing up.
+        cmd.creation_flags(0x0800_0000);
+    }
+    if let Err(e) = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+    {
+        log::warn!("couldn't end the game ({pid}): {e}");
+    }
 }
 
 /// What the game's process is called on Windows and macOS.
