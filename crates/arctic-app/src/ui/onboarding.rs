@@ -324,9 +324,11 @@ impl ArcticApp {
         }
         ui.add_space(8.0);
         ui.label(
-            RichText::new("Your sign-in stays on this PC. Arctic never sees your password.")
-                .small()
-                .color(p.muted),
+            RichText::new(
+                "Your sign-in stays on this PC, encrypted. Arctic never sees your password.",
+            )
+            .small()
+            .color(p.muted),
         );
     }
 
