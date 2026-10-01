@@ -16,7 +16,7 @@ pub use ping::{Login, login_check, status_json};
 /// Player names shown from a server's sample.
 const MAX_SAMPLE: usize = 12;
 /// Servers pinged at once.
-const PARALLEL: usize = 8;
+const PARALLEL: usize = 16;
 
 /// Why a ping failed, in words for players.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,17 +76,43 @@ pub fn ping(address: &str, proxy: Option<Socks>) -> Result<Status> {
     parse_status(&json, ping_ms)
 }
 
+/// Ping many servers at once, calling `done(index, result)` as each one
+/// answers. Each of the [`PARALLEL`] workers takes the next server when it's
+/// free, so a dead server holds up only its own worker, not a whole batch.
+pub fn ping_each(
+    addresses: &[String],
+    proxy: Option<Socks>,
+    done: impl Fn(usize, Result<Status>) + Sync,
+) {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let next = AtomicUsize::new(0);
+    std::thread::scope(|s| {
+        for _ in 0..PARALLEL.min(addresses.len()) {
+            s.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(address) = addresses.get(i) else {
+                        break;
+                    };
+                    done(i, ping(address, proxy));
+                }
+            });
+        }
+    });
+}
+
 /// Ping many servers at once; results come back in the same order.
 pub fn ping_all(addresses: &[String], proxy: Option<Socks>) -> Vec<Result<Status>> {
-    let mut results: Vec<Option<Result<Status>>> = addresses.iter().map(|_| None).collect();
-    for (chunk_addrs, chunk_out) in addresses.chunks(PARALLEL).zip(results.chunks_mut(PARALLEL)) {
-        std::thread::scope(|s| {
-            for (addr, out) in chunk_addrs.iter().zip(chunk_out.iter_mut()) {
-                s.spawn(move || *out = Some(ping(addr, proxy)));
-            }
-        });
-    }
+    let results: std::sync::Mutex<Vec<Option<Result<Status>>>> =
+        std::sync::Mutex::new(addresses.iter().map(|_| None).collect());
+    ping_each(addresses, proxy, |i, r| {
+        if let Ok(mut all) = results.lock() {
+            all[i] = Some(r);
+        }
+    });
     results
+        .into_inner()
+        .unwrap_or_default()
         .into_iter()
         .map(|r| r.unwrap_or_else(|| Err(Error::new("not pinged"))))
         .collect()
