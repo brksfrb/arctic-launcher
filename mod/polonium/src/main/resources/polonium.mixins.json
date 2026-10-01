@@ -2,6 +2,7 @@
 	"required": true,
 	"minVersion": "0.8",
 	"package": "com.arcticlauncher.polonium.mixin",
+	"plugin": "com.arcticlauncher.polonium.PoloniumMixins",
 	"compatibilityLevel": "JAVA_21",
 	"client": [
 		"StagedVertexBufferMixin",
@@ -21,7 +22,10 @@
 		"EntityRendererNameTagMixin",
 		"EntityAttributeCacheMixin",
 		"LivingEntityRendererNameTagMixin",
-		"LevelExtractorMixin"
+		"LevelExtractorMixin",
+		"ComponentLayoutMixin",
+		"PreparedTextRunsMixin",
+		"GlyphRendererAccess"
 	],
 	"injectors": {
 		"defaultRequire": 1
