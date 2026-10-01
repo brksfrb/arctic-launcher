@@ -75,9 +75,11 @@ pub fn spawn(
 
     let on_event = Arc::new(on_event);
     let window_seen = Arc::new(AtomicBool::new(false));
+    let secrets: Arc<[String]> = plan.log_secrets().into();
     let tee = |stream: Box<dyn Read + Send>| {
         let (log, seen, on_event) = (log.clone(), window_seen.clone(), on_event.clone());
-        std::thread::spawn(move || tee_output(stream, &log, &seen, &*on_event));
+        let secrets = secrets.clone();
+        std::thread::spawn(move || tee_output(stream, &log, &seen, &secrets, &*on_event));
     };
     if let Some(out) = child.stdout.take() {
         tee(Box::new(out));
@@ -227,11 +229,13 @@ fn in_named_folder(exe: &Path) -> PathBuf {
 }
 
 /// Copy a child stream into the log line by line, firing `WindowReady` the
-/// first time a marker shows up (on either stream).
+/// first time a marker shows up (on either stream). `secrets` never reach
+/// the log or the launcher (1.8 prints its session token, for one).
 fn tee_output(
     stream: Box<dyn Read + Send>,
     log: &Mutex<File>,
     window_seen: &AtomicBool,
+    secrets: &[String],
     on_event: &(dyn Fn(GameEvent) + Send + Sync),
 ) {
     let mut reader = BufReader::new(stream);
@@ -249,6 +253,7 @@ fn tee_output(
             }
             Ok(_) => {}
         }
+        redact(&mut line, secrets);
         if let Ok(mut file) = log.lock() {
             let _ = file.write_all(&line);
         }
@@ -260,6 +265,15 @@ fn tee_output(
         let parsed = parser.feed(&String::from_utf8_lossy(&line));
         if !parsed.is_empty() {
             on_event(GameEvent::Output(parsed));
+        }
+    }
+}
+
+/// Replace every secret in `line` with `<redacted>`.
+fn redact(line: &mut Vec<u8>, secrets: &[String]) {
+    for secret in secrets.iter().map(String::as_bytes) {
+        while let Some(at) = line.windows(secret.len()).position(|w| w == secret) {
+            line.splice(at..at + secret.len(), b"<redacted>".iter().copied());
         }
     }
 }
@@ -339,6 +353,7 @@ mod tests {
             Box::new(std::io::Cursor::new(input.clone())),
             &log,
             &seen,
+            &[],
             &|e| fired.lock().unwrap().push(e),
         );
         drop(log);
@@ -356,5 +371,43 @@ mod tests {
             })
             .sum();
         assert_eq!((ready, lines), (1, 4));
+    }
+
+    #[test]
+    fn session_tokens_stay_out_of_the_log() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("game.log");
+        let log = Mutex::new(File::create(&path).unwrap());
+        let seen = AtomicBool::new(false);
+        let input = b"[Client thread/INFO] (Session ID is token:eyJ.SECRET:15ca)
+ok SECRET SECRET
+"
+        .to_vec();
+        let shown = Mutex::new(Vec::new());
+        tee_output(
+            Box::new(std::io::Cursor::new(input)),
+            &log,
+            &seen,
+            &["eyJ.SECRET".to_owned(), "SECRET".to_owned()],
+            &|e| {
+                if let GameEvent::Output(lines) = e {
+                    shown
+                        .lock()
+                        .unwrap()
+                        .extend(lines.into_iter().map(|l| l.text));
+                }
+            },
+        );
+        drop(log);
+        let written = std::fs::read_to_string(&path).unwrap();
+        assert!(!written.contains("SECRET"), "{written}");
+        assert!(written.contains("token:<redacted>:15ca"));
+        assert!(
+            shown
+                .into_inner()
+                .unwrap()
+                .iter()
+                .all(|l| !l.contains("SECRET"))
+        );
     }
 }

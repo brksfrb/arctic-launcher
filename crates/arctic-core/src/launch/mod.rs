@@ -108,13 +108,26 @@ pub struct LaunchPlan {
 }
 
 impl LaunchPlan {
+    /// The secrets worth hiding, longest first (empty and placeholder ones
+    /// left out).
+    fn log_secrets(&self) -> Vec<String> {
+        let mut secrets: Vec<String> = self
+            .secrets
+            .iter()
+            .filter(|s| !s.is_empty() && s.as_str() != "0")
+            .cloned()
+            .collect();
+        secrets.sort_by_key(|s| std::cmp::Reverse(s.len()));
+        secrets
+    }
+
     /// Command line safe to show or log (access token and proxy password
     /// replaced).
     pub fn redacted_command(&self) -> String {
+        let secrets = self.log_secrets();
         let redact = |a: &String| {
-            self.secrets
+            secrets
                 .iter()
-                .filter(|s| !s.is_empty() && s.as_str() != "0")
                 .fold(a.clone(), |arg, s| arg.replace(s.as_str(), "<redacted>"))
         };
         std::iter::once(self.java.display().to_string())

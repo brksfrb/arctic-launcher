@@ -126,6 +126,21 @@ fn pack() -> Option<&'static Pack> {
         .as_ref()
 }
 
+/// A hash of the developer pack in use, so its jars replace ones from
+/// another pack (they'd otherwise pass for current: see [`pack_id`]).
+static DEV_PACK_ID: OnceLock<u64> = OnceLock::new();
+
+/// Which pack the jars come from: the bundled one, or a developer pack.
+fn pack_id() -> u64 {
+    if option_env!("ARCTIC_DEV_PACK").is_some() {
+        let _ = pack();
+        if let Some(id) = DEV_PACK_ID.get() {
+            return *id;
+        }
+    }
+    PACK_ID
+}
+
 /// Developer builds (made with `ARCTIC_DEV_PACK=1`) use an `arctic-client.pack`
 /// next to the launcher when there is one, so a change to the mod needs only
 /// `python mod/build.py`, not a launcher rebuild. Release builds never do.
@@ -136,6 +151,11 @@ fn dev_pack() -> Option<Pack> {
         .with_file_name("arctic-client.pack");
     let bytes = fs::read(&path).ok()?;
     let pack = Pack::unpack(&bytes);
+    if pack.is_some() {
+        let mut hasher = std::hash::DefaultHasher::new();
+        std::hash::Hasher::write(&mut hasher, &bytes);
+        let _ = DEV_PACK_ID.set(std::hash::Hasher::finish(&hasher));
+    }
     match &pack {
         Some(_) => log::info!("using the Arctic Client from {}", path.display()),
         None => log::warn!(
@@ -177,7 +197,8 @@ pub fn sync(mods_dir: &Path, game_version: &str, enabled: bool) -> Result<()> {
             false => Ok(()),
         };
     };
-    let stamp = |len: u64| format!("{PACK_ID:016x} {build} {len}");
+    let id = pack_id();
+    let stamp = |len: u64| format!("{id:016x} {build} {len}");
     if let Ok(meta) = fs::metadata(&path)
         && fs::read_to_string(&stamp_path).is_ok_and(|s| s == stamp(meta.len()))
     {
