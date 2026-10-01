@@ -321,9 +321,12 @@ pub fn gallery_report(base: &str, token: &str, id: &str) -> Result<()> {
     }
 }
 
-/// Gallery ids are hex; anything else can't reach another path.
+/// Gallery ids are hex, or `arctic-<hex>` for the built-in skins; keeping
+/// only letters, digits and dashes means an id can't reach another path.
 fn url_segment(id: &str) -> String {
-    id.chars().filter(|c| c.is_ascii_hexdigit()).collect()
+    id.chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .collect()
 }
 
 // ---- Sign-in ------------------------------------------------------------
@@ -593,6 +596,16 @@ pub fn cape_frames(width: u32, height: u32) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gallery_ids_stay_whole_but_cannot_escape_the_path() {
+        assert_eq!(
+            url_segment("arctic-eb46302ea78bd2a1"),
+            "arctic-eb46302ea78bd2a1"
+        );
+        assert_eq!(url_segment("003f9230304949ff"), "003f9230304949ff");
+        assert_eq!(url_segment("../admin?x=1"), "adminx1");
+    }
 
     fn png(w: u32, h: u32) -> Vec<u8> {
         let mut out = Vec::new();
