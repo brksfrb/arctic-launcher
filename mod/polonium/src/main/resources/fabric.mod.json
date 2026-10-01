@@ -1,0 +1,20 @@
+{
+	"schemaVersion": 1,
+	"id": "polonium",
+	"version": "${version}",
+	"name": "Polonium",
+	"description": "Faster entity rendering for huge crowds: the work Minecraft does on one thread is spread across all your CPU cores, with every frame drawn exactly the same. Made by the Arctic Launcher team.",
+	"authors": ["Arctic Launcher contributors"],
+	"contact": {
+		"homepage": "https://arcticlauncher.com",
+		"sources": "https://github.com/brksfrb/arctic-launcher"
+	},
+	"license": "GPL-3.0-or-later",
+	"environment": "client",
+	"mixins": ["polonium.mixins.json"],
+	"depends": {
+		"fabricloader": ">=${loader_min}",
+		"minecraft": ${minecraft_range},
+		"java": ">=${java}"
+	}
+}

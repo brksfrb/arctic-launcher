@@ -1,0 +1,29 @@
+{
+	"required": true,
+	"minVersion": "0.8",
+	"package": "com.arcticlauncher.polonium.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"StagedVertexBufferMixin",
+		"StagedVertexBufferAccess",
+		"DrawAccess",
+		"GpuBufferPoolMixin",
+		"NameTagFeatureRendererMixin",
+		"FontManagerMixin",
+		"ModelPartAccess",
+		"ModelFeatureRendererMixin",
+		"RenderTypeFeatureRendererMixin",
+		"ShaderSourceMixin",
+		"ItemFeatureRendererMixin",
+		"PreparedFrameAccess",
+		"FeatureRenderDispatcherMixin",
+		"EntityNameTagMixin",
+		"EntityRendererNameTagMixin",
+		"EntityAttributeCacheMixin",
+		"LivingEntityRendererNameTagMixin",
+		"LevelExtractorMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

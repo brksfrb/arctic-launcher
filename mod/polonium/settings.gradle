@@ -1,0 +1,14 @@
+pluginManagement {
+	repositories {
+		maven {
+			name = 'Fabric'
+			url = 'https://maven.fabricmc.net/'
+		}
+		mavenCentral()
+		gradlePluginPortal()
+	}
+}
+
+// Polonium, the entity rendering performance mod. Build from mod/:
+// ./gradlew -p polonium build -Pminecraft_version=26.2
+rootProject.name = 'polonium'
