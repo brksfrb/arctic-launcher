@@ -4,6 +4,7 @@
 
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Write};
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -57,7 +58,7 @@ pub fn spawn(
 ) -> Result<GameHandle> {
     log::info!("launching: {}", plan.redacted_command());
     let log = Arc::new(Mutex::new(File::create(&plan.log_file).at(&plan.log_file)?));
-    let mut child = Command::new(&plan.java)
+    let mut child = Command::new(branded_java(&plan.java))
         .args(&plan.args)
         .current_dir(&plan.game_dir)
         .stdin(Stdio::null())
@@ -110,7 +111,7 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
     log::info!("launching (detached): {}", plan.redacted_command());
     let log = File::create(&plan.log_file).at(&plan.log_file)?;
     let log_err = log.try_clone().at(&plan.log_file)?;
-    let child = Command::new(&plan.java)
+    let child = Command::new(branded_java(&plan.java))
         .args(&plan.args)
         .current_dir(&plan.game_dir)
         .stdin(Stdio::null())
@@ -119,6 +120,77 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
         .spawn()
         .at(&plan.java)?;
     Ok(child.id())
+}
+
+/// What the game's process is called on Windows and macOS.
+const CLIENT_PROCESS: &str = if cfg!(windows) {
+    "Arctic Client.exe"
+} else {
+    "arctic-client"
+};
+
+/// Discord marks any `javaw.exe` (macOS: `java`) running Minecraft as
+/// "Playing Minecraft", which buries the launcher's own presence. A copy of
+/// the Java launcher under the client's name, next to the original (it finds
+/// the rest of Java from its own folder), keeps that from happening and
+/// shows "Arctic Client" in Task Manager. Falls back to `java` on any error
+/// (a read-only Java folder, say).
+fn branded_java(java: &Path) -> PathBuf {
+    let is_java = java
+        .file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| matches!(n, "javaw.exe" | "java"));
+    if !is_java || !(cfg!(windows) || cfg!(target_os = "macos")) {
+        return java.to_path_buf();
+    }
+    let copy = java.with_file_name(CLIENT_PROCESS);
+    let same = |a: &Path, b: &Path| match (std::fs::metadata(a), std::fs::metadata(b)) {
+        (Ok(a), Ok(b)) => a.len() == b.len() && a.modified().ok() <= b.modified().ok(),
+        _ => false,
+    };
+    if !same(java, &copy)
+        && let Err(e) = std::fs::copy(java, &copy)
+    {
+        log::info!("running the game as {}: {e}", java.display());
+        return java.to_path_buf();
+    }
+    in_named_folder(&copy)
+}
+
+/// NVIDIA's recorder files clips under the name of the folder that holds
+/// `bin`, which is the runtime's (`java-runtime-delta`). The game is started
+/// through a junction named after the client instead:
+/// `runtimes/.named/<runtime>/Arctic Client` → `runtimes/<runtime>`. Java
+/// works out its home from that path, so nothing else changes.
+#[cfg(windows)]
+fn in_named_folder(exe: &Path) -> PathBuf {
+    const NAME: &str = "Arctic Client";
+    let named = (|| {
+        let bin = exe.parent()?;
+        let runtime = bin.parent()?;
+        if bin.file_name()? != "bin" || runtime.file_name()? == NAME {
+            return None;
+        }
+        let link = runtime
+            .parent()?
+            .join(".named")
+            .join(runtime.file_name()?)
+            .join(NAME);
+        if junction::get_target(&link).ok().as_deref() != Some(runtime) {
+            let _ = std::fs::remove_dir(&link);
+            std::fs::create_dir_all(link.parent()?).ok()?;
+            junction::create(runtime, &link)
+                .inspect_err(|e| log::info!("junction for the game's name: {e}"))
+                .ok()?;
+        }
+        Some(link.join("bin").join(exe.file_name()?))
+    })();
+    named.unwrap_or_else(|| exe.to_path_buf())
+}
+
+#[cfg(not(windows))]
+fn in_named_folder(exe: &Path) -> PathBuf {
+    exe.to_path_buf()
 }
 
 /// Copy a child stream into the log line by line, firing `WindowReady` the
@@ -167,6 +239,46 @@ fn is_window_marker(line: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(any(windows, target_os = "macos"))]
+    fn the_game_runs_as_arctic_client() {
+        let dir = tempfile::tempdir().unwrap();
+        let java = dir
+            .path()
+            .join(if cfg!(windows) { "javaw.exe" } else { "java" });
+        std::fs::write(&java, b"java v1").unwrap();
+        let first = branded_java(&java);
+        assert!(first.ends_with(CLIENT_PROCESS), "{}", first.display());
+        assert!(dir.path().join(CLIENT_PROCESS).is_file());
+        assert_eq!(std::fs::read(&first).unwrap(), b"java v1");
+        // A Java update is copied again.
+        std::fs::write(&java, b"java v2 (longer)").unwrap();
+        assert_eq!(
+            std::fs::read(branded_java(&java)).unwrap(),
+            b"java v2 (longer)"
+        );
+        // Started from a folder named after the client (for recorders).
+        let runtime = dir.path().join("java-runtime-delta");
+        let bin = runtime.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join(java.file_name().unwrap()), b"java").unwrap();
+        let named = branded_java(&bin.join(java.file_name().unwrap()));
+        if cfg!(windows) {
+            assert!(
+                named.ends_with(format!("Arctic Client/bin/{CLIENT_PROCESS}")),
+                "{}",
+                named.display()
+            );
+            assert!(named.starts_with(dir.path().join(".named").join("java-runtime-delta")));
+            assert_eq!(std::fs::read(&named).unwrap(), b"java");
+            // A second launch reuses the same junction.
+            assert_eq!(branded_java(&bin.join(java.file_name().unwrap())), named);
+        }
+        // Anything that isn't the Java launcher is left alone.
+        let other = dir.path().join("custom-java.exe");
+        assert_eq!(branded_java(&other), other);
+    }
 
     #[test]
     fn detects_window_markers_in_plain_and_xml_logs() {

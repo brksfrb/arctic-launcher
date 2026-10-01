@@ -11,6 +11,9 @@ use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
 
 /// Discord application "Arctic Launcher".
 const APP_ID: &str = "1553107151306760263";
+/// Discord application "Arctic Client", shown while the game runs (Discord
+/// titles a presence with its application's name).
+const CLIENT_APP_ID: &str = "1554589488825639042";
 const LOGO: &str =
     "https://raw.githubusercontent.com/brksfrb/arctic-launcher/main/docs/assets/icon.png";
 const SITE: &str = "https://arcticlauncher.com";
@@ -24,6 +27,14 @@ pub struct Presence {
     pub state: Option<String>,
     /// Unix milliseconds; Discord shows the elapsed time.
     pub since: i64,
+    /// The game is running (shown as the Arctic Client).
+    pub in_game: bool,
+}
+
+impl Presence {
+    fn app_id(&self) -> &'static str {
+        if self.in_game { CLIENT_APP_ID } else { APP_ID }
+    }
 }
 
 pub struct Discord {
@@ -56,6 +67,7 @@ impl Discord {
             details,
             state: Some(state),
             since: now_ms(),
+            in_game: true,
         });
     }
 
@@ -70,6 +82,7 @@ impl Discord {
                 details: "In the launcher".into(),
                 state: None,
                 since: self.launcher_since,
+                in_game: false,
             });
             if let Some(note) = together {
                 presence.state = Some(note);
@@ -84,7 +97,8 @@ impl Discord {
 }
 
 fn worker(rx: Receiver<Option<Presence>>) {
-    let mut client: Option<DiscordIpcClient> = None;
+    // The connection and the application it speaks for.
+    let mut client: Option<(DiscordIpcClient, &str)> = None;
     let mut want: Option<Presence> = None;
     let mut shown: Option<Presence> = None;
     loop {
@@ -98,25 +112,34 @@ fn worker(rx: Receiver<Option<Presence>>) {
             want = next;
         }
         let Some(presence) = &want else {
-            if let Some(mut c) = client.take() {
+            if let Some((mut c, _)) = client.take() {
                 let _ = c.clear_activity();
                 let _ = c.close();
             }
             shown = None;
             continue;
         };
+        let app = presence.app_id();
+        if client.as_ref().is_some_and(|(_, id)| *id != app)
+            && let Some((mut c, _)) = client.take()
+        {
+            let _ = c.clear_activity();
+            let _ = c.close();
+        }
         if client.is_none() {
-            let mut c = DiscordIpcClient::new(APP_ID);
+            let mut c = DiscordIpcClient::new(app);
             if c.connect().is_err() {
                 continue; // Discord isn't running; try again later.
             }
-            client = Some(c);
+            client = Some((c, app));
             shown = None;
         }
         if shown.as_ref() == Some(presence) {
             continue;
         }
-        let Some(c) = client.as_mut() else { continue };
+        let Some((c, _)) = client.as_mut() else {
+            continue;
+        };
         // Read Discord's reply so errors are visible and replies don't pile up.
         match c.set_activity(activity(presence)).and_then(|()| c.recv()) {
             Ok((_, reply)) => {
@@ -132,7 +155,7 @@ fn worker(rx: Receiver<Option<Presence>>) {
             }
         }
     }
-    if let Some(mut c) = client {
+    if let Some((mut c, _)) = client {
         let _ = c.close();
     }
 }
@@ -142,11 +165,11 @@ fn activity(p: &Presence) -> Activity<'_> {
         .activity_type(ActivityType::Playing)
         .details(p.details.as_str())
         .timestamps(Timestamps::new().start(p.since))
-        .assets(
-            Assets::new()
-                .large_image(LOGO)
-                .large_text("Arctic Launcher"),
-        )
+        .assets(Assets::new().large_image(LOGO).large_text(if p.in_game {
+            "Arctic Client"
+        } else {
+            "Arctic Launcher"
+        }))
         .buttons(vec![Button::new("Get Arctic Launcher", SITE)]);
     if let Some(state) = &p.state {
         activity = activity.state(state.as_str());
