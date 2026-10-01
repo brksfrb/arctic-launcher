@@ -17,7 +17,7 @@ impl ArcticApp {
             ui,
             p,
             "Accounts",
-            "Click an account to play as it. Tokens stay on this PC only.",
+            "Click an account to play as it. Sign-ins stay on this PC, encrypted for your user.",
         );
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(14.0, 14.0);
