@@ -287,6 +287,14 @@ public interface Platform {
 	}
 
 	/** How many items whose id contains {@code idPart} you carry, or -1. */
+	/**
+	 * The arrows you carry, one row per kind (plain, spectral, each tipped
+	 * kind): {an item stack to draw, how many (Integer)}. Empty outside a world.
+	 */
+	default java.util.List<Object[]> arrows() {
+		return java.util.Collections.emptyList();
+	}
+
 	default int countItems(String idPart) {
 		return -1;
 	}
