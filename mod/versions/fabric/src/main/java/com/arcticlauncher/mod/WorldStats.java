@@ -38,6 +38,30 @@ final class WorldStats {
 		return n;
 	}
 
+	/** Arrows by kind (their name tells tipped kinds apart): {stack, count}. */
+	static java.util.List<Object[]> arrows() {
+		LocalPlayer p = Minecraft.getInstance().player;
+		if (p == null) {
+			return java.util.Collections.emptyList();
+		}
+		Inventory inventory = Compat.inventory(p);
+		java.util.Map<String, Object[]> kinds = new java.util.LinkedHashMap<String, Object[]>();
+		for (int i = 0; i < inventory.getContainerSize(); i++) {
+			ItemStack stack = inventory.getItem(i);
+			if (stack.isEmpty() || !BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath().endsWith("arrow")) {
+				continue;
+			}
+			String kind = stack.getHoverName().getString();
+			Object[] row = kinds.get(kind);
+			if (row == null) {
+				kinds.put(kind, new Object[] {stack, stack.getCount()});
+			} else {
+				row[1] = (Integer) row[1] + stack.getCount();
+			}
+		}
+		return new java.util.ArrayList<Object[]>(kinds.values());
+	}
+
 	static float[] food() {
 		LocalPlayer p = Minecraft.getInstance().player;
 		if (p == null) {

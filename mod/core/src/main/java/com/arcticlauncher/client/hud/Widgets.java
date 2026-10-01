@@ -140,13 +140,6 @@ final class Widgets {
 				return minutes < 60 ? minutes + "m" : minutes / 60 + "h " + minutes % 60 + "m";
 			}
 		});
-		all.add(new TextWidget("arrows", "Arrows", "Arrows you carry", false) {
-			@Override
-			protected String value(boolean preview) {
-				int n = platform().countItems("arrow");
-				return n < 0 ? "64" : String.valueOf(n);
-			}
-		});
 		all.add(new TextWidget("food", "Food", "Hunger and saturation (the hidden part)", false) {
 			@Override
 			protected String value(boolean preview) {

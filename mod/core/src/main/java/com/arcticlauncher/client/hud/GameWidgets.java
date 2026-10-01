@@ -30,6 +30,7 @@ final class GameWidgets {
 		all.add(new Armor());
 		all.add(new Effects());
 		all.add(new Held());
+		all.add(new Arrows());
 		all.add(new Target());
 		all.add(new GameText("reach", "Reach", "Distance of your last hit") {
 			@Override
@@ -119,6 +120,62 @@ final class GameWidgets {
 				if (row[1] != null) {
 					g.text((String) row[1], PAD + ICON + 3, y + 4, text(), shadow());
 				}
+				y += ROW;
+			}
+		}
+	}
+
+	/** The arrows you carry: an icon and a count per kind (plain, spectral, each tipped kind). */
+	private static final class Arrows extends HudWidget {
+		Arrows() {
+			super("arrows", "Arrows", "Arrows you carry, by kind", false, Column.RIGHT);
+		}
+
+		@Override
+		public boolean needsGame() {
+			return true;
+		}
+
+		private static List<Object[]> rows(boolean preview) {
+			List<Object[]> rows = new java.util.ArrayList<Object[]>();
+			for (Object[] kind : platform().arrows()) {
+				rows.add(new Object[] {kind[0], String.valueOf(kind[1])});
+			}
+			if (rows.isEmpty() && preview) {
+				rows.add(sample("arrow", "64"));
+				Object[] spectral = sample("spectral_arrow", "16");
+				if (spectral[0] != null) {
+					rows.add(spectral);
+				}
+			}
+			return rows;
+		}
+
+		@Override
+		public int width(Gfx g) {
+			return PAD * 2 + ICON + 3 + g.textWidth("0000");
+		}
+
+		@Override
+		public int height() {
+			return PAD + Math.max(1, rows(true).size()) * ROW;
+		}
+
+		@Override
+		public void render(Gfx g, Style s, boolean preview) {
+			List<Object[]> rows = rows(preview);
+			if (rows.isEmpty()) {
+				return;
+			}
+			panel(g, s, 0, 0, width(g), PAD + rows.size() * ROW);
+			int y = PAD / 2;
+			for (Object[] row : rows) {
+				if (row[0] != null) {
+					g.item(row[0], PAD, y);
+				} else {
+					placeholderIcon(g, PAD, y, s);
+				}
+				g.text((String) row[1], PAD + ICON + 3, y + 4, text(), shadow());
 				y += ROW;
 			}
 		}

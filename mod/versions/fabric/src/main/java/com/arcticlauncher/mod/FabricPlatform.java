@@ -840,6 +840,11 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public java.util.List<Object[]> arrows() {
+		return WorldStats.arrows();
+	}
+
+	@Override
 	public float[] food() {
 		return WorldStats.food();
 	}

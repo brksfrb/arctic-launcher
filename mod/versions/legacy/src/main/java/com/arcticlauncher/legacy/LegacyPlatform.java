@@ -509,6 +509,33 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public java.util.List<Object[]> arrows() {
+		ClientPlayerEntity p = mc().player;
+		if (p == null) {
+			return java.util.Collections.emptyList();
+		}
+		java.util.Map<String, Object[]> kinds = new java.util.LinkedHashMap<String, Object[]>();
+		for (ItemStack stack : mainSlots(p)) {
+			if (!present(stack)) {
+				continue;
+			}
+			Identifier id = (Identifier) net.minecraft.item.Item.REGISTRY.getIdentifier(stack.getItem());
+			if (id == null || !id.getPath().endsWith("arrow")) {
+				continue;
+			}
+			// The name tells tipped kinds apart ("Arrow of Poison").
+			String kind = stack.getCustomName();
+			Object[] row = kinds.get(kind);
+			if (row == null) {
+				kinds.put(kind, new Object[] {stack, count(stack)});
+			} else {
+				row[1] = (Integer) row[1] + count(stack);
+			}
+		}
+		return new java.util.ArrayList<Object[]>(kinds.values());
+	}
+
+	@Override
 	public int countItems(String idPart) {
 		ClientPlayerEntity p = mc().player;
 		if (p == null) {
