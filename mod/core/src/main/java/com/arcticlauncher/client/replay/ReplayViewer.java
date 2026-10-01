@@ -112,6 +112,8 @@ public final class ReplayViewer {
 			export.cancel();
 			export = null;
 		}
+		// A path export hides the HUD; leaving mid-export mustn't keep it hidden.
+		backend.cleanView(false);
 		ReplayClock.stop();
 		backend.stop();
 		try {

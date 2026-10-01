@@ -34,6 +34,8 @@ public final class Features {
 	private long lastFrame;
 
 	private boolean freelook;
+	/** The camera is in third person for your emote (see {@link #emoteView}). */
+	private boolean emoteView;
 	/** The server we last said bans Freelook (said once per server). */
 	private String toldFreelookBanned;
 	private float lookYaw;
@@ -80,6 +82,7 @@ public final class Features {
 		if (wantLook != freelook) {
 			setFreelook(wantLook);
 		}
+		emoteView(screenOpen);
 		boolean fullbrightDown = inGame && down(config.fullbrightKey);
 		if (fullbrightDown && !fullbrightKeyWasDown) {
 			config.fullbright = !config.fullbright;
@@ -106,10 +109,35 @@ public final class Features {
 		return key != null && !UNBOUND.equals(key) && platform.isKeyDown(key);
 	}
 
+	/**
+	 * Third person while your own emote plays (once no screen is up, so the
+	 * wheel's preview doesn't move the camera), and back when it ends.
+	 */
+	private void emoteView(boolean screenOpen) {
+		boolean playing = config.emoteThirdPerson && platform.hasFeatures() && ownEmotePlaying();
+		if (playing && !emoteView && !screenOpen && !freelook) {
+			emoteView = true;
+			platform.setThirdPerson(true);
+		} else if (!playing && emoteView) {
+			emoteView = false;
+			platform.setThirdPerson(false);
+		}
+	}
+
+	private boolean ownEmotePlaying() {
+		java.util.UUID me = platform.worldPlayerId();
+		return me != null && com.arcticlauncher.client.ArcticClient.looks().cosmetics().playingFor(me) != null;
+	}
+
 	private void setFreelook(boolean on) {
 		double[] p = platform.position();
 		if (on && p == null) {
 			return;
+		}
+		if (on && emoteView) {
+			// Freelook takes the camera over; the emote's view ends here.
+			emoteView = false;
+			platform.setThirdPerson(false);
 		}
 		freelook = on;
 		if (on) {

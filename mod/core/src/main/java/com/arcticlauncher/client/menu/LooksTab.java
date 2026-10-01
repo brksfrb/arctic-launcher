@@ -97,6 +97,11 @@ final class LooksTab implements MenuTab {
 						c.emoteWheelHold = on;
 						ArcticClient.saveConfig();
 					}))).bounds(x, wheelKeyY + 22, listW, ROW);
+			host.add(new Toggle("Third person while emoting", "See your emote; the camera goes back when it ends",
+					Form.binding(() -> c.emoteThirdPerson, on -> {
+						c.emoteThirdPerson = on;
+						ArcticClient.saveConfig();
+					}))).bounds(x, wheelKeyY + 22 + ROW + 4, listW, ROW);
 			return;
 		}
 		int end = capes(host, looks, listTop, listW);
