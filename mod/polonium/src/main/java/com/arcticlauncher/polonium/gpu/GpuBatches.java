@@ -77,6 +77,8 @@ public final class GpuBatches implements GpuFeature {
 		GpuMesh mesh;
 		/** Entities may join from anywhere in the group (opaque, or the group's order is free). */
 		boolean anyOrder;
+		/** Its entities' textures are cells of this atlas, bound in place of Sampler0 (null: the render type's own). */
+		@Nullable GpuTextureView atlas;
 		final InstanceData data = new InstanceData();
 		int instances;
 		int firstTexel;
@@ -137,22 +139,37 @@ public final class GpuBatches implements GpuFeature {
 	 * and mesh, made if needed. The caller writes exactly
 	 * {@code mesh.texelsPerInstance} texels to it.
 	 */
+	/** The render type as the game prepares it for drawing (kept for the frame). */
+	PreparedRenderType prepare(RenderType renderType) {
+		return prepared.computeIfAbsent(renderType, RenderType::prepare);
+	}
+
 	InstanceData add(RenderType renderType, GpuMesh mesh) {
+		return add(renderType, mesh, null);
+	}
+
+	/**
+	 * Where this entity's instance data goes. With an {@code atlas}, its
+	 * texture is a cell of it: entities whose render types differ only in that
+	 * texture share a batch (and a draw).
+	 */
+	InstanceData add(RenderType renderType, GpuMesh mesh, @Nullable GpuTextureView atlas) {
 		List<Batch> group = java.util.Objects.requireNonNull(current, "not preparing a group");
 		mesh.lastUsedFrame = frame;
-		PreparedRenderType preparedType = prepared.computeIfAbsent(renderType, RenderType::prepare);
+		PreparedRenderType preparedType = prepare(renderType);
 		// As the game: consecutive entities of one render type share a draw; when the
 		// group's order is free they share it from anywhere. Opaque ones look the
 		// same in any order (the depth test decides), so those share freely too.
 		boolean consolidate = renderType.canConsolidateConsecutiveGeometry();
 		boolean anyOrder = !strictlyOrdered || !renderType.hasBlending();
-		Batch batch = consolidate ? find(group, preparedType, mesh, anyOrder) : null;
+		Batch batch = consolidate ? find(group, preparedType, mesh, anyOrder, atlas) : null;
 		if (batch == null) {
 			batch = spare.isEmpty() ? new Batch() : spare.removeLast();
 			batch.prepared = preparedType;
 			batch.pipeline = InstancedPipelines.twin(preparedType.pipeline(), mesh.vertexShader);
 			batch.mesh = mesh;
 			batch.anyOrder = anyOrder;
+			batch.atlas = atlas;
 			batch.instances = 0;
 			batch.data.clear();
 			group.add(batch);
@@ -162,10 +179,12 @@ public final class GpuBatches implements GpuFeature {
 	}
 
 	/** The batch to add to: the last one if it matches, or (when order doesn't matter) any matching one. */
-	private static @Nullable Batch find(List<Batch> group, PreparedRenderType preparedType, GpuMesh mesh, boolean anyOrder) {
+	private static @Nullable Batch find(List<Batch> group, PreparedRenderType preparedType, GpuMesh mesh, boolean anyOrder,
+			@Nullable GpuTextureView atlas) {
 		for (int i = group.size() - 1; i >= 0; i--) {
 			Batch batch = group.get(i);
-			if (batch.mesh == mesh && batch.prepared.equals(preparedType)) {
+			if (batch.mesh == mesh && batch.atlas == atlas
+					&& (atlas == null ? batch.prepared.equals(preparedType) : sameButSampler0(batch.prepared, preparedType))) {
 				return batch;
 			}
 			if (!anyOrder || !batch.anyOrder) {
@@ -173,6 +192,39 @@ public final class GpuBatches implements GpuFeature {
 			}
 		}
 		return null;
+	}
+
+	/** The same render type but for the texture bound as Sampler0 (the one an atlas replaces). */
+	private static boolean sameButSampler0(PreparedRenderType a, PreparedRenderType b) {
+		if (a == b) {
+			return true;
+		}
+		if (a.pipeline() != b.pipeline() || a.outputTarget() != b.outputTarget() || !a.scissorState().equals(b.scissorState())
+				|| a.textures().size() != b.textures().size()) {
+			return false;
+		}
+		for (int i = 0; i < a.textures().size(); i++) {
+			PreparedRenderType.Texture ta = a.textures().get(i);
+			PreparedRenderType.Texture tb = b.textures().get(i);
+			if (!ta.name().equals(tb.name())) {
+				return false;
+			}
+			if ("Sampler0".equals(ta.name())) {
+				// Each texture has its own sampler object; what matters is that they sample alike.
+				if (!sameSettings(ta.sampler(), tb.sampler())) {
+					return false;
+				}
+			} else if (ta.sampler() != tb.sampler() || ta.textureView() != tb.textureView()) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private static boolean sameSettings(com.mojang.blaze3d.textures.GpuSampler a, com.mojang.blaze3d.textures.GpuSampler b) {
+		return a == b || (a.getAddressModeU() == b.getAddressModeU() && a.getAddressModeV() == b.getAddressModeV()
+				&& a.getMinFilter() == b.getMinFilter() && a.getMagFilter() == b.getMagFilter()
+				&& a.getMaxAnisotropy() == b.getMaxAnisotropy() && a.getMaxLod().equals(b.getMaxLod()));
 	}
 
 	/** Draw this group's batches (the game draws the rest of the group after). */
@@ -269,7 +321,8 @@ public final class GpuBatches implements GpuFeature {
 				pass.setUniform("PoloniumDraw", draws.slice(batch.drawOffset, 16));
 				pass.setVertexBuffer(0, batch.mesh.vertices.slice());
 				for (PreparedRenderType.Texture texture : type.textures()) {
-					pass.bindTexture(texture.name(), texture.textureView(), texture.sampler());
+					GpuTextureView view = batch.atlas != null && "Sampler0".equals(texture.name()) ? batch.atlas : texture.textureView();
+					pass.bindTexture(texture.name(), view, texture.sampler());
 				}
 				pass.setIndexBuffer(indices.getBuffer(indexCount), indices.type());
 				pass.drawIndexed(indexCount, batch.instances, 0, 0, 0);

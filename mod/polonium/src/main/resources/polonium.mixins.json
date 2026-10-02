@@ -17,6 +17,7 @@
 		"ShaderSourceMixin",
 		"ItemFeatureRendererMixin",
 		"ItemSubmitMixin",
+		"SkinTextureUsageMixin",
 		"PreparedFrameAccess",
 		"FeatureRenderDispatcherMixin",
 		"EntityNameTagMixin",

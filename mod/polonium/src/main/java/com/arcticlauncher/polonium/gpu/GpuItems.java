@@ -22,6 +22,14 @@ public final class GpuItems {
 	/** Meshes by the quads they were made from (the game refills one list per item every frame). */
 	private final Map<QuadsKey, List<ItemMesh>> meshes = new HashMap<>();
 	private final QuadsKey probe = new QuadsKey();
+	/**
+	 * In front of {@link #meshes}: by the list's first quad, checked against its
+	 * last quad and count. A model's quads are shared objects, so that tells
+	 * models apart without hashing or comparing every quad of every item.
+	 */
+	private final Map<BakedQuad, Quick> quick = new java.util.IdentityHashMap<>();
+
+	private record Quick(int size, BakedQuad last, List<ItemMesh> meshes) {}
 	private final GpuBatches batches = new GpuBatches("items", this::evictIdle);
 
 	public GpuBatches batches() {
@@ -57,6 +65,19 @@ public final class GpuItems {
 	}
 
 	private List<ItemMesh> meshes(List<BakedQuad> quads) {
+		int size = quads.size();
+		BakedQuad first = quads.get(0);
+		BakedQuad last = quads.get(size - 1);
+		Quick known = quick.get(first);
+		if (known != null && known.size == size && known.last == last) {
+			return known.meshes;
+		}
+		List<ItemMesh> found = fullLookup(quads);
+		quick.put(first, new Quick(size, last, found));
+		return found;
+	}
+
+	private List<ItemMesh> fullLookup(List<BakedQuad> quads) {
 		probe.look(quads);
 		List<ItemMesh> found = meshes.get(probe);
 		if (found == null) {
@@ -85,6 +106,8 @@ public final class GpuItems {
 
 	private void evictIdle() {
 		long frame = batches.frame();
+		// Some of these may point at meshes about to close: they're found again next time.
+		quick.clear();
 		meshes.values().removeIf(parts -> {
 			boolean idle = !parts.isEmpty() && parts.stream().allMatch(mesh -> frame - mesh.lastUsedFrame > GpuBatches.MESH_IDLE_FRAMES);
 			if (idle) {

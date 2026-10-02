@@ -70,13 +70,17 @@ public final class GlyphRuns {
 		/** Per vertex: x, y, z, u, v. */
 		private final float[] vertices;
 		private final int[] colors;
-		/** The vertices packed for the GPU name tag stream, made on first use. */
-		private byte[] packed;
+		/** Where this run's vertices are in the GPU glyph pool (see GpuText), and which pool that was. */
+		public int poolStart = -1;
+		public int poolGeneration = -1;
+		/** Kept as a field: reading it shouldn't have to reach into the arrays (thousands of tags a frame). */
+		private final int vertexCount;
 
 		Run(RenderType type, float[] vertices, int[] colors) {
 			this.type = type;
 			this.vertices = vertices;
 			this.colors = colors;
+			this.vertexCount = colors.length;
 		}
 
 		@Override
@@ -89,12 +93,27 @@ public final class GlyphRuns {
 			}
 		}
 
-		/** The vertices as {@link com.arcticlauncher.polonium.gpu.GpuText} streams them. */
-		public byte[] packed() {
-			if (packed == null) {
-				packed = com.arcticlauncher.polonium.gpu.GpuText.pack(vertices, colors);
+		public int vertexCount() {
+			return vertexCount;
+		}
+
+		/**
+		 * The vertices for the GPU glyph pool, two texels (8 floats) each:
+		 * x, y, z, 0, then u, v and the color as two 16-bit halves (exact as
+		 * floats; color bits stored straight in a float could read as NaN).
+		 */
+		public void writeGlyphs(float[] out, int at) {
+			for (int i = 0, v = 0; i < colors.length; i++, v += 5, at += 8) {
+				int c = colors[i];
+				out[at] = vertices[v];
+				out[at + 1] = vertices[v + 1];
+				out[at + 2] = vertices[v + 2];
+				out[at + 3] = 0f;
+				out[at + 4] = vertices[v + 3];
+				out[at + 5] = vertices[v + 4];
+				out[at + 6] = (c >>> 16) & 0xFFFF;
+				out[at + 7] = c & 0xFFFF;
 			}
-			return packed;
 		}
 
 		@Override

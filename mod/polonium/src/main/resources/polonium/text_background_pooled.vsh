@@ -1,11 +1,7 @@
 #version 330
 
-// Minecraft's core/text.vsh (26.2) with its includes written out, except that
-// vertices arrive in their name tag's own space and are placed here, on the
-// GPU: each vertex names its tag (Instance), whose pose and light come from
-// PoloniumInstances (pose: 3 rows of 4; then light u, v). One draw covers
-// every tag of a render type.
-
+// Minecraft's core/text_background.vsh (26.2), fed from Polonium's glyph pool
+// as text_pooled.vsh is (see there).
 #if !defined(IS_GUI) && !defined(IS_SEE_THROUGH)
 float fog_spherical_distance(vec3 pos) {
     return length(pos);
@@ -34,11 +30,10 @@ layout(std140) uniform Projection {
 };
 
 uniform samplerBuffer PoloniumInstances;
+uniform samplerBuffer PoloniumGlyphs;
 
-in vec3 Position;
-in vec4 Color;
-in vec2 UV0;
-in int Instance;
+in int Slot;
+in ivec3 Item;
 
 #if !defined(IS_GUI) && !defined(IS_SEE_THROUGH)
 uniform sampler2D Sampler2;
@@ -47,11 +42,27 @@ out float cylindricalVertexDistance;
 #endif
 
 out vec4 vertexColor;
-out vec2 texCoord0;
 
 void main() {
-    int tag = Instance * 4;
-    vec4 local = vec4(Position, 1.0);
+    if (Slot >= Item.y) {
+        // Past this run's end: every such vertex lands on the same point outside the view.
+        gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+        vertexColor = vec4(0.0);
+#if !defined(IS_GUI) && !defined(IS_SEE_THROUGH)
+        sphericalVertexDistance = 0.0;
+        cylindricalVertexDistance = 0.0;
+#endif
+        return;
+    }
+    int glyph = (Item.x + Slot) * 2;
+    vec4 first = texelFetch(PoloniumGlyphs, glyph);
+    vec4 second = texelFetch(PoloniumGlyphs, glyph + 1);
+    uint high = uint(second.z);
+    uint low = uint(second.w);
+    vec4 Color = vec4(float(high & 255u), float(low >> 8u), float(low & 255u), float(high >> 8u)) / 255.0;
+
+    int tag = Item.z * 4;
+    vec4 local = vec4(first.xyz, 1.0);
     vec3 position = vec3(
         dot(texelFetch(PoloniumInstances, tag), local),
         dot(texelFetch(PoloniumInstances, tag + 1), local),
@@ -66,5 +77,4 @@ void main() {
 #else
     vertexColor = Color;
 #endif
-    texCoord0 = UV0;
 }

@@ -54,10 +54,19 @@ final class InstancedPipelines {
 
 	/** {@code original} with this vertex shader, vertex format and extra bind group. */
 	static RenderPipeline twin(RenderPipeline original, Identifier vertexShader, VertexFormat format, BindGroupLayout layout) {
+		return twin(original, vertexShader, layout, format);
+	}
+
+	/** {@code original} with this vertex shader, extra bind group and these vertex buffers (bindings 0, 1, ...). */
+	static RenderPipeline twin(RenderPipeline original, Identifier vertexShader, BindGroupLayout layout, VertexFormat... formats) {
 		Map<Identifier, RenderPipeline> twins = TWINS.computeIfAbsent(original, p -> new java.util.HashMap<>());
 		RenderPipeline twin = twins.get(vertexShader);
 		if (twin == null) {
-			twin = create(original, vertexShader, format, layout);
+			// The pipeline keeps one slot per possible binding: fill ours, clear the rest.
+			VertexFormat[] bindings = original.getVertexFormatBindings().clone();
+			java.util.Arrays.fill(bindings, null);
+			System.arraycopy(formats, 0, bindings, 0, formats.length);
+			twin = create(original, vertexShader, layout, bindings);
 			// Compiled now: a shader that doesn't compile would otherwise draw nothing, silently.
 			if (!RenderSystem.getDevice().precompilePipeline(twin).isValid()) {
 				throw new IllegalStateException("the GPU couldn't compile Polonium's version of " + original.getLocation());
@@ -67,11 +76,9 @@ final class InstancedPipelines {
 		return twin;
 	}
 
-	private static RenderPipeline create(RenderPipeline original, Identifier vertexShader, VertexFormat format, BindGroupLayout layout) {
+	private static RenderPipeline create(RenderPipeline original, Identifier vertexShader, BindGroupLayout layout, VertexFormat[] bindings) {
 		List<BindGroupLayout> layouts = new ArrayList<>(original.getBindGroupLayouts());
 		layouts.add(layout);
-		VertexFormat[] bindings = original.getVertexFormatBindings().clone();
-		bindings[0] = format;
 		Identifier location = Identifier.fromNamespaceAndPath("polonium",
 				"instanced/" + original.getLocation().getNamespace() + "/" + original.getLocation().getPath() + "/" + vertexShader.getPath());
 		try {

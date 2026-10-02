@@ -12,8 +12,8 @@ public final class ShaderSources {
 	private static final java.util.Map<Identifier, String> FILES = java.util.Map.of(
 			ModelMesh.SHADER, "/polonium/entity_instanced.vsh",
 			ItemMesh.SHADER, "/polonium/item_instanced.vsh",
-			GpuText.TEXT_SHADER, "/polonium/text_instanced.vsh",
-			GpuText.BACKGROUND_SHADER, "/polonium/text_background_instanced.vsh");
+			GpuText.TEXT_SHADER, "/polonium/text_pooled.vsh",
+			GpuText.BACKGROUND_SHADER, "/polonium/text_background_pooled.vsh");
 	private static final java.util.Map<Identifier, String> LOADED = new java.util.concurrent.ConcurrentHashMap<>();
 
 	private ShaderSources() {}
