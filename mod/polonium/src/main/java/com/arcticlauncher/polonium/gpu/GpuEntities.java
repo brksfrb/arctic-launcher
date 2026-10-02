@@ -34,8 +34,8 @@ public final class GpuEntities {
 
 	public GpuEntities() {
 		batches.beforeUpload(() -> {
-			Crowd.computeAll();
-			Crowd.linkBorrowed();
+			CrowdFrame.computeAll();
+			CrowdFrame.linkBorrowed();
 			poses.computeAll();
 		});
 		batches.afterFrame(() -> {
@@ -155,7 +155,7 @@ public final class GpuEntities {
 		try {
 			ModelMesh mesh = group.owner == null ? mesh(group.model) : borrowedMesh(group);
 			if (group.renderType.hasBlending()) {
-				Crowd.sortFarToNear(group.members);
+				CrowdFrame.sortFarToNear(group.members);
 			}
 			long frame = batches.frame();
 			int count = group.members.size();
@@ -166,13 +166,13 @@ public final class GpuEntities {
 			}
 			for (int i = 0; i < count; i++) {
 				int member = members[i];
-				Crowd.Bucket bucket = Crowd.memberBucket(member);
+				Crowd.Bucket bucket = CrowdFrame.memberBucket(member);
 				if (bucket.cellFrame != frame) {
 					place(bucket, frame);
 				}
 				RenderType renderType = bucket.cell >= 0 ? bucket.batchOwner.renderType : bucket.renderType;
 				InstanceData data = batches.add(renderType, mesh, bucket.cellView);
-				Crowd.target(member, data, data.reserve(mesh.texelsPerInstance), mesh, bucket.uv);
+				CrowdFrame.target(member, data, data.reserve(mesh.texelsPerInstance), mesh, bucket.uv);
 			}
 		} catch (RuntimeException | LinkageError e) {
 			GpuBatches.disable("couldn't take a crowd onto the GPU", e);
@@ -193,7 +193,7 @@ public final class GpuEntities {
 		// 1. Each skin already in the atlas: its cell (most, every frame after their first).
 		runParts(count, (from, to) -> {
 			for (int i = from; i < to; i++) {
-				Crowd.Bucket bucket = Crowd.memberBucket(members[i]);
+				Crowd.Bucket bucket = CrowdFrame.memberBucket(members[i]);
 				if (bucket.cellFrame == frame) {
 					continue;
 				}
@@ -210,7 +210,7 @@ public final class GpuEntities {
 		// 2. The rest, here: new skins copied in, textures gone, buckets to work out again.
 		for (int i = 0; i < count; i++) {
 			if (here[i]) {
-				Crowd.Bucket bucket = Crowd.memberBucket(members[i]);
+				Crowd.Bucket bucket = CrowdFrame.memberBucket(members[i]);
 				if (bucket.cellFrame != frame) {
 					place(bucket, frame);
 				}
@@ -219,13 +219,13 @@ public final class GpuEntities {
 		// 3. Those in the atlas, in order, in one batch; others on their own.
 		int inAtlas = 0;
 		for (int i = 0; i < count; i++) {
-			Crowd.Bucket bucket = Crowd.memberBucket(members[i]);
+			Crowd.Bucket bucket = CrowdFrame.memberBucket(members[i]);
 			if (bucket.cell >= 0 && bucket.batchOwner == group) {
 				inAtlas++;
 			} else {
 				InstanceData data = batches.add(bucket.renderType, mesh, null);
 				System.arraycopy(OWN_TEXTURE, 0, bucket.uv, 0, 4);
-				Crowd.target(members[i], data, data.reserve(mesh.texelsPerInstance), mesh, bucket.uv);
+				CrowdFrame.target(members[i], data, data.reserve(mesh.texelsPerInstance), mesh, bucket.uv);
 			}
 		}
 		if (inAtlas == 0) {
@@ -236,7 +236,7 @@ public final class GpuEntities {
 		InstanceData data = batches.add(group.renderType, mesh, view, inAtlas);
 		int texels = mesh.texelsPerInstance;
 		int base = data.reserve(texels * inAtlas);
-		int firstTarget = Crowd.reserveTargets(inAtlas);
+		int firstTarget = CrowdFrame.reserveTargets(inAtlas);
 		// Each part's first place: how many atlas members come before it.
 		int parts = partsFor(count);
 		int[] before = new int[parts + 1];
@@ -245,7 +245,7 @@ public final class GpuEntities {
 			int to = count * (p + 1) / parts;
 			int n = 0;
 			for (int i = from; i < to; i++) {
-				Crowd.Bucket bucket = Crowd.memberBucket(members[i]);
+				Crowd.Bucket bucket = CrowdFrame.memberBucket(members[i]);
 				if (bucket.cell >= 0 && bucket.batchOwner == group) {
 					n++;
 				}
@@ -261,7 +261,7 @@ public final class GpuEntities {
 			jobs.add(() -> {
 				int k = start;
 				for (int i = from; i < to; i++) {
-					Crowd.Bucket bucket = Crowd.memberBucket(members[i]);
+					Crowd.Bucket bucket = CrowdFrame.memberBucket(members[i]);
 					if (bucket.cell < 0 || bucket.batchOwner != group) {
 						continue;
 					}
@@ -271,7 +271,7 @@ public final class GpuEntities {
 					uv[2] = SkinAtlas.CELL / size;
 					uv[3] = SkinAtlas.CELL / size;
 					bucket.cellView = view;
-					Crowd.targetAt(firstTarget + k, members[i], data, base + k * texels, mesh, uv);
+					CrowdFrame.targetAt(firstTarget + k, members[i], data, base + k * texels, mesh, uv);
 					k++;
 				}
 			});

@@ -33,7 +33,7 @@ public final class GpuItems {
 	private final GpuBatches batches = new GpuBatches("items", this::evictIdle);
 
 	public GpuItems() {
-		batches.beforeUpload(Crowd::computeAll);
+		batches.beforeUpload(CrowdFrame::computeAll);
 	}
 
 	public GpuBatches batches() {
@@ -84,13 +84,13 @@ public final class GpuItems {
 				translucent |= mesh.renderType.hasBlending();
 			}
 			if (translucent) {
-				Crowd.sortFarToNear(quads.bucket.members);
+				CrowdFrame.sortFarToNear(quads.bucket.members);
 			}
 			it.unimi.dsi.fastutil.ints.IntArrayList members = quads.bucket.members;
 			for (int i = 0; i < members.size(); i++) {
 				for (ItemMesh mesh : parts) {
 					InstanceData data = batches.add(mesh.renderType, mesh);
-					Crowd.target(members.getInt(i), data, data.reserve(ItemMesh.TEXELS), null, null);
+					CrowdFrame.target(members.getInt(i), data, data.reserve(ItemMesh.TEXELS), null, null);
 				}
 			}
 		} catch (RuntimeException | LinkageError e) {
