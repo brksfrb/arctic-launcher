@@ -23,6 +23,10 @@
 </p>
 
 <p align="center">
+  <a href="https://flashhosting.net">Supported by&nbsp;<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/flash-hosting-light.svg"><img src="docs/assets/flash-hosting-dark.svg" width="18" alt="Flash Hosting"></picture>&nbsp;<b>Flash Hosting</b></a>
+</p>
+
+<p align="center">
   <img src="docs/assets/screenshot.webp" alt="Arctic Launcher" width="900">
 </p>
 
@@ -212,8 +216,13 @@ See [docs/building.md](docs/building.md). The architecture overview is in
 
 ## Supported by
 
-Arctic is supported by [Flash Hosting](https://flashhosting.net), game servers for when
-your world needs to stay up while you're offline.
+<a href="https://flashhosting.net"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/flash-hosting-light.svg"><img src="docs/assets/flash-hosting-dark.svg" width="56" alt="Flash Hosting" align="left"></picture></a>
+
+Arctic is supported by **[Flash Hosting](https://flashhosting.net)**: Minecraft servers that stay up
+24/7, priced by player slots, not gigabytes. Play together runs while you're online; Flash Hosting
+keeps your world up when you're not.
+
+<br clear="left">
 
 ## License
 

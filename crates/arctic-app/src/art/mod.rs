@@ -4,6 +4,7 @@
 
 pub mod avatar;
 pub mod flakes;
+pub mod flash;
 pub mod icons;
 pub mod scenery;
 pub mod splash;
