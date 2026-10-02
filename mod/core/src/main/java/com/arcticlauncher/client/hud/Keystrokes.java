@@ -43,6 +43,24 @@ final class Keystrokes extends HudWidget {
 		return KEY * 2 + MOUSE_H + SPACE_H + GAP * 3;
 	}
 
+	/** Still: no key held or fading out; then only the click counts can change it. */
+	@Override
+	public Object content(boolean preview) {
+		if (look.chroma) {
+			return null;
+		}
+		for (float l : lit) {
+			if (l > 0f) {
+				return null;
+			}
+		}
+		if (down(GameKey.FORWARD) || down(GameKey.LEFT) || down(GameKey.BACK) || down(GameKey.RIGHT) || down(GameKey.ATTACK)
+				|| down(GameKey.USE) || down(GameKey.JUMP)) {
+			return null;
+		}
+		return cps.get(Keys.MOUSE_LEFT) * 1000 + cps.get(Keys.MOUSE_RIGHT);
+	}
+
 	@Override
 	public void render(Gfx g, Style s, boolean preview) {
 		long now = System.nanoTime();

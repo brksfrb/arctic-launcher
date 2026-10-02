@@ -74,4 +74,28 @@ public final class HudSlot {
 		c.radius = radius;
 		return c;
 	}
+
+	/** Everything about how the widget looks and sits, in one number: a drawing is reused only while it's unchanged. */
+	public long look() {
+		long h = 17;
+		h = h * 31 + (enabled ? 1 : 0);
+		h = h * 31 + (placed ? 1 : 0);
+		h = h * 31 + ax;
+		h = h * 31 + ay;
+		h = h * 31 + dx;
+		h = h * 31 + dy;
+		h = h * 31 + Float.floatToIntBits(scale);
+		h = h * 31 + (background ? 1 : 0);
+		h = h * 31 + textColor;
+		h = h * 31 + labelColor;
+		h = h * 31 + backgroundColor;
+		h = h * 31 + (border ? 1 : 0);
+		h = h * 31 + borderColor;
+		h = h * 31 + (shadow ? 1 : 0);
+		h = h * 31 + (chroma ? 1 : 0);
+		h = h * 31 + (brackets ? 1 : 0);
+		h = h * 31 + labelMode;
+		h = h * 31 + radius;
+		return h;
+	}
 }

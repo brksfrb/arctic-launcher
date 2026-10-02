@@ -18,15 +18,17 @@ public abstract class TextWidget extends HudWidget {
 	private final String label;
 	/** Whether the last draw showed the sample value (the editor), so the width matches it. */
 	private boolean previewing;
-	/** This draw's text (label part, value part, order) and widths, worked out once per HUD draw. */
-	private String[] parts;
+	/** This HUD draw's text (label part, value part, order), worked out once per draw. */
+	private String[] current;
+	private long currentFrame = -1;
+	private boolean currentPreview;
+	private HudSlot currentLook;
+	/** The text last measured, and its parts' widths (measured again only when it changes). */
+	private String[] measuredParts;
 	private int partWidth0;
 	private int partWidth1;
-	private long partsFrame = -1;
-	private boolean partsPreview;
-	private HudSlot partsLook;
 	/** The font the widths were measured in (smooth or the game's). */
-	private boolean partsFancy;
+	private boolean measuredFancy;
 
 	protected TextWidget(String id, String label, String description, boolean onByDefault) {
 		super(id, label, description, onByDefault, Column.LEFT);
@@ -49,24 +51,39 @@ public abstract class TextWidget extends HudWidget {
 		}
 	}
 
-	/** The text for this HUD draw: the value is asked for once, and text measured only when it changed. */
-	private String[] measured(Gfx g, boolean preview) {
-		if (parts != null && partsFrame == Hud.frame() && partsPreview == preview && partsLook == look) {
-			return parts;
+	/** This HUD draw's text: the value is asked for once per draw. */
+	private String[] current(boolean preview) {
+		if (current == null || currentFrame != Hud.frame() || currentPreview != preview || currentLook != look) {
+			current = parts(value(preview));
+			currentFrame = Hud.frame();
+			currentPreview = preview;
+			currentLook = look;
 		}
-		String[] p = parts(value(preview));
-		boolean fontChanged = partsFancy != com.arcticlauncher.client.gfx.Draw.fancy;
-		partsFancy = com.arcticlauncher.client.gfx.Draw.fancy;
-		if (parts == null || fontChanged || !p[0].equals(parts[0])) {
+		return current;
+	}
+
+	@Override
+	public Object content(boolean preview) {
+		if (look.chroma) {
+			return null;
+		}
+		String[] p = current(preview);
+		return p[0] + '' + p[1] + '' + p[2];
+	}
+
+	/** This draw's text, measured (only the parts that changed since the last measuring). */
+	private String[] measured(Gfx g, boolean preview) {
+		String[] p = current(preview);
+		boolean fancy = com.arcticlauncher.client.gfx.Draw.fancy;
+		boolean fontChanged = measuredFancy != fancy;
+		if (measuredParts == null || fontChanged || !p[0].equals(measuredParts[0])) {
 			partWidth0 = g.textWidth(p[0]);
 		}
-		if (parts == null || fontChanged || !p[1].equals(parts[1])) {
+		if (measuredParts == null || fontChanged || !p[1].equals(measuredParts[1])) {
 			partWidth1 = g.textWidth(p[1]);
 		}
-		parts = p;
-		partsFrame = Hud.frame();
-		partsPreview = preview;
-		partsLook = look;
+		measuredParts = p;
+		measuredFancy = fancy;
 		return p;
 	}
 

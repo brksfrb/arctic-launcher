@@ -104,7 +104,28 @@ public final class GfxImpl implements Gfx {
 
 	//#if MC >= 26.1
 	@Override
+	public boolean startRecording() {
+		return GuiRecording.start();
+	}
+
+	@Override
+	public Object stopRecording() {
+		return GuiRecording.stop();
+	}
+
+	@Override
+	public boolean replay(Object recorded) {
+		GuiRecording.replay(((com.arcticlauncher.mod.mixin.GuiGraphicsStateAccess) g).arctic$guiRenderState(), (java.util.List<?>) recorded);
+		return true;
+	}
+	//#endif
+
+	//#if MC >= 26.1
+	@Override
 	public boolean roundedFill(int x0, int y0, int x1, int y1, int r, int color) {
+		if (RoundedPanel.add(g, x0, y0, x1, y1, r, color)) {
+			return true;
+		}
 		Identifier corners = r < 1 ? null : RoundedCorners.texture(r);
 		if (corners == null) {
 			return false;
