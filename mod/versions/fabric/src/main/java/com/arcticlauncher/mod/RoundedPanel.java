@@ -1,7 +1,11 @@
 //#if MC >= 26.1
 package com.arcticlauncher.mod;
 
+//#if MC >= 26.3
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+//#else
 import com.mojang.blaze3d.pipeline.RenderPipeline;
+//#endif
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import java.lang.invoke.MethodHandle;
