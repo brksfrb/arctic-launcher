@@ -165,7 +165,9 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
-        pattern: r"(?i)\b(atio6axx|atioglxx|atig6pxx|amdxc64|nvoglv64|nvoglv32|ig\w*icd(?:32|64))\.dll",
+        // The crashing frame of a native crash ("# C  [nvoglv64.dll+0x1234]"), not
+        // any mention: Sodium logs the driver's file at every start.
+        pattern: r"(?im)^#\s*C\s+\[(atio6axx|atioglxx|atig6pxx|amdxc64|nvoglv64|nvoglv32|ig\w*icd(?:32|64))\.dll",
         explain: |c, _| {
             let vendor = match c[1].to_ascii_lowercase().as_str() {
                 d if d.starts_with("nv") => "NVIDIA",
@@ -336,6 +338,11 @@ mod tests {
         );
         assert!(diagnose("Suspected Mods: None\nnothing else").is_none());
         assert!(diagnose("[Render thread/INFO] Stopping!").is_none());
+        // Sodium names the driver's file at every start; that alone isn't a crash.
+        assert!(
+            diagnose(r"[main/INFO]: Found graphics adapter: AdapterInfo{vendor=NVIDIA, openglIcdFilePath='C:\Windows\System32\nvoglv64.dll'}")
+                .is_none()
+        );
     }
 
     #[test]
