@@ -2,7 +2,9 @@ package com.arcticlauncher.polonium.mixin;
 
 import com.arcticlauncher.polonium.ParallelTicks;
 import net.minecraft.world.level.entity.EntityInLevelCallback;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -15,11 +17,21 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(targets = "net.minecraft.world.level.entity.TransientEntitySectionManager$Callback")
 abstract class EntitySectionMoveMixin {
+	@Shadow
+	@Final
+	private net.minecraft.world.level.entity.EntityAccess entity;
+
+	@Shadow
+	private long currentSectionKey;
+
 	@Inject(method = "onMove", at = @At("HEAD"), cancellable = true)
 	private void polonium$moveLater(CallbackInfo ci) {
 		if (ParallelTicks.deferring()) {
-			EntityInLevelCallback callback = (EntityInLevelCallback) this;
-			ParallelTicks.defer(callback::onMove);
+			// Still in its section: the game's onMove would do nothing (read-only check; sections don't change meanwhile).
+			if (net.minecraft.core.SectionPos.asLong(entity.blockPosition()) != currentSectionKey) {
+				EntityInLevelCallback callback = (EntityInLevelCallback) this;
+				ParallelTicks.defer(callback::onMove);
+			}
 			ci.cancel();
 		}
 	}

@@ -27,8 +27,11 @@ abstract class LevelRendererCrowdMixin {
 
 	@Inject(method = "submitEntities", at = @At("HEAD"))
 	private void polonium$beginCrowd(PoseStack poseStack, LevelRenderState levelRenderState, SubmitNodeCollector output, CallbackInfo ci) {
+		com.arcticlauncher.polonium.Timeline.start(com.arcticlauncher.polonium.Timeline.Step.SUBMIT_ENTITIES);
+		com.arcticlauncher.polonium.Timeline.start(com.arcticlauncher.polonium.Timeline.Step.CROWD_BULK);
 		Crowd.beginFrame();
 		Crowd.bulkSubmit(levelRenderState.entityRenderStates, levelRenderState.cameraRenderState, poseStack, output, entityRenderDispatcher);
+		com.arcticlauncher.polonium.Timeline.end(com.arcticlauncher.polonium.Timeline.Step.CROWD_BULK);
 	}
 
 	/** Players the crowd path took in bulk aren't submitted again. */
@@ -43,7 +46,10 @@ abstract class LevelRendererCrowdMixin {
 
 	@Inject(method = "submitEntities", at = @At("TAIL"))
 	private void polonium$endCrowd(PoseStack poseStack, LevelRenderState levelRenderState, SubmitNodeCollector output, CallbackInfo ci) {
+		com.arcticlauncher.polonium.Timeline.start(com.arcticlauncher.polonium.Timeline.Step.CROWD_END);
 		Crowd.endSubmits(output);
+		com.arcticlauncher.polonium.Timeline.end(com.arcticlauncher.polonium.Timeline.Step.CROWD_END);
+		com.arcticlauncher.polonium.Timeline.end(com.arcticlauncher.polonium.Timeline.Step.SUBMIT_ENTITIES);
 	}
 }
 //#endif

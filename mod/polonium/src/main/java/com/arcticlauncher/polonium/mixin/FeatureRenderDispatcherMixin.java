@@ -23,6 +23,18 @@ abstract class FeatureRenderDispatcherMixin {
 	@Final
 	private FeatureRendererMap featureRenderers;
 
+	@Inject(method = "prepareFrameWithContext", at = @At("HEAD"))
+	private void polonium$prepareStarts(FeatureFrameContext context, SubmitNodeStorage storage,
+			CallbackInfoReturnable<FeatureRenderDispatcher.PreparedFrame> cir) {
+		com.arcticlauncher.polonium.Timeline.start(com.arcticlauncher.polonium.Timeline.Step.PREPARE_FRAME);
+	}
+
+	@Inject(method = "prepareFrameWithContext", at = @At("RETURN"))
+	private void polonium$prepared(FeatureFrameContext context, SubmitNodeStorage storage,
+			CallbackInfoReturnable<FeatureRenderDispatcher.PreparedFrame> cir) {
+		com.arcticlauncher.polonium.Timeline.end(com.arcticlauncher.polonium.Timeline.Step.PREPARE_FRAME);
+	}
+
 	@Inject(method = "prepareFrameWithContext",
 			at = @At(value = "INVOKE", target = "Lnet/minecraft/util/profiling/ProfilerFiller;popPush(Ljava/lang/String;)V", ordinal = 0))
 	private void polonium$scan(FeatureFrameContext context, SubmitNodeStorage storage,

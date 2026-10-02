@@ -34,12 +34,16 @@ abstract class ClientLevelParallelTicksMixin {
 
 	@Inject(method = "tickEntities", at = @At("HEAD"))
 	private void polonium$begin(CallbackInfo ci) {
+		com.arcticlauncher.polonium.Timeline.start(com.arcticlauncher.polonium.Timeline.Step.TICK_ENTITIES);
 		ParallelTicks.begin();
 	}
 
 	@Inject(method = "tickEntities", at = @At("TAIL"))
 	private void polonium$tickSetAside(CallbackInfo ci) {
+		com.arcticlauncher.polonium.Timeline.start(com.arcticlauncher.polonium.Timeline.Step.PARALLEL_TICKS);
 		ParallelTicks.end(polonium$self());
+		com.arcticlauncher.polonium.Timeline.end(com.arcticlauncher.polonium.Timeline.Step.PARALLEL_TICKS);
+		com.arcticlauncher.polonium.Timeline.end(com.arcticlauncher.polonium.Timeline.Step.TICK_ENTITIES);
 	}
 
 	/**

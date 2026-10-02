@@ -63,6 +63,7 @@ abstract class LevelExtractorMixin {
 		if (!ParallelExtract.enabled()) {
 			return;
 		}
+		com.arcticlauncher.polonium.Timeline.start(com.arcticlauncher.polonium.Timeline.Step.EXTRACT_ENTITIES);
 		Vec3 cameraPos = camera.position();
 		double camX = cameraPos.x();
 		double camY = cameraPos.y();
@@ -101,6 +102,7 @@ abstract class LevelExtractorMixin {
 			}
 		}
 		ParallelExtract.extract(visible, partials, trusted, this::extractEntity, output.entityRenderStates);
+		com.arcticlauncher.polonium.Timeline.end(com.arcticlauncher.polonium.Timeline.Step.EXTRACT_ENTITIES);
 		ci.cancel();
 	}
 }
