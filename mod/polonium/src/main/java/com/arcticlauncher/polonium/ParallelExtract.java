@@ -34,6 +34,57 @@ public final class ParallelExtract {
 			&& !loaded("entity_texture_features", "entity_model_features", "figura");
 	private static boolean announced;
 
+	/** The game's own visibility test for one entity. */
+	public interface Visibility {
+		boolean visible(Entity entity);
+	}
+
+	/**
+	 * Which of {@code entities} are visible, and which have a trusted renderer
+	 * ({@code trusted}, filled in here). Trusted ones are tested on several
+	 * threads (the test reads the entity, the camera and the frustum); the rest
+	 * on this thread, in order.
+	 */
+	public static boolean[] visible(List<Entity> entities, EntityRenderDispatcher dispatcher, Visibility test, boolean[] trusted) {
+		int count = entities.size();
+		boolean[] visible = new boolean[count];
+		if (count < PARALLEL_MIN) {
+			for (int i = 0; i < count; i++) {
+				trusted[i] = trusted(dispatcher.getRenderer(entities.get(i)));
+				visible[i] = test.visible(entities.get(i));
+			}
+			return visible;
+		}
+		int parts = Workers.HELPERS + 1;
+		List<Runnable> jobs = new ArrayList<>(parts);
+		for (int p = 0; p < parts; p++) {
+			int from = count * p / parts;
+			int to = count * (p + 1) / parts;
+			jobs.add(() -> {
+				for (int i = from; i < to; i++) {
+					Entity entity = entities.get(i);
+					if (trusted(dispatcher.getRenderer(entity))) {
+						trusted[i] = true;
+						visible[i] = test.visible(entity);
+					}
+				}
+			});
+		}
+		try {
+			Workers.runAll(jobs);
+		} catch (RuntimeException | Error e) {
+			enabled = false;
+			LOG.error("Polonium: testing entity visibility on several threads failed; back to one thread from now on", e);
+			java.util.Arrays.fill(trusted, false);
+		}
+		for (int i = 0; i < count; i++) {
+			if (!trusted[i]) {
+				visible[i] = test.visible(entities.get(i));
+			}
+		}
+		return visible;
+	}
+
 	/** The game's own per-entity extraction (with whatever other mods add to it). */
 	public interface Extractor {
 		EntityRenderState extract(Entity entity, float partialTicks);
@@ -45,9 +96,8 @@ public final class ParallelExtract {
 		return enabled;
 	}
 
-	/** Every visible entity's render state, in order. */
-	public static EntityRenderState[] extract(List<Entity> entities, List<Float> partials, EntityRenderDispatcher dispatcher,
-			Extractor extractor) {
+	/** Every visible entity's render state, in order ({@code trusted}: per entity, from {@link #visible}). */
+	public static EntityRenderState[] extract(List<Entity> entities, List<Float> partials, boolean[] trusted, Extractor extractor) {
 		int count = entities.size();
 		EntityRenderState[] states = new EntityRenderState[count];
 		if (count < PARALLEL_MIN) {
@@ -60,11 +110,11 @@ public final class ParallelExtract {
 		}
 		// Untrusted renderers first, on this thread, in order.
 		boolean[] parallel = new boolean[count];
-		List<Integer> trusted = new ArrayList<>(count);
+		List<Integer> queue = new ArrayList<>(count);
 		for (int i = 0; i < count; i++) {
-			if (trusted(dispatcher.getRenderer(entities.get(i)))) {
+			if (trusted[i]) {
 				parallel[i] = true;
-				trusted.add(i);
+				queue.add(i);
 			} else {
 				states[i] = extractor.extract(entities.get(i), partials.get(i));
 			}
@@ -72,11 +122,11 @@ public final class ParallelExtract {
 		int parts = Workers.HELPERS + 1;
 		List<Runnable> jobs = new ArrayList<>(parts);
 		for (int p = 0; p < parts; p++) {
-			int from = trusted.size() * p / parts;
-			int to = trusted.size() * (p + 1) / parts;
+			int from = queue.size() * p / parts;
+			int to = queue.size() * (p + 1) / parts;
 			jobs.add(() -> {
 				for (int k = from; k < to; k++) {
-					int i = trusted.get(k);
+					int i = queue.get(k);
 					states[i] = extractor.extract(entities.get(i), partials.get(i));
 				}
 			});
