@@ -100,6 +100,15 @@ public final class ParallelExtract {
 
 	/** Every visible entity's render state, in order ({@code trusted}: per entity, from {@link #visible}). */
 	public static EntityRenderState[] extract(List<Entity> entities, List<Float> partials, boolean[] trusted, Extractor extractor) {
+		KeptStates.inLevel(true);
+		try {
+			return extractAll(entities, partials, trusted, extractor);
+		} finally {
+			KeptStates.inLevel(false);
+		}
+	}
+
+	private static EntityRenderState[] extractAll(List<Entity> entities, List<Float> partials, boolean[] trusted, Extractor extractor) {
 		int count = entities.size();
 		lastDrawn = count;
 		EntityRenderState[] states = new EntityRenderState[count];
