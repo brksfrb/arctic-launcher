@@ -57,6 +57,15 @@ public interface Gfx {
 	 * transform), drawn as a few pieces if this renderer can; false to have
 	 * it drawn row by row instead.
 	 */
+	/**
+	 * What's drawn next goes in a new layer above everything so far. The
+	 * game's GUI (1.21.6+) compares every new piece with all the pieces in
+	 * the current layer to stack overlapping ones in order; a busy HUD on
+	 * top of the game's own paid for that with every piece. Drawing on top
+	 * anyway, a widget in its own layer only meets its own pieces.
+	 */
+	default void newLayer() {}
+
 	default boolean roundedFill(int x0, int y0, int x1, int y1, int radius, int color) {
 		return false;
 	}

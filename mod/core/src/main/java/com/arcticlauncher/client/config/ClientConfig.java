@@ -26,6 +26,13 @@ public final class ClientConfig {
 	public long styleFromLauncher;
 	/** HUD widget id → placement. */
 	public Map<String, HudSlot> hud = new LinkedHashMap<String, HudSlot>();
+	/** Bumped whenever {@link #hud} is replaced or cleared (the HUD keeps its slots looked up until then). Not saved. */
+	public transient int hudEpoch;
+
+	/** The HUD's slots were cleared or replaced. */
+	public void hudChanged() {
+		hudEpoch++;
+	}
 	/** Layout format of {@link #hud}; older layouts are reset. */
 	public int hudVersion = HUD_VERSION;
 	/** Features: Fullbright (on/off), and the keys (Minecraft key names). */
@@ -144,6 +151,7 @@ public final class ClientConfig {
 		}
 		if (hudVersion < HUD_VERSION) {
 			hud.clear();
+			hudChanged();
 			hudVersion = HUD_VERSION;
 		}
 		if (zoomKey == null) {

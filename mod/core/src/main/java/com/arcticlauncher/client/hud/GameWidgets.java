@@ -8,7 +8,6 @@ import com.arcticlauncher.client.style.Style;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * HUD widgets that read the game (armor, effects, combat): they need the
@@ -39,7 +38,7 @@ final class GameWidgets {
 				if (reach < 0) {
 					return preview ? "3.00 m" : "--";
 				}
-				return String.format(Locale.ROOT, "%.2f m", reach);
+				return Num.fixed(reach, 2) + " m";
 			}
 		});
 		all.add(new GameText("combo", "Combo", "Hits in a row without getting hit") {
@@ -334,7 +333,7 @@ final class GameWidgets {
 			float max = Math.max(1f, (Float) t[2]);
 			panel(g, s, 0, 0, W, H);
 			g.text(Draw.fit(g, (String) t[0], W - 50), PAD, PAD, text(), shadow());
-			String hp = String.format(Locale.ROOT, "%.1f / %.0f", health, max);
+			String hp = Num.fixed(health, 1) + " / " + Num.fixed(max, 0);
 			g.text(hp, W - PAD - g.textWidth(hp), PAD, muted(), shadow());
 			int barY = H - PAD - 5;
 			Draw.round(g, PAD, barY, W - PAD, barY + 5, 1, Draw.alpha(muted(), 0.35f));

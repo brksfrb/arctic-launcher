@@ -18,6 +18,15 @@ public abstract class TextWidget extends HudWidget {
 	private final String label;
 	/** Whether the last draw showed the sample value (the editor), so the width matches it. */
 	private boolean previewing;
+	/** This draw's text (label part, value part, order) and widths, worked out once per HUD draw. */
+	private String[] parts;
+	private int partWidth0;
+	private int partWidth1;
+	private long partsFrame = -1;
+	private boolean partsPreview;
+	private HudSlot partsLook;
+	/** The font the widths were measured in (smooth or the game's). */
+	private boolean partsFancy;
 
 	protected TextWidget(String id, String label, String description, boolean onByDefault) {
 		super(id, label, description, onByDefault, Column.LEFT);
@@ -40,9 +49,30 @@ public abstract class TextWidget extends HudWidget {
 		}
 	}
 
+	/** The text for this HUD draw: the value is asked for once, and text measured only when it changed. */
+	private String[] measured(Gfx g, boolean preview) {
+		if (parts != null && partsFrame == Hud.frame() && partsPreview == preview && partsLook == look) {
+			return parts;
+		}
+		String[] p = parts(value(preview));
+		boolean fontChanged = partsFancy != com.arcticlauncher.client.gfx.Draw.fancy;
+		partsFancy = com.arcticlauncher.client.gfx.Draw.fancy;
+		if (parts == null || fontChanged || !p[0].equals(parts[0])) {
+			partWidth0 = g.textWidth(p[0]);
+		}
+		if (parts == null || fontChanged || !p[1].equals(parts[1])) {
+			partWidth1 = g.textWidth(p[1]);
+		}
+		parts = p;
+		partsFrame = Hud.frame();
+		partsPreview = preview;
+		partsLook = look;
+		return p;
+	}
+
 	private int textWidth(Gfx g) {
-		String[] p = parts(value(previewing));
-		return g.textWidth(p[0]) + g.textWidth(p[1]);
+		measured(g, previewing);
+		return partWidth0 + partWidth1;
 	}
 
 	@Override
@@ -59,7 +89,7 @@ public abstract class TextWidget extends HudWidget {
 	@Override
 	public void render(Gfx g, Style s, boolean preview) {
 		previewing = preview;
-		String[] p = parts(value(preview));
+		String[] p = measured(g, preview);
 		int w = width(g);
 		panel(g, s, 0, 0, w, HEIGHT);
 		int x = (w - textWidth(g)) / 2;
@@ -69,6 +99,6 @@ public abstract class TextWidget extends HudWidget {
 		int first = labelFirst ? accent() : text();
 		int second = labelFirst ? text() : accent();
 		g.text(p[0], x, y, first, shadow());
-		g.text(p[1], x + g.textWidth(p[0]), y, second, shadow());
+		g.text(p[1], x + partWidth0, y, second, shadow());
 	}
 }

@@ -70,7 +70,7 @@ final class Compass extends HudWidget {
 			}
 			Draw.round(g, x - DOT, 13, x + DOT, 13 + DOT * 2, DOT, w.color);
 			int d = (int) Math.round(w.distance(px, pz));
-			String label = d < 1000 ? d + "m" : String.format(java.util.Locale.ROOT, "%.1fk", d / 1000.0);
+			String label = d < 1000 ? d + "m" : Num.fixed(d / 1000.0, 1) + "k";
 			int from = x + DOT + 2;
 			int to = from + g.textWidth(label);
 			boolean free = to <= WIDTH;
