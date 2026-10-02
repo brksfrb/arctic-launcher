@@ -54,15 +54,7 @@ abstract class AvatarRendererMixin {
 	@Inject(method = "extractRenderState(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V",
 			at = @At("TAIL"))
 	private void arctic$speaking(Avatar entity, AvatarRenderState state, float partialTick, CallbackInfo ci) {
-		VoiceLink voice = ArcticClient.voice();
-		if (state.nameTag == null || voice == null || !voice.active() || entity == null) {
-			return;
-		}
-		if (voice.isSpeaking(entity.getUUID())) {
-			Component speaker = Compat.speakerBadge();
-			Component gap = com.arcticlauncher.mod.Compat.literal(" ").withStyle(Compat.arcticBadge().getStyle());
-			state.nameTag = com.arcticlauncher.mod.Compat.empty().append(speaker).append(gap).append(state.nameTag);
-		}
+		com.arcticlauncher.mod.cosmetic.SpeakerBadge.apply(entity, state);
 	}
 }
 //#endif
