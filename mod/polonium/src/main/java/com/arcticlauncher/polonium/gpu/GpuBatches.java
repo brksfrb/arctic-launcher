@@ -154,6 +154,11 @@ public final class GpuBatches implements GpuFeature {
 	 * texture share a batch (and a draw).
 	 */
 	InstanceData add(RenderType renderType, GpuMesh mesh, @Nullable GpuTextureView atlas) {
+		return add(renderType, mesh, atlas, 1);
+	}
+
+	/** Like {@link #add}, for {@code count} entities in a row (their texels reserved one after another by the caller). */
+	InstanceData add(RenderType renderType, GpuMesh mesh, @Nullable GpuTextureView atlas, int count) {
 		List<Batch> group = java.util.Objects.requireNonNull(current, "not preparing a group");
 		mesh.lastUsedFrame = frame;
 		PreparedRenderType preparedType = prepare(renderType);
@@ -174,7 +179,7 @@ public final class GpuBatches implements GpuFeature {
 			batch.data.clear();
 			group.add(batch);
 		}
-		batch.instances++;
+		batch.instances += count;
 		return batch.data;
 	}
 

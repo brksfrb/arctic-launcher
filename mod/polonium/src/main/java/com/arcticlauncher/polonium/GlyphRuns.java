@@ -97,6 +97,11 @@ public final class GlyphRuns {
 			return vertexCount;
 		}
 
+		/** Its render type (the same in every display mode: a run is recorded per mode). */
+		public RenderType type() {
+			return type;
+		}
+
 		/**
 		 * The vertices for the GPU glyph pool, two texels (8 floats) each:
 		 * x, y, z, 0, then u, v and the color as two 16-bit halves (exact as

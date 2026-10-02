@@ -158,8 +158,14 @@ public final class GpuEntities {
 				Crowd.sortFarToNear(group.members);
 			}
 			long frame = batches.frame();
-			for (int i = 0; i < group.members.size(); i++) {
-				int member = group.members.getInt(i);
+			int count = group.members.size();
+			int[] members = group.members.elements();
+			if (count >= BULK_MIN && group.atlasTexture != null && group.batchOwner == group && SkinAtlas.ENABLED) {
+				addCrowdInAtlas(group, mesh, members, count, frame);
+				return;
+			}
+			for (int i = 0; i < count; i++) {
+				int member = members[i];
 				Crowd.Bucket bucket = Crowd.memberBucket(member);
 				if (bucket.cellFrame != frame) {
 					place(bucket, frame);
@@ -171,6 +177,133 @@ public final class GpuEntities {
 		} catch (RuntimeException | LinkageError e) {
 			GpuBatches.disable("couldn't take a crowd onto the GPU", e);
 		}
+	}
+
+	/** Below this many players a group isn't worth the helper threads. */
+	private static final int BULK_MIN = 256;
+
+	/**
+	 * A big group of skins sharing the atlas (thousands of players, each its
+	 * own skin): finding each skin's cell, and writing where each player's data
+	 * goes, on the helper threads; one batch for all of them. Skins new to the
+	 * atlas (copied in) and anything unusual are done here in between.
+	 */
+	private void addCrowdInAtlas(Crowd.Bucket group, ModelMesh mesh, int[] members, int count, long frame) {
+		boolean[] here = new boolean[count];
+		// 1. Each skin already in the atlas: its cell (most, every frame after their first).
+		runParts(count, (from, to) -> {
+			for (int i = from; i < to; i++) {
+				Crowd.Bucket bucket = Crowd.memberBucket(members[i]);
+				if (bucket.cellFrame == frame) {
+					continue;
+				}
+				int cell = bucket.batchOwner == group && bucket.atlasTexture != null && !bucket.atlasTexture.texture().isClosed()
+						? atlas.knownCell(bucket.atlasTexture, frame) : -1;
+				if (cell >= 0) {
+					bucket.cell = cell;
+					bucket.cellFrame = frame;
+				} else {
+					here[i] = true;
+				}
+			}
+		});
+		// 2. The rest, here: new skins copied in, textures gone, buckets to work out again.
+		for (int i = 0; i < count; i++) {
+			if (here[i]) {
+				Crowd.Bucket bucket = Crowd.memberBucket(members[i]);
+				if (bucket.cellFrame != frame) {
+					place(bucket, frame);
+				}
+			}
+		}
+		// 3. Those in the atlas, in order, in one batch; others on their own.
+		int inAtlas = 0;
+		for (int i = 0; i < count; i++) {
+			Crowd.Bucket bucket = Crowd.memberBucket(members[i]);
+			if (bucket.cell >= 0 && bucket.batchOwner == group) {
+				inAtlas++;
+			} else {
+				InstanceData data = batches.add(bucket.renderType, mesh, null);
+				System.arraycopy(OWN_TEXTURE, 0, bucket.uv, 0, 4);
+				Crowd.target(members[i], data, data.reserve(mesh.texelsPerInstance), mesh, bucket.uv);
+			}
+		}
+		if (inAtlas == 0) {
+			return;
+		}
+		com.mojang.blaze3d.textures.GpuTextureView view = atlas.view();
+		float size = atlas.size();
+		InstanceData data = batches.add(group.renderType, mesh, view, inAtlas);
+		int texels = mesh.texelsPerInstance;
+		int base = data.reserve(texels * inAtlas);
+		int firstTarget = Crowd.reserveTargets(inAtlas);
+		// Each part's first place: how many atlas members come before it.
+		int parts = partsFor(count);
+		int[] before = new int[parts + 1];
+		for (int p = 0; p < parts; p++) {
+			int from = count * p / parts;
+			int to = count * (p + 1) / parts;
+			int n = 0;
+			for (int i = from; i < to; i++) {
+				Crowd.Bucket bucket = Crowd.memberBucket(members[i]);
+				if (bucket.cell >= 0 && bucket.batchOwner == group) {
+					n++;
+				}
+			}
+			before[p + 1] = before[p] + n;
+		}
+		// 4. Where each one's data goes, and its skin's place in the atlas (the atlas's size now: it may have grown).
+		java.util.List<Runnable> jobs = new java.util.ArrayList<>(parts);
+		for (int p = 0; p < parts; p++) {
+			int from = count * p / parts;
+			int to = count * (p + 1) / parts;
+			int start = before[p];
+			jobs.add(() -> {
+				int k = start;
+				for (int i = from; i < to; i++) {
+					Crowd.Bucket bucket = Crowd.memberBucket(members[i]);
+					if (bucket.cell < 0 || bucket.batchOwner != group) {
+						continue;
+					}
+					float[] uv = bucket.uv;
+					uv[0] = atlas.cellX(bucket.cell) / size;
+					uv[1] = atlas.cellY(bucket.cell) / size;
+					uv[2] = SkinAtlas.CELL / size;
+					uv[3] = SkinAtlas.CELL / size;
+					bucket.cellView = view;
+					Crowd.targetAt(firstTarget + k, members[i], data, base + k * texels, mesh, uv);
+					k++;
+				}
+			});
+		}
+		if (parts == 1) {
+			jobs.get(0).run();
+		} else {
+			com.arcticlauncher.polonium.Workers.runAll(jobs);
+		}
+	}
+
+	private static int partsFor(int count) {
+		return count < BULK_MIN ? 1 : com.arcticlauncher.polonium.Workers.HELPERS + 1;
+	}
+
+	private interface Range {
+		void run(int from, int to);
+	}
+
+	private static void runParts(int count, Range range) {
+		int parts = partsFor(count);
+		if (parts == 1) {
+			range.run(0, count);
+			return;
+		}
+		java.util.List<Runnable> jobs = new java.util.ArrayList<>(parts);
+		for (int p = 0; p < parts; p++) {
+			int from = count * p / parts;
+			int to = count * (p + 1) / parts;
+			jobs.add(() -> range.run(from, to));
+		}
+		com.arcticlauncher.polonium.Workers.runAll(jobs);
 	}
 
 	/** A bucket's texture this frame: its atlas cell, or its own texture. */

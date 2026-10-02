@@ -170,6 +170,201 @@ public final class GpuText implements GpuFeature {
 	}
 
 	/** Make sure the run's vertices are in the pool; false if the pool is full this frame. */
+	/**
+	 * Many tags at once (a crowd's: see CrowdTags), in order: the
+	 * {@code i}th has runs {@code runs[i]} (null: not drawn), and its pose and
+	 * light are those of tag {@code order[i]} ({@code poses[16 * order[i]]},
+	 * {@code lights[order[i]]}). As {@link #captureRuns}
+	 * for each, but with the per-tag work on the helper threads: checking the
+	 * runs are on the GPU, then counting, then writing every tag's data and
+	 * run records. What can't be shared (placing new runs in the glyph pool,
+	 * setting up batches) happens on this thread in between.
+	 */
+	public void captureMany(int count, GlyphRuns.Run[][] runs, int[] order, float[] poses, int[] lights) {
+		List<Batch> group = current;
+		if (!ENABLED || group == null || GpuBatches.disabled() || count == 0) {
+			return;
+		}
+		try {
+			// Each run's batch, by a small number per render type (several glyph pages, the background).
+			Map<RenderType, Integer> typeIndex = new IdentityHashMap<>();
+			List<Batch> batches = new ArrayList<>();
+			// The types earlier crowds used: known up front, so the check below can run on the helpers.
+			for (RenderType type : BULK_TYPES.keySet()) {
+				typeIndex.put(type, batches.size());
+				batches.add(batchFor(group, type));
+			}
+			boolean[] ready = new boolean[count];
+			int parts = count < BULK_PARALLEL_MIN ? 1 : com.arcticlauncher.polonium.Workers.HELPERS + 1;
+			// 1. Which tags have everything in place already (most, every frame after the first).
+			runParts(parts, count, (from, to) -> {
+				for (int i = from; i < to; i++) {
+					ready[i] = runs[i] != null && placedAndKnown(runs[i], typeIndex);
+				}
+			});
+			// 2. The rest, here: place their runs, set up their batches.
+			for (int i = 0; i < count; i++) {
+				if (ready[i] || runs[i] == null) {
+					continue;
+				}
+				boolean ok = true;
+				for (GlyphRuns.Run run : runs[i]) {
+					if (shaderFor(run.type()) == null || !place(run)) {
+						ok = false;
+						break;
+					}
+				}
+				if (!ok) {
+					continue;
+				}
+				for (GlyphRuns.Run run : runs[i]) {
+					typeIndex.computeIfAbsent(run.type(), type -> {
+						BULK_TYPES.put(type, Boolean.TRUE);
+						batches.add(batchFor(group, type));
+						return batches.size() - 1;
+					});
+				}
+				ready[i] = true;
+			}
+			// typeIndex may have been filled in only now: index every ready tag's runs again below.
+			int types = batches.size();
+			if (types == 0) {
+				return;
+			}
+			// 3. Per part: how many tags, and how many runs per batch.
+			int[][] perBatch = new int[parts][types];
+			int[] tagsIn = new int[parts];
+			int[][] longest = new int[parts][types];
+			runParts(parts, count, (from, to) -> {
+				int part = partOf(from, count, parts);
+				for (int i = from; i < to; i++) {
+					if (!ready[i]) {
+						continue;
+					}
+					tagsIn[part]++;
+					for (GlyphRuns.Run run : runs[i]) {
+						int b = typeIndex.get(run.type());
+						perBatch[part][b]++;
+						longest[part][b] = Math.max(longest[part][b], run.vertexCount());
+					}
+				}
+			});
+			// 4. Room for all of it; each part's place in it.
+			int firstTag = tags.texels() / TEXELS_PER_TAG;
+			int totalTags = 0;
+			int[] tagAt = new int[parts];
+			for (int p = 0; p < parts; p++) {
+				tagAt[p] = firstTag + totalTags;
+				totalTags += tagsIn[p];
+			}
+			tags.reserve(totalTags * TEXELS_PER_TAG);
+			int[][] itemAt = new int[parts][types];
+			for (int b = 0; b < types; b++) {
+				Batch batch = batches.get(b);
+				int at = batch.count;
+				for (int p = 0; p < parts; p++) {
+					itemAt[p][b] = at;
+					at += perBatch[p][b];
+					batch.maxVertices = Math.max(batch.maxVertices, longest[p][b]);
+				}
+				if (at * 3 > batch.items.length) {
+					batch.items = Arrays.copyOf(batch.items, Math.max(batch.items.length * 2, at * 3));
+				}
+				batch.count = at;
+			}
+			// Batches set up for a type no tag used this time aren't drawn.
+			group.removeIf(batch -> batch.count == 0);
+			// 5. Write it all.
+			float[] tagData = tags.array();
+			runParts(parts, count, (from, to) -> {
+				int part = partOf(from, count, parts);
+				int tag = tagAt[part];
+				int[] next = itemAt[part].clone();
+				for (int i = from; i < to; i++) {
+					if (!ready[i]) {
+						continue;
+					}
+					int o = tag * TEXELS_PER_TAG * 4;
+					int pose = order[i] * 16;
+					// Rows of the pose (column-major: m00 m01 m02 m03 / m10 ...).
+					tagData[o] = poses[pose];
+					tagData[o + 1] = poses[pose + 4];
+					tagData[o + 2] = poses[pose + 8];
+					tagData[o + 3] = poses[pose + 12];
+					tagData[o + 4] = poses[pose + 1];
+					tagData[o + 5] = poses[pose + 5];
+					tagData[o + 6] = poses[pose + 9];
+					tagData[o + 7] = poses[pose + 13];
+					tagData[o + 8] = poses[pose + 2];
+					tagData[o + 9] = poses[pose + 6];
+					tagData[o + 10] = poses[pose + 10];
+					tagData[o + 11] = poses[pose + 14];
+					int light = lights[order[i]];
+					tagData[o + 12] = light & 0xFFFF;
+					tagData[o + 13] = (light >>> 16) & 0xFFFF;
+					tagData[o + 14] = 0;
+					tagData[o + 15] = 0;
+					for (GlyphRuns.Run run : runs[i]) {
+						int b = typeIndex.get(run.type());
+						int[] items = batches.get(b).items;
+						int at = next[b]++ * 3;
+						items[at] = run.poolStart;
+						items[at + 1] = run.vertexCount();
+						items[at + 2] = tag;
+					}
+					tag++;
+				}
+			});
+		} catch (RuntimeException | LinkageError e) {
+			GpuBatches.disable("couldn't take a crowd's name tags onto the GPU", e);
+		}
+	}
+
+	/** Render types crowds' tags have used (a few: the font's glyph pages, the background). */
+	private static final Map<RenderType, Boolean> BULK_TYPES = new IdentityHashMap<>();
+
+	/** Below this many tags the helper threads aren't worth waking. */
+	private static final int BULK_PARALLEL_MIN = 256;
+
+	private interface Range {
+		void run(int from, int to);
+	}
+
+	/** {@code [0, count)} in {@code parts} even parts, on the helper threads (one part: here). */
+	private static void runParts(int parts, int count, Range range) {
+		if (parts == 1) {
+			range.run(0, count);
+			return;
+		}
+		List<Runnable> jobs = new ArrayList<>(parts);
+		for (int p = 0; p < parts; p++) {
+			int from = count * p / parts;
+			int to = count * (p + 1) / parts;
+			jobs.add(() -> range.run(from, to));
+		}
+		com.arcticlauncher.polonium.Workers.runAll(jobs);
+	}
+
+	/** Which part {@code from} starts (the inverse of runParts' split). */
+	private static int partOf(int from, int count, int parts) {
+		for (int p = 0; p < parts; p++) {
+			if (count * p / parts == from) {
+				return p;
+			}
+		}
+		throw new IllegalStateException("not a part start: " + from);
+	}
+
+	/** Whether every run is in the glyph pool and has a batch already (read-only: safe on any thread). */
+	private static boolean placedAndKnown(GlyphRuns.Run[] runs, Map<RenderType, Integer> typeIndex) {
+		for (GlyphRuns.Run run : runs) {
+			if (run.poolGeneration != poolGeneration || run.poolStart < 0 || !typeIndex.containsKey(run.type())) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	private static boolean place(GlyphRuns.Run run) {
 		if (run.poolGeneration == poolGeneration && run.poolStart >= 0) {
 			return true;
