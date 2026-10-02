@@ -16,6 +16,7 @@
 		"RenderTypeFeatureRendererMixin",
 		"ShaderSourceMixin",
 		"ItemFeatureRendererMixin",
+		"ItemSubmitMixin",
 		"PreparedFrameAccess",
 		"FeatureRenderDispatcherMixin",
 		"EntityNameTagMixin",

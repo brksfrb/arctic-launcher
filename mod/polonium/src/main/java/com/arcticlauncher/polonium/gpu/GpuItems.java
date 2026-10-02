@@ -111,11 +111,21 @@ public final class GpuItems {
 		void look(List<BakedQuad> list) {
 			this.list = list;
 			this.quads = null;
-			int h = list.size();
-			for (int i = 0; i < list.size(); i++) {
-				h = h * 31 + System.identityHashCode(list.get(i));
+			this.hash = hash(list.size(), list::get);
+		}
+
+		/**
+		 * From the count and a few of the quads (hashing every quad of every
+		 * item each frame added up); equal keys still compare every quad.
+		 */
+		private static int hash(int size, java.util.function.IntFunction<BakedQuad> quad) {
+			if (size == 0) {
+				return 0;
 			}
-			this.hash = h;
+			int h = size;
+			h = h * 31 + System.identityHashCode(quad.apply(0));
+			h = h * 31 + System.identityHashCode(quad.apply(size / 2));
+			return h * 31 + System.identityHashCode(quad.apply(size - 1));
 		}
 
 		private int size() {
