@@ -125,6 +125,12 @@ impl ArcticApp {
                     });
             });
             ui.checkbox(&mut s.fullscreen, "Start in fullscreen");
+            if cfg!(windows) {
+                ui.checkbox(&mut s.high_performance_gpu, "Use the gaming graphics card")
+                    .on_hover_text(
+                        "Laptops with two graphics cards: Minecraft runs on the fast one instead of the built-in one. A choice you made in Windows' graphics settings is kept.",
+                    );
+            }
             widgets::field_row(ui, |ui| {
                 ui.label("When the game starts");
                 ui.selectable_value(

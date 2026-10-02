@@ -311,9 +311,11 @@ impl ArcticApp {
         });
     }
 
-    /// Vanilla instances: the Performance switch (Sodium, Lithium, …).
+    /// Vanilla, Fabric and Quilt instances: the Performance switch (Sodium, Lithium, …).
     fn performance_card(&mut self, ui: &mut egui::Ui, instance: &Instance) {
-        if instance.loader.kind().is_some() {
+        use arctic_core::loaders::LoaderKind;
+        let modded = instance.loader.kind().is_some();
+        if matches!(instance.loader.kind(), Some(LoaderKind::Forge | LoaderKind::NeoForge)) {
             return;
         }
         let p = self.palette();
@@ -327,6 +329,13 @@ impl ArcticApp {
                 )
                 .color(p.muted),
             );
+            if modded {
+                ui.label(
+                    RichText::new("Ones you've added yourself (or mods that do the same job) are left as they are.")
+                        .small()
+                        .color(p.muted),
+                );
+            }
             let mut on = instance.performance;
             if ui.checkbox(&mut on, "Boost FPS with performance mods").changed() {
                 let id = instance.id.clone();

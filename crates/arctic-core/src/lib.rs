@@ -14,6 +14,7 @@ pub mod error;
 pub mod ffmpeg;
 pub mod friends;
 pub mod game_defaults;
+pub mod gpu_preference;
 mod game_defaults_keys;
 pub mod instances;
 pub mod java;

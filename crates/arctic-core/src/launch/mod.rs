@@ -103,6 +103,8 @@ pub struct LaunchPlan {
     pub args: Vec<String>,
     pub game_dir: PathBuf,
     pub log_file: PathBuf,
+    /// Run on the high-performance graphics card of laptops with two.
+    pub high_performance_gpu: bool,
     /// Access token and proxy password, kept only to redact them from logs.
     secrets: Vec<String>,
 }
@@ -315,17 +317,18 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                     req.instance.arctic_mod && fits,
                 )?;
                 timer.step("arctic client");
-                if req.instance.loader.kind().is_none() {
-                    progress(ProgressInfo::stage("Checking performance mods"));
-                    crate::mods::performance::sync(
-                        &game_dir,
-                        &vanilla.id,
-                        req.instance.performance,
-                        req.instance.shaders,
-                        progress,
-                    )?;
-                    timer.step("performance mods");
-                }
+                // Vanilla instances (on Fabric underneath) and Fabric/Quilt
+                // instances alike; in those, mods the player already has stay theirs.
+                progress(ProgressInfo::stage("Checking performance mods"));
+                crate::mods::performance::sync(
+                    &game_dir,
+                    &vanilla.id,
+                    req.instance.performance,
+                    req.instance.shaders,
+                    req.instance.loader.kind().is_some(),
+                    progress,
+                )?;
+                timer.step("performance mods");
                 share_session = req.instance.arctic_mod && arctic_mod::supports(&vanilla.id);
             }
             profile
@@ -403,7 +406,7 @@ fn effective_loader(
         // Pure vanilla: make sure earlier Fabric runs left nothing behind.
         let game_dir = instance.game_dir(dirs);
         let _ = arctic_mod::sync(&game_dir.join("mods"), game, false);
-        let _ = crate::mods::performance::sync(&game_dir, game, false, false, &|_| {});
+        let _ = crate::mods::performance::sync(&game_dir, game, false, false, false, &|_| {});
     }
     fabric.map(|v| (loaders::LoaderKind::Fabric, v))
 }
@@ -485,6 +488,7 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
             0 => format!("game-{}.log", req.instance.id),
             n => format!("game-{}-{}.log", req.instance.id, n + 1),
         }),
+        high_performance_gpu: settings.high_performance_gpu,
         secrets: vec![identity.access_token, proxy.password.clone()],
     }
 }
@@ -626,6 +630,7 @@ mod tests {
             args: vec!["--accessToken".into(), "SECRET123".into()],
             game_dir: PathBuf::new(),
             log_file: PathBuf::new(),
+            high_performance_gpu: false,
             secrets: vec!["SECRET123".into(), String::new()],
         };
         let cmd = plan.redacted_command();
@@ -640,6 +645,7 @@ mod tests {
             args: vec!["--proxyPass".into(), "hunter2".into()],
             game_dir: PathBuf::new(),
             log_file: PathBuf::new(),
+            high_performance_gpu: false,
             secrets: vec!["tok".into(), "hunter2".into()],
         };
         assert!(plan.redacted_command().ends_with("--proxyPass <redacted>"));

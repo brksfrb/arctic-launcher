@@ -263,7 +263,7 @@ pub fn xmx_mb(args: &str) -> Option<u32> {
 
 /// Mod id and version from a jar's `fabric.mod.json` / `quilt.mod.json`
 /// / `mods.toml`.
-fn mod_identity(path: &Path) -> Option<(String, String)> {
+pub(crate) fn mod_identity(path: &Path) -> Option<(String, String)> {
     let mut zip = zip::ZipArchive::new(std::fs::File::open(path).ok()?).ok()?;
     let mut read = |name: &str| {
         let mut s = String::new();

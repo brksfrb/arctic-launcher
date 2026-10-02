@@ -1,7 +1,9 @@
 //! The Performance switch: well-known optimization mods (Sodium, Lithium,
-//! …) added to Vanilla instances, which run on Fabric underneath. They're
-//! downloaded from Modrinth for the exact version rather than bundled, and
-//! tracked in their own index so user mods are never touched.
+//! …) added to Vanilla instances, which run on Fabric underneath, and to
+//! Fabric and Quilt instances (leaving out any the player already has, or
+//! has something in place of). They're downloaded from Modrinth for the
+//! exact version rather than bundled, and tracked in their own index so user
+//! mods are never touched.
 
 use std::path::{Path, PathBuf};
 
@@ -23,6 +25,75 @@ pub const MODS: &[(&str, &str)] = &[
     ("5ZwdcRci", "ImmediatelyFast"),
     ("NNAgCjsB", "EntityCulling"),
 ];
+
+/// The mod ids (as their jars declare them) each one goes by, then mods that
+/// do the same job in its place: with any of them already in a modded
+/// instance, it's left out.
+fn provided_by(project: &str) -> (&'static [&'static str], &'static [&'static str]) {
+    match project {
+        "nmDcB62a" => (&["modernfix"], &[]),
+        "AANobbMI" => (&["sodium"], &["optifabric", "canvas", "embeddium", "rubidium"]),
+        "gvQqBUqZ" => (&["lithium"], &["canary", "radium"]),
+        "uXXizFIs" => (&["ferritecore"], &[]),
+        "5ZwdcRci" => (&["immediatelyfast"], &[]),
+        "NNAgCjsB" => (&["entityculling"], &[]),
+        super::packs::IRIS => (&["iris"], &["optifabric", "oculus"]),
+        _ => (&[], &[]),
+    }
+}
+
+/// Ids of the mods in the folder the player put there (not this switch's).
+fn players_mod_ids(mods_dir: &Path, ours: &[String]) -> std::collections::HashSet<String> {
+    let Ok(entries) = std::fs::read_dir(mods_dir) else {
+        return Default::default();
+    };
+    entries
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().into_owned();
+            (name.ends_with(".jar") && !ours.contains(&name)).then(|| e.path())
+        })
+        .filter_map(|path| crate::migrate::detect::mod_identity(&path).map(|(id, _)| id))
+        .collect()
+}
+
+/// Leave out of `wanted` what the player already has; take out of the
+/// folder ours they've since added themselves. Returns whether anything of
+/// ours was taken out.
+fn leave_players_mods(game_dir: &Path, wanted: &mut Vec<(&str, &str)>) -> Result<bool> {
+    let index = index_path(game_dir);
+    let mods_dir = game_dir.join("mods");
+    let ours = ModIndex::load(&index)?;
+    let our_files: Vec<String> = ours.mods.iter().map(|m| m.file_name.clone()).collect();
+    let theirs = players_mod_ids(&mods_dir, &our_files);
+    if theirs.is_empty() {
+        return Ok(false);
+    }
+    let has = |project: &str| {
+        let (ids, replacements) = provided_by(project);
+        ids.iter().chain(replacements).any(|id| theirs.contains(*id))
+    };
+    wanted.retain(|(project, name)| {
+        let keep = !has(project);
+        if !keep {
+            log::info!("{name}: the instance already has it (or a mod in its place); not added");
+        }
+        keep
+    });
+    let mut index_now = ours.clone();
+    let mut removed = false;
+    for m in &ours.mods {
+        if has(&m.project_id) {
+            super::files::delete(&mods_dir, &m.file_name)?;
+            index_now = index_now.without_file(&m.file_name);
+            removed = true;
+        }
+    }
+    if removed {
+        index_now.save(&index)?;
+    }
+    Ok(removed)
+}
 
 /// Look for new builds (and mods that were missing) at most this often.
 const RECHECK_SECS: u64 = 7 * 24 * 60 * 60;
@@ -115,11 +186,14 @@ fn unstash(game_dir: &Path, game_version: &str, shaders: bool) -> Result<bool> {
 /// Install (or update) the performance mods for `game_version` (and Iris
 /// when `shaders` is on), or remove them when neither is wanted. Offline,
 /// mods already installed for this version are kept.
+/// `modded`: an instance with its own Fabric/Quilt mods, where those the
+/// player already has (or something in their place) are left out.
 pub fn sync(
     game_dir: &Path,
     game_version: &str,
     enabled: bool,
     shaders: bool,
+    modded: bool,
     progress: Progress,
 ) -> Result<()> {
     let state: State = load_json(&state_path(game_dir))?.unwrap_or_default();
@@ -129,6 +203,12 @@ pub fn sync(
     }
     if wanted.is_empty() {
         return remove_all(game_dir);
+    }
+    if modded && state.game_version == game_version && state.shaders == shaders {
+        leave_players_mods(game_dir, &mut wanted)?;
+        if wanted.is_empty() {
+            return Ok(());
+        }
     }
     let mods_dir = game_dir.join("mods");
     let index = index_path(game_dir);
@@ -143,6 +223,12 @@ pub fn sync(
         && all_present(&index, &mods_dir)?
     {
         return Ok(());
+    }
+    if modded {
+        leave_players_mods(game_dir, &mut wanted)?;
+        if wanted.is_empty() {
+            return Ok(());
+        }
     }
     let ids: Vec<&str> = wanted.iter().map(|(id, _)| *id).collect();
     let (installed, failed) = super::install_many(
@@ -258,7 +344,7 @@ mod tests {
             .unwrap();
         assert_eq!(installed(dir.path()), vec!["Sodium".to_owned()]);
 
-        sync(dir.path(), "26.3", false, false, &|_| {}).unwrap();
+        sync(dir.path(), "26.3", false, false, false, &|_| {}).unwrap();
         assert!(!mods.join("sodium.jar").exists());
         assert!(mods.join("mine.jar").exists());
         assert!(installed(dir.path()).is_empty());
@@ -281,7 +367,7 @@ mod tests {
         };
         save_json(&state_path(dir.path()), &state).unwrap();
         // Would fail (and log) if it tried Modrinth with a fake version.
-        sync(dir.path(), "26.3", true, false, &|_| {}).unwrap();
+        sync(dir.path(), "26.3", true, false, false, &|_| {}).unwrap();
         assert!(mods.join("sodium.jar").exists());
     }
 
@@ -316,7 +402,7 @@ mod tests {
         assert!(!mods.join("sodium-26.2.jar").exists());
         installed_set(dir.path(), "26.3", "sodium-26.3.jar");
         // Back to 26.2 through sync: no network, the stashed set returns.
-        sync(dir.path(), "26.2", true, false, &|_| {}).unwrap();
+        sync(dir.path(), "26.2", true, false, false, &|_| {}).unwrap();
         assert_eq!(
             std::fs::read(mods.join("sodium-26.2.jar")).unwrap(),
             b"26.2"

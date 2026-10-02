@@ -10,7 +10,7 @@
 
 mod copy;
 mod deps;
-mod detect;
+pub(crate) mod detect;
 mod hud;
 mod ranges;
 mod sources;
