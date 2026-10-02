@@ -16,6 +16,8 @@ import net.minecraft.resources.Identifier;
 public final class GpuEntities {
 	private static final Identifier ENTITY_SHADER = Identifier.withDefaultNamespace("core/entity");
 	private final Map<Model<?>, ModelMesh> meshes = new IdentityHashMap<>();
+	/** Shapes drawn with another model's poses (see {@link ModelMesh#borrowing}), by (model, owner). */
+	private final Map<java.util.List<Model<?>>, ModelMesh> borrowedMeshes = new java.util.HashMap<>();
 	private final PartPoses poses = new PartPoses();
 	private final SkinAtlas atlas = new SkinAtlas();
 	/** The texture itself: no offset, full scale. */
@@ -25,10 +27,17 @@ public final class GpuEntities {
 	private static final boolean PARALLEL_POSING = !"false".equals(System.getProperty("polonium.parallelPosing"));
 	/** Per entity state, its models that the game also draws on top (enchantment glint): they stay on its path. */
 	private final Map<Object, java.util.Set<Model<?>>> keepOnGamePath = new IdentityHashMap<>();
-	private final GpuBatches batches = new GpuBatches("entity models", () -> GpuBatches.evictIdle(meshes, batches().frame()));
+	private final GpuBatches batches = new GpuBatches("entity models", () -> {
+		GpuBatches.evictIdle(meshes, batches().frame());
+		GpuBatches.evictIdle(borrowedMeshes, batches().frame());
+	});
 
 	public GpuEntities() {
-		batches.beforeUpload(poses::computeAll);
+		batches.beforeUpload(() -> {
+			Crowd.computeAll();
+			Crowd.linkBorrowed();
+			poses.computeAll();
+		});
 		batches.afterFrame(() -> {
 			poses.clear();
 			atlas.endFrame();
@@ -104,6 +113,11 @@ public final class GpuEntities {
 		}
 	}
 
+	/** Whether models of this render type can be drawn on the GPU path at all. */
+	static boolean drawable(RenderType renderType) {
+		return InstancedPipelines.supports(renderType.pipeline(), ENTITY_SHADER);
+	}
+
 	private static boolean takeable(ModelFeatureRenderer.Submit<?> submit) {
 		return submit.sprite() == null && submit.sheetedDecalPose() == null
 				&& InstancedPipelines.supports(submit.renderType().pipeline(), ENTITY_SHADER);
@@ -111,6 +125,11 @@ public final class GpuEntities {
 
 	/** Take this submit onto the GPU path; false to let the game build its vertices. */
 	public boolean capture(ModelFeatureRenderer.Submit<?> submit) {
+		if (submit.state() instanceof Crowd.Bucket bucket) {
+			// Never the game's way: its "state" is the bucket.
+			addCrowd(bucket);
+			return true;
+		}
 		if (GpuBatches.modelMod() || !batches.preparing() || !takeable(submit) || keptOnGamePath(submit)) {
 			return false;
 		}
@@ -124,14 +143,116 @@ public final class GpuEntities {
 		}
 	}
 
-	@SuppressWarnings({"unchecked", "rawtypes"})
-	private void add(ModelFeatureRenderer.Submit<?> submit, RenderType renderType) {
-		Model model = submit.model();
+	/** A crowd bucket's players (see {@link Crowd}): one instance each, in this group. */
+	private void addCrowd(Crowd.Bucket bucket) {
+		if (GpuBatches.modelMod() || !batches.preparing()) {
+			return;
+		}
+		try {
+			ModelMesh mesh = bucket.owner == null ? mesh(bucket.model) : borrowedMesh(bucket);
+			RenderType renderType = bucket.renderType;
+			if (!bucket.resolved()) {
+				resolve(bucket);
+			}
+			com.mojang.blaze3d.textures.GpuTextureView atlasView = null;
+			int cell = bucket.atlasTexture != null ? atlas.cell(bucket.atlasTexture, batches.frame()) : -1;
+			if (cell >= 0) {
+				renderType = bucket.batchOwner.renderType;
+				atlasView = atlas.view();
+				float size = atlas.size();
+				bucket.uv[0] = atlas.cellX(cell) / size;
+				bucket.uv[1] = atlas.cellY(cell) / size;
+				bucket.uv[2] = SkinAtlas.CELL / size;
+				bucket.uv[3] = SkinAtlas.CELL / size;
+			} else {
+				System.arraycopy(OWN_TEXTURE, 0, bucket.uv, 0, 4);
+			}
+			if (renderType.hasBlending()) {
+				Crowd.sortFarToNear(bucket.members);
+			}
+			for (int i = 0; i < bucket.members.size(); i++) {
+				InstanceData data = batches.add(renderType, mesh, atlasView);
+				Crowd.target(bucket.members.getInt(i), data, data.reserve(mesh.texelsPerInstance), mesh, bucket.uv);
+			}
+		} catch (RuntimeException | LinkageError e) {
+			GpuBatches.disable("couldn't take a crowd onto the GPU", e);
+		}
+	}
+
+	/**
+	 * Crowd buckets whose render types differ only in their (atlas) texture,
+	 * by everything else about them: they share batches, made with the first
+	 * one's render type. That way each skin's render type needn't be prepared
+	 * every frame (with thousands of skins, that added up).
+	 */
+	private final Map<java.util.List<Object>, Crowd.Bucket> families = new java.util.HashMap<>();
+	private static final int MAX_FAMILIES = 256;
+
+	private void resolve(Crowd.Bucket bucket) {
+		RenderType renderType = bucket.renderType;
+		bucket.atlasTexture = null;
+		bucket.batchOwner = bucket;
+		net.minecraft.client.renderer.rendertype.PreparedRenderType prepared = batches.prepare(renderType);
+		if (!SkinAtlas.ENABLED || prepared.pipeline().getShaderDefines().flags().contains("APPLY_TEXTURE_MATRIX")) {
+			return;
+		}
+		java.util.List<Object> family = new java.util.ArrayList<>();
+		family.add(bucket.model);
+		family.add(prepared.pipeline());
+		family.add(prepared.outputTarget());
+		family.add(prepared.scissorState());
+		com.mojang.blaze3d.textures.GpuTextureView texture = null;
+		for (net.minecraft.client.renderer.rendertype.PreparedRenderType.Texture t : prepared.textures()) {
+			family.add(t.name());
+			if ("Sampler0".equals(t.name())) {
+				texture = t.textureView();
+				com.mojang.blaze3d.textures.GpuSampler sampler = t.sampler();
+				family.add(java.util.List.of(sampler.getAddressModeU(), sampler.getAddressModeV(), sampler.getMinFilter(), sampler.getMagFilter(),
+						sampler.getMaxAnisotropy(), sampler.getMaxLod()));
+			} else {
+				family.add(t.textureView());
+				family.add(t.sampler());
+			}
+		}
+		if (texture == null || !SkinAtlas.fits(texture)) {
+			return;
+		}
+		if (families.size() > MAX_FAMILIES) {
+			families.clear();
+		}
+		bucket.atlasTexture = texture;
+		// The owner's texture must still be there: its render type is prepared for the batches.
+		Crowd.Bucket owner = families.get(family);
+		if (owner == null || owner.atlasTexture == null || owner.atlasTexture.texture().isClosed()) {
+			owner = bucket;
+			families.put(family, bucket);
+		}
+		bucket.batchOwner = owner;
+	}
+
+	private ModelMesh borrowedMesh(Crowd.Bucket bucket) {
+		java.util.List<Model<?>> key = java.util.List.of(bucket.model, bucket.owner);
+		ModelMesh mesh = borrowedMeshes.get(key);
+		if (mesh == null) {
+			mesh = ModelMesh.borrowing(bucket.model, bucket.borrowIndex);
+			borrowedMeshes.put(key, mesh);
+		}
+		return mesh;
+	}
+
+	private ModelMesh mesh(Model<?> model) {
 		ModelMesh mesh = meshes.get(model);
 		if (mesh == null) {
 			mesh = ModelMesh.build(model);
 			meshes.put(model, mesh);
 		}
+		return mesh;
+	}
+
+	@SuppressWarnings({"unchecked", "rawtypes"})
+	private void add(ModelFeatureRenderer.Submit<?> submit, RenderType renderType) {
+		Model model = submit.model();
+		ModelMesh mesh = mesh(model);
 		float[] uv = OWN_TEXTURE;
 		com.mojang.blaze3d.textures.GpuTextureView atlasView = null;
 		int cell = atlasCell(renderType);

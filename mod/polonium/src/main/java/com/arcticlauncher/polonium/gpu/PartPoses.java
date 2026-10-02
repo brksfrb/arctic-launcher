@@ -27,7 +27,7 @@ final class PartPoses {
 	/** Texels per part: the pose's three rows (normals are worked out from it on the GPU). */
 	static final int TEXELS_PER_PART = 3;
 	/** Per part: x, y, z, xRot, yRot, zRot, xScale, yScale, zScale, visible, skipDraw. */
-	private static final int VALUES_PER_PART = 11;
+	static final int VALUES_PER_PART = 11;
 	/**
 	 * Before the parts: the root pose (16), color, overlay and light (as int
 	 * bits), then where the texture is: u, v offset and scale (an atlas cell;
@@ -86,7 +86,7 @@ final class PartPoses {
 	}
 
 	/** The parts' pose values into {@code out} from {@code at}; returns the index after them. */
-	private static int copyParts(ModelPart[] parts, float[] out, int at) {
+	static int copyParts(ModelPart[] parts, float[] out, int at) {
 		for (ModelPart part : parts) {
 			out[at] = part.x;
 			out[at + 1] = part.y;
@@ -174,27 +174,66 @@ final class PartPoses {
 				copyParts(copy.parts, parts, 0);
 				partsAt = 0;
 			}
-			float[] out = job.target.array();
-			int o = job.targetOffset * 4;
 			int v = job.valuesOffset;
-			int color = Float.floatToRawIntBits(values[v + 16]);
-			int overlay = Float.floatToRawIntBits(values[v + 17]);
-			int light = Float.floatToRawIntBits(values[v + 18]);
-			out[o] = ((color >> 16) & 0xFF) / 255f;
-			out[o + 1] = ((color >> 8) & 0xFF) / 255f;
-			out[o + 2] = (color & 0xFF) / 255f;
-			out[o + 3] = ((color >>> 24) & 0xFF) / 255f;
-			out[o + 4] = overlay & 0xFFFF;
-			out[o + 5] = (overlay >>> 16) & 0xFFFF;
-			out[o + 6] = light & 0xFFFF;
-			out[o + 7] = (light >>> 16) & 0xFFFF;
-			out[o + 8] = values[v + 19];
-			out[o + 9] = values[v + 20];
-			out[o + 10] = values[v + 21];
-			out[o + 11] = values[v + 22];
 			root.set(values, v);
-			part(job.mesh, parts, 0, root, 1, partsAt, out, o + 12, stack);
+			write(job.mesh, parts, partsAt, root, Float.floatToRawIntBits(values[v + 16]), Float.floatToRawIntBits(values[v + 17]),
+					Float.floatToRawIntBits(values[v + 18]), values, v + 19, job.target.array(), job.targetOffset * 4, stack);
 		}
+	}
+
+	/**
+	 * One entity's instance data at {@code out[o]}: color, overlay and light,
+	 * the texture placement ({@code uv[uvAt]}: u, v offset and scale), then
+	 * every part's pose under {@code root}, from the part values at
+	 * {@code parts[partsAt]}. {@code stack} is the calling thread's scratch.
+	 */
+	static void write(ModelMesh mesh, float[] parts, int partsAt, Matrix4f root, int color, int overlay, int light, float[] uv, int uvAt,
+			float[] out, int o, List<Matrix4f> stack) {
+		out[o] = ((color >> 16) & 0xFF) / 255f;
+		out[o + 1] = ((color >> 8) & 0xFF) / 255f;
+		out[o + 2] = (color & 0xFF) / 255f;
+		out[o + 3] = ((color >>> 24) & 0xFF) / 255f;
+		out[o + 4] = overlay & 0xFFFF;
+		out[o + 5] = (overlay >>> 16) & 0xFFFF;
+		out[o + 6] = light & 0xFFFF;
+		out[o + 7] = (light >>> 16) & 0xFFFF;
+		out[o + 8] = uv[uvAt];
+		out[o + 9] = uv[uvAt + 1];
+		out[o + 10] = uv[uvAt + 2];
+		out[o + 11] = uv[uvAt + 3];
+		// Its parts follow.
+		out[o + 12] = -1f;
+		out[o + 13] = 0f;
+		out[o + 14] = 0f;
+		out[o + 15] = 0f;
+		part(mesh, parts, 0, root, 1, partsAt, out, o + HEADER_TEXELS * 4, stack);
+	}
+
+	/** Texels before an entity's parts: color, overlay and light, texture placement, where the parts are. */
+	static final int HEADER_TEXELS = 4;
+
+	/**
+	 * An entity whose parts are another's (armor posed exactly like the body
+	 * it's on): just the header, pointing at that entity's parts, which start
+	 * at texel {@code partsTexel} of the instance buffer.
+	 */
+	static void writeBorrowed(int color, int overlay, int light, float[] uv, int partsTexel, float[] out, int o) {
+		out[o] = ((color >> 16) & 0xFF) / 255f;
+		out[o + 1] = ((color >> 8) & 0xFF) / 255f;
+		out[o + 2] = (color & 0xFF) / 255f;
+		out[o + 3] = ((color >>> 24) & 0xFF) / 255f;
+		out[o + 4] = overlay & 0xFFFF;
+		out[o + 5] = (overlay >>> 16) & 0xFFFF;
+		out[o + 6] = light & 0xFFFF;
+		out[o + 7] = (light >>> 16) & 0xFFFF;
+		out[o + 8] = uv[0];
+		out[o + 9] = uv[1];
+		out[o + 10] = uv[2];
+		out[o + 11] = uv[3];
+		out[o + 12] = partsTexel;
+		out[o + 13] = 0f;
+		out[o + 14] = 0f;
+		out[o + 15] = 0f;
 	}
 
 	/** Write part {@code index} (under {@code parent}) and its subtree; returns the number after the subtree. */
@@ -251,7 +290,7 @@ final class PartPoses {
 		}
 	}
 
-	private static Matrix4f at(List<Matrix4f> stack, int depth) {
+	static Matrix4f at(List<Matrix4f> stack, int depth) {
 		while (stack.size() <= depth) {
 			stack.add(new Matrix4f());
 		}

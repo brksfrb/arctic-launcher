@@ -32,12 +32,20 @@ public final class GpuItems {
 	private record Quick(int size, BakedQuad last, List<ItemMesh> meshes) {}
 	private final GpuBatches batches = new GpuBatches("items", this::evictIdle);
 
+	public GpuItems() {
+		batches.beforeUpload(Crowd::computeAll);
+	}
+
 	public GpuBatches batches() {
 		return batches;
 	}
 
 	/** Take this item onto the GPU path; false to let the game build its vertices. */
 	public boolean capture(ItemFeatureRenderer.Submit submit) {
+		if (submit.quads() instanceof Crowd.ItemQuads crowd) {
+			addCrowd(crowd);
+			return true;
+		}
 		// Enchanted items stay on the game's path: their glint is drawn on top at exactly
 		// the item's depth, which only the game's own (CPU) positions match.
 		if (!batches.preparing() || submit.outlineColor() != 0 || submit.displayContext() == ItemDisplayContext.GUI
@@ -61,6 +69,72 @@ public final class GpuItems {
 		} catch (RuntimeException | LinkageError e) {
 			GpuBatches.disable("couldn't take an item onto the GPU", e);
 			return false;
+		}
+	}
+
+	/** A crowd's item bucket (see {@link Crowd}): one instance per player, per render type the item uses. */
+	private void addCrowd(Crowd.ItemQuads quads) {
+		if (!batches.preparing()) {
+			return;
+		}
+		try {
+			List<ItemMesh> parts = meshes(quads);
+			boolean translucent = false;
+			for (ItemMesh mesh : parts) {
+				translucent |= mesh.renderType.hasBlending();
+			}
+			if (translucent) {
+				Crowd.sortFarToNear(quads.bucket.members);
+			}
+			it.unimi.dsi.fastutil.ints.IntArrayList members = quads.bucket.members;
+			for (int i = 0; i < members.size(); i++) {
+				for (ItemMesh mesh : parts) {
+					InstanceData data = batches.add(mesh.renderType, mesh);
+					Crowd.target(members.getInt(i), data, data.reserve(ItemMesh.TEXELS), null, null);
+				}
+			}
+		} catch (RuntimeException | LinkageError e) {
+			GpuBatches.disable("couldn't take a crowd's items onto the GPU", e);
+		}
+	}
+
+	/** Whether these quads can be drawn on the GPU path (checked before a crowd relies on it). */
+	static boolean drawable(BakedQuad[] quads) {
+		for (BakedQuad quad : quads) {
+			BakedQuad.MaterialInfo material = quad.materialInfo();
+			if (material.isTinted() && material.tintIndex() >= ItemMesh.TINT_SLOTS
+					|| !InstancedPipelines.supports(material.itemRenderType().pipeline(), ITEM_SHADER)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** One item's instance data at {@code out[o]} (as {@link #write(InstanceData, ItemFeatureRenderer.Submit)} puts it). */
+	static void write(float[] out, int o, int overlay, int light, Matrix4f m, int[] tints) {
+		out[o] = overlay & 0xFFFF;
+		out[o + 1] = (overlay >>> 16) & 0xFFFF;
+		out[o + 2] = light & 0xFFFF;
+		out[o + 3] = (light >>> 16) & 0xFFFF;
+		out[o + 4] = m.m00();
+		out[o + 5] = m.m10();
+		out[o + 6] = m.m20();
+		out[o + 7] = m.m30();
+		out[o + 8] = m.m01();
+		out[o + 9] = m.m11();
+		out[o + 10] = m.m21();
+		out[o + 11] = m.m31();
+		out[o + 12] = m.m02();
+		out[o + 13] = m.m12();
+		out[o + 14] = m.m22();
+		out[o + 15] = m.m32();
+		for (int layer = 0; layer < ItemMesh.TINT_SLOTS; layer++) {
+			int color = layer < tints.length ? tints[layer] : -1;
+			int at = o + 16 + layer * 4;
+			out[at] = ((color >> 16) & 0xFF) / 255f;
+			out[at + 1] = ((color >> 8) & 0xFF) / 255f;
+			out[at + 2] = (color & 0xFF) / 255f;
+			out[at + 3] = ((color >>> 24) & 0xFF) / 255f;
 		}
 	}
 

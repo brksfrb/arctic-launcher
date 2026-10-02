@@ -30,6 +30,8 @@ public final class NameTagCache {
 	public static final class Kept {
 		final int generation;
 		final boolean obfuscated;
+		/** The text's width in the font, or -1: not measured yet. */
+		float width = -1;
 		float x0, y0, x1, y1;
 		int color0, background0, color1, background1;
 		Font.PreparedText layout0, layout1;
@@ -101,6 +103,22 @@ public final class NameTagCache {
 			kept.background1 = backgroundColor;
 		}
 		return prepared;
+	}
+
+	/** The text's width, as {@code font.width(text)}: measured once and kept on the text while it's the same. */
+	public static float width(Component text, Font font) {
+		if (!(text instanceof Holder holder)) {
+			return font.width(text);
+		}
+		Kept kept = holder.polonium$layouts();
+		if (kept == null || kept.generation != generation) {
+			kept = new Kept(generation, isObfuscated(text));
+			holder.polonium$layouts(kept);
+		}
+		if (kept.width < 0) {
+			kept.width = font.width(text);
+		}
+		return kept.width;
 	}
 
 	/** A new frame (kept for the frame hook; layouts live on their texts). */

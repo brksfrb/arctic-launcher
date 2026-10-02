@@ -3,6 +3,7 @@ package com.arcticlauncher.polonium.mixin;
 import com.arcticlauncher.polonium.GlyphRuns;
 import com.arcticlauncher.polonium.NameTagCache;
 import com.arcticlauncher.polonium.gpu.GpuBatchesHolder;
+import com.arcticlauncher.polonium.gpu.CrowdTags;
 import com.arcticlauncher.polonium.gpu.GpuText;
 import org.spongepowered.asm.mixin.Unique;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -31,6 +32,10 @@ abstract class NameTagFeatureRendererMixin implements GpuBatchesHolder {
 			method = "buildGroup",
 			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/feature/NameTagFeatureRenderer;prepareText(Lnet/minecraft/client/gui/Font;Lnet/minecraft/client/renderer/feature/NameTagFeatureRenderer$Submit;)Lnet/minecraft/client/gui/Font$PreparedText;"))
 	private Font.PreparedText polonium$cachedLayout(Font font, NameTagFeatureRenderer.Submit tag, Operation<Font.PreparedText> layout) {
+		if (CrowdTags.isList(tag.text())) {
+			// A crowd's tags, all at once (the stand-in itself lays out as nothing).
+			CrowdTags.draw(tag.text(), polonium$gpu, font);
+		}
 		return NameTagCache.get(tag.text(), tag.x(), tag.y(), tag.color(), tag.backgroundColor(), () -> layout.call(font, tag));
 	}
 
