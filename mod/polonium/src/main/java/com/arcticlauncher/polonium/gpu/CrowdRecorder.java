@@ -59,6 +59,8 @@ final class CrowdRecorder implements SubmitNodeCollector {
 	private @Nullable HumanoidArm arm;
 	/** Model and item submits, to hand to the real collector if the recipe can't be used. */
 	private final List<Consumer<SubmitNodeCollector>> replay = new ArrayList<>();
+	/** The renderer's own name tags: dropped when the crowd path draws the tags (see {@link CrowdTags}), else passed on. */
+	private final List<Consumer<SubmitNodeCollector>> tags = new ArrayList<>();
 	private final Ordered[] orders = new Ordered[8];
 
 	/**
@@ -66,7 +68,7 @@ final class CrowdRecorder implements SubmitNodeCollector {
 	 * the crowd path would put its model; the body must land exactly there.
 	 */
 	CrowdRecipe record(LivingEntityRenderer<?, ?, ?> renderer, AvatarRenderState state, PoseStack poseStack, SubmitNodeCollector real,
-			CameraRenderState camera, Matrix4f root, long frame) {
+			CameraRenderState camera, Matrix4f root, long frame, boolean crowdTags) {
 		this.real = real;
 		this.state = state;
 		this.renderer = renderer;
@@ -76,6 +78,7 @@ final class CrowdRecorder implements SubmitNodeCollector {
 		this.layer = null;
 		this.arm = null;
 		replay.clear();
+		tags.clear();
 		try {
 			submitWithGame(renderer, state, poseStack, camera);
 		} finally {
@@ -90,7 +93,13 @@ final class CrowdRecorder implements SubmitNodeCollector {
 				submit.accept(real);
 			}
 		}
+		if (recipe.unsupported != null || !crowdTags) {
+			for (Consumer<SubmitNodeCollector> submit : tags) {
+				submit.accept(real);
+			}
+		}
 		replay.clear();
+		tags.clear();
 		CrowdRecipe done = recipe;
 		this.recipe = null;
 		this.real = null;
@@ -324,6 +333,11 @@ final class CrowdRecorder implements SubmitNodeCollector {
 		@Override
 		public void submitNameTag(PoseStack poseStack, @Nullable Vec3 attachment, int offset, Component name, boolean seeThrough, int light,
 				CameraRenderState camera) {
+			if (layer == null) {
+				PoseStack.Pose pose = poseStack.last().copy();
+				tags.add(c -> c.order(order).submitNameTag(stackAt(pose), attachment, offset, name, seeThrough, light, camera));
+				return;
+			}
 			other(order, "name tag").submitNameTag(poseStack, attachment, offset, name, seeThrough, light, camera);
 		}
 

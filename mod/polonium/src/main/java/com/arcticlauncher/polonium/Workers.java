@@ -14,12 +14,14 @@ import java.util.concurrent.locks.LockSupport;
  */
 public final class Workers {
 	/**
-	 * Copies and sorts stop getting faster after a few threads (memory is the
-	 * limit), and every extra thread woken each frame costs time, competing
-	 * with the game's chunk builders too.
+	 * About a third of the processor's threads (two on a 6-core with 12,
+	 * eight on a 24-thread one), leaving the rest to the game's chunk
+	 * builders and everything else. Past eight, memory is the limit and every
+	 * extra thread woken each frame costs time. -Dpolonium.helpers=N sets it.
 	 */
-	private static final int MAX_HELPERS = 4;
-	public static final int HELPERS = Math.max(1, Math.min(MAX_HELPERS, Runtime.getRuntime().availableProcessors() / 4));
+	private static final int MAX_HELPERS = 8;
+	public static final int HELPERS = Math.max(1, Integer.getInteger("polonium.helpers",
+			Math.min(MAX_HELPERS, Runtime.getRuntime().availableProcessors() / 3)));
 	private static final ExecutorService POOL = Executors.newFixedThreadPool(HELPERS, job -> {
 		Thread thread = new Thread(job, "Polonium Worker");
 		thread.setDaemon(true);
