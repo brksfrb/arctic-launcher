@@ -2,7 +2,6 @@ package com.arcticlauncher.polonium.gpu;
 
 import com.arcticlauncher.polonium.GlyphRuns;
 import com.arcticlauncher.polonium.NameTagCache;
-import com.mojang.blaze3d.vertex.PoseStack;
 import java.util.Arrays;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -41,11 +40,8 @@ public final class CrowdTags {
 	private static final int SOLID_PASS = 0;
 	private static final int SEE_THROUGH_PASS = 1;
 	private static final int DISCREET = 2;
-	private static final PoseStack STACK = new PoseStack();
-	private static final Matrix4f POSE = new Matrix4f();
 	/** This frame's tag turn (to face the camera) and scale, the same for every tag. */
 	private static final Matrix4f FACING = new Matrix4f();
-	private static final Matrix4f TAG = new Matrix4f();
 
 	private static final Tags normal = new Tags();
 	private static final Tags seeThrough = new Tags();
@@ -102,7 +98,7 @@ public final class CrowdTags {
 		}
 	}
 
-	/** One list of tags, as arrays (thousands a frame). */
+	/** One list of tags, as arrays (thousands a frame), filled in on the helper threads (see {@link #fill}). */
 	private static final class Tags {
 		int count;
 		Look[] look = new Look[256];
@@ -113,26 +109,35 @@ public final class CrowdTags {
 		float[] pose = new float[256 * 16];
 		int farthest = -1;
 
-		void add(Look look, int way, float y, int light, Matrix4f pose) {
-			int i = count++;
-			if (i == this.look.length) {
-				int size = i * 2;
-				this.look = Arrays.copyOf(this.look, size);
-				this.way = Arrays.copyOf(this.way, size);
-				this.y = Arrays.copyOf(this.y, size);
-				this.light = Arrays.copyOf(this.light, size);
-				this.distance = Arrays.copyOf(this.distance, size);
-				this.pose = Arrays.copyOf(this.pose, size * 16);
+		/** Room for {@code count} tags, set with {@link #set}. */
+		void size(int count) {
+			if (count > look.length) {
+				int size = Math.max(look.length * 2, count);
+				look = Arrays.copyOf(look, size);
+				way = Arrays.copyOf(way, size);
+				y = Arrays.copyOf(y, size);
+				light = Arrays.copyOf(light, size);
+				distance = Arrays.copyOf(distance, size);
+				pose = Arrays.copyOf(pose, size * 16);
 			}
+			this.count = count;
+		}
+
+		void set(int i, Look look, int way, float y, int light, Matrix4f pose) {
 			this.look[i] = look;
 			this.way[i] = (byte) way;
 			this.y[i] = y;
 			this.light[i] = light;
 			pose.get(this.pose, i * 16);
-			float d = pose.m30() * pose.m30() + pose.m31() * pose.m31() + pose.m32() * pose.m32();
-			distance[i] = d;
-			if (farthest < 0 || d > distance[farthest]) {
-				farthest = i;
+			distance[i] = pose.m30() * pose.m30() + pose.m31() * pose.m31() + pose.m32() * pose.m32();
+		}
+
+		void findFarthest() {
+			farthest = -1;
+			for (int i = 0; i < count; i++) {
+				if (farthest < 0 || distance[i] > distance[farthest]) {
+					farthest = i;
+				}
 			}
 		}
 
@@ -155,19 +160,116 @@ public final class CrowdTags {
 		background = ARGB.color(Minecraft.getInstance().gameRenderer.gameRenderState().optionsRenderState.getBackgroundOpacity(0.25F), -16777216);
 	}
 
-	/** A player's score line and name, as {@code AvatarRenderer.submitNameDisplay} places them. */
-	static void nameDisplay(AvatarRenderState state, CrowdRecipe recipe, PoseStack poseStack, CameraRenderState camera) {
+	// Per queued player (see CrowdFrame): which tags it has, and where they go in the lists.
+	private static final int SCORE = 1;
+	private static final int NAME = 2;
+	private static final int SEE_THROUGH_TOO = 4;
+	private static int[] planned = new int[256];
+	private static CrowdRecipe[] plannedRecipe = new CrowdRecipe[256];
+	private static int[] normalAt = new int[256];
+	private static int[] seeThroughAt = new int[256];
+
+	/** A queued player without crowd tags (the game draws its tags, or it has none). */
+	static void none(int entity) {
+		ensurePlanned(entity);
+		planned[entity] = 0;
+		plannedRecipe[entity] = null;
+	}
+
+	/**
+	 * A queued player's score line and name, as {@code AvatarRenderer.submitNameDisplay}
+	 * has them: their texts laid out if new (here, on the render thread:
+	 * fonts aren't safe on several threads); placed later, in {@link #fill}.
+	 */
+	static void plan(int entity, AvatarRenderState state, CrowdRecipe recipe, CameraRenderState camera) {
+		ensurePlanned(entity);
+		int tags = 0;
+		if (state.nameTagAttachment != null) {
+			if (state.scoreText != null) {
+				recipe.scoreLook = look(recipe.scoreLook, state.scoreText);
+				tags |= SCORE;
+			}
+			if (state.nameTag != null) {
+				recipe.nameLook = look(recipe.nameLook, state.nameTag);
+				tags |= NAME;
+			}
+			if (!state.isDiscrete) {
+				tags |= SEE_THROUGH_TOO;
+			}
+		}
+		planned[entity] = tags;
+		plannedRecipe[entity] = recipe;
+		if (tags != 0 && !facingReady) {
+			// As the game: turn to face the camera, then scale (worked out once, applied to every tag).
+			FACING.rotation(camera.orientation).scale(0.025F, -0.025F, 0.025F);
+			facingReady = true;
+		}
+	}
+
+	private static void ensurePlanned(int entity) {
+		if (entity >= planned.length) {
+			int size = Math.max(planned.length * 2, entity + 1);
+			planned = Arrays.copyOf(planned, size);
+			plannedRecipe = Arrays.copyOf(plannedRecipe, size);
+			normalAt = Arrays.copyOf(normalAt, size);
+			seeThroughAt = Arrays.copyOf(seeThroughAt, size);
+		}
+	}
+
+	/** Every queued player planned: each one's place in the lists. */
+	static void layOut(int count) {
+		int normalCount = 0;
+		int seeThroughCount = 0;
+		for (int e = 0; e < count; e++) {
+			int tags = planned[e];
+			int n = ((tags & SCORE) != 0 ? 1 : 0) + ((tags & NAME) != 0 ? 1 : 0);
+			normalAt[e] = normalCount;
+			normalCount += n;
+			seeThroughAt[e] = seeThroughCount;
+			seeThroughCount += (tags & SEE_THROUGH_TOO) != 0 ? n : 0;
+		}
+		normal.size(normalCount);
+		seeThrough.size(seeThroughCount);
+	}
+
+	/** A player's tags into their places (on a helper thread); {@code pose} is where it was submitted. */
+	static void fill(int entity, AvatarRenderState state, Matrix4f pose, Matrix4f scratch) {
+		int tags = planned[entity];
+		if (tags == 0) {
+			return;
+		}
+		CrowdRecipe recipe = plannedRecipe[entity];
 		int offset = state.showExtraEars ? -10 : 0;
-		STACK.last().set(poseStack.last());
-		if (state.scoreText != null) {
-			recipe.scoreLook = look(recipe.scoreLook, state.scoreText);
-			tag(state.nameTagAttachment, offset, recipe.scoreLook, !state.isDiscrete, state.lightCoords, camera);
-			STACK.translate(0.0F, 9.0F * 1.15F * 0.025F, 0.0F);
+		boolean seeThroughToo = (tags & SEE_THROUGH_TOO) != 0;
+		int n = normalAt[entity];
+		int s = seeThroughAt[entity];
+		Vec3 at = state.nameTagAttachment;
+		float lift = 0;
+		if ((tags & SCORE) != 0) {
+			place(scratch.set(pose).translate((float) at.x, (float) (at.y + 0.5), (float) at.z).mul(FACING), recipe.scoreLook, offset,
+					seeThroughToo, state.lightCoords, n++, s++);
+			// The name goes above the score line.
+			lift = 9.0F * 1.15F * 0.025F;
 		}
-		if (state.nameTag != null) {
-			recipe.nameLook = look(recipe.nameLook, state.nameTag);
-			tag(state.nameTagAttachment, offset, recipe.nameLook, !state.isDiscrete, state.lightCoords, camera);
+		if ((tags & NAME) != 0) {
+			place(scratch.set(pose).translate(0.0F, lift, 0.0F).translate((float) at.x, (float) (at.y + 0.5), (float) at.z).mul(FACING),
+					recipe.nameLook, offset, seeThroughToo, state.lightCoords, n, s);
 		}
+	}
+
+	private static void place(Matrix4f pose, Look look, int offset, boolean seeThroughToo, int light, int n, int s) {
+		if (seeThroughToo) {
+			normal.set(n, look, SOLID_PASS, offset, LightCoordsUtil.lightCoordsWithEmission(light, 2), pose);
+			seeThrough.set(s, look, SEE_THROUGH_PASS, offset, light, pose);
+		} else {
+			normal.set(n, look, DISCREET, offset, light, pose);
+		}
+	}
+
+	/** Every tag in place: where the farthest of each list is. */
+	static void finish() {
+		normal.findFarthest();
+		seeThrough.findFarthest();
 	}
 
 	private static Look look(@Nullable Look kept, Component text) {
@@ -192,34 +294,15 @@ public final class CrowdTags {
 	private static final java.util.Map<String, Integer> MADE = new java.util.HashMap<>();
 	private static long lastDebug;
 
-	private static void tag(@Nullable Vec3 attachment, int offset, Look look, boolean seeThroughToo, int light, CameraRenderState camera) {
-		if (attachment == null) {
-			return;
-		}
-		if (!facingReady) {
-			// As the game: turn to face the camera, then scale (worked out once, applied to every tag).
-			FACING.rotation(camera.orientation).scale(0.025F, -0.025F, 0.025F);
-			facingReady = true;
-		}
-		Matrix4f pose = TAG.set(STACK.last().pose()).translate((float) attachment.x, (float) (attachment.y + 0.5), (float) attachment.z)
-				.mul(FACING);
-		if (seeThroughToo) {
-			normal.add(look, SOLID_PASS, offset, LightCoordsUtil.lightCoordsWithEmission(light, 2), pose);
-			seeThrough.add(look, SEE_THROUGH_PASS, offset, light, pose);
-		} else {
-			normal.add(look, DISCREET, offset, light, pose);
-		}
-	}
-
 	private static boolean facingReady;
 
 	/** All entities are in: each list goes to the game as one tag, where the farthest of its tags is. */
 	static void endSubmits(SubmitNodeStorage storage) {
 		SubmitNodeCollection collection = storage.order(0);
-		if (normal.count > 0) {
+		if (normal.count > 0 && normal.farthest >= 0) {
 			collection.nameTags.submit(standIn(normal, NORMAL, Font.DisplayMode.NORMAL));
 		}
-		if (seeThrough.count > 0) {
+		if (seeThrough.count > 0 && seeThrough.farthest >= 0) {
 			collection.seeThroughNameTags.submit(standIn(seeThrough, SEE_THROUGH, Font.DisplayMode.SEE_THROUGH));
 		}
 	}
@@ -246,7 +329,7 @@ public final class CrowdTags {
 			order[i] = i;
 		}
 		if (mode == Font.DisplayMode.SEE_THROUGH) {
-			Crowd.sortFarToNear(order, order.length, tags.distance);
+			CrowdFrame.sortFarToNear(order, order.length, tags.distance);
 		}
 		int count = order.length;
 		GlyphRuns.Run[][] runs = new GlyphRuns.Run[count][];
