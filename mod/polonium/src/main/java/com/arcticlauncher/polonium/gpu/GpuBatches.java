@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.gpu;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
@@ -485,3 +486,4 @@ public final class GpuBatches implements GpuFeature {
 		return false;
 	}
 }
+//#endif

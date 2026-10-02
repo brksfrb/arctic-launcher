@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.mixin;
 
 import com.arcticlauncher.polonium.gpu.ShaderSources;
@@ -21,3 +22,4 @@ abstract class ShaderSourceMixin {
 		}
 	}
 }
+//#endif

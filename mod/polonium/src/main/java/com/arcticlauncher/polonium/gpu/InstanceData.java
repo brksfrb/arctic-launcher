@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.gpu;
 
 import java.nio.ByteBuffer;
@@ -59,3 +60,4 @@ final class InstanceData {
 		size = 0;
 	}
 }
+//#endif

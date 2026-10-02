@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.mixin;
 
 import com.mojang.blaze3d.IndexType;
@@ -29,3 +30,4 @@ public interface DrawAccess {
 	@Invoker("freeVertexData")
 	void polonium$freeVertexData();
 }
+//#endif

@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.mixin;
 
 import com.mojang.blaze3d.GpuFormat;
@@ -22,3 +23,4 @@ abstract class SkinTextureUsageMixin {
 				? usage | GpuTexture.USAGE_COPY_SRC : usage;
 	}
 }
+//#endif

@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium;
 
 import com.arcticlauncher.polonium.mixin.DrawAccess;
@@ -143,3 +144,4 @@ public final class ParallelUpload {
 		}
 	}
 }
+//#endif

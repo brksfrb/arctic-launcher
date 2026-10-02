@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -227,3 +228,4 @@ public final class GlyphRuns {
 		}
 	}
 }
+//#endif

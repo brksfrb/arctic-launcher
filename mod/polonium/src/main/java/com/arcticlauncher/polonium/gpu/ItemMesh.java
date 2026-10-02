@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.gpu;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
@@ -85,3 +86,4 @@ final class ItemMesh extends GpuMesh {
 		}
 	}
 }
+//#endif

@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.mixin;
 
 import java.util.List;
@@ -11,3 +12,4 @@ public interface PreparedFrameAccess {
 	@Accessor("allSubmits")
 	List<SubmitNode> polonium$allSubmits();
 }
+//#endif

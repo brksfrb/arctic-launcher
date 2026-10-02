@@ -92,8 +92,8 @@ public final class CrowdBench implements ClientModInitializer {
 		LOG.info("crowd bench: {} entities, {}s measured", COUNT, SECONDS);
 		// The window may lose focus while no one is watching: keep the pause menu away.
 		TIMER.scheduleAtFixedRate(() -> run(() -> {
-			if (Minecraft.getInstance().gui.screen() instanceof PauseScreen) {
-				Minecraft.getInstance().gui.setScreen(null);
+			if (screen(Minecraft.getInstance()) instanceof PauseScreen) {
+				closeScreen(Minecraft.getInstance());
 			}
 		}), 1, 1, TimeUnit.SECONDS);
 		TIMER.schedule(() -> run(CrowdBench::createWorld), 12, TimeUnit.SECONDS);
@@ -116,16 +116,16 @@ public final class CrowdBench implements ClientModInitializer {
 		LOG.info("crowd bench: creating {}", name);
 		mc.createWorldOpenFlows().createFreshLevel(name, settings, WorldOptions.defaultWithRandomSeed(),
 				registries -> registries.lookupOrThrow(Registries.WORLD_PRESET).getOrThrow(WorldPresets.FLAT).value().createWorldDimensions(),
-				mc.gui.screen());
+				screen(mc));
 		waitForWorld(0);
 	}
 
 	private static void waitForWorld(int attempt) {
 		Minecraft mc = Minecraft.getInstance();
-		if (mc.level != null && mc.player != null && mc.gui.screen() instanceof PauseScreen) {
-			mc.gui.setScreen(null);
+		if (mc.level != null && mc.player != null && screen(mc) instanceof PauseScreen) {
+			closeScreen(mc);
 		}
-		if (mc.level != null && mc.player != null && mc.gui.screen() == null) {
+		if (mc.level != null && mc.player != null && screen(mc) == null) {
 			LOG.info("crowd bench: in the world after {}s", attempt);
 			TIMER.schedule(() -> run(CrowdBench::setUp), 5, TimeUnit.SECONDS);
 		} else if (attempt < 180) {
@@ -334,7 +334,7 @@ public final class CrowdBench implements ClientModInitializer {
 		} catch (IOException e) {
 			LOG.error("crowd bench: couldn't save the result", e);
 		}
-		Screenshot.grab(mc, false);
+		screenshot(mc);
 		// A close look too, at an angle, to check how entities and name tags are drawn.
 		String player = mc.player.getGameProfile().name();
 		net.minecraft.client.server.IntegratedServer server = mc.getSingleplayerServer();
@@ -344,7 +344,33 @@ public final class CrowdBench implements ClientModInitializer {
 			mc.player.setXRot(30);
 			mc.player.setYRot(-45);
 		}), 2, TimeUnit.SECONDS);
-		TIMER.schedule(() -> run(() -> Screenshot.grab(mc, false)), 5, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> screenshot(mc)), 5, TimeUnit.SECONDS);
 		TIMER.schedule(() -> run(mc::stop), 8, TimeUnit.SECONDS);
+	}
+
+	// ---- What differs between Minecraft versions ----
+
+	private static net.minecraft.client.gui.screens.@org.jspecify.annotations.Nullable Screen screen(Minecraft mc) {
+		//#if MC >= 26.2
+		return mc.gui.screen();
+		//#else
+		return mc.screen;
+		//#endif
+	}
+
+	private static void closeScreen(Minecraft mc) {
+		//#if MC >= 26.2
+		mc.gui.setScreen(null);
+		//#else
+		mc.setScreen(null);
+		//#endif
+	}
+
+	private static void screenshot(Minecraft mc) {
+		//#if MC >= 26.2
+		Screenshot.grab(mc, false);
+		//#else
+		Screenshot.grab(mc.gameDirectory, mc.getMainRenderTarget(), message -> {});
+		//#endif
 	}
 }

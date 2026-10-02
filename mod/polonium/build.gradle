@@ -164,6 +164,19 @@ processResources {
 	filesMatching(['fabric.mod.json', 'polonium.mixins.json']) {
 		expand props
 	}
+	// Mixins whose source is compiled out for this version (//#if) aren't listed.
+	dependsOn 'preprocessJava'
+	doLast {
+		def config = new File(destinationDir, 'polonium.mixins.json')
+		def json = new groovy.json.JsonSlurper().parse(config)
+		def mixinDir = new File(preprocessedJava.get().asFile, 'com/arcticlauncher/polonium/mixin')
+		json.client = json.client.findAll { name ->
+			def source = new File(mixinDir, "${name}.java")
+			source.exists() && java.util.regex.Pattern.compile('(class|interface)[ ]+' + name + '[ <{]').matcher(source.getText('UTF-8')).find()
+		}
+		logger.lifecycle("Polonium mixins for ${mc}: ${json.client.size()}")
+		config.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json)), 'UTF-8')
+	}
 }
 
 tasks.withType(JavaCompile).configureEach {

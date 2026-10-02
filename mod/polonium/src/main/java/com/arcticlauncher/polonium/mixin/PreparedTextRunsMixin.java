@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.mixin;
 
 import com.arcticlauncher.polonium.GlyphRuns;
@@ -15,3 +16,4 @@ abstract class PreparedTextRunsMixin implements GlyphRuns.Holder {
 		return polonium$runs;
 	}
 }
+//#endif

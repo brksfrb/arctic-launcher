@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.gpu;
 
 import java.util.IdentityHashMap;
@@ -488,3 +489,4 @@ public final class GpuEntities {
 		poses.snapshot(mesh, submit.pose(), submit.tintedColor(), submit.overlayCoords(), submit.lightCoords(), uv, data);
 	}
 }
+//#endif

@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.gpu;
 
 import com.arcticlauncher.polonium.GlyphRuns;
@@ -610,3 +611,4 @@ public final class GpuText implements GpuFeature {
 		frame++;
 	}
 }
+//#endif

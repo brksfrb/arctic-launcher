@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.mixin;
 
 import com.arcticlauncher.polonium.gpu.CrowdChecked;
@@ -55,3 +56,4 @@ abstract class AvatarRenderStateCrowdMixin implements CrowdChecked {
 		polonium$checkedFrame = frame;
 	}
 }
+//#endif

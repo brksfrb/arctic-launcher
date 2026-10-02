@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.gpu;
 
 import com.arcticlauncher.polonium.Workers;
@@ -297,3 +298,4 @@ final class PartPoses {
 		return stack.get(depth);
 	}
 }
+//#endif

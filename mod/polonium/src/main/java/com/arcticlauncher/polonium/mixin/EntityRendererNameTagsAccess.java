@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.mixin;
 
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -12,3 +13,4 @@ public interface EntityRendererNameTagsAccess {
 	@Invoker("extractNameTags")
 	void polonium$extractNameTags(Entity entity, EntityRenderState state, float partialTicks, double nameTagDistance, double belowNameDistance);
 }
+//#endif

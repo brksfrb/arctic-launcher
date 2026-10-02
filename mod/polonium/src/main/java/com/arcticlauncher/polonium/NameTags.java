@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium;
 
 import java.util.Map;
@@ -76,3 +77,4 @@ public final class NameTags {
 		}
 	}
 }
+//#endif

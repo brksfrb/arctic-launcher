@@ -44,8 +44,14 @@ public final class AttributeValues {
 
 	/** An attribute instance changed (or was made): if it's one kept here, every kept value is stale. */
 	public static void changed(Holder<Attribute> attribute) {
+		//#if MC >= 26.2
 		if (attribute == Attributes.SCALE || attribute == Attributes.NAME_TAG_DISTANCE || attribute == Attributes.BELOW_NAME_DISTANCE) {
 			VERSION.incrementAndGet();
 		}
+		//#else
+		if (attribute == Attributes.SCALE) {
+			VERSION.incrementAndGet();
+		}
+		//#endif
 	}
 }
