@@ -79,10 +79,14 @@ final class CrowdRecipe {
 	private final boolean redOverlay;
 	private final boolean baby;
 	private final HumanoidArm mainArm;
-	private final ItemStack head;
-	private final ItemStack chest;
-	private final ItemStack legs;
-	private final ItemStack feet;
+	// The armor as recorded (or an equal copy since: kept, so the next look is quick).
+	private ItemStack head;
+	private ItemStack chest;
+	private ItemStack legs;
+	private ItemStack feet;
+	/** The state, and its held items' version, the items last matched with (see KeptStates.Slots). */
+	private @Nullable Object itemsState;
+	private int itemsVersion;
 	private final ItemLook right;
 	private final ItemLook left;
 	private final long recordedFrame;
@@ -127,16 +131,45 @@ final class CrowdRecipe {
 
 	/** Same skin, armor and items in hand as recorded (safe on any thread while the frame's states are made). */
 	boolean looksTheSame(AvatarRenderState state) {
-		return (state.skin == skin || state.skin.equals(skin)) && state.hasRedOverlay == redOverlay && state.isBaby == baby
-				&& state.mainArm == mainArm
-				&& same(state.headEquipment, head) && same(state.chestEquipment, chest)
-				&& same(state.legsEquipment, legs) && same(state.feetEquipment, feet)
-				&& right.matches(state.rightHandItemState) && left.matches(state.leftHandItemState);
-	}
-
-	/** The same stack (kept states hand out the same copy while nothing changed), or an equal one. */
-	private static boolean same(ItemStack now, ItemStack kept) {
-		return now == kept || ItemStack.isSameItemSameComponents(now, kept);
+		if (!(state.skin == skin || state.skin.equals(skin)) || state.hasRedOverlay != redOverlay || state.isBaby != baby
+				|| state.mainArm != mainArm) {
+			return false;
+		}
+		if (state.headEquipment != head) {
+			if (!ItemStack.isSameItemSameComponents(state.headEquipment, head)) {
+				return false;
+			}
+			head = state.headEquipment;
+		}
+		if (state.chestEquipment != chest) {
+			if (!ItemStack.isSameItemSameComponents(state.chestEquipment, chest)) {
+				return false;
+			}
+			chest = state.chestEquipment;
+		}
+		if (state.legsEquipment != legs) {
+			if (!ItemStack.isSameItemSameComponents(state.legsEquipment, legs)) {
+				return false;
+			}
+			legs = state.legsEquipment;
+		}
+		if (state.feetEquipment != feet) {
+			if (!ItemStack.isSameItemSameComponents(state.feetEquipment, feet)) {
+				return false;
+			}
+			feet = state.feetEquipment;
+		}
+		// Held items: a kept state whose items' models weren't made again since they last matched still matches.
+		int version = state instanceof com.arcticlauncher.polonium.KeptStates.Slots slots ? slots.polonium$itemsVersion() : -1;
+		if (version >= 0 && itemsState == state && itemsVersion == version) {
+			return true;
+		}
+		if (!right.matches(state.rightHandItemState) || !left.matches(state.leftHandItemState)) {
+			return false;
+		}
+		itemsState = state;
+		itemsVersion = version;
+		return true;
 	}
 
 	/**

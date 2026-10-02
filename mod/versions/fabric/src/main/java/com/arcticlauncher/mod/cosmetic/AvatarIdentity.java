@@ -18,5 +18,10 @@ public interface AvatarIdentity {
 	com.arcticlauncher.client.looks.Look arctic$look();
 
 	void arctic$setLook(com.arcticlauncher.client.looks.Look look);
+
+	/** When its looks were last looked up (states kept from frame to frame needn't ask every frame). */
+	long arctic$lookedAt();
+
+	void arctic$lookedAt(long millis);
 }
 //#endif

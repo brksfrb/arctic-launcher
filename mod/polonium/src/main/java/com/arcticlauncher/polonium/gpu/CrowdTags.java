@@ -206,6 +206,48 @@ public final class CrowdTags {
 		}
 	}
 
+	/** Room for players {@code [0, count)} (before {@link #planKept} on several threads). */
+	static void ensure(int count) {
+		if (count > 0) {
+			ensurePlanned(count - 1);
+		}
+	}
+
+	/** This frame's tag turn, from the camera (before {@link #planKept} on several threads). */
+	static void facing(CameraRenderState camera) {
+		if (!facingReady) {
+			FACING.rotation(camera.orientation).scale(0.025F, -0.025F, 0.025F);
+			facingReady = true;
+		}
+	}
+
+	/** Whether the player's tag texts are laid out already (then {@link #planKept} may plan it on any thread). */
+	static boolean laidOut(AvatarRenderState state, CrowdRecipe recipe) {
+		if (state.nameTagAttachment == null) {
+			return true;
+		}
+		return (state.scoreText == null || recipe.scoreLook != null && recipe.scoreLook.current(state.scoreText))
+				&& (state.nameTag == null || recipe.nameLook != null && recipe.nameLook.current(state.nameTag));
+	}
+
+	/** {@link #plan} for a player whose texts are laid out ({@link #laidOut}), after {@link #ensure} and {@link #facing}: safe on any thread. */
+	static void planKept(int entity, AvatarRenderState state, CrowdRecipe recipe) {
+		int tags = 0;
+		if (state.nameTagAttachment != null) {
+			if (state.scoreText != null) {
+				tags |= SCORE;
+			}
+			if (state.nameTag != null) {
+				tags |= NAME;
+			}
+			if (!state.isDiscrete) {
+				tags |= SEE_THROUGH_TOO;
+			}
+		}
+		planned[entity] = tags;
+		plannedRecipe[entity] = recipe;
+	}
+
 	private static void ensurePlanned(int entity) {
 		if (entity >= planned.length) {
 			int size = Math.max(planned.length * 2, entity + 1);

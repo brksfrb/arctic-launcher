@@ -24,6 +24,12 @@ public final class KeptStates {
 	public static final int LEFT_COPY = 2;
 	public static final int RIGHT_COPY = 3;
 	public static final int ARMOR = 4;
+	/**
+	 * Copies of the items are made again this often, in ticks, even when the
+	 * player holds the same item object (in case it was changed in place:
+	 * the server sends new items when they change, so that's rare).
+	 */
+	public static final int COPY_TICKS = 20;
 	private static volatile boolean inLevel;
 
 	/** Room on an entity for its kept state (added to Entity by a mixin). */
@@ -40,6 +46,16 @@ public final class KeptStates {
 		Object[] polonium$sources();
 
 		int[] polonium$ticks();
+
+		/** Counts the times its held items' models were made again (not left as they were). */
+		int polonium$itemsVersion();
+
+		void polonium$itemsChanged();
+	}
+
+	/** {@link #same} for a slot that holds a copy (made again every {@link #COPY_TICKS} ticks). */
+	public static boolean sameCopy(Object state, int slot, Object source, int tick) {
+		return same(state, slot, source, tick / COPY_TICKS);
 	}
 
 	private KeptStates() {}

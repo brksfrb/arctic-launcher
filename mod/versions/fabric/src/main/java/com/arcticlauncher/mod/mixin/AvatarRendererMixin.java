@@ -19,6 +19,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** Players get Arctic's cosmetics layer, and a speaker on their name tag while talking. */
 @Mixin(AvatarRenderer.class)
 abstract class AvatarRendererMixin {
+	/** How long a player's looks found for its render state stay good. */
+	private static final long LOOK_REFRESH_MS = 250;
+
 	@SuppressWarnings({"unchecked", "rawtypes"})
 	@Inject(method = "<init>", at = @At("TAIL"))
 	private void arctic$cosmetics(EntityRendererProvider.Context context, boolean slim, CallbackInfo ci) {
@@ -33,10 +36,17 @@ abstract class AvatarRendererMixin {
 		// Only players can be Arctic players: mannequins and other player-shaped
 		// entities skip the looks, emotes and cosmetics work (a crowd of them adds up).
 		java.util.UUID id = entity instanceof net.minecraft.world.entity.player.Player ? entity.getUUID() : null;
-		((AvatarIdentity) state).arctic$setUuid(id);
-		((AvatarIdentity) state).arctic$setLook(id != null && ArcticClient.looks() != null ? ArcticClient.looks().lookFor(id) : null);
-		if (id != null && ArcticClient.looks() != null) {
-			ArcticClient.looks().cosmetics().watch(id);
+		AvatarIdentity identity = (AvatarIdentity) state;
+		long now = System.currentTimeMillis();
+		// Performance mods may keep a player's state from frame to frame: then its looks needn't be looked up every frame.
+		boolean fresh = id == null || !id.equals(identity.arctic$uuid()) || now - identity.arctic$lookedAt() > LOOK_REFRESH_MS;
+		identity.arctic$setUuid(id);
+		if (fresh) {
+			identity.arctic$setLook(id != null && ArcticClient.looks() != null ? ArcticClient.looks().lookFor(id) : null);
+			identity.arctic$lookedAt(now);
+			if (id != null && ArcticClient.looks() != null) {
+				ArcticClient.looks().cosmetics().watch(id);
+			}
 		}
 	}
 

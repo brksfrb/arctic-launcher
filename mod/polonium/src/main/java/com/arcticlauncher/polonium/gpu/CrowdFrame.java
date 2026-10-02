@@ -99,6 +99,32 @@ final class CrowdFrame {
 		return e;
 	}
 
+	/** Room for {@code count} players queued with {@link #queueAt} (on any thread); returns the first one's number. */
+	static int reserve(int count) {
+		int first = entityCount;
+		entityCount += count;
+		if (entityCount > entityRecipe.length) {
+			int size = Math.max(entityRecipe.length * 2, entityCount);
+			entityRecipe = Arrays.copyOf(entityRecipe, size);
+			entityState = Arrays.copyOf(entityState, size);
+			entityPose = Arrays.copyOf(entityPose, size * 16);
+			entityRoot = Arrays.copyOf(entityRoot, size * 16);
+			entityLight = Arrays.copyOf(entityLight, size);
+			entityFirstMember = Arrays.copyOf(entityFirstMember, size);
+			entityMemberCount = Arrays.copyOf(entityMemberCount, size);
+		}
+		return first;
+	}
+
+	/** A reserved player (see {@link #queue}). */
+	static void queueAt(int e, CrowdRecipe recipe, AvatarRenderState state, Matrix4f pose) {
+		entityRecipe[e] = recipe;
+		entityState[e] = state;
+		entityLight[e] = state.lightCoords;
+		pose.get(entityPose, e * 16);
+		entityMemberCount[e] = recipe.models.size() + recipe.items.size();
+	}
+
 	/** The model's root, as {@link LivingEntityRenderer#submit} works it out, from the pose the entity was submitted at. */
 	static Matrix4f root(LivingEntityRenderer<?, ?, ?> renderer, AvatarRenderState state, Matrix4f pose, PoseStack scratch) {
 		LivingEntityRendererAccess access = (LivingEntityRendererAccess) renderer;
