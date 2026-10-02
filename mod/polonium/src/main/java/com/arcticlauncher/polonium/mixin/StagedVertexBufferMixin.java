@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.mixin;
 
 import com.arcticlauncher.polonium.ParallelUpload;
@@ -28,3 +29,4 @@ abstract class StagedVertexBufferMixin {
 		}
 	}
 }
+//#endif

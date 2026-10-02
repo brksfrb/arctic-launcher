@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.mixin;
 
 import net.minecraft.client.gui.Font;
@@ -15,3 +16,4 @@ public interface GlyphRendererAccess {
 	@Accessor("lightCoords")
 	int polonium$lightCoords();
 }
+//#endif

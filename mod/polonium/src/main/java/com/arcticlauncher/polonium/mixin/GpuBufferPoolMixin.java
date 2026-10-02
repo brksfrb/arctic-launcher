@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.mixin;
 
 import com.arcticlauncher.polonium.StagingPool;
@@ -17,3 +18,4 @@ abstract class GpuBufferPoolMixin implements StagingPool {
 		return acquire(device, minSize);
 	}
 }
+//#endif

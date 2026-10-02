@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.gpu;
 
 /**
@@ -22,3 +23,4 @@ public interface CrowdChecked {
 
 	void polonium$taken(long frame);
 }
+//#endif

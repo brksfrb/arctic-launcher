@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.gpu;
 
 import com.mojang.blaze3d.GpuFormat;
@@ -263,3 +264,4 @@ final class SkinAtlas {
 				to.glId(), org.lwjgl.opengl.GL11C.GL_TEXTURE_2D, 0, dx, dy, 0, width, height, 1);
 	}
 }
+//#endif

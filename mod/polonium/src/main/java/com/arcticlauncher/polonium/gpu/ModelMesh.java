@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.gpu;
 
 import com.arcticlauncher.polonium.mixin.ModelPartAccess;
@@ -164,3 +165,4 @@ final class ModelMesh extends GpuMesh {
 	}
 
 }
+//#endif

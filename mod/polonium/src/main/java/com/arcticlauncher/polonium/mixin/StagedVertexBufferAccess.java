@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.mixin;
 
 import com.mojang.blaze3d.vertex.CompactVectorArray;
@@ -13,3 +14,4 @@ public interface StagedVertexBufferAccess {
 		throw new AssertionError();
 	}
 }
+//#endif

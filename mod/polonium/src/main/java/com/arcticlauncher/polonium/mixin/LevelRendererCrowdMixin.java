@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.mixin;
 
 import com.arcticlauncher.polonium.gpu.Crowd;
@@ -45,3 +46,4 @@ abstract class LevelRendererCrowdMixin {
 		Crowd.endSubmits(output);
 	}
 }
+//#endif

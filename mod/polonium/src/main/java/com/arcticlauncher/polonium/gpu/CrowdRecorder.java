@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.gpu;
 
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -407,3 +408,4 @@ final class CrowdRecorder implements SubmitNodeCollector {
 		}
 	}
 }
+//#endif

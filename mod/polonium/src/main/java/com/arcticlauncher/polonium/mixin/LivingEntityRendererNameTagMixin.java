@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.mixin;
 
 import com.arcticlauncher.polonium.AttributeValues;
@@ -26,3 +27,4 @@ abstract class LivingEntityRendererNameTagMixin {
 				kept.polonium$belowNameDistance());
 	}
 }
+//#endif

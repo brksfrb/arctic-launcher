@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.gpu;
 
 import java.util.HashMap;
@@ -277,3 +278,4 @@ public final class GpuItems {
 		}
 	}
 }
+//#endif

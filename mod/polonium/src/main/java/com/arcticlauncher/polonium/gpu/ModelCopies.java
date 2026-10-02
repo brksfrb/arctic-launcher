@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.gpu;
 
 import java.lang.reflect.Field;
@@ -209,3 +210,4 @@ final class ModelCopies {
 		}
 	}
 }
+//#endif

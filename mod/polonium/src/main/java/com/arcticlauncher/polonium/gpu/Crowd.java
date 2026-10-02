@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.gpu;
 
 import com.arcticlauncher.polonium.Workers;
@@ -661,3 +662,4 @@ public final class Crowd {
 	/** -Dpolonium.debugCulling=true: log entity culling's tick counters with the crowd report. */
 	private static final boolean DEBUG_CULLING = Boolean.getBoolean("polonium.debugCulling");
 }
+//#endif

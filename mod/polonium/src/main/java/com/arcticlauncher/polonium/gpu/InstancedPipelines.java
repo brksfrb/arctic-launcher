@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.gpu;
 
 import com.mojang.blaze3d.GpuFormat;
@@ -104,3 +105,4 @@ final class InstancedPipelines {
 		return constructor;
 	}
 }
+//#endif

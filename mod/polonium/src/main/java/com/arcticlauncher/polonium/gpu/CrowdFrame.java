@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.gpu;
 
 import com.arcticlauncher.polonium.Workers;
@@ -587,3 +588,4 @@ final class CrowdFrame {
 		}
 	}
 }
+//#endif

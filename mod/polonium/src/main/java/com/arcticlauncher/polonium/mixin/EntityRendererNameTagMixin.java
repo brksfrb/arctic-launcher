@@ -1,3 +1,4 @@
+//#if MC >= 26.2
 package com.arcticlauncher.polonium.mixin;
 
 import com.arcticlauncher.polonium.NameTags;
@@ -18,3 +19,4 @@ abstract class EntityRendererNameTagMixin {
 		return NameTags.displayName(entity, () -> build.call(entity));
 	}
 }
+//#endif
