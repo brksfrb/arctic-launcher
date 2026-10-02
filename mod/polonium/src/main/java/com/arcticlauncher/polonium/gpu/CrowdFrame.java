@@ -215,7 +215,7 @@ final class CrowdFrame {
 		ensureMembers(total);
 		memberCount = total;
 		CrowdTags.layOut(count);
-		int parts = count < PARALLEL_MIN ? 1 : Workers.HELPERS + 1;
+		int parts = count < PARALLEL_MIN ? 1 : Workers.PARTS;
 		Part[] work = new Part[parts];
 		List<Runnable> jobs = new ArrayList<>(parts);
 		for (int p = 0; p < parts; p++) {
@@ -406,7 +406,7 @@ final class CrowdFrame {
 			range.run(0, count);
 			return;
 		}
-		int parts = Workers.HELPERS + 1;
+		int parts = Workers.PARTS;
 		List<Runnable> chunks = new ArrayList<>(parts);
 		for (int p = 0; p < parts; p++) {
 			int from = count * p / parts;

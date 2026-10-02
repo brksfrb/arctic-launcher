@@ -403,7 +403,7 @@ public final class Crowd {
 	}
 
 	private static void inParts(int count, Range range) {
-		int parts = count < BULK_MIN ? 1 : Workers.HELPERS + 1;
+		int parts = count < BULK_MIN ? 1 : Workers.PARTS;
 		if (parts == 1) {
 			range.run(0, count);
 			return;

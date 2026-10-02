@@ -284,7 +284,7 @@ public final class GpuEntities {
 	}
 
 	private static int partsFor(int count) {
-		return count < BULK_MIN ? 1 : com.arcticlauncher.polonium.Workers.HELPERS + 1;
+		return count < BULK_MIN ? 1 : com.arcticlauncher.polonium.Workers.PARTS;
 	}
 
 	private interface Range {

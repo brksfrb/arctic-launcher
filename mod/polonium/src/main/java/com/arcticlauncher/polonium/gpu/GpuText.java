@@ -195,7 +195,7 @@ public final class GpuText implements GpuFeature {
 				batches.add(batchFor(group, type));
 			}
 			boolean[] ready = new boolean[count];
-			int parts = count < BULK_PARALLEL_MIN ? 1 : com.arcticlauncher.polonium.Workers.HELPERS + 1;
+			int parts = count < BULK_PARALLEL_MIN ? 1 : com.arcticlauncher.polonium.Workers.PARTS;
 			// 1. Which tags have everything in place already (most, every frame after the first).
 			runParts(parts, count, (from, to) -> {
 				for (int i = from; i < to; i++) {

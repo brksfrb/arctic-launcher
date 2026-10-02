@@ -131,7 +131,7 @@ final class PartPoses {
 		if (count < PARALLEL_MIN) {
 			compute(0, count);
 		} else {
-			int parts = Workers.HELPERS + 1;
+			int parts = Workers.PARTS;
 			List<Runnable> chunks = new ArrayList<>(parts);
 			for (int p = 0; p < parts; p++) {
 				int from = count * p / parts;
