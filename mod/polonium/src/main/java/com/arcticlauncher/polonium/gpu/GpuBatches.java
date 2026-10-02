@@ -292,9 +292,9 @@ public final class GpuBatches implements GpuFeature {
 		ByteBuffer drawBytesBuffer = MemoryUtil.memCalloc((int) drawBytes).order(ByteOrder.nativeOrder());
 		try (GpuBufferSlice.MappedView view = instanceBuffers[slot].slice(0, texels * 16).map(false, true)) {
 			ByteBuffer instanceBytes = view.data().order(ByteOrder.nativeOrder());
+			copyInstances(instanceBytes, texels);
 			for (List<Batch> group : groups) {
 				for (Batch batch : group) {
-					batch.data.writeTo(instanceBytes);
 					drawBytesBuffer.putInt((int) batch.drawOffset, batch.firstTexel);
 					drawBytesBuffer.putInt((int) batch.drawOffset + 4, batch.mesh.texelsPerInstance);
 				}
@@ -303,6 +303,42 @@ public final class GpuBatches implements GpuFeature {
 		} finally {
 			MemoryUtil.memFree(drawBytesBuffer);
 		}
+	}
+
+	/** Copies bigger than this (in floats) are split over the helper threads. */
+	private static final int PARALLEL_COPY_FLOATS = 256 * 1024;
+	/** The size of a piece of such a copy, in floats (1 MB). */
+	private static final int COPY_PIECE_FLOATS = 256 * 1024;
+
+	/**
+	 * Every batch's instance data into the mapped buffer, at its place. With
+	 * thousands of entities that's megabytes a frame: then in pieces, on the
+	 * helper threads (each writes its own range).
+	 */
+	private void copyInstances(ByteBuffer target, long texels) {
+		java.nio.FloatBuffer floats = target.asFloatBuffer();
+		if (texels * 4 < PARALLEL_COPY_FLOATS) {
+			for (List<Batch> group : groups) {
+				for (Batch batch : group) {
+					floats.put(batch.firstTexel * 4, batch.data.array(), 0, batch.data.texels() * 4);
+				}
+			}
+			return;
+		}
+		List<Runnable> pieces = new ArrayList<>();
+		for (List<Batch> group : groups) {
+			for (Batch batch : group) {
+				float[] source = batch.data.array();
+				int length = batch.data.texels() * 4;
+				int at = batch.firstTexel * 4;
+				for (int from = 0; from < length; from += COPY_PIECE_FLOATS) {
+					int start = from;
+					int count = Math.min(COPY_PIECE_FLOATS, length - from);
+					pieces.add(() -> floats.duplicate().put(at + start, source, start, count));
+				}
+			}
+		}
+		com.arcticlauncher.polonium.Workers.runAll(pieces);
 	}
 
 	private static GpuBuffer ensure(GpuDevice device, @Nullable GpuBuffer buffer, long size, int usage, String label) {
