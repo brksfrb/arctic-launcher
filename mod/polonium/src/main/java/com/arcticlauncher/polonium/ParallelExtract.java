@@ -98,23 +98,29 @@ public final class ParallelExtract {
 		return enabled;
 	}
 
-	/** Every visible entity's render state, in order ({@code trusted}: per entity, from {@link #visible}). */
-	public static EntityRenderState[] extract(List<Entity> entities, float[] partials, boolean[] trusted, Extractor extractor) {
-		KeptStates.inLevel(true);
-		try {
-			return extractAll(entities, partials, trusted, extractor);
-		} finally {
-			KeptStates.inLevel(false);
-		}
-	}
+	/** States being made on the helpers, added to the frame by {@link #finish}. */
+	private record Started(Workers.Started work, EntityRenderState[] states, List<Entity> entities, float[] partials, Extractor extractor,
+			boolean[] parallel, List<EntityRenderState> output) {}
 
-	private static EntityRenderState[] extractAll(List<Entity> entities, float[] partials, boolean[] trusted, Extractor extractor) {
+	private static Started started;
+
+	/**
+	 * Every visible entity's render state, added to {@code output} in order
+	 * ({@code trusted}: per entity, from {@link #visible}). With many
+	 * entities, those with trusted renderers are made on the helpers while
+	 * this thread goes on with the rest of the frame's extraction (blocks,
+	 * particles, sky, the HUD), and added by {@link #finish}: nothing reads
+	 * the level's entity states before the frame is drawn.
+	 */
+	public static void extract(List<Entity> entities, float[] partials, boolean[] trusted, Extractor extractor, List<EntityRenderState> output) {
+		finish();
 		int count = entities.size();
 		lastDrawn = count;
 		EntityRenderState[] states = new EntityRenderState[count];
 		if (count < PARALLEL_MIN) {
-			serial(entities, partials, extractor, states, null);
-			return states;
+			serialInLevel(entities, partials, extractor, states, null);
+			addAll(states, output);
+			return;
 		}
 		if (!announced) {
 			announced = true;
@@ -127,31 +133,64 @@ public final class ParallelExtract {
 			if (trusted[i]) {
 				parallel[i] = true;
 				queue.add(i);
-			} else {
-				states[i] = extractor.extract(entities.get(i), partials[i]);
 			}
 		}
+		boolean[] untrusted = new boolean[count];
+		for (int i = 0; i < count; i++) {
+			untrusted[i] = !parallel[i];
+		}
+		serialInLevel(entities, partials, extractor, states, untrusted);
 		int parts = Workers.PARTS;
 		List<Runnable> jobs = new ArrayList<>(parts);
 		for (int p = 0; p < parts; p++) {
 			int from = queue.size() * p / parts;
 			int to = queue.size() * (p + 1) / parts;
 			jobs.add(() -> {
-				for (int k = from; k < to; k++) {
-					int i = queue.get(k);
-					states[i] = extractor.extract(entities.get(i), partials[i]);
-					com.arcticlauncher.polonium.gpu.Crowd.precheck(states[i]);
+				KeptStates.inLevel(true);
+				try {
+					for (int k = from; k < to; k++) {
+						int i = queue.get(k);
+						states[i] = extractor.extract(entities.get(i), partials[i]);
+						com.arcticlauncher.polonium.gpu.Crowd.precheck(states[i]);
+					}
+				} finally {
+					KeptStates.inLevel(false);
 				}
 			});
 		}
+		started = new Started(Workers.start(jobs), states, entities, partials, extractor, parallel, output);
+	}
+
+	/** The entity states {@link #extract} left on the helpers, waited for and added to the frame (if any are left). */
+	public static void finish() {
+		Started work = started;
+		if (work == null) {
+			return;
+		}
+		started = null;
 		try {
-			Workers.runAll(jobs);
+			Workers.join(work.work);
 		} catch (RuntimeException | Error e) {
 			enabled = false;
 			LOG.error("Polonium: making entity render states on several threads failed; back to one thread from now on", e);
-			serial(entities, partials, extractor, states, parallel);
+			serialInLevel(work.entities, work.partials, work.extractor, work.states, work.parallel);
 		}
-		return states;
+		addAll(work.states, work.output);
+	}
+
+	private static void addAll(EntityRenderState[] states, List<EntityRenderState> output) {
+		for (EntityRenderState state : states) {
+			output.add(state);
+		}
+	}
+
+	private static void serialInLevel(List<Entity> entities, float[] partials, Extractor extractor, EntityRenderState[] states, boolean[] only) {
+		KeptStates.inLevel(true);
+		try {
+			serial(entities, partials, extractor, states, only);
+		} finally {
+			KeptStates.inLevel(false);
+		}
 	}
 
 	/** On this thread: every entity, or only those marked in {@code only}. */

@@ -53,20 +53,27 @@ public final class ParallelTicks {
 		return true;
 	}
 
+	/** Whether players are ticking in parallel right now. */
+	public static boolean running() {
+		return running;
+	}
+
 	/** Whether work reaching outside the entity being ticked must wait (see {@link #defer}). */
 	public static boolean deferring() {
 		return running && DEFERRED.get() != null;
 	}
 
-	/** Lookups of other entities take turns while players tick in parallel (see the *LookupMixin classes). */
-	private static final Object LOOKUPS = new Object();
-
-	/** Run a lookup of other entities: in turn with the other threads during parallel ticks, else as it is. */
-	public static <T> T inTurn(java.util.function.Supplier<T> lookup) {
+	/**
+	 * Run a lookup in the level's entity lists ({@code lists}: the section or
+	 * map searched) in turn with the other threads during parallel ticks, else
+	 * as it is. Only threads searching the same lists wait for each other (see
+	 * the *LookupMixin classes).
+	 */
+	public static <T> T inTurn(Object lists, java.util.function.Supplier<T> lookup) {
 		if (!running) {
 			return lookup.get();
 		}
-		synchronized (LOOKUPS) {
+		synchronized (lists) {
 			return lookup.get();
 		}
 	}

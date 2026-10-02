@@ -18,6 +18,6 @@ import org.spongepowered.asm.mixin.Mixin;
 abstract class ByClassLookupMixin {
 	@WrapMethod(method = "find")
 	private <S> Collection<S> polonium$inTurn(Class<S> type, Operation<Collection<S>> find) {
-		return ParallelTicks.inTurn(() -> find.call(type));
+		return ParallelTicks.inTurn(this, () -> find.call(type));
 	}
 }
