@@ -9,6 +9,8 @@ import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.Nullable;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -40,10 +42,19 @@ abstract class ClientLevelParallelTicksMixin {
 		ParallelTicks.end(polonium$self());
 	}
 
-	@Inject(method = "tickNonPassenger", at = @At("HEAD"), cancellable = true)
-	private void polonium$setAside(Entity entity, CallbackInfo ci) {
-		if (ParallelTicks.collect(entity)) {
-			ci.cancel();
+	/**
+	 * Set aside before tickNonPassenger is even called, so hooks at its head
+	 * run once, in the parallel tick. Entity culling's does: it marks the
+	 * entity out of view (until it's rendered) and ticks it lightly if it
+	 * still is; run once before setting aside and again in the parallel
+	 * tick, it saw its own mark and gave every visible player the light tick
+	 * (no walk animation, no body turn: legs still or racing, heads spinning).
+	 */
+	@WrapOperation(method = "lambda$tickEntities$0",
+			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/multiplayer/ClientLevel;guardEntityTick(Ljava/util/function/Consumer;Lnet/minecraft/world/entity/Entity;)V"))
+	private void polonium$setAside(ClientLevel level, java.util.function.Consumer<Entity> tick, Entity entity, Operation<Void> guarded) {
+		if (!ParallelTicks.collect(entity)) {
+			guarded.call(level, tick, entity);
 		}
 	}
 

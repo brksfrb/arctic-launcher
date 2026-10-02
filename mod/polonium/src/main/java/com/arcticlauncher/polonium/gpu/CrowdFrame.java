@@ -230,6 +230,7 @@ final class CrowdFrame {
 			Workers.runAll(jobs);
 		}
 		CrowdTags.finish();
+		reportAnimation();
 		// The groups, their members in the players' order.
 		for (Part part : work) {
 			for (int g = 0; g < part.groups.size(); g++) {
@@ -299,7 +300,79 @@ final class CrowdFrame {
 				part.add(entry.bucket, m++, distance, e);
 			}
 			CrowdTags.fill(e, state, pose, scratch.tag);
+			if (state.id == JITTER_ID) {
+				jitter(state);
+			}
+			if (ANIMATION_CHECK) {
+				check(state);
+			}
 		}
+	}
+
+	/** -Dpolonium.debugAnimation=true: count crowd players whose animation looks wrong (logged every 600 frames). */
+	private static final boolean ANIMATION_CHECK = Boolean.getBoolean("polonium.debugAnimation");
+	private static final java.util.concurrent.atomic.AtomicLong CHECKED = new java.util.concurrent.atomic.AtomicLong();
+	private static final java.util.concurrent.atomic.AtomicLong FAST_LEGS = new java.util.concurrent.atomic.AtomicLong();
+	private static final java.util.concurrent.atomic.AtomicLong STILL_LEGS = new java.util.concurrent.atomic.AtomicLong();
+	private static final java.util.concurrent.atomic.AtomicLong TWISTED_HEAD = new java.util.concurrent.atomic.AtomicLong();
+	private static long checkReport;
+
+	private static void check(AvatarRenderState state) {
+		CHECKED.incrementAndGet();
+		if (state.walkAnimationSpeed > 1.2F) {
+			FAST_LEGS.incrementAndGet();
+		}
+		if (state.walkAnimationSpeed < 0.02F) {
+			STILL_LEGS.incrementAndGet();
+		}
+		if (Math.abs(state.yRot) > 75F) {
+			TWISTED_HEAD.incrementAndGet();
+		}
+	}
+
+	/** The animation counts so far (every ten seconds or so). */
+	static void reportAnimation() {
+		long now = System.nanoTime();
+		if (!ANIMATION_CHECK || now - checkReport < 10_000_000_000L) {
+			return;
+		}
+		checkReport = now;
+		long checked = Math.max(1, CHECKED.getAndSet(0));
+		org.slf4j.LoggerFactory.getLogger("Polonium").info(String.format(java.util.Locale.ROOT,
+				"Polonium animation: %d looked at; legs too fast %.2f%%, legs still %.2f%%, head twisted %.2f%%", checked,
+				100.0 * FAST_LEGS.getAndSet(0) / checked, 100.0 * STILL_LEGS.getAndSet(0) / checked, 100.0 * TWISTED_HEAD.getAndSet(0) / checked));
+	}
+
+	/** -Dpolonium.debugJitter=ID: how smoothly that entity turns and walks, frame to frame (logged every 600 frames). */
+	private static final int JITTER_ID = Integer.getInteger("polonium.debugJitter", Integer.MIN_VALUE);
+	private static final float[][] JITTER = new float[3][600];
+	private static int jitterAt;
+
+	private static synchronized void jitter(AvatarRenderState state) {
+		JITTER[0][jitterAt] = state.bodyRot;
+		JITTER[1][jitterAt] = state.bodyRot + state.yRot;
+		JITTER[2][jitterAt] = state.walkAnimationPos;
+		if (++jitterAt < 600) {
+			return;
+		}
+		jitterAt = 0;
+		StringBuilder line = new StringBuilder("Polonium jitter:");
+		String[] names = {"body", "head", "walk"};
+		for (int k = 0; k < 3; k++) {
+			float[] v = JITTER[k];
+			double second = 0;
+			int reversals = 0;
+			for (int i = 2; i < v.length; i++) {
+				float d1 = v[i - 1] - v[i - 2];
+				float d2 = v[i] - v[i - 1];
+				second += Math.abs(d2 - d1);
+				if (d1 * d2 < 0) {
+					reversals++;
+				}
+			}
+			line.append(String.format(java.util.Locale.ROOT, " %s: mean |accel| %.3f, reversals %d;", names[k], second / (v.length - 2), reversals));
+		}
+		org.slf4j.LoggerFactory.getLogger("Polonium").info(line.toString());
 	}
 
 	private static void ensureMembers(int count) {
