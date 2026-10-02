@@ -241,12 +241,20 @@ public final class GpuBatches implements GpuFeature {
 		}
 		try {
 			if (!uploaded) {
+				com.arcticlauncher.polonium.Timeline.start(com.arcticlauncher.polonium.Timeline.Step.CROWD_LAYOUT);
 				layOut();
+				com.arcticlauncher.polonium.Timeline.end(com.arcticlauncher.polonium.Timeline.Step.CROWD_LAYOUT);
+				com.arcticlauncher.polonium.Timeline.start(com.arcticlauncher.polonium.Timeline.Step.CROWD_COMPUTE);
 				beforeUpload.run();
+				com.arcticlauncher.polonium.Timeline.end(com.arcticlauncher.polonium.Timeline.Step.CROWD_COMPUTE);
+				com.arcticlauncher.polonium.Timeline.start(com.arcticlauncher.polonium.Timeline.Step.CROWD_UPLOAD);
 				upload();
+				com.arcticlauncher.polonium.Timeline.end(com.arcticlauncher.polonium.Timeline.Step.CROWD_UPLOAD);
 				uploaded = true;
 			}
+			com.arcticlauncher.polonium.Timeline.start(com.arcticlauncher.polonium.Timeline.Step.CROWD_DRAWS);
 			drawAll(groups.get(groupIndex), instanceBuffers[slot()], drawBuffers[slot()]);
+			com.arcticlauncher.polonium.Timeline.end(com.arcticlauncher.polonium.Timeline.Step.CROWD_DRAWS);
 		} catch (RuntimeException e) {
 			disable("drawing models on the GPU failed", e);
 		}
