@@ -1,22 +1,28 @@
 package com.arcticlauncher.polonium.mixin;
 
-import com.arcticlauncher.polonium.AttributeCache;
+import com.arcticlauncher.polonium.AttributeValues;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
-import net.minecraft.core.Holder;
+import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.ai.attributes.Attribute;
-import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.injection.At;
 
-/** The name tag distance attributes, remembered per entity (see {@link AttributeCache}). */
+/** The name tag distance attributes, kept per entity as values (see {@link AttributeValues}). */
 @Mixin(LivingEntityRenderer.class)
 abstract class LivingEntityRendererNameTagMixin {
-	@WrapOperation(method = "extractNameTags",
-			at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;getAttribute(Lnet/minecraft/core/Holder;)Lnet/minecraft/world/entity/ai/attributes/AttributeInstance;"))
-	private AttributeInstance polonium$rememberedAttribute(LivingEntity entity, Holder<Attribute> attribute, Operation<AttributeInstance> lookUp) {
-		return AttributeCache.get(entity, attribute, () -> lookUp.call(entity, attribute));
+	@WrapMethod(method = "extractNameTags(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;F)V")
+	private void polonium$keptDistances(LivingEntity entity, LivingEntityRenderState state, float partialTicks, Operation<Void> extract) {
+		AttributeValues.Holder2 kept = (AttributeValues.Holder2) entity;
+		long version = AttributeValues.version();
+		if (kept.polonium$version() != version) {
+			// As the game reads them.
+			kept.polonium$nameDistances(entity.getAttribute(Attributes.NAME_TAG_DISTANCE).getValue(),
+					entity.getAttribute(Attributes.BELOW_NAME_DISTANCE).getValue());
+			kept.polonium$version(version);
+		}
+		((EntityRendererNameTagsAccess) this).polonium$extractNameTags(entity, state, partialTicks, kept.polonium$nameDistance(),
+				kept.polonium$belowNameDistance());
 	}
 }

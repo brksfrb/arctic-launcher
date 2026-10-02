@@ -93,7 +93,7 @@ public final class Cosmetics {
 	private final Map<UUID, Playing> playing = new ConcurrentHashMap<UUID, Playing>();
 	private final Map<UUID, Long> watched = new ConcurrentHashMap<UUID, Long>();
 	/** How stale a player's "on screen" time may get before it's refreshed. */
-	private static final long WATCH_REFRESH_MS = 250;
+	private static final long WATCH_REFRESH_MS = 1000;
 
 	Cosmetics(Platform platform, String baseUrl, ScheduledExecutorService worker) {
 		this.platform = platform;

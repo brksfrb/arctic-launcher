@@ -129,9 +129,14 @@ final class CrowdRecipe {
 	boolean looksTheSame(AvatarRenderState state) {
 		return (state.skin == skin || state.skin.equals(skin)) && state.hasRedOverlay == redOverlay && state.isBaby == baby
 				&& state.mainArm == mainArm
-				&& ItemStack.isSameItemSameComponents(state.headEquipment, head) && ItemStack.isSameItemSameComponents(state.chestEquipment, chest)
-				&& ItemStack.isSameItemSameComponents(state.legsEquipment, legs) && ItemStack.isSameItemSameComponents(state.feetEquipment, feet)
+				&& same(state.headEquipment, head) && same(state.chestEquipment, chest)
+				&& same(state.legsEquipment, legs) && same(state.feetEquipment, feet)
 				&& right.matches(state.rightHandItemState) && left.matches(state.leftHandItemState);
+	}
+
+	/** The same stack (kept states hand out the same copy while nothing changed), or an equal one. */
+	private static boolean same(ItemStack now, ItemStack kept) {
+		return now == kept || ItemStack.isSameItemSameComponents(now, kept);
 	}
 
 	/**

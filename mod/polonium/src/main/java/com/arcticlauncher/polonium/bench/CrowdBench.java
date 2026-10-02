@@ -52,8 +52,8 @@ public final class CrowdBench implements ClientModInitializer {
 	 * move them), not mannequins. Their ticking is what a real crowd costs.
 	 */
 	private static final boolean PLAYERS = "players".equals(System.getProperty("polonium.bench.kind"));
-	private static final java.util.Map<java.util.UUID, net.minecraft.world.entity.player.PlayerSkin> PLAYER_SKINS =
-			new java.util.concurrent.ConcurrentHashMap<>();
+	/** Filled once (render thread) before the players exist; only read after. */
+	private static final java.util.Map<java.util.UUID, net.minecraft.world.entity.player.PlayerSkin> PLAYER_SKINS = new java.util.HashMap<>();
 	private static final List<net.minecraft.client.player.RemotePlayer> PLAYER_CROWD = new ArrayList<>();
 	/** How far each bench player walks from its spot (blocks), and how fast it goes round (radians a step). */
 	private static final double WALK_RADIUS = 0.6;
