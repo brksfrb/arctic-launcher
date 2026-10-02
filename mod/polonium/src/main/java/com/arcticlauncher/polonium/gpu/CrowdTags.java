@@ -43,6 +43,9 @@ public final class CrowdTags {
 	private static final int DISCREET = 2;
 	private static final PoseStack STACK = new PoseStack();
 	private static final Matrix4f POSE = new Matrix4f();
+	/** This frame's tag turn (to face the camera) and scale, the same for every tag. */
+	private static final Matrix4f FACING = new Matrix4f();
+	private static final Matrix4f TAG = new Matrix4f();
 
 	private static final Tags normal = new Tags();
 	private static final Tags seeThrough = new Tags();
@@ -77,6 +80,9 @@ public final class CrowdTags {
 			GlyphRuns.Run[] kept = runs[way];
 			if (kept != null && this.y[way] == y && this.background[way] == background) {
 				return kept;
+			}
+			if (DEBUG) {
+				MADE.merge("runs " + (kept == null ? "first" : this.y[way] != y ? "y" : "background") + " way " + way, 1, Integer::sum);
 			}
 			int color = way == SOLID_PASS ? -1 : TAG_COLOR;
 			int shownBackground = way == SOLID_PASS ? 0 : background;
@@ -139,6 +145,7 @@ public final class CrowdTags {
 	static void beginFrame() {
 		normal.clear();
 		seeThrough.clear();
+		facingReady = false;
 		background = ARGB.color(Minecraft.getInstance().gameRenderer.gameRenderState().optionsRenderState.getBackgroundOpacity(0.25F), -16777216);
 	}
 
@@ -183,19 +190,22 @@ public final class CrowdTags {
 		if (attachment == null) {
 			return;
 		}
-		STACK.pushPose();
-		STACK.translate(attachment.x, attachment.y + 0.5, attachment.z);
-		STACK.mulPose(camera.orientation);
-		STACK.scale(0.025F, -0.025F, 0.025F);
-		Matrix4f pose = STACK.last().pose();
+		if (!facingReady) {
+			// As the game: turn to face the camera, then scale (worked out once, applied to every tag).
+			FACING.rotation(camera.orientation).scale(0.025F, -0.025F, 0.025F);
+			facingReady = true;
+		}
+		Matrix4f pose = TAG.set(STACK.last().pose()).translate((float) attachment.x, (float) (attachment.y + 0.5), (float) attachment.z)
+				.mul(FACING);
 		if (seeThroughToo) {
 			normal.add(look, SOLID_PASS, offset, LightCoordsUtil.lightCoordsWithEmission(light, 2), pose);
 			seeThrough.add(look, SEE_THROUGH_PASS, offset, light, pose);
 		} else {
 			normal.add(look, DISCREET, offset, light, pose);
 		}
-		STACK.popPose();
 	}
+
+	private static boolean facingReady;
 
 	/** All entities are in: each list goes to the game as one tag, where the farthest of its tags is. */
 	static void endSubmits(SubmitNodeStorage storage) {

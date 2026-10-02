@@ -371,7 +371,7 @@ public final class Crowd {
 			Matrix4f root = new Matrix4f(root(renderer, state, poseStack));
 			recording = true;
 			try {
-				recipe = RECORDER.record(renderer, state, poseStack, collector, camera, root, frame);
+				recipe = RECORDER.record(renderer, state, poseStack, collector, camera, root, frame, crowdTags(collector));
 			} finally {
 				recording = false;
 			}
@@ -386,6 +386,10 @@ public final class Crowd {
 				UNSUPPORTED.merge(recipe.unsupported, 1, Integer::sum);
 			} else {
 				add(recipe, state, root);
+				if (crowdTags(collector)) {
+					// The recorder kept the game's tags back: the crowd path draws them.
+					CrowdTags.nameDisplay(state, recipe, poseStack, camera);
+				}
 			}
 			// Drawn either way: by the recorder's replay, or from the recipe.
 			return true;
@@ -430,6 +434,11 @@ public final class Crowd {
 		}
 	}
 
+	/** Whether the crowd's name tags go the crowd path's way this frame (see {@link CrowdTags}). */
+	private static boolean crowdTags(SubmitNodeCollector collector) {
+		return CROWD_TAGS && CrowdTags.usable() && collector instanceof net.minecraft.client.renderer.SubmitNodeStorage;
+	}
+
 	/** What the renderer submits after the model: leashes and the name tag. */
 	private static void submitRest(LivingEntityRenderer<?, ?, ?> renderer, CrowdRecipe recipe, AvatarRenderState state, PoseStack poseStack,
 			SubmitNodeCollector collector, CameraRenderState camera) {
@@ -438,7 +447,7 @@ public final class Crowd {
 				collector.submitLeash(poseStack, leash);
 			}
 		}
-		if (CROWD_TAGS && CrowdTags.usable() && collector instanceof net.minecraft.client.renderer.SubmitNodeStorage) {
+		if (crowdTags(collector)) {
 			CrowdTags.nameDisplay(state, recipe, poseStack, camera);
 		} else {
 			((EntityRendererNameAccess) renderer).polonium$submitNameDisplay(state, poseStack, collector, camera);
@@ -732,7 +741,23 @@ public final class Crowd {
 			return;
 		}
 		linkedFrame = frame;
-		for (int e = 0; e < entityCount; e++) {
+		int count = entityCount;
+		if (count < PARALLEL_MIN) {
+			linkBorrowed(0, count);
+			return;
+		}
+		int parts = Workers.HELPERS + 1;
+		List<Runnable> chunks = new ArrayList<>(parts);
+		for (int p = 0; p < parts; p++) {
+			int from = count * p / parts;
+			int to = count * (p + 1) / parts;
+			chunks.add(() -> linkBorrowed(from, to));
+		}
+		Workers.runAll(chunks);
+	}
+
+	private static void linkBorrowed(int from, int to) {
+		for (int e = from; e < to; e++) {
 			Model<?> anchorModel = entityRecipe[e].renderer.getModel();
 			int light = entityLight[e];
 			int anchorParts = -1;

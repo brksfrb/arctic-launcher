@@ -29,7 +29,7 @@ import org.jspecify.annotations.Nullable;
  */
 final class CrowdRecipe {
 	/** Recorded again after this many frames even when nothing seems to have changed (plus a little per entity, to spread it out). */
-	private static final long REFRESH_FRAMES = 1200;
+	private static final long REFRESH_FRAMES = 2400;
 
 	/** A model drawn at the entity's root (its body, a piece of armor), posed every frame from the frame's state. */
 	static final class ModelEntry {
@@ -118,7 +118,8 @@ final class CrowdRecipe {
 
 	/** Due to be recorded again (see {@link #REFRESH_FRAMES}). */
 	boolean due(AvatarRenderState state, long frame) {
-		return frame - recordedFrame >= REFRESH_FRAMES + (state.id & 255);
+		// Spread over another REFRESH_FRAMES, so a crowd recorded together isn't recorded again all at once.
+		return frame - recordedFrame >= REFRESH_FRAMES + Math.floorMod(state.id, REFRESH_FRAMES);
 	}
 
 	/** Same skin, armor and items in hand as recorded (safe on any thread while the frame's states are made). */
