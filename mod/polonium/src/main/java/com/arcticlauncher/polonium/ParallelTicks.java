@@ -9,7 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Other players ticked on several threads. With thousands of players in
+ * Other players (and mannequins) ticked on several threads. With thousands of players in
  * view, the client's own tick of each (smoothing its position, its walk
  * animation and head turn, its effects and pose) is a third of the time.
  * Each player's tick mostly touches only that player, so they're set aside
@@ -46,7 +46,7 @@ public final class ParallelTicks {
 
 	/** An entity is about to be ticked: true if it's set aside to be ticked with the others (the caller skips it). */
 	public static boolean collect(Entity entity) {
-		if (!collecting || running || entity.getClass() != RemotePlayer.class || !entity.getPassengers().isEmpty()) {
+		if (!collecting || running || !playerLike(entity) || !entity.getPassengers().isEmpty()) {
 			return false;
 		}
 		COLLECTED.add(entity);
@@ -56,6 +56,16 @@ public final class ParallelTicks {
 	/** Whether players are ticking in parallel right now. */
 	public static boolean running() {
 		return running;
+	}
+
+	/**
+	 * Other players and mannequins (a server's bots are often mannequins):
+	 * their client tick only smooths their movement and turning and steps
+	 * their animations (no AI, no physics), like a player's.
+	 */
+	private static boolean playerLike(Entity entity) {
+		Class<?> type = entity.getClass();
+		return type == RemotePlayer.class || type == net.minecraft.client.entity.ClientMannequin.class;
 	}
 
 	/** Whether work reaching outside the entity being ticked must wait (see {@link #defer}). */
