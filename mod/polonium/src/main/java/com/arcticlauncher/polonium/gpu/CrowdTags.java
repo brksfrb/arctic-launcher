@@ -376,7 +376,7 @@ public final class CrowdTags {
 		int count = order.length;
 		GlyphRuns.Run[][] runs = new GlyphRuns.Run[count][];
 		// Kept runs, on the helper threads (most tags, every frame after their first).
-		int parts = count < 256 ? 1 : com.arcticlauncher.polonium.Workers.HELPERS + 1;
+		int parts = count < 256 ? 1 : com.arcticlauncher.polonium.Workers.PARTS;
 		if (parts == 1) {
 			keptRuns(tags, order, runs, 0, count);
 		} else {

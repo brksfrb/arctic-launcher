@@ -22,6 +22,12 @@ public final class Workers {
 	private static final int MAX_HELPERS = 8;
 	public static final int HELPERS = Math.max(1, Integer.getInteger("polonium.helpers",
 			Math.min(MAX_HELPERS, Runtime.getRuntime().availableProcessors() / 3)));
+	/**
+	 * Pieces to split per-entity work into: a few per thread, so a thread
+	 * that starts late (or is slowed by something else) leaves its share to
+	 * the others instead of keeping the frame waiting.
+	 */
+	public static final int PARTS = (HELPERS + 1) * 4;
 	private static final ExecutorService POOL = Executors.newFixedThreadPool(HELPERS, job -> {
 		Thread thread = new Thread(job, "Polonium Worker");
 		thread.setDaemon(true);

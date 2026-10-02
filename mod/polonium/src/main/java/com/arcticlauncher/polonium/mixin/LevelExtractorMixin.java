@@ -72,9 +72,12 @@ abstract class LevelExtractorMixin {
 		EntityRenderDispatcher dispatcher = this.levelRenderer.entityRenderDispatcher();
 		boolean[] trustedAll = new boolean[all.size()];
 		boolean[] seen = ParallelExtract.visible(all, dispatcher, e -> this.isEntityVisible(e, frustum, camX, camY, camZ), trustedAll);
-		List<Entity> visible = new ArrayList<>();
-		List<Float> partials = new ArrayList<>();
+		List<Entity> visible = new ArrayList<>(all.size());
+		float[] partials = new float[all.size()];
 		boolean[] trusted = new boolean[all.size()];
+		// The same for every entity but those the tick rate freezes.
+		float running = deltaTracker.getGameTimeDeltaPartialTick(true);
+		float frozen = deltaTracker.getGameTimeDeltaPartialTick(false);
 		for (int i = 0; i < all.size(); i++) {
 			Entity entity = all.get(i);
 			if (seen[i]
@@ -87,8 +90,8 @@ abstract class LevelExtractorMixin {
 					entity.zOld = entity.getZ();
 				}
 				trusted[visible.size()] = trustedAll[i];
+				partials[visible.size()] = tickRateManager.isEntityFrozen(entity) ? frozen : running;
 				visible.add(entity);
-				partials.add(deltaTracker.getGameTimeDeltaPartialTick(!tickRateManager.isEntityFrozen(entity)));
 			}
 		}
 		EntityRenderState[] states = ParallelExtract.extract(visible, partials, trusted, this::extractEntity);

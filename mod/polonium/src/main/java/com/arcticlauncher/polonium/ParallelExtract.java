@@ -57,7 +57,7 @@ public final class ParallelExtract {
 			}
 			return visible;
 		}
-		int parts = Workers.HELPERS + 1;
+		int parts = Workers.PARTS;
 		List<Runnable> jobs = new ArrayList<>(parts);
 		for (int p = 0; p < parts; p++) {
 			int from = count * p / parts;
@@ -99,7 +99,7 @@ public final class ParallelExtract {
 	}
 
 	/** Every visible entity's render state, in order ({@code trusted}: per entity, from {@link #visible}). */
-	public static EntityRenderState[] extract(List<Entity> entities, List<Float> partials, boolean[] trusted, Extractor extractor) {
+	public static EntityRenderState[] extract(List<Entity> entities, float[] partials, boolean[] trusted, Extractor extractor) {
 		KeptStates.inLevel(true);
 		try {
 			return extractAll(entities, partials, trusted, extractor);
@@ -108,7 +108,7 @@ public final class ParallelExtract {
 		}
 	}
 
-	private static EntityRenderState[] extractAll(List<Entity> entities, List<Float> partials, boolean[] trusted, Extractor extractor) {
+	private static EntityRenderState[] extractAll(List<Entity> entities, float[] partials, boolean[] trusted, Extractor extractor) {
 		int count = entities.size();
 		lastDrawn = count;
 		EntityRenderState[] states = new EntityRenderState[count];
@@ -128,10 +128,10 @@ public final class ParallelExtract {
 				parallel[i] = true;
 				queue.add(i);
 			} else {
-				states[i] = extractor.extract(entities.get(i), partials.get(i));
+				states[i] = extractor.extract(entities.get(i), partials[i]);
 			}
 		}
-		int parts = Workers.HELPERS + 1;
+		int parts = Workers.PARTS;
 		List<Runnable> jobs = new ArrayList<>(parts);
 		for (int p = 0; p < parts; p++) {
 			int from = queue.size() * p / parts;
@@ -139,7 +139,7 @@ public final class ParallelExtract {
 			jobs.add(() -> {
 				for (int k = from; k < to; k++) {
 					int i = queue.get(k);
-					states[i] = extractor.extract(entities.get(i), partials.get(i));
+					states[i] = extractor.extract(entities.get(i), partials[i]);
 					com.arcticlauncher.polonium.gpu.Crowd.precheck(states[i]);
 				}
 			});
@@ -155,11 +155,11 @@ public final class ParallelExtract {
 	}
 
 	/** On this thread: every entity, or only those marked in {@code only}. */
-	private static void serial(List<Entity> entities, List<Float> partials, Extractor extractor, EntityRenderState[] states,
+	private static void serial(List<Entity> entities, float[] partials, Extractor extractor, EntityRenderState[] states,
 			boolean[] only) {
 		for (int i = 0; i < entities.size(); i++) {
 			if (only == null || only[i]) {
-				states[i] = extractor.extract(entities.get(i), partials.get(i));
+				states[i] = extractor.extract(entities.get(i), partials[i]);
 			}
 		}
 	}
