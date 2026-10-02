@@ -199,21 +199,47 @@ public final class CrowdBench implements ClientModInitializer {
 		TIMER.scheduleAtFixedRate(() -> run(CrowdBench::walk), 50, 50, TimeUnit.MILLISECONDS);
 	}
 
+	/** -Dpolonium.bench.uneven=true: movement arrives unevenly, as a real server's packets do (some late, some two at once). */
+	private static final boolean UNEVEN = Boolean.getBoolean("polonium.bench.uneven");
+	private static final java.util.Random RANDOM = new java.util.Random(1);
+	/** -Dpolonium.bench.active=true: bench players also jump, sprint and look about. */
+	private static final boolean ACTIVE = Boolean.getBoolean("polonium.bench.active");
+	private static int[] steps;
+
 	private static void walk() {
 		walkTick++;
+		if (steps == null) {
+			steps = new int[PLAYER_CROWD.size()];
+		}
 		for (int i = 0; i < PLAYER_CROWD.size(); i++) {
 			net.minecraft.client.player.RemotePlayer player = PLAYER_CROWD.get(i);
 			if (player.isRemoved()) {
 				continue;
 			}
+			int roll = UNEVEN ? RANDOM.nextInt(4) : 1;
+			if (roll == 0) {
+				continue;
+			}
+			steps[i] += roll == 3 ? 2 : 1;
 			int side = (int) Math.ceil(Math.sqrt(COUNT));
 			double offset = (side - 1) * SPACING / 2;
-			double angle = walkTick * WALK_STEP + i;
+			double angle = steps[i] * WALK_STEP + i;
 			double x = (i % side) * SPACING - offset + Math.cos(angle) * WALK_RADIUS;
 			double z = (i / side) * SPACING - offset + Math.sin(angle) * WALK_RADIUS;
 			float yaw = (float) Math.toDegrees(angle) + 180;
-			player.moveOrInterpolateTo(new net.minecraft.world.phys.Vec3(x, GROUND, z), yaw, 0);
-			player.lerpHeadTo(yaw, 3);
+			double y = GROUND;
+			float headYaw = yaw;
+			if (ACTIVE) {
+				// Jumping now and then, sprinting, looking about (as players and bots do).
+				int phase = (steps[i] + i) % 24;
+				if (phase < 6) {
+					y += Math.sin(phase / 6.0 * Math.PI) * 1.2;
+				}
+				player.setSprinting(phase % 12 < 6);
+				headYaw = yaw + (float) (Math.sin(steps[i] * 0.7 + i) * 60);
+			}
+			player.moveOrInterpolateTo(new net.minecraft.world.phys.Vec3(x, y, z), yaw, 0);
+			player.lerpHeadTo(headYaw, 3);
 		}
 	}
 

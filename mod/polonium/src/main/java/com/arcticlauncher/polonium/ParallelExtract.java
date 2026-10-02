@@ -164,10 +164,22 @@ public final class ParallelExtract {
 		}
 	}
 
+	/** The last renderer class asked about, and the answer: a crowd is mostly one kind of entity (several threads ask at once). */
+	private static volatile Last last = new Last(Object.class, false);
+
+	private record Last(Class<?> type, boolean trusted) {}
+
 	/** Minecraft's own living-entity renderers only. */
 	private static boolean trusted(EntityRenderer<?, ?> renderer) {
-		return TRUSTED.computeIfAbsent(renderer.getClass(),
-				type -> LivingEntityRenderer.class.isAssignableFrom(type) && type.getName().startsWith("net.minecraft."));
+		Class<?> type = renderer.getClass();
+		Last known = last;
+		if (known.type == type) {
+			return known.trusted;
+		}
+		boolean trusted = TRUSTED.computeIfAbsent(type,
+				t -> LivingEntityRenderer.class.isAssignableFrom(t) && t.getName().startsWith("net.minecraft."));
+		last = new Last(type, trusted);
+		return trusted;
 	}
 
 	private static boolean loaded(String... ids) {

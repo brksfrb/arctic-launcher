@@ -220,16 +220,35 @@ public final class GpuEntities {
 				}
 			}
 		}
-		// 3. Those in the atlas, in order, in one batch; others on their own.
-		int inAtlas = 0;
-		for (int i = 0; i < count; i++) {
-			Crowd.Bucket bucket = CrowdFrame.memberBucket(members[i]);
-			if (bucket.cell >= 0 && bucket.batchOwner == group) {
-				inAtlas++;
-			} else {
-				InstanceData data = batches.add(bucket.renderType, mesh, null);
-				System.arraycopy(OWN_TEXTURE, 0, bucket.uv, 0, 4);
-				CrowdFrame.target(members[i], data, data.reserve(mesh.texelsPerInstance), mesh, bucket.uv);
+		// 3. How many of each part's are in the atlas (counted on the helper threads); the others drawn with their own textures.
+		int parts = partsFor(count);
+		int[] inPart = new int[parts];
+		boolean[] own = new boolean[count];
+		runPieces(parts, count, (part, from, to) -> {
+			int n = 0;
+			for (int i = from; i < to; i++) {
+				Crowd.Bucket bucket = CrowdFrame.memberBucket(members[i]);
+				if (bucket.cell >= 0 && bucket.batchOwner == group) {
+					n++;
+				} else {
+					own[i] = true;
+				}
+			}
+			inPart[part] = n;
+		});
+		int[] before = new int[parts + 1];
+		for (int p = 0; p < parts; p++) {
+			before[p + 1] = before[p] + inPart[p];
+		}
+		int inAtlas = before[parts];
+		if (inAtlas < count) {
+			for (int i = 0; i < count; i++) {
+				if (own[i]) {
+					Crowd.Bucket bucket = CrowdFrame.memberBucket(members[i]);
+					InstanceData data = batches.add(bucket.renderType, mesh, null);
+					System.arraycopy(OWN_TEXTURE, 0, bucket.uv, 0, 4);
+					CrowdFrame.target(members[i], data, data.reserve(mesh.texelsPerInstance), mesh, bucket.uv);
+				}
 			}
 		}
 		if (inAtlas == 0) {
@@ -241,21 +260,6 @@ public final class GpuEntities {
 		int texels = mesh.texelsPerInstance;
 		int base = data.reserve(texels * inAtlas);
 		int firstTarget = CrowdFrame.reserveTargets(inAtlas);
-		// Each part's first place: how many atlas members come before it.
-		int parts = partsFor(count);
-		int[] before = new int[parts + 1];
-		for (int p = 0; p < parts; p++) {
-			int from = count * p / parts;
-			int to = count * (p + 1) / parts;
-			int n = 0;
-			for (int i = from; i < to; i++) {
-				Crowd.Bucket bucket = CrowdFrame.memberBucket(members[i]);
-				if (bucket.cell >= 0 && bucket.batchOwner == group) {
-					n++;
-				}
-			}
-			before[p + 1] = before[p] + n;
-		}
 		// 4. Where each one's data goes, and its skin's place in the atlas (the atlas's size now: it may have grown).
 		java.util.List<Runnable> jobs = new java.util.ArrayList<>(parts);
 		for (int p = 0; p < parts; p++) {
@@ -265,10 +269,10 @@ public final class GpuEntities {
 			jobs.add(() -> {
 				int k = start;
 				for (int i = from; i < to; i++) {
-					Crowd.Bucket bucket = CrowdFrame.memberBucket(members[i]);
-					if (bucket.cell < 0 || bucket.batchOwner != group) {
+					if (own[i]) {
 						continue;
 					}
+					Crowd.Bucket bucket = CrowdFrame.memberBucket(members[i]);
 					float[] uv = bucket.uv;
 					uv[0] = atlas.cellX(bucket.cell) / size;
 					uv[1] = atlas.cellY(bucket.cell) / size;
@@ -327,6 +331,26 @@ public final class GpuEntities {
 
 	private interface Range {
 		void run(int from, int to);
+	}
+
+	private interface Piece {
+		void run(int part, int from, int to);
+	}
+
+	/** {@code [0, count)} in {@code parts} pieces (as {@link #partsFor} splits it), told which piece each is. */
+	private static void runPieces(int parts, int count, Piece piece) {
+		if (parts == 1) {
+			piece.run(0, 0, count);
+			return;
+		}
+		java.util.List<Runnable> jobs = new java.util.ArrayList<>(parts);
+		for (int p = 0; p < parts; p++) {
+			int part = p;
+			int from = count * p / parts;
+			int to = count * (p + 1) / parts;
+			jobs.add(() -> piece.run(part, from, to));
+		}
+		com.arcticlauncher.polonium.Workers.runAll(jobs);
 	}
 
 	private static void runParts(int count, Range range) {

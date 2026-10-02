@@ -372,6 +372,16 @@ public final class Crowd {
 					((CrowdChecked) state).polonium$taken(frame);
 				}
 			});
+			// Their shadows (players near the camera), as the game's submit has them: at the player's place, without the offset.
+			for (int k = 0; k < total; k++) {
+				AvatarRenderState state = (AvatarRenderState) states.get(which[k]);
+				if (!state.shadowPieces.isEmpty()) {
+					poseStack.pushPose();
+					poseStack.translate(state.x - camX, state.y - camY, state.z - camZ);
+					collector.submitShadow(poseStack, state.shadowRadius, state.shadowPieces);
+					poseStack.popPose();
+				}
+			}
 		} catch (RuntimeException | LinkageError e) {
 			GpuBatches.disable("the crowd path failed", e);
 			inLevel = false;
@@ -380,8 +390,7 @@ public final class Crowd {
 
 	/** Whether this entity can be taken in bulk (see {@link #bulkSubmit}). Safe on any thread. */
 	private static boolean takeable(EntityRenderState entityState, EntityRenderDispatcher dispatcher, long frame) {
-		if (!(entityState instanceof AvatarRenderState state) || !eligible(state) || state.displayFireAnimation || !state.shadowPieces.isEmpty()
-				|| state.leashStates != null) {
+		if (!(entityState instanceof AvatarRenderState state) || !eligible(state) || state.displayFireAnimation || state.leashStates != null) {
 			return false;
 		}
 		CrowdChecked checked = (CrowdChecked) state;
@@ -637,5 +646,18 @@ public final class Crowd {
 				CrowdFrame.ACTIVE_MODELS.size(), borrowing, CrowdFrame.ACTIVE_ITEMS.size(), recordedThisFrame,
 				UNSUPPORTED.isEmpty() ? "" : "; drawn the game's way: " + UNSUPPORTED);
 		UNSUPPORTED.clear();
+		if (DEBUG_CULLING) {
+			try {
+				Class<?> base = Class.forName("dev.tr7zw.entityculling.EntityCullingModBase");
+				Object instance = base.getField("instance").get(null);
+				LOG.info("Polonium debug: entity culling ticked {}, skipped {} (light ticks)", base.getField("tickedEntities").get(instance),
+						base.getField("skippedEntityTicks").get(instance));
+			} catch (ReflectiveOperationException | RuntimeException e) {
+				LOG.info("Polonium debug: no entity culling counters ({})", e.toString());
+			}
+		}
 	}
+
+	/** -Dpolonium.debugCulling=true: log entity culling's tick counters with the crowd report. */
+	private static final boolean DEBUG_CULLING = Boolean.getBoolean("polonium.debugCulling");
 }

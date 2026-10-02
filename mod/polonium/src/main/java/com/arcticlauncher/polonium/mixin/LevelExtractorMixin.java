@@ -33,8 +33,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * {@link ParallelExtract}); everything with side effects stays on this
  * thread, and states are added in the game's order. With few entities, or when Polonium has stepped aside,
  * the game's own code runs.
+ *
+ * Applied after other mods' hooks (a priority above the default 1000): their
+ * callbacks at the head of extractVisibleEntities run before this one takes
+ * the method over (entity culling records the frame's frustum there).
  */
-@Mixin(LevelExtractor.class)
+@Mixin(value = LevelExtractor.class, priority = 1500)
 abstract class LevelExtractorMixin {
 	@Shadow
 	@Final
