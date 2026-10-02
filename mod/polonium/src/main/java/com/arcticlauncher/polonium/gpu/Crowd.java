@@ -626,6 +626,31 @@ public final class Crowd {
 	}
 
 	/** The GPU path took a member's submit: its instance data goes at {@code offset} texels in {@code data}. */
+	/** Room for {@code count} targets, filled in with {@link #targetAt} (on any thread); returns the first. */
+	static int reserveTargets(int count) {
+		int first = targetCount;
+		targetCount += count;
+		if (targetCount > targetData.length) {
+			int size = Math.max(targetData.length * 2, targetCount);
+			targetData = Arrays.copyOf(targetData, size);
+			targetOffset = Arrays.copyOf(targetOffset, size);
+			targetNext = Arrays.copyOf(targetNext, size);
+			targetMesh = Arrays.copyOf(targetMesh, size);
+			targetUv = Arrays.copyOf(targetUv, size);
+		}
+		return first;
+	}
+
+	/** A reserved target, as a model member's only one. */
+	static void targetAt(int t, int member, InstanceData data, int offset, ModelMesh mesh, float[] uv) {
+		targetData[t] = data;
+		targetOffset[t] = offset;
+		targetMesh[t] = mesh;
+		targetUv[t] = uv;
+		targetNext[t] = -1;
+		memberTarget[member] = t;
+	}
+
 	static void target(int member, InstanceData data, int offset, @Nullable ModelMesh mesh, float @Nullable [] uv) {
 		int t = targetCount++;
 		if (t == targetData.length) {

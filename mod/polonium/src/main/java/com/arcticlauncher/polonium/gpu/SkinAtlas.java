@@ -124,6 +124,24 @@ final class SkinAtlas {
 		}
 	}
 
+	/**
+	 * The texture's cell if it's in the atlas already (marked used), else -1:
+	 * only reads (and marks), so several threads may ask at once while
+	 * nothing is added.
+	 */
+	int knownCell(GpuTextureView source, long frame) {
+		if (failed) {
+			return -1;
+		}
+		GpuTexture t = source.texture();
+		Integer known = cells.get(t);
+		if (known == null || t.isClosed()) {
+			return -1;
+		}
+		lastUsed[known] = frame;
+		return known;
+	}
+
 	/** The frame is drawn: textures replaced by a bigger atlas can go. */
 	void endFrame() {
 		for (GpuTextureView v : retiredViews) {

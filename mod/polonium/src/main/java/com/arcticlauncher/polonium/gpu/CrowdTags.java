@@ -75,6 +75,12 @@ public final class CrowdTags {
 			return this.text == text && generation == NameTagCache.generation();
 		}
 
+		/** The runs for one way of drawing it if laid out already (read-only: safe on any thread), else null. */
+		GlyphRuns.Run @Nullable [] kept(int way, float y, int background) {
+			GlyphRuns.Run[] kept = runs[way];
+			return kept != null && this.y[way] == y && this.background[way] == background ? kept : null;
+		}
+
 		/** The runs for one way of drawing it, laid out (and recorded) the first time. */
 		GlyphRuns.Run[] runs(int way, float y, int background, Font font) {
 			GlyphRuns.Run[] kept = runs[way];
@@ -242,9 +248,35 @@ public final class CrowdTags {
 		if (mode == Font.DisplayMode.SEE_THROUGH) {
 			Crowd.sortFarToNear(order, order.length, tags.distance);
 		}
-		for (int i : order) {
-			GlyphRuns.Run[] runs = tags.look[i].runs(tags.way[i], tags.y[i], background, font);
-			gpu.captureRuns(runs, mode, POSE.set(tags.pose, i * 16), tags.light[i]);
+		int count = order.length;
+		GlyphRuns.Run[][] runs = new GlyphRuns.Run[count][];
+		// Kept runs, on the helper threads (most tags, every frame after their first).
+		int parts = count < 256 ? 1 : com.arcticlauncher.polonium.Workers.HELPERS + 1;
+		if (parts == 1) {
+			keptRuns(tags, order, runs, 0, count);
+		} else {
+			java.util.List<Runnable> jobs = new java.util.ArrayList<>(parts);
+			for (int p = 0; p < parts; p++) {
+				int from = count * p / parts;
+				int to = count * (p + 1) / parts;
+				jobs.add(() -> keptRuns(tags, order, runs, from, to));
+			}
+			com.arcticlauncher.polonium.Workers.runAll(jobs);
+		}
+		// New ones laid out here (fonts aren't safe on several threads).
+		for (int k = 0; k < count; k++) {
+			if (runs[k] == null) {
+				int i = order[k];
+				runs[k] = tags.look[i].runs(tags.way[i], tags.y[i], background, font);
+			}
+		}
+		gpu.captureMany(count, runs, order, tags.pose, tags.light);
+	}
+
+	private static void keptRuns(Tags tags, int[] order, GlyphRuns.Run[][] runs, int from, int to) {
+		for (int k = from; k < to; k++) {
+			int i = order[k];
+			runs[k] = tags.look[i].kept(tags.way[i], tags.y[i], background);
 		}
 	}
 }

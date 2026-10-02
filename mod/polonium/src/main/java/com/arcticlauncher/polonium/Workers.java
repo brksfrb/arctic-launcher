@@ -30,6 +30,29 @@ public final class Workers {
 
 	private Workers() {}
 
+	/** -Dpolonium.debugWorkers=true: every 10 s, how long the caller worked and waited in runAll, by caller. */
+	private static final boolean TIMING = Boolean.getBoolean("polonium.debugWorkers");
+	private static final java.util.Map<String, long[]> TIMES = new java.util.HashMap<>();
+	private static long lastTimingReport = System.nanoTime();
+
+	private static void timed(List<Runnable> jobs, long working, long waiting) {
+		StackTraceElement caller = Thread.currentThread().getStackTrace()[3];
+		String key = caller.getClassName().substring(caller.getClassName().lastIndexOf('.') + 1) + "." + caller.getMethodName();
+		long[] t = TIMES.computeIfAbsent(key, k -> new long[3]);
+		t[0] += working;
+		t[1] += waiting;
+		t[2]++;
+		long now = System.nanoTime();
+		if (now - lastTimingReport > 10_000_000_000L) {
+			StringBuilder line = new StringBuilder();
+			TIMES.forEach((k, v) -> line.append(String.format(java.util.Locale.ROOT, " %s: %d calls, worked %.0f ms, waited %.0f ms;", k, v[2],
+					v[0] / 1e6, v[1] / 1e6)));
+			org.slf4j.LoggerFactory.getLogger("Polonium").info("Polonium workers (10 s):{}", line);
+			TIMES.clear();
+			lastTimingReport = now;
+		}
+	}
+
 	/** Run every job, here and on the helpers; returns when all are done, throwing the first failure. */
 	public static void runAll(List<Runnable> jobs) {
 		int count = jobs.size();
@@ -54,12 +77,18 @@ public final class Workers {
 			}
 		};
 		int helpers = Math.min(HELPERS, count - 1);
+		long start = TIMING ? System.nanoTime() : 0;
 		for (int h = 0; h < helpers; h++) {
 			POOL.execute(drain);
 		}
 		drain.run();
+		long drained = TIMING ? System.nanoTime() : 0;
 		while (finished.get() < count) {
 			LockSupport.park(Workers.class);
+		}
+		if (TIMING) {
+			long end = System.nanoTime();
+			timed(jobs, drained - start, end - drained);
 		}
 		Throwable e = failure.get();
 		if (e instanceof RuntimeException r) {
