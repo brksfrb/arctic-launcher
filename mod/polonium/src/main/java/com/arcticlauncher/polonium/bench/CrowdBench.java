@@ -46,6 +46,25 @@ public final class CrowdBench implements ClientModInitializer {
 	 * the old bench.
 	 */
 	private static final int SKINS = Math.max(1, Integer.getInteger("polonium.bench.skins", 1));
+	/**
+	 * -Dpolonium.bench.kind=players: the crowd is players (as a server sends
+	 * them: client-side players walking about, moved the way movement packets
+	 * move them), not mannequins. Their ticking is what a real crowd costs.
+	 */
+	private static final boolean PLAYERS = "players".equals(System.getProperty("polonium.bench.kind"));
+	private static final java.util.Map<java.util.UUID, net.minecraft.world.entity.player.PlayerSkin> PLAYER_SKINS =
+			new java.util.concurrent.ConcurrentHashMap<>();
+	private static final List<net.minecraft.client.player.RemotePlayer> PLAYER_CROWD = new ArrayList<>();
+	/** How far each bench player walks from its spot (blocks), and how fast it goes round (radians a step). */
+	private static final double WALK_RADIUS = 0.6;
+	private static final double WALK_STEP = 0.12;
+	private static int walkTick;
+
+	/** A bench player's skin (null: not a bench player). */
+	public static net.minecraft.world.entity.player.@org.jspecify.annotations.Nullable PlayerSkin skinOf(java.util.UUID id) {
+		return PLAYER_SKINS.isEmpty() ? null : PLAYER_SKINS.get(id);
+	}
+
 	/** -Dpolonium.bench.armor=false: bare mannequins (to look at the skins). */
 	private static final boolean ARMOR = !"false".equals(System.getProperty("polonium.bench.armor"));
 	/** -Dpolonium.bench.profile=true: also record the game's own profile (F3+L) while measuring. */
@@ -128,7 +147,7 @@ public final class CrowdBench implements ClientModInitializer {
 		commands.add("gamerule advance_weather false");
 		commands.add("time set noon");
 		commands.add("setblock 0 " + (GROUND + CAMERA_HEIGHT - 1) + " 0 minecraft:glass");
-		for (int i = 0; i < COUNT; i++) {
+		for (int i = 0; i < (PLAYERS ? 0 : COUNT); i++) {
 			double x = (i % side) * SPACING - offset;
 			double z = (i / side) * SPACING - offset;
 			commands.add(String.format(java.util.Locale.ROOT,
@@ -140,7 +159,62 @@ public final class CrowdBench implements ClientModInitializer {
 					.replaceAll(ARMOR ? "^$" : "head:\\{[^}]*\\},chest:\\{[^}]*\\},legs:\\{[^}]*\\},feet:\\{[^}]*\\},", ""));
 		}
 		commands.add("tp " + Minecraft.getInstance().player.getGameProfile().name() + " 0 " + (GROUND + CAMERA_HEIGHT) + " 0 0 90");
+		if (PLAYERS) {
+			spawnPlayers(side, offset);
+		}
 		sendInBatches(commands, 0);
+	}
+
+	/** The crowd as client-side players, each with its own skin, armor and items, walking in small circles. */
+	private static void spawnPlayers(int side, double offset) {
+		Minecraft mc = Minecraft.getInstance();
+		for (int i = 0; i < COUNT; i++) {
+			java.util.UUID id = java.util.UUID.nameUUIDFromBytes(("polonium-bench-" + i).getBytes(StandardCharsets.UTF_8));
+			net.minecraft.client.player.RemotePlayer player = new net.minecraft.client.player.RemotePlayer(mc.level,
+					new com.mojang.authlib.GameProfile(id, "Bench" + i));
+			player.setId(2_000_000 + i);
+			double x = (i % side) * SPACING - offset;
+			double z = (i / side) * SPACING - offset;
+			player.snapTo(x, GROUND, z, (i * 37) % 360, 0);
+			if (ARMOR) {
+				player.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_HELMET));
+				player.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_CHESTPLATE));
+				player.setItemSlot(net.minecraft.world.entity.EquipmentSlot.LEGS, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_LEGGINGS));
+				player.setItemSlot(net.minecraft.world.entity.EquipmentSlot.FEET, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_BOOTS));
+			}
+			player.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SWORD));
+			player.setItemSlot(net.minecraft.world.entity.EquipmentSlot.OFFHAND, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE));
+			if (SKINS > 1) {
+				net.minecraft.resources.Identifier texture = net.minecraft.resources.Identifier.fromNamespaceAndPath("polonium",
+						"textures/bench/skin_" + (i % SKINS) + ".png");
+				PLAYER_SKINS.put(id, net.minecraft.world.entity.player.PlayerSkin.insecure(
+						new net.minecraft.core.ClientAsset.ResourceTexture(texture, texture), null, null,
+						net.minecraft.world.entity.player.PlayerModelType.WIDE));
+			}
+			mc.level.addEntity(player);
+			PLAYER_CROWD.add(player);
+		}
+		LOG.info("crowd bench: {} players", COUNT);
+		// Movement as a server sends it: every 50 ms, a new position for each player, interpolated by the client.
+		TIMER.scheduleAtFixedRate(() -> run(CrowdBench::walk), 50, 50, TimeUnit.MILLISECONDS);
+	}
+
+	private static void walk() {
+		walkTick++;
+		for (int i = 0; i < PLAYER_CROWD.size(); i++) {
+			net.minecraft.client.player.RemotePlayer player = PLAYER_CROWD.get(i);
+			if (player.isRemoved()) {
+				continue;
+			}
+			int side = (int) Math.ceil(Math.sqrt(COUNT));
+			double offset = (side - 1) * SPACING / 2;
+			double angle = walkTick * WALK_STEP + i;
+			double x = (i % side) * SPACING - offset + Math.cos(angle) * WALK_RADIUS;
+			double z = (i / side) * SPACING - offset + Math.sin(angle) * WALK_RADIUS;
+			float yaw = (float) Math.toDegrees(angle) + 180;
+			player.moveOrInterpolateTo(new net.minecraft.world.phys.Vec3(x, GROUND, z), yaw, 0);
+			player.lerpHeadTo(yaw, 3);
+		}
 	}
 
 	/** The mannequin's skin (one of {@link #SKINS}), as its profile's texture. */
