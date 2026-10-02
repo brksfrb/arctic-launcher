@@ -48,6 +48,8 @@ public final class CrowdBench implements ClientModInitializer {
 	private static final int SKINS = Math.max(1, Integer.getInteger("polonium.bench.skins", 1));
 	/** -Dpolonium.bench.armor=false: bare mannequins (to look at the skins). */
 	private static final boolean ARMOR = !"false".equals(System.getProperty("polonium.bench.armor"));
+	/** -Dpolonium.bench.profile=true: also record the game's own profile (F3+L) while measuring. */
+	private static final boolean PROFILE = Boolean.getBoolean("polonium.bench.profile");
 	private static final int SECONDS = Integer.getInteger("polonium.bench.seconds", 20);
 	private static final int WARMUP_SECONDS = 15;
 	/** Ground level of the default flat world. */
@@ -191,7 +193,13 @@ public final class CrowdBench implements ClientModInitializer {
 			TIMER.schedule(() -> run(() -> sendInBatches(commands, to)), 60, TimeUnit.MILLISECONDS);
 		} else {
 			LOG.info("crowd bench: {} commands sent; warming up {}s", commands.size(), WARMUP_SECONDS);
-			TIMER.schedule(() -> run(() -> measure(new ArrayList<>(), SECONDS)), WARMUP_SECONDS, TimeUnit.SECONDS);
+			TIMER.schedule(() -> run(() -> {
+				if (PROFILE) {
+					// The game's own profiler (F3+L): ten seconds of where frame time goes, in debug/profiling.
+					Minecraft.getInstance().debugClientMetricsStart(message -> LOG.info("crowd bench: profile {}", message.getString()));
+				}
+				measure(new ArrayList<>(), SECONDS);
+			}), WARMUP_SECONDS, TimeUnit.SECONDS);
 		}
 	}
 

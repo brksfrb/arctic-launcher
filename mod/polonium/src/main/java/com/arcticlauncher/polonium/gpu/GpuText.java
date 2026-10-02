@@ -76,6 +76,11 @@ public final class GpuText implements GpuFeature {
 	private static final int FRAMES_IN_FLIGHT = 3;
 	private static final boolean ENABLED = !"false".equals(System.getProperty("polonium.gpuText"));
 
+	/** Whether name tags go to the GPU at all. */
+	static boolean enabled() {
+		return ENABLED;
+	}
+
 	private final Map<RenderType, PreparedRenderType> prepared = new IdentityHashMap<>();
 	private final List<List<Batch>> groups = new ArrayList<>();
 	private final List<Batch> spare = new ArrayList<>();

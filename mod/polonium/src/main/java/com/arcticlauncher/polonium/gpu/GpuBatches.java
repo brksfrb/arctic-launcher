@@ -235,6 +235,7 @@ public final class GpuBatches implements GpuFeature {
 		}
 		try {
 			if (!uploaded) {
+				layOut();
 				beforeUpload.run();
 				upload();
 				uploaded = true;
@@ -245,20 +246,36 @@ public final class GpuBatches implements GpuFeature {
 		}
 	}
 
-	/** Every batch's instance data in one texel buffer, and each batch's place in it in one uniform buffer. */
-	private void upload() {
-		GpuDevice device = RenderSystem.getDevice();
-		int alignment = Math.max(16, device.getDeviceInfo().limits().minUniformOffsetAlignment());
+	private long layoutTexels;
+	private long layoutDrawBytes;
+
+	/**
+	 * Each batch's place in the instance buffer, before the deferred work
+	 * writes the data: an entity may point at another's (see
+	 * {@link PartPoses#writeBorrowed}), which needs where that one lands.
+	 */
+	private void layOut() {
+		int alignment = Math.max(16, RenderSystem.getDevice().getDeviceInfo().limits().minUniformOffsetAlignment());
 		long texels = 0;
 		long drawBytes = 0;
 		for (List<Batch> group : groups) {
 			for (Batch batch : group) {
 				batch.firstTexel = (int) texels;
+				batch.data.base = (int) texels;
 				texels += batch.data.texels();
 				batch.drawOffset = drawBytes;
 				drawBytes += alignment;
 			}
 		}
+		layoutTexels = texels;
+		layoutDrawBytes = drawBytes;
+	}
+
+	/** Every batch's instance data in one texel buffer, and each batch's place in it in one uniform buffer. */
+	private void upload() {
+		GpuDevice device = RenderSystem.getDevice();
+		long texels = layoutTexels;
+		long drawBytes = layoutDrawBytes;
 		if (texels == 0) {
 			return;
 		}

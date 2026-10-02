@@ -49,8 +49,11 @@ layout(std140) uniform PoloniumDraw {
 
 // Per entity: color, then (overlay u, v, light u, v), then where its texture
 // is (u, v offset and scale: a cell of Polonium's skin atlas, or 0, 0, 1, 1),
-// then three texels per model part: its pose (3 rows of 4). Normals use the pose's inverse
-// transpose, which is what Minecraft's normal matrix is.
+// then where its parts' poses are (x: -1 right after this header; else the
+// texel they start at, another entity's: armor posed exactly like the body it's
+// on uses the body's), then three texels per model part: its pose (3 rows of
+// 4). Normals use the pose's inverse transpose, which is what Minecraft's
+// normal matrix is.
 uniform samplerBuffer PoloniumInstances;
 
 vec4 sample_lightmap(sampler2D lightMap, ivec2 uv) {
@@ -108,7 +111,8 @@ void main() {
     ivec2 lightCoords = ivec2(coords.zw);
 
     vec4 placement = texelFetch(PoloniumInstances, entity + 2);
-    int part = entity + 3 + UV1.x * 3;
+    float partsAt = texelFetch(PoloniumInstances, entity + 3).x;
+    int part = (partsAt < 0.0 ? entity + 4 : int(partsAt)) + UV1.x * 3;
     vec4 row0 = texelFetch(PoloniumInstances, part);
     vec4 row1 = texelFetch(PoloniumInstances, part + 1);
     vec4 row2 = texelFetch(PoloniumInstances, part + 2);

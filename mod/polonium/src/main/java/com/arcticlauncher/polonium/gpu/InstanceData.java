@@ -7,6 +7,8 @@ import java.util.Arrays;
 final class InstanceData {
 	private float[] floats = new float[4096];
 	private int size;
+	/** Where it starts in the frame's instance buffer, in texels: set once the frame's batches are laid out, before they're written. */
+	int base;
 
 	void put(float x, float y, float z, float w) {
 		if (size + 4 > floats.length) {

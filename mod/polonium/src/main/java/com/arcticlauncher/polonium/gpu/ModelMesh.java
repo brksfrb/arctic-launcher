@@ -37,19 +37,81 @@ final class ModelMesh extends GpuMesh {
 	/** For each part: the number after its last descendant (its subtree is [i, end)). */
 	final int[] subtreeEnd;
 
-	private ModelMesh(ModelPart[] parts, int[] subtreeEnd, int vertexCount, GpuBuffer vertices) {
-		// Color, (overlay, light), texture placement, then each part's pose.
-		super(vertices, vertexCount, 3 + PartPoses.TEXELS_PER_PART * parts.length, SHADER);
+	private ModelMesh(ModelPart[] parts, int[] subtreeEnd, int vertexCount, GpuBuffer vertices, int texelsPerInstance) {
+		super(vertices, vertexCount, texelsPerInstance, SHADER);
 		this.parts = parts;
 		this.subtreeEnd = subtreeEnd;
 	}
 
 	static ModelMesh build(Model<?> model) {
+		ModelPart[] parts = partsInOrder(model);
+		int[] identity = new int[parts.length];
+		for (int i = 0; i < identity.length; i++) {
+			identity[i] = i;
+		}
+		// Header (color, overlay and light, texture placement, where the parts are), then each part's pose.
+		return build(parts, subtreeEnds(model), identity, PartPoses.HEADER_TEXELS + PartPoses.TEXELS_PER_PART * parts.length);
+	}
+
+	/**
+	 * For drawing {@code model} with {@code owner}'s parts' poses (see
+	 * {@link PartPoses#writeBorrowed}): each of its parts' number in
+	 * {@code owner}, by place (the same names from the root). Null if a part
+	 * with cubes has no counterpart there that's drawn (with cubes or children
+	 * of its own).
+	 */
+	static int @org.jspecify.annotations.Nullable [] borrowIndex(Model<?> model, Model<?> owner) {
+		ModelPart[] ownerParts = partsInOrder(owner);
+		int[] ownerEnds = subtreeEnds(owner);
+		List<String> ownerPaths = new ArrayList<>();
+		paths(owner.root(), "", ownerPaths);
+		java.util.Map<String, Integer> ownerIndex = new java.util.HashMap<>();
+		for (int i = 0; i < ownerPaths.size(); i++) {
+			ownerIndex.put(ownerPaths.get(i), i);
+		}
+		ModelPart[] parts = partsInOrder(model);
+		List<String> paths = new ArrayList<>();
+		paths(model.root(), "", paths);
+		int[] index = new int[parts.length];
+		for (int i = 0; i < parts.length; i++) {
+			Integer at = ownerIndex.get(paths.get(i));
+			if (!cubes(parts[i]).isEmpty()
+					&& (at == null || cubes(ownerParts[at]).isEmpty() && ownerEnds[at] == at + 1)) {
+				return null;
+			}
+			index[i] = at == null ? 0 : at;
+		}
+		return index;
+	}
+
+	/** {@code model}'s shape, its parts numbered as {@link #borrowIndex} says: drawn with another entity's poses. */
+	static ModelMesh borrowing(Model<?> model, int[] index) {
+		return build(partsInOrder(model), subtreeEnds(model), index, PartPoses.HEADER_TEXELS);
+	}
+
+	/** Each part's path of child names from the root, in visiting order (the root is ""). */
+	static void paths(ModelPart part, String path, List<String> out) {
+		out.add(path);
+		for (java.util.Map.Entry<String, ModelPart> child : ((ModelPartAccess) (Object) part).polonium$children().entrySet()) {
+			paths(child.getValue(), path + "/" + child.getKey(), out);
+		}
+	}
+
+	/** The model's parts in {@link ModelPart#render}'s order. */
+	static ModelPart[] partsInOrder(Model<?> model) {
 		List<ModelPart> order = new ArrayList<>();
+		collect(model.root(), order, new ArrayList<>());
+		return order.toArray(new ModelPart[0]);
+	}
+
+	private static int[] subtreeEnds(Model<?> model) {
 		List<Integer> ends = new ArrayList<>();
-		collect(model.root(), order, ends);
-		ModelPart[] parts = order.toArray(new ModelPart[0]);
-		int[] subtreeEnd = ends.stream().mapToInt(Integer::intValue).toArray();
+		collect(model.root(), new ArrayList<>(), ends);
+		return ends.stream().mapToInt(Integer::intValue).toArray();
+	}
+
+	/** Vertices of {@code parts}, each tagged with {@code partIndex} of its part. */
+	private static ModelMesh build(ModelPart[] parts, int[] subtreeEnd, int[] partIndex, int texelsPerInstance) {
 		int vertexCount = 0;
 		for (ModelPart part : parts) {
 			for (ModelPart.Cube cube : cubes(part)) {
@@ -68,7 +130,7 @@ final class ModelMesh extends GpuMesh {
 						for (ModelPart.Vertex vertex : polygon.vertices()) {
 							data.putFloat(vertex.worldX()).putFloat(vertex.worldY()).putFloat(vertex.worldZ());
 							data.putFloat(vertex.u()).putFloat(vertex.v());
-							data.putShort((short) index).putShort((short) 0);
+							data.putShort((short) partIndex[index]).putShort((short) 0);
 							data.putFloat(normal.x()).putFloat(normal.y()).putFloat(normal.z());
 						}
 					}
@@ -76,7 +138,7 @@ final class ModelMesh extends GpuMesh {
 			}
 			data.flip();
 			GpuBuffer buffer = RenderSystem.getDevice().createBuffer(() -> "Polonium model mesh", GpuBuffer.USAGE_VERTEX, data);
-			return new ModelMesh(parts, subtreeEnd, vertexCount, buffer);
+			return new ModelMesh(parts, subtreeEnd, vertexCount, buffer, texelsPerInstance);
 		} finally {
 			MemoryUtil.memFree(data);
 		}
