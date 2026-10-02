@@ -28,10 +28,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * The game's {@code extractVisibleEntities}, with the per-entity work spread
- * over threads: which entities are visible is decided here, in order, as the
- * game does; their render states are then made on several threads (only for
- * renderers known to be safe, see {@link ParallelExtract}); and they're added
- * in the game's order. With few entities, or when Polonium has stepped aside,
+ * over threads: which entities are visible, then their render states, are
+ * worked out on several threads (only for renderers known to be safe, see
+ * {@link ParallelExtract}); everything with side effects stays on this
+ * thread, and states are added in the game's order. With few entities, or when Polonium has stepped aside,
  * the game's own code runs.
  */
 @Mixin(LevelExtractor.class)
@@ -65,10 +65,19 @@ abstract class LevelExtractorMixin {
 		TickRateManager tickRateManager = this.minecraft.level.tickRateManager();
 		Entity.setViewScale(
 				Mth.clamp(this.minecraft.options.getEffectiveRenderDistance() / 8.0, 1.0, 2.5) * this.minecraft.options.entityDistanceScaling().get());
+		List<Entity> all = new ArrayList<>();
+		for (Entity entity : this.level.entitiesForRendering()) {
+			all.add(entity);
+		}
+		EntityRenderDispatcher dispatcher = this.levelRenderer.entityRenderDispatcher();
+		boolean[] trustedAll = new boolean[all.size()];
+		boolean[] seen = ParallelExtract.visible(all, dispatcher, e -> this.isEntityVisible(e, frustum, camX, camY, camZ), trustedAll);
 		List<Entity> visible = new ArrayList<>();
 		List<Float> partials = new ArrayList<>();
-		for (Entity entity : this.level.entitiesForRendering()) {
-			if (this.isEntityVisible(entity, frustum, camX, camY, camZ)
+		boolean[] trusted = new boolean[all.size()];
+		for (int i = 0; i < all.size(); i++) {
+			Entity entity = all.get(i);
+			if (seen[i]
 					&& (entity != camera.entity() || camera.isDetached()
 							|| camera.entity() instanceof LivingEntity && ((LivingEntity) camera.entity()).isSleeping())
 					&& (!(entity instanceof LocalPlayer) || camera.entity() == entity)) {
@@ -77,12 +86,12 @@ abstract class LevelExtractorMixin {
 					entity.yOld = entity.getY();
 					entity.zOld = entity.getZ();
 				}
+				trusted[visible.size()] = trustedAll[i];
 				visible.add(entity);
 				partials.add(deltaTracker.getGameTimeDeltaPartialTick(!tickRateManager.isEntityFrozen(entity)));
 			}
 		}
-		EntityRenderDispatcher dispatcher = this.levelRenderer.entityRenderDispatcher();
-		EntityRenderState[] states = ParallelExtract.extract(visible, partials, dispatcher, this::extractEntity);
+		EntityRenderState[] states = ParallelExtract.extract(visible, partials, trusted, this::extractEntity);
 		for (EntityRenderState state : states) {
 			output.entityRenderStates.add(state);
 		}
