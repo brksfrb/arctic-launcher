@@ -36,6 +36,19 @@ abstract class ArmedStateKeptSlotsMixin implements KeptStates.Slots {
 		return polonium$ticks;
 	}
 
+	@Unique
+	private int polonium$itemsVersion;
+
+	@Override
+	public int polonium$itemsVersion() {
+		return polonium$itemsVersion;
+	}
+
+	@Override
+	public void polonium$itemsChanged() {
+		polonium$itemsVersion++;
+	}
+
 	@WrapOperation(method = "extractArmedEntityRenderState", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/renderer/item/ItemModelResolver;updateForLiving(Lnet/minecraft/client/renderer/item/ItemStackRenderState;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/item/ItemDisplayContext;Lnet/minecraft/world/entity/LivingEntity;)V"))
 	private static void polonium$keptModel(ItemModelResolver resolver, ItemStackRenderState output, ItemStack item, ItemDisplayContext context,
@@ -43,6 +56,7 @@ abstract class ArmedStateKeptSlotsMixin implements KeptStates.Slots {
 		int slot = output == state.rightHandItemState ? KeptStates.RIGHT_MODEL : KeptStates.LEFT_MODEL;
 		if (!KeptStates.same(state, slot, item, entity.tickCount)) {
 			update.call(resolver, output, item, context, entity);
+			((KeptStates.Slots) state).polonium$itemsChanged();
 		}
 	}
 
@@ -50,13 +64,13 @@ abstract class ArmedStateKeptSlotsMixin implements KeptStates.Slots {
 			at = @At(value = "INVOKE", target = "Lnet/minecraft/world/item/ItemStack;copy()Lnet/minecraft/world/item/ItemStack;", ordinal = 0))
 	private static ItemStack polonium$keptLeftCopy(ItemStack held, Operation<ItemStack> copy, @Local(argsOnly = true) LivingEntity entity,
 			@Local(argsOnly = true) ArmedEntityRenderState state) {
-		return KeptStates.same(state, KeptStates.LEFT_COPY, held, entity.tickCount) ? state.leftHandItemStack : copy.call(held);
+		return KeptStates.sameCopy(state, KeptStates.LEFT_COPY, held, entity.tickCount) ? state.leftHandItemStack : copy.call(held);
 	}
 
 	@WrapOperation(method = "extractArmedEntityRenderState",
 			at = @At(value = "INVOKE", target = "Lnet/minecraft/world/item/ItemStack;copy()Lnet/minecraft/world/item/ItemStack;", ordinal = 1))
 	private static ItemStack polonium$keptRightCopy(ItemStack held, Operation<ItemStack> copy, @Local(argsOnly = true) LivingEntity entity,
 			@Local(argsOnly = true) ArmedEntityRenderState state) {
-		return KeptStates.same(state, KeptStates.RIGHT_COPY, held, entity.tickCount) ? state.rightHandItemStack : copy.call(held);
+		return KeptStates.sameCopy(state, KeptStates.RIGHT_COPY, held, entity.tickCount) ? state.rightHandItemStack : copy.call(held);
 	}
 }

@@ -17,6 +17,8 @@ import net.minecraft.client.model.ArmedModel;
 import net.minecraft.client.model.Model;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
+import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.layers.ArrowLayer;
 import net.minecraft.client.renderer.entity.layers.BeeStingerLayer;
@@ -303,6 +305,116 @@ public final class Crowd {
 					ItemStackRenderState.LayerRenderState.EMPTY_TINTS, bucket.quads, ItemStackRenderState.FoilType.NONE);
 		}
 		report();
+	}
+
+	/** Off with -Dpolonium.crowdBulk=false: every crowd player goes through the game's submit, one by one. */
+	private static final boolean BULK = !"false".equals(System.getProperty("polonium.crowdBulk"));
+	/** Below this many entities taking them in bulk isn't worth it. */
+	private static final int BULK_MIN = 64;
+
+	/**
+	 * Before the game submits the level's entities one by one: the crowd
+	 * players that need nothing of the game's per-entity submit (their recipe
+	 * holds, nothing for other layers to draw, no flames, shadows or leashes,
+	 * their tags laid out) are taken here, all at once, on the helper threads;
+	 * the game's loop skips them ({@link #taken}). The rest go through the
+	 * game's submit (and {@link #submit}) as before.
+	 */
+	public static void bulkSubmit(List<EntityRenderState> states, CameraRenderState camera, PoseStack poseStack, SubmitNodeCollector collector,
+			EntityRenderDispatcher dispatcher) {
+		int count = states.size();
+		if (!inLevel || !BULK || count < BULK_MIN || !crowdTags(collector)) {
+			return;
+		}
+		try {
+			long frame = CrowdFrame.frame;
+			boolean[] take = new boolean[count];
+			inParts(count, (from, to) -> {
+				for (int i = from; i < to; i++) {
+					take[i] = takeable(states.get(i), dispatcher, frame);
+				}
+			});
+			int taken = 0;
+			for (boolean t : take) {
+				if (t) {
+					taken++;
+				}
+			}
+			if (taken == 0) {
+				return;
+			}
+			int[] which = new int[taken];
+			for (int i = 0, k = 0; i < count; i++) {
+				if (take[i]) {
+					which[k++] = i;
+				}
+			}
+			int first = CrowdFrame.reserve(taken);
+			CrowdTags.ensure(first + taken);
+			CrowdTags.facing(camera);
+			Matrix4f base = new Matrix4f(poseStack.last().pose());
+			double camX = camera.pos.x();
+			double camY = camera.pos.y();
+			double camZ = camera.pos.z();
+			int total = taken;
+			inParts(total, (from, to) -> {
+				Matrix4f pose = new Matrix4f();
+				for (int k = from; k < to; k++) {
+					AvatarRenderState state = (AvatarRenderState) states.get(which[k]);
+					CrowdRecipe recipe = (CrowdRecipe) ((CrowdChecked) state).polonium$checked();
+					// Where the game's submit would put it: its place relative to the camera, plus the renderer's offset.
+					net.minecraft.world.phys.Vec3 offset = ((LivingEntityRenderer) recipe.renderer).getRenderOffset(state);
+					pose.set(base).translate((float) (state.x - camX + offset.x()), (float) (state.y - camY + offset.y()),
+							(float) (state.z - camZ + offset.z()));
+					CrowdFrame.queueAt(first + k, recipe, state, pose);
+					CrowdTags.planKept(first + k, state, recipe);
+					recipe.lastSeen = frame;
+					((CrowdChecked) state).polonium$taken(frame);
+				}
+			});
+		} catch (RuntimeException | LinkageError e) {
+			GpuBatches.disable("the crowd path failed", e);
+			inLevel = false;
+		}
+	}
+
+	/** Whether this entity can be taken in bulk (see {@link #bulkSubmit}). Safe on any thread. */
+	private static boolean takeable(EntityRenderState entityState, EntityRenderDispatcher dispatcher, long frame) {
+		if (!(entityState instanceof AvatarRenderState state) || !eligible(state) || state.displayFireAnimation || !state.shadowPieces.isEmpty()
+				|| state.leashStates != null) {
+			return false;
+		}
+		CrowdChecked checked = (CrowdChecked) state;
+		if (checked.polonium$checkedFrame() != frame || checked.polonium$liveLayers()
+				|| !(checked.polonium$checked() instanceof CrowdRecipe recipe) || recipe.unsupported != null || recipe.due(state, frame)) {
+			return false;
+		}
+		EntityRenderer<?, ?> renderer = dispatcher.getRenderer(state);
+		return renderer == recipe.renderer && renderer.getClass() == AvatarRenderer.class && CrowdTags.laidOut(state, recipe);
+	}
+
+	/** Whether the crowd path took this state in bulk this frame (the game's submit skips it). */
+	public static boolean taken(EntityRenderState state) {
+		return state instanceof CrowdChecked checked && checked.polonium$taken() == CrowdFrame.frame && inLevel;
+	}
+
+	private interface Range {
+		void run(int from, int to);
+	}
+
+	private static void inParts(int count, Range range) {
+		int parts = count < BULK_MIN ? 1 : Workers.HELPERS + 1;
+		if (parts == 1) {
+			range.run(0, count);
+			return;
+		}
+		List<Runnable> jobs = new ArrayList<>(parts);
+		for (int p = 0; p < parts; p++) {
+			int from = count * p / parts;
+			int to = count * (p + 1) / parts;
+			jobs.add(() -> range.run(from, to));
+		}
+		Workers.runAll(jobs);
 	}
 
 	/**

@@ -16,4 +16,9 @@ public interface CrowdChecked {
 	boolean polonium$liveLayers();
 
 	void polonium$liveLayers(boolean live);
+
+	/** The frame the crowd path took it in bulk (see Crowd#bulkSubmit): the game's submit skips it. */
+	long polonium$taken();
+
+	void polonium$taken(long frame);
 }

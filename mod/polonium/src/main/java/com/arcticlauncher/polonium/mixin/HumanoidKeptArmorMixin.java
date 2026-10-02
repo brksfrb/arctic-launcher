@@ -26,7 +26,7 @@ abstract class HumanoidKeptArmorMixin {
 			case FEET -> 3;
 			default -> -1;
 		};
-		if (index < 0 || !KeptStates.same(state, KeptStates.ARMOR + index, entity.getItemBySlot(slot), entity.tickCount)) {
+		if (index < 0 || !KeptStates.sameCopy(state, KeptStates.ARMOR + index, entity.getItemBySlot(slot), entity.tickCount)) {
 			return copy.call(entity, slot);
 		}
 		return switch (slot) {

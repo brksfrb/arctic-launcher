@@ -35,5 +35,18 @@ abstract class AvatarRenderStateMixin implements AvatarIdentity {
 	public void arctic$setLook(com.arcticlauncher.client.looks.Look look) {
 		arctic$look = look;
 	}
+
+	@Unique
+	private long arctic$lookedAt;
+
+	@Override
+	public long arctic$lookedAt() {
+		return arctic$lookedAt;
+	}
+
+	@Override
+	public void arctic$lookedAt(long millis) {
+		arctic$lookedAt = millis;
+	}
 }
 //#endif
