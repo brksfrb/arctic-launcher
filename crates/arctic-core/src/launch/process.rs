@@ -64,7 +64,7 @@ pub fn spawn(
 ) -> Result<GameHandle> {
     log::info!("launching: {}", plan.redacted_command());
     let log = Arc::new(Mutex::new(File::create(&plan.log_file).at(&plan.log_file)?));
-    let mut child = Command::new(branded_java(&plan.java))
+    let mut child = Command::new(game_exe(plan))
         .args(&plan.args)
         .current_dir(&plan.game_dir)
         .stdin(Stdio::null())
@@ -119,7 +119,7 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
     log::info!("launching (detached): {}", plan.redacted_command());
     let log = File::create(&plan.log_file).at(&plan.log_file)?;
     let log_err = log.try_clone().at(&plan.log_file)?;
-    let child = Command::new(branded_java(&plan.java))
+    let child = Command::new(game_exe(plan))
         .args(&plan.args)
         .current_dir(&plan.game_dir)
         .stdin(Stdio::null())
@@ -170,6 +170,13 @@ const CLIENT_PROCESS: &str = if cfg!(windows) {
 /// the rest of Java from its own folder), keeps that from happening and
 /// shows "Arctic Client" in Task Manager. Falls back to `java` on any error
 /// (a read-only Java folder, say).
+/// The executable the game runs as, set to the graphics card the player wants.
+fn game_exe(plan: &LaunchPlan) -> PathBuf {
+    let exe = branded_java(&plan.java);
+    crate::gpu_preference::apply(&exe, plan.high_performance_gpu);
+    exe
+}
+
 fn branded_java(java: &Path) -> PathBuf {
     let is_java = java
         .file_name()
