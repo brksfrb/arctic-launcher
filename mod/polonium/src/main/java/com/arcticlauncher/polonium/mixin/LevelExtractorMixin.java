@@ -73,6 +73,7 @@ abstract class LevelExtractorMixin {
 		for (Entity entity : this.level.entitiesForRendering()) {
 			all.add(entity);
 		}
+		com.arcticlauncher.polonium.Workers.load(all.size());
 		EntityRenderDispatcher dispatcher = this.levelRenderer.entityRenderDispatcher();
 		boolean[] trustedAll = new boolean[all.size()];
 		boolean[] seen = ParallelExtract.visible(all, dispatcher, e -> this.isEntityVisible(e, frustum, camX, camY, camZ), trustedAll);
@@ -98,10 +99,7 @@ abstract class LevelExtractorMixin {
 				visible.add(entity);
 			}
 		}
-		EntityRenderState[] states = ParallelExtract.extract(visible, partials, trusted, this::extractEntity);
-		for (EntityRenderState state : states) {
-			output.entityRenderStates.add(state);
-		}
+		ParallelExtract.extract(visible, partials, trusted, this::extractEntity, output.entityRenderStates);
 		ci.cancel();
 	}
 }

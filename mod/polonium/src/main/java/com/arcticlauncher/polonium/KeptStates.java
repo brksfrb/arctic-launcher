@@ -30,7 +30,8 @@ public final class KeptStates {
 	 * the server sends new items when they change, so that's rare).
 	 */
 	public static final int COPY_TICKS = 20;
-	private static volatile boolean inLevel;
+	/** Per thread: the level's entity states are made on several threads, while the render thread may make others (menus). */
+	private static final ThreadLocal<boolean[]> IN_LEVEL = ThreadLocal.withInitial(() -> new boolean[1]);
 
 	/** Room on an entity for its kept state (added to Entity by a mixin). */
 	public interface Holder {
@@ -60,13 +61,13 @@ public final class KeptStates {
 
 	private KeptStates() {}
 
-	/** The level's entities are being made (their states may be kept). */
+	/** This thread is making the level's entities' states (they may be kept). */
 	public static void inLevel(boolean making) {
-		inLevel = making;
+		IN_LEVEL.get()[0] = making;
 	}
 
 	public static boolean inLevel() {
-		return ENABLED && inLevel;
+		return ENABLED && IN_LEVEL.get()[0];
 	}
 
 	/**
