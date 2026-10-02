@@ -61,7 +61,7 @@ impl ArcticApp {
             .on_hover_text("Off: games keep running after the launcher closes.");
             ui.checkbox(&mut s.show_sponsor, "Show supporter mentions")
                 .on_hover_text(
-                    "A small \"Supported by Flash Hosting\" in About and Play together.",
+                    "\"Supported by Flash Hosting\" in the sidebar, About and Play together.",
                 );
         });
 

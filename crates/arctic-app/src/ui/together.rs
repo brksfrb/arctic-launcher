@@ -109,11 +109,8 @@ impl ArcticApp {
             .small()
             .color(p.muted),
         );
-        ui.add_space(4.0);
-        self.sponsor_hint(
-            ui,
-            "Want your world up while you're offline? A 24/7 server from",
-        );
+        ui.add_space(12.0);
+        self.sponsor_card(ui);
     }
 
     fn host_card(&mut self, ui: &mut egui::Ui) {

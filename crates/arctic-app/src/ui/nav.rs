@@ -104,6 +104,8 @@ impl ArcticApp {
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
             ui.add_space(4.0);
             self.account_switcher(ui);
+            ui.add_space(6.0);
+            self.sponsor_sidebar(ui);
         });
     }
 
