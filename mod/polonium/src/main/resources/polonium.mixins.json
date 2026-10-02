@@ -18,6 +18,8 @@
 		"ItemFeatureRendererMixin",
 		"ItemSubmitMixin",
 		"SkinTextureUsageMixin",
+		"EntityRendererCacheMixin",
+		"EntityRendererHolderMixin",
 		"PreparedFrameAccess",
 		"FeatureRenderDispatcherMixin",
 		"EntityNameTagMixin",
