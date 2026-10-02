@@ -26,6 +26,16 @@ public final class Hud {
 	private final ClientConfig config;
 	private final Cps cps = new Cps();
 	private final List<HudWidget> widgets;
+	/** Each widget's slot, looked up once (the config map is keyed by id strings). */
+	private final Map<HudWidget, HudSlot> slots = new IdentityHashMap<HudWidget, HudSlot>();
+	private Map<String, HudSlot> slotsFrom;
+	private int slotsEpoch;
+	/** Counts HUD draws: text widgets work their value and width out once per draw. */
+	private static long frame;
+
+	static long frame() {
+		return frame;
+	}
 
 	public Hud(ClientConfig config) {
 		this.config = config;
@@ -48,17 +58,28 @@ public final class Hud {
 
 	/** The widget's placement, created from its defaults on first use. */
 	public HudSlot slot(HudWidget w) {
-		HudSlot slot = config.hud.get(w.id);
+		if (slotsFrom != config.hud || slotsEpoch != config.hudEpoch) {
+			slots.clear();
+			slotsFrom = config.hud;
+			slotsEpoch = config.hudEpoch;
+		}
+		HudSlot slot = slots.get(w);
+		if (slot != null) {
+			return slot;
+		}
+		slot = config.hud.get(w.id);
 		if (slot == null) {
 			slot = new HudSlot(w.onByDefault);
 			config.hud.put(w.id, slot);
 		}
+		slots.put(w, slot);
 		return slot;
 	}
 
 	/** Back to the default set of widgets, neatly stacked. */
 	public void reset() {
 		config.hud.clear();
+		config.hudChanged();
 	}
 
 	/**
@@ -187,6 +208,7 @@ public final class Hud {
 	}
 
 	public void render(Gfx g, Style s, boolean preview) {
+		frame++;
 		for (Map.Entry<HudWidget, int[]> e : sorted(layout(g))) {
 			draw(g, s, e.getKey(), e.getValue(), preview);
 		}
@@ -205,6 +227,7 @@ public final class Hud {
 	}
 
 	public void draw(Gfx g, Style s, HudWidget w, int[] rect, boolean preview) {
+		g.newLayer();
 		g.push();
 		g.translate(rect[0], rect[1]);
 		g.scale(slot(w).scale);

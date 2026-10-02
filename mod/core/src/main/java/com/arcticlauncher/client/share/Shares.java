@@ -205,6 +205,7 @@ public final class Shares {
 		if (hud != null) {
 			config.hud.clear();
 			config.hud.putAll(hud);
+			config.hudChanged();
 			if (hudVersion != null) {
 				config.hudVersion = hudVersion;
 			}

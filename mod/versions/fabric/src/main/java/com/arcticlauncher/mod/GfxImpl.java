@@ -95,6 +95,13 @@ public final class GfxImpl implements Gfx {
 		g.fill(x0, y0, x1, y1, color);
 	}
 
+	//#if MC >= 1.21.6
+	@Override
+	public void newLayer() {
+		g.nextStratum();
+	}
+	//#endif
+
 	//#if MC >= 26.1
 	@Override
 	public boolean roundedFill(int x0, int y0, int x1, int y1, int r, int color) {
@@ -132,8 +139,31 @@ public final class GfxImpl implements Gfx {
 
 	@Override
 	public int textWidth(String text) {
-		return font.width(text);
+		long now = System.nanoTime();
+		if (widthsFont != font || WIDTHS.size() > MAX_WIDTHS || now - widthsSince > WIDTHS_NANOS) {
+			WIDTHS.clear();
+			widthsFont = font;
+			widthsSince = now;
+		}
+		Integer width = WIDTHS.get(text);
+		if (width == null) {
+			width = font.width(text);
+			WIDTHS.put(text, width);
+		}
+		return width;
 	}
+
+	/**
+	 * Text widths already measured: the HUD measures the same strings every
+	 * frame, and the game works each one out glyph by glyph (with bidi
+	 * reordering). Render thread only; forgotten now and then, so a reloaded
+	 * font's widths come through.
+	 */
+	private static final java.util.HashMap<String, Integer> WIDTHS = new java.util.HashMap<String, Integer>();
+	private static final int MAX_WIDTHS = 1024;
+	private static final long WIDTHS_NANOS = 5_000_000_000L;
+	private static Object widthsFont;
+	private static long widthsSince;
 
 	@Override
 	public void texture(String key, int x, int y, int w, int h, float u, float v, int regionW, int regionH, int texW, int texH) {

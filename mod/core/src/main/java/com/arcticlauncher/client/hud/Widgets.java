@@ -89,7 +89,7 @@ final class Widgets {
 				if (tps < 0) {
 					return preview ? "20.0" : "--";
 				}
-				return String.format(Locale.ROOT, "%.1f", tps);
+				return Num.fixed(tps, 1);
 			}
 		});
 		all.add(new TextWidget("players", "Players", "Players online on the server", false) {
@@ -147,7 +147,7 @@ final class Widgets {
 				if (f == null) {
 					return "20 (5.0)";
 				}
-				return (int) f[0] + " (" + String.format(Locale.ROOT, "%.1f", f[1]) + ")";
+				return (int) f[0] + " (" + Num.fixed(f[1], 1) + ")";
 			}
 		});
 		all.add(new TextWidget("pack", "Pack", "Your top resource pack", false) {
@@ -286,7 +286,7 @@ final class Widgets {
 			if (Math.abs(target - shown) < SETTLE) {
 				shown = target;
 			}
-			return String.format(Locale.ROOT, "%.1f b/s", shown);
+			return Num.fixed(shown, 1) + " b/s";
 		}
 
 		/** Path length over the window, per second. */
