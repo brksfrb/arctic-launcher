@@ -64,7 +64,9 @@
 		"ReplayFrameMixin",
 		"LivingEntitySwingMixin"<% } %><% if (replayWindow) { %>,
 		"WindowFrameMixin"<% } %><% if (oldWorldCreation) { %>,
-		"CreateWorldScreenAccess"<% } %>
+		"CreateWorldScreenAccess"<% } %><% if (guiReplay) { %>,
+		"GuiRenderStateRecordMixin",
+		"GuiGraphicsStateAccess"<% } %>
 	],
 	"injectors": {
 		"defaultRequire": 1

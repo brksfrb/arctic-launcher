@@ -224,6 +224,8 @@ processResources {
 			resolver: atLeast('1.17'),
 			// Toast slots were tracked from 1.19.
 			toastSlots: atLeast('1.19'),
+			// HUD widgets hand in last frame's GUI pieces again (26.1's GUI states).
+			guiReplay: atLeast('26.1'),
 	]
 	inputs.properties props
 	filesMatching(['fabric.mod.json', 'arctic.mixins.json']) {

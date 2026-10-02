@@ -31,6 +31,16 @@ public abstract class HudWidget {
 		this.column = column;
 	}
 
+	/**
+	 * What the widget shows right now, cheap to work out and compared with
+	 * equals: while it stays equal (and the widget's look and place too),
+	 * its last drawing is drawn again instead of drawing it anew. Null: drawn
+	 * every frame (animations, anything that changes without saying).
+	 */
+	public Object content(boolean preview) {
+		return null;
+	}
+
 	/** Draw with these settings from now on (the HUD sets it before each draw). */
 	public void use(HudSlot slot) {
 		look = slot;

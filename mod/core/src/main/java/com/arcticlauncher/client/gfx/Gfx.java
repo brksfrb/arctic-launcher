@@ -58,6 +58,26 @@ public interface Gfx {
 	 * it drawn row by row instead.
 	 */
 	/**
+	 * Start keeping the GUI pieces drawn from now on, to draw them again
+	 * unchanged later ({@link #replay}): a HUD widget showing the same thing
+	 * skips its drawing (and the game's text shaping) entirely. False if this
+	 * game version can't.
+	 */
+	default boolean startRecording() {
+		return false;
+	}
+
+	/** The pieces drawn since {@link #startRecording} (null if it wasn't). */
+	default Object stopRecording() {
+		return null;
+	}
+
+	/** Draw recorded pieces again, where they were; false if this game version can't. */
+	default boolean replay(Object recorded) {
+		return false;
+	}
+
+	/**
 	 * What's drawn next goes in a new layer above everything so far. The
 	 * game's GUI (1.21.6+) compares every new piece with all the pieces in
 	 * the current layer to stack overlapping ones in order; a busy HUD on

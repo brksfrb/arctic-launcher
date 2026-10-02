@@ -32,6 +32,69 @@ public final class Hud {
 	private int slotsEpoch;
 	/** Counts HUD draws: text widgets work their value and width out once per draw. */
 	private static long frame;
+	/** Per widget: what it showed, its size, and its last drawing (see {@link HudWidget#content}). */
+	private final Map<HudWidget, Kept> kept = new IdentityHashMap<HudWidget, Kept>();
+	/** The last layout, and what it was worked out from (screen size; each widget's slot and size). */
+	private Map<HudWidget, int[]> lastLayout;
+	private long[] lastLayoutFrom = new long[0];
+	private List<Map.Entry<HudWidget, int[]>> lastSorted;
+	private Map<HudWidget, int[]> lastSortedFrom;
+
+	private static final class Kept {
+		/** This frame's content (null: changes every frame). */
+		long frame = -1;
+		boolean preview;
+		Object content;
+		/** The size worked out for {@link #sizedContent}. */
+		Object sizedContent;
+		long sizedLook;
+		boolean sizedFancy;
+		int width;
+		int height;
+		/** The last drawing, and what it showed where. */
+		Object drawing;
+		Object drawnContent;
+		long drawnLook;
+		boolean drawnPreview;
+		boolean drawnFancy;
+		Style drawnStyle;
+		int[] drawnRect;
+	}
+
+	/** The widget's state for this frame: its content asked for once. */
+	private Kept kept(HudWidget w, HudSlot slot, boolean preview) {
+		Kept k = kept.get(w);
+		if (k == null) {
+			k = new Kept();
+			kept.put(w, k);
+		}
+		if (k.frame != frame || k.preview != preview) {
+			w.use(slot);
+			k.content = w.content(preview);
+			k.frame = frame;
+			k.preview = preview;
+		}
+		return k;
+	}
+
+	/** Width and height (unscaled): worked out again only when what it shows, or its look, changed. */
+	private Kept sized(Gfx g, HudWidget w, HudSlot slot) {
+		Kept k = kept(w, slot, previewing);
+		long look = slot.look();
+		boolean fancy = com.arcticlauncher.client.gfx.Draw.fancy;
+		if (k.content == null || !k.content.equals(k.sizedContent) || k.sizedLook != look || k.sizedFancy != fancy) {
+			w.use(slot);
+			k.width = w.width(g);
+			k.height = w.height();
+			k.sizedContent = k.content;
+			k.sizedLook = look;
+			k.sizedFancy = fancy;
+		}
+		return k;
+	}
+
+	/** Whether this draw is the editor's preview (sample values). */
+	private boolean previewing;
 
 	static long frame() {
 		return frame;
@@ -87,13 +150,40 @@ public final class Hud {
 	 * they were put; the rest stack in their column, stepping around them.
 	 */
 	public Map<HudWidget, int[]> layout(Gfx g) {
+		frame++;
+		// Worked out again only when the screen, a widget's slot or a widget's size changed.
+		long[] from = new long[2 + widgets.size() * 3];
+		from[0] = g.width();
+		from[1] = g.height();
+		int f = 2;
+		for (HudWidget w : widgets) {
+			HudSlot slot = slot(w);
+			from[f++] = slot.look();
+			if (slot.enabled) {
+				Kept k = sized(g, w, slot);
+				from[f++] = k.width;
+				from[f++] = k.height;
+			} else {
+				f += 2;
+			}
+		}
+		if (lastLayout != null && java.util.Arrays.equals(from, lastLayoutFrom)) {
+			return lastLayout;
+		}
+		lastLayoutFrom = from;
+		lastLayout = workOutLayout(g);
+		return lastLayout;
+	}
+
+	private Map<HudWidget, int[]> workOutLayout(Gfx g) {
 		Map<HudWidget, int[]> rects = new IdentityHashMap<HudWidget, int[]>();
 		List<int[]> taken = new ArrayList<int[]>();
 		for (HudWidget w : widgets) {
 			HudSlot slot = slot(w);
 			if (slot.enabled && slot.placed) {
-				int ww = Math.round(w.width(g) * slot.scale);
-				int hh = Math.round(w.height() * slot.scale);
+				Kept k = sized(g, w, slot);
+				int ww = Math.round(k.width * slot.scale);
+				int hh = Math.round(k.height * slot.scale);
 				int x = clamp(anchored(slot.ax, slot.dx, g.width(), ww), g.width() - ww);
 				int y = clamp(anchored(slot.ay, slot.dy, g.height(), hh), g.height() - hh);
 				int[] r = {x, y, ww, hh};
@@ -109,8 +199,9 @@ public final class Hud {
 			if (!slot.enabled || slot.placed) {
 				continue;
 			}
-			int ww = Math.round(w.width(g) * slot.scale);
-			int hh = Math.round(w.height() * slot.scale);
+			Kept k = sized(g, w, slot);
+			int ww = Math.round(k.width * slot.scale);
+			int hh = Math.round(k.height * slot.scale);
 			boolean onLeft = w.column == HudWidget.Column.LEFT;
 			Stack stack = onLeft ? left : right;
 			int[] r = new int[4];
@@ -208,8 +299,13 @@ public final class Hud {
 	}
 
 	public void render(Gfx g, Style s, boolean preview) {
-		frame++;
-		for (Map.Entry<HudWidget, int[]> e : sorted(layout(g))) {
+		previewing = preview;
+		Map<HudWidget, int[]> rects = layout(g);
+		if (lastSorted == null || lastSortedFrom != rects) {
+			lastSorted = sorted(rects);
+			lastSortedFrom = rects;
+		}
+		for (Map.Entry<HudWidget, int[]> e : lastSorted) {
 			draw(g, s, e.getKey(), e.getValue(), preview);
 		}
 	}
@@ -228,11 +324,31 @@ public final class Hud {
 
 	public void draw(Gfx g, Style s, HudWidget w, int[] rect, boolean preview) {
 		g.newLayer();
-		g.push();
-		g.translate(rect[0], rect[1]);
-		g.scale(slot(w).scale);
-		w.use(slot(w));
-		w.render(g, s, preview);
-		g.pop();
+		HudSlot slot = slot(w);
+		Kept k = kept(w, slot, preview);
+		long look = slot.look();
+		boolean fancy = com.arcticlauncher.client.gfx.Draw.fancy;
+		// Showing the same thing, the same way, in the same place: last frame's drawing again.
+		if (k.content != null && k.drawing != null && k.content.equals(k.drawnContent) && k.drawnLook == look && k.drawnPreview == preview
+				&& k.drawnFancy == fancy && k.drawnStyle == s && java.util.Arrays.equals(rect, k.drawnRect) && g.replay(k.drawing)) {
+			return;
+		}
+		boolean recording = k.content != null && g.startRecording();
+		try {
+			g.push();
+			g.translate(rect[0], rect[1]);
+			g.scale(slot.scale);
+			w.use(slot);
+			w.render(g, s, preview);
+			g.pop();
+		} finally {
+			k.drawing = recording ? g.stopRecording() : null;
+		}
+		k.drawnContent = k.content;
+		k.drawnLook = look;
+		k.drawnPreview = preview;
+		k.drawnFancy = fancy;
+		k.drawnStyle = s;
+		k.drawnRect = rect.clone();
 	}
 }
