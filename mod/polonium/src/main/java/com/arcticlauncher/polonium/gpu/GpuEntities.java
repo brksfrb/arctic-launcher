@@ -143,39 +143,54 @@ public final class GpuEntities {
 		}
 	}
 
-	/** A crowd bucket's players (see {@link Crowd}): one instance each, in this group. */
-	private void addCrowd(Crowd.Bucket bucket) {
+	/**
+	 * A crowd group's players (see {@link Crowd}): one instance each. The
+	 * group may span several buckets (skins sharing batches in the atlas);
+	 * each bucket's atlas cell is found once a frame.
+	 */
+	private void addCrowd(Crowd.Bucket group) {
 		if (GpuBatches.modelMod() || !batches.preparing()) {
 			return;
 		}
 		try {
-			ModelMesh mesh = bucket.owner == null ? mesh(bucket.model) : borrowedMesh(bucket);
-			RenderType renderType = bucket.renderType;
-			if (!bucket.resolved()) {
-				resolve(bucket);
+			ModelMesh mesh = group.owner == null ? mesh(group.model) : borrowedMesh(group);
+			if (group.renderType.hasBlending()) {
+				Crowd.sortFarToNear(group.members);
 			}
-			com.mojang.blaze3d.textures.GpuTextureView atlasView = null;
-			int cell = bucket.atlasTexture != null ? atlas.cell(bucket.atlasTexture, batches.frame()) : -1;
-			if (cell >= 0) {
-				renderType = bucket.batchOwner.renderType;
-				atlasView = atlas.view();
-				float size = atlas.size();
-				bucket.uv[0] = atlas.cellX(cell) / size;
-				bucket.uv[1] = atlas.cellY(cell) / size;
-				bucket.uv[2] = SkinAtlas.CELL / size;
-				bucket.uv[3] = SkinAtlas.CELL / size;
-			} else {
-				System.arraycopy(OWN_TEXTURE, 0, bucket.uv, 0, 4);
-			}
-			if (renderType.hasBlending()) {
-				Crowd.sortFarToNear(bucket.members);
-			}
-			for (int i = 0; i < bucket.members.size(); i++) {
-				InstanceData data = batches.add(renderType, mesh, atlasView);
-				Crowd.target(bucket.members.getInt(i), data, data.reserve(mesh.texelsPerInstance), mesh, bucket.uv);
+			long frame = batches.frame();
+			for (int i = 0; i < group.members.size(); i++) {
+				int member = group.members.getInt(i);
+				Crowd.Bucket bucket = Crowd.memberBucket(member);
+				if (bucket.cellFrame != frame) {
+					place(bucket, frame);
+				}
+				RenderType renderType = bucket.cell >= 0 ? bucket.batchOwner.renderType : bucket.renderType;
+				InstanceData data = batches.add(renderType, mesh, bucket.cellView);
+				Crowd.target(member, data, data.reserve(mesh.texelsPerInstance), mesh, bucket.uv);
 			}
 		} catch (RuntimeException | LinkageError e) {
 			GpuBatches.disable("couldn't take a crowd onto the GPU", e);
+		}
+	}
+
+	/** A bucket's texture this frame: its atlas cell, or its own texture. */
+	private void place(Crowd.Bucket bucket, long frame) {
+		bucket.cellFrame = frame;
+		if (!bucket.resolved()) {
+			resolve(bucket);
+		}
+		int cell = bucket.atlasTexture != null ? atlas.cell(bucket.atlasTexture, frame) : -1;
+		bucket.cell = cell;
+		if (cell >= 0) {
+			bucket.cellView = atlas.view();
+			float size = atlas.size();
+			bucket.uv[0] = atlas.cellX(cell) / size;
+			bucket.uv[1] = atlas.cellY(cell) / size;
+			bucket.uv[2] = SkinAtlas.CELL / size;
+			bucket.uv[3] = SkinAtlas.CELL / size;
+		} else {
+			bucket.cellView = null;
+			System.arraycopy(OWN_TEXTURE, 0, bucket.uv, 0, 4);
 		}
 	}
 
@@ -198,6 +213,7 @@ public final class GpuEntities {
 		}
 		java.util.List<Object> family = new java.util.ArrayList<>();
 		family.add(bucket.model);
+		family.add(java.util.Objects.requireNonNullElse(bucket.owner, "posed itself"));
 		family.add(prepared.pipeline());
 		family.add(prepared.outputTarget());
 		family.add(prepared.scissorState());

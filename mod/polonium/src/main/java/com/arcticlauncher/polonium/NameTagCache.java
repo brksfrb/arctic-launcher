@@ -124,6 +124,11 @@ public final class NameTagCache {
 	/** A new frame (kept for the frame hook; layouts live on their texts). */
 	public static void newFrame() {}
 
+	/** Bumped when fonts reload: anything laid out before is stale. */
+	public static int generation() {
+		return generation;
+	}
+
 	/** New fonts: every kept layout is stale. */
 	public static void clear() {
 		generation++;

@@ -1,8 +1,8 @@
 package com.arcticlauncher.polonium.gpu;
 
+import com.arcticlauncher.polonium.GlyphRuns;
 import com.arcticlauncher.polonium.NameTagCache;
 import com.mojang.blaze3d.vertex.PoseStack;
-import it.unimi.dsi.fastutil.ints.IntArrays;
 import java.util.Arrays;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -16,6 +16,7 @@ import net.minecraft.util.ARGB;
 import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The crowd's name tags (see {@link Crowd}): worked out as the game does
@@ -24,14 +25,22 @@ import org.joml.Matrix4f;
  * as a single tag. When the name tag renderer gets to that tag it draws the
  * whole list on the GPU ({@link GpuText}), see-through ones back to front as
  * the game sorts them. Thousands of tags then skip the game's per-tag
- * submits, sorting and grouping. Render thread only.
+ * submits, sorting and grouping.
+ *
+ * Each player keeps its tags' width, layout and glyph runs ({@link Look},
+ * on its recipe) while the text stays the same, so a frame's tag is its pose
+ * and light plus runs already at hand. Render thread only.
  */
 public final class CrowdTags {
 	/** Stand-ins for the lists, as the text of the tag handed to the game. */
 	private static final Component NORMAL = Component.empty();
 	private static final Component SEE_THROUGH = Component.empty();
-	/** As the game: a see-through tag's shadow color, and the solid pass's light. */
+	/** As the game: a see-through tag's shadow color. */
 	private static final int TAG_COLOR = -2130706433;
+	/** The ways a tag is drawn: the solid pass of a see-through tag, its see-through pass, and a discreet (sneaking) tag. */
+	private static final int SOLID_PASS = 0;
+	private static final int SEE_THROUGH_PASS = 1;
+	private static final int DISCREET = 2;
 	private static final PoseStack STACK = new PoseStack();
 	private static final Matrix4f POSE = new Matrix4f();
 
@@ -41,37 +50,71 @@ public final class CrowdTags {
 
 	private CrowdTags() {}
 
+	/**
+	 * One tag text of one player, laid out for each way it's drawn, while the
+	 * text (and fonts, and the background opacity) stay the same.
+	 */
+	static final class Look {
+		final Component text;
+		final float width;
+		private final int generation;
+		private final GlyphRuns.Run[][] runs = new GlyphRuns.Run[3][];
+		private final float[] y = new float[3];
+		private final int[] background = new int[3];
+
+		Look(Component text, Font font) {
+			this.text = text;
+			this.width = font.width(text);
+			this.generation = NameTagCache.generation();
+		}
+
+		boolean current(Component text) {
+			return this.text == text && generation == NameTagCache.generation();
+		}
+
+		/** The runs for one way of drawing it, laid out (and recorded) the first time. */
+		GlyphRuns.Run[] runs(int way, float y, int background, Font font) {
+			GlyphRuns.Run[] kept = runs[way];
+			if (kept != null && this.y[way] == y && this.background[way] == background) {
+				return kept;
+			}
+			int color = way == SOLID_PASS ? -1 : TAG_COLOR;
+			int shownBackground = way == SOLID_PASS ? 0 : background;
+			Font.DisplayMode mode = way == SEE_THROUGH_PASS ? Font.DisplayMode.SEE_THROUGH : Font.DisplayMode.NORMAL;
+			Font.PreparedText layout = font.prepareText(text.getVisualOrderText(), -width / 2.0F, y, color, false, false, shownBackground);
+			kept = GlyphRuns.runs(layout, mode);
+			runs[way] = kept;
+			this.y[way] = y;
+			this.background[way] = background;
+			return kept;
+		}
+	}
+
 	/** One list of tags, as arrays (thousands a frame). */
 	private static final class Tags {
 		int count;
-		Component[] text = new Component[256];
-		float[] x = new float[256];
+		Look[] look = new Look[256];
+		byte[] way = new byte[256];
 		float[] y = new float[256];
-		int[] color = new int[256];
-		int[] background = new int[256];
 		int[] light = new int[256];
 		float[] distance = new float[256];
 		float[] pose = new float[256 * 16];
 		int farthest = -1;
 
-		void add(Component text, float x, float y, int color, int background, int light, Matrix4f pose) {
+		void add(Look look, int way, float y, int light, Matrix4f pose) {
 			int i = count++;
-			if (i == this.text.length) {
+			if (i == this.look.length) {
 				int size = i * 2;
-				this.text = Arrays.copyOf(this.text, size);
-				this.x = Arrays.copyOf(this.x, size);
+				this.look = Arrays.copyOf(this.look, size);
+				this.way = Arrays.copyOf(this.way, size);
 				this.y = Arrays.copyOf(this.y, size);
-				this.color = Arrays.copyOf(this.color, size);
-				this.background = Arrays.copyOf(this.background, size);
 				this.light = Arrays.copyOf(this.light, size);
 				this.distance = Arrays.copyOf(this.distance, size);
 				this.pose = Arrays.copyOf(this.pose, size * 16);
 			}
-			this.text[i] = text;
-			this.x[i] = x;
+			this.look[i] = look;
+			this.way[i] = (byte) way;
 			this.y[i] = y;
-			this.color[i] = color;
-			this.background[i] = background;
 			this.light[i] = light;
 			pose.get(this.pose, i * 16);
 			float d = pose.m30() * pose.m30() + pose.m31() * pose.m31() + pose.m32() * pose.m32();
@@ -82,7 +125,7 @@ public final class CrowdTags {
 		}
 
 		void clear() {
-			Arrays.fill(text, 0, count, null);
+			Arrays.fill(look, 0, count, null);
 			count = 0;
 			farthest = -1;
 		}
@@ -100,19 +143,43 @@ public final class CrowdTags {
 	}
 
 	/** A player's score line and name, as {@code AvatarRenderer.submitNameDisplay} places them. */
-	static void nameDisplay(AvatarRenderState state, PoseStack poseStack, CameraRenderState camera) {
+	static void nameDisplay(AvatarRenderState state, CrowdRecipe recipe, PoseStack poseStack, CameraRenderState camera) {
 		int offset = state.showExtraEars ? -10 : 0;
 		STACK.last().set(poseStack.last());
 		if (state.scoreText != null) {
-			tag(state.nameTagAttachment, offset, state.scoreText, !state.isDiscrete, state.lightCoords, camera);
+			recipe.scoreLook = look(recipe.scoreLook, state.scoreText);
+			tag(state.nameTagAttachment, offset, recipe.scoreLook, !state.isDiscrete, state.lightCoords, camera);
 			STACK.translate(0.0F, 9.0F * 1.15F * 0.025F, 0.0F);
 		}
 		if (state.nameTag != null) {
-			tag(state.nameTagAttachment, offset, state.nameTag, !state.isDiscrete, state.lightCoords, camera);
+			recipe.nameLook = look(recipe.nameLook, state.nameTag);
+			tag(state.nameTagAttachment, offset, recipe.nameLook, !state.isDiscrete, state.lightCoords, camera);
 		}
 	}
 
-	private static void tag(Vec3 attachment, int offset, Component name, boolean seeThroughToo, int light, CameraRenderState camera) {
+	private static Look look(@Nullable Look kept, Component text) {
+		if (kept != null && kept.current(text)) {
+			return kept;
+		}
+		if (DEBUG) {
+			String why = kept == null ? "new" : kept.text != text ? (kept.text.equals(text) ? "same text, new object" : "changed") : "fonts";
+			MADE.merge(why + " " + text.getClass().getSimpleName(), 1, Integer::sum);
+			long now = System.nanoTime();
+			if (now - lastDebug > 10_000_000_000L) {
+				lastDebug = now;
+				org.slf4j.LoggerFactory.getLogger("Polonium").info("Polonium crowd tags laid out: {}", MADE);
+				MADE.clear();
+			}
+		}
+		return new Look(text, Minecraft.getInstance().font);
+	}
+
+	/** -Dpolonium.debugTags=true: every 10 s, log why the crowd's tags were laid out again. */
+	private static final boolean DEBUG = Boolean.getBoolean("polonium.debugTags");
+	private static final java.util.Map<String, Integer> MADE = new java.util.HashMap<>();
+	private static long lastDebug;
+
+	private static void tag(@Nullable Vec3 attachment, int offset, Look look, boolean seeThroughToo, int light, CameraRenderState camera) {
 		if (attachment == null) {
 			return;
 		}
@@ -121,12 +188,11 @@ public final class CrowdTags {
 		STACK.mulPose(camera.orientation);
 		STACK.scale(0.025F, -0.025F, 0.025F);
 		Matrix4f pose = STACK.last().pose();
-		float x = -NameTagCache.width(name, Minecraft.getInstance().font) / 2.0F;
 		if (seeThroughToo) {
-			normal.add(name, x, offset, -1, 0, LightCoordsUtil.lightCoordsWithEmission(light, 2), pose);
-			seeThrough.add(name, x, offset, TAG_COLOR, background, light, pose);
+			normal.add(look, SOLID_PASS, offset, LightCoordsUtil.lightCoordsWithEmission(light, 2), pose);
+			seeThrough.add(look, SEE_THROUGH_PASS, offset, light, pose);
 		} else {
-			normal.add(name, x, offset, TAG_COLOR, background, light, pose);
+			normal.add(look, DISCREET, offset, light, pose);
 		}
 		STACK.popPose();
 	}
@@ -153,9 +219,8 @@ public final class CrowdTags {
 	}
 
 	/**
-	 * The name tag renderer got to a list's stand-in: every tag in it, laid
-	 * out as the game lays out tags (kept, see {@link NameTagCache}) and drawn
-	 * on the GPU; see-through tags back to front.
+	 * The name tag renderer got to a list's stand-in: every tag in it, drawn
+	 * on the GPU from its player's kept runs; see-through tags back to front.
 	 */
 	public static void draw(Component marker, GpuText gpu, Font font) {
 		Tags tags = marker == NORMAL ? normal : seeThrough;
@@ -165,18 +230,11 @@ public final class CrowdTags {
 			order[i] = i;
 		}
 		if (mode == Font.DisplayMode.SEE_THROUGH) {
-			float[] distance = tags.distance;
-			IntArrays.unstableSort(order, (a, b) -> Float.compare(distance[b], distance[a]));
+			Crowd.sortFarToNear(order, order.length, tags.distance);
 		}
 		for (int i : order) {
-			Component text = tags.text[i];
-			float x = tags.x[i];
-			float y = tags.y[i];
-			int color = tags.color[i];
-			int background = tags.background[i];
-			Font.PreparedText layout = NameTagCache.get(text, x, y, color, background,
-					() -> font.prepareText(text.getVisualOrderText(), x, y, color, false, false, background));
-			gpu.capture(layout, mode, POSE.set(tags.pose, i * 16), tags.light[i]);
+			GlyphRuns.Run[] runs = tags.look[i].runs(tags.way[i], tags.y[i], background, font);
+			gpu.captureRuns(runs, mode, POSE.set(tags.pose, i * 16), tags.light[i]);
 		}
 	}
 }
