@@ -34,6 +34,7 @@ abstract class AvatarRendererMixin {
 		// entities skip the looks, emotes and cosmetics work (a crowd of them adds up).
 		java.util.UUID id = entity instanceof net.minecraft.world.entity.player.Player ? entity.getUUID() : null;
 		((AvatarIdentity) state).arctic$setUuid(id);
+		((AvatarIdentity) state).arctic$setLook(id != null && ArcticClient.looks() != null ? ArcticClient.looks().lookFor(id) : null);
 		if (id != null && ArcticClient.looks() != null) {
 			ArcticClient.looks().cosmetics().watch(id);
 		}

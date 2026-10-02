@@ -22,5 +22,18 @@ abstract class AvatarRenderStateMixin implements AvatarIdentity {
 	public void arctic$setUuid(UUID uuid) {
 		arctic$uuid = uuid;
 	}
+
+	@Unique
+	private com.arcticlauncher.client.looks.Look arctic$look;
+
+	@Override
+	public com.arcticlauncher.client.looks.Look arctic$look() {
+		return arctic$look;
+	}
+
+	@Override
+	public void arctic$setLook(com.arcticlauncher.client.looks.Look look) {
+		arctic$look = look;
+	}
 }
 //#endif

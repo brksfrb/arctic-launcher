@@ -113,6 +113,8 @@ public final class Crowd {
 	// This frame's members: one per (player, recipe entry).
 	private static int memberCount;
 	private static Object[] memberEntry = new Object[1024];
+	/** A model member's own bucket (its group's submit covers several buckets: see {@link Bucket#groupKey}). */
+	private static Bucket[] memberBucket = new Bucket[1024];
 	private static float[] memberDistance = new float[1024];
 	/** First target (-1: none, its submit wasn't taken), chained through {@link #targetNext}. */
 	private static int[] memberTarget = new int[1024];
@@ -147,6 +149,20 @@ public final class Crowd {
 		com.mojang.blaze3d.textures.@Nullable GpuTextureView atlasTexture;
 		/** The bucket whose render type its batches are made with (itself, without an atlas texture). */
 		@Nullable Bucket batchOwner;
+
+		/** This frame's atlas cell (-1: drawn with its own texture), its place, and the atlas then; see GpuEntities. */
+		int cell;
+		long cellFrame = -1;
+		com.mojang.blaze3d.textures.@Nullable GpuTextureView cellView;
+
+		/**
+		 * The bucket whose submit covers this one this frame: the batch owner,
+		 * when they share batches, so thousands of skins go in as one submit.
+		 */
+		Bucket groupKey() {
+			// Whether it's still valid is checked once a frame per bucket, when it's placed (GpuEntities).
+			return batchOwner != null ? batchOwner : this;
+		}
 
 		/** Worked out, and still valid: its texture and its batch owner's are still there. */
 		boolean resolved() {
@@ -334,8 +350,13 @@ public final class Crowd {
 			return false;
 		}
 		try {
-			CrowdRecipe recipe = RECIPES.get(state.id);
-			if (recipe != null && recipe.matches(state, renderer, frame)) {
+			// Usually checked already, while the state was made (see precheck).
+			CrowdChecked checked = (CrowdChecked) state;
+			CrowdRecipe recipe = checked.polonium$checkedFrame() == frame ? (CrowdRecipe) checked.polonium$checked() : RECIPES.get(state.id);
+			boolean matches = checked.polonium$checkedFrame() == frame
+					? recipe != null && recipe.renderer == renderer && !recipe.due(state, frame)
+					: recipe != null && recipe.matches(state, renderer, frame);
+			if (matches) {
 				recipe.lastSeen = frame;
 				if (recipe.unsupported != null) {
 					return false;
@@ -343,9 +364,10 @@ public final class Crowd {
 				Matrix4f root = root(renderer, state, poseStack);
 				add(recipe, state, root);
 				submitLiveLayers(renderer, state, collector);
-				submitRest(renderer, state, poseStack, collector, camera);
+				submitRest(renderer, recipe, state, poseStack, collector, camera);
 				return true;
 			}
+			CrowdRecipe previous = recipe != null ? recipe : RECIPES.get(state.id);
 			Matrix4f root = new Matrix4f(root(renderer, state, poseStack));
 			recording = true;
 			try {
@@ -355,6 +377,11 @@ public final class Crowd {
 			}
 			recordedThisFrame++;
 			RECIPES.put(state.id, recipe);
+			if (previous != null) {
+				// Its tags' layouts stay good while their texts are the same.
+				recipe.nameLook = previous.nameLook;
+				recipe.scoreLook = previous.scoreLook;
+			}
 			if (recipe.unsupported != null) {
 				UNSUPPORTED.merge(recipe.unsupported, 1, Integer::sum);
 			} else {
@@ -404,7 +431,7 @@ public final class Crowd {
 	}
 
 	/** What the renderer submits after the model: leashes and the name tag. */
-	private static void submitRest(LivingEntityRenderer<?, ?, ?> renderer, AvatarRenderState state, PoseStack poseStack,
+	private static void submitRest(LivingEntityRenderer<?, ?, ?> renderer, CrowdRecipe recipe, AvatarRenderState state, PoseStack poseStack,
 			SubmitNodeCollector collector, CameraRenderState camera) {
 		if (state.leashStates != null) {
 			for (EntityRenderState.LeashState leash : state.leashStates) {
@@ -412,7 +439,7 @@ public final class Crowd {
 			}
 		}
 		if (CROWD_TAGS && CrowdTags.usable() && collector instanceof net.minecraft.client.renderer.SubmitNodeStorage) {
-			CrowdTags.nameDisplay(state, poseStack, camera);
+			CrowdTags.nameDisplay(state, recipe, poseStack, camera);
 		} else {
 			((EntityRendererNameAccess) renderer).polonium$submitNameDisplay(state, poseStack, collector, camera);
 		}
@@ -497,7 +524,8 @@ public final class Crowd {
 		entityFirstMember[e] = memberCount;
 		float distance = root.m30() * root.m30() + root.m31() * root.m31() + root.m32() * root.m32();
 		for (CrowdRecipe.ModelEntry entry : recipe.models) {
-			Bucket bucket = entry.bucket;
+			// Buckets that share batches (skins in the atlas) go in as one group: one submit for all of them.
+			Bucket bucket = entry.bucket.groupKey();
 			if (bucket.frame != frame) {
 				bucket.frame = frame;
 				bucket.members.clear();
@@ -505,6 +533,7 @@ public final class Crowd {
 				ACTIVE_MODELS.add(bucket);
 			}
 			int m = member(entry, distance);
+			memberBucket[m] = entry.bucket;
 			bucket.members.add(m);
 			if (distance > bucket.farthest) {
 				bucket.farthest = distance;
@@ -534,6 +563,7 @@ public final class Crowd {
 		if (m == memberEntry.length) {
 			int size = m * 2;
 			memberEntry = Arrays.copyOf(memberEntry, size);
+			memberBucket = Arrays.copyOf(memberBucket, size);
 			memberDistance = Arrays.copyOf(memberDistance, size);
 			memberTarget = Arrays.copyOf(memberTarget, size);
 		}
@@ -543,9 +573,47 @@ public final class Crowd {
 		return m;
 	}
 
+	/** A model member's own bucket. */
+	static Bucket memberBucket(int member) {
+		return memberBucket[member];
+	}
+
 	/** Translucent buckets: their players back to front, as the game sorts translucent submits. */
 	static void sortFarToNear(IntArrayList members) {
-		IntArrays.quickSort(members.elements(), 0, members.size(), (a, b) -> Float.compare(memberDistance[b], memberDistance[a]));
+		sortFarToNear(members.elements(), members.size(), memberDistance);
+	}
+
+	/**
+	 * {@code items[0..count)} (indices into {@code distance}) farthest first.
+	 * Sorted as longs (distance bits, then the index): a primitive sort, much
+	 * quicker than comparing through the distances thousands of times.
+	 */
+	static void sortFarToNear(int[] items, int count, float[] distance) {
+		long[] keys = sortKeys.length >= count ? sortKeys : (sortKeys = new long[Math.max(count, sortKeys.length * 2)]);
+		for (int i = 0; i < count; i++) {
+			// Non-negative floats order as their bits; inverted for farthest first.
+			keys[i] = ((long) ~Float.floatToRawIntBits(distance[items[i]]) << 32) | (items[i] & 0xFFFFFFFFL);
+		}
+		java.util.Arrays.sort(keys, 0, count);
+		for (int i = 0; i < count; i++) {
+			items[i] = (int) keys[i];
+		}
+	}
+
+	private static long[] sortKeys = new long[1024];
+
+	/**
+	 * While the frame's render states are made (on the helper threads): whether
+	 * this player still looks as its recipe says, kept on the state for
+	 * {@link #submit}. Recipes only change while entities are submitted, after
+	 * this, so reading them here is safe.
+	 */
+	public static void precheck(net.minecraft.client.renderer.entity.state.EntityRenderState state) {
+		if (!ENABLED || !(state instanceof AvatarRenderState avatar)) {
+			return;
+		}
+		CrowdRecipe recipe = RECIPES.get(avatar.id);
+		((CrowdChecked) avatar).polonium$checked(recipe != null && recipe.looksTheSame(avatar) ? recipe : null, frame + 1);
 	}
 
 	/** The GPU path took a member's submit: its instance data goes at {@code offset} texels in {@code data}. */

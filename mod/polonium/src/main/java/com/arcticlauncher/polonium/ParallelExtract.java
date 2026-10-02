@@ -131,6 +131,7 @@ public final class ParallelExtract {
 				for (int k = from; k < to; k++) {
 					int i = queue.get(k);
 					states[i] = extractor.extract(entities.get(i), partials.get(i));
+					com.arcticlauncher.polonium.gpu.Crowd.precheck(states[i]);
 				}
 			});
 		}

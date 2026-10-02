@@ -35,8 +35,8 @@ public final class CosmeticsLayer extends RenderLayer<AvatarRenderState, PlayerM
 		if (state.isInvisible || ArcticClient.looks() == null) {
 			return;
 		}
-		UUID id = player(state);
-		Look look = id == null ? null : ArcticClient.looks().lookFor(id);
+		// Looked up when the state was filled in.
+		Look look = ((AvatarIdentity) state).arctic$look();
 		if (look == null || look.cosmetics.isEmpty()) {
 			return;
 		}

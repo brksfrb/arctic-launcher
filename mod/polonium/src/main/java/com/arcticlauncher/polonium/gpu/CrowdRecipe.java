@@ -91,6 +91,9 @@ final class CrowdRecipe {
 	/** Drawn the game's way: something about this player the crowd path can't reproduce (why, for the log). */
 	@Nullable String unsupported;
 	long lastSeen;
+	/** Its name tag and score line, laid out (see {@link CrowdTags}). */
+	CrowdTags.@Nullable Look nameLook;
+	CrowdTags.@Nullable Look scoreLook;
 
 	CrowdRecipe(LivingEntityRenderer<?, ?, ?> renderer, AvatarRenderState state, long frame) {
 		this.renderer = renderer;
@@ -110,8 +113,17 @@ final class CrowdRecipe {
 
 	/** Whether this player still looks as recorded (and the recording isn't due for a refresh). */
 	boolean matches(AvatarRenderState state, LivingEntityRenderer<?, ?, ?> renderer, long frame) {
-		return renderer == this.renderer && frame - recordedFrame < REFRESH_FRAMES + (state.id & 255)
-				&& (state.skin == skin || state.skin.equals(skin)) && state.hasRedOverlay == redOverlay && state.isBaby == baby
+		return renderer == this.renderer && !due(state, frame) && looksTheSame(state);
+	}
+
+	/** Due to be recorded again (see {@link #REFRESH_FRAMES}). */
+	boolean due(AvatarRenderState state, long frame) {
+		return frame - recordedFrame >= REFRESH_FRAMES + (state.id & 255);
+	}
+
+	/** Same skin, armor and items in hand as recorded (safe on any thread while the frame's states are made). */
+	boolean looksTheSame(AvatarRenderState state) {
+		return (state.skin == skin || state.skin.equals(skin)) && state.hasRedOverlay == redOverlay && state.isBaby == baby
 				&& state.mainArm == mainArm
 				&& ItemStack.isSameItemSameComponents(state.headEquipment, head) && ItemStack.isSameItemSameComponents(state.chestEquipment, chest)
 				&& ItemStack.isSameItemSameComponents(state.legsEquipment, legs) && ItemStack.isSameItemSameComponents(state.feetEquipment, feet)

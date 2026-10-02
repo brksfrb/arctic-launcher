@@ -136,12 +136,19 @@ public final class GpuText implements GpuFeature {
 
 	/** Take this tag onto the GPU; false to let the game write its vertices. */
 	public boolean capture(Font.PreparedText text, Font.DisplayMode mode, Matrix4fc pose, int lightCoords) {
+		if (!ENABLED || current == null || GpuBatches.disabled() || poolFull) {
+			return false;
+		}
+		return captureRuns(GlyphRuns.runs(text, mode), mode, pose, lightCoords);
+	}
+
+	/** {@link #capture} with the text's runs for this mode already at hand (kept by the caller). */
+	public boolean captureRuns(GlyphRuns.Run[] runs, Font.DisplayMode mode, Matrix4fc pose, int lightCoords) {
 		List<Batch> group = current;
 		if (!ENABLED || group == null || GpuBatches.disabled() || poolFull) {
 			return false;
 		}
 		try {
-			GlyphRuns.Run[] runs = GlyphRuns.runs(text, mode);
 			for (GlyphRuns.Run run : runs) {
 				if (shaderFor(run.renderType(mode)) == null || !place(run)) {
 					return false;
