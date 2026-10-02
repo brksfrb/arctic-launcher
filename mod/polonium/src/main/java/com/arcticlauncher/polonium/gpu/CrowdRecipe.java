@@ -91,6 +91,9 @@ final class CrowdRecipe {
 	/** Drawn the game's way: something about this player the crowd path can't reproduce (why, for the log). */
 	@Nullable String unsupported;
 	long lastSeen;
+	/** Per model entry: the bucket whose submit covers it (see Crowd.Bucket#groupKey), and when that was worked out. */
+	Crowd.Bucket @Nullable [] groups;
+	long groupsFrame;
 	/** Its name tag and score line, laid out (see {@link CrowdTags}). */
 	CrowdTags.@Nullable Look nameLook;
 	CrowdTags.@Nullable Look scoreLook;

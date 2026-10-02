@@ -81,6 +81,8 @@ public final class Crowd {
 	/** Below this many players the helper threads aren't worth waking. */
 	private static final int PARALLEL_MIN = 64;
 	private static final int FULL_BRIGHT = 0xF000F0;
+	/** How often a player's groups are looked up again (see add). */
+	private static final long GROUPS_FRAMES = 30;
 	/** Off with -Dpolonium.crowdTags=false: the crowd's name tags take the game's path. */
 	private static final boolean CROWD_TAGS = !"false".equals(System.getProperty("polonium.crowdTags"));
 
@@ -422,6 +424,11 @@ public final class Crowd {
 	/** Layers left to the game, the game's way (at the root, with the model posed, as the game would). */
 	@SuppressWarnings({"unchecked", "rawtypes"})
 	private static void submitLiveLayers(LivingEntityRenderer<?, ?, ?> renderer, AvatarRenderState state, SubmitNodeCollector collector) {
+		CrowdChecked checked = (CrowdChecked) state;
+		if (checked.polonium$checkedFrame() == frame && !checked.polonium$liveLayers()) {
+			// Worked out with the check: nothing to draw.
+			return;
+		}
 		boolean posed = false;
 		for (RenderLayer layer : ((LivingEntityRendererAccess) renderer).polonium$layers()) {
 			if (live(layer, state)) {
@@ -457,7 +464,10 @@ public final class Crowd {
 	/**
 	 * Whether a layer is left to the game: the armor and held items are the
 	 * crowd path's; the player's other layers only when they have something
-	 * to draw; layers it doesn't know (mods') always.
+	 * to draw; layers it doesn't know (mods') always, unless they say
+	 * otherwise: a layer that is a {@code Predicate} of the render state
+	 * answers whether it has something to draw for it (a plain JDK interface,
+	 * so other mods needn't depend on Polonium). Safe on any thread.
 	 */
 	private static boolean live(RenderLayer<?, ?> layer, AvatarRenderState state) {
 		Class<?> type = layer.getClass();
@@ -487,6 +497,13 @@ public final class Crowd {
 		}
 		if (type == SpinAttackEffectLayer.class) {
 			return state.isAutoSpinAttack;
+		}
+		if (layer instanceof java.util.function.Predicate<?> says) {
+			try {
+				return ((java.util.function.Predicate<Object>) says).test(state);
+			} catch (RuntimeException e) {
+				return true;
+			}
 		}
 		return true;
 	}
@@ -532,9 +549,20 @@ public final class Crowd {
 		entityLight[e] = state.lightCoords;
 		entityFirstMember[e] = memberCount;
 		float distance = root.m30() * root.m30() + root.m31() * root.m31() + root.m32() * root.m32();
+		// Buckets that share batches (skins in the atlas) go in as one group: one submit for all of them.
+		// Which group, the player keeps (looked up again now and then: a bucket's group may change).
+		Bucket[] groups = recipe.groups;
+		if (groups == null || frame - recipe.groupsFrame > GROUPS_FRAMES) {
+			groups = new Bucket[recipe.models.size()];
+			for (int j = 0; j < groups.length; j++) {
+				groups[j] = recipe.models.get(j).bucket.groupKey();
+			}
+			recipe.groups = groups;
+			recipe.groupsFrame = frame;
+		}
+		int j = 0;
 		for (CrowdRecipe.ModelEntry entry : recipe.models) {
-			// Buckets that share batches (skins in the atlas) go in as one group: one submit for all of them.
-			Bucket bucket = entry.bucket.groupKey();
+			Bucket bucket = groups[j++];
 			if (bucket.frame != frame) {
 				bucket.frame = frame;
 				bucket.members.clear();
@@ -622,7 +650,19 @@ public final class Crowd {
 			return;
 		}
 		CrowdRecipe recipe = RECIPES.get(avatar.id);
-		((CrowdChecked) avatar).polonium$checked(recipe != null && recipe.looksTheSame(avatar) ? recipe : null, frame + 1);
+		boolean same = recipe != null && recipe.looksTheSame(avatar);
+		CrowdChecked checked = (CrowdChecked) avatar;
+		checked.polonium$checked(same ? recipe : null, frame + 1);
+		if (same) {
+			boolean live = false;
+			for (RenderLayer<?, ?> layer : ((LivingEntityRendererAccess) recipe.renderer).polonium$layers()) {
+				if (live(layer, avatar)) {
+					live = true;
+					break;
+				}
+			}
+			checked.polonium$liveLayers(live);
+		}
 	}
 
 	/** The GPU path took a member's submit: its instance data goes at {@code offset} texels in {@code data}. */

@@ -11,4 +11,9 @@ public interface CrowdChecked {
 	long polonium$checkedFrame();
 
 	void polonium$checked(Object recipe, long frame);
+
+	/** Whether any layer left to the game has something to draw for it (worked out with the check). */
+	boolean polonium$liveLayers();
+
+	void polonium$liveLayers(boolean live);
 }
