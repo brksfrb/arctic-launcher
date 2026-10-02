@@ -87,6 +87,28 @@ public final class GpuItems {
 				CrowdFrame.sortFarToNear(quads.bucket.members);
 			}
 			it.unimi.dsi.fastutil.ints.IntArrayList members = quads.bucket.members;
+			if (parts.size() == 1 && members.size() >= BULK_MIN) {
+				// One render type (most items): one batch for everyone, places written on the helper threads.
+				ItemMesh mesh = parts.get(0);
+				int count = members.size();
+				int[] ids = members.elements();
+				InstanceData data = batches.add(mesh.renderType, mesh, null, count);
+				int base = data.reserve(ItemMesh.TEXELS * count);
+				int firstTarget = CrowdFrame.reserveTargets(count);
+				int pieces = com.arcticlauncher.polonium.Workers.PARTS;
+				java.util.List<Runnable> jobs = new java.util.ArrayList<>(pieces);
+				for (int p = 0; p < pieces; p++) {
+					int from = count * p / pieces;
+					int to = count * (p + 1) / pieces;
+					jobs.add(() -> {
+						for (int i = from; i < to; i++) {
+							CrowdFrame.itemTargetAt(firstTarget + i, ids[i], data, base + i * ItemMesh.TEXELS);
+						}
+					});
+				}
+				com.arcticlauncher.polonium.Workers.runAll(jobs);
+				return;
+			}
 			for (int i = 0; i < members.size(); i++) {
 				for (ItemMesh mesh : parts) {
 					InstanceData data = batches.add(mesh.renderType, mesh);
@@ -97,6 +119,9 @@ public final class GpuItems {
 			GpuBatches.disable("couldn't take a crowd's items onto the GPU", e);
 		}
 	}
+
+	/** Below this many players a crowd's items aren't worth the helper threads. */
+	private static final int BULK_MIN = 256;
 
 	/** Whether these quads can be drawn on the GPU path (checked before a crowd relies on it). */
 	static boolean drawable(BakedQuad[] quads) {

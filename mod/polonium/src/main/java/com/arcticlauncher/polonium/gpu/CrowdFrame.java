@@ -372,6 +372,16 @@ final class CrowdFrame {
 		memberTarget[member] = t;
 	}
 
+	/** A reserved target, as an item member's only one. */
+	static void itemTargetAt(int t, int member, InstanceData data, int offset) {
+		targetData[t] = data;
+		targetOffset[t] = offset;
+		targetMesh[t] = null;
+		targetUv[t] = null;
+		targetNext[t] = -1;
+		memberTarget[member] = t;
+	}
+
 	/** The GPU path took a member's submit: its instance data goes at {@code offset} texels in {@code data}. */
 	static void target(int member, InstanceData data, int offset, @Nullable ModelMesh mesh, float @Nullable [] uv) {
 		int t = reserveTargets(1);

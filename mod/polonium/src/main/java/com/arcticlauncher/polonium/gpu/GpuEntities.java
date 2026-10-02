@@ -164,6 +164,10 @@ public final class GpuEntities {
 				addCrowdInAtlas(group, mesh, members, count, frame);
 				return;
 			}
+			if (count >= BULK_MIN && group.atlasTexture == null && group.batchOwner == group && allOwn(group, members, count)) {
+				addCrowdOwnTexture(group, mesh, members, count, frame);
+				return;
+			}
 			for (int i = 0; i < count; i++) {
 				int member = members[i];
 				Crowd.Bucket bucket = CrowdFrame.memberBucket(member);
@@ -281,6 +285,40 @@ public final class GpuEntities {
 		} else {
 			com.arcticlauncher.polonium.Workers.runAll(jobs);
 		}
+	}
+
+	/** Whether every member is the group's own bucket's (not another bucket it covers). */
+	private static boolean allOwn(Crowd.Bucket group, int[] members, int count) {
+		boolean[] other = new boolean[1];
+		runParts(count, (from, to) -> {
+			for (int i = from; i < to && !other[0]; i++) {
+				if (CrowdFrame.memberBucket(members[i]) != group) {
+					other[0] = true;
+				}
+			}
+		});
+		return !other[0];
+	}
+
+	/**
+	 * A big group of one bucket drawn with its own texture (armor, say: every
+	 * player's chestplate): one batch for all, each player's place in it
+	 * written on the helper threads.
+	 */
+	private void addCrowdOwnTexture(Crowd.Bucket group, ModelMesh mesh, int[] members, int count, long frame) {
+		if (group.cellFrame != frame || group.cell >= 0) {
+			place(group, frame);
+		}
+		InstanceData data = batches.add(group.renderType, mesh, null, count);
+		int texels = mesh.texelsPerInstance;
+		int base = data.reserve(texels * count);
+		int firstTarget = CrowdFrame.reserveTargets(count);
+		float[] uv = group.uv;
+		runParts(count, (from, to) -> {
+			for (int i = from; i < to; i++) {
+				CrowdFrame.targetAt(firstTarget + i, members[i], data, base + i * texels, mesh, uv);
+			}
+		});
 	}
 
 	private static int partsFor(int count) {
