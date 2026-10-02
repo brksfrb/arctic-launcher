@@ -13,7 +13,8 @@
 	"icon": "assets/arctic/icon.png",
 	"environment": "client",
 	"entrypoints": {
-		"client": ["com.arcticlauncher.mod.ArcticMod"]
+		"client": ["com.arcticlauncher.mod.ArcticMod"],
+		"polonium:light_state": ["com.arcticlauncher.mod.PoloniumLightState"]
 	},
 	"mixins": ["arctic.mixins.json"],
 	"depends": {
