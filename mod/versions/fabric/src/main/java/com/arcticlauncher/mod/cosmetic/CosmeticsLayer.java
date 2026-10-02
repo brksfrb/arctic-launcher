@@ -18,7 +18,8 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.world.entity.Entity;
 
 /** Draws the Arctic cosmetics a player wears, attached to their model's parts. */
-public final class CosmeticsLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
+public final class CosmeticsLayer extends RenderLayer<AvatarRenderState, PlayerModel>
+		implements java.util.function.Predicate<AvatarRenderState> {
 	private static final int WHITE = -1;
 
 	public CosmeticsLayer(RenderLayerParent<AvatarRenderState, PlayerModel> parent) {
@@ -28,6 +29,17 @@ public final class CosmeticsLayer extends RenderLayer<AvatarRenderState, PlayerM
 	/** The player a render state is for (by entity id), or null. */
 	public static UUID player(AvatarRenderState state) {
 		return ((AvatarIdentity) state).arctic$uuid();
+	}
+
+	/**
+	 * Whether this player has cosmetics to draw. Performance mods that skip
+	 * layers for players with nothing to draw (Polonium's crowd path) ask;
+	 * it's a plain JDK interface so they needn't depend on each other.
+	 */
+	@Override
+	public boolean test(AvatarRenderState state) {
+		Look look = state.isInvisible ? null : ((AvatarIdentity) state).arctic$look();
+		return look != null && !look.cosmetics.isEmpty();
 	}
 
 	@Override

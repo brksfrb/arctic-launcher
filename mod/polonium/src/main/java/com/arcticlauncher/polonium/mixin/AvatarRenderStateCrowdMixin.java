@@ -23,6 +23,19 @@ abstract class AvatarRenderStateCrowdMixin implements CrowdChecked {
 		return polonium$checkedFrame;
 	}
 
+	@Unique
+	private boolean polonium$liveLayers = true;
+
+	@Override
+	public boolean polonium$liveLayers() {
+		return polonium$liveLayers;
+	}
+
+	@Override
+	public void polonium$liveLayers(boolean live) {
+		polonium$liveLayers = live;
+	}
+
 	@Override
 	public void polonium$checked(Object recipe, long frame) {
 		polonium$checked = recipe;
