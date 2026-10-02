@@ -214,6 +214,10 @@ or Microsoft.
 See [docs/building.md](docs/building.md). The architecture overview is in
 [docs/architecture.md](docs/architecture.md).
 
+Polonium, our mod for huge crowds of players (entities drawn on the GPU, their
+work spread across CPU cores), lives in its own repository:
+[brksfrb/polonium](https://github.com/brksfrb/polonium).
+
 ## Supported by
 
 <a href="https://flashhosting.net"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/flash-hosting-light.svg"><img src="docs/assets/flash-hosting-dark.svg" width="56" alt="Flash Hosting" align="left"></picture></a>
