@@ -148,10 +148,11 @@ def javaVersion = atLeast('26.1') ? 25 : atLeast('1.20.5') ? 21 : atLeast('1.18'
 def covers = (project.findProperty('covers') ?: mc).tokenize(',')
 def minecraftRange = '[' + covers.collect { '"' + it.trim() + '"' }.join(', ') + ']'
 
-// The oldest Fabric Loader that can actually load this jar: the compile-time
-// loader_version for 1.21.6+ (already required), a much older one below that
-// so players on old Minecraft aren't forced onto a needlessly new loader.
-def loaderMin = atLeast('1.21.6') ? project.loader_version : '0.16.9'
+// The oldest Fabric Loader that can actually load this jar: Polonium needs
+// nothing newer than the loader's bundled Mixin and MixinExtras (0.16.9 has
+// both), so players aren't forced onto a needlessly new loader (tested on
+// 26.1.2 with 0.19.3).
+def loaderMin = '0.16.9'
 
 processResources {
 	def props = [
