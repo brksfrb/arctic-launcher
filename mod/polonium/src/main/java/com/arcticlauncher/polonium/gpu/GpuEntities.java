@@ -17,13 +17,22 @@ public final class GpuEntities {
 	private static final Identifier ENTITY_SHADER = Identifier.withDefaultNamespace("core/entity");
 	private final Map<Model<?>, ModelMesh> meshes = new IdentityHashMap<>();
 	private final PartPoses poses = new PartPoses();
+	private final SkinAtlas atlas = new SkinAtlas();
+	/** The texture itself: no offset, full scale. */
+	private static final float[] OWN_TEXTURE = {0f, 0f, 1f, 1f};
+	private final float[] cellUv = new float[4];
+	/** Off with -Dpolonium.parallelPosing=false: every model is posed on the render thread. */
+	private static final boolean PARALLEL_POSING = !"false".equals(System.getProperty("polonium.parallelPosing"));
 	/** Per entity state, its models that the game also draws on top (enchantment glint): they stay on its path. */
 	private final Map<Object, java.util.Set<Model<?>>> keepOnGamePath = new IdentityHashMap<>();
 	private final GpuBatches batches = new GpuBatches("entity models", () -> GpuBatches.evictIdle(meshes, batches().frame()));
 
 	public GpuEntities() {
 		batches.beforeUpload(poses::computeAll);
-		batches.afterFrame(poses::clear);
+		batches.afterFrame(() -> {
+			poses.clear();
+			atlas.endFrame();
+		});
 	}
 
 	public GpuBatches batches() {
@@ -49,6 +58,50 @@ public final class GpuEntities {
 	private boolean keptOnGamePath(ModelFeatureRenderer.Submit<?> submit) {
 		java.util.Set<Model<?>> models = keepOnGamePath.isEmpty() ? null : keepOnGamePath.get(submit.state());
 		return models != null && models.contains(submit.model());
+	}
+
+	/**
+	 * The atlas cell for this render type's texture (Sampler0), or -1 to draw
+	 * with the texture itself: not 64×64, or its pipeline moves texture
+	 * coordinates around itself (a texture matrix).
+	 */
+	private int atlasCell(RenderType renderType) {
+		if (!SkinAtlas.ENABLED) {
+			return -1;
+		}
+		net.minecraft.client.renderer.rendertype.PreparedRenderType prepared = batches.prepare(renderType);
+		if (prepared.pipeline().getShaderDefines().flags().contains("APPLY_TEXTURE_MATRIX")) {
+			return -1;
+		}
+		for (net.minecraft.client.renderer.rendertype.PreparedRenderType.Texture texture : prepared.textures()) {
+			if ("Sampler0".equals(texture.name())) {
+				int cell = SkinAtlas.fits(texture.textureView()) ? atlas.cell(texture.textureView(), batches.frame()) : -1;
+				debugAtlas(texture.textureView(), cell);
+				return cell;
+			}
+		}
+		debugAtlas(null, -2);
+		return -1;
+	}
+
+	private static final boolean DEBUG_ATLAS = Boolean.getBoolean("polonium.debugAtlas");
+	private final java.util.Map<String, Integer> atlasReasons = new java.util.HashMap<>();
+	private long atlasReport;
+
+	private void debugAtlas(com.mojang.blaze3d.textures.@org.jspecify.annotations.Nullable GpuTextureView view, int cell) {
+		if (!DEBUG_ATLAS) {
+			return;
+		}
+		String why = view == null ? "no Sampler0" : cell >= 0 ? "in atlas"
+				: "not taken " + view.texture().getWidth(0) + "x" + view.texture().getHeight(0) + " mips=" + view.texture().getMipLevels()
+						+ " base=" + view.baseMipLevel() + " " + view.texture().getFormat() + " " + view.texture().getLabel();
+		atlasReasons.merge(why.length() > 120 ? why.substring(0, 120) : why, 1, Integer::sum);
+		long now = System.nanoTime();
+		if (now - atlasReport > 10_000_000_000L) {
+			atlasReport = now;
+			org.slf4j.LoggerFactory.getLogger("Polonium").info("Polonium atlas: {}", atlasReasons);
+			atlasReasons.clear();
+		}
 	}
 
 	private static boolean takeable(ModelFeatureRenderer.Submit<?> submit) {
@@ -79,9 +132,27 @@ public final class GpuEntities {
 			mesh = ModelMesh.build(model);
 			meshes.put(model, mesh);
 		}
-		InstanceData data = batches.add(renderType, mesh);
+		float[] uv = OWN_TEXTURE;
+		com.mojang.blaze3d.textures.GpuTextureView atlasView = null;
+		int cell = atlasCell(renderType);
+		if (cell >= 0) {
+			atlasView = atlas.view();
+			float size = atlas.size();
+			cellUv[0] = atlas.cellX(cell) / size;
+			cellUv[1] = atlas.cellY(cell) / size;
+			cellUv[2] = SkinAtlas.CELL / size;
+			cellUv[3] = SkinAtlas.CELL / size;
+			uv = cellUv;
+		}
+		InstanceData data = batches.add(renderType, mesh, atlasView);
+		if (PARALLEL_POSING && ModelCopies.copyable(model)) {
+			// Posed later on the helper threads, each with its own copy of the model.
+			poses.defer(mesh, model, submit.state(), submit.pose(), submit.tintedColor(), submit.overlayCoords(), submit.lightCoords(), uv,
+					data);
+			return;
+		}
 		// What the game does before turning the model into vertices.
 		model.setupAnim(submit.state());
-		poses.snapshot(mesh, submit.pose(), submit.tintedColor(), submit.overlayCoords(), submit.lightCoords(), data);
+		poses.snapshot(mesh, submit.pose(), submit.tintedColor(), submit.overlayCoords(), submit.lightCoords(), uv, data);
 	}
 }

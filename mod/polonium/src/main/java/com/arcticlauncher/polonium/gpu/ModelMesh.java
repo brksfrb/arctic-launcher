@@ -38,8 +38,8 @@ final class ModelMesh extends GpuMesh {
 	final int[] subtreeEnd;
 
 	private ModelMesh(ModelPart[] parts, int[] subtreeEnd, int vertexCount, GpuBuffer vertices) {
-		// Color, (overlay, light), then each part's pose.
-		super(vertices, vertexCount, 2 + PartPoses.TEXELS_PER_PART * parts.length, SHADER);
+		// Color, (overlay, light), texture placement, then each part's pose.
+		super(vertices, vertexCount, 3 + PartPoses.TEXELS_PER_PART * parts.length, SHADER);
 		this.parts = parts;
 		this.subtreeEnd = subtreeEnd;
 	}

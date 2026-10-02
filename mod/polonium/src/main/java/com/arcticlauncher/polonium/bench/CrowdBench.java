@@ -40,12 +40,22 @@ import org.slf4j.LoggerFactory;
 public final class CrowdBench implements ClientModInitializer {
 	private static final Logger LOG = LoggerFactory.getLogger("Polonium bench");
 	private static final int COUNT = Integer.getInteger("polonium.bench.count", 1000);
+	/**
+	 * How many different skins the crowd wears (generated: Steve in other
+	 * colors). Real servers have nearly one per player; 1 (all the same) is
+	 * the old bench.
+	 */
+	private static final int SKINS = Math.max(1, Integer.getInteger("polonium.bench.skins", 1));
+	/** -Dpolonium.bench.armor=false: bare mannequins (to look at the skins). */
+	private static final boolean ARMOR = !"false".equals(System.getProperty("polonium.bench.armor"));
 	private static final int SECONDS = Integer.getInteger("polonium.bench.seconds", 20);
 	private static final int WARMUP_SECONDS = 15;
 	/** Ground level of the default flat world. */
 	private static final int GROUND = -60;
-	private static final int CAMERA_HEIGHT = 34;
-	private static final double SPACING = 1.5;
+	/** Bigger crowds stand closer, so all of them stay within entity tracking and drawing range. */
+	private static final double SPACING = COUNT > 1000 ? 1.0 : 1.5;
+	/** 34 blocks up for 1,000; a little higher for bigger crowds (but within range of the farthest). */
+	private static final int CAMERA_HEIGHT = Math.min(44, Math.max(34, (int) Math.ceil(Math.sqrt(COUNT) * SPACING * 0.55)));
 	private static final int SUMMONS_PER_TICK = 40;
 	private static final ScheduledExecutorService TIMER = Executors.newSingleThreadScheduledExecutor(r -> {
 		Thread t = new Thread(r, "polonium-bench");
@@ -76,6 +86,8 @@ public final class CrowdBench implements ClientModInitializer {
 		Minecraft mc = Minecraft.getInstance();
 		mc.options.framerateLimit().set(260);
 		mc.options.enableVsync().set(false);
+		// The bench runs while people use the PC: a window without focus mustn't pause the game.
+		mc.options.pauseOnLostFocus = false;
 		mc.options.renderDistance().set(8);
 		String name = "Polonium Bench " + System.currentTimeMillis();
 		LevelSettings settings = new LevelSettings(name, GameType.CREATIVE,
@@ -89,6 +101,9 @@ public final class CrowdBench implements ClientModInitializer {
 
 	private static void waitForWorld(int attempt) {
 		Minecraft mc = Minecraft.getInstance();
+		if (mc.level != null && mc.player != null && mc.gui.screen() instanceof PauseScreen) {
+			mc.gui.setScreen(null);
+		}
 		if (mc.level != null && mc.player != null && mc.gui.screen() == null) {
 			LOG.info("crowd bench: in the world after {}s", attempt);
 			TIMER.schedule(() -> run(CrowdBench::setUp), 5, TimeUnit.SECONDS);
@@ -101,6 +116,9 @@ public final class CrowdBench implements ClientModInitializer {
 	}
 
 	private static void setUp() {
+		if (SKINS > 1) {
+			makeSkins();
+		}
 		int side = (int) Math.ceil(Math.sqrt(COUNT));
 		double offset = (side - 1) * SPACING / 2;
 		List<String> commands = new ArrayList<>();
@@ -116,10 +134,46 @@ public final class CrowdBench implements ClientModInitializer {
 							+ "equipment:{head:{id:\"minecraft:iron_helmet\"},chest:{id:\"minecraft:iron_chestplate\"},"
 							+ "legs:{id:\"minecraft:iron_leggings\"},feet:{id:\"minecraft:iron_boots\"},"
 							+ "mainhand:{id:\"minecraft:iron_sword\"},offhand:{id:\"minecraft:golden_apple\"}}}",
-					x, GROUND, z, (i * 37) % 360, i + 1));
+					x, GROUND, z, (i * 37) % 360, i + 1).replace("CustomNameVisible:1b,", "CustomNameVisible:1b," + skin(i))
+					.replaceAll(ARMOR ? "^$" : "head:\\{[^}]*\\},chest:\\{[^}]*\\},legs:\\{[^}]*\\},feet:\\{[^}]*\\},", ""));
 		}
 		commands.add("tp " + Minecraft.getInstance().player.getGameProfile().name() + " 0 " + (GROUND + CAMERA_HEIGHT) + " 0 0 90");
 		sendInBatches(commands, 0);
+	}
+
+	/** The mannequin's skin (one of {@link #SKINS}), as its profile's texture. */
+	private static String skin(int i) {
+		return SKINS > 1 ? "profile:{texture:\"polonium:bench/skin_" + (i % SKINS) + "\"}," : "";
+	}
+
+	/** {@link #SKINS} versions of Steve's skin, each in its own color, as textures the mannequins can wear. */
+	private static void makeSkins() {
+		Minecraft mc = Minecraft.getInstance();
+		try (java.io.InputStream in = mc.getResourceManager()
+				.open(net.minecraft.resources.Identifier.withDefaultNamespace("textures/entity/player/wide/steve.png"))) {
+			com.mojang.blaze3d.platform.NativeImage steve = com.mojang.blaze3d.platform.NativeImage.read(in);
+			for (int n = 0; n < SKINS; n++) {
+				com.mojang.blaze3d.platform.NativeImage skin = new com.mojang.blaze3d.platform.NativeImage(steve.getWidth(), steve.getHeight(), true);
+				int tint = java.awt.Color.HSBtoRGB((n * 0.618034f) % 1f, 0.5f, 1f);
+				for (int y = 0; y < steve.getHeight(); y++) {
+					for (int x = 0; x < steve.getWidth(); x++) {
+						int c = steve.getPixel(x, y);
+						int r = ((c >> 16) & 0xFF) * ((tint >> 16) & 0xFF) / 255;
+						int g = ((c >> 8) & 0xFF) * ((tint >> 8) & 0xFF) / 255;
+						int b = (c & 0xFF) * (tint & 0xFF) / 255;
+						skin.setPixel(x, y, (c & 0xFF000000) | (r << 16) | (g << 8) | b);
+					}
+				}
+				final int number = n;
+				mc.getTextureManager().register(
+						net.minecraft.resources.Identifier.fromNamespaceAndPath("polonium", "textures/bench/skin_" + n + ".png"),
+						new net.minecraft.client.renderer.texture.DynamicTexture(() -> "Polonium bench skin " + number, skin));
+			}
+			steve.close();
+			LOG.info("crowd bench: {} skins", SKINS);
+		} catch (IOException | RuntimeException e) {
+			LOG.error("crowd bench: couldn't make skins", e);
+		}
 	}
 
 	private static void sendInBatches(List<String> commands, int from) {
@@ -163,8 +217,8 @@ public final class CrowdBench implements ClientModInitializer {
 				.map(m -> m.getMetadata().getVersion().getFriendlyString()).orElse("?");
 		String label = System.getProperty("polonium.bench.label", "");
 		String line = String.format(java.util.Locale.ROOT,
-				"%s polonium=%s label=%s entities=%d fps_avg=%.1f fps_min=%d fps_max=%d samples=%s%n",
-				java.time.LocalDateTime.now().withNano(0), polonium, label, mc.level.getEntityCount(), average, min, max, samples);
+				"%s polonium=%s label=%s skins=" + SKINS + " entities=%d drawn=%d fps_avg=%.1f fps_min=%d fps_max=%d samples=%s%n",
+				java.time.LocalDateTime.now().withNano(0), polonium, label, mc.level.getEntityCount(), com.arcticlauncher.polonium.ParallelExtract.lastDrawn, average, min, max, samples);
 		LOG.info("crowd bench: RESULT {}", line.trim());
 		try {
 			Files.writeString(new File(mc.gameDirectory, "polonium-bench.txt").toPath(), line, StandardCharsets.UTF_8,

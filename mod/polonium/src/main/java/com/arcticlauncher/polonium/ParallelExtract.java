@@ -33,6 +33,8 @@ public final class ParallelExtract {
 	private static volatile boolean enabled = !"false".equals(System.getProperty("polonium.parallelExtract"))
 			&& !loaded("entity_texture_features", "entity_model_features", "figura");
 	private static boolean announced;
+	/** How many entities the last frame drew (for the benchmark). */
+	public static volatile int lastDrawn;
 
 	/** The game's own visibility test for one entity. */
 	public interface Visibility {
@@ -99,6 +101,7 @@ public final class ParallelExtract {
 	/** Every visible entity's render state, in order ({@code trusted}: per entity, from {@link #visible}). */
 	public static EntityRenderState[] extract(List<Entity> entities, List<Float> partials, boolean[] trusted, Extractor extractor) {
 		int count = entities.size();
+		lastDrawn = count;
 		EntityRenderState[] states = new EntityRenderState[count];
 		if (count < PARALLEL_MIN) {
 			serial(entities, partials, extractor, states, null);
