@@ -99,6 +99,14 @@ public final class ClientConfig {
 	public int hitColor;
 	/** Time of day on your screen (ticks, 6000 = noon), or -1 for the server's. */
 	public int timeLock = -1;
+	/**
+	 * What those were set to when they were last switched off (0 / -1: never),
+	 * so switching them back on brings back the player's choice.
+	 */
+	public int outlineColorOff;
+	public float outlineWidthOff;
+	public int hitColorOff;
+	public int timeLockOff = -1;
 	/** A pop-up when armor or the held tool is about to break. */
 	public boolean durabilityWarning = true;
 	/** A pop-up with your coordinates when you die. */
