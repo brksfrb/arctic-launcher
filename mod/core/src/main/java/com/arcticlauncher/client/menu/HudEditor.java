@@ -339,7 +339,7 @@ public final class HudEditor extends Page {
 	private void hide(HudWidget w) {
 		HudSlot slot = ArcticClient.hud().slot(w);
 		slot.enabled = false;
-		slot.placed = false;
+		// Where it was placed is kept, for when it's shown again.
 		ArcticClient.saveConfig();
 	}
 

@@ -37,12 +37,8 @@ final class ModCatalog {
 		for (final HudWidget w : ArcticClient.hud().widgets()) {
 			final HudSlot slot = ArcticClient.hud().slot(w);
 			Mod m = new Mod("hud." + w.id, w.name, w.description, w.id, Category.HUD, "hud widget")
-					.toggle(() -> slot.enabled, on -> {
-						slot.enabled = on;
-						if (!on) {
-							slot.placed = false;
-						}
-					})
+					// Where it was placed is kept while it's off.
+					.toggle(() -> slot.enabled, on -> slot.enabled = on)
 					.settings((host, f) -> {
 						if ("stopwatch".equals(w.id)) {
 							f.section("Key");
@@ -118,7 +114,14 @@ final class ModCatalog {
 				.toggle(() -> c.crosshair.enabled, on -> c.crosshair.enabled = on)
 				.page(CrosshairTab::new));
 		out.add(new Mod("time", "Time Changer", "Pick the time of day on your screen", "time", Category.VISUAL, "day night sky")
-				.toggle(() -> c.timeLock >= 0, on -> c.timeLock = on ? TIME_TICKS[1] : -1)
+				.toggle(() -> c.timeLock >= 0, on -> {
+					if (on) {
+						c.timeLock = c.timeLockOff >= 0 ? c.timeLockOff : TIME_TICKS[1];
+					} else {
+						c.timeLockOff = c.timeLock;
+						c.timeLock = -1;
+					}
+				})
 				.settings((host, f) -> {
 					f.section("Time");
 					f.choice("Time of day", TIMES, () -> indexOf(TIME_TICKS, c.timeLock), i -> c.timeLock = TIME_TICKS[i]);
@@ -131,8 +134,15 @@ final class ModCatalog {
 		if (p.outlineTweaks()) {
 			out.add(new Mod("outline", "Block Outline", "The outline on the block you look at", "outline", Category.VISUAL, "selection")
 					.toggle(() -> c.outlineColor != 0, on -> {
-						c.outlineColor = on ? OUTLINE_COLORS[0] : 0;
-						c.outlineWidth = on ? WIDTH_VALUES[1] : 1f;
+						if (on) {
+							c.outlineColor = c.outlineColorOff != 0 ? c.outlineColorOff : OUTLINE_COLORS[0];
+							c.outlineWidth = c.outlineWidthOff > 0 ? c.outlineWidthOff : WIDTH_VALUES[1];
+						} else {
+							c.outlineColorOff = c.outlineColor;
+							c.outlineWidthOff = c.outlineWidth;
+							c.outlineColor = 0;
+							c.outlineWidth = 1f;
+						}
 					})
 					.settings((host, f) -> {
 						f.section("Outline");
@@ -143,7 +153,14 @@ final class ModCatalog {
 		if (p.hitColorWorks()) {
 			out.add(new Mod("hitcolor", "Hit Color", "Recolor the red flash players and mobs get when they're hit", "hitcolor", Category.VISUAL,
 					"damage red tint")
-					.toggle(() -> c.hitColor != 0, on -> c.hitColor = on ? HIT_COLORS[1] & 0xFFFFFF : 0)
+					.toggle(() -> c.hitColor != 0, on -> {
+						if (on) {
+							c.hitColor = c.hitColorOff != 0 ? c.hitColorOff : HIT_COLORS[1] & 0xFFFFFF;
+						} else {
+							c.hitColorOff = c.hitColor;
+							c.hitColor = 0;
+						}
+					})
 					.settings((host, f) -> {
 						f.section("Color");
 						f.swatches("Hit color", HIT_COLORS, () -> 0xFF000000 | c.hitColor, v -> c.hitColor = v & 0xFFFFFF);
