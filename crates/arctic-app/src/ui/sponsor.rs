@@ -33,7 +33,7 @@ impl ArcticApp {
             egui::pos2(rect.left() + 20.0, rect.center().y),
             vec2(18.0, 18.0),
         );
-        flash::mark(ui.painter(), mark, p.text);
+        flash::mark(ui.painter(), mark);
         let text = if hovered { p.text } else { p.muted };
         ui.painter().text(
             egui::pos2(rect.left() + 36.0, rect.center().y - 6.5),
@@ -72,7 +72,7 @@ impl ArcticApp {
             |ui| {
                 ui.label(RichText::new("Supported by").color(p.muted));
                 let (mark, _) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::hover());
-                flash::mark(ui.painter(), mark, p.text);
+                flash::mark(ui.painter(), mark);
                 if widgets::button(ui, p, Some(Icon::External), NAME, false)
                     .on_hover_text(URL)
                     .clicked()
@@ -93,7 +93,7 @@ impl ArcticApp {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
                 let (mark, _) = ui.allocate_exact_size(vec2(44.0, 44.0), Sense::hover());
-                flash::mark(ui.painter(), mark, p.text);
+                flash::mark(ui.painter(), mark);
                 ui.add_space(6.0);
                 // The button first (from the right), so the text wraps in what's left.
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
