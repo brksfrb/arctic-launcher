@@ -26,7 +26,10 @@ pub fn apply(exe: &Path, prefer: bool) {
         }
         for path in paths {
             if let Err(code) = windows::apply(&path, prefer) {
-                log::info!("graphics card preference for {}: error {code}", path.display());
+                log::info!(
+                    "graphics card preference for {}: error {code}",
+                    path.display()
+                );
             }
         }
     }
@@ -53,8 +56,8 @@ mod windows {
     use std::ptr::{null, null_mut};
 
     use windows_sys::Win32::System::Registry::{
-        HKEY, HKEY_CURRENT_USER, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_OPTION_NON_VOLATILE, REG_SZ, RegCloseKey,
-        RegCreateKeyExW, RegDeleteValueW, RegQueryValueExW, RegSetValueExW,
+        HKEY, HKEY_CURRENT_USER, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_OPTION_NON_VOLATILE, REG_SZ,
+        RegCloseKey, RegCreateKeyExW, RegDeleteValueW, RegQueryValueExW, RegSetValueExW,
     };
 
     use super::HIGH_PERFORMANCE;
@@ -105,7 +108,11 @@ mod windows {
             // Taken back only if it's what we'd have set (not another choice the player made).
             (false, Some(HIGH_PERFORMANCE)) => {
                 let status = unsafe { RegDeleteValueW(key.0, name.as_ptr()) };
-                if status == ERROR_SUCCESS { Ok(()) } else { Err(status) }
+                if status == ERROR_SUCCESS {
+                    Ok(())
+                } else {
+                    Err(status)
+                }
             }
             _ => Ok(()),
         }
@@ -113,7 +120,16 @@ mod windows {
 
     fn read(key: &Key, name: &[u16]) -> Result<Option<String>, u32> {
         let mut bytes: u32 = 0;
-        let status = unsafe { RegQueryValueExW(key.0, name.as_ptr(), null(), null_mut(), null_mut(), &mut bytes) };
+        let status = unsafe {
+            RegQueryValueExW(
+                key.0,
+                name.as_ptr(),
+                null(),
+                null_mut(),
+                null_mut(),
+                &mut bytes,
+            )
+        };
         if status == ERROR_FILE_NOT_FOUND {
             return Ok(None);
         }
@@ -122,7 +138,14 @@ mod windows {
         }
         let mut buffer = vec![0u16; (bytes as usize).div_ceil(2)];
         let status = unsafe {
-            RegQueryValueExW(key.0, name.as_ptr(), null(), null_mut(), buffer.as_mut_ptr().cast(), &mut bytes)
+            RegQueryValueExW(
+                key.0,
+                name.as_ptr(),
+                null(),
+                null_mut(),
+                buffer.as_mut_ptr().cast(),
+                &mut bytes,
+            )
         };
         if status != ERROR_SUCCESS {
             return Err(status);
@@ -134,8 +157,19 @@ mod windows {
     fn write(key: &Key, name: &[u16]) -> Result<(), u32> {
         let data = wide(std::ffi::OsStr::new(HIGH_PERFORMANCE));
         let status = unsafe {
-            RegSetValueExW(key.0, name.as_ptr(), 0, REG_SZ, data.as_ptr().cast(), (data.len() * 2) as u32)
+            RegSetValueExW(
+                key.0,
+                name.as_ptr(),
+                0,
+                REG_SZ,
+                data.as_ptr().cast(),
+                (data.len() * 2) as u32,
+            )
         };
-        if status == ERROR_SUCCESS { Ok(()) } else { Err(status) }
+        if status == ERROR_SUCCESS {
+            Ok(())
+        } else {
+            Err(status)
+        }
     }
 }

@@ -32,7 +32,10 @@ pub const MODS: &[(&str, &str)] = &[
 fn provided_by(project: &str) -> (&'static [&'static str], &'static [&'static str]) {
     match project {
         "nmDcB62a" => (&["modernfix"], &[]),
-        "AANobbMI" => (&["sodium"], &["optifabric", "canvas", "embeddium", "rubidium"]),
+        "AANobbMI" => (
+            &["sodium"],
+            &["optifabric", "canvas", "embeddium", "rubidium"],
+        ),
         "gvQqBUqZ" => (&["lithium"], &["canary", "radium"]),
         "uXXizFIs" => (&["ferritecore"], &[]),
         "5ZwdcRci" => (&["immediatelyfast"], &[]),
@@ -71,7 +74,9 @@ fn leave_players_mods(game_dir: &Path, wanted: &mut Vec<(&str, &str)>) -> Result
     }
     let has = |project: &str| {
         let (ids, replacements) = provided_by(project);
-        ids.iter().chain(replacements).any(|id| theirs.contains(*id))
+        ids.iter()
+            .chain(replacements)
+            .any(|id| theirs.contains(*id))
     };
     wanted.retain(|(project, name)| {
         let keep = !has(project);

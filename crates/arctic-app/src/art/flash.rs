@@ -27,7 +27,12 @@ pub fn mark(painter: &Painter, rect: Rect) {
     };
     painter.rect_filled(rect, CORNER / SPAN * rect.width(), TILE);
     let block = |opacity: f32| {
-        Color32::from_rgba_unmultiplied(BLOCK[0], BLOCK[1], BLOCK[2], (opacity * 255.0).round() as u8)
+        Color32::from_rgba_unmultiplied(
+            BLOCK[0],
+            BLOCK[1],
+            BLOCK[2],
+            (opacity * 255.0).round() as u8,
+        )
     };
     let face = |points: [(f32, f32); 4], color: Color32| {
         Shape::convex_polygon(
