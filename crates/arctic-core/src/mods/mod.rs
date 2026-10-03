@@ -14,6 +14,7 @@ pub mod modpack;
 mod modrinth;
 pub mod packs;
 pub mod performance;
+pub mod polarium;
 mod resolve;
 #[cfg(test)]
 mod tests;

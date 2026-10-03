@@ -315,7 +315,10 @@ impl ArcticApp {
     fn performance_card(&mut self, ui: &mut egui::Ui, instance: &Instance) {
         use arctic_core::loaders::LoaderKind;
         let modded = instance.loader.kind().is_some();
-        if matches!(instance.loader.kind(), Some(LoaderKind::Forge | LoaderKind::NeoForge)) {
+        if matches!(
+            instance.loader.kind(),
+            Some(LoaderKind::Forge | LoaderKind::NeoForge)
+        ) {
             return;
         }
         let p = self.palette();
@@ -325,7 +328,7 @@ impl ArcticApp {
             ui.label(RichText::new("Performance").size(17.0).strong().color(p.text));
             ui.label(
                 RichText::new(
-                    "Adds Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling and ModernFix for much higher FPS and faster starts. Downloaded from Modrinth for your version; ones not updated yet are skipped.",
+                    "Adds Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, ModernFix and Polarium for much higher FPS and faster starts. Downloaded from Modrinth for your version (Polarium comes with Arctic); ones not updated yet are skipped.",
                 )
                 .color(p.muted),
             );
@@ -345,8 +348,11 @@ impl ArcticApp {
                     self.performance_off_confirm = Some(id);
                 }
             }
-            let installed =
-                arctic_core::mods::performance::installed(&instance.game_dir(&self.dirs));
+            let game_dir = instance.game_dir(&self.dirs);
+            let mut installed = arctic_core::mods::performance::installed(&game_dir);
+            if arctic_core::mods::polarium::installed(&game_dir.join("mods")) {
+                installed.push(arctic_core::mods::polarium::NAME.to_owned());
+            }
             if on && !installed.is_empty() {
                 ui.label(
                     RichText::new(format!("Installed: {}", installed.join(", ")))

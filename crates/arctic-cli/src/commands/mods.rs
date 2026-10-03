@@ -130,7 +130,9 @@ fn install(ctx: &Ctx, inst: &Instance, project: &str) -> Result<()> {
 fn list(ctx: &Ctx, inst: &Instance) -> Result<()> {
     let (dir, index) = folders(ctx, inst);
     for f in mods::list(&dir, &index)? {
-        if f.file_name == arctic_core::arctic_mod::FILE_NAME {
+        if f.file_name == arctic_core::arctic_mod::FILE_NAME
+            || f.file_name == mods::polarium::FILE_NAME
+        {
             continue;
         }
         let title = f

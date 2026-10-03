@@ -90,7 +90,8 @@ impl InstancePack {
                     dependency: m.dependency,
                 }),
                 None if performance.contains(&file.file_name)
-                    || file.file_name == crate::arctic_mod::FILE_NAME => {}
+                    || file.file_name == crate::arctic_mod::FILE_NAME
+                    || file.file_name == mods::polarium::FILE_NAME => {}
                 None => left_out.push(file.file_name),
             }
         }
