@@ -182,6 +182,41 @@ pub fn icon_button(ui: &mut Ui, p: &Palette, icon: Icon, tooltip: &str) -> Respo
         .on_hover_cursor(CursorIcon::PointingHand)
 }
 
+/// Size of [`switch`]: a pill with a knob that slides across.
+const SWITCH_SIZE: egui::Vec2 = vec2(46.0, 26.0);
+
+/// On/off switch (a sliding knob, not a check mark). Returns a response
+/// that is `changed()` when clicked.
+pub fn switch(ui: &mut Ui, p: &Palette, on: &mut bool) -> Response {
+    let (rect, mut response) = ui.allocate_exact_size(SWITCH_SIZE, Sense::click());
+    if response.clicked() {
+        *on = !*on;
+        response.mark_changed();
+    }
+    let t = ui.ctx().animate_bool_responsive(response.id, *on);
+    let hover = ui
+        .ctx()
+        .animate_bool(response.id.with("h"), response.hovered());
+    let radius = rect.height() / 2.0;
+    let off_fill = lerp_color(p.surface, p.surface_hover, hover);
+    ui.painter()
+        .rect_filled(rect, radius, lerp_color(off_fill, p.accent, t));
+    ui.painter().rect_stroke(
+        rect,
+        radius,
+        egui::Stroke::new(1.0, lerp_color(p.card_stroke, p.accent, t)),
+        egui::StrokeKind::Inside,
+    );
+    let knob_radius = radius - 4.0;
+    let x = egui::lerp((rect.left() + radius)..=(rect.right() - radius), t);
+    ui.painter().circle_filled(
+        pos2(x, rect.center().y),
+        knob_radius,
+        lerp_color(p.muted, p.on_accent, t),
+    );
+    response.on_hover_cursor(CursorIcon::PointingHand)
+}
+
 /// Square icon button with a visible tile, sized to sit next to a big
 /// button (e.g. the Play button's quick actions).
 pub fn tile_button(ui: &mut Ui, p: &Palette, icon: Icon, tooltip: &str, size: f32) -> Response {

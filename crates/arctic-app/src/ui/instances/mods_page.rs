@@ -112,9 +112,8 @@ impl ArcticApp {
                     }
                 }
                 let mut enabled = file.enabled;
-                if ui
-                    .checkbox(&mut enabled, "")
-                    .on_hover_text("Enabled")
+                if widgets::switch(ui, p, &mut enabled)
+                    .on_hover_text(if enabled { "On" } else { "Off" })
                     .changed()
                 {
                     match mods::set_enabled(mods_dir, &file.file_name, enabled) {
