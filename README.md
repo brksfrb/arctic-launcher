@@ -214,9 +214,9 @@ or Microsoft.
 See [docs/building.md](docs/building.md). The architecture overview is in
 [docs/architecture.md](docs/architecture.md).
 
-Polonium, our mod for huge crowds of players (entities drawn on the GPU, their
+Polarium, our mod for huge crowds of players (entities drawn on the GPU, their
 work spread across CPU cores), lives in its own repository:
-[brksfrb/polonium](https://github.com/brksfrb/polonium).
+[brksfrb/polarium](https://github.com/brksfrb/polarium).
 
 ## Supported by
 
