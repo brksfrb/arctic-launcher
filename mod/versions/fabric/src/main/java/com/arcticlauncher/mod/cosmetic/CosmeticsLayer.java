@@ -33,7 +33,7 @@ public final class CosmeticsLayer extends RenderLayer<AvatarRenderState, PlayerM
 
 	/**
 	 * Whether this player has cosmetics to draw. Performance mods that skip
-	 * layers for players with nothing to draw (Polonium's crowd path) ask;
+	 * layers for players with nothing to draw (Polarium's crowd path) ask;
 	 * it's a plain JDK interface so they needn't depend on each other.
 	 */
 	@Override
