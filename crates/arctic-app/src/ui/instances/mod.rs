@@ -280,11 +280,14 @@ impl ArcticApp {
         };
         let mods_dir = instance.game_dir(&self.dirs).join("mods");
         let index = mods::index_path(&self.dirs.instance_dir(id));
-        // The bundled Arctic mod is managed by the launcher, not listed.
+        // The bundled Arctic mod and Polarium are managed by the launcher, not listed.
         let files = mods::list(&mods_dir, &index)
             .unwrap_or_default()
             .into_iter()
-            .filter(|f| f.file_name != arctic_core::arctic_mod::FILE_NAME)
+            .filter(|f| {
+                f.file_name != arctic_core::arctic_mod::FILE_NAME
+                    && f.file_name != mods::polarium::FILE_NAME
+            })
             .collect();
         self.inst.mod_files = Some((id.to_owned(), files));
     }

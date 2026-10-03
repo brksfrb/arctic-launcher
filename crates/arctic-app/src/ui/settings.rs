@@ -79,7 +79,7 @@ impl ArcticApp {
             super::client_style::fancy_toggle(ui, s);
             ui.checkbox(&mut performance, "Boost FPS with performance mods")
                 .on_hover_text(
-                    "Vanilla: adds Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling and ModernFix. Other instances have their own switch.",
+                    "Vanilla: adds Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, ModernFix and Polarium. Other instances have their own switch.",
                 );
         });
 
