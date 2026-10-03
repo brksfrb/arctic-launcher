@@ -3,6 +3,13 @@ name: Release
 on:
   push:
     tags: ["v*"]
+    # Builds on main (never published) keep a warm cache there: a tag's run
+    # can only restore caches from its own tag or the default branch.
+    branches: [main]
+    paths: ["Cargo.lock", ".github/workflows/release.yml"]
+  # GitHub drops caches unused for 7 days; releases come less often.
+  schedule:
+    - cron: "17 4 */3 * *"
   # By hand: build everything (test builds, like the Mac app) without publishing.
   workflow_dispatch: {}
 
