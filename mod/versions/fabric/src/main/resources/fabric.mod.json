@@ -14,7 +14,8 @@
 	"environment": "client",
 	"entrypoints": {
 		"client": ["com.arcticlauncher.mod.ArcticMod"],
-		"polarium:light_state": ["com.arcticlauncher.mod.PolariumLightState"]
+		"polarium:light_state": ["com.arcticlauncher.mod.PolariumLightState"],
+		"polarium:posing": ["com.arcticlauncher.mod.PolariumPosing"]
 	},
 	"mixins": ["arctic.mixins.json"],
 	"depends": {
