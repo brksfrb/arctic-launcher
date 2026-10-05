@@ -29,8 +29,9 @@ abstract class CustomPayloadHandlerMixin {
 	@Final
 	protected Connection connection;
 
-	/** The connection Arctic already said hello on: once is enough. */
+	/** The connection Arctic already said hello on, and to whom: once each is enough. */
 	private static Connection arctic$greeted;
+	private static final java.util.Set<String> arctic$greetings = new java.util.HashSet<>();
 
 	@Inject(method = "handleCustomPayload(Lnet/minecraft/network/protocol/common/ClientboundCustomPayloadPacket;)V",
 			at = @At("HEAD"), cancellable = true)
@@ -39,11 +40,7 @@ abstract class CustomPayloadHandlerMixin {
 			return;
 		}
 		ci.cancel();
-		// Only a server that lists arctic:hello among its channels hears from us.
-		if (connection != arctic$greeted && payload.channels().contains(SvcPayload.HELLO.toString())) {
-			arctic$greeted = connection;
-			connection.send(new ServerboundCustomPayloadPacket(SvcPayload.hello()));
-		}
+		arctic$greet(payload);
 		VoiceLink voice = ArcticClient.voice();
 		if (voice == null || !SvcPayload.SECRET.equals(payload.type().id())) {
 			return;
@@ -52,6 +49,27 @@ abstract class CustomPayloadHandlerMixin {
 		if (remote instanceof InetSocketAddress inet) {
 			String host = inet.getAddress() != null ? inet.getAddress().getHostAddress() : inet.getHostString();
 			voice.onSimpleVoiceChatSecret(payload.data(), host);
+		}
+	}
+
+	/** Say hello to the servers that list a hello channel (Arctic's, and Polarium's on its behalf). */
+	private void arctic$greet(SvcPayload register) {
+		java.util.List<String> channels = register.channels();
+		if (channels.isEmpty()) {
+			return;
+		}
+		if (connection != arctic$greeted) {
+			arctic$greeted = connection;
+			arctic$greetings.clear();
+		}
+		if (channels.contains(SvcPayload.HELLO.toString()) && arctic$greetings.add("arctic")) {
+			connection.send(new ServerboundCustomPayloadPacket(SvcPayload.hello()));
+		}
+		if (channels.contains(SvcPayload.POLARIUM_HELLO.toString()) && arctic$greetings.add("polarium")) {
+			SvcPayload hello = SvcPayload.polariumHello();
+			if (hello != null) {
+				connection.send(new ServerboundCustomPayloadPacket(hello));
+			}
 		}
 	}
 }

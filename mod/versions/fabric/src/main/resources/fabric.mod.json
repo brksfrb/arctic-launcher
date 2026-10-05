@@ -12,6 +12,9 @@
 	"license": "GPL-3.0-or-later",
 	"icon": "assets/arctic/icon.png",
 	"environment": "client",
+	"custom": {
+		"arctic:greets": ["polarium"]
+	},
 	"entrypoints": {
 		"client": ["com.arcticlauncher.mod.ArcticMod"],
 		"polarium:light_state": ["com.arcticlauncher.mod.PolariumLightState"],
