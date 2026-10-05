@@ -168,6 +168,7 @@ pub fn install(
     java_override: Option<PathBuf>,
     progress: Progress,
 ) -> Result<Installation> {
+    let clock = std::time::Instant::now();
     fs::create_dir_all(game_dir).at(game_dir)?;
     let libs = files::resolve_libraries(dirs, &version, &RuleEnv::for_version(&version));
     let client = files::client_job(dirs, &version)?;
@@ -193,13 +194,27 @@ pub fn install(
         (runtime, assets)
     });
     let (runtime, assets) = (runtime?, assets?);
+    log::info!(
+        "install: runtime and asset plan done at {} ms",
+        clock.elapsed().as_millis()
+    );
 
     let mut jobs = libs.jobs;
     jobs.push(client);
     jobs.extend(logging.iter().map(|(job, _)| job.clone()));
     jobs.extend(runtime.iter().flat_map(|r| r.jobs.iter().cloned()));
-    jobs.extend(assets.jobs.iter().cloned());
+    let assets_fresh = files::assets_verified_recently(dirs, &assets.index_name);
+    if !assets_fresh {
+        jobs.extend(assets.jobs.iter().cloned());
+    }
     download_all("Downloading game files", jobs, progress)?;
+    if !assets_fresh {
+        files::mark_assets_verified(dirs, &assets.index_name);
+    }
+    log::info!(
+        "install: files checked at {} ms",
+        clock.elapsed().as_millis()
+    );
 
     progress(ProgressInfo::stage("Preparing"));
     let java = match (runtime, java_override) {
@@ -211,6 +226,7 @@ pub fn install(
     files::extract_natives(&libs.natives, &natives_dir)?;
     assets.finish()?;
     mark_installed(dirs, &version.id)?;
+    log::info!("install: done at {} ms", clock.elapsed().as_millis());
 
     let mut classpath = libs.classpath;
     classpath.push(client_jar);
