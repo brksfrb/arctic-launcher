@@ -143,6 +143,7 @@ fn smoke_instance(kind: LoaderKind, game: &str, loader_version: String) -> Insta
         jvm_args: String::new(),
         performance: false,
         shaders: false,
+        own_settings: true,
     }
 }
 

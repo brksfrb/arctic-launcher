@@ -152,6 +152,10 @@ pub struct Instance {
     /// Vanilla instances: add Iris so shader packs work.
     #[serde(default)]
     pub shaders: bool,
+    /// Keeps its own settings (HUD, keys, FOV, server list) instead of sharing
+    /// them with the profile's other instances (see `shared`).
+    #[serde(default)]
+    pub own_settings: bool,
 }
 
 fn enabled() -> bool {
@@ -172,6 +176,7 @@ impl Instance {
             jvm_args: String::new(),
             performance: true,
             shaders: false,
+            own_settings: false,
         }
     }
 
@@ -225,6 +230,7 @@ pub fn create(dirs: &DataDirs, name: &str, game_version: &str, loader: Loader) -
         jvm_args: String::new(),
         performance: true,
         shaders: false,
+        own_settings: false,
     };
     let mods = instance.game_dir(dirs).join("mods");
     std::fs::create_dir_all(&mods).map_err(|e| Error::io(&mods, e))?;

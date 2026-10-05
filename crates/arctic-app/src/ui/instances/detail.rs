@@ -175,6 +175,7 @@ impl ArcticApp {
         self.java_card(ui, instance);
         self.arctic_mod_card(ui, instance);
         self.performance_card(ui, instance);
+        self.settings_card(ui, instance);
         if instance.is_default() {
             return;
         }
@@ -312,6 +313,39 @@ impl ArcticApp {
     }
 
     /// Vanilla, Fabric and Quilt instances: the Performance switch (Sodium, Lithium, …).
+    /// Whether this instance follows the settings shared by the profile's instances.
+    fn settings_card(&mut self, ui: &mut egui::Ui, instance: &Instance) {
+        let p = self.palette();
+        ui.add_space(12.0);
+        theme::card(p).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(RichText::new("Settings").size(17.0).strong().color(p.text));
+            ui.label(
+                RichText::new(
+                    "Your server list, HUD and Arctic Client settings, and Minecraft's keys, FOV and video settings are the same in every instance that shares them, so a new one feels like the one you already set up.",
+                )
+                .color(p.muted),
+            );
+            let mut shared = !instance.own_settings;
+            if ui
+                .checkbox(&mut shared, "Share settings with my other instances")
+                .changed()
+            {
+                let id = instance.id.clone();
+                self.update_instance(&id, |i| i.own_settings = !shared);
+            }
+            ui.label(
+                RichText::new(if shared {
+                    "Changes you make here show up in the others, and theirs show up here."
+                } else {
+                    "This instance keeps its own settings; nothing is copied in or out."
+                })
+                .small()
+                .color(p.muted),
+            );
+        });
+    }
+
     fn performance_card(&mut self, ui: &mut egui::Ui, instance: &Instance) {
         use arctic_core::loaders::LoaderKind;
         let modded = instance.loader.kind().is_some();

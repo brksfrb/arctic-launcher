@@ -150,7 +150,10 @@ pub fn install_file(dirs: &DataDirs, pack: &Path, progress: Progress) -> Result<
         Some((kind, version)) => Loader::new(Some(kind), version),
         None => Loader::Vanilla,
     };
-    let instance = instances::create(dirs, &index.name, &game, loader)?;
+    let mut instance = instances::create(dirs, &index.name, &game, loader)?;
+    // The pack's own settings; sharing would write the others' over them.
+    instance.own_settings = true;
+    instance.save(dirs)?;
     let game_dir = instance.game_dir(dirs);
     let result = populate(&index, &mut zip, &game_dir, progress);
     if let Err(e) = result {

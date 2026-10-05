@@ -71,6 +71,8 @@ pub fn sync(
     }
     let mut all = vec![instances::load_default(dirs)?];
     all.extend(instances::list_custom(dirs)?);
+    // Instances that keep their own settings neither give nor get any.
+    all.retain(|i| !i.own_settings);
     let folders: Vec<GameFolder> = all
         .iter()
         .map(|i| {
@@ -102,7 +104,9 @@ pub fn sync(
         sync_options(
             &folders,
             &store.join(SHARED_OPTIONS),
-            launching.map(|(i, v)| (i.game_dir(dirs), v)),
+            launching
+                .filter(|(i, _)| !i.own_settings)
+                .map(|(i, v)| (i.game_dir(dirs), v)),
         )?;
     }
     Ok(())
@@ -278,6 +282,20 @@ mod tests {
                     .join("servers.dat.before-sharing")
                     .exists()
         );
+    }
+
+    #[test]
+    fn an_instance_with_its_own_settings_is_left_alone() {
+        let (_tmp, dirs, a, mut b) = setup();
+        b.own_settings = true;
+        b.save(&dirs).unwrap();
+        let file = |i: &Instance| i.game_dir(&dirs).join("config/arctic.json");
+        std::fs::write(file(&a), "{\"a\":1}").unwrap();
+        later();
+        std::fs::write(file(&b), "{\"b\":1}").unwrap();
+        sync(&dirs, SharedSettings::default(), Some((&b, "1.8.9"))).unwrap();
+        assert_eq!(std::fs::read_to_string(file(&a)).unwrap(), "{\"a\":1}");
+        assert_eq!(std::fs::read_to_string(file(&b)).unwrap(), "{\"b\":1}");
     }
 
     #[test]
