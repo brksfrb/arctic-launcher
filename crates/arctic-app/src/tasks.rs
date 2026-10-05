@@ -103,6 +103,7 @@ pub enum Event {
     GalleryDone(Outcome<String>),
     /// A crash report was sent.
     CrashReportSent(Outcome<()>),
+    SuggestionSent(Outcome<()>),
     /// Other launchers looked through (the folder, if one was picked).
     MigrateScanned(Option<PathBuf>, crate::migrate_tasks::ScanResult),
     MigrateProgress(String, ProgressSnapshot),
@@ -207,6 +208,16 @@ impl Tasks {
     pub(crate) fn run(&self, job: impl FnOnce(&Tasks) + Send + 'static) {
         let me = self.clone();
         std::thread::spawn(move || job(&me));
+    }
+
+    /// Send an idea or bug report in the background.
+    pub fn send_suggestion(&self, suggestion: arctic_core::cosmetics::Suggestion) {
+        self.run(move |t| {
+            let base = arctic_core::cosmetics::base_url();
+            let result = arctic_core::cosmetics::send_suggestion(&base, &suggestion)
+                .map_err(|e| e.to_string());
+            t.send(Event::SuggestionSent(result));
+        });
     }
 
     /// Callback for the play-together service, feeding the event loop.

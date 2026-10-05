@@ -6,6 +6,7 @@ mod client_style;
 mod dialogs;
 mod instances;
 mod logs;
+pub(crate) mod suggest;
 
 pub use instances::{InstancePage, InstancesUi};
 pub use logs::LogViewKey;

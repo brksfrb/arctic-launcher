@@ -97,6 +97,7 @@ impl ArcticApp {
         self.performance_off_dialog(&ctx);
         self.profile_dialogs(&ctx);
         self.create_instance_dialog(&ctx);
+        self.suggest_dialog(&ctx);
         self.import_worlds_dialog(&ctx);
         self.share_dialogs(&ctx);
         self.migrate_dialog(&ctx);
