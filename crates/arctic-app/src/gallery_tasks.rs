@@ -57,7 +57,7 @@ impl Tasks {
             let base = cosmetics::base_url();
             let result = cosmetics::token_for(t.dirs(), &base, &account)
                 .and_then(|token| cosmetics::gallery_share(&base, &token, &png, variant, &name))
-                .map(|()| format!("Shared {name}"))
+                .map(|()| format!("{name} sent for review; it shows in the gallery once approved"))
                 .map_err(|e| friendly(&e.to_string()));
             t.send(Event::GalleryDone(result));
         });
