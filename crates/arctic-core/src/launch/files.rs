@@ -183,6 +183,28 @@ impl AssetPlan {
     }
 }
 
+/// How long a check of all asset files stays good: the game's thousands of sound and
+/// texture files are not looked at again on every start within this time.
+const ASSETS_VERIFIED_FOR: std::time::Duration = std::time::Duration::from_secs(12 * 60 * 60);
+
+fn assets_stamp(dirs: &DataDirs, index_name: &str) -> PathBuf {
+    dirs.assets().join(format!(".verified-{index_name}"))
+}
+
+/// Whether every asset file of this index was found in place recently.
+pub fn assets_verified_recently(dirs: &DataDirs, index_name: &str) -> bool {
+    fs::metadata(assets_stamp(dirs, index_name))
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.elapsed().ok())
+        .is_some_and(|age| age < ASSETS_VERIFIED_FOR)
+}
+
+/// Note that every asset file of this index was just found in place.
+pub fn mark_assets_verified(dirs: &DataDirs, index_name: &str) {
+    let _ = fs::write(assets_stamp(dirs, index_name), b"ok");
+}
+
 /// Fetch the asset index (small, verified) and list every object.
 pub fn plan_assets(dirs: &DataDirs, version: &VersionJson, game_dir: &Path) -> Result<AssetPlan> {
     let index_ref = version
