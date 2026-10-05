@@ -33,15 +33,27 @@ pub struct ScreenshotsUi {
     filter: Option<String>,
     open: Option<Shot>,
     loading: bool,
+    /// When the list was last asked for (egui time), to look again now and then.
+    asked: f64,
 }
+
+/// While the tab is open, new screenshots show up within this many seconds.
+const RESCAN_EVERY: f64 = 3.0;
 
 impl ArcticApp {
     pub(crate) fn screenshots_tab(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        if self.shots.shots.is_none() && !self.shots.loading {
+        let now = ui.input(|i| i.time);
+        // Shots taken in game appear on their own, without pressing Refresh.
+        if !self.shots.loading
+            && (self.shots.shots.is_none() || now - self.shots.asked >= RESCAN_EVERY)
+        {
             self.shots.loading = true;
+            self.shots.asked = now;
             self.tasks.screenshot_list();
         }
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_secs_f64(RESCAN_EVERY));
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 widgets::page_header(ui, p, "Screenshots", "From every instance, newest first.");
@@ -49,6 +61,7 @@ impl ArcticApp {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                 if widgets::button(ui, p, None, "Refresh", false).clicked() {
                     self.shots.loading = true;
+                    self.shots.asked = now;
                     self.tasks.screenshot_list();
                 }
                 self.screenshot_filter(ui);
