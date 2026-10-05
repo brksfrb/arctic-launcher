@@ -36,6 +36,7 @@ impl Tasks {
                 .set_title("Choose a world archive")
                 .add_filter("World archive", &["zip"])
                 .pick_file();
+            t.note_if_picker_missing(&picked);
             let result = match picked {
                 None => Ok("No file chosen".to_owned()),
                 Some(zip) => worlds::import_zip(&zip, &saves)

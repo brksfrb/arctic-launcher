@@ -51,6 +51,8 @@ pub type LaunchId = u64;
 pub(crate) type Outcome<T> = std::result::Result<T, String>;
 
 pub enum Event {
+    /// A file dialog never appeared (no desktop portal or zenity on Linux).
+    PickerMissing,
     Manifest(Outcome<VersionManifest>),
     /// Preparing a launch (id, progress).
     LaunchProgress(LaunchId, ProgressSnapshot),
@@ -218,6 +220,14 @@ impl Tasks {
         }
     }
 
+    /// After a file dialog returned nothing: tell the player when that is because the system has no
+    /// file picker (Linux without a desktop portal, zenity or kdialog), not because they cancelled.
+    pub(crate) fn note_if_picker_missing<T>(&self, picked: &Option<T>) {
+        if picked.is_none() && !file_picker_available() {
+            self.send(Event::PickerMissing);
+        }
+    }
+
     pub(crate) fn send(&self, event: Event) {
         // The receiver only disappears when the app is closing.
         let _ = self.tx.send(event);
@@ -379,9 +389,10 @@ impl Tasks {
             let picked = path.or_else(|| {
                 rfd::FileDialog::new()
                     .set_title("Choose a modpack")
-                    .add_filter("Modrinth modpack", &["mrpack"])
+                    .add_filter("Modrinth modpack", &["mrpack", "zip"])
                     .pick_file()
             });
+            t.note_if_picker_missing(&picked);
             let result = match picked {
                 None => Ok(None),
                 Some(path) => {
@@ -450,4 +461,26 @@ impl Tasks {
             t.send(Event::UpdateInstalled(result.map_err(|e| e.to_string())));
         });
     }
+}
+
+/// Whether a file dialog can open here. Only Linux lacks one by default: the dialog needs a
+/// desktop portal, or zenity or kdialog, which minimal installs don't have.
+pub(crate) fn file_picker_available() -> bool {
+    if !cfg!(target_os = "linux") {
+        return true;
+    }
+    let in_path = |name: &str| {
+        std::env::var_os("PATH")
+            .is_some_and(|paths| std::env::split_paths(&paths).any(|dir| dir.join(name).is_file()))
+    };
+    in_path("zenity")
+        || in_path("kdialog")
+        || [
+            "/usr/libexec/xdg-desktop-portal",
+            "/usr/lib/xdg-desktop-portal",
+            "/usr/lib/x86_64-linux-gnu/xdg-desktop-portal",
+            "/usr/lib/aarch64-linux-gnu/xdg-desktop-portal",
+        ]
+        .iter()
+        .any(|p| std::path::Path::new(p).is_file())
 }

@@ -132,6 +132,14 @@ pub fn install_from_modrinth(
 }
 
 /// Install a `.mrpack` file as a new instance.
+/// Whether this file (a `.mrpack`, or a `.zip` of one) holds a Modrinth modpack.
+pub fn is_modrinth_pack(path: &Path) -> bool {
+    fs::File::open(path)
+        .ok()
+        .and_then(|f| zip::ZipArchive::new(f).ok())
+        .is_some_and(|mut z| z.by_name(INDEX).is_ok())
+}
+
 pub fn install_file(dirs: &DataDirs, pack: &Path, progress: Progress) -> Result<Instance> {
     let size = fs::metadata(pack).at(pack)?.len();
     if size > MAX_PACK_BYTES {
@@ -140,9 +148,16 @@ pub fn install_file(dirs: &DataDirs, pack: &Path, progress: Progress) -> Result<
     let mut zip = zip::ZipArchive::new(fs::File::open(pack).at(pack)?)
         .map_err(|e| Error::Other(format!("not a modpack file: {e}")))?;
     let index: PackIndex = {
+        let curseforge = zip.file_names().any(|n| n == "manifest.json");
         let entry = zip
             .by_name(INDEX)
-            .map_err(|_| Error::Other("not a Modrinth modpack (no modrinth.index.json)".into()))?;
+            .map_err(|_| {
+                if curseforge {
+                    Error::Other("this is a CurseForge modpack; Arctic installs Modrinth modpacks (.mrpack). Look for the pack on Modrinth".into())
+                } else {
+                    Error::Other("not a Modrinth modpack (no modrinth.index.json)".into())
+                }
+            })?;
         serde_json::from_reader(entry)?
     };
     let (game, loader) = index.target()?;
