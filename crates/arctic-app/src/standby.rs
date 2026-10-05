@@ -42,7 +42,7 @@ const NOT_THE_GAME: &[&str] = &[
     "update_channel",
     "check_updates_on_start",
     "crash_reports",
-    "keep_ready",
+    "ready_to_play",
     "last_version",
     "show_snapshots",
     "show_old_versions",
