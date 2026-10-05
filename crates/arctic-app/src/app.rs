@@ -788,6 +788,18 @@ impl ArcticApp {
                 self.login_from_game = true;
                 self.bridge.set_login_status("waiting", None, None);
             }
+            Event::AddOfflineFromGame(name) => {
+                if let Ok(account) = arctic_core::auth::offline::create(&name) {
+                    self.toasts.push(
+                        Kind::Success,
+                        format!("Added {}", account.username),
+                        "Offline account, from the game",
+                    );
+                    self.offer_profile_link(&account);
+                    self.accounts.upsert(account);
+                    self.save_accounts();
+                }
+            }
             Event::ShareCode(result) => self.on_share_code(result, ctx),
             Event::ShareSaved(result) => self.on_share_saved(result),
             Event::ShareLoaded(result) => self.on_share_loaded(result),

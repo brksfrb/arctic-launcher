@@ -585,5 +585,6 @@ ok SECRET SECRET
         game.reveal();
         assert!(visible(first), "not shown by reveal");
         let _ = child.kill();
+        let _ = child.wait();
     }
 }
