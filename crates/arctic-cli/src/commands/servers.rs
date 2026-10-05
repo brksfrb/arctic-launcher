@@ -80,6 +80,24 @@ pub fn run(ctx: &Ctx, command: &ServersCommand) -> Result<i32> {
                 },
             );
         }
+        ServersCommand::Move {
+            address,
+            before,
+            instance,
+        } => {
+            let instance = instance_or_default(ctx, instance.as_deref())?;
+            let moved =
+                servers::move_before(&instance.game_dir(&ctx.dirs), address, before.as_deref())?;
+            if !moved {
+                return Err(Error::Other(
+                    "that server (or the one to put it before) isn't on the list".into(),
+                ));
+            }
+            ctx.out.emit(
+                json!({"event": "moved", "address": address, "instance": instance.id}),
+                || format!("Moved {address} in {}'s server list.", instance.name),
+            );
+        }
         ServersCommand::Submit {
             address,
             name,
