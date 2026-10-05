@@ -148,6 +148,12 @@ impl ArcticApp {
                 &mut s.discord_presence,
                 "Show what you're playing on Discord",
             );
+            if cfg!(windows) {
+                ui.checkbox(&mut s.keep_ready, "Keep Minecraft ready in the background")
+                    .on_hover_text(
+                        "Loads the game with its window hidden while the launcher is open, so Play shows it at once instead of waiting. Uses the game's memory (a few GB) meanwhile. It's replaced when you change the instance, account, settings or mods, and not used for Fullscreen or joining a server.",
+                    );
+            }
             widgets::field_row(ui, |ui| {
                 ui.label("Crash reports")
                     .on_hover_text("When the game crashes, Arctic can send its log so the crash can be fixed. Your name, folders and sign-in details are taken out first.");
