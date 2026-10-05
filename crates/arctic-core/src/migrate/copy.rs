@@ -484,6 +484,8 @@ fn target(
         max_memory_mb: found.memory_mb,
         // The other launcher had its own mods; don't add ours on top.
         performance: found.loader.is_none() && created.performance,
+        // Its own settings came along; sharing would write the others' over them.
+        own_settings: true,
         ..created
     };
     instance.save(dirs)?;

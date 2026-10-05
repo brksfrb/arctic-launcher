@@ -187,6 +187,8 @@ impl InstancePack {
             performance: self.performance,
             arctic_mod: self.arctic_mod,
             max_memory_mb: self.max_memory_mb,
+            // The share's own settings; sharing would write the others' over them.
+            own_settings: true,
             ..created
         };
         instance.save(dirs)?;

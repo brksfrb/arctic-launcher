@@ -18,6 +18,8 @@ pub struct CreateForm {
     pub loader: Option<LoaderKind>,
     pub game: Option<String>,
     pub loader_version: Option<String>,
+    /// Keeps its own settings instead of sharing the other instances'.
+    pub own_settings: bool,
 }
 
 impl ArcticApp {
@@ -132,6 +134,18 @@ impl ArcticApp {
                 {
                     form.name_edited = true;
                 }
+                ui.add_space(10.0);
+                ui.label(RichText::new("SETTINGS").small().color(p.muted));
+                ui.radio_value(
+                    &mut form.own_settings,
+                    false,
+                    "Same as my other instances (server list, HUD, keys, FOV)",
+                );
+                ui.radio_value(
+                    &mut form.own_settings,
+                    true,
+                    "Its own: start fresh and keep them separate",
+                );
                 ui.add_space(14.0);
                 ui.horizontal(|ui| {
                     if ui.button("Cancel").clicked() {
@@ -231,11 +245,14 @@ impl ArcticApp {
     }
 
     fn finish_create(&mut self, form: CreateForm) {
-        let (Some(game), name) = (form.game, form.name) else {
+        let (Some(game), name) = (form.game.clone(), form.name.clone()) else {
             return;
         };
-        let loader = Loader::new(form.loader, form.loader_version.unwrap_or_default());
-        match instances::create(&self.dirs, &name, &game, loader) {
+        let loader = Loader::new(form.loader, form.loader_version.clone().unwrap_or_default());
+        match instances::create(&self.dirs, &name, &game, loader).and_then(|mut i| {
+            i.own_settings = form.own_settings;
+            i.save(&self.dirs).map(|()| i)
+        }) {
             Ok(instance) => {
                 let id = instance.id.clone();
                 self.reload_instances();
