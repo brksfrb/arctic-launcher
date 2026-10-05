@@ -195,6 +195,7 @@ fn admin_view(l: &Listing) -> serde_json::Value {
     v["owner"] = json!(l.owner);
     v["code"] = json!(l.code);
     v["partner"] = json!(l.partner);
+    v["partner_tier"] = json!(l.partner_tier);
     v
 }
 
@@ -204,6 +205,9 @@ struct Decision {
     /// With `partner`: the partner's name (empty to make it an ordinary server again).
     #[serde(default)]
     group: String,
+    /// With `partner`: `exclusive` (our own servers) or `hosted` (default).
+    #[serde(default)]
+    tier: String,
 }
 
 async fn decide(
@@ -219,7 +223,7 @@ async fn decide(
         "approve" => state.store.listing_set_state(&id, ListingState::Listed),
         "reject" => state.store.listing_set_state(&id, ListingState::Rejected),
         "remove" => state.store.listing_remove(&id),
-        "partner" => state.store.listing_set_partner(&id, &d.group),
+        "partner" => state.store.listing_set_partner(&id, &d.group, &d.tier),
         _ => {
             return error(
                 StatusCode::BAD_REQUEST,

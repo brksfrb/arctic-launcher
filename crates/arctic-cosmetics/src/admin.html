@@ -169,9 +169,15 @@ async function servers(out) {
         el("button", { onclick: async () => {
           const group = prompt("Partner name (for example Flash Hosting). Leave empty to make it an ordinary server again.", s.partner || "");
           if (group === null) return;
-          try { await api("/v1/admin/servers/" + encodeURIComponent(s.id), { method: "POST", body: JSON.stringify({ action: "partner", group }) }); render(); }
+          let tier = "hosted";
+          if (group.trim()) {
+            const answer = prompt("Tier: type exclusive for our own servers (shown on top of every list), or hosted for servers hosted with Flash Hosting (their own tab).", s.partner_tier || "hosted");
+            if (answer === null) return;
+            tier = answer.trim().toLowerCase() === "exclusive" ? "exclusive" : "hosted";
+          }
+          try { await api("/v1/admin/servers/" + encodeURIComponent(s.id), { method: "POST", body: JSON.stringify({ action: "partner", group, tier }) }); render(); }
           catch (e) { alert(e.message); }
-        } }, s.partner ? "Partner: " + s.partner : "Make partner"))));
+        } }, s.partner ? "Partner: " + s.partner + " (" + (s.partner_tier || "hosted") + ")" : "Make partner"))));
   });
   out.replaceChildren(sel, rows.length
     ? el("table", {}, el("tbody", {}, ...rows)) : el("div", { class: "empty" }, "Nothing here."));

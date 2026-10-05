@@ -106,11 +106,13 @@ impl ArcticApp {
                 (Access::Any, "All"),
                 (Access::Premium, "Premium"),
                 (Access::Cracked, "Cracked"),
+                (Access::Partners, "Partners"),
             ] {
                 let tip = match access {
                     Access::Any => "Every server",
                     Access::Premium => "Need a Microsoft account",
                     Access::Cracked => "Let any name in",
+                    Access::Partners => "Servers hosted with Flash Hosting, and ours",
                 };
                 if ui
                     .selectable_label(self.discover.access == access, label)
@@ -165,17 +167,31 @@ impl ArcticApp {
             shown.insert(0, s);
         }
         if shown.is_empty() {
-            ui.label(RichText::new("No servers match.").color(p.muted));
+            // The same room as a full list, so the window doesn't jump.
+            ui.allocate_ui(vec2(ui.available_width(), LIST_HEIGHT), |ui| {
+                ui.label(RichText::new("No servers match.").color(p.muted));
+            });
             return;
         }
         egui::ScrollArea::vertical()
+            .min_scrolled_height(LIST_HEIGHT)
             .max_height(LIST_HEIGHT)
-            .auto_shrink([false, true])
+            .auto_shrink([false, false])
             .show(ui, |ui| {
-                // Partners (sponsors, hosting partners) sit in their own section above the rest.
-                let (partners, others): (Vec<&PublicServer>, Vec<&PublicServer>) =
-                    shown.into_iter().partition(|s| !s.partner.is_empty());
-                for (title, group) in [("Partners", partners), ("All servers", others)] {
+                // Our own servers sit on top of every list; the Partners tab holds
+                // those and the servers hosted with Flash Hosting.
+                let partners_tab = self.discover.access == Access::Partners;
+                let (partners, others): (Vec<&PublicServer>, Vec<&PublicServer>) = shown
+                    .into_iter()
+                    .partition(|s| partners_tab || s.partner_tier == "exclusive");
+                let mut partners = partners;
+                partners.sort_by_key(|s| s.partner_tier != "exclusive");
+                let top = if partners_tab {
+                    "Partners"
+                } else {
+                    "Exclusive partners"
+                };
+                for (title, group) in [(top, partners), ("All servers", others)] {
                     if group.is_empty() {
                         continue;
                     }

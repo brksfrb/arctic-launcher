@@ -36,6 +36,9 @@ pub struct PublicServer {
     /// A partner's name (a sponsor or hosting partner), empty for ordinary servers.
     #[serde(default)]
     pub partner: String,
+    /// `exclusive` (our own servers), `hosted` (hosted with Flash Hosting) or empty.
+    #[serde(default)]
+    pub partner_tier: String,
 }
 
 /// Which servers to show.
@@ -47,14 +50,19 @@ pub enum Access {
     Premium,
     /// Lets any name in.
     Cracked,
+    /// Partners only: our own servers and the ones hosted with Flash Hosting.
+    Partners,
 }
 
 impl Access {
     pub fn allows(self, s: &PublicServer) -> bool {
+        // Hosted partners have their own tab; the other lists leave them out.
+        let hosted = s.partner_tier == "hosted";
         match self {
-            Access::Any => true,
-            Access::Premium => s.cracked == Some(false),
-            Access::Cracked => s.cracked == Some(true),
+            Access::Any => !hosted,
+            Access::Premium => s.cracked == Some(false) && !hosted,
+            Access::Cracked => s.cracked == Some(true) && !hosted,
+            Access::Partners => !s.partner_tier.is_empty(),
         }
     }
 }

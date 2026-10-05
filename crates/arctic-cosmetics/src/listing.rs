@@ -79,6 +79,9 @@ pub struct Listing {
     pub code: String,
     /// Empty unless this server is a partner's (a sponsor or hosting partner).
     pub partner: String,
+    /// `exclusive` (our own servers, on top of every list), `hosted` (hosted with
+    /// Flash Hosting; their own tab) or empty.
+    pub partner_tier: String,
 }
 
 /// One entry of `servers.json`.
@@ -93,6 +96,9 @@ pub struct Seed {
     /// A sponsor or hosting partner's name; shown in its own section.
     #[serde(default)]
     pub partner: String,
+    /// `exclusive` or `hosted` (the default for a partner).
+    #[serde(default)]
+    pub partner_tier: String,
 }
 
 /// Live numbers from a ping.
@@ -118,7 +124,7 @@ impl From<rusqlite::Error> for SubmitError {
 }
 
 const COLUMNS: &str = "id, address, name, description, tags, state, cracked, online, players,
-     max_players, version, last_seen, owner, code, partner";
+     max_players, version, last_seen, owner, code, partner, partner_tier";
 
 fn row(r: &rusqlite::Row) -> rusqlite::Result<Listing> {
     let tags: String = r.get(4)?;
@@ -140,6 +146,7 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<Listing> {
         owner: r.get(12)?,
         code: r.get(13)?,
         partner: r.get(14)?,
+        partner_tier: r.get(15)?,
     })
 }
 
@@ -219,12 +226,32 @@ impl Store {
                 "ALTER TABLE listed_servers ADD COLUMN partner TEXT NOT NULL DEFAULT ''",
             )?;
         }
-        Ok(())
+        let has_tier = {
+            let mut stmt = conn.prepare("SELECT name FROM pragma_table_info('listed_servers')")?;
+            let names = stmt
+                .query_map([], |r| r.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            names.iter().any(|n| n == "partner_tier")
+        };
+        if !has_tier {
+            conn.execute_batch(
+                "ALTER TABLE listed_servers ADD COLUMN partner_tier TEXT NOT NULL DEFAULT ''",
+            )?;
+        }
+        // A partner with no tier is a hosted one.
+        conn.execute_batch(
+            "UPDATE listed_servers SET partner_tier = 'hosted' WHERE partner != '' AND partner_tier = ''",
+        )
     }
 
     /// Make a server a partner's (shown in the partners section), or an
     /// ordinary one again with an empty name. `Ok(false)`: no such server.
-    pub fn listing_set_partner(&self, id: &str, partner: &str) -> rusqlite::Result<bool> {
+    pub fn listing_set_partner(
+        &self,
+        id: &str,
+        partner: &str,
+        tier: &str,
+    ) -> rusqlite::Result<bool> {
         let name: String = partner
             .chars()
             .filter(|c| !c.is_control())
@@ -232,9 +259,14 @@ impl Store {
             .collect::<String>()
             .trim()
             .to_owned();
+        let tier = match (name.is_empty(), tier.trim()) {
+            (true, _) => "",
+            (false, "exclusive") => "exclusive",
+            (false, _) => "hosted",
+        };
         Ok(self.conn().execute(
-            "UPDATE listed_servers SET partner = ?1 WHERE id = ?2",
-            params![name, id],
+            "UPDATE listed_servers SET partner = ?1, partner_tier = ?2 WHERE id = ?3",
+            params![name, tier, id],
         )? > 0)
     }
 
@@ -249,11 +281,12 @@ impl Store {
             };
             let tags = serde_json::to_string(&clean_tags(&seed.tags)).unwrap_or_default();
             conn.execute(
-                "INSERT INTO listed_servers (id, address, name, description, tags, state, code, created, partner)
-                 VALUES (?1, ?2, ?3, ?4, ?5, 'curated', '', ?6, ?7)
+                "INSERT INTO listed_servers (id, address, name, description, tags, state, code, created, partner, partner_tier)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 'curated', '', ?6, ?7, ?8)
                  ON CONFLICT(address) DO UPDATE SET name = excluded.name,
                      description = excluded.description, tags = excluded.tags, state = 'curated',
-                     partner = CASE WHEN excluded.partner != '' THEN excluded.partner ELSE partner END",
+                     partner = CASE WHEN excluded.partner != '' THEN excluded.partner ELSE partner END,
+                     partner_tier = CASE WHEN excluded.partner_tier != '' THEN excluded.partner_tier ELSE partner_tier END",
                 params![
                     random_id(8),
                     address,
@@ -261,7 +294,12 @@ impl Store {
                     seed.description.chars().take(MAX_DESCRIPTION).collect::<String>(),
                     tags,
                     now as i64,
-                    seed.partner.chars().take(MAX_NAME).collect::<String>()
+                    seed.partner.chars().take(MAX_NAME).collect::<String>(),
+                    match (seed.partner.is_empty(), seed.partner_tier.as_str()) {
+                        (true, _) => "",
+                        (false, "exclusive") => "exclusive",
+                        (false, _) => "hosted",
+                    }
                 ],
             )?;
             count += 1;
@@ -429,6 +467,7 @@ mod tests {
             description: String::new(),
             tags: vec!["Minigames".into(), "bad tag!".into()],
             partner: String::new(),
+            partner_tier: String::new(),
         }
     }
 
@@ -439,7 +478,11 @@ mod tests {
         let id = store.listing_in_state(State::Curated).unwrap()[0]
             .id
             .clone();
-        assert!(store.listing_set_partner(&id, "  Flash Hosting ").unwrap());
+        assert!(
+            store
+                .listing_set_partner(&id, "  Flash Hosting ", "exclusive")
+                .unwrap()
+        );
         assert_eq!(
             store.listing_in_state(State::Curated).unwrap()[0].partner,
             "Flash Hosting"
@@ -450,12 +493,12 @@ mod tests {
             store.listing_in_state(State::Curated).unwrap()[0].partner,
             "Flash Hosting"
         );
-        assert!(store.listing_set_partner(&id, "").unwrap());
+        assert!(store.listing_set_partner(&id, "", "").unwrap());
         assert_eq!(
             store.listing_in_state(State::Curated).unwrap()[0].partner,
             ""
         );
-        assert!(!store.listing_set_partner("nope", "x").unwrap());
+        assert!(!store.listing_set_partner("nope", "x", "").unwrap());
     }
 
     #[test]
