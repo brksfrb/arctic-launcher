@@ -80,6 +80,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn versions_without_a_build_get_no_jar_and_lose_an_old_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let mods = dir.path().join("mods");
+        sync(&mods, "26.2", true).unwrap();
+        assert!(installed(&mods));
+        // The same folder played on 26.3 (no build): the 26.2 jar must go, or Fabric refuses to start.
+        sync(&mods, "26.3", true).unwrap();
+        assert!(!installed(&mods));
+        sync(&mods, "1.21.11", true).unwrap();
+        assert!(!installed(&mods));
+    }
+
+    #[test]
     fn added_for_a_covered_version_and_taken_out_when_off() {
         let dir = tempfile::tempdir().unwrap();
         let mods = dir.path().join("mods");
