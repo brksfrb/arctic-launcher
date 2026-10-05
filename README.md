@@ -94,7 +94,7 @@
   Your name, folders, sign-in details, e-mails and IP addresses are removed first.
 - **Live logs.** Minecraft's output appears inside the launcher, readable, searchable and
   filterable by warnings or errors.
-- **Proxy.** Send the launcher and the game through a SOCKS5 proxy.
+- **Proxy.** Send the launcher and the game through a SOCKS5 proxy. Server connections go through it with the Arctic Client (Vanilla and Fabric instances); other games only proxy Minecraft's login.
 - **Made to look at.** An animated arctic night with aurora, snowfall and shooting stars.
   Aurora, Dark and Light themes.
 - **Discord status.** Friends see what you're playing. Turn it off in Settings.
