@@ -1,3 +1,4 @@
+//#if MC >= 1.18
 package com.arcticlauncher.mod.startup;
 
 /**
@@ -46,3 +47,4 @@ public final class Timeline {
 		Preloader.record();
 	}
 }
+//#endif

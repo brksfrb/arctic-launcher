@@ -58,7 +58,16 @@ pub fn flags(game_dir: &Path, game_version: &str, java_major: u32) -> Vec<String
     let key = key(game_dir, game_version, java_major);
     let list = dir.join(LIST);
     if list.is_file() && fs::read_to_string(dir.join(KEY)).is_ok_and(|k| k.trim() == key) {
-        return vec![format!("-Darctic.preload={}", path_arg(list))];
+        // The client's jar is also a Java agent that makes class loading take turns (so loading
+        // ahead on another thread can't deadlock); without it the list isn't used.
+        let agent = game_dir.join("mods").join(crate::arctic_mod::FILE_NAME);
+        if !agent.is_file() {
+            return Vec::new();
+        }
+        return vec![
+            format!("-javaagent:{}", path_arg(agent)),
+            format!("-Darctic.preload={}", path_arg(list)),
+        ];
     }
     if fs::create_dir_all(&dir).is_err() {
         return Vec::new();
@@ -97,6 +106,7 @@ mod tests {
         let game = dir.path();
         fs::create_dir_all(game.join("mods")).unwrap();
         fs::write(game.join("mods/a.jar"), b"1").unwrap();
+        fs::write(game.join("mods").join(crate::arctic_mod::FILE_NAME), b"jar").unwrap();
         let first = flags(game, "26.2", 25);
         assert!(first.iter().any(|f| f.starts_with("-Xlog:class+load")));
         // The client wrote its list and the key it was told.
@@ -108,8 +118,9 @@ mod tests {
         fs::write(game.join(DIR).join(LIST), "a.B\n").unwrap();
         fs::write(game.join(DIR).join(KEY), &key).unwrap();
         let second = flags(game, "26.2", 25);
-        assert_eq!(second.len(), 1);
-        assert!(second[0].starts_with("-Darctic.preload="));
+        assert_eq!(second.len(), 2);
+        assert!(second[0].starts_with("-javaagent:"));
+        assert!(second[1].starts_with("-Darctic.preload="));
         // A mod added: record again.
         fs::write(game.join("mods/b.jar"), b"22").unwrap();
         let third = flags(game, "26.2", 25);

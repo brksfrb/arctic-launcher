@@ -1,3 +1,4 @@
+//#if MC >= 1.18
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.mod.startup.Timeline;
@@ -15,3 +16,4 @@ abstract class MinecraftReadyMixin {
 		Timeline.mark("minecraft-ready");
 	}
 }
+//#endif
