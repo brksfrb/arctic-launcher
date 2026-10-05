@@ -7,5 +7,6 @@ public final class EarlyStart implements PreLaunchEntrypoint {
 	@Override
 	public void onPreLaunch() {
 		Timeline.mark("preLaunch");
+		Preloader.start();
 	}
 }

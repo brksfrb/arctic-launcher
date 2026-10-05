@@ -36,6 +36,11 @@ public final class Timeline {
 			return;
 		}
 		mark("title");
+		//#if MC >= 26.1
+		if (System.getProperty("arctic.checkStates") != null) {
+			mark("states " + StateCaches.digest());
+		}
+		//#endif
 		done = true;
 		System.out.println("[Arctic startup] " + MARKS);
 	}

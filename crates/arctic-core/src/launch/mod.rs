@@ -320,10 +320,6 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 // Vanilla instances (on Fabric underneath) and Fabric/Quilt
                 // instances alike; in those, mods the player already has stay theirs.
                 progress(ProgressInfo::stage("Checking performance mods"));
-                // The cut-down Fabric API goes back to the whole one before the mods are looked after.
-                if let Err(e) = crate::mods::slim_api::undo(&game_dir.join("mods")) {
-                    log::warn!("couldn't restore Fabric API: {e}");
-                }
                 crate::mods::performance::sync(
                     &game_dir,
                     &vanilla.id,
