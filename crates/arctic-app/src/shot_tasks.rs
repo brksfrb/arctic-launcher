@@ -3,7 +3,6 @@
 
 use std::path::{Path, PathBuf};
 
-use eframe::egui;
 
 use crate::tasks::{Event, Tasks};
 
@@ -25,18 +24,36 @@ impl Tasks {
 
     pub fn screenshot_copy(&self, path: PathBuf) {
         self.run(move |t| {
-            let result = image::open(&path)
-                .map(|img| {
-                    let rgba = img.to_rgba8();
-                    egui::ColorImage::from_rgba_unmultiplied(
-                        [rgba.width() as usize, rgba.height() as usize],
-                        rgba.as_raw(),
-                    )
-                })
-                .map_err(|e| e.to_string());
+            let result = copy_image(&path);
             t.send(Event::ScreenshotCopied(result));
         });
     }
+}
+
+/// How often the clipboard is tried when another program has it open
+/// (clipboard managers and overlays do, for a moment).
+const CLIPBOARD_TRIES: u32 = 8;
+
+/// Put the picture on the clipboard, trying again while it's busy.
+fn copy_image(path: &Path) -> Result<(), String> {
+    let rgba = image::open(path).map_err(|e| e.to_string())?.to_rgba8();
+    let (width, height) = (rgba.width() as usize, rgba.height() as usize);
+    let mut last = String::new();
+    for attempt in 0..CLIPBOARD_TRIES {
+        if attempt > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(120));
+        }
+        let data = arboard::ImageData {
+            width,
+            height,
+            bytes: std::borrow::Cow::Borrowed(rgba.as_raw()),
+        };
+        match arboard::Clipboard::new().and_then(|mut c| c.set_image(data)) {
+            Ok(()) => return Ok(()),
+            Err(e) => last = e.to_string(),
+        }
+    }
+    Err(format!("the clipboard is busy ({last})"))
 }
 
 /// A small PNG of the screenshot, from the cache when it's still current.

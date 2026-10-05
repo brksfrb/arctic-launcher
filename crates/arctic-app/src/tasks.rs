@@ -134,7 +134,7 @@ pub enum Event {
     ServerVerified(Outcome<String>),
     Screenshots(Vec<arctic_core::screenshots::Shot>),
     ScreenshotThumb(PathBuf, Outcome<Vec<u8>>),
-    ScreenshotCopied(Outcome<egui::ColorImage>),
+    ScreenshotCopied(Outcome<()>),
     /// The game asked to add an account (show the sign-in).
     AddAccountFromGame,
     /// The game's skin picker: wear this library skin (`None`: the Minecraft skin).
