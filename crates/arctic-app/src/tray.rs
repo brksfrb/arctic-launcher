@@ -201,7 +201,9 @@ mod imp {
 
     /// The icon as the tray protocol wants it: ARGB, bytes in that order.
     fn argb(rgba: &[u8]) -> Vec<u8> {
-        rgba.chunks_exact(4)
+        rgba.as_chunks::<4>()
+            .0
+            .iter()
             .flat_map(|p| [p[3], p[0], p[1], p[2]])
             .collect()
     }
