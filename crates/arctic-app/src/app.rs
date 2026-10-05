@@ -218,6 +218,15 @@ impl ArcticApp {
         let voice = crate::voice::VoiceHub::new(dirs.clone(), data.settings.voice.clone());
         bridge.set_voice(voice.clone());
         tasks.load_manifest();
+        // A game that crashed or was killed leaves its unfinished replay recording
+        // behind: clear them (nothing the launcher started is running yet).
+        let sweep_dirs = dirs.clone();
+        std::thread::spawn(move || {
+            let freed = arctic_core::replays::clear_all_temp(&sweep_dirs);
+            if freed > 0 {
+                log::info!("cleared {freed} bytes of unfinished replay recordings");
+            }
+        });
         let update = if data.settings.check_updates_on_start {
             tasks.check_update(data.settings.update_channel);
             UpdateState::Checking
