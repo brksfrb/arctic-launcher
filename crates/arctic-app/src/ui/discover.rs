@@ -172,10 +172,20 @@ impl ArcticApp {
             .max_height(LIST_HEIGHT)
             .auto_shrink([false, true])
             .show(ui, |ui| {
-                for s in shown {
-                    let picked = self.discover.picked.as_ref() == Some(&s.id);
-                    self.public_row(ui, s, picked);
-                    ui.add_space(6.0);
+                // Partners (sponsors, hosting partners) sit in their own section above the rest.
+                let (partners, others): (Vec<&PublicServer>, Vec<&PublicServer>) =
+                    shown.into_iter().partition(|s| !s.partner.is_empty());
+                for (title, group) in [("Partners", partners), ("All servers", others)] {
+                    if group.is_empty() {
+                        continue;
+                    }
+                    ui.label(RichText::new(title).small().strong().color(p.muted));
+                    ui.add_space(4.0);
+                    for s in group {
+                        let picked = self.discover.picked.as_ref() == Some(&s.id);
+                        self.public_row(ui, s, picked);
+                        ui.add_space(6.0);
+                    }
                 }
             });
     }
@@ -215,6 +225,10 @@ impl ArcticApp {
                         ui.horizontal(|ui| {
                             ui.label(RichText::new(&s.name).strong().color(p.text));
                             ui.label(RichText::new(&s.address).small().color(p.muted));
+                            if !s.partner.is_empty() {
+                                ui.label(RichText::new(&s.partner).small().color(p.accent))
+                                    .on_hover_text("A partner of Arctic Launcher");
+                            }
                         });
                         let mut detail = Vec::new();
                         if !s.tags.is_empty() {

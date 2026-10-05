@@ -3,7 +3,6 @@
 
 use std::path::{Path, PathBuf};
 
-
 use crate::tasks::{Event, Tasks};
 
 const THUMB_W: u32 = 480;

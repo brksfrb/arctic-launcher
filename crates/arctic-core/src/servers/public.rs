@@ -33,6 +33,9 @@ pub struct PublicServer {
     pub max_players: u32,
     #[serde(default)]
     pub version: String,
+    /// A partner's name (a sponsor or hosting partner), empty for ordinary servers.
+    #[serde(default)]
+    pub partner: String,
 }
 
 /// Which servers to show.
