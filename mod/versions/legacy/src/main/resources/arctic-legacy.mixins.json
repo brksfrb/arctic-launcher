@@ -4,6 +4,7 @@
 	"compatibilityLevel": "JAVA_8",
 	"client": [
 		"MinecraftClientMixin",
+		"ClientBrandMixin",
 		"KeyBindingMixin",
 		"InGameHudMixin",
 		"ChatHudMixin",

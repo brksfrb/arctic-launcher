@@ -9,6 +9,7 @@
 		"CheckboxMixin",
 		"EditBoxMixin",<% } %>
 		"AbstractClientPlayerMixin",
+		"ClientBrandMixin",
 		"ConnectionProxyMixin",
 <% if (resolver) { %>		"ServerNameResolverMixin",
 <% } else { %>		"ConnectScreenLookupMixin",
