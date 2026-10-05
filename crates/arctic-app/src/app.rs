@@ -568,28 +568,10 @@ impl ArcticApp {
             return;
         }
         // Loading in the background already: just show it.
-        // (Joining a server works too: the Arctic Client in it does the joining.)
-        let join = match &quick_play {
-            None => Some(None),
-            Some(arctic_core::launch::QuickPlay::Server(address))
-                if instance.arctic_mod && arctic_core::arctic_mod::supports(&version.id) =>
-            {
-                Some(Some(address.clone()))
-            }
-            Some(_) => None,
-        };
         if !another_copy
-            && let Some(server) = join
+            && quick_play.is_none()
             && let Some(id) = self.standby_match(&instance, &version.id, &account)
         {
-            if let Some(address) = server
-                && let Err(e) = arctic_core::cosmetics::write_activation(
-                    &instance.game_dir(&self.dirs),
-                    &address,
-                )
-            {
-                log::warn!("couldn't ask the ready game to join {address}: {e}");
-            }
             self.activate_standby(id, &instance, &version, &account);
             return;
         }
