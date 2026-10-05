@@ -41,11 +41,18 @@ fn preview(style: ClientStyle) -> Preview {
             button: Color32::from_rgb(0x2A, 0x23, 0x50),
         },
         ClientStyle::Classic => Preview {
-            sky_top: Color32::from_rgb(0x2B, 0x2B, 0x2B),
-            sky_bottom: Color32::from_rgb(0x45, 0x45, 0x45),
-            ground: Color32::from_rgb(0x1C, 0x1C, 0x1C),
-            primary: Color32::from_rgb(0x70, 0x70, 0x70),
-            button: Color32::from_rgb(0x55, 0x55, 0x55),
+            sky_top: Color32::from_rgb(0x00, 0x00, 0x00),
+            sky_bottom: Color32::from_rgb(0x12, 0x12, 0x12),
+            ground: Color32::from_rgb(0x0A, 0x0A, 0x0A),
+            primary: Color32::from_rgb(0xE8, 0xE8, 0xE8),
+            button: Color32::from_rgb(0x2A, 0x2A, 0x2A),
+        },
+        ClientStyle::Vanilla => Preview {
+            sky_top: Color32::from_rgb(0x78, 0xA7, 0xFF),
+            sky_bottom: Color32::from_rgb(0xB8, 0xD4, 0xFF),
+            ground: Color32::from_rgb(0x5B, 0x8C, 0x3A),
+            primary: Color32::from_rgb(0xFF, 0xFF, 0xFF),
+            button: Color32::from_rgb(0x6F, 0x6F, 0x6F),
         },
     }
 }

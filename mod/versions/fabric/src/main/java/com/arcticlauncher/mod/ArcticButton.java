@@ -4,7 +4,7 @@ import com.arcticlauncher.client.ArcticClient;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 
-/** The "Arctic" button on the pause screen and the Classic title screen. */
+/** The "Arctic" button on the pause screen and the Vanilla title screen. */
 public final class ArcticButton {
 	private ArcticButton() {}
 

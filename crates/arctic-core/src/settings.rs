@@ -135,12 +135,14 @@ pub enum ClientStyle {
     Arctic,
     /// Violet sky with northern-light greens.
     Aurora,
-    /// Minecraft's own menus (the Arctic HUD still works).
+    /// Plain black and white, no colors.
     Classic,
+    /// Minecraft's own menus (the Arctic HUD still works).
+    Vanilla,
 }
 
 impl ClientStyle {
-    pub const ALL: [ClientStyle; 3] = [Self::Arctic, Self::Aurora, Self::Classic];
+    pub const ALL: [ClientStyle; 4] = [Self::Arctic, Self::Aurora, Self::Classic, Self::Vanilla];
 
     /// The id the Arctic mod knows the style by.
     pub fn id(self) -> &'static str {
@@ -148,6 +150,7 @@ impl ClientStyle {
             Self::Arctic => "arctic",
             Self::Aurora => "aurora",
             Self::Classic => "classic",
+            Self::Vanilla => "vanilla",
         }
     }
 
@@ -156,6 +159,7 @@ impl ClientStyle {
             Self::Arctic => "Arctic",
             Self::Aurora => "Aurora",
             Self::Classic => "Classic",
+            Self::Vanilla => "Vanilla",
         }
     }
 }
