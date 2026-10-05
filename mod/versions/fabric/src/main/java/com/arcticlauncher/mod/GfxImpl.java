@@ -214,6 +214,16 @@ public final class GfxImpl implements Gfx {
 	}
 
 	@Override
+	public void itemIcon(Object stack, int x, int y) {
+		net.minecraft.world.item.ItemStack item = (net.minecraft.world.item.ItemStack) stack;
+		//#if MC >= 26.1
+		g.item(item, x, y);
+		//#else
+		g.renderItem(item, x, y);
+		//#endif
+	}
+
+	@Override
 	public void player(int x0, int y0, int x1, int y1, int scale, int mouseX, int mouseY) {
 		net.minecraft.client.player.LocalPlayer player = net.minecraft.client.Minecraft.getInstance().player;
 		if (player == null) {

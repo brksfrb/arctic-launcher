@@ -14,6 +14,8 @@ import com.arcticlauncher.client.menu.Mod.Category;
 /** Every card on the Mods screen, for this version of the game. */
 final class ModCatalog {
 	private static final int[] OUTLINE_COLORS = {0xFFFFFFFF, 0xFF7DD3FC, 0xFF86EFAC, 0xFFFDE047, 0xFFF87171, 0xFFE879F9, 0xFF000000};
+	/** Unset, the pointer takes the menu's accent color. */
+	private static final int[] POINTER_COLORS = {0xFF7DD3FC, 0xFFFFFFFF, 0xFF86EFAC, 0xFFFDE047, 0xFFF87171, 0xFFE879F9};
 	private static final int[] HIT_COLORS = {0xFFFFFFFF, 0xFF7DD3FC, 0xFF86EFAC, 0xFFFDE047, 0xFFF97316, 0xFFE879F9};
 	private static final String[] ZOOM_FEEL = {"Slower", "Slow", "Normal", "Fast"};
 	private static final int[] ZOOM_FEEL_PERCENT = {50, 75, 100, 150};
@@ -42,6 +44,10 @@ final class ModCatalog {
 					// Where it was placed is kept while it's off.
 					.toggle(() -> slot.enabled, on -> slot.enabled = on)
 					.settings((host, f) -> {
+						if ("compass".equals(w.id)) {
+							f.section("Pointer");
+							f.swatches("Color", POINTER_COLORS, () -> c.compassPointer, v -> c.compassPointer = v);
+						}
 						if ("stopwatch".equals(w.id)) {
 							f.section("Key");
 							f.key("Stopwatch key", "Starts, stops and clears it", Form.key(() -> c.stopwatchKey, k -> c.stopwatchKey = k));
