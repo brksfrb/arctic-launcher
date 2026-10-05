@@ -19,8 +19,6 @@ use crate::tasks::{LaunchId, StartAt};
 
 /// How often the background game is looked after (seconds).
 const CHECK_EVERY: f64 = 2.0;
-/// How often a waiting background game's memory is trimmed (seconds).
-const TRIM_EVERY: f64 = 45.0;
 /// Older than this and it's replaced while the launcher is idle: its sign-in goes stale.
 const MAX_AGE: Duration = Duration::from_secs(6 * 60 * 60);
 /// A background game that dies this soon after starting counts as a failure.
@@ -60,17 +58,6 @@ impl ArcticApp {
         }
         self.standby_check_at = now;
         ctx.request_repaint_after(Duration::from_secs_f64(CHECK_EVERY));
-
-        // A background game that has finished loading just waits: let Windows keep its memory on
-        // disk (reclaimable) until Play, so keeping a game ready doesn't hold gigabytes of RAM.
-        if now - self.standby_trim_at > TRIM_EVERY
-            && let Some(run) = self.runs.standby()
-            && matches!(run.state, RunState::Running { .. })
-            && let Some(game) = run.game()
-        {
-            game.trim_memory();
-            self.standby_trim_at = now;
-        }
 
         let wanted = self.standby_target();
         let have = self.runs.standby().map(|r| {
