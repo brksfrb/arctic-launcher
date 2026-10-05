@@ -11,6 +11,7 @@ import com.arcticlauncher.mod.svc.SvcPayload;
 import net.minecraft.client.multiplayer.ClientCommonPacketListenerImpl;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
+import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -18,12 +19,18 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** The server's Simple Voice Chat secret goes to voice chat; its other messages are dropped quietly. */
+/**
+ * The server's Simple Voice Chat secret goes to voice chat; a server that lists {@code arctic:hello}
+ * gets Arctic's hello; its other messages are dropped quietly.
+ */
 @Mixin(ClientCommonPacketListenerImpl.class)
 abstract class CustomPayloadHandlerMixin {
 	@Shadow
 	@Final
 	protected Connection connection;
+
+	/** The connection Arctic already said hello on: once is enough. */
+	private static Connection arctic$greeted;
 
 	@Inject(method = "handleCustomPayload(Lnet/minecraft/network/protocol/common/ClientboundCustomPayloadPacket;)V",
 			at = @At("HEAD"), cancellable = true)
@@ -32,6 +39,11 @@ abstract class CustomPayloadHandlerMixin {
 			return;
 		}
 		ci.cancel();
+		// Only a server that lists arctic:hello among its channels hears from us.
+		if (connection != arctic$greeted && payload.channels().contains(SvcPayload.HELLO.toString())) {
+			arctic$greeted = connection;
+			connection.send(new ServerboundCustomPayloadPacket(SvcPayload.hello()));
+		}
 		VoiceLink voice = ArcticClient.voice();
 		if (voice == null || !SvcPayload.SECRET.equals(payload.type().id())) {
 			return;
