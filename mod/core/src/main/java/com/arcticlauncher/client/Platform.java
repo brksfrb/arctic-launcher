@@ -322,6 +322,11 @@ public interface Platform {
 		return -1;
 	}
 
+	/** Entities the world has loaded around you, or -1 outside a world. */
+	default int entityCount() {
+		return -1;
+	}
+
 	/** Other players in the world: {uuid, name, x, y, z}. */
 	List<Object[]> otherPlayers();
 

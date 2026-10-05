@@ -165,6 +165,25 @@ final class Widgets {
 				return format.format(new Date());
 			}
 		});
+		all.add(new TextWidget("entities", "Entities", "Entities the world has loaded around you", false) {
+			@Override
+			protected String value(boolean preview) {
+				int n = platform().entityCount();
+				return n < 0 ? (preview ? "312" : "--") : String.valueOf(n);
+			}
+		});
+		all.add(new TextWidget("worldtime", "World time", "The in-game clock (not your computer's)", false) {
+			@Override
+			protected String value(boolean preview) {
+				long ticks = platform().dayTime();
+				if (ticks < 0) {
+					return preview ? "13:30" : "--";
+				}
+				// Tick 0 is 6:00; 1000 ticks make an hour.
+				long t = ticks % 24000;
+				return String.format(Locale.ROOT, "%02d:%02d", (t / 1000 + 6) % 24, t % 1000 * 60 / 1000);
+			}
+		});
 		all.add(new TextWidget("stopwatch", "Stopwatch", "Set its key in Features: start, stop, clear", false) {
 			@Override
 			protected String value(boolean preview) {

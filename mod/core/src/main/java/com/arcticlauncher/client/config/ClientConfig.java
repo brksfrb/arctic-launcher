@@ -42,6 +42,8 @@ public final class ClientConfig {
 	public String zoomKey = "key.keyboard.c";
 	/** OptiFine-style smooth (cinematic) camera while zoomed. */
 	public boolean zoomSmoothCamera = true;
+	/** How fast the mouse turns while zoomed, in percent of the automatic amount (50, 75, 100, 150). */
+	public int zoomSensitivity = 100;
 	public String freelookKey = "key.keyboard.left.alt";
 	public String fullbrightKey = "key.keyboard.unknown";
 	/** Opens the emote wheel. */

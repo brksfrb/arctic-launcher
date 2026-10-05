@@ -707,6 +707,11 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public int entityCount() {
+		return mc().world == null ? -1 : mc().world.loadedEntities.size();
+	}
+
+	@Override
 	public Object connectionKey() {
 		return mc().getNetworkHandler();
 	}
