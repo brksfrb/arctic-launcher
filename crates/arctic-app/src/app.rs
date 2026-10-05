@@ -166,6 +166,8 @@ pub struct ArcticApp {
     pub(crate) minimized_for_game: bool,
     /// When the background game was last looked after (egui time).
     pub(crate) standby_check_at: f64,
+    /// When the waiting background game's memory was last trimmed (see `GameHandle::trim_memory`).
+    pub(crate) standby_trim_at: f64,
     /// Background games that died right after starting: after two, none are tried.
     pub(crate) standby_fails: u32,
     /// (start time, button center) of the Play-press snowflake burst.
@@ -306,6 +308,7 @@ impl ArcticApp {
             log_follow: true,
             minimized_for_game: false,
             standby_check_at: f64::NEG_INFINITY,
+            standby_trim_at: f64::NEG_INFINITY,
             standby_fails: 0,
             play_burst: None,
             login_attempts: 0,
