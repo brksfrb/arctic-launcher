@@ -219,7 +219,9 @@ public final class Features {
 		}
 		double fov = Math.toRadians(Math.max(1.0, Math.min(170.0, platform.fovDegrees())));
 		double zoomedFov = fov * (1.0 - (1.0 - factor) * zoom);
-		return Math.tan(zoomedFov / 2) / Math.tan(fov / 2);
+		double zoomedTurn = Math.tan(zoomedFov / 2) / Math.tan(fov / 2);
+		// The player's own setting, faded in with the zoom.
+		return zoomedTurn * (1.0 + (config.zoomSensitivity / 100.0 - 1.0) * zoom);
 	}
 
 	/** While zoomed, the smooth (cinematic) camera like OptiFine's zoom; the player's own setting comes back after. */

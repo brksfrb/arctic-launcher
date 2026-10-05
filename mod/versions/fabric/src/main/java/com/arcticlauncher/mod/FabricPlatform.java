@@ -875,6 +875,11 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public int entityCount() {
+		return mc().level == null ? -1 : mc().level.getEntityCount();
+	}
+
+	@Override
 	public Object connectionKey() {
 		return mc().getConnection();
 	}

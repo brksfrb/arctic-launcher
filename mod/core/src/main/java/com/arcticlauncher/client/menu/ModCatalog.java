@@ -15,6 +15,8 @@ import com.arcticlauncher.client.menu.Mod.Category;
 final class ModCatalog {
 	private static final int[] OUTLINE_COLORS = {0xFFFFFFFF, 0xFF7DD3FC, 0xFF86EFAC, 0xFFFDE047, 0xFFF87171, 0xFFE879F9, 0xFF000000};
 	private static final int[] HIT_COLORS = {0xFFFFFFFF, 0xFF7DD3FC, 0xFF86EFAC, 0xFFFDE047, 0xFFF97316, 0xFFE879F9};
+	private static final String[] ZOOM_FEEL = {"Slower", "Slow", "Normal", "Fast"};
+	private static final int[] ZOOM_FEEL_PERCENT = {50, 75, 100, 150};
 	private static final String[] TIMES = {"Day", "Noon", "Sunset", "Night", "Midnight"};
 	private static final int[] TIME_TICKS = {1000, 6000, 12500, 13500, 18000};
 	private static final String[] WIDTHS = {"Thin", "Normal", "Thick"};
@@ -61,6 +63,8 @@ final class ModCatalog {
 					f.section("Feel");
 					f.toggle("Smooth camera while zoomed", "Like OptiFine's zoom: the view glides instead of snapping",
 							() -> c.zoomSmoothCamera, on -> c.zoomSmoothCamera = on);
+					f.choice("Zoom sensitivity", ZOOM_FEEL, () -> indexOf(ZOOM_FEEL_PERCENT, c.zoomSensitivity),
+							i -> c.zoomSensitivity = ZOOM_FEEL_PERCENT[i]);
 				}));
 		out.add(new Mod("freelook", "Freelook", "Hold a key to look around without turning", "freelook", Category.GAMEPLAY, "perspective 360")
 				.toggle(() -> c.freelookEnabled, on -> c.freelookEnabled = on)

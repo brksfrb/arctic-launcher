@@ -1,6 +1,6 @@
 """Check the Arctic Client for every target in targets.json without starting the game.
 
-Usage (from anywhere, JDK 25 on JAVA_HOME):  python mod/check.py [version ...]
+Usage (from anywhere, JDK 25 on JAVA_HOME):  python mod/check.py [version ...] [--offline]
 
 For each target: compile it (with its preprocessed sources and expanded
 mixin config) and, on the Fabric adapter, check every mixin hook against that
@@ -14,6 +14,8 @@ import sys
 from pathlib import Path
 
 MOD = Path(__file__).resolve().parent
+# Extra Gradle flags ("--offline", when a Maven is refusing Gradle).
+OFFLINE = []
 GRADLEW = MOD / ("gradlew.bat" if sys.platform == "win32" else "gradlew")
 MIXCHECK = MOD / "versions" / "fabric" / "mixcheck.py"
 
@@ -24,7 +26,7 @@ def check(target):
     covers = ",".join(target["covers"])
     print(f"== {version} ({project})", flush=True)
     compiled = subprocess.run(
-        [str(GRADLEW), "-p", f"versions/{project}", "compileJava", "processResources", "-q",
+        [str(GRADLEW), *OFFLINE, "-p", f"versions/{project}", "compileJava", "processResources", "-q",
          f"-Pminecraft_version={version}", f"-Pcovers={covers}"],
         cwd=MOD,
     )
@@ -37,7 +39,9 @@ def check(target):
 
 def main():
     targets = json.loads((MOD / "targets.json").read_text(encoding="utf-8"))
-    wanted = set(sys.argv[1:])
+    if "--offline" in sys.argv:
+        OFFLINE.append("--offline")
+    wanted = {a for a in sys.argv[1:] if a != "--offline"}
     unknown = wanted - {t["build"] for t in targets}
     if unknown:
         sys.exit(f"not in targets.json: {', '.join(sorted(unknown))}")
