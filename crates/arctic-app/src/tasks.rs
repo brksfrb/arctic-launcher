@@ -114,6 +114,8 @@ pub enum Event {
     ServerList(u64, Outcome<Vec<arctic_core::servers::Server>>),
     /// (request id, address, status)
     ServerStatus(u64, String, Outcome<arctic_core::servers::Status>),
+    /// The address typed into "Direct join" answered (or not).
+    DirectPing(String, Outcome<arctic_core::servers::Status>),
     /// Profile and friends (refresh).
     Friends(Outcome<crate::friend_tasks::FriendsView>),
     /// A friends action finished (what to say, or empty).

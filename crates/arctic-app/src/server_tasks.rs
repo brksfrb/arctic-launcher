@@ -29,6 +29,17 @@ impl Tasks {
 }
 
 impl Tasks {
+    /// Ping one typed-in address for the "Direct join" box.
+    pub fn direct_ping(&self, address: String) {
+        self.run(move |t| {
+            let proxy = ProxySettings::load(t.dirs());
+            let status = servers::ping(&address, proxy.active()).map_err(|e| e.to_string());
+            t.send(Event::DirectPing(address, status));
+        });
+    }
+}
+
+impl Tasks {
     /// The public server list (shuffled by the Arctic server).
     pub fn public_servers(&self) {
         self.run(|t| {

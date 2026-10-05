@@ -735,6 +735,7 @@ impl ArcticApp {
                 self.on_pack_installed(instance, project, result)
             }
             Event::ServerList(request, list) => self.on_server_list(ctx, request, list),
+            Event::DirectPing(address, status) => self.on_direct_ping(address, status),
             Event::ServerStatus(request, address, status) => {
                 self.on_server_status(ctx, request, address, status)
             }
