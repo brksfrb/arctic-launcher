@@ -36,6 +36,18 @@ public final class Recorder {
 	private static final int BUFFER = 1 << 18;
 	/** Queued but unwritten data past this is dropped (the disk can't keep up). */
 	private static final long MAX_PENDING_BYTES = 256L << 20;
+	/**
+	 * A session stops being recorded once its packets reach this much: a long
+	 * stay at a crowded server would otherwise fill the whole drive (an hour
+	 * with a thousand players around is tens of gigabytes).
+	 */
+	static final long MAX_RECORDING_BYTES = 1L << 30;
+	/** ...and the self-track (one small sample per tick) at this much. */
+	private static final long MAX_SELF_BYTES = 64L << 20;
+	/** Recording also stops when the drive has less than this left. */
+	static final long MIN_FREE_BYTES = 10L << 30;
+	/** How much is written between looks at the drive's free space. */
+	private static final long FREE_CHECK_EVERY = 64L << 20;
 	private static final Gson GSON = new Gson();
 
 	private final File tempDir;
@@ -43,6 +55,8 @@ public final class Recorder {
 	private final java.util.function.BooleanSupplier enabled;
 	private final java.util.function.IntSupplier clipSeconds;
 	private final Consumer<String> log;
+	private final long maxBytes;
+	private final long minFreeBytes;
 	private final LinkedBlockingQueue<Runnable> tasks = new LinkedBlockingQueue<Runnable>();
 	private volatile Take current;
 
@@ -51,6 +65,14 @@ public final class Recorder {
 	 * {@code clipSeconds} how far back a moment reaches, {@code log} for problems.
 	 */
 	public Recorder(File gameDir, java.util.function.BooleanSupplier enabled, java.util.function.IntSupplier clipSeconds, Consumer<String> log) {
+		this(gameDir, enabled, clipSeconds, log, MAX_RECORDING_BYTES, MIN_FREE_BYTES);
+	}
+
+	/** With other limits (for tests): packets per session, and free space the drive must keep. */
+	Recorder(File gameDir, java.util.function.BooleanSupplier enabled, java.util.function.IntSupplier clipSeconds, Consumer<String> log,
+			long maxBytes, long minFreeBytes) {
+		this.maxBytes = maxBytes;
+		this.minFreeBytes = minFreeBytes;
 		this.tempDir = new File(gameDir, ".arctic/replay-temp");
 		this.savedDir = new File(gameDir, "replay_recordings");
 		this.enabled = enabled;
@@ -160,6 +182,9 @@ public final class Recorder {
 		private long packetBytes;
 		private long selfBytes;
 		private boolean broken;
+		/** Recording stopped on purpose (size limit or a nearly full drive); what's recorded is kept as is. */
+		private boolean full;
+		private long checkedFreeAt;
 		// Any thread:
 		private final java.util.concurrent.atomic.AtomicLong pending = new java.util.concurrent.atomic.AtomicLong();
 		private volatile boolean ended;
@@ -236,7 +261,7 @@ public final class Recorder {
 			pending.addAndGet(data.length);
 			tasks.add(() -> {
 				pending.addAndGet(-data.length);
-				if (packets == null || broken) {
+				if (packets == null || broken || full) {
 					return;
 				}
 				try {
@@ -244,6 +269,7 @@ public final class Recorder {
 					packets.writeInt(data.length);
 					packets.write(data);
 					packetBytes += 8 + data.length;
+					checkLimits();
 				} catch (IOException e) {
 					broken = true;
 				}
@@ -257,7 +283,7 @@ public final class Recorder {
 			}
 			s.time = time();
 			tasks.add(() -> {
-				if (self == null || broken) {
+				if (self == null || broken || full) {
 					return;
 				}
 				try {
@@ -267,6 +293,31 @@ public final class Recorder {
 					broken = true;
 				}
 			});
+		}
+
+		/** Writer thread: stop recording at the size limit, or when the drive is nearly full. */
+		private void checkLimits() {
+			String why = null;
+			if (packetBytes >= maxBytes || selfBytes >= MAX_SELF_BYTES) {
+				why = "the size limit was reached";
+			} else if (packetBytes - checkedFreeAt >= FREE_CHECK_EVERY || checkedFreeAt == 0) {
+				checkedFreeAt = Math.max(1, packetBytes);
+				if (tempDir.getUsableSpace() < minFreeBytes) {
+					why = "the drive is nearly full";
+				}
+			}
+			if (why != null) {
+				full = true;
+				try {
+					packets.flush();
+					self.flush();
+				} catch (IOException e) {
+					broken = true;
+				}
+				log.accept("replay: recording stopped, " + why);
+				com.arcticlauncher.client.notice.Notices.post("Replay recording stopped",
+						"Your drive is protected: " + why + ". What was recorded can still be saved.");
+			}
 		}
 
 		/** Keep this session; mark a moment at {@code at}. */

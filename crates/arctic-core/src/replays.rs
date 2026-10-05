@@ -57,6 +57,48 @@ struct Extras {
     moments: Vec<i64>,
 }
 
+/// Where the game writes the session it is recording (deleted when the session
+/// ends; only a crash or a kill leaves it behind).
+const TEMP: &str = ".arctic/replay-temp";
+
+/// Empty the unfinished recordings in `game_dir`'s temp folder; the bytes freed.
+/// Only call it when no game is running in that folder.
+pub fn clear_temp(game_dir: &Path) -> u64 {
+    let Ok(entries) = fs::read_dir(game_dir.join(TEMP)) else {
+        return 0;
+    };
+    let mut freed = 0;
+    for entry in entries.flatten() {
+        let size = entry.metadata().map_or(0, |m| m.len());
+        if fs::remove_file(entry.path()).is_ok() {
+            freed += size;
+        }
+    }
+    freed
+}
+
+/// Every game folder of every profile's instances (for sweeps).
+fn all_game_dirs(dirs: &crate::storage::DataDirs) -> Vec<PathBuf> {
+    let mut roots = vec![dirs.instances()];
+    if let Ok(profiles) = fs::read_dir(dirs.profiles_dir()) {
+        roots.extend(profiles.flatten().map(|p| p.path().join("instances")));
+    }
+    roots.sort();
+    roots.dedup();
+    roots
+        .iter()
+        .filter_map(|root| fs::read_dir(root).ok())
+        .flat_map(|entries| entries.flatten())
+        .map(|instance| instance.path().join("minecraft"))
+        .collect()
+}
+
+/// At launcher start nothing the launcher started is running: clear every
+/// instance's leftover recordings. Returns the bytes freed.
+pub fn clear_all_temp(dirs: &crate::storage::DataDirs) -> u64 {
+    all_game_dirs(dirs).iter().map(|dir| clear_temp(dir)).sum()
+}
+
 /// The replays in `game_dir`, newest first (unreadable files are skipped).
 pub fn list(game_dir: &Path) -> Vec<Replay> {
     let dir = game_dir.join(FOLDER);
@@ -139,6 +181,38 @@ pub fn trash(replay: &Replay) -> Result<()> {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn leftover_recordings_are_cleared() {
+        let dir = tempfile::tempdir().unwrap();
+        let temp = dir.path().join(TEMP);
+        fs::create_dir_all(&temp).unwrap();
+        fs::write(temp.join("a.tmcpr"), vec![0u8; 1000]).unwrap();
+        fs::write(temp.join("a.self"), vec![0u8; 24]).unwrap();
+        // Saved replays are not touched.
+        let saved = dir.path().join(FOLDER);
+        fs::create_dir_all(&saved).unwrap();
+        fs::write(saved.join("keep.mcpr"), b"x").unwrap();
+        assert_eq!(clear_temp(dir.path()), 1024);
+        assert_eq!(fs::read_dir(&temp).unwrap().count(), 0);
+        assert!(saved.join("keep.mcpr").exists());
+        assert_eq!(clear_temp(&dir.path().join("nothing")), 0);
+    }
+
+    #[test]
+    fn every_profiles_instances_are_swept() {
+        let root = tempfile::tempdir().unwrap();
+        let dirs = crate::storage::DataDirs::new(root.path());
+        for game in [
+            root.path().join("instances/a/minecraft"),
+            root.path().join("profiles/p/instances/b/minecraft"),
+        ] {
+            let temp = game.join(TEMP);
+            fs::create_dir_all(&temp).unwrap();
+            fs::write(temp.join("x.tmcpr"), vec![0u8; 500]).unwrap();
+        }
+        assert_eq!(clear_all_temp(&dirs), 1000);
+    }
 
     fn write_replay(dir: &Path, name: &str, meta: &str, extras: Option<&str>) -> PathBuf {
         let path = dir.join(name);

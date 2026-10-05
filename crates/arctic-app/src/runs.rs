@@ -314,6 +314,23 @@ impl ArcticApp {
                         log::warn!("sharing between instances: {e}");
                     }
                 });
+                // The game threw its unfinished recording away itself unless it crashed or
+                // was killed; either way nothing is writing it now (unless another copy of
+                // the instance still runs in the same folder).
+                let game_dir = run.game_dir.clone();
+                if !self
+                    .runs
+                    .list
+                    .iter()
+                    .any(|other| other.id != id && other.is_active() && other.game_dir == game_dir)
+                {
+                    std::thread::spawn(move || {
+                        arctic_core::replays::clear_temp(&game_dir);
+                    });
+                }
+                let Some(run) = self.runs.get_mut(id) else {
+                    return;
+                };
                 let watchdog = run.shutdown_watchdog_fired();
                 let title = run.title.clone();
                 let diagnosis = matches!(code, Some(c) if c != 0 && !watchdog)

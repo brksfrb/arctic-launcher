@@ -43,6 +43,58 @@ class RecorderTest {
 	}
 
 	@Test
+	void aSessionStopsBeingRecordedAtTheSizeLimitButStaysSavable() throws Exception {
+		// 1 KB of packets at most; plenty of free space is required of nobody here.
+		Recorder r = new Recorder(dir.toFile(), () -> true, () -> 20, message -> {}, 1024, 0);
+		Recorder.Take take = r.begin("busy.example.net", false, 775, "26.3");
+		for (int i = 0; i < 200; i++) {
+			take.packet(new byte[100]);
+		}
+		await(r);
+		File temp = new File(r.tempDir(), "x");
+		long written = 0;
+		for (File f : r.tempDir().listFiles()) {
+			if (f.getName().endsWith(".tmcpr")) {
+				written = f.length();
+			}
+		}
+		// Far fewer than the 200 * 108 bytes offered, and not a byte past the limit plus one packet.
+		assertTrue(written > 0 && written <= 1024 + 108, "wrote " + written);
+		assertFalse(temp.exists());
+		AtomicReference<File> saved = new AtomicReference<File>();
+		CountDownLatch done = new CountDownLatch(1);
+		r.saveMoment(f -> {
+			saved.set(f);
+			done.countDown();
+		});
+		assertTrue(done.await(10, TimeUnit.SECONDS));
+		assertNotNull(saved.get());
+		assertTrue(saved.get().isFile());
+		take.end();
+		await(r);
+	}
+
+	@Test
+	void aNearlyFullDriveStopsRecordingToo() throws Exception {
+		// Asking for more free space than any drive has.
+		Recorder r = new Recorder(dir.toFile(), () -> true, () -> 20, message -> {}, 1L << 40, Long.MAX_VALUE);
+		Recorder.Take take = r.begin("busy.example.net", false, 775, "26.3");
+		for (int i = 0; i < 50; i++) {
+			take.packet(new byte[100]);
+		}
+		await(r);
+		long written = 0;
+		for (File f : r.tempDir().listFiles()) {
+			if (f.getName().endsWith(".tmcpr")) {
+				written = f.length();
+			}
+		}
+		assertTrue(written <= 108, "wrote " + written);
+		take.end();
+		await(r);
+	}
+
+	@Test
 	void aKeptSessionReadsBackWithItsPacketsSamplesAndMoments() throws Exception {
 		Recorder r = recorder(true);
 		Recorder.Take take = r.begin("play.example.net", false, 775, "26.3");
