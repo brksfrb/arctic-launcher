@@ -31,12 +31,23 @@ public final class Timeline {
 		MARKS.append(stage).append(' ').append(System.currentTimeMillis() - STARTED).append(" ms");
 	}
 
-	/** The title screen is up: print the stages. */
+	private static boolean titled;
+
+	/** The title screen was opened (the loading screen may still be over it). */
 	public static synchronized void title() {
+		if (titled) {
+			return;
+		}
+		titled = true;
+		mark("title");
+	}
+
+	/** The loading screen is gone: the game is ready. Print the stages. */
+	public static synchronized void ready() {
 		if (done) {
 			return;
 		}
-		mark("title");
+		mark("ready");
 		//#if MC >= 26.1
 		if (System.getProperty("arctic.checkStates") != null) {
 			mark("states " + StateCaches.digest());

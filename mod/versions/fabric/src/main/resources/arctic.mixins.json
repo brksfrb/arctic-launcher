@@ -32,7 +32,8 @@
 		"FirstScreenMixin",
 		"BootstrapMarkMixin",
 		"WindowMarkMixin",
-		"CrashReportPreloadMixin",<% } %><% if (fastStart) { %>
+		"CrashReportPreloadMixin",
+		"OverlayDoneMixin",<% } %><% if (fastStart) { %>
 		"BlocksInitMixin",
 		"FerriteCoreLockMixin",<% } %>
 		"EntityTurnMixin"<% if (features) { %>,
