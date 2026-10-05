@@ -19,6 +19,8 @@ const ICON: f32 = 40.0;
 const REFRESH_EVERY: f64 = 120.0;
 /// Names listed inline before "+N more".
 const INLINE_NAMES: usize = 4;
+/// How long typing in "Direct join" must pause before the address is pinged (seconds).
+const DIRECT_PAUSE: f64 = 0.7;
 const GOOD_PING_MS: u32 = 100;
 const OKAY_PING_MS: u32 = 250;
 
@@ -32,6 +34,13 @@ enum Ping {
 pub struct ServersUi {
     /// The address typed into "Direct join".
     direct: String,
+    /// The address last pinged for it, and what came back (`None` while waiting).
+    direct_asked: String,
+    direct_status: Option<Outcome<Status>>,
+    /// When the box's text last changed (egui time): pinged once typing pauses.
+    direct_changed: f64,
+    /// The text `direct_changed` was set for.
+    direct_asked_for: String,
     request: u64,
     /// Instance the list is for.
     instance: Option<String>,
@@ -162,6 +171,22 @@ impl ArcticApp {
         let p = self.palette();
         let typed = self.servers.direct.trim().to_owned();
         let valid = arctic_core::servers::Address::parse(&typed).is_some();
+        let now = ui.input(|i| i.time);
+        if typed != self.servers.direct_asked {
+            if self.servers.direct_changed == 0.0 || self.servers.direct_asked_for != typed {
+                self.servers.direct_changed = now;
+                self.servers.direct_asked_for = typed.clone();
+            }
+            // Ask once typing pauses, so half-typed names aren't looked up.
+            if valid && now - self.servers.direct_changed >= DIRECT_PAUSE {
+                self.servers.direct_asked = typed.clone();
+                self.servers.direct_status = None;
+                self.tasks.direct_ping(typed.clone());
+            } else {
+                ui.ctx()
+                    .request_repaint_after(std::time::Duration::from_secs_f64(DIRECT_PAUSE));
+            }
+        }
         let (mut join, mut add) = (false, false);
         ui.horizontal(|ui| {
             let field = ui.add(
@@ -176,6 +201,36 @@ impl ArcticApp {
                 ui.label(RichText::new("Not a server address").small().color(p.muted));
             }
         });
+        if valid && typed == self.servers.direct_asked {
+            match &self.servers.direct_status {
+                None => {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(RichText::new("Pinging…").small().color(p.muted));
+                    });
+                }
+                Some(Ok(status)) => {
+                    let text = format!(
+                        "{} / {} online · {} ms · {}",
+                        status.online, status.max, status.ping_ms, status.version
+                    );
+                    ui.label(RichText::new(text).small().color(p.text));
+                    if !status.motd.is_empty() {
+                        ui.add(
+                            egui::Label::new(RichText::new(&status.motd).small().color(p.muted))
+                                .truncate(),
+                        );
+                    }
+                }
+                Some(Err(e)) => {
+                    ui.label(
+                        RichText::new(format!("No answer: {e}"))
+                            .small()
+                            .color(p.muted),
+                    );
+                }
+            }
+        }
         if !valid {
             return;
         }
@@ -201,6 +256,13 @@ impl ArcticApp {
         }
         if join {
             self.launch_into(QuickPlay::Server(typed));
+        }
+    }
+
+    /// The typed address answered: show it if it's still what's typed.
+    pub(crate) fn on_direct_ping(&mut self, address: String, status: Outcome<Status>) {
+        if address == self.servers.direct_asked {
+            self.servers.direct_status = Some(status);
         }
     }
 
