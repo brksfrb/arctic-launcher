@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Arctic moderation</title>
+<style>
+  :root {
+    --bg: #0b1220; --panel: #121c2f; --line: #223049; --text: #e6eefc; --muted: #8a9bb8;
+    --accent: #38bdf8; --good: #34d399; --bad: #f87171; --warn: #fbbf24;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f1f5fb; --panel: #ffffff; --line: #d5deec; --text: #0f1b30; --muted: #5b6b86;
+            --accent: #0284c7; --good: #059669; --bad: #dc2626; --warn: #b45309; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+           border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
+  header h1 { font-size: 16px; margin: 0; flex: 1; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  button { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line);
+           border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent); border-color: var(--accent); color: #04121f; font-weight: 600; }
+  button.good { border-color: var(--good); color: var(--good); }
+  button.bad { border-color: var(--bad); color: var(--bad); }
+  input { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+          border-radius: 8px; padding: 8px 10px; width: 100%; }
+  .login { max-width: 380px; margin: 12vh auto; padding: 20px; background: var(--panel);
+           border: 1px solid var(--line); border-radius: 12px; display: grid; gap: 10px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px;
+          display: grid; gap: 8px; align-content: start; }
+  .card img { width: 100%; max-height: 220px; object-fit: contain; image-rendering: pixelated;
+              background: repeating-conic-gradient(#8883 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+              border-radius: 8px; }
+  .card h3 { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+  .muted { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row button { flex: 1; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 12px; overflow: hidden; }
+  td, th { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top;
+           overflow-wrap: anywhere; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line);
+           font-size: 12px; color: var(--muted); }
+  .empty { padding: 40px 0; text-align: center; color: var(--muted); }
+  #msg { color: var(--bad); min-height: 1.3em; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+"use strict";
+// Everything from the server is put on the page as text, never as HTML.
+const app = document.getElementById("app");
+const KEY = "arctic-admin-key";
+let key = sessionStorage.getItem(KEY) || "";
+let me = null;
+let tab = "gallery";
+let queue = "pending";
+
+function el(tag, props, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else e[k] = v;
+  }
+  for (const kid of kids) e.append(kid);
+  return e;
+}
+
+async function api(path, options) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { "X-Admin-Key": key, "Content-Type": "application/json" },
+    cache: "no-store",
+    credentials: "omit",
+  });
+  if (res.status === 403) { key = ""; sessionStorage.removeItem(KEY); me = null; throw new Error("auth"); }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || "request failed (" + res.status + ")");
+  return body;
+}
+
+function login(message) {
+  const input = el("input", { type: "password", placeholder: "Your moderator key", autocomplete: "off" });
+  const msg = el("div", { id: "msg" }, message || "");
+  const go = async () => {
+    key = input.value.trim();
+    try { me = await api("/v1/admin/me"); sessionStorage.setItem(KEY, key); render(); }
+    catch (e) { login(e.message === "auth" ? "That key isn't valid." : e.message); }
+  };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+  app.replaceChildren(el("div", { class: "login" },
+    el("h1", {}, "Arctic moderation"),
+    el("div", { class: "muted" }, "Enter your moderator key. It is kept only until you close this tab."),
+    input, el("button", { class: "on", onclick: go }, "Sign in"), msg));
+  input.focus();
+}
+
+function when(t) { return new Date(t * 1000).toLocaleString(); }
+
+async function render() {
+  if (!me) { try { me = await api("/v1/admin/me"); } catch (_) { return login(); } }
+  const tabs = [["gallery", "Gallery" + (me.pending ? " (" + me.pending + ")" : "")], ["servers", "Servers"], ["log", "History"]];
+  const nav = el("nav", {}, ...tabs.map(([id, label]) =>
+    el("button", { class: tab === id ? "on" : "", onclick: () => { tab = id; render(); } }, label)));
+  const out = el("div", {}, "Loading…");
+  app.replaceChildren(
+    el("header", {}, el("h1", {}, "Arctic moderation"), el("span", { class: "muted" }, "Signed in as " + me.name),
+      el("button", { onclick: () => { key = ""; me = null; sessionStorage.removeItem(KEY); login(); } }, "Sign out")),
+    el("main", {}, nav, out));
+  try {
+    if (tab === "gallery") await gallery(out);
+    else if (tab === "servers") await servers(out);
+    else await history(out);
+  } catch (e) { if (e.message !== "auth") out.replaceChildren(el("div", { id: "msg" }, e.message)); else login("Signed out."); }
+}
+
+async function gallery(out) {
+  const queues = [["pending", "Waiting"], ["reported", "Reported"], ["hidden", "Hidden"], ["approved", "Live"], ["rejected", "Rejected"]];
+  const bar = el("nav", {}, ...queues.map(([id, label]) =>
+    el("button", { class: queue === id ? "on" : "", onclick: () => { queue = id; render(); } }, label)));
+  const data = await api("/v1/admin/gallery?queue=" + encodeURIComponent(queue));
+  const actionsFor = { pending: ["approve", "reject"], reported: ["restore", "remove"], hidden: ["restore", "remove"],
+                       approved: ["remove"], rejected: ["approve", "remove"] }[queue];
+  const cards = data.items.map((it) => {
+    const decide = async (action) => {
+      if (action === "remove" && !confirm("Delete \"" + it.name + "\" for good?")) return;
+      try { await api("/v1/admin/gallery/" + encodeURIComponent(it.id), { method: "POST", body: JSON.stringify({ action }) }); me = null; render(); }
+      catch (e) { alert(e.message); }
+    };
+    return el("div", { class: "card" },
+      el("img", { src: "/v1/textures/" + it.texture + ".png", alt: "", loading: "lazy" }),
+      el("h3", {}, it.name),
+      el("div", { class: "muted" }, "by " + it.author + " · " + it.model + " · " + when(it.created)),
+      el("div", { class: "muted" }, it.reports + " reports · " + it.downloads + " uses" + (it.hidden ? " · hidden" : "")),
+      el("div", { class: "row" }, ...actionsFor.map((a) =>
+        el("button", { class: a === "approve" || a === "restore" ? "good" : "bad", onclick: () => decide(a) },
+          a[0].toUpperCase() + a.slice(1)))));
+  });
+  out.replaceChildren(bar, cards.length ? el("div", { class: "grid" }, ...cards) : el("div", { class: "empty" }, "Nothing here."));
+}
+
+async function servers(out) {
+  const states = ["pending", "unverified", "listed", "rejected"];
+  const sel = el("nav", {}, ...states.map((s) =>
+    el("button", { class: (servers.state || "pending") === s ? "on" : "", onclick: () => { servers.state = s; render(); } }, s)));
+  const data = await api("/v1/admin/servers?state=" + (servers.state || "pending"));
+  const rows = data.servers.map((s) => {
+    const decide = async (action) => {
+      try { await api("/v1/admin/servers/" + encodeURIComponent(s.id), { method: "POST", body: JSON.stringify({ action }) }); render(); }
+      catch (e) { alert(e.message); }
+    };
+    return el("tr", {},
+      el("td", {}, el("strong", {}, s.name), el("div", { class: "muted" }, s.address)),
+      el("td", {}, s.description || ""),
+      el("td", {}, el("span", { class: "badge" }, s.online ? s.players + "/" + s.max_players + " online" : "offline")),
+      el("td", {}, el("div", { class: "row" },
+        el("button", { class: "good", onclick: () => decide("approve") }, "Approve"),
+        el("button", { class: "bad", onclick: () => decide("reject") }, "Reject"),
+        el("button", { class: "bad", onclick: () => confirm("Remove " + s.name + "?") && decide("remove") }, "Remove"))));
+  });
+  out.replaceChildren(sel, rows.length
+    ? el("table", {}, el("tbody", {}, ...rows)) : el("div", { class: "empty" }, "Nothing here."));
+}
+
+async function history(out) {
+  const data = await api("/v1/admin/log");
+  const rows = data.entries.map((e) => el("tr", {},
+    el("td", {}, when(e.at)), el("td", {}, e.moderator), el("td", {}, el("span", { class: "badge" }, e.action)), el("td", {}, e.detail)));
+  out.replaceChildren(rows.length
+    ? el("table", {}, el("tbody", {}, ...rows)) : el("div", { class: "empty" }, "No decisions yet."));
+}
+
+if (key) render(); else login();
+</script>
+</body>
+</html>

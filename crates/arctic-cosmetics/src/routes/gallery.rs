@@ -7,7 +7,7 @@ use axum::{Json, Router, routing};
 use serde::Deserialize;
 use serde_json::json;
 
-use super::{Shared, db_error, error, known_texture, now, player, store_upload};
+use super::{Shared, db_error, error, known_texture, moderator, now, player, store_upload};
 use crate::gallery::{self, PublishError, Sort};
 use crate::images::Kind;
 
@@ -89,7 +89,7 @@ async fn publish(
         .gallery_publish(&id, &texture, model, &name, &uuid, &author, now())
     {
         Ok(()) => Json(
-            json!({ "id": id, "name": name, "texture": texture, "model": model, "author": author }),
+            json!({ "id": id, "name": name, "texture": texture, "model": model, "author": author, "pending": true }),
         )
         .into_response(),
         Err(PublishError::Duplicate) => {
@@ -130,27 +130,22 @@ async fn report(
     }
 }
 
-/// Authors remove their own items; `X-Admin-Key` removes anything.
+/// Authors remove their own items; a moderator (`X-Admin-Key`) removes anything.
 async fn remove(
     State(state): State<Shared>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Response {
-    let admin = state.admin_key.as_deref().is_some_and(|key| {
-        headers
-            .get("x-admin-key")
-            .and_then(|v| v.to_str().ok())
-            .is_some_and(|given| given == key)
-    });
-    let author = if admin {
-        None
+    let result = if let Some(name) = moderator(&state, &headers) {
+        state
+            .store
+            .gallery_moderate(&id, gallery::Action::Remove, &name, now())
+    } else if let Some(uuid) = player(&state, &headers) {
+        state.store.gallery_delete(&id, Some(&uuid))
     } else {
-        player(&state, &headers)
-    };
-    if !admin && author.is_none() {
         return error(StatusCode::UNAUTHORIZED, "sign in first");
-    }
-    match state.store.gallery_delete(&id, author.as_deref()) {
+    };
+    match result {
         Ok(true) => Json(json!({ "deleted": true })).into_response(),
         Ok(false) => error(StatusCode::NOT_FOUND, "not found"),
         Err(e) => db_error("gallery delete", e),

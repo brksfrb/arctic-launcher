@@ -45,8 +45,65 @@ async fn app() -> Router {
         secret: b"test-secret-test-secret-test-secret".to_vec(),
         session_url: fake_session().await,
         trust_proxy: false,
-        admin_key: Some("admin-key-admin-key".into()),
+        admins: crate::admin::Moderators::parse(
+            Some("alice:alice-key-alice-key,bob:bob-key-bob-key-bob"),
+            Some("admin-key-admin-key"),
+        ),
     }))
+}
+
+async fn admin_call(
+    app: &Router,
+    key: &str,
+    method: &str,
+    uri: &str,
+    body: Option<serde_json::Value>,
+) -> (StatusCode, serde_json::Value) {
+    let req = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("x-admin-key", key)
+        .header("content-type", "application/json");
+    let req = match body {
+        Some(b) => req.body(Body::from(b.to_string())),
+        None => req.body(Body::empty()),
+    }
+    .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn dashboard_is_served_only_with_moderators_configured() {
+    let app = app().await;
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/admin")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let csp = resp.headers()["content-security-policy"]
+        .to_str()
+        .unwrap()
+        .to_owned();
+    assert!(csp.contains("default-src 'none'") && csp.contains("frame-ancestors 'none'"));
+    let (s, _) = admin_call(&app, "", "GET", "/v1/admin/me", None).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, me) = admin_call(&app, "admin-key-admin-key", "GET", "/v1/admin/me", None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(me["name"], "admin");
 }
 
 async fn call(
@@ -353,7 +410,43 @@ async fn gallery_share_browse_use_report() {
     .await;
     assert_eq!(s, StatusCode::OK, "{item}");
     assert_eq!(item["author"], "Notch");
+    assert_eq!(item["pending"], true);
     let id = item["id"].as_str().unwrap().to_owned();
+    // Not public until a moderator lets it in.
+    let (_, page) = call(&app, "GET", "/v1/gallery", None, None).await;
+    assert_eq!(page["total"], 0);
+    let (s, _) = call(&app, "POST", &format!("/v1/gallery/{id}/use"), None, None).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, _) = admin_call(
+        &app,
+        "bad-key-bad-key-bad",
+        "POST",
+        &format!("/v1/admin/gallery/{id}"),
+        Some(json!({"action": "approve"})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, queue) = admin_call(
+        &app,
+        "alice-key-alice-key",
+        "GET",
+        "/v1/admin/gallery?queue=pending",
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(queue["items"][0]["id"], id.as_str());
+    let (s, _) = admin_call(
+        &app,
+        "bob-key-bob-key-bob",
+        "POST",
+        &format!("/v1/admin/gallery/{id}"),
+        Some(json!({"action": "approve"})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let (_, log) = admin_call(&app, "alice-key-alice-key", "GET", "/v1/admin/log", None).await;
+    assert_eq!(log["entries"][0]["moderator"], "bob");
     let (s, _) = call(
         &app,
         "POST",

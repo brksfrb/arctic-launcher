@@ -5,11 +5,14 @@
 //! - `ARCTIC_COSMETICS_ADDR` (default `0.0.0.0:8080`)
 //! - `ARCTIC_COSMETICS_DB` (default `cosmetics.db`)
 //! - `ARCTIC_COSMETICS_ASSETS` (default `assets`): `catalog.json` and `capes/`.
-//! - `ARCTIC_COSMETICS_ADMIN_KEY` (16+ chars, optional): remove any gallery item
-//!   with the `X-Admin-Key` header.
+//! - `ARCTIC_COSMETICS_ADMIN_KEYS` (optional): moderators, as `name:key,name:key`
+//!   (keys 16+ chars). They sign in to `/admin` and use the `X-Admin-Key` header.
+//!   Add or remove a person by editing the list. `ARCTIC_COSMETICS_ADMIN_KEY`
+//!   (one key, the moderator "admin") still works.
 //! - `ARCTIC_COSMETICS_TRUST_PROXY=1`: rate-limit by `X-Forwarded-For` (only
 //!   behind a reverse proxy that sets it).
 
+mod admin;
 mod auth;
 mod catalog;
 mod chat;
@@ -98,9 +101,10 @@ async fn run() -> Result<(), String> {
         secret: secret.into_bytes(),
         session_url: env("ARCTIC_SESSION_URL", SESSION_URL),
         trust_proxy: env("ARCTIC_COSMETICS_TRUST_PROXY", "0") == "1",
-        admin_key: std::env::var("ARCTIC_COSMETICS_ADMIN_KEY")
-            .ok()
-            .filter(|k| k.len() >= 16),
+        admins: admin::Moderators::parse(
+            std::env::var("ARCTIC_COSMETICS_ADMIN_KEYS").ok().as_deref(),
+            std::env::var("ARCTIC_COSMETICS_ADMIN_KEY").ok().as_deref(),
+        ),
     };
     let state = Arc::new(state);
     tokio::spawn(routes::server_pinger(state.clone(), SERVER_PING_EVERY));

@@ -47,8 +47,8 @@ pub struct AppState {
     /// Behind a reverse proxy: take the client address from
     /// `X-Forwarded-For` instead of the connection.
     pub trust_proxy: bool,
-    /// `ARCTIC_COSMETICS_ADMIN_KEY`: lets you remove any gallery item.
-    pub admin_key: Option<String>,
+    /// Who may moderate (`ARCTIC_COSMETICS_ADMIN_KEYS`).
+    pub admins: crate::admin::Moderators,
 }
 
 type Shared = Arc<AppState>;
@@ -65,6 +65,7 @@ pub fn router(state: Shared) -> Router {
         .route("/v1/look", get(my_look).put(set_look))
         .route("/v1/online", post(online))
         .merge(gallery::routes())
+        .merge(admin::routes())
         .merge(content::routes())
         .merge(shares::routes())
         .merge(servers::routes())
@@ -72,6 +73,12 @@ pub fn router(state: Shared) -> Router {
         .layer(DefaultBodyLimit::max(MAX_BODY))
         .layer(middleware::from_fn_with_state(state.clone(), rate_limit))
         .with_state(state)
+}
+
+/// The moderator whose key is in `X-Admin-Key`, if it's a valid one.
+fn moderator(state: &Shared, headers: &HeaderMap) -> Option<String> {
+    let key = headers.get("x-admin-key")?.to_str().ok()?;
+    state.admins.identify(key).map(str::to_owned)
 }
 
 fn now() -> u64 {
@@ -472,6 +479,7 @@ fn store_upload(state: &AppState, b64: &str, kind: Kind, t: u64) -> Result<Strin
     Ok(hash)
 }
 
+mod admin;
 mod content;
 mod friends;
 mod gallery;

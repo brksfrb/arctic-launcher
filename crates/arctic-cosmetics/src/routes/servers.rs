@@ -8,7 +8,7 @@ use axum::{Json, Router, routing};
 use serde::Deserialize;
 use serde_json::json;
 
-use super::{Shared, db_error, error, now, player};
+use super::{Shared, db_error, error, moderator, now, player};
 use crate::listing::{self, Listing, Live, State as ListingState, SubmitError};
 
 pub fn routes() -> Router<Shared> {
@@ -162,15 +162,6 @@ pub(crate) fn check(address: &str) -> arctic_ping::Result<(arctic_ping::Status, 
     Ok((status, cracked))
 }
 
-fn is_admin(state: &Shared, headers: &HeaderMap) -> bool {
-    state.admin_key.as_deref().is_some_and(|key| {
-        headers
-            .get("x-admin-key")
-            .and_then(|v| v.to_str().ok())
-            .is_some_and(|given| given == key)
-    })
-}
-
 #[derive(Deserialize)]
 struct ReviewQuery {
     state: Option<String>,
@@ -181,7 +172,7 @@ async fn review(
     headers: HeaderMap,
     Query(q): Query<ReviewQuery>,
 ) -> Response {
-    if !is_admin(&state, &headers) {
+    if moderator(&state, &headers).is_none() {
         return error(StatusCode::FORBIDDEN, "admins only");
     }
     let wanted = match q.state.as_deref().unwrap_or("pending") {
@@ -217,9 +208,9 @@ async fn decide(
     Path(id): Path<String>,
     Json(d): Json<Decision>,
 ) -> Response {
-    if !is_admin(&state, &headers) {
+    let Some(name) = moderator(&state, &headers) else {
         return error(StatusCode::FORBIDDEN, "admins only");
-    }
+    };
     let done = match d.action.as_str() {
         "approve" => state.store.listing_set_state(&id, ListingState::Listed),
         "reject" => state.store.listing_set_state(&id, ListingState::Rejected),
@@ -232,7 +223,12 @@ async fn decide(
         }
     };
     match done {
-        Ok(true) => Json(json!({ "ok": true })).into_response(),
+        Ok(true) => {
+            let _ = state
+                .store
+                .moderation_note(&name, &d.action, &id, "server", now());
+            Json(json!({ "ok": true })).into_response()
+        }
         Ok(false) => error(StatusCode::NOT_FOUND, "no such server"),
         Err(e) => db_error("server decide", e),
     }

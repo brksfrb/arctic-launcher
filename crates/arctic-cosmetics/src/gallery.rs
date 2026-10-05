@@ -36,6 +36,67 @@ pub struct Page {
     pub total: i64,
 }
 
+/// A gallery item as the moderators see it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AdminItem {
+    pub id: String,
+    pub name: String,
+    pub texture: String,
+    pub model: String,
+    pub author: String,
+    pub author_uuid: String,
+    pub created: i64,
+    pub downloads: i64,
+    pub reports: i64,
+    pub hidden: bool,
+    /// pending, approved or rejected.
+    pub status: String,
+}
+
+/// What a moderator can do with an item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Action {
+    /// Let a new item into the gallery.
+    Approve,
+    /// Keep a new item out (it stays on record, so it can't be shared again).
+    Reject,
+    /// Show an item again that reports hid.
+    Restore,
+    /// Delete it outright.
+    Remove,
+}
+
+impl Action {
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "approve" => Some(Self::Approve),
+            "reject" => Some(Self::Reject),
+            "restore" => Some(Self::Restore),
+            "remove" => Some(Self::Remove),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Approve => "approve",
+            Self::Reject => "reject",
+            Self::Restore => "restore",
+            Self::Remove => "remove",
+        }
+    }
+}
+
+/// One line of the moderation history.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LogEntry {
+    pub at: i64,
+    pub moderator: String,
+    pub action: String,
+    pub target: String,
+    pub detail: String,
+}
+
 /// Why a publish was refused.
 #[derive(Debug, PartialEq, Eq)]
 pub enum PublishError {
@@ -60,7 +121,7 @@ impl Store {
         };
         let sql = format!(
             "SELECT id, name, texture, model, author_name, downloads, created FROM gallery
-             WHERE hidden = 0 AND (name LIKE ?1 OR author_name LIKE ?1)
+             WHERE hidden = 0 AND status = 'approved' AND (name LIKE ?1 OR author_name LIKE ?1)
              ORDER BY {order} LIMIT ?2 OFFSET ?3"
         );
         let mut stmt = conn.prepare(&sql)?;
@@ -81,11 +142,175 @@ impl Store {
             )?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         let total = conn.query_row(
-            "SELECT COUNT(*) FROM gallery WHERE hidden = 0 AND (name LIKE ?1 OR author_name LIKE ?1)",
+            "SELECT COUNT(*) FROM gallery WHERE hidden = 0 AND status = 'approved' AND (name LIKE ?1 OR author_name LIKE ?1)",
             [&pattern],
             |r| r.get(0),
         )?;
         Ok(Page { items, total })
+    }
+
+    /// Items wait for a moderator's approval. Older databases get the
+    /// column, with everything already in the gallery counted as approved.
+    pub(crate) fn migrate_gallery_status(&self) -> rusqlite::Result<()> {
+        let conn = self.conn();
+        let has_column = {
+            let mut stmt = conn.prepare("SELECT name FROM pragma_table_info('gallery')")?;
+            let names = stmt
+                .query_map([], |r| r.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            names.iter().any(|n| n == "status")
+        };
+        if !has_column {
+            conn.execute_batch(
+                "ALTER TABLE gallery ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'",
+            )?;
+        }
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS moderation_log (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 at INTEGER NOT NULL,
+                 moderator TEXT NOT NULL,
+                 action TEXT NOT NULL,
+                 target TEXT NOT NULL,
+                 detail TEXT NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS gallery_status ON gallery (status, created);",
+        )
+    }
+
+    /// Items in one moderation queue: oldest first for "pending", most
+    /// reported first for "reported", newest first otherwise.
+    pub fn gallery_admin_list(&self, queue: &str) -> rusqlite::Result<Vec<AdminItem>> {
+        let (filter, order) = match queue {
+            "reported" => (
+                "reports > 0 AND status = 'approved'",
+                "reports DESC, created DESC",
+            ),
+            "hidden" => ("hidden = 1 AND status = 'approved'", "created DESC"),
+            "approved" => ("status = 'approved' AND hidden = 0", "created DESC"),
+            "rejected" => ("status = 'rejected'", "created DESC"),
+            _ => ("status = 'pending'", "created ASC"),
+        };
+        let conn = self.conn();
+        let mut stmt = conn.prepare(&format!(
+            "SELECT id, name, texture, model, author_name, author_uuid, created, downloads,
+                    reports, hidden, status FROM gallery WHERE {filter} ORDER BY {order} LIMIT 200"
+        ))?;
+        stmt.query_map([], |r| {
+            Ok(AdminItem {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                texture: r.get(2)?,
+                model: r.get(3)?,
+                author: r.get(4)?,
+                author_uuid: r.get(5)?,
+                created: r.get(6)?,
+                downloads: r.get(7)?,
+                reports: r.get(8)?,
+                hidden: r.get::<_, i64>(9)? != 0,
+                status: r.get(10)?,
+            })
+        })?
+        .collect()
+    }
+
+    /// How many items wait for approval.
+    pub fn gallery_pending_count(&self) -> rusqlite::Result<i64> {
+        self.conn().query_row(
+            "SELECT COUNT(*) FROM gallery WHERE status = 'pending'",
+            [],
+            |r| r.get(0),
+        )
+    }
+
+    /// Apply a moderator's decision and write it to the history.
+    /// `Ok(false)`: no such item.
+    pub fn gallery_moderate(
+        &self,
+        id: &str,
+        action: Action,
+        moderator: &str,
+        now: u64,
+    ) -> rusqlite::Result<bool> {
+        let conn = self.conn();
+        let found: Option<(String, String)> = conn
+            .query_row(
+                "SELECT name, author_name FROM gallery WHERE id = ?1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        let Some((name, author)) = found else {
+            return Ok(false);
+        };
+        match action {
+            Action::Approve => conn.execute(
+                "UPDATE gallery SET status = 'approved', hidden = 0 WHERE id = ?1",
+                [id],
+            )?,
+            Action::Reject => {
+                conn.execute("UPDATE gallery SET status = 'rejected' WHERE id = ?1", [id])?
+            }
+            Action::Restore => {
+                conn.execute("DELETE FROM gallery_reports WHERE item = ?1", [id])?;
+                conn.execute(
+                    "UPDATE gallery SET hidden = 0, reports = 0 WHERE id = ?1",
+                    [id],
+                )?
+            }
+            Action::Remove => {
+                conn.execute("DELETE FROM gallery_reports WHERE item = ?1", [id])?;
+                conn.execute("DELETE FROM gallery WHERE id = ?1", [id])?
+            }
+        };
+        conn.execute(
+            "INSERT INTO moderation_log (at, moderator, action, target, detail)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                now as i64,
+                moderator,
+                action.as_str(),
+                id,
+                format!("{name} by {author}")
+            ],
+        )?;
+        Ok(true)
+    }
+
+    /// The latest moderation decisions, newest first.
+    pub fn moderation_log(&self, limit: usize) -> rusqlite::Result<Vec<LogEntry>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT at, moderator, action, target, detail FROM moderation_log
+             ORDER BY id DESC LIMIT ?1",
+        )?;
+        stmt.query_map([limit as i64], |r| {
+            Ok(LogEntry {
+                at: r.get(0)?,
+                moderator: r.get(1)?,
+                action: r.get(2)?,
+                target: r.get(3)?,
+                detail: r.get(4)?,
+            })
+        })?
+        .collect()
+    }
+
+    /// Record something a moderator did outside the gallery's own queue.
+    pub fn moderation_note(
+        &self,
+        moderator: &str,
+        action: &str,
+        target: &str,
+        detail: &str,
+        now: u64,
+    ) -> rusqlite::Result<()> {
+        self.conn().execute(
+            "INSERT INTO moderation_log (at, moderator, action, target, detail)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![now as i64, moderator, action, target, detail],
+        )?;
+        Ok(())
     }
 
     /// Gallery items are unique by look (their pixels), whoever shares them.
@@ -171,8 +396,8 @@ impl Store {
         }
         let inserted = conn
             .execute(
-                "INSERT OR IGNORE INTO gallery (id, texture, model, name, author_uuid, author_name, created, look)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT OR IGNORE INTO gallery (id, texture, model, name, author_uuid, author_name, created, look, status)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'pending')",
                 params![id, texture, model, name, author_uuid, author_name, now as i64, look],
             )
             .map_err(db)?;
@@ -187,7 +412,7 @@ impl Store {
         let conn = self.conn();
         let texture: Option<String> = conn
             .query_row(
-                "SELECT texture FROM gallery WHERE id = ?1 AND hidden = 0",
+                "SELECT texture FROM gallery WHERE id = ?1 AND hidden = 0 AND status = 'approved'",
                 [id],
                 |r| r.get(0),
             )
@@ -269,6 +494,12 @@ mod tests {
             s.gallery_publish("3", "t1", "slim", "Again", "a", "Alice", 30),
             Err(PublishError::Duplicate)
         );
+        // Nothing is public until a moderator approves it.
+        assert_eq!(s.gallery_page(Sort::New, "", 0, 10).unwrap().total, 0);
+        assert_eq!(s.gallery_take("1").unwrap(), None);
+        for id in ["1", "2"] {
+            assert!(s.gallery_moderate(id, Action::Approve, "mod", 40).unwrap());
+        }
         assert_eq!(s.gallery_take("1").unwrap().as_deref(), Some("t1"));
         let popular = s.gallery_page(Sort::Popular, "", 0, 10).unwrap();
         assert_eq!(popular.items[0].id, "1");
@@ -290,6 +521,49 @@ mod tests {
             s.gallery_publish("2", "t1", "classic", "Also mine", "b", "Bob", 20),
             Err(PublishError::Duplicate)
         );
+    }
+
+    #[test]
+    fn moderation_queues_and_history() {
+        let s = store();
+        s.gallery_publish("1", "t1", "classic", "One", "a", "Alice", 10)
+            .unwrap();
+        s.gallery_publish("2", "t2", "classic", "Two", "a", "Alice", 20)
+            .unwrap();
+        let waiting = s.gallery_admin_list("pending").unwrap();
+        assert_eq!(
+            waiting.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(),
+            ["1", "2"]
+        );
+        assert_eq!(s.gallery_pending_count().unwrap(), 2);
+        s.gallery_moderate("1", Action::Approve, "alice", 30)
+            .unwrap();
+        s.gallery_moderate("2", Action::Reject, "bob", 31).unwrap();
+        assert_eq!(s.gallery_pending_count().unwrap(), 0);
+        assert_eq!(s.gallery_admin_list("rejected").unwrap().len(), 1);
+        // A rejected look can't be shared again.
+        assert_eq!(
+            s.gallery_publish("3", "t2", "classic", "Two again", "a", "Alice", 40),
+            Err(PublishError::Duplicate)
+        );
+        assert!(
+            !s.gallery_moderate("nope", Action::Remove, "bob", 50)
+                .unwrap()
+        );
+        let log = s.moderation_log(10).unwrap();
+        assert_eq!(log.len(), 2);
+        assert_eq!(
+            (log[0].moderator.as_str(), log[0].action.as_str()),
+            ("bob", "reject")
+        );
+        // Reports hide an approved item; a moderator can bring it back.
+        for r in ["r1", "r2", "r3"] {
+            s.gallery_report("1", r).unwrap();
+        }
+        assert_eq!(s.gallery_admin_list("hidden").unwrap().len(), 1);
+        s.gallery_moderate("1", Action::Restore, "alice", 60)
+            .unwrap();
+        assert_eq!(s.gallery_page(Sort::New, "", 0, 10).unwrap().total, 1);
     }
 
     #[test]
@@ -321,6 +595,7 @@ mod tests {
         let s = store();
         s.gallery_publish("1", "t1", "classic", "Bad", "a", "Alice", 10)
             .unwrap();
+        s.gallery_moderate("1", Action::Approve, "mod", 11).unwrap();
         for _ in 0..5 {
             s.gallery_report("1", "r1").unwrap();
         }

@@ -73,6 +73,7 @@ impl Store {
             db: Mutex::new(conn),
         };
         store.migrate_gallery_looks()?;
+        store.migrate_gallery_status()?;
         store.migrate_presence()?;
         store.migrate_shares()?;
         store.migrate_listing()?;
