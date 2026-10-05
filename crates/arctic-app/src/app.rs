@@ -775,6 +775,14 @@ impl ArcticApp {
             | Event::Gallery(..)
             | Event::GalleryTaken(..)
             | Event::GalleryDone(..)) => self.on_skins_event(e),
+            Event::CrashReportSent(result) => match result {
+                Ok(()) => self.toasts.push(
+                    Kind::Success,
+                    "Crash report sent",
+                    "Thanks, that helps fix it.",
+                ),
+                Err(e) => self.toasts.push(Kind::Error, "Couldn't send the report", e),
+            },
             Event::UpdateChecked(result) => self.on_update_checked(result),
             Event::ProxyTested(proxy, result) => self.on_proxy_tested(proxy, result),
             Event::UpdateInstalled(result) => self.on_update_installed(result),

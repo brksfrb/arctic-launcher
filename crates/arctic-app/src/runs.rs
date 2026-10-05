@@ -11,12 +11,12 @@ use arctic_core::crash::{self, Diagnosis};
 use arctic_core::launch::logparse::{Level, LogLine};
 use arctic_core::launch::startup::Stage;
 use arctic_core::launch::{GameEvent, GameHandle};
-use arctic_core::settings::GameStartAction;
+use arctic_core::settings::{CrashReports, GameStartAction};
 use eframe::egui;
 
 use crate::app::{ArcticApp, LogSource};
 use crate::motion::RateMeter;
-use crate::tasks::{LaunchId, ProgressSnapshot};
+use crate::tasks::{Event, LaunchId, ProgressSnapshot, Tasks};
 use crate::toasts::{Kind, ToastAction};
 
 /// Game log lines kept in memory per run (older ones are dropped).
@@ -58,6 +58,8 @@ pub struct Run {
     started: SystemTime,
     /// Game events that overtook their `Launched` event.
     early: Vec<GameEvent>,
+    /// The crash, ready to send if the player agrees.
+    crash_report: Option<crash::Report>,
 }
 
 impl Run {
@@ -93,6 +95,13 @@ impl Run {
             .rev()
             .take(400)
             .any(|l| l.text.contains("Client shutdown from post-main"))
+    }
+
+    /// The crash as a report, from the game log's end and the crash report it wrote.
+    fn crash_report(&self, title: &str) -> crash::Report {
+        let lines: Vec<&str> = self.log.iter().map(|l| l.text.as_str()).collect();
+        let written = newest_crash_report(&self.game_dir, self.started);
+        crash::Report::build(&self.version, "", title, &lines, written.as_deref())
     }
 
     /// Why the game crashed, from its log and the crash report it wrote.
@@ -161,6 +170,7 @@ impl Runs {
             game_dir,
             started: SystemTime::now(),
             early: Vec::new(),
+            crash_report: None,
         });
         self.next_id
     }
@@ -315,6 +325,12 @@ impl ArcticApp {
                         text: format!("──── Arctic: {} — {} ────", d.title, d.detail),
                     }]);
                 }
+                let crashed = matches!(code, Some(c) if c != 0 && !watchdog);
+                if crashed {
+                    let report =
+                        run.crash_report(diagnosis.as_ref().map_or("", |d| d.title.as_str()));
+                    self.offer_crash_report(id, report);
+                }
                 // Back to the launcher once the last game is closed.
                 if self.minimized_for_game && !self.runs.any_game() {
                     self.minimized_for_game = false;
@@ -362,6 +378,33 @@ impl ArcticApp {
         }
     }
 
+    /// What to do with a crash report, by the player's setting: nothing,
+    /// send it, or ask with a button on a toast.
+    fn offer_crash_report(&mut self, id: LaunchId, report: crash::Report) {
+        match self.settings.crash_reports {
+            CrashReports::Never => {}
+            CrashReports::Always => self.tasks.send_crash_report(report),
+            CrashReports::Ask => {
+                if let Some(run) = self.runs.get_mut(id) {
+                    run.crash_report = Some(report);
+                }
+                self.toasts.push_with_action(
+                    Kind::Info,
+                    "Help fix this crash?",
+                    "Send the log to Arctic. Your name, folders and sign-in details are taken out first.",
+                    Some(ToastAction::SendCrash(id)),
+                );
+            }
+        }
+    }
+
+    /// The player said yes to sending this run's crash report.
+    pub(crate) fn send_crash_report(&mut self, id: LaunchId) {
+        if let Some(report) = self.runs.get_mut(id).and_then(|r| r.crash_report.take()) {
+            self.tasks.send_crash_report(report);
+        }
+    }
+
     /// Note a line in a run's log (launch banners and the like).
     pub(crate) fn run_note(&mut self, id: LaunchId, text: String) {
         if let Some(run) = self.runs.get_mut(id) {
@@ -376,6 +419,18 @@ impl ArcticApp {
     pub(crate) fn show_run_log(&mut self, id: LaunchId, now: f64) {
         self.log_source = LogSource::Game(id);
         self.set_tab(crate::app::Tab::Logs, now);
+    }
+}
+
+impl Tasks {
+    /// Send a crash report in the background; says so when it's done.
+    pub fn send_crash_report(&self, report: crash::Report) {
+        self.run(move |t| {
+            let base = arctic_core::cosmetics::base_url();
+            let result = arctic_core::cosmetics::send_crash_report(&base, &report)
+                .map_err(|e| e.to_string());
+            t.send(Event::CrashReportSent(result));
+        });
     }
 }
 

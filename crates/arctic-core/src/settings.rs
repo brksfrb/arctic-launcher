@@ -49,6 +49,8 @@ pub struct Settings {
     /// What's behind the launcher.
     pub backdrop: Backdrop,
     pub on_game_start: GameStartAction,
+    /// What happens to a crash report when the game crashes.
+    pub crash_reports: CrashReports,
     /// Show what you're playing on Discord.
     pub discord_presence: bool,
     /// First-run setup finished (or skipped) for this profile.
@@ -165,6 +167,17 @@ pub enum GameStartAction {
     Minimize,
 }
 
+/// Whether crash reports are sent to Arctic: never on its own unless chosen.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CrashReports {
+    /// Offer to send each one.
+    #[default]
+    Ask,
+    Always,
+    Never,
+}
+
 /// The launcher's background.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -212,6 +225,7 @@ impl Default for Settings {
             theme: ThemeMode::Default,
             backdrop: Backdrop::Scenery,
             on_game_start: GameStartAction::KeepOpen,
+            crash_reports: CrashReports::Ask,
             discord_presence: true,
             onboarded: false,
             tray: true,

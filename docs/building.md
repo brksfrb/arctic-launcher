@@ -95,6 +95,11 @@ recorded under the moderator's name. The same key works as an `X-Admin-Key` head
 the page behind Cloudflare Access (admin.arcticlauncher.com) for a second lock. The older
 single `ARCTIC_COSMETICS_ADMIN_KEY` still works as the moderator `admin`.
 
+Crash reports: when the game crashes the launcher offers to send its log (Settings → Crash
+reports: ask, always or never). Names, folders, tokens, e-mails and IPs are removed before it
+leaves the PC. They arrive at `POST /v1/crash` (a few per address per hour), are grouped by
+cause, and show under Crashes in `/admin`.
+
 ## Checks
 
 ```sh

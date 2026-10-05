@@ -99,6 +99,8 @@ pub enum Event {
     GalleryTaken(Outcome<(String, Vec<u8>, arctic_core::skins::Variant, bool)>),
     /// A gallery share or report finished (message).
     GalleryDone(Outcome<String>),
+    /// A crash report was sent.
+    CrashReportSent(Outcome<()>),
     /// Other launchers looked through (the folder, if one was picked).
     MigrateScanned(Option<PathBuf>, crate::migrate_tasks::ScanResult),
     MigrateProgress(String, ProgressSnapshot),

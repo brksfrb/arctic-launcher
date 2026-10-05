@@ -39,6 +39,8 @@ pub enum ToastAction {
     OpenFriends,
     /// Link a newly added account into the profile of `into`.
     LinkAccount { into: String, other: String },
+    /// Send this run's crash report to Arctic.
+    SendCrash(crate::tasks::LaunchId),
 }
 
 impl ToastAction {
@@ -47,6 +49,7 @@ impl ToastAction {
             ToastAction::ShowLogs(_) => "View logs",
             ToastAction::OpenFriends => "Open",
             ToastAction::LinkAccount { .. } => "Link",
+            ToastAction::SendCrash(_) => "Send report",
         }
     }
 }

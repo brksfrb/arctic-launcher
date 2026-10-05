@@ -107,6 +107,7 @@ impl ArcticApp {
                 ToastAction::ShowLogs(id) => self.show_run_log(id, now),
                 ToastAction::OpenFriends => self.set_tab(Tab::Together, now),
                 ToastAction::LinkAccount { into, other } => self.link_accounts(&into, &other),
+                ToastAction::SendCrash(id) => self.send_crash_report(id),
             }
         }
     }
