@@ -15,6 +15,9 @@ use crate::widgets;
 
 const WIDTH: f32 = 500.0;
 const MAX_LISTED_MODS: usize = 8;
+/// Tallest the paste box and the list of a profile's parts get before they scroll.
+const PASTE_HEIGHT: f32 = 130.0;
+const PARTS_HEIGHT: f32 = 190.0;
 const MAX_LISTED_WARNINGS: usize = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,6 +77,53 @@ pub struct ImportState {
     stage: ImportStage,
     /// Instance client settings are applied to.
     target: String,
+    /// What of a profile to bring in (all of it until the player unticks something).
+    pick: Option<Pick>,
+}
+
+/// The parts of a profile that are ticked.
+struct Pick {
+    settings: bool,
+    vanilla: bool,
+    options: bool,
+    instances: Vec<bool>,
+}
+
+impl Pick {
+    fn all(pack: &ProfilePack) -> Self {
+        Self {
+            settings: !pack.settings.is_empty(),
+            vanilla: pack.vanilla.is_some(),
+            options: !pack.options.is_empty(),
+            instances: vec![true; pack.instances.len()],
+        }
+    }
+
+    fn any(&self) -> bool {
+        self.settings || self.vanilla || self.options || self.instances.iter().any(|on| *on)
+    }
+
+    /// The profile with only the ticked parts.
+    fn apply(&self, pack: &ProfilePack) -> ProfilePack {
+        let mut out = pack.clone();
+        if !self.settings {
+            out.settings.clear();
+        }
+        if !self.vanilla {
+            out.vanilla = None;
+        }
+        if !self.options {
+            out.options.clear();
+        }
+        out.instances = pack
+            .instances
+            .iter()
+            .zip(&self.instances)
+            .filter(|(_, on)| **on)
+            .map(|(i, _)| i.clone())
+            .collect();
+        out
+    }
 }
 
 #[derive(Default)]
@@ -115,6 +165,7 @@ impl ArcticApp {
             input: String::new(),
             stage: ImportStage::Edit(None),
             target: self.selected_instance().id.clone(),
+            pick: None,
         });
     }
 
@@ -265,12 +316,14 @@ impl ArcticApp {
             if widgets::button(ui, p, Some(Icon::Copy), "Copy as text", false).clicked() {
                 ui.ctx().copy_text(bundle.to_text());
                 state.note = Some("Copied. Paste it anywhere; it works without the server.".into());
+                self.toasts.push(Kind::Success, "Copied as text", "");
             }
             if widgets::button(ui, p, Some(Icon::Document), "Save file…", false).clicked() {
                 let name = format!("arctic-{}.json", bundle.kind());
                 self.tasks.share_save(bundle.clone(), name);
             }
         });
+        let mut copied = false;
         match &state.code {
             Some(CodeState::Making) => {
                 ui.horizontal(|ui| {
@@ -290,6 +343,7 @@ impl ArcticApp {
                     );
                     if widgets::icon_button(ui, p, Icon::Copy, "Copy code").clicked() {
                         ui.ctx().copy_text(code.clone());
+                        copied = true;
                     }
                 });
                 ui.label(
@@ -305,6 +359,9 @@ impl ArcticApp {
         }
         if let Some(note) = &state.note {
             ui.label(RichText::new(note).small().color(p.muted));
+        }
+        if copied {
+            self.toasts.push(Kind::Success, "Code copied", "");
         }
     }
 
@@ -350,12 +407,17 @@ impl ArcticApp {
                 .color(p.muted),
         );
         ui.add_space(6.0);
-        ui.add(
-            egui::TextEdit::multiline(&mut state.input)
-                .hint_text("abcd-efgh")
-                .desired_rows(3)
-                .desired_width(f32::INFINITY),
-        );
+        // A long pasted text scrolls inside the box instead of growing past the window.
+        egui::ScrollArea::vertical()
+            .max_height(PASTE_HEIGHT)
+            .show(ui, |ui| {
+                ui.add(
+                    egui::TextEdit::multiline(&mut state.input)
+                        .hint_text("abcd-efgh")
+                        .desired_rows(3)
+                        .desired_width(f32::INFINITY),
+                );
+            });
         if let ImportStage::Edit(Some(e)) = &state.stage {
             ui.label(RichText::new(e).color(p.error));
         }
@@ -489,12 +551,46 @@ impl ArcticApp {
                         .color(p.muted),
                 );
             }
-            Bundle::Profile(_) => {
+            Bundle::Profile(pack) => {
+                let pick = state.pick.get_or_insert_with(|| Pick::all(pack));
+                if pick.instances.len() != pack.instances.len() {
+                    *pick = Pick::all(pack);
+                }
+                ui.label(RichText::new("Pick what to bring in").color(p.muted));
+                egui::ScrollArea::vertical()
+                    .max_height(PARTS_HEIGHT)
+                    .auto_shrink([true, true])
+                    .show(ui, |ui| {
+                        if !pack.settings.is_empty() {
+                            ui.checkbox(
+                                &mut pick.settings,
+                                format!("Launcher settings ({})", pack.settings.len()),
+                            );
+                        }
+                        if pack.vanilla.is_some() {
+                            ui.checkbox(&mut pick.vanilla, "Vanilla instance's setup");
+                        }
+                        if !pack.options.is_empty() {
+                            ui.checkbox(
+                                &mut pick.options,
+                                format!("Default game settings ({})", pack.options.len()),
+                            );
+                        }
+                        for (on, instance) in pick.instances.iter_mut().zip(&pack.instances) {
+                            ui.checkbox(
+                                on,
+                                format!("{} ({} mods)", instance.name, instance.mods.len()),
+                            );
+                        }
+                    });
                 ui.label(
-                    RichText::new("Your launcher settings change to these. New instances are added; yours with the same names stay as they are.")
+                    RichText::new("Ticked launcher settings replace yours. Ticked instances are added; yours with the same names stay as they are.")
                         .small()
                         .color(p.muted),
                 );
+                if !pick.any() {
+                    blocked = Some("Tick at least one thing to import.");
+                }
                 if self.runs.any_game()
                     || sharing::client::in_use(&self.instance.game_dir(&self.dirs))
                 {
@@ -520,7 +616,11 @@ impl ArcticApp {
                 if go.clicked() {
                     let target: Option<Instance> = self.instance_by_id(&state.target).cloned();
                     self.sharing.progress = None;
-                    self.tasks.share_import(bundle.clone(), target);
+                    let chosen = match (&bundle, &state.pick) {
+                        (Bundle::Profile(pack), Some(pick)) => Bundle::Profile(pick.apply(pack)),
+                        _ => bundle.clone(),
+                    };
+                    self.tasks.share_import(chosen, target);
                     state.stage = ImportStage::Working;
                 }
             });
