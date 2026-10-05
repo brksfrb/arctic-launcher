@@ -59,8 +59,8 @@
   emotes from a wheel in game. Every Arctic player sees them.
 - **Skin gallery.** Browse skins other players shared, search by name or creator, and wear
   one in a click. Share your own from your library.
-- **Arctic Client.** Vanilla gets a fresh look: restyled menus (pick Arctic, Aurora or
-  Classic), over thirty HUD widgets (FPS, CPS, ping, TPS, keystrokes, coordinates, speed,
+- **Arctic Client.** Vanilla gets a fresh look: restyled menus (pick Arctic, Aurora,
+  Classic or Vanilla), over thirty HUD widgets (FPS, CPS, ping, TPS, keystrokes, coordinates, speed,
   armor, effects, target health, reach, combo, a compass, a minimap, a stopwatch, item
   counts and more) that line up on their own and snap into place when you move them,
   Zoom, Freelook, Fullbright, Toggle Sprint and Sneak, a crosshair editor (your own picture

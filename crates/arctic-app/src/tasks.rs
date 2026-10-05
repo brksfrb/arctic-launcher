@@ -370,11 +370,18 @@ impl Tasks {
 
     /// Ask for a `.mrpack` file and install it as a new instance.
     pub fn import_modpack_file(&self) {
-        self.run(|t| {
-            let picked = rfd::FileDialog::new()
-                .set_title("Choose a modpack")
-                .add_filter("Modrinth modpack", &["mrpack"])
-                .pick_file();
+        self.install_modpack_file(None);
+    }
+
+    /// Install a `.mrpack` file as a new instance (asking for the file when `path` is `None`).
+    pub fn install_modpack_file(&self, path: Option<std::path::PathBuf>) {
+        self.run(move |t| {
+            let picked = path.or_else(|| {
+                rfd::FileDialog::new()
+                    .set_title("Choose a modpack")
+                    .add_filter("Modrinth modpack", &["mrpack"])
+                    .pick_file()
+            });
             let result = match picked {
                 None => Ok(None),
                 Some(path) => {

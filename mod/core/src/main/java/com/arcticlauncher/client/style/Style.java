@@ -2,7 +2,7 @@ package com.arcticlauncher.client.style;
 
 /**
  * A menu style: the palette for Arctic screens and restyled vanilla
- * widgets. {@link #CLASSIC} keeps Minecraft's own menus.
+ * widgets. {@link #VANILLA} keeps Minecraft's own menus.
  */
 public final class Style {
 	public final String id;
@@ -67,7 +67,15 @@ public final class Style {
 			.ink(0xFFF1EEFF, 0xFFA69CC8, 0x900E0B20)
 			.build();
 
-	public static final Style CLASSIC = new Builder("classic", "Classic", "Minecraft's own menus, plus the Arctic HUD.")
+	public static final Style CLASSIC = new Builder("classic", "Classic", "Plain black and white, no colors.")
+			.accent(0xFFE8E8E8, 0xFF000000)
+			.sky(0xFF000000, 0xFF121212, 0x00FFFFFF)
+			.mountains(0xFF1C1C1C, 0xFF0A0A0A)
+			.surfaces(0xE8050505, 0x40FFFFFF, 0xB0161616, 0xD82A2A2A, 0x80101010, 0xC0000000)
+			.ink(0xFFF2F2F2, 0xFF9A9A9A, 0x90000000)
+			.build();
+
+	public static final Style VANILLA = new Builder("vanilla", "Vanilla", "Minecraft's own menus, plus the Arctic HUD.")
 			.restyles(false)
 			.accent(0xFFFFFFFF, 0xFF202020)
 			.sky(0xFF101010, 0xFF2A2A2A, 0x00FFFFFF)
@@ -76,7 +84,7 @@ public final class Style {
 			.ink(0xFFFFFFFF, 0xFFA0A0A0, 0x90000000)
 			.build();
 
-	public static final Style[] ALL = {ARCTIC, AURORA, CLASSIC};
+	public static final Style[] ALL = {ARCTIC, AURORA, CLASSIC, VANILLA};
 
 	public static Style byId(String id) {
 		for (Style s : ALL) {

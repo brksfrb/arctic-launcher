@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** The game tick drives Arctic; Minecraft's title screen becomes Arctic's (unless the style is Classic). */
+/** The game tick drives Arctic; Minecraft's title screen becomes Arctic's (unless the style is Vanilla). */
 @Mixin(MinecraftClient.class)
 abstract class MinecraftClientMixin {
 	@Shadow

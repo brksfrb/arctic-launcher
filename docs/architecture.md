@@ -187,7 +187,7 @@ never mix with user mods. It rechecks for new builds weekly, keeps what's instal
 offline, and runs Fabric even on versions the client doesn't support yet.
 
 Vanilla screens keep their own logic; only their widgets and backdrop are restyled, so
-adapters stay small. The Classic style turns restyling off and keeps the HUD.
+adapters stay small. The Vanilla style turns restyling off and keeps the HUD.
 
 ## Platforms
 

@@ -41,7 +41,7 @@ public final class Shares {
 	private static final int MAX_HUD_VERSION = 100;
 	private static final float MIN_SCALE = 0.5f;
 	private static final float MAX_SCALE = 2.5f;
-	private static final List<String> STYLES = Arrays.asList("arctic", "aurora", "classic");
+	private static final List<String> STYLES = Arrays.asList("arctic", "aurora", "classic", "vanilla");
 	private static final String[] BOOLEANS = {"fancy", "showCosmetics", "fullbright", "zoomEnabled", "freelookEnabled",
 			"toggleSprint", "toggleSneak", "chatTimestamps", "chatStack", "lowFire", "clearWeather", "confirmLeave"};
 	private static final String[] KEYS = {"zoomKey", "freelookKey", "fullbrightKey", "emoteKey"};

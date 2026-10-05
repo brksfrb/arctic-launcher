@@ -165,7 +165,55 @@ impl ArcticApp {
         self.instances_grid(ui);
     }
 
+    /// A modpack file dropped anywhere on the Instances page installs it.
+    fn take_dropped_modpack(&mut self, ui: &egui::Ui) {
+        let dropped: Option<std::path::PathBuf> = ui.input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .map(|f| f.path().to_path_buf())
+                .find(|p| {
+                    p.extension()
+                        .is_some_and(|e| e.eq_ignore_ascii_case("mrpack"))
+                })
+        });
+        if let Some(path) = dropped
+            && self.inst.pack_installing.is_none()
+        {
+            self.inst.pack_installing = Some(String::new());
+            self.tasks.install_modpack_file(Some(path));
+            self.inst.modpacks_open = true;
+        }
+    }
+
+    /// Modpacks, up front: finding them under a small button isn't obvious.
+    fn modpacks_banner(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
+        ui.add_space(6.0);
+        crate::theme::card(p).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("Modpacks").size(16.0).strong().color(p.text));
+                    ui.label(
+                        RichText::new(
+                            "Install a whole modpack from Modrinth in one click, or drop a .mrpack file anywhere on this page.",
+                        )
+                        .color(p.muted),
+                    );
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if widgets::button(ui, p, Some(Icon::Layers), "Browse modpacks", true).clicked() {
+                        self.inst.modpacks_open = true;
+                    }
+                });
+            });
+        });
+        ui.add_space(10.0);
+    }
+
     fn instances_grid(&mut self, ui: &mut egui::Ui) {
+        self.take_dropped_modpack(ui);
         let p = self.palette();
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
@@ -192,6 +240,7 @@ impl ArcticApp {
                 }
             });
         });
+        self.modpacks_banner(ui);
         let mut all = vec![self.instance.clone()];
         all.extend(self.custom_instances.iter().cloned());
         ui.horizontal_wrapped(|ui| {

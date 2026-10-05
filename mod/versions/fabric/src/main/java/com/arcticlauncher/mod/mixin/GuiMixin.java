@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
-/** Swaps Minecraft's title screen for Arctic's (unless the style is Classic). */
+/** Swaps Minecraft's title screen for Arctic's (unless the style is Vanilla). */
 //#if MC >= 26.2
 @Mixin(Gui.class)
 //#else
