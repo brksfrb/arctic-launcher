@@ -56,6 +56,9 @@ class Jar:
         return chain
 
     def has_member(self, cls, name):
+        if name == "<clinit>":
+            # javap lists the static initializer as "static {};".
+            return "static {};" in self.members(cls)
         if name == "<init>":
             # javap lists constructors by the class's own name.
             simple = cls.split(".")[-1].split("$")[-1]
