@@ -119,6 +119,46 @@ pub fn merge_files(sources: &[std::path::PathBuf], into: &Path) -> Result<usize>
     Ok(count)
 }
 
+/// Move the server with this address in front of the one at `before` (to
+/// the end when `None`), keeping every entry as it was, hidden ones too.
+/// `Ok(false)`: one of them isn't on the list.
+pub fn move_before(game_dir: &Path, address: &str, before: Option<&str>) -> Result<bool> {
+    let path = game_dir.join(SERVERS_FILE);
+    let damaged = || Error::Other("servers.dat couldn't be read (damaged?)".into());
+    let data = std::fs::read(&path).map_err(|e| Error::io(&path, e))?;
+    let mut root = nbt::read_root(&data).ok_or_else(damaged)?;
+    let nbt::Tag::Compound(entries) = &mut root else {
+        return Err(damaged());
+    };
+    let Some((_, nbt::Tag::List(servers))) = entries.iter_mut().find(|(k, _)| k == "servers")
+    else {
+        return Err(damaged());
+    };
+    let find = |servers: &[nbt::Tag], address: &str| {
+        servers.iter().position(|e| {
+            e.get("ip")
+                .and_then(nbt::Tag::as_str)
+                .is_some_and(|ip| ip.trim().eq_ignore_ascii_case(address.trim()))
+        })
+    };
+    let Some(from) = find(servers, address) else {
+        return Ok(false);
+    };
+    let entry = servers.remove(from);
+    let to = match before {
+        Some(other) => match find(servers, other) {
+            Some(i) => i,
+            None => return Ok(false),
+        },
+        None => servers.len(),
+    };
+    servers.insert(to, entry);
+    let tmp = path.with_extension("dat.arctic-tmp");
+    std::fs::write(&tmp, nbt::write_root(&root)).map_err(|e| Error::io(&tmp, e))?;
+    std::fs::rename(&tmp, &path).map_err(|e| Error::io(&path, e))?;
+    Ok(true)
+}
+
 /// Add a server to the end of the game's multiplayer list (as the game
 /// does). Everything already in the file is kept as it was. `Ok(false)`
 /// when that address is on the list already.
@@ -210,6 +250,28 @@ fn socks(p: &ProxySettings) -> arctic_ping::Socks<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_server_moves_to_a_place_in_the_list() {
+        let dir = tempfile::tempdir().unwrap();
+        for (name, ip) in [
+            ("A", "a.example.net"),
+            ("B", "b.example.net"),
+            ("C", "c.example.net"),
+        ] {
+            add(dir.path(), name, ip).unwrap();
+        }
+        let order = |dir: &Path| -> Vec<String> {
+            list(dir).unwrap().into_iter().map(|s| s.name).collect()
+        };
+        assert!(move_before(dir.path(), "C.example.net", Some("a.example.net")).unwrap());
+        assert_eq!(order(dir.path()), ["C", "A", "B"]);
+        assert!(move_before(dir.path(), "c.example.net", None).unwrap());
+        assert_eq!(order(dir.path()), ["A", "B", "C"]);
+        assert!(!move_before(dir.path(), "nope.example.net", None).unwrap());
+        assert!(!move_before(dir.path(), "a.example.net", Some("nope.example.net")).unwrap());
+        assert_eq!(order(dir.path()), ["A", "B", "C"]);
+    }
 
     #[test]
     fn lists_visible_servers_in_order() {
