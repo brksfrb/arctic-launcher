@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use arctic_core::settings::{GameStartAction, MIN_MEMORY_MB, Settings, ThemeMode};
+use arctic_core::settings::{CrashReports, GameStartAction, MIN_MEMORY_MB, Settings, ThemeMode};
 use arctic_core::update::UpdateChannel;
 use eframe::egui::{self, CornerRadius, RichText, Sense, Stroke, StrokeKind, vec2};
 
@@ -148,6 +148,13 @@ impl ArcticApp {
                 &mut s.discord_presence,
                 "Show what you're playing on Discord",
             );
+            widgets::field_row(ui, |ui| {
+                ui.label("Crash reports")
+                    .on_hover_text("When the game crashes, Arctic can send its log so the crash can be fixed. Your name, folders and sign-in details are taken out first.");
+                ui.selectable_value(&mut s.crash_reports, CrashReports::Ask, "Ask me");
+                ui.selectable_value(&mut s.crash_reports, CrashReports::Always, "Always send");
+                ui.selectable_value(&mut s.crash_reports, CrashReports::Never, "Never");
+            });
         });
 
         section(ui, p, "Java", |ui| {

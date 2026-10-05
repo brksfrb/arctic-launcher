@@ -285,6 +285,135 @@ pub fn diagnose(text: &str) -> Option<Diagnosis> {
         .find(|d| !d.title.is_empty())
 }
 
+/// A crash as it's sent: the log's end and the crash report, with anything
+/// personal taken out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Report {
+    pub launcher: String,
+    pub game: String,
+    pub loader: String,
+    pub os: String,
+    pub title: String,
+    pub log: String,
+}
+
+/// Lines of the game log's end that are sent.
+const REPORT_LOG_LINES: usize = 150;
+/// Most of the log's end, and of the crash report's start, that are sent (bytes).
+const REPORT_LOG_BYTES: usize = 16 * 1024;
+const REPORT_CRASH_BYTES: usize = 30 * 1024;
+
+impl Report {
+    /// `lines` is the game's log, `crash_report` the file Minecraft wrote (if it did).
+    /// `title` is what Arctic made of it, or empty.
+    pub fn build(
+        game: &str,
+        loader: &str,
+        title: &str,
+        lines: &[&str],
+        crash_report: Option<&str>,
+    ) -> Self {
+        let skip = lines.len().saturating_sub(REPORT_LOG_LINES);
+        let tail = lines[skip..].join("\n");
+        let mut text = tail_of(&tail, REPORT_LOG_BYTES).to_owned();
+        if let Some(report) = crash_report {
+            text.push_str("\n\n---- crash report ----\n");
+            text.push_str(head_of(report, REPORT_CRASH_BYTES));
+        }
+        Self {
+            launcher: env!("CARGO_PKG_VERSION").to_owned(),
+            game: game.to_owned(),
+            loader: loader.to_owned(),
+            os: std::env::consts::OS.to_owned(),
+            title: title.to_owned(),
+            log: scrub(&text, &Own::this_pc()),
+        }
+    }
+}
+
+fn head_of(text: &str, max: usize) -> &str {
+    let mut end = max.min(text.len());
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
+fn tail_of(text: &str, max: usize) -> &str {
+    let mut start = text.len().saturating_sub(max);
+    while !text.is_char_boundary(start) {
+        start += 1;
+    }
+    &text[start..]
+}
+
+/// What identifies this PC's owner in paths and logs.
+pub struct Own {
+    pub home: Option<String>,
+    pub user: Option<String>,
+}
+
+impl Own {
+    fn this_pc() -> Self {
+        Self {
+            home: std::env::var("USERPROFILE")
+                .or_else(|_| std::env::var("HOME"))
+                .ok(),
+            user: std::env::var("USERNAME")
+                .or_else(|_| std::env::var("USER"))
+                .ok(),
+        }
+    }
+}
+
+/// Take out what a stranger shouldn't read: the home folder and user name,
+/// sign-in tokens, e-mail addresses and IP addresses.
+pub fn scrub(text: &str, own: &Own) -> String {
+    static PATTERNS: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
+    let patterns = PATTERNS.get_or_init(|| {
+        [
+            (
+                r"(?i)(--(?:accessToken|uuid|username|xuid|clientId|session)\s+)\S+",
+                "${1}<hidden>",
+            ),
+            (
+                r"(?i)((?:access_?token|session_?id|bearer|token)[\x22'\s:=]+)[A-Za-z0-9._\-]{20,}",
+                "${1}<hidden>",
+            ),
+            (
+                r"eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}",
+                "<hidden>",
+            ),
+            (r"Setting user: \S+", "Setting user: <player>"),
+            (
+                r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}",
+                "<email>",
+            ),
+            (r"\b(?:\d{1,3}\.){3}\d{1,3}\b", "<ip>"),
+        ]
+        .into_iter()
+        .filter_map(|(p, r)| Regex::new(p).ok().map(|re| (re, r)))
+        .collect()
+    });
+    let mut out = text.to_owned();
+    if let Some(home) = own.home.as_deref().filter(|h| h.len() > 3) {
+        for variant in [home.to_owned(), home.replace('\\', "/")] {
+            if let Ok(re) = Regex::new(&format!("(?i){}", regex::escape(&variant))) {
+                out = re.replace_all(&out, "<home>").into_owned();
+            }
+        }
+    }
+    if let Some(user) = own.user.as_deref().filter(|u| u.len() >= 3)
+        && let Ok(re) = Regex::new(&format!(r"(?i)\b{}\b", regex::escape(user)))
+    {
+        out = re.replace_all(&out, "<user>").into_owned();
+    }
+    for (re, replacement) in patterns {
+        out = re.replace_all(&out, *replacement).into_owned();
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -350,5 +479,43 @@ mod tests {
         let mut log = "é".repeat(MAX_TEXT);
         log.push_str("java.lang.OutOfMemoryError");
         assert_eq!(title(&log), "Minecraft ran out of memory");
+    }
+
+    #[test]
+    fn reports_lose_what_is_personal() {
+        let own = Own {
+            home: Some(r"C:\Users\Burak".into()),
+            user: Some("Burak".into()),
+        };
+        let text = "Setting user: Steve\nat C:\\Users\\Burak\\AppData\\x.jar\n\
+                    --accessToken eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.abcdefghijk1 --uuid 1234\n\
+                    mail me at a.b@example.com from 192.168.1.20, Burak";
+        let clean = scrub(text, &own);
+        for secret in [
+            "Steve",
+            "Burak",
+            "eyJhbG",
+            "a.b@example.com",
+            "192.168",
+            "1234",
+        ] {
+            assert!(!clean.contains(secret), "{secret} left in: {clean}");
+        }
+        assert!(clean.contains("<home>") && clean.contains("<hidden>") && clean.contains("<ip>"));
+    }
+
+    #[test]
+    fn a_report_fits_what_the_server_keeps() {
+        let line = "x".repeat(400);
+        let lines: Vec<&str> = (0..500).map(|_| line.as_str()).collect();
+        let report = Report::build(
+            "1.21.4",
+            "fabric",
+            "Crash",
+            &lines,
+            Some(&"y".repeat(200_000)),
+        );
+        assert!(report.log.len() < 48 * 1024);
+        assert!(report.log.contains("---- crash report ----"));
     }
 }

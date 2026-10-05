@@ -42,6 +42,7 @@ async fn app() -> Router {
         challenges: Challenges::default(),
         limiter: Limiter::new(1000, Duration::from_secs(60)),
         read_limiter: Limiter::new(1000, Duration::from_secs(60)),
+        crash_limiter: Limiter::new(3, Duration::from_secs(3600)),
         secret: b"test-secret-test-secret-test-secret".to_vec(),
         session_url: fake_session().await,
         trust_proxy: false,
@@ -78,6 +79,77 @@ async fn admin_call(
         status,
         serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
     )
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn crash_reports_are_kept_and_shown_to_moderators() {
+    let app = app().await;
+    let report = json!({
+        "launcher": "0.2.1", "game": "1.21.4", "loader": "fabric", "os": "windows",
+        "title": "Out of memory", "log": "java.lang.OutOfMemoryError: Java heap space
+    at a.b"
+    });
+    for _ in 0..2 {
+        let (s, _) = call(&app, "POST", "/v1/crash", None, Some(report.clone())).await;
+        assert_eq!(s, StatusCode::OK);
+    }
+    let (s, _) = call(
+        &app,
+        "POST",
+        "/v1/crash",
+        None,
+        Some(json!({"game": "1.21.4", "log": "  "})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _) = admin_call(
+        &app,
+        "nope-nope-nope-nope",
+        "GET",
+        "/v1/admin/crashes",
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, groups) = admin_call(
+        &app,
+        "alice-key-alice-key",
+        "GET",
+        "/v1/admin/crashes",
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(groups["groups"].as_array().unwrap().len(), 1);
+    assert_eq!(groups["groups"][0]["count"], 2);
+    let id = groups["groups"][0]["id"].as_i64().unwrap();
+    let (_, detail) = admin_call(
+        &app,
+        "alice-key-alice-key",
+        "GET",
+        &format!("/v1/admin/crashes/{id}"),
+        None,
+    )
+    .await;
+    assert!(detail["log"].as_str().unwrap().contains("OutOfMemoryError"));
+    let (s, _) = admin_call(
+        &app,
+        "alice-key-alice-key",
+        "DELETE",
+        &format!("/v1/admin/crashes/{id}"),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let (_, groups) = admin_call(
+        &app,
+        "alice-key-alice-key",
+        "GET",
+        "/v1/admin/crashes",
+        None,
+    )
+    .await;
+    assert!(groups["groups"].as_array().unwrap().is_empty());
 }
 
 #[tokio::test(flavor = "multi_thread")]

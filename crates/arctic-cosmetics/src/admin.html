@@ -107,7 +107,7 @@ function when(t) { return new Date(t * 1000).toLocaleString(); }
 
 async function render() {
   if (!me) { try { me = await api("/v1/admin/me"); } catch (_) { return login(); } }
-  const tabs = [["gallery", "Gallery" + (me.pending ? " (" + me.pending + ")" : "")], ["servers", "Servers"], ["log", "History"]];
+  const tabs = [["gallery", "Gallery" + (me.pending ? " (" + me.pending + ")" : "")], ["servers", "Servers"], ["crashes", "Crashes"], ["log", "History"]];
   const nav = el("nav", {}, ...tabs.map(([id, label]) =>
     el("button", { class: tab === id ? "on" : "", onclick: () => { tab = id; render(); } }, label)));
   const out = el("div", {}, "Loading…");
@@ -118,6 +118,7 @@ async function render() {
   try {
     if (tab === "gallery") await gallery(out);
     else if (tab === "servers") await servers(out);
+    else if (tab === "crashes") await crashes(out);
     else await history(out);
   } catch (e) { if (e.message !== "auth") out.replaceChildren(el("div", { id: "msg" }, e.message)); else login("Signed out."); }
 }
@@ -168,6 +169,32 @@ async function servers(out) {
   });
   out.replaceChildren(sel, rows.length
     ? el("table", {}, el("tbody", {}, ...rows)) : el("div", { class: "empty" }, "Nothing here."));
+}
+
+async function crashes(out) {
+  const data = await api("/v1/admin/crashes");
+  const rows = data.groups.map((g) => el("tr", {},
+    el("td", {}, el("strong", {}, g.title || "Crash"), el("div", { class: "muted" }, "Minecraft " + g.game)),
+    el("td", {}, el("span", { class: "badge" }, g.count + (g.count === 1 ? " report" : " reports"))),
+    el("td", {}, when(g.last)),
+    el("td", {}, el("button", { onclick: () => openCrash(g.id) }, "Open"))));
+  out.replaceChildren(rows.length
+    ? el("table", {}, el("tbody", {}, ...rows)) : el("div", { class: "empty" }, "No crash reports yet."));
+}
+
+async function openCrash(id) {
+  try {
+    const d = await api("/v1/admin/crashes/" + id);
+    const back = el("button", { onclick: () => render() }, "Back");
+    const del = el("button", { class: "bad", onclick: async () => {
+      if (!confirm("Delete every report of this crash?")) return;
+      try { await api("/v1/admin/crashes/" + id, { method: "DELETE" }); render(); } catch (e) { alert(e.message); }
+    } }, "Delete this crash");
+    app.querySelector("main").replaceChildren(
+      el("nav", {}, back, del),
+      el("div", { class: "muted" }, "Minecraft " + d.game + " · " + d.loader + " · " + d.os + " · launcher " + d.launcher + " · " + when(d.at)),
+      el("pre", { style: "white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px" }, d.log));
+  } catch (e) { alert(e.message); }
 }
 
 async function history(out) {

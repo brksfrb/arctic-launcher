@@ -14,6 +14,8 @@ use crate::gallery::Action;
 const PAGE: &str = include_str!("../admin.html");
 /// Most history entries one request returns.
 const LOG_LIMIT: usize = 200;
+/// Most crash groups one request returns.
+const CRASH_LIMIT: usize = 100;
 
 pub fn routes() -> Router<Shared> {
     Router::new()
@@ -22,6 +24,11 @@ pub fn routes() -> Router<Shared> {
         .route("/v1/admin/gallery", routing::get(queue))
         .route("/v1/admin/gallery/{id}", routing::post(decide))
         .route("/v1/admin/log", routing::get(log))
+        .route("/v1/admin/crashes", routing::get(crash_groups))
+        .route(
+            "/v1/admin/crashes/{id}",
+            routing::get(crash_detail).delete(crash_delete),
+        )
 }
 
 /// The dashboard: one self-contained page that talks only to this server.
@@ -123,5 +130,51 @@ async fn log(State(state): State<Shared>, headers: HeaderMap) -> Response {
     match state.store.moderation_log(LOG_LIMIT) {
         Ok(entries) => Json(json!({ "entries": entries })).into_response(),
         Err(e) => db_error("moderation log", e),
+    }
+}
+
+async fn crash_groups(State(state): State<Shared>, headers: HeaderMap) -> Response {
+    if moderator(&state, &headers).is_none() {
+        return denied();
+    }
+    match state.store.crash_groups(CRASH_LIMIT) {
+        Ok(groups) => Json(json!({ "groups": groups })).into_response(),
+        Err(e) => db_error("crash groups", e),
+    }
+}
+
+async fn crash_detail(
+    State(state): State<Shared>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Response {
+    if moderator(&state, &headers).is_none() {
+        return denied();
+    }
+    match state.store.crash_detail(id) {
+        Ok(Some(detail)) => Json(detail).into_response(),
+        Ok(None) => error(StatusCode::NOT_FOUND, "not found"),
+        Err(e) => db_error("crash detail", e),
+    }
+}
+
+async fn crash_delete(
+    State(state): State<Shared>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Response {
+    let Some(name) = moderator(&state, &headers) else {
+        return denied();
+    };
+    match state.store.crash_delete_group(id) {
+        Ok(true) => {
+            let _ =
+                state
+                    .store
+                    .moderation_note(&name, "remove", &id.to_string(), "crash group", now());
+            Json(json!({ "ok": true })).into_response()
+        }
+        Ok(false) => error(StatusCode::NOT_FOUND, "not found"),
+        Err(e) => db_error("crash delete", e),
     }
 }

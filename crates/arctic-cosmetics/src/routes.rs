@@ -42,6 +42,8 @@ pub struct AppState {
     /// Reads (textures, models, lists...): a game or the launcher's
     /// Cosmetics tab asks for many at once, so a much higher ceiling.
     pub read_limiter: Limiter,
+    /// Crash reports sent by one address: a few an hour is plenty.
+    pub crash_limiter: Limiter,
     pub secret: Vec<u8>,
     pub session_url: String,
     /// Behind a reverse proxy: take the client address from
@@ -66,6 +68,7 @@ pub fn router(state: Shared) -> Router {
         .route("/v1/online", post(online))
         .merge(gallery::routes())
         .merge(admin::routes())
+        .merge(crash::routes())
         .merge(content::routes())
         .merge(shares::routes())
         .merge(servers::routes())
@@ -96,7 +99,11 @@ fn db_error(what: &str, e: rusqlite::Error) -> Response {
     error(StatusCode::INTERNAL_SERVER_ERROR, "database error")
 }
 
-async fn rate_limit(State(state): State<Shared>, request: Request, next: Next) -> Response {
+/// The caller's address, put on each request by the rate limiter.
+#[derive(Clone, Copy)]
+struct ClientAddr(Option<std::net::IpAddr>);
+
+async fn rate_limit(State(state): State<Shared>, mut request: Request, next: Next) -> Response {
     let peer = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
@@ -108,6 +115,7 @@ async fn rate_limit(State(state): State<Shared>, request: Request, next: Next) -
         .then(|| client_ip(request.headers()))
         .flatten()
         .or(peer);
+    request.extensions_mut().insert(ClientAddr(ip));
     let reading = matches!(
         *request.method(),
         axum::http::Method::GET | axum::http::Method::HEAD
@@ -481,6 +489,7 @@ fn store_upload(state: &AppState, b64: &str, kind: Kind, t: u64) -> Result<Strin
 
 mod admin;
 mod content;
+mod crash;
 mod friends;
 mod gallery;
 mod servers;

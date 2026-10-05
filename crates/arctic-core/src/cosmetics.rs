@@ -304,6 +304,29 @@ pub fn gallery_share(
     }
 }
 
+/// Send a crash report the player agreed to share.
+pub fn send_crash_report(base: &str, report: &crate::crash::Report) -> Result<()> {
+    let mut resp = agent()
+        .post(&format!("{base}/v1/crash"))
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .send_json(serde_json::json!({
+            "launcher": report.launcher,
+            "game": report.game,
+            "loader": report.loader,
+            "os": report.os,
+            "title": report.title,
+            "log": report.log,
+        }))?;
+    let status = resp.status().as_u16();
+    if (200..300).contains(&status) {
+        Ok(())
+    } else {
+        Err(Error::Other(server_error(&mut resp, status)))
+    }
+}
+
 /// Report a gallery skin (hidden after several reports).
 pub fn gallery_report(base: &str, token: &str, id: &str) -> Result<()> {
     let mut resp = agent()
