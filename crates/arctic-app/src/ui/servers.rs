@@ -30,6 +30,8 @@ enum Ping {
 
 #[derive(Default)]
 pub struct ServersUi {
+    /// The address typed into "Direct join".
+    direct: String,
     request: u64,
     /// Instance the list is for.
     instance: Option<String>,
@@ -86,6 +88,8 @@ impl ArcticApp {
             });
         });
         ui.add_space(4.0);
+        self.direct_join(ui, &instance);
+        ui.add_space(6.0);
         if list.is_empty() {
             ui.label(
                 RichText::new(
@@ -150,6 +154,53 @@ impl ArcticApp {
                 }
             }
             egui::DragAndDrop::clear_payload(ui.ctx());
+        }
+    }
+
+    /// Type an address to join it now, or to keep it on the list.
+    fn direct_join(&mut self, ui: &mut egui::Ui, instance: &arctic_core::instances::Instance) {
+        let p = self.palette();
+        let typed = self.servers.direct.trim().to_owned();
+        let valid = arctic_core::servers::Address::parse(&typed).is_some();
+        let (mut join, mut add) = (false, false);
+        ui.horizontal(|ui| {
+            let field = ui.add(
+                widgets::text_field(&mut self.servers.direct)
+                    .hint_text("Direct join: play.example.net")
+                    .desired_width(240.0),
+            );
+            join = widgets::button(ui, p, Some(Icon::Play), "Join", valid).clicked()
+                || (field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && valid);
+            add = widgets::button(ui, p, Some(Icon::Plus), "Add to list", false).clicked();
+            if !typed.is_empty() && !valid {
+                ui.label(RichText::new("Not a server address").small().color(p.muted));
+            }
+        });
+        if !valid {
+            return;
+        }
+        if add {
+            match arctic_core::servers::add(&instance.game_dir(&self.dirs), "", &typed) {
+                Ok(true) => {
+                    self.toasts.push(
+                        Kind::Success,
+                        format!("Added {typed}"),
+                        format!("It's in {}'s server list.", instance.name),
+                    );
+                    self.servers.direct.clear();
+                    self.servers_changed();
+                }
+                Ok(false) => {
+                    self.toasts
+                        .push(Kind::Info, format!("{typed} is already on your list"), "")
+                }
+                Err(e) => self
+                    .toasts
+                    .push(Kind::Error, "Couldn't add it", e.to_string()),
+            }
+        }
+        if join {
+            self.launch_into(QuickPlay::Server(typed));
         }
     }
 
