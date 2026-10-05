@@ -28,8 +28,12 @@
 		"ChatPlaceholderMixin",
 		"MinecraftTickMixin",
 		"MainStartMixin",
-		"MinecraftReadyMixin",
+		"MinecraftReadyMixin",<% if (fastStart) { %>
+		"BlocksInitMixin",
+		"FerriteCoreLockMixin",<% } %>
 		"FirstScreenMixin",
+		"BootstrapMarkMixin",
+		"WindowMarkMixin",
 		"EntityTurnMixin"<% if (features) { %>,
 		"CameraMixin",
 		"LightmapMixin",

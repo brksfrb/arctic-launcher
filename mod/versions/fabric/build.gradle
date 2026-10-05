@@ -204,6 +204,8 @@ processResources {
 			oldCamera: !atLeast('26.1'),
 			// Needs the FreeType font code of 26.1+ (older versions use STB).
 			smoothFont: atLeast('26.1'),
+			// Block states' caches made on all cores (names as in the game: unobfuscated from 26.1).
+			fastStart: atLeast('26.1'),
 			cosmetics: atLeast('26.1'),
 			accountSwitch: atLeast('26.1'),
 			// Scoreboard tweaks, hit color, the minimap, duels, toasts: 1.20+ for now.

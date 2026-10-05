@@ -202,23 +202,26 @@ pub fn sync(
     progress: Progress,
 ) -> Result<()> {
     let state: State = load_json(&state_path(game_dir))?.unwrap_or_default();
+    let mods_dir = game_dir.join("mods");
     let mut wanted: Vec<(&str, &str)> = if enabled { MODS.to_vec() } else { Vec::new() };
     if shaders {
         wanted.push((super::packs::IRIS, "Iris"));
     }
     if wanted.is_empty() {
+        super::slim_api::undo(&mods_dir)?;
         return remove_all(game_dir);
     }
     if modded && state.game_version == game_version && state.shaders == shaders {
+        super::slim_api::undo(&mods_dir)?;
         leave_players_mods(game_dir, &mut wanted)?;
         if wanted.is_empty() {
             return Ok(());
         }
     }
-    let mods_dir = game_dir.join("mods");
     let index = index_path(game_dir);
     if state.game_version != game_version || state.shaders != shaders {
         // Another version's set: keep it for later, and bring back this one's if we have it.
+        super::slim_api::undo(&mods_dir)?;
         stash(game_dir, &state)?;
         remove_all(game_dir)?;
         if unstash(game_dir, game_version, shaders)? {
@@ -229,6 +232,8 @@ pub fn sync(
     {
         return Ok(());
     }
+    // New or changed mods are about to be written: Fabric API goes back to the whole one first.
+    super::slim_api::undo(&mods_dir)?;
     if modded {
         leave_players_mods(game_dir, &mut wanted)?;
         if wanted.is_empty() {
@@ -274,15 +279,17 @@ pub fn sync(
 
 fn all_present(index: &Path, mods_dir: &Path) -> Result<bool> {
     let tracked = ModIndex::load(index)?;
-    Ok(tracked
-        .mods
-        .iter()
-        .all(|m| super::files::exists(mods_dir, &m.file_name)))
+    let stashed = super::slim_api::stashed(mods_dir);
+    Ok(tracked.mods.iter().all(|m| {
+        super::files::exists(mods_dir, &m.file_name)
+            || stashed.as_deref() == Some(m.file_name.as_str())
+    }))
 }
 
 /// Delete every mod the Performance switch installed.
 fn remove_all(game_dir: &Path) -> Result<()> {
     let index = index_path(game_dir);
+    super::slim_api::undo(&game_dir.join("mods"))?;
     if !index.exists() {
         return Ok(());
     }

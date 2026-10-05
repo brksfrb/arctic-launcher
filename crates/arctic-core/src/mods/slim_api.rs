@@ -184,14 +184,14 @@ fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 }
 
 /// What the other jars in the folder look like (names, sizes, times).
-fn signature(mods_dir: &Path, skip: &str) -> String {
+fn signature(mods_dir: &Path, skip: &[&str]) -> String {
     let mut parts: Vec<String> = fs::read_dir(mods_dir)
         .into_iter()
         .flatten()
         .flatten()
         .filter_map(|e| {
             let name = e.file_name().to_string_lossy().into_owned();
-            if !name.ends_with(".jar") || name == skip || name == STUB {
+            if !name.ends_with(".jar") || skip.contains(&name.as_str()) || name == STUB {
                 return None;
             }
             let meta = e.metadata().ok()?;
@@ -287,9 +287,28 @@ fn store(mods_dir: &Path, sig: &str, keep: &BTreeSet<String>) {
     }
 }
 
+/// The big jar's file name while it is put aside (so that "is everything there" checks can count it).
+pub fn stashed(mods_dir: &Path) -> Option<String> {
+    let text = fs::read_to_string(state_path(mods_dir)).ok()?;
+    let state: State = serde_json::from_str(&text).ok()?;
+    (!state.original.is_empty()).then_some(state.original)
+}
+
 /// Replace the big Fabric API jar with the modules the other jars use.
-/// Returns whether it did. Call [`undo`] before changing the folder's mods.
+/// Returns whether it did (or it was done already and nothing changed since).
+/// Call [`undo`] before changing the folder's mods.
 pub fn apply(mods_dir: &Path) -> Result<bool> {
+    if let Ok(text) = fs::read_to_string(state_path(mods_dir))
+        && let Ok(state) = serde_json::from_str::<State>(&text)
+    {
+        let mut skip: Vec<&str> = state.added.iter().map(String::as_str).collect();
+        skip.push(&state.original);
+        if signature(mods_dir, &skip) == state.signature {
+            return Ok(true);
+        }
+        // The folder's mods changed since: start from the whole thing again.
+        undo(mods_dir)?;
+    }
     let Some(umbrella) = find_umbrella(mods_dir) else {
         return Ok(false);
     };
@@ -300,7 +319,7 @@ pub fn apply(mods_dir: &Path) -> Result<bool> {
     if modules.is_empty() {
         return Ok(false);
     }
-    let sig = signature(mods_dir, &umbrella);
+    let sig = signature(mods_dir, &[umbrella.as_str()]);
     let wanted = match cached(mods_dir, &sig) {
         Some(ids) => ids,
         None => {
@@ -470,6 +489,43 @@ mod tests {
             .collect();
         back.sort();
         assert_eq!(back, ["fabric-api-0.1.0.jar", "user.jar"]);
+    }
+
+    #[test]
+    fn applying_again_changes_nothing_until_the_mods_change() {
+        let dir = tempfile::tempdir().unwrap();
+        setup(dir.path());
+        let mods = dir.path().join("mods");
+        assert!(apply(&mods).unwrap());
+        let stub_time = fs::metadata(mods.join("fabric-api-stub.jar"))
+            .unwrap()
+            .modified()
+            .unwrap();
+        assert_eq!(stashed(&mods).as_deref(), Some("fabric-api-0.1.0.jar"));
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        assert!(apply(&mods).unwrap());
+        assert_eq!(
+            fs::metadata(mods.join("fabric-api-stub.jar"))
+                .unwrap()
+                .modified()
+                .unwrap(),
+            stub_time,
+            "nothing was rewritten"
+        );
+        // A mod added later is looked at: the whole jar comes back first.
+        let meta = serde_json::json!({"schemaVersion": 1, "id": "extra", "version": "1"});
+        fs::write(
+            mods.join("extra.jar"),
+            jar(&[
+                ("fabric.mod.json", meta.to_string().as_bytes()),
+                ("a/D.class", b"net/fabricmc/fabric/api/m7/Thing"),
+            ]),
+        )
+        .unwrap();
+        // (With three of the ten modules in use there is too little to gain: the whole jar stays.)
+        assert!(!apply(&mods).unwrap());
+        assert!(mods.join("fabric-api-0.1.0.jar").exists());
+        assert!(!mods.join("m1-1.jar").exists());
     }
 
     #[test]
