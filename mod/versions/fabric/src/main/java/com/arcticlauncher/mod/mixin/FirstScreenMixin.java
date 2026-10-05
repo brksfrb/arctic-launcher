@@ -1,3 +1,4 @@
+//#if MC >= 1.18
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.mod.startup.Timeline;
@@ -21,3 +22,4 @@ abstract class FirstScreenMixin {
 		}
 	}
 }
+//#endif

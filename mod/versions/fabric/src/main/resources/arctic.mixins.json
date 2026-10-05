@@ -26,14 +26,15 @@
 		"TitleScreenMixin",
 		"ServerTimeMixin",
 		"ChatPlaceholderMixin",
-		"MinecraftTickMixin",
+		"MinecraftTickMixin",<% if (startup) { %>
 		"MainStartMixin",
-		"MinecraftReadyMixin",<% if (fastStart) { %>
-		"BlocksInitMixin",
-		"FerriteCoreLockMixin",<% } %>
+		"MinecraftReadyMixin",
 		"FirstScreenMixin",
 		"BootstrapMarkMixin",
 		"WindowMarkMixin",
+		"CrashReportPreloadMixin",<% } %><% if (fastStart) { %>
+		"BlocksInitMixin",
+		"FerriteCoreLockMixin",<% } %>
 		"EntityTurnMixin"<% if (features) { %>,
 		"CameraMixin",
 		"LightmapMixin",

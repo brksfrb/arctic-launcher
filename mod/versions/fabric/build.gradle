@@ -167,6 +167,9 @@ dependencies {
 	if (!atLeast('26.1')) {
 		mappings loom.officialMojangMappings()
 	}
+	// The class-loading agent (see ArcticAgent) edits Fabric Loader with ASM, which the game ships.
+	compileOnly 'org.ow2.asm:asm:9.9'
+	compileOnly 'org.ow2.asm:asm-tree:9.9'
 	if (atLeast('26.1')) {
 		implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	} else {
@@ -206,6 +209,8 @@ processResources {
 			smoothFont: atLeast('26.1'),
 			// Block states' caches made on all cores (names as in the game: unobfuscated from 26.1).
 			fastStart: atLeast('26.1'),
+			// The startup timeline, class pre-loader and the agent behind it: Java 17+ (1.18 and later).
+			startup: atLeast('1.18'),
 			cosmetics: atLeast('26.1'),
 			accountSwitch: atLeast('26.1'),
 			// Scoreboard tweaks, hit color, the minimap, duels, toasts: 1.20+ for now.
@@ -248,4 +253,11 @@ tasks.withType(JavaCompile).configureEach {
 java {
 	sourceCompatibility = JavaVersion.toVersion(javaVersion)
 	targetCompatibility = JavaVersion.toVersion(javaVersion)
+}
+
+// The jar is also a Java agent (started with -javaagent before the game, see ArcticAgent).
+tasks.named('jar') {
+	manifest {
+		attributes('Premain-Class': 'com.arcticlauncher.mod.startup.ArcticAgent')
+	}
 }

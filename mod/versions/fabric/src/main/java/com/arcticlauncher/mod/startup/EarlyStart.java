@@ -1,3 +1,4 @@
+//#if MC >= 1.18
 package com.arcticlauncher.mod.startup;
 
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
@@ -10,3 +11,4 @@ public final class EarlyStart implements PreLaunchEntrypoint {
 		Preloader.start();
 	}
 }
+//#endif
