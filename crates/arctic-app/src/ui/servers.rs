@@ -11,6 +11,7 @@ use eframe::egui::{self, Color32, CornerRadius, RichText, vec2};
 use crate::app::ArcticApp;
 use crate::art::icons::{self, Icon};
 use crate::tasks::Outcome;
+use crate::toasts::Kind;
 use crate::widgets;
 
 const ICON: f32 = 40.0;
@@ -95,15 +96,61 @@ impl ArcticApp {
             );
             return;
         }
+        let mut rows = Vec::new();
         crate::theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
             for (i, server) in list.iter().enumerate() {
                 if i > 0 {
                     ui.separator();
                 }
-                self.server_row(ui, server);
+                let rect = self.server_row(ui, server);
+                rows.push((server.address.clone(), rect));
             }
         });
+        self.finish_server_drag(ui, &rows, &instance);
+    }
+
+    /// While a server is being dragged by its grip: show where it would
+    /// land, and move it there when let go.
+    fn finish_server_drag(
+        &mut self,
+        ui: &egui::Ui,
+        rows: &[(String, egui::Rect)],
+        instance: &arctic_core::instances::Instance,
+    ) {
+        let p = self.palette();
+        let Some(dragged) = egui::DragAndDrop::payload::<String>(ui.ctx()) else {
+            return;
+        };
+        let Some(pointer) = ui.input(|i| i.pointer.interact_pos()) else {
+            return;
+        };
+        let (Some(first), Some(last)) = (rows.first(), rows.last()) else {
+            return;
+        };
+        // It goes in front of the first row whose middle the pointer is above.
+        let slot = rows.iter().position(|(_, r)| pointer.y < r.center().y);
+        let y = match slot {
+            Some(i) => rows[i].1.top(),
+            None => last.1.bottom(),
+        };
+        let x = first.1.x_range();
+        ui.painter().hline(x, y, egui::Stroke::new(2.0, p.accent));
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+        if ui.input(|i| i.pointer.any_released()) {
+            let before = slot.map(|i| rows[i].0.as_str());
+            if before != Some(dragged.as_str()) {
+                let dir = instance.game_dir(&self.dirs);
+                match arctic_core::servers::move_before(&dir, &dragged, before) {
+                    Ok(_) => self.servers_changed(),
+                    Err(e) => {
+                        self.toasts
+                            .push(Kind::Error, "Couldn't move the server", e.to_string())
+                    }
+                }
+            }
+            egui::DragAndDrop::clear_payload(ui.ctx());
+        }
     }
 
     /// The list changed on disk: read and ping it again.
@@ -129,11 +176,31 @@ impl ArcticApp {
             .servers_refresh(self.servers.request, instance.game_dir(&self.dirs));
     }
 
-    fn server_row(&mut self, ui: &mut egui::Ui, server: &Server) {
+    /// One row of the list; returns the space it takes.
+    fn server_row(&mut self, ui: &mut egui::Ui, server: &Server) -> egui::Rect {
         let p = self.palette();
         let ping = self.servers.status.get(&server.address);
         let mut join = false;
-        ui.horizontal(|ui| {
+        let row = ui.horizontal(|ui| {
+            // Grip: drag the server up or down the list.
+            let (grip, response) =
+                ui.allocate_exact_size(vec2(14.0, ICON), egui::Sense::click_and_drag());
+            for dy in [-6.0, 0.0, 6.0] {
+                for dx in [-2.5, 2.5] {
+                    ui.painter().circle_filled(
+                        grip.center() + vec2(dx, dy),
+                        1.3,
+                        if response.hovered() { p.text } else { p.muted },
+                    );
+                }
+            }
+            if response.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+            }
+            response.clone().on_hover_text("Drag to reorder");
+            if response.drag_started() {
+                egui::DragAndDrop::set_payload(ui.ctx(), server.address.clone());
+            }
             let (rect, _) = ui.allocate_exact_size(vec2(ICON, ICON), egui::Sense::hover());
             match self.servers.icons.get(&server.address) {
                 Some(uri) => {
@@ -198,6 +265,7 @@ impl ArcticApp {
         if join {
             self.launch_into(QuickPlay::Server(server.address.clone()));
         }
+        row.response.rect
     }
 
     /// Players and ping (or offline / pinging), right-aligned.
