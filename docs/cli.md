@@ -231,6 +231,7 @@ arguments are never included, and everything imported is checked value by value 
 ```text
 arctic worlds list|sources [--instance <I>]
 arctic servers list [--instance <I>] [--no-ping] | ping <ADDRESS> | add <ADDRESS> [--name N] [--instance <I>]
+arctic servers move <ADDRESS> [--before <ADDRESS>] [--instance <I>]
 arctic servers browse [--premium|--cracked] [--random]
 arctic servers submit <ADDRESS> --name N [--description D] [--tag T]... | verify <ID>
 arctic servers review [--state pending] [--approve|--reject|--remove <ID>]   (needs ARCTIC_ADMIN_KEY)

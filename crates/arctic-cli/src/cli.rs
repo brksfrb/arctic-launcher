@@ -446,6 +446,15 @@ pub enum ServersCommand {
         #[arg(long)]
         instance: Option<String>,
     },
+    /// Move a server up or down an instance's multiplayer list.
+    Move {
+        address: String,
+        /// Put it in front of this server (default: the end of the list).
+        #[arg(long)]
+        before: Option<String>,
+        #[arg(long)]
+        instance: Option<String>,
+    },
     /// List your own server publicly: prints a code to put in its MOTD.
     Submit {
         address: String,
