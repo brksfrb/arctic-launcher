@@ -16,6 +16,7 @@ pub mod packs;
 pub mod performance;
 pub mod polarium;
 mod resolve;
+pub mod slim_api;
 #[cfg(test)]
 mod tests;
 
