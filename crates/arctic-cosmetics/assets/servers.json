@@ -9,5 +9,6 @@
   {"address": "jartexnetwork.com", "name": "JartexNetwork", "tags": ["minigames", "prison", "skyblock"]},
   {"address": "play.pika-network.net", "name": "PikaNetwork", "tags": ["minigames", "bedwars", "survival"]},
   {"address": "minehut.com", "name": "Minehut", "tags": ["community", "player-servers"]},
-  {"address": "play.purpleprison.net", "name": "Purple Prison", "tags": ["prison"]}
+  {"address": "play.purpleprison.net", "name": "Purple Prison", "tags": ["prison"]},
+  {"address": "botpvp.flashhosting.net", "name": "BotPvP", "description": "Hosted by Flash Hosting, Arctic Launcher's hosting partner.", "tags": ["pvp"], "partner": "Flash Hosting"}
 ]
