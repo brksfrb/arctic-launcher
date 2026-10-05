@@ -151,7 +151,7 @@ impl ArcticApp {
             if cfg!(windows) {
                 ui.checkbox(&mut s.keep_ready, "Keep Minecraft ready in the background")
                     .on_hover_text(
-                        "Loads the game with its window hidden while the launcher is open, so Play shows it at once instead of waiting. Uses the game's memory (a few GB) meanwhile. It's replaced when you change the instance, account, settings or mods, and not used for Fullscreen or joining a server.",
+                        "Loads the game with its window hidden while the launcher is open, so Play shows it at once instead of waiting. Uses the game's memory (a few GB) meanwhile. It's replaced when you change the instance, account, settings or mods, and not used for Fullscreen.",
                     );
             }
             widgets::field_row(ui, |ui| {

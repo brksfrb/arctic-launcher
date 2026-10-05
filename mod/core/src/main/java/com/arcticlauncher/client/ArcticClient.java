@@ -290,6 +290,7 @@ public final class ArcticClient {
 	}
 
 	public static void tick(boolean screenOpen) {
+		com.arcticlauncher.client.config.Activation.poll(platform);
 		com.arcticlauncher.client.replay.Replays.tick(screenOpen);
 		if (com.arcticlauncher.client.replay.Replays.watching()) {
 			return;

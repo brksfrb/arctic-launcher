@@ -567,6 +567,18 @@ pub fn write_mod_session(game_dir: &Path, session: &ModSession) -> Result<()> {
     )
 }
 
+/// Ask a game that's ready in the background to join `server` (the Arctic
+/// Client picks the file up within a moment and removes it).
+pub fn write_activation(game_dir: &Path, server: &str) -> Result<()> {
+    let at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    save_json(
+        &game_dir.join("config").join("arctic-activate.json"),
+        &serde_json::json!({ "server": server, "at": at }),
+    )
+}
+
 fn get<T: serde::de::DeserializeOwned>(url: &str, token: Option<&str>) -> Result<T> {
     let mut req = agent().get(url);
     if let Some(t) = token {
