@@ -28,6 +28,7 @@ mod presence;
 mod routes;
 mod shares;
 mod store;
+mod suggestions;
 mod voice;
 
 use std::net::SocketAddr;
@@ -100,6 +101,7 @@ async fn run() -> Result<(), String> {
         limiter: limit::Limiter::new(120, Duration::from_secs(60)),
         read_limiter: limit::Limiter::new(1500, Duration::from_secs(60)),
         crash_limiter: limit::Limiter::new(6, Duration::from_secs(3600)),
+        suggest_limiter: limit::Limiter::new(5, Duration::from_secs(3600)),
         secret: secret.into_bytes(),
         session_url: env("ARCTIC_SESSION_URL", SESSION_URL),
         trust_proxy: env("ARCTIC_COSMETICS_TRUST_PROXY", "0") == "1",

@@ -44,6 +44,7 @@ pub struct AppState {
     pub read_limiter: Limiter,
     /// Crash reports sent by one address: a few an hour is plenty.
     pub crash_limiter: Limiter,
+    pub suggest_limiter: Limiter,
     pub secret: Vec<u8>,
     pub session_url: String,
     /// Behind a reverse proxy: take the client address from
@@ -69,6 +70,7 @@ pub fn router(state: Shared) -> Router {
         .merge(gallery::routes())
         .merge(admin::routes())
         .merge(crash::routes())
+        .merge(suggest::routes())
         .merge(content::routes())
         .merge(shares::routes())
         .merge(servers::routes())
@@ -494,6 +496,7 @@ mod friends;
 mod gallery;
 mod servers;
 mod shares;
+mod suggest;
 
 pub use servers::pinger as server_pinger;
 

@@ -47,6 +47,17 @@ impl ArcticApp {
                 if widgets::button(ui, p, Some(Icon::Friends), "Discord", false).clicked() {
                     ui.ctx().open_url(egui::OpenUrl::new_tab(DISCORD));
                 }
+                if widgets::button(
+                    ui,
+                    p,
+                    Some(Icon::Plus),
+                    "Suggest a feature or report a bug",
+                    true,
+                )
+                .clicked()
+                {
+                    self.open_suggest();
+                }
                 if widgets::button(ui, p, Some(Icon::External), "Email support", false)
                     .on_hover_text(SUPPORT_EMAIL)
                     .clicked()

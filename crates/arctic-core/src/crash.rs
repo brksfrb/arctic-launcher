@@ -347,6 +347,11 @@ fn tail_of(text: &str, max: usize) -> &str {
     &text[start..]
 }
 
+/// The end of `text` (at most `max` bytes), with names and tokens taken out.
+pub fn scrubbed_tail(text: &str, max: usize) -> String {
+    scrub(tail_of(text, max), &Own::this_pc())
+}
+
 /// What identifies this PC's owner in paths and logs.
 pub struct Own {
     pub home: Option<String>,

@@ -29,6 +29,13 @@ pub fn routes() -> Router<Shared> {
             "/v1/admin/crashes/{id}",
             routing::get(crash_detail).delete(crash_delete),
         )
+        .route("/v1/admin/suggestions", routing::get(suggestion_list))
+        .route(
+            "/v1/admin/suggestions/{id}",
+            routing::get(suggestion_detail)
+                .post(suggestion_done)
+                .delete(suggestion_delete),
+        )
 }
 
 /// The dashboard: one self-contained page that talks only to this server.
@@ -176,5 +183,66 @@ async fn crash_delete(
         }
         Ok(false) => error(StatusCode::NOT_FOUND, "not found"),
         Err(e) => db_error("crash delete", e),
+    }
+}
+
+async fn suggestion_list(State(state): State<Shared>, headers: HeaderMap) -> Response {
+    if moderator(&state, &headers).is_none() {
+        return denied();
+    }
+    match state.store.suggestions(CRASH_LIMIT) {
+        Ok(entries) => Json(json!({ "entries": entries })).into_response(),
+        Err(e) => db_error("suggestions", e),
+    }
+}
+
+async fn suggestion_detail(
+    State(state): State<Shared>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Response {
+    if moderator(&state, &headers).is_none() {
+        return denied();
+    }
+    match state.store.suggestion_detail(id) {
+        Ok(Some(detail)) => Json(detail).into_response(),
+        Ok(None) => error(StatusCode::NOT_FOUND, "not found"),
+        Err(e) => db_error("suggestion detail", e),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct DoneBody {
+    done: bool,
+}
+
+async fn suggestion_done(
+    State(state): State<Shared>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(body): Json<DoneBody>,
+) -> Response {
+    if moderator(&state, &headers).is_none() {
+        return denied();
+    }
+    match state.store.suggestion_set_done(id, body.done) {
+        Ok(true) => Json(json!({ "ok": true })).into_response(),
+        Ok(false) => error(StatusCode::NOT_FOUND, "not found"),
+        Err(e) => db_error("suggestion done", e),
+    }
+}
+
+async fn suggestion_delete(
+    State(state): State<Shared>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Response {
+    if moderator(&state, &headers).is_none() {
+        return denied();
+    }
+    match state.store.suggestion_delete(id) {
+        Ok(true) => Json(json!({ "ok": true })).into_response(),
+        Ok(false) => error(StatusCode::NOT_FOUND, "not found"),
+        Err(e) => db_error("suggestion delete", e),
     }
 }

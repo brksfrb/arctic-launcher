@@ -43,6 +43,7 @@ async fn app() -> Router {
         limiter: Limiter::new(1000, Duration::from_secs(60)),
         read_limiter: Limiter::new(1000, Duration::from_secs(60)),
         crash_limiter: Limiter::new(3, Duration::from_secs(3600)),
+        suggest_limiter: Limiter::new(3, Duration::from_secs(3600)),
         secret: b"test-secret-test-secret-test-secret".to_vec(),
         session_url: fake_session().await,
         trust_proxy: false,
@@ -150,6 +151,67 @@ async fn crash_reports_are_kept_and_shown_to_moderators() {
     )
     .await;
     assert!(groups["groups"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn suggestions_reach_the_dashboard() {
+    let app = app().await;
+    let (s, _) = call(
+        &app,
+        "POST",
+        "/v1/suggest",
+        None,
+        Some(json!({"text": " "})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _) = call(
+        &app,
+        "POST",
+        "/v1/suggest",
+        None,
+        Some(json!({"kind": "bug", "text": "maps lag", "os": "linux", "log": "boom"})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let (s, _) = admin_call(
+        &app,
+        "nope-nope-nope-nope",
+        "GET",
+        "/v1/admin/suggestions",
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (_, list) = admin_call(
+        &app,
+        "alice-key-alice-key",
+        "GET",
+        "/v1/admin/suggestions",
+        None,
+    )
+    .await;
+    assert_eq!(list["entries"][0]["kind"], "bug");
+    assert_eq!(list["entries"][0]["has_log"], true);
+    let id = list["entries"][0]["id"].as_i64().unwrap();
+    let (_, detail) = admin_call(
+        &app,
+        "alice-key-alice-key",
+        "GET",
+        &format!("/v1/admin/suggestions/{id}"),
+        None,
+    )
+    .await;
+    assert_eq!(detail["log"], "boom");
+    let (s, _) = admin_call(
+        &app,
+        "alice-key-alice-key",
+        "DELETE",
+        &format!("/v1/admin/suggestions/{id}"),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
 }
 
 #[tokio::test(flavor = "multi_thread")]

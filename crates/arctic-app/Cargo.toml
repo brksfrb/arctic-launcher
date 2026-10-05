@@ -9,9 +9,9 @@ homepage.workspace = true
 authors.workspace = true
 
 [dependencies]
-arctic-core = { version = "0.2.0", path = "../arctic-core" }
-arctic-share = { version = "0.2.0", path = "../arctic-share" }
-arctic-voice = { version = "0.2.0", path = "../arctic-voice" }
+arctic-core = { path = "../arctic-core" }
+arctic-share = { path = "../arctic-share" }
+arctic-voice = { path = "../arctic-voice" }
 # glow (OpenGL) instead of the default wgpu backend keeps the binary small.
 eframe = { version = "0.36.2", default-features = false, features = ["accesskit", "default_fonts", "glow", "links", "wayland", "x11"] }
 egui_extras = { version = "0.36", default-features = false, features = ["file", "image"] }

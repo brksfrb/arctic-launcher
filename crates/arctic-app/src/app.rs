@@ -143,6 +143,8 @@ pub struct ArcticApp {
     pub(crate) remove_confirm: Option<String>,
     /// Instance whose performance mods are about to be turned off (asks first).
     pub(crate) performance_off_confirm: Option<String>,
+    /// The suggest-a-feature form, while it's open.
+    pub(crate) suggest: Option<crate::ui::suggest::SuggestForm>,
     pub(crate) profile_dialog: ProfileDialog,
     /// Instances tab state (pages, mod browser, create dialog).
     pub(crate) inst: InstancesUi,
@@ -287,6 +289,7 @@ impl ArcticApp {
             add_account: AddAccount::Closed,
             remove_confirm: None,
             performance_off_confirm: None,
+            suggest: None,
             profile_dialog: ProfileDialog::Closed,
             inst: InstancesUi::default(),
             update,
@@ -845,6 +848,7 @@ impl ArcticApp {
                 ),
                 Err(e) => self.toasts.push(Kind::Error, "Couldn't send the report", e),
             },
+            Event::SuggestionSent(result) => self.on_suggestion_sent(result),
             Event::UpdateChecked(result) => self.on_update_checked(result),
             Event::ProxyTested(proxy, result) => self.on_proxy_tested(proxy, result),
             Event::UpdateInstalled(result) => self.on_update_installed(result),

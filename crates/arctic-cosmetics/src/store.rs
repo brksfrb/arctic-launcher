@@ -75,6 +75,7 @@ impl Store {
         store.migrate_gallery_looks()?;
         store.migrate_gallery_status()?;
         store.migrate_crashes()?;
+        store.migrate_suggestions()?;
         store.migrate_presence()?;
         store.migrate_shares()?;
         store.migrate_listing()?;

@@ -327,6 +327,40 @@ pub fn send_crash_report(base: &str, report: &crate::crash::Report) -> Result<()
     }
 }
 
+/// An idea or bug report typed into the launcher.
+pub struct Suggestion {
+    /// `idea` or `bug`.
+    pub kind: String,
+    pub text: String,
+    /// How to reach the sender, if they said.
+    pub contact: String,
+    /// Logs the sender chose to attach (already cleaned), or empty.
+    pub log: String,
+}
+
+/// Send a suggestion the player wrote.
+pub fn send_suggestion(base: &str, suggestion: &Suggestion) -> Result<()> {
+    let mut resp = agent()
+        .post(&format!("{base}/v1/suggest"))
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .send_json(serde_json::json!({
+            "kind": suggestion.kind,
+            "text": suggestion.text,
+            "contact": suggestion.contact,
+            "launcher": env!("CARGO_PKG_VERSION"),
+            "os": std::env::consts::OS,
+            "log": suggestion.log,
+        }))?;
+    let status = resp.status().as_u16();
+    if (200..300).contains(&status) {
+        Ok(())
+    } else {
+        Err(Error::Other(server_error(&mut resp, status)))
+    }
+}
+
 /// Report a gallery skin (hidden after several reports).
 pub fn gallery_report(base: &str, token: &str, id: &str) -> Result<()> {
     let mut resp = agent()
