@@ -46,6 +46,10 @@ struct Hold {
 mod windows_guard {
     use std::ffi::c_void;
 
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SET_QUOTA, SetProcessWorkingSetSize,
+    };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         AllowSetForegroundWindow, EnumWindows, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
         SW_HIDE, SW_RESTORE, SW_SHOW, SetForegroundWindow, ShowWindow,
@@ -91,6 +95,24 @@ mod windows_guard {
         found
     }
 
+    /// Move the process's memory out of RAM (what Windows does to idle apps under pressure).
+    pub fn trim(pid: u32) {
+        // SAFETY: an owned handle with the rights this call needs, closed right after.
+        unsafe {
+            let process = OpenProcess(
+                PROCESS_SET_QUOTA | PROCESS_QUERY_LIMITED_INFORMATION,
+                0,
+                pid,
+            );
+            if process.is_null() {
+                return;
+            }
+            // (-1, -1): trim as much as possible.
+            SetProcessWorkingSetSize(process, usize::MAX, usize::MAX);
+            CloseHandle(process);
+        }
+    }
+
     /// Show `windows` again and bring the first to the front.
     pub fn show(pid: u32, windows: &[isize]) {
         // The launcher is in front when Play is pressed: let the game take over.
@@ -120,6 +142,8 @@ mod windows_guard {
     }
 
     pub fn show(_pid: u32, _windows: &[isize]) {}
+
+    pub fn trim(_pid: u32) {}
 }
 
 /// How often hidden-game windows are looked for (a window is hidden a few
@@ -186,6 +210,13 @@ impl GameHandle {
                 std::thread::sleep(GUARD_INTERVAL);
             }
         });
+    }
+
+    /// Ask Windows to move this (waiting, hidden) game's memory out of RAM: it stays
+    /// reclaimable and comes back from disk when the game is touched again, so a game
+    /// kept ready costs little RAM while it waits. Does nothing elsewhere.
+    pub fn trim_memory(&self) {
+        windows_guard::trim(self.pid);
     }
 
     /// Show the windows [`GameHandle::hide_windows`] kept hidden, in front.
