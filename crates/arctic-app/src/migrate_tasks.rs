@@ -63,10 +63,11 @@ impl Tasks {
     /// Ask for a folder to look in.
     pub fn migrate_pick_folder(&self) {
         self.run(|t| {
-            if let Some(folder) = rfd::FileDialog::new()
+            let picked = rfd::FileDialog::new()
                 .set_title("Folder with instances")
-                .pick_folder()
-            {
+                .pick_folder();
+            t.note_if_picker_missing(&picked);
+            if let Some(folder) = picked {
                 t.migrate_scan(Some(folder));
             }
         });

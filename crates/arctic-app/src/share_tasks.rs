@@ -63,6 +63,7 @@ impl Tasks {
                 .set_title("Open share file")
                 .add_filter("Arctic share", &["json", "txt"])
                 .pick_file();
+            t.note_if_picker_missing(&picked);
             let result = match picked {
                 None => Ok(None),
                 Some(path) => sharing::read_file(&path)

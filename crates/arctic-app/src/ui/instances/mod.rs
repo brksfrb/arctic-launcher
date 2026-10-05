@@ -173,8 +173,11 @@ impl ArcticApp {
                 .iter()
                 .map(|f| f.path().to_path_buf())
                 .find(|p| {
-                    p.extension()
-                        .is_some_and(|e| e.eq_ignore_ascii_case("mrpack"))
+                    p.extension().is_some_and(|e| {
+                        e.eq_ignore_ascii_case("mrpack")
+                            || (e.eq_ignore_ascii_case("zip")
+                                && arctic_core::mods::modpack::is_modrinth_pack(p))
+                    })
                 })
         });
         if let Some(path) = dropped

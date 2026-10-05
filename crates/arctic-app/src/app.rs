@@ -767,6 +767,11 @@ impl ArcticApp {
             | Event::ModIcon(..)) => self.on_instances_event(e, ctx),
             Event::Share(id, event) => self.on_share_event(id, event),
             Event::WorldsDone(id, result) => self.on_worlds_done(id, result),
+            Event::PickerMissing => self.toasts.push(
+                crate::toasts::Kind::Error,
+                "No file picker on this system",
+                "Install zenity or xdg-desktop-portal, or drop the file onto the launcher window.",
+            ),
             Event::ModpackInstalled(result) => self.on_modpack_installed(result),
             Event::MigrateScanned(folder, result) => {
                 self.on_migrate_scanned(folder.is_some(), result)
