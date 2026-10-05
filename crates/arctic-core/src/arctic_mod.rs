@@ -286,6 +286,16 @@ pub fn jvm_flag() -> Option<String> {
         .map(|url| format!("-Darctic.cosmetics.url={url}"))
 }
 
+/// JVM flag making a Vanilla instance tell servers it's vanilla. It runs on
+/// Fabric underneath, whose "fabric" brand some anti-cheats take for a hacked
+/// client; instances the player gave a loader keep theirs.
+pub fn brand_flag(loader: &crate::instances::Loader) -> Option<String> {
+    loader
+        .kind()
+        .is_none()
+        .then(|| "-Darctic.brand=vanilla".to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Read;

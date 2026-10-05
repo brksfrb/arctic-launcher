@@ -474,6 +474,7 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
             .chain(req.instance.jvm_args.split_whitespace())
             .map(str::to_owned)
             .chain(arctic_mod::jvm_flag())
+            .chain(arctic_mod::brand_flag(&req.instance.loader))
             .chain(proxy.active().map(|_| {
                 format!(
                     "-Djdk.net.hosts.file={}",
