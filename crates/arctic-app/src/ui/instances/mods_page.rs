@@ -43,6 +43,7 @@ impl ArcticApp {
         let p = self.palette();
         let mods_dir = instance.game_dir(&self.dirs).join("mods");
         self.rescan_mods_if_changed(ui, &instance.id, &mods_dir);
+        self.add_dropped_mods(ui, &instance.id, &mods_dir);
         let files = match &self.inst.mod_files {
             Some((id, files)) if *id == instance.id => files.clone(),
             _ => {
@@ -96,6 +97,68 @@ impl ArcticApp {
         });
         if changed {
             self.refresh_mods(&instance.id);
+        }
+    }
+
+    /// .jar files dropped on the window go into this instance's mods folder.
+    fn add_dropped_mods(&mut self, ui: &egui::Ui, id: &str, mods_dir: &std::path::Path) {
+        let is_jar =
+            |p: &std::path::Path| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("jar"));
+        if ui.input(|i| {
+            i.raw
+                .hovered_files
+                .iter()
+                .any(|f| f.path.as_deref().is_some_and(is_jar))
+        }) {
+            let p = self.palette();
+            let rect = ui.max_rect();
+            ui.painter()
+                .rect_filled(rect, 10.0, p.accent.gamma_multiply(0.12));
+            ui.painter().text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                "Drop to add these mods",
+                egui::FontId::proportional(18.0),
+                p.text,
+            );
+        }
+        let dropped: Vec<std::path::PathBuf> = ui.input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .map(|f| f.path().to_path_buf())
+                .filter(|p| is_jar(p))
+                .collect()
+        });
+        if dropped.is_empty() {
+            return;
+        }
+        let _ = std::fs::create_dir_all(mods_dir);
+        let mut added = 0;
+        for jar in &dropped {
+            let Some(name) = jar.file_name() else {
+                continue;
+            };
+            match std::fs::copy(jar, mods_dir.join(name)) {
+                Ok(_) => added += 1,
+                Err(e) => self.toasts.push(
+                    Kind::Error,
+                    format!("Couldn't add {}", name.to_string_lossy()),
+                    e.to_string(),
+                ),
+            }
+        }
+        if added > 0 {
+            self.toasts.push(
+                Kind::Success,
+                if added == 1 {
+                    "Mod added".to_owned()
+                } else {
+                    format!("{added} mods added")
+                },
+                "",
+            );
+            self.refresh_mods(id);
         }
     }
 
