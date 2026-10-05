@@ -222,8 +222,18 @@ impl Tasks {
 
     pub fn load_manifest(&self) {
         self.run(|t| {
-            let result = VersionManifest::fetch(&t.dirs).map_err(|e| e.to_string());
-            t.send(Event::Manifest(result));
+            // The last copy shows right away; the fresh one replaces it.
+            let cached = VersionManifest::cached(&t.dirs);
+            let have_cached = cached.is_some();
+            if let Some(manifest) = cached {
+                t.send(Event::Manifest(Ok(manifest)));
+            }
+            match VersionManifest::fetch(&t.dirs) {
+                Ok(manifest) => t.send(Event::Manifest(Ok(manifest))),
+                // Offline with a copy on screen: keep using it.
+                Err(_) if have_cached => {}
+                Err(e) => t.send(Event::Manifest(Err(e.to_string()))),
+            }
         });
     }
 

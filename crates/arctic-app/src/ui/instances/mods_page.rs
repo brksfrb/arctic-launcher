@@ -13,10 +13,36 @@ use crate::toasts::Kind;
 use crate::widgets;
 
 const ICON: f32 = 36.0;
+/// While the Mods page is open, the folder is looked at this often (seconds).
+const MODS_RESCAN_EVERY: f64 = 2.0;
+
+/// A cheap fingerprint of a folder: its files' names, sizes and times.
+fn folder_stamp(dir: &std::path::Path) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut entries: Vec<_> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| {
+            let meta = e.metadata().ok();
+            (
+                e.file_name(),
+                meta.as_ref().map(|m| m.len()),
+                meta.and_then(|m| m.modified().ok()),
+            )
+        })
+        .collect();
+    entries.sort();
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    entries.hash(&mut hasher);
+    hasher.finish()
+}
 
 impl ArcticApp {
     pub(super) fn mods_page(&mut self, ui: &mut egui::Ui, instance: &Instance) {
         let p = self.palette();
+        let mods_dir = instance.game_dir(&self.dirs).join("mods");
+        self.rescan_mods_if_changed(ui, &instance.id, &mods_dir);
         let files = match &self.inst.mod_files {
             Some((id, files)) if *id == instance.id => files.clone(),
             _ => {
@@ -24,7 +50,6 @@ impl ArcticApp {
                 Vec::new()
             }
         };
-        let mods_dir = instance.game_dir(&self.dirs).join("mods");
         ui.horizontal(|ui| {
             let enabled = files.iter().filter(|f| f.enabled).count();
             ui.label(
@@ -71,6 +96,23 @@ impl ArcticApp {
         });
         if changed {
             self.refresh_mods(&instance.id);
+        }
+    }
+
+    /// Jars added, removed or replaced in the folder (by hand, or by a game
+    /// that updates its mods) show up here without leaving the page.
+    fn rescan_mods_if_changed(&mut self, ui: &egui::Ui, id: &str, mods_dir: &std::path::Path) {
+        let now = ui.input(|i| i.time);
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_secs_f64(MODS_RESCAN_EVERY));
+        if now - self.inst.mod_watch.0 < MODS_RESCAN_EVERY {
+            return;
+        }
+        let stamp = folder_stamp(mods_dir);
+        let changed = stamp != self.inst.mod_watch.1;
+        self.inst.mod_watch = (now, stamp);
+        if changed {
+            self.refresh_mods(id);
         }
     }
 

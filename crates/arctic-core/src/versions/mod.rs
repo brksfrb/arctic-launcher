@@ -54,6 +54,12 @@ pub enum VersionKind {
 }
 
 impl VersionManifest {
+    /// The manifest as last fetched, if there is one: the version list can
+    /// show at once while a fresh copy is on its way.
+    pub fn cached(dirs: &DataDirs) -> Option<Self> {
+        load_json(&dirs.meta().join(MANIFEST_CACHE)).ok().flatten()
+    }
+
     /// Fetch the manifest, caching it; fall back to the cache when offline.
     pub fn fetch(dirs: &DataDirs) -> Result<Self> {
         let cache = dirs.meta().join(MANIFEST_CACHE);

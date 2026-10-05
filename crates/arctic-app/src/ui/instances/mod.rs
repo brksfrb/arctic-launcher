@@ -89,6 +89,8 @@ pub struct InstancesUi {
     pub rename: Option<String>,
     /// Mods folder listing for the open instance.
     pub mod_files: Option<(String, Vec<ModFile>)>,
+    /// What the open mods folder looked like when last checked: (egui time, fingerprint).
+    pub mod_watch: (f64, u64),
     pub search: SearchState,
     pub installing: HashSet<String>,
     pub install_progress: Option<ProgressSnapshot>,
