@@ -21,7 +21,6 @@ mod share_tasks;
 mod shot_tasks;
 mod single_instance;
 mod skin_tasks;
-mod standby;
 mod startup;
 mod tasks;
 mod theme;

@@ -32,108 +32,11 @@ pub enum GameEvent {
     Output(Vec<LogLine>),
 }
 
-/// Keeps a game's windows out of sight while it loads in the background
-/// ("ready to play"), and shows them when the player presses Play.
-#[derive(Debug, Default)]
-struct Hold {
-    /// While true, any window the game opens is hidden at once.
-    hiding: bool,
-    /// The windows hidden so far (native handles).
-    windows: Vec<isize>,
-}
-
-#[cfg(windows)]
-mod windows_guard {
-    use std::ffi::c_void;
-
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        AllowSetForegroundWindow, EnumWindows, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
-        SW_HIDE, SW_RESTORE, SW_SHOW, SetForegroundWindow, ShowWindow,
-    };
-
-    struct Search {
-        pid: u32,
-        visible_only: bool,
-        found: Vec<isize>,
-    }
-
-    unsafe extern "system" fn each(hwnd: *mut c_void, lparam: isize) -> i32 {
-        // SAFETY: `lparam` is the address of the `Search` that `windows_of` keeps alive for the call.
-        let search = unsafe { &mut *(lparam as *mut Search) };
-        let mut pid = 0u32;
-        // SAFETY: `hwnd` comes from EnumWindows; `pid` is a valid out pointer.
-        unsafe { GetWindowThreadProcessId(hwnd, &mut pid) };
-        // SAFETY: as above.
-        if pid == search.pid && (!search.visible_only || unsafe { IsWindowVisible(hwnd) } != 0) {
-            search.found.push(hwnd as isize);
-        }
-        1
-    }
-
-    fn windows_of(pid: u32, visible_only: bool) -> Vec<isize> {
-        let mut search = Search {
-            pid,
-            visible_only,
-            found: Vec::new(),
-        };
-        // SAFETY: the callback only uses `search`, which outlives the call.
-        unsafe { EnumWindows(Some(each), &mut search as *mut Search as isize) };
-        search.found
-    }
-
-    /// Hide every visible top-level window of `pid`; the ones hidden.
-    pub fn hide_visible(pid: u32) -> Vec<isize> {
-        let found = windows_of(pid, true);
-        for hwnd in &found {
-            // SAFETY: a window handle of the game's process; hiding is harmless if it's gone.
-            unsafe { ShowWindow(*hwnd as *mut c_void, SW_HIDE) };
-        }
-        found
-    }
-
-    /// Show `windows` again and bring the first to the front.
-    pub fn show(pid: u32, windows: &[isize]) {
-        // The launcher is in front when Play is pressed: let the game take over.
-        // SAFETY: plain API calls on handles of the game's process.
-        unsafe { AllowSetForegroundWindow(pid) };
-        for hwnd in windows {
-            let hwnd = *hwnd as *mut c_void;
-            // SAFETY: as above.
-            unsafe {
-                ShowWindow(hwnd, SW_SHOW);
-                if IsIconic(hwnd) != 0 {
-                    ShowWindow(hwnd, SW_RESTORE);
-                }
-            }
-        }
-        if let Some(first) = windows.first() {
-            // SAFETY: as above.
-            unsafe { SetForegroundWindow(*first as *mut c_void) };
-        }
-    }
-}
-
-#[cfg(not(windows))]
-mod windows_guard {
-    pub fn hide_visible(_pid: u32) -> Vec<isize> {
-        Vec::new()
-    }
-
-    pub fn show(_pid: u32, _windows: &[isize]) {}
-}
-
-/// How often hidden-game windows are looked for (a window is hidden a few
-/// milliseconds after it appears).
-const GUARD_INTERVAL: Duration = Duration::from_millis(4);
-/// The guard stops by itself after this long.
-const GUARD_LIMIT: Duration = Duration::from_secs(30 * 60);
-
 /// Handle to a running game. Dropping it does not stop the game.
 #[derive(Debug, Clone)]
 pub struct GameHandle {
     pid: u32,
     kill: Arc<AtomicBool>,
-    hold: Arc<Mutex<Hold>>,
 }
 
 impl GameHandle {
@@ -150,52 +53,6 @@ impl GameHandle {
     /// Ask the watcher to terminate the game (Force close).
     pub fn kill(&self) {
         self.kill.store(true, Ordering::Relaxed);
-    }
-
-    /// Keep the game's windows hidden from now on (Windows): it loads in the
-    /// background until [`GameHandle::reveal`]. Elsewhere this does nothing and
-    /// the game's window just shows.
-    pub fn hide_windows(&self) {
-        if !cfg!(windows) {
-            return;
-        }
-        match self.hold.lock() {
-            Ok(mut hold) if !hold.hiding => hold.hiding = true,
-            _ => return,
-        }
-        let (pid, hold) = (self.pid, self.hold.clone());
-        std::thread::spawn(move || {
-            let started = std::time::Instant::now();
-            loop {
-                {
-                    let Ok(mut hold) = hold.lock() else {
-                        return;
-                    };
-                    if !hold.hiding {
-                        return;
-                    }
-                    for window in windows_guard::hide_visible(pid) {
-                        if !hold.windows.contains(&window) {
-                            hold.windows.push(window);
-                        }
-                    }
-                }
-                if started.elapsed() > GUARD_LIMIT {
-                    return;
-                }
-                std::thread::sleep(GUARD_INTERVAL);
-            }
-        });
-    }
-
-    /// Show the windows [`GameHandle::hide_windows`] kept hidden, in front.
-    pub fn reveal(&self) {
-        let Ok(mut hold) = self.hold.lock() else {
-            return;
-        };
-        hold.hiding = false;
-        let windows = std::mem::take(&mut hold.windows);
-        windows_guard::show(self.pid, &windows);
     }
 }
 
@@ -235,7 +92,6 @@ pub fn spawn(
     let handle = GameHandle {
         pid: child.id(),
         kill: kill.clone(),
-        hold: Arc::default(),
     };
     std::thread::spawn(move || {
         let code = loop {
@@ -560,31 +416,5 @@ ok SECRET SECRET
                 .iter()
                 .all(|l| !l.contains("SECRET"))
         );
-    }
-
-    /// By hand (it opens a window for a moment): `cargo test -p arctic-core -- --ignored hidden_windows`.
-    #[cfg(windows)]
-    #[test]
-    #[ignore = "opens a window"]
-    fn hidden_windows_stay_hidden_until_revealed() {
-        use windows_sys::Win32::UI::WindowsAndMessaging::IsWindowVisible;
-
-        let mut child = Command::new("charmap.exe").spawn().unwrap();
-        let game = GameHandle {
-            pid: child.id(),
-            kill: Arc::default(),
-            hold: Arc::default(),
-        };
-        game.hide_windows();
-        std::thread::sleep(Duration::from_secs(3));
-        let hidden = game.hold.lock().unwrap().windows.len();
-        assert!(hidden > 0, "no window of Character Map was hidden");
-        let visible = |hwnd: isize| unsafe { IsWindowVisible(hwnd as *mut std::ffi::c_void) != 0 };
-        let first = game.hold.lock().unwrap().windows[0];
-        assert!(!visible(first), "still visible while hidden");
-        game.reveal();
-        assert!(visible(first), "not shown by reveal");
-        let _ = child.kill();
-        let _ = child.wait();
     }
 }
