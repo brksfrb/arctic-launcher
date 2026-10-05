@@ -19,7 +19,8 @@
 <p align="center">
   <a href="https://github.com/brksfrb/arctic-launcher/releases/latest"><b>Download</b></a> ·
   <a href="https://arcticlauncher.com">Website</a> ·
-  <a href="docs/cli.md">Command line</a>
+  <a href="docs/cli.md">Command line</a> ·
+  <a href="mailto:support@arcticlauncher.com">Support</a>
 </p>
 
 <p align="center">
