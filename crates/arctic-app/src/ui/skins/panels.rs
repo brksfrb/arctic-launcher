@@ -217,6 +217,10 @@ impl ArcticApp {
                     self.skins.zoom
                 };
                 self.skins.zoom = (zoom * (1.0 + scroll * 0.002)).clamp(*ZOOM.start(), *ZOOM.end());
+                // The wheel was for the figure: the page behind it doesn't scroll too.
+                ui.input_mut(|i| {
+                    i.smooth_scroll_delta = egui::Vec2::ZERO;
+                });
             }
         }
         stage(ui.painter(), rect, p);
