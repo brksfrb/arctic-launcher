@@ -89,6 +89,9 @@
   settings, instances and worlds. Switch from the top of the sidebar.
 - **Screenshots in one place.** Every instance's screenshots, newest first: open, copy,
   or send one to a friend.
+- **Crash reports, only if you say so.** When the game crashes, Arctic explains it in plain
+  language and can send the log so it gets fixed (ask each time, always or never in Settings).
+  Your name, folders, sign-in details, e-mails and IP addresses are removed first.
 - **Live logs.** Minecraft's output appears inside the launcher, readable, searchable and
   filterable by warnings or errors.
 - **Proxy.** Send the launcher and the game through a SOCKS5 proxy.
