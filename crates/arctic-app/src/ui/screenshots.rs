@@ -188,11 +188,23 @@ impl ArcticApp {
                 // As large as the window allows (room left for the bar below),
                 // keeping the shot's shape.
                 let room = ctx.content_rect().size() * vec2(0.9, 0.82) - vec2(0.0, 60.0);
+                let view_id = Id::new(("shot_view", &shot.path));
+                let (mut zoom, mut center): (f32, egui::Vec2) = ui
+                    .data(|d| d.get_temp(view_id))
+                    .unwrap_or((1.0, vec2(0.5, 0.5)));
+                let half = 0.5 / zoom;
                 let image = ui.add(
                     egui::Image::new(uri.clone())
                         .fit_to_exact_size(room)
-                        .corner_radius(CornerRadius::same(8)),
+                        .uv(egui::Rect::from_min_max(
+                            (center - vec2(half, half)).to_pos2(),
+                            (center + vec2(half, half)).to_pos2(),
+                        ))
+                        .corner_radius(CornerRadius::same(8))
+                        .sense(Sense::click_and_drag()),
                 );
+                zoom_and_pan(ui, &image, &mut zoom, &mut center);
+                ui.data_mut(|d| d.insert_temp(view_id, (zoom, center)));
                 ui.set_max_width(image.rect.width().max(480.0));
                 ui.add_space(8.0);
                 let name = shot
@@ -302,6 +314,39 @@ impl ArcticApp {
 }
 
 /// "5 min ago", "yesterday", or a date.
+/// Most the picture can be magnified.
+const MAX_ZOOM: f32 = 12.0;
+
+/// Scroll over the picture to zoom into the spot under the pointer, drag to
+/// move around, double-click to see all of it again. `center` is the middle
+/// of what's shown, as a fraction of the whole picture.
+fn zoom_and_pan(ui: &egui::Ui, image: &egui::Response, zoom: &mut f32, center: &mut egui::Vec2) {
+    if image.double_clicked() {
+        *zoom = 1.0;
+        *center = vec2(0.5, 0.5);
+        return;
+    }
+    let scroll = if image.hovered() {
+        ui.input(|i| i.smooth_scroll_delta.y)
+    } else {
+        0.0
+    };
+    if scroll != 0.0
+        && let Some(pointer) = image.hover_pos()
+    {
+        // The spot under the pointer stays where it is.
+        let rel = (pointer - image.rect.min) / image.rect.size() - vec2(0.5, 0.5);
+        let under = *center + rel / *zoom;
+        *zoom = (*zoom * (scroll * 0.004).exp()).clamp(1.0, MAX_ZOOM);
+        *center = under - rel / *zoom;
+    }
+    if image.dragged() && *zoom > 1.0 {
+        *center -= image.drag_delta() / image.rect.size() / *zoom;
+    }
+    let half = 0.5 / *zoom;
+    *center = center.clamp(vec2(half, half), vec2(1.0 - half, 1.0 - half));
+}
+
 fn when(t: std::time::SystemTime) -> String {
     let secs = t.elapsed().map_or(0, |d| d.as_secs());
     match secs {

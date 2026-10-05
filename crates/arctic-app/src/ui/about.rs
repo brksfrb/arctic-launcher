@@ -10,6 +10,7 @@ use crate::widgets;
 
 const WEBSITE: &str = "https://arcticlauncher.com";
 const DISCORD: &str = "https://discord.arcticlauncher.com";
+const SUPPORT_EMAIL: &str = "support@arcticlauncher.com";
 
 impl ArcticApp {
     pub(crate) fn about_tab(&mut self, ui: &mut egui::Ui) {
@@ -45,6 +46,13 @@ impl ArcticApp {
                 }
                 if widgets::button(ui, p, Some(Icon::Friends), "Discord", false).clicked() {
                     ui.ctx().open_url(egui::OpenUrl::new_tab(DISCORD));
+                }
+                if widgets::button(ui, p, Some(Icon::External), "Email support", false)
+                    .on_hover_text(SUPPORT_EMAIL)
+                    .clicked()
+                {
+                    ui.ctx()
+                        .open_url(egui::OpenUrl::new_tab(format!("mailto:{SUPPORT_EMAIL}")));
                 }
             });
             ui.add_space(6.0);

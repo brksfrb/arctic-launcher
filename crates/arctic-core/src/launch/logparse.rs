@@ -18,6 +18,9 @@ pub struct LogLine {
     pub text: String,
 }
 
+/// Timestamps below this (a day after 1970) aren't real clock readings.
+const MIN_TIMESTAMP_MS: i64 = 86_400_000;
+
 /// Largest XML event we buffer before giving up and flushing it raw.
 const MAX_EVENT_BYTES: usize = 256 * 1024;
 
@@ -86,10 +89,17 @@ fn parse_event(xml: &str) -> Vec<LogLine> {
         _ => Level::Info,
     };
     let thread = attr(xml, "thread").unwrap_or("main");
+    // Old versions' plain lines start with the time; these events carry it as an attribute.
+    let clock = attr(xml, "timestamp")
+        .and_then(|t| t.parse::<i64>().ok())
+        .filter(|&t| t > MIN_TIMESTAMP_MS)
+        .and_then(crate::system::local_clock)
+        .map(|c| format!("[{c}] "))
+        .unwrap_or_default();
     let message = cdata_in(xml, "log4j:Message").unwrap_or_default();
     let mut lines = vec![LogLine {
         level,
-        text: format!("[{thread}/{}] {message}", level_name(level)),
+        text: format!("{clock}[{thread}/{}] {message}", level_name(level)),
     }];
     if let Some(trace) = cdata_in(xml, "log4j:Throwable") {
         lines.extend(
