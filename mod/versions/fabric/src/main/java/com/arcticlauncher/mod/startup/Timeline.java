@@ -43,5 +43,6 @@ public final class Timeline {
 		//#endif
 		done = true;
 		System.out.println("[Arctic startup] " + MARKS);
+		Preloader.record();
 	}
 }

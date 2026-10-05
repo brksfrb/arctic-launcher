@@ -9,6 +9,7 @@ pub mod files;
 pub mod logparse;
 pub mod process;
 pub mod startup;
+mod startup_cache;
 
 pub use process::{GameEvent, GameHandle, spawn, spawn_detached};
 
@@ -491,6 +492,14 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
         let vars = HashMap::from([("path", path.display().to_string())]);
         substitute(template, &vars)
     });
+    // The Arctic Client loads the classes a start needs ahead of the game on other cores
+    // (see startup_cache); it must be there to do it.
+    let preload_flags = match inst.version.java_version.as_ref() {
+        Some(java) if req.instance.arctic_mod && arctic_mod::supports(&req.version.id) => {
+            startup_cache::flags(&inst.game_dir, &req.version.id, java.major_version)
+        }
+        _ => Vec::new(),
+    };
     let opts = JvmOptions {
         min_memory_mb: settings.min_memory_mb,
         max_memory_mb: req.instance.max_memory_mb.unwrap_or(settings.max_memory_mb),
@@ -502,6 +511,7 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
             .chain(arctic_mod::jvm_flag())
             .chain(arctic_mod::brand_flag(&req.instance.loader))
             .chain(fast_start_flags(req.instance))
+            .chain(preload_flags)
             .chain(proxy.active().map(|_| {
                 format!(
                     "-Djdk.net.hosts.file={}",

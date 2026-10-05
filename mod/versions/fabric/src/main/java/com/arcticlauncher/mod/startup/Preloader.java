@@ -48,4 +48,49 @@ public final class Preloader {
 		}
 		Timeline.mark("preload x" + threads);
 	}
+
+	/**
+	 * With {@code -Darctic.classlog} (the JVM's log of every class it loaded) the launcher is
+	 * asking for a list: turn the log into the list of classes that came from jars, in the
+	 * order they were loaded, and note which mods and game version it belongs to.
+	 */
+	public static void record() {
+		String log = System.getProperty("arctic.classlog");
+		String list = System.getProperty("arctic.classlist");
+		String key = System.getProperty("arctic.classkey");
+		if (log == null || list == null || key == null) {
+			return;
+		}
+		Thread thread = new Thread(() -> {
+			try {
+				// A moment for the first frames' classes too.
+				Thread.sleep(1500);
+				java.util.LinkedHashSet<String> names = new java.util.LinkedHashSet<>();
+				for (String line : Files.readAllLines(Path.of(log))) {
+					int at = line.indexOf("[class,load] ");
+					if (at < 0) {
+						continue;
+					}
+					String rest = line.substring(at + "[class,load] ".length());
+					int space = rest.indexOf(' ');
+					if (space < 0 || rest.indexOf("source: file:", space) < 0) {
+						continue;
+					}
+					String name = rest.substring(0, space);
+					if (!name.contains("$$Lambda")) {
+						names.add(name);
+					}
+				}
+				Path out = Path.of(list);
+				Path temp = out.resolveSibling(out.getFileName() + ".tmp");
+				Files.write(temp, names);
+				Files.move(temp, out, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+				Files.writeString(out.resolveSibling("classes.key"), key);
+			} catch (java.io.IOException | RuntimeException | InterruptedException ignored) {
+				// No list this time: the next start tries again.
+			}
+		}, "arctic-class-list");
+		thread.setDaemon(true);
+		thread.start();
+	}
 }
