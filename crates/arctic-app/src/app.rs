@@ -164,10 +164,6 @@ pub struct ArcticApp {
     pub(crate) log_search: String,
     pub(crate) log_follow: bool,
     pub(crate) minimized_for_game: bool,
-    /// When the background game was last looked after (egui time).
-    pub(crate) standby_check_at: f64,
-    /// Background games that died right after starting: after two, none are tried.
-    pub(crate) standby_fails: u32,
     /// (start time, button center) of the Play-press snowflake burst.
     pub(crate) play_burst: Option<(f64, egui::Pos2)>,
     splash: Splash,
@@ -177,7 +173,7 @@ pub struct ArcticApp {
     pub(crate) world_backdrop: crate::art::world::WorldBackdrop,
     /// The Play tab's recent worlds.
     pub(crate) recent_worlds: crate::ui::play_worlds::RecentWorlds,
-    pub(crate) discord: crate::discord::Discord,
+    discord: crate::discord::Discord,
     pub(crate) onboarding: Option<crate::ui::Onboarding>,
     pub(crate) together: crate::ui::TogetherUi,
     pub(crate) sharing: crate::ui::ShareUi,
@@ -305,8 +301,6 @@ impl ArcticApp {
             log_search: String::new(),
             log_follow: true,
             minimized_for_game: false,
-            standby_check_at: f64::NEG_INFINITY,
-            standby_fails: 0,
             play_burst: None,
             login_attempts: 0,
         };
@@ -567,16 +561,6 @@ impl ArcticApp {
             );
             return;
         }
-        // Loading in the background already: just show it.
-        if !another_copy
-            && quick_play.is_none()
-            && let Some(id) = self.standby_match(&instance, &version.id, &account)
-        {
-            self.activate_standby(id, &instance, &version, &account);
-            return;
-        }
-        // A background copy for something else (or this one, to start it fresh) goes first.
-        self.stop_standby();
         self.warn_if_proxy_misses_servers(&instance, &version.id);
         self.discord.game_started(
             format!("Minecraft {}", version.id),
@@ -901,7 +885,6 @@ impl eframe::App for ArcticApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
         }
         self.update_theme(&ctx, frame);
-        self.manage_standby(&ctx);
         self.window_and_tray(&ctx, frame);
         let playing = self.runs.any_active();
         let together = self.together_status();
@@ -981,8 +964,6 @@ impl eframe::App for ArcticApp {
                 }
             }
         }
-        // The background copy only exists for this launcher's Play button.
-        self.stop_standby();
         if self.settings != self.saved_settings {
             let _ = self.settings.save(&self.dirs);
         }

@@ -245,12 +245,6 @@ impl Tasks {
         self.ctx.request_repaint();
     }
 
-    /// Minimize the launcher window (the game it started is up).
-    pub fn minimize_launcher(&self) {
-        self.ctx
-            .send_viewport_cmd(egui::ViewportCommand::Minimized(true));
-    }
-
     pub fn load_manifest(&self) {
         self.run(|t| {
             // The last copy shows right away; the fresh one replaces it.

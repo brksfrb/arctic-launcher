@@ -60,27 +60,11 @@ pub struct Run {
     early: Vec<GameEvent>,
     /// The crash, ready to send if the player agrees.
     crash_report: Option<crash::Report>,
-    /// Loading in the background with its window hidden, for a Play that shows it at once.
-    pub standby: bool,
-    /// What this standby was made for (instance, version, account, settings, mods).
-    pub standby_key: u64,
-    /// Dropped while still preparing: end it as soon as it starts.
-    pub standby_cancelled: bool,
 }
 
 impl Run {
     pub fn is_active(&self) -> bool {
         !matches!(self.state, RunState::Ended)
-    }
-
-    /// Running for the player (a standby isn't: nobody pressed Play yet).
-    pub fn is_playing(&self) -> bool {
-        self.is_active() && !self.standby
-    }
-
-    /// How long ago the game was started.
-    pub fn started_ago(&self) -> Option<std::time::Duration> {
-        self.started.elapsed().ok()
     }
 
     /// The game process, once it's started and until it exits.
@@ -187,9 +171,6 @@ impl Runs {
             started: SystemTime::now(),
             early: Vec::new(),
             crash_report: None,
-            standby: false,
-            standby_key: 0,
-            standby_cancelled: false,
         });
         self.next_id
     }
@@ -202,28 +183,23 @@ impl Runs {
         self.list.iter_mut().find(|r| r.id == id)
     }
 
-    /// The latest run of an instance (active or finished), not counting a standby.
+    /// The latest run of an instance (active or finished).
     pub fn for_instance(&self, instance_id: &str) -> Option<&Run> {
         self.list
             .iter()
             .rev()
-            .find(|r| r.instance_id == instance_id && !r.standby)
-    }
-
-    /// The game loading in the background, if there is one.
-    pub fn standby(&self) -> Option<&Run> {
-        self.list.iter().rev().find(|r| r.standby && r.is_active())
+            .find(|r| r.instance_id == instance_id)
     }
 
     /// The newest running copy of an instance, of `version` when given.
     pub fn active_for(&self, instance_id: &str, version: Option<&str>) -> Option<&Run> {
         self.list.iter().rev().find(|r| {
-            r.is_playing() && r.instance_id == instance_id && version.is_none_or(|v| r.version == v)
+            r.is_active() && r.instance_id == instance_id && version.is_none_or(|v| r.version == v)
         })
     }
 
     pub fn active(&self) -> impl Iterator<Item = &Run> {
-        self.list.iter().filter(|r| r.is_playing())
+        self.list.iter().filter(|r| r.is_active())
     }
 
     pub fn any_active(&self) -> bool {
@@ -232,16 +208,16 @@ impl Runs {
 
     /// A game process is up (not just preparing).
     pub fn any_game(&self) -> bool {
-        self.list.iter().any(|r| r.game().is_some() && !r.standby)
+        self.list.iter().any(|r| r.game().is_some())
     }
 
     pub fn instance_active(&self, instance_id: &str) -> bool {
-        self.for_instance(instance_id).is_some_and(Run::is_playing)
+        self.for_instance(instance_id).is_some_and(Run::is_active)
     }
 
     /// The newest run, for "View logs" defaults.
     pub fn latest(&self) -> Option<&Run> {
-        self.list.iter().rev().find(|r| !r.standby)
+        self.list.last()
     }
 
     /// Forget every run (profile switch; only allowed when none is active).
@@ -286,15 +262,6 @@ impl ArcticApp {
                     stage: Stage::Java,
                     since: Instant::now(),
                 };
-                if run.standby
-                    && let RunState::Starting { game, .. } = &run.state
-                {
-                    if run.standby_cancelled {
-                        game.terminate();
-                    } else {
-                        game.hide_windows();
-                    }
-                }
                 let early = std::mem::take(&mut run.early);
                 // Replay events from a game that was faster than our bookkeeping.
                 for event in early {
@@ -327,7 +294,6 @@ impl ArcticApp {
                 }
                 if self.settings.on_game_start == GameStartAction::Minimize
                     && !self.minimized_for_game
-                    && !run.standby
                 {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
                     self.minimized_for_game = true;
@@ -341,18 +307,6 @@ impl ArcticApp {
             }
             GameEvent::Exited { code } => {
                 run.state = RunState::Ended;
-                if run.standby {
-                    // A background copy nobody asked for yet: no crash toast, no log noise.
-                    // One that dies right away more than once isn't tried again.
-                    let early = run
-                        .started
-                        .elapsed()
-                        .is_ok_and(|d| d < crate::standby::EARLY_EXIT);
-                    if early && code != Some(0) && !run.standby_cancelled {
-                        self.standby_fails += 1;
-                    }
-                    return;
-                }
                 // What the game changed goes to the profile's other instances.
                 let (dirs, shared) = (self.dirs.clone(), self.settings.shared);
                 std::thread::spawn(move || {
@@ -482,6 +436,39 @@ impl ArcticApp {
     pub(crate) fn show_run_log(&mut self, id: LaunchId, now: f64) {
         self.log_source = LogSource::Game(id);
         self.set_tab(crate::app::Tab::Logs, now);
+    }
+}
+
+impl ArcticApp {
+    /// The proxy covers Minecraft's login services for every game, but server
+    /// connections only through the Arctic Client (Fabric/Quilt and Vanilla
+    /// instances that have it on). Say so when a game that skips it starts.
+    pub(crate) fn warn_if_proxy_misses_servers(
+        &mut self,
+        instance: &arctic_core::instances::Instance,
+        version_id: &str,
+    ) {
+        if arctic_core::proxy::ProxySettings::load(&self.dirs)
+            .active()
+            .is_none()
+        {
+            return;
+        }
+        let forge = matches!(
+            instance.loader.kind(),
+            Some(
+                arctic_core::loaders::LoaderKind::Forge
+                    | arctic_core::loaders::LoaderKind::NeoForge
+            )
+        );
+        if instance.arctic_mod && !forge && arctic_core::arctic_mod::supports(version_id) {
+            return;
+        }
+        self.toasts.push(
+            crate::toasts::Kind::Error,
+            "The proxy won't cover this game's servers",
+            "Only Minecraft's login goes through it. Servers see your real address unless you play with the Arctic Client (Vanilla or Fabric instances).",
+        );
     }
 }
 
