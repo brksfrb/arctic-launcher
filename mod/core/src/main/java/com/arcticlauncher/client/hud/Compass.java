@@ -50,7 +50,8 @@ final class Compass extends HudWidget {
 				Draw.centered(g, name, x, 3, main ? text() : muted(), shadow());
 			}
 		}
-		g.fill(mid, 1, mid + 1, 3, accent());
+		int pointer = ArcticClient.config().compassPointer;
+		g.fill(mid, 1, mid + 1, 3, pointer != 0 ? pointer : accent());
 		List<Waypoint> list = preview || p == null ? samples() : ArcticClient.waypoints().here(ArcticClient.platform());
 		double px = preview || p == null ? 0 : p[0];
 		double pz = preview || p == null ? 0 : p[2];
