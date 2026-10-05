@@ -52,7 +52,10 @@ pub struct Settings {
     /// What happens to a crash report when the game crashes.
     pub crash_reports: CrashReports,
     /// Load the game in the background (its window hidden), so pressing Play
-    /// only has to show it. Costs the game's memory while the launcher is open.
+    /// only has to show it. Costs memory while the launcher is open, so it's off
+    /// until chosen. (Saved under its own name: an "on" an older version saved by
+    /// default is not carried over.)
+    #[serde(rename = "ready_to_play")]
     pub keep_ready: bool,
     /// Show what you're playing on Discord.
     pub discord_presence: bool,
@@ -174,12 +177,6 @@ pub enum GameStartAction {
     Minimize,
 }
 
-/// On where it can work (Windows) and the memory for a second game is there.
-fn default_keep_ready() -> bool {
-    const ENOUGH_MB: u64 = 12 * 1024;
-    cfg!(windows) && crate::system::total_memory_mb().is_some_and(|mb| mb >= ENOUGH_MB)
-}
-
 /// Whether crash reports are sent to Arctic: never on its own unless chosen.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -239,7 +236,7 @@ impl Default for Settings {
             backdrop: Backdrop::Scenery,
             on_game_start: GameStartAction::KeepOpen,
             crash_reports: CrashReports::Ask,
-            keep_ready: default_keep_ready(),
+            keep_ready: false,
             discord_presence: true,
             onboarded: false,
             tray: true,
