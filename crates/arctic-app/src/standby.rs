@@ -209,6 +209,33 @@ impl ArcticApp {
         }
     }
 
+    /// The proxy covers Minecraft's login services for every game, but server
+    /// connections only through the Arctic Client (Fabric/Quilt and Vanilla
+    /// instances that have it on). Say so when a game that skips it starts.
+    pub(crate) fn warn_if_proxy_misses_servers(&mut self, instance: &Instance, version_id: &str) {
+        if arctic_core::proxy::ProxySettings::load(&self.dirs)
+            .active()
+            .is_none()
+        {
+            return;
+        }
+        let forge = matches!(
+            instance.loader.kind(),
+            Some(
+                arctic_core::loaders::LoaderKind::Forge
+                    | arctic_core::loaders::LoaderKind::NeoForge
+            )
+        );
+        if instance.arctic_mod && !forge && arctic_core::arctic_mod::supports(version_id) {
+            return;
+        }
+        self.toasts.push(
+            crate::toasts::Kind::Error,
+            "The proxy won't cover this game's servers",
+            "Only Minecraft's login goes through it. Servers see your real address unless you play with the Arctic Client (Vanilla or Fabric instances).",
+        );
+    }
+
     /// End the background game (if any).
     pub(crate) fn stop_standby(&mut self) {
         let Some(id) = self.runs.standby().map(|r| r.id) else {

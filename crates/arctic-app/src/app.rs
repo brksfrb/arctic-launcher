@@ -592,6 +592,7 @@ impl ArcticApp {
         }
         // A background copy for something else (or this one, to start it fresh) goes first.
         self.stop_standby();
+        self.warn_if_proxy_misses_servers(&instance, &version.id);
         self.discord.game_started(
             format!("Minecraft {}", version.id),
             instance.loader.label().to_owned(),
