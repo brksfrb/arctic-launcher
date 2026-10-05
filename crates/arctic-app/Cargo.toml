@@ -42,6 +42,10 @@ path = "src/main.rs"
 [build-dependencies]
 winresource = "0.1.31"
 
+# The Linux tray (StatusNotifierItem over D-Bus; no GTK needed).
+[target."cfg(target_os = \"linux\")".dependencies]
+ksni = { version = "0.3", default-features = false, features = ["async-io", "blocking"] }
+
 [target."cfg(windows)".dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_WindowsAndMessaging"] }
 tray-icon = { version = "0.25.1", default-features = false }
