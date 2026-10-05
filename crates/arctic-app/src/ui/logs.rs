@@ -132,7 +132,8 @@ impl ArcticApp {
     fn logs_toolbar(&mut self, ui: &mut egui::Ui) -> bool {
         let p = self.palette();
         let mut copy = false;
-        ui.horizontal(|ui| {
+        // Wraps onto a second line instead of running into the buttons at the end.
+        ui.horizontal_wrapped(|ui| {
             // One entry per game run (newest last), then the launcher.
             for run in &self.runs.list {
                 // A bullet the launcher's font has (● isn't in it).
@@ -155,29 +156,28 @@ impl ArcticApp {
                     .desired_width(180.0),
             );
             ui.checkbox(&mut self.log_follow, "Auto-scroll");
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if let LogSource::Game(id) = self.log_source
-                    && widgets::icon_button(ui, p, Icon::Trash, "Clear").clicked()
-                    && let Some(run) = self.runs.get_mut(id)
-                {
-                    run.clear_log();
-                }
-                let file = match self.log_source {
-                    LogSource::Game(id) => self.runs.get(id).map_or_else(
-                        || self.dirs.logs().join("none"),
-                        |r| self.dirs.logs().join(format!("game-{}.log", r.instance_id)),
-                    ),
-                    LogSource::Launcher => self.dirs.launcher_logs().join("launcher.log"),
-                };
-                if file.is_file()
-                    && widgets::icon_button(ui, p, Icon::Document, "Open log file").clicked()
-                {
-                    let _ = open::that_detached(&file);
-                }
-                if widgets::icon_button(ui, p, Icon::Copy, "Copy shown lines").clicked() {
-                    copy = true;
-                }
-            });
+            ui.add_space(8.0);
+            if let LogSource::Game(id) = self.log_source
+                && widgets::icon_button(ui, p, Icon::Trash, "Clear").clicked()
+                && let Some(run) = self.runs.get_mut(id)
+            {
+                run.clear_log();
+            }
+            let file = match self.log_source {
+                LogSource::Game(id) => self.runs.get(id).map_or_else(
+                    || self.dirs.logs().join("none"),
+                    |r| self.dirs.logs().join(format!("game-{}.log", r.instance_id)),
+                ),
+                LogSource::Launcher => self.dirs.launcher_logs().join("launcher.log"),
+            };
+            if file.is_file()
+                && widgets::icon_button(ui, p, Icon::Document, "Open log file").clicked()
+            {
+                let _ = open::that_detached(&file);
+            }
+            if widgets::icon_button(ui, p, Icon::Copy, "Copy shown lines").clicked() {
+                copy = true;
+            }
         });
         copy
     }
