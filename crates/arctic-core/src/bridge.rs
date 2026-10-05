@@ -52,6 +52,12 @@ pub trait Accounts: Send + Sync + 'static {
             "add accounts in Arctic Launcher (or with `arctic accounts login`)".into(),
         ))
     }
+    /// Add an offline account (a name, no sign-in) to the launcher's accounts.
+    fn add_offline(&self, _name: &str) -> Result<()> {
+        Err(crate::Error::Other(
+            "add accounts in Arctic Launcher (or with `arctic accounts add`)".into(),
+        ))
+    }
     /// Put a screenshot (a `.png` in a game's `screenshots` folder) on the
     /// clipboard as a picture, which the game itself can't always do.
     fn copy_image(&self, _path: &str) -> Result<()> {
@@ -240,6 +246,16 @@ fn respond(request: &Request, accounts: &dyn Accounts) -> (&'static str, String)
             Ok(()) => ("200 OK", "{}".to_owned()),
             Err(e) => error("501 Not Implemented", &e.to_string()),
         },
+        ("POST", "/v1/accounts/offline") => {
+            let name = serde_json::from_slice::<serde_json::Value>(&request.body)
+                .ok()
+                .and_then(|v| v.get("name").and_then(|n| n.as_str()).map(str::to_owned));
+            match name.map(|n| accounts.add_offline(&n)) {
+                Some(Ok(())) => ("200 OK", "{}".to_owned()),
+                Some(Err(e)) => error("400 Bad Request", &e.to_string()),
+                None => error("400 Bad Request", "no name"),
+            }
+        }
         ("POST", "/v1/clipboard") => {
             let path = serde_json::from_slice::<serde_json::Value>(&request.body)
                 .ok()

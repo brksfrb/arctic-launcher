@@ -134,6 +134,28 @@ public final class AccountSwitcher {
 		});
 	}
 
+	/** Add an offline account (just a name; no sign-in) to the launcher's accounts. */
+	public void addOffline(final String name) {
+		if (!available() || busy) {
+			return;
+		}
+		background(new Runnable() {
+			@Override
+			public void run() {
+				try {
+					JsonObject body = new JsonObject();
+					body.addProperty("name", name);
+					Http.send("POST", bridgeUrl + "/v1/accounts/offline", secret, body.toString());
+					status = "Added " + name + ".";
+					lastRefresh = 0;
+					refresh();
+				} catch (Exception e) {
+					status = "Couldn't add it: a name is 1-16 letters, digits or _ (and the launcher must be open).";
+				}
+			}
+		});
+	}
+
 	/** Poll the launcher until the sign-in ends (or gives up after a while). */
 	private void followSignIn() throws InterruptedException {
 		long until = System.currentTimeMillis() + SIGN_IN_MS;

@@ -105,6 +105,21 @@ impl bridge::Accounts for AppAccounts {
         Ok(())
     }
 
+    fn add_offline(&self, name: &str) -> arctic_core::Result<()> {
+        // Same rule as the launcher's own "Add offline account".
+        arctic_core::auth::offline::validate_username(name.trim())?;
+        let tasks = self
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .tasks
+            .clone();
+        tasks.send(crate::tasks::Event::AddOfflineFromGame(
+            name.trim().to_owned(),
+        ));
+        Ok(())
+    }
+
     fn skins(&self) -> arctic_core::Result<String> {
         let dirs = self
             .0

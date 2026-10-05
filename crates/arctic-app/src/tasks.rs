@@ -139,6 +139,8 @@ pub enum Event {
     ScreenshotCopied(Outcome<()>),
     /// The game asked to add an account (show the sign-in).
     AddAccountFromGame,
+    /// The game asked to add an offline account with this name.
+    AddOfflineFromGame(String),
     /// The game's skin picker: wear this library skin (`None`: the Minecraft skin).
     WearSkinFromGame(Option<String>),
     /// A share code was made.

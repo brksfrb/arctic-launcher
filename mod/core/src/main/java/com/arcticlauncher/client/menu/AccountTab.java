@@ -26,6 +26,14 @@ final class AccountTab {
 	private static int page;
 
 	private static final int FIELD_H = 18;
+	private static final int MAX_NAME = 16;
+	/** What a Minecraft name may hold. */
+	private static final TextField.Filter NAME_CHARS = new TextField.Filter() {
+		@Override
+		public boolean accepts(int c) {
+			return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+		}
+	};
 	private static final int GAP = 6;
 	private static final int PORT_W = 44;
 	private static final int MAX_HOST = 253;
@@ -96,6 +104,24 @@ final class AccountTab {
 		});
 		add.enabled = !switcher.signingIn();
 		host.add(add).bounds(x, y, Math.min(w, ADD_W), ACCOUNT_ROW - 4);
+		y += ACCOUNT_ROW;
+		// An offline account: just a name (the launcher keeps it).
+		final TextField offline = new TextField("Offline name", MAX_NAME, NAME_CHARS);
+		Runnable addOffline = new Runnable() {
+			@Override
+			public void run() {
+				String name = offline.text().trim();
+				if (!name.isEmpty()) {
+					switcher.addOffline(name);
+					offline.text("");
+					host.rebuild();
+				}
+			}
+		};
+		offline.onEnter(addOffline);
+		int fieldW = Math.max(60, Math.min(w, ADD_W + 60) - ADD_W - GAP);
+		host.add(offline).bounds(x, y, fieldW, FIELD_H);
+		host.add(new Button("Add offline", addOffline)).bounds(x + fieldW + GAP, y, ADD_W, FIELD_H);
 		y += ACCOUNT_ROW;
 		notesY = y + 4;
 	}
