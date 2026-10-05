@@ -16,6 +16,7 @@
 		"arctic:greets": ["polarium"]
 	},
 	"entrypoints": {
+		"preLaunch": ["com.arcticlauncher.mod.startup.EarlyStart"],
 		"client": ["com.arcticlauncher.mod.ArcticMod"],
 		"polarium:light_state": ["com.arcticlauncher.mod.PolariumLightState"],
 		"polarium:posing": ["com.arcticlauncher.mod.PolariumPosing"]

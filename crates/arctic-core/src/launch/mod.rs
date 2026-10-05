@@ -320,6 +320,10 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 // Vanilla instances (on Fabric underneath) and Fabric/Quilt
                 // instances alike; in those, mods the player already has stay theirs.
                 progress(ProgressInfo::stage("Checking performance mods"));
+                // The cut-down Fabric API goes back to the whole one before the mods are looked after.
+                if let Err(e) = crate::mods::slim_api::undo(&game_dir.join("mods")) {
+                    log::warn!("couldn't restore Fabric API: {e}");
+                }
                 crate::mods::performance::sync(
                     &game_dir,
                     &vanilla.id,
@@ -333,6 +337,14 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                     &vanilla.id,
                     req.instance.performance,
                 )?;
+                // Vanilla instances (nothing in the folder but the launcher's own mods): load only
+                // the Fabric API modules those use, which starts the game noticeably faster.
+                if req.instance.performance
+                    && req.instance.loader.kind().is_none()
+                    && let Err(e) = crate::mods::slim_api::apply(&game_dir.join("mods"))
+                {
+                    log::warn!("couldn't cut Fabric API down: {e}");
+                }
                 timer.step("performance mods");
                 share_session = req.instance.arctic_mod && arctic_mod::supports(&vanilla.id);
             }
@@ -410,6 +422,7 @@ fn effective_loader(
     if fabric.is_none() {
         // Pure vanilla: make sure earlier Fabric runs left nothing behind.
         let game_dir = instance.game_dir(dirs);
+        let _ = crate::mods::slim_api::undo(&game_dir.join("mods"));
         let _ = arctic_mod::sync(&game_dir.join("mods"), game, false);
         let _ = crate::mods::performance::sync(&game_dir, game, false, false, false, &|_| {});
         let _ = crate::mods::polarium::sync(&game_dir.join("mods"), game, false);
