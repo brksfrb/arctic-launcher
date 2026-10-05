@@ -311,22 +311,14 @@ impl ArcticApp {
         self.shots.thumbs.insert(path, state);
     }
 
-    pub(crate) fn on_screenshot_copied(
-        &mut self,
-        ctx: &egui::Context,
-        image: Result<egui::ColorImage, String>,
-    ) {
-        match image {
-            Ok(image) => {
-                ctx.copy_image(image);
-                self.toasts.push(Kind::Success, "Copied the screenshot", "");
-            }
+    pub(crate) fn on_screenshot_copied(&mut self, result: Result<(), String>) {
+        match result {
+            Ok(()) => self.toasts.push(Kind::Success, "Copied the screenshot", ""),
             Err(e) => self.toasts.push(Kind::Error, "Couldn't copy it", e),
         }
     }
 }
 
-/// "5 min ago", "yesterday", or a date.
 /// Most the picture can be magnified.
 const MAX_ZOOM: f32 = 12.0;
 
@@ -360,6 +352,7 @@ fn zoom_and_pan(ui: &egui::Ui, image: &egui::Response, zoom: &mut f32, center: &
     *center = center.clamp(vec2(half, half), vec2(1.0 - half, 1.0 - half));
 }
 
+/// "5 min ago", "yesterday", or a date.
 fn when(t: std::time::SystemTime) -> String {
     let secs = t.elapsed().map_or(0, |d| d.as_secs());
     match secs {

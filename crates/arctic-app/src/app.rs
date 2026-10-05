@@ -751,7 +751,7 @@ impl ArcticApp {
             Event::ServerVerified(result) => self.on_server_verified(result),
             Event::Screenshots(list) => self.on_screenshot_list(list),
             Event::ScreenshotThumb(path, result) => self.on_screenshot_thumb(ctx, path, result),
-            Event::ScreenshotCopied(result) => self.on_screenshot_copied(ctx, result),
+            Event::ScreenshotCopied(result) => self.on_screenshot_copied(result),
             Event::WearSkinFromGame(id) => self.wear_skin_from_game(id),
             Event::AddAccountFromGame => {
                 // Straight to Microsoft's sign-in in the browser; the game
