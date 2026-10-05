@@ -66,20 +66,20 @@ impl ArcticApp {
             "Arctic players see the skin you pick here; others see your Minecraft skin.",
             library,
         );
-        ui.horizontal(|ui| {
+        // Wraps instead of overlapping when the window is narrow.
+        ui.horizontal_wrapped(|ui| {
             ui.selectable_value(&mut self.skins.view, SkinsView::Library, "My skins");
             ui.selectable_value(&mut self.skins.view, SkinsView::Gallery, "Gallery");
             if library {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if widgets::button(ui, p, Some(Icon::Plus), "Add skin…", true).clicked() {
-                        self.tasks.pick_skin_file();
-                    }
-                    if widgets::icon_button(ui, p, Icon::Folder, "Open skins folder").clicked() {
-                        let dir = self.skins_dir();
-                        let _ = std::fs::create_dir_all(&dir);
-                        let _ = open::that_detached(&dir);
-                    }
-                });
+                ui.add_space(8.0);
+                if widgets::button(ui, p, Some(Icon::Plus), "Add skin…", true).clicked() {
+                    self.tasks.pick_skin_file();
+                }
+                if widgets::icon_button(ui, p, Icon::Folder, "Open skins folder").clicked() {
+                    let dir = self.skins_dir();
+                    let _ = std::fs::create_dir_all(&dir);
+                    let _ = open::that_detached(&dir);
+                }
             }
         });
         ui.add_space(10.0);

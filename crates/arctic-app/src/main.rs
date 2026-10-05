@@ -43,8 +43,8 @@ use arctic_core::profiles::ProfileStore;
 use arctic_core::storage::DataDirs;
 use eframe::egui;
 
-const MIN_WINDOW: [f32; 2] = [860.0, 560.0];
-const DEFAULT_WINDOW: [f32; 2] = [1060.0, 680.0];
+const MIN_WINDOW: [f32; 2] = [960.0, 620.0];
+const DEFAULT_WINDOW: [f32; 2] = [1180.0, 720.0];
 const ICON_SIZE: u32 = 64;
 
 fn main() -> eframe::Result {
