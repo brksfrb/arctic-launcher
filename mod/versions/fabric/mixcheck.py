@@ -55,7 +55,18 @@ class Jar:
             chain.append(m.group(1))
         return chain
 
+    @staticmethod
+    def selector_pattern(name):
+        """The regular expression of a Mixin selector written /like this/ (Java source escapes undone), else None."""
+        if len(name) > 2 and name.startswith("/") and name.endswith("/"):
+            return name[1:-1].replace("\\\\", "\\")
+        return None
+
     def has_member(self, cls, name):
+        pattern = self.selector_pattern(name)
+        if pattern is not None:
+            pat = re.compile(r"[ .](?:" + pattern + r")(\(|;)")
+            return any(pat.search(self.members(c)) for c in self.hierarchy(cls))
         if name == "<clinit>":
             # javap lists the static initializer as "static {};".
             return "static {};" in self.members(cls)

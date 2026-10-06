@@ -182,7 +182,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mods = dir.path().join("mods");
         fs::create_dir_all(&mods).unwrap();
-        fs::write(mods.join("polarium-26.2-mine.jar"), jar_for("26.2").unwrap()).unwrap();
+        fs::write(
+            mods.join("polarium-26.2-mine.jar"),
+            jar_for("26.2").unwrap(),
+        )
+        .unwrap();
         // The instance was switched to 1.8.9: Fabric would refuse to start with it.
         sync(&mods, "1.8.9", true).unwrap();
         assert!(!mods.join("polarium-26.2-mine.jar").exists());

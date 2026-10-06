@@ -61,14 +61,21 @@ fn pack_key(game_dir: &Path, base: &str) -> String {
             if entry.file_name().to_string_lossy().starts_with("arctic") {
                 continue;
             }
-            let small = entry.metadata().is_ok_and(|m| m.is_file() && m.len() <= CONFIG_MAX);
+            let small = entry
+                .metadata()
+                .is_ok_and(|m| m.is_file() && m.len() <= CONFIG_MAX);
             if small && let Ok(bytes) = fs::read(&path) {
                 hasher.update(entry.file_name().to_string_lossy().as_bytes());
                 hasher.update(&bytes);
             }
         }
     }
-    hasher.finalize().iter().take(12).map(|b| format!("{b:02x}")).collect()
+    hasher
+        .finalize()
+        .iter()
+        .take(12)
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 /// Settings files bigger than this are not looked at (they are data, not settings).
@@ -85,7 +92,12 @@ fn path_arg(path: PathBuf) -> String {
 /// `keep_classes`: also keep the classes as Fabric and Mixin leave them (the client's `MixinCache`).
 /// Only for instances whose mods the launcher chose itself: that set is known and tested, a
 /// player's own mods may do things at start that a saved class can't carry.
-pub fn flags(game_dir: &Path, game_version: &str, java_major: u32, keep_classes: bool) -> Vec<String> {
+pub fn flags(
+    game_dir: &Path,
+    game_version: &str,
+    java_major: u32,
+    keep_classes: bool,
+) -> Vec<String> {
     if java_major < 17 {
         return Vec::new();
     }
@@ -103,7 +115,10 @@ pub fn flags(game_dir: &Path, game_version: &str, java_major: u32, keep_classes:
     let mut flags = vec![format!("-javaagent:{}", path_arg(agent))];
     flags.extend(class_list_flags(&dir, &key));
     if keep_classes {
-        flags.push(format!("-Darctic.mixincache={}", path_arg(pack_path(game_dir, &dir, &key))));
+        flags.push(format!(
+            "-Darctic.mixincache={}",
+            path_arg(pack_path(game_dir, &dir, &key))
+        ));
     }
     flags
 }
@@ -203,7 +218,11 @@ mod tests {
         assert!(!game.join(DIR).join(LIST).exists());
         assert!(flags(game, "26.2", 8, true).is_empty());
         // Not for instances with the player's own mods.
-        assert!(!flags(game, "26.2", 25, false).iter().any(|f| f.starts_with("-Darctic.mixincache=")));
+        assert!(
+            !flags(game, "26.2", 25, false)
+                .iter()
+                .any(|f| f.starts_with("-Darctic.mixincache="))
+        );
         fs::write(game.join(DIR).join("mixin-x.pak"), b"1").unwrap();
         drop_pack(game);
         assert!(!game.join(DIR).join("mixin-x.pak").exists());
