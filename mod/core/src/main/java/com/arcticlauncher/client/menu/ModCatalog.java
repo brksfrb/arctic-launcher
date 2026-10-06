@@ -23,6 +23,8 @@ final class ModCatalog {
 	private static final int[] TIME_TICKS = {1000, 6000, 12500, 13500, 18000};
 	private static final String[] WIDTHS = {"Thin", "Normal", "Thick"};
 	private static final float[] WIDTH_VALUES = {1f, 2f, 3f};
+	/** Motion blur strengths, 1 to 4. */
+	private static final String[] BLUR = {"Low", "Medium", "High", "Max"};
 
 	private ModCatalog() {}
 
@@ -141,6 +143,21 @@ final class ModCatalog {
 				.toggle(() -> c.clearWeather, on -> c.clearWeather = on));
 		out.add(new Mod("fire", "Low Fire", "A shorter fire overlay when you're burning", "fire", Category.VISUAL, "burning overlay")
 				.toggle(() -> c.lowFire, on -> c.lowFire = on));
+		if (p.motionBlurWorks()) {
+			out.add(new Mod("motionblur", "Motion Blur", "A soft blur as you move and turn", "motionblur", Category.VISUAL, "smooth trail")
+					.toggle(() -> c.motionBlur, on -> c.motionBlur = on)
+					.settings((host, f) -> {
+						f.section("Blur");
+						f.choice("Strength", BLUR, () -> Math.max(0, Math.min(BLUR.length - 1, c.motionBlurStrength - 1)),
+								i -> c.motionBlurStrength = i + 1);
+						f.note("The HUD and menus stay sharp.");
+					}));
+		}
+		if (p.itemPhysicsWorks()) {
+			out.add(new Mod("itemphysics", "Item Physics", "Dropped items lie flat and tumble as they fall", "itemphysics",
+					Category.VISUAL, "drops ground realistic")
+					.toggle(() -> c.itemPhysics, on -> c.itemPhysics = on));
+		}
 		if (p.outlineTweaks()) {
 			out.add(new Mod("outline", "Block Outline", "The outline on the block you look at", "outline", Category.VISUAL, "selection")
 					.toggle(() -> c.outlineColor != 0, on -> {

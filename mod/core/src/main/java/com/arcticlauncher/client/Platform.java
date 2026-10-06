@@ -266,6 +266,16 @@ public interface Platform {
 		return false;
 	}
 
+	/** Motion blur works on this version. */
+	default boolean motionBlurWorks() {
+		return false;
+	}
+
+	/** Item physics works on this version. */
+	default boolean itemPhysicsWorks() {
+		return false;
+	}
+
 	/** The block outline settings work on this version. */
 	default boolean outlineTweaks() {
 		return false;

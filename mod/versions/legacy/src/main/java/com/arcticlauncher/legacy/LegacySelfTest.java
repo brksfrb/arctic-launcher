@@ -41,6 +41,10 @@ final class LegacySelfTest {
 			LegacyWorldTest.start();
 			return;
 		}
+		if (LegacyVisualsTest.requested()) {
+			LegacyVisualsTest.start();
+			return;
+		}
 		ArcticLegacy.LOG.info("selftest: scheduled ({})", mode);
 		int step = 3;
 		later(step++, () -> shot("title"));

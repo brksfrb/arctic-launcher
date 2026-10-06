@@ -220,6 +220,8 @@ processResources {
 			svc: atLeast('1.20.5'),
 			// Block outline: 26.1 draws it another way.
 			outline: atLeast('26.2'),
+			// Motion blur (a post effect in the client's pack) and item physics: 26.1's renderer for now.
+			visuals: atLeast('26.1'),
 			// Replays (recording and watching): ported version by version.
 			replay: atLeast('1.16'),
 			// Before 26.1 a replay grabs finished frames where the window shows them.

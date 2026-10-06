@@ -34,17 +34,24 @@ public final class ArcticPacks implements RepositorySource {
 	private static volatile int loadedOversample;
 	private static java.util.concurrent.CompletableFuture<Void> reloading;
 
+	/** The client's own effects (motion blur): always on, under every other pack. */
+	public static final String CLIENT = "arctic_client";
+
 	@Override
 	public void loadPacks(Consumer<Pack> out) {
+		add(out, SMOOTH_FONT, "resourcepacks/smooth_font", "Arctic smooth font", new PackSelectionConfig(false, Pack.Position.TOP, false));
+		add(out, CLIENT, "resourcepacks/client", "Arctic Client", new PackSelectionConfig(true, Pack.Position.BOTTOM, true));
+	}
+
+	private static void add(Consumer<Pack> out, String id, String folder, String title, PackSelectionConfig selection) {
 		Optional<Path> root = FabricLoader.getInstance()
 				.getModContainer(ArcticMod.ID)
-				.flatMap(mod -> mod.findPath("resourcepacks/smooth_font"));
+				.flatMap(mod -> mod.findPath(folder));
 		if (root.isEmpty()) {
 			return;
 		}
-		PackLocationInfo info = new PackLocationInfo(SMOOTH_FONT, com.arcticlauncher.mod.Compat.literal("Arctic smooth font"), PackSource.BUILT_IN, Optional.empty());
-		Pack pack = Pack.readMetaAndCreate(info, new PathPackResources.PathResourcesSupplier(root.get()),
-				PackType.CLIENT_RESOURCES, new PackSelectionConfig(false, Pack.Position.TOP, false));
+		PackLocationInfo info = new PackLocationInfo(id, com.arcticlauncher.mod.Compat.literal(title), PackSource.BUILT_IN, Optional.empty());
+		Pack pack = Pack.readMetaAndCreate(info, new PathPackResources.PathResourcesSupplier(root.get()), PackType.CLIENT_RESOURCES, selection);
 		if (pack != null) {
 			out.accept(pack);
 		}
