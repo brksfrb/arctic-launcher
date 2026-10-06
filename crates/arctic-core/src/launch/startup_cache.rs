@@ -153,9 +153,13 @@ fn class_list_flags(dir: &Path, key: &str) -> Vec<String> {
     if list.is_file() && fs::read_to_string(dir.join(KEY)).is_ok_and(|k| k.trim() == key) {
         return vec![format!("-Darctic.preload={}", path_arg(list))];
     }
-    // Out of date: a new list is recorded by this start.
-    let _ = fs::remove_file(&list);
-    let _ = fs::remove_file(dir.join(KEY));
+    // Out of date: a new list is recorded by this start. The old one is still used meanwhile: after an
+    // update nearly all of it still holds (names that are gone are skipped), and without it this start
+    // would be the slow one.
+    let mut flags = Vec::new();
+    if list.is_file() {
+        flags.push(format!("-Darctic.preload={}", path_arg(list.clone())));
+    }
     // A file of its own each time: a log the last game still holds open must not stop this one (a JVM
     // that can't open its log doesn't start).
     if let Ok(entries) = fs::read_dir(dir) {
@@ -169,12 +173,13 @@ fn class_list_flags(dir: &Path, key: &str) -> Vec<String> {
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_millis());
     let log = dir.join(format!("{LOG_PREFIX}{stamp}.log"));
-    vec![
+    flags.extend([
         format!("-Xlog:class+load=info:file={}", path_arg(log.clone())),
         format!("-Darctic.classlog={}", path_arg(log)),
         format!("-Darctic.classlist={}", path_arg(list)),
         format!("-Darctic.classkey={key}"),
-    ]
+    ]);
+    flags
 }
 
 #[cfg(test)]
@@ -211,11 +216,12 @@ mod tests {
         let changed = flags(game, "26.2", 25, true);
         assert_ne!(pack(&second), pack(&changed));
         assert_eq!(pack(&changed), pack(&flags(game, "26.2", 25, true)));
-        // A mod added: record again.
+        // A mod added: record again, still loading ahead from the old list meanwhile.
         fs::write(game.join("mods/b.jar"), b"22").unwrap();
         let third = flags(game, "26.2", 25, true);
         assert!(third.iter().any(|f| f.starts_with("-Xlog:class+load")));
-        assert!(!game.join(DIR).join(LIST).exists());
+        assert!(third.iter().any(|f| f.starts_with("-Darctic.preload=")));
+        assert!(game.join(DIR).join(LIST).exists());
         assert!(flags(game, "26.2", 8, true).is_empty());
         // Not for instances with the player's own mods.
         assert!(
