@@ -62,16 +62,26 @@ public final class Greeter {
 		if (!FabricLoader.getInstance().isModLoaded("fabric-networking-api-v1")) {
 			return;
 		}
-		hook("net.fabricmc.fabric.api.client.networking.v1.C2SConfigurationChannelEvents");
-		hook("net.fabricmc.fabric.api.client.networking.v1.C2SPlayChannelEvents");
+		// Play phase only: servers' plugin channels (Paper's, BotPvP's) only take hellos sent in play.
+		// The event's name changed with Mojang's names (26.1); whichever this Fabric API has is used.
+		if (!hook("net.fabricmc.fabric.api.client.networking.v1.ServerboundPlayChannelEvents")
+				&& !hook("net.fabricmc.fabric.api.client.networking.v1.C2SPlayChannelEvents")) {
+			LOG.warn("Arctic: no Fabric API channel event found: servers won't get Arctic's or Polarium's hello");
+		}
 	}
 
 	/** {@code <events>.REGISTER.register((handler, sender, client, channels) -> greet(...))}, by name. */
-	private static void hook(String events) {
+	private static boolean hook(String events) {
+		ClassLoader loader = Greeter.class.getClassLoader();
 		try {
-			Class<?> owner = Class.forName(events);
+			Class<?> owner;
+			try {
+				owner = Class.forName(events, true, loader);
+			} catch (ClassNotFoundException e) {
+				return false;
+			}
 			Object event = owner.getField("REGISTER").get(null);
-			Class<?> callback = Class.forName(events + "$Register");
+			Class<?> callback = Class.forName(events + "$Register", true, loader);
 			Object listener = Proxy.newProxyInstance(callback.getClassLoader(), new Class<?>[] {callback}, (proxy, method, args) -> {
 				if (method.getDeclaringClass() == Object.class) {
 					return switch (method.getName()) {
@@ -89,11 +99,13 @@ public final class Greeter {
 				}
 				return null;
 			});
-			Method register = Class.forName("net.fabricmc.fabric.api.event.Event").getMethod("register", Object.class);
+			Method register = Class.forName("net.fabricmc.fabric.api.event.Event", true, loader).getMethod("register", Object.class);
 			register.invoke(event, listener);
 			LOG.info("Arctic: listening for server channels through Fabric API ({})", owner.getSimpleName());
+			return true;
 		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
 			LOG.warn("Arctic: can't listen for server channels through Fabric API ({}): {}", events, e.toString());
+			return false;
 		}
 	}
 
