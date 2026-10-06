@@ -29,9 +29,6 @@ abstract class CustomPayloadHandlerMixin {
 	@Final
 	protected Connection connection;
 
-	/** The connection Arctic already said hello on, and to whom: once each is enough. */
-	private static Connection arctic$greeted;
-	private static final java.util.Set<String> arctic$greetings = new java.util.HashSet<>();
 
 	@Inject(method = "handleCustomPayload(Lnet/minecraft/network/protocol/common/ClientboundCustomPayloadPacket;)V",
 			at = @At("HEAD"), cancellable = true)
@@ -54,23 +51,7 @@ abstract class CustomPayloadHandlerMixin {
 
 	/** Say hello to the servers that list a hello channel (Arctic's, and Polarium's on its behalf). */
 	private void arctic$greet(SvcPayload register) {
-		java.util.List<String> channels = register.channels();
-		if (channels.isEmpty()) {
-			return;
-		}
-		if (connection != arctic$greeted) {
-			arctic$greeted = connection;
-			arctic$greetings.clear();
-		}
-		if (channels.contains(SvcPayload.HELLO.toString()) && arctic$greetings.add("arctic")) {
-			connection.send(new ServerboundCustomPayloadPacket(SvcPayload.hello()));
-		}
-		if (channels.contains(SvcPayload.POLARIUM_HELLO.toString()) && arctic$greetings.add("polarium")) {
-			SvcPayload hello = SvcPayload.polariumHello();
-			if (hello != null) {
-				connection.send(new ServerboundCustomPayloadPacket(hello));
-			}
-		}
+		com.arcticlauncher.mod.svc.Greeter.greet(connection, register.channels());
 	}
 }
 //#endif
