@@ -128,8 +128,10 @@ public final class MixinReplay {
 	 * about it doesn't fit (then the caller lets Mixin do its own setup).
 	 */
 	public static boolean replay() {
-		if (Boolean.getBoolean("arctic.noreplay")) {
-			why = "switched off";
+		// Off unless asked for (-Darctic.replay=true): a class the cache lacks makes Mixin do its setup late, and
+		// then MixinExtras tries to define helper classes the cache already defined (duplicate class definition).
+		if (!Boolean.getBoolean("arctic.replay")) {
+			why = "off";
 			return false;
 		}
 		if (file == null || !Files.isRegularFile(file)) {
