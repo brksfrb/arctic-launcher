@@ -76,7 +76,10 @@ impl ArcticApp {
                 }
                 ui.multiply_opacity(t);
                 ui.add_space((1.0 - t) * TAB_SLIDE);
+                // A scroll position of its own for each page (one shared by all would carry the
+                // Settings page's scroll over to Play).
                 egui::ScrollArea::vertical()
+                    .id_salt(("page_scroll", self.tab as usize))
                     .auto_shrink(false)
                     .show(ui, |ui| match self.tab {
                         Tab::Play => self.play_tab(ui),
