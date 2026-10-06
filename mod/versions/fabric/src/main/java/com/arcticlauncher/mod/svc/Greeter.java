@@ -22,6 +22,7 @@ import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
  * said hello on instances that have Fabric API, and servers thought Polarium wasn't there.
  */
 public final class Greeter {
+	private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger("Arctic");
 	private static Connection greeted;
 	private static final Set<String> GREETINGS = new HashSet<>();
 
@@ -32,17 +33,26 @@ public final class Greeter {
 		if (connection == null || channels.isEmpty()) {
 			return;
 		}
+		boolean arctic = channels.contains(SvcPayload.HELLO.toString());
+		boolean polarium = channels.contains(SvcPayload.POLARIUM_HELLO.toString());
+		if (arctic || polarium) {
+			LOG.info("Arctic: the server lists {} channel(s) (arctic:hello {}, polarium:hello {})", channels.size(), arctic, polarium);
+		}
 		if (connection != greeted) {
 			greeted = connection;
 			GREETINGS.clear();
 		}
 		if (channels.contains(SvcPayload.HELLO.toString()) && GREETINGS.add("arctic")) {
 			connection.send(new ServerboundCustomPayloadPacket(SvcPayload.hello()));
+			LOG.info("Arctic: said arctic:hello");
 		}
 		if (channels.contains(SvcPayload.POLARIUM_HELLO.toString()) && GREETINGS.add("polarium")) {
 			SvcPayload hello = SvcPayload.polariumHello();
 			if (hello != null) {
 				connection.send(new ServerboundCustomPayloadPacket(hello));
+				LOG.info("Arctic: said polarium:hello for Polarium");
+			} else {
+				LOG.info("Arctic: the server asks for polarium:hello but Polarium isn't loaded");
 			}
 		}
 	}
@@ -81,8 +91,9 @@ public final class Greeter {
 			});
 			Method register = Class.forName("net.fabricmc.fabric.api.event.Event").getMethod("register", Object.class);
 			register.invoke(event, listener);
+			LOG.info("Arctic: listening for server channels through Fabric API ({})", owner.getSimpleName());
 		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-			// Another Fabric API shape: no hello through it.
+			LOG.warn("Arctic: can't listen for server channels through Fabric API ({}): {}", events, e.toString());
 		}
 	}
 
