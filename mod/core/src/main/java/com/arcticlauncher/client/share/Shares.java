@@ -43,7 +43,8 @@ public final class Shares {
 	private static final float MAX_SCALE = 2.5f;
 	private static final List<String> STYLES = Arrays.asList("arctic", "aurora", "classic", "vanilla");
 	private static final String[] BOOLEANS = {"fancy", "showCosmetics", "fullbright", "zoomEnabled", "freelookEnabled",
-			"toggleSprint", "toggleSneak", "chatTimestamps", "chatStack", "lowFire", "clearWeather", "confirmLeave"};
+			"toggleSprint", "toggleSneak", "chatTimestamps", "chatStack", "lowFire", "clearWeather", "confirmLeave",
+			"motionBlur", "itemPhysics"};
 	private static final String[] KEYS = {"zoomKey", "freelookKey", "fullbrightKey", "emoteKey"};
 	private static final Gson GSON = new Gson();
 

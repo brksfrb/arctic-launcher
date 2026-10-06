@@ -76,6 +76,11 @@ public final class ClientConfig {
 	public boolean chatMentions = true;
 	public boolean lowFire;
 	public boolean clearWeather;
+	/** Motion blur, and how strong (1 low to 4 max). */
+	public boolean motionBlur;
+	public int motionBlurStrength = 2;
+	/** Dropped items lie flat on the ground and tumble as they fall. */
+	public boolean itemPhysics;
 	/** Fancy style: smooth font and smooth rounded shapes. */
 	public boolean fancy;
 	/** The pause menu's leave button needs a second click. */

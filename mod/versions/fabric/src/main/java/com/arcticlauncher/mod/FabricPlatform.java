@@ -802,6 +802,20 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean motionBlurWorks() {
+		//#if MC >= 26.1
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	@Override
+	public boolean itemPhysicsWorks() {
+		return motionBlurWorks();
+	}
+
+	@Override
 	public boolean scoreboardTweaks() {
 		// The "extras" mixins (scoreboard, hit color, minimap, duels) are 1.20+ for now.
 		//#if MC >= 1.20

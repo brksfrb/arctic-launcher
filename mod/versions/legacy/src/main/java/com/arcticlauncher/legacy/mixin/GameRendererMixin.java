@@ -36,4 +36,11 @@ abstract class GameRendererMixin {
 	private void arctic$freelookEnd(float tickDelta, CallbackInfo ci) {
 		LegacyHooks.freelookCamera(false);
 	}
+
+	/** Motion blur: after the world, before the HUD. */
+	@Inject(method = "render(FJ)V", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/client/render/WorldRenderer;drawEntityOutlineFramebuffer()V", shift = At.Shift.AFTER))
+	private void arctic$motionBlur(float tickDelta, long nanoTime, CallbackInfo ci) {
+		com.arcticlauncher.legacy.LegacyMotionBlur.apply();
+	}
 }

@@ -61,6 +61,8 @@ FROM_LUCIDE = {
     "memory": "memory-stick",
     "messages": "message-square-text",
     "minimap": "map",
+    "motionblur": "fast-forward",
+    "itemphysics": "package-open",
     "mods": "layout-grid",
     "movement": "footprints",
     "outline": "box",

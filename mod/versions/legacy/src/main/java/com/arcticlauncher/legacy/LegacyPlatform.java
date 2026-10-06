@@ -271,6 +271,16 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean motionBlurWorks() {
+		return true;
+	}
+
+	@Override
+	public boolean itemPhysicsWorks() {
+		return true;
+	}
+
+	@Override
 	public boolean scoreboardTweaks() {
 		return true;
 	}
