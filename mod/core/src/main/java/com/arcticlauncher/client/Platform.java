@@ -240,6 +240,11 @@ public interface Platform {
 	/** Turn on a pack from the resource pack folder (by file name) and reload. */
 	default void enableResourcePack(String fileName) {}
 
+	/** Commands take 1.8.9 to 1.12.2's syntax (camelCase game rules, "effect @a clear", replaceitem). */
+	default boolean oldCommands() {
+		return false;
+	}
+
 	/** This version can make a duel world and open it to LAN. */
 	default boolean canDuel() {
 		return false;
