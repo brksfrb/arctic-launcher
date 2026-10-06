@@ -512,7 +512,12 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
     // (see startup_cache); it must be there to do it.
     let preload_flags = match inst.version.java_version.as_ref() {
         Some(java) if req.instance.arctic_mod && arctic_mod::supports(&req.version.id) => {
-            startup_cache::flags(&inst.game_dir, &req.version.id, java.major_version)
+            startup_cache::flags(
+                &inst.game_dir,
+                &req.version.id,
+                java.major_version,
+                req.instance.loader.kind().is_none(),
+            )
         }
         _ => Vec::new(),
     };
