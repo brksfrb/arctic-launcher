@@ -302,7 +302,11 @@ impl ArcticApp {
             let mut on = instance.arctic_mod;
             if ui.checkbox(&mut on, toggle).changed() {
                 let id = instance.id.clone();
-                self.update_instance(&id, |i| i.arctic_mod = on);
+                if on {
+                    self.update_instance(&id, |i| i.arctic_mod = true);
+                } else {
+                    self.client_off_confirm = Some(id);
+                }
             }
             if !supported {
                 ui.label(

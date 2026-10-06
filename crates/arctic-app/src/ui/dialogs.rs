@@ -299,6 +299,48 @@ impl ArcticApp {
             self.performance_off_confirm = None;
         }
     }
+
+    /// "Turn off the Arctic Client?": asked before it goes off in an instance.
+    pub(crate) fn client_off_dialog(&mut self, ctx: &egui::Context) {
+        let Some(id) = self.client_off_confirm.clone() else {
+            return;
+        };
+        let vanilla = self
+            .instance_mut(&id)
+            .is_none_or(|i| i.loader.kind().is_none());
+        let (title, about) = if vanilla {
+            (
+                "Turn off the Arctic Client?",
+                "The game runs without Arctic's menus, HUD, cosmetics and replays, and the faster-start work that comes with it. Your Arctic settings are kept. You can turn it back on any time.",
+            )
+        } else {
+            (
+                "Turn off the Arctic mod?",
+                "You won't see other players' Arctic looks (skins and capes) or the Arctic menu in game. Your Arctic settings are kept. You can turn it back on any time.",
+            )
+        };
+        let p = self.palette();
+        let modal = Modal::new(Id::new("client_off"))
+            .frame(dialog_frame(p))
+            .show(ctx, |ui| {
+                ui.set_width(380.0);
+                ui.label(RichText::new(title).size(20.0).strong());
+                ui.label(RichText::new(about).color(p.muted));
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Keep it").clicked() {
+                        self.client_off_confirm = None;
+                    }
+                    if widgets::button(ui, p, None, "Turn off", true).clicked() {
+                        self.update_instance(&id, |i| i.arctic_mod = false);
+                        self.client_off_confirm = None;
+                    }
+                });
+            });
+        if modal.should_close() {
+            self.client_off_confirm = None;
+        }
+    }
 }
 
 pub(super) fn dialog_frame(p: &Palette) -> egui::Frame {

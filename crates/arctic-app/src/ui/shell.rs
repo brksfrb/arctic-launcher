@@ -95,6 +95,7 @@ impl ArcticApp {
         self.add_account_dialog(&ctx);
         self.remove_account_dialog(&ctx);
         self.performance_off_dialog(&ctx);
+        self.client_off_dialog(&ctx);
         self.profile_dialogs(&ctx);
         self.create_instance_dialog(&ctx);
         self.suggest_dialog(&ctx);
