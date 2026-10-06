@@ -171,31 +171,62 @@ public final class Duel {
 
 	/** Duel rules: no mobs, noon, keep the arena clean. */
 	private void setUpWorld() {
-		// Game rule names as of 26.x (duels need 26.3, see Platform.canDuel).
-		String[] commands = {
-				"gamerule send_command_feedback false", "gamerule spawn_mobs false", "gamerule advance_time false",
-				"gamerule advance_weather false", "gamerule immediate_respawn true", "gamerule keep_inventory false",
-				"gamerule show_advancement_messages false", "gamerule pvp true",
-				"time set noon", "weather clear", "difficulty easy", "setworldspawn 0 -60 0",
-		};
-		for (String c : commands) {
-			platform.sendChat("/" + c);
-		}
+		send(platform.oldCommands() ? OLD_RULES : RULES);
 		newRound();
 	}
 
+	/** Game rule names as of 26.x. */
+	private static final String[] RULES = {
+			"gamerule send_command_feedback false", "gamerule spawn_mobs false", "gamerule advance_time false",
+			"gamerule advance_weather false", "gamerule immediate_respawn true", "gamerule keep_inventory false",
+			"gamerule show_advancement_messages false", "gamerule pvp true",
+			"time set noon", "weather clear", "difficulty easy", "setworldspawn 0 -60 0",
+	};
+	/** 1.8.9 to 1.12.2: camelCase rules (no weather or respawn rules yet; PvP is on in worlds); the flat ground is at y 4. */
+	private static final String[] OLD_RULES = {
+			"gamerule sendCommandFeedback false", "gamerule doMobSpawning false", "gamerule doDaylightCycle false",
+			"gamerule keepInventory false", "time set 6000", "weather clear 1000000", "difficulty 1", "setworldspawn 0 4 0",
+	};
+	private static final String[] ROUND = {
+			"clear @a", "effect clear @a", "effect give @a instant_health 1 10", "effect give @a saturation 1 10",
+			"gamemode survival @a", "spreadplayers 0 0 8 14 false @a",
+	};
+	private static final String[] OLD_ROUND = {
+			"clear @a", "effect @a clear", "effect @a instant_health 1 10", "effect @a saturation 1 10",
+			"gamemode 0 @a", "spreadplayers 0 0 8 14 false @a",
+	};
+
 	/** Everyone healed, re-kitted and spread apart. */
 	public void newRound() {
-		String[] commands = {
-				"clear @a", "effect clear @a", "effect give @a instant_health 1 10", "effect give @a saturation 1 10",
-				"gamemode survival @a", "spreadplayers 0 0 8 14 false @a",
-		};
+		boolean old = platform.oldCommands();
+		send(old ? OLD_ROUND : ROUND);
+		send(old ? oldKit(kit) : kit(kit));
+	}
+
+	private void send(String[] commands) {
 		for (String c : commands) {
 			platform.sendChat("/" + c);
 		}
-		for (String c : kit(kit)) {
-			platform.sendChat("/" + c);
+	}
+
+	/** The kits in 1.8.9 to 1.12.2's commands (replaceitem, old item ids). */
+	static String[] oldKit(String id) {
+		if ("uhc".equals(id)) {
+			return new String[] {
+					"give @a diamond_sword", "give @a bow", "give @a arrow 32", "give @a golden_apple 6",
+					"give @a cooked_beef 16", "give @a water_bucket", "give @a planks 64",
+					"replaceitem entity @a slot.armor.head diamond_helmet", "replaceitem entity @a slot.armor.chest diamond_chestplate",
+					"replaceitem entity @a slot.armor.legs diamond_leggings", "replaceitem entity @a slot.armor.feet diamond_boots",
+			};
 		}
+		if ("sword".equals(id)) {
+			return new String[] {
+					"give @a iron_sword", "give @a golden_apple 4", "give @a cooked_beef 16",
+					"replaceitem entity @a slot.armor.head iron_helmet", "replaceitem entity @a slot.armor.chest iron_chestplate",
+					"replaceitem entity @a slot.armor.legs iron_leggings", "replaceitem entity @a slot.armor.feet iron_boots",
+			};
+		}
+		return new String[0];
 	}
 
 	static String[] kit(String id) {

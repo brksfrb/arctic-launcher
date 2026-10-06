@@ -89,12 +89,33 @@ final class LegacyVisualsTest {
 				() -> {
 					c.motionBlur = false;
 					c.itemPhysics = false;
+					for (com.arcticlauncher.client.hud.HudWidget w : ArcticClient.hud().widgets()) {
+						if ("minimap".equals(w.id)) {
+							ArcticClient.hud().slot(w).enabled = true;
+						}
+					}
+				},
+				() -> LegacyWorldTest.shot("minimap"),
+				() -> {
+					ArcticLegacy.LOG.info("visualstest: duel available {}", ArcticClient.duel().available());
+					ArcticClient.duel().start("uhc", null, null);
+				},
+				null, null, null, null, null,
+				() -> {
+					ArcticLegacy.LOG.info("visualstest: duel hosting {} code {}", ArcticClient.duel().hosting(), ArcticClient.duel().code());
+					LegacyWorldTest.shot("duel");
+				},
+				() -> {
 					ArcticLegacy.LOG.info("visualstest: done");
 					MinecraftClient.getInstance().scheduleStop();
 				},
 		};
 		for (int i = 0; i < steps.length; i++) {
 			final Runnable step = steps[i];
+			if (step == null) {
+				// A pause: waiting for something the game does by itself.
+				continue;
+			}
 			TIMER.schedule(() -> run(step), (long) i * STEP_SECONDS, TimeUnit.SECONDS);
 		}
 	}

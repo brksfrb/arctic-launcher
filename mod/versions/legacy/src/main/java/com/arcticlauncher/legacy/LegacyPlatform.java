@@ -276,6 +276,16 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean minimapWorks() {
+		return true;
+	}
+
+	@Override
+	public String minimap() {
+		return LegacyMinimap.refresh() ? "dyn:" + LegacyMinimap.KEY : null;
+	}
+
+	@Override
 	public boolean itemPhysicsWorks() {
 		return true;
 	}
@@ -816,6 +826,62 @@ public final class LegacyPlatform implements Platform {
 		return LegacyHooks.camera();
 	}
 
+	// ---- Duels --------------------------------------------------------------------------
+
+	private static final String DUEL_PREFIX = "Arctic Duel ";
+
+	@Override
+	public boolean canDuel() {
+		return true;
+	}
+
+	@Override
+	public boolean oldCommands() {
+		return true;
+	}
+
+	/** A flat survival world with commands on (one at a time: earlier duel arenas are thrown away). */
+	@Override
+	public void createDuelWorld() {
+		LegacyHooks.onNextFrame(() -> {
+			MinecraftClient mc = mc();
+			leave(mc);
+			LegacyWorldTest.deleteWorlds(new File(mc.runDirectory, "saves"), DUEL_PREFIX);
+			String name = DUEL_PREFIX + new java.text.SimpleDateFormat("MM-dd HH.mm").format(new java.util.Date());
+			//#if MC >= 1.10
+			net.minecraft.world.level.LevelInfo info = new net.minecraft.world.level.LevelInfo(System.currentTimeMillis(),
+					net.minecraft.world.GameMode.SURVIVAL, false, false, net.minecraft.world.level.LevelGeneratorType.FLAT)
+			//#else
+			net.minecraft.world.level.LevelInfo info = new net.minecraft.world.level.LevelInfo(System.currentTimeMillis(),
+					net.minecraft.world.level.LevelInfo.GameMode.SURVIVAL, false, false, net.minecraft.world.level.LevelGeneratorType.FLAT)
+			//#endif
+					.enableCommands();
+			mc.startIntegratedServer(name, name, info);
+		});
+	}
+
+	@Override
+	public boolean inSingleplayerWorld() {
+		MinecraftClient mc = mc();
+		return mc.world != null && mc.player != null && mc.getServer() != null;
+	}
+
+	@Override
+	public boolean openToLan() {
+		net.minecraft.server.integrated.IntegratedServer server = mc().getServer();
+		if (server == null) {
+			return false;
+		}
+		if (server.isPublished()) {
+			return true;
+		}
+		//#if MC >= 1.10
+		return server.openToLAN(net.minecraft.world.GameMode.SURVIVAL, true) != null;
+		//#else
+		return server.getPort(net.minecraft.world.level.LevelInfo.GameMode.SURVIVAL, true) != null;
+		//#endif
+	}
+
 	@Override
 	public void leaveWorld() {
 		MinecraftClient mc = mc();
@@ -872,6 +938,25 @@ public final class LegacyPlatform implements Platform {
 	@Override
 	public String playerName() {
 		return mc().getSession().getUsername();
+	}
+
+	/**
+	 * Play as another account without restarting: on these versions the session is all there is per
+	 * account (server joins read its token, the profile comes from it); the old account's profile
+	 * properties (its skin) are dropped.
+	 */
+	@Override
+	public String switchAccount(String name, UUID uuid, String accessToken, String xuid, boolean microsoft) {
+		MinecraftClient mc = mc();
+		if (mc.world != null) {
+			return "leave the world first";
+		}
+		String undashed = uuid.toString().replace("-", "");
+		((com.arcticlauncher.legacy.mixin.MinecraftClientAccountAccess) mc).arctic$setSession(
+				new net.minecraft.client.util.Session(name, undashed, accessToken, microsoft ? "mojang" : "legacy"));
+		mc.getSessionProperties().clear();
+		ArcticLegacy.LOG.info("Now playing as {}", name);
+		return null;
 	}
 
 	@Override
