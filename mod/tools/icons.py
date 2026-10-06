@@ -44,6 +44,7 @@ FROM_LUCIDE = {
     "direction": "navigation-2",
     "durability": "pickaxe",
     "effects": "flask-conical",
+    "entities": "rabbit",
     "food": "drumstick",
     "fps": "gauge",
     "freelook": "eye",
@@ -84,6 +85,7 @@ FROM_LUCIDE = {
     "voice": "mic",
     "waypoints": "map-pin",
     "weather": "cloud-off",
+    "worldtime": "sunset",
     "zoom": "zoom-in",
 }
 
