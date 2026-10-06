@@ -48,6 +48,7 @@ public final class Timeline {
 			return;
 		}
 		mark("ready");
+		mark("mixin cache: " + mixinCacheStats());
 		//#if MC >= 26.1
 		if (System.getProperty("arctic.checkStates") != null) {
 			mark("states " + StateCaches.digest());
@@ -56,6 +57,30 @@ public final class Timeline {
 		done = true;
 		System.out.println("[Arctic startup] " + MARKS);
 		Preloader.record();
+		tellMixinCache();
+	}
+
+	private static String mixinCacheStats() {
+		if (System.getProperty("arctic.mixincache") == null) {
+			return "n/a";
+		}
+		try {
+			return String.valueOf(Class.forName("com.arcticlauncher.mod.startup.MixinCache", true, ClassLoader.getSystemClassLoader()).getMethod("stats").invoke(null));
+		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+			return "no agent";
+		}
+	}
+
+	/** The agent's cache of transformed classes lives in the system class loader: reached by name. */
+	private static void tellMixinCache() {
+		if (System.getProperty("arctic.mixincache") == null) {
+			return;
+		}
+		try {
+			Class.forName("com.arcticlauncher.mod.startup.MixinCache", true, ClassLoader.getSystemClassLoader()).getMethod("ready").invoke(null);
+		} catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
+			// No agent this start: nothing to tell.
+		}
 	}
 }
 //#endif

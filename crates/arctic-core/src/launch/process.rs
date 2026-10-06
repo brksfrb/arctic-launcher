@@ -93,6 +93,7 @@ pub fn spawn(
         pid: child.id(),
         kill: kill.clone(),
     };
+    let game_dir = plan.game_dir.clone();
     std::thread::spawn(move || {
         let code = loop {
             if kill.swap(false, Ordering::Relaxed) {
@@ -107,6 +108,9 @@ pub fn spawn(
                 }
             }
         };
+        if code.is_some_and(|c| c != 0) {
+            super::startup_cache::drop_pack(&game_dir);
+        }
         on_event(GameEvent::Exited { code });
     });
     Ok(handle)
