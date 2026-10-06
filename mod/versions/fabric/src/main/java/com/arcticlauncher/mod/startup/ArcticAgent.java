@@ -31,6 +31,9 @@ import org.objectweb.asm.tree.VarInsnNode;
  */
 public final class ArcticAgent {
 	private static final String DELEGATE = "net/fabricmc/loader/impl/launch/knot/KnotClassDelegate";
+	private static final String PLUGIN_HANDLE = "org/spongepowered/asm/mixin/transformer/PluginHandle";
+	private static final String MIXIN_CONFIG = "org/spongepowered/asm/mixin/transformer/MixinConfig";
+	private static final String REPLAY = "com/arcticlauncher/mod/startup/MixinReplay";
 	private static final String LOAD = "loadClass";
 	private static final String LOAD_DESC = "(Ljava/lang/String;Z)Ljava/lang/Class;";
 	private static final String INNER = "loadClass$arctic";
@@ -44,6 +47,20 @@ public final class ArcticAgent {
 		instrumentation.addTransformer(new ClassFileTransformer() {
 			@Override
 			public byte[] transform(ClassLoader loader, String name, Class<?> redefined, ProtectionDomain domain, byte[] bytes) {
+				if (MIXIN_CONFIG.equals(name)) {
+					try {
+						return wrapConfig(bytes);
+					} catch (Throwable e) {
+						return null;
+					}
+				}
+				if (PLUGIN_HANDLE.equals(name)) {
+					try {
+						return wrapHandle(bytes);
+					} catch (Throwable e) {
+						return null;
+					}
+				}
 				if (!DELEGATE.equals(name)) {
 					// Classes made up while the game runs (MixinExtras' helpers) are defined without Fabric's loading
 					// path: the pack needs them too.
@@ -70,6 +87,7 @@ public final class ArcticAgent {
 		new ClassReader(bytes).accept(node, 0);
 		lockLoading(node);
 		cacheTransformed(node);
+		hideServed(node);
 		// The class's own frames stay as they are; only the wrappers' are written above.
 		ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
 		node.accept(writer);
@@ -100,9 +118,17 @@ public final class ArcticAgent {
 		code.add(new VarInsnNode(Opcodes.ALOAD, 0));
 		code.add(new org.objectweb.asm.tree.FieldInsnNode(Opcodes.GETFIELD, node.name, "transformInitialized", "Z"));
 		code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, cache, "get", "(Ljava/lang/String;Z)[B", false));
-		code.add(new InsnNode(Opcodes.DUP));
 		code.add(new VarInsnNode(Opcodes.ASTORE, 3));
+		code.add(new VarInsnNode(Opcodes.ALOAD, 3));
 		code.add(new org.objectweb.asm.tree.JumpInsnNode(Opcodes.IFNULL, miss));
+		code.add(new VarInsnNode(Opcodes.ALOAD, 3));
+		code.add(new org.objectweb.asm.tree.FieldInsnNode(Opcodes.GETSTATIC, cache, "NULL_MARK", "[B"));
+		LabelNode hit = new LabelNode();
+		code.add(new org.objectweb.asm.tree.JumpInsnNode(Opcodes.IF_ACMPNE, hit));
+		code.add(new InsnNode(Opcodes.ACONST_NULL));
+		code.add(new InsnNode(Opcodes.ARETURN));
+		code.add(hit);
+		code.add(new FrameNode(Opcodes.F_FULL, 4, new Object[] {node.name, "java/lang/String", Opcodes.INTEGER, "[B"}, 0, new Object[0]));
 		code.add(new VarInsnNode(Opcodes.ALOAD, 3));
 		code.add(new InsnNode(Opcodes.ARETURN));
 		code.add(miss);
@@ -120,6 +146,110 @@ public final class ArcticAgent {
 		wrapper.instructions = code;
 		wrapper.maxLocals = 4;
 		wrapper.maxStack = 3;
+		node.methods.add(wrapper);
+	}
+
+	/**
+	 * {@code MixinConfig.onSelect()} creates the mod's plugin and runs its {@code onLoad}. The
+	 * {@link MixinReplay} does that ahead of Mixin's own setup; if the setup runs later after all (for a
+	 * class the cache lacks) it must not create the plugin a second time.
+	 */
+	static byte[] wrapConfig(byte[] bytes) {
+		ClassNode node = new ClassNode();
+		new ClassReader(bytes).accept(node, 0);
+		MethodNode select = null;
+		boolean hasPlugin = false;
+		for (MethodNode method : node.methods) {
+			if ("onSelect".equals(method.name) && "()V".equals(method.desc)) {
+				select = method;
+			}
+		}
+		for (org.objectweb.asm.tree.FieldNode field : node.fields) {
+			if ("plugin".equals(field.name)) {
+				hasPlugin = true;
+			}
+		}
+		if (select == null || !hasPlugin) {
+			throw new IllegalStateException("not the expected MixinConfig");
+		}
+		LabelNode go = new LabelNode();
+		InsnList guard = new InsnList();
+		guard.add(new VarInsnNode(Opcodes.ALOAD, 0));
+		guard.add(new org.objectweb.asm.tree.FieldInsnNode(Opcodes.GETFIELD, node.name, "plugin", "Lorg/spongepowered/asm/mixin/transformer/PluginHandle;"));
+		guard.add(new org.objectweb.asm.tree.JumpInsnNode(Opcodes.IFNULL, go));
+		guard.add(new InsnNode(Opcodes.RETURN));
+		guard.add(go);
+		guard.add(new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
+		select.instructions.insert(guard);
+		select.maxStack = Math.max(select.maxStack, 1);
+		ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+		node.accept(writer);
+		return writer.toByteArray();
+	}
+
+	/**
+	 * {@code PluginHandle.shouldApplyMixin(target, mixin)} (Mixin asking a mod's plugin) is reported to the
+	 * {@link MixinReplay}, which writes the calls down for the next start.
+	 */
+	static byte[] wrapHandle(byte[] bytes) {
+		ClassNode node = new ClassNode();
+		new ClassReader(bytes).accept(node, 0);
+		MethodNode apply = null;
+		for (MethodNode method : node.methods) {
+			if ("shouldApplyMixin".equals(method.name) && "(Ljava/lang/String;Ljava/lang/String;)Z".equals(method.desc)) {
+				apply = method;
+			}
+		}
+		if (apply == null) {
+			throw new IllegalStateException("not the expected PluginHandle");
+		}
+		InsnList note = new InsnList();
+		note.add(new VarInsnNode(Opcodes.ALOAD, 0));
+		note.add(new VarInsnNode(Opcodes.ALOAD, 1));
+		note.add(new VarInsnNode(Opcodes.ALOAD, 2));
+		note.add(new MethodInsnNode(Opcodes.INVOKESTATIC, REPLAY, "noteApply", "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;)V", false));
+		apply.instructions.insert(note);
+		apply.maxStack = Math.max(apply.maxStack, 3);
+		ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+		node.accept(writer);
+		return writer.toByteArray();
+	}
+
+	/**
+	 * {@code isClassLoaded(name)} is what Mixin asks to learn whether a target was loaded before its mixins
+	 * were looked at (a critical error). Classes read back from the {@link MixinCache} were loaded without
+	 * Mixin's help, so if Mixin does its own setup later (for a class the cache didn't have) they must not
+	 * count: their mixins are already in them.
+	 */
+	private static void hideServed(ClassNode node) {
+		MethodNode original = null;
+		for (MethodNode method : node.methods) {
+			if ("isClassLoaded".equals(method.name) && "(Ljava/lang/String;)Z".equals(method.desc)) {
+				original = method;
+			}
+		}
+		if (original == null || (original.access & Opcodes.ACC_ABSTRACT) != 0) {
+			return;
+		}
+		MethodNode wrapper = new MethodNode(original.access, "isClassLoaded", "(Ljava/lang/String;)Z", original.signature, null);
+		original.name = "isClassLoaded$arctic";
+		original.access = (original.access & ~(Opcodes.ACC_PUBLIC | Opcodes.ACC_PROTECTED)) | Opcodes.ACC_PRIVATE | Opcodes.ACC_SYNTHETIC;
+		LabelNode loaded = new LabelNode();
+		InsnList code = new InsnList();
+		code.add(new VarInsnNode(Opcodes.ALOAD, 1));
+		code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "com/arcticlauncher/mod/startup/MixinCache", "served", "(Ljava/lang/String;)Z", false));
+		code.add(new org.objectweb.asm.tree.JumpInsnNode(Opcodes.IFEQ, loaded));
+		code.add(new InsnNode(Opcodes.ICONST_0));
+		code.add(new InsnNode(Opcodes.IRETURN));
+		code.add(loaded);
+		code.add(new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
+		code.add(new VarInsnNode(Opcodes.ALOAD, 0));
+		code.add(new VarInsnNode(Opcodes.ALOAD, 1));
+		code.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, node.name, original.name, "(Ljava/lang/String;)Z", false));
+		code.add(new InsnNode(Opcodes.IRETURN));
+		wrapper.instructions = code;
+		wrapper.maxLocals = 2;
+		wrapper.maxStack = 2;
 		node.methods.add(wrapper);
 	}
 

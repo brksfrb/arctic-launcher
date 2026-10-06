@@ -28,6 +28,7 @@ public final class Preloader {
 		} catch (java.io.IOException | RuntimeException e) {
 			return;
 		}
+		final List<String> wanted = onlyCached(names);
 		ClassLoader loader = Thread.currentThread().getContextClassLoader();
 		int threads = Integer.getInteger("arctic.preload.threads", 2);
 		AtomicInteger next = new AtomicInteger();
@@ -35,11 +36,11 @@ public final class Preloader {
 			Thread thread = new Thread(() -> {
 				for (;;) {
 					int at = next.getAndIncrement();
-					if (at >= names.size()) {
+					if (at >= wanted.size()) {
 						return;
 					}
 					try {
-						Class.forName(names.get(at), false, loader);
+						Class.forName(wanted.get(at), false, loader);
 					} catch (Throwable ignored) {
 						// A class that isn't there (a list from other mods) or can't load yet: the game finds out itself.
 					}
@@ -49,6 +50,30 @@ public final class Preloader {
 			thread.start();
 		}
 		Timeline.mark("preload x" + threads);
+	}
+
+	/**
+	 * When Mixin's setup was replayed instead of done, a class the saved pack doesn't have would make Mixin
+	 * do it after all; the list (made from the JVM's log) names a few such classes (the agent's own, ones the
+	 * parent class loader provides), so those are left out. Without the saved pack the list is used whole.
+	 */
+	private static List<String> onlyCached(List<String> names) {
+		try {
+			Class<?> cache = Class.forName("com.arcticlauncher.mod.startup.MixinCache", true, ClassLoader.getSystemClassLoader());
+			if (!(Boolean) cache.getMethod("active").invoke(null)) {
+				return names;
+			}
+			java.lang.reflect.Method has = cache.getMethod("has", String.class);
+			List<String> kept = new java.util.ArrayList<>(names.size());
+			for (String name : names) {
+				if ((Boolean) has.invoke(null, name)) {
+					kept.add(name);
+				}
+			}
+			return kept;
+		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+			return names;
+		}
 	}
 
 	/**

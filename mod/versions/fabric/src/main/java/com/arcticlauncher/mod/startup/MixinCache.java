@@ -11,7 +11,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -31,17 +33,25 @@ import java.util.Map;
  * trusted a second time.
  */
 public final class MixinCache {
-	private static final int MAGIC = 0x4D58_4331; // "MXC1"
+	private static final int MAGIC = 0x4D58_4332; // "MXC2"
 	/** Recording stops growing past this (a runaway start must not eat the disk or the heap). */
 	private static final long MAX_RECORD_BYTES = 600L << 20;
 
+	/** In the pack: a class Fabric answered "not mine" for (the parent class loader has it): no bytes, nothing for Mixin to do. */
+	private static final byte[] NULL_ENTRY = new byte[0];
+	/** What {@link #get} returns for such a class (the agent's wrapper then answers null at once, without Mixin). */
+	public static final byte[] NULL_MARK = new byte[0];
 	private static Path pack;
 	private static Path marker;
 	private static Map<String, int[]> index;
 	private static MappedByteBuffer data;
 	private static Map<String, byte[]> recorded;
 	private static long recordedBytes;
+	private static final int FORCE_MISS = Integer.getInteger("arctic.forcemiss", 0);
+	private static boolean extending;
 	private static boolean mixinAsked;
+	private static boolean replayed;
+	private static final java.util.List<String> firstMisses = new java.util.ArrayList<>();
 	private static volatile ClassLoader knot;
 	private static int hits;
 	private static int misses;
@@ -56,6 +66,16 @@ public final class MixinCache {
 		}
 		try {
 			pack = Path.of(file);
+			MixinReplay.init(pack);
+			// What the last start added at its exit is moved in before the pack is read.
+			Path next = pack.resolveSibling(pack.getFileName() + ".next");
+			if (Files.isRegularFile(next)) {
+				try {
+					Files.move(next, pack, StandardCopyOption.REPLACE_EXISTING);
+				} catch (IOException ignored) {
+					// Not now: the pack stays as it was.
+				}
+			}
 			marker = pack.resolveSibling(pack.getFileName() + ".try");
 			if (Files.isRegularFile(pack)) {
 				if (Files.exists(marker)) {
@@ -64,6 +84,10 @@ public final class MixinCache {
 					Files.deleteIfExists(marker);
 				} else if (load()) {
 					Files.writeString(marker, "1");
+					// What this start has to produce (the pack lacks it) is kept to be added at exit.
+					recorded = new LinkedHashMap<>();
+					extending = true;
+					Runtime.getRuntime().addShutdownHook(new Thread(MixinCache::extend, "arctic-pack-extend"));
 					return;
 				} else {
 					Files.deleteIfExists(pack);
@@ -107,19 +131,33 @@ public final class MixinCache {
 	 */
 	public static byte[] get(String name, boolean transformersOn) {
 		Map<String, int[]> entries = index;
+		if (transformersOn && !mixinAsked) {
+			mixinAsked = true;
+			MixinReplay.snapshot();
+			// Mixin's setup is skipped when the plugin calls it would make can be made from the record
+			// (what mods use it for); otherwise this first class is done the ordinary way, which sets Mixin up.
+			if (entries == null || !MixinReplay.replay()) {
+				return null;
+			}
+			replayed = true;
+			System.out.println("[Arctic startup] Mixin setup replayed: " + MixinReplay.did);
+		}
 		if (entries == null) {
 			return null;
 		}
-		if (transformersOn && !mixinAsked) {
-			mixinAsked = true;
-			return null;
-		}
-		int[] at = entries.get(name);
+		// A way to test the case where Mixin's setup has to run late: after this many classes read back, all miss.
+		int[] at = FORCE_MISS > 0 && replayed && hits > FORCE_MISS ? null : entries.get(name);
 		if (at == null) {
 			misses++;
+			if (replayed && firstMisses.size() < 6) {
+				firstMisses.add(name);
+			}
 			return null;
 		}
 		hits++;
+		if (at[1] < 0) {
+			return NULL_MARK;
+		}
 		byte[] out = new byte[at[1]];
 		data.get(at[0], out);
 		return out;
@@ -146,16 +184,38 @@ public final class MixinCache {
 		}
 	}
 
+	/** Whether this class came out of the pack (Mixin must not take it for one loaded before it looked). */
+	public static boolean served(String name) {
+		Map<String, int[]> entries = index;
+		int[] at = entries == null ? null : entries.get(name);
+		return replayed && at != null && at[1] >= 0;
+	}
+
+	/** Whether this start reads classes back after replaying Mixin's setup (then a class it lacks costs that setup). */
+	public static boolean active() {
+		return replayed;
+	}
+
+	/** Whether the pack has real bytes for this class. */
+	public static boolean has(String name) {
+		Map<String, int[]> entries = index;
+		int[] at = entries == null ? null : entries.get(name);
+		return at != null && at[1] >= 0;
+	}
+
 	/** How many classes this start read back and how many it had to produce, for the startup line. */
 	public static String stats() {
-		return index == null ? (recorded == null ? "off" : "recording") : hits + " read back, " + misses + " produced";
+		return index == null ? (recorded == null ? "off" : "recording") : hits + " read back, " + misses + " produced" + (replayed ? ", Mixin setup replayed (" + MixinReplay.did + "), first misses " + firstMisses + "" : (MixinReplay.why.isEmpty() ? "" : ", no replay: " + MixinReplay.why));
 	}
 
 	/** What Fabric produced for this class; kept for the pack when this start is recording. */
 	public static void put(String name, byte[] bytes) {
 		Map<String, byte[]> into = recorded;
-		if (into == null || bytes == null) {
+		if (into == null) {
 			return;
+		}
+		if (bytes == null) {
+			bytes = NULL_ENTRY;
 		}
 		synchronized (into) {
 			if (recordedBytes + bytes.length > MAX_RECORD_BYTES) {
@@ -169,6 +229,7 @@ public final class MixinCache {
 
 	/** The game is ready: a used pack was good; a recording is written out. Called through reflection by the mod. */
 	public static void ready() {
+		MixinReplay.flush();
 		try {
 			if (marker != null) {
 				Files.deleteIfExists(marker);
@@ -176,7 +237,7 @@ public final class MixinCache {
 		} catch (IOException ignored) {
 			// The next start just records again.
 		}
-		if (recorded == null) {
+		if (recorded == null || extending) {
 			return;
 		}
 		Thread thread = new Thread(() -> {
@@ -260,6 +321,85 @@ public final class MixinCache {
 		}
 	}
 
+	/**
+	 * At exit: classes this start had to produce that the pack lacks (a screen opened for the first time,
+	 * a world joined) are added to it, so the next start reads them back too. Written next to the pack
+	 * ({@code .next}); the next start moves it into place (a mapped file can't be replaced while the game runs).
+	 */
+	private static void extend() {
+		Map<String, byte[]> into = recorded;
+		Map<String, int[]> old = index;
+		if (!extending || into == null || old == null) {
+			return;
+		}
+		Map<String, byte[]> add;
+		synchronized (into) {
+			add = new LinkedHashMap<>(into);
+		}
+		boolean fresh = false;
+		for (Map.Entry<String, byte[]> entry : add.entrySet()) {
+			int[] at = old.get(entry.getKey());
+			if (entry.getValue() != NULL_ENTRY && (at == null || at[1] < 0)) {
+				fresh = true;
+				break;
+			}
+		}
+		if (!fresh) {
+			return;
+		}
+		Path next = pack.resolveSibling(pack.getFileName() + ".next");
+		try {
+			List<String> names = new ArrayList<>(old.size() + add.size());
+			for (String name : old.keySet()) {
+				if (!add.containsKey(name)) {
+					names.add(name);
+				}
+			}
+			names.addAll(add.keySet());
+			long headerSize = 8;
+			for (String name : names) {
+				headerSize += 2 + name.getBytes(StandardCharsets.UTF_8).length + 8;
+			}
+			ByteBuffer header = ByteBuffer.allocate((int) headerSize);
+			header.putInt(MAGIC).putInt(names.size());
+			long offset = headerSize;
+			for (String name : names) {
+				byte[] added = add.get(name);
+				int length = added != null ? (added == NULL_ENTRY ? -1 : added.length) : old.get(name)[1];
+				header.putShort((short) name.getBytes(StandardCharsets.UTF_8).length).put(name.getBytes(StandardCharsets.UTF_8)).putInt((int) offset).putInt(length);
+				if (length > 0) {
+					offset += length;
+				}
+			}
+			if (offset > Integer.MAX_VALUE) {
+				return;
+			}
+			header.flip();
+			try (FileChannel out = FileChannel.open(next, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+				out.write(header);
+				for (String name : names) {
+					byte[] added = add.get(name);
+					if (added != null) {
+						if (added != NULL_ENTRY) {
+							out.write(ByteBuffer.wrap(added));
+						}
+					} else {
+						int[] at = old.get(name);
+						if (at[1] > 0) {
+							out.write(data.slice(at[0], at[1]));
+						}
+					}
+				}
+			}
+		} catch (IOException | RuntimeException e) {
+			try {
+				Files.deleteIfExists(next);
+			} catch (IOException ignored) {
+				// The next start just carries on with the pack it has.
+			}
+		}
+	}
+
 	private static void write(Map<String, byte[]> classes) {
 		Path temp = pack.resolveSibling(pack.getFileName() + ".tmp");
 		try {
@@ -273,8 +413,9 @@ public final class MixinCache {
 			long offset = headerSize;
 			for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
 				byte[] name = entry.getKey().getBytes(StandardCharsets.UTF_8);
-				header.putShort((short) name.length).put(name).putInt((int) offset).putInt(entry.getValue().length);
-				offset += entry.getValue().length;
+				boolean none = entry.getValue() == NULL_ENTRY;
+				header.putShort((short) name.length).put(name).putInt((int) offset).putInt(none ? -1 : entry.getValue().length);
+				offset += none ? 0 : entry.getValue().length;
 			}
 			if (offset > Integer.MAX_VALUE) {
 				return;
@@ -282,7 +423,9 @@ public final class MixinCache {
 			try (DataOutputStream out = new DataOutputStream(new java.io.BufferedOutputStream(Files.newOutputStream(temp), 1 << 20))) {
 				out.write(header.array());
 				for (byte[] bytes : classes.values()) {
-					out.write(bytes);
+					if (bytes != NULL_ENTRY) {
+						out.write(bytes);
+					}
 				}
 			}
 			Files.move(temp, pack, StandardCopyOption.REPLACE_EXISTING);
