@@ -76,6 +76,11 @@ impl ArcticApp {
                 }
                 ui.multiply_opacity(t);
                 ui.add_space((1.0 - t) * TAB_SLIDE);
+                if self.tab == Tab::Skins {
+                    // Scrolls inside itself: the character stays in view while the catalog scrolls.
+                    self.skins_tab(ui);
+                    return;
+                }
                 // A scroll position of its own for each page (one shared by all would carry the
                 // Settings page's scroll over to Play).
                 egui::ScrollArea::vertical()

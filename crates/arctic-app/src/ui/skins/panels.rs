@@ -55,11 +55,17 @@ impl ArcticApp {
         ui.horizontal_top(|ui| {
             theme::card(p).show(ui, |ui| {
                 ui.set_width(PREVIEW_W);
-                ui.vertical(|ui| {
-                    self.preview_panel(ui, hover.as_ref());
-                    ui.add_space(10.0);
-                    self.equipped_panel(ui);
-                });
+                // Stays put; scrolls on its own only when the window is too short for it.
+                egui::ScrollArea::vertical()
+                    .id_salt("cosmetics_preview")
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        ui.vertical(|ui| {
+                            self.preview_panel(ui, hover.as_ref());
+                            ui.add_space(10.0);
+                            self.equipped_panel(ui);
+                        });
+                    });
             });
             ui.add_space(12.0);
             theme::card(p).show(ui, |ui| {
@@ -70,11 +76,17 @@ impl ArcticApp {
                         self.category_rail(ui);
                     });
                     ui.add_space(14.0);
-                    ui.vertical(|ui| match self.skins.section {
-                        Section::Skins => self.skins_section(ui),
-                        Section::Capes => self.capes_section(ui),
-                        Section::Slot(slot) => self.cosmetics_section(ui, slot),
-                    });
+                    // Only the items scroll; the categories stay in view.
+                    egui::ScrollArea::vertical()
+                        .id_salt(("cosmetics_items", format!("{:?}", self.skins.section)))
+                        .auto_shrink(false)
+                        .show(ui, |ui| {
+                            ui.vertical(|ui| match self.skins.section {
+                                Section::Skins => self.skins_section(ui),
+                                Section::Capes => self.capes_section(ui),
+                                Section::Slot(slot) => self.cosmetics_section(ui, slot),
+                            });
+                        });
                 });
             });
         });
