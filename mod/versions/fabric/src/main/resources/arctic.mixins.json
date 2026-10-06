@@ -34,9 +34,7 @@
 		"WindowMarkMixin",
 		"CrashReportPreloadMixin",
 		"OverlayDoneMixin",
-		"LoadingFadeMixin",<% } %><% if (fastStart) { %>
-		"BlocksInitMixin",
-		"FerriteCoreLockMixin",<% } %>
+		"LoadingFadeMixin",<% } %>
 		"EntityTurnMixin"<% if (features) { %>,
 		"CameraMixin",
 		"LightmapMixin",
