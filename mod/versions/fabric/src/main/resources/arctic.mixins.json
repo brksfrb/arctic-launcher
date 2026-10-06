@@ -33,7 +33,8 @@
 		"BootstrapMarkMixin",
 		"WindowMarkMixin",
 		"CrashReportPreloadMixin",
-		"OverlayDoneMixin",<% } %><% if (fastStart) { %>
+		"OverlayDoneMixin",
+		"LoadingFadeMixin",<% } %><% if (fastStart) { %>
 		"BlocksInitMixin",
 		"FerriteCoreLockMixin",<% } %>
 		"EntityTurnMixin"<% if (features) { %>,
