@@ -61,7 +61,11 @@ public final class MixinCache {
 	/** Called by the agent before the game starts. */
 	public static void init() {
 		String file = System.getProperty("arctic.mixincache");
-		if (file == null || file.isEmpty() || Boolean.getBoolean("arctic.mixincache.off")) {
+		// Off unless asked for (-Darctic.mixincache.on=true). Classes read back were never shown to Mixin, so
+		// when the game later loads one the pack lacks, Mixin applies its mixins with its own state missing:
+		// MixinExtras then defines helper classes the pack had already defined (duplicate class definition),
+		// which broke server pinging and world loading.
+		if (file == null || file.isEmpty() || !Boolean.getBoolean("arctic.mixincache.on")) {
 			return;
 		}
 		try {
