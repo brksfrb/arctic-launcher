@@ -143,6 +143,8 @@ pub struct ArcticApp {
     pub(crate) remove_confirm: Option<String>,
     /// Instance whose performance mods are about to be turned off (asks first).
     pub(crate) performance_off_confirm: Option<String>,
+    /// Instance whose Arctic Client (or Arctic mod) is about to be turned off (asks first).
+    pub(crate) client_off_confirm: Option<String>,
     /// The suggest-a-feature form, while it's open.
     pub(crate) suggest: Option<crate::ui::suggest::SuggestForm>,
     pub(crate) profile_dialog: ProfileDialog,
@@ -285,6 +287,7 @@ impl ArcticApp {
             add_account: AddAccount::Closed,
             remove_confirm: None,
             performance_off_confirm: None,
+            client_off_confirm: None,
             suggest: None,
             profile_dialog: ProfileDialog::Closed,
             inst: InstancesUi::default(),
