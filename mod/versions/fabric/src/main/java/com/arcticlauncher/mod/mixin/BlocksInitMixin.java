@@ -15,7 +15,14 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  */
 @Mixin(Blocks.class)
 abstract class BlocksInitMixin {
-	@Redirect(method = "<clinit>", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/state/BlockState;initCache()V"))
+	// From 26.3 the loop that makes every state's cache is a lambda of the class initializer (its number changes
+	// with every edit of the class, so it is matched by pattern). Not required: where the call isn't found the
+	// caches are made one by one as before, only slower.
+	//#if MC >= 26.3
+	@Redirect(method = "/lambda\\$static\\$\\d+/", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/state/BlockState;initCache()V"), require = 0)
+	//#else
+	@Redirect(method = "<clinit>", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/state/BlockState;initCache()V"), require = 0)
+	//#endif
 	private static void arctic$later(BlockState state) {
 		StateCaches.defer(state);
 	}
