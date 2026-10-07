@@ -167,8 +167,12 @@ impl Sheen {
     /// normal's z), `t` seconds into the loop.
     pub fn at(&self, p: [f32; 3], facing_z: f32, t: f32) -> f32 {
         let sweep = (t / self.period).rem_euclid(1.0);
-        let mut place = (self.axis[0] * p[0] + self.axis[1] * p[1] + self.axis[2] * p[2] - self.origin) / self.length;
-        let mut tilt = self.skew_axis[0] * p[0] + self.skew_axis[1] * p[1] + self.skew_axis[2] * p[2] - self.skew_origin;
+        let mut place = (self.axis[0] * p[0] + self.axis[1] * p[1] + self.axis[2] * p[2]
+            - self.origin)
+            / self.length;
+        let mut tilt =
+            self.skew_axis[0] * p[0] + self.skew_axis[1] * p[1] + self.skew_axis[2] * p[2]
+                - self.skew_origin;
         if self.skew_abs {
             tilt = tilt.abs();
         }
@@ -209,7 +213,11 @@ impl Mesh {
         for (i, node) in self.nodes.iter().enumerate() {
             let (mut t, mut r, mut s) = (node.translation, node.rotation, node.scale);
             if let (Some(time), Some(anim)) = (time, &self.animation) {
-                let time = if anim.length > 0.0 { time % anim.length } else { 0.0 };
+                let time = if anim.length > 0.0 {
+                    time % anim.length
+                } else {
+                    0.0
+                };
                 for c in anim.channels.iter().filter(|c| c.node == i) {
                     let v = c.sample(time);
                     match c.path {
@@ -291,9 +299,21 @@ fn slerp(a: [f32; 4], mut b: [f32; 4], k: f32) -> [f32; 4] {
 pub fn trs(t: [f32; 3], q: [f32; 4], s: [f32; 3]) -> Mat4 {
     let [x, y, z, w] = q;
     let r = [
-        [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w), 2.0 * (x * z + y * w)],
-        [2.0 * (x * y + z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - x * w)],
-        [2.0 * (x * z - y * w), 2.0 * (y * z + x * w), 1.0 - 2.0 * (x * x + y * y)],
+        [
+            1.0 - 2.0 * (y * y + z * z),
+            2.0 * (x * y - z * w),
+            2.0 * (x * z + y * w),
+        ],
+        [
+            2.0 * (x * y + z * w),
+            1.0 - 2.0 * (x * x + z * z),
+            2.0 * (y * z - x * w),
+        ],
+        [
+            2.0 * (x * z - y * w),
+            2.0 * (y * z + x * w),
+            1.0 - 2.0 * (x * x + y * y),
+        ],
     ];
     [
         [r[0][0] * s[0], r[0][1] * s[1], r[0][2] * s[2], t[0]],
@@ -376,7 +396,9 @@ struct Reader<'a> {
 }
 
 fn arr<'v>(v: &'v Value, key: &str) -> &'v [Value] {
-    v.get(key).and_then(Value::as_array).map_or(&[], Vec::as_slice)
+    v.get(key)
+        .and_then(Value::as_array)
+        .map_or(&[], Vec::as_slice)
 }
 
 fn num(v: &Value) -> Result<f32, String> {
@@ -391,7 +413,10 @@ fn floats<const N: usize>(v: Option<&Value>, default: [f32; N]) -> Result<[f32; 
     let Some(v) = v else {
         return Ok(default);
     };
-    let a = v.as_array().filter(|a| a.len() == N).ok_or("wrong number of values")?;
+    let a = v
+        .as_array()
+        .filter(|a| a.len() == N)
+        .ok_or("wrong number of values")?;
     let mut out = [0.0; N];
     for (o, x) in out.iter_mut().zip(a) {
         *o = num(x)?;
@@ -400,7 +425,9 @@ fn floats<const N: usize>(v: Option<&Value>, default: [f32; N]) -> Result<[f32; 
 }
 
 fn index(v: &Value, what: &str, len: usize) -> Result<usize, String> {
-    let i = v.as_u64().ok_or_else(|| format!("{what} must be an index"))? as usize;
+    let i = v
+        .as_u64()
+        .ok_or_else(|| format!("{what} must be an index"))? as usize;
     if i >= len {
         return Err(format!("{what} {i} does not exist"));
     }
@@ -423,7 +450,9 @@ impl Reader<'_> {
         }
         let buffers = arr(d, "buffers");
         if buffers.len() > 1 || buffers.iter().any(|b| b.get("uri").is_some()) {
-            return Err("only the file's own binary chunk may hold data (no external or data: URIs)".into());
+            return Err(
+                "only the file's own binary chunk may hold data (no external or data: URIs)".into(),
+            );
         }
         if arr(d, "materials").len() > MAX_MATERIALS {
             return Err(format!("more than {MAX_MATERIALS} materials"));
@@ -449,7 +478,10 @@ impl Reader<'_> {
             return Err("no triangles".into());
         }
         if mesh.triangles() > MAX_TRIANGLES {
-            return Err(format!("{} triangles (at most {MAX_TRIANGLES})", mesh.triangles()));
+            return Err(format!(
+                "{} triangles (at most {MAX_TRIANGLES})",
+                mesh.triangles()
+            ));
         }
         Ok(mesh)
     }
@@ -459,19 +491,27 @@ impl Reader<'_> {
         let mut out = Vec::new();
         for (n, img) in arr(self.doc, "images").iter().enumerate() {
             if img.get("uri").is_some() {
-                return Err(format!("image {n} is an external file; embed it in the .glb"));
+                return Err(format!(
+                    "image {n} is an external file; embed it in the .glb"
+                ));
             }
             if img.get("mimeType").and_then(Value::as_str) != Some("image/png") {
                 return Err(format!("image {n} must be a PNG"));
             }
-            let view = &views[index(img.get("bufferView").ok_or("an image has no bufferView")?, "bufferView", views.len())?];
+            let view = &views[index(
+                img.get("bufferView").ok_or("an image has no bufferView")?,
+                "bufferView",
+                views.len(),
+            )?];
             let bytes = self.view_bytes(view)?.to_vec();
             let info = png::Decoder::new(std::io::Cursor::new(&bytes))
                 .read_info()
                 .map_err(|_| format!("image {n} is not a PNG"))?;
             let (w, h) = (info.info().width, info.info().height);
             if w == 0 || h == 0 || w > MAX_TEXTURE_SIDE || h > MAX_TEXTURE_SIDE {
-                return Err(format!("image {n} is {w}×{h} (at most {MAX_TEXTURE_SIDE}×{MAX_TEXTURE_SIDE})"));
+                return Err(format!(
+                    "image {n} is {w}×{h} (at most {MAX_TEXTURE_SIDE}×{MAX_TEXTURE_SIDE})"
+                ));
             }
             out.push(bytes);
         }
@@ -480,7 +520,10 @@ impl Reader<'_> {
 
     fn view_bytes(&self, view: &Value) -> Result<&[u8], String> {
         let off = view.get("byteOffset").and_then(Value::as_u64).unwrap_or(0) as usize;
-        let len = view.get("byteLength").and_then(Value::as_u64).ok_or("a bufferView has no length")? as usize;
+        let len = view
+            .get("byteLength")
+            .and_then(Value::as_u64)
+            .ok_or("a bufferView has no length")? as usize;
         self.bin
             .get(off..off.checked_add(len).ok_or("bufferView overflow")?)
             .ok_or_else(|| "a bufferView runs past the binary chunk".to_owned())
@@ -495,25 +538,42 @@ impl Reader<'_> {
             if v.get("texCoord").and_then(Value::as_u64).unwrap_or(0) != 0 {
                 return Err("only TEXCOORD_0 is supported".into());
             }
-            let t = &textures[index(v.get("index").ok_or("texture needs an index")?, "texture", textures.len())?];
-            Ok(Some(index(t.get("source").ok_or("a texture has no source")?, "image", images)?))
+            let t = &textures[index(
+                v.get("index").ok_or("texture needs an index")?,
+                "texture",
+                textures.len(),
+            )?];
+            Ok(Some(index(
+                t.get("source").ok_or("a texture has no source")?,
+                "image",
+                images,
+            )?))
         };
         let mut out = Vec::new();
         for m in arr(self.doc, "materials") {
             let pbr = m.get("pbrMetallicRoughness");
-            let alpha = match m.get("alphaMode").and_then(Value::as_str).unwrap_or("OPAQUE") {
+            let alpha = match m
+                .get("alphaMode")
+                .and_then(Value::as_str)
+                .unwrap_or("OPAQUE")
+            {
                 "OPAQUE" => Alpha::Opaque,
                 "MASK" => Alpha::Mask(m.get("alphaCutoff").map_or(Ok(0.5), num)?.clamp(0.0, 1.0)),
                 "BLEND" => Alpha::Blend,
                 other => return Err(format!("alphaMode {other}")),
             };
             out.push(Material {
-                base_color: floats(pbr.and_then(|p| p.get("baseColorFactor")), [1.0; 4])?.map(|x| x.clamp(0.0, 1.0)),
+                base_color: floats(pbr.and_then(|p| p.get("baseColorFactor")), [1.0; 4])?
+                    .map(|x| x.clamp(0.0, 1.0)),
                 texture: tex(pbr.and_then(|p| p.get("baseColorTexture")))?,
                 emissive_texture: tex(m.get("emissiveTexture"))?,
-                emissive_factor: floats(m.get("emissiveFactor"), [0.0; 3])?.map(|x| x.clamp(0.0, 1.0)),
+                emissive_factor: floats(m.get("emissiveFactor"), [0.0; 3])?
+                    .map(|x| x.clamp(0.0, 1.0)),
                 alpha,
-                double_sided: m.get("doubleSided").and_then(Value::as_bool).unwrap_or(false),
+                double_sided: m
+                    .get("doubleSided")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
             });
         }
         Ok(out)
@@ -531,15 +591,21 @@ impl Reader<'_> {
             return Ok(None);
         };
         let one = |key: &str, default: f32, lo: f32, hi: f32| -> Result<f32, String> {
-            let v = s.get(key).map_or(Ok(default), num).map_err(|e| format!("sheen {key}: {e}"))?;
+            let v = s
+                .get(key)
+                .map_or(Ok(default), num)
+                .map_err(|e| format!("sheen {key}: {e}"))?;
             if v < lo || v > hi {
                 return Err(format!("sheen {key} must be between {lo} and {hi}"));
             }
             Ok(v)
         };
         let skew = s.get("skew");
-        let skew_one = |key: &str| -> Result<f32, String> { skew.and_then(|k| k.get(key)).map_or(Ok(0.0), num) };
-        let tint = floats(s.get("tint"), [1.0, 1.0, 1.0]).map_err(|e| format!("sheen tint: {e}"))?;
+        let skew_one = |key: &str| -> Result<f32, String> {
+            skew.and_then(|k| k.get(key)).map_or(Ok(0.0), num)
+        };
+        let tint =
+            floats(s.get("tint"), [1.0, 1.0, 1.0]).map_err(|e| format!("sheen tint: {e}"))?;
         if tint.iter().any(|c| !(0.0..=1.0).contains(c)) {
             return Err("sheen tint must be between 0 and 1".into());
         }
@@ -552,10 +618,14 @@ impl Reader<'_> {
             axis: floats(s.get("axis"), [0.0, 1.0, 0.0]).map_err(|e| format!("sheen axis: {e}"))?,
             origin: one("origin", 0.0, -1000.0, 1000.0)?,
             length,
-            skew_axis: floats(skew.and_then(|k| k.get("axis")), [1.0, 0.0, 0.0]).map_err(|e| format!("sheen skew axis: {e}"))?,
+            skew_axis: floats(skew.and_then(|k| k.get("axis")), [1.0, 0.0, 0.0])
+                .map_err(|e| format!("sheen skew axis: {e}"))?,
             skew: skew_one("amount")?,
             skew_origin: skew_one("origin")?,
-            skew_abs: skew.and_then(|k| k.get("abs")).and_then(Value::as_bool).unwrap_or(false),
+            skew_abs: skew
+                .and_then(|k| k.get("abs"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
         }))
     }
 
@@ -577,7 +647,9 @@ impl Reader<'_> {
             .collect::<Result<_, _>>()?;
         while let Some((i, parent)) = stack.pop() {
             if order.contains_key(&i) {
-                return Err(format!("node {i} is reached twice (nodes must form a tree)"));
+                return Err(format!(
+                    "node {i} is reached twice (nodes must form a tree)"
+                ));
             }
             if nodes.len() >= MAX_NODES {
                 return Err(format!("more than {MAX_NODES} nodes"));
@@ -585,7 +657,9 @@ impl Reader<'_> {
             let n = &raw[i];
             for key in ["matrix", "skin", "camera", "weights"] {
                 if n.get(key).is_some() {
-                    return Err(format!("node {i}: {key} is not supported (use translation, rotation, scale)"));
+                    return Err(format!(
+                        "node {i}: {key} is not supported (use translation, rotation, scale)"
+                    ));
                 }
             }
             let mut rotation = floats(n.get("rotation"), [0.0, 0.0, 0.0, 1.0])?;
@@ -596,12 +670,20 @@ impl Reader<'_> {
             rotation = rotation.map(|x| x / len);
             let translation = floats(n.get("translation"), [0.0; 3])?;
             let scale = floats(n.get("scale"), [1.0; 3])?;
-            if translation.iter().any(|x| x.abs() > MAX_COORD) || scale.iter().any(|x| x.abs() > 64.0) {
+            if translation.iter().any(|x| x.abs() > MAX_COORD)
+                || scale.iter().any(|x| x.abs() > 64.0)
+            {
                 return Err(format!("node {i}: translation or scale is too large"));
             }
             order.insert(i, nodes.len());
             nodes.push(Node {
-                name: n.get("name").and_then(Value::as_str).unwrap_or("").chars().take(48).collect(),
+                name: n
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .chars()
+                    .take(48)
+                    .collect(),
                 parent,
                 translation,
                 rotation,
@@ -616,7 +698,11 @@ impl Reader<'_> {
         Ok((nodes, order))
     }
 
-    fn primitives(&self, order: &HashMap<usize, usize>, materials: usize) -> Result<Vec<Primitive>, String> {
+    fn primitives(
+        &self,
+        order: &HashMap<usize, usize>,
+        materials: usize,
+    ) -> Result<Vec<Primitive>, String> {
         let meshes = arr(self.doc, "meshes");
         let mut out = Vec::new();
         let mut triangles = 0;
@@ -650,9 +736,15 @@ impl Reader<'_> {
         if prim.get("targets").is_some() {
             return Err("morph targets are not supported".into());
         }
-        let attrs = prim.get("attributes").and_then(Value::as_object).ok_or("a primitive has no attributes")?;
+        let attrs = prim
+            .get("attributes")
+            .and_then(Value::as_object)
+            .ok_or("a primitive has no attributes")?;
         for k in attrs.keys() {
-            if !matches!(k.as_str(), "POSITION" | "NORMAL" | "TANGENT" | "TEXCOORD_0" | "TEXCOORD_1" | "COLOR_0") {
+            if !matches!(
+                k.as_str(),
+                "POSITION" | "NORMAL" | "TANGENT" | "TEXCOORD_0" | "TEXCOORD_1" | "COLOR_0"
+            ) {
                 return Err(format!("attribute {k} is not supported"));
             }
         }
@@ -661,17 +753,27 @@ impl Reader<'_> {
         let mut positions: Vec<[f32; 3]> = self.vecs::<3>(position, false)?;
         let n = positions.len();
         if positions.iter().flatten().any(|c| c.abs() > MAX_COORD) {
-            return Err(format!("a position is more than {MAX_COORD} pixels from the origin"));
+            return Err(format!(
+                "a position is more than {MAX_COORD} pixels from the origin"
+            ));
         }
-        let mut normals = acc("NORMAL").map(|i| self.vecs::<3>(i, false)).transpose()?;
-        let mut uvs = acc("TEXCOORD_0").map(|i| self.vecs::<2>(i, true)).transpose()?;
+        let mut normals = acc("NORMAL")
+            .map(|i| self.vecs::<3>(i, false))
+            .transpose()?;
+        let mut uvs = acc("TEXCOORD_0")
+            .map(|i| self.vecs::<2>(i, true))
+            .transpose()?;
         let mut colors = match acc("COLOR_0") {
             Some(i) => Some(self.colors(i)?),
             None => None,
         };
-        for len in [normals.as_ref().map(Vec::len), uvs.as_ref().map(Vec::len), colors.as_ref().map(Vec::len)]
-            .into_iter()
-            .flatten()
+        for len in [
+            normals.as_ref().map(Vec::len),
+            uvs.as_ref().map(Vec::len),
+            colors.as_ref().map(Vec::len),
+        ]
+        .into_iter()
+        .flatten()
         {
             if len != n {
                 return Err("a primitive's attributes have different lengths".into());
@@ -681,7 +783,7 @@ impl Reader<'_> {
             Some(i) => self.indices(i as usize)?,
             None => (0..n as u32).collect(),
         };
-        if indices.len() % 3 != 0 || indices.is_empty() {
+        if !indices.len().is_multiple_of(3) || indices.is_empty() {
             return Err("a primitive's index count is not a multiple of 3".into());
         }
         if indices.iter().any(|&i| i as usize >= n) {
@@ -698,7 +800,7 @@ impl Reader<'_> {
             uvs = uvs.map(|u| indices.iter().map(|&i| u[i as usize]).collect());
             colors = colors.map(|c| indices.iter().map(|&i| c[i as usize]).collect());
             let mut flat = Vec::with_capacity(flat_pos.len());
-            for t in flat_pos.chunks_exact(3) {
+            for t in flat_pos.as_chunks::<3>().0 {
                 let nn = face_normal(t[0], t[1], t[2]);
                 flat.extend([nn, nn, nn]);
             }
@@ -711,7 +813,11 @@ impl Reader<'_> {
             .into_iter()
             .map(|v| {
                 let len = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
-                if len < 1e-6 { [0.0, 1.0, 0.0] } else { v.map(|x| x / len) }
+                if len < 1e-6 {
+                    [0.0, 1.0, 0.0]
+                } else {
+                    v.map(|x| x / len)
+                }
             })
             .collect();
         Ok(Primitive {
@@ -727,7 +833,12 @@ impl Reader<'_> {
 
     /// Where an accessor's elements are: (bytes, count, element size, stride, component type, normalized).
     #[allow(clippy::type_complexity)]
-    fn accessor(&self, i: usize, kind: &str, components: &[u64]) -> Result<(&[u8], usize, usize, usize, u64, bool), String> {
+    fn accessor(
+        &self,
+        i: usize,
+        kind: &str,
+        components: &[u64],
+    ) -> Result<(&[u8], usize, usize, usize, u64, bool), String> {
         let accessors = arr(self.doc, "accessors");
         let views = arr(self.doc, "bufferViews");
         let a = accessors.get(i).ok_or("an accessor does not exist")?;
@@ -737,15 +848,29 @@ impl Reader<'_> {
         if a.get("type").and_then(Value::as_str) != Some(kind) {
             return Err(format!("an accessor must be {kind}"));
         }
-        let comp = a.get("componentType").and_then(Value::as_u64).ok_or("accessor has no componentType")?;
+        let comp = a
+            .get("componentType")
+            .and_then(Value::as_u64)
+            .ok_or("accessor has no componentType")?;
         if !components.contains(&comp) {
-            return Err(format!("accessor component type {comp} is not supported here"));
+            return Err(format!(
+                "accessor component type {comp} is not supported here"
+            ));
         }
-        let count = a.get("count").and_then(Value::as_u64).ok_or("accessor has no count")? as usize;
+        let count = a
+            .get("count")
+            .and_then(Value::as_u64)
+            .ok_or("accessor has no count")? as usize;
         if count == 0 || count > MAX_ACCESSOR {
-            return Err(format!("an accessor has {count} elements (1 to {MAX_ACCESSOR})"));
+            return Err(format!(
+                "an accessor has {count} elements (1 to {MAX_ACCESSOR})"
+            ));
         }
-        let view = &views[index(a.get("bufferView").ok_or("accessor has no bufferView")?, "bufferView", views.len())?];
+        let view = &views[index(
+            a.get("bufferView").ok_or("accessor has no bufferView")?,
+            "bufferView",
+            views.len(),
+        )?];
         let bytes = self.view_bytes(view)?;
         let ncomp = match kind {
             "SCALAR" => 1,
@@ -760,7 +885,10 @@ impl Reader<'_> {
             _ => 4,
         };
         let elem = ncomp * csize;
-        let stride = view.get("byteStride").and_then(Value::as_u64).map_or(elem, |s| s as usize);
+        let stride = view
+            .get("byteStride")
+            .and_then(Value::as_u64)
+            .map_or(elem, |s| s as usize);
         if stride < elem || stride > 252 {
             return Err("bad byteStride".into());
         }
@@ -769,14 +897,21 @@ impl Reader<'_> {
         if end > bytes.len() {
             return Err("an accessor runs past its bufferView".into());
         }
-        let normalized = a.get("normalized").and_then(Value::as_bool).unwrap_or(false);
+        let normalized = a
+            .get("normalized")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         Ok((&bytes[off..end], count, elem, stride, comp, normalized))
     }
 
     /// `N`-component float vectors (also normalized 8/16-bit integers when allowed).
     fn vecs<const N: usize>(&self, i: usize, allow_int: bool) -> Result<Vec<[f32; N]>, String> {
         let kind = format!("VEC{N}");
-        let comps: &[u64] = if allow_int { &[5126, 5121, 5123] } else { &[5126] };
+        let comps: &[u64] = if allow_int {
+            &[5126, 5121, 5123]
+        } else {
+            &[5126]
+        };
         let (b, count, elem, stride, comp, normalized) = self.accessor(i, &kind, comps)?;
         if comp != 5126 && !normalized {
             return Err("integer attributes must be normalized".into());
@@ -794,7 +929,12 @@ impl Reader<'_> {
         let (b, count, _, stride, _, _) = self.accessor(i, "SCALAR", &[5126])?;
         let mut out = Vec::with_capacity(count);
         for e in 0..count {
-            let v = f32::from_le_bytes([b[e * stride], b[e * stride + 1], b[e * stride + 2], b[e * stride + 3]]);
+            let v = f32::from_le_bytes([
+                b[e * stride],
+                b[e * stride + 1],
+                b[e * stride + 2],
+                b[e * stride + 3],
+            ]);
             if !v.is_finite() {
                 return Err("an animation time is not a finite number".into());
             }
@@ -812,7 +952,11 @@ impl Reader<'_> {
             .ok_or("an accessor does not exist")?;
         match kind {
             "VEC4" => self.vecs::<4>(i, true),
-            "VEC3" => Ok(self.vecs::<3>(i, true)?.into_iter().map(|c| [c[0], c[1], c[2], 1.0]).collect()),
+            "VEC3" => Ok(self
+                .vecs::<3>(i, true)?
+                .into_iter()
+                .map(|c| [c[0], c[1], c[2], 1.0])
+                .collect()),
             _ => Err("COLOR_0 must be VEC3 or VEC4".into()),
         }
     }
@@ -831,7 +975,11 @@ impl Reader<'_> {
         Ok(out)
     }
 
-    fn animation(&self, order: &HashMap<usize, usize>, nodes: usize) -> Result<Option<Animation>, String> {
+    fn animation(
+        &self,
+        order: &HashMap<usize, usize>,
+        nodes: usize,
+    ) -> Result<Option<Animation>, String> {
         let list = arr(self.doc, "animations");
         if list.len() > 1 {
             return Err("only one animation is supported".into());
@@ -847,8 +995,14 @@ impl Reader<'_> {
                 return Err(format!("more than {MAX_CHANNELS} animation channels"));
             }
             let target = c.get("target").ok_or("a channel has no target")?;
-            let raw = index(target.get("node").ok_or("a channel has no node")?, "node", arr(self.doc, "nodes").len())?;
-            let node = *order.get(&raw).ok_or("an animation moves a node that is not in the scene")?;
+            let raw = index(
+                target.get("node").ok_or("a channel has no node")?,
+                "node",
+                arr(self.doc, "nodes").len(),
+            )?;
+            let node = *order
+                .get(&raw)
+                .ok_or("an animation moves a node that is not in the scene")?;
             debug_assert!(node < nodes);
             let path = match target.get("path").and_then(Value::as_str) {
                 Some("translation") => Path::Translation,
@@ -856,25 +1010,50 @@ impl Reader<'_> {
                 Some("scale") => Path::Scale,
                 other => return Err(format!("animation path {other:?} is not supported")),
             };
-            let s = &samplers[index(c.get("sampler").ok_or("a channel has no sampler")?, "sampler", samplers.len())?];
-            let step = match s.get("interpolation").and_then(Value::as_str).unwrap_or("LINEAR") {
+            let s = &samplers[index(
+                c.get("sampler").ok_or("a channel has no sampler")?,
+                "sampler",
+                samplers.len(),
+            )?];
+            let step = match s
+                .get("interpolation")
+                .and_then(Value::as_str)
+                .unwrap_or("LINEAR")
+            {
                 "LINEAR" => false,
                 "STEP" => true,
-                other => return Err(format!("{other} interpolation is not supported (use LINEAR or STEP)")),
+                other => {
+                    return Err(format!(
+                        "{other} interpolation is not supported (use LINEAR or STEP)"
+                    ));
+                }
             };
-            let input = index(s.get("input").ok_or("a sampler has no input")?, "accessor", arr(self.doc, "accessors").len())?;
+            let input = index(
+                s.get("input").ok_or("a sampler has no input")?,
+                "accessor",
+                arr(self.doc, "accessors").len(),
+            )?;
             let times = self.scalars(input)?;
             if times.len() > MAX_KEYFRAMES
                 || times.iter().any(|t| !t.is_finite() || *t < 0.0)
                 || times.windows(2).any(|w| w[1] < w[0])
             {
-                return Err("animation times must be increasing, finite, and at most 256 keys".into());
+                return Err(
+                    "animation times must be increasing, finite, and at most 256 keys".into(),
+                );
             }
-            let out_acc = index(s.get("output").ok_or("a sampler has no output")?, "accessor", arr(self.doc, "accessors").len())?;
+            let out_acc = index(
+                s.get("output").ok_or("a sampler has no output")?,
+                "accessor",
+                arr(self.doc, "accessors").len(),
+            )?;
             let values: Vec<[f32; 4]> = if path == Path::Rotation {
                 self.vecs::<4>(out_acc, false)?
             } else {
-                self.vecs::<3>(out_acc, false)?.into_iter().map(|v| [v[0], v[1], v[2], 0.0]).collect()
+                self.vecs::<3>(out_acc, false)?
+                    .into_iter()
+                    .map(|v| [v[0], v[1], v[2], 0.0])
+                    .collect()
             };
             if values.len() != times.len() {
                 return Err("an animation sampler's input and output differ in length".into());
@@ -884,7 +1063,11 @@ impl Reader<'_> {
                     .into_iter()
                     .map(|q| {
                         let l = q.iter().map(|x| x * x).sum::<f32>().sqrt();
-                        if l < 1e-6 { [0.0, 0.0, 0.0, 1.0] } else { q.map(|x| x / l) }
+                        if l < 1e-6 {
+                            [0.0, 0.0, 0.0, 1.0]
+                        } else {
+                            q.map(|x| x / l)
+                        }
                     })
                     .collect()
             } else {
@@ -906,7 +1089,9 @@ impl Reader<'_> {
             return Ok(None);
         }
         if length <= 0.0 || length > MAX_ANIMATION_SECS {
-            return Err(format!("the animation must last 0 to {MAX_ANIMATION_SECS} seconds"));
+            return Err(format!(
+                "the animation must last 0 to {MAX_ANIMATION_SECS} seconds"
+            ));
         }
         Ok(Some(Animation { length, channels }))
     }
@@ -934,9 +1119,17 @@ fn read_vec<const N: usize>(b: &[u8], comp: u64) -> Result<[f32; N], String> {
 pub fn face_normal(a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> [f32; 3] {
     let u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
     let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-    let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    let n = [
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+    ];
     let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
-    if len < 1e-12 { [0.0, 1.0, 0.0] } else { n.map(|x| x / len) }
+    if len < 1e-12 {
+        [0.0, 1.0, 0.0]
+    } else {
+        n.map(|x| x / len)
+    }
 }
 
 /// A one-triangle `.glb` on a node called `body`, for other crates' tests.
@@ -955,7 +1148,7 @@ pub fn sample_glb() -> Vec<u8> {
         "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}],
     });
     let mut json = serde_json::to_vec(&doc).unwrap_or_default();
-    while json.len() % 4 != 0 {
+    while !json.len().is_multiple_of(4) {
         json.push(b' ');
     }
     let total = 12 + 8 + json.len() + 8 + bin.len();

@@ -436,7 +436,9 @@ fn cape_part(swing: f32) -> Part {
 
 /// Draw one cosmetic on its own, turning slowly, fitted to `rect`.
 pub fn paint_cosmetic(painter: &egui::Painter, rect: Rect, worn: Worn, yaw: f32) {
-    paint_turning(painter, rect, yaw, |view| cosmetic_faces(&worn, &|p| view(p)));
+    paint_turning(painter, rect, yaw, |view| {
+        cosmetic_faces(&worn, &|p| view(p))
+    });
 }
 
 /// The same for a sculpted cosmetic.
@@ -458,10 +460,7 @@ fn paint_turning(
     };
     // Turned around its own middle (not the wearer's), and sized from the
     // sphere around it, so it stays put and keeps its size while it turns.
-    let corners: Vec<V3> = faces_of(&|p| p)
-        .iter()
-        .flat_map(|f| f.corners)
-        .collect();
+    let corners: Vec<V3> = faces_of(&|p| p).iter().flat_map(|f| f.corners).collect();
     if corners.is_empty() {
         return;
     }
@@ -532,7 +531,7 @@ fn mesh_faces(worn: &WornMesh, view: &impl Fn(V3) -> V3) -> Vec<Face> {
             }
             view(p)
         };
-        for tri in prim.indices.chunks_exact(3) {
+        for tri in prim.indices.as_chunks::<3>().0 {
             // The travelling light (in the model's own space, as the game draws it).
             let glint = match (&worn.mesh.sheen, worn.time) {
                 (Some(sheen), Some(t)) => {
@@ -545,7 +544,10 @@ fn mesh_faces(worn: &WornMesh, view: &impl Fn(V3) -> V3) -> Vec<Face> {
                     ];
                     let (u, v) = (sub(p1, p0), sub(p2, p0));
                     let nz = u[0] * v[1] - u[1] * v[0];
-                    let len = (u[1] * v[2] - u[2] * v[1]).hypot(u[2] * v[0] - u[0] * v[2]).hypot(nz).max(1e-9);
+                    let len = (u[1] * v[2] - u[2] * v[1])
+                        .hypot(u[2] * v[0] - u[0] * v[2])
+                        .hypot(nz)
+                        .max(1e-9);
                     sheen.at(centre, nz / len, t as f32)
                 }
                 _ => 0.0,
@@ -912,7 +914,8 @@ mod tests {
     }
 
     fn faces_of(geometry_json: &str) -> Vec<([V3; 4], [Pos2; 4])> {
-        let geometry = arctic_core::cosmetic_models::Geometry::parse(geometry_json.as_bytes()).unwrap();
+        let geometry =
+            arctic_core::cosmetic_models::Geometry::parse(geometry_json.as_bytes()).unwrap();
         let worn = Worn {
             geometry: &geometry,
             texture: TextureId::default(),
@@ -920,7 +923,16 @@ mod tests {
         // Seen from the front and from behind, so every face shows once.
         let mut out = Vec::new();
         for yaw in [0.3_f32, 3.4] {
-            let view = |p: V3| rotate_view(p, Pose { yaw, pitch: 0.4, swing: 0.0 });
+            let view = |p: V3| {
+                rotate_view(
+                    p,
+                    Pose {
+                        yaw,
+                        pitch: 0.4,
+                        swing: 0.0,
+                    },
+                )
+            };
             out.extend(
                 cosmetic_faces(&worn, &view)
                     .into_iter()
@@ -956,7 +968,8 @@ mod tests {
 
     #[test]
     fn a_cube_turned_by_zero_degrees_stays_put_and_a_turn_moves_it() {
-        let flat = r#"{"origin":[-4,14,2],"size":[8,8,1],"uv":{"north":{"uv":[0,0],"uv_size":[8,8]}}"#;
+        let flat =
+            r#"{"origin":[-4,14,2],"size":[8,8,1],"uv":{"north":{"uv":[0,0],"uv_size":[8,8]}}"#;
         let still = faces_of(&one_cube(&format!(r#"{flat},"rotation":[0,0,0]}}"#)));
         let plain = faces_of(&one_cube(&format!("{flat}}}")));
         assert_eq!(still, plain);

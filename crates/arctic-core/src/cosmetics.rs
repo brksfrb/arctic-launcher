@@ -674,7 +674,8 @@ pub const MAX_CAPE_FPS: u32 = 30;
 /// How long each frame of a cape shows at the default speed.
 pub const CAPE_FRAME_SECS: f64 = 1.0 / DEFAULT_CAPE_FPS as f64;
 
-static REDUCE_CAPE_MOTION: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static REDUCE_CAPE_MOTION: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// The viewer's "reduce motion" choice: animated capes stand still on the
 /// first frame (everywhere in the launcher, for every cape shown).
@@ -822,7 +823,8 @@ mod tests {
 
     #[test]
     fn older_servers_have_no_fps_or_still() {
-        let p: Preset = serde_json::from_str(r#"{"id":"a","name":"A","texture":"t","frames":6}"#).unwrap();
+        let p: Preset =
+            serde_json::from_str(r#"{"id":"a","name":"A","texture":"t","frames":6}"#).unwrap();
         assert_eq!((p.fps, p.still.clone()), (8, None));
         assert!(p.animated() && !p.has_still());
     }

@@ -10,7 +10,11 @@ fn main() {
                     "{path}: ok, {} triangles, {} nodes ({}), {} primitives, {} materials, {} images, animation {:?}, bounds {lo:?} to {hi:?}",
                     m.triangles(),
                     m.nodes.len(),
-                    m.nodes.iter().map(|n| n.name.as_str()).collect::<Vec<_>>().join("/"),
+                    m.nodes
+                        .iter()
+                        .map(|n| n.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join("/"),
                     m.primitives.len(),
                     m.materials.len(),
                     m.images.len(),
