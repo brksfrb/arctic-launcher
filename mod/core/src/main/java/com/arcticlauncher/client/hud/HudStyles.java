@@ -28,6 +28,7 @@ public final class HudStyles {
 	}
 
 	static void apply(String id, HudSlot slot, Style s) {
+		slot.styled = true;
 		slot.border = false;
 		slot.brackets = false;
 		slot.chroma = false;

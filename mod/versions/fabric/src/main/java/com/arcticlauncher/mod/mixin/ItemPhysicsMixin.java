@@ -36,12 +36,17 @@ abstract class ItemPhysicsMixin {
 	/** Copies in a stack of flat items are this many model depths apart (as the game draws them). */
 	@Unique
 	private static final float STACK_SPACING = 1.5F;
-	/** Radians per tick a falling item turns over. */
+	/** Radians per second a falling item turns over. */
 	@Unique
-	private static final float TUMBLE_SPEED = 0.35F;
-	/** The game's hover above the ground for items in the air. */
+	private static final float TUMBLE_SPEED = 7F;
+	/** How fast a landed item settles flat (per second; about a third of a second to settle). */
 	@Unique
-	private static final float HOVER = 0.0625F;
+	private static final float SETTLE_RATE = 12F;
+	/** Longest frame gap the motion steps over at once (a stall or an item coming back into view). */
+	@Unique
+	private static final float MAX_STEP_S = 0.1F;
+	@Unique
+	private static final float HALF_PI = (float) (Math.PI / 2);
 
 	@Unique
 	private static boolean arctic$on() {
@@ -59,7 +64,50 @@ abstract class ItemPhysicsMixin {
 	private void arctic$notePlace(ItemEntity entity, ItemEntityRenderState state, float partialTicks, CallbackInfo ci) {
 		int place = entity.isInLiquid() ? ItemPhysicsState.FLOATING
 				: entity.onGround() ? ItemPhysicsState.ON_GROUND : ItemPhysicsState.IN_AIR;
-		((ItemPhysicsState) state).arctic$setPlace(place);
+		ItemPhysicsState physics = (ItemPhysicsState) state;
+		physics.arctic$setPlace(place);
+		if (place == ItemPhysicsState.FLOATING || !arctic$on() || state.item.isEmpty()) {
+			return;
+		}
+		physics.arctic$setTilt(arctic$moveTilt((ItemPhysicsState.Motion) entity, place == ItemPhysicsState.IN_AIR,
+				state.item.getModelBoundingBox().getZsize() <= FLAT_DEPTH));
+	}
+
+	/**
+	 * The item's tilt this frame: turning over while it falls, easing to its resting angle once it lands
+	 * (flat items face up or down, whichever is nearer; blocks onto their nearest side) instead of snapping.
+	 */
+	@Unique
+	private static float arctic$moveTilt(ItemPhysicsState.Motion motion, boolean falling, boolean flat) {
+		long now = System.nanoTime();
+		long last = motion.arctic$tiltAt();
+		float step = last == 0 ? 0F : Math.min(MAX_STEP_S, (now - last) / 1e9F);
+		float tilt = motion.arctic$tilt();
+		if (last == 0 && !falling) {
+			// Already lying there when first seen (joined, or came back into view): no settling to watch.
+			tilt = flat ? -HALF_PI : 0F;
+		} else if (falling) {
+			tilt = (tilt + TUMBLE_SPEED * step) % (float) (Math.PI * 2);
+		} else {
+			float rest = flat ? (Math.abs(arctic$wrap(tilt - HALF_PI)) < Math.abs(arctic$wrap(tilt + HALF_PI)) ? HALF_PI : -HALF_PI)
+					: Math.round(tilt / HALF_PI) * HALF_PI;
+			tilt += arctic$wrap(rest - tilt) * (1F - (float) Math.exp(-SETTLE_RATE * step));
+		}
+		motion.arctic$setTilt(tilt, now);
+		return tilt;
+	}
+
+	/** An angle difference brought into -pi..pi (the short way round). */
+	@Unique
+	private static float arctic$wrap(float angle) {
+		float twoPi = (float) (Math.PI * 2);
+		angle %= twoPi;
+		if (angle > Math.PI) {
+			angle -= twoPi;
+		} else if (angle < -Math.PI) {
+			angle += twoPi;
+		}
+		return angle;
 	}
 
 	/** Whether the item being drawn uses item physics (render thread only; set as its drawing starts). */
@@ -95,17 +143,16 @@ abstract class ItemPhysicsMixin {
 		}
 		AABB box = state.item.getModelBoundingBox();
 		float depth = (float) box.getZsize();
-		if (((ItemPhysicsState) state).arctic$place() == ItemPhysicsState.IN_AIR) {
-			pose.translate(0F, -(float) box.minY + HOVER, 0F);
-			arctic$turn(pose, Axis.XP.rotation(state.ageInTicks * TUMBLE_SPEED));
-		} else if (depth <= FLAT_DEPTH) {
-			// Turned face up, the model's depth is its height: the lowest copy of the stack rests on the block.
-			float stackHalf = depth * STACK_SPACING * (state.count - 1) / 2F;
-			pose.translate(0F, stackHalf - (float) box.minZ, 0F);
-			arctic$turn(pose, Axis.XP.rotation((float) (-Math.PI / 2)));
-		} else {
-			pose.translate(0F, -(float) box.minY, 0F);
-		}
+		// Copies of a flat stack are spread along the model's depth (as the game draws them).
+		float stackHalf = depth <= FLAT_DEPTH ? depth * STACK_SPACING * (state.count - 1) / 2F : 0F;
+		float tilt = ((ItemPhysicsState) state).arctic$tilt();
+		// Lifted so the lowest point of the turned model (stack included) touches the ground, at any tilt.
+		float cos = (float) Math.cos(tilt);
+		float sin = (float) Math.sin(tilt);
+		float lowest = Math.min((float) box.minY * cos, (float) box.maxY * cos)
+				+ Math.min(-((float) box.minZ - stackHalf) * sin, -((float) box.maxZ + stackHalf) * sin);
+		pose.translate(0F, -lowest, 0F);
+		arctic$turn(pose, Axis.XP.rotation(tilt));
 	}
 
 	@Unique

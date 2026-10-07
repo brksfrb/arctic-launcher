@@ -37,6 +37,7 @@
 		"ClientPlayerSwingMixin",
 		"ServerPingPoolMixin",
 		"ItemEntityRendererMixin",
+		"ItemEntityMotionMixin",
 		"MinecraftClientAccountAccess"<% if (mc18) { %>,
 		"SignUpdateMixin",
 		"ScreenKeyEventMixin"<% } %><% if (achievements) { %>,

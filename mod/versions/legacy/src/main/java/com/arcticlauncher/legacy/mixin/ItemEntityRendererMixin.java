@@ -23,9 +23,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  */
 @Mixin(ItemEntityRenderer.class)
 abstract class ItemEntityRendererMixin {
-	/** Degrees per tick a falling item turns over. */
+	/** Degrees per second a falling item turns over. */
 	@Unique
-	private static final float TUMBLE_DEGREES = 20f;
+	private static final float TUMBLE_DEGREES = 400f;
+	/** How fast a landed item settles flat (per second; about a third of a second to settle). */
+	@Unique
+	private static final float SETTLE_RATE = 12f;
+	/** Longest frame gap the motion steps over at once. */
+	@Unique
+	private static final float MAX_STEP_S = 0.1f;
 	/** The game lifts a flat item by a quarter of its ground scale (0.5) so it stands on the ground. */
 	@Unique
 	private static final float STANDING_LIFT = 0.125f;
@@ -42,6 +48,9 @@ abstract class ItemEntityRendererMixin {
 	private static float arctic$tickDelta;
 	@Unique
 	private static boolean arctic$flat;
+	/** The item's tilt this frame (degrees around its sideways axis; -90 is lying face up). */
+	@Unique
+	private static float arctic$tilt;
 
 	@Inject(method = "method_10221", at = @At("HEAD"))
 	private void arctic$start(ItemEntity item, double x, double y, double z, float tickDelta, BakedModel model,
@@ -50,6 +59,33 @@ abstract class ItemEntityRendererMixin {
 		arctic$item = config != null && config.itemPhysics && !item.isTouchingWater() ? item : null;
 		arctic$tickDelta = tickDelta;
 		arctic$flat = !model.hasDepth();
+		if (arctic$item != null) {
+			arctic$tilt = arctic$moveTilt((com.arcticlauncher.legacy.ItemPhysicsMotion) item, !item.onGround, arctic$flat);
+		}
+	}
+
+	/**
+	 * Turning over while it falls, easing to its resting angle once it lands (flat items face up or
+	 * down, whichever is nearer; blocks onto their nearest side) instead of snapping.
+	 */
+	@Unique
+	private static float arctic$moveTilt(com.arcticlauncher.legacy.ItemPhysicsMotion motion, boolean falling, boolean flat) {
+		long now = System.nanoTime();
+		long last = motion.arctic$tiltAt();
+		float step = last == 0 ? 0f : Math.min(MAX_STEP_S, (now - last) / 1e9f);
+		float tilt = motion.arctic$tilt();
+		if (last == 0 && !falling) {
+			// Already lying there when first seen: no settling to watch.
+			tilt = flat ? -90f : 0f;
+		} else if (falling) {
+			tilt = (tilt + TUMBLE_DEGREES * step) % 360f;
+		} else {
+			float rest = flat ? (Math.abs(MathHelper.wrapDegrees(tilt - 90f)) < Math.abs(MathHelper.wrapDegrees(tilt + 90f)) ? 90f : -90f)
+					: Math.round(tilt / 90f) * 90f;
+			tilt += MathHelper.wrapDegrees(rest - tilt) * (1f - (float) Math.exp(-SETTLE_RATE * step));
+		}
+		motion.arctic$setTilt(tilt, now);
+		return tilt;
 	}
 
 	@Redirect(method = "method_10221",
@@ -58,8 +94,11 @@ abstract class ItemEntityRendererMixin {
 		ItemEntity item = arctic$item;
 		if (item != null) {
 			y -= MathHelper.sin((item.getAge() + arctic$tickDelta) / 10.0F + item.hoverHeight) * 0.1F + 0.1F;
-			if (item.onGround && arctic$flat) {
-				y += LYING_LIFT + COPY_SPACING * (arctic$copies(item) - 1) - STANDING_LIFT;
+			if (arctic$flat) {
+				// Standing up the sprite's half height holds it off the ground; lying down, its stack does.
+				float radians = arctic$tilt * ((float) Math.PI / 180f);
+				float lying = LYING_LIFT + COPY_SPACING * (arctic$copies(item) - 1);
+				y += STANDING_LIFT * Math.abs(MathHelper.cos(radians)) + lying * Math.abs(MathHelper.sin(radians)) - STANDING_LIFT;
 			}
 		}
 		GlStateManager.translate(x, y, z);
@@ -74,12 +113,8 @@ abstract class ItemEntityRendererMixin {
 			return;
 		}
 		GlStateManager.rotate(item.hoverHeight * (180F / (float) Math.PI), 0F, 1F, 0F);
-		if (!item.onGround) {
-			GlStateManager.rotate((item.getAge() + arctic$tickDelta) * TUMBLE_DEGREES, 1F, 0F, 0F);
-		} else if (arctic$flat) {
-			// Face up; the copies of a stack, spread along the model's depth, pile up from the ground.
-			GlStateManager.rotate(-90F, 1F, 0F, 0F);
-		}
+		// Lying face up (-90): the copies of a stack, spread along the model's depth, pile up from the ground.
+		GlStateManager.rotate(arctic$tilt, 1F, 0F, 0F);
 	}
 
 	/** How many copies the game draws for this stack (as its own method_10222). */
