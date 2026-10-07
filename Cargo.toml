@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/arctic-core", "crates/arctic-ping", "crates/arctic-voice", "crates/arctic-app", "crates/arctic-cli", "crates/arctic-share", "crates/arctic-cosmetics"]
 
 [workspace.package]
-version = "0.3.0-beta.3"
+version = "0.3.0-beta.4"
 edition = "2024"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/brksfrb/arctic-launcher"
