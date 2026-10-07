@@ -1,6 +1,6 @@
 package com.arcticlauncher.mod.mixin;
 
-//#if MC >= 26.1
+//#if MC >= 1.21.9
 import com.arcticlauncher.mod.cosmetic.AvatarIdentity;
 import java.util.UUID;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;

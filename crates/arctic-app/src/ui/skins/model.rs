@@ -5,7 +5,7 @@
 
 use std::f32::consts::PI;
 
-use arctic_core::cosmetic_models::Geometry;
+use arctic_core::cosmetic_models::{Geometry, Mesh as MeshModel};
 use arctic_core::skins::Variant;
 use eframe::egui::{self, Color32, Mesh, Pos2, Rect, TextureId, pos2};
 
@@ -50,6 +50,9 @@ struct Face {
     uv: [Pos2; 4],
     depth: f32,
     texture: TextureId,
+    /// Multiplies the texture (white for the player and cuboid cosmetics;
+    /// the shading and vertex colors of a mesh).
+    tint: Color32,
     /// Texels across and down (how finely it's cut up for depth sorting).
     cells: [u16; 2],
 }
@@ -95,6 +98,7 @@ impl Face {
                     uv: points.map(|p| p.1),
                     depth: corners.iter().map(|c| c[2]).sum::<f32>() / 4.0,
                     texture: self.texture,
+                    tint: self.tint,
                     cells: [1, 1],
                 }
             })
@@ -117,6 +121,32 @@ pub struct Worn<'a> {
     pub texture: TextureId,
 }
 
+/// A sculpted cosmetic to draw: its mesh and textures.
+#[derive(Clone, Copy)]
+pub struct WornMesh<'a> {
+    pub mesh: &'a MeshModel,
+    /// One texture per image embedded in the mesh.
+    pub textures: &'a [TextureId],
+    /// A plain white texel, for parts painted with vertex colors alone.
+    pub white: TextureId,
+    /// Seconds into the idle animation (`None`: the authored rest pose).
+    pub time: Option<f64>,
+    /// The wearer's arm and leg swing, radians: pieces on a limb follow it.
+    pub swing: f32,
+}
+
+/// Where a piece that follows a limb turns (the shoulder or hip height in the preview) and which way:
+/// arms and legs swing in opposite directions, as `parts` has them.
+fn limb(root: &str, swing: f32) -> Option<(f32, f32)> {
+    match root.to_ascii_lowercase().replace('_', "").as_str() {
+        "rightarm" => Some((22.0, swing)),
+        "leftarm" => Some((22.0, -swing)),
+        "rightleg" => Some((12.0, -swing)),
+        "leftleg" => Some((12.0, swing)),
+        _ => None,
+    }
+}
+
 /// Draw the player into `rect`. `cape` is a 64×32 cape texture.
 #[allow(clippy::too_many_arguments)]
 pub fn paint(
@@ -127,6 +157,7 @@ pub fn paint(
     has_overlay: bool,
     cape: Option<TextureId>,
     cosmetics: &[Worn],
+    meshes: &[WornMesh],
     pose: Pose,
 ) {
     let scale = rect.height() / (HEIGHT + 6.0);
@@ -155,6 +186,9 @@ pub fn paint(
     for worn in cosmetics {
         faces.extend(cosmetic_faces(worn, &view));
     }
+    for worn in meshes {
+        faces.extend(mesh_faces(worn, &view));
+    }
     // One depth order for body, cape and cosmetics, so each hides the others
     // correctly; consecutive faces with the same texture share a mesh.
     let mut faces: Vec<Face> = faces.iter().flat_map(Face::cut).collect();
@@ -172,7 +206,7 @@ fn mesh(faces: &[Face], project: &impl Fn(V3) -> Pos2) -> Mesh {
             mesh.vertices.push(egui::epaint::Vertex {
                 pos: project(*corner),
                 uv,
-                color: Color32::WHITE,
+                color: face.tint,
             });
         }
         mesh.add_triangle(base, base + 1, base + 2);
@@ -207,6 +241,7 @@ fn build_faces(
                 uv,
                 depth,
                 texture,
+                tint: Color32::WHITE,
                 cells,
             });
         }
@@ -401,6 +436,21 @@ fn cape_part(swing: f32) -> Part {
 
 /// Draw one cosmetic on its own, turning slowly, fitted to `rect`.
 pub fn paint_cosmetic(painter: &egui::Painter, rect: Rect, worn: Worn, yaw: f32) {
+    paint_turning(painter, rect, yaw, |view| cosmetic_faces(&worn, &|p| view(p)));
+}
+
+/// The same for a sculpted cosmetic.
+pub fn paint_mesh_cosmetic(painter: &egui::Painter, rect: Rect, worn: WornMesh, yaw: f32) {
+    paint_turning(painter, rect, yaw, |view| mesh_faces(&worn, &|p| view(p)));
+}
+
+/// Draws the faces `faces_of` makes for a view, turned around their own middle.
+fn paint_turning(
+    painter: &egui::Painter,
+    rect: Rect,
+    yaw: f32,
+    faces_of: impl Fn(&dyn Fn(V3) -> V3) -> Vec<Face>,
+) {
     let pose = Pose {
         yaw,
         pitch: 0.25,
@@ -408,7 +458,7 @@ pub fn paint_cosmetic(painter: &egui::Painter, rect: Rect, worn: Worn, yaw: f32)
     };
     // Turned around its own middle (not the wearer's), and sized from the
     // sphere around it, so it stays put and keeps its size while it turns.
-    let corners: Vec<V3> = cosmetic_faces(&worn, &|p| p)
+    let corners: Vec<V3> = faces_of(&|p| p)
         .iter()
         .flat_map(|f| f.corners)
         .collect();
@@ -434,15 +484,121 @@ pub fn paint_cosmetic(painter: &egui::Painter, rect: Rect, worn: Worn, yaw: f32)
             pose,
         )
     };
-    let mut faces: Vec<Face> = cosmetic_faces(&worn, &view)
-        .iter()
-        .flat_map(Face::cut)
-        .collect();
+    let mut faces: Vec<Face> = faces_of(&view).iter().flat_map(Face::cut).collect();
     faces.sort_by(|a, b| a.depth.total_cmp(&b.depth));
     let scale = rect.width().min(rect.height()) * 0.9 / (2.0 * radius);
     let center = rect.center();
     let project = |p: V3| pos2(center.x + p[0] * scale, center.y - p[1] * scale);
     painter.add(mesh(&faces, &project));
+}
+
+/// The triangles of a sculpted cosmetic, placed like the game places them:
+/// vertices are in model space (as for cuboid cosmetics), moved by their
+/// node, and the preview's z is the model's z flipped. Lit from the front
+/// and above, on both sides (so a mesh reads the same whichever way its
+/// triangles wind).
+fn mesh_faces(worn: &WornMesh, view: &impl Fn(V3) -> V3) -> Vec<Face> {
+    use arctic_core::cosmetic_models::mesh::apply;
+    let light = {
+        let l: V3 = [0.35, 0.65, 0.68];
+        let len = (l[0] * l[0] + l[1] * l[1] + l[2] * l[2]).sqrt();
+        l.map(|x| x / len)
+    };
+    let world = worn.mesh.world(worn.time.map(|t| t as f32));
+    let mut faces = Vec::with_capacity(worn.mesh.triangles());
+    for prim in &worn.mesh.primitives {
+        let material = prim.material.map(|m| &worn.mesh.materials[m]);
+        let texture = material
+            .and_then(|m| m.texture)
+            .and_then(|i| worn.textures.get(i))
+            .copied()
+            .unwrap_or(worn.white);
+        let base = material.map_or([1.0; 4], |m| m.base_color);
+        let matrix = &world[prim.node];
+        // The root node says which part of the player the piece follows.
+        let mut root = prim.node;
+        while let Some(parent) = worn.mesh.nodes[root].parent {
+            root = parent;
+        }
+        let turn = limb(&worn.mesh.nodes[root].name, worn.swing);
+        let at = |i: u32| -> V3 {
+            let p = apply(matrix, prim.positions[i as usize]);
+            let mut p = [p[0], p[1], -p[2]];
+            if let Some((pivot_y, angle)) = turn {
+                // Around the shoulder or hip, as the limb itself turns (see `part_transform`).
+                let (s, c) = angle.sin_cos();
+                let y = p[1] - pivot_y;
+                p = [p[0], pivot_y + y * c - p[2] * s, y * s + p[2] * c];
+            }
+            view(p)
+        };
+        for tri in prim.indices.chunks_exact(3) {
+            // The travelling light (in the model's own space, as the game draws it).
+            let glint = match (&worn.mesh.sheen, worn.time) {
+                (Some(sheen), Some(t)) => {
+                    let m = |i: u32| apply(matrix, prim.positions[i as usize]);
+                    let (p0, p1, p2) = (m(tri[0]), m(tri[1]), m(tri[2]));
+                    let centre = [
+                        (p0[0] + p1[0] + p2[0]) / 3.0,
+                        (p0[1] + p1[1] + p2[1]) / 3.0,
+                        (p0[2] + p1[2] + p2[2]) / 3.0,
+                    ];
+                    let (u, v) = (sub(p1, p0), sub(p2, p0));
+                    let nz = u[0] * v[1] - u[1] * v[0];
+                    let len = (u[1] * v[2] - u[2] * v[1]).hypot(u[2] * v[0] - u[0] * v[2]).hypot(nz).max(1e-9);
+                    sheen.at(centre, nz / len, t as f32)
+                }
+                _ => 0.0,
+            };
+            let (a, b, c) = (at(tri[0]), at(tri[1]), at(tri[2]));
+            let (u, v) = (sub(b, a), sub(c, a));
+            let mut n = [
+                u[1] * v[2] - u[2] * v[1],
+                u[2] * v[0] - u[0] * v[2],
+                u[0] * v[1] - u[1] * v[0],
+            ];
+            let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt().max(1e-9);
+            n = n.map(|x| x / len);
+            if n[2] < 0.0 {
+                n = n.map(|x| -x);
+            }
+            let shade = 0.5 + 0.5 * (n[0] * light[0] + n[1] * light[1] + n[2] * light[2]).max(0.0);
+            let mut color = [0.0f32; 4];
+            for &i in tri {
+                let vc = prim.colors[i as usize];
+                for k in 0..4 {
+                    color[k] += vc[k] / 3.0;
+                }
+            }
+            let to_u8 = |x: f32| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let lit = |k: usize| -> f32 {
+                let light = color[k] * base[k] * shade;
+                match &worn.mesh.sheen {
+                    Some(sheen) => light * (1.0 - glint) + sheen.tint[k] * glint,
+                    None => light,
+                }
+            };
+            let tint = Color32::from_rgba_unmultiplied(
+                to_u8(lit(0)),
+                to_u8(lit(1)),
+                to_u8(lit(2)),
+                to_u8(color[3] * base[3]),
+            );
+            let uv = |i: u32| {
+                let t = prim.uvs[i as usize];
+                pos2(t[0], t[1])
+            };
+            faces.push(Face {
+                corners: [a, b, c, c],
+                uv: [uv(tri[0]), uv(tri[1]), uv(tri[2]), uv(tri[2])],
+                depth: (a[2] + b[2] + c[2]) / 3.0,
+                texture,
+                tint,
+                cells: [1, 1],
+            });
+        }
+    }
+    faces
 }
 
 /// Model height in Java model space: Bedrock y (feet at 0, up) is 24 - y there.
@@ -587,7 +743,7 @@ fn cube_faces(
     let part = cuboid(
         [a[0].min(b[0]), a[1].min(b[1]), a[2].min(b[2])],
         [w, h, d],
-        (cube.uv[0], cube.uv[1]),
+        (0.0, 0.0),
         0.0,
         [0.0; 3],
         0.0,
@@ -596,28 +752,42 @@ fn cube_faces(
         max: [a[0].max(b[0]), a[1].max(b[1]), a[2].max(b[2])],
         ..part
     };
-    let mut boxes = box_faces(&part);
-    if cube.mirror {
-        // Mirrored cubes swap their sides and flip every face sideways.
-        let (right, left) = (boxes[2].2, boxes[3].2);
-        boxes[2].2 = left;
-        boxes[3].2 = right;
-        for face in &mut boxes {
-            let uv = face.2;
-            face.2 = [uv[1], uv[0], uv[3], uv[2]];
+    // The faces come in the same order as the cube's rectangles (north,
+    // south, east, west, up, down); a face without a rectangle isn't drawn.
+    let rects = cube.face_rects();
+    let boxes = box_faces(&part);
+    // The cube's own turn, around its pivot (the middle unless given), in
+    // the bone's Java space.
+    let turn = if cube.rotation == [0.0; 3] {
+        Placement::IDENTITY
+    } else {
+        let mid = [
+            cube.origin[0] + w / 2.0,
+            cube.origin[1] + h / 2.0,
+            cube.origin[2] + d / 2.0,
+        ];
+        let at_pivot = sub(java_pivot(cube.pivot.unwrap_or(mid)), pivot);
+        let turned = Placement::IDENTITY.then([0.0; 3], cube.rotation);
+        Placement {
+            at: sub(at_pivot, turned.apply(at_pivot)),
+            ..turned
         }
-    }
+    };
     let place = |p: V3| {
-        let world = at.apply(flip(p));
+        let world = at.apply(turn.apply(flip(p)));
         view([world[0], JAVA_HEIGHT - world[1], -world[2]])
     };
     let origin = place([0.0; 3]);
     let mut out = Vec::new();
-    for (corners, normal, uv) in boxes {
+    for ((corners, normal, _), rect) in boxes.into_iter().zip(rects) {
+        let Some([u, v, rw, rh]) = rect else {
+            continue;
+        };
         let n = sub(place(normal), origin);
         if n[2] <= 1e-4 {
             continue;
         }
+        let uv = [(u, v), (u + rw, v), (u + rw, v + rh), (u, v + rh)];
         let corners = corners.map(place);
         let depth = corners.iter().map(|c| c[2]).sum::<f32>() / 4.0;
         out.push(Face {
@@ -625,6 +795,7 @@ fn cube_faces(
             uv: uv.map(|(u, v)| pos2(u / tex_w, v / tex_h)),
             depth,
             texture,
+            tint: Color32::WHITE,
             cells: Face::cells_of(&uv),
         });
     }
@@ -738,5 +909,62 @@ mod tests {
                 assert!((4.0..=5.0).contains(&c[2]), "{c:?}");
             }
         }
+    }
+
+    fn faces_of(geometry_json: &str) -> Vec<([V3; 4], [Pos2; 4])> {
+        let geometry = arctic_core::cosmetic_models::Geometry::parse(geometry_json.as_bytes()).unwrap();
+        let worn = Worn {
+            geometry: &geometry,
+            texture: TextureId::default(),
+        };
+        // Seen from the front and from behind, so every face shows once.
+        let mut out = Vec::new();
+        for yaw in [0.3_f32, 3.4] {
+            let view = |p: V3| rotate_view(p, Pose { yaw, pitch: 0.4, swing: 0.0 });
+            out.extend(
+                cosmetic_faces(&worn, &view)
+                    .into_iter()
+                    .map(|f| (f.corners, f.uv)),
+            );
+        }
+        out
+    }
+
+    fn one_cube(cube: &str) -> String {
+        format!(
+            r#"{{"minecraft:geometry":[{{"description":{{"texture_width":64,"texture_height":64}},
+            "bones":[{{"name":"back","pivot":[0,24,0],"cubes":[{cube}]}}]}}]}}"#
+        )
+    }
+
+    #[test]
+    fn per_face_uv_matches_the_box_layout_it_replaces() {
+        // Box UV at (4, 6) for a 6×8×2 cube, written out face by face:
+        // w = 6, h = 8, d = 2.
+        let boxed = one_cube(r#"{"origin":[-3,14,2],"size":[6,8,2],"uv":[4,6]}"#);
+        let faces = one_cube(
+            r#"{"origin":[-3,14,2],"size":[6,8,2],"uv":{
+                "north":{"uv":[6,8],"uv_size":[6,8]},
+                "south":{"uv":[14,8],"uv_size":[6,8]},
+                "east":{"uv":[4,8],"uv_size":[2,8]},
+                "west":{"uv":[12,8],"uv_size":[2,8]},
+                "up":{"uv":[6,6],"uv_size":[6,2]},
+                "down":{"uv":[12,6],"uv_size":[6,2]}}}"#,
+        );
+        assert_eq!(faces_of(&boxed), faces_of(&faces));
+    }
+
+    #[test]
+    fn a_cube_turned_by_zero_degrees_stays_put_and_a_turn_moves_it() {
+        let flat = r#"{"origin":[-4,14,2],"size":[8,8,1],"uv":{"north":{"uv":[0,0],"uv_size":[8,8]}}"#;
+        let still = faces_of(&one_cube(&format!(r#"{flat},"rotation":[0,0,0]}}"#)));
+        let plain = faces_of(&one_cube(&format!("{flat}}}")));
+        assert_eq!(still, plain);
+        let turned = faces_of(&one_cube(&format!(
+            r#"{flat},"pivot":[0,18,2.5],"rotation":[0,0,90]}}"#
+        )));
+        assert_ne!(turned, plain);
+        // Only the faces that were given are drawn.
+        assert!(plain.len() <= 2 && !plain.is_empty());
     }
 }

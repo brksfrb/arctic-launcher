@@ -110,9 +110,31 @@ final class LooksTab implements MenuTab {
 			end += 24;
 		}
 		final ClientConfig config = ArcticClient.config();
+		int y = end + 8;
+		final Preset wornCape = looks.myLook() == null ? null : looks.presetFor(looks.myLook().cape);
+		if (wornCape != null && wornCape.hasStill()) {
+			final String id = wornCape.id;
+			host.add(new Toggle("Animate " + wornCape.name, "Off: everyone sees its still image. Remembered per cape",
+					Form.binding(() -> !config.capeStill.contains(id), on -> {
+						if (on) {
+							config.capeStill.remove(id);
+						} else {
+							config.capeStill.add(id);
+						}
+						ArcticClient.saveConfig();
+						ArcticClient.looks().wearCape(id);
+					}))).bounds(x, y, listW, ROW);
+			y += ROW + 4;
+		}
+		host.add(new Toggle("Freeze animated capes and cosmetics", "Everything animated you see stands still (only your screen)",
+				Form.binding(() -> config.reduceCapeMotion, on -> {
+					config.reduceCapeMotion = on;
+					ArcticClient.saveConfig();
+				}))).bounds(x, y, listW, ROW);
+		y += ROW + 4;
 		host.add(new Toggle("Show Arctic looks", "Other players' Arctic skins, capes and cosmetics",
-				Form.binding(() -> config.showCosmetics, on -> config.showCosmetics = on))).bounds(x, end + 8, listW, ROW);
-		nearby(host, end + 8 + ROW + 4, listW);
+				Form.binding(() -> config.showCosmetics, on -> config.showCosmetics = on))).bounds(x, y, listW, ROW);
+		nearby(host, y + ROW + 4, listW);
 	}
 
 	/** Your launcher's skins (and your Minecraft skin); a click wears one. */
@@ -159,7 +181,7 @@ final class LooksTab implements MenuTab {
 		for (int i = 0; i < count; i++) {
 			Preset p = i == 0 ? null : presets.get(i - 1);
 			String texture = p == null ? null : p.texture;
-			boolean isWorn = texture == null ? worn == null : texture.equals(worn);
+			boolean isWorn = p == null ? worn == null : p.has(worn);
 			CapeTile tile = new CapeTile(p == null ? null : p.id, p == null ? "No cape" : p.name, texture, isWorn);
 			tile.enabled = canWear;
 			host.add(tile).bounds(x + (i % cols) * (tileW + 4), y0 + (i / cols) * (TILE_H + 4), tileW, TILE_H);

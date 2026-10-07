@@ -165,6 +165,8 @@ final class CosmeticTiles {
 				return "Back";
 			case "shoulders":
 				return "Shoulders";
+			case "arms":
+				return "Arms";
 			default:
 				return "Body";
 		}

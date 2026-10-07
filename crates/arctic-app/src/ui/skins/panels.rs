@@ -29,7 +29,7 @@ const AUTO_TURN_AFTER: f64 = 4.0;
 const AUTO_TURN_SPEED: f32 = 0.35;
 const ZOOM: std::ops::RangeInclusive<f32> = 0.8..=1.8;
 /// Cosmetic slots in the order they're listed.
-pub(super) const SLOTS: [&str; 5] = ["head", "face", "back", "shoulders", "body"];
+pub(super) const SLOTS: [&str; 6] = ["head", "face", "back", "shoulders", "arms", "body"];
 
 /// What "you" look like to others: Arctic skin first, then Minecraft's.
 /// Changes still being saved are already in it.
@@ -76,17 +76,24 @@ impl ArcticApp {
                         self.category_rail(ui);
                     });
                     ui.add_space(14.0);
-                    // Only the items scroll; the categories stay in view.
-                    egui::ScrollArea::vertical()
-                        .id_salt(("cosmetics_items", format!("{:?}", self.skins.section)))
-                        .auto_shrink(false)
-                        .show(ui, |ui| {
-                            ui.vertical(|ui| match self.skins.section {
-                                Section::Skins => self.skins_section(ui),
-                                Section::Capes => self.capes_section(ui),
-                                Section::Slot(slot) => self.cosmetics_section(ui, slot),
+                    // Only the cards scroll; the categories, title and search stay in view.
+                    ui.vertical(|ui| {
+                        match self.skins.section {
+                            Section::Skins => self.skins_header(ui),
+                            Section::Capes => self.capes_header(ui),
+                            Section::Slot(slot) => self.cosmetics_header(ui, slot),
+                        }
+                        egui::ScrollArea::vertical()
+                            .id_salt(("cosmetics_items", format!("{:?}", self.skins.section)))
+                            .auto_shrink(false)
+                            .show(ui, |ui| {
+                                ui.vertical(|ui| match self.skins.section {
+                                    Section::Skins => self.skins_body(ui),
+                                    Section::Capes => self.capes_body(ui),
+                                    Section::Slot(slot) => self.cosmetics_body(ui, slot),
+                                });
                             });
-                        });
+                    });
                 });
             });
         });
@@ -259,10 +266,24 @@ impl ArcticApp {
         };
         let wearing = self.cosmetic_models(&ctx, &worn_ids);
         let worn: Vec<model::Worn> = wearing
+            .cuboids
             .iter()
             .map(|(geometry, texture)| model::Worn {
                 geometry,
                 texture: *texture,
+            })
+            .collect();
+        // Sculpted cosmetics play their idle animation (still, if the viewer froze motion).
+        let motion = (!arctic_core::cosmetics::reduce_cape_motion()).then_some(now);
+        let worn_meshes: Vec<model::WornMesh> = wearing
+            .meshes
+            .iter()
+            .map(|(mesh, textures)| model::WornMesh {
+                mesh,
+                textures,
+                white: wearing.white,
+                time: motion,
+                swing: pose.swing,
             })
             .collect();
         match self.skin_texture(&ctx, &key) {
@@ -276,6 +297,7 @@ impl ArcticApp {
                     tex.overlay,
                     cape,
                     &worn,
+                    &worn_meshes,
                     pose,
                 );
                 ctx.request_repaint();
@@ -332,13 +354,36 @@ impl ArcticApp {
         if equipped_row(ui, p, "Cape", &cape, arctic_cape) {
             self.set_arctic_cape(None, None);
         }
+        // An animated cape can be switched to its still image.
+        if let Some(preset) = self.worn_animated_cape() {
+            let on = !self.settings.capes_still.contains(&preset.id);
+            let mut flip = false;
+            ui.horizontal(|ui| {
+                ui.add_sized(
+                    [70.0, 20.0],
+                    egui::Label::new(RichText::new("Animate").small().color(p.muted)),
+                );
+                flip = switch(ui, p, on)
+                    .on_hover_text(if on {
+                        "On. Turn off to show this cape's still image to everyone."
+                    } else {
+                        "Off: everyone sees this cape's still image. Remembered for each cape."
+                    })
+                    .clicked();
+            });
+            if flip {
+                self.set_cape_animate(&preset, !on);
+            }
+        }
         let worn = self.worn_ids();
         let names: Vec<(String, String, String)> = match self.arctic_state() {
-            Some(state) => worn
-                .iter()
-                .filter_map(|id| state.items.iter().find(|(i, _)| &i.id == id))
-                .map(|(i, _)| (i.id.clone(), slot_name(&i.slot).to_owned(), i.name.clone()))
-                .collect(),
+            Some(state) => {
+                let entries = super::cards::cosmetic_entries(state);
+                worn.iter()
+                    .filter_map(|id| entries.iter().find(|e| &e.id == id))
+                    .map(|e| (e.id.clone(), slot_name(&e.slot).to_owned(), e.name.clone()))
+                    .collect()
+            }
             None => Vec::new(),
         };
         let mut remove: Option<String> = None;
@@ -381,6 +426,21 @@ impl ArcticApp {
         });
     }
 
+    /// The worn Arctic cape, when it can animate (it has a still to switch to).
+    pub(super) fn worn_animated_cape(&self) -> Option<arctic_core::cosmetics::Preset> {
+        let state = self.arctic_state()?;
+        let hash = match &self.skins.trying.cape {
+            Some(Some(key)) => key.strip_prefix("acape:").map(str::to_owned),
+            Some(None) => None,
+            None => state.look.cape.clone(),
+        }?;
+        state
+            .presets
+            .iter()
+            .find(|p| p.is_texture(&hash) && p.has_still())
+            .cloned()
+    }
+
     /// The cape's name for the Equipped list, and whether it's an Arctic one
     /// (which can be taken off here).
     fn equipped_cape_name(&self) -> (String, bool) {
@@ -393,7 +453,7 @@ impl ArcticApp {
         match hash {
             Some(hash) => {
                 let name = state
-                    .and_then(|s| s.presets.iter().find(|p| p.texture == hash))
+                    .and_then(|s| s.presets.iter().find(|p| p.is_texture(&hash)))
                     .map_or("Your cape".to_owned(), |p| p.name.clone());
                 (name, true)
             }
@@ -435,9 +495,9 @@ impl ArcticApp {
             .iter()
             .map(|slot| {
                 let n = self.arctic_state().map_or(0, |s| {
-                    s.items
+                    super::cards::cosmetic_entries(s)
                         .iter()
-                        .filter(|(i, _)| slot_key(&i.slot) == *slot)
+                        .filter(|e| slot_key(&e.slot) == *slot)
                         .count()
                 });
                 (*slot, n)
@@ -510,6 +570,18 @@ fn stage(painter: &egui::Painter, rect: Rect, p: &Palette) {
 }
 
 /// One line of the Equipped list; true when its × was clicked.
+/// An on/off switch.
+fn switch(ui: &mut egui::Ui, p: &Palette, on: bool) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(vec2(34.0, 18.0), Sense::click());
+    let t = ui.ctx().animate_bool(response.id, on);
+    let fill = p.surface_hover.lerp_to_gamma(p.accent, t);
+    ui.painter().rect_filled(rect, CornerRadius::same(9), fill);
+    let x = egui::lerp(rect.left() + 9.0..=rect.right() - 9.0, t);
+    ui.painter()
+        .circle_filled(pos2(x, rect.center().y), 7.0, Color32::WHITE);
+    response.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
 fn equipped_row(ui: &mut egui::Ui, p: &Palette, what: &str, name: &str, removable: bool) -> bool {
     let mut clicked = false;
     ui.horizontal(|ui| {
@@ -589,6 +661,7 @@ pub(super) fn slot_name(slot: &str) -> &'static str {
         "face" => "Face",
         "back" => "Back",
         "shoulders" => "Shoulders",
+        "arms" => "Arms",
         _ => "Body",
     }
 }

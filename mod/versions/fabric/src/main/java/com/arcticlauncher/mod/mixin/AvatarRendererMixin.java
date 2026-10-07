@@ -1,13 +1,10 @@
 package com.arcticlauncher.mod.mixin;
 
-//#if MC >= 26.1
+//#if MC >= 1.21.9
 import com.arcticlauncher.client.ArcticClient;
-import com.arcticlauncher.client.voice.VoiceLink;
-import com.arcticlauncher.mod.Compat;
 import com.arcticlauncher.mod.cosmetic.AvatarIdentity;
 import com.arcticlauncher.mod.cosmetic.CosmeticsLayer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Avatar;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.player.AvatarRenderer;
@@ -30,7 +27,7 @@ abstract class AvatarRendererMixin {
 	}
 
 	/** Who this is, kept on the state (see {@link AvatarIdentity}), and seen for emote updates. */
-	@Inject(method = "extractRenderState(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V",
+	@Inject(method = "extractRender" + "State(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V",
 			at = @At("TAIL"))
 	private void arctic$identify(Avatar entity, AvatarRenderState state, float partialTick, CallbackInfo ci) {
 		// Only players can be Arctic players: mannequins and other player-shaped
@@ -50,11 +47,13 @@ abstract class AvatarRendererMixin {
 		}
 	}
 
+	//#if MC >= 26.1
 	/** A speaker before the name of a player talking in voice chat. */
 	@Inject(method = "extractRenderState(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V",
 			at = @At("TAIL"))
 	private void arctic$speaking(Avatar entity, AvatarRenderState state, float partialTick, CallbackInfo ci) {
 		com.arcticlauncher.mod.cosmetic.SpeakerBadge.apply(entity, state);
 	}
+	//#endif
 }
 //#endif

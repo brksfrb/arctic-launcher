@@ -2,7 +2,7 @@
 //! capes and each cosmetic slot, as cards. Pointing at a card tries it on
 //! in the preview ([`Hover`]); clicking wears it (again: takes it off).
 
-use arctic_core::cosmetic_models::Geometry;
+use arctic_core::cosmetic_models::{Geometry, Mesh};
 use arctic_core::cosmetics::CapeChoice;
 use arctic_core::skins::{SkinEntry, Variant};
 use eframe::egui::{
@@ -57,7 +57,8 @@ impl ArcticApp {
 
     // ---- Skins ---------------------------------------------------------------------
 
-    pub(super) fn skins_section(&mut self, ui: &mut egui::Ui) {
+    /// Everything above the cards: title, search, tabs, the player-name and gallery search rows.
+    pub(super) fn skins_header(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         let library = self.skins.view == SkinsView::Library;
         self.list_header(
@@ -84,13 +85,20 @@ impl ArcticApp {
         });
         ui.add_space(10.0);
         match self.skins.view {
-            SkinsView::Library => self.library_panel(ui),
-            SkinsView::Gallery => self.gallery_panel(ui),
+            SkinsView::Library => self.library_header(ui),
+            SkinsView::Gallery => self.gallery_header(ui),
         }
     }
 
-    fn library_panel(&mut self, ui: &mut egui::Ui) {
-        let p = self.palette();
+    /// The skin cards (the part that scrolls).
+    pub(super) fn skins_body(&mut self, ui: &mut egui::Ui) {
+        match self.skins.view {
+            SkinsView::Library => self.library_body(ui),
+            SkinsView::Gallery => self.gallery_body(ui),
+        }
+    }
+
+    fn library_header(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             let field = ui.add(
                 widgets::text_field(&mut self.skins.player_name)
@@ -112,6 +120,10 @@ impl ArcticApp {
         });
         self.rename_row(ui);
         ui.add_space(10.0);
+    }
+
+    fn library_body(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
         let entries: Vec<SkinEntry> = self
             .skins
             .library
@@ -279,6 +291,7 @@ impl ArcticApp {
                 tex.overlay,
                 None,
                 &[],
+                &[],
                 Pose {
                     yaw,
                     pitch: 0.1,
@@ -297,18 +310,22 @@ impl ArcticApp {
 
     // ---- Capes ---------------------------------------------------------------------
 
-    pub(super) fn capes_section(&mut self, ui: &mut egui::Ui) {
+    pub(super) fn capes_header(&mut self, ui: &mut egui::Ui) {
         self.list_header(
             ui,
             "Capes",
             "Arctic players see an Arctic cape; without one, your Minecraft cape shows.",
             true,
         );
+    }
+
+    pub(super) fn capes_body(&mut self, ui: &mut egui::Ui) {
         self.arctic_capes(ui);
         self.minecraft_capes(ui);
     }
 
-    /// Arctic capes (still and animated), your own image, or none.
+    /// Arctic capes, your own image, or none. Capes that can animate carry a small
+    /// animation icon; the Animate switch is in the Equipped card.
     fn arctic_capes(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         let Some(state) = self.arctic_state().cloned() else {
@@ -328,57 +345,54 @@ impl ArcticApp {
             .filter(|c| self.matches_search(&c.name))
             .cloned()
             .collect();
-        let (animated, still): (Vec<_>, Vec<_>) = presets.into_iter().partition(|c| c.frames > 1);
         let mut pick: Option<(Option<CapeChoice>, Option<String>)> = None;
         let mut upload = false;
-        for (title, list, first) in [("Still", &still, true), ("Animated", &animated, false)] {
-            if list.is_empty() && !first {
-                continue;
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = vec2(GAP, GAP);
+            let r = cape_card(ui, p, None, Icon::Close, "No cape", None, worn.is_none());
+            if r.hovered() {
+                self.skins.hover = Some(Hover::Cape(None));
             }
-            section_label(ui, p, title);
-            ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing = vec2(GAP, GAP);
-                if first {
-                    let r = cape_card(ui, p, None, Icon::Close, "No cape", None, worn.is_none());
-                    if r.hovered() {
-                        self.skins.hover = Some(Hover::Cape(None));
-                    }
-                    if r.clicked() && worn.is_some() {
-                        pick = Some((None, None));
-                    }
+            if r.clicked() && worn.is_some() {
+                pick = Some((None, None));
+            }
+            for preset in &presets {
+                let animate_on = !self.settings.capes_still.contains(&preset.id);
+                let shown = match (&preset.still, animate_on) {
+                    (Some(still), false) if preset.animated() => still.clone(),
+                    _ => preset.texture.clone(),
+                };
+                let key = format!("acape:{shown}");
+                let tex = self.skin_texture(&ctx, &key).map(|t| animate(&ctx, t, now));
+                let active = worn.as_deref().is_some_and(|h| preset.is_texture(h));
+                let r = cape_card(ui, p, tex, Icon::Close, &preset.name, None, active);
+                if preset.has_still() {
+                    animation_badge(ui, p, r.rect, animate_on);
                 }
-                for preset in list {
-                    let key = format!("acape:{}", preset.texture);
-                    let tex = self.skin_texture(&ctx, &key).map(|t| animate(&ctx, t, now));
-                    let active = worn.as_deref() == Some(preset.texture.as_str());
-                    let badge = (preset.frames > 1).then_some("Animated");
-                    let r = cape_card(ui, p, tex, Icon::Close, &preset.name, badge, active);
-                    if r.hovered() {
-                        self.skins.hover = Some(Hover::Cape(Some(key.clone())));
-                    }
-                    if r.clicked() && !active {
-                        pick = Some((Some(CapeChoice::Preset(preset.id.clone())), Some(key)));
-                    }
+                if r.hovered() {
+                    self.skins.hover = Some(Hover::Cape(Some(key.clone())));
                 }
-                if first {
-                    let custom = worn
-                        .as_ref()
-                        .filter(|h| !state.presets.iter().any(|p| &p.texture == *h));
-                    if let Some(hash) = custom {
-                        let tex = self
-                            .skin_texture(&ctx, &format!("acape:{hash}"))
-                            .map(|t| animate(&ctx, t, now));
-                        cape_card(ui, p, tex, Icon::Close, "Your cape", None, true);
-                    }
-                    let r = cape_card(ui, p, None, Icon::Plus, "Your own…", None, false)
-                        .on_hover_text("Use your own cape image: 64×32 or HD PNG; stack up to 8 frames to animate it");
-                    if r.clicked() {
-                        upload = true;
-                    }
+                if r.clicked() && !active {
+                    pick = Some((Some(preset.choice(animate_on)), Some(key)));
                 }
-            });
-            ui.add_space(12.0);
-        }
+            }
+            let custom = worn
+                .as_ref()
+                .filter(|h| !state.presets.iter().any(|p| p.is_texture(h)));
+            if let Some(hash) = custom {
+                let tex = self
+                    .skin_texture(&ctx, &format!("acape:{hash}"))
+                    .map(|t| animate(&ctx, t, now));
+                cape_card(ui, p, tex, Icon::Close, "Your cape", None, true);
+            }
+            let r = cape_card(ui, p, None, Icon::Plus, "Your own…", None, false).on_hover_text(
+                "Use your own cape image: 64×32 up to 1024×512; stack up to 32 frames (12288 pixels tall) to animate it, at 8 frames a second",
+            );
+            if r.clicked() {
+                upload = true;
+            }
+        });
+        ui.add_space(12.0);
         if upload {
             self.tasks.pick_cape_file();
         }
@@ -443,36 +457,63 @@ impl ArcticApp {
 
     // ---- 3D cosmetics --------------------------------------------------------------
 
-    /// These cosmetics' models, with textures (for the preview).
+    /// These cosmetics' models, with textures (for the preview): the cuboid
+    /// ones, the sculpted ones, and a white texel for the sculpted ones that
+    /// are painted with vertex colors alone.
     pub(super) fn cosmetic_models(
         &mut self,
         ctx: &egui::Context,
         ids: &[String],
-    ) -> Vec<(Geometry, egui::TextureId)> {
+    ) -> WornModels {
         let Some(state) = self.arctic_state().cloned() else {
-            return Vec::new();
+            return WornModels::default();
         };
-        state
-            .items
-            .iter()
-            .filter(|(item, _)| ids.contains(&item.id))
-            .filter_map(|(item, geometry)| {
-                let texture = self.skin_texture(ctx, &format!("acos:{}", item.texture))?;
-                Some((geometry.clone(), texture.handle.id()))
+        let mut out = WornModels::default();
+        for entry in cosmetic_entries(&state) {
+            if !ids.contains(&entry.id) {
+                continue;
+            }
+            match entry.shape {
+                Shape3d::Cuboid { geometry, texture } => {
+                    if let Some(t) = self.skin_texture(ctx, &format!("acos:{texture}")) {
+                        out.cuboids.push((geometry, t.handle.id()));
+                    }
+                }
+                Shape3d::Mesh { mesh, hash } => {
+                    let textures = self.mesh_textures(ctx, &hash, mesh.images.len());
+                    out.meshes.push((mesh, textures));
+                }
+            }
+        }
+        out.white = self
+            .skin_texture(ctx, super::WHITE)
+            .map_or(egui::TextureId::default(), |t| t.handle.id());
+        out
+    }
+
+    /// The textures embedded in a mesh cosmetic (a gap where one isn't ready).
+    fn mesh_textures(&mut self, ctx: &egui::Context, hash: &str, count: usize) -> Vec<egui::TextureId> {
+        (0..count)
+            .map(|i| {
+                self.skin_texture(ctx, &format!("amesh:{hash}:{i}"))
+                    .map_or(egui::TextureId::default(), |t| t.handle.id())
             })
             .collect()
     }
 
     /// One slot's cosmetics: pointing at one tries it on, clicking wears it
     /// (replacing what's in that slot) or takes it off.
-    pub(super) fn cosmetics_section(&mut self, ui: &mut egui::Ui, slot: &'static str) {
-        let p = self.palette();
+    pub(super) fn cosmetics_header(&mut self, ui: &mut egui::Ui, slot: &'static str) {
         self.list_header(
             ui,
             slot_name(slot),
             "One per slot. Point at one to try it on; click to wear it, again to take it off.",
             true,
         );
+    }
+
+    pub(super) fn cosmetics_body(&mut self, ui: &mut egui::Ui, slot: &'static str) {
+        let p = self.palette();
         let Some(state) = self.arctic_state().cloned() else {
             ui.label(RichText::new("Cosmetics show once your look has loaded.").color(p.muted));
             return;
@@ -480,10 +521,10 @@ impl ArcticApp {
         let ctx = ui.ctx().clone();
         let now = ui.input(|i| i.time);
         let worn_ids = self.worn_ids();
-        let items: Vec<_> = state
-            .items
+        let entries = cosmetic_entries(&state);
+        let items: Vec<&Entry3d> = entries
             .iter()
-            .filter(|(item, _)| slot_key(&item.slot) == slot && self.matches_search(&item.name))
+            .filter(|e| slot_key(&e.slot) == slot && self.matches_search(&e.name))
             .collect();
         if items.is_empty() {
             ui.label(RichText::new("Nothing here yet.").color(p.muted));
@@ -492,11 +533,10 @@ impl ArcticApp {
         // What you'd wear after clicking `item`: the rest, plus it in its slot (or nothing).
         let after = |item_id: &str, worn: bool| -> Vec<String> {
             let slot_of = |id: &String| {
-                state
-                    .items
+                entries
                     .iter()
-                    .find(|(i, _)| &i.id == id)
-                    .map(|(i, _)| slot_key(&i.slot))
+                    .find(|e| &e.id == id)
+                    .map(|e| slot_key(&e.slot))
             };
             let mut next: Vec<String> = worn_ids
                 .iter()
@@ -511,18 +551,30 @@ impl ArcticApp {
         let mut pick: Option<Vec<String>> = None;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(GAP, GAP);
-            for (item, geometry) in items {
-                let worn = worn_ids.contains(&item.id);
-                let texture = self
-                    .skin_texture(&ctx, &format!("acos:{}", item.texture))
-                    .map(|t| t.handle.id());
-                let r = cosmetic_card(ui, p, geometry, texture, &item.name, worn, now);
+            for entry in items {
+                let worn = worn_ids.contains(&entry.id);
+                let still = match &entry.shape {
+                    Shape3d::Cuboid { geometry, texture } => {
+                        let t = self
+                            .skin_texture(&ctx, &format!("acos:{texture}"))
+                            .map(|t| t.handle.id());
+                        CardModel::Cuboid(geometry.clone(), t)
+                    }
+                    Shape3d::Mesh { mesh, hash } => {
+                        let textures = self.mesh_textures(&ctx, hash, mesh.images.len());
+                        let white = self
+                            .skin_texture(&ctx, super::WHITE)
+                            .map_or(egui::TextureId::default(), |t| t.handle.id());
+                        CardModel::Mesh(mesh.clone(), textures, white)
+                    }
+                };
+                let r = cosmetic_card(ui, p, &still, &entry.name, worn, now);
                 if r.hovered() {
-                    self.skins.hover = Some(Hover::Cosmetics(after(&item.id, worn)));
+                    self.skins.hover = Some(Hover::Cosmetics(after(&entry.id, worn)));
                     ctx.request_repaint();
                 }
                 if r.clicked() {
-                    pick = Some(after(&item.id, worn));
+                    pick = Some(after(&entry.id, worn));
                 }
             }
         });
@@ -589,9 +641,7 @@ fn section_label(ui: &mut egui::Ui, p: &Palette, text: &str) {
 /// The frame to show now; keeps repainting while a cape is animated.
 fn animate(ctx: &egui::Context, texture: &super::SkinTexture, now: f64) -> egui::TextureId {
     if texture.animated() {
-        ctx.request_repaint_after(std::time::Duration::from_secs_f64(
-            arctic_core::cosmetics::CAPE_FRAME_SECS,
-        ));
+        ctx.request_repaint_after(std::time::Duration::from_secs_f64(texture.frame_secs));
     }
     texture.id_at(now)
 }
@@ -635,13 +685,112 @@ fn cape_card(
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
-/// A cosmetic card: the model at a three-quarter angle (turning while
-/// pointed at), its name, and "Wearing" when worn.
+/// The "this cape can animate" mark in a card's corner: a play button that
+/// glows in the accent color while the wearer's Animate switch is on, and
+/// goes grey with a slash through it when it is off.
+fn animation_badge(ui: &egui::Ui, p: &Palette, card: Rect, on: bool) {
+    let painter = ui.painter();
+    let chip = Rect::from_min_size(card.right_top() + vec2(-38.0, 8.0), vec2(30.0, 26.0));
+    let round = CornerRadius::same(13);
+    painter.rect_filled(chip, round, Color32::from_black_alpha(if on { 185 } else { 140 }));
+    let ink = if on { p.accent } else { p.muted };
+    painter.rect_stroke(
+        chip,
+        round,
+        egui::Stroke::new(1.5, ink.gamma_multiply(if on { 0.9 } else { 0.55 })),
+        egui::StrokeKind::Inside,
+    );
+    let c = chip.center() + vec2(1.0, 0.0);
+    let (w, h) = (6.5, 7.5);
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            pos2(c.x - w * 0.6, c.y - h),
+            pos2(c.x - w * 0.6, c.y + h),
+            pos2(c.x + w, c.y),
+        ],
+        ink,
+        egui::Stroke::NONE,
+    ));
+    if !on {
+        painter.line_segment(
+            [
+                chip.left_bottom() + vec2(6.0, -5.0),
+                chip.right_top() + vec2(-6.0, 5.0),
+            ],
+            egui::Stroke::new(2.4, p.muted),
+        );
+    }
+}
+
+/// The 3D cosmetics, sculpted ones first, each once (a cuboid item that also
+/// has a sculpted version is listed as the sculpted one).
+#[derive(Debug, Clone)]
+pub(super) struct Entry3d {
+    pub id: String,
+    pub name: String,
+    pub slot: String,
+    pub shape: Shape3d,
+}
+
+#[derive(Debug, Clone)]
+pub(super) enum Shape3d {
+    /// The model and the hash of its texture.
+    Cuboid { geometry: Geometry, texture: String },
+    /// The mesh and the hash it is stored under (its textures are keyed by it).
+    Mesh { mesh: std::sync::Arc<Mesh>, hash: String },
+}
+
+pub(super) fn cosmetic_entries(state: &crate::skin_tasks::ArcticState) -> Vec<Entry3d> {
+    let mut out: Vec<Entry3d> = state
+        .meshes
+        .iter()
+        .map(|(item, mesh)| Entry3d {
+            id: item.id.clone(),
+            name: item.name.clone(),
+            slot: item.slot.clone(),
+            shape: Shape3d::Mesh {
+                mesh: mesh.clone(),
+                hash: item.mesh.clone(),
+            },
+        })
+        .collect();
+    for (item, geometry) in &state.items {
+        if !out.iter().any(|e| e.id == item.id) {
+            out.push(Entry3d {
+                id: item.id.clone(),
+                name: item.name.clone(),
+                slot: item.slot.clone(),
+                shape: Shape3d::Cuboid {
+                    geometry: geometry.clone(),
+                    texture: item.texture.clone(),
+                },
+            });
+        }
+    }
+    out
+}
+
+/// What the preview wears: cuboid cosmetics and sculpted ones.
+#[derive(Default)]
+pub(super) struct WornModels {
+    pub cuboids: Vec<(Geometry, egui::TextureId)>,
+    pub meshes: Vec<(std::sync::Arc<Mesh>, Vec<egui::TextureId>)>,
+    pub white: egui::TextureId,
+}
+
+/// What a cosmetic card draws.
+enum CardModel {
+    Cuboid(Geometry, Option<egui::TextureId>),
+    Mesh(std::sync::Arc<Mesh>, Vec<egui::TextureId>, egui::TextureId),
+}
+
+/// A cosmetic card: the model at a three-quarter angle (turning, and
+/// moving as its idle animation does, while pointed at), its name, and
+/// "Wearing" when worn.
 fn cosmetic_card(
     ui: &mut egui::Ui,
     p: &Palette,
-    geometry: &Geometry,
-    texture: Option<egui::TextureId>,
+    model_to_draw: &CardModel,
     name: &str,
     worn: bool,
     now: f64,
@@ -649,21 +798,40 @@ fn cosmetic_card(
     let (rect, response) = ui.allocate_exact_size(COSMETIC_CARD.into(), Sense::click());
     let hover = card_back(ui, p, rect, &response);
     let model_rect = Rect::from_min_max(rect.min + vec2(14.0, 12.0), rect.max - vec2(14.0, 48.0));
-    if let Some(texture) = texture {
-        let yaw = if response.hovered() {
-            CARD_YAW + (now * TURN_SPEED) as f32
-        } else {
-            CARD_YAW
-        };
-        model::paint_cosmetic(
+    let yaw = if response.hovered() {
+        CARD_YAW + (now * TURN_SPEED) as f32
+    } else {
+        CARD_YAW
+    };
+    match model_to_draw {
+        CardModel::Cuboid(geometry, Some(texture)) => model::paint_cosmetic(
             ui.painter(),
             model_rect,
-            model::Worn { geometry, texture },
+            model::Worn {
+                geometry,
+                texture: *texture,
+            },
             yaw,
-        );
-    } else {
-        ui.painter()
-            .circle_filled(model_rect.center(), 4.0, p.muted);
+        ),
+        CardModel::Mesh(mesh, textures, white) => {
+            let moving = response.hovered() && !arctic_core::cosmetics::reduce_cape_motion();
+            model::paint_mesh_cosmetic(
+                ui.painter(),
+                model_rect,
+                model::WornMesh {
+                    mesh,
+                    textures,
+                    white: *white,
+                    time: moving.then_some(now),
+                    swing: 0.0,
+                },
+                yaw,
+            );
+        }
+        CardModel::Cuboid(_, None) => {
+            ui.painter()
+                .circle_filled(model_rect.center(), 4.0, p.muted);
+        }
     }
     card_label(ui, p, rect, name, worn.then_some("Wearing"), hover);
     worn_frame(ui, p, rect, worn);

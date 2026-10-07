@@ -22,6 +22,8 @@ pub struct GalleryUi {
     request: u64,
     pub loading: bool,
     pub page: Option<Result<Vec<GalleryItem>, String>>,
+    /// How many skins match in all (more pages in as you scroll).
+    pub total: i64,
     /// Texture hash → PNG for the listed skins.
     pub pngs: HashMap<String, Vec<u8>>,
     typed_at: Option<f64>,
@@ -29,8 +31,8 @@ pub struct GalleryUi {
 }
 
 impl ArcticApp {
-    pub(super) fn gallery_panel(&mut self, ui: &mut egui::Ui) {
-        let p = self.palette();
+    /// The search box and sort, which stay put while the skins scroll.
+    pub(super) fn gallery_header(&mut self, ui: &mut egui::Ui) {
         if self.skins.gallery.page.is_none() && !self.skins.gallery.loading {
             self.run_gallery_search();
         }
@@ -72,6 +74,11 @@ impl ArcticApp {
             self.run_gallery_search();
         }
         ui.add_space(8.0);
+    }
+
+    /// The skins themselves (the part that scrolls).
+    pub(super) fn gallery_body(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
         let items = match &self.skins.gallery.page {
             None => return,
             Some(Err(e)) => {
@@ -112,11 +119,20 @@ impl ArcticApp {
                 tile.context_menu(|ui| self.gallery_menu(ui, item));
             }
         });
+        // More skins come in as the end scrolls into view.
+        if (items.len() as i64) < self.skins.gallery.total {
+            let (end, _) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), egui::Sense::hover());
+            if ui.is_rect_visible(end) {
+                ui.put(end, egui::Spinner::new());
+                self.load_more_gallery();
+            }
+        }
         ui.add_space(6.0);
         ui.label(
-            RichText::new(
-                "Click a skin to wear it (it's saved to your library). Right-click for more.",
-            )
+            RichText::new(format!(
+                "{} skins. Click one to wear it (it's saved to your library). Right-click for more.",
+                self.skins.gallery.total.max(items.len() as i64)
+            ))
             .small()
             .color(p.muted),
         );
@@ -134,7 +150,23 @@ impl ArcticApp {
         g.request += 1;
         g.loading = true;
         self.tasks
-            .gallery_search(g.request, g.sort, g.query.trim().to_owned());
+            .gallery_search(g.request, g.sort, g.query.trim().to_owned(), 0);
+    }
+
+    /// The next page of the same search.
+    fn load_more_gallery(&mut self) {
+        let g = &mut self.skins.gallery;
+        let Some(Ok(items)) = &g.page else {
+            return;
+        };
+        if g.loading {
+            return;
+        }
+        let offset = items.len();
+        g.request += 1;
+        g.loading = true;
+        self.tasks
+            .gallery_search(g.request, g.sort, g.query.trim().to_owned(), offset);
     }
 
     /// A gallery skin's right-click menu.
@@ -186,9 +218,20 @@ impl ArcticApp {
             Event::Gallery(request, result) if request == g.request => {
                 g.loading = false;
                 match result {
-                    Ok(GalleryResult { page, textures }) => {
+                    Ok(GalleryResult {
+                        offset,
+                        page,
+                        textures,
+                    }) => {
                         g.pngs.extend(textures);
-                        g.page = Some(Ok(page.items));
+                        g.total = page.total;
+                        match &mut g.page {
+                            // The next page of what is shown: it goes on the end.
+                            Some(Ok(items)) if offset > 0 && offset == items.len() => {
+                                items.extend(page.items);
+                            }
+                            _ => g.page = Some(Ok(page.items)),
+                        }
                     }
                     Err(e) => g.page = Some(Err(e)),
                 }

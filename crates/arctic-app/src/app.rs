@@ -880,6 +880,7 @@ impl ArcticApp {
 
 impl eframe::App for ArcticApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        arctic_core::cosmetics::set_reduce_cape_motion(self.settings.reduce_cape_motion);
         let ctx = ui.ctx().clone();
         while let Ok(event) = self.events.try_recv() {
             self.handle_event(event, &ctx);
