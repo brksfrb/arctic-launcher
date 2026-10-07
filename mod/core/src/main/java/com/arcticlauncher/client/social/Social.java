@@ -109,11 +109,13 @@ public final class Social {
 		this.looks = looks;
 	}
 
+	/**
+	 * Screenshots are watched from the start (copying them needs no sign-in). Friends wait for the
+	 * Arctic sign-in, which may finish only after the client has started (signing in through Mojang
+	 * runs in the background): until then each poll just finds no token.
+	 */
 	public void start() {
-		if (looks.token() == null) {
-			available = false;
-			return;
-		}
+		available = looks.token() != null;
 		worker.scheduleWithFixedDelay(this::poll, 2, MESSAGES_EVERY_S, TimeUnit.SECONDS);
 		worker.scheduleWithFixedDelay(this::watchScreenshots, 1000, SCREENSHOTS_EVERY_MS, TimeUnit.MILLISECONDS);
 	}
@@ -250,6 +252,10 @@ public final class Social {
 	// ---- Background ---------------------------------------------------------
 
 	private void poll() {
+		if (looks.token() == null) {
+			available = false;
+			return;
+		}
 		try {
 			pollMessages();
 			if (checks++ % FRIENDS_EVERY == 0) {
@@ -337,8 +343,15 @@ public final class Social {
 			final File shot = newest;
 			final com.arcticlauncher.client.feature.ScreenshotCopy copier = com.arcticlauncher.client.ArcticClient.screenshotCopy();
 			if (com.arcticlauncher.client.ArcticClient.config().copyScreenshots && copier != null) {
-				copier.copy(shot, ok -> {});
-				Notices.post("Screenshot copied", shot.getName(), "look:" + hash, thumb.getWidth(), thumb.getHeight());
+				// Said once the copy is done: "copied" only when it really is on the clipboard.
+				copier.copy(shot, ok -> {
+					if (ok) {
+						Notices.post("Screenshot copied", shot.getName(), "look:" + hash, thumb.getWidth(), thumb.getHeight());
+					} else {
+						Notices.post("Screenshot saved (couldn't copy it)", shot.getName(), "look:" + hash, thumb.getWidth(),
+								thumb.getHeight(), "Copy", () -> copier.copy(shot, again -> Notices.relabel("Copy", again ? "Copied" : "Failed")));
+					}
+				});
 			} else {
 				Notices.post("Screenshot saved", shot.getName(), "look:" + hash, thumb.getWidth(), thumb.getHeight(), "Copy",
 						copier == null ? null : () -> copier.copy(shot, ok -> Notices.relabel("Copy", ok ? "Copied" : "Failed")));
