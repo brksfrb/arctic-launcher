@@ -460,11 +460,7 @@ impl ArcticApp {
     /// These cosmetics' models, with textures (for the preview): the cuboid
     /// ones, the sculpted ones, and a white texel for the sculpted ones that
     /// are painted with vertex colors alone.
-    pub(super) fn cosmetic_models(
-        &mut self,
-        ctx: &egui::Context,
-        ids: &[String],
-    ) -> WornModels {
+    pub(super) fn cosmetic_models(&mut self, ctx: &egui::Context, ids: &[String]) -> WornModels {
         let Some(state) = self.arctic_state().cloned() else {
             return WornModels::default();
         };
@@ -492,7 +488,12 @@ impl ArcticApp {
     }
 
     /// The textures embedded in a mesh cosmetic (a gap where one isn't ready).
-    fn mesh_textures(&mut self, ctx: &egui::Context, hash: &str, count: usize) -> Vec<egui::TextureId> {
+    fn mesh_textures(
+        &mut self,
+        ctx: &egui::Context,
+        hash: &str,
+        count: usize,
+    ) -> Vec<egui::TextureId> {
         (0..count)
             .map(|i| {
                 self.skin_texture(ctx, &format!("amesh:{hash}:{i}"))
@@ -692,7 +693,11 @@ fn animation_badge(ui: &egui::Ui, p: &Palette, card: Rect, on: bool) {
     let painter = ui.painter();
     let chip = Rect::from_min_size(card.right_top() + vec2(-38.0, 8.0), vec2(30.0, 26.0));
     let round = CornerRadius::same(13);
-    painter.rect_filled(chip, round, Color32::from_black_alpha(if on { 185 } else { 140 }));
+    painter.rect_filled(
+        chip,
+        round,
+        Color32::from_black_alpha(if on { 185 } else { 140 }),
+    );
     let ink = if on { p.accent } else { p.muted };
     painter.rect_stroke(
         chip,
@@ -737,7 +742,10 @@ pub(super) enum Shape3d {
     /// The model and the hash of its texture.
     Cuboid { geometry: Geometry, texture: String },
     /// The mesh and the hash it is stored under (its textures are keyed by it).
-    Mesh { mesh: std::sync::Arc<Mesh>, hash: String },
+    Mesh {
+        mesh: std::sync::Arc<Mesh>,
+        hash: String,
+    },
 }
 
 pub(super) fn cosmetic_entries(state: &crate::skin_tasks::ArcticState) -> Vec<Entry3d> {

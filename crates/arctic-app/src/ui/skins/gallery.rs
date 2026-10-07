@@ -121,7 +121,8 @@ impl ArcticApp {
         });
         // More skins come in as the end scrolls into view.
         if (items.len() as i64) < self.skins.gallery.total {
-            let (end, _) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), egui::Sense::hover());
+            let (end, _) =
+                ui.allocate_exact_size(vec2(ui.available_width(), 34.0), egui::Sense::hover());
             if ui.is_rect_visible(end) {
                 ui.put(end, egui::Spinner::new());
                 self.load_more_gallery();

@@ -26,7 +26,10 @@ pub struct ArcticState {
     /// 3D cosmetics with their parsed models (items that failed are left out).
     pub items: Vec<(cosmetic_models::Item, cosmetic_models::Geometry)>,
     /// Sculpted cosmetics (mesh-only ones, and the meshes of cuboid items that also have one).
-    pub meshes: Vec<(cosmetic_models::MeshItem, std::sync::Arc<cosmetic_models::Mesh>)>,
+    pub meshes: Vec<(
+        cosmetic_models::MeshItem,
+        std::sync::Arc<cosmetic_models::Mesh>,
+    )>,
 }
 
 impl ArcticState {

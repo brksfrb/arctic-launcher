@@ -273,10 +273,10 @@ impl Geometry {
                     in_range(&c.origin)
                         && in_range(&c.size)
                         && c.size.iter().all(|s| *s >= 0.0)
-                        && c.face_rects()
-                            .iter()
-                            .flatten()
-                            .all(|r| r.iter().all(|x| x.is_finite() && x.abs() <= 2.0 * MAX_TEXTURE as f32))
+                        && c.face_rects().iter().flatten().all(|r| {
+                            r.iter()
+                                .all(|x| x.is_finite() && x.abs() <= 2.0 * MAX_TEXTURE as f32)
+                        })
                         && c.rotation.iter().all(|r| r.is_finite() && r.abs() <= 360.0)
                         && c.pivot.is_none_or(|p| in_range(&p))
                         && c.inflate.is_finite()
@@ -349,7 +349,10 @@ mod tests {
             "bones":[{"name":"a","parent":"b","pivot":[0,0,0],"cubes":[{"origin":[0,0,0],"size":[1,1,1],"uv":[0,0]}]},
                      {"name":"b","parent":"a","pivot":[0,0,0]}]}]}"#;
         assert!(Geometry::parse(loops.as_bytes()).is_err());
-        let junk_face = HALO.replace(r#""uv":[0,0]"#, r#""uv":{"middle":{"uv":[0,0],"uv_size":[1,1]}}"#);
+        let junk_face = HALO.replace(
+            r#""uv":[0,0]"#,
+            r#""uv":{"middle":{"uv":[0,0],"uv_size":[1,1]}}"#,
+        );
         assert!(Geometry::parse(junk_face.as_bytes()).is_err());
         let huge = HALO.replace("[8,1,1]", "[1e9,1,1]");
         assert!(Geometry::parse(huge.as_bytes()).is_err());

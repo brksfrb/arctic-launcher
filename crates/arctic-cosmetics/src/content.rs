@@ -527,7 +527,10 @@ mod tests {
             r#"{{"minecraft:geometry":[{{"description":{{"texture_width":64,"texture_height":32}},
             "bones":[{{"name":"back","pivot":[0,24,0],"cubes":[{cube}]}}]}}]}}"#
         );
-        JsonFile(text.clone().into_bytes(), serde_json::from_str(&text).unwrap())
+        JsonFile(
+            text.clone().into_bytes(),
+            serde_json::from_str(&text).unwrap(),
+        )
     }
 
     #[test]
@@ -536,11 +539,23 @@ mod tests {
             "uv":{"north":{"uv":[0,0],"uv_size":[32,32]},"south":{"uv":[32,0],"uv_size":[-32,32]}}}"#;
         assert_eq!(check_geometry(&geo_with_cube(ok)), Ok((64, 32)));
         let past_edge = ok.replace("[32,32]},\"south", "[80,32]},\"south");
-        assert!(check_geometry(&geo_with_cube(&past_edge)).unwrap_err().contains("outside"));
+        assert!(
+            check_geometry(&geo_with_cube(&past_edge))
+                .unwrap_err()
+                .contains("outside")
+        );
         let bad_face = ok.replace("north", "front");
-        assert!(check_geometry(&geo_with_cube(&bad_face)).unwrap_err().contains("unknown face"));
+        assert!(
+            check_geometry(&geo_with_cube(&bad_face))
+                .unwrap_err()
+                .contains("unknown face")
+        );
         let bad_box = r#"{"origin":[0,0,0],"size":[20,16,16],"uv":[0,0]}"#;
-        assert!(check_geometry(&geo_with_cube(bad_box)).unwrap_err().contains("box UV"));
+        assert!(
+            check_geometry(&geo_with_cube(bad_box))
+                .unwrap_err()
+                .contains("box UV")
+        );
     }
 
     /// Whatever the kit last wrote (tools/out, not committed) must load: run
@@ -589,10 +604,16 @@ mod tests {
         assert_eq!(c.meshes.len(), 1);
         assert_eq!(c.meshes[0].id, "wings");
         assert_eq!(c.cosmetics.len(), 1);
-        assert!(c.cosmetics[0].mesh.is_some(), "the halo's mesh is offered next to its cuboids");
+        assert!(
+            c.cosmetics[0].mesh.is_some(),
+            "the halo's mesh is offered next to its cuboids"
+        );
         assert!(c.file(&c.meshes[0].mesh).unwrap().starts_with(b"glTF"));
         // Both kinds can be worn, one per slot.
-        assert_eq!(c.check_worn(&["wings".into(), "halo".into()]).unwrap(), ["wings", "halo"]);
+        assert_eq!(
+            c.check_worn(&["wings".into(), "halo".into()]).unwrap(),
+            ["wings", "halo"]
+        );
         assert!(c.check_worn(&["wings".into(), "wings".into()]).is_err());
         // A broken mesh stops the server with the file's name in the message.
         write(d, "cosmetics/wings.glb", b"glTF-but-not-really");
@@ -603,13 +624,25 @@ mod tests {
     fn glow_texture_must_match_the_model() {
         let dir = tempfile::tempdir().unwrap();
         let d = dir.path();
-        write(d, "cosmetics.json", br#"[{"id":"halo","name":"Halo","slot":"head"}]"#);
+        write(
+            d,
+            "cosmetics.json",
+            br#"[{"id":"halo","name":"Halo","slot":"head"}]"#,
+        );
         write(d, "cosmetics/halo.geo.json", GEO.as_bytes());
         write(d, "cosmetics/halo.png", &crate::images::test_png(16, 16));
-        write(d, "cosmetics/halo.glow.png", &crate::images::test_png(16, 16));
+        write(
+            d,
+            "cosmetics/halo.glow.png",
+            &crate::images::test_png(16, 16),
+        );
         let c = Content::load(d).unwrap();
         assert!(c.cosmetics[0].glow.is_some());
-        write(d, "cosmetics/halo.glow.png", &crate::images::test_png(32, 32));
+        write(
+            d,
+            "cosmetics/halo.glow.png",
+            &crate::images::test_png(32, 32),
+        );
         assert!(Content::load(d).unwrap_err().contains("glow"));
     }
 

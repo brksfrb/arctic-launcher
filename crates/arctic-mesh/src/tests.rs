@@ -4,11 +4,11 @@ use serde_json::json;
 /// A GLB with `json` and `bin`.
 fn glb(json: &Value, bin: &[u8]) -> Vec<u8> {
     let mut j = serde_json::to_vec(json).unwrap();
-    while j.len() % 4 != 0 {
+    while !j.len().is_multiple_of(4) {
         j.push(b' ');
     }
     let mut b = bin.to_vec();
-    while b.len() % 4 != 0 {
+    while !b.len().is_multiple_of(4) {
         b.push(0);
     }
     let total = 12 + 8 + j.len() + if b.is_empty() { 0 } else { 8 + b.len() };
@@ -46,7 +46,20 @@ fn triangle_doc(animate: bool) -> (Value, Vec<u8>) {
     if animate {
         let at = bin.len();
         bin.extend(floats(&[0.0, 1.0, 2.0]));
-        bin.extend(floats(&[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.7071, 0.7071, 0.0, 0.0, 0.0, 1.0]));
+        bin.extend(floats(&[
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            std::f32::consts::FRAC_1_SQRT_2,
+            std::f32::consts::FRAC_1_SQRT_2,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+        ]));
         views.push(json!({"buffer":0,"byteOffset":at,"byteLength":12}));
         views.push(json!({"buffer":0,"byteOffset":at + 12,"byteLength":48}));
         accessors.push(json!({"bufferView":1,"componentType":5126,"count":3,"type":"SCALAR"}));
@@ -121,7 +134,9 @@ fn refuses_what_is_not_supported() {
     }
     let uri = rewrite(|d| d["buffers"][0]["uri"] = json!("http://example.com/x.bin"));
     assert!(parse(&uri).unwrap_err().contains("URI"));
-    let matrix = rewrite(|d| d["nodes"][0]["matrix"] = json!([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]));
+    let matrix = rewrite(|d| {
+        d["nodes"][0]["matrix"] = json!([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+    });
     assert!(parse(&matrix).unwrap_err().contains("matrix"));
     let attr = rewrite(|d| d["meshes"][0]["primitives"][0]["attributes"]["JOINTS_0"] = json!(0));
     assert!(parse(&attr).unwrap_err().contains("JOINTS_0"));
@@ -150,7 +165,11 @@ fn refuses_nonsense_geometry() {
             {"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"},
             {"bufferView":1,"componentType":5121,"count":3,"type":"SCALAR"}]
     });
-    assert!(parse(&glb(&doc, &bin)).unwrap_err().contains("past the vertices"));
+    assert!(
+        parse(&glb(&doc, &bin))
+            .unwrap_err()
+            .contains("past the vertices")
+    );
     // An accessor that runs past its data.
     let short = rewrite(|d| d["accessors"][0]["count"] = json!(30));
     assert!(parse(&short).unwrap_err().contains("past"));
