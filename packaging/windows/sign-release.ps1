@@ -11,7 +11,8 @@ param(
 	[Parameter(Mandatory = $true)][string]$Tag,
 	# The certificate's thumbprint ("Open Source Developer Leyla Barlak", Certum, until 2027-10-07).
 	[string]$Thumbprint = "1CB4E723F6E1CE921BE5C2E6CBB7B22A131B57D4",
-	[string]$Timestamp = "http://time.certum.pl"
+	[string]$Timestamp = "http://time.certum.pl",
+	[string]$SiteRevalidate = "https://arcticlauncher.com/api/revalidate"
 )
 $ErrorActionPreference = "Stop"
 
@@ -58,6 +59,19 @@ try {
 	gh release edit $Tag --notes-file $notesFile --draft=false
 	if ($LASTEXITCODE -ne 0) { throw "publishing the release failed" }
 	Write-Host "Signed and published $Tag"
+
+	# The website caches GitHub's release data for an hour; ask it to refresh now. The token is
+	# kept outside the repos; without it the site catches up on its own within the hour.
+	$tokenFile = Join-Path $env:USERPROFILE ".arctic-release\site-revalidate-token"
+	if (Test-Path $tokenFile) {
+		$token = (Get-Content $tokenFile -Raw).Trim()
+		try {
+			Invoke-RestMethod -Method Post -Uri $SiteRevalidate -Headers @{ Authorization = "Bearer $token" } | Out-Null
+			Write-Host "arcticlauncher.com refreshed"
+		} catch {
+			Write-Warning "arcticlauncher.com didn't refresh ($($_.Exception.Message)); it catches up within the hour"
+		}
+	}
 } finally {
 	Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 }
