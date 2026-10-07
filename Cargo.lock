@@ -358,6 +358,7 @@ name = "arctic-core"
 version = "0.3.0-beta.4"
 dependencies = [
  "aes-gcm",
+ "arctic-mesh",
  "arctic-ping",
  "base64 0.23.1",
  "dirs",
@@ -386,6 +387,14 @@ dependencies = [
  "windows-sys 0.61.2",
  "zeroize",
  "zip",
+]
+
+[[package]]
+name = "arctic-mesh"
+version = "0.3.0-beta.4"
+dependencies = [
+ "png",
+ "serde_json",
 ]
 
 [[package]]
