@@ -358,6 +358,7 @@ name = "arctic-core"
 version = "0.3.0-beta.4"
 dependencies = [
  "aes-gcm",
+ "arctic-mesh",
  "arctic-ping",
  "base64 0.23.1",
  "dirs",
@@ -392,6 +393,7 @@ dependencies = [
 name = "arctic-cosmetics"
 version = "0.3.0-beta.4"
 dependencies = [
+ "arctic-mesh",
  "arctic-ping",
  "axum",
  "base64 0.23.1",
@@ -411,6 +413,14 @@ dependencies = [
  "tower",
  "ureq",
  "uuid 1.26.1",
+]
+
+[[package]]
+name = "arctic-mesh"
+version = "0.3.0-beta.4"
+dependencies = [
+ "png",
+ "serde_json",
 ]
 
 [[package]]

@@ -35,6 +35,7 @@ fn now_ms() -> u64 {
 async fn catalog(State(state): State<Shared>) -> Response {
     Json(json!({
         "cosmetics": state.content.cosmetics,
+        "meshes": state.content.meshes,
         "emotes": state.content.emotes,
     }))
     .into_response()
@@ -46,7 +47,14 @@ async fn asset(State(state): State<Shared>, Path(hash): Path<String>) -> Respons
     match state.content.file(hash) {
         Some(bytes) => (
             [
-                (header::CONTENT_TYPE, "application/json"),
+                (
+                    header::CONTENT_TYPE,
+                    if bytes.starts_with(b"glTF") {
+                        "model/gltf-binary"
+                    } else {
+                        "application/json"
+                    },
+                ),
                 (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
             ],
             bytes.to_vec(),

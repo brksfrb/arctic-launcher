@@ -2,11 +2,20 @@
 
 use sha1::{Digest, Sha1};
 
-/// Largest upload accepted (a 512×256 HD cape is well under this).
-pub const MAX_PNG_BYTES: usize = 256 * 1024;
-/// Animated capes stack up to this many frames vertically (clients play
-/// them at 8 frames a second).
-pub const MAX_CAPE_FRAMES: u32 = 8;
+/// Largest skin upload accepted.
+pub const MAX_SKIN_BYTES: usize = 256 * 1024;
+/// Largest cape upload accepted (a 1024×512, 16-frame strip is about 1.3 MB).
+pub const MAX_CAPE_BYTES: usize = 2 * 1024 * 1024;
+/// The largest of the above (request bodies are sized from it).
+pub const MAX_PNG_BYTES: usize = MAX_CAPE_BYTES;
+/// Capes are 64 to 1024 pixels wide per frame.
+pub const MAX_CAPE_WIDTH: u32 = 1024;
+/// Animated capes stack up to this many frames vertically...
+pub const MAX_CAPE_FRAMES: u32 = 32;
+/// ...and the whole strip is at most this tall (32 frames at 512×256, or
+/// 24 at 1024×512). Playback speed is the cape's own (8 frames a second
+/// unless a preset says otherwise).
+pub const MAX_CAPE_STRIP_HEIGHT: u32 = 12288;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -18,7 +27,11 @@ pub enum Kind {
 /// decode, so every client can load what the server hands out. Returns its
 /// SHA-1 (hex) on success.
 pub fn check(png_bytes: &[u8], kind: Kind) -> Result<String, String> {
-    if png_bytes.len() > MAX_PNG_BYTES {
+    let limit = match kind {
+        Kind::Skin => MAX_SKIN_BYTES,
+        Kind::Cape => MAX_CAPE_BYTES,
+    };
+    if png_bytes.len() > limit {
         return Err("image is too large".into());
     }
     let decoder = png::Decoder::new(std::io::Cursor::new(png_bytes));
@@ -29,14 +42,15 @@ pub fn check(png_bytes: &[u8], kind: Kind) -> Result<String, String> {
     let ok = match kind {
         // Classic 64×64 skins and legacy 64×32 ones.
         Kind::Skin => w == 64 && (h == 64 || h == 32),
-        // Capes are 2:1 frames, from 64×32 up to 512×256 (HD capes),
+        // Capes are 2:1 frames, from 64×32 up to 1024×512 (HD capes),
         // stacked vertically when animated.
         Kind::Cape => {
             let frame = w / 2;
-            (64..=512).contains(&w)
+            (64..=MAX_CAPE_WIDTH).contains(&w)
                 && w.is_power_of_two()
                 && h.is_multiple_of(frame)
                 && (1..=MAX_CAPE_FRAMES).contains(&(h / frame))
+                && h <= MAX_CAPE_STRIP_HEIGHT
         }
     };
     if !ok {
@@ -45,7 +59,7 @@ pub fn check(png_bytes: &[u8], kind: Kind) -> Result<String, String> {
             match kind {
                 Kind::Skin => "skin (64×64)",
                 Kind::Cape => {
-                    "cape (64×32, or 128×64 up to 512×256; animated capes stack up to 8 frames)"
+                    "cape (64×32, or 128×64 up to 1024×512; animated capes stack up to 32 frames, 12288 pixels tall)"
                 }
             }
         ));
@@ -137,7 +151,13 @@ mod tests {
         // Animated: frames stacked vertically, at most 8.
         assert!(check(&test_png(64, 32 * 6), Kind::Cape).is_ok());
         assert!(check(&test_png(128, 64 * 8), Kind::Cape).is_ok());
-        assert!(check(&test_png(64, 32 * 9), Kind::Cape).is_err());
+        assert!(check(&test_png(64, 32 * 33), Kind::Cape).is_err());
+        // HD: 1024×512 per frame, 24 frames fill the 12288-pixel strip; 25 do not.
+        assert!(check(&test_png(1024, 512), Kind::Cape).is_ok());
+        assert!(check(&test_png(1024, 512 * 24), Kind::Cape).is_ok());
+        assert!(check(&test_png(1024, 512 * 25), Kind::Cape).is_err());
+        assert!(check(&test_png(512, 256 * 32), Kind::Cape).is_ok());
+        assert!(check(&test_png(2048, 1024), Kind::Cape).is_err());
         assert!(check(&test_png(64, 48), Kind::Cape).is_err());
         assert!(check(b"nope", Kind::Cape).is_err());
     }

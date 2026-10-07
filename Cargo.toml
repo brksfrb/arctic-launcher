@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/arctic-core", "crates/arctic-ping", "crates/arctic-voice", "crates/arctic-app", "crates/arctic-cli", "crates/arctic-share", "crates/arctic-cosmetics"]
+members = ["crates/arctic-core", "crates/arctic-ping", "crates/arctic-voice", "crates/arctic-app", "crates/arctic-cli", "crates/arctic-share", "crates/arctic-cosmetics", "crates/arctic-mesh"]
 
 [workspace.package]
 version = "0.3.0-beta.4"

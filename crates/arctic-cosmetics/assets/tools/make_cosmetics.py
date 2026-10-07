@@ -215,18 +215,6 @@ cosmetic("viking_helmet", "Viking Helmet", "head", [
     ]),
 ])
 
-cosmetic("santa_hat", "Santa Hat", "head", [
-    Bone("head", None, [
-        Box([-5, 31, -5], [10, 2, 10], "#f8fafc"),
-        Box([-4, 33, -4], [8, 3, 8], "#dc2626"),
-    ]),
-    Bone("hat_tip", "head", [
-        Box([-2, 36, -2], [5, 2, 5], "#dc2626"),
-        Box([0, 38, 0], [3, 2, 3], "#b91c1c"),
-        Box([2, 39, 2], [2, 2, 2], "#f8fafc"),
-    ], pivot=[0, 36, 0], rotation=[-12, 0, 0]),
-])
-
 cosmetic("headphones", "Headphones", "head", [
     Bone("head", None, [
         Box([-5, 32, -1], [10, 1, 2], "#27272a"),

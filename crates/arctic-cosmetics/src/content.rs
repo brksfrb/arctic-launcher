@@ -4,7 +4,9 @@
 //! assets/cosmetics.json            [{ "id", "name", "slot" }]
 //! assets/cosmetics/<id>.geo.json   Bedrock geometry (bones and cubes)
 //! assets/cosmetics/<id>.png        its texture
+//! assets/cosmetics/<id>.glow.png   optional: parts drawn fullbright (same size as the texture)
 //! assets/cosmetics/<id>.animation.json   optional idle animation
+//! assets/cosmetics/<id>.glb        optional sculpted mesh (see the arctic-mesh crate)
 //! assets/emotes.json               [{ "id", "name" }]
 //! assets/emotes/<id>.animation.json      Bedrock animation of the player's bones
 //! ```
@@ -21,14 +23,14 @@ use sha1::{Digest, Sha1};
 use crate::store::Store;
 
 /// Where a cosmetic sits; a player wears at most one per slot.
-pub const SLOTS: [&str; 5] = ["head", "face", "back", "body", "shoulders"];
+pub const SLOTS: [&str; 6] = ["head", "face", "back", "body", "shoulders", "arms"];
 /// Largest geometry or animation file accepted.
-pub const MAX_JSON_BYTES: usize = 256 * 1024;
+pub const MAX_JSON_BYTES: usize = 512 * 1024;
 /// Most bones and cubes in one cosmetic (clients enforce the same).
-pub const MAX_BONES: usize = 64;
-pub const MAX_CUBES: usize = 256;
+pub const MAX_BONES: usize = 128;
+pub const MAX_CUBES: usize = 512;
 /// Largest cosmetic texture side.
-pub const MAX_TEXTURE: u32 = 512;
+pub const MAX_TEXTURE: u32 = 1024;
 /// Longest emote, in seconds.
 pub const MAX_EMOTE_SECS: f64 = 15.0;
 
@@ -48,8 +50,28 @@ pub struct Cosmetic {
     /// Content hashes: `/v1/assets/<hash>` (JSON) and `/v1/textures/<hash>.png`.
     pub model: String,
     pub texture: String,
+    /// Optional second texture of the same size: its opaque pixels are drawn fullbright.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub glow: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub animation: Option<String>,
+    /// A sculpted mesh version (`/v1/assets/<hash>`, a .glb): clients that
+    /// can draw meshes use it; the rest draw this cosmetic's cuboid model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mesh: Option<String>,
+}
+
+/// A cosmetic that exists only as a mesh. It is listed apart from the
+/// cuboid cosmetics (`meshes` in the catalog), so clients that cannot draw
+/// meshes never see it and keep parsing the rest as before: it is simply not
+/// shown to them, and nothing else takes its place.
+#[derive(Debug, Clone, Serialize)]
+pub struct MeshCosmetic {
+    pub id: String,
+    pub name: String,
+    pub slot: String,
+    /// Content hash of the `.glb`: `/v1/assets/<hash>`.
+    pub mesh: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -66,6 +88,7 @@ pub struct Emote {
 #[derive(Debug, Default)]
 pub struct Content {
     pub cosmetics: Vec<Cosmetic>,
+    pub meshes: Vec<MeshCosmetic>,
     pub emotes: Vec<Emote>,
     /// JSON files by content hash.
     files: HashMap<String, Vec<u8>>,
@@ -87,11 +110,39 @@ impl Content {
                 ));
             }
             check_id(&entry.id)?;
+            // A sculpted version, if there is one (checked completely: what a client
+            // would otherwise allocate for is refused here).
+            let mesh = match std::fs::read(at("glb")) {
+                Ok(bytes) => {
+                    check_mesh(&bytes).map_err(|e| format!("cosmetic {} (mesh): {e}", entry.id))?;
+                    Some(content.add_file(bytes))
+                }
+                Err(_) => None,
+            };
+            if mesh.is_some() && !at("geo.json").exists() {
+                content.meshes.push(MeshCosmetic {
+                    id: entry.id,
+                    name: entry.name,
+                    slot: entry.slot,
+                    mesh: mesh.unwrap_or_default(),
+                });
+                continue;
+            }
             let geo = read_json(&at("geo.json"))?;
-            check_geometry(&geo).map_err(|e| format!("cosmetic {}: {e}", entry.id))?;
+            let size = check_geometry(&geo).map_err(|e| format!("cosmetic {}: {e}", entry.id))?;
             let png =
                 std::fs::read(at("png")).map_err(|e| format!("{}: {e}", at("png").display()))?;
-            let texture = check_texture(&png).map_err(|e| format!("cosmetic {}: {e}", entry.id))?;
+            let texture = check_texture(&png, Some(size))
+                .map_err(|e| format!("cosmetic {}: {e}", entry.id))?;
+            let glow = match std::fs::read(at("glow.png")) {
+                Ok(bytes) => {
+                    let hash = check_texture(&bytes, Some(size))
+                        .map_err(|e| format!("cosmetic {} (glow): {e}", entry.id))?;
+                    content.textures.push((hash.clone(), bytes));
+                    Some(hash)
+                }
+                Err(_) => None,
+            };
             let animation = match std::fs::read(at("animation.json")) {
                 Ok(bytes) => {
                     let json = parse_json(&bytes, &at("animation.json"))?;
@@ -108,7 +159,9 @@ impl Content {
                 slot: entry.slot,
                 model,
                 texture,
+                glow,
                 animation,
+                mesh,
             });
         }
         for entry in read_list(&dir.join("emotes.json"))? {
@@ -150,27 +203,27 @@ impl Content {
         self.files.get(hash).map(Vec::as_slice)
     }
 
-    pub fn cosmetic(&self, id: &str) -> Option<&Cosmetic> {
-        self.cosmetics.iter().find(|c| c.id == id)
-    }
-
     pub fn emote(&self, id: &str) -> Option<&Emote> {
         self.emotes.iter().find(|e| e.id == id)
     }
 
     /// A valid set to wear: known ids, one per slot.
     pub fn check_worn(&self, ids: &[String]) -> Result<Vec<String>, String> {
-        let mut slots = Vec::new();
+        let mut slots: Vec<&str> = Vec::new();
         let mut out = Vec::new();
         for id in ids {
-            let c = self
-                .cosmetic(id)
+            let (slot, id) = self
+                .cosmetics
+                .iter()
+                .map(|c| (c.slot.as_str(), c.id.as_str()))
+                .chain(self.meshes.iter().map(|m| (m.slot.as_str(), m.id.as_str())))
+                .find(|(_, i)| i == id)
                 .ok_or_else(|| format!("unknown cosmetic {id}"))?;
-            if slots.contains(&c.slot) {
-                return Err(format!("two cosmetics for the {} slot", c.slot));
+            if slots.contains(&slot) {
+                return Err(format!("two cosmetics for the {slot} slot"));
             }
-            slots.push(c.slot.clone());
-            out.push(c.id.clone());
+            slots.push(slot);
+            out.push(id.to_owned());
         }
         Ok(out)
     }
@@ -216,14 +269,28 @@ fn parse_json(bytes: &[u8], path: &Path) -> Result<serde_json::Value, String> {
     serde_json::from_slice(bytes).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-/// Bedrock geometry within the limits clients accept.
-fn check_geometry(file: &JsonFile) -> Result<(), String> {
+/// Bedrock geometry within the limits clients accept; returns the texture
+/// size it declares, which the PNG must match.
+fn check_geometry(file: &JsonFile) -> Result<(u32, u32), String> {
     let geometry = file
         .1
         .get("minecraft:geometry")
         .and_then(|g| g.as_array())
         .and_then(|g| g.first())
         .ok_or("no minecraft:geometry")?;
+    let side = |key: &str| -> Result<u32, String> {
+        let n = geometry
+            .pointer(&format!("/description/{key}"))
+            .and_then(serde_json::Value::as_u64)
+            .ok_or(format!("description.{key} is missing"))?;
+        u32::try_from(n)
+            .ok()
+            .filter(|s| (1..=MAX_TEXTURE).contains(s) && s.is_power_of_two())
+            .ok_or(format!(
+                "{key} is {n}; sides must be powers of two up to {MAX_TEXTURE}"
+            ))
+    };
+    let (tex_w, tex_h) = (side("texture_width")?, side("texture_height")?);
     let bones = geometry
         .get("bones")
         .and_then(|b| b.as_array())
@@ -231,22 +298,112 @@ fn check_geometry(file: &JsonFile) -> Result<(), String> {
     if bones.is_empty() || bones.len() > MAX_BONES {
         return Err(format!("needs 1 to {MAX_BONES} bones"));
     }
-    let cubes: usize = bones
-        .iter()
-        .map(|b| {
-            b.get("cubes")
-                .and_then(|c| c.as_array())
-                .map_or(0, Vec::len)
-        })
-        .sum();
+    let mut cubes = 0;
+    for bone in bones {
+        let name = bone.get("name").and_then(|n| n.as_str()).unwrap_or("?");
+        for cube in bone
+            .get("cubes")
+            .and_then(|c| c.as_array())
+            .map_or(&[][..], Vec::as_slice)
+        {
+            cubes += 1;
+            check_cube(cube, tex_w, tex_h).map_err(|e| format!("bone {name}: {e}"))?;
+        }
+    }
     if cubes == 0 || cubes > MAX_CUBES {
         return Err(format!("needs 1 to {MAX_CUBES} cubes"));
+    }
+    Ok((tex_w, tex_h))
+}
+
+/// One cube: its numbers are finite and every texture rectangle it uses
+/// lies inside the texture (a cube that reads past the edge shows garbage).
+fn check_cube(cube: &serde_json::Value, tex_w: u32, tex_h: u32) -> Result<(), String> {
+    let nums = |key: &str| -> Result<Option<Vec<f64>>, String> {
+        match cube.get(key) {
+            None => Ok(None),
+            Some(v) => {
+                let a = v
+                    .as_array()
+                    .filter(|a| a.len() == 3)
+                    .ok_or(format!("{key} must be [x, y, z]"))?;
+                a.iter()
+                    .map(|n| n.as_f64().filter(|n| n.abs() <= 256.0))
+                    .collect::<Option<Vec<_>>>()
+                    .map(Some)
+                    .ok_or(format!("{key} needs numbers within ±256"))
+            }
+        }
+    };
+    let size = nums("size")?.ok_or("a cube needs a size")?;
+    nums("origin")?.ok_or("a cube needs an origin")?;
+    nums("pivot")?;
+    nums("rotation")?;
+    let uv = cube.get("uv").ok_or("a cube needs uv")?;
+    let in_texture = |u: f64, v: f64, w: f64, h: f64, what: &str| -> Result<(), String> {
+        let (x0, x1) = (u.min(u + w), u.max(u + w));
+        let (y0, y1) = (v.min(v + h), v.max(v + h));
+        if x0 < 0.0 || y0 < 0.0 || x1 > f64::from(tex_w) || y1 > f64::from(tex_h) {
+            return Err(format!(
+                "{what} reaches outside the {tex_w}×{tex_h} texture (u {x0}..{x1}, v {y0}..{y1})"
+            ));
+        }
+        Ok(())
+    };
+    if let Some(box_uv) = uv.as_array() {
+        let (u, v) = match box_uv.as_slice() {
+            [u, v] => u.as_f64().zip(v.as_f64()),
+            _ => None,
+        }
+        .ok_or("uv must be [u, v]")?;
+        let (w, h, d) = (size[0], size[1], size[2]);
+        in_texture(u, v, 2.0 * (w + d), d + h, "box UV")?;
+    } else if let Some(faces) = uv.as_object() {
+        if faces.is_empty() {
+            return Err("uv has no faces".into());
+        }
+        for (name, face) in faces {
+            if !["north", "south", "east", "west", "up", "down"].contains(&name.as_str()) {
+                return Err(format!("unknown face {name:?}"));
+            }
+            let pair = |key: &str| -> Result<(f64, f64), String> {
+                match face.get(key).and_then(|a| a.as_array()).map(Vec::as_slice) {
+                    Some([a, b]) => a.as_f64().zip(b.as_f64()),
+                    _ => None,
+                }
+                .ok_or(format!("{name}: {key} must be [x, y]"))
+            };
+            let ((u, v), (w, h)) = (pair("uv")?, pair("uv_size")?);
+            in_texture(u, v, w, h, &format!("face {name}"))?;
+        }
+    } else {
+        return Err("uv must be [u, v] or a list of faces".into());
     }
     Ok(())
 }
 
-/// PNG with power-of-two sides up to `MAX_TEXTURE`; returns its hash.
-fn check_texture(png: &[u8]) -> Result<String, String> {
+/// A mesh cosmetic's `.glb`: the whole subset check, and every embedded
+/// texture decoded (so a damaged one is refused here, not on players' PCs).
+fn check_mesh(bytes: &[u8]) -> Result<(), String> {
+    let mesh = arctic_mesh::parse(bytes)?;
+    for (i, png_bytes) in mesh.images.iter().enumerate() {
+        let mut reader = png::Decoder::new(std::io::Cursor::new(png_bytes))
+            .read_info()
+            .map_err(|_| format!("texture {i} is not a PNG"))?;
+        let size = reader
+            .output_buffer_size()
+            .ok_or_else(|| format!("texture {i} is too large"))?;
+        let mut buf = vec![0; size];
+        reader
+            .next_frame(&mut buf)
+            .map_err(|_| format!("texture {i} is damaged"))?;
+    }
+    Ok(())
+}
+
+/// PNG with power-of-two sides up to `MAX_TEXTURE` (and, when given, the
+/// size the geometry declares); returns its hash.
+fn check_texture(png: &[u8], expect: Option<(u32, u32)>) -> Result<String, String> {
     let reader = png::Decoder::new(std::io::Cursor::new(png))
         .read_info()
         .map_err(|_| "texture isn't a PNG")?;
@@ -255,6 +412,13 @@ fn check_texture(png: &[u8]) -> Result<String, String> {
     if !side_ok(w) || !side_ok(h) {
         return Err(format!(
             "texture is {w}×{h}; sides must be powers of two up to {MAX_TEXTURE}"
+        ));
+    }
+    if let Some((ew, eh)) = expect
+        && (w, h) != (ew, eh)
+    {
+        return Err(format!(
+            "texture is {w}×{h} but the model declares {ew}×{eh}"
         ));
     }
     Ok(hex::encode(Sha1::digest(png)))
@@ -293,7 +457,7 @@ mod tests {
     }
 
     const GEO: &str = r#"{"format_version":"1.12.0","minecraft:geometry":[{"description":{"identifier":"geometry.halo","texture_width":16,"texture_height":16},
-        "bones":[{"name":"head","pivot":[0,24,0],"cubes":[{"origin":[-4,33,-4],"size":[8,1,8],"uv":[0,0]}]}]}]}"#;
+        "bones":[{"name":"head","pivot":[0,24,0],"cubes":[{"origin":[-4,33,-4],"size":[4,1,4],"uv":[0,0]}]}]}]}"#;
     const ANIM: &str = r#"{"format_version":"1.8.0","animations":{"animation.wave":{"loop":false,"animation_length":2.0,
         "bones":{"rightArm":{"rotation":{"0.0":[0,0,0],"1.0":[0,0,-150]}}}}}}"#;
 
@@ -349,13 +513,104 @@ mod tests {
         write(
             d,
             "cosmetics/halo.geo.json",
-            br#"{"minecraft:geometry":[{"bones":[]}]}"#,
+            br#"{"minecraft:geometry":[{"description":{"texture_width":16,"texture_height":16},"bones":[]}]}"#,
         );
         write(d, "cosmetics/halo.png", &crate::images::test_png(16, 16));
         assert!(Content::load(d).unwrap_err().contains("bones"));
         write(d, "cosmetics/halo.geo.json", GEO.as_bytes());
         write(d, "cosmetics/halo.png", &crate::images::test_png(20, 16));
         assert!(Content::load(d).unwrap_err().contains("powers of two"));
+    }
+
+    fn geo_with_cube(cube: &str) -> JsonFile {
+        let text = format!(
+            r#"{{"minecraft:geometry":[{{"description":{{"texture_width":64,"texture_height":32}},
+            "bones":[{{"name":"back","pivot":[0,24,0],"cubes":[{cube}]}}]}}]}}"#
+        );
+        JsonFile(text.clone().into_bytes(), serde_json::from_str(&text).unwrap())
+    }
+
+    #[test]
+    fn per_face_uv_and_cube_rotation_are_checked() {
+        let ok = r#"{"origin":[0,0,0],"size":[16,16,1],"pivot":[0,8,0],"rotation":[0,20,0],
+            "uv":{"north":{"uv":[0,0],"uv_size":[32,32]},"south":{"uv":[32,0],"uv_size":[-32,32]}}}"#;
+        assert_eq!(check_geometry(&geo_with_cube(ok)), Ok((64, 32)));
+        let past_edge = ok.replace("[32,32]},\"south", "[80,32]},\"south");
+        assert!(check_geometry(&geo_with_cube(&past_edge)).unwrap_err().contains("outside"));
+        let bad_face = ok.replace("north", "front");
+        assert!(check_geometry(&geo_with_cube(&bad_face)).unwrap_err().contains("unknown face"));
+        let bad_box = r#"{"origin":[0,0,0],"size":[20,16,16],"uv":[0,0]}"#;
+        assert!(check_geometry(&geo_with_cube(bad_box)).unwrap_err().contains("box UV"));
+    }
+
+    /// Whatever the kit last wrote (tools/out, not committed) must load: run
+    /// the example scripts, then this test, to check the kit and the server agree.
+    #[test]
+    fn the_kit_output_loads() {
+        let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/tools/out");
+        let Ok(dirs) = std::fs::read_dir(&out) else {
+            return;
+        };
+        for dir in dirs.flatten().filter(|d| d.path().is_dir()) {
+            let id = dir.file_name().to_string_lossy().into_owned();
+            let tmp = tempfile::tempdir().unwrap();
+            let target = tmp.path().join("cosmetics");
+            std::fs::create_dir_all(&target).unwrap();
+            for file in std::fs::read_dir(dir.path()).unwrap().flatten() {
+                if !file.file_name().to_string_lossy().ends_with(".preview.png") {
+                    std::fs::copy(file.path(), target.join(file.file_name())).unwrap();
+                }
+            }
+            write(
+                tmp.path(),
+                "cosmetics.json",
+                format!(r#"[{{"id":"{id}","name":"Kit","slot":"back"}}]"#).as_bytes(),
+            );
+            let c = Content::load(tmp.path()).unwrap_or_else(|e| panic!("{id}: {e}"));
+            assert_eq!(c.cosmetics.len(), 1, "{id}");
+        }
+    }
+
+    #[test]
+    fn mesh_cosmetics_are_listed_apart_and_can_fall_back_to_cuboids() {
+        let dir = tempfile::tempdir().unwrap();
+        let d = dir.path();
+        write(
+            d,
+            "cosmetics.json",
+            br#"[{"id":"wings","name":"Wings","slot":"back"},{"id":"halo","name":"Halo","slot":"head"}]"#,
+        );
+        // Wings exist only as a mesh; the halo has both a mesh and a cuboid version.
+        write(d, "cosmetics/wings.glb", &arctic_mesh::sample_glb());
+        write(d, "cosmetics/halo.glb", &arctic_mesh::sample_glb());
+        write(d, "cosmetics/halo.geo.json", GEO.as_bytes());
+        write(d, "cosmetics/halo.png", &crate::images::test_png(16, 16));
+        let c = Content::load(d).unwrap();
+        assert_eq!(c.meshes.len(), 1);
+        assert_eq!(c.meshes[0].id, "wings");
+        assert_eq!(c.cosmetics.len(), 1);
+        assert!(c.cosmetics[0].mesh.is_some(), "the halo's mesh is offered next to its cuboids");
+        assert!(c.file(&c.meshes[0].mesh).unwrap().starts_with(b"glTF"));
+        // Both kinds can be worn, one per slot.
+        assert_eq!(c.check_worn(&["wings".into(), "halo".into()]).unwrap(), ["wings", "halo"]);
+        assert!(c.check_worn(&["wings".into(), "wings".into()]).is_err());
+        // A broken mesh stops the server with the file's name in the message.
+        write(d, "cosmetics/wings.glb", b"glTF-but-not-really");
+        assert!(Content::load(d).unwrap_err().contains("wings (mesh)"));
+    }
+
+    #[test]
+    fn glow_texture_must_match_the_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let d = dir.path();
+        write(d, "cosmetics.json", br#"[{"id":"halo","name":"Halo","slot":"head"}]"#);
+        write(d, "cosmetics/halo.geo.json", GEO.as_bytes());
+        write(d, "cosmetics/halo.png", &crate::images::test_png(16, 16));
+        write(d, "cosmetics/halo.glow.png", &crate::images::test_png(16, 16));
+        let c = Content::load(d).unwrap();
+        assert!(c.cosmetics[0].glow.is_some());
+        write(d, "cosmetics/halo.glow.png", &crate::images::test_png(32, 32));
+        assert!(Content::load(d).unwrap_err().contains("glow"));
     }
 
     #[test]

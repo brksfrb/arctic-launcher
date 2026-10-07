@@ -35,3 +35,7 @@ AGENTS.md
 .DS_Store
 Thumbs.db
 __pycache__/
+
+# Cosmetic kit output (regenerate with the scripts in tools/)
+/crates/arctic-cosmetics/assets/tools/out/
+/crates/arctic-cosmetics/assets/tools/__pycache__/

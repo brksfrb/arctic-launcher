@@ -73,7 +73,7 @@ async fn admin_call(
     .unwrap();
     let resp = app.clone().oneshot(req).await.unwrap();
     let status = resp.status();
-    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+    let bytes = axum::body::to_bytes(resp.into_body(), 4 << 20)
         .await
         .unwrap();
     (
@@ -260,7 +260,7 @@ async fn call(
     .unwrap();
     let resp = app.clone().oneshot(req).await.unwrap();
     let status = resp.status();
-    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+    let bytes = axum::body::to_bytes(resp.into_body(), 4 << 20)
         .await
         .unwrap();
     (
@@ -894,7 +894,7 @@ async fn servers_submit_verify_and_review() {
             .unwrap();
             let resp = app.oneshot(req).await.unwrap();
             let status = resp.status();
-            let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+            let bytes = axum::body::to_bytes(resp.into_body(), 4 << 20)
                 .await
                 .unwrap();
             (
