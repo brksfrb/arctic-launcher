@@ -139,4 +139,6 @@ jobs:
           } > notes.md
           prerelease=""
           case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" dist/* --title "Arctic Launcher $GITHUB_REF_NAME" --notes-file notes.md --generate-notes $prerelease
+          # A draft: the Windows files are signed on the maintainer's PC (Certum's cloud certificate),
+          # which then publishes it: packaging/windows/sign-release.ps1.
+          gh release create "$GITHUB_REF_NAME" dist/* --title "Arctic Launcher $GITHUB_REF_NAME" --notes-file notes.md --generate-notes --draft $prerelease
