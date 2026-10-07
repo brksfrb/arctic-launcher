@@ -41,6 +41,12 @@ pub struct Settings {
     pub check_updates_on_start: bool,
     /// Animated backdrop (aurora, snow, shooting stars).
     pub animations: bool,
+    /// Animated capes stand still on their first frame in the launcher (a
+    /// viewer's choice; it doesn't change what anyone else sees).
+    pub reduce_cape_motion: bool,
+    /// Ids of animated capes whose wearer turned "Animate" off: the still
+    /// image is published instead. Capes not listed animate.
+    pub capes_still: Vec<String>,
     /// Short snowflake intro when the launcher opens.
     pub intro: bool,
     /// Open the launcher window maximized.
@@ -224,6 +230,8 @@ impl Default for Settings {
             update_channel: UpdateChannel::Stable,
             check_updates_on_start: true,
             animations: true,
+            reduce_cape_motion: false,
+            capes_still: Vec::new(),
             intro: true,
             start_maximized: false,
             theme: ThemeMode::Default,

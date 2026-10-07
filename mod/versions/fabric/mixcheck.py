@@ -125,6 +125,8 @@ def check(version):
         if not jar.members(cls):
             problems.append(f"{f}: target class missing {cls}")
             continue
+        # "a" + "b" (kept apart so the version renames leave the name alone) is one string.
+        src = re.sub(r'"\s*\+\s*"', "", src)
         consts = dict(re.findall(r'String (\w+) = "([^"]+)"', src))
         methods = re.findall(r'method\s*=\s*"([^"]+)"', src)
         for grp in re.findall(r"method\s*=\s*\{([^}]+)\}", src):

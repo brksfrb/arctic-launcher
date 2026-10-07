@@ -40,11 +40,15 @@ public final class Looks {
 	private static final long RETRY_MS = TimeUnit.MINUTES.toMillis(1);
 	private static final int BATCH = 100;
 	private static final Gson GSON = new Gson();
-	/** Animated capes: frame length and the most frames (as the launcher). */
-	private static final long CAPE_FRAME_MS = 125;
-	private static final int MAX_CAPE_FRAMES = 8;
+	/** Animated capes: playback speed and size limits (as the launcher and server). */
+	private static final int DEFAULT_CAPE_FPS = 8;
+	private static final int MAX_CAPE_FPS = 30;
+	private static final int MAX_CAPE_FRAMES = 32;
+	private static final int MAX_CAPE_STRIP_HEIGHT = 12288;
 	private static final int MIN_CAPE_WIDTH = 64;
-	private static final int MAX_CAPE_WIDTH = 512;
+	private static final int MAX_CAPE_WIDTH = 1024;
+	/** {@link #putLook} cape argument prefix: publish this texture hash (an animated cape's still). */
+	private static final String HASH_PREFIX = "\u0000hash:";
 	private static final int SKIN_SIZE = 64;
 	private static final int LEGACY_SKIN_HEIGHT = 32;
 	private static final int HASH_LENGTH = 40;
@@ -88,6 +92,8 @@ public final class Looks {
 	private volatile boolean busy;
 	private volatile String status = "";
 	private volatile List<Preset> presets = Collections.emptyList();
+	/** Playback speed (frames a second) of preset capes, by texture hash. */
+	private volatile java.util.Map<String, Integer> capeFps = Collections.emptyMap();
 
 	private volatile boolean shareServer;
 
@@ -422,25 +428,52 @@ public final class Looks {
 
 	/**
 	 * The texture to draw now for a ready hash: {@code hash}, or for an
-	 * animated cape {@code hash/frame}, cycling at 8 frames a second.
+	 * animated cape {@code hash/frame}, cycling at the cape's own speed
+	 * (8 frames a second unless its preset says otherwise). With "Freeze
+	 * animated capes" on, every animated cape stays on its first frame.
 	 */
 	public String frame(String hash) {
 		Integer frames = ready.get(hash);
 		if (frames == null || frames < 2) {
 			return hash;
 		}
-		long frame = (System.currentTimeMillis() / CAPE_FRAME_MS) % frames;
+		if (config.reduceCapeMotion) {
+			return hash + "/0";
+		}
+		Integer fps = capeFps.get(hash);
+		long frameMs = 1000L / (fps == null ? DEFAULT_CAPE_FPS : fps);
+		long frame = (System.currentTimeMillis() / frameMs) % frames;
 		return hash + "/" + frame;
 	}
 
 	/** Frames in a cape image: 1 plain, more when animated, 0 if invalid. */
 	public static int capeFrames(int width, int height) {
 		int frame = width / 2;
-		if (frame == 0 || height % frame != 0) {
+		if (frame == 0 || height % frame != 0 || height > MAX_CAPE_STRIP_HEIGHT) {
 			return 0;
 		}
 		int frames = height / frame;
 		return frames <= MAX_CAPE_FRAMES ? frames : 0;
+	}
+
+	/** The preset cape with this id, or null. */
+	public Preset preset(String id) {
+		for (Preset p : presets) {
+			if (p.id.equals(id)) {
+				return p;
+			}
+		}
+		return null;
+	}
+
+	/** The preset cape whose image (animated or still) is {@code hash}, or null. */
+	public Preset presetFor(String hash) {
+		for (Preset p : presets) {
+			if (p.has(hash)) {
+				return p;
+			}
+		}
+		return null;
 	}
 
 	private void loadTexture(final String hash) {
@@ -535,7 +568,7 @@ public final class Looks {
 
 	/**
 	 * Whether a PNG's header says skin size (64×64, 64×32) or cape size
-	 * (2:1 frames, 64 to 512 wide, up to 8 stacked), checked before any
+	 * (2:1 frames, 64 to 1024 wide, up to 32 stacked, at most 8192 tall), checked before any
 	 * pixels are decoded: a tiny file can claim to be gigapixels.
 	 */
 	static boolean fitsTexture(byte[] png, boolean cape) {
@@ -653,10 +686,16 @@ public final class Looks {
 		try {
 			Preset[] items = GSON.fromJson(Http.getText(baseUrl + "/v1/catalog", null), Preset[].class);
 			presets = cleanPresets(items);
+			java.util.Map<String, Integer> speeds = new java.util.HashMap<String, Integer>();
 			for (Preset p : presets) {
+				// Only marked as capes: HD animated ones are big, so each loads when it is first drawn.
 				capes.add(p.texture);
-				texture(p.texture);
+				speeds.put(p.texture, p.fps);
+				if (p.still != null) {
+					capes.add(p.still);
+				}
 			}
+			capeFps = Collections.unmodifiableMap(speeds);
 			platform.log(false, "Arctic capes: " + presets.size() + " from " + baseUrl);
 		} catch (Exception e) {
 			platform.log(true, "Arctic catalog: " + e);
@@ -690,6 +729,11 @@ public final class Looks {
 				continue;
 			}
 			p.name = cleanName(p.name);
+			if (p.still != null && !isHash(p.still)) {
+				p.still = null;
+			}
+			p.frames = Math.max(1, p.frames);
+			p.fps = p.fps < 1 || p.fps > MAX_CAPE_FPS ? DEFAULT_CAPE_FPS : p.fps;
 			out.add(p);
 		}
 		return Collections.unmodifiableList(out);
@@ -743,7 +787,13 @@ public final class Looks {
 
 	private void putCape(String presetId) {
 		try {
-			putLook(presetId, null);
+			String choice = presetId;
+			Preset p = presetId == null ? null : preset(presetId);
+			if (p != null && p.hasStill() && config.capeStill.contains(presetId)) {
+				// "Animate" is off for this cape: wear its still image instead.
+				choice = HASH_PREFIX + p.still;
+			}
+			putLook(choice, null);
 			setBusy(false, presetId == null ? "Cape removed." : "Every Arctic player sees your new cape.");
 		} catch (Exception e) {
 			setBusy(false, "Couldn't save: " + e.getMessage());
@@ -772,6 +822,10 @@ public final class Looks {
 				cape.addProperty("hash", mine.cape);
 				body.add("cape", cape);
 			}
+		} else if (capePreset != null && capePreset.startsWith(HASH_PREFIX)) {
+			JsonObject cape = new JsonObject();
+			cape.addProperty("hash", capePreset.substring(HASH_PREFIX.length()));
+			body.add("cape", cape);
 		} else if (capePreset != null) {
 			JsonObject cape = new JsonObject();
 			cape.addProperty("preset", capePreset);

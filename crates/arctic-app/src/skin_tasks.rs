@@ -25,6 +25,8 @@ pub struct ArcticState {
     pub textures: Vec<(String, Vec<u8>)>,
     /// 3D cosmetics with their parsed models (items that failed are left out).
     pub items: Vec<(cosmetic_models::Item, cosmetic_models::Geometry)>,
+    /// Sculpted cosmetics (mesh-only ones, and the meshes of cuboid items that also have one).
+    pub meshes: Vec<(cosmetic_models::MeshItem, std::sync::Arc<cosmetic_models::Mesh>)>,
 }
 
 impl ArcticState {
@@ -175,6 +177,7 @@ impl Tasks {
             look,
             textures,
             items: known.items,
+            meshes: known.meshes,
         })
     }
 
@@ -195,10 +198,27 @@ impl Tasks {
         // their hash): kept on disk, and fetched several at a time.
         let cache = self.dirs().cache().join("arctic-looks");
         // 3D cosmetics are optional: an older server just has none.
-        let catalog = cosmetic_models::catalog(&base)
-            .map(|c| c.cosmetics)
-            .unwrap_or_default();
-        let items: Vec<_> = in_parallel(catalog, |item| {
+        let catalog = cosmetic_models::catalog(&base).unwrap_or_default();
+        // Meshes: the mesh-only items, and the sculpted version of any cuboid item that has one.
+        let mut mesh_items = catalog.meshes.clone();
+        mesh_items.extend(catalog.cosmetics.iter().filter_map(|i| {
+            i.mesh.clone().map(|mesh| cosmetic_models::MeshItem {
+                id: i.id.clone(),
+                name: i.name.clone(),
+                slot: i.slot.clone(),
+                mesh,
+            })
+        }));
+        let meshes = in_parallel(mesh_items, |item| {
+            let bytes = cached(&cache, &item.mesh, || {
+                cosmetic_models::mesh_asset(&base, &item.mesh)
+            })?;
+            let mesh = cosmetic_models::mesh::parse(&bytes)
+                .inspect_err(|e| log::warn!("cosmetic {} (mesh): {e}", item.id))
+                .ok()?;
+            Some((item, std::sync::Arc::new(mesh)))
+        });
+        let items: Vec<_> = in_parallel(catalog.cosmetics, |item| {
             let bytes = cached(&cache, &item.model, || {
                 cosmetic_models::asset(&base, &item.model)
             })?;
@@ -208,6 +228,8 @@ impl Tasks {
             Some((item, geometry))
         });
         let mut wanted: Vec<String> = presets.iter().map(|p| p.texture.clone()).collect();
+        // Each animated cape's still image too (worn when its wearer turns Animate off).
+        wanted.extend(presets.iter().filter_map(|p| p.still.clone()));
         wanted.extend(items.iter().map(|(i, _)| i.texture.clone()));
         wanted.extend(look.skin.clone());
         wanted.extend(look.cape.clone());
@@ -222,6 +244,7 @@ impl Tasks {
             look,
             textures,
             items,
+            meshes,
         })
     }
 
@@ -245,7 +268,7 @@ impl Tasks {
     pub fn pick_cape_file(&self) {
         self.run(|t| {
             let result = pick_png(
-                "Choose a cape image (64×32, or up to 8 frames stacked for an animated cape)",
+                "Choose a cape image (64×32 up to 1024×512, or up to 32 frames stacked for an animated cape)",
                 "Cape",
             )
             .map(|f| f.map(|(_, b)| b));

@@ -4,40 +4,62 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 /**
  * A cosmetic's shape, from a Blockbench "Bedrock geometry" file: bones
- * (with pivots, rotations and parents) holding box-UV cubes. Everything is
+ * (with pivots, rotations and parents) holding cubes, each with box UV or
+ * one texture rectangle per face, and optionally its own rotation. Everything is
  * checked while parsing; a file outside the limits is refused whole.
  */
 public final class Geometry {
-	public static final int MAX_BONES = 64;
-	public static final int MAX_CUBES = 256;
+	public static final int MAX_BONES = 128;
+	public static final int MAX_CUBES = 512;
 	/** Coordinates and sizes stay within this many pixels of the origin. */
 	private static final float MAX_COORD = 256f;
 	private static final float MAX_ROTATION = 360f;
-	private static final int MAX_TEXTURE = 512;
+	private static final int MAX_TEXTURE = 1024;
 	/** Largest texture side for a cosmetic. */
 	public static final int MAX_TEXTURE_SIDE = MAX_TEXTURE;
 	private static final int MAX_NAME = 64;
 
+	/** Face order everywhere: north (-z, the front), south, east, west, up, down. */
+	public static final int NORTH = 0;
+	public static final int SOUTH = 1;
+	public static final int EAST = 2;
+	public static final int WEST = 3;
+	public static final int UP = 4;
+	public static final int DOWN = 5;
+	public static final int FACES = 6;
+	private static final String[] FACE_NAMES = {"north", "south", "east", "west", "up", "down"};
+
 	public static final class Cube {
 		public final float[] origin;
 		public final float[] size;
-		public final int u;
-		public final int v;
+		/**
+		 * Each face's texture rectangle {u, v, w, h} in texels (a negative w or
+		 * h flips it), or null for a face that isn't drawn.
+		 */
+		public final float[][] faces;
 		public final float inflate;
-		public final boolean mirror;
+		/** Degrees, turning the cube around {@link #pivot} like a bone's rotation. */
+		public final float[] rotation;
+		/** Rotation pivot in model space, or null for the cube's middle. */
+		public final float[] pivot;
 
-		Cube(float[] origin, float[] size, int u, int v, float inflate, boolean mirror) {
+		Cube(float[] origin, float[] size, float[][] faces, float inflate, float[] rotation, float[] pivot) {
 			this.origin = origin;
 			this.size = size;
-			this.u = u;
-			this.v = v;
+			this.faces = faces;
 			this.inflate = inflate;
-			this.mirror = mirror;
+			this.rotation = rotation;
+			this.pivot = pivot;
+		}
+
+		public boolean rotated() {
+			return rotation[0] != 0 || rotation[1] != 0 || rotation[2] != 0;
 		}
 	}
 
@@ -129,18 +151,71 @@ public final class Geometry {
 			}
 		}
 		JsonElement uvJson = c.get("uv");
-		if (uvJson == null || !uvJson.isJsonArray()) {
-			throw new IllegalArgumentException("cubes need box UV ([u, v]); per-face UV isn't supported");
+		if (uvJson == null) {
+			throw new IllegalArgumentException("cubes need uv");
 		}
-		JsonArray uv = uvJson.getAsJsonArray();
+		float inflate = c.has("inflate") ? number(c.get("inflate"), 16) : 0f;
+		boolean mirror = c.has("mirror") && c.get("mirror").isJsonPrimitive() && c.get("mirror").getAsBoolean();
+		float[][] faces = uvJson.isJsonArray() ? boxFaces(uvJson.getAsJsonArray(), size, mirror) : faceRects(object(uvJson));
+		float[] rotation = optionalVec(c.get("rotation"), MAX_ROTATION);
+		float[] pivot = c.has("pivot") ? vec(c.get("pivot"), MAX_COORD) : null;
+		return new Cube(origin, size, faces, inflate, rotation, pivot);
+	}
+
+	/** Box UV: the usual six rectangles around (u, v); mirrored cubes swap east and west and flip sideways. */
+	private static float[][] boxFaces(JsonArray uv, float[] size, boolean mirror) {
 		if (uv.size() != 2) {
 			throw new IllegalArgumentException("uv must be [u, v]");
 		}
-		int u = (int) number(uv.get(0), MAX_TEXTURE);
-		int v = (int) number(uv.get(1), MAX_TEXTURE);
-		float inflate = c.has("inflate") ? number(c.get("inflate"), 16) : 0f;
-		boolean mirror = c.has("mirror") && c.get("mirror").isJsonPrimitive() && c.get("mirror").getAsBoolean();
-		return new Cube(origin, size, u, v, inflate, mirror);
+		float u = number(uv.get(0), MAX_TEXTURE);
+		float v = number(uv.get(1), MAX_TEXTURE);
+		float w = size[0];
+		float h = size[1];
+		float d = size[2];
+		float[][] r = {
+			{u + d, v + d, w, h},
+			{u + 2 * d + w, v + d, w, h},
+			{u, v + d, d, h},
+			{u + d + w, v + d, d, h},
+			{u + d, v, w, d},
+			{u + d + w, v, w, d}};
+		if (mirror) {
+			float[] east = r[EAST];
+			r[EAST] = r[WEST];
+			r[WEST] = east;
+			for (float[] f : r) {
+				f[0] += f[2];
+				f[2] = -f[2];
+			}
+		}
+		return r;
+	}
+
+	/** Per-face UV: {"north": {"uv": [u, v], "uv_size": [w, h]}, ...}; faces left out aren't drawn. */
+	private static float[][] faceRects(JsonObject uv) {
+		for (java.util.Map.Entry<String, JsonElement> e : uv.entrySet()) {
+			if (!Arrays.asList(FACE_NAMES).contains(e.getKey())) {
+				throw new IllegalArgumentException("unknown face " + e.getKey());
+			}
+		}
+		if (uv.entrySet().isEmpty()) {
+			throw new IllegalArgumentException("uv has no faces");
+		}
+		float[][] r = new float[FACES][];
+		for (int i = 0; i < FACES; i++) {
+			if (!uv.has(FACE_NAMES[i])) {
+				continue;
+			}
+			JsonObject face = object(uv.get(FACE_NAMES[i]));
+			JsonArray at = array(face.get("uv"));
+			JsonArray size = array(face.get("uv_size"));
+			if (at.size() != 2 || size.size() != 2) {
+				throw new IllegalArgumentException("face " + FACE_NAMES[i] + " needs uv and uv_size as [x, y]");
+			}
+			r[i] = new float[] {number(at.get(0), MAX_TEXTURE), number(at.get(1), MAX_TEXTURE), number(size.get(0), MAX_TEXTURE),
+					number(size.get(1), MAX_TEXTURE)};
+		}
+		return r;
 	}
 
 	/** Parents must lead to a root (no loops). */

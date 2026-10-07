@@ -23,6 +23,7 @@
 		"HeldItemRendererMixin",
 		"WorldRendererMixin",
 		"LivingEntityRendererMixin",
+		"PlayerEntityRendererMixin",
 		"ScoreboardHudMixin",
 		"PlayerInventoryMixin",
 		"ScreenMouseMixin",

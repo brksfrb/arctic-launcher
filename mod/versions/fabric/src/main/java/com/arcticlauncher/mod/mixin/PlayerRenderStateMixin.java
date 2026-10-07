@@ -1,15 +1,15 @@
 package com.arcticlauncher.mod.mixin;
 
-//#if MC >= 1.21.9
+//#if MC >= 1.21.2 && MC < 1.21.9
 import com.arcticlauncher.mod.cosmetic.AvatarIdentity;
 import java.util.UUID;
-import net.minecraft.client.renderer.entity.state.AvatarRenderState;
+import net.minecraft.client.renderer.entity.state.PlayerRenderState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 
 /** See {@link AvatarIdentity}. */
-@Mixin(AvatarRenderState.class)
-abstract class AvatarRenderStateMixin implements AvatarIdentity {
+@Mixin(PlayerRenderState.class)
+abstract class PlayerRenderStateMixin implements AvatarIdentity {
 	@Unique
 	private UUID arctic$uuid;
 

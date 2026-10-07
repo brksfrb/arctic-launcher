@@ -1,6 +1,6 @@
 package com.arcticlauncher.mod.cosmetic;
 
-//#if MC >= 26.1
+//#if MC >= 1.21.2
 import java.util.UUID;
 
 /**

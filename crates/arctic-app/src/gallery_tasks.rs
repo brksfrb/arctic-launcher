@@ -10,24 +10,30 @@ use crate::tasks::{Event, Tasks};
 /// A gallery page with every skin's texture.
 #[derive(Debug, Clone, Default)]
 pub struct GalleryResult {
+    /// Where this page starts (0: a fresh search).
+    pub offset: usize,
     pub page: GalleryPage,
     /// (texture hash, PNG)
     pub textures: Vec<(String, Vec<u8>)>,
 }
 
 impl Tasks {
-    pub fn gallery_search(&self, request: u64, sort: GallerySort, query: String) {
+    pub fn gallery_search(&self, request: u64, sort: GallerySort, query: String, offset: usize) {
         self.run(move |t| {
             let base = cosmetics::base_url();
             let cache = t.dirs().cache().join("arctic-looks");
-            let result = cosmetics::gallery(&base, sort, &query, 0)
+            let result = cosmetics::gallery(&base, sort, &query, offset)
                 .map(|page| {
                     let hashes = page.items.iter().map(|i| i.texture.clone()).collect();
                     let textures = in_parallel(hashes, |hash: String| {
                         let png = cached(&cache, &hash, || cosmetics::texture(&base, &hash))?;
                         Some((hash, png))
                     });
-                    GalleryResult { page, textures }
+                    GalleryResult {
+                        offset,
+                        page,
+                        textures,
+                    }
                 })
                 .map_err(|e| friendly(&e.to_string()));
             t.send(Event::Gallery(request, result));

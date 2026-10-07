@@ -1,6 +1,5 @@
 package com.arcticlauncher.mod.mixin;
 
-//#if MC >= 26.1
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import org.spongepowered.asm.mixin.Mixin;
@@ -13,4 +12,3 @@ public interface LivingEntityRendererAccess {
 	@Invoker("addLayer")
 	boolean arctic$addLayer(RenderLayer layer);
 }
-//#endif

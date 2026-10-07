@@ -85,10 +85,17 @@ public interface Platform {
 	Object[] heldItem();
 
 	/**
-	 * Bake a cosmetic (its model and PNG texture) for drawing, on the render
-	 * thread; then call {@code Cosmetics.ready(id)}.
+	 * Bake a cosmetic (its model, PNG texture and, if it has one, the PNG of
+	 * the parts that glow) for drawing, on the render thread; then call
+	 * {@code Cosmetics.ready(id)}.
 	 */
-	default void registerCosmetic(String id, com.arcticlauncher.client.looks.Geometry geometry, byte[] png) {}
+	default void registerCosmetic(String id, com.arcticlauncher.client.looks.Geometry geometry, byte[] png, byte[] glow) {}
+
+	/**
+	 * Bake a sculpted cosmetic (its triangles and embedded textures) for
+	 * drawing, on the render thread; then call {@code Cosmetics.ready(id)}.
+	 */
+	default void registerMesh(String id, com.arcticlauncher.client.looks.MeshModel mesh) {}
 
 	/** The local player is moving (walking, jumping, sneaking): stops emotes. */
 	default boolean localMoving() {

@@ -243,27 +243,83 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
-	public void registerCosmetic(String id, com.arcticlauncher.client.looks.Geometry geometry, byte[] png) {
-		//#if MC >= 26.1
+	public void registerCosmetic(String id, com.arcticlauncher.client.looks.Geometry geometry, byte[] png, byte[] glowPng) {
 		NativeImage image;
+		NativeImage glowImage = null;
 		try {
 			image = NativeImage.read(new java.io.ByteArrayInputStream(png));
+			if (glowPng != null) {
+				glowImage = NativeImage.read(new java.io.ByteArrayInputStream(glowPng));
+			}
 		} catch (Exception e) {
 			ArcticMod.LOG.debug("cosmetic {}: {}", id, e.toString());
 			return;
 		}
 		com.arcticlauncher.client.looks.Cosmetics.Item item = ArcticClient.looks().cosmetics().item(id);
+		NativeImage glowFinal = glowImage;
 		mc().execute(() -> {
 			try {
 				net.minecraft.resources.Identifier texture = GfxImpl.look("cosmetic/" + id);
 				mc().getTextureManager().register(texture, Compat.texture("Arctic cosmetic " + id, image));
-				com.arcticlauncher.mod.cosmetic.CosmeticModels.bake(id, geometry, item == null ? null : item.idle, texture);
+				net.minecraft.resources.Identifier glow = null;
+				if (glowFinal != null) {
+					glow = GfxImpl.look("cosmetic/" + id + "_glow");
+					mc().getTextureManager().register(glow, Compat.texture("Arctic cosmetic glow " + id, glowFinal));
+				}
+				com.arcticlauncher.mod.cosmetic.CosmeticModels.bake(id, geometry, item == null ? null : item.idle, texture, glow);
 				ArcticClient.looks().cosmetics().ready(id);
 			} catch (Exception e) {
 				ArcticMod.LOG.warn("cosmetic {}: {}", id, e.toString());
 			}
 		});
-		//#endif
+	}
+
+	/** The texel the vertex-colored parts of meshes are drawn with. */
+	private static boolean whiteRegistered;
+
+	@Override
+	public void registerMesh(String id, com.arcticlauncher.client.looks.MeshModel mesh) {
+		List<NativeImage> images = new ArrayList<>();
+		try {
+			for (byte[] png : mesh.images) {
+				images.add(NativeImage.read(new java.io.ByteArrayInputStream(png)));
+			}
+		} catch (Exception e) {
+			for (NativeImage image : images) {
+				image.close();
+			}
+			ArcticMod.LOG.warn("cosmetic {} (mesh): {}", id, e.toString());
+			return;
+		}
+		mc().execute(() -> {
+			try {
+				net.minecraft.resources.Identifier[] textures = new net.minecraft.resources.Identifier[images.size()];
+				for (int i = 0; i < textures.length; i++) {
+					String key = "mesh/" + id + "_" + i;
+					if (!register(key, images.get(i))) {
+						return;
+					}
+					textures[i] = GfxImpl.look(key);
+				}
+				if (!whiteRegistered) {
+					NativeImage white = new NativeImage(2, 2, false);
+					for (int y = 0; y < 2; y++) {
+						for (int x = 0; x < 2; x++) {
+							//#if MC >= 1.21.2
+							white.setPixel(x, y, -1);
+							//#else
+							white.setPixelRGBA(x, y, -1);
+							//#endif
+						}
+					}
+					whiteRegistered = register("mesh/white", white);
+				}
+				com.arcticlauncher.mod.cosmetic.MeshModels.bake(id, mesh, textures, GfxImpl.look("mesh/white"));
+				ArcticClient.looks().cosmetics().ready(id);
+			} catch (Exception e) {
+				ArcticMod.LOG.warn("cosmetic {} (mesh): {}", id, e.toString());
+			}
+		});
 	}
 
 	@Override

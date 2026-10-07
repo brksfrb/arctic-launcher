@@ -46,10 +46,54 @@ pub struct Preset {
     /// Animation frames (1: a still cape; older servers don't say).
     #[serde(default = "one_frame")]
     pub frames: u32,
+    /// Frames per second when animated (older servers don't say: 8).
+    #[serde(default = "default_fps")]
+    pub fps: u32,
+    /// The still image (texture hash) shown when the wearer turns
+    /// "Animate" off; only animated capes have one.
+    #[serde(default)]
+    pub still: Option<String>,
 }
 
 fn one_frame() -> u32 {
     1
+}
+
+fn default_fps() -> u32 {
+    DEFAULT_CAPE_FPS
+}
+
+impl Preset {
+    /// A cape that moves (more than one frame).
+    pub fn animated(&self) -> bool {
+        self.frames > 1
+    }
+
+    /// Whether an animated cape can be switched to a still one.
+    pub fn has_still(&self) -> bool {
+        self.animated() && self.still.is_some()
+    }
+
+    /// How long each frame shows.
+    pub fn frame_secs(&self) -> f64 {
+        1.0 / f64::from(self.fps.clamp(1, MAX_CAPE_FPS))
+    }
+
+    /// Whether `hash` is this cape, animated or its still.
+    pub fn is_texture(&self, hash: &str) -> bool {
+        self.texture == hash || self.still.as_deref() == Some(hash)
+    }
+
+    /// What to publish to wear this cape: the animated cape, or (when the
+    /// wearer turned "Animate" off and the cape has a still) its still.
+    pub fn choice(&self, animate: bool) -> CapeChoice {
+        match (&self.still, animate) {
+            (Some(still), false) if self.animated() => {
+                CapeChoice::Custom(Texture::Hash(still.clone()))
+            }
+            _ => CapeChoice::Preset(self.id.clone()),
+        }
+    }
 }
 
 /// A published look; textures are hashes (`texture()` fetches them).
@@ -108,6 +152,7 @@ impl NewLook {
                 .as_deref()
                 .map(|hash| match presets.iter().find(|p| p.texture == hash) {
                     Some(p) => CapeChoice::Preset(p.id.clone()),
+                    // A still image stays the still it is (never silently animated again).
                     None => CapeChoice::Custom(Texture::Hash(hash.to_owned())),
                 });
         Self {
@@ -240,7 +285,10 @@ pub enum GallerySort {
     New,
 }
 
-/// Browse the gallery (`query` matches names and authors).
+/// Skins asked for per request (the server allows 48).
+pub const GALLERY_PAGE: usize = 48;
+
+/// Browse the gallery (`query` matches names and authors); `offset` pages on.
 pub fn gallery(base: &str, sort: GallerySort, query: &str, offset: usize) -> Result<GalleryPage> {
     let sort = match sort {
         GallerySort::Popular => "popular",
@@ -259,7 +307,7 @@ pub fn gallery(base: &str, sort: GallerySort, query: &str, offset: usize) -> Res
         })
         .collect();
     get(
-        &format!("{base}/v1/gallery?sort={sort}&q={q}&offset={offset}&limit=24"),
+        &format!("{base}/v1/gallery?sort={sort}&q={q}&offset={offset}&limit={GALLERY_PAGE}"),
         None,
     )
 }
@@ -615,11 +663,28 @@ fn post<T: serde::de::DeserializeOwned>(url: &str, body: &serde_json::Value) -> 
     Ok(resp.body_mut().with_config().limit(MAX_BYTES).read_json()?)
 }
 
-/// Animated capes stack up to this many 2:1 frames vertically.
-pub const MAX_CAPE_FRAMES: u32 = 8;
-/// How long each frame of an animated cape shows (8 frames a second,
-/// matching the Arctic Client).
-pub const CAPE_FRAME_SECS: f64 = 0.125;
+/// Animated capes stack up to this many 2:1 frames vertically...
+pub const MAX_CAPE_FRAMES: u32 = 32;
+/// ...in a strip at most this tall (as the server allows).
+pub const MAX_CAPE_STRIP_HEIGHT: u32 = 12288;
+/// Playback speed of capes that don't say (8 frames a second).
+pub const DEFAULT_CAPE_FPS: u32 = 8;
+/// Fastest playback a cape may ask for.
+pub const MAX_CAPE_FPS: u32 = 30;
+/// How long each frame of a cape shows at the default speed.
+pub const CAPE_FRAME_SECS: f64 = 1.0 / DEFAULT_CAPE_FPS as f64;
+
+static REDUCE_CAPE_MOTION: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The viewer's "reduce motion" choice: animated capes stand still on the
+/// first frame (everywhere in the launcher, for every cape shown).
+pub fn set_reduce_cape_motion(on: bool) {
+    REDUCE_CAPE_MOTION.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn reduce_cape_motion() -> bool {
+    REDUCE_CAPE_MOTION.load(std::sync::atomic::Ordering::Relaxed)
+}
 
 /// Width and height from a PNG's header, without decoding the pixels.
 pub fn png_size(png: &[u8]) -> Option<(u32, u32)> {
@@ -630,7 +695,7 @@ pub fn png_size(png: &[u8]) -> Option<(u32, u32)> {
 }
 
 /// Widest cape accepted (HD capes, as the server allows).
-pub const MAX_CAPE_WIDTH: u32 = 512;
+pub const MAX_CAPE_WIDTH: u32 = 1024;
 
 /// Whether a PNG is a cape the server would accept, judged from its header
 /// before anything is decoded.
@@ -647,7 +712,9 @@ pub fn cape_frames(width: u32, height: u32) -> Option<u32> {
     if frame == 0 || !height.is_multiple_of(frame) {
         return None;
     }
-    Some(height / frame).filter(|n| (1..=MAX_CAPE_FRAMES).contains(n))
+    Some(height / frame)
+        .filter(|n| (1..=MAX_CAPE_FRAMES).contains(n))
+        .filter(|_| height <= MAX_CAPE_STRIP_HEIGHT)
 }
 
 #[cfg(test)]
@@ -690,6 +757,8 @@ mod tests {
     fn cape_pngs_are_judged_by_their_header() {
         assert!(is_cape_png(&png(64, 32)));
         assert!(is_cape_png(&png(128, 64 * 4)));
+        assert!(is_cape_png(&png(1024, 512)));
+        assert!(!is_cape_png(&png(2048, 1024)));
         assert!(!is_cape_png(&png(96, 48)));
         assert!(!is_cape_png(b"not a png"));
         // A small file claiming a huge size is refused before decoding.
@@ -703,9 +772,59 @@ mod tests {
     fn counts_cape_frames() {
         assert_eq!(cape_frames(64, 32), Some(1));
         assert_eq!(cape_frames(128, 64 * 6), Some(6));
-        assert_eq!(cape_frames(64, 32 * 9), None);
+        assert_eq!(cape_frames(64, 32 * 9), Some(9));
+        assert_eq!(cape_frames(64, 32 * 33), None);
+        // The strip may be at most 12288 tall: 24 frames of 1024×512, not 25.
+        assert_eq!(cape_frames(1024, 512 * 24), Some(24));
+        assert_eq!(cape_frames(1024, 512 * 25), None);
+        assert_eq!(cape_frames(512, 256 * 32), Some(32));
         assert_eq!(cape_frames(64, 48), None);
         assert_eq!(cape_frames(0, 0), None);
+    }
+
+    fn preset(frames: u32, still: Option<&str>) -> Preset {
+        Preset {
+            id: "wolf".into(),
+            name: "Wolf".into(),
+            texture: "aa".into(),
+            frames,
+            fps: 12,
+            still: still.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn animate_off_wears_the_still_and_keeps_it_across_republishes() {
+        let wolf = preset(16, Some("bb"));
+        assert_eq!(wolf.choice(true), CapeChoice::Preset("wolf".into()));
+        assert_eq!(
+            wolf.choice(false),
+            CapeChoice::Custom(Texture::Hash("bb".into()))
+        );
+        assert!((wolf.frame_secs() - 1.0 / 12.0).abs() < 1e-9);
+        assert!(wolf.is_texture("aa") && wolf.is_texture("bb") && !wolf.is_texture("cc"));
+        // A cape that doesn't move has no still to switch to.
+        assert_eq!(
+            preset(1, None).choice(false),
+            CapeChoice::Preset("wolf".into())
+        );
+        // Re-publishing a look that wears the still keeps the still.
+        let look = Look {
+            cape: Some("bb".into()),
+            ..Look::default()
+        };
+        let again = NewLook::from_look(&look, &[wolf]);
+        assert_eq!(
+            again.cape,
+            Some(CapeChoice::Custom(Texture::Hash("bb".into())))
+        );
+    }
+
+    #[test]
+    fn older_servers_have_no_fps_or_still() {
+        let p: Preset = serde_json::from_str(r#"{"id":"a","name":"A","texture":"t","frames":6}"#).unwrap();
+        assert_eq!((p.fps, p.still.clone()), (8, None));
+        assert!(p.animated() && !p.has_still());
     }
 
     #[test]

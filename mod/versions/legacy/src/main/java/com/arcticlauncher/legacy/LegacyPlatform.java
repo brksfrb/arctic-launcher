@@ -990,6 +990,17 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public void registerCosmetic(String id, com.arcticlauncher.client.looks.Geometry geometry, byte[] png, byte[] glowPng) {
+		com.arcticlauncher.client.looks.Cosmetics.Item item = ArcticClient.looks().cosmetics().item(id);
+		LegacyCosmetics.register(id, geometry, item == null ? null : item.idle, png, glowPng);
+	}
+
+	@Override
+	public void registerMesh(String id, com.arcticlauncher.client.looks.MeshModel mesh) {
+		LegacyCosmetics.register(id, mesh);
+	}
+
+	@Override
 	public double fovDegrees() {
 		return net.minecraft.client.MinecraftClient.getInstance().options.fov;
 	}

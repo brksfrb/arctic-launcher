@@ -18,6 +18,10 @@ public final class ClientConfig {
 
 	/** Show Arctic looks (skins and capes) at all. */
 	public boolean showCosmetics = true;
+	/** Animated capes stay on their first frame on your screen (everyone's, not just yours). */
+	public boolean reduceCapeMotion;
+	/** Ids of animated preset capes you turned "Animate" off for (their still image is worn). */
+	public Set<String> capeStill = new HashSet<String>();
 	/** Players whose Arctic look you chose to hide (UUID strings). */
 	public Set<String> hiddenPlayers = new HashSet<String>();
 	/** Menu style id (see {@code Style}). */

@@ -35,21 +35,28 @@ public final class Cosmetics {
 		public final String slot;
 		final String model;
 		final String texture;
+		/** The glow texture's hash, or null. */
+		final String glow;
 		final String animation;
+		/** The sculpted version's hash (a .glb), or null. */
+		final String mesh;
 		/** Parsed files, once loaded (null until then or if broken). */
 		public volatile Geometry geometry;
+		public volatile MeshModel meshModel;
 		public volatile Animation idle;
 		/** The adapter has baked it; it can be drawn. */
 		public volatile boolean ready;
 		volatile boolean requested;
 
-		Item(String id, String name, String slot, String model, String texture, String animation) {
+		Item(String id, String name, String slot, String model, String texture, String glow, String animation, String mesh) {
 			this.id = id;
 			this.name = name;
 			this.slot = slot;
 			this.model = model;
 			this.texture = texture;
+			this.glow = glow;
 			this.animation = animation;
+			this.mesh = mesh;
 		}
 	}
 
@@ -303,10 +310,25 @@ public final class Cosmetics {
 			String slot = Looks.stringField(o, "slot");
 			String model = Looks.stringField(o, "model");
 			String texture = Looks.stringField(o, "texture");
+			String glow = Looks.stringField(o, "glow");
 			String animation = Looks.stringField(o, "animation");
-			if (isId(id) && isId(slot) && Looks.isHash(model) && Looks.isHash(texture)
-					&& (animation == null || Looks.isHash(animation))) {
-				found.add(new Item(id, Looks.cleanName(Looks.stringField(o, "name")), slot, model, texture, animation));
+			String mesh = Looks.stringField(o, "mesh");
+			if (isId(id) && isId(slot) && Looks.isHash(model) && Looks.isHash(texture) && (glow == null || Looks.isHash(glow))
+					&& (animation == null || Looks.isHash(animation)) && (mesh == null || Looks.isHash(mesh))) {
+				found.add(new Item(id, Looks.cleanName(Looks.stringField(o, "name")), slot, model, texture, glow, animation, mesh));
+			}
+		}
+		// Sculpted cosmetics that have no cuboid version.
+		for (JsonElement e : list(catalog, "meshes")) {
+			if (!e.isJsonObject() || found.size() >= MAX_ITEMS) {
+				continue;
+			}
+			JsonObject o = e.getAsJsonObject();
+			String id = Looks.stringField(o, "id");
+			String slot = Looks.stringField(o, "slot");
+			String mesh = Looks.stringField(o, "mesh");
+			if (isId(id) && isId(slot) && Looks.isHash(mesh)) {
+				found.add(new Item(id, Looks.cleanName(Looks.stringField(o, "name")), slot, null, null, null, null, mesh));
 			}
 		}
 		List<Emote> moves = new ArrayList<Emote>();
@@ -339,7 +361,9 @@ public final class Cosmetics {
 		for (Item f : fresh) {
 			Item kept = null;
 			for (Item old : items) {
-				if (old.id.equals(f.id) && old.model.equals(f.model) && old.texture.equals(f.texture)
+				if (old.id.equals(f.id) && java.util.Objects.equals(old.model, f.model) && java.util.Objects.equals(old.texture, f.texture)
+						&& java.util.Objects.equals(old.mesh, f.mesh)
+						&& (old.glow == null ? f.glow == null : old.glow.equals(f.glow))
 						&& (old.animation == null ? f.animation == null : old.animation.equals(f.animation))) {
 					kept = old;
 				}
@@ -364,20 +388,43 @@ public final class Cosmetics {
 	}
 
 	private void load(Item item) {
+		if (item.mesh != null) {
+			try {
+				item.meshModel = MeshModel.parse(Http.get(baseUrl + "/v1/assets/" + item.mesh, null));
+				platform.registerMesh(item.id, item.meshModel);
+				return;
+			} catch (Exception | StackOverflowError e) {
+				platform.log(false, "cosmetic " + item.id + " (mesh): " + e);
+				if (item.model == null) {
+					return;
+				}
+				// A cuboid version stands in for a mesh this client can't use.
+			}
+		}
+		if (item.model == null) {
+			return;
+		}
 		try {
 			item.geometry = Geometry.parse(json(item.model));
 			if (item.animation != null) {
 				item.idle = Animation.parse(json(item.animation));
 			}
-			byte[] png = Http.get(baseUrl + "/v1/textures/" + item.texture + ".png", null);
-			int[] size = Looks.pngSize(png);
-			if (size == null || size[0] > Geometry.MAX_TEXTURE_SIDE || size[1] > Geometry.MAX_TEXTURE_SIDE) {
-				throw new IllegalArgumentException("texture isn't a small PNG");
-			}
-			platform.registerCosmetic(item.id, item.geometry, png);
+			byte[] png = texture(item.texture);
+			byte[] glow = item.glow == null ? null : texture(item.glow);
+			platform.registerCosmetic(item.id, item.geometry, png, glow);
 		} catch (Exception | StackOverflowError e) {
 			platform.log(false, "cosmetic " + item.id + ": " + e);
 		}
+	}
+
+	/** A cosmetic texture by hash; it must be a PNG within the size limit. */
+	private byte[] texture(String hash) throws Exception {
+		byte[] png = Http.get(baseUrl + "/v1/textures/" + hash + ".png", null);
+		int[] size = Looks.pngSize(png);
+		if (size == null || size[0] > Geometry.MAX_TEXTURE_SIDE || size[1] > Geometry.MAX_TEXTURE_SIDE) {
+			throw new IllegalArgumentException("texture isn't a small PNG");
+		}
+		return png;
 	}
 
 	private JsonElement json(String hash) throws Exception {

@@ -70,20 +70,23 @@ pub struct SkinTexture {
     pub guessed: Variant,
     /// Animated capes: one texture per frame (`handle` is the first).
     frames: Vec<TextureHandle>,
+    /// How long each frame shows (the cape's own speed).
+    pub frame_secs: f64,
 }
 
 impl SkinTexture {
     /// The texture to draw at `time` (seconds): animated capes cycle.
     pub fn id_at(&self, time: f64) -> egui::TextureId {
-        if self.frames.is_empty() {
+        if self.frames.is_empty() || arctic_core::cosmetics::reduce_cape_motion() {
             return self.handle.id();
         }
-        let frame = (time / arctic_core::cosmetics::CAPE_FRAME_SECS) as usize % self.frames.len();
+        let frame = (time / self.frame_secs) as usize % self.frames.len();
         self.frames[frame].id()
     }
 
+    /// Moves on screen (animated, and the viewer hasn't asked to freeze capes).
     pub fn animated(&self) -> bool {
-        !self.frames.is_empty()
+        !self.frames.is_empty() && !arctic_core::cosmetics::reduce_cape_motion()
     }
 }
 
@@ -323,6 +326,24 @@ impl ArcticApp {
         self.change_look(|l| l.cape = cape, |t| t.cape = Some(key));
     }
 
+    /// Turn "Animate" on or off for one cape (remembered per cape); if it is
+    /// the cape being worn, publish the matching image at once.
+    fn set_cape_animate(&mut self, preset: &arctic_core::cosmetics::Preset, on: bool) {
+        let wearing = self.worn_animated_cape().is_some_and(|w| w.id == preset.id);
+        self.settings.capes_still.retain(|id| id != &preset.id);
+        if !on {
+            self.settings.capes_still.push(preset.id.clone());
+        }
+        self.persist_settings();
+        if wearing {
+            let shown = match (&preset.still, on) {
+                (Some(still), false) => still.clone(),
+                _ => preset.texture.clone(),
+            };
+            self.set_arctic_cape(Some(preset.choice(on)), Some(format!("acape:{shown}")));
+        }
+    }
+
     fn set_cosmetics(&mut self, ids: Vec<String>) {
         let shown = ids.clone();
         self.change_look(|l| l.cosmetics = Some(ids), |t| t.cosmetics = Some(shown));
@@ -344,21 +365,47 @@ impl ArcticApp {
         if key == MANNEQUIN && !self.skins.textures.contains_key(key) {
             self.skins.textures.insert(key.to_owned(), mannequin(ctx));
         }
+        if key == WHITE && !self.skins.textures.contains_key(key) {
+            self.skins.textures.insert(key.to_owned(), white(ctx));
+        }
         if !self.skins.textures.contains_key(key) {
             if self.skins.failed.contains(key) {
                 return None;
             }
             let png = self.skin_png(key)?;
-            let Some(texture) = upload(ctx, key, &png) else {
+            let Some(mut texture) = upload(ctx, key, &png) else {
                 self.skins.failed.insert(key.to_owned());
                 return None;
             };
+            if let Some(secs) = self.cape_frame_secs(key) {
+                texture.frame_secs = secs;
+            }
             self.skins.textures.insert(key.to_owned(), texture);
         }
         self.skins.textures.get(key)
     }
 
+    /// The playback speed a preset cape asks for (`acape:` keys; others play at the default).
+    fn cape_frame_secs(&self, key: &str) -> Option<f64> {
+        let hash = key.strip_prefix("acape:")?;
+        let presets = &self.arctic_state()?.presets;
+        presets
+            .iter()
+            .find(|p| p.is_texture(hash))
+            .map(arctic_core::cosmetics::Preset::frame_secs)
+    }
+
     fn skin_png(&self, key: &str) -> Option<Vec<u8>> {
+        // A texture embedded in a mesh cosmetic: `amesh:<mesh hash>:<image number>`.
+        if let Some(rest) = key.strip_prefix("amesh:") {
+            let (hash, number) = rest.split_once(':')?;
+            let (_, mesh) = self
+                .arctic_state()?
+                .meshes
+                .iter()
+                .find(|(item, _)| item.mesh == hash)?;
+            return mesh.images.get(number.parse::<usize>().ok()?).cloned();
+        }
         if let Some(id) = key.strip_prefix("lib:") {
             return Library::read_png(&self.skins_dir(), id).ok();
         }
@@ -550,6 +597,9 @@ fn upload(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture> {
     if key.starts_with("acos:") {
         return upload_plain(ctx, key, png);
     }
+    if key.starts_with("amesh:") {
+        return upload_mesh_texture(ctx, key, png);
+    }
     let image = skins::decode(png).ok()?;
     let color = ColorImage::from_rgba_unmultiplied([64, 64], &image.rgba);
     let handle = ctx.load_texture(key, color, TextureOptions::NEAREST);
@@ -558,6 +608,41 @@ fn upload(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture> {
         overlay: !image.legacy,
         guessed: image.guess_variant(),
         frames: Vec::new(),
+        frame_secs: arctic_core::cosmetics::CAPE_FRAME_SECS,
+    })
+}
+
+/// Texture key of a single white texel (for meshes painted with vertex colors alone).
+pub(crate) const WHITE: &str = "white";
+
+fn white(ctx: &egui::Context) -> SkinTexture {
+    let color = ColorImage::from_rgba_unmultiplied([2, 2], &[255; 16]);
+    SkinTexture {
+        handle: ctx.load_texture(WHITE, color, TextureOptions::NEAREST),
+        overlay: false,
+        guessed: Variant::Classic,
+        frames: Vec::new(),
+        frame_secs: arctic_core::cosmetics::CAPE_FRAME_SECS,
+    }
+}
+
+/// A texture embedded in a mesh cosmetic (any size up to 1024 on a side; the
+/// mesh file's own check already looked at the header).
+fn upload_mesh_texture(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture> {
+    let (w, h) = arctic_core::cosmetics::png_size(png)?;
+    let max = arctic_core::cosmetic_models::mesh::MAX_TEXTURE_SIDE;
+    if w == 0 || h == 0 || w > max || h > max {
+        return None;
+    }
+    let image = image::load_from_memory(png).ok()?.to_rgba8();
+    let size = [image.width() as usize, image.height() as usize];
+    let color = ColorImage::from_rgba_unmultiplied(size, image.as_raw());
+    Some(SkinTexture {
+        handle: ctx.load_texture(key, color, TextureOptions::NEAREST),
+        overlay: false,
+        guessed: Variant::Classic,
+        frames: Vec::new(),
+        frame_secs: arctic_core::cosmetics::CAPE_FRAME_SECS,
     })
 }
 
@@ -598,6 +683,7 @@ fn mannequin(ctx: &egui::Context) -> SkinTexture {
         overlay: false,
         guessed: Variant::Classic,
         frames: Vec::new(),
+        frame_secs: arctic_core::cosmetics::CAPE_FRAME_SECS,
     }
 }
 
@@ -620,6 +706,7 @@ fn upload_plain(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTextur
         overlay: false,
         guessed: Variant::Classic,
         frames: Vec::new(),
+        frame_secs: arctic_core::cosmetics::CAPE_FRAME_SECS,
     })
 }
 
@@ -647,6 +734,7 @@ fn upload_cape(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture
         overlay: false,
         guessed: Variant::Classic,
         frames: if count > 1 { frames } else { Vec::new() },
+        frame_secs: arctic_core::cosmetics::CAPE_FRAME_SECS,
     })
 }
 
