@@ -21,5 +21,18 @@ abstract class ItemEntityRenderStateMixin implements ItemPhysicsState {
 	public void arctic$setPlace(int place) {
 		arctic$place = place;
 	}
+
+	@Unique
+	private float arctic$tilt;
+
+	@Override
+	public float arctic$tilt() {
+		return arctic$tilt;
+	}
+
+	@Override
+	public void arctic$setTilt(float tilt) {
+		arctic$tilt = tilt;
+	}
 }
 //#endif

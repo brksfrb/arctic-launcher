@@ -46,8 +46,18 @@ public final class HudSlot {
 	public int labelMode = LABEL_BEFORE;
 	/** Rounded box corners (0 = square). */
 	public int radius;
+	/** The HUD style has been applied to it (or it was checked and kept as the player left it). */
+	public boolean styled;
 
 	public HudSlot() {}
+
+	/** Still the look a widget starts with: never styled or changed by the player. */
+	public boolean looksPlain() {
+		HudSlot plain = new HudSlot();
+		return textColor == plain.textColor && labelColor == plain.labelColor && backgroundColor == plain.backgroundColor
+				&& border == plain.border && shadow == plain.shadow && chroma == plain.chroma && brackets == plain.brackets
+				&& radius == plain.radius && background == plain.background;
+	}
 
 	public HudSlot(boolean enabled) {
 		this.enabled = enabled;
@@ -72,6 +82,7 @@ public final class HudSlot {
 		c.brackets = brackets;
 		c.labelMode = labelMode;
 		c.radius = radius;
+		c.styled = styled;
 		return c;
 	}
 

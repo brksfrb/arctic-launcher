@@ -135,6 +135,17 @@ public final class Hud {
 			slot = new HudSlot(w.onByDefault);
 			config.hud.put(w.id, slot);
 		}
+		if (!slot.styled) {
+			// A widget seen for the first time (new in this version, or never shown) looks like the rest:
+			// the HUD style last picked, not plain boxes. One the player restyled by hand is left alone.
+			com.arcticlauncher.client.style.Style style = com.arcticlauncher.client.ArcticClient.style();
+			if (style != null) {
+				if (config.hudStyle != null && slot.looksPlain()) {
+					HudStyles.apply(config.hudStyle, slot, style);
+				}
+				slot.styled = true;
+			}
+		}
 		slots.put(w, slot);
 		return slot;
 	}

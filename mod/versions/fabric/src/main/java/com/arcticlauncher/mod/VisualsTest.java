@@ -33,7 +33,59 @@ final class VisualsTest {
 
 	static void start() {
 		ArcticMod.LOG.info("visualstest: scheduled");
-		TIMER.schedule(() -> run(() -> WorldTest.createTestWorld(VisualsTest::steps)), 10, TimeUnit.SECONDS);
+		boolean ghosts = Boolean.getBoolean("arctic.selftest.ghosts");
+		TIMER.schedule(() -> run(() -> WorldTest.createTestWorld(ghosts ? VisualsTest::ghosts : VisualsTest::steps)), 10, TimeUnit.SECONDS);
+	}
+
+	/** Dropped items left behind when their chunks unload and load again ({@code -Darctic.selftest.ghosts=true}). */
+	private static void ghosts() {
+		ClientConfig c = ArcticClient.config();
+		c.itemPhysics = Boolean.parseBoolean(System.getProperty("arctic.selftest.itemphysics", "true"));
+		Runnable[] steps = {
+				() -> {
+					command("tp @s 0 200 0 0 50");
+					command("fill -4 199 -3 4 199 7 minecraft:stone");
+					command("fill -4 200 -3 4 204 7 minecraft:air");
+					for (int i = 0; i < 6; i++) {
+						command("summon item " + (i - 3) + " 201 3 {Item:{id:\"minecraft:diamond\",count:1},PickupDelay:32767}");
+					}
+				},
+				() -> countItems("dropped"),
+				() -> command("tp @s 6000 200 6000"),
+				null, null,
+				() -> countItems("far away"),
+				() -> command("tp @s 0 200 0 0 50"),
+				null,
+				() -> {
+					countItems("back");
+					WorldTest.shot("ghosts-back");
+				},
+				() -> command("kill @e[type=item]"),
+				() -> {
+					countItems("after kill");
+					WorldTest.shot("ghosts-after-kill");
+				},
+				() -> {
+					ArcticMod.LOG.info("visualstest: done");
+					Minecraft.getInstance().stop();
+				},
+		};
+		for (int i = 0; i < steps.length; i++) {
+			Runnable step = steps[i];
+			if (step != null) {
+				TIMER.schedule(() -> run(step), (long) i * STEP_SECONDS, TimeUnit.SECONDS);
+			}
+		}
+	}
+
+	private static void countItems(String when) {
+		int items = 0;
+		for (net.minecraft.world.entity.Entity e : Minecraft.getInstance().level.entitiesForRendering()) {
+			if (e instanceof net.minecraft.world.entity.item.ItemEntity) {
+				items++;
+			}
+		}
+		ArcticMod.LOG.info("visualstest: {} item entities {} (item physics {})", items, when, ArcticClient.config().itemPhysics);
 	}
 
 	/** On the game thread; the test window may lose focus, so a pause menu that brings is closed first. */
