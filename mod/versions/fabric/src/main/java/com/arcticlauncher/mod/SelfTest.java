@@ -142,7 +142,6 @@ final class SelfTest {
 				() -> open("hud.keystrokes", "menu-hud-keystrokes"),
 				() -> open("crosshair", "menu-crosshair"),
 				() -> open("packs", "menu-packs"),
-				() -> open("looks", "menu-looks"),
 				() -> open("style", "menu-style"),
 				() -> {
 					// Account tab: Tab focuses the address box, then type into it.

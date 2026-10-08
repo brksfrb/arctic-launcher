@@ -15,7 +15,7 @@ import net.minecraft.client.util.ScreenshotUtils;
  */
 final class LegacySelfTest {
 	private static final int STEP_SECONDS = 4;
-	private static final String[] TABS = {"mods", "hud.fps", "hud.keystrokes", "crosshair", "packs", "looks", "style"};
+	private static final String[] TABS = {"mods", "hud.fps", "hud.keystrokes", "crosshair", "packs", "style"};
 	private static final ScheduledExecutorService TIMER = Executors.newSingleThreadScheduledExecutor(r -> {
 		Thread t = new Thread(r, "arctic-selftest");
 		t.setDaemon(true);
