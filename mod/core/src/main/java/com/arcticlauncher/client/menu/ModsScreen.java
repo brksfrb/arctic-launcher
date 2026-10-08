@@ -29,7 +29,7 @@ final class ModsScreen extends Page {
 	private static final int LOGO = 18;
 	private static final int MAX_QUERY = 32;
 
-	/** Kept while the game runs. */
+	/** The tab is kept while the game runs; the search starts empty each time the menu opens. */
 	private static Mod.Category category = Mod.Category.ALL;
 	private static String query = "";
 	private static int scrollOffset;
@@ -46,6 +46,10 @@ final class ModsScreen extends Page {
 	private int shown;
 
 	ModsScreen() {
+		// A search left over from earlier would quietly hide mods (opening a mod's settings and
+		// coming back is the same screen, so its search stays).
+		query = "";
+		scrollOffset = 0;
 		search.text(query);
 		search.onChange(() -> {
 			query = search.text();
