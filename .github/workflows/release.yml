@@ -129,6 +129,11 @@ jobs:
           # downloads and a table at the top of the notes.
           (cd dist && sha256sum -- * > SHA256SUMS.txt)
           {
+            # What's new, written by hand (docs/release-notes/<tag>.md), above the checksums.
+            if [ -f "docs/release-notes/$GITHUB_REF_NAME.md" ]; then
+              cat "docs/release-notes/$GITHUB_REF_NAME.md"
+              echo
+            fi
             echo "### SHA-256"
             echo
             echo "| File | SHA-256 |"
