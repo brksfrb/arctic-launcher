@@ -19,6 +19,8 @@ pub struct StartupOptions {
     pub no_intro: bool,
     /// Profile to open (name or id).
     pub profile: Option<String>,
+    /// Start hidden in the tray (the updater restarting a launcher that was hidden).
+    pub hidden: bool,
 }
 
 impl StartupOptions {
@@ -32,6 +34,9 @@ impl StartupOptions {
                 "--tab" => opts.tab = args.next().as_deref().and_then(parse_tab),
                 "--no-intro" => opts.no_intro = true,
                 "--profile" => opts.profile = args.next(),
+                "--hidden" => opts.hidden = true,
+                // Read by single_instance (taking over from the updated launcher).
+                crate::single_instance::REPLACE_FLAG => {}
                 other => log::warn!("ignoring unknown argument {other}"),
             }
         }

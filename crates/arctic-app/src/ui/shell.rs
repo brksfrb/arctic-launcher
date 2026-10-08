@@ -118,6 +118,7 @@ impl ArcticApp {
                 ToastAction::OpenFriends => self.set_tab(Tab::Together, now),
                 ToastAction::LinkAccount { into, other } => self.link_accounts(&into, &other),
                 ToastAction::SendCrash(id) => self.send_crash_report(id),
+                ToastAction::WhatsNew(url) => ctx.open_url(egui::OpenUrl::new_tab(url)),
             }
         }
     }
@@ -172,7 +173,10 @@ impl ArcticApp {
                 ui.add(egui::ProgressBar::new(fraction).desired_width(220.0));
             }
             UpdateState::Installed { .. } => {
-                ui.label(RichText::new("Update installed.").color(p.accent));
+                ui.label(
+                    RichText::new("Update installed: it's used next time you open the launcher.")
+                        .color(p.accent),
+                );
                 if widgets::button(ui, p, None, "Restart now", true).clicked() {
                     self.restart_after_update(ui.ctx());
                 }
