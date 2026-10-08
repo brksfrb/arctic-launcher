@@ -49,5 +49,5 @@ ksni = { version = "0.3", default-features = false, features = ["async-io", "blo
 [target."cfg(windows)".dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_WindowsAndMessaging"] }
 tray-icon = { version = "0.25.1", default-features = false }
-# Windows' own H.264 encoder, for replay videos without FFmpeg.
-windows = { version = "0.62.2", features = ["Win32_Media_MediaFoundation", "Win32_System_Com"] }
+# Windows' own H.264 encoder, for replay videos without FFmpeg; the Start menu shortcut (Shell).
+windows = { version = "0.62.2", features = ["Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_UI_Shell"] }

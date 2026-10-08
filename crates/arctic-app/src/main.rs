@@ -21,6 +21,8 @@ mod share_tasks;
 mod shot_tasks;
 mod single_instance;
 mod skin_tasks;
+#[cfg(windows)]
+mod start_menu;
 mod startup;
 mod tasks;
 mod theme;
@@ -73,6 +75,9 @@ fn main() -> eframe::Result {
     if let Err(e) = dirs.ensure() {
         log::error!("could not create data folders: {e}");
     }
+    // So Windows search finds the launcher (no installer puts it in the Start menu).
+    #[cfg(windows)]
+    start_menu::ensure(dirs.root());
     let mut profiles = match ProfileStore::load_or_init(&dirs) {
         Ok(p) => p,
         Err(e) => {
