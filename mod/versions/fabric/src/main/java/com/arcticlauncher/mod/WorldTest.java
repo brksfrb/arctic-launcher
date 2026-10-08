@@ -289,21 +289,9 @@ final class WorldTest {
 							TimeUnit.SECONDS);
 				},
 				() -> {
-					com.arcticlauncher.client.menu.Menus.selectLooks(2);
-					ArcticClient.platform().openPage(com.arcticlauncher.client.menu.Menus.selected());
-					TIMER.schedule(() -> run(() -> shot("menu-cosmetics")), 2, TimeUnit.SECONDS);
-					TIMER.schedule(() -> run(() -> {
-						Compat.setScreen(null);
-						ArcticClient.platform().openPage(new com.arcticlauncher.client.menu.EmoteWheel());
-					}), 3, TimeUnit.SECONDS);
-					TIMER.schedule(() -> run(() -> shot("emote-wheel")), 4, TimeUnit.SECONDS);
-					TIMER.schedule(() -> run(() -> {
-						Compat.setScreen(null);
-						com.arcticlauncher.client.menu.Menus.selectLooks(0);
-						ArcticClient.platform().openPage(com.arcticlauncher.client.menu.Menus.selected());
-					}), 4500, TimeUnit.MILLISECONDS);
-					TIMER.schedule(() -> run(() -> shot("menu-skins")), 6500, TimeUnit.MILLISECONDS);
-					TIMER.schedule(() -> run(() -> Compat.setScreen(null)), 7500, TimeUnit.MILLISECONDS);
+					ArcticClient.platform().openPage(new com.arcticlauncher.client.menu.EmoteWheel());
+					TIMER.schedule(() -> run(() -> shot("emote-wheel")), 1, TimeUnit.SECONDS);
+					TIMER.schedule(() -> run(() -> Compat.setScreen(null)), 2, TimeUnit.SECONDS);
 				},
 				() -> {
 					// The tab list badge: our own entry, once we've checked in.

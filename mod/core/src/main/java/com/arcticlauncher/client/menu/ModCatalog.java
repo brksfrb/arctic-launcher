@@ -234,8 +234,6 @@ final class ModCatalog {
 	private static void social(List<Mod> out, ClientConfig c) {
 		out.add(new Mod("friends", "Friends", "Who's online, chat, screenshots, voice", "friends", Category.SOCIAL, "voice duel invite")
 				.page(FriendsPage::new));
-		out.add(new Mod("looks", "Looks", "Capes, cosmetics and emotes", "looks", Category.SOCIAL, "cape cosmetic emote")
-				.page(LooksTab::new));
 		out.add(new Mod("account", "Account", "Switch accounts, or use a proxy", "account", Category.CLIENT, "proxy login")
 				.page(AccountPage::new));
 		out.add(new Mod("style", "Menu Style", "How the menus look; smooth font", "style", Category.CLIENT, "theme font fancy")

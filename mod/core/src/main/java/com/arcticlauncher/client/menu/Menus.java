@@ -58,6 +58,8 @@ public final class Menus {
 	private static String selectedId = "mods";
 	private static final String[][] OLD_TABS = {
 			{"hud", "mods"}, {"features", "zoom"}, {"view", "chat"}, {"world", "outline"}, {"messages", "messages"},
+			// Looks (skins, capes, cosmetics, emotes) is chosen in the launcher, not in game.
+			{"looks", "mods"},
 	};
 
 	public static void select(String id) {
@@ -68,12 +70,6 @@ public final class Menus {
 			}
 		}
 		selectedId = mapped;
-	}
-
-	/** Looks on a page (0 skins, 1 capes, 2 cosmetics, 3 emotes). */
-	public static void selectLooks(int page) {
-		LooksTab.page = Math.max(0, Math.min(3, page));
-		selectedId = "looks";
 	}
 
 	/** Packs on your packs or the Modrinth browser (with a search typed in). */

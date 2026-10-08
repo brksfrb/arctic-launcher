@@ -39,7 +39,7 @@ public final class HudEditor extends Page {
 	private static final int HINT_PAD = 8;
 	private static final float SCALE_SNAP = 0.05f;
 	private static final String[][] SHORTCUTS = {
-			{"Waypoints", "waypoints"}, {"Replays", "replays"}, {"Packs", "packs"}, {"Looks", "looks"}, {"Friends", "friends"},
+			{"Waypoints", "waypoints"}, {"Replays", "replays"}, {"Packs", "packs"}, {"Friends", "friends"},
 	};
 
 	private int bx;
