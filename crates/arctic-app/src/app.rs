@@ -23,7 +23,7 @@ use crate::session::ProfileData;
 use crate::startup::StartupOptions;
 use crate::tasks::{Event, LaunchId, LoginAttempt, Tasks};
 use crate::theme::{self, Palette};
-use crate::toasts::{Kind, Toasts};
+use crate::toasts::{Kind, ToastAction, Toasts};
 use crate::ui::{InstancesUi, ProfileDialog};
 
 /// Backdrop frame interval when focused / unfocused.
@@ -319,7 +319,30 @@ impl ArcticApp {
                     .push(Kind::Error, format!("No account named '{query}'"), ""),
             }
         }
+        app.note_new_version();
+        crate::auto_update::spawn(app.dirs.clone(), app.tasks.clone());
         app
+    }
+
+    /// Once after an update: say so, with a link to what's new.
+    fn note_new_version(&mut self) {
+        let current = arctic_core::APP_VERSION;
+        if self.settings.launcher_version_seen == current {
+            return;
+        }
+        if !self.settings.launcher_version_seen.is_empty() {
+            self.toasts.push_with_action(
+                Kind::Success,
+                format!("Updated to Arctic Launcher {current}"),
+                "See what's new in this version.",
+                Some(ToastAction::WhatsNew(format!(
+                    "https://github.com/{}/releases/tag/v{current}",
+                    arctic_core::update::GITHUB_REPO
+                ))),
+            );
+        }
+        self.settings.launcher_version_seen = current.to_owned();
+        self.persist_settings();
     }
 
     /// Replace all profile-scoped state (used at start and on switch).
@@ -593,12 +616,21 @@ impl ArcticApp {
         if !self.window_known {
             self.window_known = true;
             crate::window::remember(frame);
+            log::info!(
+                "window ready{}",
+                if crate::window::hidden() {
+                    " (hidden)"
+                } else {
+                    ""
+                }
+            );
             let wake_ctx = ctx.clone();
             crate::single_instance::on_wake(move || {
                 crate::window::show();
                 wake_ctx.request_repaint();
             });
         }
+        crate::window::keep_hidden(ctx);
         if self.settings.tray && self.tray.is_none() && crate::window::is_known() {
             self.tray = crate::tray::Tray::new(ctx);
         }
@@ -821,10 +853,19 @@ impl ArcticApp {
             Event::UpdateChecked(result) => self.on_update_checked(result),
             Event::ProxyTested(proxy, result) => self.on_proxy_tested(proxy, result),
             Event::UpdateInstalled(result) => self.on_update_installed(result),
+            // The update thread installed one while the launcher was open.
+            Event::UpdateApplied(required) => self.update = UpdateState::Installed { required },
         }
     }
 
     fn on_update_checked(&mut self, result: Result<Option<UpdateInfo>, String>) {
+        if let Ok(Some(info)) = &result
+            && self.settings.auto_install_updates
+        {
+            // Installs by itself; the banner shows it going.
+            self.start_update(info.clone());
+            return;
+        }
         self.update = match result {
             Ok(Some(info)) => UpdateState::Available {
                 info,
@@ -842,6 +883,12 @@ impl ArcticApp {
         let UpdateState::Installing { info, .. } = &self.update else {
             return;
         };
+        if result.is_ok() {
+            crate::auto_update::mark_installed();
+            if self.settings.auto_install_updates && crate::auto_update::restart_if_unnoticed() {
+                return;
+            }
+        }
         self.update = match result {
             Ok(()) => UpdateState::Installed {
                 required: info.required,
@@ -890,6 +937,11 @@ impl eframe::App for ArcticApp {
         }
         self.update_theme(&ctx, frame);
         self.window_and_tray(&ctx, frame);
+        crate::auto_update::sync(
+            self.settings.auto_install_updates,
+            self.settings.update_channel,
+            self.runs.any_active(),
+        );
         let playing = self.runs.any_active();
         let together = self.together_status();
         self.discord

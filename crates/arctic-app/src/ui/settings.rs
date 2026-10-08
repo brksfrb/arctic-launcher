@@ -179,6 +179,10 @@ impl ArcticApp {
                 ui.selectable_value(&mut s.update_channel, UpdateChannel::Beta, "Beta");
             });
             ui.checkbox(&mut s.check_updates_on_start, "Check for updates on start");
+            ui.checkbox(&mut s.auto_install_updates, "Install updates automatically")
+                .on_hover_text(
+                    "New versions download by themselves and are used the next time the launcher                      opens (right away when it's waiting in the tray with no game running)",
+                );
         });
 
         section(ui, p, "Network", |ui| self.network_section(ui, p));

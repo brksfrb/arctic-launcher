@@ -3,6 +3,7 @@
 
 mod app;
 mod art;
+mod auto_update;
 mod bridge_host;
 mod devshot;
 mod discord;
@@ -106,8 +107,13 @@ fn main() -> eframe::Result {
         width: ICON_SIZE,
         height: ICON_SIZE,
     };
+    // Restarted into an update while hidden in the tray: stay there.
+    if startup.hidden {
+        window::started_hidden();
+    }
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
+            .with_visible(!startup.hidden)
             .with_title(arctic_core::APP_NAME)
             .with_icon(Arc::new(icon))
             .with_inner_size(DEFAULT_WINDOW)

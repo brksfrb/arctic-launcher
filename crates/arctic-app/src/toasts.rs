@@ -41,6 +41,8 @@ pub enum ToastAction {
     LinkAccount { into: String, other: String },
     /// Send this run's crash report to Arctic.
     SendCrash(crate::tasks::LaunchId),
+    /// Open this release's notes (after an update).
+    WhatsNew(String),
 }
 
 impl ToastAction {
@@ -50,6 +52,7 @@ impl ToastAction {
             ToastAction::OpenFriends => "Open",
             ToastAction::LinkAccount { .. } => "Link",
             ToastAction::SendCrash(_) => "Send report",
+            ToastAction::WhatsNew(_) => "What's new",
         }
     }
 }

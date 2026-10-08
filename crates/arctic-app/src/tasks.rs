@@ -70,6 +70,8 @@ pub enum Event {
     /// A proxy test finished (the settings tested, result).
     ProxyTested(arctic_core::proxy::ProxySettings, Outcome<()>),
     UpdateInstalled(Outcome<()>),
+    /// The background updater installed a new version (`true`: a required one).
+    UpdateApplied(bool),
     /// Minecraft versions a loader supports.
     LoaderGames(LoaderKind, Outcome<Vec<String>>),
     /// Loader versions for (loader, Minecraft version).
