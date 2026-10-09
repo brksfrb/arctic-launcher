@@ -10,9 +10,6 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
-import org.lwjgl.util.freetype.FT_Face;
-import org.lwjgl.util.freetype.FT_GlyphSlot;
-import org.lwjgl.util.freetype.FreeType;
 import net.minecraft.server.packs.PackLocationInfo;
 import net.minecraft.server.packs.PackSelectionConfig;
 import net.minecraft.server.packs.PackType;
@@ -57,61 +54,18 @@ public final class ArcticPacks implements RepositorySource {
 		}
 	}
 
-	private static final int FT_LOAD_RENDER = 1 << 2;
-	private static final int FT_LOAD_NO_BITMAP = 1 << 3;
-	private static final int FT_LOAD_BITMAP_METRICS_ONLY = 1 << 22;
-	private static final int FT_RENDER_MODE_NORMAL = 0;
-	/** Extra stem weight in 1/64 pixel: sideways a little over a third of a pixel, a little upward. */
-	private static final long EMBOLDEN_X = 24;
-	private static final long EMBOLDEN_Y = 8;
-
-	/** FT_Load_Glyph, as the game calls it. */
-	public interface GlyphLoader {
-		int load(FT_Face face, int glyph, int flags);
-	}
-
-	/**
-	 * Load a smooth-font glyph with a slightly heavier outline, rendered
-	 * so its bitmap size is known (the game measures glyphs and draws them
-	 * in separate calls; both come through here, so they agree).
-	 */
-	public static int loadGlyph(FT_Face face, int glyph, int flags, GlyphLoader original) {
-		if (!smoothFontOn()) {
-			return original.load(face, glyph, flags);
-		}
-		int error = original.load(face, glyph, (flags & ~FT_LOAD_RENDER & ~FT_LOAD_BITMAP_METRICS_ONLY) | FT_LOAD_NO_BITMAP);
-		if (error != 0) {
-			return error;
-		}
-		FT_GlyphSlot slot = face.glyph();
-		if (slot == null) {
-			return error;
-		}
-		// The same weight at every size: titles are rasterized several times larger.
-		float size = emboldenScale(face);
-		FreeType.FT_Outline_EmboldenXY(slot.outline(), Math.round(EMBOLDEN_X * size), Math.round(EMBOLDEN_Y * size));
-		return FreeType.FT_Render_Glyph(slot, FT_RENDER_MODE_NORMAL);
+	/** The GUI scale the font was last rasterized at (see {@link FontWeight}). */
+	public static int loadedOversample() {
+		return loadedOversample;
 	}
 
 	public static boolean isSmoothFont(Identifier file) {
 		return FONT_FILE.equals(file);
 	}
 
-	/** The smooth font's size in the pack's font files. */
-	private static final float FONT_SIZE = 8.5f;
 	/** Copies of the smooth font rasterized larger, for text drawn scaled up. */
 	public static final Identifier TITLE_FONT = Identifier.fromNamespaceAndPath("arctic", "title");
 	public static final Identifier SUBTITLE_FONT = Identifier.fromNamespaceAndPath("arctic", "subtitle");
-
-	/** How much larger than chat text this face is rasterized (1 for chat, 4 for titles). */
-	private static float emboldenScale(FT_Face face) {
-		org.lwjgl.util.freetype.FT_Size size = face.size();
-		int scale = Math.max(1, loadedOversample);
-		if (size == null) {
-			return 1;
-		}
-		return Math.max(1, size.metrics().x_ppem() / (FONT_SIZE * scale));
-	}
 
 	/**
 	 * Titles and subtitles are drawn 4× and 2× larger than chat text, so the

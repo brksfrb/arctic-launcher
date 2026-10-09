@@ -28,7 +28,9 @@
 		"ChatPlaceholderMixin",
 		"MinecraftTickMixin",<% if (smoothFontSet) { %>
 		"SmoothFontSetMixin",
-		"SmoothFontGlyphMixin",<% } %><% if (smoothFontManager) { %>
+		"SmoothFontGlyphMixin",<% } %><% if (fontWeight) { %>
+		"FontHintingMixin",
+		"FontBitmapHintingMixin",<% } %><% if (smoothFontManager) { %>
 		"SmoothFontManagerMixin",
 		"SmoothFontGlyphInfoMixin",<% } %><% if (startup) { %>
 		"MainStartMixin",
@@ -54,8 +56,6 @@
 		"TrueTypeDefinitionMixin",
 		"TrueTypeGlyphMixin",
 		"OptionsPacksMixin",
-		"FontHintingMixin",
-		"FontBitmapHintingMixin",
 		"FontShadowMixin",
 		"FontMaskMixin",
 		"TextShaderMixin",
