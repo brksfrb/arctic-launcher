@@ -31,6 +31,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class Looks {
 	private static final long TTL_MS = TimeUnit.MINUTES.toMillis(10);
+	/**
+	 * Someone not on Arctic is asked about again this soon: a player who just joined checks in
+	 * a few seconds after you first see them, and the first answer would otherwise hide their
+	 * snowflake for the whole {@link #TTL_MS}.
+	 */
+	private static final long NOT_ARCTIC_TTL_MS = TimeUnit.SECONDS.toMillis(20);
 	/** Your own look, changed in the launcher, shows in the game this soon. */
 	private static final long OWN_TTL_MS = TimeUnit.SECONDS.toMillis(15);
 	/** While the Looks menu is open, sooner. */
@@ -280,7 +286,7 @@ public final class Looks {
 		Look look = players.get(player);
 		boolean mine = isMe(player);
 		long now = System.currentTimeMillis();
-		long ttl = !mine ? TTL_MS : now < menuOpenUntil ? OWN_TTL_OPEN_MS : OWN_TTL_MS;
+		long ttl = !mine ? othersTtl(look) : now < menuOpenUntil ? OWN_TTL_OPEN_MS : OWN_TTL_MS;
 		if (look == null || now - look.fetched > ttl) {
 			pending.add(player);
 		}
@@ -296,10 +302,14 @@ public final class Looks {
 	/** Whether this player is playing with Arctic (from the lookup cache; queues one if needed). */
 	public boolean isArctic(UUID player) {
 		Look look = players.get(player);
-		if (look == null || System.currentTimeMillis() - look.fetched > TTL_MS) {
+		if (look == null || System.currentTimeMillis() - look.fetched > othersTtl(look)) {
 			pending.add(player);
 		}
 		return look != null && look.arctic;
+	}
+
+	private static long othersTtl(Look look) {
+		return look != null && look.arctic ? TTL_MS : NOT_ARCTIC_TTL_MS;
 	}
 
 	/**
@@ -520,7 +530,7 @@ public final class Looks {
 		} catch (Exception | StackOverflowError e) {
 			// Server unreachable: try these players again in a minute.
 			for (UUID player : batch) {
-				players.put(player, new Look(null, false, null, java.util.Collections.<String>emptyList(), false, now - TTL_MS + RETRY_MS));
+				players.put(player, new Look(null, false, null, java.util.Collections.<String>emptyList(), false, now - NOT_ARCTIC_TTL_MS + RETRY_MS));
 			}
 			platform.log(false, "look lookup: " + e);
 		}
