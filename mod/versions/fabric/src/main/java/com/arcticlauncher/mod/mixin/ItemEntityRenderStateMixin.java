@@ -1,4 +1,4 @@
-//#if MC >= 26.1
+//#if MC >= 1.21.2
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.mod.ItemPhysicsState;

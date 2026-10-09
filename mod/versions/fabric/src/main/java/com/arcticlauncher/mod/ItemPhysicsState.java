@@ -1,6 +1,6 @@
 package com.arcticlauncher.mod;
 
-/** Where a dropped item is and how far it's turned over, carried on its render state for item physics (26.1+). */
+/** Where a dropped item is and how far it's turned over, carried on its render state for item physics (1.21.2+; older versions keep this per frame in the renderer). */
 public interface ItemPhysicsState {
 	/** Swimming or in lava: the game's own bobbing. */
 	int FLOATING = 0;

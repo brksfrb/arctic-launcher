@@ -955,7 +955,7 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public boolean itemPhysicsWorks() {
-		return motionBlurWorks();
+		return true;
 	}
 
 	@Override
