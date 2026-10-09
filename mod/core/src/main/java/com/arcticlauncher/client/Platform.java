@@ -313,6 +313,11 @@ public interface Platform {
 		return false;
 	}
 
+	/** The outline's thickness can change (its lines aren't shared with every other line drawn). */
+	default boolean outlineWidthWorks() {
+		return outlineTweaks();
+	}
+
 	/** The scoreboard switches work on this version. */
 	default boolean scoreboardTweaks() {
 		return false;

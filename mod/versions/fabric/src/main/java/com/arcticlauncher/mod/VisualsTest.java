@@ -1,4 +1,3 @@
-//#if MC >= 26.1
 package com.arcticlauncher.mod;
 
 import com.arcticlauncher.client.ArcticClient;
@@ -47,7 +46,7 @@ final class VisualsTest {
 					command("fill -4 199 -3 4 199 7 minecraft:stone");
 					command("fill -4 200 -3 4 204 7 minecraft:air");
 					for (int i = 0; i < 6; i++) {
-						command("summon item " + (i - 3) + " 201 3 {Item:{id:\"minecraft:diamond\",count:1},PickupDelay:32767}");
+						command("summon item " + (i - 3) + " 201 3 {Item:" + item("diamond", 1) + ",PickupDelay:32767}");
 					}
 				},
 				() -> countItems("dropped"),
@@ -98,6 +97,15 @@ final class VisualsTest {
 		});
 	}
 
+	/** An item's NBT for /summon: "count" from 1.20.5 (item components), "Count" as a byte before. */
+	private static String item(String id, int count) {
+		//#if MC >= 1.20.5
+		return "{id:\"minecraft:" + id + "\",count:" + count + "}";
+		//#else
+		return "{id:\"minecraft:" + id + "\",Count:" + count + "b}";
+		//#endif
+	}
+
 	private static void command(String command) {
 		Compat.sendChat("/" + command);
 	}
@@ -113,10 +121,10 @@ final class VisualsTest {
 					command("fill ~-4 199 ~-3 ~4 199 ~7 minecraft:stone");
 					command("fill ~-4 200 ~-3 ~4 204 ~7 minecraft:air");
 					// A flat item, a tool, a block and a full stack, a little in front of the player.
-					command("summon item ~ ~1 ~2 {Item:{id:\"minecraft:diamond\",count:1},PickupDelay:32767}");
-					command("summon item ~1 ~1 ~2.5 {Item:{id:\"minecraft:iron_sword\",count:1},PickupDelay:32767}");
-					command("summon item ~-1 ~1 ~2.5 {Item:{id:\"minecraft:stone\",count:1},PickupDelay:32767}");
-					command("summon item ~0.5 ~1 ~3.5 {Item:{id:\"minecraft:apple\",count:64},PickupDelay:32767}");
+					command("summon item ~ ~1 ~2 {Item:" + item("diamond", 1) + ",PickupDelay:32767}");
+					command("summon item ~1 ~1 ~2.5 {Item:" + item("iron_sword", 1) + ",PickupDelay:32767}");
+					command("summon item ~-1 ~1 ~2.5 {Item:" + item("stone", 1) + ",PickupDelay:32767}");
+					command("summon item ~0.5 ~1 ~3.5 {Item:" + item("apple", 64) + ",PickupDelay:32767}");
 					c.itemPhysics = false;
 				},
 				() -> WorldTest.shot("items-vanilla"),
@@ -125,7 +133,7 @@ final class VisualsTest {
 				},
 				() -> WorldTest.shot("items-physics"),
 				() -> {
-					command("summon item ~ ~4 ~2 {Item:{id:\"minecraft:gold_ingot\",count:1},PickupDelay:32767,Motion:[0.0,0.6,0.0]}");
+					command("summon item ~ ~4 ~2 {Item:" + item("gold_ingot", 1) + ",PickupDelay:32767,Motion:[0.0,0.6,0.0]}");
 					TIMER.schedule(() -> run(() -> WorldTest.shot("items-physics-air")), 300, TimeUnit.MILLISECONDS);
 				},
 				() -> {
@@ -165,4 +173,3 @@ final class VisualsTest {
 		TIMER.schedule(() -> turning.cancel(false), 1700, TimeUnit.MILLISECONDS);
 	}
 }
-//#endif

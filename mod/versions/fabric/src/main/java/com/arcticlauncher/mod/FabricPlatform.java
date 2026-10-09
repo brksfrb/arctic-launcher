@@ -934,7 +934,13 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public boolean outlineTweaks() {
-		//#if MC >= 26.2
+		return true;
+	}
+
+	@Override
+	public boolean outlineWidthWorks() {
+		// Before 1.21.11 the outline's line width is the one every line is drawn with.
+		//#if MC >= 1.21.11
 		return true;
 		//#else
 		return false;
@@ -943,11 +949,8 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public boolean motionBlurWorks() {
-		//#if MC >= 26.1
+		// 26.1+: a post effect; before: MotionBlurGL.
 		return true;
-		//#else
-		return false;
-		//#endif
 	}
 
 	@Override

@@ -228,10 +228,12 @@ processResources {
 			// Simple Voice Chat's payloads need the CustomPacketPayload/StreamCodec system (1.20.5+);
 			// before that payloads were raw FriendlyByteBuf + channel ResourceLocation, no equivalent hook.
 			svc: atLeast('1.20.5'),
-			// Block outline: 26.1 draws it another way.
-			outline: atLeast('26.2'),
+			// Block outline: every version (each draws it its own way).
+			outline: true,
 			// Motion blur (a post effect in the client's pack) and item physics: 26.1's renderer for now.
 			visuals: atLeast('26.1'),
+			// Motion blur before 26.1: plain OpenGL after the world is drawn (MotionBlurGL).
+			oldMotionBlur: !atLeast('26.1'),
 			// Replays (recording and watching): ported version by version.
 			replay: atLeast('1.16'),
 			// Before 26.1 a replay grabs finished frames where the window shows them.
