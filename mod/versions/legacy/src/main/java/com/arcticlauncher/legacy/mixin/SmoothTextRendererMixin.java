@@ -7,6 +7,10 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArgs;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import com.mojang.blaze3d.platform.GlStateManager;
+import org.lwjgl.opengl.GL11;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
 
@@ -26,6 +30,35 @@ abstract class SmoothTextRendererMixin {
 
 	@Shadow
 	public abstract int getCharWidth(char c);
+
+	/** Blending was off when this string started, so it's on just for the string. */
+	private boolean arctic$blendForString;
+
+	/**
+	 * A string starts: Inter's edges need blending. Where the game draws text without it (the
+	 * scoreboard's lines are white at ~12% alpha, most HUD text), Minecraft's own font ignores the
+	 * colour's alpha; so does this, or that text would come out faded. One driver query per string.
+	 */
+	@ModifyVariable(method = "drawLayer(Ljava/lang/String;FFIZ)I", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private int arctic$blendString(int color) {
+		arctic$blendForString = false;
+		if (!arctic$smooth() || GL11.glIsEnabled(GL11.GL_BLEND)) {
+			return color;
+		}
+		arctic$blendForString = true;
+		GlStateManager.enableBlend();
+		GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+		// Below 0.1 alpha the game's alpha test hides the text anyway: leave that as it is.
+		return (color >>> 24) >= 26 ? color | 0xFF000000 : color;
+	}
+
+	@Inject(method = "drawLayer(Ljava/lang/String;FFIZ)I", at = @At("RETURN"))
+	private void arctic$blendStringDone(String text, float x, float y, int color, boolean shadow, CallbackInfoReturnable<Integer> cir) {
+		if (arctic$blendForString) {
+			arctic$blendForString = false;
+			GlStateManager.disableBlend();
+		}
+	}
 
 	private boolean arctic$smooth() {
 		return LegacySmoothFont.on() && !isUnicode();

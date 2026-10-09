@@ -307,6 +307,7 @@ public final class LegacyPlatform implements Platform {
 	/** Each tick: Fullbright raises gamma while on, and gives it back after. */
 	void tick() {
 		GameOptions options = mc().options;
+		vboOnce(options);
 		boolean bright = ArcticClient.features() != null && ArcticClient.features().fullbright();
 		if (bright) {
 			if (Float.isNaN(gammaBefore)) {
@@ -316,6 +317,23 @@ public final class LegacyPlatform implements Platform {
 		} else if (!Float.isNaN(gammaBefore)) {
 			options.gamma = gammaBefore;
 			gammaBefore = Float.NaN;
+		}
+	}
+
+	/**
+	 * Vertex buffers: off in Minecraft's defaults, many more frames per second on. Switched on once
+	 * (before a world is open, so nothing has to be rebuilt); the player can turn them off again.
+	 */
+	private void vboOnce(GameOptions options) {
+		if (ArcticClient.config().legacyVboOn || mc().world != null) {
+			return;
+		}
+		ArcticClient.config().legacyVboOn = true;
+		ArcticClient.saveConfig();
+		if (!options.vbo) {
+			options.vbo = true;
+			options.save();
+			ArcticLegacy.LOG.info("vertex buffers switched on (Video Settings: Use VBOs)");
 		}
 	}
 

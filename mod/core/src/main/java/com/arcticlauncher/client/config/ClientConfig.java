@@ -87,6 +87,8 @@ public final class ClientConfig {
 	public boolean itemPhysics;
 	/** Fancy style: smooth font and smooth rounded shapes. */
 	public boolean fancy;
+	/** 1.8.9 - 1.12.2: vertex buffers were switched on once (they're off in Minecraft's defaults). */
+	public boolean legacyVboOn;
 	/** The pause menu's leave button needs a second click. */
 	public boolean confirmLeave = true;
 	/** SOCKS5 proxy for server connections and Arctic's web requests. */

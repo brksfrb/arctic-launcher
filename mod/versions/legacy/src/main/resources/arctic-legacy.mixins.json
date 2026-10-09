@@ -38,6 +38,7 @@
 		"ServerListPingerProxyMixin",
 		"ServerAddressMixin",
 		"LoginSessionMixin",
+		"ScoreboardRemoveMixin",
 		"ClientPlayerSwingMixin",
 		"ServerPingPoolMixin",
 		"ItemEntityRendererMixin",
