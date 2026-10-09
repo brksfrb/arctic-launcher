@@ -112,6 +112,18 @@ final class LegacyWorldTest {
 					});
 				},
 				() -> {
+					// An emote, seen from the front.
+					com.arcticlauncher.client.looks.Cosmetics.Emote wave = ArcticClient.looks().cosmetics().emote("wave");
+					ArcticLegacy.LOG.info("worldtest: emotes {}, wave {}", ArcticClient.looks().cosmetics().emotes().size(), wave != null);
+					if (wave != null) {
+						mc.options.perspective = 2;
+						ArcticClient.looks().playEmote(wave);
+						// Early, while the wave is still playing.
+						TIMER.schedule(() -> run(() -> shot("emote-wave")), 400, TimeUnit.MILLISECONDS);
+						later(() -> mc.options.perspective = 0);
+					}
+				},
+				() -> {
 					ArcticClient.config().streamerMode = true;
 					String me = mc.getSession().getUsername();
 					ArcticLegacy.LOG.info("worldtest: streamer mask '{}' -> '{}'", "hi " + me, Streamer.mask("hi " + me));
