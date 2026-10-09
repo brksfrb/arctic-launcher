@@ -58,6 +58,11 @@ public final class SmoothFont {
 
 	private SmoothFont() {}
 
+	/** The GUI scale Inter was last rasterized at (see {@link FontWeight}). */
+	public static int loadedScale() {
+		return loadedScale;
+	}
+
 	public static boolean on() {
 		return ArcticClient.config().fancy;
 	}

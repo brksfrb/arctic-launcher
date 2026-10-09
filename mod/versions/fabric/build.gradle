@@ -211,6 +211,8 @@ processResources {
 			// the font itself, or from 1.21.9 (where a font no longer knows its name) the font manager.
 			smoothFontSet: !atLeast('1.21.9'),
 			smoothFontManager: atLeast('1.21.9') && !atLeast('26.1'),
+			// The smooth font's slightly heavier outline needs FreeType (1.20.5+).
+			fontWeight: atLeast('1.20.5'),
 			// Block states' caches made on all cores (names as in the game: unobfuscated from 26.1).
 			fastStart: atLeast('26.1'),
 			// The startup timeline, class pre-loader and the agent behind it: Java 17+ (1.18 and later).

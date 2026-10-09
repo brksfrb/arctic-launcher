@@ -1,7 +1,7 @@
 package com.arcticlauncher.mod.mixin;
 
-//#if MC >= 26.1
-import com.arcticlauncher.mod.ArcticPacks;
+//#if MC >= 1.20.5
+import com.arcticlauncher.mod.FontWeight;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.platform.NativeImage;
@@ -20,7 +20,7 @@ abstract class FontBitmapHintingMixin {
 			method = "copyFromFont",
 			at = @At(value = "INVOKE", target = "Lorg/lwjgl/util/freetype/FreeType;FT_Load_Glyph(Lorg/lwjgl/util/freetype/FT_Face;II)I"))
 	private int arctic$heavier(FT_Face face, int glyph, int flags, Operation<Integer> original) {
-		return ArcticPacks.loadGlyph(face, glyph, flags, original::call);
+		return FontWeight.loadGlyph(face, glyph, flags, original::call);
 	}
 }
 //#endif
