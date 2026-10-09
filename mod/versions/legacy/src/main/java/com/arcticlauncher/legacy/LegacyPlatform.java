@@ -751,6 +751,24 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean canSimpleVoiceChat() {
+		return LegacySvc.ENABLED;
+	}
+
+	@Override
+	public void requestSimpleVoiceChat() {
+		mc().submit(new Runnable() {
+			@Override
+			public void run() {
+				net.minecraft.client.network.ClientPlayNetworkHandler handler = mc().getNetworkHandler();
+				if (handler != null) {
+					LegacySvc.request(handler);
+				}
+			}
+		});
+	}
+
+	@Override
 	public Object connectionKey() {
 		return mc().getNetworkHandler();
 	}

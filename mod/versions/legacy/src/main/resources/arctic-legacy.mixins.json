@@ -10,6 +10,7 @@
 		"ChatHudMixin",
 		"ClientPlayerEntityMixin",
 		"ClientPlayNetworkHandlerMixin",
+		"ClientCustomPayloadMixin",
 		"GameRendererMixin",
 		"EntityMixin",
 		"ClientPlayerInteractionManagerMixin",

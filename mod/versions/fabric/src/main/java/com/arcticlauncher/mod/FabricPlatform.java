@@ -654,28 +654,20 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public boolean canSimpleVoiceChat() {
-		//#if MC >= 1.20.5
 		return com.arcticlauncher.mod.svc.SvcPayload.ENABLED;
-		//#else
-		// Before 1.20.5 custom payloads weren't CustomPacketPayload-based (plain
-		// FriendlyByteBuf + channel ResourceLocation instead), no hook for this.
-		return false;
-		//#endif
 	}
 
 	@Override
 	public void requestSimpleVoiceChat() {
-		//#if MC >= 1.20.5
 		Minecraft mc = mc();
 		mc.execute(() -> {
 			ClientPacketListener connection = mc.getConnection();
 			if (connection != null) {
 				for (com.arcticlauncher.mod.svc.SvcPayload p : com.arcticlauncher.mod.svc.SvcPayload.request()) {
-					connection.send(new net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket(p));
+					connection.send(p.toPacket());
 				}
 			}
 		});
-		//#endif
 	}
 
 	@Override
