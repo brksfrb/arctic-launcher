@@ -464,6 +464,29 @@ pub(crate) fn fast_start_flags(instance: &Instance) -> Vec<String> {
     ]
 }
 
+/// The garbage collector Mojang's own launcher sets up: G1 with short pauses and room for the
+/// game's bursts of short-lived objects. Without it Java 8 (Minecraft 1.16.5 and older) uses
+/// the parallel collector, which stops the game for every collection: the regular FPS drops.
+const GC_FLAGS: [&str; 6] = [
+    "-XX:+UnlockExperimentalVMOptions",
+    "-XX:+UseG1GC",
+    "-XX:G1NewSizePercent=20",
+    "-XX:G1ReservePercent=20",
+    "-XX:MaxGCPauseMillis=50",
+    "-XX:G1HeapRegionSize=32M",
+];
+
+/// [`GC_FLAGS`], unless the player chose a collector in their own JVM flags.
+fn gc_flags<'a>(user_flags: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let chose = user_flags
+        .into_iter()
+        .any(|f| f.starts_with("-XX:+Use") && f.ends_with("GC"));
+    if chose {
+        return Vec::new();
+    }
+    GC_FLAGS.iter().map(|f| (*f).to_owned()).collect()
+}
+
 /// Tell the Arctic mod its menu style and let it publish looks as this
 /// player. Best effort: without the cosmetics server the game still starts.
 fn share_cosmetics_session(req: &LaunchRequest, game_dir: &Path) {
@@ -535,7 +558,17 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
             .map(str::to_owned)
             .chain(arctic_mod::jvm_flag())
             .chain(arctic_mod::brand_flag(&req.instance.loader))
+            .chain(gc_flags(
+                settings
+                    .extra_jvm_args
+                    .split_whitespace()
+                    .chain(req.instance.jvm_args.split_whitespace()),
+            ))
             .chain(fast_start_flags(req.instance))
+            .chain(
+                (settings.game_maximized && !settings.fullscreen)
+                    .then(|| game_window::CLIENT_FLAG.to_owned()),
+            )
             .chain(preload_flags)
             .chain(truststore::flags(
                 req.dirs,
@@ -698,6 +731,13 @@ mod tests {
             &mut extra,
         );
         assert!(extra.is_empty() && vars.is_empty());
+    }
+
+    #[test]
+    fn games_get_g1_unless_the_player_chose_a_collector() {
+        assert!(gc_flags(["-Xss2M"]).contains(&"-XX:+UseG1GC".to_owned()));
+        assert!(gc_flags(["-XX:+UseZGC", "-XX:+ZGenerational"]).is_empty());
+        assert!(gc_flags(["-XX:+UseShenandoahGC"]).is_empty());
     }
 
     #[test]
