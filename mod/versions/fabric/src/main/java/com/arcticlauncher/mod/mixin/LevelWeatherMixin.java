@@ -1,4 +1,3 @@
-//#if MC >= 1.20
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.client.ArcticClient;
@@ -30,4 +29,3 @@ abstract class LevelWeatherMixin {
 		return (Object) this instanceof ClientLevel && ArcticClient.config().clearWeather;
 	}
 }
-//#endif

@@ -107,7 +107,33 @@ final class SelfTest {
 				ArcticMod.LOG.error("selftest: FAILED to load {}", name, e);
 			}
 		}
+		switchAccountCheck();
 		waitForLook(0);
+	}
+
+	/** Play as another (offline) account and back, as the account page and session renewal do. */
+	private static void switchAccountCheck() {
+		final UUID other = UUID.fromString("00000000-0000-4000-8000-00000000a7c1");
+		java.util.concurrent.CompletableFuture<String> done = new java.util.concurrent.CompletableFuture<>();
+		Minecraft.getInstance().execute(() -> {
+			String name = ArcticClient.platform().playerName();
+			UUID id = ArcticClient.platform().playerId();
+			String problem = ArcticClient.platform().switchAccount("ArcticSwap", other, "0", null, false);
+			String now = ArcticClient.platform().playerName();
+			String back = ArcticClient.platform().switchAccount(name, id, "0", null, false);
+			done.complete(problem != null ? problem : back != null ? back
+					: "ArcticSwap".equals(now) && name.equals(ArcticClient.platform().playerName()) ? null : "the name didn't change (" + now + ")");
+		});
+		try {
+			String problem = done.get(10, TimeUnit.SECONDS);
+			if (problem == null) {
+				ArcticMod.LOG.info("selftest: account switch ok");
+			} else {
+				ArcticMod.LOG.error("selftest: account switch FAILED: {}", problem);
+			}
+		} catch (Exception e) {
+			ArcticMod.LOG.error("selftest: account switch FAILED", e);
+		}
 	}
 
 	private static void waitForLook(int attempt) {

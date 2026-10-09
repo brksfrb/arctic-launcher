@@ -13,6 +13,7 @@ the expanded config is available. Exit code 1 if anything is wrong.
 """
 import glob
 import json
+import zipfile
 import os
 import re
 import subprocess
@@ -84,24 +85,31 @@ class Jar:
         return "\n".join(re.findall(r"\n  [^\n]*[ .]" + re.escape(name) + r"\([^\n]*\n(.*?)\n\n", self.code_cache[cls], re.S))
 
 
+def build_dir(version):
+    """The fabric build folder holding this version's newest preprocessed sources: build.py
+    compiles in worker copies (mod/build/workers/wN), a lone gradle build here."""
+    roots = [HERE] + glob.glob(os.path.join(HERE, "..", "..", "build", "workers", "*", "versions", "fabric"))
+    found = [r for r in roots if os.path.isdir(os.path.join(r, "build", "preprocessed", version))]
+    if not found:
+        return HERE
+    return max(found, key=lambda r: os.path.getmtime(os.path.join(r, "build", "preprocessed", version)))
+
+
 def active_mixins(version):
-    """Mixin names this version's expanded config lists, or None when unknown."""
-    path = os.path.join(HERE, "build", "resources", "main", "arctic.mixins.json")
-    pre = os.path.join(HERE, "build", "preprocessed", version)
-    if not os.path.isfile(path) or not os.path.isdir(pre):
-        return None
-    if os.path.getmtime(path) < os.path.getmtime(pre):
-        # The expanded config is from another version's build.
+    """Mixin names this version's expanded config lists (from the built jar), or None when unknown."""
+    jar = os.path.join(HERE, "..", "..", "dist", f"arctic-mod-{version}.jar")
+    if not os.path.isfile(jar):
         return None
     try:
-        return set(json.load(open(path, encoding="utf-8")).get("client", []))
-    except ValueError:
+        with zipfile.ZipFile(jar) as z:
+            return set(json.loads(z.read("arctic.mixins.json").decode("utf-8")).get("client", []))
+    except (KeyError, ValueError, zipfile.BadZipFile):
         return None
 
 
 def check(version):
     jar_path = jar_for(version)
-    src_dir = os.path.join(HERE, "build", "preprocessed", version, "java", "com", "arcticlauncher", "mod", "mixin")
+    src_dir = os.path.join(build_dir(version), "build", "preprocessed", version, "java", "com", "arcticlauncher", "mod", "mixin")
     if not jar_path or not os.path.isdir(src_dir):
         print(f"{version}: compile it first (no named jar or preprocessed sources)")
         return 1

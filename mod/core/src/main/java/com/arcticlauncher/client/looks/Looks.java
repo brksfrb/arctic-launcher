@@ -483,7 +483,8 @@ public final class Looks {
 			if (!fitsTexture(png, cape)) {
 				throw new java.io.IOException("not a " + (cape ? "cape" : "skin") + "-sized PNG");
 			}
-			platform.registerTexture(hash, png, cape);
+			// Old 64x32 skins into the layout the player model reads (Minecraft does this for its own downloads).
+			platform.registerTexture(hash, cape ? png : SkinFormat.modern(png), cape);
 		} catch (Exception e) {
 			platform.log(false, "texture " + hash + ": " + e);
 			worker.schedule(new Runnable() {

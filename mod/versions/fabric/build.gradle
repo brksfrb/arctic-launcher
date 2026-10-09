@@ -197,7 +197,7 @@ processResources {
 			java: javaVersion,
 			loader_min: loaderMin,
 			// Zoom, Freelook, Fullbright and the rest (see Compat.FEATURES): 1.20+ for now.
-			features: atLeast('1.20'),
+			features: true,
 			// Minecraft's own buttons, sliders, checkboxes and text boxes in the Arctic style (1.20+ for now).
 			restyleWidgets: atLeast('1.20'),
 			// Screen gained a generic renderPanorama hook in 1.20.6; before that
@@ -222,9 +222,9 @@ processResources {
 			cosmeticsBuffers: !atLeast('1.21.9'),
 			cosmeticsState: atLeast('1.21.2') && !atLeast('1.21.9'),
 			emotes: atLeast('26.1'),
-			accountSwitch: atLeast('26.1'),
-			// Scoreboard tweaks, hit color, the minimap, duels, toasts: 1.20+ for now.
-			extras: atLeast('1.20'),
+			accountSwitch: true,
+			// Scoreboard tweaks, hit color, the minimap, duels (1.19.4+), toasts: every version.
+			extras: true,
 			// Simple Voice Chat's payloads need the CustomPacketPayload/StreamCodec system (1.20.5+);
 			// before that payloads were raw FriendlyByteBuf + channel ResourceLocation, no equivalent hook.
 			svc: atLeast('1.20.5'),

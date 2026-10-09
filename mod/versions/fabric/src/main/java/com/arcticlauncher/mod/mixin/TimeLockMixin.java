@@ -1,4 +1,3 @@
-//#if MC >= 1.20
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.client.ArcticClient;
@@ -49,5 +48,4 @@ abstract class TimeLockMixin {
 		}
 	}
 }
-//#endif
 //#endif

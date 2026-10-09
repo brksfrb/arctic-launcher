@@ -48,12 +48,8 @@ public final class Compat {
 	public static final String BLIT_SPRITE = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;blitSprite(Lnet/minecraft/resources/Identifier;IIII)V";
 	//#endif
 
-	/** Zoom, Freelook, Fullbright and the rest of the Features/View/Crosshair tabs. */
-	//#if MC >= 1.20
+	/** Zoom, Freelook, Fullbright and the rest of the Features/View/Crosshair tabs: every version. */
 	public static final boolean FEATURES = true;
-	//#else
-	public static final boolean FEATURES = false;
-	//#endif
 
 	private Compat() {}
 

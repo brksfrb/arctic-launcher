@@ -724,7 +724,12 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public boolean canDuel() {
-		return scoreboardTweaks();
+		// A duel world is made directly from 1.19.4; before that worlds come from the Create World screen.
+		//#if MC >= 1.19.4
+		return true;
+		//#else
+		return false;
+		//#endif
 	}
 
 	@Override
@@ -811,7 +816,6 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public void setHitColor(int rgb) {
-		//#if MC >= 1.20
 		Minecraft mc = mc();
 		mc.execute(() -> {
 			net.minecraft.client.renderer.texture.DynamicTexture texture =
@@ -827,13 +831,13 @@ final class FabricPlatform implements Platform {
 					//#if MC >= 1.21.2
 					pixels.setPixel(x, y, color);
 					//#else
-					pixels.setPixelRGBA(x, y, color);
+					// Before 1.21.2 these pixels are ABGR: red and blue swap places.
+					pixels.setPixelRGBA(x, y, (color & 0xFF00FF00) | ((color >> 16) & 0xFF) | ((color & 0xFF) << 16));
 					//#endif
 				}
 			}
 			texture.upload();
 		});
-		//#endif
 	}
 
 	/** The game's hurt tint: red at 70% (0xB2). */
@@ -875,12 +879,7 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public boolean scoreboardTweaks() {
-		// The "extras" mixins (scoreboard, hit color, minimap, duels) are 1.20+ for now.
-		//#if MC >= 1.20
 		return true;
-		//#else
-		return false;
-		//#endif
 	}
 
 	@Override

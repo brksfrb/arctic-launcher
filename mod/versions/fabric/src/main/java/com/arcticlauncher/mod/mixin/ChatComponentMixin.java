@@ -1,4 +1,3 @@
-//#if MC >= 1.20
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.client.ArcticClient;
@@ -37,16 +36,23 @@ abstract class ChatComponentMixin {
 	@Shadow
 	//#if MC >= 1.20.6
 	private void refreshTrimmedMessages() {}
-	//#else
+	//#elif MC >= 1.19
 	private void refreshTrimmedMessage() {}
+	//#else
+	// Before 1.19 the visible lines are rebuilt by rescaleChat.
+	public void rescaleChat() {}
 	//#endif
 
 	@ModifyVariable(
 			//#if MC >= 26.1
 			method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/multiplayer/chat/GuiMessageSource;Lnet/minecraft/client/multiplayer/chat/GuiMessageTag;)V",
-			//#else
+			//#elif MC >= 1.19
 			// Before 26.1 there's no separate GuiMessageSource: one 3-arg entry point.
 			method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/GuiMessageTag;)V",
+			//#else
+			// Before 1.19 (no signed chat): new lines come through (message, id); the 4-arg one
+			// also re-adds old lines when the chat is rescaled.
+			method = "addMessage(Lnet/minecraft/network/chat/Component;I)V",
 			//#endif
 			at = @At("HEAD"),
 			argsOnly = true)
@@ -65,8 +71,10 @@ abstract class ChatComponentMixin {
 			//#endif
 			//#if MC >= 1.20.6
 			refreshTrimmedMessages();
-			//#else
+			//#elif MC >= 1.19
 			refreshTrimmedMessage();
+			//#else
+			rescaleChat();
 			//#endif
 			out = message.copy().append(com.arcticlauncher.mod.Compat.literal(" (x" + arctic$repeats + ")").withStyle(ChatFormatting.GRAY));
 		} else {
@@ -88,4 +96,3 @@ abstract class ChatComponentMixin {
 		return out;
 	}
 }
-//#endif
