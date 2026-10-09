@@ -1,4 +1,3 @@
-//#if MC >= 26.1
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.mod.ItemPhysicsState;
@@ -30,4 +29,3 @@ abstract class ItemEntityMotionMixin implements ItemPhysicsState.Motion {
 		arctic$tiltAt = at;
 	}
 }
-//#endif
