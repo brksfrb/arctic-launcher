@@ -1,4 +1,3 @@
-//#if MC >= 1.20.5
 package com.arcticlauncher.mod.svc;
 
 import java.lang.reflect.Method;
@@ -10,7 +9,6 @@ import java.util.Set;
 
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.network.Connection;
-import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
 
 /**
  * Says hello to a server that lists a hello channel: Arctic's own ({@code arctic:hello}) and Polarium's
@@ -22,7 +20,12 @@ import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
  * said hello on instances that have Fabric API, and servers thought Polarium wasn't there.
  */
 public final class Greeter {
+	//#if MC >= 1.18
 	private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger("Arctic");
+	//#else
+	// slf4j isn't on the game's classpath before 1.18.
+	private static final org.apache.logging.log4j.Logger LOG = org.apache.logging.log4j.LogManager.getLogger("Arctic");
+	//#endif
 	private static Connection greeted;
 	private static final Set<String> GREETINGS = new HashSet<>();
 
@@ -43,13 +46,13 @@ public final class Greeter {
 			GREETINGS.clear();
 		}
 		if (channels.contains(SvcPayload.HELLO.toString()) && GREETINGS.add("arctic")) {
-			connection.send(new ServerboundCustomPayloadPacket(SvcPayload.hello()));
+			connection.send(SvcPayload.hello().toPacket());
 			LOG.info("Arctic: said arctic:hello");
 		}
 		if (channels.contains(SvcPayload.POLARIUM_HELLO.toString()) && GREETINGS.add("polarium")) {
 			SvcPayload hello = SvcPayload.polariumHello();
 			if (hello != null) {
-				connection.send(new ServerboundCustomPayloadPacket(hello));
+				connection.send(hello.toPacket());
 				LOG.info("Arctic: said polarium:hello for Polarium");
 			} else {
 				LOG.info("Arctic: the server asks for polarium:hello but Polarium isn't loaded");
@@ -84,13 +87,17 @@ public final class Greeter {
 			Class<?> callback = Class.forName(events + "$Register", true, loader);
 			Object listener = Proxy.newProxyInstance(callback.getClassLoader(), new Class<?>[] {callback}, (proxy, method, args) -> {
 				if (method.getDeclaringClass() == Object.class) {
-					return switch (method.getName()) {
-						case "hashCode" -> System.identityHashCode(proxy);
-						case "equals" -> proxy == args[0];
-						default -> "Arctic hello listener";
-					};
+					switch (method.getName()) {
+						case "hashCode":
+							return System.identityHashCode(proxy);
+						case "equals":
+							return proxy == args[0];
+						default:
+							return "Arctic hello listener";
+					}
 				}
-				if (args != null && args.length == 4 && args[3] instanceof List<?> ids) {
+				if (args != null && args.length == 4 && args[3] instanceof List<?>) {
+					List<?> ids = (List<?>) args[3];
 					List<String> channels = new ArrayList<>(ids.size());
 					for (Object id : ids) {
 						channels.add(String.valueOf(id));
@@ -112,10 +119,9 @@ public final class Greeter {
 	private static Connection connectionOf(Object handler) {
 		try {
 			Object connection = handler.getClass().getMethod("getConnection").invoke(handler);
-			return connection instanceof Connection c ? c : null;
+			return connection instanceof Connection ? (Connection) connection : null;
 		} catch (ReflectiveOperationException | RuntimeException e) {
 			return null;
 		}
 	}
 }
-//#endif
