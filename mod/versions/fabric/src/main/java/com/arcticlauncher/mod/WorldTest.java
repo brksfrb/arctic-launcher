@@ -165,6 +165,11 @@ final class WorldTest {
 		if (unpauser != null) {
 			unpauser.cancel(false);
 		}
+		String emoteShots = System.getProperty("arctic.emoteshots");
+		if (emoteShots != null) {
+			emoteTour(emoteShots.split(","));
+			return;
+		}
 		ClientConfig c = ArcticClient.config();
 		for (HudWidget w : ArcticClient.hud().widgets()) {
 			HudSlot slot = ArcticClient.hud().slot(w);
@@ -578,6 +583,59 @@ final class WorldTest {
 			Runnable step = steps[i];
 			TIMER.schedule(() -> run(step), (long) i * STEP * 2, TimeUnit.SECONDS);
 		}
+	}
+
+	/** Moments of each emote shot, as parts of its length. */
+	private static final float[] EMOTE_MOMENTS = {0.25f, 0.5f, 0.75f};
+
+	/**
+	 * -Darctic.emoteshots=id,id: each emote held still at a quarter, half and three quarters of it,
+	 * shot from the front and the back, then the game quits.
+	 */
+	private static void emoteTour(String[] ids) {
+		emoteTour(ids, 0);
+	}
+
+	/** Shoot once every emote's animation is here (asked for again each try: the list can arrive late). */
+	private static void emoteTour(String[] ids, int attempt) {
+		boolean ready = true;
+		for (String id : ids) {
+			com.arcticlauncher.client.looks.Cosmetics.Emote e = ArcticClient.looks().cosmetics().emote(id.trim());
+			ready &= e != null && ArcticClient.looks().cosmetics().animation(e) != null;
+		}
+		if (!ready && attempt < 60) {
+			TIMER.schedule(() -> run(() -> emoteTour(ids, attempt + 1)), 500, TimeUnit.MILLISECONDS);
+			return;
+		}
+		Compat.setScreen(null);
+		Minecraft mc = Minecraft.getInstance();
+		Compat.setYRot(mc.player, 0);
+		Compat.setXRot(mc.player, 10);
+		long at = 500;
+		for (String raw : ids) {
+			String id = raw.trim();
+			for (float moment : EMOTE_MOMENTS) {
+				for (int camera : new int[] {2, 1}) {
+					String name = "emote-" + id + "-" + Math.round(moment * 100) + (camera == 2 ? "-front" : "-back");
+					TIMER.schedule(() -> run(() -> {
+						com.arcticlauncher.client.looks.Cosmetics.Emote e = ArcticClient.looks().cosmetics().emote(id);
+						com.arcticlauncher.client.looks.Animation a = e == null ? null : ArcticClient.looks().cosmetics().animation(e);
+						if (a == null) {
+							ArcticMod.LOG.error("worldtest: FAILED emote {} not loaded", id);
+							return;
+						}
+						Compat.setCamera(camera);
+						ArcticClient.looks().cosmetics().holdLocal(ArcticClient.platform().worldPlayerId(), e, a.length * moment);
+					}), at, TimeUnit.MILLISECONDS);
+					TIMER.schedule(() -> run(() -> shot(name)), at + 700, TimeUnit.MILLISECONDS);
+					at += 1200;
+				}
+			}
+		}
+		TIMER.schedule(() -> run(() -> {
+			ArcticMod.LOG.info("worldtest: done");
+			Minecraft.getInstance().stop();
+		}), at + 1000, TimeUnit.MILLISECONDS);
 	}
 
 	private static void command(String command) {

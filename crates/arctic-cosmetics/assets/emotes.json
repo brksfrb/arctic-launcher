@@ -10,5 +10,17 @@
   {"id": "snow_shuffle", "name": "Snow Shuffle"},
   {"id": "stargaze", "name": "Stargaze"},
   {"id": "victory_twirl", "name": "Victory Twirl"},
-  {"id": "summit_balance", "name": "Summit Balance"}
+  {"id": "summit_balance", "name": "Summit Balance"},
+  {"id": "hello_wave", "name": "Hello Wave"},
+  {"id": "respect_bow", "name": "Respect Bow"},
+  {"id": "triple_clap", "name": "Triple Clap"},
+  {"id": "no_way", "name": "No Way"},
+  {"id": "over_there", "name": "Over There"},
+  {"id": "quick_salute", "name": "Quick Salute"},
+  {"id": "side_shuffle", "name": "Side Shuffle"},
+  {"id": "wake_up_stretch", "name": "Wake-up Stretch"},
+  {"id": "showboat_spin", "name": "Showboat Spin"},
+  {"id": "take_a_seat", "name": "Take a Seat"},
+  {"id": "facepalm_act", "name": "Facepalm Act"},
+  {"id": "victory_hop", "name": "Victory Hop"}
 ]

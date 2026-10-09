@@ -641,6 +641,24 @@ async fn gallery_share_browse_use_report() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn only_clients_with_the_expressive_rig_get_its_emotes() {
+    let app = app().await;
+    let ids = |catalog: &serde_json::Value| -> Vec<String> {
+        catalog["emotes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["id"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let (_, old) = call(&app, "GET", "/v1/cosmetics", None, None).await;
+    let (_, new) = call(&app, "GET", "/v1/cosmetics?rig=2", None, None).await;
+    assert!(ids(&old).contains(&"wave".to_owned()));
+    assert!(!ids(&old).contains(&"take_a_seat".to_owned()));
+    assert!(ids(&new).contains(&"take_a_seat".to_owned()));
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn cosmetics_are_worn_and_emotes_relayed() {
     let app = app().await;
     let token = microsoft_token(&app).await;

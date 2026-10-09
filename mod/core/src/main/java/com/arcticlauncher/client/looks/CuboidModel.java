@@ -53,9 +53,15 @@ public final class CuboidModel {
 		 * the packed light; glow pieces pass fullbright.
 		 */
 		public void emit(Xform xf, int light) {
+			float t = idle == null ? 0f : (System.currentTimeMillis() % 3_600_000L) / 1000f;
+			emit(xf, light, idle, t);
+		}
+
+		/** Draws the piece with its bones posed by {@code motion} (bones by name) at {@code t} seconds. */
+		public void emit(Xform xf, int light, Animation motion, float t) {
+			Animation idle = motion;
 			int n = parent.length;
 			float[] world = new float[n * 12];
-			float t = idle == null ? 0f : (System.currentTimeMillis() % 3_600_000L) / 1000f;
 			for (int i = 0; i < n; i++) {
 				float rx = rotation[i][0];
 				float ry = rotation[i][1];

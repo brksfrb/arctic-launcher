@@ -32,11 +32,24 @@ fn now_ms() -> u64 {
         .map_or(0, |d| d.as_millis() as u64)
 }
 
-async fn catalog(State(state): State<Shared>) -> Response {
+#[derive(Deserialize)]
+struct CatalogQuery {
+    /// The newest player rig the client can play (see `Emote::rig`); older clients send none.
+    rig: Option<u8>,
+}
+
+async fn catalog(State(state): State<Shared>, Query(q): Query<CatalogQuery>) -> Response {
+    let rig = q.rig.unwrap_or(1);
+    let emotes: Vec<_> = state
+        .content
+        .emotes
+        .iter()
+        .filter(|e| e.rig <= rig)
+        .collect();
     Json(json!({
         "cosmetics": state.content.cosmetics,
         "meshes": state.content.meshes,
-        "emotes": state.content.emotes,
+        "emotes": emotes,
     }))
     .into_response()
 }

@@ -83,6 +83,27 @@ pub struct Emote {
     pub length: f64,
     #[serde(rename = "loop")]
     pub looping: bool,
+    /// The player rig it needs: 1, the six vanilla parts; 2, the expressive rig (a `root` or
+    /// `torso` bone), which only clients that ask for it get (older ones would play it wrong).
+    #[serde(skip)]
+    pub rig: u8,
+}
+
+/// The newest player rig an emote can need.
+pub const EXPRESSIVE_RIG: u8 = 2;
+
+/// The rig an emote's animation needs (see [`Emote::rig`]).
+fn rig_of(json: &serde_json::Value) -> u8 {
+    let bones = json
+        .get("animations")
+        .and_then(|a| a.as_object())
+        .and_then(|a| a.values().next())
+        .and_then(|a| a.get("bones"))
+        .and_then(|b| b.as_object());
+    match bones {
+        Some(b) if b.contains_key("root") || b.contains_key("torso") => EXPRESSIVE_RIG,
+        _ => 1,
+    }
 }
 
 #[derive(Debug, Default)]
@@ -173,6 +194,7 @@ impl Content {
             let json = parse_json(&bytes, &path)?;
             let (length, looping) =
                 animation_info(&json).map_err(|e| format!("emote {}: {e}", entry.id))?;
+            let rig = rig_of(&json);
             let animation = content.add_file(bytes);
             content.emotes.push(Emote {
                 id: entry.id,
@@ -180,6 +202,7 @@ impl Content {
                 animation,
                 length,
                 looping,
+                rig,
             });
         }
         Ok(content)
@@ -467,6 +490,17 @@ mod tests {
         let content = Content::load(&dir).unwrap();
         assert!(content.cosmetics.len() >= 17, "{}", content.cosmetics.len());
         assert!(content.emotes.len() >= 6, "{}", content.emotes.len());
+    }
+
+    #[test]
+    fn expressive_emotes_are_told_apart() {
+        let six: serde_json::Value = serde_json::from_str(ANIM).unwrap();
+        assert_eq!(rig_of(&six), 1);
+        let rig: serde_json::Value = serde_json::from_str(
+            r#"{"animations":{"a":{"animation_length":1,"bones":{"root":{"position":{"0":[0,0,0]}}}}}}"#,
+        )
+        .unwrap();
+        assert_eq!(rig_of(&rig), EXPRESSIVE_RIG);
     }
 
     #[test]

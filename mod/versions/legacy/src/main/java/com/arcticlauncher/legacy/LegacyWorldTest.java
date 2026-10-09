@@ -86,6 +86,11 @@ final class LegacyWorldTest {
 
 	private static void tour() {
 		final MinecraftClient mc = MinecraftClient.getInstance();
+		String emoteShots = System.getProperty("arctic.emoteshots");
+		if (emoteShots != null) {
+			emoteTour(emoteShots.split(","), 0);
+			return;
+		}
 		Runnable[] steps = {
 				() -> {
 					for (HudWidget w : ArcticClient.hud().widgets()) {
@@ -197,6 +202,53 @@ final class LegacyWorldTest {
 			final Runnable step = steps[i];
 			TIMER.schedule(() -> run(step), (long) i * STEP, TimeUnit.SECONDS);
 		}
+	}
+
+	/** Moments of each emote shot, as parts of its length. */
+	private static final float[] EMOTE_MOMENTS = {0.25f, 0.5f, 0.75f};
+
+	/**
+	 * -Darctic.emoteshots=id,id: once every animation is here, each emote held still at a quarter,
+	 * half and three quarters of it, shot from the front and the back; then the game quits.
+	 */
+	private static void emoteTour(String[] ids, int attempt) {
+		final MinecraftClient mc = MinecraftClient.getInstance();
+		boolean ready = true;
+		for (String id : ids) {
+			com.arcticlauncher.client.looks.Cosmetics.Emote e = ArcticClient.looks().cosmetics().emote(id.trim());
+			ready &= e != null && ArcticClient.looks().cosmetics().animation(e) != null;
+		}
+		if (!ready && attempt < 60) {
+			TIMER.schedule(() -> run(() -> emoteTour(ids, attempt + 1)), 500, TimeUnit.MILLISECONDS);
+			return;
+		}
+		mc.player.yaw = 0;
+		mc.player.pitch = 10;
+		long at = 500;
+		for (String raw : ids) {
+			final String id = raw.trim();
+			for (final float moment : EMOTE_MOMENTS) {
+				for (final int perspective : new int[] {2, 1}) {
+					final String name = "emote-" + id + "-" + Math.round(moment * 100) + (perspective == 2 ? "-front" : "-back");
+					TIMER.schedule(() -> run(() -> {
+						com.arcticlauncher.client.looks.Cosmetics.Emote e = ArcticClient.looks().cosmetics().emote(id);
+						com.arcticlauncher.client.looks.Animation a = e == null ? null : ArcticClient.looks().cosmetics().animation(e);
+						if (a == null) {
+							ArcticLegacy.LOG.error("worldtest: FAILED emote {} not loaded", id);
+							return;
+						}
+						mc.options.perspective = perspective;
+						ArcticClient.looks().cosmetics().holdLocal(ArcticClient.platform().worldPlayerId(), e, a.length * moment);
+					}), at, TimeUnit.MILLISECONDS);
+					TIMER.schedule(() -> run(() -> shot(name)), at + 700, TimeUnit.MILLISECONDS);
+					at += 1200;
+				}
+			}
+		}
+		TIMER.schedule(() -> run(() -> {
+			ArcticLegacy.LOG.info("worldtest: done");
+			mc.scheduleStop();
+		}), at + 1000, TimeUnit.MILLISECONDS);
 	}
 
 	private static void later(Runnable r) {
