@@ -386,6 +386,7 @@ dependencies = [
  "ureq",
  "uuid 1.26.1",
  "windows-sys 0.61.2",
+ "x11rb",
  "zeroize",
  "zip",
 ]
