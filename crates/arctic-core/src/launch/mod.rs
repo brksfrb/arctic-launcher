@@ -10,6 +10,7 @@ pub mod logparse;
 pub mod process;
 pub mod startup;
 mod startup_cache;
+mod truststore;
 
 pub use process::{GameEvent, GameHandle, spawn, spawn_detached};
 
@@ -533,6 +534,10 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
             .chain(arctic_mod::brand_flag(&req.instance.loader))
             .chain(fast_start_flags(req.instance))
             .chain(preload_flags)
+            .chain(truststore::flags(
+                req.dirs,
+                inst.version.java_version.as_ref().map_or(8, |j| j.major_version),
+            ))
             .chain(proxy.active().map(|_| {
                 format!(
                     "-Djdk.net.hosts.file={}",

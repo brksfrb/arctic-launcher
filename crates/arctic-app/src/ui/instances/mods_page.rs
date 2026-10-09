@@ -100,8 +100,9 @@ impl ArcticApp {
         }
     }
 
-    /// .jar files dropped on the window go into this instance's mods folder.
-    fn add_dropped_mods(&mut self, ui: &egui::Ui, id: &str, mods_dir: &std::path::Path) {
+    /// .jar files dropped on the window go into this instance's mods folder (from any of its
+    /// tabs); returns whether any were added.
+    pub(super) fn add_dropped_mods(&mut self, ui: &egui::Ui, id: &str, mods_dir: &std::path::Path) -> bool {
         let is_jar =
             |p: &std::path::Path| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("jar"));
         if ui.input(|i| {
@@ -131,7 +132,7 @@ impl ArcticApp {
                 .collect()
         });
         if dropped.is_empty() {
-            return;
+            return false;
         }
         let _ = std::fs::create_dir_all(mods_dir);
         let mut added = 0;
@@ -160,6 +161,7 @@ impl ArcticApp {
             );
             self.refresh_mods(id);
         }
+        added > 0
     }
 
     /// Jars added, removed or replaced in the folder (by hand, or by a game

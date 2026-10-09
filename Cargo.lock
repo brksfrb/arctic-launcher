@@ -374,6 +374,7 @@ dependencies = [
  "png",
  "regex",
  "rusqlite",
+ "rustls-native-certs",
  "self-replace",
  "semver",
  "serde",

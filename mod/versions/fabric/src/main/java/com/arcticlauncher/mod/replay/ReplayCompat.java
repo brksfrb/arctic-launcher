@@ -1,4 +1,4 @@
-//#if MC >= 1.16
+//#if MC >= 1.15
 package com.arcticlauncher.mod.replay;
 
 import com.mojang.authlib.GameProfile;
@@ -45,8 +45,10 @@ public final class ReplayCompat {
 	static boolean onGround(Entity e) {
 		//#if MC >= 1.20
 		return e.onGround();
-		//#else
+		//#elif MC >= 1.16
 		return e.isOnGround();
+		//#else
+		return e.onGround;
 		//#endif
 	}
 
@@ -118,8 +120,10 @@ public final class ReplayCompat {
 		mc.gui.chatListener().handleSystemMessage(message, false);
 		//#elif MC >= 1.19
 		mc.getChatListener().handleSystemMessage(message, false);
-		//#else
+		//#elif MC >= 1.16
 		mc.gui.handleChat(net.minecraft.network.chat.ChatType.SYSTEM, message, net.minecraft.Util.NIL_UUID);
+		//#else
+		mc.gui.handleChat(net.minecraft.network.chat.ChatType.SYSTEM, message);
 		//#endif
 	}
 
@@ -288,10 +292,15 @@ public final class ReplayCompat {
 				p.registryHolder(), p.dimensionType(), p.dimension(), p.seed(), p.maxPlayers(), p.chunkRadius(),
 				p.simulationDistance(), p.reducedDebugInfo(), false, p.isDebug(), p.isFlat(), p.lastDeathLocation());
 		//#else
-		// Its encoding starts with the player's id (int), hardcore (boolean) and game mode (byte).
 		net.minecraft.network.FriendlyByteBuf bytes = bytesOf(p);
 		bytes.setInt(0, cameraId);
+		//#if MC >= 1.16
+		// Its encoding starts with the player's id (int), hardcore (boolean) and game mode (byte).
 		bytes.setByte(5, GameType.SPECTATOR.getId());
+		//#else
+		// 1.15: one byte after the id holds the game mode, with hardcore as its 8 bit.
+		bytes.setByte(4, (bytes.getUnsignedByte(4) & 8) | GameType.SPECTATOR.getId());
+		//#endif
 		//#if MC >= 1.17
 		return new ClientboundLoginPacket(bytes);
 		//#else

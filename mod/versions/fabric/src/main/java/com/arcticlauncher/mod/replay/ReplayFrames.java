@@ -1,4 +1,4 @@
-//#if MC >= 1.16
+//#if MC >= 1.15
 package com.arcticlauncher.mod.replay;
 
 import com.arcticlauncher.client.replay.ReplayBackend;
@@ -85,7 +85,11 @@ final class ReplayFrames {
 		// OpenGL directly: read the color texture into memory we own.
 		java.nio.ByteBuffer pixels = org.lwjgl.system.MemoryUtil.memAlloc(width * height * 4);
 		try {
+			//#if MC >= 1.16
 			RenderSystem.bindTexture(target.getColorTextureId());
+			//#else
+			RenderSystem.bindTexture(target.colorTextureId);
+			//#endif
 			org.lwjgl.opengl.GL11.glPixelStorei(org.lwjgl.opengl.GL11.GL_PACK_ALIGNMENT, 1);
 			org.lwjgl.opengl.GL11.glGetTexImage(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, 0, org.lwjgl.opengl.GL11.GL_RGBA,
 					org.lwjgl.opengl.GL11.GL_UNSIGNED_BYTE, pixels);

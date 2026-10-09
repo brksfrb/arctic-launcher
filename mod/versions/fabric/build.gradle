@@ -200,9 +200,8 @@ processResources {
 			features: true,
 			// Minecraft's own buttons, sliders, checkboxes and text boxes in the Arctic style.
 			restyleWidgets: true,
-			// Screen gained a generic renderPanorama hook in 1.20.6; before that
-			// only TitleScreen draws one, so ScreenMixin has nothing to attach to.
-			panoramaHook: atLeast('1.20.6'),
+			// Menus' backdrop: Screen's panorama from 1.20.6, its dirt background before (ScreenMixin).
+			panoramaHook: true,
 			// Before 26.1 zoom's FOV multiplier is applied on GameRenderer, not Camera.
 			oldCamera: !atLeast('26.1'),
 			// Needs the FreeType font code of 26.1+ (older versions use STB).
@@ -238,10 +237,10 @@ processResources {
 			// item's render state carries where it is and how far it's turned.
 			itemPhysics: true,
 			itemPhysicsState: atLeast('1.21.2'),
-			// Replays (recording and watching): ported version by version.
-			replay: atLeast('1.16'),
+			// Replays (recording and watching): every version.
+			replay: true,
 			// Before 26.1 a replay grabs finished frames where the window shows them.
-			replayWindow: atLeast('1.16') && !atLeast('26.1'),
+			replayWindow: !atLeast('26.1'),
 			// Self-tests make worlds through the Create World screen before 1.19.4.
 			oldWorldCreation: !atLeast('1.19.4'),
 			// Server names were looked up by ServerNameResolver from 1.17; before, by

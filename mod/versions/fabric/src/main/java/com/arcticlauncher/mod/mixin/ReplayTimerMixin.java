@@ -1,4 +1,4 @@
-//#if MC >= 1.16
+//#if MC >= 1.15
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.client.replay.ReplayClock;
