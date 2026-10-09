@@ -165,8 +165,8 @@ impl ArcticApp {
         let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
         ui.add_space(10.0);
         let mut close = false;
-        ui.horizontal(|ui| {
-            if ui.button("Cancel").clicked() {
+        crate::widgets::row(ui, |ui| {
+            if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
                 close = true;
             }
             let valid = !name.trim().is_empty();
@@ -215,13 +215,13 @@ impl ArcticApp {
                 .inner_margin(10.0)
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.horizontal(|ui| {
+                    crate::widgets::row(ui, |ui| {
                         let (dot, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
                         ui.painter().circle_filled(dot.center(), 6.0, rgb(profile.color));
                         match &mut renaming {
                             Some((id, text)) if *id == profile.id => {
                                 let r = ui.add(widgets::text_field(text).char_limit(32).desired_width(180.0));
-                                let done = ui.button("Save").clicked()
+                                let done = crate::widgets::button(ui, p, None, "Save", false).clicked()
                                     || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
                                 if done {
                                     match self.profiles.rename(&profile.id, text) {
@@ -271,8 +271,8 @@ impl ArcticApp {
                                 .small()
                                 .color(p.warn),
                         );
-                        ui.horizontal(|ui| {
-                            if ui.button("Keep").clicked() {
+                        crate::widgets::row(ui, |ui| {
+                            if crate::widgets::button(ui, p, None, "Keep", false).clicked() {
                                 confirm = None;
                             }
                             if widgets::button(ui, p, Some(Icon::Trash), "Remove", true).clicked() {
@@ -292,7 +292,7 @@ impl ArcticApp {
                 .push(Kind::Error, "Could not save profiles", e.to_string());
         }
         ui.add_space(4.0);
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             if widgets::button(ui, p, Some(Icon::Plus), "New profile", false).clicked() {
                 self.profile_dialog = ProfileDialog::Create {
                     name: String::new(),
@@ -302,7 +302,7 @@ impl ArcticApp {
             if widgets::button(ui, p, Some(Icon::Folder), "Open folder", false).clicked() {
                 let _ = open::that_detached(self.dirs.profile_root());
             }
-            if ui.button("Done").clicked() {
+            if crate::widgets::button(ui, p, None, "Done", false).clicked() {
                 self.profile_dialog = ProfileDialog::Closed;
             }
         });

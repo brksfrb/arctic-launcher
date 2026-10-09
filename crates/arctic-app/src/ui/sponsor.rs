@@ -91,7 +91,7 @@ impl ArcticApp {
         let p = self.palette();
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
+            crate::widgets::row(ui, |ui| {
                 let (mark, _) = ui.allocate_exact_size(vec2(44.0, 44.0), Sense::hover());
                 flash::mark(ui.painter(), mark);
                 ui.add_space(6.0);

@@ -269,7 +269,7 @@ impl ArcticApp {
                     }
                 }
                 ui.add_space(12.0);
-                ui.horizontal(|ui| {
+                crate::widgets::row(ui, |ui| {
                     ui.label(
                         RichText::new("Codes are kept on the Arctic server; text and files work anywhere.")
                             .small()
@@ -296,7 +296,7 @@ impl ArcticApp {
     fn export_buttons(&mut self, ui: &mut egui::Ui, state: &mut ExportState, bundle: Bundle) {
         let p = self.palette();
         let account = self.accounts.active().cloned();
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             let making = matches!(state.code, Some(CodeState::Making));
             let can_code = account.is_some() && !making;
             let code = ui
@@ -423,7 +423,7 @@ impl ArcticApp {
         }
         ui.add_space(10.0);
         let mut close = false;
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             if widgets::button(ui, p, Some(Icon::Folder), "Open file…", false).clicked() {
                 state.stage = ImportStage::Loading;
                 self.tasks.share_open_file();
@@ -603,7 +603,7 @@ impl ArcticApp {
         }
         ui.add_space(12.0);
         let mut back = false;
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             if widgets::button(ui, p, None, "Back", false).clicked() {
                 back = true;
             }

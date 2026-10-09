@@ -147,8 +147,8 @@ impl ArcticApp {
                     "Its own: start fresh and keep them separate",
                 );
                 ui.add_space(14.0);
-                ui.horizontal(|ui| {
-                    if ui.button("Cancel").clicked() {
+                crate::widgets::row(ui, |ui| {
+                    if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
                         ui.close();
                     }
                     let ready = !form.name.trim().is_empty()

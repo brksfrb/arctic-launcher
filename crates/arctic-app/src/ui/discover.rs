@@ -62,7 +62,7 @@ impl ArcticApp {
                     self.discover_list(ui);
                 }
                 ui.add_space(10.0);
-                ui.horizontal(|ui| {
+                crate::widgets::row(ui, |ui| {
                     if self.discover.form.is_some()
                         && widgets::button(ui, p, Some(Icon::ChevronLeft), "Back", false).clicked()
                     {
@@ -81,7 +81,7 @@ impl ArcticApp {
 
     fn discover_list(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             ui.vertical(|ui| {
                 ui.label(
                     RichText::new("Discover servers")
@@ -101,7 +101,7 @@ impl ArcticApp {
             });
         });
         ui.add_space(10.0);
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             for (access, label) in [
                 (Access::Any, "All"),
                 (Access::Premium, "Premium"),
@@ -235,7 +235,7 @@ impl ArcticApp {
             .inner_margin(10.0)
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.horizontal(|ui| {
+                crate::widgets::row(ui, |ui| {
                     ui.vertical(|ui| {
                         ui.set_max_width((ui.available_width() - 220.0).max(160.0));
                         ui.horizontal(|ui| {
@@ -354,7 +354,7 @@ impl ArcticApp {
                     .color(p.muted),
             );
             ui.add_space(8.0);
-            ui.horizontal(|ui| {
+            crate::widgets::row(ui, |ui| {
                 let check =
                     !form.busy && widgets::button(ui, p, None, "Check my MOTD", true).clicked();
                 if form.busy {
@@ -402,7 +402,7 @@ impl ArcticApp {
                     ui.end_row();
                 });
             ui.add_space(8.0);
-            ui.horizontal(|ui| {
+            crate::widgets::row(ui, |ui| {
                 let ready = !form.busy
                     && !form.fields.address.trim().is_empty()
                     && !form.fields.name.trim().is_empty();

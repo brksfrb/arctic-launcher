@@ -154,8 +154,8 @@ impl ArcticApp {
         ui.add_space(10.0);
         let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
         let name = name.clone();
-        ui.horizontal(|ui| {
-            if ui.button("Back").clicked() {
+        crate::widgets::row(ui, |ui| {
+            if crate::widgets::button(ui, p, None, "Back", false).clicked() {
                 self.add_account = AddAccount::Choose;
             }
             let add = ui
@@ -224,7 +224,7 @@ impl ArcticApp {
             }
         }
         ui.add_space(8.0);
-        if ui.button("Cancel").clicked() {
+        if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
             self.cancel_login();
         }
     }
@@ -249,8 +249,8 @@ impl ArcticApp {
                 );
                 ui.label(RichText::new("You can add it again at any time.").color(p.muted));
                 ui.add_space(12.0);
-                ui.horizontal(|ui| {
-                    if ui.button("Cancel").clicked() {
+                crate::widgets::row(ui, |ui| {
+                    if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
                         self.remove_confirm = None;
                     }
                     if widgets::button(ui, p, Some(Icon::Trash), "Remove", true).clicked() {
@@ -285,8 +285,8 @@ impl ArcticApp {
                     .color(p.muted),
                 );
                 ui.add_space(12.0);
-                ui.horizontal(|ui| {
-                    if ui.button("Keep them").clicked() {
+                crate::widgets::row(ui, |ui| {
+                    if crate::widgets::button(ui, p, None, "Keep them", false).clicked() {
                         self.performance_off_confirm = None;
                     }
                     if widgets::button(ui, p, None, "Turn off", true).clicked() {
@@ -327,8 +327,8 @@ impl ArcticApp {
                 ui.label(RichText::new(title).size(20.0).strong());
                 ui.label(RichText::new(about).color(p.muted));
                 ui.add_space(12.0);
-                ui.horizontal(|ui| {
-                    if ui.button("Keep it").clicked() {
+                crate::widgets::row(ui, |ui| {
+                    if crate::widgets::button(ui, p, None, "Keep it", false).clicked() {
                         self.client_off_confirm = None;
                     }
                     if widgets::button(ui, p, None, "Turn off", true).clicked() {

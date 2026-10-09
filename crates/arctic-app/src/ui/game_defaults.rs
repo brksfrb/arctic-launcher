@@ -117,9 +117,12 @@ impl ArcticApp {
             .clone()
             .filter(|id| all.iter().any(|(i, _)| i == id))
             .unwrap_or_else(|| all[0].0.clone());
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             ui.label(RichText::new("Instance").color(p.muted));
-            let name = all.iter().find(|(i, _)| *i == picked).map_or("", |(_, n)| n.as_str());
+            let name = all
+                .iter()
+                .find(|(i, _)| *i == picked)
+                .map_or("", |(_, n)| n.as_str());
             egui::ComboBox::from_id_salt("defaults_instance")
                 .selected_text(name)
                 .show_ui(ui, |ui| {
@@ -141,9 +144,17 @@ impl ArcticApp {
                         Ok(c) => {
                             let n = c.values.len();
                             *d = c;
-                            self.toasts.push(Toast::Success, format!("Copied {n} settings"), format!("From {}", instance.name));
+                            self.toasts.push(
+                                Toast::Success,
+                                format!("Copied {n} settings"),
+                                format!("From {}", instance.name),
+                            );
                         }
-                        Err(_) => self.toasts.push(Toast::Info, "Nothing to copy yet", "Play that instance once first."),
+                        Err(_) => self.toasts.push(
+                            Toast::Info,
+                            "Nothing to copy yet",
+                            "Play that instance once first.",
+                        ),
                     }
                 }
                 if widgets::button(ui, p, None, "Apply to it", false)
@@ -161,7 +172,7 @@ impl ArcticApp {
                 }
             }
         });
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             if !d.is_empty() && widgets::button(ui, p, Some(Icon::Share), "Share", false).clicked()
             {
                 self.open_share_defaults();

@@ -76,7 +76,7 @@ impl ArcticApp {
             None => return,
         };
         ui.add_space(18.0);
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             ui.label(RichText::new("SERVERS").small().color(p.muted));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let busy = self
@@ -188,7 +188,7 @@ impl ArcticApp {
             }
         }
         let (mut join, mut add) = (false, false);
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             let field = ui.add(
                 widgets::text_field(&mut self.servers.direct)
                     .hint_text("Direct join: play.example.net")
@@ -294,7 +294,7 @@ impl ArcticApp {
         let p = self.palette();
         let ping = self.servers.status.get(&server.address);
         let mut join = false;
-        let row = ui.horizontal(|ui| {
+        let row = crate::widgets::row(ui, |ui| {
             // Grip: drag the server up or down the list.
             let (grip, response) =
                 ui.allocate_exact_size(vec2(14.0, ICON), egui::Sense::click_and_drag());

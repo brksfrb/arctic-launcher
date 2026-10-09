@@ -37,7 +37,7 @@ impl ArcticApp {
                 Vec::new()
             }
         };
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             ui.label(RichText::new(format!("{} worlds", list.len())).color(p.muted));
             if self.inst.worlds_busy {
                 ui.spinner();
@@ -246,8 +246,8 @@ impl ArcticApp {
                         }
                     });
                 ui.add_space(10.0);
-                ui.horizontal(|ui| {
-                    if ui.button("Cancel").clicked() {
+                crate::widgets::row(ui, |ui| {
+                    if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
                         ui.close();
                     }
                     let n = dialog.picked.len();

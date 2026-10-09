@@ -246,6 +246,23 @@ pub fn tile_button(ui: &mut Ui, p: &Palette, icon: Icon, tooltip: &str, size: f3
 }
 
 /// Text button with a leading icon; `primary` uses the accent color.
+/// Height of every button.
+pub const BUTTON_HEIGHT: f32 = 34.0;
+
+/// A row of controls with buttons in it. Like `ui.horizontal`, but everything is centered on
+/// the buttons' height: egui centers a row on its default control height (18), so text beside
+/// a button sat near its top.
+pub fn row<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> egui::InnerResponse<R> {
+    let normal = ui.spacing().interact_size.y;
+    ui.spacing_mut().interact_size.y = BUTTON_HEIGHT;
+    let response = ui.horizontal(|ui| {
+        ui.spacing_mut().interact_size.y = normal;
+        add(ui)
+    });
+    ui.spacing_mut().interact_size.y = normal;
+    response
+}
+
 pub fn button(
     ui: &mut Ui,
     p: &Palette,
@@ -262,7 +279,7 @@ pub fn button(
         .painter()
         .layout_no_wrap(label.to_owned(), FontId::proportional(14.0), fg);
     let icon_w = if icon.is_some() { 22.0 } else { 0.0 };
-    let size = vec2(galley.size().x + icon_w + 28.0, 34.0);
+    let size = vec2(galley.size().x + icon_w + 28.0, BUTTON_HEIGHT);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     let hover = ui
         .ctx()

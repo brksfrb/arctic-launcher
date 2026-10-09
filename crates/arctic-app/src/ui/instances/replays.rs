@@ -30,7 +30,7 @@ impl ArcticApp {
                 Vec::new()
             }
         };
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             ui.label(RichText::new(format!("{} replays", list.len())).color(p.muted));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if widgets::icon_button(ui, p, Icon::Folder, "Open replays folder").clicked() {
@@ -77,7 +77,7 @@ impl ArcticApp {
 
     fn replay_row(&mut self, ui: &mut egui::Ui, instance: &Instance, replay: &Replay) {
         let p = self.palette();
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             match &replay.thumbnail {
                 Some(png) => {
                     let uri = format!("bytes://replay/{}.png", replay.path.display());

@@ -134,7 +134,7 @@ impl ArcticApp {
 
     fn update_banner(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        ui.horizontal(|ui| match &self.update {
+        crate::widgets::row(ui, |ui| match &self.update {
             UpdateState::Available { info, .. } => {
                 let info = info.clone();
                 let text = if info.required {
@@ -152,7 +152,7 @@ impl ArcticApp {
                     self.start_update(info.clone());
                 }
                 ui.hyperlink_to("Release notes", &info.page_url);
-                if !info.required && ui.button("Later").clicked() {
+                if !info.required && crate::widgets::button(ui, p, None, "Later", false).clicked() {
                     self.update = UpdateState::Available {
                         info,
                         dismissed: true,
@@ -187,7 +187,7 @@ impl ArcticApp {
             } => {
                 let info = info.clone();
                 ui.label(RichText::new(format!("Update failed: {error}")).color(p.error));
-                if ui.button("Retry").clicked() {
+                if crate::widgets::button(ui, p, None, "Retry", false).clicked() {
                     self.start_update(info);
                 }
             }

@@ -51,7 +51,7 @@ impl ArcticApp {
                 Vec::new()
             }
         };
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             let enabled = files.iter().filter(|f| f.enabled).count();
             ui.label(
                 RichText::new(format!("{} mods · {enabled} enabled", files.len())).color(p.muted),

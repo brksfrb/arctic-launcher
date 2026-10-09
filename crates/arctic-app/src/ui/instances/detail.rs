@@ -34,7 +34,7 @@ impl ArcticApp {
         ui.add_space(8.0);
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
+            crate::widgets::row(ui, |ui| {
                 let emblem = widgets::instance_emblem(ui, p, &instance.icon, 64.0);
                 self.icon_picker(&emblem, id);
                 ui.add_space(6.0);
@@ -129,7 +129,7 @@ impl ArcticApp {
                     );
                     if name.trim() != instance.name
                         && !name.trim().is_empty()
-                        && ui.button("Save").clicked()
+                        && crate::widgets::button(ui, p, None, "Save", false).clicked()
                     {
                         self.update_instance(&id, |i| i.name = name.trim().to_owned());
                         self.inst.rename = None;
@@ -191,8 +191,8 @@ impl ArcticApp {
                 }
                 return;
             }
-            ui.horizontal(|ui| {
-                if ui.button("Keep it").clicked() {
+            crate::widgets::row(ui, |ui| {
+                if crate::widgets::button(ui, p, None, "Keep it", false).clicked() {
                     self.inst.confirm_delete = false;
                 }
                 if widgets::button(ui, p, Some(Icon::Trash), "Yes, remove", true).clicked() {

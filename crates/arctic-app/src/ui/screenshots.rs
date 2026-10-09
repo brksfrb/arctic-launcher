@@ -54,7 +54,7 @@ impl ArcticApp {
         }
         ui.ctx()
             .request_repaint_after(std::time::Duration::from_secs_f64(RESCAN_EVERY));
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             ui.vertical(|ui| {
                 widgets::page_header(ui, p, "Screenshots", "From every instance, newest first.");
             });
@@ -237,7 +237,7 @@ impl ArcticApp {
                     .truncate(),
                 );
                 ui.add_space(6.0);
-                ui.horizontal(|ui| {
+                crate::widgets::row(ui, |ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if widgets::button(ui, p, None, "Close", false).clicked() {
                             close = true;

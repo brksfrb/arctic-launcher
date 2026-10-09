@@ -20,9 +20,19 @@ pub fn quitting() -> bool {
     QUITTING.load(Ordering::Relaxed)
 }
 
-/// Let the next close request really quit instead of hiding.
+/// If the window doesn't close on its own after quitting (hidden and not processing frames, or
+/// stuck shutting something down), exit anyway after this long.
+const QUIT_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Let the next close request really quit instead of hiding, and make sure the process ends
+/// even if closing hangs (a restart into an update must not leave a frozen old window behind).
 pub fn set_quitting() {
-    QUITTING.store(true, Ordering::Relaxed);
+    if !QUITTING.swap(true, Ordering::Relaxed) {
+        std::thread::spawn(|| {
+            std::thread::sleep(QUIT_GRACE);
+            std::process::exit(0);
+        });
+    }
 }
 
 pub struct Tray {
@@ -59,9 +69,6 @@ mod imp {
     pub type Handle = tray_icon::TrayIcon;
 
     const ICON_SIZE: u32 = 32;
-    /// If the window doesn't close on its own after Quit (it may be hidden
-    /// and not processing frames), exit anyway after this long.
-    const QUIT_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 
     pub fn create(ctx: &egui::Context, tx: Sender<Action>) -> Option<Handle> {
         let open = MenuItem::new("Open Arctic Launcher", true, None);
@@ -90,12 +97,8 @@ mod imp {
                 window::show();
                 let _ = tx.send(Action::Play);
             } else if event.id == quit_id {
-                QUITTING.store(true, Ordering::Relaxed);
+                set_quitting();
                 window::close();
-                std::thread::spawn(|| {
-                    std::thread::sleep(QUIT_GRACE);
-                    std::process::exit(0);
-                });
             }
             menu_ctx.request_repaint();
         }));
@@ -128,8 +131,6 @@ mod imp {
     pub type Handle = ksni::blocking::Handle<ArcticTray>;
 
     const ICON_SIZE: u32 = 32;
-    /// If the window doesn't close on its own after Quit, exit anyway after this long.
-    const QUIT_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 
     pub struct ArcticTray {
         tx: Sender<Action>,
@@ -184,13 +185,9 @@ mod imp {
                 StandardItem {
                     label: "Quit".into(),
                     activate: Box::new(|tray: &mut Self| {
-                        QUITTING.store(true, Ordering::Relaxed);
+                        set_quitting();
                         window::close();
                         tray.ctx.request_repaint();
-                        std::thread::spawn(|| {
-                            std::thread::sleep(QUIT_GRACE);
-                            std::process::exit(0);
-                        });
                     }),
                     ..Default::default()
                 }
