@@ -252,6 +252,26 @@ public interface Platform {
 		return false;
 	}
 
+	/** Game rules have camelCase names (1.13 to 1.21.10; snake_case from 1.21.11, as in 26.x). */
+	default boolean camelCaseRules() {
+		return false;
+	}
+
+	/** Armour is given with "replaceitem" and 1.13's slot names (1.13 to 1.16; "item replace" from 1.17). */
+	default boolean replaceItemCommand() {
+		return false;
+	}
+
+	/** Where a flat world's ground is: y 4 before 1.18, y -60 after (worlds got deeper). */
+	default int flatGroundY() {
+		return -60;
+	}
+
+	/** The duel world isn't flat (made through the Create World screen): duel on an arena built in the sky. */
+	default boolean duelArena() {
+		return false;
+	}
+
 	/** This version can make a duel world and open it to LAN. */
 	default boolean canDuel() {
 		return false;
