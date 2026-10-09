@@ -724,11 +724,43 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public boolean canDuel() {
-		// A duel world is made directly from 1.19.4; before that worlds come from the Create World screen.
-		//#if MC >= 1.19.4
 		return true;
-		//#else
+	}
+
+	@Override
+	public boolean camelCaseRules() {
+		//#if MC >= 1.21.11
 		return false;
+		//#else
+		return true;
+		//#endif
+	}
+
+	@Override
+	public boolean replaceItemCommand() {
+		//#if MC >= 1.17
+		return false;
+		//#else
+		return true;
+		//#endif
+	}
+
+	@Override
+	public int flatGroundY() {
+		//#if MC >= 1.18
+		return -60;
+		//#else
+		return 4;
+		//#endif
+	}
+
+	@Override
+	public boolean duelArena() {
+		// Before 1.19.4 the world comes from the Create World screen: not flat.
+		//#if MC >= 1.19.4
+		return false;
+		//#else
+		return true;
 		//#endif
 	}
 
@@ -784,8 +816,54 @@ final class FabricPlatform implements Platform {
 							.getHolderOrThrow(net.minecraft.world.level.levelgen.presets.WorldPresets.FLAT).value().createWorldDimensions());
 			//#endif
 		});
+		//#else
+		// Before 1.19.4 there's no direct way to make a world: the Create World screen, filled in.
+		Minecraft mc = mc();
+		mc.execute(() -> {
+			leaveWorld(mc);
+			WorldStats.deleteWorlds(new java.io.File(mc.gameDirectory, "saves"), "Arctic Duel ");
+			//#if MC >= 1.19
+			net.minecraft.client.gui.screens.worldselection.CreateWorldScreen.openFresh(mc, null);
+			//#elif MC >= 1.18
+			mc.setScreen(net.minecraft.client.gui.screens.worldselection.CreateWorldScreen.createFresh(null));
+			//#elif MC >= 1.16
+			mc.setScreen(net.minecraft.client.gui.screens.worldselection.CreateWorldScreen.create(null));
+			//#else
+			mc.setScreen(new net.minecraft.client.gui.screens.worldselection.CreateWorldScreen(null));
+			//#endif
+			fillCreateWorld(mc, 0);
+		});
 		//#endif
 	}
+
+	//#if MC < 1.19.4
+	/** Name the duel world, cheats on, Create: once the screen is up (1.19 opens it after loading data packs). */
+	private static void fillCreateWorld(Minecraft mc, int attempt) {
+		if (!(Compat.screen() instanceof net.minecraft.client.gui.screens.worldselection.CreateWorldScreen)) {
+			if (attempt < CREATE_WORLD_TRIES) {
+				Thread t = new Thread(() -> {
+					try {
+						Thread.sleep(CREATE_WORLD_WAIT_MS);
+					} catch (InterruptedException e) {
+						return;
+					}
+					mc.execute(() -> fillCreateWorld(mc, attempt + 1));
+				}, "arctic-duel-world");
+				t.setDaemon(true);
+				t.start();
+			}
+			return;
+		}
+		com.arcticlauncher.mod.mixin.CreateWorldScreenAccess screen = (com.arcticlauncher.mod.mixin.CreateWorldScreenAccess) Compat.screen();
+		screen.arctic$nameEdit().setValue("Arctic Duel " + new java.text.SimpleDateFormat("MM-dd HH.mm").format(new java.util.Date()));
+		screen.arctic$setCommands(true);
+		screen.arctic$setCommandsChanged(true);
+		screen.arctic$create();
+	}
+
+	private static final int CREATE_WORLD_TRIES = 50;
+	private static final long CREATE_WORLD_WAIT_MS = 200;
+	//#endif
 
 	@Override
 	public boolean inSingleplayerWorld() {

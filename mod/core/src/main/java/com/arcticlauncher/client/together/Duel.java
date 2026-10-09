@@ -171,8 +171,40 @@ public final class Duel {
 
 	/** Duel rules: no mobs, noon, keep the arena clean. */
 	private void setUpWorld() {
-		send(platform.oldCommands() ? OLD_RULES : RULES);
+		if (platform.oldCommands()) {
+			send(OLD_RULES);
+		} else {
+			send(platform.camelCaseRules() ? CAMEL_RULES : RULES);
+			int ground = platform.flatGroundY();
+			if (platform.duelArena()) {
+				// Built where the host stands: the world's spawn (and its loaded chunks) isn't at 0, 0.
+				double[] at = platform.position();
+				centerX = at == null ? 0 : (int) Math.floor(at[0]);
+				centerZ = at == null ? 0 : (int) Math.floor(at[2]);
+				send(arena(centerX, centerZ));
+				ground = ARENA_Y;
+			}
+			send(new String[] {"setworldspawn " + centerX + " " + ground + " " + centerZ});
+		}
 		newRound();
+	}
+
+	/** Where the sky arena's floor is walked on (above any terrain near spawn, below the build limit of every version). */
+	private static final int ARENA_Y = 240;
+	/** The duel's middle (0, 0 in a flat world; where the host stood for a sky arena). */
+	private int centerX;
+	private int centerZ;
+
+	/** A stone floor with glass walls, high over the world (for worlds that aren't flat). */
+	static String[] arena(int x, int z) {
+		int y = ARENA_Y;
+		return new String[] {
+				"fill " + (x - 18) + " " + (y - 1) + " " + (z - 18) + " " + (x + 18) + " " + (y - 1) + " " + (z + 18) + " stone",
+				"fill " + (x - 19) + " " + y + " " + (z - 19) + " " + (x + 19) + " " + (y + 3) + " " + (z - 19) + " glass",
+				"fill " + (x - 19) + " " + y + " " + (z + 19) + " " + (x + 19) + " " + (y + 3) + " " + (z + 19) + " glass",
+				"fill " + (x - 19) + " " + y + " " + (z - 19) + " " + (x - 19) + " " + (y + 3) + " " + (z + 19) + " glass",
+				"fill " + (x + 19) + " " + y + " " + (z - 19) + " " + (x + 19) + " " + (y + 3) + " " + (z + 19) + " glass",
+		};
 	}
 
 	/** Game rule names as of 26.x. */
@@ -180,7 +212,13 @@ public final class Duel {
 			"gamerule send_command_feedback false", "gamerule spawn_mobs false", "gamerule advance_time false",
 			"gamerule advance_weather false", "gamerule immediate_respawn true", "gamerule keep_inventory false",
 			"gamerule show_advancement_messages false", "gamerule pvp true",
-			"time set noon", "weather clear", "difficulty easy", "setworldspawn 0 -60 0",
+			"time set noon", "weather clear", "difficulty easy",
+	};
+	/** 1.13 to 1.21.10: the same rules by their camelCase names (no PvP rule: it's on in worlds anyway). */
+	private static final String[] CAMEL_RULES = {
+			"gamerule sendCommandFeedback false", "gamerule doMobSpawning false", "gamerule doDaylightCycle false",
+			"gamerule doWeatherCycle false", "gamerule doImmediateRespawn true", "gamerule keepInventory false",
+			"gamerule announceAdvancements false", "time set noon", "weather clear", "difficulty easy",
 	};
 	/** 1.8.9 to 1.12.2: camelCase rules (no weather or respawn rules yet; PvP is on in worlds); the flat ground is at y 4. */
 	private static final String[] OLD_RULES = {
@@ -189,7 +227,7 @@ public final class Duel {
 	};
 	private static final String[] ROUND = {
 			"clear @a", "effect clear @a", "effect give @a instant_health 1 10", "effect give @a saturation 1 10",
-			"gamemode survival @a", "spreadplayers 0 0 8 14 false @a",
+			"gamemode survival @a",
 	};
 	private static final String[] OLD_ROUND = {
 			"clear @a", "effect @a clear", "effect @a instant_health 1 10", "effect @a saturation 1 10",
@@ -200,7 +238,10 @@ public final class Duel {
 	public void newRound() {
 		boolean old = platform.oldCommands();
 		send(old ? OLD_ROUND : ROUND);
-		send(old ? oldKit(kit) : kit(kit));
+		if (!old) {
+			send(new String[] {"spreadplayers " + centerX + " " + centerZ + " 8 14 false @a"});
+		}
+		send(old ? oldKit(kit) : platform.replaceItemCommand() ? replaceItemKit(kit(kit)) : kit(kit));
 	}
 
 	private void send(String[] commands) {
@@ -227,6 +268,15 @@ public final class Duel {
 			};
 		}
 		return new String[0];
+	}
+
+	/** 1.13 to 1.16: "replaceitem entity @a armor.head x" instead of "item replace entity @a armor.head with x". */
+	static String[] replaceItemKit(String[] kit) {
+		String[] out = new String[kit.length];
+		for (int i = 0; i < kit.length; i++) {
+			out[i] = kit[i].startsWith("item replace ") ? "replaceitem " + kit[i].substring("item replace ".length()).replace(" with ", " ") : kit[i];
+		}
+		return out;
 	}
 
 	static String[] kit(String id) {
