@@ -66,8 +66,6 @@ public final class LegacySmoothFont {
 	private static int checkedScale;
 	private static long checkedAt;
 	private static boolean broken;
-	/** The GL colour, read back when drawing without blending (16 floats: glGetFloat wants room for any query). */
-	private static final java.nio.FloatBuffer COLOR = org.lwjgl.BufferUtils.createFloatBuffer(16);
 
 	private LegacySmoothFont() {}
 
@@ -98,10 +96,9 @@ public final class LegacySmoothFont {
 	}
 
 	/**
-	 * Draw a glyph at the pen (top of the line) in the text's colour; returns how far the pen moves.
-	 * Its edges need blending; where the game draws text without it (the scoreboard, most HUD
-	 * text), the colour's alpha is left out as Minecraft's own font ignores it there, or that text
-	 * would come out faded.
+	 * Draw a glyph at the pen (top of the line) in the current colour; returns how far the pen moves.
+	 * Blending is on for the whole string (SmoothTextRendererMixin), not asked for per letter: asking
+	 * the driver for its state stalls it, and the HUD draws hundreds of letters a frame.
 	 */
 	public static float draw(Glyph g, float penX, float penY, boolean italic) {
 		float s = scale;
@@ -112,14 +109,6 @@ public final class LegacySmoothFont {
 		float y1 = y0 + g.height;
 		float slant = italic ? 1f : 0f;
 		GlStateManager.bindTexture(texture.getGlId());
-		boolean blend = GL11.glIsEnabled(GL11.GL_BLEND);
-		if (!blend) {
-			GlStateManager.enableBlend();
-			GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-			// The current colour (formatting codes set it without telling the text renderer's fields).
-			GL11.glGetFloat(GL11.GL_CURRENT_COLOR, COLOR);
-			GL11.glColor4f(COLOR.get(0), COLOR.get(1), COLOR.get(2), 1f);
-		}
 		GL11.glBegin(GL11.GL_QUADS);
 		GL11.glTexCoord2f(g.u0, g.v0);
 		GL11.glVertex3f(x0 + slant, y0, 0f);
@@ -130,10 +119,6 @@ public final class LegacySmoothFont {
 		GL11.glTexCoord2f(g.u1, g.v0);
 		GL11.glVertex3f(x1 + slant, y0, 0f);
 		GL11.glEnd();
-		if (!blend) {
-			GL11.glColor4f(COLOR.get(0), COLOR.get(1), COLOR.get(2), COLOR.get(3));
-			GlStateManager.disableBlend();
-		}
 		return g.advance;
 	}
 
