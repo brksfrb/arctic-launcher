@@ -134,10 +134,11 @@ impl ArcticApp {
             .on_hover_text(
                 "The game window fills the screen, with the taskbar and title bar still there.",
             );
-            if cfg!(windows) {
+            // macOS already runs OpenGL games on the gaming card.
+            if !cfg!(target_os = "macos") {
                 ui.checkbox(&mut s.high_performance_gpu, "Use the gaming graphics card")
                     .on_hover_text(
-                        "Laptops with two graphics cards: Minecraft runs on the fast one instead of the built-in one. A choice you made in Windows' graphics settings is kept.",
+                        "Laptops with two graphics cards: Minecraft runs on the fast one instead of the built-in one. A choice you made yourself (Windows' graphics settings, or PRIME variables on Linux) is kept.",
                     );
             }
             widgets::field_row(ui, |ui| {
