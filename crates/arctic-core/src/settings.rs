@@ -25,7 +25,7 @@ pub struct Settings {
     pub window_width: u32,
     pub window_height: u32,
     pub fullscreen: bool,
-    /// Maximize the game window once it opens (Windows).
+    /// Maximize the game window once it opens.
     pub game_maximized: bool,
     /// Extra JVM flags, whitespace separated.
     pub extra_jvm_args: String,

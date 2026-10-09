@@ -42,6 +42,7 @@
 		"CrashReportPreloadMixin",
 		"OverlayDoneMixin",
 		"LoadingFadeMixin",<% } %>
+		"WindowMaximizeMixin",
 		"EntityTurnMixin"<% if (features) { %>,
 		"CameraMixin",
 		"LightmapMixin",

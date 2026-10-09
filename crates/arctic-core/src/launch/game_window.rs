@@ -1,20 +1,25 @@
-//! "Start the game maximized": Minecraft has no option for it, so on Windows the launcher finds
-//! the game's window once it opens and maximizes it. Every version and loader opens its window
-//! through LWJGL (GLFW from 1.13, LWJGL 2 before), so that's the window looked for.
+//! "Start the game maximized": Minecraft has no option for it. The Arctic Client maximizes its
+//! own window (every system, see its WindowMaximizeMixin); the launcher also asks the system to
+//! maximize the game's window, which covers games without the Arctic Client and LWJGL 2
+//! (1.8.9-1.12.2), which can't do it itself: on Windows directly, on Linux through the X11
+//! window manager (Xorg, and XWayland under Wayland). On macOS the client does it alone.
 
 use std::time::Duration;
 
 /// How long after the start the game's window is looked for (a first start after an update is slow).
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(not(any(windows, target_os = "linux")), allow(dead_code))]
 const WATCH_FOR: Duration = Duration::from_secs(180);
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(not(any(windows, target_os = "linux")), allow(dead_code))]
 const POLL: Duration = Duration::from_millis(150);
+
+/// The JVM flag that tells the Arctic Client to maximize its window.
+pub const CLIENT_FLAG: &str = "-Darctic.maximized=true";
 
 /// Maximize the window game `pid` opens, once (a player who restores it keeps it that way).
 pub fn maximize_when_open(pid: u32) {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     std::thread::spawn(move || imp::watch(pid));
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "linux")))]
     let _ = pid;
 }
 
@@ -81,5 +86,111 @@ mod imp {
             }
         }
         1
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod imp {
+    use std::time::Instant;
+
+    use x11rb::connection::Connection;
+    use x11rb::protocol::res::{ClientIdMask, ClientIdSpec, ConnectionExt as _};
+    use x11rb::protocol::xproto::{
+        Atom, ClientMessageEvent, ConnectionExt as _, EventMask, MapState, Window,
+    };
+
+    use super::{POLL, WATCH_FOR};
+
+    /// `_NET_WM_STATE_ADD` in a `_NET_WM_STATE` request.
+    const STATE_ADD: u32 = 1;
+    /// The game's window sits at most this deep under the root (inside the window manager's frame).
+    const MAX_DEPTH: u8 = 3;
+
+    pub fn watch(pid: u32) {
+        // Without an X server (a Wayland-only session) only the Arctic Client can do it.
+        if std::env::var_os("DISPLAY").is_none() {
+            return;
+        }
+        let Ok((conn, screen)) = x11rb::connect(None) else {
+            return;
+        };
+        let root = conn.setup().roots[screen].root;
+        let atom = |name: &str| -> Option<Atom> {
+            Some(
+                conn.intern_atom(false, name.as_bytes())
+                    .ok()?
+                    .reply()
+                    .ok()?
+                    .atom,
+            )
+        };
+        let (Some(state), Some(vert), Some(horz)) = (
+            atom("_NET_WM_STATE"),
+            atom("_NET_WM_STATE_MAXIMIZED_VERT"),
+            atom("_NET_WM_STATE_MAXIMIZED_HORZ"),
+        ) else {
+            return;
+        };
+        let start = Instant::now();
+        while start.elapsed() < WATCH_FOR {
+            if let Some(window) = find(&conn, root, pid) {
+                let event =
+                    ClientMessageEvent::new(32, window, state, [STATE_ADD, vert, horz, 1, 0]);
+                let mask = EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY;
+                if conn.send_event(false, root, mask, event).is_ok() && conn.flush().is_ok() {
+                    log::info!("maximized the game window");
+                }
+                return;
+            }
+            std::thread::sleep(POLL);
+        }
+    }
+
+    /// The game's visible window: one made by the X client that is process `pid`.
+    fn find(conn: &impl Connection, root: Window, pid: u32) -> Option<Window> {
+        let base = client_base(conn, pid)?;
+        let mask = conn.setup().resource_id_mask;
+        search(conn, root, MAX_DEPTH, &|w| w & !mask == base)
+    }
+
+    /// The id range X gave process `pid`'s connection (what its windows' ids start with).
+    fn client_base(conn: &impl Connection, pid: u32) -> Option<u32> {
+        let all = ClientIdSpec {
+            client: 0,
+            mask: ClientIdMask::LOCAL_CLIENT_PID,
+        };
+        let reply = conn.res_query_client_ids(&[all]).ok()?.reply().ok()?;
+        reply
+            .ids
+            .iter()
+            .find(|id| id.value.first() == Some(&pid))
+            .map(|id| id.spec.client)
+    }
+
+    fn search(
+        conn: &impl Connection,
+        window: Window,
+        depth: u8,
+        is_game: &dyn Fn(Window) -> bool,
+    ) -> Option<Window> {
+        let children = conn.query_tree(window).ok()?.reply().ok()?.children;
+        for child in children {
+            if is_game(child) && viewable(conn, child) {
+                return Some(child);
+            }
+            if depth > 1
+                && let Some(found) = search(conn, child, depth - 1, is_game)
+            {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    fn viewable(conn: &impl Connection, window: Window) -> bool {
+        conn.get_window_attributes(window)
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .is_some_and(|a| a.map_state == MapState::VIEWABLE)
     }
 }
