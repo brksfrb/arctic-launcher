@@ -66,6 +66,7 @@ pub fn spawn(
     let log = Arc::new(Mutex::new(File::create(&plan.log_file).at(&plan.log_file)?));
     let mut child = Command::new(game_exe(plan))
         .args(&plan.args)
+        .envs(crate::gpu_preference::env(plan.high_performance_gpu))
         .current_dir(&plan.game_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -128,6 +129,7 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
     let log_err = log.try_clone().at(&plan.log_file)?;
     let child = Command::new(game_exe(plan))
         .args(&plan.args)
+        .envs(crate::gpu_preference::env(plan.high_performance_gpu))
         .current_dir(&plan.game_dir)
         .stdin(Stdio::null())
         .stdout(log)

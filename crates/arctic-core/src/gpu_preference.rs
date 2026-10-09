@@ -2,7 +2,9 @@
 //! run Java on the built-in one, which is many times slower. Windows keeps
 //! a per-program choice (Settings → System → Display → Graphics); the game
 //! is set to the high-performance card there, unless the player already
-//! made a choice for it.
+//! made a choice for it. On Linux the game is started with the variables
+//! that send it to the other card (PRIME render offload: NVIDIA's driver or
+//! Mesa's `DRI_PRIME`). macOS already runs OpenGL games on the gaming card.
 
 use std::path::Path;
 
@@ -37,6 +39,69 @@ pub fn apply(exe: &Path, prefer: bool) {
     {
         let _ = (exe, prefer);
     }
+}
+
+/// PCI vendor id of NVIDIA graphics cards.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+const NVIDIA: u16 = 0x10de;
+
+/// Environment for the game on the gaming card (`prefer`): set on Linux laptops with two
+/// cards, unless the player set these variables themselves.
+pub fn env(prefer: bool) -> Vec<(&'static str, &'static str)> {
+    #[cfg(target_os = "linux")]
+    {
+        if prefer {
+            return offload_env(&linux_gpu_vendors(), |name| {
+                std::env::var_os(name).is_some()
+            });
+        }
+    }
+    let _ = prefer;
+    Vec::new()
+}
+
+/// The offload variables for a computer with these graphics cards: NVIDIA's driver with
+/// another card next to it, or two cards of other makers (Mesa). One card: nothing to choose.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn offload_env(
+    vendors: &[u16],
+    already_set: impl Fn(&str) -> bool,
+) -> Vec<(&'static str, &'static str)> {
+    if vendors.len() < 2 {
+        return Vec::new();
+    }
+    let hybrid_nvidia = vendors.contains(&NVIDIA) && vendors.iter().any(|v| *v != NVIDIA);
+    let wanted: &[(&'static str, &'static str)] = if hybrid_nvidia {
+        &[
+            ("__NV_PRIME_RENDER_OFFLOAD", "1"),
+            ("__GLX_VENDOR_LIBRARY_NAME", "nvidia"),
+            ("__VK_LAYER_NV_optimus", "NVIDIA_only"),
+        ]
+    } else {
+        &[("DRI_PRIME", "1")]
+    };
+    if wanted.iter().any(|(name, _)| already_set(name)) {
+        return Vec::new();
+    }
+    wanted.to_vec()
+}
+
+/// The vendor of each graphics card the kernel knows (`/sys/class/drm/cardN`).
+#[cfg(target_os = "linux")]
+fn linux_gpu_vendors() -> Vec<u16> {
+    let Ok(entries) = std::fs::read_dir("/sys/class/drm") else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter(|e| {
+            let name = e.file_name().to_string_lossy().into_owned();
+            name.strip_prefix("card")
+                .is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+        })
+        .filter_map(|e| std::fs::read_to_string(e.path().join("device/vendor")).ok())
+        .filter_map(|v| u16::from_str_radix(v.trim().trim_start_matches("0x"), 16).ok())
+        .collect()
 }
 
 /// `\\?\C:\…` (from canonicalize) as `C:\…`, the form Windows' settings use.
@@ -171,5 +236,33 @@ mod windows {
         } else {
             Err(status)
         }
+    }
+}
+
+#[cfg(test)]
+mod offload_tests {
+    use super::*;
+
+    const INTEL: u16 = 0x8086;
+    const AMD: u16 = 0x1002;
+
+    #[test]
+    fn nvidia_laptops_use_the_nvidia_offload() {
+        let env = offload_env(&[INTEL, NVIDIA], |_| false);
+        assert!(env.contains(&("__NV_PRIME_RENDER_OFFLOAD", "1")));
+    }
+
+    #[test]
+    fn other_pairs_use_mesa_and_one_card_needs_nothing() {
+        assert_eq!(
+            offload_env(&[INTEL, AMD], |_| false),
+            vec![("DRI_PRIME", "1")]
+        );
+        assert!(offload_env(&[NVIDIA], |_| false).is_empty());
+    }
+
+    #[test]
+    fn the_players_own_variables_win() {
+        assert!(offload_env(&[INTEL, AMD], |n| n == "DRI_PRIME").is_empty());
     }
 }
