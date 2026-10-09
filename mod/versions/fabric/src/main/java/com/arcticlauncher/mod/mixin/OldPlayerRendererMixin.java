@@ -23,7 +23,12 @@ import net.minecraft.client.renderer.entity.state.PlayerRenderState;
 @Mixin(PlayerRenderer.class)
 abstract class OldPlayerRendererMixin {
 	@SuppressWarnings({"unchecked", "rawtypes"})
+	//#if MC >= 1.17
 	@Inject(method = "<init>", at = @At("TAIL"))
+	//#else
+	// Before 1.17 there is also a one-argument constructor (it calls this one).
+	@Inject(method = "<init>(Lnet/minecraft/client/renderer/entity/EntityRenderDispatcher;Z)V", at = @At("TAIL"))
+	//#endif
 	//#if MC >= 1.17
 	private void arctic$cosmetics(EntityRendererProvider.Context context, boolean slim, CallbackInfo ci) {
 	//#else

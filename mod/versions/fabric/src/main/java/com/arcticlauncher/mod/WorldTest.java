@@ -213,7 +213,7 @@ final class WorldTest {
 					later(() -> shot("world-rain-cleared"));
 				},
 				() -> {
-					// The smooth font pack needs 26.1+ (see ArcticPacks).
+					// The smooth font: a pack from 26.1 (ArcticPacks), put in by code before (SmoothFont).
 					//#if MC >= 26.1
 					c.fancy = true;
 					ArcticPacks.setSmoothFont(true);
@@ -222,7 +222,12 @@ final class WorldTest {
 						shot("world-fancy");
 					}), STEP + 2, TimeUnit.SECONDS);
 					//#else
-					later(() -> shot("world-fancy-unavailable"));
+					c.fancy = true;
+					SmoothFont.changed();
+					TIMER.schedule(() -> run(() -> {
+						Compat.setScreen(null);
+						shot("world-fancy");
+					}), STEP + 2, TimeUnit.SECONDS);
 					//#endif
 				},
 				() -> {

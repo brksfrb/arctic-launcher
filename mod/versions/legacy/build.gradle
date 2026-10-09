@@ -164,6 +164,11 @@ processResources {
 	}
 	// Modern-only resources (the smooth font pack).
 	exclude 'resourcepacks/**'
+	// The smooth font's Inter (and its licence), drawn by LegacySmoothFont.
+	from('../fabric/src/main/resources/resourcepacks/smooth_font') {
+		include 'assets/arctic/font/inter.ttf', 'OFL.txt'
+		into 'smooth_font'
+	}
 }
 
 tasks.withType(JavaCompile).configureEach {
