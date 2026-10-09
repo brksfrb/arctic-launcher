@@ -20,6 +20,8 @@ abstract class MinecraftTickMixin {
 		//#endif
 		//#if MC >= 26.1
 		com.arcticlauncher.mod.ArcticPacks.checkFontScale();
+		//#else
+		com.arcticlauncher.mod.SmoothFont.checkScale();
 		//#endif
 	}
 }

@@ -35,7 +35,14 @@ struct State {
     added: Vec<String>,
     /// What the other jars looked like when the choice was made.
     signature: String,
+    /// How the stand-in was made ([`STUB_VERSION`]); older ones are made again.
+    #[serde(default)]
+    stub_version: u32,
 }
+
+/// 2: the stand-in answers to both `fabric` and `fabric-api` (1 only to `fabric-api`, which
+/// broke mods for old Fabric API, like EntityCulling on 1.16.5).
+const STUB_VERSION: u32 = 2;
 
 fn state_path(mods_dir: &Path) -> PathBuf {
     mods_dir.join(STATE)
@@ -86,19 +93,22 @@ fn find_umbrella(mods_dir: &Path) -> Option<String> {
         .find(|n| n.starts_with("fabric-api-") && n.ends_with(".jar") && n != STUB)
 }
 
-fn read_modules(umbrella: &Path) -> Option<(Vec<Module>, String)> {
+/// The big jar's modules, its version and its mod id (`fabric-api`; `fabric` in older releases,
+/// such as the ones for 1.16).
+fn read_modules(umbrella: &Path) -> Option<(Vec<Module>, String, String)> {
     let mut zip = zip::ZipArchive::new(fs::File::open(umbrella).ok()?).ok()?;
-    let version = {
+    let (version, id) = {
         let mut text = String::new();
         zip.by_name("fabric.mod.json")
             .ok()?
             .read_to_string(&mut text)
             .ok()?;
-        serde_json::from_str::<serde_json::Value>(text.trim_start_matches('\u{feff}'))
-            .ok()?
-            .get("version")?
-            .as_str()?
-            .to_owned()
+        let meta =
+            serde_json::from_str::<serde_json::Value>(text.trim_start_matches('\u{feff}')).ok()?;
+        (
+            meta.get("version")?.as_str()?.to_owned(),
+            meta.get("id")?.as_str()?.to_owned(),
+        )
     };
     let names: Vec<String> = zip
         .file_names()
@@ -138,7 +148,7 @@ fn read_modules(umbrella: &Path) -> Option<(Vec<Module>, String)> {
             classes,
         });
     }
-    Some((modules, version))
+    Some((modules, version, id))
 }
 
 /// Every `net/fabricmc/fabric/...` class name mentioned in the class files of a jar
@@ -303,7 +313,7 @@ pub fn apply(mods_dir: &Path) -> Result<bool> {
     {
         let mut skip: Vec<&str> = state.added.iter().map(String::as_str).collect();
         skip.push(&state.original);
-        if signature(mods_dir, &skip) == state.signature {
+        if state.stub_version == STUB_VERSION && signature(mods_dir, &skip) == state.signature {
             return Ok(true);
         }
         // The folder's mods changed since: start from the whole thing again.
@@ -313,7 +323,7 @@ pub fn apply(mods_dir: &Path) -> Result<bool> {
         return Ok(false);
     };
     let path = mods_dir.join(&umbrella);
-    let Some((modules, version)) = read_modules(&path) else {
+    let Some((modules, version, id)) = read_modules(&path) else {
         return Ok(false);
     };
     if modules.is_empty() {
@@ -354,7 +364,7 @@ pub fn apply(mods_dir: &Path) -> Result<bool> {
         added.push(name);
     }
     let stub = mods_dir.join(STUB);
-    write_stub(&stub, &version)?;
+    write_stub(&stub, &id, &version)?;
     added.push(STUB.to_owned());
     drop(zip);
     let moved = stash.join(&umbrella);
@@ -366,6 +376,7 @@ pub fn apply(mods_dir: &Path) -> Result<bool> {
         original: umbrella.clone(),
         added,
         signature: sig,
+        stub_version: STUB_VERSION,
     };
     let text = serde_json::to_string_pretty(&state).unwrap_or_default();
     let state_file = state_path(mods_dir);
@@ -378,13 +389,16 @@ pub fn apply(mods_dir: &Path) -> Result<bool> {
     Ok(true)
 }
 
-/// A jar holding only the `fabric-api` name, for mods that ask for it.
-fn write_stub(path: &Path, version: &str) -> Result<()> {
+/// A jar holding only the big jar's name (`id`), for mods that ask for it. It answers to the
+/// other name too: mods made for old Fabric API ask for `fabric`, newer ones for `fabric-api`.
+fn write_stub(path: &Path, id: &str, version: &str) -> Result<()> {
     let file = fs::File::create(path).at(path)?;
     let mut zip = zip::ZipWriter::new(file);
+    let other = if id == "fabric" { "fabric-api" } else { "fabric" };
     let meta = serde_json::json!({
         "schemaVersion": 1,
-        "id": "fabric-api",
+        "id": id,
+        "provides": [other],
         "version": version,
         "name": "Fabric API (the parts in use)",
         "description": "Arctic keeps only the Fabric API modules the installed mods use, to start faster.",
@@ -540,5 +554,30 @@ mod tests {
         fs::write(mods.join("big.jar"), jar(&[("a/C.class", body.as_bytes())])).unwrap();
         assert!(!apply(&mods).unwrap());
         assert!(mods.join("fabric-api-0.1.0.jar").exists());
+    }
+
+    fn stub_meta(path: &Path) -> serde_json::Value {
+        let mut zip = zip::ZipArchive::new(fs::File::open(path).unwrap()).unwrap();
+        let mut text = String::new();
+        zip.by_name("fabric.mod.json")
+            .unwrap()
+            .read_to_string(&mut text)
+            .unwrap();
+        serde_json::from_str(&text).unwrap()
+    }
+
+    #[test]
+    fn the_stand_in_answers_to_both_names() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = dir.path().join("old.jar");
+        write_stub(&old, "fabric", "0.42.0").unwrap();
+        let meta = stub_meta(&old);
+        assert_eq!(meta["id"], "fabric");
+        assert_eq!(meta["provides"], serde_json::json!(["fabric-api"]));
+        let new = dir.path().join("new.jar");
+        write_stub(&new, "fabric-api", "0.100.0").unwrap();
+        let meta = stub_meta(&new);
+        assert_eq!(meta["id"], "fabric-api");
+        assert_eq!(meta["provides"], serde_json::json!(["fabric"]));
     }
 }

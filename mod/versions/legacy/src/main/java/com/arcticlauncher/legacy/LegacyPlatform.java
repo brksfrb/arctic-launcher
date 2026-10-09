@@ -297,9 +297,10 @@ public final class LegacyPlatform implements Platform {
 
 	@Override
 	public boolean smoothFont() {
-		return false;
+		return LegacySmoothFont.on();
 	}
 
+	/** Nothing to reload: the text renderer asks LegacySmoothFont every time it draws. */
 	@Override
 	public void setSmoothFont(boolean on) {}
 

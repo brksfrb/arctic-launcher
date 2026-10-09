@@ -201,7 +201,7 @@ final class FabricPlatform implements Platform {
 		//#if MC >= 26.1
 		return ArcticPacks.smoothFontOn();
 		//#else
-		return false;
+		return SmoothFont.on();
 		//#endif
 	}
 
@@ -209,6 +209,8 @@ final class FabricPlatform implements Platform {
 	public void setSmoothFont(boolean on) {
 		//#if MC >= 26.1
 		ArcticPacks.setSmoothFont(on);
+		//#else
+		SmoothFont.changed();
 		//#endif
 	}
 
