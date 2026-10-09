@@ -124,6 +124,24 @@ public final class Compat {
 		//#endif
 	}
 
+	/** Mouse over or keyboard focused (isHovered() meant this before 1.18 renamed it). */
+	public static boolean widgetHovered(net.minecraft.client.gui.components.AbstractWidget w) {
+		//#if MC >= 1.18
+		return w.isHoveredOrFocused();
+		//#else
+		return w.isHovered();
+		//#endif
+	}
+
+	/** Whether a widget accepts clicks (isActive() only exists from 1.17). */
+	public static boolean widgetActive(net.minecraft.client.gui.components.AbstractWidget w) {
+		//#if MC >= 1.17
+		return w.isActive();
+		//#else
+		return w.active;
+		//#endif
+	}
+
 	/** Frames drawn in the last second. */
 	public static int fps() {
 		//#if MC >= 1.19.4

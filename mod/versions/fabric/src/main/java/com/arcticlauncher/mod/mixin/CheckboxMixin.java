@@ -1,4 +1,3 @@
-//#if MC >= 1.20
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.mod.Compat;
@@ -54,7 +53,7 @@ abstract class CheckboxMixin {
 		Checkbox box = (Checkbox) (Object) this;
 		Skin.checkbox(new GfxImpl(g), ArcticClient.style(), x, y, Math.min(w, h), box.selected(), box.isHoveredOrFocused());
 	}
-	//#else
+	//#elif MC >= 1.20
 	// Before 1.20.2 the checkbox has its own texture (no sprite atlas): one plain blit.
 	@Redirect(
 			method = "extractWidgetRenderState",
@@ -68,6 +67,38 @@ abstract class CheckboxMixin {
 		Checkbox box = (Checkbox) (Object) this;
 		Skin.checkbox(new GfxImpl(g), ArcticClient.style(), x, y, Math.min(w, h), box.selected(), box.isHoveredOrFocused());
 	}
+	//#else
+	// Before 1.20 the checkbox is one static blit of its own texture (renderButton until 1.19.4 renamed it).
+	@Redirect(
+			//#if MC >= 1.19.4
+			method = "extractWidgetRenderState",
+			//#else
+			method = "renderButton",
+			//#endif
+			at = @At(value = "INVOKE",
+					//#if MC >= 1.16
+					target = "Lnet/minecraft/client/gui/components/Checkbox;blit(Lcom/mojang/blaze3d/vertex/PoseStack;IIFFIIII)V"))
+					//#else
+					target = "Lnet/minecraft/client/gui/components/Checkbox;blit(IIFFIIII)V"))
+					//#endif
+	//#if MC >= 1.16
+	private void arctic$box(com.mojang.blaze3d.vertex.PoseStack pose, int x, int y, float u, float v, int w, int h, int texW, int texH) {
+		if (!ArcticClient.restyles()) {
+			net.minecraft.client.gui.GuiComponent.blit(pose, x, y, u, v, w, h, texW, texH);
+			return;
+		}
+		Checkbox box = (Checkbox) (Object) this;
+		Skin.checkbox(GfxImpl.of(pose), ArcticClient.style(), x, y, Math.min(w, h), box.selected(), Compat.widgetHovered(box));
+	}
+	//#else
+	private void arctic$box(int x, int y, float u, float v, int w, int h, int texW, int texH) {
+		if (!ArcticClient.restyles()) {
+			net.minecraft.client.gui.GuiComponent.blit(x, y, u, v, w, h, texW, texH);
+			return;
+		}
+		Checkbox box = (Checkbox) (Object) this;
+		Skin.checkbox(GfxImpl.of(new com.mojang.blaze3d.vertex.PoseStack()), ArcticClient.style(), x, y, Math.min(w, h), box.selected(), Compat.widgetHovered(box));
+	}
+	//#endif
 	//#endif
 }
-//#endif
