@@ -405,7 +405,12 @@ final class WorldTest {
 						shot("crosshair-target");
 						// Hit color: hurt the pig, it flashes aqua instead of red.
 						ArcticClient.config().hitColor = 0x7DD3FC;
+						//#if MC >= 1.19.4
 						command("damage @e[type=pig,limit=1,sort=nearest] 1");
+						//#else
+						// No /damage before 1.19.4: a hit of Instant Damage (it heals the undead, not pigs).
+						command("effect give @e[type=pig,limit=1,sort=nearest] instant_damage 1 0");
+						//#endif
 						TIMER.schedule(() -> run(() -> shot("hit-color")), 250, TimeUnit.MILLISECONDS);
 					}), STEP, TimeUnit.SECONDS);
 				},

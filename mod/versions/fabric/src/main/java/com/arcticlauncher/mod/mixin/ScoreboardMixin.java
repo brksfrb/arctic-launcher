@@ -1,4 +1,3 @@
-//#if MC >= 1.20
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.client.ArcticClient;
@@ -34,9 +33,23 @@ abstract class ScoreboardMixin {
 			ci.cancel();
 		}
 	}
-	//#else
+	//#elif MC >= 1.20
 	@Inject(method = "displayScoreboardSidebar", at = @At("HEAD"), cancellable = true)
 	private void arctic$hideScoreboard(GuiGraphics graphics, Objective objective, CallbackInfo ci) {
+		if (ArcticClient.config().scoreboardHidden) {
+			ci.cancel();
+		}
+	}
+	//#elif MC >= 1.16
+	@Inject(method = "displayScoreboardSidebar", at = @At("HEAD"), cancellable = true)
+	private void arctic$hideScoreboard(com.mojang.blaze3d.vertex.PoseStack pose, Objective objective, CallbackInfo ci) {
+		if (ArcticClient.config().scoreboardHidden) {
+			ci.cancel();
+		}
+	}
+	//#else
+	@Inject(method = "displayScoreboardSidebar", at = @At("HEAD"), cancellable = true)
+	private void arctic$hideScoreboard(Objective objective, CallbackInfo ci) {
 		if (ArcticClient.config().scoreboardHidden) {
 			ci.cancel();
 		}
@@ -49,6 +62,24 @@ abstract class ScoreboardMixin {
 	@ModifyVariable(method = "displayScoreboardSidebar", at = @At("STORE"), ordinal = 0)
 	private NumberFormat arctic$hideNumbers(NumberFormat format) {
 		return ArcticClient.config().scoreboardNumbers ? format : BlankFormat.INSTANCE;
+	}
+	//#else
+	// Before 1.20.3 a score is drawn as a red string ("§c12"): drawn empty instead.
+	//#if MC >= 1.20
+	@ModifyArg(method = "displayScoreboardSidebar", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/client/gui/GuiGraphics;drawString(Lnet/minecraft/client/gui/Font;Ljava/lang/String;IIIZ)I"))
+	//#elif MC >= 1.16
+	@ModifyArg(method = "displayScoreboardSidebar", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/client/gui/Font;draw(Lcom/mojang/blaze3d/vertex/PoseStack;Ljava/lang/String;FFI)I"))
+	//#else
+	@ModifyArg(method = "displayScoreboardSidebar", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/client/gui/Font;draw(Ljava/lang/String;FFI)I"))
+	//#endif
+	private String arctic$hideNumbers(String text) {
+		if (!ArcticClient.config().scoreboardNumbers && text.startsWith("§c") && text.substring(2).matches("-?\\d+")) {
+			return "";
+		}
+		return text;
 	}
 	//#endif
 
@@ -65,4 +96,3 @@ abstract class ScoreboardMixin {
 		return c.scoreboardBackground ? opacity : 0f;
 	}
 }
-//#endif

@@ -16,8 +16,11 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(TrueTypeGlyphProvider.class)
 abstract class FontHintingMixin {
 	@WrapOperation(
-			// getGlyph before 1.21.2.
-			method = {"loadGlyph", "getGlyph"},
+			//#if MC >= 1.21.2
+			method = "loadGlyph",
+			//#else
+			method = "getGlyph",
+			//#endif
 			at = @At(value = "INVOKE", target = "Lorg/lwjgl/util/freetype/FreeType;FT_Load_Glyph(Lorg/lwjgl/util/freetype/FT_Face;II)I"))
 	private int arctic$heavier(FT_Face face, int glyph, int flags, Operation<Integer> original) {
 		return FontWeight.loadGlyph(face, glyph, flags, original::call);
