@@ -217,11 +217,11 @@ processResources {
 			fastStart: atLeast('26.1'),
 			// The startup timeline, class pre-loader and the agent behind it: Java 17+ (1.18 and later).
 			startup: atLeast('1.18'),
-			// 3D cosmetics: a layer on the player renderer (three shapes across versions) and, from 26.1, emotes.
+			// 3D cosmetics: a layer on the player renderer (three shapes across versions), and emotes.
 			cosmeticsSubmit: atLeast('1.21.9'),
 			cosmeticsBuffers: !atLeast('1.21.9'),
 			cosmeticsState: atLeast('1.21.2') && !atLeast('1.21.9'),
-			emotes: atLeast('26.1'),
+			emotes: true,
 			accountSwitch: true,
 			// Scoreboard tweaks, hit color, the minimap, duels (1.19.4+), toasts: every version.
 			extras: true,

@@ -25,6 +25,7 @@
 		"WorldRendererMixin",
 		"LivingEntityRendererMixin",
 		"PlayerEntityRendererMixin",
+		"PlayerModelEmoteMixin",
 		"LivingEntityFeatureAccess",
 		"ScoreboardHudMixin",
 		"PlayerInventoryMixin",
