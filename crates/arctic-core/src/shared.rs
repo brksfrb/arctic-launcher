@@ -190,10 +190,10 @@ fn sync_options(
     if let Some(newest) = newest_first(folders, OPTIONS).into_iter().next()
         && modified(&newest).is_some_and(|t| shared_time.is_none_or(|s| t > s))
         && let Ok(captured) = Defaults::capture(newest.parent().unwrap_or(Path::new(".")))
-        && captured.values != known.values
         && !captured.is_empty()
+        && keep_acknowledged(&known, captured.clone()).values != known.values
     {
-        known = captured;
+        known = keep_acknowledged(&known, captured);
         crate::storage::save_json(shared, &known)?;
     }
     let Some((game_dir, version)) = launching else {
@@ -208,6 +208,26 @@ fn sync_options(
     }
     known.apply_to(&game_dir, Some(version))?;
     Ok(())
+}
+
+/// One-time notices the player has dismissed, as (key, value once dismissed). An instance that
+/// still has the notice pending (a fresh or test instance played since) mustn't bring it back to
+/// every other instance: these only ever spread in the dismissed direction.
+const ACKNOWLEDGED: &[(&str, &str)] = &[
+    ("skipMultiplayerWarning", "true"),
+    ("joinedFirstServer", "true"),
+    ("onboardAccessibility", "false"),
+    ("tutorialStep", "none"),
+];
+
+/// `captured`, with the notices `known` has dismissed kept dismissed.
+fn keep_acknowledged(known: &Defaults, mut captured: Defaults) -> Defaults {
+    for (key, done) in ACKNOWLEDGED {
+        if known.values.get(*key).map(String::as_str) == Some(*done) && captured.values.contains_key(*key) {
+            captured.values.insert((*key).to_owned(), (*done).to_owned());
+        }
+    }
+    captured
 }
 
 /// The instance's own copy, the first time sharing replaces it.
@@ -235,6 +255,19 @@ fn write(path: &Path, bytes: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dismissed_notices_stay_dismissed() {
+        let mut known = Defaults::default();
+        known.values.insert("skipMultiplayerWarning".into(), "true".into());
+        known.values.insert("fov".into(), "0.0".into());
+        let mut captured = Defaults::default();
+        captured.values.insert("skipMultiplayerWarning".into(), "false".into());
+        captured.values.insert("fov".into(), "0.5".into());
+        let merged = keep_acknowledged(&known, captured);
+        assert_eq!(merged.values["skipMultiplayerWarning"], "true");
+        assert_eq!(merged.values["fov"], "0.5");
+    }
     use crate::instances::Loader;
 
     fn setup() -> (tempfile::TempDir, DataDirs, Instance, Instance) {
