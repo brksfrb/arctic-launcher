@@ -28,6 +28,7 @@ const SETTINGS: &[&str] = &[
     "window_width",
     "window_height",
     "fullscreen",
+    "game_maximized",
     "max_memory_mb",
     "min_memory_mb",
     "client_style",

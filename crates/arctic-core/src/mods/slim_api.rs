@@ -394,7 +394,11 @@ pub fn apply(mods_dir: &Path) -> Result<bool> {
 fn write_stub(path: &Path, id: &str, version: &str) -> Result<()> {
     let file = fs::File::create(path).at(path)?;
     let mut zip = zip::ZipWriter::new(file);
-    let other = if id == "fabric" { "fabric-api" } else { "fabric" };
+    let other = if id == "fabric" {
+        "fabric-api"
+    } else {
+        "fabric"
+    };
     let meta = serde_json::json!({
         "schemaVersion": 1,
         "id": id,

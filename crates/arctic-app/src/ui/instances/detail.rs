@@ -93,7 +93,11 @@ impl ArcticApp {
         // A mod dropped on any other tab is added too, and the Mods tab opens to show it.
         if modded
             && self.inst.page != InstancePage::Mods
-            && self.add_dropped_mods(ui, &instance.id, &instance.game_dir(&self.dirs).join("mods"))
+            && self.add_dropped_mods(
+                ui,
+                &instance.id,
+                &instance.game_dir(&self.dirs).join("mods"),
+            )
         {
             self.inst.page = InstancePage::Mods;
         }

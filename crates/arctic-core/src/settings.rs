@@ -25,6 +25,8 @@ pub struct Settings {
     pub window_width: u32,
     pub window_height: u32,
     pub fullscreen: bool,
+    /// Maximize the game window once it opens (Windows).
+    pub game_maximized: bool,
     /// Extra JVM flags, whitespace separated.
     pub extra_jvm_args: String,
     /// Use this `java(w).exe` instead of a managed runtime.
@@ -226,6 +228,7 @@ impl Default for Settings {
             window_width: DEFAULT_WIDTH,
             window_height: DEFAULT_HEIGHT,
             fullscreen: false,
+            game_maximized: false,
             extra_jvm_args: String::new(),
             java_override: None,
             last_version: None,

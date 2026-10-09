@@ -128,6 +128,15 @@ impl ArcticApp {
             });
             ui.checkbox(&mut s.fullscreen, "Start in fullscreen");
             if cfg!(windows) {
+                ui.add_enabled(
+                    !s.fullscreen,
+                    egui::Checkbox::new(&mut s.game_maximized, "Start the game maximized"),
+                )
+                .on_hover_text(
+                    "The game window fills the screen, with the taskbar and title bar still there.",
+                );
+            }
+            if cfg!(windows) {
                 ui.checkbox(&mut s.high_performance_gpu, "Use the gaming graphics card")
                     .on_hover_text(
                         "Laptops with two graphics cards: Minecraft runs on the fast one instead of the built-in one. A choice you made in Windows' graphics settings is kept.",
