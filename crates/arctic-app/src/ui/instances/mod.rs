@@ -195,7 +195,7 @@ impl ArcticApp {
         ui.add_space(6.0);
         crate::theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
+            crate::widgets::row(ui, |ui| {
                 ui.vertical(|ui| {
                     ui.label(RichText::new("Modpacks").size(16.0).strong().color(p.text));
                     ui.label(
@@ -218,9 +218,14 @@ impl ArcticApp {
     fn instances_grid(&mut self, ui: &mut egui::Ui) {
         self.take_dropped_modpack(ui);
         let p = self.palette();
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             ui.vertical(|ui| {
-                widgets::page_header(ui, p, "Instances", "Separate game folders, each with its own version, mods and snowflake.");
+                widgets::page_header(
+                    ui,
+                    p,
+                    "Instances",
+                    "Separate game folders, each with its own version, mods and snowflake.",
+                );
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                 if widgets::button(ui, p, Some(Icon::Plus), "New instance", true).clicked() {

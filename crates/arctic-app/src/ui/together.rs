@@ -230,7 +230,7 @@ impl ArcticApp {
                     }
                 });
                 ui.add_space(8.0);
-                ui.horizontal(|ui| {
+                crate::widgets::row(ui, |ui| {
                     let idle = !self.runs.instance_active(&self.selected_instance().id);
                     let play = ui
                         .add_enabled_ui(idle, |ui| {
@@ -250,7 +250,7 @@ impl ArcticApp {
                     ui.spinner();
                     ui.label(RichText::new("Connecting to your friend…").color(p.muted));
                 });
-                if ui.button("Cancel").clicked() {
+                if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
                     self.stop_together();
                 }
             }

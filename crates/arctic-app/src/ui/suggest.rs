@@ -90,8 +90,8 @@ impl ArcticApp {
                     .color(p.muted),
                 );
                 ui.add_space(12.0);
-                ui.horizontal(|ui| {
-                    if ui.button("Cancel").clicked() {
+                crate::widgets::row(ui, |ui| {
+                    if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
                         ui.close();
                     }
                     let ready = form.text.trim().chars().count() >= 3 && !form.sending;

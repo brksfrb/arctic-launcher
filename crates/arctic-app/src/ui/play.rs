@@ -272,7 +272,7 @@ impl ArcticApp {
             match &self.manifest {
                 ManifestState::Failed(e) => {
                     ui.label(RichText::new(format!("Could not load versions: {e}")).color(p.error));
-                    if ui.button("Retry").clicked() {
+                    if crate::widgets::button(ui, p, None, "Retry", false).clicked() {
                         self.manifest = ManifestState::Loading;
                         self.tasks.load_manifest();
                     }

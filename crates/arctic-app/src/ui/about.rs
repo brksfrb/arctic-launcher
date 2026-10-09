@@ -32,7 +32,7 @@ impl ArcticApp {
             ui.add_space(8.0);
             ui.label("A lightweight, open-source Minecraft launcher.");
             ui.add_space(8.0);
-            ui.horizontal(|ui| {
+            crate::widgets::row(ui, |ui| {
                 if widgets::button(ui, p, Some(Icon::External), "arcticlauncher.com", false)
                     .clicked()
                 {

@@ -131,7 +131,7 @@ impl ArcticApp {
 
     fn friends_header(&mut self, ui: &mut egui::Ui, profile: &Profile) {
         let p = self.palette();
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             ui.label(RichText::new("Friends").size(18.0).strong().color(p.text));
             ui.label(RichText::new(format!("as {}", profile.name)).color(p.muted));
             if !profile.code.is_empty() {
@@ -184,7 +184,7 @@ impl ArcticApp {
             .inner_margin(12.0)
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.horizontal(|ui| {
+                crate::widgets::row(ui, |ui| {
                     ui.label(RichText::new("Shown to friends as").color(p.muted));
                     ui.add(
                         widgets::text_field(&mut self.friends.name_edit)
@@ -257,7 +257,7 @@ impl ArcticApp {
                     .collect();
                 let mut link = None;
                 for a in others {
-                    ui.horizontal(|ui| {
+                    crate::widgets::row(ui, |ui| {
                         ui.label(RichText::new(&a.username).color(p.muted));
                         if widgets::button(ui, p, Some(Icon::Plus), "Link to this profile", false)
                             .on_hover_text("Its friends move here too")
@@ -339,7 +339,7 @@ impl ArcticApp {
             RichText::new("Used this name on another PC? Enter the recovery code you saved there.")
                 .color(p.muted),
         );
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             ui.add(
                 widgets::text_field(&mut self.friends.restore_code)
                     .hint_text("xxxx-xxxx-xxxx-xxxx")
@@ -405,7 +405,7 @@ impl ArcticApp {
         let p = self.palette();
         let mut act = None;
         for invite in &o.invites {
-            ui.horizontal(|ui| {
+            crate::widgets::row(ui, |ui| {
                 let what = match invite.kind.as_str() {
                     "together" => "their world".to_owned(),
                     _ => invite.target.clone(),
@@ -432,7 +432,7 @@ impl ArcticApp {
             });
         }
         for person in &o.incoming {
-            ui.horizontal(|ui| {
+            crate::widgets::row(ui, |ui| {
                 ui.label(
                     RichText::new(format!("{} wants to be friends", person.name)).color(p.text),
                 );
@@ -470,7 +470,7 @@ impl ArcticApp {
         let p = self.palette();
         let invite_to = self.invite_target();
         let mut act = None;
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             let color = if f.in_game {
                 Color32::from_rgb(0x86, 0xEF, 0xAC)
             } else if f.online {

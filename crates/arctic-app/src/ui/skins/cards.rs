@@ -99,7 +99,8 @@ impl ArcticApp {
     }
 
     fn library_header(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
+        let p = self.palette();
+        crate::widgets::row(ui, |ui| {
             let field = ui.add(
                 widgets::text_field(&mut self.skins.player_name)
                     .hint_text("Copy a player's skin by name")
@@ -108,7 +109,11 @@ impl ArcticApp {
             );
             let enter = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             let ready = !self.skins.player_name.trim().is_empty() && !self.skins.looking_up;
-            let get = ui.add_enabled_ui(ready, |ui| ui.button("Get")).inner;
+            let get = ui
+                .add_enabled_ui(ready, |ui| {
+                    crate::widgets::button(ui, p, None, "Get", false)
+                })
+                .inner;
             if ready && (get.clicked() || enter) {
                 self.skins.looking_up = true;
                 self.tasks
@@ -195,8 +200,9 @@ impl ArcticApp {
         let Some((id, mut name)) = self.skins.renaming.clone() else {
             return;
         };
+        let p = self.palette();
         ui.add_space(6.0);
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             ui.label("Name");
             let field = ui.add(
                 widgets::text_field(&mut name)
@@ -204,8 +210,8 @@ impl ArcticApp {
                     .desired_width(240.0),
             );
             let enter = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            let save = ui.button("Save").clicked();
-            let cancel = ui.button("Cancel").clicked();
+            let save = crate::widgets::button(ui, p, None, "Save", false).clicked();
+            let cancel = crate::widgets::button(ui, p, None, "Cancel", false).clicked();
             if save || enter {
                 let trimmed = name.trim().to_owned();
                 if !trimmed.is_empty() {

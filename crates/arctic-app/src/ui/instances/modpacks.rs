@@ -25,7 +25,7 @@ impl ArcticApp {
             return;
         }
         ui.add_space(8.0);
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             ui.vertical(|ui| {
                 widgets::page_header(ui, p, "Modpacks", "Search modpacks on Modrinth");
             });
@@ -57,7 +57,7 @@ impl ArcticApp {
     fn pack_search_bar(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         let mut search = false;
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             let field = ui.add(
                 widgets::text_field(&mut self.inst.search.text)
                     .hint_text("Search modpacks on Modrinth")
@@ -162,7 +162,7 @@ impl ArcticApp {
 
     fn pack_row(&mut self, ui: &mut egui::Ui, hit: &ProjectHit) {
         let p = self.palette();
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             mod_icon(ui, self, hit.icon_url.as_deref());
             ui.vertical(|ui| {
                 ui.set_max_width(ui.available_width() - 130.0);

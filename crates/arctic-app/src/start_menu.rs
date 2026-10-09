@@ -43,6 +43,10 @@ fn make(data_root: &Path) -> Result<(), String> {
     let lnk = shortcut_path().ok_or("no APPDATA folder")?;
     let marker = data_root.join(MARKER);
     let exe_text = exe.to_string_lossy().into_owned();
+    // A build run straight from the source tree (tests, screenshots) isn't the installed launcher.
+    if exe.components().any(|c| c.as_os_str() == "target") {
+        return Ok(());
+    }
     if lnk.is_file() && std::fs::read_to_string(&marker).is_ok_and(|m| m == exe_text) {
         return Ok(());
     }

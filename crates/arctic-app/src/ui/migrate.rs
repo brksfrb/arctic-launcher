@@ -203,7 +203,7 @@ impl ArcticApp {
             .sum();
         let count = state.picked.len();
         let mut close = false;
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             if widgets::button(ui, p, Some(Icon::Folder), "Choose folder…", false)
                 .on_hover_text(
                     "A launcher's instances folder (portable MultiMC, moved CurseForge folder…)",

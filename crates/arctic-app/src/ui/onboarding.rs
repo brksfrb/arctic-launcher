@@ -155,12 +155,12 @@ impl ArcticApp {
                     }
                 });
                 ui.add_space(18.0);
-                ui.horizontal(|ui| {
+                crate::widgets::row(ui, |ui| {
                     if step == Step::Welcome {
                         if ui.link("Skip setup").clicked() {
                             finish = true;
                         }
-                    } else if ui.button("Back").clicked() {
+                    } else if crate::widgets::button(ui, p, None, "Back", false).clicked() {
                         go = Some(-1);
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

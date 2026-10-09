@@ -203,7 +203,7 @@ impl ArcticApp {
             if self.chat.picking {
                 self.screenshot_picker(ui, &friend);
             }
-            ui.horizontal(|ui| {
+            crate::widgets::row(ui, |ui| {
                 if widgets::icon_button(ui, p, crate::art::icons::Icon::Image, "Send a screenshot")
                     .clicked()
                 {

@@ -33,7 +33,7 @@ impl ArcticApp {
             self.run_mod_search(instance, 0);
         }
         let mut search = false;
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             let field = ui.add(
                 widgets::text_field(&mut self.inst.search.text)
                     .hint_text("Search mods on Modrinth")
@@ -151,7 +151,7 @@ impl ArcticApp {
         installed: bool,
     ) {
         let p = self.palette();
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             mod_icon(ui, self, hit.icon_url.as_deref());
             ui.vertical(|ui| {
                 ui.set_max_width(ui.available_width() - 130.0);

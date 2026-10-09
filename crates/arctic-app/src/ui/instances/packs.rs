@@ -120,7 +120,7 @@ impl ArcticApp {
                 return;
             }
             for pack in &list {
-                ui.horizontal(|ui| {
+                crate::widgets::row(ui, |ui| {
                     let size = if pack.size > 0 {
                         format!("{:.1} MB", pack.size as f64 / MB)
                     } else {
@@ -160,7 +160,7 @@ impl ArcticApp {
     fn rp_search_bar(&mut self, ui: &mut egui::Ui, instance: &Instance) {
         let p = self.palette();
         let mut search = false;
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             let hint = match self.inst.packs.kind {
                 PackKind::Resource => "Search resource packs on Modrinth",
                 PackKind::Shader => "Search shaders on Modrinth",
@@ -236,7 +236,7 @@ impl ArcticApp {
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
             for hit in &hits {
-                ui.horizontal(|ui| {
+                crate::widgets::row(ui, |ui| {
                     mod_icon(ui, self, hit.icon_url.as_deref());
                     ui.vertical(|ui| {
                         ui.set_max_width(ui.available_width() - 130.0);

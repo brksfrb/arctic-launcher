@@ -223,7 +223,7 @@ impl ArcticApp {
                 .color(p.muted),
             );
             ui.add_space(4.0);
-            ui.horizontal(|ui| {
+            crate::widgets::row(ui, |ui| {
                 if widgets::button(ui, p, Some(Icon::Share), "Export profile", false).clicked() {
                     self.open_share(None);
                 }
@@ -238,7 +238,7 @@ impl ArcticApp {
             });
         });
 
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             if widgets::button(ui, p, Some(Icon::Folder), "Open data folder", false).clicked()
                 && let Err(e) = open::that_detached(self.dirs.root())
             {

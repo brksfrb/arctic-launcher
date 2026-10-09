@@ -81,7 +81,7 @@ impl ArcticApp {
             .enabled
             .then(|| self.network.draft.validate().err())
             .flatten();
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             let can_save = changed && problem.is_none();
             if ui
                 .add_enabled_ui(can_save, |ui| widgets::button(ui, p, None, "Save", true))
