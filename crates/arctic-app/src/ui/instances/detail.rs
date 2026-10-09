@@ -90,6 +90,13 @@ impl ArcticApp {
             ui.selectable_value(&mut self.inst.page, InstancePage::Settings, "Settings");
         });
         ui.add_space(10.0);
+        // A mod dropped on any other tab is added too, and the Mods tab opens to show it.
+        if modded
+            && self.inst.page != InstancePage::Mods
+            && self.add_dropped_mods(ui, &instance.id, &instance.game_dir(&self.dirs).join("mods"))
+        {
+            self.inst.page = InstancePage::Mods;
+        }
         match (self.inst.page, modded) {
             (InstancePage::Mods, true) => self.mods_page(ui, &instance),
             (InstancePage::Browse, true) => self.browse_page(ui, &instance),

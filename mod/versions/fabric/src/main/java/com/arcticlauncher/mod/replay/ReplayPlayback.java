@@ -1,4 +1,4 @@
-//#if MC >= 1.16
+//#if MC >= 1.15
 package com.arcticlauncher.mod.replay;
 
 import com.arcticlauncher.client.replay.Category;
@@ -198,9 +198,15 @@ public final class ReplayPlayback implements ReplayBackend {
 				placed = true;
 				return packet;
 			case "game_event": {
+				//#if MC >= 1.16
 				ClientboundGameEventPacket.Type type = ((ClientboundGameEventPacket) packet).getEvent();
 				boolean bad = type == ClientboundGameEventPacket.CHANGE_GAME_MODE || type == ClientboundGameEventPacket.WIN_GAME
 						|| type == ClientboundGameEventPacket.DEMO_EVENT;
+				//#else
+				// 1.15: events are numbers (3 game mode, 4 the credits, 5 the demo screen).
+				int type = ((ClientboundGameEventPacket) packet).getEvent();
+				boolean bad = type == 3 || type == 4 || type == 5;
+				//#endif
 				return bad ? null : packet;
 			}
 			//#if MC >= 1.19
@@ -318,7 +324,9 @@ public final class ReplayPlayback implements ReplayBackend {
 		body.setShiftKeyDown(sneaking);
 		body.setSprinting(s.has(SelfSample.SPRINTING));
 		body.setSwimming(swimming);
+		//#if MC >= 1.16
 		body.setPose(gliding ? Pose.FALL_FLYING : swimming ? Pose.SWIMMING : sneaking ? Pose.CROUCHING : Pose.STANDING);
+		//#endif
 	}
 
 	/** What the recording player held and wore: the camera carries their inventory (recorded). */

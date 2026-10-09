@@ -1,4 +1,4 @@
-//#if MC >= 1.16
+//#if MC >= 1.15
 package com.arcticlauncher.mod.replay;
 
 import com.arcticlauncher.client.replay.PacketSorter;
@@ -36,7 +36,11 @@ public final class ReplayCodec {
 	private ReplayCodec() {}
 
 	public static int protocolVersion() {
+		//#if MC >= 1.16
 		return SharedConstants.getProtocolVersion();
+		//#else
+		return SharedConstants.getCurrentVersion().getProtocolVersion();
+		//#endif
 	}
 
 	public static PacketSorter sorter() {

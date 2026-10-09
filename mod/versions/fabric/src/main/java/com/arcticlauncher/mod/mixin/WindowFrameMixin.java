@@ -1,4 +1,4 @@
-//#if MC >= 1.16 && MC < 26.1
+//#if MC < 26.1
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.client.replay.Replays;

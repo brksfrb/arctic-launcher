@@ -203,7 +203,13 @@ public final class ReplayViewer {
 			backend.apply(data.packet(i), jumping);
 		} catch (RuntimeException e) {
 			if (problem == null) {
-				platform.log(true, "replay: packet " + i + " failed: " + e);
+				// Where it failed too: a bare NullPointerException says nothing on its own.
+				StackTraceElement[] at = e.getStackTrace();
+				StringBuilder where = new StringBuilder();
+				for (int k = 0; k < Math.min(3, at.length); k++) {
+					where.append(" at ").append(at[k]);
+				}
+				platform.log(true, "replay: packet " + i + " failed: " + e + where);
 			}
 		}
 	}

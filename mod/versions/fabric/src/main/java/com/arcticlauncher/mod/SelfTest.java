@@ -49,7 +49,7 @@ final class SelfTest {
 	private SelfTest() {}
 
 	static void maybeStart() {
-		//#if MC >= 1.16
+		//#if MC >= 1.15
 		if (ReplayTest.requested()) {
 			ReplayTest.start();
 			return;

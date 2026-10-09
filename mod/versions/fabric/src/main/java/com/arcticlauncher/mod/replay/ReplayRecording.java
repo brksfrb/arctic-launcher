@@ -1,4 +1,4 @@
-//#if MC >= 1.16
+//#if MC >= 1.15
 package com.arcticlauncher.mod.replay;
 
 import com.arcticlauncher.client.replay.Recorder;
@@ -36,7 +36,11 @@ public final class ReplayRecording {
 		boolean singleplayer = local != null && connection.isMemoryConnection();
 		String name;
 		if (singleplayer) {
+			//#if MC >= 1.16
 			name = local.getWorldData().getLevelName();
+			//#else
+			name = local.getLevelName();
+			//#endif
 		} else {
 			SocketAddress address = connection.getRemoteAddress();
 			name = address instanceof InetSocketAddress ? ((InetSocketAddress) address).getHostString() : "Server";

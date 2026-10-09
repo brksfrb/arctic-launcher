@@ -1,4 +1,4 @@
-//#if MC >= 1.16 && MC < 1.20.5
+//#if MC < 1.20.5
 package com.arcticlauncher.mod.replay;
 
 import java.util.HashMap;
@@ -55,18 +55,30 @@ final class PacketNames {
 		put(net.minecraft.network.protocol.game.ClientboundRemoveMobEffectPacket.class, "remove_mob_effect");
 		put(net.minecraft.network.protocol.game.ClientboundRespawnPacket.class, "respawn");
 		put(net.minecraft.network.protocol.game.ClientboundRotateHeadPacket.class, "rotate_head");
+		//#if MC >= 1.16
 		put(net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket.class, "section_blocks_update");
+		//#else
+		put(net.minecraft.network.protocol.game.ClientboundChunkBlocksUpdatePacket.class, "section_blocks_update");
+		//#endif
 		put(net.minecraft.network.protocol.game.ClientboundSelectAdvancementsTabPacket.class, "select_advancements_tab");
 		put(net.minecraft.network.protocol.game.ClientboundSetCameraPacket.class, "set_camera");
 		put(net.minecraft.network.protocol.game.ClientboundSetCarriedItemPacket.class, "set_carried_item");
 		put(net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket.class, "set_chunk_cache_center");
 		put(net.minecraft.network.protocol.game.ClientboundSetChunkCacheRadiusPacket.class, "set_chunk_cache_radius");
+		//#if MC >= 1.16
 		put(net.minecraft.network.protocol.game.ClientboundSetDefaultSpawnPositionPacket.class, "set_default_spawn_position");
+		//#else
+		put(net.minecraft.network.protocol.game.ClientboundSetSpawnPositionPacket.class, "set_default_spawn_position");
+		//#endif
 		put(net.minecraft.network.protocol.game.ClientboundSetDisplayObjectivePacket.class, "set_display_objective");
 		put(net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket.class, "set_entity_data");
 		put(net.minecraft.network.protocol.game.ClientboundSetEntityLinkPacket.class, "set_entity_link");
 		put(net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket.class, "set_entity_motion");
+		//#if MC >= 1.16
 		put(net.minecraft.network.protocol.game.ClientboundSetEquipmentPacket.class, "set_equipment");
+		//#else
+		put(net.minecraft.network.protocol.game.ClientboundSetEquippedItemPacket.class, "set_equipment");
+		//#endif
 		put(net.minecraft.network.protocol.game.ClientboundSetExperiencePacket.class, "set_experience");
 		put(net.minecraft.network.protocol.game.ClientboundSetHealthPacket.class, "set_health");
 		put(net.minecraft.network.protocol.game.ClientboundSetObjectivePacket.class, "set_objective");
