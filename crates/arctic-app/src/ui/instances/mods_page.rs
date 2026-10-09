@@ -102,7 +102,12 @@ impl ArcticApp {
 
     /// .jar files dropped on the window go into this instance's mods folder (from any of its
     /// tabs); returns whether any were added.
-    pub(super) fn add_dropped_mods(&mut self, ui: &egui::Ui, id: &str, mods_dir: &std::path::Path) -> bool {
+    pub(super) fn add_dropped_mods(
+        &mut self,
+        ui: &egui::Ui,
+        id: &str,
+        mods_dir: &std::path::Path,
+    ) -> bool {
         let is_jar =
             |p: &std::path::Path| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("jar"));
         if ui.input(|i| {

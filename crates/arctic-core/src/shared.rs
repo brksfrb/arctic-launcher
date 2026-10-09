@@ -223,8 +223,12 @@ const ACKNOWLEDGED: &[(&str, &str)] = &[
 /// `captured`, with the notices `known` has dismissed kept dismissed.
 fn keep_acknowledged(known: &Defaults, mut captured: Defaults) -> Defaults {
     for (key, done) in ACKNOWLEDGED {
-        if known.values.get(*key).map(String::as_str) == Some(*done) && captured.values.contains_key(*key) {
-            captured.values.insert((*key).to_owned(), (*done).to_owned());
+        if known.values.get(*key).map(String::as_str) == Some(*done)
+            && captured.values.contains_key(*key)
+        {
+            captured
+                .values
+                .insert((*key).to_owned(), (*done).to_owned());
         }
     }
     captured
@@ -259,10 +263,14 @@ mod tests {
     #[test]
     fn dismissed_notices_stay_dismissed() {
         let mut known = Defaults::default();
-        known.values.insert("skipMultiplayerWarning".into(), "true".into());
+        known
+            .values
+            .insert("skipMultiplayerWarning".into(), "true".into());
         known.values.insert("fov".into(), "0.0".into());
         let mut captured = Defaults::default();
-        captured.values.insert("skipMultiplayerWarning".into(), "false".into());
+        captured
+            .values
+            .insert("skipMultiplayerWarning".into(), "false".into());
         captured.values.insert("fov".into(), "0.5".into());
         let merged = keep_acknowledged(&known, captured);
         assert_eq!(merged.values["skipMultiplayerWarning"], "true");

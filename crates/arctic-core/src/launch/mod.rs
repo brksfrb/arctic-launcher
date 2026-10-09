@@ -6,6 +6,7 @@
 
 pub mod args;
 pub mod files;
+mod game_window;
 pub mod logparse;
 pub mod process;
 pub mod startup;
@@ -107,6 +108,8 @@ pub struct LaunchPlan {
     pub log_file: PathBuf,
     /// Run on the high-performance graphics card of laptops with two.
     pub high_performance_gpu: bool,
+    /// Maximize the game window once it opens.
+    pub maximize_window: bool,
     /// Access token and proxy password, kept only to redact them from logs.
     secrets: Vec<String>,
 }
@@ -536,7 +539,10 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
             .chain(preload_flags)
             .chain(truststore::flags(
                 req.dirs,
-                inst.version.java_version.as_ref().map_or(8, |j| j.major_version),
+                inst.version
+                    .java_version
+                    .as_ref()
+                    .map_or(8, |j| j.major_version),
             ))
             .chain(proxy.active().map(|_| {
                 format!(
@@ -559,6 +565,7 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
             n => format!("game-{}-{}.log", req.instance.id, n + 1),
         }),
         high_performance_gpu: settings.high_performance_gpu,
+        maximize_window: settings.game_maximized && !settings.fullscreen,
         secrets: vec![identity.access_token, proxy.password.clone()],
     }
 }
@@ -701,6 +708,7 @@ mod tests {
             game_dir: PathBuf::new(),
             log_file: PathBuf::new(),
             high_performance_gpu: false,
+            maximize_window: false,
             secrets: vec!["SECRET123".into(), String::new()],
         };
         let cmd = plan.redacted_command();
@@ -716,6 +724,7 @@ mod tests {
             game_dir: PathBuf::new(),
             log_file: PathBuf::new(),
             high_performance_gpu: false,
+            maximize_window: false,
             secrets: vec!["tok".into(), "hunter2".into()],
         };
         assert!(plan.redacted_command().ends_with("--proxyPass <redacted>"));

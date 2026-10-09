@@ -72,6 +72,9 @@ pub fn spawn(
         .stderr(Stdio::piped())
         .spawn()
         .at(&plan.java)?;
+    if plan.maximize_window {
+        super::game_window::maximize_when_open(child.id());
+    }
 
     let on_event = Arc::new(on_event);
     let window_seen = Arc::new(AtomicBool::new(false));
@@ -131,6 +134,9 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
         .stderr(log_err)
         .spawn()
         .at(&plan.java)?;
+    if plan.maximize_window {
+        super::game_window::maximize_when_open(child.id());
+    }
     Ok(child.id())
 }
 
