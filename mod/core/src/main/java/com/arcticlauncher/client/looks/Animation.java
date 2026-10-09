@@ -136,6 +136,26 @@ public final class Animation {
 		return track == null ? null : track.at(time(t));
 	}
 
+	/** The same animation with only these bones' tracks (the rest of the player is posed elsewhere). */
+	public Animation only(String... bones) {
+		Map<String, Track> r = new HashMap<String, Track>();
+		Map<String, Track> p = new HashMap<String, Track>();
+		for (String bone : bones) {
+			if (rotations.containsKey(bone)) {
+				r.put(bone, rotations.get(bone));
+			}
+			if (positions.containsKey(bone)) {
+				p.put(bone, positions.get(bone));
+			}
+		}
+		return new Animation(length, looping, Collections.unmodifiableMap(r), Collections.unmodifiableMap(p));
+	}
+
+	/** Whether {@code bone} has a rotation or position track. */
+	public boolean hasBone(String bone) {
+		return rotations.containsKey(bone) || positions.containsKey(bone);
+	}
+
 	/** Whether a one-shot animation is over at {@code t}. */
 	public boolean finished(float t) {
 		return !looping && t >= length;

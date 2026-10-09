@@ -21,6 +21,8 @@ import java.util.concurrent.ScheduledExecutorService;
  */
 public final class Cosmetics {
 	private static final Gson GSON = new Gson();
+	/** The newest player rig this client plays (see Rig); the catalog leaves out emotes needing more. */
+	private static final int RIG = 2;
 	private static final int MAX_ITEMS = 500;
 	private static final int MAX_ID = 32;
 	/** Most cosmetics one player can wear (one per slot). */
@@ -78,13 +80,23 @@ public final class Cosmetics {
 	public static final class Playing {
 		public final Emote emote;
 		public final long since;
+		/** Held at this many seconds (self-test screenshots), or below 0 to play on. */
+		private final float held;
 
 		Playing(Emote emote, long since) {
+			this(emote, since, -1f);
+		}
+
+		private Playing(Emote emote, long since, float held) {
 			this.emote = emote;
 			this.since = since;
+			this.held = held;
 		}
 
 		public float seconds() {
+			if (held >= 0) {
+				return held;
+			}
 			return (System.currentTimeMillis() - since) / 1000f;
 		}
 	}
@@ -208,6 +220,12 @@ public final class Cosmetics {
 		}
 	}
 
+	/** Hold the local player in {@code emote}'s pose at {@code seconds} (self-test screenshots). */
+	public void holdLocal(UUID me, Emote emote, float seconds) {
+		animation(emote);
+		playing.put(me, new Playing(emote, System.currentTimeMillis(), seconds));
+	}
+
 	/** The emote's animation, loading it on first ask. */
 	public Animation animation(final Emote emote) {
 		if (emote.animation == null && !emote.requested) {
@@ -299,7 +317,7 @@ public final class Cosmetics {
 	}
 
 	private void loadCatalog() throws Exception {
-		JsonObject catalog = Geometry.object(GSON.fromJson(Http.getText(baseUrl + "/v1/cosmetics", null), JsonElement.class));
+		JsonObject catalog = Geometry.object(GSON.fromJson(Http.getText(baseUrl + "/v1/cosmetics?rig=" + RIG, null), JsonElement.class));
 		List<Item> found = new ArrayList<Item>();
 		for (JsonElement e : list(catalog, "cosmetics")) {
 			if (!e.isJsonObject() || found.size() >= MAX_ITEMS) {

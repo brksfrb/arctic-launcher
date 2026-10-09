@@ -15,15 +15,21 @@ import java.util.UUID;
  * The emote wheel (B by default): emotes around a circle, you in the middle
  * previewing the one pointed at. Held (the default): let go of the key to
  * play what you point at. Toggled: click one, or press the key again to close.
+ * More emotes than fit go on further pages: scroll to turn them.
  */
 public final class EmoteWheel extends Page {
 	private static final int RADIUS = 92;
 	private static final int INNER = 44;
 	private static final int ITEM_R = 22;
-	private static final int MAX_SHOWN = 12;
+	/** Emotes on one page of the wheel. */
+	private static final int PER_PAGE = 12;
+	private static final int DOT_R = 3;
+	private static final int DOT_GAP = 10;
 
 	private int mouseX = -1;
 	private int mouseY = -1;
+	/** The page shown (0 is the first); kept between openings. */
+	private static int page;
 	/** The emote being previewed (index), or -1. */
 	private int previewing = -1;
 	/** An emote was chosen: it keeps playing after the wheel closes. */
@@ -55,9 +61,16 @@ public final class EmoteWheel extends Page {
 	@Override
 	protected void build() {}
 
+	private static int pages(List<Cosmetics.Emote> all) {
+		return Math.max(1, (all.size() + PER_PAGE - 1) / PER_PAGE);
+	}
+
+	/** The emotes on the page shown. */
 	private List<Cosmetics.Emote> emotes() {
 		List<Cosmetics.Emote> all = ArcticClient.looks().cosmetics().emotes();
-		return all.size() > MAX_SHOWN ? all.subList(0, MAX_SHOWN) : all;
+		page = Math.min(page, pages(all) - 1);
+		int from = page * PER_PAGE;
+		return all.subList(Math.min(from, all.size()), Math.min(from + PER_PAGE, all.size()));
 	}
 
 	/** The emote the mouse points at, or -1. */
@@ -102,6 +115,31 @@ public final class EmoteWheel extends Page {
 		g.player(cx - INNER, cy - INNER + 4, cx + INNER, cy + INNER - 10, INNER - 12, cx, cy - INNER);
 		String hint = hovered >= 0 ? emotes.get(hovered).name : hold() ? "Point, then let go" : "Pick an emote";
 		Draw.centered(g, hint, cx, cy + INNER - 8, s.text, false);
+		drawPages(g, s, cx, cy + RADIUS + ITEM_R + 18);
+	}
+
+	/** One dot per page under the wheel, the shown one lit, and how to turn them. */
+	private static void drawPages(Gfx g, Style s, int cx, int y) {
+		int count = pages(ArcticClient.looks().cosmetics().emotes());
+		if (count < 2) {
+			return;
+		}
+		int left = cx - (count - 1) * DOT_GAP / 2;
+		for (int i = 0; i < count; i++) {
+			Draw.disc(g, left + i * DOT_GAP, y, DOT_R, i == page ? s.accent : s.muted);
+		}
+		Draw.centered(g, "Scroll for more emotes", cx, y + 8, s.text, true);
+	}
+
+	@Override
+	public boolean mouseScrolled(double mx, double my, double amount) {
+		int count = pages(ArcticClient.looks().cosmetics().emotes());
+		if (count < 2 || amount == 0) {
+			return true;
+		}
+		page = ((page + (amount < 0 ? 1 : -1)) % count + count) % count;
+		previewing = -2;
+		return true;
 	}
 
 	/** Play the pointed emote on you, only here (nobody else sees a preview). */
