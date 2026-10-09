@@ -37,6 +37,7 @@
 		"ServerLookupMixin",
 		"ServerListPingerProxyMixin",
 		"ServerAddressMixin",
+		"LoginSessionMixin",
 		"ClientPlayerSwingMixin",
 		"ServerPingPoolMixin",
 		"ItemEntityRendererMixin",
