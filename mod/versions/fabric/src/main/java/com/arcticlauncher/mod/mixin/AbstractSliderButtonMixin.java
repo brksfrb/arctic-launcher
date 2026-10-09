@@ -1,4 +1,3 @@
-//#if MC >= 1.20
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.mod.Compat;
@@ -69,7 +68,7 @@ abstract class AbstractSliderButtonMixin {
 		}
 		Skin.sliderHandle(new GfxImpl(g), ArcticClient.style(), x, y, w, h, ((AbstractWidget) (Object) this).isHoveredOrFocused());
 	}
-	//#else
+	//#elif MC >= 1.20
 	// Before 1.20.2 there's no sprite atlas: renderWidget draws two nine-sliced blits.
 	@Redirect(
 			method = "extractWidgetRenderState",
@@ -98,6 +97,87 @@ abstract class AbstractSliderButtonMixin {
 		}
 		Skin.sliderHandle(new GfxImpl(g), ArcticClient.style(), x, y, width, height, ((AbstractWidget) (Object) this).isHoveredOrFocused());
 	}
+	//#elif MC >= 1.19.4
+	// 1.19.4: two static nine-sliced blits (pose, x, y, width, height, then six texture numbers).
+	@Redirect(
+			method = "extractWidgetRenderState",
+			at = @At(value = "INVOKE",
+					target = "Lnet/minecraft/client/gui/components/AbstractSliderButton;blitNineSliced(Lcom/mojang/blaze3d/vertex/PoseStack;IIIIIIIIII)V",
+					ordinal = 0))
+	private void arctic$track(com.mojang.blaze3d.vertex.PoseStack pose, int x, int y, int width, int height,
+			int a, int b, int c, int d, int e, int f) {
+		if (!ArcticClient.restyles()) {
+			net.minecraft.client.gui.GuiComponent.blitNineSliced(pose, x, y, width, height, a, b, c, d, e, f);
+			return;
+		}
+		Skin.sliderTrack(GfxImpl.of(pose), ArcticClient.style(), x, y, width, height, ((AbstractWidget) (Object) this).isHoveredOrFocused());
+	}
+
+	@Redirect(
+			method = "extractWidgetRenderState",
+			at = @At(value = "INVOKE",
+					target = "Lnet/minecraft/client/gui/components/AbstractSliderButton;blitNineSliced(Lcom/mojang/blaze3d/vertex/PoseStack;IIIIIIIIII)V",
+					ordinal = 1))
+	private void arctic$handle(com.mojang.blaze3d.vertex.PoseStack pose, int x, int y, int width, int height,
+			int a, int b, int c, int d, int e, int f) {
+		if (!ArcticClient.restyles()) {
+			net.minecraft.client.gui.GuiComponent.blitNineSliced(pose, x, y, width, height, a, b, c, d, e, f);
+			return;
+		}
+		Skin.sliderHandle(GfxImpl.of(pose), ArcticClient.style(), x, y, width, height, ((AbstractWidget) (Object) this).isHoveredOrFocused());
+	}
+	//#else
+	// 1.15 - 1.19.3: renderBg draws the handle as two blits (left half, right half) of widgets.png; the
+	// track is AbstractWidget.renderButton's (see AbstractButtonMixin). The first draws the whole handle.
+	//#if MC >= 1.16
+	@Redirect(
+			method = "renderBg",
+			at = @At(value = "INVOKE",
+					target = "Lnet/minecraft/client/gui/components/AbstractSliderButton;blit(Lcom/mojang/blaze3d/vertex/PoseStack;IIIIII)V",
+					ordinal = 0))
+	private void arctic$handle(AbstractSliderButton self, com.mojang.blaze3d.vertex.PoseStack pose, int x, int y, int u, int v, int w, int h) {
+		if (ArcticClient.restyles()) {
+			Skin.sliderHandle(GfxImpl.of(pose), ArcticClient.style(), x, y, w * 2, h, Compat.widgetHovered(self));
+		} else {
+			self.blit(pose, x, y, u, v, w, h);
+		}
+	}
+
+	@Redirect(
+			method = "renderBg",
+			at = @At(value = "INVOKE",
+					target = "Lnet/minecraft/client/gui/components/AbstractSliderButton;blit(Lcom/mojang/blaze3d/vertex/PoseStack;IIIIII)V",
+					ordinal = 1))
+	private void arctic$handleRight(AbstractSliderButton self, com.mojang.blaze3d.vertex.PoseStack pose, int x, int y, int u, int v, int w, int h) {
+		if (!ArcticClient.restyles()) {
+			self.blit(pose, x, y, u, v, w, h);
+		}
+	}
+	//#else
+	// 1.15 has no PoseStack to pass around: the GUI draws with the global matrix.
+	@Redirect(
+			method = "renderBg",
+			at = @At(value = "INVOKE",
+					target = "Lnet/minecraft/client/gui/components/AbstractSliderButton;blit(IIIIII)V",
+					ordinal = 0))
+	private void arctic$handle(AbstractSliderButton self, int x, int y, int u, int v, int w, int h) {
+		if (ArcticClient.restyles()) {
+			Skin.sliderHandle(GfxImpl.of(new com.mojang.blaze3d.vertex.PoseStack()), ArcticClient.style(), x, y, w * 2, h, Compat.widgetHovered(self));
+		} else {
+			self.blit(x, y, u, v, w, h);
+		}
+	}
+
+	@Redirect(
+			method = "renderBg",
+			at = @At(value = "INVOKE",
+					target = "Lnet/minecraft/client/gui/components/AbstractSliderButton;blit(IIIIII)V",
+					ordinal = 1))
+	private void arctic$handleRight(AbstractSliderButton self, int x, int y, int u, int v, int w, int h) {
+		if (!ArcticClient.restyles()) {
+			self.blit(x, y, u, v, w, h);
+		}
+	}
+	//#endif
 	//#endif
 }
-//#endif

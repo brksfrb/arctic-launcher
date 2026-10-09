@@ -198,8 +198,8 @@ processResources {
 			loader_min: loaderMin,
 			// Zoom, Freelook, Fullbright and the rest (see Compat.FEATURES): 1.20+ for now.
 			features: true,
-			// Minecraft's own buttons, sliders, checkboxes and text boxes in the Arctic style (1.20+ for now).
-			restyleWidgets: atLeast('1.20'),
+			// Minecraft's own buttons, sliders, checkboxes and text boxes in the Arctic style.
+			restyleWidgets: true,
 			// Screen gained a generic renderPanorama hook in 1.20.6; before that
 			// only TitleScreen draws one, so ScreenMixin has nothing to attach to.
 			panoramaHook: atLeast('1.20.6'),
