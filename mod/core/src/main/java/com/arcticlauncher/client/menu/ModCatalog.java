@@ -174,7 +174,9 @@ final class ModCatalog {
 					.settings((host, f) -> {
 						f.section("Outline");
 						f.swatches("Color", OUTLINE_COLORS, () -> c.outlineColor, v -> c.outlineColor = v);
-						f.choice("Thickness", WIDTHS, () -> indexOf(WIDTH_VALUES, c.outlineWidth), i -> c.outlineWidth = WIDTH_VALUES[i]);
+						if (p.outlineWidthWorks()) {
+							f.choice("Thickness", WIDTHS, () -> indexOf(WIDTH_VALUES, c.outlineWidth), i -> c.outlineWidth = WIDTH_VALUES[i]);
+						}
 					}));
 		}
 		if (p.hitColorWorks()) {

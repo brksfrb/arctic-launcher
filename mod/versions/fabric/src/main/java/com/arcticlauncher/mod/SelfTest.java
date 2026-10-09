@@ -65,12 +65,10 @@ final class SelfTest {
 			WorldTest.start();
 			return;
 		}
-		//#if MC >= 26.1
 		if (VisualsTest.requested()) {
 			VisualsTest.start();
 			return;
 		}
-		//#endif
 		if ("duel".equals(System.getProperty("arctic.selftest"))) {
 			// A duel through the launcher: world, kit, LAN, a play-together code.
 			TIMER.schedule(() -> Minecraft.getInstance().execute(() -> {

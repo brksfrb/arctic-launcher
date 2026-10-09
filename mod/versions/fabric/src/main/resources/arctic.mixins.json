@@ -26,7 +26,8 @@
 		"TitleScreenMixin",
 		"ServerTimeMixin",
 		"ChatPlaceholderMixin",
-		"MinecraftTickMixin",<% if (smoothFontSet) { %>
+		"MinecraftTickMixin",<% if (oldMotionBlur) { %>
+		"MotionBlurOldMixin",<% } %><% if (smoothFontSet) { %>
 		"SmoothFontSetMixin",
 		"SmoothFontGlyphMixin",<% } %><% if (fontWeight) { %>
 		"FontHintingMixin",
