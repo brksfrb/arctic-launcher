@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 use crate::auth::{Account, LaunchIdentity};
 use crate::error::IoContext;
 use crate::instances::Instance;
-use crate::net::download_all;
+use crate::net::{DownloadJob, download_all};
 use crate::settings::Settings;
 use crate::storage::DataDirs;
 use crate::versions::{RuleEnv, VersionEntry, VersionJson, load_version, mark_installed};
@@ -213,7 +213,7 @@ pub fn install(
     }
     download_all("Downloading game files", jobs, progress)?;
     if !assets_fresh {
-        files::mark_assets_verified(dirs, &assets.index_name);
+        finish_assets_later(dirs, assets.index_name.clone(), assets.later.clone());
     }
     log::info!(
         "install: files checked at {} ms",
@@ -244,6 +244,23 @@ pub fn install(
         logging: logging.map(|(job, template)| (job.dest, template)),
         version,
     })
+}
+
+/// The assets the game can start without, fetched on a thread of their own while it runs; all of
+/// the version's assets count as checked only once they're in (a launcher closed meanwhile
+/// leaves the rest for the next start).
+fn finish_assets_later(dirs: &DataDirs, index_name: String, later: Vec<DownloadJob>) {
+    if later.is_empty() {
+        files::mark_assets_verified(dirs, &index_name);
+        return;
+    }
+    let dirs = dirs.clone();
+    std::thread::spawn(
+        move || match download_all("Music and languages", later, &|_| {}) {
+            Ok(()) => files::mark_assets_verified(&dirs, &index_name),
+            Err(e) => log::warn!("music and languages for {index_name}: {e}"),
+        },
+    );
 }
 
 /// Download everything and build the command. Safe to call from a worker thread.

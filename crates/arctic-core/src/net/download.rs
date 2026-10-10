@@ -21,11 +21,14 @@ pub const WORKERS: usize = 64;
 /// so total time is roughly max(bytes / bandwidth, files / request rate).
 const LARGE_FILE_WORKERS: usize = 8;
 const BUF_SIZE: usize = 64 * 1024;
-const ATTEMPTS: u32 = 3;
+const ATTEMPTS: u32 = 5;
 const RETRY_BACKOFF: Duration = Duration::from_millis(400);
-/// Body timeout = base + size / slowest acceptable speed.
-const BODY_TIMEOUT_BASE: Duration = Duration::from_secs(15);
-const MIN_SPEED_BYTES_PER_SEC: u64 = 100 * 1024;
+/// Body timeout = base + size / slowest acceptable speed. The speed is per file, and up to
+/// [`WORKERS`] files share the connection: on a modest line each gets a few dozen KB/s, so the
+/// bar is low enough that only a connection that has really stalled gives up (a 100 KB/s bar
+/// failed 1 MB libraries on ordinary home connections: "timeout: receive body").
+const BODY_TIMEOUT_BASE: Duration = Duration::from_secs(30);
+const MIN_SPEED_BYTES_PER_SEC: u64 = 8 * 1024;
 /// Minimum interval between progress callbacks.
 const REPORT_EVERY_MS: u64 = 50;
 /// Files at least this big are fetched in parallel byte ranges, so one slow
@@ -660,7 +663,7 @@ mod tests {
     fn body_timeout_scales_with_size() {
         assert_eq!(body_timeout(None), BODY_TIMEOUT_BASE);
         let big = body_timeout(Some(100 * 1024 * 1024));
-        assert_eq!(big, BODY_TIMEOUT_BASE + Duration::from_secs(1024));
+        assert_eq!(big, BODY_TIMEOUT_BASE + Duration::from_secs(100 * 128));
     }
 
     #[test]
