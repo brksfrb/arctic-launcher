@@ -165,6 +165,11 @@ final class WorldTest {
 		if (unpauser != null) {
 			unpauser.cancel(false);
 		}
+		String bench = System.getProperty("arctic.fpsbench");
+		if (bench != null) {
+			fpsBench(Integer.parseInt(bench));
+			return;
+		}
 		String emoteShots = System.getProperty("arctic.emoteshots");
 		if (emoteShots != null) {
 			emoteTour(emoteShots.split(","));
@@ -583,6 +588,34 @@ final class WorldTest {
 			Runnable step = steps[i];
 			TIMER.schedule(() -> run(step), (long) i * STEP * 2, TimeUnit.SECONDS);
 		}
+	}
+
+	/** Blocks travelled per hop in the FPS benchmark's moving half (new chunks to load). */
+	private static final int BENCH_HOP = 200;
+	private static final int BENCH_HOP_SECONDS = 5;
+
+	/**
+	 * -Darctic.fpsbench=SECONDS: the game's FPS logged each second, standing still for the first half
+	 * and hopping to new ground every few seconds for the second (chunk loading makes the most
+	 * garbage), then the game quits.
+	 */
+	private static void fpsBench(int seconds) {
+		Compat.setScreen(null);
+		Minecraft mc = Minecraft.getInstance();
+		Compat.setXRot(mc.player, 10);
+		for (int i = 1; i <= seconds; i++) {
+			int second = i;
+			TIMER.schedule(() -> run(() -> {
+				ArcticMod.LOG.info("worldtest: bench second {} fps {}", second, ArcticClient.platform().fps());
+				if (second > seconds / 2 && second % BENCH_HOP_SECONDS == 0) {
+					command("tp @s ~" + BENCH_HOP + " ~ ~");
+				}
+			}), 5 + i, TimeUnit.SECONDS);
+		}
+		TIMER.schedule(() -> run(() -> {
+			ArcticMod.LOG.info("worldtest: done");
+			Minecraft.getInstance().stop();
+		}), seconds + 7, TimeUnit.SECONDS);
 	}
 
 	/** Moments of each emote shot, as parts of its length. */
