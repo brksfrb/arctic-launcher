@@ -10,12 +10,14 @@ import com.arcticlauncher.client.looks.Cosmetics;
 import com.arcticlauncher.client.looks.CuboidModel;
 import com.arcticlauncher.client.looks.Look;
 import com.arcticlauncher.client.looks.MeshDraw;
+import com.arcticlauncher.client.looks.SkinLimbs;
 import com.arcticlauncher.client.looks.Xform;
 import com.mojang.blaze3d.platform.GLX;
 import com.mojang.blaze3d.platform.GlStateManager;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.client.render.entity.PlayerEntityRenderer;
+import net.minecraft.client.render.entity.PlayerModelPart;
 import net.minecraft.client.render.entity.feature.FeatureRenderer;
 import net.minecraft.client.render.model.ModelPart;
 import net.minecraft.util.Identifier;
@@ -52,6 +54,7 @@ public final class LegacyCosmeticLayer implements FeatureRenderer<AbstractClient
 		if (player.isInvisible() || ArcticClient.looks() == null) {
 			return;
 		}
+		drawLimbs(player);
 		Look look = lookOf(player.getUuid());
 		if (look == null || look.cosmetics.isEmpty()) {
 			return;
@@ -80,6 +83,37 @@ public final class LegacyCosmeticLayer implements FeatureRenderer<AbstractClient
 				}
 				GlStateManager.popMatrix();
 			}
+		}
+	}
+
+	/**
+	 * Limbs an expressive emote bends (the game's own limb is hidden meanwhile, see
+	 * PlayerModelEmoteMixin): drawn in two halves from the player's skin.
+	 */
+	private void drawLimbs(AbstractClientPlayerEntity player) {
+		Cosmetics.Playing playing = ArcticClient.looks().cosmetics().playingFor(player.getUuid());
+		com.arcticlauncher.client.looks.Animation animation = playing == null ? null : playing.emote.animation;
+		if (animation == null || !SkinLimbs.bends(animation)) {
+			return;
+		}
+		float t = playing.seconds();
+		boolean slim = "slim".equals(player.getModel());
+		// Null until the skin has loaded (the game then draws the default one, as here).
+		Identifier skin = player.getSkinId();
+		if (skin == null) {
+			skin = net.minecraft.client.util.DefaultSkinHelper.getTexture(player.getUuid());
+		}
+		PlayerModelPart[] outer = {PlayerModelPart.RIGHT_SLEEVE, PlayerModelPart.LEFT_SLEEVE, PlayerModelPart.RIGHT_PANTS_LEG,
+				PlayerModelPart.LEFT_PANTS_LEG, PlayerModelPart.JACKET};
+		for (SkinLimbs.Limb limb : SkinLimbs.Limb.values()) {
+			if (!SkinLimbs.bends(animation, limb)) {
+				continue;
+			}
+			CuboidModel.Piece piece = SkinLimbs.piece(limb, slim, player.isPartVisible(outer[limb.ordinal()]));
+			GlStateManager.pushMatrix();
+			part(limb.attach).preRender(SCALE);
+			draw(skin, new Pass(piece, animation.only(limb.joint), t));
+			GlStateManager.popMatrix();
 		}
 	}
 
@@ -131,7 +165,17 @@ public final class LegacyCosmeticLayer implements FeatureRenderer<AbstractClient
 		private final boolean glow;
 		private final boolean sheen;
 
+		/** An emote's bend for a skin limb, at {@code t} seconds; null for a cosmetic's own motion. */
+		private final com.arcticlauncher.client.looks.Animation bend;
+		private final float t;
+
 		Pass(CuboidModel.Piece piece) {
+			this(piece, null, 0f);
+		}
+
+		Pass(CuboidModel.Piece piece, com.arcticlauncher.client.looks.Animation bend, float t) {
+			this.bend = bend;
+			this.t = t;
 			this.piece = piece;
 			this.mesh = null;
 			this.primitive = 0;
@@ -146,6 +190,8 @@ public final class LegacyCosmeticLayer implements FeatureRenderer<AbstractClient
 		}
 
 		Pass(LegacyCosmetics.Mesh mesh, int primitive, Attach attach, boolean animate, boolean glow, boolean sheen) {
+			this.bend = null;
+			this.t = 0f;
 			this.piece = null;
 			this.mesh = mesh;
 			this.primitive = primitive;
@@ -157,7 +203,9 @@ public final class LegacyCosmeticLayer implements FeatureRenderer<AbstractClient
 
 		void emit(Xform xf, boolean glowPass) {
 			int light = glowPass ? Xform.FULL_BRIGHT : 0;
-			if (piece != null) {
+			if (piece != null && bend != null) {
+				piece.emit(xf, light, bend, t);
+			} else if (piece != null) {
 				piece.emit(xf, light);
 			} else if (sheen) {
 				MeshDraw.emitSheen(mesh.mesh, primitive, attach, xf);

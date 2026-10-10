@@ -66,8 +66,12 @@ public final class CosmeticsLayer extends RenderLayer<AvatarRenderState, PlayerM
 	@Override
 	public void submit(PoseStack pose, SubmitNodeCollector collector, int light, AvatarRenderState state, float yRot, float xRot) {
 		if (!state.isInvisible) {
+			Canvas canvas = new Canvas(collector);
 			// Looked up when the state was filled in.
-			draw(pose, new Canvas(collector), light, ((AvatarIdentity) state).arctic$look());
+			draw(pose, canvas, light, ((AvatarIdentity) state).arctic$look());
+			drawLimbs(pose, canvas, light, player(state), state.skin.body().texturePath(),
+					state.skin.model() == net.minecraft.world.entity.player.PlayerModelType.SLIM,
+					new boolean[] {state.showRightSleeve, state.showLeftSleeve, state.showRightPants, state.showLeftPants, state.showJacket});
 		}
 	}
 //#elif MC >= 1.21.2
@@ -79,8 +83,12 @@ public final class CosmeticsLayer extends RenderLayer<PlayerRenderState, PlayerM
 	@Override
 	public void render(PoseStack pose, MultiBufferSource buffers, int light, PlayerRenderState state, float yRot, float xRot) {
 		if (!state.isInvisible) {
+			Canvas canvas = new Canvas(buffers);
 			// Looked up when the state was filled in.
-			draw(pose, new Canvas(buffers), light, ((AvatarIdentity) state).arctic$look());
+			draw(pose, canvas, light, ((AvatarIdentity) state).arctic$look());
+			drawLimbs(pose, canvas, light, ((AvatarIdentity) state).arctic$uuid(), state.skin.texture(),
+					state.skin.model() == net.minecraft.client.resources.PlayerSkin.Model.SLIM,
+					new boolean[] {state.showRightSleeve, state.showLeftSleeve, state.showRightPants, state.showLeftPants, state.showJacket});
 		}
 	}
 //#else
@@ -119,7 +127,19 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 			entry.at = now;
 			ArcticClient.looks().cosmetics().watch(id);
 		}
-		draw(pose, new Canvas(buffers), light, entry.look);
+		Canvas canvas = new Canvas(buffers);
+		draw(pose, canvas, light, entry.look);
+		//#if MC >= 1.20.2
+		boolean slim = player.getSkin().model() == net.minecraft.client.resources.PlayerSkin.Model.SLIM;
+		//#else
+		boolean slim = "slim".equals(player.getModelName());
+		//#endif
+		drawLimbs(pose, canvas, light, id, getTextureLocation(player), slim, new boolean[] {
+				player.isModelPartShown(net.minecraft.world.entity.player.PlayerModelPart.RIGHT_SLEEVE),
+				player.isModelPartShown(net.minecraft.world.entity.player.PlayerModelPart.LEFT_SLEEVE),
+				player.isModelPartShown(net.minecraft.world.entity.player.PlayerModelPart.RIGHT_PANTS_LEG),
+				player.isModelPartShown(net.minecraft.world.entity.player.PlayerModelPart.LEFT_PANTS_LEG),
+				player.isModelPartShown(net.minecraft.world.entity.player.PlayerModelPart.JACKET)});
 	}
 //#endif
 
@@ -201,6 +221,34 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 				}
 				pose.popPose();
 			}
+		}
+	}
+
+	/**
+	 * Limbs an expressive emote bends (the game's own limb is hidden meanwhile, see
+	 * PlayerModelEmoteMixin): drawn in two halves from the player's skin. {@code outer}: whether the
+	 * right sleeve, left sleeve, right and left trouser leg and jacket are shown.
+	 */
+	private void drawLimbs(PoseStack pose, Canvas canvas, int light, java.util.UUID id, Identifier skin, boolean slim, boolean[] outer) {
+		if (id == null || ArcticClient.looks() == null) {
+			return;
+		}
+		Cosmetics.Playing playing = ArcticClient.looks().cosmetics().playingFor(id);
+		com.arcticlauncher.client.looks.Animation animation = playing == null ? null : playing.emote.animation;
+		if (animation == null || !com.arcticlauncher.client.looks.SkinLimbs.bends(animation)) {
+			return;
+		}
+		float t = playing.seconds();
+		for (com.arcticlauncher.client.looks.SkinLimbs.Limb limb : com.arcticlauncher.client.looks.SkinLimbs.Limb.values()) {
+			if (!com.arcticlauncher.client.looks.SkinLimbs.bends(animation, limb)) {
+				continue;
+			}
+			com.arcticlauncher.client.looks.CuboidModel.Piece piece = com.arcticlauncher.client.looks.SkinLimbs.piece(limb, slim, outer[limb.ordinal()]);
+			com.arcticlauncher.client.looks.Animation bend = animation.only(limb.joint);
+			pose.pushPose();
+			part(limb.attach).translateAndRotate(pose);
+			canvas.base(pose, skin, xf -> piece.emit(xf, light, bend, t));
+			pose.popPose();
 		}
 	}
 

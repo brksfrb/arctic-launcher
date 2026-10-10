@@ -12,6 +12,10 @@ package com.arcticlauncher.client.looks;
  * <li>{@code rightLeg}, {@code leftLeg}: rotations at the hips, under the root.</li>
  * </ul>
  *
+ * A split body (a {@code chest} or {@code pelvis} bone, instead of {@code torso}) turns both halves
+ * about the middle of the body: the chest carries the head and arms, the pelvis (turned relative to
+ * the chest) carries the legs. The body's lower half is then drawn by {@link SkinLimbs}.
+ *
  * Rotations are degrees in the model part's own order (z, then y, then x), as for the six-part
  * emotes; positions are pixels with y up, like Blockbench. Parts are in the game's model space
  * (y down, the player facing -z).
@@ -30,13 +34,20 @@ public final class Rig {
 	private static final float DEG = (float) (Math.PI / 180);
 	/** From the body's pivot (the neck) down to the waist, where the torso bends. */
 	private static final float WAIST = 12f;
+	/** From the body's pivot down to where a split body's chest and pelvis meet. */
+	private static final float MIDDLE = 6f;
 
 	private Rig() {
 	}
 
 	/** Whether {@code animation} uses this rig. */
 	public static boolean expressive(Animation animation) {
-		return animation.hasBone("torso") || animation.hasBone("root");
+		return animation.hasBone("torso") || animation.hasBone("root") || split(animation);
+	}
+
+	/** Whether the body moves as two halves (see the class comment). */
+	public static boolean split(Animation animation) {
+		return animation.hasBone("chest") || animation.hasBone("pelvis");
 	}
 
 	/**
@@ -47,8 +58,20 @@ public final class Rig {
 		float[] rootRot = orZero(animation.rotation("root", t));
 		float[] rootPos = orZero(animation.position("root", t));
 		float[] root = euler(0, rootRot[1] * DEG, 0);
-		float[] torso = euler(orZero(animation.rotation("torso", t)), DEG);
-		float[] waist = {pivots[BODY][0], pivots[BODY][1] + WAIST, pivots[BODY][2]};
+		boolean split = split(animation);
+		// What the upper body turns by and about, and what the legs do.
+		float[] torso;
+		float[] legs;
+		float[] waist;
+		if (split) {
+			torso = euler(orZero(animation.rotation("chest", t)), DEG);
+			legs = mul(torso, euler(orZero(animation.rotation("pelvis", t)), DEG));
+			waist = new float[] {pivots[BODY][0], pivots[BODY][1] + MIDDLE, pivots[BODY][2]};
+		} else {
+			torso = euler(orZero(animation.rotation("torso", t)), DEG);
+			legs = null;
+			waist = new float[] {pivots[BODY][0], pivots[BODY][1] + WAIST, pivots[BODY][2]};
+		}
 		// Positions are y up; the model is y down.
 		float[] lift = {rootPos[0], -rootPos[1], rootPos[2]};
 		for (int i = 0; i < PARTS; i++) {
@@ -61,9 +84,10 @@ public final class Rig {
 				pivot[2] += offset[2];
 			}
 			float[] rotation = local;
-			if (ON_TORSO[i]) {
-				pivot = add(waist, apply(torso, sub(pivot, waist)));
-				rotation = mul(torso, rotation);
+			float[] frame = ON_TORSO[i] ? torso : legs;
+			if (frame != null) {
+				pivot = add(waist, apply(frame, sub(pivot, waist)));
+				rotation = mul(frame, rotation);
 			}
 			pivots[i] = add(apply(root, pivot), lift);
 			rotations[i] = angles(mul(root, rotation));

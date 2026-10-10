@@ -22,5 +22,10 @@
   {"id": "showboat_spin", "name": "Showboat Spin"},
   {"id": "take_a_seat", "name": "Take a Seat"},
   {"id": "facepalm_act", "name": "Facepalm Act"},
-  {"id": "victory_hop", "name": "Victory Hop"}
+  {"id": "victory_hop", "name": "Victory Hop"},
+  {"id": "hmm", "name": "Hmm"},
+  {"id": "heartfelt_thanks", "name": "Heartfelt Thanks"},
+  {"id": "achoo", "name": "Achoo!"},
+  {"id": "zen_hover", "name": "Zen Hover"},
+  {"id": "twerk", "name": "Twerk"}
 ]

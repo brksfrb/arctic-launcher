@@ -4,6 +4,7 @@ import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.looks.Animation;
 import com.arcticlauncher.client.looks.Cosmetics;
 import com.arcticlauncher.client.looks.Rig;
+import com.arcticlauncher.client.looks.SkinLimbs;
 import java.util.UUID;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelPart;
@@ -92,6 +93,13 @@ abstract class PlayerModelEmoteMixin {
 			rightSleeve.copyFrom(model.rightArm);
 			leftPants.copyFrom(model.leftLeg);
 			rightPants.copyFrom(model.rightLeg);
+			// The outer layers are parts of their own here: hidden with their limb (the game shows
+			// them again before the next player, from that player's settings).
+			rightSleeve.visible &= model.rightArm.visible;
+			leftSleeve.visible &= model.leftArm.visible;
+			rightPants.visible &= model.rightLeg.visible;
+			leftPants.visible &= model.leftLeg.visible;
+			jacket.visible &= model.body.visible;
 			jacket.copyFrom(model.body);
 			model.hat.copyFrom(model.head);
 		}
@@ -100,6 +108,7 @@ abstract class PlayerModelEmoteMixin {
 
 	/** Pose the parts for the emote this player is playing; whether one is playing. */
 	private boolean arctic$pose(UUID id) {
+		arctic$showLimbs();
 		if (id == null || ArcticClient.looks() == null) {
 			return false;
 		}
@@ -112,6 +121,7 @@ abstract class PlayerModelEmoteMixin {
 		HumanoidModel<?> model = (HumanoidModel<?>) (Object) this;
 		if (Rig.expressive(animation)) {
 			arctic$rig(animation, t);
+			arctic$hideBentLimbs(animation);
 			return true;
 		}
 		pose(animation, "head", model.head, t);
@@ -121,6 +131,44 @@ abstract class PlayerModelEmoteMixin {
 		pose(animation, "rightLeg", model.rightLeg, t);
 		pose(animation, "leftLeg", model.leftLeg, t);
 		return true;
+	}
+
+	/** The limbs (in SkinLimbs.Limb order) hidden for the last player drawn, to show again. */
+	@Unique
+	private final boolean[] arctic$hidden = new boolean[5];
+
+	/** The game's own limbs, in SkinLimbs.Limb order. */
+	@Unique
+	private ModelPart[] arctic$limbs() {
+		HumanoidModel<?> model = (HumanoidModel<?>) (Object) this;
+		return new ModelPart[] {model.rightArm, model.leftArm, model.rightLeg, model.leftLeg, model.body};
+	}
+
+	/**
+	 * A limb the emote bends is drawn in two halves by the cosmetics layer; the game's own one (and
+	 * its outer layer) is hidden meanwhile.
+	 */
+	@Unique
+	private void arctic$hideBentLimbs(Animation animation) {
+		ModelPart[] limbs = arctic$limbs();
+		for (SkinLimbs.Limb limb : SkinLimbs.Limb.values()) {
+			if (SkinLimbs.bends(animation, limb)) {
+				limbs[limb.ordinal()].visible = false;
+				arctic$hidden[limb.ordinal()] = true;
+			}
+		}
+	}
+
+	/** Show what was hidden for the player drawn before (the model is shared by every player). */
+	@Unique
+	private void arctic$showLimbs() {
+		ModelPart[] limbs = arctic$limbs();
+		for (int i = 0; i < arctic$hidden.length; i++) {
+			if (arctic$hidden[i]) {
+				limbs[i].visible = true;
+				arctic$hidden[i] = false;
+			}
+		}
 	}
 
 	/** The expressive rig: the parts move together (see Rig). */
