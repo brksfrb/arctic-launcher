@@ -164,7 +164,11 @@ pub fn logging_job(dirs: &DataDirs, version: &VersionJson) -> Option<(DownloadJo
 
 /// Assets still to fetch plus how the game should find them.
 pub struct AssetPlan {
+    /// Needed before the game starts.
     pub jobs: Vec<DownloadJob>,
+    /// Fetched while the game runs: music, music discs and other languages' translations (over
+    /// half of a version's download). The game plays without them; a missing track is skipped.
+    pub later: Vec<DownloadJob>,
     pub index_name: String,
     /// Value for `${game_assets}` (legacy versions read loose files from here).
     pub game_assets: PathBuf,
@@ -227,20 +231,25 @@ pub fn plan_assets(dirs: &DataDirs, version: &VersionJson, game_dir: &Path) -> R
         .ok_or_else(|| Error::Other("asset index missing after download".into()))?;
 
     let objects = dirs.assets().join("objects");
-    let jobs = index
-        .objects
-        .values()
-        .map(|o| {
-            let prefix = &o.hash[..2.min(o.hash.len())];
-            DownloadJob {
-                url: format!("{RESOURCES_URL}/{prefix}/{}", o.hash),
-                dest: objects.join(prefix).join(&o.hash),
-                sha1: Some(o.hash.clone()),
-                size: Some(o.size),
-                lzma: None,
-            }
-        })
-        .collect();
+    // Old versions read copies laid out once everything is here: all of it first.
+    let legacy = index.map_to_resources || index.is_virtual;
+    let language = game_language(game_dir);
+    let (mut jobs, mut later) = (Vec::new(), Vec::new());
+    for (name, o) in &index.objects {
+        let prefix = &o.hash[..2.min(o.hash.len())];
+        let job = DownloadJob {
+            url: format!("{RESOURCES_URL}/{prefix}/{}", o.hash),
+            dest: objects.join(prefix).join(&o.hash),
+            sha1: Some(o.hash.clone()),
+            size: Some(o.size),
+            lzma: None,
+        };
+        if !legacy && can_wait(name, &language) {
+            later.push(job);
+        } else {
+            jobs.push(job);
+        }
+    }
     let game_assets = if index.map_to_resources {
         game_dir.join("resources")
     } else if index.is_virtual {
@@ -250,11 +259,43 @@ pub fn plan_assets(dirs: &DataDirs, version: &VersionJson, game_dir: &Path) -> R
     };
     Ok(AssetPlan {
         jobs,
+        later,
         index_name: index_ref.id.clone(),
         game_assets,
         index,
         objects,
     })
+}
+
+/// Whether the game can start without asset `name`: music other than the title screen's, music
+/// discs, and translations into languages other than `language` (the game's own setting).
+pub(crate) fn can_wait(name: &str, language: &str) -> bool {
+    if let Some(track) = name.strip_prefix("minecraft/sounds/music/") {
+        return !track.starts_with("menu/");
+    }
+    if name.starts_with("minecraft/sounds/records/") {
+        return true;
+    }
+    let translation = name
+        .strip_prefix("minecraft/lang/")
+        .or_else(|| name.strip_prefix("realms/lang/"));
+    translation.is_some_and(|file| {
+        file.strip_suffix(".json")
+            .or_else(|| file.strip_suffix(".lang"))
+            .is_some_and(|code| !code.eq_ignore_ascii_case(language))
+    })
+}
+
+/// The language the game is set to (its `options.txt`), English before the first start.
+fn game_language(game_dir: &Path) -> String {
+    fs::read_to_string(game_dir.join("options.txt"))
+        .ok()
+        .and_then(|text| {
+            text.lines()
+                .find_map(|l| l.strip_prefix("lang:").map(|v| v.trim().to_owned()))
+        })
+        .filter(|l| !l.is_empty())
+        .unwrap_or_else(|| "en_us".to_owned())
 }
 
 fn copy_legacy_assets(index: &AssetIndex, objects: &Path, target: &Path) -> Result<()> {
@@ -311,6 +352,21 @@ pub fn extract_natives(natives: &[NativeJar], natives_dir: &Path) -> Result<()> 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn music_discs_and_other_languages_can_wait() {
+        use super::can_wait;
+        assert!(can_wait("minecraft/sounds/music/game/calm1.ogg", "en_us"));
+        assert!(can_wait("minecraft/sounds/records/cat.ogg", "en_us"));
+        assert!(can_wait("minecraft/lang/tr_tr.json", "en_us"));
+        assert!(!can_wait("minecraft/lang/tr_tr.json", "tr_tr"));
+        assert!(!can_wait("minecraft/sounds/music/menu/menu1.ogg", "en_us"));
+        assert!(!can_wait("minecraft/sounds/mob/zombie/say1.ogg", "en_us"));
+        assert!(!can_wait(
+            "minecraft/textures/gui/title/background/panorama_0.png",
+            "en_us"
+        ));
+    }
+
     use super::*;
     use std::collections::HashSet as Set;
     use std::io::Write;
