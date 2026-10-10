@@ -1071,6 +1071,10 @@ pub struct LaunchArgs {
     #[arg(long)]
     pub fullscreen: bool,
 
+    /// Start with the game window maximized.
+    #[arg(long, conflicts_with = "fullscreen")]
+    pub maximized: bool,
+
     /// Join this server right away (`host` or `host:port`).
     #[arg(long, value_name = "ADDRESS", conflicts_with = "world")]
     pub server: Option<String>,
