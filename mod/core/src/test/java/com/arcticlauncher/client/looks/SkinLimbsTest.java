@@ -63,6 +63,17 @@ class SkinLimbsTest {
 	}
 
 	@Test
+	void theBodySplitsAtItsMiddleWithTheJacketOutside() {
+		Box box = new Box();
+		SkinLimbs.piece(SkinLimbs.Limb.BODY, false, true).emit(box, 0);
+		// The body: from its pivot (the neck) 12 down, its skin rows 16 to 32 and the jacket's 32 to 48.
+		assertEquals(-0.25f, box.minY, EPS);
+		assertEquals(12.25f, box.maxY, EPS);
+		assertEquals(16f, box.minV, EPS);
+		assertEquals(48f, box.maxV, EPS);
+	}
+
+	@Test
 	void aStraightArmFillsTheGamesArmBox() {
 		Box box = new Box();
 		SkinLimbs.piece(SkinLimbs.Limb.RIGHT_ARM, false, false).emit(box, 0);

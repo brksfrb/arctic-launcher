@@ -58,4 +58,17 @@ class RigTest {
 		assertEquals(5f, pivots[Rig.RIGHT_ARM][0], EPS);
 		assertEquals((float) Math.PI, Math.abs(rotations[Rig.HEAD][1]) + Math.abs(rotations[Rig.HEAD][0]), 0.01f);
 	}
+
+	@Test
+	void aSplitBodysPelvisCarriesTheLegsAndItsChestTheHead() {
+		float[][] pivots = restPivots();
+		float[][] rotations = new float[6][3];
+		Rig.pose(anim("\"chest\":{\"rotation\":[0,0,0]},\"pelvis\":{\"rotation\":[90,0,0]}"), 0, pivots, rotations);
+		// Turned 90° about the body's middle (y 6): the hips (y 12) swing 6 behind it; the head stays.
+		assertEquals(6f, pivots[Rig.RIGHT_LEG][1], EPS);
+		assertEquals(6f, pivots[Rig.RIGHT_LEG][2], EPS);
+		assertEquals((float) Math.PI / 2, rotations[Rig.RIGHT_LEG][0], EPS);
+		assertEquals(0f, pivots[Rig.HEAD][1], EPS);
+		assertEquals(0f, rotations[Rig.HEAD][0], EPS);
+	}
 }

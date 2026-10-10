@@ -4,6 +4,7 @@ import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.looks.Animation;
 import com.arcticlauncher.client.looks.Cosmetics;
 import com.arcticlauncher.client.looks.Rig;
+import com.arcticlauncher.client.looks.SkinLimbs;
 import net.minecraft.client.render.entity.model.EntityModel;
 import net.minecraft.client.render.entity.model.PlayerEntityModel;
 import net.minecraft.client.render.model.ModelPart;
@@ -55,6 +56,7 @@ abstract class PlayerModelEmoteMixin {
 		PlayerEntityModel model = (PlayerEntityModel) (Object) this;
 		if (Rig.expressive(animation)) {
 			arctic$undo = rig(animation, t, parts());
+			hideBentLimbs(animation, model);
 		} else {
 			pose(animation, "head", model.head, t);
 			pose(animation, "body", model.body, t);
@@ -89,6 +91,22 @@ abstract class PlayerModelEmoteMixin {
 		}
 		apply(parts, after);
 		return before;
+	}
+
+	/**
+	 * A limb the emote bends is drawn in two halves by the cosmetics layer; the game's own one and its
+	 * outer layer are hidden meanwhile (the game shows every part again before the next player).
+	 */
+	private static void hideBentLimbs(Animation animation, PlayerEntityModel model) {
+		ModelPart[][] limbs = {{model.rightArm, model.rightSleeve}, {model.leftArm, model.leftSleeve}, {model.rightLeg, model.rightPants},
+				{model.leftLeg, model.leftPants}, {model.body, model.jacket}};
+		for (SkinLimbs.Limb limb : SkinLimbs.Limb.values()) {
+			if (SkinLimbs.bends(animation, limb)) {
+				for (ModelPart part : limbs[limb.ordinal()]) {
+					part.visible = false;
+				}
+			}
+		}
 	}
 
 	private ModelPart[] parts() {

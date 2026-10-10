@@ -188,6 +188,7 @@ public final class LegacyHooks {
 
 	/** An Arctic look texture once it's uploaded, or null. */
 	public static Identifier ready(String hash) {
-		return ArcticClient.looks().texture(hash) ? LegacyTextures.look(ArcticClient.looks().frame(hash)) : null;
+		// Only once uploaded: before that Minecraft looks for it in the resource packs and fails the draw.
+		return ArcticClient.looks().texture(hash) ? LegacyTextures.resolve("look:" + ArcticClient.looks().frame(hash)) : null;
 	}
 }

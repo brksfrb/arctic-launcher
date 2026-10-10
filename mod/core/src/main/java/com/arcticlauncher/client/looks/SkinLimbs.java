@@ -6,10 +6,10 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * The player's arms and legs cut in two (at the elbow or knee), textured from their skin, for
- * expressive emotes that bend them: while one plays, the game's own limb is hidden and this one is
- * drawn in its place on the same part. The lower half turns by the emote's {@code rightForearm},
- * {@code leftForearm}, {@code rightShin} or {@code leftShin} bone, at the joint.
+ * The player's arms, legs and body cut in two (at the elbow, knee or middle), textured from their
+ * skin, for expressive emotes that bend them: while one plays, the game's own part is hidden and
+ * this one is drawn in its place. The lower half turns by the emote's {@code rightForearm},
+ * {@code leftForearm}, {@code rightShin}, {@code leftShin} or {@code pelvis} bone, at the joint.
  *
  * Built as an ordinary cosmetic model (two bones, per-face UVs on the 64×64 skin layout), so every
  * version draws it the way it draws cosmetics.
@@ -19,7 +19,8 @@ public final class SkinLimbs {
 		RIGHT_ARM(Attach.RIGHT_ARM, "rightForearm", 40, 16, 40, 32, true),
 		LEFT_ARM(Attach.LEFT_ARM, "leftForearm", 32, 48, 48, 48, true),
 		RIGHT_LEG(Attach.RIGHT_LEG, "rightShin", 0, 16, 0, 32, false),
-		LEFT_LEG(Attach.LEFT_LEG, "leftShin", 16, 48, 0, 48, false);
+		LEFT_LEG(Attach.LEFT_LEG, "leftShin", 16, 48, 0, 48, false),
+		BODY(Attach.BODY, "pelvis", 16, 16, 16, 32, false);
 
 		public final Attach attach;
 		/** The emote bone that bends the lower half. */
@@ -68,10 +69,16 @@ public final class SkinLimbs {
 		return built[s][o];
 	}
 
+	/** Whether {@code animation} bends {@code limb}. */
+	public static boolean bends(Animation animation, Limb limb) {
+		// A split body's pelvis can stay still: the halves are still drawn apart (see Rig.split).
+		return limb == Limb.BODY ? Rig.split(animation) : animation.hasBone(limb.joint);
+	}
+
 	/** Whether {@code animation} bends any limb. */
 	public static boolean bends(Animation animation) {
 		for (Limb limb : Limb.values()) {
-			if (animation.hasBone(limb.joint)) {
+			if (bends(animation, limb)) {
 				return true;
 			}
 		}
@@ -80,7 +87,7 @@ public final class SkinLimbs {
 
 	/** The geometry, in Blockbench's space (y up from the feet), as a cosmetic file would have it. */
 	static String json(Limb limb, boolean slim, boolean outer) {
-		int width = slim ? 3 : 4;
+		int width = limb == Limb.BODY ? 8 : slim ? 3 : 4;
 		// The part's pivot and the limb's box, from the game's player model.
 		float pivotX = limb.attach.x;
 		float pivotY = 24 - limb.attach.y;
@@ -88,6 +95,9 @@ public final class SkinLimbs {
 		float top;
 		if (limb.arm) {
 			x0 = limb == Limb.RIGHT_ARM ? -4 - width : 4;
+			top = 24;
+		} else if (limb == Limb.BODY) {
+			x0 = -4;
 			top = 24;
 		} else {
 			x0 = pivotX - 2;
@@ -105,7 +115,7 @@ public final class SkinLimbs {
 			cube(upper, x0, jointY, width, limb.outerU, limb.outerV, 0, OUTER);
 			cube(lower, x0, top - LENGTH, width, limb.outerU, limb.outerV, HALF, OUTER);
 		}
-		String root = limb.attach.name().toLowerCase(Locale.ROOT).replace("_a", "A").replace("_l", "L");
+		String root = limb == Limb.BODY ? "body" : limb.attach.name().toLowerCase(Locale.ROOT).replace("_a", "A").replace("_l", "L");
 		return "{\"minecraft:geometry\":[{\"description\":{\"texture_width\":64,\"texture_height\":64},\"bones\":["
 				+ "{\"name\":\"" + root + "\",\"pivot\":[" + pivotX + "," + pivotY + ",0],\"cubes\":[" + upper + "]},"
 				+ "{\"name\":\"" + limb.joint + "\",\"parent\":\"" + root + "\",\"pivot\":[" + jointX + "," + jointY + ",0],\"cubes\":[" + lower + "]}"
