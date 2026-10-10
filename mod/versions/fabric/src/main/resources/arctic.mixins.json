@@ -43,6 +43,7 @@
 		"OverlayDoneMixin",
 		"LoadingFadeMixin",<% } %>
 		"WindowMaximizeMixin",
+		"MinecraftMaximizeMixin",
 		"EntityTurnMixin"<% if (features) { %>,
 		"CameraMixin",
 		"LightmapMixin",

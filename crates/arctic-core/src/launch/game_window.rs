@@ -35,8 +35,8 @@ mod imp {
 
     use super::{POLL, WATCH_FOR};
 
-    /// Window classes of LWJGL 3 (GLFW) and LWJGL 2.
-    const GAME_CLASSES: [&str; 2] = ["GLFW30", "LWJGL"];
+    /// Window classes of LWJGL 3's GLFW (1.13 to 26.2), its SDL (26.3 on) and LWJGL 2.
+    const GAME_CLASSES: [&str; 3] = ["GLFW30", "SDL_app", "LWJGL"];
 
     struct Search {
         pid: u32,

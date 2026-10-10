@@ -190,6 +190,7 @@ fn apply_overrides(settings: Settings, args: &LaunchArgs) -> Result<Settings> {
         window_width: args.width.unwrap_or(settings.window_width),
         window_height: args.height.unwrap_or(settings.window_height),
         fullscreen: args.fullscreen || settings.fullscreen,
+        game_maximized: args.maximized || settings.game_maximized,
         java_override: args.java.clone().or(settings.java_override.clone()),
         ..settings
     }
