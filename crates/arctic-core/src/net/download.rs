@@ -167,6 +167,16 @@ pub fn download_all(stage: &str, jobs: Vec<DownloadJob>, progress: Progress) -> 
         }
     });
 
+    // What a slow download looked like, for reports ("downloads take forever").
+    let secs = reporter.start.elapsed().as_secs_f64();
+    let bytes = reporter.bytes_done.load(Ordering::Relaxed);
+    log::info!(
+        "{stage}: {} of {} files, {:.1} MB in {secs:.1} s ({:.1} MB/s)",
+        reporter.files_done.load(Ordering::Relaxed),
+        reporter.files_total,
+        bytes as f64 / 1e6,
+        bytes as f64 / 1e6 / secs.max(0.001),
+    );
     match first_error.into_inner() {
         Ok(Some(e)) => Err(e),
         Ok(None) => Ok(()),

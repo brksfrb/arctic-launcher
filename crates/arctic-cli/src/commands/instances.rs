@@ -70,18 +70,7 @@ fn kind(arg: LoaderArg) -> Option<LoaderKind> {
 
 /// Newest stable loader build for a Minecraft version.
 fn default_loader_version(kind: LoaderKind, game: &str) -> Result<String> {
-    let versions = loaders::loader_versions(kind, game)?;
-    versions
-        .iter()
-        .find(|v| v.stable)
-        .or(versions.first())
-        .map(|v| v.id.clone())
-        .ok_or_else(|| {
-            Error::Other(format!(
-                "{} has no build for Minecraft {game}",
-                kind.label()
-            ))
-        })
+    loaders::default_loader_version(kind, game)
 }
 
 fn create(

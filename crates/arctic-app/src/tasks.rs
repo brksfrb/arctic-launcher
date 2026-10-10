@@ -50,6 +50,16 @@ pub type LaunchId = u64;
 
 pub(crate) type Outcome<T> = std::result::Result<T, String>;
 
+/// What moving an instance's mods to another version did.
+#[derive(Debug, Clone)]
+pub struct Retargeted {
+    /// The loader build for the new version.
+    pub loader_version: String,
+    pub updated: usize,
+    pub disabled: Vec<String>,
+    pub failed: Vec<String>,
+}
+
 pub enum Event {
     /// A file dialog never appeared (no desktop portal or zenity on Linux).
     PickerMissing,
@@ -81,6 +91,14 @@ pub enum Event {
     ModProgress(ProgressSnapshot),
     /// (instance id, project id, result)
     ModInstalled(String, String, Outcome<Vec<InstalledMod>>),
+    /// What an instance's mods become on another version: (instance id, version, result).
+    RetargetChecked(
+        String,
+        String,
+        Outcome<Vec<arctic_core::mods::retarget::ModCheck>>,
+    ),
+    /// An instance's mods moved to another version: (instance id, version, result).
+    Retargeted(String, String, Outcome<Retargeted>),
     /// Icon bytes for a URL.
     ModIcon(String, Outcome<Vec<u8>>),
     /// Skin and capes of an account (account id, result).
@@ -411,6 +429,62 @@ impl Tasks {
                 }
             };
             t.send(Event::ModpackInstalled(result));
+        });
+    }
+
+    /// Look up what the instance's mods become on `version`.
+    pub fn retarget_check(&self, instance: Instance, version: String) {
+        self.run(move |t| {
+            let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
+            let result = match instance.loader.kind() {
+                Some(loader) => mods::retarget::check(
+                    &instance.game_dir(&t.dirs).join("mods"),
+                    &mods::index_path(&t.dirs.instance_dir(&instance.id)),
+                    &version,
+                    loader,
+                    &progress,
+                )
+                .map_err(|e| e.to_string()),
+                None => Ok(Vec::new()),
+            };
+            t.send(Event::RetargetChecked(instance.id, version, result));
+        });
+    }
+
+    /// Move the instance's mods to `version` (from a check for it) and find its loader build.
+    pub fn retarget_apply(
+        &self,
+        instance: Instance,
+        version: String,
+        checks: Vec<arctic_core::mods::retarget::ModCheck>,
+    ) {
+        self.run(move |t| {
+            let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
+            let result = (|| -> Outcome<Retargeted> {
+                let loader = instance
+                    .loader
+                    .kind()
+                    .ok_or("Vanilla instances have no mods to move")?;
+                // The loader build first: a version without one changes nothing.
+                let loader_version = arctic_core::loaders::default_loader_version(loader, &version)
+                    .map_err(|e| e.to_string())?;
+                let applied = mods::retarget::apply(
+                    &instance.game_dir(&t.dirs).join("mods"),
+                    &mods::index_path(&t.dirs.instance_dir(&instance.id)),
+                    &checks,
+                    &version,
+                    loader,
+                    &progress,
+                )
+                .map_err(|e| e.to_string())?;
+                Ok(Retargeted {
+                    loader_version,
+                    updated: applied.installed.len(),
+                    disabled: applied.disabled,
+                    failed: applied.failed.into_iter().map(|(p, _)| p).collect(),
+                })
+            })();
+            t.send(Event::Retargeted(instance.id, version, result));
         });
     }
 

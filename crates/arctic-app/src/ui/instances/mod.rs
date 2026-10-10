@@ -9,6 +9,7 @@ mod modpacks;
 mod mods_page;
 mod packs;
 mod replays;
+pub mod retarget;
 mod worlds;
 
 use std::collections::{HashMap, HashSet};
@@ -109,6 +110,8 @@ pub struct InstancesUi {
     pub pack_installing: Option<String>,
     /// Resource packs and shaders page.
     pub packs: packs::PacksUi,
+    /// Moving the open instance to another Minecraft version.
+    pub retarget: Option<retarget::RetargetUi>,
 }
 
 impl ArcticApp {
@@ -398,6 +401,12 @@ impl ArcticApp {
                 }
             }
             Event::ModProgress(p) => self.inst.install_progress = Some(p),
+            Event::RetargetChecked(instance, version, result) => {
+                self.on_retarget_checked(instance, version, result)
+            }
+            Event::Retargeted(instance, version, result) => {
+                self.on_retargeted(instance, version, result)
+            }
             Event::ModInstalled(instance_id, project_id, result) => {
                 self.inst.installing.remove(&project_id);
                 if self.inst.installing.is_empty() {

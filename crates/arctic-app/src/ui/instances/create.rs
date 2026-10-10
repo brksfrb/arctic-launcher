@@ -33,7 +33,7 @@ impl ArcticApp {
 
     /// Minecraft versions offered for `loader` (respecting the snapshot /
     /// old-version settings), newest first. `None` while still loading.
-    fn create_game_versions(&self, loader: Option<LoaderKind>) -> Option<Vec<String>> {
+    pub(super) fn create_game_versions(&self, loader: Option<LoaderKind>) -> Option<Vec<String>> {
         let ManifestState::Ready(manifest) = &self.manifest else {
             return None;
         };
