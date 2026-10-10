@@ -998,6 +998,17 @@ pub enum ModsCommand {
         #[arg(short, long)]
         instance: String,
     },
+    /// Move an instance to another Minecraft version: shows which of its mods have a version
+    /// there; with --apply, updates them, turns off the ones that don't, and switches.
+    Retarget {
+        /// Minecraft version id, or `latest`.
+        version: String,
+        #[arg(short, long)]
+        instance: String,
+        /// Make the change (without it, only shows what would happen).
+        #[arg(long)]
+        apply: bool,
+    },
     /// Turn a mod on or off without removing it.
     Toggle {
         file: String,

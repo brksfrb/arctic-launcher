@@ -42,6 +42,11 @@ pub fn run(ctx: &Ctx, command: &ModsCommand) -> Result<i32> {
                 || format!("{} mods recognized on Modrinth, {} not found there", r.tracked, r.unknown),
             );
         }
+        ModsCommand::Retarget {
+            version,
+            instance,
+            apply,
+        } => retarget(ctx, modded(ctx, instance)?, version, *apply)?,
         ModsCommand::Toggle {
             file,
             instance,
@@ -74,6 +79,60 @@ fn folders(ctx: &Ctx, inst: &Instance) -> (PathBuf, PathBuf) {
         inst.game_dir(&ctx.dirs).join("mods"),
         mods::index_path(&ctx.dirs.instance_dir(&inst.id)),
     )
+}
+
+/// `arctic mods retarget`: what the mods become on another version, and the switch.
+fn retarget(ctx: &Ctx, mut inst: Instance, version: &str, apply: bool) -> Result<()> {
+    let manifest = arctic_core::versions::VersionManifest::fetch(&ctx.dirs)?;
+    let game = super::resolve_version(&manifest, version)?.id;
+    let kind = inst
+        .loader
+        .kind()
+        .ok_or_else(|| Error::Other("no mod loader".into()))?;
+    let (dir, index) = folders(ctx, &inst);
+    let progress = |_: ProgressInfo| {};
+    let checks = mods::retarget::check(&dir, &index, &game, kind, &progress)?;
+    for c in &checks {
+        ctx.out.emit(
+            json!({"event": "check", "file": c.file_name, "title": c.title, "project": c.project_id,
+                   "current": c.current, "available": c.available, "dependency": c.dependency}),
+            || match (&c.project_id, &c.available) {
+                (None, _) => format!("  ?  {} (not on Modrinth, kept as is)", c.title),
+                (Some(_), Some(v)) => format!(
+                    "  ok {} {} -> {v}",
+                    c.title,
+                    c.current.as_deref().unwrap_or("?")
+                ),
+                (Some(_), None) => format!("  -- {} (no version for {game} yet)", c.title),
+            },
+        );
+    }
+    if !apply {
+        return Ok(());
+    }
+    let applied = mods::retarget::apply(&dir, &index, &checks, &game, kind, &progress)?;
+    let build = arctic_core::loaders::default_loader_version(kind, &game)?;
+    inst.version = Some(game.clone());
+    inst.loader = arctic_core::instances::Loader::new(Some(kind), build);
+    inst.save(&ctx.dirs)?;
+    ctx.out.emit(
+        json!({"event": "retargeted", "version": game, "installed": applied.installed.len(),
+               "disabled": applied.disabled, "failed": applied.failed.iter().map(|(p, e)| json!({"project": p, "error": e.to_string()})).collect::<Vec<_>>()}),
+        || {
+            format!(
+                "{} is now on {game}: {} mods updated, {} turned off{}",
+                inst.name,
+                applied.installed.len(),
+                applied.disabled.len(),
+                if applied.failed.is_empty() {
+                    String::new()
+                } else {
+                    format!(", {} failed", applied.failed.len())
+                }
+            )
+        },
+    );
+    Ok(())
 }
 
 fn search(ctx: &Ctx, inst: &Instance, text: &str, limit: usize) -> Result<()> {

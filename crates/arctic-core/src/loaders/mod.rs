@@ -76,6 +76,22 @@ pub fn game_versions(kind: LoaderKind) -> Result<Vec<String>> {
     }
 }
 
+/// The newest stable loader build for a Minecraft version (the newest of any, if none is stable).
+pub fn default_loader_version(kind: LoaderKind, game_version: &str) -> Result<String> {
+    let versions = loader_versions(kind, game_version)?;
+    versions
+        .iter()
+        .find(|v| v.stable)
+        .or(versions.first())
+        .map(|v| v.id.clone())
+        .ok_or_else(|| {
+            crate::Error::Other(format!(
+                "{} has no build for Minecraft {game_version}",
+                kind.label()
+            ))
+        })
+}
+
 /// Loader versions available for `game_version`, newest first.
 pub fn loader_versions(kind: LoaderKind, game_version: &str) -> Result<Vec<LoaderVersion>> {
     let game_version = game_version.trim();

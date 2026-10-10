@@ -768,6 +768,8 @@ impl ArcticApp {
             | Event::ModSearch(..)
             | Event::ModProgress(..)
             | Event::ModInstalled(..)
+            | Event::RetargetChecked(..)
+            | Event::Retargeted(..)
             | Event::ModIcon(..)) => self.on_instances_event(e, ctx),
             Event::Share(id, event) => self.on_share_event(id, event),
             Event::WorldsDone(id, result) => self.on_worlds_done(id, result),
