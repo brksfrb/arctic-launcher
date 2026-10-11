@@ -281,8 +281,13 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
-	public String minimap() {
-		return LegacyMinimap.refresh() ? "dyn:" + LegacyMinimap.KEY : null;
+	public boolean mapColumns(int x0, int z0, int w, int h, int[] out) {
+		return LegacyMinimap.columns(x0, z0, w, h, out);
+	}
+
+	@Override
+	public String minimapPixels(int[] argb, int size) {
+		return LegacyMinimap.upload(argb, size) ? "dyn:" + LegacyMinimap.KEY : null;
 	}
 
 	@Override
@@ -531,7 +536,7 @@ public final class LegacyPlatform implements Platform {
 		UUID self = worldPlayerId();
 		for (PlayerEntity p : mc.world.playerEntities) {
 			if (!p.getUuid().equals(self)) {
-				out.add(new Object[] {p.getUuid(), p.getGameProfile().getName(), p.x, p.y, p.z});
+				out.add(new Object[] {p.getUuid(), p.getGameProfile().getName(), p.x, p.y, p.z, (double) p.yaw});
 			}
 		}
 		return out;

@@ -715,8 +715,13 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
-	public String minimap() {
-		return MinimapTexture.refresh() ? "dyn:minimap" : null;
+	public boolean mapColumns(int x0, int z0, int w, int h, int[] out) {
+		return minimapWorks() && MinimapTexture.columns(x0, z0, w, h, out);
+	}
+
+	@Override
+	public String minimapPixels(int[] argb, int size) {
+		return minimapWorks() ? MinimapTexture.upload(argb, size) : null;
 	}
 
 	@Override
@@ -1070,7 +1075,7 @@ final class FabricPlatform implements Platform {
 		UUID self = playerId();
 		for (AbstractClientPlayer p : mc.level.players()) {
 			if (!p.getUUID().equals(self)) {
-				out.add(new Object[] {p.getUUID(), Compat.playerName(p), p.getX(), p.getY(), p.getZ()});
+				out.add(new Object[] {p.getUUID(), Compat.playerName(p), p.getX(), p.getY(), p.getZ(), (double) Compat.yRot(p)});
 			}
 		}
 		return out;

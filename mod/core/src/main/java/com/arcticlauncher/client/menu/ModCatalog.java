@@ -50,6 +50,20 @@ final class ModCatalog {
 							f.section("Pointer");
 							f.swatches("Color", POINTER_COLORS, () -> c.compassPointer, v -> c.compassPointer = v);
 						}
+						if ("minimap".equals(w.id)) {
+							f.section("Map");
+							f.choice("Shape", new String[] {"Square", "Round"}, () -> c.minimapRound ? 1 : 0, i -> c.minimapRound = i == 1);
+							f.toggle("Turn with me", "The way you face stays up (otherwise north is up)", () -> c.minimapRotate,
+									on -> c.minimapRotate = on);
+							f.choice("Size", labels(ClientConfig.MINIMAP_SIZES, ""),
+									() -> Math.max(0, indexOf(ClientConfig.MINIMAP_SIZES, c.minimapSize)),
+									i -> c.minimapSize = ClientConfig.MINIMAP_SIZES[i]);
+							f.choice("Shows", labels(ClientConfig.MINIMAP_ZOOMS, " blocks"),
+									() -> Math.max(0, indexOf(ClientConfig.MINIMAP_ZOOMS, c.minimapZoom)),
+									i -> c.minimapZoom = ClientConfig.MINIMAP_ZOOMS[i]);
+							f.toggle("Other players", "Arrows for the players near you", () -> c.minimapPlayers, on -> c.minimapPlayers = on);
+							f.toggle("Coordinates", "Your X and Z under the map", () -> c.minimapCoords, on -> c.minimapCoords = on);
+						}
 						if ("stopwatch".equals(w.id)) {
 							f.section("Key");
 							f.key("Stopwatch key", "Starts, stops and clears it", Form.key(() -> c.stopwatchKey, k -> c.stopwatchKey = k));
@@ -288,6 +302,14 @@ final class ModCatalog {
 			}
 		}
 		return m;
+	}
+
+	private static String[] labels(int[] values, String unit) {
+		String[] out = new String[values.length];
+		for (int i = 0; i < values.length; i++) {
+			out[i] = values[i] + unit;
+		}
+		return out;
 	}
 
 	private static int indexOf(int[] values, int v) {

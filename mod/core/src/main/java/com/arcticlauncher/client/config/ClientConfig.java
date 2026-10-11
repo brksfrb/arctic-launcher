@@ -91,6 +91,16 @@ public final class ClientConfig {
 	public boolean legacyVboOn;
 	/** The pause menu's leave button needs a second click. */
 	public boolean confirmLeave = true;
+	/** Minimap sizes (GUI pixels) and how many blocks across it can show. */
+	public static final int[] MINIMAP_SIZES = {64, 96, 128};
+	public static final int[] MINIMAP_ZOOMS = {32, 64, 96, 128};
+	/** Minimap: shown size (GUI pixels), blocks across, round, turning with you, other players, coordinates under it. */
+	public int minimapSize = 96;
+	public int minimapZoom = 64;
+	public boolean minimapRound;
+	public boolean minimapRotate;
+	public boolean minimapPlayers = true;
+	public boolean minimapCoords = true;
 	/** After a disconnect, join the same server again by itself (after {@link #reconnectSeconds}). */
 	public boolean autoReconnect;
 	public int reconnectSeconds = 5;

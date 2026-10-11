@@ -242,8 +242,17 @@ public interface Platform {
 	/** A short, quiet ping (someone mentioned you). */
 	default void mentionSound() {}
 
-	/** The minimap's texture key, redrawn when due; null where there's none. */
-	default String minimap() {
+	/**
+	 * The map colors (ARGB, like a map item; 0 = not loaded) of the {@code w}×{@code h} block
+	 * columns from ({@code x0}, {@code z0}), row by row into {@code out}; false where this
+	 * version has no minimap. Game thread.
+	 */
+	default boolean mapColumns(int x0, int z0, int w, int h, int[] out) {
+		return false;
+	}
+
+	/** Show these pixels ({@code size}×{@code size} ARGB, row by row) as the minimap's texture: its key, or null. Game thread. */
+	default String minimapPixels(int[] argb, int size) {
 		return null;
 	}
 
@@ -382,7 +391,7 @@ public interface Platform {
 		return -1;
 	}
 
-	/** Other players in the world: {uuid, name, x, y, z}. */
+	/** Other players in the world: {uuid, name, x, y, z, yaw}. */
 	List<Object[]> otherPlayers();
 
 	/**

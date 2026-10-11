@@ -6,20 +6,15 @@ import net.minecraft.block.material.MaterialColor;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.client.world.ClientWorld;
-import net.minecraft.entity.player.ClientPlayerEntity;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.MathHelper;
 import net.minecraft.world.chunk.Chunk;
 
 /**
- * The minimap for 1.8.9 to 1.12.2: the top block's map color for each column around you (like a map
- * item), redrawn into one texture a couple of times a second. As on newer versions (MinimapTexture).
+ * The minimap's two halves for 1.8.9 to 1.12.2: the top block's map color for each column (like a
+ * map item), and the texture the core's finished picture is shown from (core {@code MinimapView}).
  */
 final class LegacyMinimap {
-	static final int SIZE = 64;
 	static final String KEY = "minimap";
-	private static final long REFRESH_NANOS = 500_000_000L;
-	private static final int UNLOADED = 0xFF101418;
 	private static final int WATER_DEPTH_STEP = 2;
 	private static final int MAX_WATER_DEPTH = 10;
 	/** Map color shades: 0 darker, 1 normal, 2 lighter. */
@@ -28,51 +23,46 @@ final class LegacyMinimap {
 	private static final int HIGH = 2;
 
 	private static NativeImageBackedTexture texture;
-	private static long drawnAt;
+	private static int textureSize;
 
 	private LegacyMinimap() {}
 
-	/** Redraw when due; false when there's no world. Render thread. */
-	static boolean refresh() {
+	/** Map colors (ARGB, 0 = not loaded) of the w×h columns from (x0, z0), row by row. Render thread. */
+	static boolean columns(int x0, int z0, int w, int h, int[] out) {
 		MinecraftClient mc = MinecraftClient.getInstance();
 		ClientWorld world = mc.world;
-		ClientPlayerEntity player = mc.player;
-		if (world == null || player == null) {
+		if (world == null) {
 			return false;
 		}
-		long now = System.nanoTime();
-		if (texture != null && now - drawnAt < REFRESH_NANOS) {
-			return true;
-		}
-		drawnAt = now;
-		if (texture == null) {
-			texture = new NativeImageBackedTexture(SIZE, SIZE);
-			mc.getTextureManager().loadTexture(LegacyTextures.dyn(KEY), texture);
-		}
-		int[] pixels = texture.getPixels();
-		int left = MathHelper.floor(player.x) - SIZE / 2;
-		int top = MathHelper.floor(player.z) - SIZE / 2;
-		for (int dx = 0; dx < SIZE; dx++) {
-			int north = Integer.MIN_VALUE;
-			for (int dz = -1; dz < SIZE; dz++) {
-				int x = left + dx;
-				int z = top + dz;
-				Chunk chunk = world.getChunk(x >> 4, z >> 4);
-				if (chunk.isEmpty()) {
-					if (dz >= 0) {
-						pixels[dz * SIZE + dx] = UNLOADED;
-					}
-					north = Integer.MIN_VALUE;
-					continue;
-				}
-				int y = chunk.getHighestBlockY(x & 15, z & 15) - 1;
-				BlockPos pos = new BlockPos(x, y, z);
-				if (dz >= 0) {
-					pixels[dz * SIZE + dx] = color(world, pos, y, north);
-				}
+		for (int dx = 0; dx < w; dx++) {
+			int x = x0 + dx;
+			// The row before the first, for the slope of the first.
+			int north = top(world, x, z0 - 1);
+			for (int dz = 0; dz < h; dz++) {
+				int z = z0 + dz;
+				int y = top(world, x, z);
+				out[dz * w + dx] = y == Integer.MIN_VALUE ? 0 : color(world, new BlockPos(x, y, z), y, north);
 				north = y;
 			}
 		}
+		return true;
+	}
+
+	/** The top block's height, or MIN_VALUE where the chunk isn't loaded. */
+	private static int top(ClientWorld world, int x, int z) {
+		Chunk chunk = world.getChunk(x >> 4, z >> 4);
+		return chunk.isEmpty() ? Integer.MIN_VALUE : chunk.getHighestBlockY(x & 15, z & 15) - 1;
+	}
+
+	/** Show {@code argb} (size×size) as the minimap texture. Render thread. */
+	static boolean upload(int[] argb, int size) {
+		MinecraftClient mc = MinecraftClient.getInstance();
+		if (texture == null || textureSize != size) {
+			texture = new NativeImageBackedTexture(size, size);
+			textureSize = size;
+			mc.getTextureManager().loadTexture(LegacyTextures.dyn(KEY), texture);
+		}
+		System.arraycopy(argb, 0, texture.getPixels(), 0, size * size);
 		texture.upload();
 		return true;
 	}
@@ -82,7 +72,7 @@ final class LegacyMinimap {
 		BlockState state = world.getBlockState(pos);
 		MaterialColor color = mapColor(state, world, pos);
 		if (color == null || color == MaterialColor.AIR) {
-			return UNLOADED;
+			return 0;
 		}
 		int shade = NORMAL;
 		if (fluid(state)) {

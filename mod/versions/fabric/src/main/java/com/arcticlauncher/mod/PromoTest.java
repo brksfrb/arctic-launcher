@@ -103,6 +103,19 @@ final class PromoTest {
 			}
 			later(t, () -> style("arctic"));
 			if (k == 0) {
+				// The minimap round and turning with you, then back.
+				later(t, () -> {
+					ArcticClient.config().minimapRound = true;
+					ArcticClient.config().minimapRotate = true;
+					ArcticClient.config().hudChanged();
+				});
+				later(t + 1, () -> WorldTest.shot("promo-minimap-round"));
+				later(t + 2, () -> {
+					ArcticClient.config().minimapRound = false;
+					ArcticClient.config().minimapRotate = false;
+					ArcticClient.config().hudChanged();
+				});
+				t += 3;
 				// Something in the target widget: in front of you, across the crosshair.
 				later(t, () -> {
 					command("kill @e[type=minecraft:horse]");
