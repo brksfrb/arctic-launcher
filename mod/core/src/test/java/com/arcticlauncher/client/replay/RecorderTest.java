@@ -75,6 +75,49 @@ class RecorderTest {
 	}
 
 	@Test
+	void aLongSessionIsCompactedToTheWorldAsItWasAndKeepsRecording() throws Exception {
+		// Packet 1 is a chunk (its second byte says which), anything else something passing.
+		ReplayBackend.Classifier sorter = (packet, key) -> {
+			if (packet.get(0) == 1) {
+				key[0] = packet.get(1);
+				return Category.CHUNK;
+			}
+			return Category.TRANSIENT;
+		};
+		// Compacted past 4 KB; nothing of the session is kept whole (no clip either).
+		Recorder r = new Recorder(dir.toFile(), () -> true, () -> 0, message -> {}, 1L << 30, 0, 4096, 0, () -> sorter);
+		Recorder.Take take = r.begin("busy.example.net", false, 775, "26.3");
+		for (int i = 0; i < 400; i++) {
+			byte[] p = new byte[100];
+			p[0] = (byte) (i % 2 == 0 ? 1 : 2);
+			p[1] = (byte) (i % 4);
+			take.packet(p);
+		}
+		Thread.sleep(5);
+		byte[] last = new byte[100];
+		last[0] = 2;
+		last[1] = 99;
+		take.packet(last);
+		await(r);
+		AtomicReference<File> saved = new AtomicReference<File>();
+		CountDownLatch done = new CountDownLatch(1);
+		assertTrue(r.saveMoment(f -> {
+			saved.set(f);
+			done.countDown();
+		}));
+		assertTrue(done.await(10, TimeUnit.SECONDS));
+		try (ReplayData data = ReplayData.open(saved.get(), dir.resolve("cache").toFile())) {
+			// Far fewer than the 401 recorded: the newest copy of each chunk, and what came after.
+			assertTrue(data.count() < 50, "kept " + data.count());
+			ByteBuffer newest = data.packet(data.count() - 1);
+			assertEquals(2, newest.get(0));
+			assertEquals(99, newest.get(1));
+		}
+		take.end();
+		await(r);
+	}
+
+	@Test
 	void aNearlyFullDriveStopsRecordingToo() throws Exception {
 		// Asking for more free space than any drive has.
 		Recorder r = new Recorder(dir.toFile(), () -> true, () -> 20, message -> {}, 1L << 40, Long.MAX_VALUE);

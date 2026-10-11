@@ -59,8 +59,9 @@ public final class Replays {
 		platform = p;
 		File config = p.configDir();
 		gameDir = config.getAbsoluteFile().getParentFile();
+		// The adapter's packet sorter compacts long sessions (it's there once the adapter has registered).
 		recorder = new Recorder(gameDir, () -> ArcticClient.config().replayRecording, () -> ArcticClient.config().clipSeconds,
-				message -> p.log(true, message));
+				message -> p.log(true, message), () -> backend == null ? null : backend.classifier(null));
 		ffmpeg = new Ffmpeg(bridgePort, bridgeSecret);
 		// Ask early, so export buttons know right away.
 		ffmpeg.get();

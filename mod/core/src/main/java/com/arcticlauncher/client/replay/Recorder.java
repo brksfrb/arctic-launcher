@@ -2,6 +2,7 @@ package com.arcticlauncher.client.replay;
 
 import com.google.gson.Gson;
 import java.io.BufferedOutputStream;
+import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -18,14 +19,23 @@ import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.function.Consumer;
 import java.util.zip.Deflater;
+import java.util.zip.DeflaterOutputStream;
+import java.util.zip.Inflater;
+import java.util.zip.InflaterInputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /**
  * Records every session quietly: packets as the game received them go to a
- * temp file on a background thread (the game thread only hands them over).
- * Nothing is kept unless the player saves; then the session becomes a replay
- * in {@code replay_recordings} (updated again when they leave).
+ * temp file on a background thread (the game thread only hands them over),
+ * compressed as they're written. Nothing is kept unless the player saves; then
+ * the session becomes a replay in {@code replay_recordings} (updated again when
+ * they leave).
+ *
+ * <p>A long stay at a busy server is compacted instead of growing without end:
+ * once the packets pass {@link #COMPACT_AT}, everything older than the last
+ * {@link #KEEP_MS} is cut down to what it takes to show the world as it was then
+ * ({@link SeekPlan}), so recording goes on in bounded space.
  */
 public final class Recorder {
 	static final String PACKETS_ENTRY = "recording.tmcpr";
@@ -44,6 +54,12 @@ public final class Recorder {
 	static final long MAX_RECORDING_BYTES = 1L << 30;
 	/** ...and the self-track (one small sample per tick) at this much. */
 	private static final long MAX_SELF_BYTES = 64L << 20;
+	/** Packets (uncompressed) past which older parts of the session are compacted. */
+	static final long COMPACT_AT = 512L << 20;
+	/** How much of the session compaction keeps whole, at least (and twice the clip length). */
+	static final int KEEP_MS = 10 * 60 * 1000;
+	/** Compaction that frees less than this share isn't worth repeating: the size limit applies. */
+	private static final double MIN_COMPACT_GAIN = 0.25;
 	/** Recording also stops when the drive has less than this left. */
 	static final long MIN_FREE_BYTES = 10L << 30;
 	/** How much is written between looks at the drive's free space. */
@@ -57,6 +73,12 @@ public final class Recorder {
 	private final Consumer<String> log;
 	private final long maxBytes;
 	private final long minFreeBytes;
+	private final long compactAt;
+	private final int keepMs;
+	/** Sorts packets for compaction (null: this version can't, and the size limit applies). */
+	private final java.util.function.Supplier<ReplayBackend.Classifier> sorter;
+	/** The "recording stopped" notice was shown (once per game is enough). */
+	private volatile boolean toldFull;
 	private final LinkedBlockingQueue<Runnable> tasks = new LinkedBlockingQueue<Runnable>();
 	private volatile Take current;
 
@@ -65,14 +87,29 @@ public final class Recorder {
 	 * {@code clipSeconds} how far back a moment reaches, {@code log} for problems.
 	 */
 	public Recorder(File gameDir, java.util.function.BooleanSupplier enabled, java.util.function.IntSupplier clipSeconds, Consumer<String> log) {
-		this(gameDir, enabled, clipSeconds, log, MAX_RECORDING_BYTES, MIN_FREE_BYTES);
+		this(gameDir, enabled, clipSeconds, log, () -> null);
+	}
+
+	/** {@code sorter} lets long sessions be compacted (see the class comment). */
+	public Recorder(File gameDir, java.util.function.BooleanSupplier enabled, java.util.function.IntSupplier clipSeconds, Consumer<String> log,
+			java.util.function.Supplier<ReplayBackend.Classifier> sorter) {
+		this(gameDir, enabled, clipSeconds, log, MAX_RECORDING_BYTES, MIN_FREE_BYTES, COMPACT_AT, KEEP_MS, sorter);
 	}
 
 	/** With other limits (for tests): packets per session, and free space the drive must keep. */
 	Recorder(File gameDir, java.util.function.BooleanSupplier enabled, java.util.function.IntSupplier clipSeconds, Consumer<String> log,
 			long maxBytes, long minFreeBytes) {
+		this(gameDir, enabled, clipSeconds, log, maxBytes, minFreeBytes, Long.MAX_VALUE, KEEP_MS, () -> null);
+	}
+
+	/** ...and when to compact, keeping how much (ms) whole, with what. */
+	Recorder(File gameDir, java.util.function.BooleanSupplier enabled, java.util.function.IntSupplier clipSeconds, Consumer<String> log,
+			long maxBytes, long minFreeBytes, long compactAt, int keepMs, java.util.function.Supplier<ReplayBackend.Classifier> sorter) {
+		this.keepMs = keepMs;
 		this.maxBytes = maxBytes;
 		this.minFreeBytes = minFreeBytes;
+		this.compactAt = compactAt;
+		this.sorter = sorter;
 		this.tempDir = new File(gameDir, ".arctic/replay-temp");
 		this.savedDir = new File(gameDir, "replay_recordings");
 		this.enabled = enabled;
@@ -174,12 +211,17 @@ public final class Recorder {
 		private final long startNanos = System.nanoTime();
 		private long pausedNanos;
 		private long pausedAt = -1;
-		private final File packetsFile;
+		/** Replaced by each compaction. */
+		private File packetsFile;
 		private final File selfFile;
 		// Writer thread only:
 		private DataOutputStream packets;
+		private Deflater deflater;
 		private DataOutputStream self;
+		/** Uncompressed, as the replay will hold them. */
 		private long packetBytes;
+		/** Compaction is due again past this (it grows when compaction gains little). */
+		private long compactNext;
 		private long selfBytes;
 		private boolean broken;
 		/** Recording stopped on purpose (size limit or a nearly full drive); what's recorded is kept as is. */
@@ -210,7 +252,8 @@ public final class Recorder {
 		private void open() {
 			try {
 				tempDir.mkdirs();
-				packets = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(packetsFile), BUFFER));
+				packets = packetStream(packetsFile);
+				compactNext = compactAt;
 				self = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(selfFile), BUFFER / 8));
 			} catch (IOException e) {
 				broken = true;
@@ -295,8 +338,20 @@ public final class Recorder {
 			});
 		}
 
-		/** Writer thread: stop recording at the size limit, or when the drive is nearly full. */
+		/** Writer thread: packets go in compressed (sync-flushed, so a save can read all written so far). */
+		private DataOutputStream packetStream(File file) throws IOException {
+			deflater = new Deflater(Deflater.BEST_SPEED, true);
+			return new DataOutputStream(new DeflaterOutputStream(new BufferedOutputStream(new FileOutputStream(file), BUFFER), deflater, BUFFER, true));
+		}
+
+		/** Writer thread: compact a long session; stop at the size limit, or when the drive is nearly full. */
 		private void checkLimits() {
+			if (packetBytes >= compactNext) {
+				compact();
+				if (broken) {
+					return;
+				}
+			}
 			String why = null;
 			if (packetBytes >= maxBytes || selfBytes >= MAX_SELF_BYTES) {
 				why = "the size limit was reached";
@@ -315,9 +370,80 @@ public final class Recorder {
 					broken = true;
 				}
 				log.accept("replay: recording stopped, " + why);
-				com.arcticlauncher.client.notice.Notices.post("Replay recording stopped",
-						"Your drive is protected: " + why + ". What was recorded can still be saved.");
+				if (!toldFull) {
+					toldFull = true;
+					com.arcticlauncher.client.notice.Notices.post("Replay recording stopped",
+							"Your drive is protected: " + why + ". What was recorded can still be saved.");
+				}
 			}
+		}
+
+		/**
+		 * Writer thread: everything older than the kept window is cut down to what
+		 * shows the world as it was where the window starts. A replay saved earlier
+		 * is written out first and then left as it is (the next save starts a new one).
+		 */
+		private void compact() {
+			ReplayBackend.Classifier classifier = sorter.get();
+			if (classifier == null || packets == null) {
+				compactNext = Long.MAX_VALUE;
+				return;
+			}
+			if (keptAs != null) {
+				write();
+				keptAs = null;
+				synchronized (moments) {
+					moments.clear();
+				}
+			}
+			long before = packetBytes;
+			File next = new File(tempDir, packetsFile.getName() + "+");
+			try {
+				packets.close();
+				deflater.end();
+				packets = null;
+				Index index = Index.of(packetsFile, packetBytes, classifier);
+				int window = Math.max(keepMs, clipSeconds.getAsInt() * 2000);
+				int cut = index.firstAt(lastTime - window);
+				int[] earlier = SeekPlan.plan(index.category, index.key, 0, cut);
+				int windowStart = cut < index.count ? index.time[cut] : lastTime;
+				DataOutputStream out = packetStream(next);
+				long written = 0;
+				try (DataInputStream in = packetReader(packetsFile)) {
+					byte[] buf = new byte[1 << 16];
+					int e = 0;
+					for (int i = 0; i < index.count; i++) {
+						int t = in.readInt();
+						int len = in.readInt();
+						if (buf.length < len) {
+							buf = new byte[len];
+						}
+						in.readFully(buf, 0, len);
+						boolean earlierKept = i < cut && e < earlier.length && earlier[e] == i;
+						if (earlierKept) {
+							e++;
+							// The world as it was: all of it at the window's start.
+							t = windowStart;
+						}
+						if (i >= cut || earlierKept) {
+							out.writeInt(t);
+							out.writeInt(len);
+							out.write(buf, 0, len);
+							written += 8 + len;
+						}
+					}
+				}
+				packetsFile.delete();
+				packets = out;
+				packetsFile = next;
+				packetBytes = written;
+			} catch (IOException | RuntimeException e) {
+				broken = true;
+				log.accept("replay: compaction failed, recording stopped: " + e);
+				return;
+			}
+			log.accept("replay: compacted " + (before >> 20) + " MB of packets to " + (packetBytes >> 20) + " MB");
+			compactNext = before - packetBytes < before * MIN_COMPACT_GAIN ? Long.MAX_VALUE : packetBytes + compactAt;
 		}
 
 		/** Keep this session; mark a moment at {@code at}. */
@@ -356,6 +482,7 @@ public final class Recorder {
 			try {
 				if (packets != null) {
 					packets.close();
+					deflater.end();
 				}
 				if (self != null) {
 					self.close();
@@ -382,8 +509,8 @@ public final class Recorder {
 					zip.setLevel(Deflater.BEST_SPEED);
 					entry(zip, META_ENTRY, GSON.toJson(meta()).getBytes(StandardCharsets.UTF_8));
 					entry(zip, EXTRAS_ENTRY, GSON.toJson(extras()).getBytes(StandardCharsets.UTF_8));
-					copy(zip, PACKETS_ENTRY, packetsFile, packetBytes);
-					copy(zip, SELF_ENTRY, selfFile, selfBytes);
+					copy(zip, PACKETS_ENTRY, packetReader(packetsFile), packetBytes);
+					copy(zip, SELF_ENTRY, new FileInputStream(selfFile), selfBytes);
 					byte[] thumb = thumbnail;
 					if (thumb != null) {
 						entry(zip, THUMB_ENTRY, thumb);
@@ -443,12 +570,17 @@ public final class Recorder {
 		zip.closeEntry();
 	}
 
-	/** The first {@code length} bytes of {@code file} (it may still be growing). */
-	private static void copy(ZipOutputStream zip, String name, File file, long length) throws IOException {
+	/** The packets written to {@code file} so far, uncompressed. */
+	static DataInputStream packetReader(File file) throws IOException {
+		return new DataInputStream(new InflaterInputStream(new java.io.BufferedInputStream(new FileInputStream(file), BUFFER), new Inflater(true), BUFFER));
+	}
+
+	/** The first {@code length} bytes of {@code from} (its file may still be growing); closes it. */
+	private static void copy(ZipOutputStream zip, String name, InputStream from, long length) throws IOException {
 		zip.putNextEntry(new ZipEntry(name));
 		byte[] buf = new byte[BUFFER];
 		long left = length;
-		try (InputStream in = new FileInputStream(file)) {
+		try (InputStream in = from) {
 			while (left > 0) {
 				int n = in.read(buf, 0, (int) Math.min(buf.length, left));
 				if (n < 0) {
@@ -466,6 +598,65 @@ public final class Recorder {
 		int n;
 		while ((n = in.read(buf)) >= 0) {
 			out.write(buf, 0, n);
+		}
+	}
+
+	/** Each recorded packet's time and category, read front to back (for compaction). */
+	static final class Index {
+		int count;
+		int[] time = new int[1 << 12];
+		byte[] category = new byte[1 << 12];
+		long[] key = new long[1 << 12];
+
+		static Index of(File file, long length, ReplayBackend.Classifier classifier) throws IOException {
+			Index index = new Index();
+			long[] out = new long[1];
+			long read = 0;
+			try (DataInputStream in = packetReader(file)) {
+				byte[] buf = new byte[1 << 16];
+				while (read < length) {
+					int t = in.readInt();
+					int len = in.readInt();
+					if (len < 0) {
+						throw new IOException("damaged recording");
+					}
+					if (buf.length < len) {
+						buf = new byte[len];
+					}
+					in.readFully(buf, 0, len);
+					read += 8 + len;
+					out[0] = 0;
+					index.add(t, classifier.classify(java.nio.ByteBuffer.wrap(buf, 0, len).slice(), out), out[0]);
+				}
+			}
+			return index;
+		}
+
+		private void add(int t, byte c, long k) {
+			if (count == time.length) {
+				time = java.util.Arrays.copyOf(time, count * 2);
+				category = java.util.Arrays.copyOf(category, count * 2);
+				key = java.util.Arrays.copyOf(key, count * 2);
+			}
+			time[count] = t;
+			category[count] = c;
+			key[count] = k;
+			count++;
+		}
+
+		/** The first packet at or after {@code t} ({@link #count} if none). */
+		int firstAt(int t) {
+			int lo = 0;
+			int hi = count;
+			while (lo < hi) {
+				int mid = (lo + hi) >>> 1;
+				if (time[mid] < t) {
+					lo = mid + 1;
+				} else {
+					hi = mid;
+				}
+			}
+			return lo;
 		}
 	}
 }
