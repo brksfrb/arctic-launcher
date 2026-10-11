@@ -23,8 +23,11 @@ const POLL: Duration = Duration::from_millis(250);
 /// The Arctic Client's line once the loading screen is gone.
 pub const READY_MARKER: &str = "[Arctic startup]";
 
-/// Start the process above normal priority.
+/// Start the process above normal priority (unless `ARCTIC_GAME_PRIORITY=normal`).
 pub fn boost(cmd: &mut Command) {
+    if std::env::var("ARCTIC_GAME_PRIORITY").is_ok_and(|v| v == "normal") {
+        return;
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
