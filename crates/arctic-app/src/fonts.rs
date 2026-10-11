@@ -54,10 +54,9 @@ pub fn install_ui(ctx: &egui::Context) {
     let (regular, semibold) = ui_fonts();
     let mut fonts = egui::FontDefinitions::default();
     if let Some(bytes) = first_readable(regular) {
-        fonts.font_data.insert(
-            "ui".into(),
-            std::sync::Arc::new(FontData::from_owned(bytes)),
-        );
+        fonts
+            .font_data
+            .insert("ui".into(), std::sync::Arc::new(centered(bytes)));
         if let Some(list) = fonts.families.get_mut(&FontFamily::Proportional) {
             list.insert(0, "ui".into());
         }
@@ -69,14 +68,59 @@ pub fn install_ui(ctx: &egui::Context) {
         .cloned()
         .unwrap_or_default();
     if let Some(bytes) = first_readable(semibold) {
-        fonts.font_data.insert(
-            "ui-semibold".into(),
-            std::sync::Arc::new(FontData::from_owned(bytes)),
-        );
+        fonts
+            .font_data
+            .insert("ui-semibold".into(), std::sync::Arc::new(centered(bytes)));
         heading_list.insert(0, "ui-semibold".into());
     }
     fonts.families.insert(heading, heading_list);
     ctx.set_fonts(fonts);
+}
+
+/// A font whose letters sit in the middle of their line: centered text (button labels) lines
+/// up with icons and boxes. Fonts like Segoe UI keep more room above the letters than below, so
+/// text centered by its line box looks low; this moves the glyphs up by the difference.
+fn centered(bytes: Vec<u8>) -> FontData {
+    let shift = letters_low_by(&bytes);
+    let mut data = FontData::from_owned(bytes);
+    if let Some(shift) = shift {
+        data.tweak.y_offset_factor = -shift;
+    }
+    data
+}
+
+/// How far (in font sizes) the middle of the capital letters is below the middle of the line
+/// box: (ascender - descender - cap height) / 2, from the font's `hhea`, `OS/2` and `head`.
+fn letters_low_by(font: &[u8]) -> Option<f32> {
+    let u16_at = |at: usize| Some(u16::from_be_bytes(font.get(at..at + 2)?.try_into().ok()?));
+    let i16_at = |at: usize| u16_at(at).map(|v| v as i16);
+    let table = |tag: &[u8; 4]| -> Option<usize> {
+        let count = usize::from(u16_at(4)?);
+        for i in 0..count {
+            let rec = 12 + i * 16;
+            if font.get(rec..rec + 4)? == tag {
+                let offset: [u8; 4] = font.get(rec + 8..rec + 12)?.try_into().ok()?;
+                return Some(u32::from_be_bytes(offset) as usize);
+            }
+        }
+        None
+    };
+    let units = f32::from(u16_at(table(b"head")? + 18)?);
+    let hhea = table(b"hhea")?;
+    let ascent = f32::from(i16_at(hhea + 4)?);
+    let descent = f32::from(i16_at(hhea + 6)?).abs();
+    let os2 = table(b"OS/2")?;
+    // sCapHeight is in OS/2 version 2 and later.
+    if u16_at(os2)? < 2 {
+        return None;
+    }
+    let cap = f32::from(i16_at(os2 + 88)?);
+    if units <= 0.0 || cap <= 0.0 {
+        return None;
+    }
+    let low = (ascent - descent - cap) / 2.0 / units;
+    // Only a nudge: a broken table shouldn't throw the text around.
+    Some(low.clamp(-0.15, 0.15))
 }
 
 /// Heading text at `size`.
@@ -159,5 +203,27 @@ mod tests {
         assert!(needs_fallback("좀비"));
         assert!(!needs_fallback("Zombie Invade — 100 Days"));
         assert!(!needs_fallback("Привет"));
+    }
+}
+
+#[cfg(test)]
+mod metric_tests {
+    use super::*;
+
+    #[test]
+    fn segoe_letters_sit_low_in_their_line() {
+        // Only where the font is (Windows).
+        let Some(bytes) = first_readable(&[r"C:\Windows\Fonts\segoeui.ttf"]) else {
+            return;
+        };
+        let low = letters_low_by(&bytes).expect("Segoe UI has the tables");
+        // ascender 2210, descender 514, cap height 1434, 2048 units: about 0.064.
+        assert!((low - 0.064).abs() < 0.01, "{low}");
+    }
+
+    #[test]
+    fn not_a_font_is_left_alone() {
+        assert_eq!(letters_low_by(b"not a font"), None);
+        assert_eq!(letters_low_by(&[]), None);
     }
 }

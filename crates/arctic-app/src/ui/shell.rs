@@ -47,6 +47,11 @@ impl ArcticApp {
             );
         }
 
+        // Glass: the backdrop, blurred, behind every card and the sidebar (found once laid out).
+        if p.glass {
+            backdrop.add(crate::glass::backdrop_callback(ctx.content_rect()));
+        }
+
         let nav = egui::Panel::left("nav")
             .resizable(false)
             .show_separator_line(false)
@@ -113,6 +118,9 @@ impl ArcticApp {
         self.whats_new_dialog(&ctx);
         self.mod_clash_dialog(&ctx);
         self.required_update_overlay(&ctx);
+        if p.glass {
+            crate::glass::note_panes(&ctx, &[p.card_fill, p.nav_fill]);
+        }
         self.friends_tick(now, self.tab == Tab::Together);
         self.chat_tick(now, self.tab == Tab::Together);
         if let Some(action) = self.toasts.show(&ctx, p) {

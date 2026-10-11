@@ -220,6 +220,8 @@ pub enum ThemeMode {
     Default,
     Dark,
     Light,
+    /// The aurora night through frosted glass cards.
+    Glass,
 }
 
 impl Default for Settings {

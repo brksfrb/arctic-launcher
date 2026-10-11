@@ -16,8 +16,9 @@ const MAX_MEMORY_SLIDER_MB: u32 = 32 * 1024;
 const MEMORY_STEP_MB: f64 = 512.0;
 const MAX_RESOLUTION: u32 = 7680;
 const RESOLUTIONS: [(u32, u32); 4] = [(854, 480), (1280, 720), (1600, 900), (1920, 1080)];
-const THEMES: [(ThemeMode, &str); 3] = [
+const THEMES: [(ThemeMode, &str); 4] = [
     (ThemeMode::Default, "Aurora"),
+    (ThemeMode::Glass, "Glass"),
     (ThemeMode::Dark, "Dark"),
     (ThemeMode::Light, "Light"),
 ];
@@ -338,6 +339,21 @@ fn theme_tile(ui: &mut egui::Ui, tp: &Palette, name: &str, selected: bool) -> bo
         tp.scene.mountains[1].0,
         Stroke::NONE,
     ));
+    if tp.glass {
+        // A frosted pane over the mountains.
+        let pane = egui::Rect::from_min_size(preview.min + vec2(14.0, 16.0), vec2(60.0, 32.0));
+        painter.rect_filled(
+            pane,
+            CornerRadius::same(6),
+            egui::Color32::from_white_alpha(46),
+        );
+        painter.rect_stroke(
+            pane,
+            CornerRadius::same(6),
+            Stroke::new(1.0, egui::Color32::from_white_alpha(90)),
+            egui::StrokeKind::Inside,
+        );
+    }
     painter.circle_filled(preview.right_top() + vec2(-16.0, 14.0), 6.0, tp.accent);
     let ring = lerp_color(tp.card_stroke, tp.accent, sel.max(hover * 0.5));
     painter.rect_stroke(

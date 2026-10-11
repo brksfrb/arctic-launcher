@@ -1,6 +1,6 @@
 //! Cross-fade between themes. Blended palettes are built once per
 //! (from, to, step) and kept for the life of the process, so the rest of
-//! the UI can keep using `&'static Palette`. At most 3 × 3 × `STEPS`.
+//! the UI can keep using `&'static Palette`. At most 4 × 4 × `STEPS`.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
@@ -77,6 +77,7 @@ fn index(mode: ThemeMode) -> u8 {
         ThemeMode::Default => 0,
         ThemeMode::Dark => 1,
         ThemeMode::Light => 2,
+        ThemeMode::Glass => 3,
     }
 }
 
@@ -95,6 +96,8 @@ fn mix_palette(a: &Palette, b: &Palette, t: f32) -> Palette {
     let c = |x: Color32, y: Color32| mix(x, y, t);
     Palette {
         dark: if t < 0.5 { a.dark } else { b.dark },
+        // Frosting comes in at the end of a fade (the panes match the final card color).
+        glass: if t < 0.5 { a.glass } else { b.glass },
         bg: c(a.bg, b.bg),
         surface: c(a.surface, b.surface),
         surface_hover: c(a.surface_hover, b.surface_hover),

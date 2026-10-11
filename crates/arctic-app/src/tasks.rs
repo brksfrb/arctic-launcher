@@ -508,13 +508,12 @@ impl Tasks {
                         &mods::index_path(&dir),
                         &progress,
                     );
-                    if let (Ok(installed), Some(old)) = (&result, &replacing) {
-                        // Unless the "new" one is that very file.
-                        if !installed.iter().any(|m| &m.file_name == old) {
-                            if let Err(e) = mods::set_enabled(&mods_dir, old, false) {
-                                log::warn!("could not turn off {old}: {e}");
-                            }
-                        }
+                    // Unless the "new" one is that very file.
+                    if let (Ok(installed), Some(old)) = (&result, &replacing)
+                        && !installed.iter().any(|m| &m.file_name == old)
+                        && let Err(e) = mods::set_enabled(&mods_dir, old, false)
+                    {
+                        log::warn!("could not turn off {old}: {e}");
                     }
                     result.map_err(|e| e.to_string())
                 }

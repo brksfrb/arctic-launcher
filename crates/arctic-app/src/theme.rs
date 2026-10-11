@@ -51,6 +51,8 @@ pub enum Celestial {
 
 pub struct Palette {
     pub dark: bool,
+    /// Cards and the sidebar frost the backdrop behind them (see `glass`).
+    pub glass: bool,
     pub bg: Color32,
     pub surface: Color32,
     pub surface_hover: Color32,
@@ -75,6 +77,7 @@ pub struct Palette {
 
 pub static DEFAULT: Palette = Palette {
     dark: true,
+    glass: false,
     bg: rgb(0x0b1320),
     surface: rgb(0x16243a),
     surface_hover: rgb(0x1e314d),
@@ -110,6 +113,7 @@ pub static DEFAULT: Palette = Palette {
 
 pub static DARK: Palette = Palette {
     dark: true,
+    glass: false,
     bg: rgb(0x0c0f13),
     surface: rgb(0x1d232b),
     surface_hover: rgb(0x28303a),
@@ -145,6 +149,7 @@ pub static DARK: Palette = Palette {
 
 pub static LIGHT: Palette = Palette {
     dark: false,
+    glass: false,
     bg: rgb(0xeef5fb),
     surface: rgb(0xdbe8f4),
     surface_hover: rgb(0xc8dcee),
@@ -178,11 +183,50 @@ pub static LIGHT: Palette = Palette {
     },
 };
 
+/// Aurora's night seen through frosted glass: cards and the sidebar blur what's behind them and
+/// tint it only lightly; buttons are glass too.
+pub static GLASS: Palette = Palette {
+    dark: true,
+    glass: true,
+    bg: rgb(0x0b1320),
+    surface: rgba(0xc8e6ff, 30),
+    surface_hover: rgba(0xc8e6ff, 52),
+    accent: rgb(0x8be0ff),
+    accent_deep: rgb(0x3cc4f5),
+    on_accent: rgb(0x08111d),
+    text: rgb(0xf2f8ff),
+    muted: rgb(0xa9c0da),
+    warn: rgb(0xfbbf24),
+    error: rgb(0xf87171),
+    card_fill: rgba(0x0d1a2c, 96),
+    card_stroke: rgba(0xd8efff, 58),
+    nav_fill: rgba(0x08111f, 110),
+    titlebar: rgb(0x0a1424),
+    shadow: Color32::from_black_alpha(70),
+    scene: Scene {
+        sky: [rgb(0x050a16), rgb(0x0b1a33), rgb(0x16385a)],
+        star_strength: 1.0,
+        aurora_strength: 1.25,
+        snow: rgb(0xe6f1ff),
+        rim: rgba(0xb8e8ff, 90),
+        snow_cap: rgba(0xe6f1ff, 150),
+        mountains: [
+            (rgb(0x2d5478), rgb(0x132c46)),
+            (rgb(0x1b375a), rgb(0x0d1f35)),
+            (rgb(0x0e1e33), rgb(0x07111e)),
+        ],
+        celestial: Celestial::Moon,
+        mist: rgba(0x3a6a96, 70),
+        trees: rgb(0x06101b),
+    },
+};
+
 pub fn palette(mode: ThemeMode) -> &'static Palette {
     match mode {
         ThemeMode::Default => &DEFAULT,
         ThemeMode::Dark => &DARK,
         ThemeMode::Light => &LIGHT,
+        ThemeMode::Glass => &GLASS,
     }
 }
 

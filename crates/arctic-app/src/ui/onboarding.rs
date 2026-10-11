@@ -24,8 +24,9 @@ const STEP_TRANSITION: f32 = 0.22;
 const STEP_SLIDE: f32 = 18.0;
 /// Checkbox width, so hints line up with the label.
 const HINT_INDENT: f32 = 24.0;
-const THEMES: [(ThemeMode, &str); 3] = [
+const THEMES: [(ThemeMode, &str); 4] = [
     (ThemeMode::Default, "Aurora"),
+    (ThemeMode::Glass, "Glass"),
     (ThemeMode::Dark, "Dark"),
     (ThemeMode::Light, "Light"),
 ];
@@ -594,7 +595,10 @@ fn progress_dots(ui: &mut egui::Ui, p: &Palette, current: usize) {
 
 /// Miniature of a theme's sky and mountains. Returns true when clicked.
 fn theme_tile(ui: &mut egui::Ui, p: &Palette, mode: ThemeMode, name: &str, selected: bool) -> bool {
-    let size = vec2((WIDTH - 24.0) / 3.0, 118.0);
+    let size = vec2(
+        (WIDTH - 12.0 * (THEMES.len() as f32 - 1.0)) / THEMES.len() as f32,
+        118.0,
+    );
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     let hover = ui
         .ctx()

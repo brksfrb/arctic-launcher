@@ -7,6 +7,7 @@
 //! a save is still going are queued, and only the newest one is sent.
 
 mod cards;
+mod decode;
 mod gallery;
 mod gpu;
 mod model;
@@ -101,6 +102,8 @@ pub struct SkinsUi {
     textures: HashMap<String, SkinTexture>,
     /// Keys whose PNG couldn't be read or decoded (not retried every frame).
     failed: HashSet<String>,
+    /// Capes being decoded in the background.
+    decoder: decode::Decoder,
     pub section: Section,
     pub trying: Trying,
     /// The newest look asked for (sent or queued): later clicks build on it.
@@ -377,7 +380,19 @@ impl ArcticApp {
             if self.skins.failed.contains(key) {
                 return None;
             }
+            self.take_decoded(ctx);
+            if self.skins.textures.contains_key(key) {
+                return self.skins.textures.get(key);
+            }
+            if self.skins.decoder.is_pending(key) {
+                return None;
+            }
             let png = self.skin_png(key)?;
+            // Capes can be huge stacks of frames: decoded in the background.
+            if key.starts_with("mccape:") || key.starts_with("acape:") {
+                self.skins.decoder.request(ctx, key, png);
+                return None;
+            }
             let Some(mut texture) = upload(ctx, key, &png) else {
                 self.skins.failed.insert(key.to_owned());
                 return None;
@@ -388,6 +403,24 @@ impl ArcticApp {
             self.skins.textures.insert(key.to_owned(), texture);
         }
         self.skins.textures.get(key)
+    }
+
+    /// Upload the capes the background decoder has finished.
+    fn take_decoded(&mut self, ctx: &egui::Context) {
+        for done in self.skins.decoder.finished(ctx) {
+            let Some(frames) = done.frames else {
+                self.skins.failed.insert(done.key);
+                continue;
+            };
+            let Some(mut texture) = cape_texture(ctx, &done.key, frames) else {
+                self.skins.failed.insert(done.key);
+                continue;
+            };
+            if let Some(secs) = self.cape_frame_secs(&done.key) {
+                texture.frame_secs = secs;
+            }
+            self.skins.textures.insert(done.key, texture);
+        }
     }
 
     /// The playback speed a preset cape asks for (`acape:` keys; others play at the default).
@@ -717,21 +750,16 @@ fn upload_plain(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTextur
 
 /// A cape texture; animated capes become one texture per frame.
 fn upload_cape(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture> {
-    // Only cape-sized images get decoded (a bad file could claim any size).
-    if !arctic_core::cosmetics::is_cape_png(png) {
-        return None;
-    }
-    let image = image::load_from_memory(png).ok()?.to_rgba8();
-    let (w, h) = image.dimensions();
-    let count = arctic_core::cosmetics::cape_frames(w, h).unwrap_or(1);
-    let frame_h = h / count;
-    let frames: Vec<TextureHandle> = (0..count)
-        .map(|i| {
-            let frame = image::imageops::crop_imm(&image, 0, i * frame_h, w, frame_h).to_image();
-            let size = [w as usize, frame_h as usize];
-            let color = ColorImage::from_rgba_unmultiplied(size, frame.as_raw());
-            ctx.load_texture(format!("{key}#{i}"), color, TextureOptions::NEAREST)
-        })
+    cape_texture(ctx, key, decode::cape_frames(png)?)
+}
+
+/// Decoded cape frames as textures (one per frame).
+fn cape_texture(ctx: &egui::Context, key: &str, frames: Vec<ColorImage>) -> Option<SkinTexture> {
+    let count = frames.len();
+    let frames: Vec<TextureHandle> = frames
+        .into_iter()
+        .enumerate()
+        .map(|(i, color)| ctx.load_texture(format!("{key}#{i}"), color, TextureOptions::NEAREST))
         .collect();
     let handle = frames.first()?.clone();
     Some(SkinTexture {

@@ -1027,6 +1027,7 @@ impl eframe::App for ArcticApp {
         if crate::devshot::enabled() {
             let tab = match std::env::var("ARCTIC_DEVSHOT_PAGE").as_deref() {
                 Ok("app-settings") => Some(Tab::Settings),
+                Ok("about") => Some(Tab::About),
                 Ok("skins" | "gallery") => Some(Tab::Skins),
                 _ => None,
             };

@@ -10,6 +10,7 @@ mod discord;
 mod fonts;
 mod friend_tasks;
 mod gallery_tasks;
+mod glass;
 mod icon_raster;
 mod logbook;
 mod migrate_tasks;
