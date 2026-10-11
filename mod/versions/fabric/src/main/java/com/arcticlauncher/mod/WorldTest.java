@@ -165,6 +165,10 @@ final class WorldTest {
 		if (unpauser != null) {
 			unpauser.cancel(false);
 		}
+		if (Boolean.getBoolean("arctic.blurcheck")) {
+			blurCheck();
+			return;
+		}
 		String bench = System.getProperty("arctic.fpsbench");
 		if (bench != null) {
 			fpsBench(Integer.parseInt(bench));
@@ -588,6 +592,29 @@ final class WorldTest {
 			Runnable step = steps[i];
 			TIMER.schedule(() -> run(step), (long) i * STEP * 2, TimeUnit.SECONDS);
 		}
+	}
+
+	/**
+	 * -Darctic.blurcheck: the same still view shot with motion blur off, then on (a still picture
+	 * blurred with itself must look the same: darker means frames are blended with black).
+	 */
+	private static void blurCheck() {
+		Compat.setScreen(null);
+		Minecraft mc = Minecraft.getInstance();
+		Compat.setYRot(mc.player, 45);
+		Compat.setXRot(mc.player, 20);
+		ClientConfig c = ArcticClient.config();
+		c.motionBlur = false;
+		TIMER.schedule(() -> run(() -> shot("blur-off")), 3, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> {
+			c.motionBlur = true;
+			c.motionBlurStrength = 4;
+		}), 4, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> shot("blur-on")), 7, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> {
+			ArcticMod.LOG.info("worldtest: done");
+			Minecraft.getInstance().stop();
+		}), 9, TimeUnit.SECONDS);
 	}
 
 	/** Blocks travelled per hop in the FPS benchmark's moving half (new chunks to load). */

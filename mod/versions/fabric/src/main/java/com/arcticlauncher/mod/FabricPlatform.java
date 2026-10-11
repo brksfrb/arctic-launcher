@@ -951,8 +951,12 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public boolean motionBlurWorks() {
-		// 26.1+: a post effect; before: MotionBlurGL.
+		// 26.1+: a post effect; before: MotionBlurGL, which draws with OpenGL (VulkanMod replaces it).
+		//#if MC >= 26.1
 		return true;
+		//#else
+		return !MotionBlurGL.VULKAN_MOD;
+		//#endif
 	}
 
 	@Override

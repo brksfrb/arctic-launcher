@@ -79,7 +79,9 @@ def effect(shader, strength):
         }
 
     return {
-        "targets": {"swap": {}, "previous": {"persistent": True}},
+        # Cleared to transparent (not the default opaque black): a frame the game didn't keep
+        # reads as see-through, and the shader leaves it out.
+        "targets": {"swap": {}, "previous": {"persistent": True, "clear_color": 0}},
         "passes": [
             {
                 "vertex_shader": "minecraft:core/screenquad",
@@ -92,7 +94,10 @@ def effect(shader, strength):
                 "uniforms": {"MotionBlurConfig": [{"name": "Strength", "type": "float", "value": strength}]},
             },
             blit("swap", "previous"),
-            blit("swap", "minecraft:main"),
+            # Back to the screen from "previous" (the same picture): the frame graph drops passes
+            # whose output nothing reads that frame, so read it, or it's never kept (and every
+            # frame is blended with black: a dark game).
+            blit("previous", "minecraft:main"),
         ],
     }
 

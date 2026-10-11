@@ -14,6 +14,7 @@ import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL14;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
+import org.lwjgl.opengl.GL33;
 
 /**
  * Motion blur before 26.1 (26.1+ uses a post effect in the client's pack): right after the world is
@@ -45,13 +46,27 @@ public final class MotionBlurGL {
 	private static final IntBuffer INTS = BufferUtils.createIntBuffer(16);
 	private static final FloatBuffer FLOATS = BufferUtils.createFloatBuffer(16);
 
+	/** VulkanMod draws the game with Vulkan: OpenGL calls would do nothing (or harm). */
+	static final boolean VULKAN_MOD = net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("vulkanmod");
+	/** Sampler objects (OpenGL 3.3) are there to unbind. */
+	private static final boolean SAMPLERS = GL.getCapabilities().OpenGL33;
+	private static int DEBUG_FRAMES = Boolean.getBoolean("arctic.blurdebug") ? 400 : 0;
+
 	private MotionBlurGL() {}
+
+	/** The centre pixel of a framebuffer, for -Darctic.blurdebug. */
+	private static String probe(int framebuffer) {
+		GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
+		java.nio.ByteBuffer px = BufferUtils.createByteBuffer(4);
+		GL11.glReadPixels(width / 2, height / 2, 1, 1, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, px);
+		return (px.get(0) & 255) + "," + (px.get(1) & 255) + "," + (px.get(2) & 255) + "," + (px.get(3) & 255);
+	}
 
 	/** After the world is drawn, before the HUD. */
 	public static void apply() {
 		ClientConfig c = ArcticClient.config();
 		Minecraft mc = Minecraft.getInstance();
-		if (c == null || !c.motionBlur || mc.level == null || broken) {
+		if (c == null || !c.motionBlur || mc.level == null || broken || VULKAN_MOD) {
 			hasPrevious = false;
 			return;
 		}
@@ -68,9 +83,14 @@ public final class MotionBlurGL {
 		Saved saved = Saved.read();
 		try {
 			prepare(target.width, target.height, texture);
+			String debug = DEBUG_FRAMES > 0 ? "now " + probe(mainFramebuffer) + " prev " + probe(prevFramebuffer) : null;
 			if (hasPrevious) {
 				float strength = STRENGTHS[Math.max(1, Math.min(STRENGTHS.length, c.motionBlurStrength)) - 1];
 				blend(strength);
+			}
+			if (debug != null) {
+				DEBUG_FRAMES--;
+				ArcticMod.LOG.info("blurdebug {} out {} size {}x{} tex {}", debug, probe(mainFramebuffer), width, height, texture);
 			}
 			// Keep this frame for the next one.
 			GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, mainFramebuffer);
@@ -141,6 +161,11 @@ public final class MotionBlurGL {
 		GL14.glBlendFuncSeparate(GL14.GL_CONSTANT_ALPHA, GL14.GL_ONE_MINUS_CONSTANT_ALPHA, GL11.GL_ZERO, GL11.GL_ONE);
 		GL13.glActiveTexture(GL13.GL_TEXTURE0);
 		GL11.glBindTexture(GL11.GL_TEXTURE_2D, prevTexture);
+		// The game may leave a sampler object on unit 0 (1.21.x does): its mipmap filtering makes our
+		// texture, which has none, read as black, and the frame would be blended with black.
+		if (SAMPLERS) {
+			GL33.glBindSampler(0, 0);
+		}
 		//#if MC >= 1.17
 		// 1.17+ runs a core OpenGL 3.2 context: a fullscreen triangle with a tiny shader.
 		if (program == 0) {
@@ -250,6 +275,7 @@ public final class MotionBlurGL {
 		int vertexArray;
 		int activeTexture;
 		int texture;
+		int sampler;
 		boolean blend;
 		int srcRgb;
 		int dstRgb;
@@ -275,6 +301,7 @@ public final class MotionBlurGL {
 			s.activeTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
 			GL13.glActiveTexture(GL13.GL_TEXTURE0);
 			s.texture = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+			s.sampler = SAMPLERS ? GL11.glGetInteger(GL33.GL_SAMPLER_BINDING) : 0;
 			s.blend = GL11.glIsEnabled(GL11.GL_BLEND);
 			s.srcRgb = GL11.glGetInteger(GL14.GL_BLEND_SRC_RGB);
 			s.dstRgb = GL11.glGetInteger(GL14.GL_BLEND_DST_RGB);
@@ -300,6 +327,9 @@ public final class MotionBlurGL {
 			GL30.glBindVertexArray(vertexArray);
 			GL13.glActiveTexture(GL13.GL_TEXTURE0);
 			GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+			if (SAMPLERS) {
+				GL33.glBindSampler(0, sampler);
+			}
 			GL13.glActiveTexture(activeTexture);
 			setEnabled(GL11.GL_BLEND, blend);
 			GL14.glBlendFuncSeparate(srcRgb, dstRgb, srcAlpha, dstAlpha);

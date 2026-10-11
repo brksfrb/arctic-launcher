@@ -86,6 +86,24 @@ final class LegacyWorldTest {
 
 	private static void tour() {
 		final MinecraftClient mc = MinecraftClient.getInstance();
+		if (Boolean.getBoolean("arctic.blurcheck")) {
+			// The same still view with motion blur off, then on: darker means blending with black.
+			mc.player.yaw = 45;
+			mc.player.pitch = 20;
+			com.arcticlauncher.client.config.ClientConfig c = ArcticClient.config();
+			c.motionBlur = false;
+			TIMER.schedule(() -> run(() -> shot("blur-off")), 3, TimeUnit.SECONDS);
+			TIMER.schedule(() -> run(() -> {
+				c.motionBlur = true;
+				c.motionBlurStrength = 4;
+			}), 4, TimeUnit.SECONDS);
+			TIMER.schedule(() -> run(() -> shot("blur-on")), 7, TimeUnit.SECONDS);
+			TIMER.schedule(() -> run(() -> {
+				ArcticLegacy.LOG.info("worldtest: done");
+				mc.scheduleStop();
+			}), 9, TimeUnit.SECONDS);
+			return;
+		}
 		String emoteShots = System.getProperty("arctic.emoteshots");
 		if (emoteShots != null) {
 			emoteTour(emoteShots.split(","), 0);

@@ -2,7 +2,8 @@
   "targets": {
     "swap": {},
     "previous": {
-      "persistent": true
+      "persistent": true,
+      "clear_color": 0
     }
   },
   "passes": [
@@ -61,7 +62,7 @@
       "inputs": [
         {
           "sampler_name": "In",
-          "target": "swap"
+          "target": "previous"
         }
       ],
       "output": "minecraft:main",
