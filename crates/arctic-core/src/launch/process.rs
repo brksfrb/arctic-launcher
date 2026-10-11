@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use super::LaunchPlan;
 use super::logparse::{LogLine, LogParser};
+use super::priority;
 use crate::Result;
 use crate::error::IoContext;
 
@@ -64,26 +65,34 @@ pub fn spawn(
 ) -> Result<GameHandle> {
     log::info!("launching: {}", plan.redacted_command());
     let log = Arc::new(Mutex::new(File::create(&plan.log_file).at(&plan.log_file)?));
-    let mut child = Command::new(game_exe(plan))
-        .args(&plan.args)
+    let mut cmd = Command::new(game_exe(plan));
+    cmd.args(&plan.args)
         .envs(crate::gpu_preference::env(plan.high_performance_gpu))
         .current_dir(&plan.game_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .at(&plan.java)?;
+        .stderr(Stdio::piped());
+    priority::boost(&mut cmd);
+    let mut child = cmd.spawn().at(&plan.java)?;
     if plan.maximize_window {
         super::game_window::maximize_when_open(child.id());
     }
 
     let on_event = Arc::new(on_event);
     let window_seen = Arc::new(AtomicBool::new(false));
+    let ready_seen = Arc::new(AtomicBool::new(false));
+    priority::settle_when_ready(child.id(), ready_seen.clone(), window_seen.clone());
     let secrets: Arc<[String]> = plan.log_secrets().into();
     let tee = |stream: Box<dyn Read + Send>| {
         let (log, seen, on_event) = (log.clone(), window_seen.clone(), on_event.clone());
-        let secrets = secrets.clone();
-        std::thread::spawn(move || tee_output(stream, &log, &seen, &secrets, &*on_event));
+        let (ready, secrets) = (ready_seen.clone(), secrets.clone());
+        std::thread::spawn(move || {
+            let seen = Seen {
+                window: &seen,
+                ready: &ready,
+            };
+            tee_output(stream, &log, seen, &secrets, &*on_event)
+        });
     };
     if let Some(out) = child.stdout.take() {
         tee(Box::new(out));
@@ -284,13 +293,21 @@ fn in_named_folder(exe: &Path) -> PathBuf {
     exe.to_path_buf()
 }
 
+/// What the output readers of both streams have seen so far.
+#[derive(Clone, Copy)]
+struct Seen<'a> {
+    window: &'a AtomicBool,
+    /// The Arctic Client said the game is ready.
+    ready: &'a AtomicBool,
+}
+
 /// Copy a child stream into the log line by line, firing `WindowReady` the
 /// first time a marker shows up (on either stream). `secrets` never reach
 /// the log or the launcher (1.8 prints its session token, for one).
 fn tee_output(
     stream: Box<dyn Read + Send>,
     log: &Mutex<File>,
-    window_seen: &AtomicBool,
+    seen: Seen,
     secrets: &[String],
     on_event: &(dyn Fn(GameEvent) + Send + Sync),
 ) {
@@ -315,8 +332,11 @@ fn tee_output(
         }
         // `swap` makes the check-and-set atomic: stdout and stderr are read
         // by separate threads and must not both fire.
-        if is_window_marker(&line) && !window_seen.swap(true, Ordering::Relaxed) {
+        if is_window_marker(&line) && !seen.window.swap(true, Ordering::Relaxed) {
             on_event(GameEvent::WindowReady);
+        }
+        if String::from_utf8_lossy(&line).contains(priority::READY_MARKER) {
+            seen.ready.store(true, Ordering::Relaxed);
         }
         let parsed = parser.feed(&String::from_utf8_lossy(&line));
         if !parsed.is_empty() {
@@ -427,13 +447,18 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("game.log");
         let log = Mutex::new(File::create(&path).unwrap());
-        let seen = AtomicBool::new(false);
+        let (window, ready_seen) = (AtomicBool::new(false), AtomicBool::new(false));
+        let seen = Seen {
+            window: &window,
+            ready: &ready_seen,
+        };
         let fired = Mutex::new(Vec::new());
-        let input = b"a\nLWJGL Version: 2\nLWJGL Version: 2\nz".to_vec();
+        let input =
+            b"a\nLWJGL Version: 2\nLWJGL Version: 2\n[Arctic startup] ready 9000 ms\nz".to_vec();
         tee_output(
             Box::new(std::io::Cursor::new(input.clone())),
             &log,
-            &seen,
+            seen,
             &[],
             &|e| fired.lock().unwrap().push(e),
         );
@@ -451,7 +476,8 @@ mod tests {
                 _ => 0,
             })
             .sum();
-        assert_eq!((ready, lines), (1, 4));
+        assert_eq!((ready, lines), (1, 5));
+        assert!(ready_seen.load(Ordering::Relaxed));
     }
 
     #[test]
@@ -459,7 +485,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("game.log");
         let log = Mutex::new(File::create(&path).unwrap());
-        let seen = AtomicBool::new(false);
+        let (window, ready) = (AtomicBool::new(false), AtomicBool::new(false));
+        let seen = Seen {
+            window: &window,
+            ready: &ready,
+        };
         let input = b"[Client thread/INFO] (Session ID is token:eyJ.SECRET:15ca)
 ok SECRET SECRET
 "
@@ -468,7 +498,7 @@ ok SECRET SECRET
         tee_output(
             Box::new(std::io::Cursor::new(input)),
             &log,
-            &seen,
+            seen,
             &["eyJ.SECRET".to_owned(), "SECRET".to_owned()],
             &|e| {
                 if let GameEvent::Output(lines) = e {

@@ -8,6 +8,7 @@ pub mod args;
 pub mod files;
 mod game_window;
 pub mod logparse;
+mod priority;
 pub mod process;
 pub mod startup;
 mod startup_cache;

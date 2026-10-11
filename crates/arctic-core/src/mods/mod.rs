@@ -183,14 +183,65 @@ pub fn install_many(
     progress: Progress,
 ) -> Result<(Vec<InstalledMod>, Vec<Failed>)> {
     progress(ProgressInfo::stage("Finding mods"));
+    let current = ModIndex::load(index)?;
+    let (plan, failed) = plan_many(projects, game_version, loader, &current, mods_dir);
+    if plan.is_empty() {
+        return Ok((Vec::new(), failed));
+    }
+    let (mods, jobs) = prepare(&plan, mods_dir)?;
+    let mods = with_project_info(mods);
+    download_all("Downloading mods", jobs, progress)?;
+    record(&current, &mods, mods_dir)?.save(index)?;
+    Ok((mods, failed))
+}
+
+/// Would [`install_many`] change anything? Looks the projects up without
+/// downloading: `Some(false)` when every one is installed and current,
+/// `None` when Modrinth couldn't be asked about all of them. `present` says
+/// whether a file of the index is there (it may be kept elsewhere for now).
+pub fn updates_waiting(
+    projects: &[&str],
+    game_version: &str,
+    loader: LoaderKind,
+    mods_dir: &Path,
+    index: &Path,
+    present: &dyn Fn(&str) -> bool,
+) -> Result<Option<bool>> {
+    let current = ModIndex::load(index)?;
+    let (plan, failed) = plan_many(projects, game_version, loader, &current, mods_dir);
+    if failed
+        .iter()
+        .any(|(_, e)| matches!(e, crate::Error::Http(_)))
+    {
+        return Ok(None);
+    }
+    // The projects asked for are always planned (each may be an update):
+    // only versions not installed yet are a change.
+    let have = |p: &Planned| {
+        current
+            .mods
+            .iter()
+            .any(|m| m.version_id == p.version.id && present(&m.file_name))
+    };
+    Ok(Some(!plan.iter().all(have)))
+}
+
+/// What installing `projects` would download (looked up side by side), and
+/// the projects that can't be installed, with why.
+fn plan_many(
+    projects: &[&str],
+    game_version: &str,
+    loader: LoaderKind,
+    current: &ModIndex,
+    mods_dir: &Path,
+) -> (Vec<Planned>, Vec<Failed>) {
     let loaders = modrinth::compatible_loaders(loader);
     let target = Target {
         loaders: &loaders,
         game_version,
         loader,
     };
-    let current = ModIndex::load(index)?;
-    let installed = installed_projects(&current, mods_dir);
+    let installed = installed_projects(current, mods_dir);
     let results: Vec<(String, Result<Vec<Planned>>)> = std::thread::scope(|s| {
         let handles: Vec<_> = projects
             .iter()
@@ -230,14 +281,7 @@ pub fn install_many(
             Err(e) => failed.push((project, e)),
         }
     }
-    if plan.is_empty() {
-        return Ok((Vec::new(), failed));
-    }
-    let (mods, jobs) = prepare(&plan, mods_dir)?;
-    let mods = with_project_info(mods);
-    download_all("Downloading mods", jobs, progress)?;
-    record(&current, &mods, mods_dir)?.save(index)?;
-    Ok((mods, failed))
+    (plan, failed)
 }
 
 /// Jars in `mods_dir`, joined with the tracking info from `index`.

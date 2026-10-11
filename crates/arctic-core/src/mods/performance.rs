@@ -111,6 +111,9 @@ struct State {
     shaders: bool,
     /// Unix seconds of the last successful check.
     checked: u64,
+    /// A background check found newer builds: the next start installs them.
+    #[serde(default)]
+    update_waiting: bool,
 }
 
 fn index_path(game_dir: &Path) -> PathBuf {
@@ -227,9 +230,13 @@ pub fn sync(
         if unstash(game_dir, game_version, shaders)? {
             return Ok(());
         }
-    } else if crate::auth::now_secs().saturating_sub(state.checked) < RECHECK_SECS
-        && all_present(&index, &mods_dir)?
-    {
+    } else if !state.update_waiting && all_present(&index, &mods_dir)? {
+        if crate::auth::now_secs().saturating_sub(state.checked) >= RECHECK_SECS {
+            // Due for a look at Modrinth: the game starts with what is here meanwhile,
+            // and only a real update is installed (at the next start).
+            let ids: Vec<String> = wanted.iter().map(|(id, _)| (*id).to_owned()).collect();
+            recheck_later(game_dir.to_path_buf(), ids, game_version.to_owned(), state);
+        }
         return Ok(());
     }
     // New or changed mods are about to be written: Fabric API goes back to the whole one first.
@@ -271,6 +278,7 @@ pub fn sync(
                 game_version: game_version.to_owned(),
                 shaders,
                 checked: crate::auth::now_secs(),
+                update_waiting: false,
             },
         )?;
     }
@@ -279,11 +287,58 @@ pub fn sync(
 
 fn all_present(index: &Path, mods_dir: &Path) -> Result<bool> {
     let tracked = ModIndex::load(index)?;
+    let present = present_in(mods_dir);
+    Ok(tracked.mods.iter().all(|m| present(&m.file_name)))
+}
+
+/// Is a file of the index there? Fabric API counts while it is cut down.
+fn present_in(mods_dir: &Path) -> impl Fn(&str) -> bool {
     let stashed = super::slim_api::stashed(mods_dir);
-    Ok(tracked.mods.iter().all(|m| {
-        super::files::exists(mods_dir, &m.file_name)
-            || stashed.as_deref() == Some(m.file_name.as_str())
-    }))
+    let mods_dir = mods_dir.to_path_buf();
+    move |name| super::files::exists(&mods_dir, name) || stashed.as_deref() == Some(name)
+}
+
+/// Ask Modrinth for newer builds in the background (it can take seconds).
+/// Nothing new: the set counts as checked. Something new: the check stays
+/// due, so the next start installs it.
+fn recheck_later(game_dir: PathBuf, ids: Vec<String>, game_version: String, state: State) {
+    std::thread::spawn(move || {
+        let mods_dir = game_dir.join("mods");
+        let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+        let waiting = super::updates_waiting(
+            &ids,
+            &game_version,
+            LoaderKind::Fabric,
+            &mods_dir,
+            &index_path(&game_dir),
+            &present_in(&mods_dir),
+        );
+        match waiting {
+            Ok(Some(false)) => {
+                let checked = State {
+                    checked: crate::auth::now_secs(),
+                    ..state
+                };
+                if let Err(e) = save_json(&state_path(&game_dir), &checked) {
+                    log::warn!("performance mods: couldn't note the check: {e}");
+                }
+            }
+            Ok(Some(true)) => {
+                log::info!("performance mods: updates found, installed at the next start");
+                let waiting = State {
+                    update_waiting: true,
+                    ..state
+                };
+                if let Err(e) = save_json(&state_path(&game_dir), &waiting) {
+                    log::warn!("performance mods: couldn't note the update: {e}");
+                }
+            }
+            Ok(None) => {
+                log::info!("performance mods: Modrinth not reachable, checking again later")
+            }
+            Err(e) => log::warn!("performance mods: couldn't check for updates: {e}"),
+        }
+    });
 }
 
 /// Delete every mod the Performance switch installed.
@@ -376,10 +431,35 @@ mod tests {
             game_version: "26.3".into(),
             shaders: false,
             checked: crate::auth::now_secs(),
+            update_waiting: false,
         };
         save_json(&state_path(dir.path()), &state).unwrap();
         // Would fail (and log) if it tried Modrinth with a fake version.
         sync(dir.path(), "26.3", true, false, false, &|_| {}).unwrap();
+        assert!(mods.join("sodium.jar").exists());
+    }
+
+    #[test]
+    fn a_due_check_does_not_hold_up_the_start() {
+        let dir = tempfile::tempdir().unwrap();
+        let mods = dir.path().join("mods");
+        std::fs::create_dir_all(&mods).unwrap();
+        std::fs::write(mods.join("sodium.jar"), b"x").unwrap();
+        ModIndex::default()
+            .with(tracked("sodium.jar"))
+            .save(&index_path(dir.path()))
+            .unwrap();
+        let state = State {
+            game_version: "0.0-test".into(),
+            shaders: false,
+            checked: 0,
+            update_waiting: false,
+        };
+        save_json(&state_path(dir.path()), &state).unwrap();
+        let start = std::time::Instant::now();
+        sync(dir.path(), "0.0-test", true, false, false, &|_| {}).unwrap();
+        // The set is used as it is; Modrinth is asked on another thread.
+        assert!(start.elapsed() < std::time::Duration::from_millis(500));
         assert!(mods.join("sodium.jar").exists());
     }
 
@@ -396,6 +476,7 @@ mod tests {
             game_version: version.into(),
             shaders: false,
             checked: crate::auth::now_secs(),
+            update_waiting: false,
         };
         save_json(&state_path(game_dir), &state).unwrap();
     }
