@@ -202,6 +202,32 @@ public final class Compat {
 		//#endif
 	}
 
+	/** The game window's native handle (GLFW or SDL). */
+	public static long windowHandle() {
+		//#if MC >= 1.21.9
+		return mc().getWindow().handle();
+		//#else
+		return mc().getWindow().getWindow();
+		//#endif
+	}
+
+	/** The hotbar slot in hand (0-8). */
+	public static int selectedSlot(net.minecraft.world.entity.player.Player p) {
+		//#if MC >= 1.21.5
+		return inventory(p).getSelectedSlot();
+		//#else
+		return inventory(p).selected;
+		//#endif
+	}
+
+	public static void selectSlot(net.minecraft.world.entity.player.Player p, int slot) {
+		//#if MC >= 1.21.5
+		inventory(p).setSelectedSlot(slot);
+		//#else
+		inventory(p).selected = slot;
+		//#endif
+	}
+
 	/** The mouse in GUI coordinates. */
 	public static double[] guiMouse() {
 		Minecraft mc = mc();

@@ -78,6 +78,10 @@
   by default for Vanilla from 1.8.9 up to the newest release (1.8.9, 1.9.4, 1.10.2,
   1.11.2, 1.12.2 and 1.15.2 onward), comes to Fabric and Quilt instances too, and you can turn
   it off per instance, or choose pure vanilla during setup.
+- **Tier Tags.** See players' PvP tiers by their names, in name tags and the tab list
+  ("HT3 Sword | Steve"), from PvPTiers or SubTiers: their best tier or one game mode.
+- **Play with a controller.** Xbox, PlayStation and other gamepads work in game on every
+  version: walk, look, fight, use the hotbar and inventory, and move a pointer through menus.
 - **Replays.** The Arctic Client keeps the last minutes of your game; save them when
   something happens, then watch from any angle in 3D, seek around, or export a video.
   Recordings are compressed as they're written, so long sessions don't fill your drive.

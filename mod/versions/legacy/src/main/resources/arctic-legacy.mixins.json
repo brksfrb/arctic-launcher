@@ -18,6 +18,7 @@
 		"WorldMixin",
 		"PlayerListHudMixin",
 		"PlayerTierMixin",
+		"ScreenClickInvoker",
 		"AbstractClientPlayerEntityMixin",
 		"TextRendererMixin",
 		"SmoothTextRendererMixin",

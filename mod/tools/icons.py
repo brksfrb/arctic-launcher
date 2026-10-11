@@ -75,6 +75,7 @@ FROM_LUCIDE = {
     "replay": "history",
     "scoreboard": "clipboard-list",
     "tiers": "medal",
+    "controller": "gamepad-2",
     "search": "search",
     "server": "server",
     "session": "hourglass",

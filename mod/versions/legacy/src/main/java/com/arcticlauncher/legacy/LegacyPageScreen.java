@@ -58,6 +58,13 @@ public final class LegacyPageScreen extends Screen {
 		page.mouseDragged(x, y, LegacyKeys.coreMouse(button));
 	}
 
+	/** A controller's scroll, where the pointer is. */
+	void scrollBy(int direction) {
+		int x = Mouse.getX() * width / client.width;
+		int y = height - Mouse.getY() * height / client.height - 1;
+		page.mouseScrolled(x, y, direction);
+	}
+
 	@Override
 	public void handleMouse() {
 		super.handleMouse();

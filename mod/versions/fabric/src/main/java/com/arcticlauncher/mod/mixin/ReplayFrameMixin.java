@@ -14,6 +14,8 @@ abstract class ReplayFrameMixin {
 	@Inject(method = "runTick", at = @At("HEAD"))
 	private void arctic$replayFrame(boolean advanceGameTime, CallbackInfo ci) {
 		Replays.frame();
+		// A game controller moves the player and the pointer each frame.
+		com.arcticlauncher.client.ArcticClient.frame(com.arcticlauncher.mod.Compat.screen() != null);
 	}
 
 	//#if MC >= 26.1

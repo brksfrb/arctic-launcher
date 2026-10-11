@@ -135,19 +135,120 @@ public final class LegacyPlatform implements Platform {
 				return o.sprintKey;
 			case ATTACK:
 				return o.attackKey;
+			case INVENTORY:
+				return o.inventoryKey;
+			case DROP:
+				return o.dropKey;
+			case PERSPECTIVE:
+				return o.togglePerspectiveKey;
+			case CHAT:
+				return o.chatKey;
+			case PLAYER_LIST:
+				return o.playerListKey;
+			case SWAP_HANDS:
+				// Unnamed in these mappings (and not in 1.8.9): found by its name.
+				for (KeyBinding k : o.allKeys) {
+					if ("key.swapHands".equals(k.getTranslationKey())) {
+						return k;
+					}
+				}
+				return null;
 			default:
 				return o.useKey;
 		}
 	}
 
 	@Override
+	public boolean readGamepad(com.arcticlauncher.client.controller.Gamepad pad) {
+		return LegacyGamepads.read(pad);
+	}
+
+	@Override
+	public void turnPlayer(double yaw, double pitch) {
+		if (mc().player != null) {
+			// Takes mouse movement: 0.15 degrees each.
+			mc().player.increaseTransforms((float) (yaw / 0.15), (float) -(pitch / 0.15));
+		}
+	}
+
+	@Override
+	public void tapKey(GameKey key) {
+		KeyBinding k = binding(key);
+		if (k != null && k.getCode() != 0) {
+			KeyBinding.onKeyPressed(k.getCode());
+		}
+	}
+
+	@Override
+	public void scrollHotbar(int step) {
+		if (mc().player != null) {
+			// The game's scroll: up (positive) is the previous slot.
+			mc().player.inventory.scrollInHotbar(-step);
+		}
+	}
+
+	@Override
+	public void back() {
+		if (mc().currentScreen == null) {
+			mc().openGameMenuScreen();
+		} else {
+			mc().setScreen(null);
+		}
+	}
+
+	@Override
+	public double[] cursor() {
+		// LWJGL 2 counts y from the bottom.
+		int h = org.lwjgl.opengl.Display.getHeight();
+		return new double[] {org.lwjgl.input.Mouse.getX(), h - 1 - org.lwjgl.input.Mouse.getY(), org.lwjgl.opengl.Display.getWidth(), h};
+	}
+
+	@Override
+	public void setCursor(double x, double y) {
+		org.lwjgl.input.Mouse.setCursorPosition((int) x, org.lwjgl.opengl.Display.getHeight() - 1 - (int) y);
+	}
+
+	@Override
+	public void mouseButton(int button, boolean down) {
+		Screen screen = mc().currentScreen;
+		if (screen == null) {
+			return;
+		}
+		double[] at = cursor();
+		int x = (int) (at[0] * screen.width / at[2]);
+		int y = (int) (at[1] * screen.height / at[3]);
+		com.arcticlauncher.legacy.mixin.ScreenClickInvoker s = (com.arcticlauncher.legacy.mixin.ScreenClickInvoker) screen;
+		try {
+			if (down) {
+				s.arctic$clicked(x, y, button);
+			} else {
+				s.arctic$released(x, y, button);
+			}
+		} catch (java.io.IOException e) {
+			ArcticLegacy.LOG.warn("a controller click failed", e);
+		}
+	}
+
+	@Override
+	public void scrollScreen(double amount) {
+		// Only Arctic's screens: the game's read the wheel straight from LWJGL.
+		if (mc().currentScreen instanceof LegacyPageScreen) {
+			((LegacyPageScreen) mc().currentScreen).scrollBy(amount > 0 ? 1 : -1);
+		}
+	}
+
+	@Override
 	public boolean physicalKeyDown(GameKey key) {
-		return LegacyKeys.isDown(binding(key).getCode());
+		KeyBinding k = binding(key);
+		return k != null && LegacyKeys.isDown(k.getCode());
 	}
 
 	@Override
 	public void setKeyDown(GameKey key, boolean down) {
-		KeyBinding.setKeyPressed(binding(key).getCode(), down);
+		KeyBinding k = binding(key);
+		if (k != null) {
+			KeyBinding.setKeyPressed(k.getCode(), down);
+		}
 	}
 
 	@Override

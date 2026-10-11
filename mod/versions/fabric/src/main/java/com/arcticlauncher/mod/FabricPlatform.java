@@ -129,9 +129,101 @@ final class FabricPlatform implements Platform {
 				return o.keySprint;
 			case ATTACK:
 				return o.keyAttack;
+			case INVENTORY:
+				return o.keyInventory;
+			case DROP:
+				return o.keyDrop;
+			case SWAP_HANDS:
+				//#if MC >= 1.16
+				return o.keySwapOffhand;
+				//#else
+				return o.keySwapHands;
+				//#endif
+			case PERSPECTIVE:
+				return o.keyTogglePerspective;
+			case CHAT:
+				return o.keyChat;
+			case PLAYER_LIST:
+				return o.keyPlayerList;
 			default:
 				return o.keyUse;
 		}
+	}
+
+	@Override
+	public boolean readGamepad(com.arcticlauncher.client.controller.Gamepad pad) {
+		return Gamepads.read(pad);
+	}
+
+	@Override
+	public void turnPlayer(double yaw, double pitch) {
+		LocalPlayer p = mc().player;
+		if (p != null) {
+			// Entity.turn takes mouse movement: 0.15 degrees each.
+			p.turn(yaw / 0.15, pitch / 0.15);
+		}
+	}
+
+	@Override
+	public void tapKey(GameKey key) {
+		com.mojang.blaze3d.platform.InputConstants.Key k = com.mojang.blaze3d.platform.InputConstants.getKey(mapping(mc().options, key).saveString());
+		if (k.getValue() >= 0) {
+			KeyMapping.click(k);
+		}
+	}
+
+	@Override
+	public void scrollHotbar(int step) {
+		LocalPlayer p = mc().player;
+		if (p != null) {
+			Compat.selectSlot(p, Math.floorMod(Compat.selectedSlot(p) + step, 9));
+		}
+	}
+
+	@Override
+	public void back() {
+		net.minecraft.client.gui.screens.Screen screen = Compat.screen();
+		if (screen == null) {
+			mc().pauseGame(false);
+		} else if (screen.shouldCloseOnEsc()) {
+			screen.onClose();
+		}
+	}
+
+	@Override
+	public double[] cursor() {
+		com.mojang.blaze3d.platform.Window w = mc().getWindow();
+		return new double[] {mc().mouseHandler.xpos(), mc().mouseHandler.ypos(), w.getScreenWidth(), w.getScreenHeight()};
+	}
+
+	@Override
+	public void setCursor(double x, double y) {
+		//#if MC >= 26.3
+		org.lwjgl.sdl.SDLMouse.SDL_WarpMouseInWindow(Compat.windowHandle(), (float) x, (float) y);
+		//#else
+		long window = Compat.windowHandle();
+		org.lwjgl.glfw.GLFW.glfwSetCursorPos(window, x, y);
+		// GLFW doesn't report a move it made itself: tell the game.
+		((com.arcticlauncher.mod.mixin.MouseHandlerInvoker) mc().mouseHandler).arctic$move(window, x, y);
+		//#endif
+	}
+
+	@Override
+	public void mouseButton(int button, boolean down) {
+		com.arcticlauncher.mod.mixin.MouseHandlerInvoker mouse = (com.arcticlauncher.mod.mixin.MouseHandlerInvoker) mc().mouseHandler;
+		int action = down ? com.arcticlauncher.mod.compat.KeyCodes.PRESS : com.arcticlauncher.mod.compat.KeyCodes.RELEASE;
+		// The game's own numbers (SDL's on 26.3: left is 1).
+		int which = button == 0 ? com.arcticlauncher.mod.compat.KeyCodes.MOUSE_LEFT : com.arcticlauncher.mod.compat.KeyCodes.MOUSE_RIGHT;
+		//#if MC >= 1.21.9
+		mouse.arctic$button(Compat.windowHandle(), new net.minecraft.client.input.MouseButtonInfo(which, 0), action);
+		//#else
+		mouse.arctic$press(Compat.windowHandle(), which, action, 0);
+		//#endif
+	}
+
+	@Override
+	public void scrollScreen(double amount) {
+		((com.arcticlauncher.mod.mixin.MouseHandlerInvoker) mc().mouseHandler).arctic$scroll(Compat.windowHandle(), 0, amount);
 	}
 
 	@Override

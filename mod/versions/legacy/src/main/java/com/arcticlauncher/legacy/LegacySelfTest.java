@@ -70,6 +70,23 @@ final class LegacySelfTest {
 		});
 		later(step++, () -> ArcticClient.platform().openPage(new com.arcticlauncher.client.servers.DisconnectedPage("Connection Lost", "Timed out")));
 		later(step++, () -> shot("disconnected"));
+		// A scripted controller: the pointer onto the pause menu's "Back to Game", then A.
+		final com.arcticlauncher.client.controller.Gamepad pad = new com.arcticlauncher.client.controller.Gamepad();
+		later(step++, () -> MinecraftClient.getInstance().setScreen(new net.minecraft.client.gui.screen.GameMenuScreen()));
+		later(step++, () -> {
+			net.minecraft.client.gui.screen.Screen screen = MinecraftClient.getInstance().currentScreen;
+			double scale = (double) org.lwjgl.opengl.Display.getWidth() / screen.width;
+			com.arcticlauncher.client.controller.Controller.scripted = pad;
+			ArcticClient.platform().setCursor(screen.width / 2.0 * scale, (screen.height / 4.0 + 18) * scale);
+		});
+		// A frame later: a press only counts once the pad is connected.
+		later(step++, () -> pad.buttons[com.arcticlauncher.client.controller.Gamepad.A] = true);
+		later(step++, () -> {
+			pad.buttons[com.arcticlauncher.client.controller.Gamepad.A] = false;
+			net.minecraft.client.gui.screen.Screen screen = MinecraftClient.getInstance().currentScreen;
+			ArcticLegacy.LOG.info("selftest: after clicking Back to Game {}", screen == null ? "none" : screen.getClass().getSimpleName());
+			com.arcticlauncher.client.controller.Controller.scripted = null;
+		});
 		later(step, () -> {
 			com.arcticlauncher.client.tiers.Tiers.Tag tag = ArcticClient.tiers().tag(tested, "ItzRealMe");
 			ArcticLegacy.LOG.info("selftest: tier tag {}", tag == null ? "none" : tag.formatted());

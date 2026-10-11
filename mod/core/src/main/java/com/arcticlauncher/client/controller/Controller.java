@@ -27,6 +27,9 @@ public final class Controller {
 	/** Scroll clicks a second at full tilt. */
 	static final double SCROLL_RATE = 12;
 
+	/** Self-tests: this pad instead of a real one (null: the real one). */
+	public static volatile Gamepad scripted;
+
 	private final Gamepad pad = new Gamepad();
 	private final Gamepad last = new Gamepad();
 	/** Controls this controller holds down (and so lets go of). */
@@ -49,7 +52,9 @@ public final class Controller {
 
 	/** Each frame, with the seconds since the last. */
 	public void frame(GamepadHost game, Settings s, double seconds, boolean screenOpen, boolean inWorld) {
-		if (!s.enabled || !game.readGamepad(pad)) {
+		Gamepad fake = scripted;
+		// Turned off: the controller isn't even looked at.
+		if (!s.enabled || !(fake != null ? copy(fake) : game.readGamepad(pad))) {
 			if (connected) {
 				letGo(game);
 				last.clear();
@@ -70,6 +75,11 @@ public final class Controller {
 			world(game, s, seconds);
 		}
 		last.copyFrom(pad);
+	}
+
+	private boolean copy(Gamepad from) {
+		pad.copyFrom(from);
+		return true;
 	}
 
 	private void world(GamepadHost game, Settings s, double seconds) {

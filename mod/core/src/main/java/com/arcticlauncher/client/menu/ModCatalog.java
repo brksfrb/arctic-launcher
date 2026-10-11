@@ -125,6 +125,10 @@ final class ModCatalog {
 		out.add(new Mod("durability", "Low Durability", "A pop-up when armor or your tool is about to break", "durability",
 				Category.GAMEPLAY, "armor tool break warning")
 				.toggle(() -> c.durabilityWarning, on -> c.durabilityWarning = on));
+		out.add(new Mod("controller", "Controller", "Play with a gamepad: Xbox, PlayStation and others", "controller",
+				Category.GAMEPLAY, "gamepad joystick xbox playstation console")
+				.toggle(() -> c.controller.enabled, on -> c.controller.enabled = on)
+				.settings((host, f) -> controllerSettings(f, c)));
 		out.add(new Mod("tiers", "Tier Tags", "Players' PvP tiers by their names: HT3 Sword | Steve", "tiers", Category.SOCIAL,
 				"tier list mctiers pvptiers subtiers rank test")
 				.toggle(() -> c.tierTags, on -> c.tierTags = on)
@@ -276,6 +280,22 @@ final class ModCatalog {
 	}
 
 	/** One look for every HUD widget, with the FPS widget as the preview. */
+	private static final int[] SPEEDS = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+
+	private static void controllerSettings(Form f, final ClientConfig c) {
+		f.section("Controller");
+		f.note(ArcticClient.controller().connected() ? "A controller is connected."
+				: "No controller found. Plug one in (on 1.8.9-1.12.2, before starting the game).");
+		f.cycle("Look speed", labels(SPEEDS, ""), () -> c.controller.lookSpeed - 1, i -> c.controller.lookSpeed = i + 1);
+		f.cycle("Pointer speed", labels(SPEEDS, ""), () -> c.controller.cursorSpeed - 1, i -> c.controller.cursorSpeed = i + 1);
+		f.toggle("Invert looking", "Push up to look down", () -> c.controller.invertY, on -> c.controller.invertY = on);
+		f.section("Buttons");
+		f.note("Left stick: walk. Right stick: look. A: jump. B: sneak. X: drop. Y: inventory.");
+		f.note("RT: attack. LT: use. LB and RB: hotbar. Press the left stick: sprint; the right stick: change view.");
+		f.note("View: players. Menu: pause. D-pad up: swap hands; down: chat.");
+		f.note("On screens the left stick moves the pointer: A clicks, X right-clicks, B goes back, the right stick scrolls.");
+	}
+
 	private static void tierSettings(Form f, final ClientConfig c) {
 		f.section("Tier list");
 		String[] sources = new String[Tiers.SOURCES.length];

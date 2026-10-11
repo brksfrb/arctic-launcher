@@ -17,6 +17,8 @@ abstract class MinecraftClientReplayMixin {
 	private void arctic$replayFrame(CallbackInfo ci) {
 		com.arcticlauncher.legacy.LegacyHooks.runQueued();
 		Replays.frame();
+		// A game controller moves the player and the pointer each frame.
+		com.arcticlauncher.client.ArcticClient.frame(((net.minecraft.client.MinecraftClient) (Object) this).currentScreen != null);
 	}
 
 	@Inject(method = "updateDisplay", at = @At("HEAD"))

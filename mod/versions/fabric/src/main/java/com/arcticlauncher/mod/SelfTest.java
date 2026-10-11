@@ -73,6 +73,10 @@ final class SelfTest {
 			PromoTest.start();
 			return;
 		}
+		if (PadTest.requested()) {
+			PadTest.start();
+			return;
+		}
 		if ("duel".equals(System.getProperty("arctic.selftest"))) {
 			// A duel through the launcher: world, kit, LAN, a play-together code.
 			TIMER.schedule(() -> Minecraft.getInstance().execute(() -> {
