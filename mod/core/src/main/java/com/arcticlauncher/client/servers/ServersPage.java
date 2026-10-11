@@ -324,7 +324,15 @@ public final class ServersPage extends Page {
 	// ---- Drawing -------------------------------------------------------------------------
 
 	@Override
+	protected void drawAbove(Gfx g, Style s, int mx, int my) {
+		drawTip(g, s);
+	}
+
+	@Override
 	protected void drawBehind(Gfx g, Style s, int mx, int my) {
+		tip = null;
+		tipX = mx;
+		tipY = my;
 		long now = System.nanoTime();
 		float dt = lastFrame == 0 ? 0f : Math.min(0.1f, (now - lastFrame) / 1e9f);
 		lastFrame = now;
@@ -431,6 +439,11 @@ public final class ServersPage extends Page {
 		}
 	}
 
+	/** What the mouse is over in a row (the ping bars, the player count, the version), shown above it all. */
+	private List<String> tip;
+	private int tipX;
+	private int tipY;
+
 	private void row(Gfx g, Style s, int x, int y, String name, String address, boolean selectedRow, boolean over) {
 		background(g, s, x, y, selectedRow, over);
 		Servers.Answer a = servers.answer(address);
@@ -450,6 +463,9 @@ public final class ServersPage extends Page {
 		g.text(Draw.fit(g, name, right - bars - pw - 6 - tx), tx, y + 4, s.text, false);
 		g.text(players, right - bars - pw - 2, y + 4, s.muted, false);
 		pingBars(g, s, right - 12, y + 4, a);
+		if (over) {
+			hoverTip(a, right, y, pw, bars);
+		}
 		if (a == null || !a.done()) {
 			g.text("Pinging…", tx, y + 15, s.muted, false);
 			return;
@@ -475,6 +491,56 @@ public final class ServersPage extends Page {
 		int tx = x + ICON + 8;
 		g.text(Draw.fit(g, w.motd, LIST_W - ICON - 14), tx, y + 4, s.text, false);
 		g.text(w.address, tx, y + 15, s.muted, false);
+	}
+
+	/** The game's hover texts: the ping (or why there's none) over the bars, who's on over the count. */
+	private void hoverTip(Servers.Answer a, int right, int y, int playersW, int bars) {
+		int mx = tipX;
+		int my = tipY;
+		if (my < y + 2 || my > y + 13) {
+			return;
+		}
+		if (mx >= right - 13 && mx <= right) {
+			if (a == null || !a.done()) {
+				tip = java.util.Collections.singletonList(tr("multiplayer.status.pinging", "Pinging..."));
+			} else if (a.error != null) {
+				tip = java.util.Collections.singletonList("§c" + tr("multiplayer.status.no_connection", "(no connection)"));
+			} else {
+				List<String> lines = new java.util.ArrayList<String>();
+				lines.add(a.status.ping < 0 ? "?" : a.status.ping + " ms");
+				if (a.status.protocol > 0 && platform.protocol() > 0 && a.status.protocol != platform.protocol()) {
+					lines.add("§c" + tr("multiplayer.status.incompatible", "Incompatible version!") + " (" + a.status.version + ")");
+				}
+				tip = lines;
+			}
+		} else if (a != null && a.status != null && mx >= right - bars - playersW - 2 && mx < right - bars - 2) {
+			List<String> lines = new java.util.ArrayList<String>(a.status.sample);
+			if (lines.isEmpty()) {
+				lines.add(a.status.online + " / " + a.status.max);
+			} else if (a.status.online > lines.size()) {
+				lines.add("§7... and " + (a.status.online - lines.size()) + " more");
+			}
+			tip = lines;
+		}
+	}
+
+	private void drawTip(Gfx g, Style s) {
+		List<String> lines = tip;
+		if (lines == null || lines.isEmpty()) {
+			return;
+		}
+		int w = 0;
+		for (String l : lines) {
+			w = Math.max(w, g.textWidth(l));
+		}
+		int h = lines.size() * 10 + 6;
+		int x = Math.min(tipX + 10, width - w - 10);
+		int y = Math.max(4, Math.min(tipY - h - 4, height - h - 4));
+		Draw.round(g, x - 4, y, x + w + 4, y + h, 3, 0xF0101828);
+		Draw.outline(g, x - 4, y, x + w + 4, y + h, 3, Draw.alpha(s.accent, 0.5f));
+		for (int i = 0; i < lines.size(); i++) {
+			g.text(lines.get(i), x, y + 4 + i * 10, s.text, false);
+		}
 	}
 
 	/** Five bars like the game's, by how fast the server answered. */

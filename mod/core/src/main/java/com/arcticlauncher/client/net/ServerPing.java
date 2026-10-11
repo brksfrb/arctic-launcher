@@ -33,6 +33,8 @@ public final class ServerPing {
 		public String motd = "";
 		public int online;
 		public int max;
+		/** Some of the players online, as the server lists them (names may have § colors). */
+		public java.util.List<String> sample = new java.util.ArrayList<String>();
 		public String version = "";
 		public int protocol;
 		/** Round trip in milliseconds. */
@@ -160,6 +162,13 @@ public final class ServerPing {
 			JsonObject p = o.getAsJsonObject("players");
 			s.online = p.has("online") ? p.get("online").getAsInt() : 0;
 			s.max = p.has("max") ? p.get("max").getAsInt() : 0;
+			if (p.has("sample") && p.get("sample").isJsonArray()) {
+				for (JsonElement e : p.getAsJsonArray("sample")) {
+					if (e.isJsonObject() && e.getAsJsonObject().has("name")) {
+						s.sample.add(e.getAsJsonObject().get("name").getAsString());
+					}
+				}
+			}
 		}
 		if (o.has("version") && o.get("version").isJsonObject()) {
 			JsonObject v = o.getAsJsonObject("version");

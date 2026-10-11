@@ -101,6 +101,11 @@ public final class Hud {
 		return previewing;
 	}
 
+	/** The HUD editor is showing it: stand-ins for what's not on screen (a boss bar, waypoints). */
+	public void previewing(boolean on) {
+		previewing = on;
+	}
+
 	static long frame() {
 		return frame;
 	}

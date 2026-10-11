@@ -152,6 +152,8 @@ public final class HudEditor extends Page {
 	@Override
 	protected void drawBehind(Gfx g, Style s, int mx, int my) {
 		Hud hud = ArcticClient.hud();
+		// Laid out as the editor shows it (the boss bar's stand-in has its own place).
+		hud.previewing(true);
 		snapper.clear();
 		if (dragging != null && moved) {
 			placeDragged(g, hud);
