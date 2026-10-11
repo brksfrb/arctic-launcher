@@ -110,6 +110,8 @@ impl ArcticApp {
         self.import_worlds_dialog(&ctx);
         self.share_dialogs(&ctx);
         self.migrate_dialog(&ctx);
+        self.whats_new_dialog(&ctx);
+        self.required_update_overlay(&ctx);
         self.friends_tick(now, self.tab == Tab::Together);
         self.chat_tick(now, self.tab == Tab::Together);
         if let Some(action) = self.toasts.show(&ctx, p) {
@@ -124,6 +126,10 @@ impl ArcticApp {
     }
 
     fn banner_visible(&self) -> bool {
+        // A required update has its own overlay.
+        if self.update_required() {
+            return false;
+        }
         match &self.update {
             UpdateState::Available { dismissed, .. } => !dismissed,
             UpdateState::Installing { .. } | UpdateState::Installed { .. } => true,
@@ -195,7 +201,7 @@ impl ArcticApp {
         });
     }
 
-    fn restart_after_update(&mut self, ctx: &egui::Context) {
+    pub(crate) fn restart_after_update(&mut self, ctx: &egui::Context) {
         if let Err(e) = arctic_core::update::restart() {
             // Keep the required flag so Play stays blocked on the old binary.
             self.toasts.push(

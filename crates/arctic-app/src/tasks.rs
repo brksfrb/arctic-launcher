@@ -82,6 +82,8 @@ pub enum Event {
     UpdateInstalled(Outcome<()>),
     /// The background updater installed a new version (`true`: a required one).
     UpdateApplied(bool),
+    /// What's new since the version that ran before an update.
+    ReleaseNotes(Outcome<update::ReleaseNotes>),
     /// Minecraft versions a loader supports.
     LoaderGames(LoaderKind, Outcome<Vec<String>>),
     /// Loader versions for (loader, Minecraft version).
@@ -530,6 +532,25 @@ impl Tasks {
         self.run(move |t| {
             t.send(Event::UpdateChecked(
                 update::check(channel).map_err(|e| e.to_string()),
+            ));
+        });
+    }
+
+    /// [`Self::check_update`] after `delay` (at start: once the window is up).
+    pub fn check_update_after(&self, channel: UpdateChannel, delay: std::time::Duration) {
+        self.run(move |t| {
+            std::thread::sleep(delay);
+            t.send(Event::UpdateChecked(
+                update::check(channel).map_err(|e| e.to_string()),
+            ));
+        });
+    }
+
+    /// What changed since `since`, the version that ran before an update.
+    pub fn load_release_notes(&self, channel: UpdateChannel, since: String) {
+        self.run(move |t| {
+            t.send(Event::ReleaseNotes(
+                update::notes_since(channel, &since).map_err(|e| e.to_string()),
             ));
         });
     }

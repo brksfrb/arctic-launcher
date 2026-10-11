@@ -25,6 +25,10 @@ use crate::net::{agent, body_timeout, get_json};
 use crate::storage::DataDirs;
 use crate::{APP_VERSION, Error, Progress, ProgressInfo, Result};
 
+pub mod notes;
+
+pub use notes::ReleaseNotes;
+
 pub const GITHUB_REPO: &str = "brksfrb/arctic-launcher";
 /// Release asset of the launcher for this platform.
 #[cfg(windows)]
@@ -86,6 +90,41 @@ pub fn check(channel: UpdateChannel) -> Result<Option<UpdateInfo>> {
     let releases: Vec<Release> = get_json(&url)?;
     let current = semver::Version::parse(APP_VERSION).map_err(|e| Error::Other(e.to_string()))?;
     Ok(pick_update(&releases, channel, &current))
+}
+
+/// What changed since `since` (the version that ran before an update), up to this version:
+/// every release in between, newest first. Pre-releases count only on the beta channel.
+pub fn notes_since(channel: UpdateChannel, since: &str) -> Result<ReleaseNotes> {
+    let url =
+        format!("https://api.github.com/repos/{GITHUB_REPO}/releases?per_page={RELEASES_PER_PAGE}");
+    let releases: Vec<Release> = get_json(&url)?;
+    let current = semver::Version::parse(APP_VERSION).map_err(|e| Error::Other(e.to_string()))?;
+    let since = parse_tag(since);
+    Ok(collect_notes(&releases, channel, since.as_ref(), &current))
+}
+
+fn collect_notes(
+    releases: &[Release],
+    channel: UpdateChannel,
+    since: Option<&semver::Version>,
+    current: &semver::Version,
+) -> ReleaseNotes {
+    let mut in_range: Vec<(semver::Version, &Release)> = releases
+        .iter()
+        .filter(|r| !r.draft && (channel == UpdateChannel::Beta || !r.prerelease))
+        .filter_map(|r| parse_tag(&r.tag_name).map(|v| (v, r)))
+        .filter(|(v, _)| v <= current && since.is_none_or(|s| v > s))
+        .collect();
+    in_range.sort_by(|a, b| b.0.cmp(&a.0));
+    // Without a known previous version, only this one's notes.
+    if since.is_none() {
+        in_range.truncate(1);
+    }
+    let mut notes = ReleaseNotes::default();
+    for (_, release) in in_range {
+        notes.append(notes::parse(release.body.as_deref().unwrap_or_default()));
+    }
+    notes
 }
 
 fn pick_update(
@@ -235,6 +274,53 @@ mod tests {
         assert!(pick_update(&rs, UpdateChannel::Stable, &v("0.1.0")).is_none());
         let rs = [release("v0.2.0", false, "", None)];
         assert!(pick_update(&rs, UpdateChannel::Stable, &v("0.1.0")).is_none());
+    }
+
+    #[test]
+    fn notes_cover_versions_after_the_previous_one() {
+        let rs = [
+            release(
+                "v0.4.0",
+                false,
+                "### Fixed
+- future",
+                Some("sha256:ab"),
+            ),
+            release(
+                "v0.3.4",
+                false,
+                "### Fixed
+- four",
+                Some("sha256:ab"),
+            ),
+            release(
+                "v0.3.4-beta.1",
+                true,
+                "### Fixed
+- beta",
+                Some("sha256:ab"),
+            ),
+            release(
+                "v0.3.3",
+                false,
+                "### Emotes
+- three",
+                Some("sha256:ab"),
+            ),
+            release(
+                "v0.3.2",
+                false,
+                "### Fixed
+- two",
+                Some("sha256:ab"),
+            ),
+        ];
+        let notes = collect_notes(&rs, UpdateChannel::Stable, Some(&v("0.3.2")), &v("0.3.4"));
+        assert_eq!(notes.fixed, vec![notes::NoteLine::Bullet("four".into())]);
+        assert_eq!(notes.new.len(), 1);
+        let only_current = collect_notes(&rs, UpdateChannel::Stable, None, &v("0.3.4"));
+        assert!(only_current.new.is_empty());
+        assert_eq!(only_current.fixed.len(), 1);
     }
 
     #[test]

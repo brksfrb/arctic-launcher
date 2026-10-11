@@ -34,6 +34,7 @@ const SETTINGS: &[&str] = &[
     "client_style",
     "client_fancy",
     "check_updates_on_start",
+    "show_release_notes",
     "favorite_versions",
 ];
 

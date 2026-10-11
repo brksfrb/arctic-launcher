@@ -21,7 +21,11 @@ Tags containing a `-` (e.g. `v0.3.0-beta.1`) are published as **pre-releases**, 
 
 ## Optional vs required updates
 
-Updates are **optional** by default: users see a dismissible banner. Put one of these HTML
+Updates are **optional** by default: users see a dismissible banner (or, with automatic
+installs on, they download by themselves). A **required** update covers the window with an
+"Update required" overlay: it downloads right away and restarts into the new version after a
+short countdown, with **Update & Restart** and **Exit** buttons. It waits for a running game to
+close before restarting. Put one of these HTML
 comments in the release notes to change that. They stay invisible on GitHub.
 
 | Marker | Effect |
@@ -33,7 +37,8 @@ Use required updates for things like broken auth or security fixes.
 
 ## Update flow in the app
 
-1. On start (if enabled) and from *About → Check for updates*, the app calls
+1. A few seconds after start (if enabled, so opening isn't slowed down) and from
+   *About → Check for updates*, the app calls
    `GET /repos/brksfrb/arctic-launcher/releases`.
 2. It picks the newest non-draft release above the running version that matches the channel.
 3. On **Update**, it streams the exe to `cache/updates/` and verifies SHA-256. It then
@@ -42,6 +47,17 @@ Use required updates for things like broken auth or security fixes.
 4. **Restart now** relaunches the new version.
 
 The whole app is one small executable, so an update is a single download plus a swap.
+
+## "What's new" after an update
+
+The first start of a new version shows a popup built from the release notes of every
+release since the version that ran before (Settings → Updates → "Show what's new after
+updating" turns it off; the popup has "Don't show this again"). Write the notes for it:
+
+- Sections titled `Fixed` (a `### Fixed` heading or a line that is only `**Fixed**`) are listed
+  under **What's fixed**; every other section under **What's new**, with its title.
+- `### Download`, `### SHA-256`, HTML comments and the "Full Changelog" line are left out.
+- Inline `**bold**`, `` `code` `` and `[links](…)` (shown as text) are understood.
 
 ## Secrets used by CI
 

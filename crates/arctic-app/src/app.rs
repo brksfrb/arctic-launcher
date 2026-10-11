@@ -29,6 +29,8 @@ use crate::ui::{InstancesUi, ProfileDialog};
 /// Backdrop frame interval when focused / unfocused.
 const FRAME_FOCUSED: Duration = Duration::from_millis(33);
 const FRAME_UNFOCUSED: Duration = Duration::from_millis(100);
+/// The update check at start waits this long, so opening the launcher isn't slowed by it.
+const START_UPDATE_CHECK_DELAY: Duration = Duration::from_secs(4);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
@@ -151,6 +153,10 @@ pub struct ArcticApp {
     /// Instances tab state (pages, mod browser, create dialog).
     pub(crate) inst: InstancesUi,
     pub(crate) update: UpdateState,
+    /// The required-update overlay's countdown (while one is pending).
+    pub(crate) required_prompt: Option<crate::ui::RequiredPrompt>,
+    /// "What's new" after an update, once its notes arrived.
+    pub(crate) whats_new: Option<crate::ui::WhatsNew>,
     pub(crate) toasts: Toasts,
     pub(crate) msa_configured: bool,
     pub(crate) version_filter: String,
@@ -232,7 +238,8 @@ impl ArcticApp {
             }
         });
         let update = if data.settings.check_updates_on_start {
-            tasks.check_update(data.settings.update_channel);
+            // Once the window is up, so the check doesn't slow down opening the launcher.
+            tasks.check_update_after(data.settings.update_channel, START_UPDATE_CHECK_DELAY);
             UpdateState::Checking
         } else {
             UpdateState::Idle
@@ -292,6 +299,8 @@ impl ArcticApp {
             profile_dialog: ProfileDialog::Closed,
             inst: InstancesUi::default(),
             update,
+            required_prompt: None,
+            whats_new: None,
             toasts,
             version_filter: String::new(),
             version_view: crate::ui::VersionView::All,
@@ -320,29 +329,59 @@ impl ArcticApp {
             }
         }
         app.note_new_version();
+        app.devshot_update_prompts();
         crate::auto_update::spawn(app.dirs.clone(), app.tasks.clone());
         app
     }
 
-    /// Once after an update: say so, with a link to what's new.
+    /// Once after an update: what's new (a popup, unless turned off; else a short note).
     fn note_new_version(&mut self) {
         let current = arctic_core::APP_VERSION;
-        if self.settings.launcher_version_seen == current {
+        let previous =
+            std::mem::replace(&mut self.settings.launcher_version_seen, current.to_owned());
+        if previous == current {
             return;
         }
-        if !self.settings.launcher_version_seen.is_empty() {
-            self.toasts.push_with_action(
-                Kind::Success,
-                format!("Updated to Arctic Launcher {current}"),
-                "See what's new in this version.",
-                Some(ToastAction::WhatsNew(format!(
-                    "https://github.com/{}/releases/tag/v{current}",
-                    arctic_core::update::GITHUB_REPO
-                ))),
-            );
-        }
-        self.settings.launcher_version_seen = current.to_owned();
         self.persist_settings();
+        if previous.is_empty() {
+            return;
+        }
+        if self.settings.show_release_notes {
+            // The popup opens when the notes arrive; the note is the fallback.
+            self.tasks
+                .load_release_notes(self.settings.update_channel, previous);
+        } else {
+            self.updated_toast();
+        }
+    }
+
+    fn updated_toast(&mut self) {
+        let current = arctic_core::APP_VERSION;
+        self.toasts.push_with_action(
+            Kind::Success,
+            format!("Updated to Arctic Launcher {current}"),
+            "See what's new in this version.",
+            Some(ToastAction::WhatsNew(format!(
+                "https://github.com/{}/releases/tag/v{current}",
+                arctic_core::update::GITHUB_REPO
+            ))),
+        );
+    }
+
+    fn on_release_notes(&mut self, result: Result<arctic_core::update::ReleaseNotes, String>) {
+        match result {
+            Ok(notes) if !notes.is_empty() => {
+                self.whats_new = Some(crate::ui::WhatsNew {
+                    version: arctic_core::APP_VERSION.to_owned(),
+                    notes,
+                });
+            }
+            Ok(_) => self.updated_toast(),
+            Err(e) => {
+                log::warn!("couldn't load the release notes: {e}");
+                self.updated_toast();
+            }
+        }
     }
 
     /// Replace all profile-scoped state (used at start and on switch).
@@ -857,14 +896,15 @@ impl ArcticApp {
             Event::UpdateInstalled(result) => self.on_update_installed(result),
             // The update thread installed one while the launcher was open.
             Event::UpdateApplied(required) => self.update = UpdateState::Installed { required },
+            Event::ReleaseNotes(result) => self.on_release_notes(result),
         }
     }
 
     fn on_update_checked(&mut self, result: Result<Option<UpdateInfo>, String>) {
         if let Ok(Some(info)) = &result
-            && self.settings.auto_install_updates
+            && (self.settings.auto_install_updates || info.required)
         {
-            // Installs by itself; the banner shows it going.
+            // Installs by itself; the banner (or a required update's overlay) shows it going.
             self.start_update(info.clone());
             return;
         }
@@ -887,7 +927,9 @@ impl ArcticApp {
         };
         if result.is_ok() {
             crate::auto_update::mark_installed();
-            if self.settings.auto_install_updates && crate::auto_update::restart_if_unnoticed() {
+            if (self.settings.auto_install_updates || info.required)
+                && crate::auto_update::restart_if_unnoticed()
+            {
                 return;
             }
         }

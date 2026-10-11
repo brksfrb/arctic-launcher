@@ -186,11 +186,14 @@ impl ArcticApp {
                 ui.selectable_value(&mut s.update_channel, UpdateChannel::Stable, "Stable");
                 ui.selectable_value(&mut s.update_channel, UpdateChannel::Beta, "Beta");
             });
-            ui.checkbox(&mut s.check_updates_on_start, "Check for updates on start");
+            ui.checkbox(&mut s.check_updates_on_start, "Check for updates on start")
+                .on_hover_text("A few seconds after the launcher opens, so it starts fast");
             ui.checkbox(&mut s.auto_install_updates, "Install updates automatically")
                 .on_hover_text(
                     "New versions download by themselves and are used the next time the launcher                      opens (right away when it's waiting in the tray with no game running)",
                 );
+            ui.checkbox(&mut s.show_release_notes, "Show what's new after updating")
+                .on_hover_text("After an update, a popup lists what's new and what's fixed");
         });
 
         section(ui, p, "Network", |ui| self.network_section(ui, p));

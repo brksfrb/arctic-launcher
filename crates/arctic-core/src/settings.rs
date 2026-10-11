@@ -46,6 +46,8 @@ pub struct Settings {
     pub auto_install_updates: bool,
     /// The launcher version that last ran (to say "Updated to …" once after an update).
     pub launcher_version_seen: String,
+    /// After an update, show what's new and what's fixed in a popup.
+    pub show_release_notes: bool,
     /// Animated backdrop (aurora, snow, shooting stars).
     pub animations: bool,
     /// Animated capes stand still on their first frame in the launcher (a
@@ -239,6 +241,7 @@ impl Default for Settings {
             check_updates_on_start: true,
             auto_install_updates: true,
             launcher_version_seen: String::new(),
+            show_release_notes: true,
             animations: true,
             reduce_cape_motion: false,
             capes_still: Vec::new(),

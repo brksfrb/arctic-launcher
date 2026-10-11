@@ -45,3 +45,5 @@ pub use skins::SkinsUi;
 mod together;
 pub use together::TogetherUi;
 mod shell;
+mod update_prompts;
+pub use update_prompts::{RequiredPrompt, WhatsNew};
