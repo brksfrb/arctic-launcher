@@ -392,6 +392,20 @@ public interface Platform {
 	boolean connectTo(String address);
 
 	/**
+	 * Join a saved server as the game's own list would: with its name, and its server resource
+	 * pack choice ({@code acceptPacks}: true, false, or null to ask). False where this version
+	 * can't; {@link #connectTo} by address then.
+	 */
+	default boolean joinSaved(String name, String address, Boolean acceptPacks) {
+		return false;
+	}
+
+	/** The network protocol this game speaks (for asking servers how they are); 0 if unknown. */
+	default int protocol() {
+		return 0;
+	}
+
+	/**
 	 * The camera this frame: {x, y, z, yaw, pitch, vertical FOV in degrees},
 	 * or null outside a world (for drawing things where they are in the world).
 	 */

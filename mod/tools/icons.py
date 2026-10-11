@@ -71,6 +71,7 @@ FROM_LUCIDE = {
     "ping": "signal",
     "players": "users-round",
     "reach": "ruler",
+    "reconnect": "refresh-cw",
     "replay": "history",
     "scoreboard": "clipboard-list",
     "search": "search",

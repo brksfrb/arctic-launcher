@@ -957,10 +957,25 @@ public final class LegacyPlatform implements Platform {
 
 	@Override
 	public boolean connectTo(String address) {
+		return joinSaved(address, address, null);
+	}
+
+	@Override
+	public int protocol() {
+		return com.arcticlauncher.legacy.replay.LegacyReplayCodec.protocolVersion();
+	}
+
+	@Override
+	public boolean joinSaved(String name, String address, Boolean acceptPacks) {
 		MinecraftClient mc = mc();
 		LegacyHooks.onNextFrame(() -> {
 			leave(mc);
-			mc.setScreen(new ConnectScreen(new TitleScreen(), mc, new ServerInfo(address, address, false)));
+			ServerInfo server = new ServerInfo(name, address, false);
+			// The choice made for this server's resource packs (asked again when none was).
+			if (acceptPacks != null) {
+				server.setResourcePackState(acceptPacks ? ServerInfo.ResourcePackState.ENABLED : ServerInfo.ResourcePackState.DISABLED);
+			}
+			mc.setScreen(new ConnectScreen(new TitleScreen(), mc, server));
 		});
 		return true;
 	}

@@ -113,6 +113,20 @@ final class ModCatalog {
 		out.add(new Mod("leave", "Confirm Leaving", "Click Disconnect or Save and Quit twice to leave", "leave", Category.GAMEPLAY,
 				"quit disconnect")
 				.toggle(() -> c.confirmLeave, on -> c.confirmLeave = on));
+		out.add(new Mod("reconnect", "Auto Reconnect", "Lost connection? Join the server again by itself", "reconnect", Category.GAMEPLAY,
+				"rejoin disconnect kicked timeout connection lost")
+				.toggle(() -> c.autoReconnect, on -> c.autoReconnect = on)
+				.settings((host, f) -> {
+					f.section("Reconnect");
+					String[] delays = new String[com.arcticlauncher.client.servers.DisconnectedPage.DELAYS.length];
+					for (int i = 0; i < delays.length; i++) {
+						delays[i] = com.arcticlauncher.client.servers.DisconnectedPage.DELAYS[i] + " s";
+					}
+					f.choice("Wait before rejoining", delays,
+							() -> Math.max(0, indexOf(com.arcticlauncher.client.servers.DisconnectedPage.DELAYS, c.reconnectSeconds)),
+							i -> c.reconnectSeconds = com.arcticlauncher.client.servers.DisconnectedPage.DELAYS[i]);
+					f.note("It gives up after 5 tries in a row. The Reconnect button is there either way.");
+				}));
 	}
 
 	private static void visuals(List<Mod> out, final ClientConfig c, Platform p) {

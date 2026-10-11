@@ -55,6 +55,15 @@ final class LegacySelfTest {
 			});
 			later(step++, () -> shot("menu-" + tab));
 		}
+		// The game's multiplayer list opens Arctic's in its place.
+		later(step++, () -> MinecraftClient.getInstance().setScreen(
+				new net.minecraft.client.gui.screen.multiplayer.MultiplayerScreen(new net.minecraft.client.gui.screen.TitleScreen())));
+		later(step++, () -> {
+			ArcticLegacy.LOG.info("selftest: multiplayer screen is {}", MinecraftClient.getInstance().currentScreen.getClass().getSimpleName());
+			shot("servers");
+		});
+		later(step++, () -> ArcticClient.platform().openPage(new com.arcticlauncher.client.servers.DisconnectedPage("Connection Lost", "Timed out")));
+		later(step++, () -> shot("disconnected"));
 		later(step, () -> {
 			ArcticLegacy.LOG.info("selftest: done");
 			MinecraftClient.getInstance().scheduleStop();

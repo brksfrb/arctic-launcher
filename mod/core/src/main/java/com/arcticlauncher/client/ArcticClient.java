@@ -291,6 +291,7 @@ public final class ArcticClient {
 
 	public static void tick(boolean screenOpen) {
 		com.arcticlauncher.client.replay.Replays.tick(screenOpen);
+		com.arcticlauncher.client.servers.DisconnectedPage.tick(platform);
 		if (com.arcticlauncher.client.replay.Replays.watching()) {
 			return;
 		}

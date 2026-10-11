@@ -91,6 +91,9 @@ public final class ClientConfig {
 	public boolean legacyVboOn;
 	/** The pause menu's leave button needs a second click. */
 	public boolean confirmLeave = true;
+	/** After a disconnect, join the same server again by itself (after {@link #reconnectSeconds}). */
+	public boolean autoReconnect;
+	public int reconnectSeconds = 5;
 	/** SOCKS5 proxy for server connections and Arctic's web requests. */
 	public ProxyConfig proxy = new ProxyConfig();
 	/** When the launcher's proxy choice was last applied (its timestamp). */

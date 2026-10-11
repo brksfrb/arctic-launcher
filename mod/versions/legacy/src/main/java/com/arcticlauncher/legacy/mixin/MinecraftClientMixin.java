@@ -39,6 +39,13 @@ abstract class MinecraftClientMixin {
 		if (title && ArcticClient.restyles()) {
 			return new LegacyPageScreen(ArcticClient.titleMenu(), null);
 		}
+		if (screen instanceof net.minecraft.client.gui.screen.multiplayer.MultiplayerScreen && ArcticClient.restyles()) {
+			return new LegacyPageScreen(new com.arcticlauncher.client.servers.ServersPage(), null);
+		}
+		if (screen instanceof net.minecraft.client.gui.screen.DisconnectedScreen && ArcticClient.restyles()) {
+			String[] text = com.arcticlauncher.legacy.LegacyDisconnectText.read(screen);
+			return new LegacyPageScreen(new com.arcticlauncher.client.servers.DisconnectedPage(text[0], text[1]), null);
+		}
 		return screen;
 	}
 }

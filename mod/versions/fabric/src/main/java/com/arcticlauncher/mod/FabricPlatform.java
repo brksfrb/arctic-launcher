@@ -632,17 +632,32 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public boolean connectTo(String address) {
+		return joinSaved(address, address, null);
+	}
+
+	@Override
+	public int protocol() {
+		return com.arcticlauncher.mod.replay.ReplayCodec.protocolVersion();
+	}
+
+	@Override
+	public boolean joinSaved(String name, String address, Boolean acceptPacks) {
 		Minecraft mc = mc();
 		mc.execute(() -> {
 			leaveWorld(mc);
 			//#if MC >= 1.20.2
 			net.minecraft.client.multiplayer.ServerData data = new net.minecraft.client.multiplayer.ServerData(
-					address, address, net.minecraft.client.multiplayer.ServerData.Type.OTHER);
+					name, address, net.minecraft.client.multiplayer.ServerData.Type.OTHER);
 			//#else
 			// Before 1.20.2 ServerData's third argument was a plain "is this a LAN entry" boolean.
 			net.minecraft.client.multiplayer.ServerData data =
-					new net.minecraft.client.multiplayer.ServerData(address, address, false);
+					new net.minecraft.client.multiplayer.ServerData(name, address, false);
 			//#endif
+			// The choice made for this server's resource packs (asked again when none was).
+			if (acceptPacks != null) {
+				data.setResourcePackStatus(acceptPacks ? net.minecraft.client.multiplayer.ServerData.ServerPackStatus.ENABLED
+						: net.minecraft.client.multiplayer.ServerData.ServerPackStatus.DISABLED);
+			}
 			//#if MC < 1.17
 			mc.setScreen(new net.minecraft.client.gui.screens.ConnectScreen(new net.minecraft.client.gui.screens.TitleScreen(), mc, data));
 			//#elif MC < 1.20
