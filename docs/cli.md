@@ -111,6 +111,7 @@ arctic mods install <SLUG_OR_ID> --instance <INSTANCE>
 arctic mods list --instance <INSTANCE>
 arctic mods toggle <FILE> on|off --instance <INSTANCE>
 arctic mods remove <FILE> --instance <INSTANCE>
+arctic mods check --instance <INSTANCE>
 ```
 
 ```text
@@ -122,6 +123,12 @@ Installed Sodium 0.6.13 (dependency)
 JSON: `search` prints `{"id","slug","title","author","downloads","description"}`,
 `install` prints one `{"event":"installed",...}` per file, `list` prints
 `{"file","enabled","title","size"}`.
+
+`check` lists what would stop the game while loading (the same mod twice, a mod that
+breaks another, a missing or too old requirement, a mod for another Minecraft version)
+with the fixes the launcher offers, and exits with 1 when it finds any. The launcher runs
+the same check when you press Play. JSON: one `{"event":"clash","problem","fixes"}` each,
+or `{"event":"clean"}`.
 
 ### `arctic modpacks`
 

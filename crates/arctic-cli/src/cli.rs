@@ -992,6 +992,13 @@ pub enum ModsCommand {
         #[arg(short, long)]
         instance: String,
     },
+    /// Mods that would stop the game together (the same mod twice, one that breaks another, a
+    /// missing or too old requirement, a mod for another Minecraft version) and how to fix
+    /// each. Exits with 1 when there are any.
+    Check {
+        #[arg(short, long)]
+        instance: String,
+    },
     /// Match the instance's mod files to Modrinth by hash (mods copied in
     /// from elsewhere), so they show names and can be updated and shared.
     Recognize {

@@ -28,6 +28,7 @@ pub fn run(ctx: &Ctx, command: &ModsCommand) -> Result<i32> {
                 format!("Removed {file}")
             });
         }
+        ModsCommand::Check { instance } => return check(ctx, &modded(ctx, instance)?),
         ModsCommand::Recognize { instance } => {
             let inst = modded(ctx, instance)?;
             let (dir, index) = folders(ctx, &inst);
@@ -62,6 +63,40 @@ pub fn run(ctx: &Ctx, command: &ModsCommand) -> Result<i32> {
         }
     }
     Ok(0)
+}
+
+/// `arctic mods check`: 1 when something would stop the game.
+fn check(ctx: &Ctx, inst: &Instance) -> Result<i32> {
+    let (dir, _) = folders(ctx, inst);
+    let game = inst.version.clone().unwrap_or_default();
+    let Some(kind) = inst.loader.kind() else {
+        return Ok(0);
+    };
+    let found = arctic_core::migrate::clashes(&dir, kind, &game);
+    for clash in &found {
+        let fixes: Vec<String> = clash
+            .fixes
+            .iter()
+            .map(arctic_core::migrate::Fix::label)
+            .collect();
+        ctx.out.emit(
+            json!({"event": "clash", "problem": clash.problem, "fixes": fixes}),
+            || {
+                format!(
+                    "{}
+  fix: {}",
+                    clash.problem,
+                    fixes.join(" / ")
+                )
+            },
+        );
+    }
+    if found.is_empty() {
+        ctx.out.emit(json!({"event": "clean"}), || {
+            format!("No clashes in {}", inst.name)
+        });
+    }
+    Ok(i32::from(!found.is_empty()))
 }
 
 /// The instance, which must have a mod loader.

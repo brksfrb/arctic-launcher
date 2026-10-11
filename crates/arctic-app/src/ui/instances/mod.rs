@@ -2,6 +2,7 @@
 //! settings), the create dialog and the icon picker.
 
 mod browse;
+mod clashes;
 mod create;
 mod detail;
 mod icon_picker;
@@ -92,6 +93,8 @@ pub struct InstancesUi {
     pub mod_files: Option<(String, Vec<ModFile>)>,
     /// What the open mods folder looked like when last checked: (egui time, fingerprint).
     pub mod_watch: (f64, u64),
+    /// Mods that won't start together, and a Play they stopped.
+    pub clashes: clashes::ClashState,
     pub search: SearchState,
     pub installing: HashSet<String>,
     pub install_progress: Option<ProgressSnapshot>,

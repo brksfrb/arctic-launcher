@@ -179,7 +179,7 @@ impl ArcticApp {
                 } else if widgets::button(ui, p, Some(Icon::Plus), "Install", true).clicked() {
                     self.inst.installing.insert(hit.project_id.clone());
                     self.tasks
-                        .mod_install(instance.clone(), hit.project_id.clone());
+                        .mod_install(instance.clone(), hit.project_id.clone(), None);
                 }
             });
         });

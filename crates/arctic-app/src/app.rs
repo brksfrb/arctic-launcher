@@ -583,6 +583,20 @@ impl ArcticApp {
         another_copy: bool,
         quick_play: Option<arctic_core::launch::QuickPlay>,
     ) {
+        // Mods that would stop the game while loading: offer the fixes first.
+        let instance = self.selected_instance().clone();
+        if self.held_by_clashes(&instance, another_copy, &quick_play) {
+            return;
+        }
+        self.launch_unchecked(another_copy, quick_play);
+    }
+
+    /// Start the selected instance as is (its mods were checked, or the player chose to).
+    pub(crate) fn launch_unchecked(
+        &mut self,
+        another_copy: bool,
+        quick_play: Option<arctic_core::launch::QuickPlay>,
+    ) {
         let ManifestState::Ready(manifest) = &self.manifest else {
             return;
         };

@@ -490,7 +490,9 @@ impl Tasks {
         });
     }
 
-    pub fn mod_install(&self, instance: Instance, project_id: String) {
+    /// Install a mod (and what it needs); `replacing` (an older copy's file) is switched off
+    /// once it's in.
+    pub fn mod_install(&self, instance: Instance, project_id: String, replacing: Option<String>) {
         self.run(move |t| {
             let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
             let game = instance.version.clone().unwrap_or_default();
@@ -498,15 +500,23 @@ impl Tasks {
                 Some(loader) => {
                     let dir = t.dirs.instance_dir(&instance.id);
                     let mods_dir = instance.game_dir(&t.dirs).join("mods");
-                    mods::install(
+                    let result = mods::install(
                         &project_id,
                         &game,
                         loader,
                         &mods_dir,
                         &mods::index_path(&dir),
                         &progress,
-                    )
-                    .map_err(|e| e.to_string())
+                    );
+                    if let (Ok(installed), Some(old)) = (&result, &replacing) {
+                        // Unless the "new" one is that very file.
+                        if !installed.iter().any(|m| &m.file_name == old) {
+                            if let Err(e) = mods::set_enabled(&mods_dir, old, false) {
+                                log::warn!("could not turn off {old}: {e}");
+                            }
+                        }
+                    }
+                    result.map_err(|e| e.to_string())
                 }
                 None => Err("Vanilla instances can't load mods".to_owned()),
             };

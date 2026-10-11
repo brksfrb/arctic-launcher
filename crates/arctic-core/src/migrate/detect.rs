@@ -320,7 +320,7 @@ pub fn newest_only(files: Vec<(PathBuf, String)>) -> Vec<(PathBuf, String)> {
 }
 
 /// Version order on the numbers in them (`0.141.3` > `0.140.0`).
-fn newer(a: &str, b: &str) -> bool {
+pub(super) fn newer(a: &str, b: &str) -> bool {
     let nums = |s: &str| -> Vec<u64> {
         s.split(|c: char| !c.is_ascii_digit())
             .filter(|p| !p.is_empty())

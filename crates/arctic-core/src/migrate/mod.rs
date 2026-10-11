@@ -8,6 +8,7 @@
 //! open-source launchers' own code (Prism/MultiMC/PolyMC, Modrinth App,
 //! GDLauncher). Anything that can't be carried over exactly is reported.
 
+mod clashes;
 mod copy;
 mod deps;
 pub(crate) mod detect;
@@ -22,6 +23,7 @@ use std::path::PathBuf;
 use crate::loaders::LoaderKind;
 use crate::sharing::ClientPart;
 
+pub use clashes::{Clash, Fix, check as clashes};
 pub use copy::{Category, Imported, Sizes, import, measure, measure_all};
 pub use hud::Unsure;
 pub use sources::{scan, scan_folder};

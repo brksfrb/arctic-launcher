@@ -49,6 +49,15 @@ pub fn game_fits(jar: &Path, game: &str, loader: LoaderKind) -> Option<bool> {
     maven_matches(&minecraft_range(&text)?, &game)
 }
 
+/// Does a mod's `version` meet a Fabric predicate (`>=0.92`, `*`)?
+/// `None` when either can't be read.
+pub(super) fn version_matches(pred: &str, version: &str) -> Option<bool> {
+    if pred.trim() == "*" {
+        return Some(true);
+    }
+    fabric_matches(pred, &numbers(version)?)
+}
+
 /// The numbers of a release version (`1.21.4` → [1, 21, 4]); `None` for
 /// snapshots and anything else that doesn't order simply.
 fn numbers(v: &str) -> Option<Vec<u64>> {

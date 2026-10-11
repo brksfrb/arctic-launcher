@@ -410,3 +410,124 @@ fn converts_labymod_and_lunar_huds() {
     assert_eq!(chosen.values["hud"]["coords"]["enabled"], false);
     assert_eq!(chosen.values["hud"]["clock"]["enabled"], false);
 }
+
+fn fabric_jar_with(mods: &Path, file: &str, desc: serde_json::Value) {
+    jar(&mods.join(file), &[("fabric.mod.json", &desc.to_string())]);
+}
+
+#[test]
+fn finds_mods_that_stop_the_game_together() {
+    let root = tempfile::tempdir().unwrap();
+    let mods = root.path();
+    // The same mod twice: the older one goes.
+    fabric_jar_with(
+        mods,
+        "sodium-old.jar",
+        json!({"id": "sodium", "name": "Sodium", "version": "0.5.3"}),
+    );
+    fabric_jar_with(
+        mods,
+        "sodium-new.jar",
+        json!({"id": "sodium", "name": "Sodium", "version": "0.5.11"}),
+    );
+    // A mod that breaks another.
+    fabric_jar_with(
+        mods,
+        "optifabric.jar",
+        json!({"id": "optifabric", "name": "OptiFabric", "version": "1.14", "breaks": {"sodium": "*"}}),
+    );
+    // Needs a newer library than the one there, and one that isn't there.
+    fabric_jar_with(
+        mods,
+        "lib.jar",
+        json!({"id": "cloth-config", "name": "Cloth Config", "version": "11.0.0"}),
+    );
+    fabric_jar_with(
+        mods,
+        "menu.jar",
+        json!({"id": "modmenu", "name": "Mod Menu", "version": "9.0.0",
+        "depends": {"cloth-config": ">=13.0.0", "fabric-api": "*", "minecraft": "1.20.1"}}),
+    );
+    // Switched off: not counted.
+    write(&mods.join("other.jar.disabled"), "not a jar");
+
+    let found = clashes(mods, LoaderKind::Fabric, "1.21.1");
+    let problems: Vec<&str> = found.iter().map(|c| c.problem.as_str()).collect();
+
+    assert!(
+        problems.contains(&"Sodium is in the mods folder 2 times"),
+        "{problems:?}"
+    );
+    let dup = found
+        .iter()
+        .find(|c| c.problem.starts_with("Sodium is"))
+        .unwrap();
+    assert_eq!(
+        dup.fixes,
+        vec![Fix::TurnOff {
+            file: "sodium-old.jar".into(),
+            name: "Sodium 0.5.3".into()
+        }]
+    );
+    // Once per pair, though both Sodium copies are hit.
+    assert_eq!(
+        problems
+            .iter()
+            .filter(|p| p.contains("can't run together"))
+            .count(),
+        1
+    );
+    assert!(
+        problems.contains(&"Mod Menu needs Fabric API, which isn't installed"),
+        "{problems:?}"
+    );
+    assert!(
+        problems.contains(&"Mod Menu needs a newer Cloth Config (it has 11.0.0)"),
+        "{problems:?}"
+    );
+    let update = found
+        .iter()
+        .find(|c| c.problem.contains("newer Cloth"))
+        .unwrap();
+    assert_eq!(update.fixes[0].label(), "Update Cloth Config");
+    assert!(
+        problems.contains(&"Mod Menu 9.0.0 is made for another Minecraft version, not 1.21.1"),
+        "{problems:?}"
+    );
+}
+
+#[test]
+fn a_clean_folder_and_forge_incompatibilities() {
+    let root = tempfile::tempdir().unwrap();
+    let mods = root.path();
+    fabric_jar_with(
+        mods,
+        "api.jar",
+        json!({"id": "fabric-api", "name": "Fabric API", "version": "0.100.0"}),
+    );
+    fabric_jar_with(
+        mods,
+        "menu.jar",
+        json!({"id": "modmenu", "version": "9.0.0", "depends": {"fabric-api": ">=0.90.0"}}),
+    );
+    assert!(clashes(mods, LoaderKind::Fabric, "1.21.1").is_empty());
+
+    let forge = root.path().join("forge");
+    jar(
+        &forge.join("a.jar"),
+        &[(
+            "META-INF/mods.toml",
+            "[[mods]]\nmodId=\"a\"\ndisplayName=\"Alpha\"\nversion=\"1.0\"\n[[dependencies.a]]\nmodId=\"b\"\ntype=\"incompatible\"\n",
+        )],
+    );
+    jar(
+        &forge.join("b.jar"),
+        &[(
+            "META-INF/mods.toml",
+            "[[mods]]\nmodId=\"b\"\ndisplayName=\"Beta\"\nversion=\"${file.jarVersion}\"\n",
+        )],
+    );
+    let found = clashes(&forge, LoaderKind::Forge, "1.20.1");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].problem, "Alpha and Beta can't run together");
+}

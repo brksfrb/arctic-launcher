@@ -17,7 +17,7 @@ const ICON: f32 = 36.0;
 const MODS_RESCAN_EVERY: f64 = 2.0;
 
 /// A cheap fingerprint of a folder: its files' names, sizes and times.
-fn folder_stamp(dir: &std::path::Path) -> u64 {
+pub(super) fn folder_stamp(dir: &std::path::Path) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut entries: Vec<_> = std::fs::read_dir(dir)
         .into_iter()
@@ -67,6 +67,7 @@ impl ArcticApp {
             });
         });
         ui.add_space(8.0);
+        self.clash_card(ui, instance);
         if files.is_empty() {
             theme::card(p).show(ui, |ui| {
                 ui.set_width(ui.available_width());

@@ -111,6 +111,7 @@ impl ArcticApp {
         self.share_dialogs(&ctx);
         self.migrate_dialog(&ctx);
         self.whats_new_dialog(&ctx);
+        self.mod_clash_dialog(&ctx);
         self.required_update_overlay(&ctx);
         self.friends_tick(now, self.tab == Tab::Together);
         self.chat_tick(now, self.tab == Tab::Together);
