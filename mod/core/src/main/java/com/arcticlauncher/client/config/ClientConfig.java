@@ -104,6 +104,14 @@ public final class ClientConfig {
 	/** After a disconnect, join the same server again by itself (after {@link #reconnectSeconds}). */
 	public boolean autoReconnect;
 	public int reconnectSeconds = 5;
+	/** Tier tags: players' PvP tiers by their names (Tiers.SOURCES[tierSource]; tierMode "" = their best). */
+	public boolean tierTags = true;
+	public int tierSource;
+	public String tierMode = "";
+	public boolean tierNametags = true;
+	public boolean tierTab = true;
+	/** Playing with a game controller. */
+	public com.arcticlauncher.client.controller.Controller.Settings controller = new com.arcticlauncher.client.controller.Controller.Settings();
 	/** SOCKS5 proxy for server connections and Arctic's web requests. */
 	public ProxyConfig proxy = new ProxyConfig();
 	/** When the launcher's proxy choice was last applied (its timestamp). */

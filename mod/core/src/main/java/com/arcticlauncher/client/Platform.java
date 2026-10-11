@@ -9,7 +9,7 @@ import java.util.UUID;
  * Everything the core needs from Minecraft. Each version adapter implements
  * this; the core never touches game classes.
  */
-public interface Platform {
+public interface Platform extends com.arcticlauncher.client.controller.GamepadHost {
 	/** The running Minecraft version, like "26.3". */
 	String minecraftVersion();
 

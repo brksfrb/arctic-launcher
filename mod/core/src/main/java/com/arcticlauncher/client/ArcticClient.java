@@ -147,6 +147,13 @@ public final class ArcticClient {
 		return hud;
 	}
 
+	private static final com.arcticlauncher.client.tiers.Tiers TIERS = new com.arcticlauncher.client.tiers.Tiers();
+
+	/** Players' PvP tiers, for their names. */
+	public static com.arcticlauncher.client.tiers.Tiers tiers() {
+		return TIERS;
+	}
+
 	public static Looks looks() {
 		return looks;
 	}
@@ -287,6 +294,24 @@ public final class ArcticClient {
 
 	public static com.arcticlauncher.client.together.Duel duel() {
 		return duel;
+	}
+
+	private static final com.arcticlauncher.client.controller.Controller CONTROLLER = new com.arcticlauncher.client.controller.Controller();
+	private static long lastFrame;
+
+	public static com.arcticlauncher.client.controller.Controller controller() {
+		return CONTROLLER;
+	}
+
+	/** Each frame, before it's drawn (the game thread). */
+	public static void frame(boolean screenOpen) {
+		long now = System.nanoTime();
+		double seconds = lastFrame == 0 ? 0 : (now - lastFrame) / 1e9;
+		lastFrame = now;
+		if (platform == null || config == null || com.arcticlauncher.client.replay.Replays.watching()) {
+			return;
+		}
+		CONTROLLER.frame(platform, config.controller, seconds, screenOpen, platform.inWorld());
 	}
 
 	public static void tick(boolean screenOpen) {

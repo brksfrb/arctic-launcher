@@ -10,6 +10,7 @@ import com.arcticlauncher.client.config.HudSlot;
 import com.arcticlauncher.client.feature.QuickMessages;
 import com.arcticlauncher.client.hud.HudWidget;
 import com.arcticlauncher.client.menu.Mod.Category;
+import com.arcticlauncher.client.tiers.Tiers;
 
 /** Every card on the Mods screen, for this version of the game. */
 final class ModCatalog {
@@ -124,6 +125,10 @@ final class ModCatalog {
 		out.add(new Mod("durability", "Low Durability", "A pop-up when armor or your tool is about to break", "durability",
 				Category.GAMEPLAY, "armor tool break warning")
 				.toggle(() -> c.durabilityWarning, on -> c.durabilityWarning = on));
+		out.add(new Mod("tiers", "Tier Tags", "Players' PvP tiers by their names: HT3 Sword | Steve", "tiers", Category.SOCIAL,
+				"tier list mctiers pvptiers subtiers rank test")
+				.toggle(() -> c.tierTags, on -> c.tierTags = on)
+				.settings((host, f) -> tierSettings(f, c)));
 		out.add(new Mod("leave", "Confirm Leaving", "Click Disconnect or Save and Quit twice to leave", "leave", Category.GAMEPLAY,
 				"quit disconnect")
 				.toggle(() -> c.confirmLeave, on -> c.confirmLeave = on));
@@ -271,6 +276,28 @@ final class ModCatalog {
 	}
 
 	/** One look for every HUD widget, with the FPS widget as the preview. */
+	private static void tierSettings(Form f, final ClientConfig c) {
+		f.section("Tier list");
+		String[] sources = new String[Tiers.SOURCES.length];
+		for (int i = 0; i < sources.length; i++) {
+			sources[i] = Tiers.SOURCES[i].name;
+		}
+		f.choice("From", sources, () -> Math.max(0, Math.min(sources.length - 1, c.tierSource)), i -> {
+			c.tierSource = i;
+			c.tierMode = "";
+		});
+		final Tiers.Source source = Tiers.SOURCES[Math.max(0, Math.min(sources.length - 1, c.tierSource))];
+		String[] modes = new String[source.modes.length + 1];
+		modes[0] = "Their best";
+		System.arraycopy(source.titles, 0, modes, 1, source.titles.length);
+		f.cycle("Game mode", modes, () -> 1 + java.util.Arrays.asList(source.modes).indexOf(c.tierMode),
+				i -> c.tierMode = i == 0 ? "" : source.modes[i - 1]);
+		f.section("Show them");
+		f.toggle("Name tags", "Above players' heads", () -> c.tierNametags, on -> c.tierNametags = on);
+		f.toggle("Tab list", "In the player list", () -> c.tierTab, on -> c.tierTab = on);
+		f.note("Players are looked up on " + source.name + " by their account; untested players show nothing.");
+	}
+
 	private static Mod hudStyle(final ClientConfig c) {
 		final String[][] styles = com.arcticlauncher.client.hud.HudStyles.ALL;
 		String[] names = new String[styles.length];

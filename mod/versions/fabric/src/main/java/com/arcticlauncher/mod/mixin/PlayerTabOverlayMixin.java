@@ -10,11 +10,18 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/** A snowflake before the names of players who are on Arctic too. */
+/** A snowflake before the names of players who are on Arctic too, and their PvP tier. */
 @Mixin(PlayerTabOverlay.class)
 abstract class PlayerTabOverlayMixin {
 	@Inject(method = "getNameForDisplay", at = @At("RETURN"), cancellable = true)
 	private void arctic$badge(PlayerInfo info, CallbackInfoReturnable<Component> cir) {
+		if (ArcticClient.config().tierTab) {
+			com.mojang.authlib.GameProfile profile = info.getProfile();
+			com.arcticlauncher.client.tiers.Tiers.Tag tag = ArcticClient.tiers().tag(Compat.profileId(profile), Compat.profileName(profile));
+			if (tag != null) {
+				cir.setReturnValue(Compat.empty().append(Compat.tierTag(tag)).append(cir.getReturnValue()));
+			}
+		}
 		// Before 1.16 text had no fonts, so there's no badge glyph to show.
 		if (Compat.BADGES && ArcticClient.looks() != null && ArcticClient.looks().isArctic(Compat.profileId(info.getProfile()))) {
 			Component badge = Compat.arcticBadge();

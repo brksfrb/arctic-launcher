@@ -17,6 +17,7 @@
 		"ClientPlayerInteractionManagerMixin",
 		"WorldMixin",
 		"PlayerListHudMixin",
+		"PlayerTierMixin",
 		"AbstractClientPlayerEntityMixin",
 		"TextRendererMixin",
 		"SmoothTextRendererMixin",

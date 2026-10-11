@@ -387,12 +387,32 @@ public final class Compat {
 		//#endif
 	}
 
+	/** A player's name (authlib 7 made GameProfile a record). */
+	public static String profileName(com.mojang.authlib.GameProfile profile) {
+		//#if MC >= 1.21.9
+		return profile.name();
+		//#else
+		return profile.getName();
+		//#endif
+	}
+
 	/** A namespaced id (1.21 replaced the public constructor with this factory). */
 	public static net.minecraft.resources.Identifier id(String namespace, String path) {
 		//#if MC >= 1.21
 		return net.minecraft.resources.Identifier.fromNamespaceAndPath(namespace, path);
 		//#else
 		return new net.minecraft.resources.Identifier(namespace, path);
+		//#endif
+	}
+
+	/** A PvP tier to put before a name: "HT3" in the tier's color, the mode, a bar. */
+	public static net.minecraft.network.chat.MutableComponent tierTag(com.arcticlauncher.client.tiers.Tiers.Tag tag) {
+		//#if MC >= 1.16
+		String rest = (tag.mode == null ? "" : " §7" + tag.mode) + " §8| §r";
+		net.minecraft.network.chat.TextColor color = net.minecraft.network.chat.TextColor.fromRgb(tag.rgb);
+		return empty().append(literal(tag.tier).withStyle(style -> style.withColor(color))).append(literal(rest));
+		//#else
+		return literal(tag.formatted());
 		//#endif
 	}
 

@@ -74,6 +74,7 @@ FROM_LUCIDE = {
     "reconnect": "refresh-cw",
     "replay": "history",
     "scoreboard": "clipboard-list",
+    "tiers": "medal",
     "search": "search",
     "server": "server",
     "session": "hourglass",

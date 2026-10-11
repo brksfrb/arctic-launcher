@@ -178,6 +178,26 @@ final class Form {
 		}), right - STEP_BTN, by, STEP_BTN, STEP_BTN);
 	}
 
+	/** "Label     <  Sword  >": one of many options, stepped through (too many for {@link #choice}). */
+	void cycle(String label, final String[] options, final java.util.function.IntSupplier get,
+			final java.util.function.IntConsumer set) {
+		int top = row(ROW);
+		rowLabel(top, label);
+		int left = x + LABEL_W;
+		int right = x + w;
+		int by = top + (ROW - STEP_BTN) / 2;
+		final Label value = new Label(options[Math.floorMod(get.getAsInt(), options.length)], Label.Kind.TEXT);
+		put(new com.arcticlauncher.client.ui.Button("<", () -> step(options, get, set, -1)), left, by, STEP_BTN, STEP_BTN);
+		put(value, left + STEP_BTN + 8, top, right - left - STEP_BTN * 2 - 16, ROW);
+		put(new com.arcticlauncher.client.ui.Button(">", () -> step(options, get, set, 1)), right - STEP_BTN, by, STEP_BTN, STEP_BTN);
+	}
+
+	private void step(String[] options, java.util.function.IntSupplier get, java.util.function.IntConsumer set, int by) {
+		set.accept(Math.floorMod(get.getAsInt() + by, options.length));
+		ArcticClient.saveConfig();
+		host.rebuild();
+	}
+
 	/** Call last: sets how far the box scrolls. */
 	void done() {
 		scroll.extendTo(y);

@@ -19,6 +19,17 @@ public final class Http {
 
 	private Http() {}
 
+	/** The server answered, but not with a 2xx. */
+	public static final class Failed extends IOException {
+		private static final long serialVersionUID = 1L;
+		public final int status;
+
+		Failed(int status, String message) {
+			super(message);
+			this.status = status;
+		}
+	}
+
 	/** Send requests through this proxy (null = directly). */
 	public static void useProxy(com.arcticlauncher.client.config.ProxyConfig p) {
 		proxy = p == null ? java.net.Proxy.NO_PROXY
@@ -137,7 +148,7 @@ public final class Http {
 			}
 			int status = c.getResponseCode();
 			if (status / 100 != 2) {
-				throw new IOException(errorOf(c, status));
+				throw new Failed(status, errorOf(c, status));
 			}
 			return read(c.getInputStream());
 		} finally {

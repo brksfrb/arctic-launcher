@@ -120,11 +120,21 @@ final class PromoTest {
 					place(com.arcticlauncher.client.hud.VanillaParts.BOSSBAR, HudSlot.CENTER, HudSlot.END, 0, 64);
 				});
 				later(t + 5, () -> WorldTest.shot("promo-vanilla-moved"));
+				// The tab list (a single player only gets one with a list objective): tier tags by names.
 				later(t + 6, () -> {
+					command("scoreboard objectives setdisplay list arctic");
+					Minecraft.getInstance().options.keyPlayerList.setDown(true);
+				});
+				later(t + 7, () -> {
+					ArcticMod.LOG.info("promotest: name tag '{}'", Minecraft.getInstance().player.getDisplayName().getString());
+					WorldTest.shot("promo-tab");
+				});
+				later(t + 8, () -> {
+					Minecraft.getInstance().options.keyPlayerList.setDown(false);
 					command("bossbar remove arctic:demo");
 					command("scoreboard objectives remove arctic");
 				});
-				t += 7;
+				t += 9;
 				// The minimap round and turning with you, then back.
 				later(t, () -> {
 					ArcticClient.config().minimapRound = true;

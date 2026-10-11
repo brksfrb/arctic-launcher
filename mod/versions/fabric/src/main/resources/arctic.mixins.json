@@ -17,6 +17,7 @@
 <% } %>		"ServerStatusPingerMixin",
 		"ServerPingPoolMixin",
 		"PlayerTabOverlayMixin",
+		"PlayerTierMixin",
 		"GuiMixin",
 		"HudMixin",
 		"KeyboardHandlerMixin",

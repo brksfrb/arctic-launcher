@@ -47,6 +47,12 @@ final class LegacySelfTest {
 		}
 		ArcticLegacy.LOG.info("selftest: scheduled ({})", mode);
 		int step = 3;
+		// Loads the player class (its mixins apply now) and looks up a tested player's tiers.
+		final java.util.UUID tested = java.util.UUID.fromString("06ec3577-3299-45fa-bbdf-613b1f86c8ab");
+		later(step, () -> {
+			ArcticLegacy.LOG.info("selftest: player class {}", net.minecraft.entity.player.PlayerEntity.class.getName());
+			ArcticClient.tiers().tag(tested, "ItzRealMe");
+		});
 		later(step++, () -> shot("title"));
 		for (final String tab : TABS) {
 			later(step++, () -> {
@@ -65,6 +71,8 @@ final class LegacySelfTest {
 		later(step++, () -> ArcticClient.platform().openPage(new com.arcticlauncher.client.servers.DisconnectedPage("Connection Lost", "Timed out")));
 		later(step++, () -> shot("disconnected"));
 		later(step, () -> {
+			com.arcticlauncher.client.tiers.Tiers.Tag tag = ArcticClient.tiers().tag(tested, "ItzRealMe");
+			ArcticLegacy.LOG.info("selftest: tier tag {}", tag == null ? "none" : tag.formatted());
 			ArcticLegacy.LOG.info("selftest: done");
 			MinecraftClient.getInstance().scheduleStop();
 		});

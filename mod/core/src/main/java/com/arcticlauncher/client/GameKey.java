@@ -1,6 +1,6 @@
 package com.arcticlauncher.client;
 
-/** Game controls the HUD shows (whatever the player bound them to). */
+/** Game controls the HUD shows and a controller presses (whatever the player bound them to). */
 public enum GameKey {
 	FORWARD,
 	BACK,
@@ -10,5 +10,11 @@ public enum GameKey {
 	SNEAK,
 	SPRINT,
 	ATTACK,
-	USE
+	USE,
+	INVENTORY,
+	DROP,
+	SWAP_HANDS,
+	PERSPECTIVE,
+	CHAT,
+	PLAYER_LIST
 }
