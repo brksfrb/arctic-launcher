@@ -42,7 +42,12 @@
   CPU while you play.
 - **Mods in a click.** Create Fabric, Quilt, NeoForge or Forge instances, then search
   Modrinth and install mods with their dependencies, or install a whole modpack in one
-  click. Each instance keeps its own version, mods, worlds and Java settings.
+  click. Each instance keeps its own version, mods, worlds and Java settings. Move an
+  instance to another Minecraft version and its mods come along (updated where Modrinth
+  has a version, switched off where it doesn't).
+- **Mods that clash, caught before you play.** Press Play and Arctic first looks for what
+  would stop the game: the same mod twice, a mod that breaks another, a missing or too old
+  requirement, a mod made for another version. Fix each in one click, or play anyway.
 - **Bring your stuff over.** Arctic finds what you have in the Minecraft Launcher, Prism,
   MultiMC, the Modrinth App, CurseForge, ATLauncher, GDLauncher, TLauncher, Lunar, Badlion,
   Feather and LabyMod and copies your instances, worlds, servers and settings (the
@@ -61,8 +66,11 @@
   one in a click. Share your own from your library.
 - **Arctic Client.** Vanilla gets a fresh look: restyled menus (pick Arctic, Aurora,
   Classic or Vanilla), over thirty HUD widgets (FPS, CPS, ping, TPS, keystrokes, coordinates, speed,
-  armor, effects, target health, reach, combo, a compass, a minimap, a stopwatch, item
-  counts and more) that line up on their own and snap into place when you move them,
+  armor, effects, target health, reach, combo, a compass, a stopwatch, item counts and more)
+  in four HUD styles (Arctic, Clean, Minimal, Rainbow) that line up on their own and snap
+  into place when you move them; the game's scoreboard and boss bar move, resize and hide
+  the same way. A smooth minimap, square or round, north-up or turning with you, with
+  players and waypoints on it,
   Zoom, Freelook, Fullbright, Toggle Sprint and Sneak, a crosshair editor (your own picture
   too, colored by what you aim at), a smooth font, chat timestamps and mentions, quick
   chat keys with {x} {y} {z}, waypoints, your own time of day, block outline and hit
@@ -72,6 +80,10 @@
   it off per instance, or choose pure vanilla during setup.
 - **Replays.** The Arctic Client keeps the last minutes of your game; save them when
   something happens, then watch from any angle in 3D, seek around, or export a video.
+  Recordings are compressed as they're written, so long sessions don't fill your drive.
+- **A better server list.** Arctic's own multiplayer screen on every version: drag servers
+  to reorder them, see icons, MOTDs, players and ping, find LAN worlds, and discover public
+  servers. Lost connection? Reconnect in one click, or let Auto Reconnect do it.
 - **Friends, chat and voice.** Add friends with a code, see who's online and where, invite
   them to your server, chat and send screenshots from the launcher or in game, and talk
   with proximity voice chat (it also works with Simple Voice Chat servers).
@@ -101,7 +113,7 @@
 - **Command line included.** Launch versions and instances, install mods and manage
   profiles from a terminal, with scriptable JSON output.
 - **Stays up to date.** Updates install themselves in seconds, verified before they're
-  applied.
+  applied, and a short "What's new" shows after each one (you can turn it off).
 - **Open source** under the GPL-3.0.
 
 ## Install
