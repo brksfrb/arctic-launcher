@@ -8,6 +8,7 @@
 
 mod cards;
 mod gallery;
+mod gpu;
 mod model;
 mod panels;
 
@@ -178,6 +179,10 @@ impl ArcticApp {
             section,
             ..SkinsUi::default()
         };
+        // A set screenshot angle stays put (no turning by itself).
+        if crate::devshot::enabled() && std::env::var_os("ARCTIC_DEVSHOT_YAW").is_some() {
+            self.skins.dragged_at = -1.0;
+        }
         match Library::load(&dir) {
             Ok(mut lib) => {
                 if let Err(e) = lib.dedupe(&dir) {

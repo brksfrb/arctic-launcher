@@ -1,13 +1,13 @@
-//! A textured 3D player model drawn with egui meshes: each body part is a
-//! box whose faces map to the standard 64×64 skin layout. Faces are
-//! back-face culled and painted far-to-near. Worn 3D cosmetics are drawn
-//! with it, placed exactly as the game places them.
+//! A textured 3D player model: each body part is a box whose faces map to
+//! the standard 64×64 skin layout. Faces are back-face culled and drawn
+//! with a depth buffer (see `gpu`). Worn 3D cosmetics are drawn with it,
+//! placed exactly as the game places them.
 
 use std::f32::consts::PI;
 
 use arctic_core::cosmetic_models::{Geometry, Mesh as MeshModel};
 use arctic_core::skins::Variant;
-use eframe::egui::{self, Color32, Mesh, Pos2, Rect, TextureId, pos2};
+use eframe::egui::{self, Color32, Pos2, Rect, TextureId, pos2};
 
 /// Model height in skin pixels (feet at 0, top of head at 32).
 const HEIGHT: f32 = 32.0;
@@ -23,7 +23,7 @@ pub struct Pose {
     pub swing: f32,
 }
 
-type V3 = [f32; 3];
+pub(super) type V3 = [f32; 3];
 type Uv = (f32, f32);
 /// Corners (tl, tr, br, bl), outward normal and texture corners.
 type BoxFace = ([V3; 4], V3, [Uv; 4]);
@@ -45,73 +45,14 @@ struct Part {
     flip: bool,
 }
 
-struct Face {
-    corners: [V3; 4],
-    uv: [Pos2; 4],
-    depth: f32,
-    texture: TextureId,
+pub(super) struct Face {
+    pub(super) corners: [V3; 4],
+    pub(super) uv: [Pos2; 4],
+    pub(super) depth: f32,
+    pub(super) texture: TextureId,
     /// Multiplies the texture (white for the player and cuboid cosmetics;
     /// the shading and vertex colors of a mesh).
-    tint: Color32,
-    /// Texels across and down (how finely it's cut up for depth sorting).
-    cells: [u16; 2],
-}
-
-/// Faces are cut into pieces at most this many texels wide before sorting.
-const MAX_CELLS: u16 = 16;
-
-impl Face {
-    /// Texels across and down, from texture-pixel corners (tl, tr, br, bl).
-    fn cells_of(uv_px: &[(f32, f32); 4]) -> [u16; 2] {
-        let across = (uv_px[1].0 - uv_px[0].0)
-            .abs()
-            .max((uv_px[1].1 - uv_px[0].1).abs());
-        let down = (uv_px[3].1 - uv_px[0].1)
-            .abs()
-            .max((uv_px[3].0 - uv_px[0].0).abs());
-        let cells = |n: f32| (n.round() as u16).clamp(1, MAX_CELLS);
-        [cells(across), cells(down)]
-    }
-
-    /// The face cut into its texels. Sorting whole faces by their middle
-    /// lets a big face (the head's side) cover a small cube in front of it
-    /// (a helmet's horn); texel-sized pieces sort (nearly) right.
-    fn cut(&self) -> impl Iterator<Item = Face> + '_ {
-        let [nu, nv] = self.cells;
-        let [tl, tr, br, bl] = self.corners;
-        let [utl, utr, ubr, ubl] = self.uv;
-        let at = move |s: f32, t: f32| -> (V3, Pos2) {
-            let top = lerp3(tl, tr, s);
-            let bottom = lerp3(bl, br, s);
-            let uv_top = utl + (utr - utl) * s;
-            let uv_bottom = ubl + (ubr - ubl) * s;
-            (lerp3(top, bottom, t), uv_top + (uv_bottom - uv_top) * t)
-        };
-        (0..nv).flat_map(move |j| {
-            (0..nu).map(move |i| {
-                let (s0, s1) = (i as f32 / nu as f32, (i + 1) as f32 / nu as f32);
-                let (t0, t1) = (j as f32 / nv as f32, (j + 1) as f32 / nv as f32);
-                let points = [at(s0, t0), at(s1, t0), at(s1, t1), at(s0, t1)];
-                let corners = points.map(|p| p.0);
-                Face {
-                    corners,
-                    uv: points.map(|p| p.1),
-                    depth: corners.iter().map(|c| c[2]).sum::<f32>() / 4.0,
-                    texture: self.texture,
-                    tint: self.tint,
-                    cells: [1, 1],
-                }
-            })
-        })
-    }
-}
-
-fn lerp3(a: V3, b: V3, t: f32) -> V3 {
-    [
-        a[0] + (b[0] - a[0]) * t,
-        a[1] + (b[1] - a[1]) * t,
-        a[2] + (b[2] - a[2]) * t,
-    ]
+    pub(super) tint: Color32,
 }
 
 /// A 3D cosmetic to draw: its geometry and texture.
@@ -191,28 +132,8 @@ pub fn paint(
     }
     // One depth order for body, cape and cosmetics, so each hides the others
     // correctly; consecutive faces with the same texture share a mesh.
-    let mut faces: Vec<Face> = faces.iter().flat_map(Face::cut).collect();
     faces.sort_by(|a, b| a.depth.total_cmp(&b.depth));
-    for run in faces.chunk_by(|a, b| a.texture == b.texture) {
-        painter.add(mesh(run, &project));
-    }
-}
-
-fn mesh(faces: &[Face], project: &impl Fn(V3) -> Pos2) -> Mesh {
-    let mut mesh = Mesh::with_texture(faces.first().map_or(TextureId::default(), |f| f.texture));
-    for face in faces {
-        let base = mesh.vertices.len() as u32;
-        for (corner, uv) in face.corners.iter().zip(face.uv) {
-            mesh.vertices.push(egui::epaint::Vertex {
-                pos: project(*corner),
-                uv,
-                color: face.tint,
-            });
-        }
-        mesh.add_triangle(base, base + 1, base + 2);
-        mesh.add_triangle(base, base + 2, base + 3);
-    }
-    mesh
+    super::gpu::draw(painter, &faces, &project);
 }
 
 /// Visible faces of all parts in view space, sorted far to near.
@@ -234,7 +155,6 @@ fn build_faces(
                 continue;
             }
             let depth = corners.iter().map(|c| c[2]).sum::<f32>() / 4.0;
-            let cells = Face::cells_of(&uv);
             let uv = uv.map(|(u, v)| pos2(u / tex_w, v / tex_h));
             faces.push(Face {
                 corners,
@@ -242,7 +162,6 @@ fn build_faces(
                 depth,
                 texture,
                 tint: Color32::WHITE,
-                cells,
             });
         }
     }
@@ -483,12 +402,12 @@ fn paint_turning(
             pose,
         )
     };
-    let mut faces: Vec<Face> = faces_of(&view).iter().flat_map(Face::cut).collect();
+    let mut faces = faces_of(&view);
     faces.sort_by(|a, b| a.depth.total_cmp(&b.depth));
     let scale = rect.width().min(rect.height()) * 0.9 / (2.0 * radius);
     let center = rect.center();
     let project = |p: V3| pos2(center.x + p[0] * scale, center.y - p[1] * scale);
-    painter.add(mesh(&faces, &project));
+    super::gpu::draw(painter, &faces, &project);
 }
 
 /// The triangles of a sculpted cosmetic, placed like the game places them:
@@ -596,7 +515,6 @@ fn mesh_faces(worn: &WornMesh, view: &impl Fn(V3) -> V3) -> Vec<Face> {
                 depth: (a[2] + b[2] + c[2]) / 3.0,
                 texture,
                 tint,
-                cells: [1, 1],
             });
         }
     }
@@ -798,7 +716,6 @@ fn cube_faces(
             depth,
             texture,
             tint: Color32::WHITE,
-            cells: Face::cells_of(&uv),
         });
     }
     out

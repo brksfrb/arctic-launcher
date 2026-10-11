@@ -187,6 +187,12 @@ impl ArcticApp {
 
     /// Worn cosmetic ids, including a change still being saved.
     pub(super) fn worn_ids(&self) -> Vec<String> {
+        // Debug builds: ARCTIC_DEVSHOT_WEAR=id,id wears those cosmetics (screenshots).
+        if crate::devshot::enabled()
+            && let Ok(ids) = std::env::var("ARCTIC_DEVSHOT_WEAR")
+        {
+            return ids.split(',').map(str::to_owned).collect();
+        }
         match (&self.skins.trying.cosmetics, self.arctic_state()) {
             (Some(ids), _) => ids.clone(),
             (None, Some(state)) => state.look.cosmetics.clone(),

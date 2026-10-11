@@ -118,6 +118,8 @@ fn main() -> eframe::Result {
             .with_icon(Arc::new(icon))
             .with_inner_size(DEFAULT_WINDOW)
             .with_min_inner_size(MIN_WINDOW),
+        // The 3D skin and cosmetics previews draw with depth (ui/skins/gpu.rs).
+        depth_buffer: 24,
         ..Default::default()
     };
     eframe::run_native(
