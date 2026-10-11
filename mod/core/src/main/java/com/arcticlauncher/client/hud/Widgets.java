@@ -106,6 +106,12 @@ final class Widgets {
 		}
 		all.add(new Keystrokes(cps));
 		all.addAll(GameWidgets.all());
+		if (platform().movesVanillaParts()) {
+			all.add(new VanillaPart(VanillaParts.SCOREBOARD, "Scoreboard", "The server's scoreboard: move it, resize it or turn it off",
+					90, 40));
+			all.add(new VanillaPart(VanillaParts.BOSSBAR, "Boss bar", "Boss health bars: move them, resize them or turn them off",
+					VanillaParts.BOSSBAR_WIDTH, 14));
+		}
 		return all;
 	}
 

@@ -33,7 +33,7 @@ final class PromoTest {
 	});
 	/** Widgets on, in the order they stack. */
 	private static final String[] SHOWN = {"fps", "cps", "coords", "direction", "biome", "compass", "keystrokes", "armor",
-			"effects", "held", "minimap", "target"};
+			"effects", "held", "minimap", "target", "scoreboard", "bossbar"};
 	/** The Arctic style first: it's the one the site leads with. */
 	private static final String[] STYLES = {"arctic", "clean", "minimal", "rainbow"};
 	/** Worn for the cosmetics shots (one per slot). */
@@ -103,6 +103,28 @@ final class PromoTest {
 			}
 			later(t, () -> style("arctic"));
 			if (k == 0) {
+				// A scoreboard and a boss bar where the game puts them, then moved in the HUD editor's way.
+				later(t, () -> {
+					command("scoreboard objectives add arctic dummy \"Arctic\"");
+					command("scoreboard objectives setdisplay sidebar arctic");
+					command("scoreboard players set Kills arctic 12");
+					command("scoreboard players set Coins arctic 340");
+					command("scoreboard players set Wins arctic 3");
+					command("bossbar add arctic:demo \"Ender Dragon\"");
+					command("bossbar set arctic:demo players @a");
+					command("bossbar set arctic:demo value 70");
+				});
+				later(t + 2, () -> WorldTest.shot("promo-vanilla-home"));
+				later(t + 3, () -> {
+					place(com.arcticlauncher.client.hud.VanillaParts.SCOREBOARD, HudSlot.START, HudSlot.CENTER, 4, 30);
+					place(com.arcticlauncher.client.hud.VanillaParts.BOSSBAR, HudSlot.CENTER, HudSlot.END, 0, 64);
+				});
+				later(t + 5, () -> WorldTest.shot("promo-vanilla-moved"));
+				later(t + 6, () -> {
+					command("bossbar remove arctic:demo");
+					command("scoreboard objectives remove arctic");
+				});
+				t += 7;
 				// The minimap round and turning with you, then back.
 				later(t, () -> {
 					ArcticClient.config().minimapRound = true;
@@ -425,6 +447,22 @@ final class PromoTest {
 			ArcticMod.LOG.error("promotest: editor layout", e);
 		}
 		return null;
+	}
+
+	/** Pin a HUD part as the HUD editor would (anchored to an edge or the middle). */
+	private static void place(String id, int ax, int ay, int dx, int dy) {
+		for (HudWidget w : ArcticClient.hud().widgets()) {
+			if (w.id.equals(id)) {
+				HudSlot slot = ArcticClient.hud().slot(w);
+				slot.enabled = true;
+				slot.placed = true;
+				slot.ax = ax;
+				slot.ay = ay;
+				slot.dx = dx;
+				slot.dy = dy;
+			}
+		}
+		ArcticClient.config().hudChanged();
 	}
 
 	/** Only {@link #SHOWN}, laid out automatically, in the Arctic style; the custom crosshair. */

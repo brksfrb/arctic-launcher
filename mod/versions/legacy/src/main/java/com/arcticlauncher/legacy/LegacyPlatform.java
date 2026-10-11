@@ -281,6 +281,11 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean movesVanillaParts() {
+		return true;
+	}
+
+	@Override
 	public boolean mapColumns(int x0, int z0, int w, int h, int[] out) {
 		return LegacyMinimap.columns(x0, z0, w, h, out);
 	}

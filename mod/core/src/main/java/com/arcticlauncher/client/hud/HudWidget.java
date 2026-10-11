@@ -110,6 +110,14 @@ public abstract class HudWidget {
 		return (Math.round(c[0] * 255) << 16) | (Math.round(c[1] * 255) << 8) | Math.round(c[2] * 255);
 	}
 
+	/**
+	 * Where it sits until the player moves it ({x, y, w, h}), when that isn't a place in a
+	 * column: the game's own parts stay where the game puts them. Null: it stacks in its column.
+	 */
+	public int[] home(Gfx g) {
+		return null;
+	}
+
 	/** Needs the version's game hooks (hidden where they don't exist). */
 	public boolean needsGame() {
 		return false;

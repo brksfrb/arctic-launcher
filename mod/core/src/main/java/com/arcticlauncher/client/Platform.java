@@ -229,6 +229,11 @@ public interface Platform {
 		return "overworld";
 	}
 
+	/** This version lets the HUD editor move the game's scoreboard and boss bar ({@code Hud.vanillaPlacement}). */
+	default boolean movesVanillaParts() {
+		return false;
+	}
+
 	/** This version has the minimap. */
 	default boolean minimapWorks() {
 		return false;

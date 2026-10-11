@@ -715,6 +715,11 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean movesVanillaParts() {
+		return true;
+	}
+
+	@Override
 	public boolean mapColumns(int x0, int z0, int w, int h, int[] out) {
 		return minimapWorks() && MinimapTexture.columns(x0, z0, w, h, out);
 	}

@@ -120,6 +120,34 @@ public final class Hud {
 		return widgets;
 	}
 
+	/** Leave the game's part as it is. */
+	private static final float[] HIDE = new float[0];
+
+	/**
+	 * Where to draw a part of the game's own HUD ({@link VanillaParts}) that it would draw at
+	 * ({@code x}, {@code y}) sized {@code w}×{@code h}: null to leave it there, an empty array to
+	 * not draw it (turned off in the HUD editor), else {left, top, scale} to draw it at. The
+	 * adapter calls this every frame it's about to draw one. Game thread.
+	 */
+	public float[] vanillaPlacement(String part, int x, int y, int w, int h) {
+		for (HudWidget widget : widgets) {
+			if (!(widget instanceof VanillaPart) || !widget.id.equals(part)) {
+				continue;
+			}
+			((VanillaPart) widget).saw(x, y, w, h);
+			HudSlot slot = slot(widget);
+			if (!slot.enabled) {
+				return HIDE;
+			}
+			int[] r = lastLayout == null ? null : lastLayout.get(widget);
+			if (!slot.placed || r == null) {
+				return null;
+			}
+			return new float[] {r[0], r[1], slot.scale};
+		}
+		return null;
+	}
+
 	public Cps cps() {
 		return cps;
 	}
@@ -168,7 +196,7 @@ public final class Hud {
 	public Map<HudWidget, int[]> layout(Gfx g) {
 		frame++;
 		// Worked out again only when the screen, a widget's slot or a widget's size changed.
-		long[] from = new long[2 + widgets.size() * 3];
+		long[] from = new long[2 + widgets.size() * 4];
 		from[0] = g.width();
 		from[1] = g.height();
 		int f = 2;
@@ -179,8 +207,11 @@ public final class Hud {
 				Kept k = sized(g, w, slot);
 				from[f++] = k.width;
 				from[f++] = k.height;
+				// The game's own parts move by themselves (a scoreboard growing, a second boss bar).
+				int[] home = slot.placed ? null : w.home(g);
+				from[f++] = home == null ? -1 : ((long) home[0] << 48) ^ ((long) home[1] << 32) ^ ((long) home[2] << 16) ^ home[3];
 			} else {
-				f += 2;
+				f += 3;
 			}
 		}
 		if (lastLayout != null && java.util.Arrays.equals(from, lastLayoutFrom)) {
@@ -196,6 +227,12 @@ public final class Hud {
 		List<int[]> taken = new ArrayList<int[]>();
 		for (HudWidget w : widgets) {
 			HudSlot slot = slot(w);
+			int[] home = slot.enabled && !slot.placed ? w.home(g) : null;
+			if (home != null) {
+				rects.put(w, home);
+				taken.add(home);
+				continue;
+			}
 			if (slot.enabled && slot.placed) {
 				Kept k = sized(g, w, slot);
 				int ww = Math.round(k.width * slot.scale);
@@ -212,7 +249,7 @@ public final class Hud {
 		int bottom = Math.max(MARGIN + 20, g.height() - BOTTOM_RESERVE);
 		for (HudWidget w : widgets) {
 			HudSlot slot = slot(w);
-			if (!slot.enabled || slot.placed) {
+			if (!slot.enabled || slot.placed || rects.containsKey(w)) {
 				continue;
 			}
 			Kept k = sized(g, w, slot);
