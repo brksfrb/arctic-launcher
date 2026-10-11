@@ -213,9 +213,10 @@ fn branded_java(java: &Path) -> PathBuf {
 
 /// NVIDIA's recorder files clips under the name of the folder that holds
 /// `bin`, which is the runtime's (`java-runtime-delta`). The game is started
-/// through a junction named after the client instead:
-/// `runtimes/.named/<runtime>/Arctic Client` → `runtimes/<runtime>`. Java
-/// works out its home from that path, so nothing else changes.
+/// from a copy of the runtime named after the client instead,
+/// `runtimes/.named/<runtime>/Arctic Client`, made of hard links (no extra
+/// space). Java works out its home from that path, so nothing else changes.
+/// (A junction isn't enough: recorders see the path it leads to.)
 #[cfg(windows)]
 fn in_named_folder(exe: &Path) -> PathBuf {
     const NAME: &str = "Arctic Client";
@@ -225,21 +226,57 @@ fn in_named_folder(exe: &Path) -> PathBuf {
         if bin.file_name()? != "bin" || runtime.file_name()? == NAME {
             return None;
         }
-        let link = runtime
+        let named = runtime
             .parent()?
             .join(".named")
             .join(runtime.file_name()?)
             .join(NAME);
-        if junction::get_target(&link).ok().as_deref() != Some(runtime) {
-            let _ = std::fs::remove_dir(&link);
-            std::fs::create_dir_all(link.parent()?).ok()?;
-            junction::create(runtime, &link)
-                .inspect_err(|e| log::info!("junction for the game's name: {e}"))
+        // Earlier versions made a junction here: remove the link itself, never what it leads to.
+        if junction::exists(&named).unwrap_or(false) {
+            std::fs::remove_dir(&named)
+                .inspect_err(|e| log::info!("old junction for the game's name: {e}"))
                 .ok()?;
         }
-        Some(link.join("bin").join(exe.file_name()?))
+        mirror_tree(runtime, &named)
+            .inspect_err(|e| log::info!("named copy of the Java runtime: {e}"))
+            .ok()?;
+        Some(named.join("bin").join(exe.file_name()?))
     })();
     named.unwrap_or_else(|| exe.to_path_buf())
+}
+
+/// Make `dst` hold every file of `src` as a hard link (a plain copy where a link can't be
+/// made). Files already linked are left alone, so this is quick once done; a file the runtime
+/// replaced is linked again.
+#[cfg(any(windows, test))]
+fn mirror_tree(src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let (from, to) = (entry.path(), dst.join(entry.file_name()));
+        let kind = entry.file_type()?;
+        if kind.is_dir() {
+            mirror_tree(&from, &to)?;
+            continue;
+        }
+        if !kind.is_file() || same_file(&from, &to) {
+            continue;
+        }
+        let _ = std::fs::remove_file(&to);
+        if std::fs::hard_link(&from, &to).is_err() {
+            std::fs::copy(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
+/// Already the same file (a hard link of it), or a copy as large and as new.
+#[cfg(any(windows, test))]
+fn same_file(a: &Path, b: &Path) -> bool {
+    match (std::fs::metadata(a), std::fs::metadata(b)) {
+        (Ok(a), Ok(b)) => a.len() == b.len() && a.modified().ok() == b.modified().ok(),
+        _ => false,
+    }
 }
 
 #[cfg(not(windows))]
@@ -304,6 +341,31 @@ fn is_window_marker(line: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn named_runtime_copy_links_every_file_and_updates_changed_ones() {
+        let dir = tempfile::tempdir().unwrap();
+        let runtime = dir.path().join("java-runtime-delta");
+        std::fs::create_dir_all(runtime.join("bin")).unwrap();
+        std::fs::create_dir_all(runtime.join("lib/security")).unwrap();
+        std::fs::write(runtime.join("bin/javaw.exe"), b"java").unwrap();
+        std::fs::write(runtime.join("lib/security/cacerts"), b"certs").unwrap();
+        let named = dir.path().join(".named/java-runtime-delta/Arctic Client");
+        mirror_tree(&runtime, &named).unwrap();
+        assert_eq!(std::fs::read(named.join("bin/javaw.exe")).unwrap(), b"java");
+        assert_eq!(
+            std::fs::read(named.join("lib/security/cacerts")).unwrap(),
+            b"certs"
+        );
+        // A runtime update replaces a file: the copy follows.
+        std::fs::remove_file(runtime.join("lib/security/cacerts")).unwrap();
+        std::fs::write(runtime.join("lib/security/cacerts"), b"newer certs").unwrap();
+        mirror_tree(&runtime, &named).unwrap();
+        assert_eq!(
+            std::fs::read(named.join("lib/security/cacerts")).unwrap(),
+            b"newer certs"
+        );
+    }
+
     use super::*;
 
     #[test]
