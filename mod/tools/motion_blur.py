@@ -110,7 +110,15 @@ def main():
         for level, strength in STRENGTHS.items():
             path = ASSETS / f"post_effect/motion_blur{suffix}_{level}.json"
             path.write_text(json.dumps(effect(shader, strength), indent=2) + "\n", encoding="utf-8", newline="\n")
-    meta = {"pack": {"description": "Arctic Client effects (motion blur)", "min_format": 84, "max_format": 1000}}
+    # 1.21.6 (format 63) on: before 1.21.9 the game reads pack_format/supported_formats, after it
+    # min_format/max_format.
+    meta = {"pack": {
+        "description": "Arctic Client effects (motion blur)",
+        "pack_format": 63,
+        "supported_formats": {"min_inclusive": 63, "max_inclusive": 1000},
+        "min_format": 63,
+        "max_format": 1000,
+    }}
     (ROOT / "pack.mcmeta").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8", newline="\n")
     print("motion blur effects written")
 

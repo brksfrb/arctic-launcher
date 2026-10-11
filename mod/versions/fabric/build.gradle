@@ -206,6 +206,8 @@ processResources {
 			oldCamera: !atLeast('26.1'),
 			// Needs the FreeType font code of 26.1+ (older versions use STB).
 			smoothFont: atLeast('26.1'),
+			// Motion blur as a post effect (and its pack) before 26.1, for VulkanMod.
+			postBlur: atLeast('1.21.6') && !atLeast('26.1'),
 			// Before 26.1 the smooth font is put into the default font by code (SmoothFont): through
 			// the font itself, or from 1.21.9 (where a font no longer knows its name) the font manager.
 			smoothFontSet: !atLeast('1.21.9'),
@@ -257,9 +259,12 @@ processResources {
 	filesMatching(['fabric.mod.json', 'arctic.mixins.json']) {
 		expand props
 	}
-	// The resource packs are 26.1+; older builds keep only the smooth font's Inter (and its licence).
-	if (!atLeast('26.1')) {
+	// The resource packs are 26.1+ (the effects pack 1.21.6+); older builds keep only the smooth font's
+	// Inter (and its licence).
+	if (!atLeast('1.21.6')) {
 		exclude 'resourcepacks/client/**'
+	}
+	if (!atLeast('26.1')) {
 		exclude 'resourcepacks/smooth_font/pack.mcmeta'
 		exclude 'resourcepacks/smooth_font/assets/minecraft/**'
 		exclude 'resourcepacks/smooth_font/assets/arctic/font/*.json'

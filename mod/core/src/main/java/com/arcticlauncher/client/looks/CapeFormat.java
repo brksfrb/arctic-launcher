@@ -11,7 +11,8 @@ import javax.imageio.ImageIO;
  * Elytra art for capes that have none. Minecraft draws an elytra from the right part of the cape
  * image (the 64×32 layout's wing box at 22,0); a cape painted only where the cape itself goes
  * leaves that empty, and since the game hides the cape while an elytra is worn, both vanish. Such
- * a cape gets wings painted from its own art: its front on the wings' outside, its back inside.
+ * a cape gets wings painted from its own art: its front on the wings' outside (the face at x 36,
+ * the one vanilla's elytra paints), its back on the inside against the player. Checked per frame.
  */
 public final class CapeFormat {
 	/** The cape layout is 64 wide (and 32 tall per frame); bigger images scale it. */
@@ -19,9 +20,9 @@ public final class CapeFormat {
 	/** The cape's front and back faces (x, y, w, h) and the wing's outer and inner faces. */
 	private static final int[] CAPE_FRONT = {1, 1, 10, 16};
 	private static final int[] CAPE_BACK = {12, 1, 10, 16};
-	private static final int[] WING_FRONT = {24, 2, 10, 20};
-	private static final int[] WING_BACK = {36, 2, 10, 20};
-	/** The whole wing box's area: empty here means the cape has no elytra art. */
+	private static final int[] WING_OUTSIDE = {36, 2, 10, 20};
+	private static final int[] WING_INSIDE = {24, 2, 10, 20};
+	/** The whole wing box's area: empty here means that frame has no elytra art. */
 	private static final int[] WING_AREA = {22, 0, 24, 22};
 
 	private CapeFormat() {}
@@ -54,7 +55,11 @@ public final class CapeFormat {
 		}
 		int s = w / BASE;
 		int frameHeight = w / 2;
-		if (!empty(in, 0, s)) {
+		boolean any = false;
+		for (int f = 0; f < frames && !any; f++) {
+			any = empty(in, f * frameHeight, s);
+		}
+		if (!any) {
 			return null;
 		}
 		BufferedImage out = new BufferedImage(w, in.getHeight(), BufferedImage.TYPE_INT_ARGB);
@@ -63,8 +68,10 @@ public final class CapeFormat {
 		g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
 		for (int f = 0; f < frames; f++) {
 			int top = f * frameHeight;
-			copy(g, in, CAPE_FRONT, WING_FRONT, s, top);
-			copy(g, in, CAPE_BACK, WING_BACK, s, top);
+			if (empty(in, top, s)) {
+				copy(g, in, CAPE_FRONT, WING_OUTSIDE, s, top);
+				copy(g, in, CAPE_BACK, WING_INSIDE, s, top);
+			}
 		}
 		g.dispose();
 		return out;

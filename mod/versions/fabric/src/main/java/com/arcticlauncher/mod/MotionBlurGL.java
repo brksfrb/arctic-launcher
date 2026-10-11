@@ -47,9 +47,14 @@ public final class MotionBlurGL {
 	private static final FloatBuffer FLOATS = BufferUtils.createFloatBuffer(16);
 
 	/** VulkanMod draws the game with Vulkan: OpenGL calls would do nothing (or harm). */
-	static final boolean VULKAN_MOD = net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("vulkanmod");
-	/** Sampler objects (OpenGL 3.3) are there to unbind. */
-	private static final boolean SAMPLERS = GL.getCapabilities().OpenGL33;
+	static final boolean VULKAN_MOD = VulkanCompat.ACTIVE;
+	/**
+	 * Whether sampler objects (OpenGL 3.3) are there to unbind. Asked on first use, not when the class
+	 * loads: under VulkanMod there is no OpenGL to ask.
+	 */
+	private static final class Samplers {
+		static final boolean SUPPORTED = GL.getCapabilities().OpenGL33;
+	}
 	private static int DEBUG_FRAMES = Boolean.getBoolean("arctic.blurdebug") ? 400 : 0;
 
 	private MotionBlurGL() {}
@@ -66,7 +71,7 @@ public final class MotionBlurGL {
 	public static void apply() {
 		ClientConfig c = ArcticClient.config();
 		Minecraft mc = Minecraft.getInstance();
-		if (c == null || !c.motionBlur || mc.level == null || broken || VULKAN_MOD) {
+		if (c == null || !c.motionBlur || mc.level == null || broken || VULKAN_MOD || VulkanCompat.postBlur()) {
 			hasPrevious = false;
 			return;
 		}
@@ -163,7 +168,7 @@ public final class MotionBlurGL {
 		GL11.glBindTexture(GL11.GL_TEXTURE_2D, prevTexture);
 		// The game may leave a sampler object on unit 0 (1.21.x does): its mipmap filtering makes our
 		// texture, which has none, read as black, and the frame would be blended with black.
-		if (SAMPLERS) {
+		if (Samplers.SUPPORTED) {
 			GL33.glBindSampler(0, 0);
 		}
 		//#if MC >= 1.17
@@ -301,7 +306,7 @@ public final class MotionBlurGL {
 			s.activeTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
 			GL13.glActiveTexture(GL13.GL_TEXTURE0);
 			s.texture = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
-			s.sampler = SAMPLERS ? GL11.glGetInteger(GL33.GL_SAMPLER_BINDING) : 0;
+			s.sampler = Samplers.SUPPORTED ? GL11.glGetInteger(GL33.GL_SAMPLER_BINDING) : 0;
 			s.blend = GL11.glIsEnabled(GL11.GL_BLEND);
 			s.srcRgb = GL11.glGetInteger(GL14.GL_BLEND_SRC_RGB);
 			s.dstRgb = GL11.glGetInteger(GL14.GL_BLEND_DST_RGB);
@@ -327,7 +332,7 @@ public final class MotionBlurGL {
 			GL30.glBindVertexArray(vertexArray);
 			GL13.glActiveTexture(GL13.GL_TEXTURE0);
 			GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
-			if (SAMPLERS) {
+			if (Samplers.SUPPORTED) {
 				GL33.glBindSampler(0, sampler);
 			}
 			GL13.glActiveTexture(activeTexture);

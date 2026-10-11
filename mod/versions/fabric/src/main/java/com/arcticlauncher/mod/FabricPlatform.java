@@ -954,8 +954,11 @@ final class FabricPlatform implements Platform {
 		// 26.1+: a post effect; before: MotionBlurGL, which draws with OpenGL (VulkanMod replaces it).
 		//#if MC >= 26.1
 		return true;
+		//#elif MC >= 1.21.6
+		// Under VulkanMod as a post effect (MotionBlurPostMixin).
+		return true;
 		//#else
-		return !MotionBlurGL.VULKAN_MOD;
+		return !VulkanCompat.ACTIVE;
 		//#endif
 	}
 

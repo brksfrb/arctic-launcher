@@ -3,6 +3,7 @@ package com.arcticlauncher.mod.mixin;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.gfx.Backdrop;
 import com.arcticlauncher.mod.GfxImpl;
+import com.arcticlauncher.mod.VulkanCompat;
 //#if MC >= 1.20
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 //#endif
@@ -44,7 +45,11 @@ abstract class ScreenMixin {
 	private static void arctic$draw(GfxImpl gfx, CallbackInfo ci) {
 		if (ArcticClient.restyles()) {
 			Backdrop.render(gfx, ArcticClient.style());
-			ci.cancel();
+			// Under VulkanMod the game's panorama still draws (hidden under the backdrop): VulkanMod's
+			// menu blur crashes the graphics driver when nothing was drawn into the frame before it.
+			if (!VulkanCompat.ACTIVE) {
+				ci.cancel();
+			}
 		}
 	}
 }

@@ -119,7 +119,9 @@ default 8) is how fast the frames play.
   - **front** (against the player's back): x 12–21, y 1–16
   - **left and right edges**: x 0 and x 11 (1×16 each)
   - **top and bottom edges**: x 1–10 and x 11–20, y 0 (10×1 each)
-  - the rest (x 22 and beyond) is the elytra area; paint it to match or leave it transparent
+  - the rest (x 22 and beyond) is the elytra area: paint it to match the cape (recommended; see
+    [elytra art](requests/elytra-art.md) for the exact wing layout). If it is left empty, the client
+    paints wings from the cape automatically.
 - Paint the edges too, or the cape looks paper-thin from the side.
 
 ### Animated capes
