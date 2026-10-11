@@ -96,6 +96,11 @@ public final class Hud {
 	/** Whether this draw is the editor's preview (sample values). */
 	private boolean previewing;
 
+	/** Drawing for the layout editor (widgets show sample values). */
+	public boolean previewing() {
+		return previewing;
+	}
+
 	static long frame() {
 		return frame;
 	}

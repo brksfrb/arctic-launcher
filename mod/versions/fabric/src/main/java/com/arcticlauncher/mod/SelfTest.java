@@ -69,6 +69,10 @@ final class SelfTest {
 			VisualsTest.start();
 			return;
 		}
+		if (PromoTest.requested()) {
+			PromoTest.start();
+			return;
+		}
 		if ("duel".equals(System.getProperty("arctic.selftest"))) {
 			// A duel through the launcher: world, kit, LAN, a play-together code.
 			TIMER.schedule(() -> Minecraft.getInstance().execute(() -> {
@@ -186,6 +190,19 @@ final class SelfTest {
 				() -> {
 					ArcticClient.platform().openPage(new HudEditor());
 					later(() -> shot("hud-editor"));
+				},
+				() -> {
+					// The game's multiplayer list opens Arctic's in its place.
+					Compat.setScreen(new net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen(
+							new net.minecraft.client.gui.screens.TitleScreen()));
+					later(() -> {
+						ArcticMod.LOG.info("selftest: multiplayer screen is {}", Compat.screen().getClass().getSimpleName());
+						shot("servers");
+					});
+				},
+				() -> {
+					ArcticClient.platform().openPage(new com.arcticlauncher.client.servers.DisconnectedPage("Connection Lost", "Timed out"));
+					later(() -> shot("disconnected"));
 				},
 				() -> {
 					// The HUD as text, back through the checks, into a fresh config.

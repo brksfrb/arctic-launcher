@@ -15,7 +15,9 @@ import com.arcticlauncher.client.waypoints.Waypoint;
  */
 final class Compass extends HudWidget {
 	private static final int WIDTH = 180;
-	private static final int HEIGHT = 24;
+	/** Just the directions; the row of waypoints below makes it taller. */
+	private static final int HEIGHT = 13;
+	private static final int WITH_WAYPOINTS = 24;
 	/** Degrees shown to each side of the middle. */
 	private static final double HALF_VIEW = 90;
 	private static final String[] NAMES = {"S", "SW", "W", "NW", "N", "NE", "E", "SE"};
@@ -33,12 +35,25 @@ final class Compass extends HudWidget {
 
 	@Override
 	public int height() {
-		return HEIGHT;
+		return ArcticClient.hud().previewing() || anyShown() ? WITH_WAYPOINTS : HEIGHT;
+	}
+
+	/** Waypoints to show here (else the strip has no second row). */
+	private static boolean anyShown() {
+		if (ArcticClient.platform().position() == null) {
+			return false;
+		}
+		for (Waypoint w : ArcticClient.waypoints().here(ArcticClient.platform())) {
+			if (w.shown) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	@Override
 	public void render(Gfx g, Style s, boolean preview) {
-		panel(g, s, 0, 0, WIDTH, HEIGHT);
+		panel(g, s, 0, 0, WIDTH, height());
 		double[] p = ArcticClient.platform().position();
 		double yaw = p == null ? 180 : p[3];
 		int mid = WIDTH / 2;

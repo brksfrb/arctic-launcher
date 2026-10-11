@@ -107,15 +107,44 @@ public final class EmoteWheel extends Page {
 			int ey = cy + (int) Math.round(Math.sin(a) * RADIUS);
 			boolean on = i == hovered;
 			Draw.disc(g, ex, ey, ITEM_R, on ? s.accent : s.button);
-			String name = Draw.fit(g, emotes.get(i).name, ITEM_R * 2 + 16);
-			Draw.centered(g, name, ex, ey - 4, on ? s.onAccent : s.text, false);
+			label(g, emotes.get(i).name, ex, ey, on ? s.onAccent : s.text);
 		}
 		// You, doing the emote pointed at.
 		Draw.disc(g, cx, cy, INNER - 4, Draw.alpha(s.button, 0.6f));
 		g.player(cx - INNER, cy - INNER + 4, cx + INNER, cy + INNER - 10, INNER - 12, cx, cy - INNER);
 		String hint = hovered >= 0 ? emotes.get(hovered).name : hold() ? "Point, then let go" : "Pick an emote";
 		Draw.centered(g, hint, cx, cy + INNER - 8, s.text, false);
-		drawPages(g, s, cx, cy + RADIUS + ITEM_R + 18);
+		// Above the wheel: below it would cover the hotbar.
+		drawPages(g, s, cx, Math.max(16, cy - RADIUS - ITEM_R - 22));
+	}
+
+	/**
+	 * An emote's name inside its circle: on one line when it fits, else on two (split between
+	 * words), each cut to the circle's width, so neighbours never overlap.
+	 */
+	private static void label(Gfx g, String name, int x, int y, int color) {
+		int max = ITEM_R * 2 - 4;
+		if (g.textWidth(name) <= max || name.indexOf(' ') < 0) {
+			Draw.centered(g, Draw.fit(g, name, max), x, y - 4, color, false);
+			return;
+		}
+		// Split where the two lines come out most even.
+		String[] words = name.split(" ");
+		int best = 1;
+		int bestWidth = Integer.MAX_VALUE;
+		for (int k = 1; k < words.length; k++) {
+			String a = String.join(" ", java.util.Arrays.copyOfRange(words, 0, k));
+			String b = String.join(" ", java.util.Arrays.copyOfRange(words, k, words.length));
+			int w = Math.max(g.textWidth(a), g.textWidth(b));
+			if (w < bestWidth) {
+				bestWidth = w;
+				best = k;
+			}
+		}
+		String first = String.join(" ", java.util.Arrays.copyOfRange(words, 0, best));
+		String second = String.join(" ", java.util.Arrays.copyOfRange(words, best, words.length));
+		Draw.centered(g, Draw.fit(g, first, max), x, y - 9, color, false);
+		Draw.centered(g, Draw.fit(g, second, max), x, y + 1, color, false);
 	}
 
 	/** One dot per page under the wheel, the shown one lit, and how to turn them. */
@@ -128,7 +157,7 @@ public final class EmoteWheel extends Page {
 		for (int i = 0; i < count; i++) {
 			Draw.disc(g, left + i * DOT_GAP, y, DOT_R, i == page ? s.accent : s.muted);
 		}
-		Draw.centered(g, "Scroll for more emotes", cx, y + 8, s.text, true);
+		Draw.centered(g, "Scroll for more emotes", cx, y - 12, s.text, true);
 	}
 
 	@Override

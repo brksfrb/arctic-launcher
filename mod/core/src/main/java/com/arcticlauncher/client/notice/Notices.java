@@ -56,6 +56,8 @@ public final class Notices {
 	}
 
 	private static final List<Notice> QUEUE = new ArrayList<Notice>();
+	/** Not drawn (screenshots for the website, {@code -Darctic.selftest=promo}). */
+	public static volatile boolean hidden;
 
 	private Notices() {}
 
@@ -115,6 +117,9 @@ public final class Notices {
 	}
 
 	public static synchronized void render(Gfx g, Style s) {
+		if (hidden) {
+			return;
+		}
 		long now = System.currentTimeMillis();
 		com.arcticlauncher.client.Platform platform = com.arcticlauncher.client.ArcticClient.platform();
 		int y = MARGIN + (platform == null ? 0 : platform.toastsBottom());

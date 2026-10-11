@@ -182,7 +182,8 @@ public final class HudEditor extends Page {
 		drawBar(g, s, mx, my);
 		String help = "Drag to move  ·  drag the corner (or scroll) to resize  ·  right-click for settings";
 		int hw = g.textWidth(help) / 2 + HINT_PAD;
-		int hy = height - 14;
+		// Under the menu bar: at the bottom it would sit on the hotbar.
+		int hy = by + BAR_H + 10;
 		Draw.round(g, width / 2 - hw, hy - 5, width / 2 + hw, hy + 13, 4, Draw.alpha(0xC0000000, shown));
 		Draw.centered(g, help, width / 2, hy, Draw.alpha(0xFFFFFFFF, shown), false);
 	}
