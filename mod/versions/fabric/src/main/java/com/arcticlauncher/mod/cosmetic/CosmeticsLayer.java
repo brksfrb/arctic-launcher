@@ -203,9 +203,10 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 			if (cosmetics.drawable(worn) == null) {
 				continue;
 			}
+			com.arcticlauncher.client.looks.Fit fit = look.fit(worn);
 			MeshModels.Baked sculpted = MeshModels.get(worn);
 			if (sculpted != null) {
-				drawMesh(pose, canvas, light, sculpted);
+				drawMesh(pose, canvas, light, sculpted, fit);
 				continue;
 			}
 			CosmeticModels.Baked baked = CosmeticModels.get(worn);
@@ -215,6 +216,7 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 			for (com.arcticlauncher.client.looks.CuboidModel.Piece piece : baked.pieces) {
 				pose.pushPose();
 				part(piece.attach).translateAndRotate(pose);
+				fit(pose, fit);
 				canvas.base(pose, baked.texture, xf -> piece.emit(xf, light));
 				if (baked.glow != null) {
 					canvas.glow(pose, baked.glow, xf -> piece.emit(xf, CosmeticModels.fullBright()));
@@ -253,11 +255,12 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 	}
 
 	/** A sculpted cosmetic: each part it follows, its idle animation (at rest when motion is frozen), and its glow. */
-	private void drawMesh(PoseStack pose, Canvas canvas, int light, MeshModels.Baked sculpted) {
+	private void drawMesh(PoseStack pose, Canvas canvas, int light, MeshModels.Baked sculpted, com.arcticlauncher.client.looks.Fit fit) {
 		boolean animate = !ArcticClient.config().reduceCapeMotion;
 		for (com.arcticlauncher.client.looks.MeshDraw.Group group : sculpted.groups) {
 			pose.pushPose();
 			part(group.attach).translateAndRotate(pose);
+			fit(pose, fit);
 			for (int primitive : sculpted.primitives(group)) {
 				canvas.base(pose, sculpted.textureOf(primitive), xf -> sculpted.emit(primitive, group.attach, animate, xf, light, false));
 				Identifier glow = sculpted.emissiveOf(primitive);
@@ -270,6 +273,18 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 				}
 			}
 			pose.popPose();
+		}
+	}
+
+	/** Where its wearer moved it: in the part's own space (px / 16), mirrored across the body for the other side. */
+	private static void fit(PoseStack pose, com.arcticlauncher.client.looks.Fit fit) {
+		if (!fit.moves()) {
+			return;
+		}
+		pose.translate(0, fit.dy() / 16.0, fit.dz() / 16.0);
+		if (fit.mirror) {
+			// The render types draw both sides, so the mirrored faces still show.
+			pose.scale(-1f, 1f, 1f);
 		}
 	}
 

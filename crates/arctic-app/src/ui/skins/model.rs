@@ -6,6 +6,7 @@
 use std::f32::consts::PI;
 
 use arctic_core::cosmetic_models::{Geometry, Mesh as MeshModel};
+use arctic_core::cosmetics::Fit;
 use arctic_core::skins::Variant;
 use eframe::egui::{self, Color32, Pos2, Rect, TextureId, pos2};
 
@@ -60,6 +61,8 @@ pub(super) struct Face {
 pub struct Worn<'a> {
     pub geometry: &'a Geometry,
     pub texture: TextureId,
+    /// How the wearer moved it (or mirrored it).
+    pub fit: Fit,
 }
 
 /// A sculpted cosmetic to draw: its mesh and textures.
@@ -74,6 +77,17 @@ pub struct WornMesh<'a> {
     pub time: Option<f64>,
     /// The wearer's arm and leg swing, radians: pieces on a limb follow it.
     pub swing: f32,
+    pub fit: Fit,
+}
+
+/// A point of a worn cosmetic where the wearer's fit puts it (the preview's space: y up, the face
+/// toward +z, in pixels).
+fn fitted(p: V3, fit: Fit) -> V3 {
+    [
+        if fit.mirror { -p[0] } else { p[0] },
+        p[1] + f32::from(fit.up) * 0.5,
+        p[2] + f32::from(fit.forward) * 0.5,
+    ]
 }
 
 /// Where a piece that follows a limb turns (the shoulder or hip height in the preview) and which way:
@@ -125,10 +139,10 @@ pub fn paint(
         ));
     }
     for worn in cosmetics {
-        faces.extend(cosmetic_faces(worn, &view));
+        faces.extend(cosmetic_faces(worn, &|p| view(fitted(p, worn.fit))));
     }
     for worn in meshes {
-        faces.extend(mesh_faces(worn, &view));
+        faces.extend(mesh_faces(worn, &|p| view(fitted(p, worn.fit))));
     }
     // One depth order for body, cape and cosmetics, so each hides the others
     // correctly; consecutive faces with the same texture share a mesh.
@@ -817,6 +831,7 @@ mod tests {
         let worn = Worn {
             geometry: &geometry,
             texture: TextureId::default(),
+            fit: Fit::default(),
         };
         let view = |p: V3| p;
         let faces = cosmetic_faces(&worn, &view);
@@ -830,12 +845,28 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_fit_moves_and_mirrors_in_the_previews_space() {
+        let moved = Fit {
+            up: 2,
+            forward: -1,
+            mirror: false,
+        };
+        assert_eq!(fitted([3.0, 30.0, 4.0], moved), [3.0, 31.0, 3.5]);
+        let other_side = Fit {
+            mirror: true,
+            ..Fit::default()
+        };
+        assert_eq!(fitted([5.0, 22.0, 0.0], other_side), [-5.0, 22.0, 0.0]);
+    }
+
     fn faces_of(geometry_json: &str) -> Vec<([V3; 4], [Pos2; 4])> {
         let geometry =
             arctic_core::cosmetic_models::Geometry::parse(geometry_json.as_bytes()).unwrap();
         let worn = Worn {
             geometry: &geometry,
             texture: TextureId::default(),
+            fit: Fit::default(),
         };
         // Seen from the front and from behind, so every face shows once.
         let mut out = Vec::new();

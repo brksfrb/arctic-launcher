@@ -241,6 +241,8 @@ public final class Looks {
 	}
 
 	private volatile java.util.List<String> tryOn;
+
+	private volatile java.util.Map<String, Fit> tryFits;
 	private volatile long tryOnUntil;
 	private volatile long menuOpenUntil;
 	/** Cosmetics picked while a save was going; sent when it finishes (only the newest). */
@@ -252,6 +254,12 @@ public final class Looks {
 
 	/** Show these cosmetics on you for a moment (call every frame while previewing). */
 	public void tryOn(java.util.List<String> ids) {
+		tryOn(ids, null);
+	}
+
+	/** Try cosmetics on, sitting like this ({@code fits} null: as you wear them). */
+	public void tryOn(java.util.List<String> ids, java.util.Map<String, Fit> fits) {
+		tryFits = fits;
 		tryOn = ids;
 		tryOnUntil = System.currentTimeMillis() + TRY_ON_MS;
 	}
@@ -293,8 +301,10 @@ public final class Looks {
 		// Hovering a cosmetic in the Looks menu: shown on you, only here.
 		java.util.List<String> trying = tryOn;
 		if (mine && trying != null && now < tryOnUntil) {
-			return look == null ? new Look(null, false, null, trying, true, now)
-					: new Look(look.skin, look.slim, look.cape, trying, look.arctic, look.fetched);
+			return look == null ? new Look(null, false, null, trying, true, now,
+					tryFits != null ? tryFits : java.util.Collections.<String, Fit>emptyMap())
+					: new Look(look.skin, look.slim, look.cape, trying, look.arctic, look.fetched,
+							tryFits != null ? tryFits : look.fits);
 		}
 		return look == null || look.isEmpty() ? null : look;
 	}
@@ -379,7 +389,7 @@ public final class Looks {
 		UUID me = platform.playerId();
 		long now = System.currentTimeMillis();
 		players.put(me, mine == null ? new Look(null, false, null, ids, true, now)
-				: new Look(mine.skin, mine.slim, mine.cape, ids, mine.arctic, now));
+				: new Look(mine.skin, mine.slim, mine.cape, ids, mine.arctic, now, mine.fits));
 		version.incrementAndGet();
 		if (busy) {
 			nextCosmetics = ids;
@@ -549,7 +559,8 @@ public final class Looks {
 		}
 		JsonElement arctic = o.get("arctic");
 		boolean onArctic = arctic != null && arctic.isJsonPrimitive() && arctic.getAsJsonPrimitive().isBoolean() && arctic.getAsBoolean();
-		return new Look(skin, "slim".equals(stringField(o, "model")), cape, Cosmetics.worn(o.get("cosmetics")), onArctic, now);
+		return new Look(skin, "slim".equals(stringField(o, "model")), cape, Cosmetics.worn(o.get("cosmetics")), onArctic, now,
+				Fit.parse(o.get("fit")));
 	}
 
 	/** A string field, or null when missing or not a string. */

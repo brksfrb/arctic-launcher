@@ -73,6 +73,10 @@ final class SelfTest {
 			PromoTest.start();
 			return;
 		}
+		if (FitTest.requested()) {
+			FitTest.start();
+			return;
+		}
 		if (PadTest.requested()) {
 			PadTest.start();
 			return;

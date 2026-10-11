@@ -3,7 +3,7 @@
 //! in the preview ([`Hover`]); clicking wears it (again: takes it off).
 
 use arctic_core::cosmetic_models::{Geometry, Mesh};
-use arctic_core::cosmetics::CapeChoice;
+use arctic_core::cosmetics::{CapeChoice, FIT_FORWARD, FIT_UP, Fit};
 use arctic_core::skins::{SkinEntry, Variant};
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontId, Rect, RichText, Sense, pos2, vec2,
@@ -470,20 +470,22 @@ impl ArcticApp {
         let Some(state) = self.arctic_state().cloned() else {
             return WornModels::default();
         };
+        let fits = self.current_fits();
         let mut out = WornModels::default();
         for entry in cosmetic_entries(&state) {
             if !ids.contains(&entry.id) {
                 continue;
             }
+            let fit = fits.get(&entry.id).copied().unwrap_or_default();
             match entry.shape {
                 Shape3d::Cuboid { geometry, texture } => {
                     if let Some(t) = self.skin_texture(ctx, &format!("acos:{texture}")) {
-                        out.cuboids.push((geometry, t.handle.id()));
+                        out.cuboids.push((geometry, t.handle.id(), fit));
                     }
                 }
                 Shape3d::Mesh { mesh, hash } => {
                     let textures = self.mesh_textures(ctx, &hash, mesh.images.len());
-                    out.meshes.push((mesh, textures));
+                    out.meshes.push((mesh, textures, fit));
                 }
             }
         }
@@ -537,6 +539,9 @@ impl ArcticApp {
             ui.label(RichText::new("Nothing here yet.").color(p.muted));
             return;
         }
+        if let Some(on) = items.iter().find(|e| worn_ids.contains(&e.id)) {
+            self.fit_controls(ui, slot, &on.id.clone(), &on.name.clone());
+        }
         // What you'd wear after clicking `item`: the rest, plus it in its slot (or nothing).
         let after = |item_id: &str, worn: bool| -> Vec<String> {
             let slot_of = |id: &String| {
@@ -587,6 +592,63 @@ impl ArcticApp {
         });
         if let Some(ids) = pick {
             self.set_cosmetics(ids);
+        }
+    }
+}
+
+impl ArcticApp {
+    /// How the worn cosmetic of a slot sits: moved on the face (eyes differ from skin to skin),
+    /// or on the other shoulder.
+    fn fit_controls(&mut self, ui: &mut egui::Ui, slot: &str, id: &str, name: &str) {
+        let p = self.palette();
+        let fit = self.current_fits().get(id).copied().unwrap_or_default();
+        let mut next = fit;
+        match slot {
+            "face" => {
+                widgets::row(ui, |ui| {
+                    ui.label(RichText::new(format!("Fit {name}")).color(p.text));
+                    ui.add_space(8.0);
+                    let step = |ui: &mut egui::Ui, label: &str, enabled: bool| {
+                        ui.add_enabled_ui(enabled, |ui| widgets::button(ui, p, None, label, false))
+                            .inner
+                            .clicked()
+                    };
+                    if step(ui, "Up", fit.up < FIT_UP) {
+                        next.up += 1;
+                    }
+                    if step(ui, "Down", fit.up > -FIT_UP) {
+                        next.up -= 1;
+                    }
+                    if step(ui, "Closer", fit.forward < FIT_FORWARD) {
+                        next.forward += 1;
+                    }
+                    if step(ui, "Farther", fit.forward > -FIT_FORWARD) {
+                        next.forward -= 1;
+                    }
+                    if step(ui, "Reset", !fit.is_default()) {
+                        next = Fit::default();
+                    }
+                });
+                ui.label(
+                    RichText::new("Moves it half a pixel at a time, to sit on your skin's eyes.")
+                        .small()
+                        .color(p.muted),
+                );
+            }
+            "shoulders" => {
+                let mut other = fit.mirror;
+                widgets::row(ui, |ui| {
+                    if widgets::switch(ui, p, &mut other).changed() {
+                        next.mirror = other;
+                    }
+                    ui.label(RichText::new(format!("{name} on the other shoulder")).color(p.text));
+                });
+            }
+            _ => return,
+        }
+        ui.add_space(10.0);
+        if next != fit {
+            self.set_fit(id, next);
         }
     }
 }
@@ -787,8 +849,8 @@ pub(super) fn cosmetic_entries(state: &crate::skin_tasks::ArcticState) -> Vec<En
 /// What the preview wears: cuboid cosmetics and sculpted ones.
 #[derive(Default)]
 pub(super) struct WornModels {
-    pub cuboids: Vec<(Geometry, egui::TextureId)>,
-    pub meshes: Vec<(std::sync::Arc<Mesh>, Vec<egui::TextureId>)>,
+    pub cuboids: Vec<(Geometry, egui::TextureId, Fit)>,
+    pub meshes: Vec<(std::sync::Arc<Mesh>, Vec<egui::TextureId>, Fit)>,
     pub white: egui::TextureId,
 }
 
@@ -824,6 +886,7 @@ fn cosmetic_card(
             model::Worn {
                 geometry,
                 texture: *texture,
+                fit: Fit::default(),
             },
             yaw,
         ),
@@ -838,6 +901,7 @@ fn cosmetic_card(
                     white: *white,
                     time: moving.then_some(now),
                     swing: 0.0,
+                    fit: Fit::default(),
                 },
                 yaw,
             );

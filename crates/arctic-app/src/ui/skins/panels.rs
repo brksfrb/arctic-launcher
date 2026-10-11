@@ -274,9 +274,10 @@ impl ArcticApp {
         let worn: Vec<model::Worn> = wearing
             .cuboids
             .iter()
-            .map(|(geometry, texture)| model::Worn {
+            .map(|(geometry, texture, fit)| model::Worn {
                 geometry,
                 texture: *texture,
+                fit: *fit,
             })
             .collect();
         // Sculpted cosmetics play their idle animation (still, if the viewer froze motion).
@@ -284,12 +285,13 @@ impl ArcticApp {
         let worn_meshes: Vec<model::WornMesh> = wearing
             .meshes
             .iter()
-            .map(|(mesh, textures)| model::WornMesh {
+            .map(|(mesh, textures, fit)| model::WornMesh {
                 mesh,
                 textures,
                 white: wearing.white,
                 time: motion,
                 swing: pose.swing,
+                fit: *fit,
             })
             .collect();
         match self.skin_texture(&ctx, &key) {

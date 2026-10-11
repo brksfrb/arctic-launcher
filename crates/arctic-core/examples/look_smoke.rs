@@ -33,6 +33,7 @@ fn main() {
             skin: Some((Texture::Png(png), variant)),
             cape: Some(CapeChoice::Preset(cape.clone())),
             cosmetics: None,
+            fit: None,
         },
     )
     .unwrap();

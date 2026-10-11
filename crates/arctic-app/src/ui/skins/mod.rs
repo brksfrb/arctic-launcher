@@ -54,6 +54,8 @@ pub struct Trying {
     /// Texture key.
     pub cape: Option<Option<String>>,
     pub cosmetics: Option<Vec<String>>,
+    /// How cosmetics sit (by id).
+    pub fit: Option<std::collections::BTreeMap<String, arctic_core::cosmetics::Fit>>,
 }
 
 /// Which skins the Skins section lists.
@@ -173,6 +175,8 @@ impl ArcticApp {
         {
             Some("capes") => Section::Capes,
             Some("cosmetics") => Section::Slot("head"),
+            Some("face") => Section::Slot("face"),
+            Some("shoulders") => Section::Slot("shoulders"),
             _ => Section::default(),
         };
         self.skins = SkinsUi {
@@ -350,6 +354,47 @@ impl ArcticApp {
             };
             self.set_arctic_cape(Some(preset.choice(on)), Some(format!("acape:{shown}")));
         }
+    }
+
+    /// How worn cosmetics sit, including a change still being saved.
+    pub(super) fn current_fits(
+        &self,
+    ) -> std::collections::BTreeMap<String, arctic_core::cosmetics::Fit> {
+        // Debug builds: ARCTIC_DEVSHOT_FIT=id:up,forward,mirror;... (screenshots).
+        if crate::devshot::enabled()
+            && let Ok(spec) = std::env::var("ARCTIC_DEVSHOT_FIT")
+        {
+            return spec
+                .split(';')
+                .filter_map(|one| {
+                    let (id, v) = one.split_once(':')?;
+                    let n: Vec<i8> = v.split(',').filter_map(|x| x.parse().ok()).collect();
+                    let fit = arctic_core::cosmetics::Fit {
+                        up: *n.first()?,
+                        forward: *n.get(1)?,
+                        mirror: n.get(2) == Some(&1),
+                    };
+                    Some((id.to_owned(), fit))
+                })
+                .collect();
+        }
+        match (&self.skins.trying.fit, self.arctic_state()) {
+            (Some(fit), _) => fit.clone(),
+            (None, Some(state)) => state.look.fit.clone(),
+            (None, None) => Default::default(),
+        }
+    }
+
+    /// Wear `id` like this (the default fit forgets it).
+    pub(super) fn set_fit(&mut self, id: &str, fit: arctic_core::cosmetics::Fit) {
+        let mut all = self.current_fits();
+        if fit.is_default() {
+            all.remove(id);
+        } else {
+            all.insert(id.to_owned(), fit);
+        }
+        let shown = all.clone();
+        self.change_look(|l| l.fit = Some(all), |t| t.fit = Some(shown));
     }
 
     fn set_cosmetics(&mut self, ids: Vec<String>) {

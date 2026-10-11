@@ -253,7 +253,7 @@ arctic worlds import <FOLDER_OR_ZIP> | backup <WORLD> | remove <WORLD> [--instan
 arctic waypoints list [--world W] | add <NAME> <X> <Y> <Z> --world W [--dim D] | remove <NAME> --world W [--instance <I>]
     (W is a server address, or sp:<world name>; the game's Compass and Minimap show them)
 arctic skin show | set <PNG> [--model classic|slim] | reset | cape <NAME|none>
-arctic look show | skin <PNG|none> | cape <PRESET|PNG|none> | wear [IDS...]
+arctic look show | skin <PNG|none> | cape <PRESET|PNG|none> | wear [IDS...] | fit <ID> [--up N] [--forward N] [--mirror]
 arctic proxy show | set <HOST> [PORT] [--username U] [--password P] | off | test
 arctic settings show | get <KEY> | set <KEY> <VALUE>
 arctic crash [FILE] [--instance <I>]

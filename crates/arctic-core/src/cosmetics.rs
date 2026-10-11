@@ -106,6 +106,32 @@ pub struct Look {
     /// Worn 3D cosmetics (catalog ids).
     #[serde(default)]
     pub cosmetics: Vec<String>,
+    /// How some of them sit, by id.
+    #[serde(default)]
+    pub fit: std::collections::BTreeMap<String, Fit>,
+}
+
+/// Half pixels a face cosmetic can move up or down (the server keeps it within this).
+pub const FIT_UP: i8 = 6;
+/// Half pixels a face cosmetic can move forward or back.
+pub const FIT_FORWARD: i8 = 4;
+
+/// How a cosmetic sits: moved in half pixels (up; forward, toward the face), or worn on the other
+/// side, mirrored (a shoulder pet).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, Deserialize)]
+pub struct Fit {
+    #[serde(default)]
+    pub up: i8,
+    #[serde(default)]
+    pub forward: i8,
+    #[serde(default)]
+    pub mirror: bool,
+}
+
+impl Fit {
+    pub fn is_default(&self) -> bool {
+        *self == Fit::default()
+    }
 }
 
 impl Look {
@@ -138,6 +164,8 @@ pub struct NewLook {
     pub cape: Option<CapeChoice>,
     /// Cosmetics to wear; `None` leaves the current ones on.
     pub cosmetics: Option<Vec<String>>,
+    /// How they sit; `None` leaves the current fits.
+    pub fit: Option<std::collections::BTreeMap<String, Fit>>,
 }
 
 impl NewLook {
@@ -159,6 +187,7 @@ impl NewLook {
             skin,
             cape,
             cosmetics: None,
+            fit: None,
         }
     }
 }
@@ -217,9 +246,15 @@ pub fn set_look(base: &str, token: &str, look: &NewLook) -> Result<Look> {
         .config()
         .http_status_as_error(false)
         .build()
-        .send_json(match &look.cosmetics {
-            Some(ids) => serde_json::json!({ "skin": skin, "cape": cape, "cosmetics": ids }),
-            None => serde_json::json!({ "skin": skin, "cape": cape }),
+        .send_json({
+            let mut body = serde_json::json!({ "skin": skin, "cape": cape });
+            if let Some(ids) = &look.cosmetics {
+                body["cosmetics"] = serde_json::json!(ids);
+            }
+            if let Some(fit) = &look.fit {
+                body["fit"] = serde_json::json!(fit);
+            }
+            body
         })?;
     let status = resp.status().as_u16();
     if !(200..300).contains(&status) {

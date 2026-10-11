@@ -65,9 +65,10 @@ public final class LegacyCosmeticLayer implements FeatureRenderer<AbstractClient
 			if (cosmetics.drawable(worn) == null) {
 				continue;
 			}
+			com.arcticlauncher.client.looks.Fit fit = look.fit(worn);
 			LegacyCosmetics.Mesh mesh = LegacyCosmetics.mesh(worn);
 			if (mesh != null) {
-				drawMesh(player, tickDelta, mesh, animate);
+				drawMesh(player, tickDelta, mesh, animate, fit);
 				continue;
 			}
 			LegacyCosmetics.Cuboid cuboid = LegacyCosmetics.cuboid(worn);
@@ -77,6 +78,7 @@ public final class LegacyCosmeticLayer implements FeatureRenderer<AbstractClient
 			for (CuboidModel.Piece piece : cuboid.pieces) {
 				GlStateManager.pushMatrix();
 				part(piece.attach).preRender(SCALE);
+				fit(fit);
 				draw(cuboid.texture, new Pass(piece));
 				if (cuboid.glow != null) {
 					drawGlow(player, tickDelta, cuboid.glow, new Pass(piece));
@@ -136,10 +138,12 @@ public final class LegacyCosmeticLayer implements FeatureRenderer<AbstractClient
 	}
 
 	/** A sculpted cosmetic: each part it follows, its idle animation (at rest when motion is frozen), and its glow. */
-	private void drawMesh(AbstractClientPlayerEntity player, float tickDelta, LegacyCosmetics.Mesh mesh, boolean animate) {
+	private void drawMesh(AbstractClientPlayerEntity player, float tickDelta, LegacyCosmetics.Mesh mesh, boolean animate,
+			com.arcticlauncher.client.looks.Fit fit) {
 		for (MeshDraw.Group group : mesh.groups) {
 			GlStateManager.pushMatrix();
 			part(group.attach).preRender(SCALE);
+			fit(fit);
 			for (int primitive : group.primitives) {
 				draw(mesh.textureOf(primitive), new Pass(mesh, primitive, group.attach, animate, false));
 				Identifier glow = mesh.emissiveOf(primitive);
@@ -152,6 +156,18 @@ public final class LegacyCosmeticLayer implements FeatureRenderer<AbstractClient
 				}
 			}
 			GlStateManager.popMatrix();
+		}
+	}
+
+	/** Where its wearer moved it: in the part's own space, mirrored across the body for the other side. */
+	private static void fit(com.arcticlauncher.client.looks.Fit fit) {
+		if (!fit.moves()) {
+			return;
+		}
+		GlStateManager.translate(0f, fit.dy() * SCALE, fit.dz() * SCALE);
+		if (fit.mirror) {
+			// Drawn with culling off, so the mirrored faces still show.
+			GlStateManager.scale(-1f, 1f, 1f);
 		}
 	}
 

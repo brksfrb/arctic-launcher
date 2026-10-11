@@ -563,6 +563,22 @@ pub enum LookCommand {
         #[arg(long)]
         account: Option<String>,
     },
+    /// How a worn cosmetic sits: moved in half pixels (face items, to sit on your skin's eyes),
+    /// or on the other shoulder. No options puts it back as it was made.
+    Fit {
+        id: String,
+        /// Up (negative: down), -6 to 6.
+        #[arg(long, default_value_t = 0, allow_negative_numbers = true)]
+        up: i8,
+        /// Toward the face (negative: away), -4 to 4.
+        #[arg(long, default_value_t = 0, allow_negative_numbers = true)]
+        forward: i8,
+        /// Wear it on the other side, mirrored.
+        #[arg(long)]
+        mirror: bool,
+        #[arg(long)]
+        account: Option<String>,
+    },
 }
 
 impl LookCommand {
@@ -571,7 +587,8 @@ impl LookCommand {
             Self::Show { account }
             | Self::Skin { account, .. }
             | Self::Cape { account, .. }
-            | Self::Wear { account, .. } => account.as_deref(),
+            | Self::Wear { account, .. }
+            | Self::Fit { account, .. } => account.as_deref(),
         }
     }
 }

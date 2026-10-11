@@ -41,6 +41,10 @@ final class LegacySelfTest {
 			LegacyWorldTest.start();
 			return;
 		}
+		if (LegacyFitTest.requested()) {
+			LegacyFitTest.start();
+			return;
+		}
 		if (LegacyVisualsTest.requested()) {
 			LegacyVisualsTest.start();
 			return;

@@ -112,6 +112,31 @@ pub fn look(ctx: &Ctx, command: &LookCommand) -> Result<i32> {
             }
             new.cosmetics = Some(ids.clone());
         }
+        LookCommand::Fit {
+            id,
+            up,
+            forward,
+            mirror,
+            ..
+        } => {
+            if !current.cosmetics.contains(id) {
+                return Err(Error::Other(format!(
+                    "you're not wearing '{id}' (see `arctic look show`)"
+                )));
+            }
+            let mut fits = current.fit.clone();
+            let fit = cosmetics::Fit {
+                up: (*up).clamp(-cosmetics::FIT_UP, cosmetics::FIT_UP),
+                forward: (*forward).clamp(-cosmetics::FIT_FORWARD, cosmetics::FIT_FORWARD),
+                mirror: *mirror,
+            };
+            if fit.is_default() {
+                fits.remove(id);
+            } else {
+                fits.insert(id.clone(), fit);
+            }
+            new.fit = Some(fits);
+        }
     }
     let look = cosmetics::set_look(&base, &token, &new)?;
     show_look(ctx, &account, &look, &presets, &items, false);
@@ -165,6 +190,7 @@ fn show_look(
             "model": look.model,
             "cape": look.cape,
             "cosmetics": look.cosmetics,
+            "fit": look.fit,
             "presets": presets.iter().map(|p| json!({"id": p.id, "name": p.name})).collect::<Vec<_>>(),
             "items": items.iter().map(|i| json!({"id": i.id, "name": i.name, "slot": i.slot})).collect::<Vec<_>>(),
         }),
@@ -176,6 +202,20 @@ fn show_look(
                 cape_name.unwrap_or("none"),
                 if look.cosmetics.is_empty() { "nothing".into() } else { look.cosmetics.join(", ") }
             );
+            for (id, fit) in &look.fit {
+                let mut how = Vec::new();
+                if fit.up != 0 {
+                    how.push(format!("up {}", fit.up));
+                }
+                if fit.forward != 0 {
+                    how.push(format!("forward {}", fit.forward));
+                }
+                if fit.mirror {
+                    how.push("other side".to_owned());
+                }
+                text.push_str(&format!("
+    {id}: {}", how.join(", ")));
+            }
             if !with_choices {
                 return text;
             }
