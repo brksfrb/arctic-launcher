@@ -189,7 +189,8 @@ public final class HudEditor extends Page {
 	}
 
 	private void drawBar(Gfx g, Style s, int mx, int my) {
-		boolean removing = dragging != null && moved && inBar(mx, my);
+		// Where the widget is being dragged (the same as the mouse, when a mouse drags it).
+		boolean removing = dragging != null && moved && inBar(mouseX, mouseY);
 		float a = removing ? 1f : shown;
 		Skin.panel(g, s, bx, by, bx + BAR_W, by + BAR_H);
 		if (removing) {

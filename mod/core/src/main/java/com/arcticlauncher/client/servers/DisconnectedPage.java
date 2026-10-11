@@ -94,10 +94,11 @@ public final class DisconnectedPage extends Page {
 			})).bounds(left, y, BUTTON_W, BUTTON_H);
 			y += BUTTON_H + GAP;
 		}
-		add(new Button(tr("gui.toMenu", "Back to Title Screen"), () -> platform.openPage(ArcticClient.titleMenu())))
-				.bounds(left, y, (BUTTON_W - GAP) / 2, BUTTON_H);
-		add(new Button(tr("menu.multiplayer", "Multiplayer"), () -> platform.openPage(new ServersPage())))
-				.bounds(left + (BUTTON_W + GAP) / 2, y, BUTTON_W - (BUTTON_W + GAP) / 2, BUTTON_H);
+		// The game's own wording: "gui.toMenu" is its "Back to Server List".
+		add(new Button(tr("gui.toMenu", "Back to Server List"), () -> platform.openPage(new ServersPage()))).bounds(left, y, BUTTON_W, BUTTON_H);
+		y += BUTTON_H + GAP;
+		add(new Button(tr("gui.toTitle", "Back to Title Screen"), () -> platform.openPage(ArcticClient.titleMenu())))
+				.bounds(left, y, BUTTON_W, BUTTON_H);
 	}
 
 	private void reconnect() {

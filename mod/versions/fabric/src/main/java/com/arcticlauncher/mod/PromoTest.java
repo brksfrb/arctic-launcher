@@ -106,7 +106,8 @@ final class PromoTest {
 				// Something in the target widget: in front of you, across the crosshair.
 				later(t, () -> {
 					command("kill @e[type=minecraft:horse]");
-					command("execute positioned ^ ^ ^4 run summon minecraft:horse ~ ~ ~ {NoAI:1b,Variant:2,Rotation:[" + (v[2] + 90) + "f,0f]}");
+					// Within reach (3 blocks in survival), or it isn't what you're aiming at.
+					command("execute positioned ^ ^ ^2.5 run summon minecraft:horse ~ ~ ~ {NoAI:1b,Variant:2,Rotation:[" + (v[2] + 90) + "f,0f]}");
 				});
 				later(t + 2, () -> WorldTest.shot("promo-target"));
 				later(t + 3, () -> command("kill @e[type=minecraft:horse]"));
@@ -323,6 +324,8 @@ final class PromoTest {
 	}
 
 	private static int height(net.minecraft.server.level.ServerLevel level, int x, int z) {
+		// Generated first: an unloaded chunk would read as the bottom of the world.
+		level.getChunk(x >> 4, z >> 4);
 		return level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, x, z);
 	}
 
@@ -362,10 +365,37 @@ final class PromoTest {
 			editor.mouseDragged(x + 140, y + 70, 0);
 		});
 		later(3, () -> WorldTest.shot("promo-hud-editor"));
+		// Over the bar: "Drop here to take it off".
 		later(4, () -> {
+			int[] bar = bar(editor);
+			if (bar != null) {
+				editor.mouseDragged(bar[0], bar[1], 0);
+			}
+		});
+		later(5, () -> WorldTest.shot("promo-hud-editor-remove"));
+		later(6, () -> {
 			ArcticMod.LOG.info("promotest: done");
 			Minecraft.getInstance().stop();
 		});
+	}
+
+	/** The middle of the editor's bar (GUI pixels), or null. */
+	private static int[] bar(HudEditor editor) {
+		try {
+			int[] at = new int[2];
+			String[][] fields = {{"bx", "BAR_W"}, {"by", "BAR_H"}};
+			for (int i = 0; i < 2; i++) {
+				java.lang.reflect.Field pos = HudEditor.class.getDeclaredField(fields[i][0]);
+				java.lang.reflect.Field size = HudEditor.class.getDeclaredField(fields[i][1]);
+				pos.setAccessible(true);
+				size.setAccessible(true);
+				at[i] = pos.getInt(editor) + size.getInt(null) / 2;
+			}
+			return at;
+		} catch (ReflectiveOperationException e) {
+			ArcticMod.LOG.error("promotest: editor bar", e);
+			return null;
+		}
 	}
 
 	@SuppressWarnings("unchecked")

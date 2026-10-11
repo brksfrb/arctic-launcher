@@ -25,6 +25,8 @@ public final class EmoteWheel extends Page {
 	private static final int PER_PAGE = 12;
 	private static final int DOT_R = 3;
 	private static final int DOT_GAP = 10;
+	/** Smallest a one-word emote name is drawn to fit its circle. */
+	private static final float MIN_LABEL_SCALE = 0.7f;
 
 	private int mouseX = -1;
 	private int mouseY = -1;
@@ -124,8 +126,16 @@ public final class EmoteWheel extends Page {
 	 */
 	private static void label(Gfx g, String name, int x, int y, int color) {
 		int max = ITEM_R * 2 - 4;
-		if (g.textWidth(name) <= max || name.indexOf(' ') < 0) {
-			Draw.centered(g, Draw.fit(g, name, max), x, y - 4, color, false);
+		int width = g.textWidth(name);
+		if (width <= max) {
+			Draw.centered(g, name, x, y - 4, color, false);
+			return;
+		}
+		if (name.indexOf(' ') < 0) {
+			// One long word: a little smaller, whole.
+			float scale = Math.max(MIN_LABEL_SCALE, max / (float) width);
+			Draw.big(g, Draw.fit(g, name, Math.round(max / scale)), Math.round(x - Math.min(width, max / scale) * scale / 2f),
+					Math.round(y - 4 * scale), scale, color);
 			return;
 		}
 		// Split where the two lines come out most even.
