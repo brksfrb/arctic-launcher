@@ -22,6 +22,19 @@ public final class CapeFormat {
 	private static final int[] CAPE_BACK = {12, 1, 10, 16};
 	private static final int[] WING_OUTSIDE = {36, 2, 10, 20};
 	private static final int[] WING_INSIDE = {24, 2, 10, 20};
+	/**
+	 * The wing's thin faces (it's 10 wide, 20 tall, 2 thick): its sides, top and bottom. Left
+	 * empty, the wings are see-through edge-on (from the side, or from above between them).
+	 */
+	private static final int[] WING_SIDE_IN = {22, 2, 2, 20};
+	private static final int[] WING_SIDE_OUT = {34, 2, 2, 20};
+	private static final int[] WING_TOP = {24, 0, 10, 2};
+	private static final int[] WING_BOTTOM = {34, 0, 10, 2};
+	/** The cape front's edge columns and rows, which those are painted from (the cape's own edges are often empty). */
+	private static final int[] FRONT_LEFT = {1, 1, 1, 16};
+	private static final int[] FRONT_RIGHT = {10, 1, 1, 16};
+	private static final int[] FRONT_TOP = {1, 1, 10, 1};
+	private static final int[] FRONT_BOTTOM = {1, 16, 10, 1};
 	/** The whole wing box's area: empty here means that frame has no elytra art. */
 	private static final int[] WING_AREA = {22, 0, 24, 22};
 
@@ -71,6 +84,10 @@ public final class CapeFormat {
 			if (empty(in, top, s)) {
 				copy(g, in, CAPE_FRONT, WING_OUTSIDE, s, top);
 				copy(g, in, CAPE_BACK, WING_INSIDE, s, top);
+				copy(g, in, FRONT_LEFT, WING_SIDE_IN, s, top);
+				copy(g, in, FRONT_RIGHT, WING_SIDE_OUT, s, top);
+				copy(g, in, FRONT_TOP, WING_TOP, s, top);
+				copy(g, in, FRONT_BOTTOM, WING_BOTTOM, s, top);
 			}
 		}
 		g.dispose();

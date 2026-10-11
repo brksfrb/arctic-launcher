@@ -19,6 +19,22 @@ class CapeFormatTest {
 	}
 
 	@Test
+	void theWingsEdgesArePaintedSoTheyAreNotSeeThroughEdgeOn() {
+		BufferedImage cape = new BufferedImage(64, 32, BufferedImage.TYPE_INT_ARGB);
+		for (int y = 1; y < 17; y++) {
+			for (int x = 1; x < 11; x++) {
+				cape.setRGB(x, y, 0xFF336699); // a solid front face
+			}
+		}
+		BufferedImage out = CapeFormat.withElytra(cape);
+		// Sides (22..24 and 34..36, 2..22), top (24..34, 0..2) and bottom (34..44, 0..2).
+		assertEquals(0xFF336699, out.getRGB(22, 10));
+		assertEquals(0xFF336699, out.getRGB(35, 10));
+		assertEquals(0xFF336699, out.getRGB(28, 1));
+		assertEquals(0xFF336699, out.getRGB(40, 0));
+	}
+
+	@Test
 	void aCapeWithElytraArtIsLeftAlone() {
 		BufferedImage cape = new BufferedImage(64, 32, BufferedImage.TYPE_INT_ARGB);
 		cape.setRGB(30, 10, 0xFF00FF00);
