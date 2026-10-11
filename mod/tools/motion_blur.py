@@ -4,7 +4,8 @@ Usage: python mod/tools/motion_blur.py
 Writes mod/versions/fabric/src/main/resources/resourcepacks/client/assets/arctic/...
 
 Each frame is blended with the last blended frame, kept in a persistent target:
-out = mix(now, previous, strength), previous = out. One post effect per strength
+out = mix(now, previous, strength), previous = out. A previous frame that wasn't kept
+(cleared to transparent black) isn't blended in. One post effect per strength
 (post-effect uniforms are fixed in the JSON) and per shader dialect: 26.3's
 shaders are Vulkan-style GLSL, 26.1 and 26.2 plain GLSL 330.
 """
@@ -35,8 +36,10 @@ layout(location = 0) out vec4 fragColor;
 
 void main() {
     vec3 now = texture(InSampler, texCoord).rgb;
-    vec3 previous = texture(PrevSampler, texCoord).rgb;
-    fragColor = vec4(mix(now, previous, Strength), 1.0);
+    // A kept frame is opaque; a previous-frame buffer some drivers lose (or wipe) reads as
+    // transparent black: blend only with what was really kept, or the picture darkens.
+    vec4 previous = texture(PrevSampler, texCoord);
+    fragColor = vec4(mix(now, previous.rgb, Strength * previous.a), 1.0);
 }
 """),
     "_gl": ("motion_blur_gl", """#version 330
@@ -54,8 +57,10 @@ out vec4 fragColor;
 
 void main() {
     vec3 now = texture(InSampler, texCoord).rgb;
-    vec3 previous = texture(PrevSampler, texCoord).rgb;
-    fragColor = vec4(mix(now, previous, Strength), 1.0);
+    // A kept frame is opaque; a previous-frame buffer some drivers lose (or wipe) reads as
+    // transparent black: blend only with what was really kept, or the picture darkens.
+    vec4 previous = texture(PrevSampler, texCoord);
+    fragColor = vec4(mix(now, previous.rgb, Strength * previous.a), 1.0);
 }
 """),
 }

@@ -13,6 +13,8 @@ out vec4 fragColor;
 
 void main() {
     vec3 now = texture(InSampler, texCoord).rgb;
-    vec3 previous = texture(PrevSampler, texCoord).rgb;
-    fragColor = vec4(mix(now, previous, Strength), 1.0);
+    // A kept frame is opaque; a previous-frame buffer some drivers lose (or wipe) reads as
+    // transparent black: blend only with what was really kept, or the picture darkens.
+    vec4 previous = texture(PrevSampler, texCoord);
+    fragColor = vec4(mix(now, previous.rgb, Strength * previous.a), 1.0);
 }

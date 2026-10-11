@@ -997,6 +997,13 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public String translate(String key, String english) {
+		String text = net.minecraft.client.resource.language.I18n.translate(key);
+		// Unknown keys come back as themselves.
+		return text == null || text.equals(key) ? english : text;
+	}
+
+	@Override
 	public void joinServer(String serverId) throws Exception {
 		mc().getSessionService().joinServer(mc().getSession().getProfile(), mc().getSession().getAccessToken(), serverId);
 	}

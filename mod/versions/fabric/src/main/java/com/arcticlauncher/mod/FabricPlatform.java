@@ -58,6 +58,16 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public String translate(String key, String english) {
+		//#if MC >= 1.16
+		net.minecraft.locale.Language language = net.minecraft.locale.Language.getInstance();
+		return language.has(key) ? language.getOrDefault(key) : english;
+		//#else
+		return net.minecraft.client.resources.language.I18n.exists(key) ? net.minecraft.client.resources.language.I18n.get(key) : english;
+		//#endif
+	}
+
+	@Override
 	public void log(boolean warning, String message) {
 		if (warning) {
 			ArcticMod.LOG.warn(message);

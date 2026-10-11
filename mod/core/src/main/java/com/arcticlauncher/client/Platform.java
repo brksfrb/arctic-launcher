@@ -13,6 +13,14 @@ public interface Platform {
 	/** The running Minecraft version, like "26.3". */
 	String minecraftVersion();
 
+	/**
+	 * Minecraft's own text for translation {@code key} in the player's language, or {@code english}
+	 * when this version has no such key.
+	 */
+	default String translate(String key, String english) {
+		return english;
+	}
+
 	File configDir();
 
 	void log(boolean warning, String message);

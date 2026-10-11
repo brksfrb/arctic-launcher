@@ -42,6 +42,11 @@ public final class TitleMenu extends Page {
 		return height / 4 + 48;
 	}
 
+	/** The game's own word for it in the player's language (these buttons stand in for its own). */
+	private static String tr(String key, String english) {
+		return ArcticClient.platform().translate(key, english);
+	}
+
 	private int logoTop() {
 		return Math.max(6, height / 4 - 36);
 	}
@@ -50,23 +55,23 @@ public final class TitleMenu extends Page {
 	protected void build() {
 		int left = width / 2 - BUTTON_W / 2;
 		int y = buttonsTop();
-		add(new Button("Singleplayer", run(MenuAction.SINGLEPLAYER)).primary()).bounds(left, y, BUTTON_W, BUTTON_H);
+		add(new Button(tr("menu.singleplayer", "Singleplayer"), run(MenuAction.SINGLEPLAYER)).primary()).bounds(left, y, BUTTON_W, BUTTON_H);
 		y += BUTTON_H + GAP;
-		add(new Button("Multiplayer", run(MenuAction.MULTIPLAYER))).bounds(left, y, BUTTON_W, BUTTON_H);
+		add(new Button(tr("menu.multiplayer", "Multiplayer"), run(MenuAction.MULTIPLAYER))).bounds(left, y, BUTTON_W, BUTTON_H);
 		y += BUTTON_H + GAP;
-		add(new Button("Realms", run(MenuAction.REALMS))).bounds(left, y, BUTTON_W, BUTTON_H);
+		add(new Button(tr("menu.online", "Realms"), run(MenuAction.REALMS))).bounds(left, y, BUTTON_W, BUTTON_H);
 		y += BUTTON_H + GAP * 3;
 		int third = (BUTTON_W - GAP * 2) / 3;
-		add(new Button("Options", run(MenuAction.OPTIONS))).bounds(left, y, third, BUTTON_H);
+		add(new Button(tr("menu.options", "Options"), run(MenuAction.OPTIONS))).bounds(left, y, third, BUTTON_H);
 		add(new Button("Arctic", new Runnable() {
 			@Override
 			public void run() {
 				ArcticClient.platform().openPage(Menus.page("mods"));
 			}
 		})).bounds(left + third + GAP, y, third, BUTTON_H);
-		add(new Button("Quit", run(MenuAction.QUIT))).bounds(left + (third + GAP) * 2, y, BUTTON_W - (third + GAP) * 2, BUTTON_H);
+		add(new Button(tr("menu.quit", "Quit"), run(MenuAction.QUIT))).bounds(left + (third + GAP) * 2, y, BUTTON_W - (third + GAP) * 2, BUTTON_H);
 		corner("Accessibility", MenuAction.ACCESSIBILITY, width - 6);
-		corner("Language", MenuAction.LANGUAGE, width - 6 - 76 - GAP);
+		corner(tr("options.language", "Language"), MenuAction.LANGUAGE, width - 6 - 76 - GAP);
 		int right = width - 6 - (76 + GAP) * 2;
 		if (com.arcticlauncher.client.replay.Replays.canWatch()) {
 			add(new Button("Replays", () -> ArcticClient.platform().openPage(Menus.page("replays")))).bounds(right - 76, 6, 76, 16);
