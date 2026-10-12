@@ -89,6 +89,8 @@ pub struct Settings {
     pub exit_games_with_launcher: bool,
     /// Mentions of Arctic's supporter (About, playing together).
     pub show_sponsor: bool,
+    /// A "Quick tip" card in the sidebar: one feature at a time.
+    pub quick_tips: bool,
     /// Laptops with two graphics cards: run the game on the high-performance
     /// one (Windows' per-program choice; one the player made is kept).
     pub high_performance_gpu: bool,
@@ -263,6 +265,7 @@ impl Default for Settings {
             share_server_with_friends: false,
             exit_games_with_launcher: false,
             show_sponsor: true,
+            quick_tips: true,
             high_performance_gpu: true,
             voice: VoiceSettings::default(),
             shared: crate::shared::SharedSettings::default(),

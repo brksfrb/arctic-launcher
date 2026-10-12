@@ -193,6 +193,7 @@ pub struct ArcticApp {
     pub(crate) game_defaults: crate::ui::DefaultsUi,
     pub(crate) migrate: Option<crate::ui::MigrateUi>,
     pub(crate) storage: crate::ui::StorageUi,
+    pub(crate) quick_tips: crate::ui::QuickTips,
     pub(crate) skins: crate::ui::SkinsUi,
     devshot: crate::devshot::DevShot,
     /// Command lines from later starts (see `single_instance`).
@@ -264,6 +265,7 @@ impl ArcticApp {
             game_defaults: crate::ui::DefaultsUi::default(),
             migrate: None,
             storage: crate::ui::StorageUi::default(),
+            quick_tips: crate::ui::QuickTips::default(),
             skins: crate::ui::SkinsUi::default(),
             devshot: crate::devshot::DevShot::from_env(),
             forwarded,

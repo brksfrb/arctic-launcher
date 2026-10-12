@@ -106,6 +106,8 @@ impl ArcticApp {
             self.account_switcher(ui);
             ui.add_space(6.0);
             self.sponsor_sidebar(ui);
+            ui.add_space(6.0);
+            self.quick_tip(ui);
         });
     }
 

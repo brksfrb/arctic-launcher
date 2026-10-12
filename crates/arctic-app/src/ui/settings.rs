@@ -66,6 +66,8 @@ impl ArcticApp {
                 .on_hover_text(
                     "\"Supported by Flash Hosting\" in the sidebar, About and Play together.",
                 );
+            ui.checkbox(&mut s.quick_tips, "Show quick tips")
+                .on_hover_text("A tip about one of Arctic's features in the sidebar, a new one every 5 minutes.");
         });
 
         section(ui, p, "Arctic Client", |ui| {
