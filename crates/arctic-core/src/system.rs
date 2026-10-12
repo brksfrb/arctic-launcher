@@ -8,6 +8,20 @@ const MAX_RECOMMENDED_MB: u32 = 8 * 1024;
 /// Memory kept for the OS and other programs when recommending.
 const FLOOR_RECOMMENDED_MB: u32 = 2 * 1024;
 
+/// Memory the game is given at most, whatever the setting: what's installed minus room for the
+/// system. A setting above what the computer has makes Java fail before the game opens
+/// ("Native memory allocation failed").
+pub fn playable_memory_mb(asked: u32) -> u32 {
+    match total_memory_mb() {
+        Some(total) => {
+            let room =
+                (total.saturating_sub(u64::from(FLOOR_RECOMMENDED_MB)) as u32).max(MIN_MEMORY_MB);
+            asked.min(room)
+        }
+        None => asked,
+    }
+}
+
 /// Installed physical memory in MiB, if it can be read.
 pub fn total_memory_mb() -> Option<u64> {
     imp::total_memory_bytes().map(|b| b / (1024 * 1024))

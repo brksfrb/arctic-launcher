@@ -341,6 +341,9 @@ impl ArcticApp {
                         level: Level::Error,
                         text: format!("──── Arctic: {} — {} ────", d.title, d.detail),
                     }]);
+                    if d.repair {
+                        arctic_core::launch::files::request_repair(&self.dirs);
+                    }
                 }
                 let crashed = matches!(code, Some(c) if c != 0 && !watchdog);
                 if crashed {

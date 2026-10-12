@@ -13,6 +13,8 @@ pub struct Diagnosis {
     pub detail: String,
     /// Mods involved (names or ids), if the logs say.
     pub mods: Vec<String>,
+    /// A game or loader file is damaged: the next start checks every library and fetches it again.
+    pub repair: bool,
 }
 
 impl Diagnosis {
@@ -26,6 +28,7 @@ impl Diagnosis {
             title: title.into(),
             detail: detail.into(),
             mods,
+            repair: false,
         }
     }
 }
@@ -145,6 +148,55 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
+        // Not the heap: a thread ran out of its own stack (endless recursion in a mod, or a driver).
+        pattern: r"OutOfMemoryError: Out of stack space|java\.lang\.StackOverflowError",
+        explain: |_, text| {
+            let vulkan = text.contains("net.vulkanmod") || text.contains("vulkanmod");
+            Diagnosis::new(
+                "The game ran out of stack space",
+                if vulkan {
+                    "A part of the game went in circles until its thread's stack was full. That isn't RAM: more memory won't help. VulkanMod is in this game; update it and the graphics driver, or play without it."
+                } else {
+                    "A part of the game went in circles until its thread's stack was full. That isn't RAM: more memory won't help. A mod is usually behind it; try updating your mods."
+                },
+                Vec::new(),
+            )
+        },
+    },
+    Rule {
+        // The system couldn't give Java the memory it was told to take (Windows: the paging file is
+        // too small for it; "errno=1455").
+        pattern: r"There is insufficient memory for the Java Runtime Environment|Native memory allocation \(mmap\) failed|errno=1455",
+        explain: |_, _| {
+            Diagnosis::new(
+                "Not enough memory for the memory setting",
+                "Minecraft was told to take more memory than this computer could give it. Lower the Maximum in Settings → Memory (or the instance's own setting), or close other programs.",
+                Vec::new(),
+            )
+        },
+    },
+    Rule {
+        // VulkanMod (or the Vulkan driver under it) failed: a lost device, no swap chain, its own bugs.
+        pattern: r"VK_ERROR_[A-Z_]+|at net\.vulkanmod\.|No GLCapabilities instance set for the current thread",
+        explain: |c, text| {
+            if !(c[0].starts_with("VK_ERROR") || text.contains("vulkanmod")) {
+                return Diagnosis::none();
+            }
+            Diagnosis::new(
+                "VulkanMod crashed",
+                format!(
+                    "VulkanMod or the graphics driver under it failed{}. Update your graphics driver and VulkanMod, or remove VulkanMod to play with the game's own renderer.",
+                    if c[0].starts_with("VK_ERROR") {
+                        format!(" ({})", &c[0])
+                    } else {
+                        String::new()
+                    }
+                ),
+                vec!["vulkanmod".into()],
+            )
+        },
+    },
+    Rule {
         pattern: r"java\.lang\.OutOfMemoryError",
         explain: |_, _| {
             Diagnosis::new(
@@ -211,6 +263,24 @@ const RULES: &[Rule] = &[
                 format!("Probably caused by {}", mods.join(", ")),
                 "The crash report points at these mods. Try updating them, or remove them to check.",
                 mods,
+            )
+        },
+    },
+    Rule {
+        // A class of the game's or the loader's own libraries can't be found: the file is damaged
+        // (a jar the right size whose insides can't be read), not a mod made for another version.
+        // "NoClassDefFoundError: org/spongepowered/asm/mixin/throwables/MixinError" from Fabric's
+        // Mixin bootstrap, before any mod runs.
+        pattern: r"(?:NoClassDefFoundError|ClassNotFoundException):? ((?:org[./]spongepowered[./]asm|org[./]objectweb[./]asm|net[./]fabricmc[./]loader|org[./]quiltmc[./]loader|cpw[./]mods|net[./]minecraftforge[./]fml|net[./]neoforged[./]fml|org[./]lwjgl|com[./]mojang[./](?:blaze3d|authlib|brigadier|datafixers|logging|serialization))[\w./$]*)",
+        explain: |c, _| Diagnosis {
+            repair: true,
+            ..Diagnosis::new(
+                "A game file is damaged",
+                format!(
+                    "Part of Minecraft or its mod loader couldn't be read ({}). Arctic checks the game's files and downloads fresh copies the next time you press Play.",
+                    c[1].replace('/', ".")
+                ),
+                Vec::new(),
             )
         },
     },
@@ -425,6 +495,63 @@ mod tests {
 
     fn title(text: &str) -> String {
         diagnose(text).map(|d| d.title).unwrap_or_default()
+    }
+
+    #[test]
+    fn the_crash_reports_get_the_right_explanation() {
+        // #01: Java couldn't get the 32 GB it was told to take.
+        assert_eq!(
+            title("OpenJDK 64-Bit Server VM warning: INFO: os::commit_memory(0x0, 34359738368, 0) failed; error='...' (DOS error/errno=1455)
+# There is insufficient memory for the Java Runtime Environment to continue.
+# Native memory allocation (mmap) failed to map 34359738368 bytes. Error detail: G1 virtual space"),
+            "Not enough memory for the memory setting"
+        );
+        // #17-21: a thread's stack, not the heap.
+        assert_eq!(
+            title("java.lang.OutOfMemoryError: Out of stack space."),
+            "The game ran out of stack space"
+        );
+        // #03, #09-16, #04: VulkanMod and its driver.
+        assert_eq!(
+            title(
+                "java.lang.RuntimeException: Failed to create swap chain: VK_ERROR_INITIALIZATION_FAILED"
+            ),
+            "VulkanMod crashed"
+        );
+        assert_eq!(
+            title(
+                "java.lang.NullPointerException: Cannot invoke \"x\"
+	at net.vulkanmod.render.chunk.WorldRenderer.allChanged(WorldRenderer.java:1)"
+            ),
+            "VulkanMod crashed"
+        );
+        // The heap really full is still about memory.
+        assert_eq!(
+            title("java.lang.OutOfMemoryError: Java heap space"),
+            "Minecraft ran out of memory"
+        );
+    }
+
+    #[test]
+    fn a_missing_loader_class_is_a_damaged_file_not_a_mod() {
+        // Crash report #22: Fabric's Mixin bootstrap, before any mod ran.
+        let log = "[main/ERROR] Uncaught exception in thread \"main\"
+    java.lang.NoClassDefFoundError: org/spongepowered/asm/mixin/throwables/MixinError
+    	at net.fabricmc.loader.impl.launch.FabricMixinBootstrap.init(FabricMixinBootstrap.java:59)
+    Caused by: java.lang.ClassNotFoundException: org.spongepowered.asm.mixin.throwables.MixinError";
+        let d = diagnose(log).unwrap();
+        assert_eq!(d.title, "A game file is damaged");
+        assert!(d.repair);
+        assert!(
+            d.detail
+                .contains("org.spongepowered.asm.mixin.throwables.MixinError"),
+            "{}",
+            d.detail
+        );
+        // A mod's own class missing is still about the mod.
+        let d = diagnose("java.lang.NoClassDefFoundError: com/example/coolmod/Thing").unwrap();
+        assert_eq!(d.title, "A mod is for a different version");
+        assert!(!d.repair);
     }
 
     #[test]

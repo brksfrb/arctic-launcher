@@ -175,6 +175,12 @@ pub fn install(
 ) -> Result<Installation> {
     let clock = std::time::Instant::now();
     fs::create_dir_all(game_dir).at(game_dir)?;
+    // 1.8.9 lists this folder when a server sends a resource pack and crashes if it isn't there
+    // ("Parameter 'directory' is not a directory"); later versions make it themselves.
+    let server_packs = game_dir.join("server-resource-packs");
+    if !server_packs.exists() {
+        let _ = fs::create_dir_all(&server_packs);
+    }
     let libs = files::resolve_libraries(dirs, &version, &RuleEnv::for_version(&version));
     let client = files::client_job(dirs, &version)?;
     let client_jar = client.dest.clone();
@@ -206,6 +212,8 @@ pub fn install(
 
     let mut jobs = libs.jobs;
     jobs.push(client);
+    // After a crash that pointed at a damaged file: each library and the client checked in full.
+    files::repair_if_asked(dirs, &jobs);
     jobs.extend(logging.iter().map(|(job, _)| job.clone()));
     jobs.extend(runtime.iter().flat_map(|r| r.jobs.iter().cloned()));
     let assets_fresh = files::assets_verified_recently(dirs, &assets.index_name);
@@ -593,9 +601,16 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
         }
         _ => Vec::new(),
     };
+    let asked = req.instance.max_memory_mb.unwrap_or(settings.max_memory_mb);
+    let max_memory_mb = crate::system::playable_memory_mb(asked);
+    if max_memory_mb < asked {
+        log::warn!(
+            "memory setting {asked} MB is more than this computer can spare: using {max_memory_mb} MB"
+        );
+    }
     let opts = JvmOptions {
-        min_memory_mb: settings.min_memory_mb,
-        max_memory_mb: req.instance.max_memory_mb.unwrap_or(settings.max_memory_mb),
+        min_memory_mb: settings.min_memory_mb.min(max_memory_mb),
+        max_memory_mb,
         extra: settings
             .extra_jvm_args
             .split_whitespace()
@@ -613,7 +628,7 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
                     .then(|| inst.version.java_version.as_ref().map(|j| j.major_version))
                     .flatten(),
                 std::thread::available_parallelism().map_or(1, |n| n.get()),
-                req.instance.max_memory_mb.unwrap_or(settings.max_memory_mb),
+                max_memory_mb,
             ))
             .chain(fast_start_flags(req.instance))
             .chain(

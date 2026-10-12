@@ -62,6 +62,48 @@ pub fn resolve_libraries(dirs: &DataDirs, version: &VersionJson, env: &RuleEnv) 
     out
 }
 
+/// Asked for after a crash that points at a damaged game file (see `crash::Diagnosis::repair`).
+const REPAIR_MARK: &str = "repair-libraries";
+
+/// Check every library by its checksum on the next start (not just its size).
+pub fn request_repair(dirs: &DataDirs) {
+    let mark = dirs.cache().join(REPAIR_MARK);
+    if let Some(parent) = mark.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Err(e) = std::fs::write(&mark, b"") {
+        log::warn!("couldn't ask for a library check: {e}");
+    }
+}
+
+/// The next start's check, once: files that are the right size but not the right content are
+/// removed, so the download fetches them again. Only jobs with a known checksum are checked.
+pub(crate) fn repair_if_asked(dirs: &DataDirs, jobs: &[crate::net::DownloadJob]) {
+    let mark = dirs.cache().join(REPAIR_MARK);
+    if !mark.is_file() {
+        return;
+    }
+    let mut damaged = 0;
+    for job in jobs {
+        let Some(want) = &job.sha1 else {
+            continue;
+        };
+        if !job.dest.is_file() {
+            continue;
+        }
+        match crate::net::sha1_file(&job.dest) {
+            Ok(have) if have.eq_ignore_ascii_case(want) => {}
+            _ => {
+                log::warn!("damaged, fetched again: {}", job.dest.display());
+                let _ = std::fs::remove_file(&job.dest);
+                damaged += 1;
+            }
+        }
+    }
+    log::info!("library check: {damaged} damaged of {}", jobs.len());
+    let _ = std::fs::remove_file(&mark);
+}
+
 /// Mojang's library repository, the default for libraries without a URL.
 const MOJANG_LIBRARIES: &str = "https://libraries.minecraft.net/";
 
@@ -475,5 +517,37 @@ mod tests {
         extract_natives(&natives, &out).unwrap();
         assert_eq!(fs::read(out.join("lwjgl64.dll")).unwrap(), b"dll");
         assert!(!out.join("META-INF").exists());
+    }
+
+    #[test]
+    fn a_repair_check_removes_files_whose_contents_are_wrong_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        let good = dir.path().join("good.jar");
+        let bad = dir.path().join("bad.jar");
+        std::fs::write(&good, b"right").unwrap();
+        std::fs::write(&bad, b"wrong").unwrap();
+        let job = |dest: &std::path::Path, content: &[u8]| crate::net::DownloadJob {
+            url: "u".into(),
+            dest: dest.to_path_buf(),
+            sha1: Some({
+                use sha1::Digest;
+                hex::encode(sha1::Sha1::digest(content))
+            }),
+            size: Some(5),
+            lzma: None,
+        };
+        let jobs = [job(&good, b"right"), job(&bad, b"right")];
+        // Not asked: nothing is hashed or removed.
+        repair_if_asked(&dirs, &jobs);
+        assert!(bad.is_file());
+        request_repair(&dirs);
+        repair_if_asked(&dirs, &jobs);
+        assert!(good.is_file());
+        assert!(!bad.is_file(), "same size, wrong contents: fetched again");
+        // Done once: the next start is back to the quick check.
+        std::fs::write(&bad, b"wrong").unwrap();
+        repair_if_asked(&dirs, &jobs);
+        assert!(bad.is_file());
     }
 }
