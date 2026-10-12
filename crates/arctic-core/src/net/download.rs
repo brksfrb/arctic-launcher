@@ -34,9 +34,18 @@ const REPORT_EVERY_MS: u64 = 50;
 /// Files at least this big are fetched in parallel byte ranges, so one slow
 /// server connection doesn't cap the speed of a big jar.
 const SEGMENT_MIN_SIZE: u64 = 8 * 1024 * 1024;
-/// Target bytes per range, and the most ranges per file.
-const SEGMENT_SIZE: u64 = 4 * 1024 * 1024;
-const MAX_SEGMENTS: u64 = 6;
+/// A big file's chunks, and the connections fetching them in turn.
+const CHUNK_SIZE: u64 = 2 * 1024 * 1024;
+const CONNECTIONS: usize = 6;
+/// A chunk's slowest acceptable speed (its own connection; a 1 Mbit/s line shared by
+/// [`CONNECTIONS`] gives each ~20 KB/s).
+const CHUNK_MIN_SPEED: u64 = 12 * 1024;
+/// A chunk that hasn't received anything for this long is fetched again, once the rest are out.
+const CHUNK_STALL: Duration = if cfg!(test) {
+    Duration::from_secs(1)
+} else {
+    Duration::from_secs(10)
+};
 
 /// One file to fetch. `sha1`/`size` describe the final file on disk and are
 /// verified when present.
@@ -295,18 +304,16 @@ fn download_one(job: &DownloadJob, reporter: &Reporter, transferred: &Cell<u64>)
     fs::rename(&tmp, &job.dest).at(&job.dest)
 }
 
-/// Byte ranges `[start, end)` for a large, uncompressed file of known size.
+/// Byte ranges `[start, end)` for a large, uncompressed file of known size: chunks of
+/// [`CHUNK_SIZE`], fetched by [`CONNECTIONS`] connections taking turns.
 fn segments(job: &DownloadJob) -> Option<Vec<(u64, u64)>> {
     let size = job.size.filter(|s| *s >= SEGMENT_MIN_SIZE)?;
     if job.lzma.is_some() {
         return None;
     }
-    let count = size.div_ceil(SEGMENT_SIZE).clamp(2, MAX_SEGMENTS);
-    let step = size.div_ceil(count);
     Some(
-        (0..count)
-            .map(|i| (i * step, ((i + 1) * step).min(size)))
-            .filter(|(start, end)| start < end)
+        (0..size.div_ceil(CHUNK_SIZE))
+            .map(|i| (i * CHUNK_SIZE, ((i + 1) * CHUNK_SIZE).min(size)))
             .collect(),
     )
 }
@@ -323,8 +330,41 @@ impl From<Error> for Segmented {
     }
 }
 
-/// Fetch every range in parallel into one preallocated `.part` file, then
-/// hash the whole file and rename it into place.
+/// One chunk of a big file.
+struct Chunk {
+    start: u64,
+    end: u64,
+    /// Bytes the chunk's own fetch has reported so far.
+    got: AtomicU64,
+    done: std::sync::atomic::AtomicBool,
+    /// A second fetch was started because this one stopped moving.
+    hedged: std::sync::atomic::AtomicBool,
+    /// When the chunk's fetch last received anything (or started).
+    moved: Mutex<Option<Instant>>,
+}
+
+/// What the chunk fetchers tell the download.
+enum ChunkNews {
+    Bytes(u64),
+    /// A fetch failed partway and is starting over: its bytes no longer count.
+    Unreport(u64),
+    Done,
+    NoRanges,
+    Failed(Error),
+}
+
+struct Chunks {
+    job: DownloadJob,
+    tmp: PathBuf,
+    list: Vec<Chunk>,
+    next: std::sync::atomic::AtomicUsize,
+}
+
+/// Fetch a big file in chunks into one preallocated `.part` file, then hash the whole file and
+/// rename it into place. [`CONNECTIONS`] connections take chunks in turn, each with a timeout
+/// sized for the chunk (a stalled connection costs one chunk, not the file), and a chunk that
+/// hasn't moved for [`CHUNK_STALL`] once the rest are handed out is fetched a second time on a
+/// fresh connection: whichever copy finishes first wins.
 fn download_segmented(
     job: &DownloadJob,
     reporter: &Reporter,
@@ -340,28 +380,66 @@ fn download_segmented(
     let file = fs::File::create(&tmp).at(&tmp)?;
     file.set_len(job.size.unwrap_or(0)).at(&tmp)?;
     drop(file);
-    let counted = AtomicU64::new(0);
-    let outcome: Vec<std::result::Result<(), Segmented>> = std::thread::scope(|scope| {
-        let handles: Vec<_> = ranges
+    let chunks = std::sync::Arc::new(Chunks {
+        job: job.clone(),
+        tmp: tmp.clone(),
+        list: ranges
             .iter()
-            .map(|&(start, end)| {
-                let (tmp, counted) = (&tmp, &counted);
-                scope.spawn(move || fetch_range(job, tmp, start, end, reporter, counted))
+            .map(|&(start, end)| Chunk {
+                start,
+                end,
+                got: AtomicU64::new(0),
+                done: Default::default(),
+                hedged: Default::default(),
+                moved: Mutex::new(None),
             })
-            .collect();
-        handles
-            .into_iter()
-            .map(|h| {
-                h.join()
-                    .unwrap_or_else(|_| Err(Error::Other("download thread panicked".into()).into()))
-            })
-            .collect()
+            .collect(),
+        next: Default::default(),
     });
-    transferred.set(counted.load(Ordering::Relaxed));
-    let failure = outcome.into_iter().find_map(|r| r.err());
-    if let Some(failure) = failure {
+    let (tx, rx) = std::sync::mpsc::channel::<ChunkNews>();
+    // Detached: a fetch stuck in a read can't be interrupted, and the file needn't wait for it
+    // once its chunk is in (it checks before writing, and writes the same bytes anyway).
+    for _ in 0..CONNECTIONS.min(chunks.list.len()) {
+        let (chunks, tx) = (chunks.clone(), tx.clone());
+        std::thread::spawn(move || {
+            loop {
+                let i = chunks.next.fetch_add(1, Ordering::Relaxed);
+                if i >= chunks.list.len() || !fetch_chunk(&chunks, i, &tx) {
+                    return;
+                }
+            }
+        });
+    }
+    let mut done = 0;
+    let result = loop {
+        if done == chunks.list.len() {
+            break Ok(());
+        }
+        match rx.recv_timeout(CHUNK_STALL / 4) {
+            Ok(ChunkNews::Bytes(n)) => {
+                transferred.set(transferred.get() + n);
+                reporter.add_bytes(n);
+            }
+            Ok(ChunkNews::Unreport(n)) => {
+                transferred.set(transferred.get().saturating_sub(n));
+                reporter.remove_bytes(n);
+            }
+            Ok(ChunkNews::Done) => done += 1,
+            Ok(ChunkNews::NoRanges) => break Err(Segmented::NoRanges),
+            Ok(ChunkNews::Failed(e)) => break Err(Segmented::Failed(e)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => hedge_stalled(&chunks, &tx),
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                break Err(Segmented::Failed(Error::Other(format!("download of {} stopped", job.url))));
+            }
+        }
+    };
+    // Fetches still running give up at their next read.
+    for chunk in &chunks.list {
+        chunk.done.store(true, Ordering::Relaxed);
+    }
+    if let Err(e) = result {
         let _ = fs::remove_file(&tmp);
-        return Err(failure);
+        return Err(e);
     }
     let size_ok = fs::metadata(&tmp).at(&tmp)?.len() == job.size.unwrap_or(0);
     let hash_ok = match &job.sha1 {
@@ -376,22 +454,75 @@ fn download_segmented(
     Ok(())
 }
 
-/// Write bytes `[start, end)` of the file at the same offset in `tmp`.
-fn fetch_range(
-    job: &DownloadJob,
-    tmp: &Path,
-    start: u64,
-    end: u64,
-    reporter: &Reporter,
-    counted: &AtomicU64,
+/// Every chunk is handed out: fetch again, once, any that hasn't moved for [`CHUNK_STALL`].
+fn hedge_stalled(chunks: &std::sync::Arc<Chunks>, tx: &std::sync::mpsc::Sender<ChunkNews>) {
+    if chunks.next.load(Ordering::Relaxed) < chunks.list.len() {
+        return;
+    }
+    for (i, chunk) in chunks.list.iter().enumerate() {
+        let stalled = chunk
+            .moved
+            .lock()
+            .ok()
+            .and_then(|m| *m)
+            .is_some_and(|at| at.elapsed() >= CHUNK_STALL);
+        if stalled && !chunk.done.load(Ordering::Relaxed) && !chunk.hedged.swap(true, Ordering::Relaxed) {
+            log::info!("chunk {i} of {} stalled: fetching it again", chunks.job.url);
+            let (chunks, tx) = (chunks.clone(), tx.clone());
+            std::thread::spawn(move || fetch_once(&chunks, i, &tx, false));
+        }
+    }
+}
+
+/// Fetch chunk `i`, retrying a few times. False: the download is over (failed, or no ranges).
+fn fetch_chunk(chunks: &Chunks, i: usize, tx: &std::sync::mpsc::Sender<ChunkNews>) -> bool {
+    let mut attempt = 1;
+    loop {
+        match fetch_once(chunks, i, tx, true) {
+            Ok(()) => return true,
+            Err(Segmented::NoRanges) => {
+                let _ = tx.send(ChunkNews::NoRanges);
+                return false;
+            }
+            Err(Segmented::Failed(e)) => {
+                let chunk = &chunks.list[i];
+                // The second fetch won meanwhile: it counted the rest of the bytes.
+                if chunk.done.load(Ordering::Relaxed) {
+                    return true;
+                }
+                let reported = chunk.got.swap(0, Ordering::Relaxed);
+                let _ = tx.send(ChunkNews::Unreport(reported));
+                if attempt >= ATTEMPTS {
+                    let _ = tx.send(ChunkNews::Failed(e));
+                    return false;
+                }
+                log::warn!("retrying chunk {i} of {} (attempt {attempt}): {e}", chunks.job.url);
+                std::thread::sleep(RETRY_BACKOFF * attempt);
+                attempt += 1;
+            }
+        }
+    }
+}
+
+/// One fetch of chunk `i` into its place in the `.part` file. The chunk's own fetch
+/// (`own`) reports its bytes as they come; a second one reports what's left when it wins.
+fn fetch_once(
+    chunks: &Chunks,
+    i: usize,
+    tx: &std::sync::mpsc::Sender<ChunkNews>,
+    own: bool,
 ) -> std::result::Result<(), Segmented> {
     use std::io::{Seek, SeekFrom};
-    let len = end - start;
+    let (job, chunk) = (&chunks.job, &chunks.list[i]);
+    let len = chunk.end - chunk.start;
+    if own && let Ok(mut moved) = chunk.moved.lock() {
+        *moved = Some(Instant::now());
+    }
     let mut resp = super::agent()
         .get(&job.url)
-        .header("Range", &format!("bytes={start}-{}", end - 1))
+        .header("Range", &format!("bytes={}-{}", chunk.start, chunk.end - 1))
         .config()
-        .timeout_recv_body(Some(body_timeout(Some(len))))
+        .timeout_recv_body(Some(chunk_timeout(len)))
         .build()
         .call()
         .map_err(Error::from)?;
@@ -400,33 +531,53 @@ fn fetch_range(
             .headers()
             .get("content-range")
             .and_then(|v| v.to_str().ok())
-            .is_some_and(|v| v.starts_with(&format!("bytes {start}-")));
+            .is_some_and(|v| v.starts_with(&format!("bytes {}-", chunk.start)));
     if !ranged {
         return Err(Segmented::NoRanges);
     }
+    let tmp = &chunks.tmp;
     let mut out = fs::OpenOptions::new().write(true).open(tmp).at(tmp)?;
-    out.seek(SeekFrom::Start(start)).at(tmp)?;
+    out.seek(SeekFrom::Start(chunk.start)).at(tmp)?;
     let mut body = resp.body_mut().as_reader();
     let mut buf = vec![0u8; BUF_SIZE];
     let mut got = 0u64;
-    loop {
+    while got < len {
         let n = body.read(&mut buf).at(tmp)?;
         if n == 0 {
             break;
         }
+        // The other fetch of this chunk won, or the download is over.
+        if chunk.done.load(Ordering::Relaxed) {
+            return Ok(());
+        }
         let n = n.min((len - got) as usize);
         out.write_all(&buf[..n]).at(tmp)?;
         got += n as u64;
-        counted.fetch_add(n as u64, Ordering::Relaxed);
-        reporter.add_bytes(n as u64);
-        if got == len {
-            break;
+        if own {
+            chunk.got.fetch_add(n as u64, Ordering::Relaxed);
+            let _ = tx.send(ChunkNews::Bytes(n as u64));
+            if let Ok(mut moved) = chunk.moved.lock() {
+                *moved = Some(Instant::now());
+            }
         }
     }
     if got != len {
         return Err(Error::Other(format!("short range read from {}", job.url)).into());
     }
+    out.flush().at(tmp)?;
+    if !chunk.done.swap(true, Ordering::Relaxed) {
+        if !own {
+            let reported = chunk.got.load(Ordering::Relaxed);
+            let _ = tx.send(ChunkNews::Bytes(len.saturating_sub(reported)));
+        }
+        let _ = tx.send(ChunkNews::Done);
+    }
     Ok(())
+}
+
+/// A chunk's body timeout: room for a slow line, short enough that a dead connection is noticed.
+fn chunk_timeout(len: u64) -> Duration {
+    BODY_TIMEOUT_BASE + Duration::from_secs(len / CHUNK_MIN_SPEED)
 }
 
 /// Both the transferred stream (if compressed) and the final file must match.
@@ -646,17 +797,90 @@ mod tests {
     }
 
     #[test]
-    fn large_files_split_into_even_ranges() {
+    fn large_files_split_into_chunks_that_cover_them() {
         assert!(segments(&job("a", Some(1024))).is_none());
         assert!(segments(&job("a", None)).is_none());
         let size = 20 * 1024 * 1024 + 3;
         let ranges = segments(&job("a", Some(size))).unwrap();
-        assert_eq!(ranges.len(), 6);
+        assert_eq!(ranges.len(), 11);
         assert_eq!(ranges[0].0, 0);
         assert_eq!(ranges.last().unwrap().1, size);
         assert!(ranges.windows(2).all(|w| w[0].1 == w[1].0));
-        let huge = segments(&job("a", Some(500 * 1024 * 1024))).unwrap();
-        assert_eq!(huge.len(), MAX_SEGMENTS as usize);
+        assert!(ranges.iter().all(|(a, b)| b - a <= CHUNK_SIZE));
+    }
+
+    /// A local server answering byte ranges; the first request for the start of the file
+    /// never answers (a connection that stalls), every other one does.
+    fn stalling_server(data: std::sync::Arc<Vec<u8>>) -> String {
+        use std::io::{BufRead, BufReader as Lines};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let stalled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let (data, stalled) = (data.clone(), stalled.clone());
+                std::thread::spawn(move || {
+                    let mut reader = Lines::new(stream.try_clone().unwrap());
+                    let mut range = None;
+                    loop {
+                        let mut line = String::new();
+                        if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
+                            break;
+                        }
+                        if let Some(r) = line.to_ascii_lowercase().strip_prefix("range: bytes=") {
+                            let (a, b) = r.trim().split_once('-').unwrap();
+                            range = Some((a.parse::<usize>().unwrap(), b.parse::<usize>().unwrap()));
+                        }
+                    }
+                    let Some((start, end)) = range else { return };
+                    if start == 0 && !stalled.swap(true, Ordering::Relaxed) {
+                        std::thread::sleep(Duration::from_secs(60));
+                        return;
+                    }
+                    let body = &data[start..=end];
+                    let mut out = stream;
+                    let head = format!(
+                        "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nConnection: close\r\n\r\n",
+                        body.len(),
+                        data.len()
+                    );
+                    let _ = out.write_all(head.as_bytes());
+                    let _ = out.write_all(body);
+                });
+            }
+        });
+        format!("http://{addr}/big.jar")
+    }
+
+    #[test]
+    fn a_stalled_connection_is_fetched_again_instead_of_waited_for() {
+        let size = SEGMENT_MIN_SIZE as usize + 12345;
+        let data: Vec<u8> = (0..size).map(|i| (i * 31 % 251) as u8).collect();
+        let sha1 = hex::encode(Sha1::digest(&data));
+        let url = stalling_server(std::sync::Arc::new(data.clone()));
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("big.jar");
+        let started = Instant::now();
+        download_all(
+            "x",
+            vec![DownloadJob {
+                url,
+                dest: dest.clone(),
+                sha1: Some(sha1),
+                size: Some(size as u64),
+                lzma: None,
+            }],
+            &|_| {},
+        )
+        .unwrap();
+        assert!(started.elapsed() < Duration::from_secs(20), "took {:?}", started.elapsed());
+        assert_eq!(fs::read(&dest).unwrap(), data);
+    }
+
+    #[test]
+    fn a_stalled_chunk_gives_up_in_minutes_not_an_hour() {
+        // The old ranges were up to 40 MB with an 8 KB/s bar: an 85-minute wait.
+        assert!(chunk_timeout(CHUNK_SIZE) <= Duration::from_secs(4 * 60));
     }
 
     #[test]
