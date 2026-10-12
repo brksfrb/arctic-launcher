@@ -339,7 +339,7 @@ impl ArcticApp {
         heading(
             ui,
             p,
-            "Memory for Minecraft",
+            "Memory and storage",
             "How much RAM the game may use. The suggestion suits most setups.",
         );
         ui.add_space(14.0);
@@ -373,6 +373,7 @@ impl ArcticApp {
                     .color(p.warn),
             );
         }
+        self.storage_choice(ui, p);
     }
 
     fn client_step(&mut self, ui: &mut egui::Ui) {

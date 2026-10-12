@@ -226,6 +226,8 @@ impl ArcticApp {
             self.game_defaults_section(ui, p)
         });
 
+        section(ui, p, "Storage", |ui| self.storage_section(ui, p));
+
         section(ui, p, "Share & back up", |ui| {
             ui.label(
                 RichText::new(
@@ -251,15 +253,6 @@ impl ArcticApp {
         });
 
         crate::widgets::row(ui, |ui| {
-            if widgets::button(ui, p, Some(Icon::Folder), "Open data folder", false).clicked()
-                && let Err(e) = open::that_detached(self.dirs.root())
-            {
-                self.toasts.push(
-                    crate::toasts::Kind::Error,
-                    "Could not open folder",
-                    e.to_string(),
-                );
-            }
             if widgets::button(ui, p, None, "Run setup again", false)
                 .on_hover_text("The first-run walkthrough, starting from your current choices")
                 .clicked()

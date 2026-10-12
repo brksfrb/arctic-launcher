@@ -33,6 +33,9 @@ use serde::de::DeserializeOwned;
 use crate::error::IoContext;
 use crate::{Error, Result};
 
+pub mod location;
+pub use location::RootSource;
+
 /// Env var to relocate all launcher data (handy for development).
 pub const DATA_DIR_ENV: &str = "ARCTIC_DATA_DIR";
 /// Marker file next to the executable that enables portable mode.
@@ -40,7 +43,24 @@ pub const PORTABLE_MARKER: &str = "portable.txt";
 /// Also accepted: Windows Explorer hides extensions, so a file named "portable.txt" there is
 /// often really "portable.txt.txt".
 const PORTABLE_MARKERS: [&str; 2] = [PORTABLE_MARKER, "portable.txt.txt"];
-const DIR_NAME: &str = "ArcticLauncher";
+pub(crate) const DIR_NAME: &str = "ArcticLauncher";
+
+/// Where the data folder is and why: `ARCTIC_DATA_DIR`, then portable mode, then the folder
+/// picked in Settings → Storage, then the OS local data dir (not roaming: game files are large).
+pub fn root_source() -> Result<RootSource> {
+    if let Some(dir) = std::env::var_os(DATA_DIR_ENV) {
+        return Ok(RootSource::Env(dir.into()));
+    }
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(Path::to_path_buf));
+    if let Some(exe_dir) = exe_dir
+        && is_portable(&exe_dir)
+    {
+        return Ok(RootSource::Portable(exe_dir.join("data")));
+    }
+    Ok(location::from_choice(location::default_root()?))
+}
 
 /// A portable-mode marker sits in `exe_dir`.
 fn is_portable(exe_dir: &Path) -> bool {
@@ -72,23 +92,9 @@ impl DataDirs {
         }
     }
 
-    /// Resolve the data root: `ARCTIC_DATA_DIR`, then portable mode, then
-    /// the OS local data dir (not roaming: game files are large).
+    /// Resolve the data root (see [`root_source`]).
     pub fn resolve() -> Result<Self> {
-        if let Some(dir) = std::env::var_os(DATA_DIR_ENV) {
-            return Ok(Self::new(dir));
-        }
-        let exe_dir = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(Path::to_path_buf));
-        if let Some(exe_dir) = exe_dir
-            && is_portable(&exe_dir)
-        {
-            return Ok(Self::new(exe_dir.join("data")));
-        }
-        dirs::data_local_dir()
-            .map(|d| Self::new(d.join(DIR_NAME)))
-            .ok_or_else(|| Error::Other("could not determine local app data directory".into()))
+        Ok(Self::new(root_source()?.root()))
     }
 
     /// Create the launcher-wide directories, plus the profile's own ones

@@ -131,6 +131,8 @@ pub enum Event {
     MigrateProgress(String, ProgressSnapshot),
     MigrateItemDone(crate::migrate_tasks::Outcome),
     MigrateFinished,
+    /// Choosing folders (see `storage_tasks`).
+    Storage(crate::storage_tasks::StorageEvent),
     /// Pack search results for request id.
     PackSearch(u64, Outcome<SearchPage>),
     /// (instance id, project id, result)

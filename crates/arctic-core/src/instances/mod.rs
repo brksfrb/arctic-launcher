@@ -5,7 +5,7 @@
 //! live next to it under `instances/<id>/` and reuse the shared libraries,
 //! assets and runtimes.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -156,6 +156,10 @@ pub struct Instance {
     /// them with the profile's other instances (see `shared`).
     #[serde(default)]
     pub own_settings: bool,
+    /// Game folder picked by the player (worlds, mods, packs live there); `None`: inside the
+    /// instance's own folder. Never shared: a path on this computer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game_folder: Option<PathBuf>,
 }
 
 fn enabled() -> bool {
@@ -177,6 +181,7 @@ impl Instance {
             performance: true,
             shaders: false,
             own_settings: false,
+            game_folder: None,
         }
     }
 
@@ -185,6 +190,14 @@ impl Instance {
     }
 
     pub fn game_dir(&self, dirs: &DataDirs) -> PathBuf {
+        match &self.game_folder {
+            Some(folder) => folder.clone(),
+            None => self.default_game_dir(dirs),
+        }
+    }
+
+    /// The game folder inside the instance's own folder (used unless one was picked).
+    pub fn default_game_dir(&self, dirs: &DataDirs) -> PathBuf {
         dirs.instance_dir(&self.id).join(GAME_DIR)
     }
 
@@ -231,6 +244,7 @@ pub fn create(dirs: &DataDirs, name: &str, game_version: &str, loader: Loader) -
         performance: true,
         shaders: false,
         own_settings: false,
+        game_folder: None,
     };
     let mods = instance.game_dir(dirs).join("mods");
     std::fs::create_dir_all(&mods).map_err(|e| Error::io(&mods, e))?;
@@ -259,6 +273,76 @@ pub fn free_name(dirs: &DataDirs, name: &str) -> Result<String> {
         .map(|n| format!("{stem} ({n})"))
         .find(|n| !taken.contains(&n.to_lowercase()))
         .unwrap_or(stem))
+}
+
+/// How an instance switches to another game folder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FolderChange {
+    /// Its worlds, mods and settings go along (the new folder must be empty).
+    MoveFiles,
+    /// The new folder is used as it is (one that already holds a game, say); nothing is moved.
+    UseAsIs,
+}
+
+/// Whether a folder holds nothing (so files can be moved into it).
+pub fn folder_is_empty(folder: &Path) -> bool {
+    std::fs::read_dir(folder).map_or(true, |mut entries| entries.next().is_none())
+}
+
+/// `instance` with its game in `folder` (`None`: back inside its own folder), saved. With
+/// [`FolderChange::MoveFiles`] the current game folder's contents are copied there and then
+/// removed from the old place (the instance must not be running). A folder the player picked is
+/// emptied but kept; nothing outside the game folder is touched.
+pub fn set_game_folder(
+    dirs: &DataDirs,
+    instance: &Instance,
+    folder: Option<&Path>,
+    change: FolderChange,
+    progress: &dyn Fn(u64, u64),
+) -> Result<Instance> {
+    let updated = Instance {
+        game_folder: folder.map(Path::to_path_buf).filter(|f| *f != instance.default_game_dir(dirs)),
+        ..instance.clone()
+    };
+    let (from, to) = (instance.game_dir(dirs), updated.game_dir(dirs));
+    if let Some(folder) = folder
+        && !folder.is_absolute()
+    {
+        return Err(Error::Other("Pick a full folder path.".into()));
+    }
+    if from == to {
+        return Ok(instance.clone());
+    }
+    if to.starts_with(&from) || from.starts_with(&to) {
+        return Err(Error::Other(
+            "Pick a folder that isn't inside the game folder (or around it).".into(),
+        ));
+    }
+    if change == FolderChange::MoveFiles {
+        if !folder_is_empty(&to) {
+            return Err(Error::Other(
+                "Pick an empty folder to move the files into, or use the folder as it is.".into(),
+            ));
+        }
+        if from.is_dir() {
+            crate::storage::location::copy_dir(&from, &to, progress)?;
+            empty_folder(&from);
+        }
+    }
+    std::fs::create_dir_all(&to).map_err(|e| Error::io(&to, e))?;
+    updated.save(dirs)?;
+    Ok(updated)
+}
+
+/// Remove what's in `folder`, keeping the folder (it may be one the player made).
+fn empty_folder(folder: &Path) {
+    for entry in std::fs::read_dir(folder).map(|e| e.flatten().collect::<Vec<_>>()).unwrap_or_default() {
+        let path = entry.path();
+        let gone = if path.is_dir() { std::fs::remove_dir_all(&path) } else { std::fs::remove_file(&path) };
+        if let Err(e) = gone {
+            log::warn!("couldn't remove {} after moving it: {e}", path.display());
+        }
+    }
 }
 
 /// Move an instance folder (worlds and mods included) to `instances/.trash`.
@@ -338,6 +422,38 @@ pub fn list_custom(dirs: &DataDirs) -> Result<Vec<Instance>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn game_folder_moves_with_its_files_or_is_used_as_it_is() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path().join("data"));
+        let inst = create(&dirs, "Mine", "1.21.11", Loader::Vanilla).unwrap();
+        let world = inst.game_dir(&dirs).join("saves/W/level.dat");
+        std::fs::create_dir_all(world.parent().unwrap()).unwrap();
+        std::fs::write(&world, b"w").unwrap();
+
+        let picked = dir.path().join("D/Games/Mine");
+        let moved = set_game_folder(&dirs, &inst, Some(&picked), FolderChange::MoveFiles, &|_, _| {}).unwrap();
+        assert_eq!(moved.game_dir(&dirs), picked);
+        assert!(picked.join("saves/W/level.dat").is_file());
+        assert!(!world.exists());
+        assert_eq!(find(&dirs, "Mine").unwrap().game_dir(&dirs), picked, "saved");
+
+        // Not into a folder with things in it, unless it's used as it is.
+        let busy = dir.path().join("busy");
+        std::fs::create_dir_all(busy.join("saves")).unwrap();
+        assert!(set_game_folder(&dirs, &moved, Some(&busy), FolderChange::MoveFiles, &|_, _| {}).is_err());
+        let used = set_game_folder(&dirs, &moved, Some(&busy), FolderChange::UseAsIs, &|_, _| {}).unwrap();
+        assert_eq!(used.game_dir(&dirs), busy);
+        assert!(picked.join("saves/W/level.dat").is_file(), "left where it was");
+
+        // Back inside its own folder, files along; the picked folder stays (emptied).
+        let back = set_game_folder(&dirs, &moved, None, FolderChange::MoveFiles, &|_, _| {}).unwrap();
+        assert_eq!(back.game_folder, None);
+        assert!(back.game_dir(&dirs).join("saves/W/level.dat").is_file());
+        assert!(picked.is_dir() && folder_is_empty(&picked));
+        assert!(set_game_folder(&dirs, &back, Some(&back.game_dir(&dirs).join("x")), FolderChange::UseAsIs, &|_, _| {}).is_err());
+    }
 
     #[test]
     fn create_and_remove_custom_instances() {

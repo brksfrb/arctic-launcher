@@ -185,6 +185,7 @@ impl ArcticApp {
             }
         });
         self.java_card(ui, instance);
+        self.game_folder_card(ui, instance);
         self.arctic_mod_card(ui, instance);
         self.performance_card(ui, instance);
         self.settings_card(ui, instance);

@@ -82,6 +82,7 @@ arctic instances show <INSTANCE>
 arctic instances edit <INSTANCE> [--name N] [--version V] [--loader L] [--loader-version V]
     [--memory 4G|default] [--icon classic|stellar|dendrite|plate|star|crystal] [--color #rrggbb|default]
     [--arctic-client on|off] [--java PATH|default] [--jvm-args "FLAGS"] [--performance on|off] [--shaders on|off]
+    [--game-dir FOLDER|default [--keep-files]]
 arctic instances remove <INSTANCE>
 ```
 
@@ -92,6 +93,11 @@ version picked to play, so its version and loader can't be pinned (make another 
 `--loader` is `vanilla` (default), `fabric`, `quilt`, `neoforge` or `forge`. Without
 `--loader-version`, the newest stable loader build for that Minecraft version is used.
 Removing an instance moves its folder (worlds included) to `instances/.trash`.
+
+`--game-dir` puts the instance's game (worlds, mods, packs, options) in a folder on any drive.
+Its files move there (the folder must be empty) unless `--keep-files`, which uses the folder as
+it is, for one that already holds a game. `default` brings it back inside the instance's folder.
+A game folder elsewhere is left alone when the instance is removed.
 
 ```text
 arctic instances create "Fabric" --version 26.3 --loader fabric
@@ -269,6 +275,20 @@ handy for running tools against the same JVM.
 
 Shows the data folder layout: settings, accounts, versions, libraries, assets, runtimes,
 instances and logs.
+
+### `arctic storage`
+
+```text
+arctic storage show
+arctic storage move <FOLDER|default>
+arctic storage use <FOLDER>
+```
+
+Where Arctic keeps everything (Settings → Storage in the launcher). `move` copies it all to an
+empty folder (another drive, say) and uses it from then on; the old copy is removed the next
+time the launcher starts. Close the launcher first. `default` moves back to the usual place.
+`use` switches to a folder that already holds Arctic's files, copying nothing. Not available
+when `ARCTIC_DATA_DIR`, `--data-dir` or portable mode (`portable.txt`) sets the folder.
 
 ### `arctic update [--beta]`
 

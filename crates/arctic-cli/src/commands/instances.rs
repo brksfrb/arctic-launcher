@@ -256,6 +256,15 @@ fn edit(ctx: &Ctx, args: &InstanceEditArgs) -> Result<()> {
     if let Some(on) = args.shaders {
         i.shaders = on.on();
     }
+    if let Some(dir) = &args.game_dir {
+        let folder = (dir != "default").then(|| std::path::absolute(dir)).transpose().map_err(|e| Error::Other(e.to_string()))?;
+        let change = if args.keep_files {
+            instances::FolderChange::UseAsIs
+        } else {
+            instances::FolderChange::MoveFiles
+        };
+        i = instances::set_game_folder(&ctx.dirs, &i, folder.as_deref(), change, &|_, _| {})?;
+    }
     i.save(&ctx.dirs)?;
     show(ctx, &i);
     Ok(())

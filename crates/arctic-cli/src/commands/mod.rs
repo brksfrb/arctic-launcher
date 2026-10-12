@@ -18,6 +18,7 @@ pub mod servers;
 pub mod settings;
 pub mod sharing;
 pub mod skins;
+pub mod storage;
 pub mod together;
 pub mod versions;
 pub mod waypoints;

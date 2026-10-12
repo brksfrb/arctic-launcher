@@ -57,6 +57,9 @@ pub enum Command {
     },
     /// Show where Arctic keeps its files.
     Paths,
+    /// Where Arctic keeps everything, and moving it to another folder or drive.
+    #[command(subcommand)]
+    Storage(StorageCommand),
     /// Check GitHub for a newer launcher release.
     Update {
         /// Include beta (pre-release) builds.
@@ -706,6 +709,17 @@ pub enum ProxyCommand {
 }
 
 #[derive(Debug, Subcommand)]
+pub enum StorageCommand {
+    /// The folder in use and how it was chosen.
+    Show,
+    /// Copy everything to an empty folder and use it from now on (`default`: back to the
+    /// usual place). The old copy is removed when the launcher next starts.
+    Move { folder: String },
+    /// Use a folder that already has Arctic's files (nothing is copied or removed).
+    Use { folder: String },
+}
+
+#[derive(Debug, Subcommand)]
 pub enum TogetherCommand {
     /// Share the world you open to LAN; prints an invite code.
     Host {
@@ -799,6 +813,13 @@ pub struct InstanceEditArgs {
     /// Vanilla instances: Iris, so shader packs work.
     #[arg(long, value_enum)]
     pub shaders: Option<Switch>,
+    /// Game folder (worlds, mods, packs): a folder on any drive, or `default` for the
+    /// instance's own. The files move there unless --keep-files.
+    #[arg(long)]
+    pub game_dir: Option<String>,
+    /// With --game-dir: use the folder as it is (one that already holds a game); nothing moves.
+    #[arg(long, requires = "game_dir")]
+    pub keep_files: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]

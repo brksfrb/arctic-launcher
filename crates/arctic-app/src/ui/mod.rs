@@ -37,6 +37,8 @@ pub use game_defaults::DefaultsUi;
 mod voice_settings;
 pub use voice_settings::VoiceSettingsUi;
 mod settings;
+mod storage;
+pub use storage::StorageUi;
 mod sharing;
 pub use sharing::ShareUi;
 mod skins;

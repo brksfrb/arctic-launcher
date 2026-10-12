@@ -14,6 +14,7 @@ mod glass;
 mod icon_raster;
 mod logbook;
 mod migrate_tasks;
+mod storage_tasks;
 mod motion;
 mod pack_tasks;
 mod runs;
@@ -73,6 +74,9 @@ fn main() -> eframe::Result {
         single_instance::Claim::Primary(rx) => rx,
     };
     logbook::init(dirs.launcher_logs().join("launcher.log"));
+    // After moving the data folder: the old copy goes now that nothing holds its files.
+    let root = dirs.root().to_path_buf();
+    std::thread::spawn(move || arctic_core::storage::location::finish_move(&root));
     let startup = startup::StartupOptions::parse(args);
     if let Err(e) = dirs.ensure() {
         log::error!("could not create data folders: {e}");

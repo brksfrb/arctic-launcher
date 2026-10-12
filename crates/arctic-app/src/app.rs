@@ -192,6 +192,7 @@ pub struct ArcticApp {
     pub(crate) chat: crate::ui::ChatUi,
     pub(crate) game_defaults: crate::ui::DefaultsUi,
     pub(crate) migrate: Option<crate::ui::MigrateUi>,
+    pub(crate) storage: crate::ui::StorageUi,
     pub(crate) skins: crate::ui::SkinsUi,
     devshot: crate::devshot::DevShot,
     /// Command lines from later starts (see `single_instance`).
@@ -262,6 +263,7 @@ impl ArcticApp {
             chat: crate::ui::ChatUi::default(),
             game_defaults: crate::ui::DefaultsUi::default(),
             migrate: None,
+            storage: crate::ui::StorageUi::default(),
             skins: crate::ui::SkinsUi::default(),
             devshot: crate::devshot::DevShot::from_env(),
             forwarded,
@@ -838,6 +840,7 @@ impl ArcticApp {
             Event::MigrateProgress(label, p) => self.on_migrate_progress(label, p),
             Event::MigrateItemDone(outcome) => self.on_migrate_item(outcome),
             Event::MigrateFinished => self.on_migrate_finished(),
+            Event::Storage(e) => self.on_storage_event(e, ctx),
             Event::PackSearch(request, result) => self.on_pack_search(request, result),
             Event::PackInstalled(instance, project, result) => {
                 self.on_pack_installed(instance, project, result)
