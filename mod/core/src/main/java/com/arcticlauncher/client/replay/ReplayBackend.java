@@ -83,6 +83,11 @@ public interface ReplayBackend {
 	 */
 	void capture(FrameSink done);
 
+	/** Why videos can't be made here (shown instead of starting one), or null when they can. */
+	default String exportBlocked() {
+		return null;
+	}
+
 	/** Where finished frames go. */
 	interface FrameSink {
 		/** {@code bottomUp}: the rows come bottom first (as OpenGL reads them). */

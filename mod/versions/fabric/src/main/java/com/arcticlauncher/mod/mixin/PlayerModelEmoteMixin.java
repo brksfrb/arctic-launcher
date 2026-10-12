@@ -106,9 +106,51 @@ abstract class PlayerModelEmoteMixin {
 	}
 	//#endif
 
+	@Shadow
+	@Final
+	private boolean slim;
+
+	/** The expressive emote the player posed last is playing, and how far in (for the held items). */
+	@Unique
+	private Animation arctic$bending;
+	@Unique
+	private float arctic$bendingAt;
+
+	//#if MC >= 1.21.9
+	@Inject(method = "translateToHand(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;Lnet/minecraft/world/entity/HumanoidArm;Lcom/mojang/blaze3d/vertex/PoseStack;)V",
+			at = @At("TAIL"))
+	private void arctic$hand(AvatarRenderState state, net.minecraft.world.entity.HumanoidArm arm, com.mojang.blaze3d.vertex.PoseStack pose,
+			CallbackInfo ci) {
+		arctic$forearm(arm, pose);
+	}
+	//#else
+	@Inject(method = "translateToHand(Lnet/minecraft/world/entity/HumanoidArm;Lcom/mojang/blaze3d/vertex/PoseStack;)V", at = @At("TAIL"))
+	private void arctic$hand(net.minecraft.world.entity.HumanoidArm arm, com.mojang.blaze3d.vertex.PoseStack pose, CallbackInfo ci) {
+		arctic$forearm(arm, pose);
+	}
+	//#endif
+
+	/**
+	 * An emote that bends the arm at the elbow draws it in two halves (the game's arm is hidden): what
+	 * the hand holds follows the forearm, turning around the elbow, instead of the straight arm.
+	 */
+	@Unique
+	private void arctic$forearm(net.minecraft.world.entity.HumanoidArm arm, com.mojang.blaze3d.vertex.PoseStack pose) {
+		SkinLimbs.Limb limb = arm == net.minecraft.world.entity.HumanoidArm.RIGHT ? SkinLimbs.Limb.RIGHT_ARM : SkinLimbs.Limb.LEFT_ARM;
+		float[] bend = SkinLimbs.bend(arctic$bending, limb, arctic$bendingAt);
+		if (bend == null) {
+			return;
+		}
+		float[] joint = SkinLimbs.joint(limb, slim);
+		pose.translate((joint[0] + bend[3]) / 16f, (joint[1] + bend[4]) / 16f, (joint[2] + bend[5]) / 16f);
+		com.arcticlauncher.mod.Compat.turnZYX(pose, bend[0], bend[1], bend[2]);
+		pose.translate(-joint[0] / 16f, -joint[1] / 16f, -joint[2] / 16f);
+	}
+
 	/** Pose the parts for the emote this player is playing; whether one is playing. */
 	private boolean arctic$pose(UUID id) {
 		arctic$showLimbs();
+		arctic$bending = null;
 		if (id == null || ArcticClient.looks() == null) {
 			return false;
 		}
@@ -119,6 +161,9 @@ abstract class PlayerModelEmoteMixin {
 		}
 		float t = playing.seconds();
 		HumanoidModel<?> model = (HumanoidModel<?>) (Object) this;
+		// Held items follow a bent forearm (whichever way the emote is played).
+		arctic$bending = animation;
+		arctic$bendingAt = t;
 		if (Rig.expressive(animation)) {
 			arctic$rig(animation, t);
 			arctic$hideBentLimbs(animation);

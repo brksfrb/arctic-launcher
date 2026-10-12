@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use arctic_core::launch::QuickPlay;
 use arctic_core::servers::{Server, Status};
-use eframe::egui::{self, Color32, CornerRadius, RichText, vec2};
+use eframe::egui::{self, Color32, CornerRadius, RichText, emath::TSTransform, pos2, vec2};
 
 use crate::app::ArcticApp;
 use crate::art::icons::{self, Icon};
@@ -15,12 +15,22 @@ use crate::toasts::Kind;
 use crate::widgets;
 
 const ICON: f32 = 40.0;
+/// The held row's frame around its content.
+const HELD_PAD: f32 = 8.0;
 /// Ping again after this long while the Play tab is open (seconds).
 const REFRESH_EVERY: f64 = 120.0;
 /// Names listed inline before "+N more".
 const INLINE_NAMES: usize = 4;
 /// How long typing in "Direct join" must pause before the address is pinged (seconds).
 const DIRECT_PAUSE: f64 = 0.7;
+/// Space between rows (a line is drawn in its middle).
+const ROW_GAP: f32 = 12.0;
+/// Seconds the other rows take to glide aside, and a dropped row to settle.
+const SLIDE: f32 = 0.14;
+/// Near the page's top or bottom edge (points), a dragged row scrolls it.
+const EDGE: f32 = 48.0;
+/// Fastest edge scroll, points a second.
+const EDGE_SCROLL: f32 = 900.0;
 const GOOD_PING_MS: u32 = 100;
 const OKAY_PING_MS: u32 = 250;
 
@@ -28,6 +38,15 @@ enum Ping {
     Waiting,
     Up(Status),
     Down(String),
+}
+
+/// A server picked up to move: which row, where on it it was held, how tall it is.
+#[derive(Clone)]
+struct Drag {
+    index: usize,
+    address: String,
+    grab_dy: f32,
+    height: f32,
 }
 
 #[derive(Default)]
@@ -49,6 +68,12 @@ pub struct ServersUi {
     /// Image URI for each address (the live favicon, else the cached one).
     icons: HashMap<String, String>,
     refreshed_at: f64,
+    /// The row being dragged.
+    drag: Option<Drag>,
+    /// Each row's place last frame (where a dragged row would land is worked out from them).
+    row_rects: Vec<egui::Rect>,
+    /// A row just dropped: its address and where it was last drawn (it glides into place).
+    settle: Option<(String, f32)>,
 }
 
 impl ArcticApp {
@@ -109,60 +134,164 @@ impl ArcticApp {
             );
             return;
         }
-        let mut rows = Vec::new();
+        self.server_list(ui, &list, &instance);
+    }
+
+    /// The rows. A row picked up (anywhere but its buttons) follows the pointer, lifted; the
+    /// others glide aside to show where it will land; near the page's edges it scrolls; let go,
+    /// it settles into its new place.
+    fn server_list(
+        &mut self,
+        ui: &mut egui::Ui,
+        list: &[Server],
+        instance: &arctic_core::instances::Instance,
+    ) {
+        let p = self.palette();
+        let pointer = ui.input(|i| i.pointer.interact_pos());
+        let dt = ui.input(|i| i.stable_dt).min(0.1);
+        let before = std::mem::take(&mut self.servers.row_rects);
+        let drag = self
+            .servers
+            .drag
+            .clone()
+            .filter(|d| d.index < list.len() && list[d.index].address == d.address);
+        if drag.is_none() {
+            self.servers.drag = None;
+        }
+        // Where the held row would land: past every other row whose middle is above its own.
+        let target = match (&drag, pointer) {
+            (Some(d), Some(at)) if before.len() == list.len() => {
+                let middle = at.y - d.grab_dy + d.height / 2.0;
+                let above = (0..list.len())
+                    .filter(|&k| k != d.index && before[k].center().y < middle)
+                    .count();
+                Some(above)
+            }
+            _ => drag.as_ref().map(|d| d.index),
+        };
+        let shift = drag.as_ref().map_or(0.0, |d| d.height + ROW_GAP);
+        let settle = self.servers.settle.take();
+        let mut rects = Vec::with_capacity(list.len());
         crate::theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
             for (i, server) in list.iter().enumerate() {
                 if i > 0 {
-                    ui.separator();
+                    ui.add_space(ROW_GAP);
                 }
-                let rect = self.server_row(ui, server);
-                rows.push((server.address.clone(), rect));
+                let held = drag.as_ref().is_some_and(|d| d.index == i);
+                let goal = match (&drag, target) {
+                    (Some(d), Some(t)) if d.index < i && i <= t => -shift,
+                    (Some(d), Some(t)) if t <= i && i < d.index => shift,
+                    _ => 0.0,
+                };
+                let id = ui.id().with(("server_row", i, &server.address));
+                let first_shape = ui.ctx().graphics(|g| {
+                    g.get(ui.layer_id())
+                        .map_or(egui::layers::ShapeIdx(0), |l| l.next_idx())
+                });
+                let top = ui.cursor().top();
+                if i > 0 {
+                    let y = top - ROW_GAP / 2.0;
+                    ui.painter().hline(
+                        ui.max_rect().x_range(),
+                        y,
+                        egui::Stroke::new(1.0, p.card_stroke),
+                    );
+                }
+                let rect = if held {
+                    // Its place stays (the held copy is drawn above everything).
+                    ui.scope(|ui| {
+                        ui.set_invisible();
+                        self.server_row(ui, server, None)
+                    })
+                    .inner
+                } else {
+                    self.server_row(ui, server, Some(i))
+                };
+                // A row just dropped starts from where it was let go.
+                if let Some((address, from)) = &settle
+                    && *address == server.address
+                {
+                    ui.ctx().animate_value_with_time(id, from - rect.top(), 0.0);
+                }
+                let offset = ui.ctx().animate_value_with_time(id, goal, SLIDE);
+                if offset != 0.0 {
+                    ui.ctx().graphics_mut(|g| {
+                        let list = g.entry(ui.layer_id());
+                        let end = list.next_idx();
+                        list.transform_range(
+                            first_shape,
+                            end,
+                            TSTransform::from_translation(vec2(0.0, offset)),
+                        );
+                    });
+                }
+                rects.push(rect);
             }
         });
-        self.finish_server_drag(ui, &rows, &instance);
-    }
-
-    /// While a server is being dragged by its grip: show where it would
-    /// land, and move it there when let go.
-    fn finish_server_drag(
-        &mut self,
-        ui: &egui::Ui,
-        rows: &[(String, egui::Rect)],
-        instance: &arctic_core::instances::Instance,
-    ) {
-        let p = self.palette();
-        let Some(dragged) = egui::DragAndDrop::payload::<String>(ui.ctx()) else {
+        self.servers.row_rects = rects;
+        let Some(d) = drag else {
             return;
         };
-        let Some(pointer) = ui.input(|i| i.pointer.interact_pos()) else {
+        let Some(at) = pointer else {
             return;
         };
-        let (Some(first), Some(last)) = (rows.first(), rows.last()) else {
-            return;
-        };
-        // It goes in front of the first row whose middle the pointer is above.
-        let slot = rows.iter().position(|(_, r)| pointer.y < r.center().y);
-        let y = match slot {
-            Some(i) => rows[i].1.top(),
-            None => last.1.bottom(),
-        };
-        let x = first.1.x_range();
-        ui.painter().hline(x, y, egui::Stroke::new(2.0, p.accent));
         ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
-        if ui.input(|i| i.pointer.any_released()) {
-            let before = slot.map(|i| rows[i].0.as_str());
-            if before != Some(dragged.as_str()) {
+        let width = self.servers.row_rects.first().map_or(0.0, |r| r.width());
+        let left = self.servers.row_rects.first().map_or(0.0, |r| r.left());
+        let top = at.y - d.grab_dy;
+        egui::Area::new(ui.id().with("server_held"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(pos2(left - HELD_PAD, top - HELD_PAD))
+            .interactable(false)
+            .show(ui.ctx(), |ui| {
+                egui::Frame::new()
+                    .fill(p.surface)
+                    .stroke(egui::Stroke::new(1.0, p.accent))
+                    .corner_radius(CornerRadius::same(10))
+                    .inner_margin(HELD_PAD)
+                    .shadow(egui::Shadow {
+                        offset: [0, 8],
+                        blur: 24,
+                        spread: 0,
+                        color: Color32::from_black_alpha(120),
+                    })
+                    .show(ui, |ui| {
+                        ui.set_width(width);
+                        self.server_row(ui, &list[d.index], None);
+                    });
+            });
+        // Near the page's edges the list scrolls under it.
+        let clip = ui.clip_rect();
+        let near_top = (clip.top() + EDGE - at.y).max(0.0) / EDGE;
+        let near_bottom = (at.y - (clip.bottom() - EDGE)).max(0.0) / EDGE;
+        let speed = (near_top - near_bottom).clamp(-1.0, 1.0) * EDGE_SCROLL * dt;
+        if speed != 0.0 {
+            ui.scroll_with_delta(vec2(0.0, speed));
+        }
+        ui.ctx().request_repaint();
+        if ui.input(|i| !i.pointer.primary_down()) {
+            self.servers.drag = None;
+            let to = target.unwrap_or(d.index);
+            if to != d.index {
+                let mut order = list.to_vec();
+                let moved = order.remove(d.index);
+                order.insert(to, moved);
+                let after = order.get(to + 1).map(|s| s.address.clone());
                 let dir = instance.game_dir(&self.dirs);
-                match arctic_core::servers::move_before(&dir, &dragged, before) {
-                    Ok(_) => self.servers_changed(),
+                match arctic_core::servers::move_before(&dir, &d.address, after.as_deref()) {
+                    Ok(_) => {
+                        // Shown in its new place now; the file is read again in a moment.
+                        self.servers.list = Some(Ok(order));
+                        self.servers_changed();
+                    }
                     Err(e) => {
                         self.toasts
                             .push(Kind::Error, "Couldn't move the server", e.to_string())
                     }
                 }
             }
-            egui::DragAndDrop::clear_payload(ui.ctx());
+            self.servers.settle = Some((d.address, top));
         }
     }
 
@@ -289,30 +418,24 @@ impl ArcticApp {
             .servers_refresh(self.servers.request, instance.game_dir(&self.dirs));
     }
 
-    /// One row of the list; returns the space it takes.
-    fn server_row(&mut self, ui: &mut egui::Ui, server: &Server) -> egui::Rect {
+    /// One row of the list; returns the space it takes. `index`: its place in the list, for
+    /// picking it up (None: a copy that can't be, like the one being held).
+    fn server_row(&mut self, ui: &mut egui::Ui, server: &Server, index: Option<usize>) -> egui::Rect {
         let p = self.palette();
         let ping = self.servers.status.get(&server.address);
         let mut join = false;
         let row = crate::widgets::row(ui, |ui| {
-            // Grip: drag the server up or down the list.
-            let (grip, response) =
-                ui.allocate_exact_size(vec2(14.0, ICON), egui::Sense::click_and_drag());
+            // Grip: a hint that the row can be picked up (anywhere on it).
+            let (grip, _) = ui.allocate_exact_size(vec2(14.0, ICON), egui::Sense::hover());
+            let lit = index.is_some_and(|i| self.servers.row_rects.get(i).is_some_and(|r| ui.rect_contains_pointer(*r)));
             for dy in [-6.0, 0.0, 6.0] {
                 for dx in [-2.5, 2.5] {
                     ui.painter().circle_filled(
                         grip.center() + vec2(dx, dy),
                         1.3,
-                        if response.hovered() { p.text } else { p.muted },
+                        if lit { p.text } else { p.muted },
                     );
                 }
-            }
-            if response.hovered() {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
-            }
-            response.clone().on_hover_text("Drag to reorder");
-            if response.drag_started() {
-                egui::DragAndDrop::set_payload(ui.ctx(), server.address.clone());
             }
             let (rect, _) = ui.allocate_exact_size(vec2(ICON, ICON), egui::Sense::hover());
             match self.servers.icons.get(&server.address) {
@@ -378,7 +501,25 @@ impl ArcticApp {
         if join {
             self.launch_into(QuickPlay::Server(server.address.clone()));
         }
-        row.response.rect
+        let rect = row.response.rect;
+        if let Some(index) = index {
+            // Over the row: only dragging (its buttons still take clicks).
+            let hold = ui
+                .interact(rect, ui.id().with(("server_hold", index)), egui::Sense::drag())
+                .on_hover_cursor(egui::CursorIcon::Grab);
+            if hold.drag_started()
+                && self.servers.drag.is_none()
+                && let Some(at) = hold.interact_pointer_pos()
+            {
+                self.servers.drag = Some(Drag {
+                    index,
+                    address: server.address.clone(),
+                    grab_dy: at.y - rect.top(),
+                    height: rect.height(),
+                });
+            }
+        }
+        rect
     }
 
     /// Players and ping (or offline / pinging), right-aligned.

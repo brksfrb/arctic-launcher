@@ -8,8 +8,51 @@ public final class EarlyStart implements PreLaunchEntrypoint {
 	@Override
 	public void onPreLaunch() {
 		Timeline.mark("preLaunch");
-		Preloader.start();
-		loadNativesAhead();
+		Thread main = Thread.currentThread();
+		ClassLoader loader = main.getContextClassLoader();
+		// Not before every mod's preLaunch has run: a class loaded now goes through Mixin, which then picks
+		// its MixinExtras for good, before mods that add their mixins in preLaunch (Essential) have offered
+		// theirs. Those mods then fail ("MixinExtras service has already been selected", or two MixinExtras
+		// working on one class). After preLaunch is when the game itself starts loading classes anyway.
+		Thread start = new Thread(() -> {
+			if (!awaitPreLaunchDone(main)) {
+				return;
+			}
+			Preloader.start(loader);
+			loadNativesAhead();
+		}, "arctic-early-start");
+		start.setDaemon(true);
+		start.start();
+	}
+
+	/** Longest wait for the other mods' preLaunch; past it nothing is loaded ahead. */
+	private static final long PRELAUNCH_WAIT_MS = 120_000;
+	private static final long POLL_MS = 5;
+
+	/** Wait until {@code main} has left the loader's setup (Knot.init, where preLaunch runs); false if it never does. */
+	private static boolean awaitPreLaunchDone(Thread main) {
+		long until = System.currentTimeMillis() + PRELAUNCH_WAIT_MS;
+		while (System.currentTimeMillis() < until) {
+			if (!main.isAlive() || !inLoaderSetup(main.getStackTrace())) {
+				return main.isAlive();
+			}
+			try {
+				Thread.sleep(POLL_MS);
+			} catch (InterruptedException e) {
+				return false;
+			}
+		}
+		return false;
+	}
+
+	/** Fabric's (and Quilt's) Knot.init is on the stack: preLaunch entrypoints are still running. */
+	static boolean inLoaderSetup(StackTraceElement[] stack) {
+		for (StackTraceElement frame : stack) {
+			if ("init".equals(frame.getMethodName()) && frame.getClassName().endsWith(".launch.knot.Knot")) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** The game's native libraries, in the order it needs them; each name's static setup is what loads its DLL. */

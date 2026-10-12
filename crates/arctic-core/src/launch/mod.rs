@@ -490,6 +490,19 @@ pub(crate) fn fast_start_flags(instance: &Instance) -> Vec<String> {
     ]
 }
 
+/// LWJGL's per-thread scratch stack in KiB (its default is 64). Vulkan (VulkanMod) lists the
+/// graphics card's extensions into it at start, and with many layers or drivers they don't fit:
+/// "OutOfMemoryError: Out of stack space" before the window opens. LWJGL 2 ignores it.
+const LWJGL_STACK_KIB: u32 = 1024;
+
+fn lwjgl_stack_flag(launcher_args: &str, instance_args: &str) -> Option<String> {
+    let own = launcher_args
+        .split_whitespace()
+        .chain(instance_args.split_whitespace())
+        .any(|a| a.starts_with("-Dorg.lwjgl.system.stackSize="));
+    (!own).then(|| format!("-Dorg.lwjgl.system.stackSize={LWJGL_STACK_KIB}"))
+}
+
 /// The garbage collector Mojang's own launcher sets up: G1 with short pauses and room for the
 /// game's bursts of short-lived objects. Without it Java 8 (Minecraft 1.16.5 and older) uses
 /// the parallel collector, which stops the game for every collection: the regular FPS drops
@@ -631,6 +644,10 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
                 max_memory_mb,
             ))
             .chain(fast_start_flags(req.instance))
+            .chain(lwjgl_stack_flag(
+                &settings.extra_jvm_args,
+                &req.instance.jvm_args,
+            ))
             .chain(
                 (settings.game_maximized && !settings.fullscreen)
                     .then(|| game_window::CLIENT_FLAG.to_owned()),
@@ -855,5 +872,21 @@ mod tests {
             secrets: vec!["tok".into(), "hunter2".into()],
         };
         assert!(plan.redacted_command().ends_with("--proxyPass <redacted>"));
+    }
+
+    #[test]
+    fn lwjgl_gets_room_for_vulkans_lists_unless_the_player_chose() {
+        assert_eq!(
+            lwjgl_stack_flag("", "").as_deref(),
+            Some("-Dorg.lwjgl.system.stackSize=1024")
+        );
+        assert_eq!(
+            lwjgl_stack_flag("-Dorg.lwjgl.system.stackSize=256", ""),
+            None
+        );
+        assert_eq!(
+            lwjgl_stack_flag("", "-Xmx4G -Dorg.lwjgl.system.stackSize=512"),
+            None
+        );
     }
 }

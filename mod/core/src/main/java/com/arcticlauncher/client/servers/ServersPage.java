@@ -457,31 +457,88 @@ public final class ServersPage extends Page {
 		}
 		int tx = x + ICON + 8;
 		int right = x + LIST_W - 6;
-		String players = a != null && a.status != null ? a.status.online + "/" + a.status.max : "";
-		int pw = g.textWidth(players);
-		int bars = 16;
-		g.text(Draw.fit(g, name, right - bars - pw - 6 - tx), tx, y + 4, s.text, false);
-		g.text(players, right - bars - pw - 2, y + 4, s.muted, false);
-		pingBars(g, s, right - 12, y + 4, a);
-		if (over) {
-			hoverTip(a, right, y, pw, bars);
+		boolean up = a != null && a.status != null;
+		boolean down = a != null && a.error != null;
+		// Top right: how fast it answered (or that it didn't), always shown, then the bars.
+		String speed = up ? (a.status.ping < 0 ? "?" : a.status.ping + " ms") : down ? "Offline" : "...";
+		int speedColor = up ? pingColor(a.status.ping) : down ? RED : s.muted;
+		int barsX = right - BARS_W;
+		int speedW = g.textWidth(speed);
+		g.text(speed, barsX - 4 - speedW, y + 4, speedColor, false);
+		pingBars(g, s, barsX, y + 3, a);
+		// Under it: who's on, then the version it advertises (red when it isn't this game's).
+		String players = up ? (a.status.online > 0 ? "§a" : "§7") + group(a.status.online) + "§8/§7" + group(a.status.max) : "";
+		String version = up ? a.status.version : "";
+		boolean incompatible = up && a.status.protocol > 0 && platform.protocol() > 0 && a.status.protocol != platform.protocol();
+		int playersW = g.textWidth(players);
+		int versionW = Math.min(g.textWidth(version), 90);
+		g.text(players, right - playersW, y + 14, s.text, false);
+		if (!version.isEmpty()) {
+			g.text(Draw.fit(g, version, versionW), right - versionW, y + 24, incompatible ? RED : 0xFF7D93AE, false);
+		}
+		int column = Math.max(playersW, versionW) + 8;
+		g.text(Draw.fit(g, name, barsX - 8 - speedW - tx), tx, y + 4, s.text, false);
+		if (over && tipY >= y + 2 && tipY <= y + 13) {
+			if (tipX >= barsX - 4 - speedW && tipX <= right) {
+				tip = speedTip(a, incompatible);
+			}
+		} else if (over && up && tipY > y + 13 && tipY <= y + 23 && tipX >= right - playersW && tipX <= right) {
+			tip = playersTip(a);
 		}
 		if (a == null || !a.done()) {
 			g.text("Pinging…", tx, y + 15, s.muted, false);
 			return;
 		}
-		if (a.error != null) {
+		if (down) {
 			g.text("§c" + a.error, tx, y + 15, s.muted, false);
 			return;
 		}
 		String[] lines = a.status.motd.split("\n", -1);
 		for (int i = 0; i < Math.min(2, lines.length); i++) {
-			g.text(Draw.fit(g, lines[i].replace("\r", ""), right - tx), tx, y + 15 + i * 10, 0xFFAAAAAA, false);
+			g.text(Draw.fit(g, lines[i].replace("\r", ""), right - column - tx), tx, y + 15 + i * 10, 0xFFAAAAAA, false);
 		}
-		if (a.status.protocol > 0 && platform.protocol() > 0 && a.status.protocol != platform.protocol() && !a.status.version.isEmpty()) {
-			String v = a.status.version;
-			g.text(v, right - g.textWidth(v), y + ROW_H - 11, 0xFFF87171, false);
+	}
+
+	private static final int RED = 0xFFF87171;
+	/** Five bars, two wide with a gap: 14 across. */
+	private static final int BARS_W = 14;
+
+	/** Green when quick, through yellow and orange, to red. */
+	private static int pingColor(long ms) {
+		if (ms < 0) {
+			return 0xFFAAAAAA;
 		}
+		return ms < 80 ? 0xFF4ADE80 : ms < 150 ? 0xFFA3E635 : ms < 300 ? 0xFFFACC15 : ms < 600 ? 0xFFFB923C : RED;
+	}
+
+	/** 12,345: thousands grouped, so big servers read at a glance. */
+	private static String group(int n) {
+		return String.format(java.util.Locale.ROOT, "%,d", n);
+	}
+
+	private List<String> speedTip(Servers.Answer a, boolean incompatible) {
+		if (a == null || !a.done()) {
+			return java.util.Collections.singletonList(tr("multiplayer.status.pinging", "Pinging..."));
+		}
+		if (a.error != null) {
+			return java.util.Collections.singletonList("§c" + tr("multiplayer.status.no_connection", "(no connection)"));
+		}
+		List<String> lines = new java.util.ArrayList<String>();
+		lines.add(a.status.ping < 0 ? "?" : a.status.ping + " ms");
+		if (incompatible) {
+			lines.add("§c" + tr("multiplayer.status.incompatible", "Incompatible version!") + " (" + a.status.version + ")");
+		}
+		return lines;
+	}
+
+	private static List<String> playersTip(Servers.Answer a) {
+		List<String> lines = new java.util.ArrayList<String>(a.status.sample);
+		if (lines.isEmpty()) {
+			lines.add(a.status.online + " / " + a.status.max);
+		} else if (a.status.online > lines.size()) {
+			lines.add("§7... and " + (a.status.online - lines.size()) + " more");
+		}
+		return lines;
 	}
 
 	private void lanRow(Gfx g, Style s, int x, int y, LanScan.World w, boolean selectedRow, boolean over) {
@@ -491,37 +548,6 @@ public final class ServersPage extends Page {
 		int tx = x + ICON + 8;
 		g.text(Draw.fit(g, w.motd, LIST_W - ICON - 14), tx, y + 4, s.text, false);
 		g.text(w.address, tx, y + 15, s.muted, false);
-	}
-
-	/** The game's hover texts: the ping (or why there's none) over the bars, who's on over the count. */
-	private void hoverTip(Servers.Answer a, int right, int y, int playersW, int bars) {
-		int mx = tipX;
-		int my = tipY;
-		if (my < y + 2 || my > y + 13) {
-			return;
-		}
-		if (mx >= right - 13 && mx <= right) {
-			if (a == null || !a.done()) {
-				tip = java.util.Collections.singletonList(tr("multiplayer.status.pinging", "Pinging..."));
-			} else if (a.error != null) {
-				tip = java.util.Collections.singletonList("§c" + tr("multiplayer.status.no_connection", "(no connection)"));
-			} else {
-				List<String> lines = new java.util.ArrayList<String>();
-				lines.add(a.status.ping < 0 ? "?" : a.status.ping + " ms");
-				if (a.status.protocol > 0 && platform.protocol() > 0 && a.status.protocol != platform.protocol()) {
-					lines.add("§c" + tr("multiplayer.status.incompatible", "Incompatible version!") + " (" + a.status.version + ")");
-				}
-				tip = lines;
-			}
-		} else if (a != null && a.status != null && mx >= right - bars - playersW - 2 && mx < right - bars - 2) {
-			List<String> lines = new java.util.ArrayList<String>(a.status.sample);
-			if (lines.isEmpty()) {
-				lines.add(a.status.online + " / " + a.status.max);
-			} else if (a.status.online > lines.size()) {
-				lines.add("§7... and " + (a.status.online - lines.size()) + " more");
-			}
-			tip = lines;
-		}
 	}
 
 	private void drawTip(Gfx g, Style s) {
@@ -543,7 +569,7 @@ public final class ServersPage extends Page {
 		}
 	}
 
-	/** Five bars like the game's, by how fast the server answered. */
+	/** Five bars like the game's, by how fast the server answered: short and two wide. */
 	private static void pingBars(Gfx g, Style s, int x, int y, Servers.Answer a) {
 		int lit;
 		int color;
@@ -552,18 +578,17 @@ public final class ServersPage extends Page {
 			color = s.muted;
 		} else if (a.error != null) {
 			lit = 0;
-			color = 0xFFF87171;
+			color = RED;
 		} else {
 			long ms = a.status.ping;
 			lit = ms < 0 ? 3 : ms < 150 ? 5 : ms < 300 ? 4 : ms < 600 ? 3 : ms < 1000 ? 2 : 1;
-			color = lit >= 4 ? 0xFF86EFAC : lit == 3 ? 0xFFFDE047 : 0xFFF87171;
+			color = pingColor(ms);
 		}
+		int bottom = y + 7;
 		for (int i = 0; i < 5; i++) {
-			int h = 2 + i * 2;
-			g.fill(x + i * 2, y + 8 - h, x + i * 2 + 1, y + 8, i < lit ? color : 0x55FFFFFF);
-		}
-		if (a != null && a.error != null) {
-			g.text("§c×", x + 2, y, 0xFFF87171, false);
+			int h = 3 + i;
+			int bx = x + i * 3;
+			g.fill(bx, bottom - h, bx + 2, bottom, i < lit ? color : 0x40FFFFFF);
 		}
 	}
 

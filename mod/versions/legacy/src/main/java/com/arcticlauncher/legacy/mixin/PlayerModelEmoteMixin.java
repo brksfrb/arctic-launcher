@@ -32,6 +32,48 @@ abstract class PlayerModelEmoteMixin {
 	@Unique
 	private float[][] arctic$undo;
 
+	@org.spongepowered.asm.mixin.Shadow
+	@org.spongepowered.asm.mixin.Final
+	private boolean thinArms;
+
+	/** The emote the player posed last is playing, and how far in (for what the hand holds). */
+	@Unique
+	private Animation arctic$bending;
+	@Unique
+	private float arctic$bendingAt;
+
+	//#if MC >= 1.9
+	@Inject(method = "method_12221(FLnet/minecraft/client/gui/screen/options/HandOption;)V", at = @At("TAIL"))
+	private void arctic$hand(float scale, net.minecraft.client.gui.screen.options.HandOption arm, CallbackInfo ci) {
+		arctic$forearm(arm == net.minecraft.client.gui.screen.options.HandOption.RIGHT ? SkinLimbs.Limb.RIGHT_ARM : SkinLimbs.Limb.LEFT_ARM, scale);
+	}
+	//#else
+	@Inject(method = "setArmAngle(F)V", at = @At("TAIL"))
+	private void arctic$hand(float scale, CallbackInfo ci) {
+		// Only the right hand holds things here.
+		arctic$forearm(SkinLimbs.Limb.RIGHT_ARM, scale);
+	}
+	//#endif
+
+	/**
+	 * An emote that bends the arm at the elbow draws it in two halves (the game's arm is hidden): what
+	 * the hand holds follows the forearm, turning around the elbow, instead of the straight arm.
+	 */
+	@Unique
+	private void arctic$forearm(SkinLimbs.Limb limb, float scale) {
+		float[] bend = SkinLimbs.bend(arctic$bending, limb, arctic$bendingAt);
+		if (bend == null) {
+			return;
+		}
+		float[] joint = SkinLimbs.joint(limb, thinArms);
+		com.mojang.blaze3d.platform.GlStateManager.translate((joint[0] + bend[3]) * scale, (joint[1] + bend[4]) * scale, (joint[2] + bend[5]) * scale);
+		float deg = 180f / (float) Math.PI;
+		com.mojang.blaze3d.platform.GlStateManager.rotate(bend[2] * deg, 0f, 0f, 1f);
+		com.mojang.blaze3d.platform.GlStateManager.rotate(bend[1] * deg, 0f, 1f, 0f);
+		com.mojang.blaze3d.platform.GlStateManager.rotate(bend[0] * deg, 1f, 0f, 0f);
+		com.mojang.blaze3d.platform.GlStateManager.translate(-joint[0] * scale, -joint[1] * scale, -joint[2] * scale);
+	}
+
 	@Inject(method = "setAngles(FFFFFFLnet/minecraft/entity/Entity;)V", at = @At("HEAD"))
 	private void arctic$undoRig(float limbAngle, float limbDistance, float age, float headYaw, float headPitch, float scale, Entity entity,
 			CallbackInfo ci) {
@@ -44,6 +86,7 @@ abstract class PlayerModelEmoteMixin {
 	@Inject(method = "setAngles(FFFFFFLnet/minecraft/entity/Entity;)V", at = @At("TAIL"))
 	private void arctic$emote(float limbAngle, float limbDistance, float age, float headYaw, float headPitch, float scale, Entity entity,
 			CallbackInfo ci) {
+		arctic$bending = null;
 		if (entity == null || ArcticClient.looks() == null) {
 			return;
 		}
@@ -53,6 +96,8 @@ abstract class PlayerModelEmoteMixin {
 			return;
 		}
 		float t = playing.seconds();
+		arctic$bending = animation;
+		arctic$bendingAt = t;
 		PlayerEntityModel model = (PlayerEntityModel) (Object) this;
 		if (Rig.expressive(animation)) {
 			arctic$undo = rig(animation, t, parts());

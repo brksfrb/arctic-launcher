@@ -250,6 +250,8 @@ processResources {
 			// Server names were looked up by ServerNameResolver from 1.17; before, by
 			// the connect screen and the server list themselves (hooked separately).
 			resolver: atLeast('1.17'),
+			// 1.21.9+ look players up by name off the game's thread (player heads): made safe.
+			playerInfoRace: atLeast('1.21.9'),
 			// Toast slots were tracked from 1.19.
 			toastSlots: atLeast('1.19'),
 			// HUD widgets hand in last frame's GUI pieces again (26.1's GUI states).

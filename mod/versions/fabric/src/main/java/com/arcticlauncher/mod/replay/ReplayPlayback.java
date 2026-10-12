@@ -416,6 +416,17 @@ public final class ReplayPlayback implements ReplayBackend {
 		ReplayFrames.capture(sink);
 	}
 
+	@Override
+	public String exportBlocked() {
+		//#if MC < 26.3
+		// Frames are read back with OpenGL, which VulkanMod doesn't draw with.
+		if (com.arcticlauncher.mod.VulkanCompat.ACTIVE) {
+			return "Videos can't be made while VulkanMod draws the game: turn it off to make one.";
+		}
+		//#endif
+		return null;
+	}
+
 	/** This replay's connection closed by itself (not by jumping or leaving). */
 	public void closed(Connection c) {
 		if (c == connection) {

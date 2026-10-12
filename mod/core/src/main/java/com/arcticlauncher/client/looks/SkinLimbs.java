@@ -85,6 +85,35 @@ public final class SkinLimbs {
 		return false;
 	}
 
+	/**
+	 * Where a bent limb's joint (the elbow, the knee) is in the game's part for that limb: Java model
+	 * space, in pixels from the part's pivot. What the hand holds turns around it with the forearm.
+	 */
+	public static float[] joint(Limb limb, boolean slim) {
+		int width = limb == Limb.BODY ? 8 : slim ? 3 : 4;
+		float x0 = limb.arm ? (limb == Limb.RIGHT_ARM ? -4 - width : 4) : limb == Limb.BODY ? -4 : limb.attach.x - 2;
+		float top = limb.arm || limb == Limb.BODY ? 24 : 12;
+		float jointX = x0 + width / 2f;
+		float jointY = top - HALF;
+		return new float[] {jointX - limb.attach.x, (24 - jointY) - limb.attach.y, 0};
+	}
+
+	/**
+	 * How the lower half is bent at {@code t}: {xRot, yRot, zRot} in radians (turned Z, then Y,
+	 * then X, as the game does) and {dx, dy, dz} in pixels (Java's y down); null when it isn't.
+	 */
+	public static float[] bend(Animation animation, Limb limb, float t) {
+		if (animation == null || !bends(animation, limb)) {
+			return null;
+		}
+		float[] r = animation.rotation(limb.joint, t);
+		float[] p = animation.position(limb.joint, t);
+		float deg = (float) (Math.PI / 180);
+		return new float[] {
+				r == null ? 0 : r[0] * deg, r == null ? 0 : r[1] * deg, r == null ? 0 : r[2] * deg,
+				p == null ? 0 : p[0], p == null ? 0 : -p[1], p == null ? 0 : p[2]};
+	}
+
 	/** The geometry, in Blockbench's space (y up from the feet), as a cosmetic file would have it. */
 	static String json(Limb limb, boolean slim, boolean outer) {
 		int width = limb == Limb.BODY ? 8 : slim ? 3 : 4;

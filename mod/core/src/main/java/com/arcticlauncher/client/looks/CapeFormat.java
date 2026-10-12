@@ -30,11 +30,13 @@ public final class CapeFormat {
 	private static final int[] WING_SIDE_OUT = {34, 2, 2, 20};
 	private static final int[] WING_TOP = {24, 0, 10, 2};
 	private static final int[] WING_BOTTOM = {34, 0, 10, 2};
-	/** The cape front's edge columns and rows, which those are painted from (the cape's own edges are often empty). */
-	private static final int[] FRONT_LEFT = {1, 1, 1, 16};
-	private static final int[] FRONT_RIGHT = {10, 1, 1, 16};
-	private static final int[] FRONT_TOP = {1, 1, 10, 1};
-	private static final int[] FRONT_BOTTOM = {1, 16, 10, 1};
+	/** The edge columns and rows of the wing's inner face, which those are painted from. */
+	private static final int[] INSIDE_LEFT = {24, 2, 1, 20};
+	private static final int[] INSIDE_RIGHT = {33, 2, 1, 20};
+	private static final int[] INSIDE_TOP = {24, 2, 10, 1};
+	private static final int[] INSIDE_BOTTOM = {24, 21, 10, 1};
+	/** All four thin faces, to tell whether a frame has them. */
+	private static final int[][] WING_EDGES = {WING_SIDE_IN, WING_SIDE_OUT, WING_TOP, WING_BOTTOM};
 	/** The whole wing box's area: empty here means that frame has no elytra art. */
 	private static final int[] WING_AREA = {22, 0, 24, 22};
 
@@ -70,7 +72,8 @@ public final class CapeFormat {
 		int frameHeight = w / 2;
 		boolean any = false;
 		for (int f = 0; f < frames && !any; f++) {
-			any = empty(in, f * frameHeight, s);
+			int top = f * frameHeight;
+			any = empty(in, WING_AREA, top, s) || edgesEmpty(in, top, s);
 		}
 		if (!any) {
 			return null;
@@ -81,23 +84,40 @@ public final class CapeFormat {
 		g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
 		for (int f = 0; f < frames; f++) {
 			int top = f * frameHeight;
-			if (empty(in, top, s)) {
+			if (empty(in, WING_AREA, top, s)) {
 				copy(g, in, CAPE_FRONT, WING_OUTSIDE, s, top);
 				copy(g, in, CAPE_BACK, WING_INSIDE, s, top);
-				copy(g, in, FRONT_LEFT, WING_SIDE_IN, s, top);
-				copy(g, in, FRONT_RIGHT, WING_SIDE_OUT, s, top);
-				copy(g, in, FRONT_TOP, WING_TOP, s, top);
-				copy(g, in, FRONT_BOTTOM, WING_BOTTOM, s, top);
+			}
+		}
+		// The wings' thin faces from their inner face's border (painted just now, or the cape's own
+		// elytra art, which often leaves them out).
+		for (int f = 0; f < frames; f++) {
+			int top = f * frameHeight;
+			if (edgesEmpty(out, top, s)) {
+				copy(g, out, INSIDE_LEFT, WING_SIDE_IN, s, top);
+				copy(g, out, INSIDE_RIGHT, WING_SIDE_OUT, s, top);
+				copy(g, out, INSIDE_TOP, WING_TOP, s, top);
+				copy(g, out, INSIDE_BOTTOM, WING_BOTTOM, s, top);
 			}
 		}
 		g.dispose();
 		return out;
 	}
 
-	/** Whether the wing area of the frame at {@code top} has no visible pixel. */
-	private static boolean empty(BufferedImage img, int top, int s) {
-		for (int y = WING_AREA[1] * s; y < (WING_AREA[1] + WING_AREA[3]) * s; y++) {
-			for (int x = WING_AREA[0] * s; x < (WING_AREA[0] + WING_AREA[2]) * s; x++) {
+	/** Whether all four thin faces of the frame at {@code top} are empty. */
+	private static boolean edgesEmpty(BufferedImage img, int top, int s) {
+		for (int[] edge : WING_EDGES) {
+			if (!empty(img, edge, top, s)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** Whether the area {@code a} (x, y, w, h) of the frame at {@code top} has no visible pixel. */
+	private static boolean empty(BufferedImage img, int[] a, int top, int s) {
+		for (int y = a[1] * s; y < (a[1] + a[3]) * s; y++) {
+			for (int x = a[0] * s; x < (a[0] + a[2]) * s; x++) {
 				if ((img.getRGB(x, top + y) >>> 24) != 0) {
 					return false;
 				}

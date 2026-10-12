@@ -182,15 +182,25 @@ const RULES: &[Rule] = &[
             if !(c[0].starts_with("VK_ERROR") || text.contains("vulkanmod")) {
                 return Diagnosis::none();
             }
+            // A window it can't draw to: usually the wrong one of two graphics cards.
+            let card = Regex::new(r"Backend API: Vulkan [\d.]+, (\w+)")
+                .ok()
+                .and_then(|re| re.captures(text).map(|v| v[1].to_owned()));
+            let hint = match card {
+                Some(card) if text.contains("Failed to create swap chain") => format!(
+                    " VulkanMod used the {card} graphics card, which can't show this window: on a computer with two cards, pick the other one in VulkanMod's video settings (Device)."
+                ),
+                _ => String::new(),
+            };
+            let code = if c[0].starts_with("VK_ERROR") {
+                format!(" ({})", &c[0])
+            } else {
+                String::new()
+            };
             Diagnosis::new(
                 "VulkanMod crashed",
                 format!(
-                    "VulkanMod or the graphics driver under it failed{}. Update your graphics driver and VulkanMod, or remove VulkanMod to play with the game's own renderer.",
-                    if c[0].starts_with("VK_ERROR") {
-                        format!(" ({})", &c[0])
-                    } else {
-                        String::new()
-                    }
+                    "VulkanMod or the graphics driver under it failed{code}.{hint} Update your graphics driver and VulkanMod, or remove VulkanMod to play with the game's own renderer."
                 ),
                 vec!["vulkanmod".into()],
             )
@@ -517,6 +527,12 @@ mod tests {
                 "java.lang.RuntimeException: Failed to create swap chain: VK_ERROR_INITIALIZATION_FAILED"
             ),
             "VulkanMod crashed"
+        );
+        let d = diagnose("java.lang.RuntimeException: Failed to create swap chain: VK_ERROR_INITIALIZATION_FAILED\n\tBackend API: Vulkan 1.4.354, AMD").unwrap();
+        assert!(
+            d.detail.contains("used the AMD graphics card"),
+            "{}",
+            d.detail
         );
         assert_eq!(
             title(

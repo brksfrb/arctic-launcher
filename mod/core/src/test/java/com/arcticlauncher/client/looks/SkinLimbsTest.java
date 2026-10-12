@@ -93,4 +93,14 @@ class SkinLimbsTest {
 		assertEquals(-6f, box.minZ, 0.01f);
 		assertTrue(box.maxZ <= 2.01f);
 	}
+
+	@org.junit.jupiter.api.Test
+	void theElbowIsHalfwayDownTheArmInTheMiddleOfItsWidth() {
+		// The right arm hangs from x -5 (pixels, Java space); it spans -8..-4, so its middle is 1 further out.
+		float[] right = SkinLimbs.joint(SkinLimbs.Limb.RIGHT_ARM, false);
+		org.junit.jupiter.api.Assertions.assertArrayEquals(new float[] {-1, 4, 0}, right, EPS);
+		float[] left = SkinLimbs.joint(SkinLimbs.Limb.LEFT_ARM, true);
+		org.junit.jupiter.api.Assertions.assertArrayEquals(new float[] {0.5f, 4, 0}, left, EPS);
+		org.junit.jupiter.api.Assertions.assertNull(SkinLimbs.bend(null, SkinLimbs.Limb.RIGHT_ARM, 0));
+	}
 }

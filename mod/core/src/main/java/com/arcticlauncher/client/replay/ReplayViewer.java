@@ -478,6 +478,11 @@ public final class ReplayViewer {
 	 * {@code FIRST_PERSON}; anything else films the free camera standing still).
 	 */
 	public void export(VideoExport job, Mode camera) {
+		String blocked = backend.exportBlocked();
+		if (blocked != null) {
+			problem = blocked;
+			return;
+		}
 		if (camera == Mode.PATH) {
 			CameraPath p = new CameraPath(keyframes);
 			if (!p.usable()) {

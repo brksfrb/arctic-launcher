@@ -16,7 +16,7 @@ public final class Preloader {
 	private Preloader() {}
 
 	/** Start loading the classes named in the list file ({@code -Darctic.preload=<file>}). */
-	public static void start() {
+	public static void start(ClassLoader loader) {
 		String file = System.getProperty("arctic.preload");
 		// Only with the agent that makes class loading take turns (see ArcticAgent): loading from two threads without it can deadlock.
 		if (file == null || file.isEmpty() || !"1".equals(System.getProperty("arctic.agent.lock"))) {
@@ -29,7 +29,6 @@ public final class Preloader {
 			return;
 		}
 		final List<String> wanted = onlyCached(names);
-		ClassLoader loader = Thread.currentThread().getContextClassLoader();
 		int threads = Integer.getInteger("arctic.preload.threads", 2);
 		AtomicInteger next = new AtomicInteger();
 		for (int i = 0; i < threads; i++) {

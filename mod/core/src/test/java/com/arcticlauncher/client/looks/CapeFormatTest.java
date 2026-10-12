@@ -22,8 +22,8 @@ class CapeFormatTest {
 	void theWingsEdgesArePaintedSoTheyAreNotSeeThroughEdgeOn() {
 		BufferedImage cape = new BufferedImage(64, 32, BufferedImage.TYPE_INT_ARGB);
 		for (int y = 1; y < 17; y++) {
-			for (int x = 1; x < 11; x++) {
-				cape.setRGB(x, y, 0xFF336699); // a solid front face
+			for (int x = 1; x < 22; x++) {
+				cape.setRGB(x, y, 0xFF336699); // a solid front and back
 			}
 		}
 		BufferedImage out = CapeFormat.withElytra(cape);
@@ -35,10 +35,28 @@ class CapeFormatTest {
 	}
 
 	@Test
-	void aCapeWithElytraArtIsLeftAlone() {
+	void aCapeWithCompleteElytraArtIsLeftAlone() {
 		BufferedImage cape = new BufferedImage(64, 32, BufferedImage.TYPE_INT_ARGB);
 		cape.setRGB(30, 10, 0xFF00FF00);
+		cape.setRGB(22, 10, 0xFF00FF00); // its wing's side
 		assertNull(CapeFormat.withElytra(cape));
+	}
+
+	@Test
+	void elytraArtWithoutEdgesGetsThemFromItsInnerFace() {
+		BufferedImage cape = new BufferedImage(64, 32, BufferedImage.TYPE_INT_ARGB);
+		for (int y = 2; y < 22; y++) {
+			for (int x = 24; x < 34; x++) {
+				cape.setRGB(x, y, 0xFF00FF00); // the wing's inner face only
+			}
+		}
+		BufferedImage out = CapeFormat.withElytra(cape);
+		assertEquals(0xFF00FF00, out.getRGB(23, 10));
+		assertEquals(0xFF00FF00, out.getRGB(34, 10));
+		assertEquals(0xFF00FF00, out.getRGB(30, 1));
+		assertEquals(0xFF00FF00, out.getRGB(40, 1));
+		// The faces themselves aren't painted over.
+		assertEquals(0, out.getRGB(40, 10) >>> 24);
 	}
 
 	@Test

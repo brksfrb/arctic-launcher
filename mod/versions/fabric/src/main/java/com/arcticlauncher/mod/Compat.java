@@ -202,6 +202,23 @@ public final class Compat {
 		//#endif
 	}
 
+	/** Turn the pose Z, then Y, then X (radians), the order a model part turns in. */
+	public static void turnZYX(com.mojang.blaze3d.vertex.PoseStack pose, float x, float y, float z) {
+		//#if MC >= 26.3
+		pose.rotate(com.mojang.math.Axis.ZP.rotation(z));
+		pose.rotate(com.mojang.math.Axis.YP.rotation(y));
+		pose.rotate(com.mojang.math.Axis.XP.rotation(x));
+		//#elif MC >= 1.19.3
+		pose.mulPose(com.mojang.math.Axis.ZP.rotation(z));
+		pose.mulPose(com.mojang.math.Axis.YP.rotation(y));
+		pose.mulPose(com.mojang.math.Axis.XP.rotation(x));
+		//#else
+		pose.mulPose(com.mojang.math.Vector3f.ZP.rotation(z));
+		pose.mulPose(com.mojang.math.Vector3f.YP.rotation(y));
+		pose.mulPose(com.mojang.math.Vector3f.XP.rotation(x));
+		//#endif
+	}
+
 	/** The game window's native handle (GLFW or SDL). */
 	public static long windowHandle() {
 		//#if MC >= 1.21.9

@@ -167,7 +167,8 @@ public final class EmoteWheel extends Page {
 		for (int i = 0; i < count; i++) {
 			Draw.disc(g, left + i * DOT_GAP, y, DOT_R, i == page ? s.accent : s.muted);
 		}
-		Draw.centered(g, "Scroll for more emotes", cx, y - 12, s.text, true);
+		int total = ArcticClient.looks().cosmetics().emotes().size();
+		Draw.centered(g, "Page " + (page + 1) + " of " + count + " (" + total + " emotes): scroll for more", cx, y - 12, s.text, true);
 	}
 
 	@Override

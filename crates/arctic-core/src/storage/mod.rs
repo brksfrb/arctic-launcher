@@ -37,7 +37,15 @@ use crate::{Error, Result};
 pub const DATA_DIR_ENV: &str = "ARCTIC_DATA_DIR";
 /// Marker file next to the executable that enables portable mode.
 pub const PORTABLE_MARKER: &str = "portable.txt";
+/// Also accepted: Windows Explorer hides extensions, so a file named "portable.txt" there is
+/// often really "portable.txt.txt".
+const PORTABLE_MARKERS: [&str; 2] = [PORTABLE_MARKER, "portable.txt.txt"];
 const DIR_NAME: &str = "ArcticLauncher";
+
+/// A portable-mode marker sits in `exe_dir`.
+fn is_portable(exe_dir: &Path) -> bool {
+    PORTABLE_MARKERS.iter().any(|name| exe_dir.join(name).is_file())
+}
 
 /// Resolved directory layout. Cheap to clone and pass around.
 #[derive(Debug, Clone)]
@@ -74,7 +82,7 @@ impl DataDirs {
             .ok()
             .and_then(|p| p.parent().map(Path::to_path_buf));
         if let Some(exe_dir) = exe_dir
-            && exe_dir.join(PORTABLE_MARKER).exists()
+            && is_portable(&exe_dir)
         {
             return Ok(Self::new(exe_dir.join("data")));
         }
@@ -193,6 +201,17 @@ pub fn save_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn portable_marker_with_or_without_hidden_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!is_portable(dir.path()));
+        std::fs::write(dir.path().join("portable.txt.txt"), b"").unwrap();
+        assert!(is_portable(dir.path()));
+        let other = tempfile::tempdir().unwrap();
+        std::fs::write(other.path().join("portable.txt"), b"").unwrap();
+        assert!(is_portable(other.path()));
+    }
 
     #[test]
     fn json_roundtrip_and_missing_file() {
