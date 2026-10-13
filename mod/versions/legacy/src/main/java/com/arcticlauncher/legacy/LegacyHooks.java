@@ -186,6 +186,14 @@ public final class LegacyHooks {
 		leaveLabel = null;
 	}
 
+	/**
+	 * A player's skin texture. Legacy Yarn names it {@code getCapeId} (its {@code getSkinId} is the cape):
+	 * the player renderer draws the body with {@code getCapeId}, the cape layer with {@code getSkinId}.
+	 */
+	public static Identifier skinOf(net.minecraft.client.network.AbstractClientPlayerEntity player) {
+		return player.getCapeId();
+	}
+
 	/** An Arctic look texture once it's uploaded, or null. */
 	public static Identifier ready(String hash) {
 		// Only once uploaded: before that Minecraft looks for it in the resource packs and fails the draw.

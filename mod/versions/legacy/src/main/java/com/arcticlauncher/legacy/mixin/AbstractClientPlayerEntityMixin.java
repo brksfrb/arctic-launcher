@@ -10,10 +10,17 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/** Shows the player's Arctic look: skin (with arm model) and cape. */
+/**
+ * Shows the player's Arctic look: skin (with arm model) and cape.
+ *
+ * <p>Legacy Yarn has these two names the wrong way round (1.8.9 to 1.12.2): {@code getCapeId} is the
+ * skin (the player renderer draws the body with it) and {@code getSkinId} is the cape (the cape layer
+ * draws with it). See {@link com.arcticlauncher.legacy.LegacyHooks#skinOf}.
+ */
 @Mixin(AbstractClientPlayerEntity.class)
 abstract class AbstractClientPlayerEntityMixin {
-	@Inject(method = "getSkinId()Lnet/minecraft/util/Identifier;", at = @At("RETURN"), cancellable = true)
+	/** The skin, despite its name. */
+	@Inject(method = "getCapeId", at = @At("RETURN"), cancellable = true)
 	private void arctic$skin(CallbackInfoReturnable<Identifier> cir) {
 		if (LegacyHooks.streamerSelf(this)) {
 			cir.setReturnValue(LegacyHooks.STEVE);
@@ -26,7 +33,8 @@ abstract class AbstractClientPlayerEntityMixin {
 		}
 	}
 
-	@Inject(method = "getCapeId", at = @At("RETURN"), cancellable = true)
+	/** The cape, despite its name. */
+	@Inject(method = "getSkinId()Lnet/minecraft/util/Identifier;", at = @At("RETURN"), cancellable = true)
 	private void arctic$cape(CallbackInfoReturnable<Identifier> cir) {
 		Look look = look();
 		Identifier tex = look == null ? null : LegacyHooks.ready(look.cape);

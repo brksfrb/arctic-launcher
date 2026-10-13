@@ -101,7 +101,7 @@ public final class LegacyCosmeticLayer implements FeatureRenderer<AbstractClient
 		float t = playing.seconds();
 		boolean slim = "slim".equals(player.getModel());
 		// Null until the skin has loaded (the game then draws the default one, as here).
-		Identifier skin = player.getSkinId();
+		Identifier skin = LegacyHooks.skinOf(player);
 		if (skin == null) {
 			skin = net.minecraft.client.util.DefaultSkinHelper.getTexture(player.getUuid());
 		}
