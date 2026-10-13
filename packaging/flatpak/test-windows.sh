@@ -77,6 +77,13 @@ for variant in plain flashback; do
     replay_failed=true
   fi
 done
+if ! timeout 420 flatpak run --command=arctic "$app" --json launch --instance flatpak-legacy --offline FlatpakTest --memory 2G --wait > "$results/replay-legacy.log" 2>&1; then
+  replay_failed=true
+  flatpak kill "$app" 2>/dev/null || true
+fi
+if ! grep -F 'replaytest: PASSED' "$results/replay-legacy.log" || grep -E '(replaytest|worldtest): FAILED' "$results/replay-legacy.log"; then
+  replay_failed=true
+fi
 test "$title_failed" = false && test "$replay_failed" = false
 
 flatpak run --command=arctic "$app" --json launch --instance flatpak-test --offline FlatpakTest --memory 2G --wait > "$results/game.log" 2>&1 &

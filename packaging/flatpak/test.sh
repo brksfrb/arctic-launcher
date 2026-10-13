@@ -65,5 +65,10 @@ flatpak run --command=arctic "$app" mods install flashback --instance flatpak-ti
 timeout 900 flatpak run --command=arctic "$app" launch --instance flatpak-title --offline FlatpakTest --memory 2G --dry-run > "$results/title-prepare.log" 2>&1
 title_game_dir=$(flatpak run --command=arctic "$app" --json instances show flatpak-title | jq -r '.game_dir')
 
+# Keep the oldest adapter in the runtime sweep, especially its replay codec.
+flatpak run --command=arctic "$app" instances create flatpak-legacy --version 1.8.9 --loader fabric
+flatpak run --command=arctic "$app" instances edit flatpak-legacy --arctic-client on --performance off --memory 2G --jvm-args='-Darctic.selftest=replay'
+timeout 900 flatpak run --command=arctic "$app" launch --instance flatpak-legacy --offline FlatpakTest --memory 2G --dry-run > "$results/legacy-prepare.log" 2>&1
+
 xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- bash "$here/test-windows.sh" "$results" "$game_dir" "$title_game_dir"
 echo 'Flatpak installation, signed update, launcher, and Fabric game checks passed.'

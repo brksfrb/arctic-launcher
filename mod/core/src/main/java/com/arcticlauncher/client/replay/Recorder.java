@@ -428,7 +428,12 @@ public final class Recorder {
 
 	/** The packets written to {@code file} so far, uncompressed. */
 	static DataInputStream packetReader(File file) throws IOException {
-		return new DataInputStream(new InflaterInputStream(new java.io.BufferedInputStream(new FileInputStream(file), BUFFER), new Inflater(true), BUFFER));
+		return new DataInputStream(new InflaterInputStream(new java.io.BufferedInputStream(new FileInputStream(file), BUFFER), new Inflater(true), BUFFER) {
+			@Override public void close() throws IOException {
+				// A supplied Inflater is not released by InflaterInputStream.close().
+				try { super.close(); } finally { inf.end(); }
+			}
+		});
 	}
 
 	/** The first {@code length} bytes of {@code from} (its file may still be growing); closes it. */
