@@ -2,6 +2,11 @@
 
 The launcher updates itself from GitHub Releases of `brksfrb/arctic-launcher`.
 
+Flatpak installations update through the Linux software manager. Stable release
+publication also triggers the [Flatpak workflow](../packaging/flatpak/README.md),
+which builds on the Ryzen runner, tests the signed package and publishes the update
+feed using this repository's GitHub Pages site.
+
 ## Cutting a release
 
 1. Bump `version` in the root `Cargo.toml` (`[workspace.package]`) and commit.
@@ -64,5 +69,6 @@ updating" turns it off; the popup has "Don't show this again"). Write the notes 
 | Secret | Purpose |
 |---|---|
 | `ARCTIC_MSA_CLIENT_ID` | Arctic's own Azure client ID, baked into release builds (sign-in works once Mojang approves it) |
+| `FLATPAK_GPG_PRIVATE_KEY` | Signs Flatpak app commits and the update repository; the public key is committed under `packaging/flatpak` |
 
 TODO: Authenticode code signing (keep the certificate in CI secrets; never commit `.pfx`).

@@ -39,7 +39,7 @@ appstreamcli validate --no-net "$build/files/share/metainfo/$app.metainfo.xml"
 flatpak build-finish "$build" --command=arctic-launcher \
   --share=network --share=ipc --socket=wayland --socket=x11 --socket=pulseaudio \
   --device=dri \
-  --talk-name=org.kde.StatusNotifierWatcher --own-name='org.kde.StatusNotifierItem-*' \
+  --talk-name=org.kde.StatusNotifierWatcher \
   --talk-name=org.a11y.Bus --filesystem=xdg-run/discord-ipc-0
 flatpak build-export --gpg-sign="$key" "$repo" "$build" stable
 flatpak build-update-repo --gpg-sign="$key" --generate-static-deltas \

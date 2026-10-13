@@ -217,6 +217,7 @@ mod imp {
             ctx: ctx.clone(),
             icon,
         }
+        .disable_dbus_name(arctic_core::update::managed_by_flatpak())
         .spawn()
         .map_err(|e| log::info!("no system tray here: {e}"))
         .ok()
