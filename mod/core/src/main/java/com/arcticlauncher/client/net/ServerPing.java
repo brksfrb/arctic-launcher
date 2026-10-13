@@ -52,6 +52,8 @@ public final class ServerPing {
 		int port = Integer.parseInt(hostPort[1]);
 		try (Socket socket = open(host, port)) {
 			socket.setSoTimeout(TIMEOUT_MS);
+			// As the game's own connection: small packets go at once, so the time is the server's, not TCP's batching.
+			socket.setTcpNoDelay(true);
 			DataOutputStream out = new DataOutputStream(socket.getOutputStream());
 			DataInputStream in = new DataInputStream(socket.getInputStream());
 			// Handshake (next state 1: status), then the status request.
@@ -187,9 +189,12 @@ public final class ServerPing {
 		return s;
 	}
 
+	/** One write per packet: the length and the body leave together (no waiting between them). */
 	private static void packet(DataOutputStream out, byte[] body) throws IOException {
-		writeVarInt(out, body.length);
-		out.write(body);
+		ByteArrayOutputStream whole = new ByteArrayOutputStream(body.length + 5);
+		writeVarInt(new DataOutputStream(whole), body.length);
+		whole.write(body);
+		out.write(whole.toByteArray());
 		out.flush();
 	}
 
