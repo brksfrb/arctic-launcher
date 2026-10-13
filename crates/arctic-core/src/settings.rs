@@ -91,6 +91,9 @@ pub struct Settings {
     pub show_sponsor: bool,
     /// A "Quick tip" card in the sidebar: one feature at a time.
     pub quick_tips: bool,
+    /// How big the launcher's interface is, in percent on top of the system's display scaling;
+    /// 0 is Auto (a little smaller on crowded screens, see arctic-app's zoom.rs).
+    pub interface_size: u16,
     /// Laptops with two graphics cards: run the game on the high-performance
     /// one (Windows' per-program choice; one the player made is kept).
     pub high_performance_gpu: bool,
@@ -266,6 +269,7 @@ impl Default for Settings {
             exit_games_with_launcher: false,
             show_sponsor: true,
             quick_tips: true,
+            interface_size: 0,
             high_performance_gpu: true,
             voice: VoiceSettings::default(),
             shared: crate::shared::SharedSettings::default(),

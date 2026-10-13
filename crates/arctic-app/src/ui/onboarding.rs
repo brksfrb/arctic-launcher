@@ -214,6 +214,8 @@ impl ArcticApp {
             }
         });
         ui.add_space(12.0);
+        crate::zoom::size_row(ui, &mut self.settings.interface_size);
+        ui.add_space(4.0);
         ui.checkbox(&mut self.settings.animations, "Animated background")
             .on_hover_text("Aurora, snowfall and shooting stars. Pauses while you play.");
         ui.checkbox(&mut self.settings.intro, "Intro animation on start");

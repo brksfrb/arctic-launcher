@@ -40,6 +40,7 @@ impl ArcticApp {
                 }
             });
             ui.add_space(6.0);
+            crate::zoom::size_row(ui, &mut s.interface_size);
             widgets::field_row(ui, |ui| {
                 use arctic_core::settings::Backdrop;
                 ui.label("Background");

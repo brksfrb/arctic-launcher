@@ -1002,6 +1002,7 @@ impl eframe::App for ArcticApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
         }
         self.update_theme(&ctx, frame);
+        crate::zoom::apply(&ctx, self.settings.interface_size);
         self.window_and_tray(&ctx, frame);
         crate::auto_update::sync(
             self.settings.auto_install_updates,

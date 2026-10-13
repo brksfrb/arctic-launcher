@@ -42,6 +42,7 @@ mod voice_svc;
 mod widgets;
 mod window;
 mod world_tasks;
+mod zoom;
 
 use std::sync::Arc;
 
