@@ -84,6 +84,25 @@ impl Tasks {
         });
     }
 
+    /// Mod files put in the mods folder by hand (from another launcher or folder): looked up on
+    /// Modrinth by their hash, so the ones it has are shared like mods installed here.
+    pub fn share_look_up_mods(&self, instance: Instance, game_version: String) {
+        self.run(move |t| {
+            let result = match instance.loader.kind() {
+                Some(loader) => arctic_core::mods::recognize(
+                    &instance.game_dir(t.dirs()).join("mods"),
+                    &arctic_core::mods::index_path(&t.dirs().instance_dir(&instance.id)),
+                    &game_version,
+                    loader,
+                )
+                .map(|r| r.tracked)
+                .map_err(|e| e.to_string()),
+                None => Ok(0),
+            };
+            t.send(Event::ShareModsLookedUp(instance.id, result));
+        });
+    }
+
     /// Use a bundle: new instance, client settings into `target`, or a
     /// whole profile.
     pub fn share_import(&self, bundle: Bundle, target: Option<Instance>) {

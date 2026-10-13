@@ -898,6 +898,7 @@ impl ArcticApp {
             Event::ShareLoaded(result) => self.on_share_loaded(result),
             Event::ShareProgress(p) => self.sharing.progress = Some(p),
             Event::ShareImported(result) => self.on_share_imported(result, now),
+            Event::ShareModsLookedUp(id, result) => self.on_share_mods_looked_up(&id, result),
             e @ (Event::SkinAccount(..)
             | Event::PlayerSkin(..)
             | Event::SkinFile(..)

@@ -63,6 +63,8 @@ pub struct ExportState {
     built: Result<(Bundle, Vec<String>), String>,
     code: Option<CodeState>,
     note: Option<String>,
+    /// The left-out mod files are being looked up on Modrinth.
+    looking_up: bool,
 }
 
 enum ImportStage {
@@ -151,13 +153,65 @@ impl ArcticApp {
 
     fn open_share_kind(&mut self, instance: Option<String>, kind: ShareKind) {
         let built = self.build_share(instance.as_deref(), kind);
+        let looking_up = self.look_up_left_out(instance.as_deref(), &built);
         self.sharing.export = Some(ExportState {
             instance,
             kind,
             built,
             code: None,
             note: None,
+            looking_up,
         });
+    }
+
+    /// Mods put in by hand are left out until Modrinth is asked about them: asked in the background
+    /// (true) when there are some.
+    fn look_up_left_out(
+        &self,
+        instance: Option<&str>,
+        built: &Result<(Bundle, Vec<String>), String>,
+    ) -> bool {
+        let Ok((Bundle::Instance(pack), left_out)) = built else {
+            return false;
+        };
+        let (Some(found), Some(game)) = (
+            instance.and_then(|id| self.instance_by_id(id)),
+            pack.game_version.clone(),
+        ) else {
+            return false;
+        };
+        if left_out.is_empty() || found.loader.kind().is_none() {
+            return false;
+        }
+        self.tasks.share_look_up_mods(found.clone(), game);
+        true
+    }
+
+    pub(crate) fn on_share_mods_looked_up(
+        &mut self,
+        instance: &str,
+        result: Result<usize, String>,
+    ) {
+        if let Err(e) = &result {
+            log::warn!("looking up mods for sharing: {e}");
+        }
+        let rebuilt = self
+            .sharing
+            .export
+            .as_ref()
+            .filter(|s| s.looking_up && s.instance.as_deref() == Some(instance))
+            .map(|s| (s.kind, s.instance.clone()));
+        let Some((kind, id)) = rebuilt else {
+            return;
+        };
+        let built = self.build_share(id.as_deref(), kind);
+        if let Some(state) = &mut self.sharing.export {
+            state.looking_up = false;
+            state.built = built;
+            if result.is_err() {
+                state.note = Some("Couldn't reach Modrinth to look the other mods up.".into());
+            }
+        }
     }
 
     pub(crate) fn open_share_import(&mut self) {
@@ -257,13 +311,26 @@ impl ArcticApp {
                     }
                     Ok((bundle, left_out)) => {
                         ui.label(RichText::new(bundle.summary()).strong().color(p.text));
-                        let notes: Vec<String> = left_out
-                            .iter()
-                            .map(|f| {
-                                format!("{f} isn't from Modrinth, so it's left out; send it separately.")
-                            })
-                            .collect();
-                        warnings(ui, p, &notes);
+                        if state.looking_up {
+                            ui.horizontal(|ui| {
+                                ui.spinner();
+                                ui.label(
+                                    RichText::new(format!(
+                                        "Looking up {} mod files on Modrinth…",
+                                        left_out.len()
+                                    ))
+                                    .color(p.muted),
+                                );
+                            });
+                        } else {
+                            let notes: Vec<String> = left_out
+                                .iter()
+                                .map(|f| {
+                                    format!("{f} isn't on Modrinth, so it's left out; send it separately.")
+                                })
+                                .collect();
+                            warnings(ui, p, &notes);
+                        }
                         ui.add_space(10.0);
                         self.export_buttons(ui, &mut state, bundle);
                     }
@@ -287,6 +354,9 @@ impl ArcticApp {
             state.built = self.build_share(state.instance.as_deref(), kind);
             state.code = None;
             state.note = None;
+            if !state.looking_up {
+                state.looking_up = self.look_up_left_out(state.instance.as_deref(), &state.built);
+            }
         }
         if !(close || modal.should_close()) {
             self.sharing.export = Some(state);

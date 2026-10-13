@@ -181,6 +181,8 @@ pub enum Event {
     ShareLoaded(Outcome<Option<arctic_core::sharing::Bundle>>),
     ShareProgress(ProgressSnapshot),
     ShareImported(Outcome<crate::share_tasks::Imported>),
+    /// Mod files of an instance looked up on Modrinth for sharing (instance id, files now known).
+    ShareModsLookedUp(String, Outcome<usize>),
     /// Play-together session update.
     Share(arctic_share::SessionId, arctic_share::ShareEvent),
 }
