@@ -34,6 +34,10 @@ const TIPS: &[(&str, Option<Tab>)] = &[
     ),
     ("Capes, wings, pets and emotes are free.", Some(Tab::Skins)),
     (
+        "Cosmetics → Skin gallery: free skins to try on.",
+        Some(Tab::Skins),
+    ),
+    (
         "Glasses off your eyes? Nudge face items in Cosmetics.",
         Some(Tab::Skins),
     ),

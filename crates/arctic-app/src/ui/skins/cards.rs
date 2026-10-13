@@ -61,18 +61,21 @@ impl ArcticApp {
     pub(super) fn skins_header(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         let library = self.skins.view == SkinsView::Library;
-        self.list_header(
-            ui,
-            "Skins",
-            "Arctic players see the skin you pick here; others see your Minecraft skin.",
-            library,
-        );
-        // Wraps instead of overlapping when the window is narrow.
-        ui.horizontal_wrapped(|ui| {
-            ui.selectable_value(&mut self.skins.view, SkinsView::Library, "My skins");
-            ui.selectable_value(&mut self.skins.view, SkinsView::Gallery, "Gallery");
-            if library {
-                ui.add_space(8.0);
+        let (title, about) = if library {
+            (
+                "Skins",
+                "Arctic players see the skin you pick here; others see your Minecraft skin.",
+            )
+        } else {
+            (
+                "Skin gallery",
+                "Skins Arctic players have shared, free for anyone. Click one to wear it.",
+            )
+        };
+        self.list_header(ui, title, about, library);
+        if library {
+            // Wraps instead of overlapping when the window is narrow.
+            ui.horizontal_wrapped(|ui| {
                 if widgets::button(ui, p, Some(Icon::Plus), "Add skin…", true).clicked() {
                     self.tasks.pick_skin_file();
                 }
@@ -81,9 +84,9 @@ impl ArcticApp {
                     let _ = std::fs::create_dir_all(&dir);
                     let _ = open::that_detached(&dir);
                 }
-            }
-        });
-        ui.add_space(10.0);
+            });
+            ui.add_space(10.0);
+        }
         match self.skins.view {
             SkinsView::Library => self.library_header(ui),
             SkinsView::Gallery => self.gallery_header(ui),

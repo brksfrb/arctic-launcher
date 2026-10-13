@@ -12,7 +12,7 @@ use eframe::egui::{
 };
 
 use super::model::{self, Pose};
-use super::{Hover, Section};
+use super::{Hover, Section, SkinsView};
 use crate::app::ArcticApp;
 use crate::art::icons::Icon;
 use crate::art::lerp_color;
@@ -561,11 +561,25 @@ impl ArcticApp {
         }
         let capes = self.catalog_state().map(|s| s.presets.len());
         let mut pick = None;
-        if rail_row(ui, p, "Skins", None, self.skins.section == Section::Skins) {
-            pick = Some(Section::Skins);
+        let mut view = None;
+        let on_skins = self.skins.section == Section::Skins;
+        ui.label(RichText::new("LOOKS").small().color(p.muted));
+        ui.add_space(2.0);
+        // The gallery has its own row: as a toggle inside Skins it went unnoticed.
+        for (skins_view, name) in [
+            (SkinsView::Library, "Skins"),
+            (SkinsView::Gallery, "Skin gallery"),
+        ] {
+            if rail_row(ui, p, name, None, on_skins && self.skins.view == skins_view) {
+                pick = Some(Section::Skins);
+                view = Some(skins_view);
+            }
         }
         if rail_row(ui, p, "Capes", capes, self.skins.section == Section::Capes) {
             pick = Some(Section::Capes);
+        }
+        if let Some(view) = view {
+            self.skins.view = view;
         }
         ui.add_space(10.0);
         ui.label(RichText::new("COSMETICS").small().color(p.muted));

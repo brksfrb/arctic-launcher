@@ -206,6 +206,10 @@ impl ArcticApp {
                     log::warn!("skin library cleanup: {e}");
                 }
                 self.skins.library = lib;
+                // Nothing saved yet (every new player): start on the gallery, not an empty list.
+                if self.skins.library.skins.is_empty() && !crate::devshot::enabled() {
+                    self.skins.view = SkinsView::Gallery;
+                }
             }
             Err(e) => self.toasts.push(
                 Kind::Error,
