@@ -26,7 +26,9 @@ abstract class GuiMixin {
 		// own inside setScreen, after this point, so catch that case too.
 		boolean title = screen instanceof TitleScreen
 				|| (screen == null && net.minecraft.client.Minecraft.getInstance().level == null);
-		if (title && ArcticClient.restyles()) {
+		// Other mods' buttons and menus (Essential's, Mod Menu's) are on Minecraft's own title screen: with
+		// them, that screen stays (in the Arctic style, with the Arctic button) so they show.
+		if (title && ArcticClient.restyles() && !com.arcticlauncher.mod.VanillaTitle.keep()) {
 			return new PageScreen(ArcticClient.titleMenu(), null);
 		}
 		if (screen instanceof net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen && ArcticClient.restyles()) {

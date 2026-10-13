@@ -520,6 +520,11 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public void openPage(Page page) {
+		// Back to the title: Minecraft's own when other mods add to it (see VanillaTitle).
+		if (page instanceof com.arcticlauncher.client.menu.TitleMenu && VanillaTitle.keep()) {
+			Compat.setScreen(new net.minecraft.client.gui.screens.TitleScreen());
+			return;
+		}
 		// One Arctic page replaces another, so Escape goes back to what was
 		// under the menu instead of through every page visited.
 		Screen now = Compat.screen();
