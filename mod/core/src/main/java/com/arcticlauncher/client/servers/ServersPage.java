@@ -79,7 +79,7 @@ public final class ServersPage extends Page {
 	public ServersPage() {
 		servers = new Servers(platform, platform.configDir().getAbsoluteFile().getParentFile());
 		entries = servers.load();
-		servers.pingAll(entries);
+		servers.pingStale(entries);
 		lan.start();
 	}
 
@@ -160,7 +160,7 @@ public final class ServersPage extends Page {
 		}).enabled(any)).bounds(left + bw + GAP, y, LIST_W - bw - GAP, BUTTON_H);
 		y += BUTTON_H + GAP;
 		int tw = (LIST_W - GAP * 2) / 3;
-		add(new Button(tr("selectServer.refresh", "Refresh"), this::loadPublic)).bounds(left, y, tw, BUTTON_H);
+		add(new Button(tr("selectServer.refresh", "Refresh"), () -> loadPublic(true))).bounds(left, y, tw, BUTTON_H);
 		add(new Button("Sort: " + SORTS[sort], () -> {
 			sort = (sort + 1) % SORTS.length;
 			publicList = sorted(publicRandom);
@@ -207,13 +207,13 @@ public final class ServersPage extends Page {
 		discover = toDiscover;
 		scroll = 0;
 		if (discover && publicList == null) {
-			loadPublic();
+			loadPublic(false);
 		}
 		rebuild();
 	}
 
-	/** Arctic's public list, in the background; each server is asked how it is, too. */
-	private void loadPublic() {
+	/** Arctic's public list, in the background; each server is asked how it is, too ({@code again}: even if it just answered). */
+	private void loadPublic(final boolean again) {
 		publicList = null;
 		publicRandom = null;
 		publicError = null;
@@ -229,7 +229,11 @@ public final class ServersPage extends Page {
 					boolean online = !o.has("online") || o.get("online").getAsBoolean();
 					publicPlayers.put(address, online && o.has("players") ? o.get("players").getAsInt() : -1);
 				}
-				servers.pingAll(list);
+				if (again) {
+					servers.pingAll(list);
+				} else {
+					servers.pingStale(list);
+				}
 				publicRandom = list;
 				publicList = sorted(list);
 			} catch (Exception e) {

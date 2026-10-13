@@ -17,8 +17,12 @@ import java.util.concurrent.Executors;
  * list page reorders, adds, edits and joins through it.
  */
 public final class Servers {
-	/** Servers asked at once (a long list fills in from the top). */
-	private static final int PINGERS = 6;
+	/** Servers asked at once (a long list fills in from the top; a server that doesn't answer holds one for seconds). */
+	private static final int PINGERS = 16;
+	/** An answer this recent isn't asked for again when the list opens (only with Refresh). */
+	private static final long FRESH_MS = 30_000;
+	/** A ping still waiting after this long is given up on: asking again queues a new one. */
+	private static final long STUCK_MS = 20_000;
 
 	/** A saved server. */
 	public static final class Entry {
@@ -37,6 +41,8 @@ public final class Servers {
 		public volatile String error;
 		/** The texture of its icon ({@code look:<hash>}), once registered. */
 		public volatile String icon;
+		/** When it was asked (System.currentTimeMillis); 0: not asked (an icon from servers.dat only). */
+		volatile long asked;
 
 		public boolean done() {
 			return status != null || error != null;
@@ -45,12 +51,13 @@ public final class Servers {
 
 	private final Platform platform;
 	private final ServersFile file;
-	private final ExecutorService pingers = Executors.newFixedThreadPool(PINGERS, r -> {
+	// Shared by every opening of the list: its answers last, and a page closed doesn't leave threads behind.
+	private static final ExecutorService pingers = Executors.newFixedThreadPool(PINGERS, r -> {
 		Thread t = new Thread(r, "arctic-server-ping");
 		t.setDaemon(true);
 		return t;
 	});
-	private final Map<String, Answer> answers = new ConcurrentHashMap<String, Answer>();
+	private static final Map<String, Answer> answers = new ConcurrentHashMap<String, Answer>();
 
 	public Servers(Platform platform, File gameDir) {
 		this.platform = platform;
@@ -125,16 +132,35 @@ public final class Servers {
 		}
 	}
 
-	/** Ask every one of {@code entries} (again). */
+	/** Ask every one of {@code entries} again (Refresh). */
 	public void pingAll(List<Entry> entries) {
 		for (Entry e : entries) {
 			ping(e.address);
 		}
 	}
 
+	/**
+	 * Ask those of {@code entries} without a recent answer (the list opening: coming back from a server
+	 * doesn't queue the whole list again behind the servers that don't answer).
+	 */
+	public void pingStale(List<Entry> entries) {
+		long now = System.currentTimeMillis();
+		for (Entry e : entries) {
+			Answer a = answers.get(e.address);
+			if (a == null || a.asked == 0 || now - a.asked > FRESH_MS) {
+				ping(e.address);
+			}
+		}
+	}
+
 	public void ping(final String address) {
 		final Answer previous = answers.get(address);
+		// Already being asked: once is enough.
+		if (previous != null && !previous.done() && previous.asked > 0 && System.currentTimeMillis() - previous.asked < STUCK_MS) {
+			return;
+		}
 		final Answer a = new Answer();
+		a.asked = System.currentTimeMillis();
 		// Keep showing the old icon while asking.
 		a.icon = previous == null ? null : previous.icon;
 		answers.put(address, a);
@@ -146,7 +172,8 @@ public final class Servers {
 					a.icon = register(status.icon);
 				}
 				a.status = status;
-			} catch (Exception e) {
+			} catch (Throwable e) {
+				// Anything (an Error too) ends the wait: a row never stays at "Pinging…".
 				a.error = e instanceof java.net.UnknownHostException ? "Can't resolve hostname" : "Can't connect to server";
 			}
 		});
