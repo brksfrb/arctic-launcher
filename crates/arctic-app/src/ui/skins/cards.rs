@@ -986,6 +986,7 @@ fn cosmetic_card(
         CardModel::Cuboid(geometry, Some(texture)) => model::paint_cosmetic(
             ui.painter(),
             model_rect,
+            &format!("cube:{name}"),
             model::Worn {
                 geometry,
                 texture: *texture,
@@ -998,6 +999,7 @@ fn cosmetic_card(
             model::paint_mesh_cosmetic(
                 ui.painter(),
                 model_rect,
+                &format!("mesh:{name}"),
                 model::WornMesh {
                     mesh,
                     textures,

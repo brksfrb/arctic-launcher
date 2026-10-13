@@ -14,6 +14,18 @@ use eframe::egui::{self, Color32, Pos2, Rect, TextureId, pos2};
 const HEIGHT: f32 = 32.0;
 /// Camera distance for the slight perspective.
 const CAMERA: f32 = 90.0;
+/// How much nearer each later cube of a cosmetic is drawn (skin pixels, far below what shows).
+const CUBE_NUDGE: f32 = 0.002;
+
+/// Whether a face with outward normal `n` can be seen from the camera (at `CAMERA` on +z, with
+/// the preview's perspective): judged from where the face is, not as if seen from infinitely far,
+/// or faces seen at a slant (a brim's underside as you tilt) vanish before they should.
+fn faces_viewer(n: V3, corners: &[V3; 4]) -> bool {
+    let mid: V3 = std::array::from_fn(|i| corners.iter().map(|c| c[i]).sum::<f32>() / 4.0);
+    let to_camera = [-mid[0], -mid[1], CAMERA - mid[2]];
+    let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt().max(1e-6);
+    (n[0] * to_camera[0] + n[1] * to_camera[1] + n[2] * to_camera[2]) / len > 1e-3
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Pose {
@@ -227,8 +239,7 @@ fn build_faces(
             let place = |p: V3| view(part_transform(part, p));
             let n = sub(place(normal), place([0.0; 3]));
             let corners = corners.map(place);
-            // Face points away from the viewer (who looks down -z).
-            if n[2] - 0.0 <= 1e-4 {
+            if !faces_viewer(n, &corners) {
                 continue;
             }
             let depth = corners.iter().map(|c| c[2]).sum::<f32>() / 4.0;
@@ -431,34 +442,52 @@ fn cape_part(swing: f32) -> Part {
 }
 
 /// Draw one cosmetic on its own, turning slowly, fitted to `rect`.
-pub fn paint_cosmetic(painter: &egui::Painter, rect: Rect, worn: Worn, yaw: f32) {
-    paint_turning(painter, rect, yaw, |view| {
+pub fn paint_cosmetic(painter: &egui::Painter, rect: Rect, key: &str, worn: Worn, yaw: f32) {
+    paint_turning(painter, rect, key, yaw, |view| {
         cosmetic_faces(&worn, &|p| view(p))
     });
 }
 
 /// The same for a sculpted cosmetic.
-pub fn paint_mesh_cosmetic(painter: &egui::Painter, rect: Rect, worn: WornMesh, yaw: f32) {
-    paint_turning(painter, rect, yaw, |view| mesh_faces(&worn, &|p| view(p)));
-}
-
-/// Draws the faces `faces_of` makes for a view, turned around their own middle.
-fn paint_turning(
+pub fn paint_mesh_cosmetic(
     painter: &egui::Painter,
     rect: Rect,
+    key: &str,
+    worn: WornMesh,
     yaw: f32,
-    faces_of: impl Fn(&dyn Fn(V3) -> V3) -> Vec<Face>,
 ) {
-    let pose = Pose {
-        yaw,
-        pitch: 0.25,
-        swing: 0.0,
-    };
-    // Turned around its own middle (not the wearer's), and sized from the
-    // sphere around it, so it stays put and keeps its size while it turns.
-    let corners: Vec<V3> = faces_of(&|p| p).iter().flat_map(|f| f.corners).collect();
+    paint_turning(painter, rect, key, yaw, |view| {
+        mesh_faces(&worn, &|p| view(p))
+    });
+}
+
+thread_local! {
+    /// Each item's middle and radius (see `bounds`), by its key.
+    static BOUNDS: std::cell::RefCell<std::collections::HashMap<String, Option<(V3, f32)>>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+/// Items whose bounds are kept (far more than any page shows).
+const MAX_BOUNDS: usize = 512;
+
+/// The middle of an item's box and the radius of the sphere around it. Every face shows from
+/// one of six sides, so the corners come from all six, turned back: seen only from the front,
+/// a box's depth is just its front face, and its middle is off (the item swings aside as it turns).
+fn bounds(faces_of: &impl Fn(&dyn Fn(V3) -> V3) -> Vec<Face>) -> Option<(V3, f32)> {
+    type Turn = fn(V3) -> V3;
+    let sides: [(Turn, Turn); 6] = [
+        (|p| p, |p| p),
+        (|p| [-p[0], p[1], -p[2]], |p| [-p[0], p[1], -p[2]]),
+        (|p| [p[2], p[1], -p[0]], |p| [-p[2], p[1], p[0]]),
+        (|p| [-p[2], p[1], p[0]], |p| [p[2], p[1], -p[0]]),
+        (|p| [p[0], p[2], -p[1]], |p| [p[0], -p[2], p[1]]),
+        (|p| [p[0], -p[2], p[1]], |p| [p[0], p[2], -p[1]]),
+    ];
+    let mut corners: Vec<V3> = Vec::new();
+    for (turn, back) in sides {
+        corners.extend(faces_of(&turn).iter().flat_map(|f| f.corners).map(back));
+    }
     if corners.is_empty() {
-        return;
+        return None;
     }
     let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
     for c in &corners {
@@ -472,6 +501,36 @@ fn paint_turning(
         .iter()
         .map(|c| (0..3).map(|i| (c[i] - mid[i]).powi(2)).sum::<f32>().sqrt())
         .fold(0.5, f32::max);
+    Some((mid, radius))
+}
+
+/// Draws the faces `faces_of` makes for a view, turned around their own middle.
+fn paint_turning(
+    painter: &egui::Painter,
+    rect: Rect,
+    key: &str,
+    yaw: f32,
+    faces_of: impl Fn(&dyn Fn(V3) -> V3) -> Vec<Face>,
+) {
+    let pose = Pose {
+        yaw,
+        pitch: 0.25,
+        swing: 0.0,
+    };
+    // Turned around its own middle (not the wearer's), and sized from the
+    // sphere around it, so it stays put and keeps its size while it turns.
+    // Measured once per item: the same model always gives the same middle.
+    let Some((mid, radius)) = BOUNDS.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if cache.len() > MAX_BOUNDS {
+            cache.clear();
+        }
+        *cache
+            .entry(key.to_owned())
+            .or_insert_with(|| bounds(&faces_of))
+    }) else {
+        return;
+    };
     // rotate_view turns around HEIGHT / 2; move the middle there first.
     let view = |p: V3| {
         rotate_view(
@@ -675,6 +734,7 @@ fn cosmetic_faces(worn: &Worn, view: &impl Fn(V3) -> V3) -> Vec<Face> {
     let g = worn.geometry;
     let (tex_w, tex_h) = (g.texture_width as f32, g.texture_height as f32);
     let mut faces = Vec::new();
+    let mut cubes = 0_u32;
     // Roots first, then children once their parent is placed (depth <= bones).
     let mut placed: Vec<(&str, Placement, V3)> = Vec::new();
     for _ in 0..g.bones.len() {
@@ -697,15 +757,21 @@ fn cosmetic_faces(worn: &Worn, view: &impl Fn(V3) -> V3) -> Vec<Face> {
             let at = parent_at.then(offset, bone.rotation);
             placed.push((&bone.name, at, pivot));
             for cube in &bone.cubes {
-                faces.extend(cube_faces(
-                    cube,
-                    pivot,
-                    &at,
-                    worn.texture,
-                    tex_w,
-                    tex_h,
-                    view,
-                ));
+                // Cubes inside each other share faces; the later one (a detail on the base)
+                // comes a hair nearer, or the two flicker as the model turns.
+                let nudge = cubes as f32 * CUBE_NUDGE;
+                cubes += 1;
+                faces.extend(
+                    cube_faces(cube, pivot, &at, worn.texture, tex_w, tex_h, view)
+                        .into_iter()
+                        .map(|mut f| {
+                            for c in &mut f.corners {
+                                c[2] += nudge;
+                            }
+                            f.depth += nudge;
+                            f
+                        }),
+                );
             }
         }
     }
@@ -781,11 +847,11 @@ fn cube_faces(
             continue;
         };
         let n = sub(place(normal), origin);
-        if n[2] <= 1e-4 {
+        let corners = corners.map(place);
+        if !faces_viewer(n, &corners) {
             continue;
         }
         let uv = [(u, v), (u + rw, v), (u + rw, v + rh), (u, v + rh)];
-        let corners = corners.map(place);
         let depth = corners.iter().map(|c| c[2]).sum::<f32>() / 4.0;
         out.push(Face {
             corners,
@@ -821,7 +887,7 @@ mod tests {
     }
 
     #[test]
-    fn front_view_shows_front_faces_only() {
+    fn front_view_shows_the_front_and_what_the_camera_sees_from_below() {
         let view = |p: V3| rotate_view(p, pose(0.0));
         let head = [cuboid(
             [-4.0, 24.0, -4.0],
@@ -832,10 +898,15 @@ mod tests {
             0.0,
         )];
         let faces = build_faces(&head, TextureId::default(), 64.0, 64.0, &view);
-        assert_eq!(faces.len(), 1);
+        // The camera is level with the body's middle, below the head: its front, and the
+        // underside of the chin; never the sides or the top.
+        assert_eq!(faces.len(), 2, "{}", faces.len());
         // Head front is at (8,8)-(16,16) in the texture.
-        assert_eq!(faces[0].uv[0], pos2(8.0 / 64.0, 8.0 / 64.0));
-        assert_eq!(faces[0].uv[2], pos2(16.0 / 64.0, 16.0 / 64.0));
+        let front = faces
+            .iter()
+            .find(|f| f.uv[0] == pos2(8.0 / 64.0, 8.0 / 64.0))
+            .expect("the front");
+        assert_eq!(front.uv[2], pos2(16.0 / 64.0, 16.0 / 64.0));
     }
 
     #[test]
