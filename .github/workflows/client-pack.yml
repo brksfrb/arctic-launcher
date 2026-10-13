@@ -1,0 +1,43 @@
+name: Client pack
+
+# The Arctic Client for every Minecraft version (mod/build.py), built on the Ryzen 9 runner instead
+# of the maintainer's PC, so a build doesn't take frames from a game. By hand only; the pack comes
+# back as an artifact (gh run download <run> -n arctic-client-pack). Nothing is committed here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      versions:
+        description: "Versions to build (space-separated; empty: all of them)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  pack:
+    runs-on: [self-hosted, linux, x64, ryzen]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Build
+        env:
+          VERSIONS: ${{ inputs.versions }}
+        # Four Gradle builds at once: the node's game servers come first (the runner only gets
+        # spare CPU and memory there).
+        run: python3 mod/build.py $VERSIONS --jobs 4
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arctic-client-pack
+          path: mod/dist/arctic-client.pack
+          retention-days: 7
