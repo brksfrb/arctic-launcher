@@ -18,6 +18,7 @@ use crate::widgets;
 
 const PAGE_SIZE: usize = 20;
 const SEARCH_DELAY: f64 = 0.35;
+const RESCAN_EVERY: f64 = 2.0;
 const MB: f64 = 1024.0 * 1024.0;
 
 pub struct PacksUi {
@@ -26,8 +27,9 @@ pub struct PacksUi {
     sort: SortBy,
     request: u64,
     results: Option<Result<SearchPage, String>>,
-    /// (instance id, kind) the results and list are for.
-    showing: Option<(String, PackKind)>,
+    /// The instance, pack kind and game folder the results and list are for.
+    showing: Option<(String, PackKind, std::path::PathBuf)>,
+    rescan_at: f64,
     installed: Vec<Pack>,
     installing: HashSet<String>,
     typed_at: Option<f64>,
@@ -42,6 +44,7 @@ impl Default for PacksUi {
             request: 0,
             results: None,
             showing: None,
+            rescan_at: 0.0,
             installed: Vec::new(),
             installing: HashSet::new(),
             typed_at: None,
@@ -61,10 +64,23 @@ impl ArcticApp {
 
     pub(super) fn packs_page(&mut self, ui: &mut egui::Ui, instance: &Instance) {
         let p = self.palette();
-        let key = (instance.id.clone(), self.inst.packs.kind);
-        if self.inst.packs.showing.as_ref() != Some(&key) {
-            self.inst.packs.showing = Some(key);
+        let key = (
+            instance.id.clone(),
+            self.inst.packs.kind,
+            instance.game_dir(&self.dirs),
+        );
+        let changed = self.inst.packs.showing.as_ref() != Some(&key);
+        let now = ui.input(|i| i.time);
+        // Files can be added in Explorer while this page is open, or the game can change
+        // which packs are on. Re-read the local list without repeating the network search.
+        if changed || now >= self.inst.packs.rescan_at {
             self.refresh_packs(instance);
+            self.inst.packs.rescan_at = now + RESCAN_EVERY;
+        }
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_secs_f64(RESCAN_EVERY));
+        if changed {
+            self.inst.packs.showing = Some(key);
             self.run_rp_search(instance);
         }
         ui.horizontal(|ui| {
@@ -299,7 +315,14 @@ impl ArcticApp {
             }
             Err(e) => self.toasts.push(Kind::Error, "Couldn't install it", e),
         }
-        if let Some(instance) = self.instance_by_id(&instance_id).cloned() {
+        if self
+            .inst
+            .packs
+            .showing
+            .as_ref()
+            .is_some_and(|(id, _, _)| *id == instance_id)
+            && let Some(instance) = self.instance_by_id(&instance_id).cloned()
+        {
             self.refresh_packs(&instance);
         }
     }
