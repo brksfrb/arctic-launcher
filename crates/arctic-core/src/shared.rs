@@ -189,7 +189,8 @@ fn sync_options(
     let shared_time = modified(shared);
     if let Some(newest) = newest_first(folders, OPTIONS).into_iter().next()
         && modified(&newest).is_some_and(|t| shared_time.is_none_or(|s| t > s))
-        && let Some(captured) = capture(newest.parent().unwrap_or(Path::new(".")), &known)
+        && let Ok(captured) = Defaults::capture(newest.parent().unwrap_or(Path::new(".")))
+        && !captured.is_empty()
         && keep_acknowledged(&known, captured.clone()).values != known.values
     {
         known = keep_acknowledged(&known, captured);
@@ -218,19 +219,6 @@ const ACKNOWLEDGED: &[(&str, &str)] = &[
     ("onboardAccessibility", "false"),
     ("tutorialStep", "none"),
 ];
-
-/// The settings in a game folder, to share. An old game's render distance at the cap it was given
-/// stands for the newer games' farther one (see `game_defaults_keys::from_old_game`).
-fn capture(game_dir: &Path, known: &Defaults) -> Option<Defaults> {
-    let mut captured = Defaults::capture(game_dir).ok()?;
-    if captured.is_empty() {
-        return None;
-    }
-    if crate::game_defaults_keys::written_by_old_game(&captured.values) {
-        crate::game_defaults_keys::from_old_game(&mut captured.values, &known.values);
-    }
-    Some(captured)
-}
 
 /// `captured`, with the notices `known` has dismissed kept dismissed.
 fn keep_acknowledged(known: &Defaults, mut captured: Defaults) -> Defaults {
