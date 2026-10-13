@@ -29,7 +29,10 @@ const SAVED_NOTE_SECS: f64 = 3.0;
 /// The preview turns by itself this long after it was last dragged.
 const AUTO_TURN_AFTER: f64 = 4.0;
 const AUTO_TURN_SPEED: f32 = 0.35;
-const ZOOM: std::ops::RangeInclusive<f32> = 0.8..=1.8;
+const ZOOM: std::ops::RangeInclusive<f32> = 0.4..=4.0;
+/// Zooming in drifts toward the head (this share of the figure's height above its middle per step
+/// of zoom), so close up you look at the face and what's worn there, not the belt.
+const ZOOM_TOWARD_HEAD: f32 = 0.34;
 /// Cosmetic slots in the order they're listed.
 pub(super) const SLOTS: [&str; 6] = ["head", "face", "back", "shoulders", "arms", "body"];
 
@@ -275,8 +278,9 @@ impl ArcticApp {
             Section::Slot("face") => (1.55, rect.height() * 0.29),
             _ => (1.0, 6.0),
         };
+        let toward_head = (zoom - 1.0).max(0.0) * rect.height() * base_zoom * ZOOM_TOWARD_HEAD;
         let model_rect = Rect::from_center_size(
-            rect.center() + vec2(0.0, y_offset),
+            rect.center() + vec2(0.0, y_offset + toward_head),
             rect.size() * zoom * base_zoom,
         );
         let painter = ui.painter().with_clip_rect(rect);
