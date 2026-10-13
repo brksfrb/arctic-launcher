@@ -70,7 +70,8 @@ pub enum Event {
     AccountRefreshed(Account),
     /// Game process started (window not necessarily up yet). Carries the
     /// version id that was actually launched.
-    Launched(LaunchId, Outcome<(GameHandle, PathBuf, String)>),
+    /// The game, its log file, its version and how Java was started.
+    Launched(LaunchId, Outcome<(GameHandle, PathBuf, String, String)>),
     /// Sent from the game's watcher threads; may overtake `Launched`.
     Game(LaunchId, GameEvent),
     DeviceCode(LoginAttempt, DeviceCode),
@@ -299,7 +300,7 @@ impl Tasks {
     ) {
         self.run(move |t| {
             let result = t.launch_blocking(id, &version, &instance, account, &settings, start);
-            let result = result.map(|(game, log)| (game, log, version.id.clone()));
+            let result = result.map(|(game, log, java)| (game, log, version.id.clone(), java));
             t.send(Event::Launched(id, result.map_err(|e| e.to_string())));
         });
     }
@@ -312,7 +313,7 @@ impl Tasks {
         account: Account,
         settings: &Settings,
         start: StartAt,
-    ) -> Result<(GameHandle, PathBuf)> {
+    ) -> Result<(GameHandle, PathBuf, String)> {
         let progress =
             |p: ProgressInfo| self.send(Event::LaunchProgress(id, ProgressSnapshot::from(p)));
         let account = if account.needs_refresh(now_secs()) {
@@ -340,7 +341,7 @@ impl Tasks {
             let _ = tx.send(Event::Game(id, event));
             ctx.request_repaint();
         })?;
-        Ok((game, plan.log_file))
+        Ok((game, plan.log_file.clone(), plan.java_summary()))
     }
 
     pub fn login_device_code(&self, attempt: LoginAttempt, cancel: Arc<AtomicBool>) {

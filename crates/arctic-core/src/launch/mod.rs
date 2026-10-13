@@ -11,7 +11,7 @@ pub mod logparse;
 mod priority;
 pub mod process;
 pub mod startup;
-mod startup_cache;
+pub mod startup_cache;
 mod truststore;
 
 pub use process::{GameEvent, GameHandle, spawn, spawn_detached};
@@ -143,6 +143,61 @@ impl LaunchPlan {
             .collect::<Vec<_>>()
             .join(" ")
     }
+
+    /// How Java is started, for the game's log (and so for crash reports): the Java, its flags and
+    /// the classpath's file names, without the game's own arguments (the account is in those).
+    pub fn java_summary(&self) -> String {
+        let java = self
+            .java
+            .parent()
+            .and_then(Path::parent)
+            .and_then(Path::file_name)
+            .map_or_else(
+                || self.java.display().to_string(),
+                |n| n.to_string_lossy().into_owned(),
+            );
+        let mut flags = Vec::new();
+        let mut classpath = Vec::new();
+        let mut args = self.args.iter();
+        while let Some(arg) = args.next() {
+            if arg == "-cp" || arg == "-classpath" {
+                classpath = args
+                    .next()
+                    .map(|cp| {
+                        std::env::split_paths(cp)
+                            .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                continue;
+            }
+            if !arg.starts_with('-') {
+                // The main class: what follows is the game's.
+                break;
+            }
+            flags.push(java_flag_without_path(arg));
+        }
+        format!(
+            "Java {java}, flags: {} | classpath: {}",
+            flags.join(" "),
+            classpath.join(", ")
+        )
+    }
+}
+
+/// `-javaagent:C:/…/mods/arctic-mod.jar` is `-javaagent:arctic-mod.jar`: the flag and the file,
+/// not where the player keeps it.
+fn java_flag_without_path(arg: &str) -> String {
+    let Some((name, value)) = arg.split_once(['=', ':']) else {
+        return arg.to_owned();
+    };
+    let looks_like_path = value.contains(['/', '\\']);
+    if !looks_like_path {
+        return arg.to_owned();
+    }
+    let file = value.rsplit(['/', '\\']).next().unwrap_or(value);
+    let sep = &arg[name.len()..=name.len()];
+    format!("{name}{sep}{file}")
 }
 
 /// A version whose files are all downloaded and laid out; command lines
@@ -869,6 +924,42 @@ mod tests {
         assert!(g1(gc_flags([], Some(21), 4, 8192)));
         assert!(g1(gc_flags([], Some(21), 16, 2048)));
         assert!(g1(gc_flags([], None, 16, 8192)));
+    }
+
+    #[test]
+    fn java_summary_names_flags_and_jars_but_not_folders_or_the_account() {
+        let plan = LaunchPlan {
+            java: PathBuf::from("C:/Users/me/runtimes/java-runtime-epsilon/bin/javaw.exe"),
+            args: vec![
+                "-Xmx8G".into(),
+                "-javaagent:C:/Users/me/mods/arctic-mod.jar".into(),
+                r"-Djava.library.path=C:\Users\me\natives".into(),
+                "-cp".into(),
+                std::env::join_paths(["C:/libs/sponge-mixin-0.17.4.jar", "C:/libs/asm-9.10.jar"])
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+                "net.fabricmc.loader.impl.launch.knot.KnotClient".into(),
+                "--accessToken".into(),
+                "SECRET123".into(),
+            ],
+            game_dir: PathBuf::new(),
+            log_file: PathBuf::new(),
+            high_performance_gpu: false,
+            maximize_window: false,
+            secrets: vec!["SECRET123".into()],
+        };
+        let s = plan.java_summary();
+        assert!(s.starts_with("Java java-runtime-epsilon"), "{s}");
+        assert!(
+            s.contains("-Xmx8G -javaagent:arctic-mod.jar -Djava.library.path=natives"),
+            "{s}"
+        );
+        assert!(s.contains("sponge-mixin-0.17.4.jar, asm-9.10.jar"), "{s}");
+        assert!(
+            !s.contains("Users") && !s.contains("SECRET123") && !s.contains("KnotClient"),
+            "{s}"
+        );
     }
 
     #[test]

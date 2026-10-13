@@ -783,8 +783,11 @@ impl ArcticApp {
                 self.save_accounts();
             }
             Event::Launched(id, result) => {
-                let result = result.map(|(game, _log_file, version)| {
+                let result = result.map(|(game, _log_file, version, java)| {
                     self.installed.insert(version);
+                    if let Some(run) = self.runs.get_mut(id) {
+                        run.java = Some(java);
+                    }
                     game
                 });
                 self.on_launched(id, result, ctx);

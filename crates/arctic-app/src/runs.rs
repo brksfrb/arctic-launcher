@@ -60,6 +60,8 @@ pub struct Run {
     early: Vec<GameEvent>,
     /// The crash, ready to send if the player agrees.
     crash_report: Option<crash::Report>,
+    /// How Java was started (flags, classpath files), for the crash report.
+    pub java: Option<String>,
 }
 
 impl Run {
@@ -101,7 +103,14 @@ impl Run {
     fn crash_report(&self, title: &str) -> crash::Report {
         let lines: Vec<&str> = self.log.iter().map(|l| l.text.as_str()).collect();
         let written = newest_crash_report(&self.game_dir, self.started);
-        crash::Report::build(&self.version, "", title, &lines, written.as_deref())
+        crash::Report::build(
+            &self.version,
+            "",
+            title,
+            &lines,
+            written.as_deref(),
+            self.java.as_deref(),
+        )
     }
 
     /// Why the game crashed, from its log and the crash report it wrote.
@@ -171,6 +180,7 @@ impl Runs {
             started: SystemTime::now(),
             early: Vec::new(),
             crash_report: None,
+            java: None,
         });
         self.next_id
     }
@@ -344,6 +354,9 @@ impl ArcticApp {
                     }]);
                     if d.repair {
                         arctic_core::launch::files::request_repair(&self.dirs);
+                        // The loader failed before any mod ran: the next start also goes without the
+                        // client's startup agent, the one thing Arctic adds to the loader's start.
+                        arctic_core::launch::startup_cache::turn_off(&run.game_dir);
                     }
                 }
                 let crashed = matches!(code, Some(c) if c != 0 && !watchdog);

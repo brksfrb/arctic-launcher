@@ -287,7 +287,7 @@ const RULES: &[Rule] = &[
             ..Diagnosis::new(
                 "A game file is damaged",
                 format!(
-                    "Part of Minecraft or its mod loader couldn't be read ({}). Arctic checks the game's files and downloads fresh copies the next time you press Play.",
+                    "Part of Minecraft or its mod loader couldn't be read ({}). The next time you press Play, Arctic checks the game's files (fetching fresh copies of damaged ones) and starts this instance without its start-up speed-ups. If it happens again, please send the report.",
                     c[1].replace('/', ".")
                 ),
                 Vec::new(),
@@ -381,21 +381,29 @@ pub struct Report {
 const REPORT_LOG_LINES: usize = 150;
 /// Most of the log's end, and of the crash report's start, that are sent (bytes).
 const REPORT_LOG_BYTES: usize = 16 * 1024;
-const REPORT_CRASH_BYTES: usize = 30 * 1024;
+const REPORT_CRASH_BYTES: usize = 24 * 1024;
+/// How Java was started: its flags and the classpath's file names.
+const REPORT_JAVA_BYTES: usize = 6 * 1024;
 
 impl Report {
-    /// `lines` is the game's log, `crash_report` the file Minecraft wrote (if it did).
-    /// `title` is what Arctic made of it, or empty.
+    /// `lines` is the game's log, `crash_report` the file Minecraft wrote (if it did), `java`
+    /// how Java was started (see `LaunchPlan::java_summary`). `title` is what Arctic made of it,
+    /// or empty.
     pub fn build(
         game: &str,
         loader: &str,
         title: &str,
         lines: &[&str],
         crash_report: Option<&str>,
+        java: Option<&str>,
     ) -> Self {
         let skip = lines.len().saturating_sub(REPORT_LOG_LINES);
         let tail = lines[skip..].join("\n");
         let mut text = tail_of(&tail, REPORT_LOG_BYTES).to_owned();
+        if let Some(java) = java {
+            text.push_str("\n\n---- java ----\n");
+            text.push_str(head_of(java, REPORT_JAVA_BYTES));
+        }
         if let Some(report) = crash_report {
             text.push_str("\n\n---- crash report ----\n");
             text.push_str(head_of(report, REPORT_CRASH_BYTES));
@@ -662,8 +670,10 @@ mod tests {
             "Crash",
             &lines,
             Some(&"y".repeat(200_000)),
+            Some(&"z".repeat(50_000)),
         );
         assert!(report.log.len() < 48 * 1024);
         assert!(report.log.contains("---- crash report ----"));
+        assert!(report.log.contains("---- java ----"));
     }
 }

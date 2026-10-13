@@ -17,6 +17,28 @@ const LIST: &str = "classes.txt";
 const KEY: &str = "classes.key";
 const LOG_PREFIX: &str = "class-load-";
 const PACK_PREFIX: &str = "mixin-";
+/// Present: this game folder starts without the client's agent and its class list (see [`turn_off`]).
+const OFF: &str = "off";
+
+/// After the game failed before any mod ran (a class of the loader's own libraries not found):
+/// later starts of this game folder go without the agent and the class list, the one thing the
+/// launcher adds to the loader's start. Slower to start, but the loader then starts as it does
+/// without Arctic.
+pub fn turn_off(game_dir: &Path) {
+    let dir = game_dir.join(DIR);
+    let _ = fs::create_dir_all(&dir);
+    if let Err(e) = fs::write(dir.join(OFF), b"") {
+        log::warn!(
+            "couldn't turn the startup agent off for {}: {e}",
+            game_dir.display()
+        );
+    }
+}
+
+/// Whether [`turn_off`] was used for this game folder.
+pub fn is_off(game_dir: &Path) -> bool {
+    game_dir.join(DIR).join(OFF).is_file()
+}
 
 /// What the list depends on: the game version, the Java, and every jar in the mods folder.
 fn key(game_dir: &Path, game_version: &str, java_major: u32) -> String {
@@ -104,7 +126,7 @@ pub fn flags(
     // The client's jar is also a Java agent: it makes class loading take turns (so loading ahead
     // on another thread can't deadlock) and keeps the transformed classes. Without it neither is used.
     let agent = game_dir.join("mods").join(crate::arctic_mod::FILE_NAME);
-    if !agent.is_file() {
+    if !agent.is_file() || is_off(game_dir) {
         return Vec::new();
     }
     let dir = game_dir.join(DIR);
@@ -185,6 +207,18 @@ fn class_list_flags(dir: &Path, key: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_game_folder_turned_off_starts_without_the_agent() {
+        let dir = tempfile::tempdir().unwrap();
+        let mods = dir.path().join("mods");
+        fs::create_dir_all(&mods).unwrap();
+        fs::write(mods.join(crate::arctic_mod::FILE_NAME), b"jar").unwrap();
+        assert!(!flags(dir.path(), "26.3", 25, false).is_empty());
+        turn_off(dir.path());
+        assert!(is_off(dir.path()));
+        assert!(flags(dir.path(), "26.3", 25, false).is_empty());
+    }
 
     #[test]
     fn records_first_then_uses_the_list_until_the_mods_change() {
