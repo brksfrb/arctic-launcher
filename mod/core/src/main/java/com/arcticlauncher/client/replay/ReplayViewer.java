@@ -168,7 +168,9 @@ public final class ReplayViewer {
 
 	/** After the frame is on screen: exporting grabs it. */
 	void afterFrame() {
-		if (export == null || !joined) {
+		// Export can start during a game tick, after frame() already ran. Its
+		// seek and camera change must be applied before we capture frame zero.
+		if (export == null || !joined || pendingSeek >= 0) {
 			return;
 		}
 		if (export.failed() != null) {
