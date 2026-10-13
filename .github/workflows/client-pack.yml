@@ -34,7 +34,10 @@ jobs:
           VERSIONS: ${{ inputs.versions }}
         # Four Gradle builds at once: the node's game servers come first (the runner only gets
         # spare CPU and memory there).
-        run: python3 mod/build.py $VERSIONS --jobs 4
+        run: |
+          # The wrapper isn't executable in the repo (made on Windows).
+          chmod +x mod/gradlew
+          python3 mod/build.py $VERSIONS --jobs 4
 
       - uses: actions/upload-artifact@v4
         with:
