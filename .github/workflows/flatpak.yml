@@ -1,0 +1,106 @@
+name: Flatpak
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flatpak
+  cancel-in-progress: false
+
+jobs:
+  native:
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    runs-on: [self-hosted, linux, x64, ryzen]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build on Ryzen
+        env:
+          ARCTIC_MSA_CLIENT_ID: ${{ secrets.ARCTIC_MSA_CLIENT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export CARGO_TARGET_DIR="$HOME/arctic-target"
+          cargo build --locked --release -p arctic-app -p arctic-cli
+          mkdir -p flatpak-input
+          cp "$CARGO_TARGET_DIR/release/arctic-launcher" "$CARGO_TARGET_DIR/release/arctic" flatpak-input/
+          "$CARGO_TARGET_DIR/release/arctic-launcher" --write-icon flatpak-input/icon.png 256
+          python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])' > flatpak-input/version.txt
+          git log -1 --format=%cs > flatpak-input/date.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak-native
+          path: flatpak-input/
+          retention-days: 3
+
+  package:
+    needs: native
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: flatpak-native
+          path: flatpak-input
+      - name: Packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends flatpak appstream desktop-file-utils xvfb xauth x11-utils imagemagick dbus-x11
+      - name: Sign and package
+        env:
+          PRIVATE_KEY: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GNUPGHOME="$RUNNER_TEMP/arctic-flatpak-keyring"
+          install -d -m700 "$GNUPGHOME"
+          trap 'gpgconf --kill gpg-agent; rm -rf -- "$GNUPGHOME"' EXIT
+          printf '%s' "$PRIVATE_KEY" | gpg --batch --import
+          unset PRIVATE_KEY
+          key=$(gpg --show-keys --with-colons packaging/flatpak/public-key.gpg | awk -F: '$1=="fpr" {print $10; exit}')
+          bash packaging/flatpak/build.sh flatpak-input flatpak-output https://brksfrb.github.io/arctic-launcher "$key"
+          bash packaging/flatpak/test.sh flatpak-output "$key"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flatpak-test-results
+          path: flatpak-output/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak-downloads
+          path: flatpak-output/downloads/
+          retention-days: 7
+      - uses: actions/upload-pages-artifact@v4
+        if: github.event_name == 'release'
+        with:
+          path: flatpak-output/site/
+      - name: Attach downloads
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" flatpak-output/downloads/* --clobber
+    permissions:
+      contents: write
+
+  deploy:
+    if: github.event_name == 'release'
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment

@@ -60,6 +60,9 @@ pub fn restart_if_unnoticed() -> bool {
 
 /// Start the periodic check.
 pub fn spawn(dirs: DataDirs, tasks: Tasks) {
+    if update::managed_by_flatpak() {
+        return;
+    }
     let spawned = std::thread::Builder::new()
         .name("auto-update".into())
         .spawn(move || {

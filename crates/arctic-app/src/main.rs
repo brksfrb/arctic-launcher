@@ -127,6 +127,7 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default()
             .with_visible(!startup.hidden)
             .with_title(arctic_core::APP_NAME)
+            .with_app_id("com.arcticlauncher.ArcticLauncher")
             .with_icon(Arc::new(icon))
             .with_inner_size(DEFAULT_WINDOW)
             .with_min_inner_size(MIN_WINDOW),

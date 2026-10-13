@@ -239,13 +239,14 @@ impl ArcticApp {
                 log::info!("cleared {freed} bytes of unfinished replay recordings");
             }
         });
-        let update = if data.settings.check_updates_on_start {
-            // Once the window is up, so the check doesn't slow down opening the launcher.
-            tasks.check_update_after(data.settings.update_channel, START_UPDATE_CHECK_DELAY);
-            UpdateState::Checking
-        } else {
-            UpdateState::Idle
-        };
+        let update =
+            if data.settings.check_updates_on_start && !arctic_core::update::managed_by_flatpak() {
+                // Once the window is up, so the check doesn't slow down opening the launcher.
+                tasks.check_update_after(data.settings.update_channel, START_UPDATE_CHECK_DELAY);
+                UpdateState::Checking
+            } else {
+                UpdateState::Idle
+            };
         let intro = data.settings.intro && !startup.no_intro;
         let mut app = Self {
             splash: Splash::new(intro),

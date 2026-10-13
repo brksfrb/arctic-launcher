@@ -30,6 +30,10 @@ pub mod notes;
 pub use notes::ReleaseNotes;
 
 pub const GITHUB_REPO: &str = "brksfrb/arctic-launcher";
+/// Flatpak owns the installed executable and updates it through its signed repository.
+pub fn managed_by_flatpak() -> bool {
+    cfg!(target_os = "linux") && std::path::Path::new("/.flatpak-info").is_file()
+}
 /// Release asset of the launcher for this platform.
 #[cfg(windows)]
 pub const PLATFORM_ASSET: &str = "arctic-launcher-windows-x64.exe";
@@ -85,6 +89,9 @@ struct Asset {
 
 /// Ask GitHub for the newest applicable release. `Ok(None)` = up to date.
 pub fn check(channel: UpdateChannel) -> Result<Option<UpdateInfo>> {
+    if managed_by_flatpak() {
+        return Ok(None);
+    }
     let url =
         format!("https://api.github.com/repos/{GITHUB_REPO}/releases?per_page={RELEASES_PER_PAGE}");
     let releases: Vec<Release> = get_json(&url)?;
@@ -171,6 +178,11 @@ fn is_required(notes: &str, current: &semver::Version) -> bool {
 
 /// Download, verify and swap in the new executable. Call `restart` afterwards.
 pub fn download_and_apply(dirs: &DataDirs, info: &UpdateInfo, progress: Progress) -> Result<()> {
+    if managed_by_flatpak() {
+        return Err(Error::Other(
+            "Update Arctic Launcher through your Linux software manager.".into(),
+        ));
+    }
     let dir = dirs.cache().join("updates");
     fs::create_dir_all(&dir).at(&dir)?;
     let path = dir.join(format!("arctic-launcher-{}.exe", info.version));

@@ -58,6 +58,13 @@ pub fn paths(ctx: &Ctx) -> Result<i32> {
 }
 
 pub fn update_check(ctx: &Ctx, beta: bool) -> Result<i32> {
+    if update::managed_by_flatpak() {
+        ctx.out.emit(
+            json!({"current": APP_VERSION, "managed_by": "flatpak"}),
+            || "Updates are managed by your Linux software manager.".into(),
+        );
+        return Ok(0);
+    }
     let channel = if beta {
         UpdateChannel::Beta
     } else {

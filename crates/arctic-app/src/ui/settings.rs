@@ -185,6 +185,11 @@ impl ArcticApp {
         });
 
         section(ui, p, "Updates", |ui| {
+            if arctic_core::update::managed_by_flatpak() {
+                ui.label("Updates are managed by your Linux software manager.");
+                ui.checkbox(&mut s.show_release_notes, "Show what's new after updating");
+                return;
+            }
             widgets::field_row(ui, |ui| {
                 ui.label("Channel");
                 ui.selectable_value(&mut s.update_channel, UpdateChannel::Stable, "Stable");

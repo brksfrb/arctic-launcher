@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Arctic Launcher
+Comment=Play Minecraft and manage your instances, mods and worlds
+Exec=arctic-launcher
+Icon=com.arcticlauncher.ArcticLauncher
+Terminal=false
+Categories=Game;
+Keywords=Minecraft;Launcher;Mods;Fabric;
+StartupWMClass=com.arcticlauncher.ArcticLauncher

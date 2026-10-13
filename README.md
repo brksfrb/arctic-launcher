@@ -142,6 +142,13 @@ choose **Open**, then **Open** again.
 
 ### Linux
 
+For software-manager installation and updates, use the
+[official Arctic Flatpak](https://brksfrb.github.io/arctic-launcher/). Download the
+install file and open it with your software manager. Enable automatic updates there
+if you want updates installed automatically. This supports x86_64 Linux.
+
+For the standalone download:
+
 1. Download **`arctic-launcher-linux-x64`** from the
    [latest release](https://github.com/brksfrb/arctic-launcher/releases/latest).
 2. Make it executable and run it:
@@ -195,6 +202,8 @@ Everything also works with `--json` for scripts. Full reference:
 **Where are my files?**
 Windows: `%LOCALAPPDATA%\ArcticLauncher`. macOS: `~/Library/Application Support/ArcticLauncher`.
 Linux: `~/.local/share/ArcticLauncher`.
+
+The Flatpak uses `~/.var/app/com.arcticlauncher.ArcticLauncher/data/ArcticLauncher`.
 Each profile lives in `profiles/<name>/`. Worlds are inside
 `instances/vanilla/minecraft/saves`. `arctic paths` prints them all.
 

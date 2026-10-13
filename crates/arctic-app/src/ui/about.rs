@@ -94,6 +94,10 @@ impl ArcticApp {
     }
 
     fn update_status(&mut self, ui: &mut egui::Ui) {
+        if arctic_core::update::managed_by_flatpak() {
+            ui.label("Updates are managed by your Linux software manager.");
+            return;
+        }
         let p = self.palette();
         let busy = matches!(
             self.update,

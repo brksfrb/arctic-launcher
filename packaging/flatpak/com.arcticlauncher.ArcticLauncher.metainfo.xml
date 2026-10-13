@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.arcticlauncher.ArcticLauncher</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Arctic Launcher</name>
+  <summary>Play Minecraft and manage your instances, mods and worlds</summary>
+  <developer id="com.arcticlauncher">
+    <name>Arctic Launcher contributors</name>
+  </developer>
+  <description>
+    <p>Arctic Launcher is an open-source Minecraft launcher with support for multiple
+    game versions, mod loaders, modpacks, skins and playing with friends.</p>
+    <p>Keep separate instances with their own mods and settings. Arctic downloads
+    the Java runtime and game files each instance needs.</p>
+    <p>Arctic Launcher is not affiliated with Mojang Studios or Microsoft.</p>
+  </description>
+  <launchable type="desktop-id">com.arcticlauncher.ArcticLauncher.desktop</launchable>
+  <provides><binary>arctic-launcher</binary><binary>arctic</binary></provides>
+  <url type="homepage">https://arcticlauncher.com</url>
+  <url type="bugtracker">https://github.com/brksfrb/arctic-launcher/issues</url>
+  <url type="vcs-browser">https://github.com/brksfrb/arctic-launcher</url>
+  <releases><release version="@VERSION@" date="@DATE@"/></releases>
+</component>
