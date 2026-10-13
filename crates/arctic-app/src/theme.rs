@@ -291,6 +291,20 @@ pub fn apply(ctx: &egui::Context, p: &Palette) {
 
 /// Frosted-ice card: translucent so the scenery shows through, with a
 /// faint edge and a soft drop shadow.
+/// A dialog's background. Glass's see-through surface reads poorly over the aurora once a
+/// dialog's text sits on it (dialogs aren't blurred like the panes), so there it's the night's
+/// own color, nearly solid; the other themes use their surface as it is.
+pub fn dialog_fill(p: &Palette) -> Color32 {
+    if p.glass {
+        Color32::from_rgba_unmultiplied(0x0e, 0x1a, 0x2c, DIALOG_GLASS_ALPHA)
+    } else {
+        p.surface
+    }
+}
+
+/// How solid Glass dialogs are (of 255).
+const DIALOG_GLASS_ALPHA: u8 = 242;
+
 pub fn card(p: &Palette) -> egui::Frame {
     egui::Frame::new()
         .fill(p.card_fill)

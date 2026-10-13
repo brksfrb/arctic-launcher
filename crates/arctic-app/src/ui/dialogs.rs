@@ -345,7 +345,7 @@ impl ArcticApp {
 
 pub(super) fn dialog_frame(p: &Palette) -> egui::Frame {
     egui::Frame::new()
-        .fill(p.surface)
+        .fill(crate::theme::dialog_fill(p))
         .stroke(Stroke::new(1.0, p.card_stroke))
         .corner_radius(CornerRadius::same(16))
         .inner_margin(22.0)
