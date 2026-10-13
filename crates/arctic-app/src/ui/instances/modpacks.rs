@@ -90,13 +90,21 @@ impl ArcticApp {
     }
 
     fn run_pack_search(&mut self) {
+        self.run_pack_search_from(0);
+    }
+
+    fn run_pack_search_from(&mut self, offset: usize) {
         let search = &mut self.inst.search;
         search.request += 1;
         search.loading = true;
-        search.results = None;
+        search.more_from = offset;
+        if offset == 0 {
+            search.results = None;
+        }
         let query = SearchQuery {
             text: search.text.trim().to_owned(),
             sort: search.sort,
+            offset,
             limit: PAGE_SIZE,
             project_type: arctic_core::mods::ProjectType::Modpack,
             ..SearchQuery::default()
@@ -158,6 +166,9 @@ impl ArcticApp {
                 ui.separator();
             }
         });
+        if let Some(from) = super::more_on_scroll(ui, p, &self.inst.search) {
+            self.run_pack_search_from(from);
+        }
     }
 
     fn pack_row(&mut self, ui: &mut egui::Ui, hit: &ProjectHit) {

@@ -82,6 +82,7 @@ impl ArcticApp {
         let search = &mut self.inst.search;
         search.request += 1;
         search.loading = true;
+        search.more_from = offset;
         if offset == 0 {
             search.results = None;
         }
@@ -131,6 +132,9 @@ impl ArcticApp {
                 ui.separator();
             }
         });
+        if let Some(from) = super::more_on_scroll(ui, p, &self.inst.search) {
+            self.run_mod_search(instance, from);
+        }
         if let Some(progress) = &self.inst.install_progress
             && progress.bytes_total > 0
         {

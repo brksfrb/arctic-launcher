@@ -66,10 +66,36 @@ pub struct SearchState {
     pub request: u64,
     pub loading: bool,
     pub results: Option<Result<SearchPage, String>>,
+    /// Where the page being fetched starts (0: a new search, which replaces the results; more:
+    /// the next page, added to them).
+    pub more_from: usize,
     /// Instance the results were fetched for.
     pub instance: Option<String>,
     /// When the search text last changed (search runs shortly after typing stops).
     pub typed_at: Option<f64>,
+}
+
+/// Under a result list: when its end scrolls into view and there are more, the next page is
+/// asked for. Returns where it starts, if it's time.
+pub(super) fn more_on_scroll(
+    ui: &mut egui::Ui,
+    p: &crate::theme::Palette,
+    search: &SearchState,
+) -> Option<usize> {
+    let Some(Ok(page)) = &search.results else {
+        return None;
+    };
+    let shown = page.hits.len();
+    if shown == 0 || shown >= page.total {
+        return None;
+    }
+    let end = ui
+        .horizontal(|ui| {
+            ui.spinner();
+            ui.label(egui::RichText::new("Loading more…").color(p.muted));
+        })
+        .response;
+    (!search.loading && ui.is_rect_visible(end.rect)).then_some(shown)
 }
 
 /// Stable, unique egui texture URI for a remote icon URL.
@@ -399,8 +425,23 @@ impl ArcticApp {
                     }
                 }
                 if request == self.inst.search.request {
-                    self.inst.search.loading = false;
-                    self.inst.search.results = Some(result);
+                    let search = &mut self.inst.search;
+                    search.loading = false;
+                    let more = std::mem::take(&mut search.more_from) > 0;
+                    match (more, &mut search.results, result) {
+                        // The next page: added (a project already listed isn't listed twice).
+                        (true, Some(Ok(shown)), Ok(page)) => {
+                            for hit in page.hits {
+                                if !shown.hits.iter().any(|h| h.project_id == hit.project_id) {
+                                    shown.hits.push(hit);
+                                }
+                            }
+                            shown.total = page.total;
+                        }
+                        // A next page that failed leaves what's shown; it's tried again on scrolling.
+                        (true, Some(Ok(_)), Err(e)) => log::warn!("loading more results: {e}"),
+                        (_, results, result) => *results = Some(result),
+                    }
                 }
             }
             Event::ModProgress(p) => self.inst.install_progress = Some(p),
