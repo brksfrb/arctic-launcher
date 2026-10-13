@@ -130,9 +130,37 @@ pub fn uses_key_codes(game: Option<&str>) -> bool {
     game.is_some_and(|g| g.starts_with("1.") && compare_versions(g, "1.13").is_lt())
 }
 
-/// The settings as that game version stores them.
+/// The data version of 1.13's `options.txt`, the first to name keys. A file
+/// with an older one (or none: 1.8.9 writes none, nor does a new file) holds
+/// LWJGL 2 codes, and a newer game converts them as it reads the file; names
+/// there make that conversion fail and the game start on its default settings.
+const KEY_NAMES_SINCE: i64 = 1519;
+
+/// Whether the `options.txt` (as read) declares a version that names keys.
+pub fn names_keys(options: &BTreeMap<String, String>) -> bool {
+    options
+        .get("version")
+        .and_then(|v| v.trim().parse::<i64>().ok())
+        .is_some_and(|v| v >= KEY_NAMES_SINCE)
+}
+
+/// The settings as they go into an `options.txt` for that game: keys in the
+/// form that file declares (see [`KEY_NAMES_SINCE`]), whatever the game.
+pub fn for_file(
+    values: &BTreeMap<String, String>,
+    game: Option<&str>,
+    file_names_keys: bool,
+) -> BTreeMap<String, String> {
+    for_codes(values, uses_key_codes(game) || !file_names_keys)
+}
+
+/// The settings as that game version stores them (for a file that already names keys).
+#[cfg(test)]
 pub fn for_game(values: &BTreeMap<String, String>, game: Option<&str>) -> BTreeMap<String, String> {
-    let codes = uses_key_codes(game);
+    for_codes(values, uses_key_codes(game))
+}
+
+fn for_codes(values: &BTreeMap<String, String>, codes: bool) -> BTreeMap<String, String> {
     values
         .iter()
         .map(|(k, v)| {
@@ -228,6 +256,26 @@ mod tests {
         assert_eq!(modern["key_key.pickItem"], "key.mouse.middle");
         assert_eq!(modern["key_key.x"], UNKNOWN);
         assert_eq!(for_game(&old, None)["key_key.jump"], "key.keyboard.space");
+    }
+
+    #[test]
+    fn keys_follow_the_files_own_version() {
+        let shared: BTreeMap<String, String> =
+            [("key_key.jump".to_owned(), "key.keyboard.space".to_owned())].into();
+        // Last written by 1.8.9 (no version) or new: codes, which 26.x converts itself.
+        assert_eq!(for_file(&shared, Some("26.2"), false)["key_key.jump"], "57");
+        // Written by a newer game: names.
+        assert_eq!(
+            for_file(&shared, Some("26.2"), true)["key_key.jump"],
+            "key.keyboard.space"
+        );
+        // An old game always gets codes.
+        assert_eq!(for_file(&shared, Some("1.8.9"), true)["key_key.jump"], "57");
+        let modern: BTreeMap<String, String> = [("version".to_owned(), "4903".to_owned())].into();
+        assert!(names_keys(&modern));
+        let old: BTreeMap<String, String> = [("version".to_owned(), "1343".to_owned())].into();
+        assert!(!names_keys(&old));
+        assert!(!names_keys(&BTreeMap::new()));
     }
 
     #[test]

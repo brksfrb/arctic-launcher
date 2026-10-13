@@ -298,7 +298,8 @@ impl Defaults {
             return Ok(false);
         }
         std::fs::create_dir_all(game_dir).map_err(|e| Error::io(game_dir, e))?;
-        let values = crate::game_defaults_keys::for_game(&self.values, game);
+        // A new file has no version line: keys as codes, which a newer game converts.
+        let values = crate::game_defaults_keys::for_file(&self.values, game, false);
         std::fs::write(&path, render(&values)).map_err(|e| Error::io(&path, e))?;
         Ok(true)
     }
@@ -319,7 +320,10 @@ impl Defaults {
             Err(e) => return Err(Error::io(&path, e)),
         };
         let order = key_order(&std::fs::read_to_string(&path).unwrap_or_default());
-        for (k, v) in crate::game_defaults_keys::for_game(&self.values, game) {
+        // Keys in the form the file says it holds: its version line stays the one the game that
+        // last wrote it left (1.8.9's file has none), and the next game converts from there.
+        let names = crate::game_defaults_keys::names_keys(&values);
+        for (k, v) in crate::game_defaults_keys::for_file(&self.values, game, names) {
             values.insert(k, v);
         }
         std::fs::create_dir_all(game_dir).map_err(|e| Error::io(game_dir, e))?;
@@ -416,6 +420,34 @@ mod tests {
         assert_eq!(d.apply_to(&game, None).unwrap(), 2);
         let text = std::fs::read_to_string(game.join(OPTIONS)).unwrap();
         assert_eq!(text, "renderDistance:8\nfov:1.0\nautoJump:false\n");
+    }
+
+    #[test]
+    fn a_file_last_saved_by_1_8_9_gets_key_codes_even_for_a_newer_game() {
+        // The Vanilla instance plays 1.8.9 and 26.2 in one folder: 26.2 converts the codes 1.8.9
+        // left (no version line), and names there made it start on its default settings.
+        let dir = tempfile::tempdir().unwrap();
+        let mut d = Defaults::default();
+        d.set("key_key.pickItem", "key.mouse.middle").unwrap();
+        d.set("fov", "1.0").unwrap();
+        std::fs::write(
+            dir.path().join(OPTIONS),
+            "invertYMouse:false\nkey_key.jump:57\n",
+        )
+        .unwrap();
+        d.apply_to(dir.path(), Some("26.2")).unwrap();
+        let text = std::fs::read_to_string(dir.path().join(OPTIONS)).unwrap();
+        assert!(text.contains("key_key.pickItem:-98"), "{text}");
+        assert!(text.contains("key_key.jump:57") && text.contains("fov:1.0"));
+        // Saved by 26.2 since (it has a version line): names.
+        std::fs::write(
+            dir.path().join(OPTIONS),
+            "version:4903\nkey_key.jump:key.keyboard.space\n",
+        )
+        .unwrap();
+        d.apply_to(dir.path(), Some("26.2")).unwrap();
+        let text = std::fs::read_to_string(dir.path().join(OPTIONS)).unwrap();
+        assert!(text.contains("key_key.pickItem:key.mouse.middle"), "{text}");
     }
 
     #[test]
