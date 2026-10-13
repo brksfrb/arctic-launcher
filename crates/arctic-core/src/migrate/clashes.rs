@@ -283,19 +283,35 @@ fn breaks(jars: &[Jar]) -> Vec<Clash> {
                 if !pairs.insert(key) {
                     continue;
                 }
-                out.push(Clash {
-                    problem: format!("{} and {} can't run together", a.name, b.name),
-                    fixes: vec![
-                        Fix::TurnOff {
-                            file: a.file.clone(),
-                            name: a.name.clone(),
-                        },
-                        Fix::TurnOff {
-                            file: b.file.clone(),
-                            name: b.name.clone(),
-                        },
-                    ],
+                // Only older versions are refused ("<0.6.6"): a newer one is the real fix, and
+                // keeps both (Continuity with Sodium before 0.6.6, say).
+                let only_old = preds.iter().all(|p| p.trim_start().starts_with('<'));
+                let mut fixes = Vec::new();
+                if only_old {
+                    let (project, _) = project_of(&b.id);
+                    fixes.push(Fix::Get {
+                        project: project.to_owned(),
+                        name: b.name.clone(),
+                        replacing: Some(b.file.clone()),
+                    });
+                }
+                fixes.push(Fix::TurnOff {
+                    file: a.file.clone(),
+                    name: a.name.clone(),
                 });
+                fixes.push(Fix::TurnOff {
+                    file: b.file.clone(),
+                    name: b.name.clone(),
+                });
+                let problem = if only_old {
+                    format!(
+                        "{} needs a newer {} ({} doesn't run with {})",
+                        a.name, b.name, a.name, b.version
+                    )
+                } else {
+                    format!("{} and {} can't run together", a.name, b.name)
+                };
+                out.push(Clash { problem, fixes });
             }
         }
     }

@@ -416,6 +416,37 @@ fn fabric_jar_with(mods: &Path, file: &str, desc: serde_json::Value) {
 }
 
 #[test]
+fn a_mod_that_refuses_only_old_versions_offers_the_update_first() {
+    // Continuity 3.0.0 for 1.21.4 breaks Sodium before 0.6.6; 0.6.13 is fine.
+    let root = tempfile::tempdir().unwrap();
+    let mods = root.path();
+    fabric_jar_with(
+        mods,
+        "continuity.jar",
+        json!({"id": "continuity", "name": "Continuity", "version": "3.0.0+1.21.4", "breaks": {"sodium": "<0.6.6"}}),
+    );
+    fabric_jar_with(
+        mods,
+        "sodium.jar",
+        json!({"id": "sodium", "name": "Sodium", "version": "0.6.5+mc1.21.4"}),
+    );
+    let found = clashes(mods, LoaderKind::Fabric, "1.21.4");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(
+        found[0].problem,
+        "Continuity needs a newer Sodium (Continuity doesn't run with 0.6.5+mc1.21.4)"
+    );
+    assert_eq!(found[0].fixes[0].label(), "Update Sodium");
+    // With today's Sodium: no clash at all.
+    fabric_jar_with(
+        mods,
+        "sodium.jar",
+        json!({"id": "sodium", "name": "Sodium", "version": "0.6.13+mc1.21.4"}),
+    );
+    assert!(clashes(mods, LoaderKind::Fabric, "1.21.4").is_empty());
+}
+
+#[test]
 fn finds_mods_that_stop_the_game_together() {
     let root = tempfile::tempdir().unwrap();
     let mods = root.path();
