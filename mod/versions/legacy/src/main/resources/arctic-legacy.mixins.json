@@ -24,6 +24,8 @@
 		"SmoothTextRendererMixin",
 		"ButtonWidgetMixin",
 		"OptionSliderWidgetMixin",
+		"SliderWidgetMixin",
+		"SoundSliderWidgetMixin",
 		"GameMenuScreenMixin",
 		"HeldItemRendererMixin",
 		"WorldRendererMixin",
