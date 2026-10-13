@@ -10,7 +10,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use eframe::egui::{self, FontData, FontFamily};
 use eframe::epaint::text::{FontInsert, FontPriority, InsertFontFamily};
 
-static REQUESTED: AtomicBool = AtomicBool::new(false);
 
 /// The font family for headings (semibold); plain text uses Proportional.
 pub const HEADING: &str = "heading";
@@ -128,73 +127,143 @@ pub fn heading(size: f32) -> egui::FontId {
     egui::FontId::new(size, FontFamily::Name(HEADING.into()))
 }
 
-/// (path, face index in a collection) of system fonts to try, in order.
-fn candidates() -> &'static [(&'static str, u32)] {
-    if cfg!(windows) {
-        &[
-            (r"C:\Windows\Fonts\msyh.ttc", 0),    // Microsoft YaHei: Chinese
-            (r"C:\Windows\Fonts\YuGothM.ttc", 0), // Yu Gothic: Japanese
-            (r"C:\Windows\Fonts\malgun.ttf", 0),  // Malgun Gothic: Korean
-            (r"C:\Windows\Fonts\Nirmala.ttc", 0), // Indic scripts
-        ]
-    } else {
-        &[
-            ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
-            ("/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc", 0),
-            (
-                "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
-                0,
-            ),
-            ("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", 0),
-        ]
+/// Scripts the built-in fonts can't draw; each loads its own system font, only when shown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Script {
+    Han,
+    Kana,
+    Hangul,
+    Indic,
+}
+
+const SCRIPTS: [Script; 4] = [Script::Han, Script::Kana, Script::Hangul, Script::Indic];
+
+impl Script {
+    fn of(c: char) -> Option<Self> {
+        match c as u32 {
+            0x0900..=0x0DFF => Some(Self::Indic),
+            0x3040..=0x30FF | 0x31F0..=0x31FF => Some(Self::Kana),
+            0x1100..=0x11FF | 0x3130..=0x318F | 0xAC00..=0xD7AF => Some(Self::Hangul),
+            0x3000..=0x9FFF | 0xF900..=0xFAFF | 0xFF00..=0xFFEF => Some(Self::Han),
+            _ => None,
+        }
+    }
+
+    fn index(self) -> usize {
+        self as usize
+    }
+
+    /// (path, face index in a collection) of system fonts that draw it, tried in order.
+    fn fonts(self) -> &'static [(&'static str, u32)] {
+        if cfg!(windows) {
+            match self {
+                Self::Han => &[(r"C:\Windows\Fonts\msyh.ttc", 0)], // Microsoft YaHei
+                Self::Kana => &[(r"C:\Windows\Fonts\YuGothM.ttc", 0), (r"C:\Windows\Fonts\msgothic.ttc", 0)],
+                Self::Hangul => &[(r"C:\Windows\Fonts\malgun.ttf", 0)], // Malgun Gothic
+                Self::Indic => &[(r"C:\Windows\Fonts\Nirmala.ttc", 0)],
+            }
+        } else {
+            // One Noto CJK covers Han, kana and Hangul (mapped once, see LOADED).
+            const CJK: &[(&str, u32)] = &[
+                ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
+                ("/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc", 0),
+                ("/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc", 0),
+                ("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", 0),
+                ("/System/Library/Fonts/PingFang.ttc", 0),
+            ];
+            match self {
+                Self::Indic => &[("/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf", 0)],
+                _ => CJK,
+            }
+        }
     }
 }
+
+/// Scripts asked for so far (each loads once).
+static REQUESTED: [AtomicBool; SCRIPTS.len()] = [const { AtomicBool::new(false) }; SCRIPTS.len()];
+/// Font files already added (a file serving two scripts is added once).
+static LOADED: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
 
 /// True if `text` has characters the built-in fonts can't draw.
 fn needs_fallback(text: &str) -> bool {
-    text.chars().any(|c| {
-        matches!(c as u32,
-            0x0900..=0x0DFF      // Indic
-            | 0x1100..=0x11FF    // Hangul Jamo
-            | 0x3000..=0x9FFF    // CJK symbols, kana, CJK ideographs
-            | 0xAC00..=0xD7AF    // Hangul syllables
-            | 0xF900..=0xFAFF    // CJK compatibility
-            | 0xFF00..=0xFFEF) // full-width forms
-    })
+    text.chars().any(|c| Script::of(c).is_some())
 }
 
-/// Load fallback fonts in the background if `text` needs them (once).
+/// Load the fallback fonts `text` needs in the background (each script once). Only the script
+/// shown is loaded (the four Windows ones together are some 50 MB), and the file is mapped,
+/// not read: its pages are the system's file cache, shared, not this program's memory.
 pub fn ensure_for(ctx: &egui::Context, text: &str) {
-    if REQUESTED.load(Ordering::Relaxed) || !needs_fallback(text) {
+    if !needs_fallback(text) {
         return;
     }
-    if REQUESTED.swap(true, Ordering::Relaxed) {
+    let mut wanted = Vec::new();
+    for c in text.chars() {
+        if let Some(script) = Script::of(c)
+            && !wanted.contains(&script)
+            && !REQUESTED[script.index()].swap(true, Ordering::Relaxed)
+        {
+            wanted.push(script);
+        }
+    }
+    if wanted.is_empty() {
         return;
     }
     let ctx = ctx.clone();
     std::thread::spawn(move || {
-        for (i, (path, index)) in candidates().iter().enumerate() {
-            let Ok(bytes) = std::fs::read(path) else {
-                continue;
-            };
-            let mut data = FontData::from_owned(bytes);
-            data.index = *index;
-            let families = [FontFamily::Proportional, FontFamily::Monospace]
-                .into_iter()
-                .map(|family| InsertFontFamily {
-                    family,
-                    priority: FontPriority::Lowest,
-                })
-                .collect();
-            ctx.add_font(FontInsert::new(&format!("fallback-{i}"), data, families));
+        for script in wanted {
+            add_fallback(&ctx, script);
         }
         ctx.request_repaint();
     });
 }
 
+fn add_fallback(ctx: &egui::Context, script: Script) {
+    for &(path, index) in script.fonts() {
+        let mut loaded = LOADED.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if loaded.contains(&path) {
+            return;
+        }
+        let Some(bytes) = map(path) else {
+            continue;
+        };
+        loaded.push(path);
+        drop(loaded);
+        let mut data = FontData::from_static(bytes);
+        data.index = index;
+        let families = [FontFamily::Proportional, FontFamily::Monospace]
+            .into_iter()
+            .map(|family| InsertFontFamily {
+                family,
+                priority: FontPriority::Lowest,
+            })
+            .collect();
+        ctx.add_font(FontInsert::new(&format!("fallback-{script:?}"), data, families));
+        return;
+    }
+}
+
+/// A font file mapped for the rest of the run (fonts are never removed once added).
+fn map(path: &str) -> Option<&'static [u8]> {
+    let file = std::fs::File::open(path).ok()?;
+    // SAFETY: a system font, mapped read-only; Windows keeps a mapped file from being changed,
+    // and fonts aren't rewritten in place elsewhere.
+    let mapped = unsafe { memmap2::Mmap::map(&file) }.ok()?;
+    Some(&**Box::leak(Box::new(mapped)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_script_gets_its_own_font() {
+        assert_eq!(Script::of('僵'), Some(Script::Han));
+        assert_eq!(Script::of('ゾ'), Some(Script::Kana));
+        assert_eq!(Script::of('좀'), Some(Script::Hangul));
+        assert_eq!(Script::of('क'), Some(Script::Indic));
+        assert_eq!(Script::of('Z'), None);
+        assert_eq!(Script::of('П'), None);
+    }
 
     #[test]
     fn detects_scripts_needing_fallback() {

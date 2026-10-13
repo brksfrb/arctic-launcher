@@ -696,7 +696,9 @@ impl ArcticApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.persist_settings();
             crate::window::hide();
+            crate::trim::now(ctx);
         }
+        crate::trim::tick(ctx, self.runs.any_game(), self.tab as usize);
         let now = ctx.input(|i| i.time);
         let actions: Vec<_> = self
             .tray

@@ -13,8 +13,10 @@ mod gallery_tasks;
 mod glass;
 mod icon_raster;
 mod logbook;
+mod memstats;
 mod migrate_tasks;
 mod storage_tasks;
+mod trim;
 mod motion;
 mod pack_tasks;
 mod runs;
@@ -42,6 +44,10 @@ mod window;
 mod world_tasks;
 
 use std::sync::Arc;
+
+#[cfg(debug_assertions)]
+#[global_allocator]
+static ALLOC: memstats::Counting = memstats::Counting;
 
 use arctic_core::profiles::ProfileStore;
 use arctic_core::storage::DataDirs;

@@ -66,6 +66,13 @@ impl DevShot {
             })
         });
         if let Some(image) = shot {
+            if std::env::var_os("ARCTIC_DEVSHOT_MEMORY").is_some() {
+                eprintln!("[memory]\n{}", crate::memstats::report(ctx));
+                if std::env::var_os("ARCTIC_DEVSHOT_TRIM").is_some() {
+                    crate::trim::now(ctx);
+                    eprintln!("[memory after trim]\n{}", crate::memstats::report(ctx));
+                }
+            }
             let [w, h] = image.size;
             let bytes: Vec<u8> = image.pixels.iter().flat_map(|c| c.to_array()).collect();
             if let Some(buf) = image::RgbaImage::from_raw(w as u32, h as u32, bytes)

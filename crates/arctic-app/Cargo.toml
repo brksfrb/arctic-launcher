@@ -12,6 +12,7 @@ authors.workspace = true
 arctic-core = { path = "../arctic-core" }
 arctic-share = { path = "../arctic-share" }
 arctic-voice = { path = "../arctic-voice" }
+memmap2 = "0.9"
 # glow (OpenGL) instead of the default wgpu backend keeps the binary small.
 eframe = { version = "0.36.2", default-features = false, features = ["accesskit", "default_fonts", "glow", "links", "wayland", "x11"] }
 egui_extras = { version = "0.36", default-features = false, features = ["file", "image"] }
@@ -45,9 +46,10 @@ winresource = "0.1.31"
 # The Linux tray (StatusNotifierItem over D-Bus; no GTK needed).
 [target."cfg(target_os = \"linux\")".dependencies]
 ksni = { version = "0.3", default-features = false, features = ["async-io", "blocking"] }
+libc = "0.2"
 
 [target."cfg(windows)".dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_System_Memory", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 tray-icon = { version = "0.25.1", default-features = false }
 # Windows' own H.264 encoder, for replay videos without FFmpeg; the Start menu shortcut (Shell).
 windows = { version = "0.62.2", features = ["Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_UI_Shell"] }
