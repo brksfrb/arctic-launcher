@@ -37,7 +37,9 @@ final class ReplaysTab implements MenuTab {
 
 	@Override
 	public String state() {
-		return Integer.toString(Replays.list().size());
+		ClientConfig c = ArcticClient.config();
+		return Replays.list().size() + ":" + Replays.recording() + ":" + Replays.queuedVideos() + ":" + Replays.exportsPaused()
+				+ ":" + Replays.ffmpeg().state() + ":" + c.replayKey + ":" + c.replayRecordKey;
 	}
 
 	@Override
@@ -57,6 +59,11 @@ final class ReplaysTab implements MenuTab {
 		f.section("Videos (" + Replays.queuedVideos() + " queued)");
 		f.toggle("Render after leaving", "720p / 30 FPS, one video at a time", () -> c.replayAutoExport, on -> c.replayAutoExport = on);
 		f.note("Videos wait at the title screen. Esc pauses the queue. Videos have no audio yet.");
+		int videoRow = f.row(24);
+		f.put(new Button("Open videos folder", () -> {
+			try { Replays.videoFolder().mkdirs(); java.awt.Desktop.getDesktop().open(Replays.videoFolder()); }
+			catch (Exception e) { com.arcticlauncher.client.notice.Notices.post("Videos folder", Replays.videoFolder().getPath()); }
+		}), f.x, videoRow, 140, 18);
 		if (Replays.exportsPaused()) {
 			int row = f.row(24);
 			f.put(new Button("Resume video queue", () -> { Replays.resumeExports(); host.rebuild(); }), f.x, row, 140, 18);
@@ -86,8 +93,9 @@ final class ReplaysTab implements MenuTab {
 			f.put(watch.enabled(Replays.canWatch()), bx, by, WATCH_W, BTN_H);
 			bx += WATCH_W + GAP;
 			final int moment = info.extras.moments.isEmpty() ? -1 : info.extras.moments.get(info.extras.moments.size() - 1);
-			f.put(new Button("Clip", () -> Replays.watch(info.file, v -> ReplayMenu.exportClip(v, moment)))
-					.enabled(Replays.canWatch() && moment >= 0), bx, by, CLIP_W, BTN_H);
+			Button clip = new Button("Clip", () -> Replays.watch(info.file, v -> ReplayMenu.exportClip(v, moment)));
+			if (inWorld) clip.confirm("Leave?");
+			f.put(clip.enabled(Replays.canWatch() && moment >= 0), bx, by, CLIP_W, BTN_H);
 			bx += CLIP_W + GAP;
 			f.put(new Button("Delete", () -> {
 				Replays.delete(info);

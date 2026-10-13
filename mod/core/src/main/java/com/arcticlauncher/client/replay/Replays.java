@@ -206,7 +206,8 @@ public final class Replays {
 			if (file != null) {
 				try {
 					exports.add(file);
-					Notices.post("3D clip saved", "MP4 queued for after you leave the world. Recording continues.");
+					Notices.post("3D clip saved", "MP4 queued for after you leave the world."
+							+ (recorder.recording() ? " Your recording continues." : ""));
 				} catch (IOException e) { Notices.post("3D clip saved", "Couldn't queue the MP4. Export it from Replays."); }
 			} else Notices.post("Clip not saved", "No replay data is available, or the file couldn't be written.");
 		});

@@ -57,7 +57,7 @@ impl ArcticApp {
                     );
                     ui.label(
                         RichText::new(
-                            "Every session records while you play. Press F9 in game to keep it.",
+                            "F9 saves the last 30 seconds. F10 starts or stops a recording. Both keys can be changed in Arctic's Replays settings.",
                         )
                         .color(p.muted),
                     );

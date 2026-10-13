@@ -54,7 +54,7 @@ const TIPS: &[(&str, Option<Tab>)] = &[
         Some(Tab::Together),
     ),
     (
-        "Replays record in the background; save the moment.",
+        "F9 saves the last 30 seconds; F10 starts or stops a recording.",
         Some(Tab::Instances),
     ),
     (
