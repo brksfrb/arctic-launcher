@@ -55,6 +55,25 @@ for variant in plain modmenu flashback both; do
   cp -a "$title_game_dir/screenshots" "$results/title-$variant-screenshots"
 done
 
+# Record, save and play back a real world with and without Flashback. Run both
+# cases even if one fails so a compatibility regression is distinguishable.
+replay_failed=false
+flatpak run --command=arctic "$app" mods toggle "$modmenu_file" --instance flatpak-title off
+flatpak run --command=arctic "$app" instances edit flatpak-title --jvm-args='-Darctic.selftest=replay'
+for variant in plain flashback; do
+  enabled=off
+  if [ "$variant" = flashback ]; then enabled=on; fi
+  flatpak run --command=arctic "$app" mods toggle "$flashback_file" --instance flatpak-title "$enabled"
+  if ! timeout 420 flatpak run --command=arctic "$app" --json launch --instance flatpak-title --offline FlatpakTest --memory 2G --wait > "$results/replay-$variant.log" 2>&1; then
+    replay_failed=true
+    flatpak kill "$app" 2>/dev/null || true
+  fi
+  if ! grep -F 'replaytest: PASSED' "$results/replay-$variant.log" || grep -E '(replaytest|worldtest): FAILED' "$results/replay-$variant.log"; then
+    replay_failed=true
+  fi
+done
+test "$replay_failed" = false
+
 flatpak run --command=arctic "$app" --json launch --instance flatpak-test --offline FlatpakTest --memory 2G --wait > "$results/game.log" 2>&1 &
 pid=$!
 ready=false
