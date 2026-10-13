@@ -33,6 +33,46 @@ impl Diagnosis {
     }
 }
 
+/// A pack this big (mods in its folder)…
+const BIG_PACK_MODS: usize = 80;
+/// …with less memory than this hardly gets through the loader reading its mods.
+const BIG_PACK_LEAST_MB: u32 = 3 * 1024;
+
+/// `-Xmx1918M` (or `-Xmx2G`) in how Java was started → MB.
+pub fn max_memory_mb(java: &str) -> Option<u32> {
+    let flag = java
+        .split_whitespace()
+        .find_map(|w| w.strip_prefix("-Xmx"))?;
+    let (number, unit) = flag.split_at(flag.find(|c: char| !c.is_ascii_digit())?);
+    let n: u32 = number.parse().ok()?;
+    match unit.to_ascii_lowercase().as_str() {
+        "m" => Some(n),
+        "g" => n.checked_mul(1024),
+        _ => None,
+    }
+}
+
+/// A big pack that got too little memory (the computer has little to give): what to tell the
+/// player before it starts, or `None` when the memory is enough.
+pub fn memory_warning(given_mb: u32, mods: usize, total_mb: Option<u64>) -> Option<String> {
+    if mods < BIG_PACK_MODS || given_mb >= BIG_PACK_LEAST_MB {
+        return None;
+    }
+    let gb = |mb: u64| format!("{:.1} GB", mb as f64 / 1024.0);
+    let computer = total_mb.map_or_else(String::new, |t| format!(" (this computer has {})", gb(t)));
+    Some(format!(
+        "Minecraft can get only {}{computer}, and {mods} mods usually need 5 GB or more: it may not start. Fewer mods, or a computer with more memory, will.",
+        gb(u64::from(given_mb))
+    ))
+}
+
+/// A start that failed while the loader read a big pack with too little memory: classes of its
+/// own libraries "not found" are memory running out, not a damaged file.
+pub fn too_little_memory(given_mb: u32, mods: usize, total_mb: Option<u64>) -> Option<Diagnosis> {
+    memory_warning(given_mb, mods, total_mb)
+        .map(|detail| Diagnosis::new("Not enough memory for this many mods", detail, Vec::new()))
+}
+
 /// Most crashes print one of these; each is a regex and what it means.
 struct Rule {
     pattern: &'static str,
@@ -510,6 +550,27 @@ pub fn scrub(text: &str, own: &Own) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_big_pack_with_too_little_memory_is_told_so() {
+        assert_eq!(
+            max_memory_mb("Java x, flags: -Xms512M -Xmx1918M -XX:+UseG1GC"),
+            Some(1918)
+        );
+        assert_eq!(max_memory_mb("flags: -Xmx4G"), Some(4096));
+        assert_eq!(max_memory_mb("flags: -Xms512M"), None);
+        let d = too_little_memory(1918, 213, Some(3966)).unwrap();
+        assert_eq!(d.title, "Not enough memory for this many mods");
+        assert!(
+            d.detail.contains("1.9 GB")
+                && d.detail.contains("3.9 GB")
+                && d.detail.contains("213 mods")
+        );
+        assert!(!d.repair);
+        // Enough memory, or a small pack: nothing to say.
+        assert!(too_little_memory(6144, 213, Some(16384)).is_none());
+        assert!(too_little_memory(1918, 20, Some(3966)).is_none());
+    }
 
     fn title(text: &str) -> String {
         diagnose(text).map(|d| d.title).unwrap_or_default()

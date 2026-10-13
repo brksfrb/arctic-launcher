@@ -82,7 +82,7 @@ impl Run {
         self.log_rev += 1;
     }
 
-    fn push_log(&mut self, lines: impl IntoIterator<Item = LogLine>) {
+    pub fn push_log(&mut self, lines: impl IntoIterator<Item = LogLine>) {
         self.log_rev += 1;
         self.log.extend(lines);
         let excess = self.log.len().saturating_sub(LOG_LINES);
@@ -111,6 +111,25 @@ impl Run {
             written.as_deref(),
             self.java.as_deref(),
         )
+    }
+
+    /// Memory a big pack was started with, if it was too little for it: the warning to show.
+    pub fn memory_warning(&self) -> Option<String> {
+        let given = crash::max_memory_mb(self.java.as_deref()?)?;
+        let mods = arctic_core::launch::mod_count(&self.game_dir.join("mods"));
+        crash::memory_warning(given, mods, arctic_core::system::total_memory_mb())
+    }
+
+    /// A loader file "damaged" while a big pack had too little memory is the memory running out.
+    fn memory_instead(&self, d: Diagnosis) -> Diagnosis {
+        if !d.repair {
+            return d;
+        }
+        let given = self.java.as_deref().and_then(crash::max_memory_mb);
+        let mods = arctic_core::launch::mod_count(&self.game_dir.join("mods"));
+        given
+            .and_then(|g| crash::too_little_memory(g, mods, arctic_core::system::total_memory_mb()))
+            .unwrap_or(d)
     }
 
     /// Why the game crashed, from its log and the crash report it wrote.
@@ -346,7 +365,8 @@ impl ArcticApp {
                 let title = run.title.clone();
                 let diagnosis = matches!(code, Some(c) if c != 0 && !watchdog)
                     .then(|| run.diagnose())
-                    .flatten();
+                    .flatten()
+                    .map(|d| run.memory_instead(d));
                 if let Some(d) = &diagnosis {
                     run.push_log([LogLine {
                         level: Level::Error,

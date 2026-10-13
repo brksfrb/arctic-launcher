@@ -797,7 +797,8 @@ fn quick_play(
 }
 
 /// Mods that will load (`.jar` files in the mods folder; switched-off ones end in `.disabled`).
-fn mod_count(mods: &Path) -> usize {
+/// Jars in a mods folder.
+pub fn mod_count(mods: &Path) -> usize {
     std::fs::read_dir(mods).map_or(0, |entries| {
         entries
             .flatten()

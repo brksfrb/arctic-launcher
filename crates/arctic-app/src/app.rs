@@ -787,6 +787,18 @@ impl ArcticApp {
                     self.installed.insert(version);
                     if let Some(run) = self.runs.get_mut(id) {
                         run.java = Some(java);
+                        if let Some(warning) = run.memory_warning() {
+                            run.push_log([arctic_core::launch::logparse::LogLine {
+                                level: arctic_core::launch::logparse::Level::Warn,
+                                text: format!("──── Arctic: {warning} ────"),
+                            }]);
+                            let title = run.title.clone();
+                            self.toasts.push(
+                                Kind::Info,
+                                format!("{title}: not much memory"),
+                                warning,
+                            );
+                        }
                     }
                     game
                 });
