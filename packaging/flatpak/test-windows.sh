@@ -2,7 +2,13 @@
 set -euo pipefail
 results=${1:?test results directory}
 app=com.arcticlauncher.ArcticLauncher
-trap 'flatpak kill "$app" 2>/dev/null || true' EXIT
+capture_results() {
+  flatpak kill "$app" 2>/dev/null || true
+  if [ -n "${title_game_dir:-}" ] && [ -d "$title_game_dir/screenshots" ]; then
+    cp -a "$title_game_dir/screenshots" "$results/title-screenshots"
+  fi
+}
+trap capture_results EXIT
 pulseaudio --start --exit-idle-time=-1
 pactl load-module module-null-sink sink_name=ci
 

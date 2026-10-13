@@ -30,10 +30,12 @@ final class TitleCompatTest {
 			SelfTest.shot("title-compat-" + (expected.isEmpty() ? "plain" : expected));
 		});
 		if (expected.contains("modmenu")) {
-			visit(steps, "com.terraformersmc.modmenu.gui.widget.ModMenuButtonWidget", "com.terraformersmc.modmenu.gui.ModsScreen");
+			visit(steps, "com.terraformersmc.modmenu.gui.ModsScreen",
+					"com.terraformersmc.modmenu.gui.widget.ModMenuButtonWidget",
+					"com.terraformersmc.modmenu.gui.widget.SmallModMenuButtonWidget");
 		}
 		if (expected.contains("flashback")) {
-			visit(steps, "com.moulberry.flashback.screen.FlashbackButton", "com.moulberry.flashback.screen.select_replay.SelectReplayScreen");
+			visit(steps, "com.moulberry.flashback.screen.select_replay.SelectReplayScreen", "com.moulberry.flashback.screen.FlashbackButton");
 		}
 		steps.add(() -> {
 			// Exercise Arctic's own return-to-title path as well as Minecraft's setScreen path.
@@ -70,18 +72,18 @@ final class TitleCompatTest {
 		if (!right) throw new IllegalStateException("Unexpected title screen: " + screen);
 	}
 
-	private static void visit(List<Runnable> steps, String widgetType, String destination) {
+	private static void visit(List<Runnable> steps, String destination, String... widgetTypes) {
 		steps.add(() -> {
 			assertTitle(true);
 			for (Object child : Compat.screen().children()) {
-				if (child.getClass().getName().equals(widgetType) && child instanceof AbstractWidget) {
+				if (java.util.Arrays.asList(widgetTypes).contains(child.getClass().getName()) && child instanceof AbstractWidget) {
 					AbstractWidget button = (AbstractWidget) child;
-					if (!button.visible || !button.active) throw new IllegalStateException("Unavailable button: " + widgetType);
+					if (!button.visible || !button.active) throw new IllegalStateException("Unavailable button: " + child.getClass().getName());
 					Compat.click(Compat.screen(), button.getX() + button.getWidth() / 2.0, button.getY() + button.getHeight() / 2.0);
 					return;
 				}
 			}
-			throw new IllegalStateException("Missing button: " + widgetType);
+			throw new IllegalStateException("Missing button: " + java.util.Arrays.toString(widgetTypes));
 		});
 		steps.add(() -> {
 			if (Compat.screen() == null || !Compat.screen().getClass().getName().equals(destination)) {
