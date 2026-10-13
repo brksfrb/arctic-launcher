@@ -45,7 +45,9 @@ struct FolderDialog {
 }
 
 fn path_text(p: &Palette, path: &Path) -> RichText {
-    RichText::new(path.display().to_string()).monospace().color(p.text)
+    RichText::new(path.display().to_string())
+        .monospace()
+        .color(p.text)
 }
 
 fn note(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) {
@@ -61,9 +63,14 @@ impl ArcticApp {
             && let Ok(mode) = std::env::var("ARCTIC_DEVSHOT_STORAGE")
         {
             if mode == "dialog" && self.storage.dialog.is_none() && self.storage.source.is_none() {
-                self.tasks.storage_check(dirs_root.clone(), dirs_root.with_file_name("Arctic on D"));
+                self.tasks
+                    .storage_check(dirs_root.clone(), dirs_root.with_file_name("Arctic on D"));
             }
-            return self.storage.source.get_or_insert(RootSource::Default(dirs_root)).clone();
+            return self
+                .storage
+                .source
+                .get_or_insert(RootSource::Default(dirs_root))
+                .clone();
         }
         self.storage
             .source
@@ -76,14 +83,19 @@ impl ArcticApp {
     /// Settings → Storage.
     pub(crate) fn storage_section(&mut self, ui: &mut egui::Ui, p: &Palette) {
         let source = self.root_source();
-        note(ui, p, "Game files, Java, instances (worlds, mods, packs), accounts and settings are kept in:");
+        note(
+            ui,
+            p,
+            "Game files, Java, instances (worlds, mods, packs), accounts and settings are kept in:",
+        );
         ui.label(path_text(p, self.dirs.root()));
         ui.add_space(4.0);
         widgets::row(ui, |ui| {
             if widgets::button(ui, p, Some(Icon::Folder), "Open folder", false).clicked()
                 && let Err(e) = open::that_detached(self.dirs.root())
             {
-                self.toasts.push(Kind::Error, "Could not open folder", e.to_string());
+                self.toasts
+                    .push(Kind::Error, "Could not open folder", e.to_string());
             }
             let movable = source.movable();
             let change = ui.add_enabled_ui(movable, |ui| {
@@ -125,7 +137,11 @@ impl ArcticApp {
         }
         ui.add_space(18.0);
         ui.label(RichText::new("Where Arctic keeps its files").color(p.text));
-        note(ui, p, "Game files, Java and your worlds. Another drive has more room? Pick a folder there.");
+        note(
+            ui,
+            p,
+            "Game files, Java and your worlds. Another drive has more room? Pick a folder there.",
+        );
         ui.label(path_text(p, self.dirs.root()));
         ui.add_space(4.0);
         if widgets::button(ui, p, Some(Icon::Import), "Change folder…", false).clicked() {
@@ -137,7 +153,10 @@ impl ArcticApp {
         match event {
             StorageEvent::Checked(checked) => self.storage.dialog = Some(Dialog::Check(checked)),
             StorageEvent::Progress(done, total) => {
-                if let Some(Dialog::Moving { done: d, total: t, .. }) = &mut self.storage.dialog {
+                if let Some(Dialog::Moving {
+                    done: d, total: t, ..
+                }) = &mut self.storage.dialog
+                {
                     (*d, *t) = (done, total);
                 }
             }
@@ -147,7 +166,12 @@ impl ArcticApp {
             }
             StorageEvent::Moved(Err(e)) => self.storage.dialog = Some(Dialog::Failed(e)),
             StorageEvent::InstancePicked(id, folder, empty) => {
-                self.storage.folder = Some(FolderDialog { id, folder: Some(folder), empty, busy: false });
+                self.storage.folder = Some(FolderDialog {
+                    id,
+                    folder: Some(folder),
+                    empty,
+                    busy: false,
+                });
             }
             StorageEvent::InstanceMoved(id, result) => {
                 self.storage.folder = None;
@@ -156,7 +180,9 @@ impl ArcticApp {
                         self.update_instance(&id, |i| *i = updated);
                         self.toasts.push(Kind::Success, "Game folder changed", "");
                     }
-                    Err(e) => self.toasts.push(Kind::Error, "Couldn't change the game folder", e),
+                    Err(e) => self
+                        .toasts
+                        .push(Kind::Error, "Couldn't change the game folder", e),
                 }
             }
         }
@@ -173,33 +199,43 @@ impl ArcticApp {
         let from = self.dirs.root().to_path_buf();
         let game_running = self.runs.any_active();
         let mut next: Option<Option<Dialog>> = None;
-        let modal = Modal::new(Id::new("storage_dialog")).frame(dialog_frame(p)).show(ctx, |ui| {
-            ui.set_width(DIALOG_WIDTH);
-            match &dialog {
-                Dialog::Check(c) => next = self.check_view(ui, p, c, &from, game_running),
-                Dialog::Moving { to, done, total } => {
-                    title(ui, p, "Moving Arctic's files…");
-                    ui.label(path_text(p, to));
-                    ui.add_space(8.0);
-                    let fraction = if *total == 0 { 0.0 } else { *done as f32 / *total as f32 };
-                    ui.add(egui::ProgressBar::new(fraction).text(format!(
-                        "{} of {}",
-                        format_bytes(*done),
-                        format_bytes(*total)
-                    )));
-                    note(ui, p, "Arctic restarts when it's done.");
-                }
-                Dialog::Failed(e) => {
-                    title(ui, p, "The files couldn't be moved");
-                    ui.label(RichText::new(e).color(p.error));
-                    note(ui, p, format!("Nothing changed: Arctic still uses {}.", from.display()));
-                    ui.add_space(8.0);
-                    if widgets::button(ui, p, None, "OK", true).clicked() {
-                        next = Some(None);
+        let modal = Modal::new(Id::new("storage_dialog"))
+            .frame(dialog_frame(p))
+            .show(ctx, |ui| {
+                ui.set_width(DIALOG_WIDTH);
+                match &dialog {
+                    Dialog::Check(c) => next = self.check_view(ui, p, c, &from, game_running),
+                    Dialog::Moving { to, done, total } => {
+                        title(ui, p, "Moving Arctic's files…");
+                        ui.label(path_text(p, to));
+                        ui.add_space(8.0);
+                        let fraction = if *total == 0 {
+                            0.0
+                        } else {
+                            *done as f32 / *total as f32
+                        };
+                        ui.add(egui::ProgressBar::new(fraction).text(format!(
+                            "{} of {}",
+                            format_bytes(*done),
+                            format_bytes(*total)
+                        )));
+                        note(ui, p, "Arctic restarts when it's done.");
+                    }
+                    Dialog::Failed(e) => {
+                        title(ui, p, "The files couldn't be moved");
+                        ui.label(RichText::new(e).color(p.error));
+                        note(
+                            ui,
+                            p,
+                            format!("Nothing changed: Arctic still uses {}.", from.display()),
+                        );
+                        ui.add_space(8.0);
+                        if widgets::button(ui, p, None, "OK", true).clicked() {
+                            next = Some(None);
+                        }
                     }
                 }
-            }
-        });
+            });
         if modal.should_close() && !moving {
             next = Some(None);
         }
@@ -244,11 +280,22 @@ impl ArcticApp {
                 Target::ArcticData => {
                     title(ui, p, "This folder already has Arctic's files");
                     ui.label(path_text(p, &c.to));
-                    note(ui, p, format!("Use them as they are? Your current files stay in {}.", from.display()));
+                    note(
+                        ui,
+                        p,
+                        format!(
+                            "Use them as they are? Your current files stay in {}.",
+                            from.display()
+                        ),
+                    );
                 }
                 Target::Other => {
                     title(ui, p, "This folder has other things in it");
-                    note(ui, p, "Arctic can keep its files in a folder of its own inside it:");
+                    note(
+                        ui,
+                        p,
+                        "Arctic can keep its files in a folder of its own inside it:",
+                    );
                     ui.label(path_text(p, &c.to.join(OWN_FOLDER)));
                 }
             }
@@ -263,8 +310,13 @@ impl ArcticApp {
                     if go.inner.clicked()
                         && let Some(default) = default.clone()
                     {
-                        self.tasks.storage_move(default, from.to_path_buf(), c.to.clone());
-                        next = Some(Some(Dialog::Moving { to: c.to.clone(), done: 0, total: c.size }));
+                        self.tasks
+                            .storage_move(default, from.to_path_buf(), c.to.clone());
+                        next = Some(Some(Dialog::Moving {
+                            to: c.to.clone(),
+                            done: 0,
+                            total: c.size,
+                        }));
                     }
                 }
                 (false, Target::ArcticData) => {
@@ -282,7 +334,8 @@ impl ArcticApp {
                 }
                 (false, Target::Other) => {
                     if widgets::button(ui, p, None, "Use that folder", true).clicked() {
-                        self.tasks.storage_check(from.to_path_buf(), c.to.join(OWN_FOLDER));
+                        self.tasks
+                            .storage_check(from.to_path_buf(), c.to.join(OWN_FOLDER));
                         next = Some(None);
                     }
                 }

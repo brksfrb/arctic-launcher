@@ -257,7 +257,10 @@ fn edit(ctx: &Ctx, args: &InstanceEditArgs) -> Result<()> {
         i.shaders = on.on();
     }
     if let Some(dir) = &args.game_dir {
-        let folder = (dir != "default").then(|| std::path::absolute(dir)).transpose().map_err(|e| Error::Other(e.to_string()))?;
+        let folder = (dir != "default")
+            .then(|| std::path::absolute(dir))
+            .transpose()
+            .map_err(|e| Error::Other(e.to_string()))?;
         let change = if args.keep_files {
             instances::FolderChange::UseAsIs
         } else {

@@ -50,13 +50,22 @@ unsafe impl GlobalAlloc for Counting {
 /// The process as the system sees it: (in RAM, committed), in MB.
 #[cfg(windows)]
 pub fn process() -> Option<(f64, f64)> {
-    use windows_sys::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS_EX};
+    use windows_sys::Win32::System::ProcessStatus::{
+        K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS_EX,
+    };
     use windows_sys::Win32::System::Threading::GetCurrentProcess;
     let mut counters: PROCESS_MEMORY_COUNTERS_EX = unsafe { std::mem::zeroed() };
     counters.cb = std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32;
     // SAFETY: the process's own pseudo-handle and a correctly sized struct.
-    let ok = unsafe { K32GetProcessMemoryInfo(GetCurrentProcess(), (&raw mut counters).cast(), counters.cb) };
-    (ok != 0).then(|| (counters.WorkingSetSize as f64 / MB, counters.PrivateUsage as f64 / MB))
+    let ok = unsafe {
+        K32GetProcessMemoryInfo(GetCurrentProcess(), (&raw mut counters).cast(), counters.cb)
+    };
+    (ok != 0).then(|| {
+        (
+            counters.WorkingSetSize as f64 / MB,
+            counters.PrivateUsage as f64 / MB,
+        )
+    })
 }
 
 #[cfg(not(windows))]
@@ -83,13 +92,20 @@ pub fn report(ctx: &egui::Context) -> String {
         "image caches: file bytes {:.1} MB, decoded {:.1} MB, textures {:.1} MB\n",
         sum(loaders.bytes.lock().iter().map(|l| l.byte_size()).collect()),
         sum(loaders.image.lock().iter().map(|l| l.byte_size()).collect()),
-        sum(loaders.texture.lock().iter().map(|l| l.byte_size()).collect()),
+        sum(loaders
+            .texture
+            .lock()
+            .iter()
+            .map(|l| l.byte_size())
+            .collect()),
     );
     // Animation frames (`name#3`) counted together.
     let mut grouped = std::collections::BTreeMap::<String, usize>::new();
     for (_, meta) in ctx.tex_manager().read().allocated() {
         let name = meta.name.split('#').next().unwrap_or_default();
-        *grouped.entry(format!("{name} {}x{}", meta.size[0], meta.size[1])).or_default() += meta.bytes_used();
+        *grouped
+            .entry(format!("{name} {}x{}", meta.size[0], meta.size[1]))
+            .or_default() += meta.bytes_used();
     }
     let mut textures: Vec<(String, usize)> = grouped.into_iter().collect();
     textures.sort_by_key(|t| std::cmp::Reverse(t.1));

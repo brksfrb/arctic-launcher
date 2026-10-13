@@ -448,7 +448,9 @@ impl ArcticApp {
     /// [`STILL`] is its first frame only.
     pub(crate) fn skin_texture(&mut self, ctx: &egui::Context, key: &str) -> Option<&SkinTexture> {
         if is_cape(key) {
-            self.skins.used.insert(key.to_owned(), std::time::Instant::now());
+            self.skins
+                .used
+                .insert(key.to_owned(), std::time::Instant::now());
         }
         if key == MANNEQUIN && !self.skins.textures.contains_key(key) {
             self.skins.textures.insert(key.to_owned(), mannequin(ctx));
@@ -470,7 +472,9 @@ impl ArcticApp {
             let png = self.skin_png(full_key(key))?;
             // Capes can be huge stacks of frames: decoded in the background.
             if is_cape(key) {
-                self.skins.decoder.request(ctx, key, png, CAPE_WIDTH, key.ends_with(STILL));
+                self.skins
+                    .decoder
+                    .request(ctx, key, png, CAPE_WIDTH, key.ends_with(STILL));
                 return None;
             }
             let Some(mut texture) = upload(ctx, key, &png) else {

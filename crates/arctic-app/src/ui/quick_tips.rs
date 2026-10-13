@@ -22,32 +22,95 @@ const MENU_ROOM: f32 = 4.0;
 /// A tip and where clicking it goes (`None`: it's in game, nothing to open).
 const TIPS: &[(&str, Option<Tab>)] = &[
     ("Drag servers to put your favorites first.", Some(Tab::Play)),
-    ("Discover servers finds new places to play.", Some(Tab::Play)),
+    (
+        "Discover servers finds new places to play.",
+        Some(Tab::Play),
+    ),
     ("Right Shift in game moves or hides any HUD widget.", None),
     ("Controllers work in game on every version.", None),
-    ("Tier Tags show PvP tiers by names (Right Shift in game).", None),
+    (
+        "Tier Tags show PvP tiers by names (Right Shift in game).",
+        None,
+    ),
     ("Capes, wings, pets and emotes are free.", Some(Tab::Skins)),
-    ("Glasses off your eyes? Nudge face items in Cosmetics.", Some(Tab::Skins)),
-    ("Shoulder pets can sit on either shoulder.", Some(Tab::Skins)),
-    ("Play together without a server: share an invite code.", Some(Tab::Together)),
-    ("Friends see where you play and join in one click.", Some(Tab::Together)),
-    ("Replays record in the background; save the moment.", Some(Tab::Instances)),
-    ("All your screenshots, every instance, one place.", Some(Tab::Screenshots)),
-    ("Modrinth modpacks install as their own instance.", Some(Tab::Instances)),
-    ("Mods that would stop the game get fixed before it starts.", Some(Tab::Instances)),
-    ("An instance can keep its worlds on any drive.", Some(Tab::Instances)),
-    ("Shaders: turn on Iris in an instance's settings.", Some(Tab::Instances)),
-    ("Short on space? Move Arctic in Settings → Storage.", Some(Tab::Settings)),
-    ("Bring instances and HUDs from other launchers.", Some(Tab::Settings)),
+    (
+        "Glasses off your eyes? Nudge face items in Cosmetics.",
+        Some(Tab::Skins),
+    ),
+    (
+        "Shoulder pets can sit on either shoulder.",
+        Some(Tab::Skins),
+    ),
+    (
+        "Play together without a server: share an invite code.",
+        Some(Tab::Together),
+    ),
+    (
+        "Friends see where you play and join in one click.",
+        Some(Tab::Together),
+    ),
+    (
+        "Replays record in the background; save the moment.",
+        Some(Tab::Instances),
+    ),
+    (
+        "All your screenshots, every instance, one place.",
+        Some(Tab::Screenshots),
+    ),
+    (
+        "Modrinth modpacks install as their own instance.",
+        Some(Tab::Instances),
+    ),
+    (
+        "Mods that would stop the game get fixed before it starts.",
+        Some(Tab::Instances),
+    ),
+    (
+        "An instance can keep its worlds on any drive.",
+        Some(Tab::Instances),
+    ),
+    (
+        "Shaders: turn on Iris in an instance's settings.",
+        Some(Tab::Instances),
+    ),
+    (
+        "Short on space? Move Arctic in Settings → Storage.",
+        Some(Tab::Settings),
+    ),
+    (
+        "Bring instances and HUDs from other launchers.",
+        Some(Tab::Settings),
+    ),
     ("Share your setup or a HUD as a code.", Some(Tab::Settings)),
-    ("Try the Glass theme in Settings → Appearance.", Some(Tab::Settings)),
-    ("One switch adds Sodium and friends for more FPS.", Some(Tab::Settings)),
-    ("Voice chat works in shared worlds and SVC servers.", Some(Tab::Settings)),
-    ("Animated capes too busy? Freeze them in Settings.", Some(Tab::Settings)),
-    ("Crashes are explained, and fixed where Arctic can.", Some(Tab::Logs)),
+    (
+        "Try the Glass theme in Settings → Appearance.",
+        Some(Tab::Settings),
+    ),
+    (
+        "One switch adds Sodium and friends for more FPS.",
+        Some(Tab::Settings),
+    ),
+    (
+        "Voice chat works in shared worlds and SVC servers.",
+        Some(Tab::Settings),
+    ),
+    (
+        "Animated capes too busy? Freeze them in Settings.",
+        Some(Tab::Settings),
+    ),
+    (
+        "Crashes are explained, and fixed where Arctic can.",
+        Some(Tab::Logs),
+    ),
     ("Every game's log is kept in Logs.", Some(Tab::Logs)),
-    ("Profiles keep accounts and instances apart (top left).", None),
-    ("Auto Reconnect brings you back when a server drops you.", None),
+    (
+        "Profiles keep accounts and instances apart (top left).",
+        None,
+    ),
+    (
+        "Auto Reconnect brings you back when a server drops you.",
+        None,
+    ),
     ("Waypoints and a minimap come with the Arctic Client.", None),
     ("The arctic command does it all too: arctic --help.", None),
 ];
@@ -120,7 +183,10 @@ impl ArcticApp {
         icons::draw(
             ui.painter(),
             Icon::StarFilled,
-            egui::Rect::from_center_size(egui::pos2(rect.left() + PAD + 6.0, label_y), vec2(12.0, 12.0)),
+            egui::Rect::from_center_size(
+                egui::pos2(rect.left() + PAD + 6.0, label_y),
+                vec2(12.0, 12.0),
+            ),
             p.accent,
         );
         ui.painter().text(
@@ -131,7 +197,10 @@ impl ArcticApp {
             p.accent,
         );
         // Another tip, right away.
-        let next = egui::Rect::from_center_size(egui::pos2(rect.right() - PAD - 4.0, label_y), vec2(18.0, 18.0));
+        let next = egui::Rect::from_center_size(
+            egui::pos2(rect.right() - PAD - 4.0, label_y),
+            vec2(18.0, 18.0),
+        );
         let next_response = ui
             .interact(next, ui.id().with("quick_tip_next"), Sense::click())
             .on_hover_cursor(CursorIcon::PointingHand)
@@ -140,7 +209,11 @@ impl ArcticApp {
             ui.painter(),
             Icon::ChevronDown,
             next.shrink(3.0),
-            if next_response.hovered() { p.text } else { p.muted },
+            if next_response.hovered() {
+                p.text
+            } else {
+                p.muted
+            },
         );
         let text_color = if hovered { p.text } else { p.muted };
         ui.painter().galley(
@@ -189,18 +262,27 @@ impl ArcticApp {
         }
         let (rect, response) = ui.allocate_exact_size(vec2(width, height), Sense::click());
         let hovered = response.hovered();
-        ui.painter()
-            .rect_filled(rect, 8.0, p.text.gamma_multiply(if hovered { 0.08 } else { 0.04 }));
+        ui.painter().rect_filled(
+            rect,
+            8.0,
+            p.text.gamma_multiply(if hovered { 0.08 } else { 0.04 }),
+        );
         let first_row = rect.top() + SHORT_PAD + TEXT_SIZE * 0.65;
         icons::draw(
             ui.painter(),
             Icon::StarFilled,
-            egui::Rect::from_center_size(egui::pos2(rect.left() + SHORT_PAD + 6.0, first_row), vec2(12.0, 12.0)),
+            egui::Rect::from_center_size(
+                egui::pos2(rect.left() + SHORT_PAD + 6.0, first_row),
+                vec2(12.0, 12.0),
+            ),
             p.accent,
         );
         let color = if hovered { p.text } else { p.muted };
-        ui.painter()
-            .galley(egui::pos2(rect.left() + text_left, rect.top() + SHORT_PAD), galley, color);
+        ui.painter().galley(
+            egui::pos2(rect.left() + text_left, rect.top() + SHORT_PAD),
+            galley,
+            color,
+        );
         let response = response.on_hover_text(format!("Quick tip: {text}"));
         let response = match target {
             Some(_) => response.on_hover_cursor(CursorIcon::PointingHand),

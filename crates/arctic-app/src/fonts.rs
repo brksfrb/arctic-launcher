@@ -10,7 +10,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use eframe::egui::{self, FontData, FontFamily};
 use eframe::epaint::text::{FontInsert, FontPriority, InsertFontFamily};
 
-
 /// The font family for headings (semibold); plain text uses Proportional.
 pub const HEADING: &str = "heading";
 
@@ -158,7 +157,10 @@ impl Script {
         if cfg!(windows) {
             match self {
                 Self::Han => &[(r"C:\Windows\Fonts\msyh.ttc", 0)], // Microsoft YaHei
-                Self::Kana => &[(r"C:\Windows\Fonts\YuGothM.ttc", 0), (r"C:\Windows\Fonts\msgothic.ttc", 0)],
+                Self::Kana => &[
+                    (r"C:\Windows\Fonts\YuGothM.ttc", 0),
+                    (r"C:\Windows\Fonts\msgothic.ttc", 0),
+                ],
                 Self::Hangul => &[(r"C:\Windows\Fonts\malgun.ttf", 0)], // Malgun Gothic
                 Self::Indic => &[(r"C:\Windows\Fonts\Nirmala.ttc", 0)],
             }
@@ -167,12 +169,18 @@ impl Script {
             const CJK: &[(&str, u32)] = &[
                 ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
                 ("/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc", 0),
-                ("/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc", 0),
+                (
+                    "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+                    0,
+                ),
                 ("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", 0),
                 ("/System/Library/Fonts/PingFang.ttc", 0),
             ];
             match self {
-                Self::Indic => &[("/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf", 0)],
+                Self::Indic => &[(
+                    "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
+                    0,
+                )],
                 _ => CJK,
             }
         }
@@ -219,7 +227,9 @@ pub fn ensure_for(ctx: &egui::Context, text: &str) {
 
 fn add_fallback(ctx: &egui::Context, script: Script) {
     for &(path, index) in script.fonts() {
-        let mut loaded = LOADED.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut loaded = LOADED
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if loaded.contains(&path) {
             return;
         }
@@ -237,7 +247,11 @@ fn add_fallback(ctx: &egui::Context, script: Script) {
                 priority: FontPriority::Lowest,
             })
             .collect();
-        ctx.add_font(FontInsert::new(&format!("fallback-{script:?}"), data, families));
+        ctx.add_font(FontInsert::new(
+            &format!("fallback-{script:?}"),
+            data,
+            families,
+        ));
         return;
     }
 }

@@ -726,7 +726,13 @@ impl ArcticApp {
     /// still picture meanwhile, until the animation has loaded). An animated preset's own still
     /// image (`still`, a single frame) is used when it has one, so the frame stack is only
     /// decoded for the cape being pointed at.
-    fn cape_card_texture(&mut self, ctx: &egui::Context, key: &str, still: Option<&str>, now: f64) -> Option<egui::TextureId> {
+    fn cape_card_texture(
+        &mut self,
+        ctx: &egui::Context,
+        key: &str,
+        still: Option<&str>,
+        now: f64,
+    ) -> Option<egui::TextureId> {
         if self.skins.animating.as_deref() == Some(key)
             && let Some(t) = self.skin_texture(ctx, key)
         {

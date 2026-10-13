@@ -91,11 +91,13 @@ fn all_game_dirs(dirs: &crate::storage::DataDirs) -> Vec<PathBuf> {
         .flat_map(|entries| entries.flatten())
         .map(|instance| {
             // A game folder the player picked elsewhere, or the one inside the instance.
-            crate::storage::load_json::<crate::instances::Instance>(&instance.path().join("instance.json"))
-                .ok()
-                .flatten()
-                .and_then(|i| i.game_folder)
-                .unwrap_or_else(|| instance.path().join("minecraft"))
+            crate::storage::load_json::<crate::instances::Instance>(
+                &instance.path().join("instance.json"),
+            )
+            .ok()
+            .flatten()
+            .and_then(|i| i.game_folder)
+            .unwrap_or_else(|| instance.path().join("minecraft"))
         })
         .collect()
 }

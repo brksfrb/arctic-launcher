@@ -34,14 +34,21 @@ fn show(ctx: &Ctx) -> Result<i32> {
         RootSource::Env(_) => ("ARCTIC_DATA_DIR or --data-dir", None),
         RootSource::Portable(_) => ("portable mode (portable.txt next to the launcher)", None),
         RootSource::Chosen(_) => ("picked in Settings → Storage", None),
-        RootSource::ChosenMissing { chosen, .. } => ("the usual folder, because the picked one isn't there", Some(chosen)),
+        RootSource::ChosenMissing { chosen, .. } => (
+            "the usual folder, because the picked one isn't there",
+            Some(chosen),
+        ),
         RootSource::Default(_) => ("the usual folder", None),
     };
     let root = source.root();
     ctx.out.emit(
         json!({"path": root, "how": how, "missing": extra}),
         || match extra {
-            Some(missing) => format!("{}\n  {how}: {} isn't available", root.display(), missing.display()),
+            Some(missing) => format!(
+                "{}\n  {how}: {} isn't available",
+                root.display(),
+                missing.display()
+            ),
             None => format!("{}\n  {how}", root.display()),
         },
     );
@@ -62,7 +69,8 @@ fn movable(ctx: &Ctx) -> Result<(PathBuf, PathBuf)> {
     let source = source(ctx)?;
     if !source.movable() {
         return Err(Error::Other(
-            "the folder is set by ARCTIC_DATA_DIR/--data-dir or portable mode; change that instead".into(),
+            "the folder is set by ARCTIC_DATA_DIR/--data-dir or portable mode; change that instead"
+                .into(),
         ));
     }
     Ok((location::default_root()?, source.root().to_path_buf()))
@@ -70,7 +78,11 @@ fn movable(ctx: &Ctx) -> Result<(PathBuf, PathBuf)> {
 
 fn move_to(ctx: &Ctx, folder: &str) -> Result<i32> {
     let (default, from) = movable(ctx)?;
-    let to = if folder == "default" { default.clone() } else { absolute(folder)? };
+    let to = if folder == "default" {
+        default.clone()
+    } else {
+        absolute(folder)?
+    };
     if let Some(why) = location::check_move(&from, &to) {
         return Err(Error::Other(why));
     }

@@ -47,7 +47,10 @@ impl RootSource {
 
     /// The player can move it from the launcher (not with the env var or portable mode).
     pub fn movable(&self) -> bool {
-        matches!(self, Self::Chosen(_) | Self::Default(_) | Self::ChosenMissing { .. })
+        matches!(
+            self,
+            Self::Chosen(_) | Self::Default(_) | Self::ChosenMissing { .. }
+        )
     }
 }
 
@@ -71,7 +74,10 @@ pub(super) fn from_choice(default: PathBuf) -> RootSource {
     match chosen(&default) {
         Some(path) if path == default => RootSource::Default(default),
         Some(path) if path.is_dir() => RootSource::Chosen(path),
-        Some(path) => RootSource::ChosenMissing { chosen: path, using: default },
+        Some(path) => RootSource::ChosenMissing {
+            chosen: path,
+            using: default,
+        },
         None => RootSource::Default(default),
     }
 }
@@ -143,7 +149,10 @@ fn normal(path: &Path) -> PathBuf {
     let mut at = path.to_path_buf();
     loop {
         if let Ok(real) = fs::canonicalize(&at) {
-            return missing.into_iter().rev().fold(real, |p: PathBuf, part| p.join(part));
+            return missing
+                .into_iter()
+                .rev()
+                .fold(real, |p: PathBuf, part| p.join(part));
         }
         match (at.file_name().map(ToOwned::to_owned), at.parent()) {
             (Some(name), Some(parent)) => {
@@ -187,12 +196,19 @@ fn tree_size(path: &Path) -> u64 {
 /// Copy the data in `from` to the empty folder `to`, then make `to` the data folder. `progress`
 /// gets (bytes copied, bytes in all). The old folder is removed on the next start
 /// ([`finish_move`]); until the launcher restarts it keeps using `from`.
-pub fn move_data(default: &Path, from: &Path, to: &Path, progress: &dyn Fn(u64, u64)) -> Result<()> {
+pub fn move_data(
+    default: &Path,
+    from: &Path,
+    to: &Path,
+    progress: &dyn Fn(u64, u64),
+) -> Result<()> {
     if let Some(why) = check_move(from, to) {
         return Err(Error::Other(why));
     }
     if inspect(to) != Target::Empty {
-        return Err(Error::Other("Pick an empty folder (or make a new one).".into()));
+        return Err(Error::Other(
+            "Pick an empty folder (or make a new one).".into(),
+        ));
     }
     let existed = to.exists();
     fs::create_dir_all(to).at(to)?;
@@ -225,12 +241,24 @@ pub(crate) fn copy_dir(from: &Path, to: &Path, progress: &dyn Fn(u64, u64)) -> R
     copy_tree(from, to, &mut done, total, progress)
 }
 
-fn copy_tree(from: &Path, to: &Path, done: &mut u64, total: u64, progress: &dyn Fn(u64, u64)) -> Result<()> {
+fn copy_tree(
+    from: &Path,
+    to: &Path,
+    done: &mut u64,
+    total: u64,
+    progress: &dyn Fn(u64, u64),
+) -> Result<()> {
     let meta = fs::symlink_metadata(from).at(from)?;
     if meta.is_dir() {
         fs::create_dir_all(to).at(to)?;
         for entry in fs::read_dir(from).at(from)?.flatten() {
-            copy_tree(&entry.path(), &to.join(entry.file_name()), done, total, progress)?;
+            copy_tree(
+                &entry.path(),
+                &to.join(entry.file_name()),
+                done,
+                total,
+                progress,
+            )?;
         }
         return Ok(());
     }
@@ -249,7 +277,9 @@ fn copy_tree(from: &Path, to: &Path, done: &mut u64, total: u64, progress: &dyn 
 /// Use the Arctic files already in `to` as they are (nothing copied, nothing removed).
 pub fn adopt(default: &Path, to: &Path) -> Result<()> {
     if inspect(to) != Target::ArcticData {
-        return Err(Error::Other("That folder doesn't hold Arctic's files.".into()));
+        return Err(Error::Other(
+            "That folder doesn't hold Arctic's files.".into(),
+        ));
     }
     set_chosen(default, to)
 }
@@ -262,19 +292,31 @@ pub fn finish_move(root: &Path) -> Option<PathBuf> {
     let old = PathBuf::from(fs::read_to_string(&note).ok()?.trim());
     let (old_c, root_c) = (normal(&old), normal(root));
     let looks_like_data = old.join("profiles.json").is_file() || old.join("shared").is_dir();
-    if !old.is_absolute() || old_c == root_c || old_c.starts_with(&root_c) || root_c.starts_with(&old_c) || !looks_like_data {
+    if !old.is_absolute()
+        || old_c == root_c
+        || old_c.starts_with(&root_c)
+        || root_c.starts_with(&old_c)
+        || !looks_like_data
+    {
         log::warn!("not removing the old data folder {}", old.display());
         let _ = fs::remove_file(&note);
         return None;
     }
     for attempt in 1..=CLEANUP_TRIES {
         let mut left = 0;
-        for entry in fs::read_dir(&old).map(|e| e.flatten().collect::<Vec<_>>()).unwrap_or_default() {
+        for entry in fs::read_dir(&old)
+            .map(|e| e.flatten().collect::<Vec<_>>())
+            .unwrap_or_default()
+        {
             if entry.file_name() == LOCATION_FILE {
                 continue;
             }
             let path = entry.path();
-            let gone = if path.is_dir() { fs::remove_dir_all(&path) } else { fs::remove_file(&path) };
+            let gone = if path.is_dir() {
+                fs::remove_dir_all(&path)
+            } else {
+                fs::remove_file(&path)
+            };
             if gone.is_err() {
                 left += 1;
             }
@@ -290,7 +332,10 @@ pub fn finish_move(root: &Path) -> Option<PathBuf> {
             std::thread::sleep(CLEANUP_PAUSE);
         }
     }
-    log::warn!("couldn't remove all of the old data folder {}: trying again next start", old.display());
+    log::warn!(
+        "couldn't remove all of the old data folder {}: trying again next start",
+        old.display()
+    );
     None
 }
 
@@ -301,8 +346,13 @@ mod tests {
     fn data(dir: &Path) {
         fs::create_dir_all(dir.join("shared/libraries/a")).unwrap();
         fs::write(dir.join("shared/libraries/a/lib.jar"), b"jar").unwrap();
-        fs::create_dir_all(dir.join("profiles/default/instances/vanilla/minecraft/saves/W")).unwrap();
-        fs::write(dir.join("profiles/default/instances/vanilla/minecraft/saves/W/level.dat"), b"world").unwrap();
+        fs::create_dir_all(dir.join("profiles/default/instances/vanilla/minecraft/saves/W"))
+            .unwrap();
+        fs::write(
+            dir.join("profiles/default/instances/vanilla/minecraft/saves/W/level.dat"),
+            b"world",
+        )
+        .unwrap();
         fs::write(dir.join("profiles.json"), b"{}").unwrap();
         fs::create_dir_all(dir.join("cache")).unwrap();
         fs::write(dir.join("cache/big.zip"), b"cache").unwrap();
@@ -321,7 +371,10 @@ mod tests {
         })
         .unwrap();
         assert_eq!(seen.get(), size_to_move(&default));
-        assert!(to.join("profiles/default/instances/vanilla/minecraft/saves/W/level.dat").is_file());
+        assert!(
+            to.join("profiles/default/instances/vanilla/minecraft/saves/W/level.dat")
+                .is_file()
+        );
         assert!(to.join("shared/libraries/a/lib.jar").is_file());
         assert!(!to.join("cache").exists());
         assert_eq!(from_choice(default.clone()), RootSource::Chosen(to.clone()));
@@ -341,7 +394,10 @@ mod tests {
         set_chosen(&default, &picked).unwrap();
         assert_eq!(inspect(&default), Target::Empty, "only location.txt there");
         move_data(&default, &picked, &default, &|_, _| {}).unwrap();
-        assert_eq!(from_choice(default.clone()), RootSource::Default(default.clone()));
+        assert_eq!(
+            from_choice(default.clone()),
+            RootSource::Default(default.clone())
+        );
         assert_eq!(finish_move(&default), Some(picked.clone()));
         assert!(!picked.exists());
     }
@@ -359,7 +415,10 @@ mod tests {
         fs::write(busy.join("photo.png"), b"x").unwrap();
         assert_eq!(inspect(&busy), Target::Other);
         assert!(move_data(&from, &from, &busy, &|_, _| {}).is_err());
-        assert!(busy.join("photo.png").is_file(), "nothing of theirs touched");
+        assert!(
+            busy.join("photo.png").is_file(),
+            "nothing of theirs touched"
+        );
     }
 
     #[test]
@@ -370,7 +429,10 @@ mod tests {
         set_chosen(&default, &gone).unwrap();
         assert_eq!(
             from_choice(default.clone()),
-            RootSource::ChosenMissing { chosen: gone, using: default }
+            RootSource::ChosenMissing {
+                chosen: gone,
+                using: default
+            }
         );
     }
 
@@ -394,7 +456,11 @@ mod tests {
         fs::create_dir_all(&root).unwrap();
         fs::create_dir_all(&stranger).unwrap();
         fs::write(stranger.join("thesis.docx"), b"x").unwrap();
-        fs::write(root.join(CLEANUP_FILE), stranger.to_string_lossy().as_bytes()).unwrap();
+        fs::write(
+            root.join(CLEANUP_FILE),
+            stranger.to_string_lossy().as_bytes(),
+        )
+        .unwrap();
         assert!(finish_move(&root).is_none());
         assert!(stranger.join("thesis.docx").is_file());
     }

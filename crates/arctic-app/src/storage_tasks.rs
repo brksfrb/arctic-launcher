@@ -73,7 +73,8 @@ impl Tasks {
                     t.send(Event::Storage(StorageEvent::Progress(done, total)));
                 }
             };
-            let result = location::move_data(&default, &from, &to, &progress).map_err(|e| e.to_string());
+            let result =
+                location::move_data(&default, &from, &to, &progress).map_err(|e| e.to_string());
             t.send(Event::Storage(StorageEvent::Moved(result)));
         });
     }
@@ -87,17 +88,30 @@ impl Tasks {
             t.note_if_picker_missing(&picked);
             if let Some(folder) = picked {
                 let empty = instances::folder_is_empty(&folder);
-                t.send(Event::Storage(StorageEvent::InstancePicked(id, folder, empty)));
+                t.send(Event::Storage(StorageEvent::InstancePicked(
+                    id, folder, empty,
+                )));
             }
         });
     }
 
     /// Switch an instance to `folder` (`None`: its own folder again).
-    pub fn instance_folder_set(&self, instance: Instance, folder: Option<PathBuf>, change: FolderChange) {
+    pub fn instance_folder_set(
+        &self,
+        instance: Instance,
+        folder: Option<PathBuf>,
+        change: FolderChange,
+    ) {
         self.run(move |t| {
             let id = instance.id.clone();
-            let result = instances::set_game_folder(t.dirs(), &instance, folder.as_deref(), change, &|_, _| {})
-                .map_err(|e| e.to_string());
+            let result = instances::set_game_folder(
+                t.dirs(),
+                &instance,
+                folder.as_deref(),
+                change,
+                &|_, _| {},
+            )
+            .map_err(|e| e.to_string());
             t.send(Event::Storage(StorageEvent::InstanceMoved(id, result)));
         });
     }

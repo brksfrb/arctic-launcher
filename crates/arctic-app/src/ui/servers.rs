@@ -420,14 +420,24 @@ impl ArcticApp {
 
     /// One row of the list; returns the space it takes. `index`: its place in the list, for
     /// picking it up (None: a copy that can't be, like the one being held).
-    fn server_row(&mut self, ui: &mut egui::Ui, server: &Server, index: Option<usize>) -> egui::Rect {
+    fn server_row(
+        &mut self,
+        ui: &mut egui::Ui,
+        server: &Server,
+        index: Option<usize>,
+    ) -> egui::Rect {
         let p = self.palette();
         let ping = self.servers.status.get(&server.address);
         let mut join = false;
         let row = crate::widgets::row(ui, |ui| {
             // Grip: a hint that the row can be picked up (anywhere on it).
             let (grip, _) = ui.allocate_exact_size(vec2(14.0, ICON), egui::Sense::hover());
-            let lit = index.is_some_and(|i| self.servers.row_rects.get(i).is_some_and(|r| ui.rect_contains_pointer(*r)));
+            let lit = index.is_some_and(|i| {
+                self.servers
+                    .row_rects
+                    .get(i)
+                    .is_some_and(|r| ui.rect_contains_pointer(*r))
+            });
             for dy in [-6.0, 0.0, 6.0] {
                 for dx in [-2.5, 2.5] {
                     ui.painter().circle_filled(
@@ -505,7 +515,11 @@ impl ArcticApp {
         if let Some(index) = index {
             // Over the row: only dragging (its buttons still take clicks).
             let hold = ui
-                .interact(rect, ui.id().with(("server_hold", index)), egui::Sense::drag())
+                .interact(
+                    rect,
+                    ui.id().with(("server_hold", index)),
+                    egui::Sense::drag(),
+                )
                 .on_hover_cursor(egui::CursorIcon::Grab);
             if hold.drag_started()
                 && self.servers.drag.is_none()

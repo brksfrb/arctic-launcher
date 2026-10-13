@@ -52,7 +52,14 @@ impl Decoder {
 
     /// Decode `png` in the background (once per key until it's finished), frames at most
     /// `max_width` wide; `still`: the first frame only.
-    pub fn request(&mut self, ctx: &egui::Context, key: &str, png: Vec<u8>, max_width: u32, still: bool) {
+    pub fn request(
+        &mut self,
+        ctx: &egui::Context,
+        key: &str,
+        png: Vec<u8>,
+        max_width: u32,
+        still: bool,
+    ) {
         if !self.pending.insert(key.to_owned()) {
             return;
         }
@@ -153,15 +160,28 @@ pub(super) fn cape_frames(png: &[u8], max_width: u32) -> Option<Vec<ColorImage>>
                 let start = i * frame_h as usize * row;
                 let bytes = &raw[start..start + frame_h as usize * row];
                 if w <= max_width {
-                    return ColorImage::from_rgba_unmultiplied([w as usize, frame_h as usize], bytes);
+                    return ColorImage::from_rgba_unmultiplied(
+                        [w as usize, frame_h as usize],
+                        bytes,
+                    );
                 }
                 let (sw, sh) = (max_width, (frame_h * max_width / w).max(1));
                 match image::RgbaImage::from_raw(w, frame_h, bytes.to_vec()) {
                     Some(frame) => {
-                        let small = image::imageops::resize(&frame, sw, sh, image::imageops::FilterType::Triangle);
-                        ColorImage::from_rgba_unmultiplied([sw as usize, sh as usize], small.as_raw())
+                        let small = image::imageops::resize(
+                            &frame,
+                            sw,
+                            sh,
+                            image::imageops::FilterType::Triangle,
+                        );
+                        ColorImage::from_rgba_unmultiplied(
+                            [sw as usize, sh as usize],
+                            small.as_raw(),
+                        )
                     }
-                    None => ColorImage::from_rgba_unmultiplied([w as usize, frame_h as usize], bytes),
+                    None => {
+                        ColorImage::from_rgba_unmultiplied([w as usize, frame_h as usize], bytes)
+                    }
                 }
             })
             .collect(),

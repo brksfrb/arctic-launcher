@@ -64,7 +64,9 @@ pub fn root_source() -> Result<RootSource> {
 
 /// A portable-mode marker sits in `exe_dir`.
 fn is_portable(exe_dir: &Path) -> bool {
-    PORTABLE_MARKERS.iter().any(|name| exe_dir.join(name).is_file())
+    PORTABLE_MARKERS
+        .iter()
+        .any(|name| exe_dir.join(name).is_file())
 }
 
 /// Resolved directory layout. Cheap to clone and pass around.

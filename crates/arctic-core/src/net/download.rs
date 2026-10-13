@@ -429,7 +429,10 @@ fn download_segmented(
             Ok(ChunkNews::Failed(e)) => break Err(Segmented::Failed(e)),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => hedge_stalled(&chunks, &tx),
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                break Err(Segmented::Failed(Error::Other(format!("download of {} stopped", job.url))));
+                break Err(Segmented::Failed(Error::Other(format!(
+                    "download of {} stopped",
+                    job.url
+                ))));
             }
         }
     };
@@ -466,7 +469,10 @@ fn hedge_stalled(chunks: &std::sync::Arc<Chunks>, tx: &std::sync::mpsc::Sender<C
             .ok()
             .and_then(|m| *m)
             .is_some_and(|at| at.elapsed() >= CHUNK_STALL);
-        if stalled && !chunk.done.load(Ordering::Relaxed) && !chunk.hedged.swap(true, Ordering::Relaxed) {
+        if stalled
+            && !chunk.done.load(Ordering::Relaxed)
+            && !chunk.hedged.swap(true, Ordering::Relaxed)
+        {
             log::info!("chunk {i} of {} stalled: fetching it again", chunks.job.url);
             let (chunks, tx) = (chunks.clone(), tx.clone());
             std::thread::spawn(move || fetch_once(&chunks, i, &tx, false));
@@ -496,7 +502,10 @@ fn fetch_chunk(chunks: &Chunks, i: usize, tx: &std::sync::mpsc::Sender<ChunkNews
                     let _ = tx.send(ChunkNews::Failed(e));
                     return false;
                 }
-                log::warn!("retrying chunk {i} of {} (attempt {attempt}): {e}", chunks.job.url);
+                log::warn!(
+                    "retrying chunk {i} of {} (attempt {attempt}): {e}",
+                    chunks.job.url
+                );
                 std::thread::sleep(RETRY_BACKOFF * attempt);
                 attempt += 1;
             }
@@ -829,7 +838,8 @@ mod tests {
                         }
                         if let Some(r) = line.to_ascii_lowercase().strip_prefix("range: bytes=") {
                             let (a, b) = r.trim().split_once('-').unwrap();
-                            range = Some((a.parse::<usize>().unwrap(), b.parse::<usize>().unwrap()));
+                            range =
+                                Some((a.parse::<usize>().unwrap(), b.parse::<usize>().unwrap()));
                         }
                     }
                     let Some((start, end)) = range else { return };
@@ -873,7 +883,11 @@ mod tests {
             &|_| {},
         )
         .unwrap();
-        assert!(started.elapsed() < Duration::from_secs(20), "took {:?}", started.elapsed());
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "took {:?}",
+            started.elapsed()
+        );
         assert_eq!(fs::read(&dest).unwrap(), data);
     }
 
