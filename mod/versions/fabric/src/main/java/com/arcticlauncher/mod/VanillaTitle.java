@@ -4,8 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.screens.TitleScreen;
-import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
-import org.spongepowered.asm.mixin.transformer.ClassInfo;
+import org.spongepowered.asm.mixin.transformer.meta.MixinMerged;
 
 /**
  * Whether Minecraft's own title screen stays instead of Arctic's: other mods put buttons and menus
@@ -16,8 +15,8 @@ import org.spongepowered.asm.mixin.transformer.ClassInfo;
 public final class VanillaTitle {
 	/** Mods whose title screen menu isn't a mixin of their own (drawn over it, or added through a loader of theirs). */
 	private static final String[] KNOWN = {"essential", "modmenu"};
-	/** Mixin configs that change the title screen without adding to it. */
-	private static final String[] IGNORED = {"arctic", "fabric-"};
+	/** Mixin owners that change the title screen without adding their own menus. */
+	private static final String[] IGNORED = {"com.arcticlauncher.", "net.fabricmc.fabric."};
 
 	private static Boolean keep;
 
@@ -34,7 +33,7 @@ public final class VanillaTitle {
 		return keep;
 	}
 
-	/** Mods (ids) and mixin configs that change the title screen, besides Arctic's own. */
+	/** Mods (ids) and applied mixins that change the title screen, besides Arctic's own. */
 	private static List<String> changedBy() {
 		List<String> by = new ArrayList<>();
 		for (String id : KNOWN) {
@@ -43,15 +42,12 @@ public final class VanillaTitle {
 			}
 		}
 		try {
-			// Mixins.getConfigs() is the pending queue: configs are removed as they're selected,
-			// before the first title screen. Read the mixins actually applied to the loaded class.
-			ClassInfo title = ClassInfo.fromCache(TitleScreen.class.getName());
-			if (title != null) {
-				for (IMixinInfo mixin : title.getAppliedMixins()) {
-					String name = mixin.getConfig().getName();
-					if (!ignored(name) && !by.contains(name)) {
-						by.add(name);
-					}
+			// Read the merged methods on the actual runtime class. The pending config queue
+			// is consumed at startup and Mixin's ClassInfo cache is not reliable from game code.
+			for (java.lang.reflect.Method method : TitleScreen.class.getDeclaredMethods()) {
+				MixinMerged merged = method.getAnnotation(MixinMerged.class);
+				if (merged != null && !ignored(merged.mixin()) && !by.contains(merged.mixin())) {
+					by.add(merged.mixin());
 				}
 			}
 		} catch (RuntimeException | LinkageError e) {

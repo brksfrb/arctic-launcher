@@ -36,6 +36,7 @@ title_game_dir=${3:?title compatibility game directory}
 modmenu_file=$(find "$title_game_dir/mods" -maxdepth 1 -type f -iname 'modmenu-*.jar' -printf '%f\n')
 flashback_file=$(find "$title_game_dir/mods" -maxdepth 1 -type f -iname 'flashback*.jar' -printf '%f\n')
 test -n "$modmenu_file" && test -n "$flashback_file"
+title_failed=false
 for variant in plain modmenu flashback both; do
   expected=""
   menu=off
@@ -49,9 +50,13 @@ for variant in plain modmenu flashback both; do
   flatpak run --command=arctic "$app" mods toggle "$flashback_file" --instance flatpak-title "$replay"
   flatpak run --command=arctic "$app" instances edit flatpak-title \
     --jvm-args="-Darctic.selftest=title-compat -Darctic.selftest.titleMods=$expected"
-  timeout 240 flatpak run --command=arctic "$app" --json launch --instance flatpak-title --offline FlatpakTest --memory 2G --wait > "$results/title-$variant.log" 2>&1
-  grep -F 'titlecompat: passed' "$results/title-$variant.log"
-  if grep -F 'titlecompat: FAILED' "$results/title-$variant.log"; then exit 1; fi
+  if ! timeout 240 flatpak run --command=arctic "$app" --json launch --instance flatpak-title --offline FlatpakTest --memory 2G --wait > "$results/title-$variant.log" 2>&1; then
+    title_failed=true
+    flatpak kill "$app" 2>/dev/null || true
+  fi
+  if ! grep -F 'titlecompat: passed' "$results/title-$variant.log" || grep -F 'titlecompat: FAILED' "$results/title-$variant.log"; then
+    title_failed=true
+  fi
   cp -a "$title_game_dir/screenshots" "$results/title-$variant-screenshots"
 done
 
@@ -72,7 +77,7 @@ for variant in plain flashback; do
     replay_failed=true
   fi
 done
-test "$replay_failed" = false
+test "$title_failed" = false && test "$replay_failed" = false
 
 flatpak run --command=arctic "$app" --json launch --instance flatpak-test --offline FlatpakTest --memory 2G --wait > "$results/game.log" 2>&1 &
 pid=$!
