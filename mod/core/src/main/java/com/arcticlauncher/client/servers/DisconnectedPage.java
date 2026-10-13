@@ -27,6 +27,13 @@ public final class DisconnectedPage extends Page {
 	private static final int BUTTON_H = 20;
 	private static final int GAP = 4;
 	private static final int MAX_LINES = 8;
+	/** Height of one line of text, and the space between the title, the reason, and the rest. */
+	private static final int LINE_H = 10;
+	private static final int SECTION_GAP = 6;
+	/** Room above the buttons. */
+	private static final int BUTTONS_GAP = 12;
+	/** The page's top edge at least this far down (a very long reason on a small window). */
+	private static final int MIN_TOP = 10;
 
 	/** The last server played on (game thread), and the tries since. */
 	private static volatile String lastServer;
@@ -39,6 +46,8 @@ public final class DisconnectedPage extends Page {
 	private final String address = lastServer;
 	private final long shownAt = System.currentTimeMillis();
 	private boolean cancelled;
+	/** Lines the reason takes (known once drawn: the page lays itself out again if it changes). */
+	private int reasonLines = 1;
 
 	public DisconnectedPage(String title, String reason) {
 		this.title = title == null || title.isEmpty() ? "Connection Lost" : title;
@@ -79,10 +88,35 @@ public final class DisconnectedPage extends Page {
 		return true;
 	}
 
+	private int buttons() {
+		return 2 + (address != null ? 1 : 0) + (autoOn() ? 1 : 0);
+	}
+
+	/**
+	 * Where things go, as one column centered on the page: the title, the reason's lines, the
+	 * address, the countdown, then the buttons. Returns the top of each: {title, reason, address,
+	 * countdown, buttons}.
+	 */
+	private int[] layout() {
+		int textH = LINE_H + SECTION_GAP + reasonLines * LINE_H;
+		if (address != null) {
+			textH += SECTION_GAP + LINE_H;
+		}
+		if (autoOn()) {
+			textH += GAP + LINE_H;
+		}
+		int total = textH + BUTTONS_GAP + buttons() * (BUTTON_H + GAP) - GAP;
+		int top = Math.max(MIN_TOP, (height - total) / 2);
+		int reason = top + LINE_H + SECTION_GAP;
+		int address = reason + reasonLines * LINE_H + SECTION_GAP;
+		int countdown = this.address != null ? address + LINE_H + GAP : address - SECTION_GAP + GAP;
+		return new int[] {top, reason, address, countdown, top + textH + BUTTONS_GAP};
+	}
+
 	@Override
 	protected void build() {
 		int left = width / 2 - BUTTON_W / 2;
-		int y = height / 2 + 30;
+		int y = layout()[4];
 		if (address != null) {
 			add(new Button("Reconnect", this::reconnect).primary()).bounds(left, y, BUTTON_W, BUTTON_H);
 			y += BUTTON_H + GAP;
@@ -120,15 +154,21 @@ public final class DisconnectedPage extends Page {
 
 	@Override
 	protected void drawBehind(Gfx g, Style s, int mx, int my) {
-		int y = height / 2 - 50;
-		Draw.centered(g, title, width / 2, y, s.text, true);
-		y += 16;
-		for (String line : wrap(g, reason, Math.min(width - 40, 360))) {
+		List<String> lines = wrap(g, reason, Math.min(width - 40, 360));
+		if (lines.size() != reasonLines) {
+			// The buttons go below however many lines the reason turned out to be.
+			reasonLines = lines.size();
+			rebuild();
+		}
+		int[] at = layout();
+		Draw.centered(g, title, width / 2, at[0], s.text, true);
+		int y = at[1];
+		for (String line : lines) {
 			Draw.centered(g, line, width / 2, y, 0xFFAAAAAA, false);
-			y += 10;
+			y += LINE_H;
 		}
 		if (address != null) {
-			Draw.centered(g, address, width / 2, height / 2 + 16, s.muted, false);
+			Draw.centered(g, address, width / 2, at[2], s.muted, false);
 		}
 		if (autoOn()) {
 			long left = deadline() - System.currentTimeMillis();
@@ -141,7 +181,7 @@ public final class DisconnectedPage extends Page {
 			if (tries > 0) {
 				text += " (try " + (tries + 1) + " of " + MAX_TRIES + ")";
 			}
-			Draw.centered(g, text, width / 2, height / 2 + 4, s.accent, false);
+			Draw.centered(g, text, width / 2, at[3], s.accent, false);
 		}
 	}
 
