@@ -153,13 +153,14 @@ final class PacksTab implements MenuTab {
 			}).selected(shader == shaders)).bounds(x + i * (CHIP_W + GAP), top, CHIP_W, CHIP_H);
 		}
 		top += CHIP_H + GAP;
+		int viewWidth = Math.min(CHIP_W, (w - 80 - GAP * 2) / 2);
 		for (int i = 0; i < VIEWS.length; i++) {
 			final int v = i;
 			host.add(new Button(VIEWS[i], () -> {
 				view = v;
 				resetScroll();
 				host.rebuild();
-			}).selected(view == i)).bounds(x + i * (CHIP_W + GAP), top, CHIP_W, CHIP_H);
+			}).selected(view == i)).bounds(x + i * (viewWidth + GAP), top, viewWidth, CHIP_H);
 		}
 		final java.io.File folder = browser().folder();
 		host.add(new Button("Open folder", () -> openFolder(folder))).bounds(x + w - 80, top, 80, CHIP_H);

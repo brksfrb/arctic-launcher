@@ -129,7 +129,7 @@ final class SelfTest {
 	private static void packsTour() {
 		Runnable[] steps = {
 				() -> {
-					java.util.List<com.arcticlauncher.client.packs.PackInfo> visible = WorldStats.packs();
+					java.util.List<com.arcticlauncher.client.packs.PackInfo> visible = ArcticClient.platform().resourcePacks();
 					int hidden = 0;
 					//#if MC >= 1.16
 					java.util.Collection<?> available = Minecraft.getInstance().getResourcePackRepository().getAvailablePacks();
