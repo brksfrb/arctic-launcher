@@ -551,7 +551,10 @@ mod tests {
         let names = |sort: Sort| {
             let mut list: Vec<&PublicServer> = all.iter().collect();
             sort.apply(&mut list);
-            list.iter().map(|s| s.name.clone()).collect::<Vec<_>>().join(",")
+            list.iter()
+                .map(|s| s.name.clone())
+                .collect::<Vec<_>>()
+                .join(",")
         };
         assert_eq!(names(Sort::Random), "b,a,c,D");
         assert_eq!(names(Sort::MostPlayers), "a,D,b,c");
