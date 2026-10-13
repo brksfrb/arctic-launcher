@@ -47,6 +47,19 @@ public final class Servers {
 		public boolean done() {
 			return status != null || error != null;
 		}
+
+		/** What it holds right now, unchanged while it's used (null for null). */
+		public static Answer copy(Answer from) {
+			if (from == null) {
+				return null;
+			}
+			Answer a = new Answer();
+			a.status = from.status;
+			a.error = from.error;
+			a.icon = from.icon;
+			a.asked = from.asked;
+			return a;
+		}
 	}
 
 	private final Platform platform;

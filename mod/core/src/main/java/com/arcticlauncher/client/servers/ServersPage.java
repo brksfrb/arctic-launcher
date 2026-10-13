@@ -501,7 +501,8 @@ public final class ServersPage extends Page {
 
 	private void row(Gfx g, Style s, int x, int y, String name, String address, boolean selectedRow, boolean over) {
 		background(g, s, x, y, selectedRow, over);
-		Servers.Answer a = servers.answer(address);
+		// Read once: a pinger thread may fill it in while the row is drawn.
+		Servers.Answer a = Servers.Answer.copy(servers.answer(address));
 		int ix = x + 2;
 		int iy = y + 2;
 		if (a != null && a.icon != null) {
