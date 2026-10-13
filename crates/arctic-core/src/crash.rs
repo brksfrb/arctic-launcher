@@ -13,7 +13,7 @@ pub struct Diagnosis {
     pub detail: String,
     /// Mods involved (names or ids), if the logs say.
     pub mods: Vec<String>,
-    /// A game or loader file is damaged: the next start checks every library and fetches it again.
+    /// A game or loader library could not load: check its files on the next start.
     pub repair: bool,
 }
 
@@ -61,16 +61,9 @@ pub fn memory_warning(given_mb: u32, mods: usize, total_mb: Option<u64>) -> Opti
     let gb = |mb: u64| format!("{:.1} GB", mb as f64 / 1024.0);
     let computer = total_mb.map_or_else(String::new, |t| format!(" (this computer has {})", gb(t)));
     Some(format!(
-        "Minecraft can get only {}{computer}, and {mods} mods usually need 5 GB or more: it may not start. Fewer mods, or a computer with more memory, will.",
+        "Minecraft is starting with {}{computer} for {mods} mod files. A large modpack may need more memory. If it runs out, try fewer mods or close other programs.",
         gb(u64::from(given_mb))
     ))
-}
-
-/// A start that failed while the loader read a big pack with too little memory: classes of its
-/// own libraries "not found" are memory running out, not a damaged file.
-pub fn too_little_memory(given_mb: u32, mods: usize, total_mb: Option<u64>) -> Option<Diagnosis> {
-    memory_warning(given_mb, mods, total_mb)
-        .map(|detail| Diagnosis::new("Not enough memory for this many mods", detail, Vec::new()))
 }
 
 /// Most crashes print one of these; each is a regex and what it means.
@@ -317,15 +310,15 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
-        // A class of the game's or the loader's own libraries can't be found: the file is damaged
-        // (a jar the right size whose insides can't be read), not a mod made for another version.
+        // A class of the game's or loader's own libraries can't be found. Damaged or unreadable
+        // files are possible, but the exception alone does not prove corruption or low memory.
         // "NoClassDefFoundError: org/spongepowered/asm/mixin/throwables/MixinError" from Fabric's
         // Mixin bootstrap, before any mod runs.
         pattern: r"(?:NoClassDefFoundError|ClassNotFoundException):? ((?:org[./]spongepowered[./]asm|org[./]objectweb[./]asm|net[./]fabricmc[./]loader|org[./]quiltmc[./]loader|cpw[./]mods|net[./]minecraftforge[./]fml|net[./]neoforged[./]fml|org[./]lwjgl|com[./]mojang[./](?:blaze3d|authlib|brigadier|datafixers|logging|serialization))[\w./$]*)",
         explain: |c, _| Diagnosis {
             repair: true,
             ..Diagnosis::new(
-                "A game file is damaged",
+                "A game library couldn't be loaded",
                 format!(
                     "Part of Minecraft or its mod loader couldn't be read ({}). The next time you press Play, Arctic checks the game's files (fetching fresh copies of damaged ones) and starts this instance without its start-up speed-ups. If it happens again, please send the report.",
                     c[1].replace('/', ".")
@@ -552,24 +545,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_big_pack_with_too_little_memory_is_told_so() {
+    fn a_big_pack_with_little_memory_gets_a_warning_not_a_diagnosis() {
         assert_eq!(
             max_memory_mb("Java x, flags: -Xms512M -Xmx1918M -XX:+UseG1GC"),
             Some(1918)
         );
         assert_eq!(max_memory_mb("flags: -Xmx4G"), Some(4096));
         assert_eq!(max_memory_mb("flags: -Xms512M"), None);
-        let d = too_little_memory(1918, 213, Some(3966)).unwrap();
-        assert_eq!(d.title, "Not enough memory for this many mods");
+        let warning = memory_warning(1918, 213, Some(3966)).unwrap();
         assert!(
-            d.detail.contains("1.9 GB")
-                && d.detail.contains("3.9 GB")
-                && d.detail.contains("213 mods")
+            warning.contains("1.9 GB")
+                && warning.contains("3.9 GB")
+                && warning.contains("213 mod files")
         );
-        assert!(!d.repair);
         // Enough memory, or a small pack: nothing to say.
-        assert!(too_little_memory(6144, 213, Some(16384)).is_none());
-        assert!(too_little_memory(1918, 20, Some(3966)).is_none());
+        assert!(memory_warning(6144, 213, Some(16384)).is_none());
+        assert!(memory_warning(1918, 20, Some(3966)).is_none());
     }
 
     fn title(text: &str) -> String {
@@ -618,14 +609,14 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_loader_class_is_a_damaged_file_not_a_mod() {
+    fn a_missing_loader_class_requests_a_library_check() {
         // Crash report #22: Fabric's Mixin bootstrap, before any mod ran.
         let log = "[main/ERROR] Uncaught exception in thread \"main\"
     java.lang.NoClassDefFoundError: org/spongepowered/asm/mixin/throwables/MixinError
     	at net.fabricmc.loader.impl.launch.FabricMixinBootstrap.init(FabricMixinBootstrap.java:59)
     Caused by: java.lang.ClassNotFoundException: org.spongepowered.asm.mixin.throwables.MixinError";
         let d = diagnose(log).unwrap();
-        assert_eq!(d.title, "A game file is damaged");
+        assert_eq!(d.title, "A game library couldn't be loaded");
         assert!(d.repair);
         assert!(
             d.detail

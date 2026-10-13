@@ -10,6 +10,8 @@ mod game_window;
 pub mod logparse;
 mod priority;
 pub mod process;
+#[cfg(test)]
+mod repair_tests;
 pub mod startup;
 pub mod startup_cache;
 mod truststore;
@@ -228,6 +230,20 @@ pub fn install(
     java_override: Option<PathBuf>,
     progress: Progress,
 ) -> Result<Installation> {
+    let repair = files::LibraryRepair::new(dirs)?;
+    let installed = install_with_repair(dirs, version, game_dir, java_override, progress, &repair)?;
+    repair.finish();
+    Ok(installed)
+}
+
+fn install_with_repair(
+    dirs: &DataDirs,
+    version: VersionJson,
+    game_dir: &Path,
+    java_override: Option<PathBuf>,
+    progress: Progress,
+    repair: &files::LibraryRepair,
+) -> Result<Installation> {
     let clock = std::time::Instant::now();
     fs::create_dir_all(game_dir).at(game_dir)?;
     // 1.8.9 lists this folder when a server sends a resource pack and crashes if it isn't there
@@ -268,7 +284,7 @@ pub fn install(
     let mut jobs = libs.jobs;
     jobs.push(client);
     // After a crash that pointed at a damaged file: each library and the client checked in full.
-    files::repair_if_asked(dirs, &jobs);
+    repair.check(&jobs, &libs.bootstrap)?;
     jobs.extend(logging.iter().map(|(job, _)| job.clone()));
     jobs.extend(runtime.iter().flat_map(|r| r.jobs.iter().cloned()));
     let assets_fresh = files::assets_verified_recently(dirs, &assets.index_name);
@@ -345,6 +361,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
     }
     let dirs = req.dirs;
     let game_dir = req.instance.game_dir(dirs);
+    let repair = files::LibraryRepair::new(dirs)?;
     let mut timer = StepTimer::new();
     // The Arctic session (a network round trip) is fetched while the game files are checked.
     let mut share_session = false;
@@ -380,12 +397,13 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         .unwrap_or((None, None))
     {
         (Some(kind), Some(loader_version)) => {
-            let base = install(
+            let base = install_with_repair(
                 dirs,
                 vanilla.clone(),
                 &game_dir,
                 java_override.clone(),
                 progress,
+                &repair,
             )?;
             timer.step("vanilla files");
             let stage = format!("Installing {} {loader_version}", kind.label());
@@ -453,7 +471,8 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
     let installation = std::thread::scope(|scope| {
         let session =
             share_session.then(|| scope.spawn(|| share_cosmetics_session(req, &game_dir)));
-        let installed = install(dirs, version, &game_dir, java_override, progress);
+        let installed =
+            install_with_repair(dirs, version, &game_dir, java_override, progress, &repair);
         if let Some(handle) = session {
             let _ = handle.join();
         }
@@ -465,7 +484,9 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         let hosts = game_dir.join(crate::proxy::HOSTS_FILE);
         std::fs::write(&hosts, proxy.hosts_file()).map_err(|e| crate::Error::io(&hosts, e))?;
     }
-    Ok(plan(req, &installation))
+    let plan = plan(req, &installation);
+    repair.finish();
+    Ok(plan)
 }
 
 /// How long each part of getting ready took, logged when done (to find slow starts).
@@ -936,10 +957,14 @@ mod tests {
                 "-javaagent:C:/Users/me/mods/arctic-mod.jar".into(),
                 r"-Djava.library.path=C:\Users\me\natives".into(),
                 "-cp".into(),
-                std::env::join_paths(["C:/libs/sponge-mixin-0.17.4.jar", "C:/libs/asm-9.10.jar"])
-                    .unwrap()
-                    .to_string_lossy()
-                    .into_owned(),
+                // A drive-letter colon is a classpath separator on Unix.
+                std::env::join_paths([
+                    "/private/libs/sponge-mixin-0.17.4.jar",
+                    "/private/libs/asm-9.10.jar",
+                ])
+                .unwrap()
+                .to_string_lossy()
+                .into_owned(),
                 "net.fabricmc.loader.impl.launch.knot.KnotClient".into(),
                 "--accessToken".into(),
                 "SECRET123".into(),
@@ -958,7 +983,10 @@ mod tests {
         );
         assert!(s.contains("sponge-mixin-0.17.4.jar, asm-9.10.jar"), "{s}");
         assert!(
-            !s.contains("Users") && !s.contains("SECRET123") && !s.contains("KnotClient"),
+            !s.contains("Users")
+                && !s.contains("private")
+                && !s.contains("SECRET123")
+                && !s.contains("KnotClient"),
             "{s}"
         );
     }

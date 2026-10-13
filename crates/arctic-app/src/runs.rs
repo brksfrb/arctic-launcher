@@ -120,18 +120,6 @@ impl Run {
         crash::memory_warning(given, mods, arctic_core::system::total_memory_mb())
     }
 
-    /// A loader file "damaged" while a big pack had too little memory is the memory running out.
-    fn memory_instead(&self, d: Diagnosis) -> Diagnosis {
-        if !d.repair {
-            return d;
-        }
-        let given = self.java.as_deref().and_then(crash::max_memory_mb);
-        let mods = arctic_core::launch::mod_count(&self.game_dir.join("mods"));
-        given
-            .and_then(|g| crash::too_little_memory(g, mods, arctic_core::system::total_memory_mb()))
-            .unwrap_or(d)
-    }
-
     /// Why the game crashed, from its log and the crash report it wrote.
     fn diagnose(&self) -> Option<Diagnosis> {
         let skip = self.log.len().saturating_sub(DIAGNOSE_LINES);
@@ -365,8 +353,7 @@ impl ArcticApp {
                 let title = run.title.clone();
                 let diagnosis = matches!(code, Some(c) if c != 0 && !watchdog)
                     .then(|| run.diagnose())
-                    .flatten()
-                    .map(|d| run.memory_instead(d));
+                    .flatten();
                 if let Some(d) = &diagnosis {
                     run.push_log([LogLine {
                         level: Level::Error,
@@ -524,6 +511,34 @@ impl Tasks {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_small_heap_does_not_hide_a_missing_library_or_disable_repair() {
+        let dir = tempfile::tempdir().unwrap();
+        let mods = dir.path().join("mods");
+        std::fs::create_dir(&mods).unwrap();
+        for n in 0..80 {
+            std::fs::write(mods.join(format!("mod-{n}.jar")), b"").unwrap();
+        }
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.21.4", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.java = Some("Java java-runtime-delta, flags: -Xms512M -Xmx1918M".into());
+        run.push_log([LogLine {
+            level: Level::Error,
+            text: "java.lang.NoClassDefFoundError: org/spongepowered/asm/mixin/throwables/MixinError\nCaused by: java.lang.ClassNotFoundException: org.spongepowered.asm.mixin.throwables.MixinError".into(),
+        }]);
+        assert!(run.memory_warning().is_some());
+        let diagnosis = run.diagnose().unwrap();
+        assert_eq!(diagnosis.title, "A game library couldn't be loaded");
+        assert!(diagnosis.repair);
+        run.clear_log();
+        run.push_log([LogLine {
+            level: Level::Error,
+            text: "java.lang.OutOfMemoryError: Java heap space".into(),
+        }]);
+        assert_eq!(run.diagnose().unwrap().title, "Minecraft ran out of memory");
+    }
 
     #[test]
     fn one_run_per_instance_and_old_logs_make_way() {

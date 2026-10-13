@@ -26,6 +26,8 @@ pub struct Libraries {
     pub classpath: Vec<PathBuf>,
     pub natives: Vec<NativeJar>,
     pub jobs: Vec<DownloadJob>,
+    /// Small loader dependencies checked even without a previous crash report.
+    pub bootstrap: Vec<DownloadJob>,
 }
 
 /// Work out which library files apply on this platform.
@@ -44,6 +46,19 @@ pub fn resolve_libraries(dirs: &DataDirs, version: &VersionJson, env: &RuleEnv) 
             out.classpath.push(job.dest.clone());
             // Locally generated files (no URL) are on the classpath only.
             if !job.url.is_empty() {
+                if job.sha1.is_some()
+                    && [
+                        "net.fabricmc:",
+                        "net.legacyfabric:",
+                        "org.quiltmc:",
+                        "org.ow2.asm:",
+                        "org.spongepowered:",
+                    ]
+                    .iter()
+                    .any(|prefix| lib.name.starts_with(prefix))
+                {
+                    out.bootstrap.push(job.clone());
+                }
                 out.jobs.push(job);
             }
         }
@@ -71,37 +86,85 @@ pub fn request_repair(dirs: &DataDirs) {
     if let Some(parent) = mark.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    if let Err(e) = std::fs::write(&mark, b"") {
+    if let Err(e) = std::fs::write(&mark, uuid::Uuid::new_v4().to_string()) {
         log::warn!("couldn't ask for a library check: {e}");
     }
 }
 
-/// The next start's check, once: files that are the right size but not the right content are
-/// removed, so the download fetches them again. Only jobs with a known checksum are checked.
-pub(crate) fn repair_if_asked(dirs: &DataDirs, jobs: &[crate::net::DownloadJob]) {
-    let mark = dirs.cache().join(REPAIR_MARK);
-    if !mark.is_file() {
-        return;
-    }
-    let mut damaged = 0;
-    for job in jobs {
-        let Some(want) = &job.sha1 else {
-            continue;
+/// One preparation's repair request, shared by the vanilla and loader installation passes.
+/// It is acknowledged only after both passes finish successfully. Dropping it on an error
+/// leaves the request on disk for the next attempt.
+pub(super) struct LibraryRepair {
+    mark: PathBuf,
+    request: Option<Vec<u8>>,
+}
+
+impl LibraryRepair {
+    pub(super) fn new(dirs: &DataDirs) -> Result<Self> {
+        let mark = dirs.cache().join(REPAIR_MARK);
+        let request = match fs::read(&mark) {
+            Ok(bytes) => Some(bytes),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+            Err(e) => return Err(Error::io(&mark, e)),
         };
-        if !job.dest.is_file() {
-            continue;
+        Ok(Self { mark, request })
+    }
+
+    pub(super) fn check(&self, jobs: &[DownloadJob], bootstrap: &[DownloadJob]) -> Result<()> {
+        // Older launchers sometimes failed to request repair. Always check the small loader
+        // dependencies, especially Mixin, so the next Play can recover without another crash.
+        let selected = if self.request.is_some() {
+            jobs
+        } else {
+            bootstrap
+        };
+        let (mut checked, mut replaced) = (0, 0);
+        for job in selected {
+            if job.url.is_empty() {
+                continue; // Locally generated Forge files cannot be downloaded again here.
+            }
+            match fs::metadata(&job.dest) {
+                Ok(meta) if meta.is_file() => {}
+                Ok(_) => {
+                    return Err(Error::Other(format!(
+                        "A game file is blocked by a folder: {}",
+                        job.dest.display()
+                    )));
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(Error::io(&job.dest, e)),
+            }
+            if let Some(want) = &job.sha1 {
+                checked += 1;
+                let have = crate::net::sha1_file(&job.dest)?;
+                if have.eq_ignore_ascii_case(want) {
+                    continue;
+                }
+            }
+            // A repair also refreshes downloadable libraries whose metadata has no checksum.
+            // A failed removal must stop preparation instead of reusing the broken file.
+            log::warn!("library fetched again: {}", job.dest.display());
+            fs::remove_file(&job.dest).at(&job.dest)?;
+            replaced += 1;
         }
-        match crate::net::sha1_file(&job.dest) {
-            Ok(have) if have.eq_ignore_ascii_case(want) => {}
-            _ => {
-                log::warn!("damaged, fetched again: {}", job.dest.display());
-                let _ = std::fs::remove_file(&job.dest);
-                damaged += 1;
+        if !selected.is_empty() {
+            log::info!("library check: {checked} checksummed, {replaced} fetched again");
+        }
+        Ok(())
+    }
+
+    pub(super) fn finish(self) {
+        if let Some(request) = self.request
+            && fs::read(&self.mark).is_ok_and(|current| current == request)
+        {
+            // Don't clear a different crash's request received during this preparation.
+            if let Err(e) = fs::remove_file(&self.mark)
+                && e.kind() != std::io::ErrorKind::NotFound
+            {
+                log::warn!("couldn't finish the library check: {e}");
             }
         }
     }
-    log::info!("library check: {damaged} damaged of {}", jobs.len());
-    let _ = std::fs::remove_file(&mark);
 }
 
 /// Mojang's library repository, the default for libraries without a URL.
@@ -520,7 +583,7 @@ mod tests {
     }
 
     #[test]
-    fn a_repair_check_removes_files_whose_contents_are_wrong_once() {
+    fn a_repair_covers_vanilla_and_loader_before_it_is_finished() {
         let dir = tempfile::tempdir().unwrap();
         let dirs = DataDirs::new(dir.path());
         let good = dir.path().join("good.jar");
@@ -539,15 +602,90 @@ mod tests {
         };
         let jobs = [job(&good, b"right"), job(&bad, b"right")];
         // Not asked: nothing is hashed or removed.
-        repair_if_asked(&dirs, &jobs);
+        LibraryRepair::new(&dirs)
+            .unwrap()
+            .check(&jobs, &[])
+            .unwrap();
         assert!(bad.is_file());
         request_repair(&dirs);
-        repair_if_asked(&dirs, &jobs);
+        // Versions before request IDs used an empty marker.
+        fs::write(dirs.cache().join(REPAIR_MARK), b"").unwrap();
+        let repair = LibraryRepair::new(&dirs).unwrap();
+        repair.check(&jobs[..1], &[]).unwrap();
+        assert!(dirs.cache().join(REPAIR_MARK).is_file());
+        repair.check(&jobs, &[]).unwrap();
         assert!(good.is_file());
         assert!(!bad.is_file(), "same size, wrong contents: fetched again");
+        repair.finish();
         // Done once: the next start is back to the quick check.
         std::fs::write(&bad, b"wrong").unwrap();
-        repair_if_asked(&dirs, &jobs);
+        LibraryRepair::new(&dirs)
+            .unwrap()
+            .check(&jobs, &[])
+            .unwrap();
         assert!(bad.is_file());
+    }
+
+    #[test]
+    fn an_unfinished_repair_and_a_newer_crash_are_not_forgotten() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        request_repair(&dirs);
+        drop(LibraryRepair::new(&dirs).unwrap());
+        assert!(dirs.cache().join(REPAIR_MARK).is_file());
+        let repair = LibraryRepair::new(&dirs).unwrap();
+        request_repair(&dirs);
+        repair.finish();
+        assert!(dirs.cache().join(REPAIR_MARK).is_file());
+        LibraryRepair::new(&dirs).unwrap().finish();
+        assert!(!dirs.cache().join(REPAIR_MARK).exists());
+    }
+
+    #[test]
+    fn a_repair_refreshes_unhashed_downloads_but_preserves_generated_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        let mut jobs = Vec::new();
+        for (name, url) in [
+            ("loader.jar", "https://example.invalid/loader.jar"),
+            ("generated.jar", ""),
+        ] {
+            let dest = dir.path().join(name);
+            fs::write(&dest, b"broken").unwrap();
+            jobs.push(DownloadJob {
+                url: url.into(),
+                dest,
+                sha1: None,
+                size: None,
+                lzma: None,
+            });
+        }
+        request_repair(&dirs);
+        LibraryRepair::new(&dirs)
+            .unwrap()
+            .check(&jobs, &[])
+            .unwrap();
+        assert!(!jobs[0].dest.exists());
+        assert_eq!(fs::read(&jobs[1].dest).unwrap(), b"broken");
+    }
+
+    #[test]
+    fn a_blocked_library_stops_repair_and_keeps_the_request() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        let blocked = dir.path().join("blocked.jar");
+        fs::create_dir(&blocked).unwrap();
+        let job = DownloadJob {
+            url: "https://example.invalid/a.jar".into(),
+            dest: blocked,
+            sha1: None,
+            size: None,
+            lzma: None,
+        };
+        request_repair(&dirs);
+        let repair = LibraryRepair::new(&dirs).unwrap();
+        assert!(repair.check(&[job], &[]).is_err());
+        drop(repair);
+        assert!(dirs.cache().join(REPAIR_MARK).is_file());
     }
 }
