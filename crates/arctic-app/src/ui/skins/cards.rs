@@ -76,9 +76,6 @@ impl ArcticApp {
         if library {
             // Wraps instead of overlapping when the window is narrow.
             ui.horizontal_wrapped(|ui| {
-                if widgets::button(ui, p, Some(Icon::Plus), "Add skin…", true).clicked() {
-                    self.tasks.pick_skin_file();
-                }
                 if widgets::icon_button(ui, p, Icon::Folder, "Open skins folder").clicked() {
                     let dir = self.skins_dir();
                     let _ = std::fs::create_dir_all(&dir);
@@ -172,6 +169,13 @@ impl ArcticApp {
                     stop = true;
                 }
             }
+            // Adding one sits with the skins, where you look for it.
+            if add_card(ui, p, SKIN_CARD, "Add skin…")
+                .on_hover_text("A .png skin file (64×64 or 64×32). You can also drop files here.")
+                .clicked()
+            {
+                self.tasks.pick_skin_file();
+            }
             for e in &entries {
                 let worn = trying_key.as_deref() == Some(format!("lib:{}", e.id).as_str())
                     || (worn_hash.is_some() && self.library_hash(&e.id) == worn_hash);
@@ -191,7 +195,7 @@ impl ArcticApp {
         }
         ui.add_space(8.0);
         let hint = if self.skins.library.skins.is_empty() {
-            "Drop .png skin files here, pick one with Add skin, or copy a player's skin."
+            "Drop .png skin files here, add one with the + card, or copy a player's skin."
         } else {
             "Right-click a skin to rename, share or delete it."
         };
@@ -368,6 +372,55 @@ impl ArcticApp {
                 pick = Some((None, None));
             }
             let mut hovered_card = None;
+            // Your own, up front: add one, then the ones you've added (newest first).
+            if can_wear {
+                let r = add_card(ui, p, CAPE_CARD, "Your own…").on_hover_text(
+                    "Use your own cape image: 64×32 up to 1024×512; stack up to 32 frames (12288 pixels tall) to animate it, at 8 frames a second. It stays here to wear again.",
+                );
+                if r.clicked() {
+                    upload = true;
+                }
+            }
+            let mut wear_own = None;
+            let mut forget_own = None;
+            let own = self.skins.own_capes.clone();
+            for (i, hash) in own.iter().enumerate() {
+                let key = format!("acape:{hash}");
+                let tex = self.cape_card_texture(&ctx, &key, None, now);
+                let active = worn.as_deref() == Some(hash.as_str());
+                let r = cape_card(ui, p, tex, Icon::Close, &format!("Your cape {}", own.len() - i), None, active)
+                    .on_hover_text("Right-click to take it off this list");
+                if r.hovered() {
+                    self.skins.hover = Some(Hover::Cape(Some(key.clone())));
+                    hovered_card = Some(key.clone());
+                }
+                if r.clicked() && !active && can_wear {
+                    wear_own = Some(hash.clone());
+                }
+                r.context_menu(|ui| {
+                    if ui.button("Remove from my capes").clicked() {
+                        forget_own = Some(hash.clone());
+                        ui.close();
+                    }
+                });
+            }
+            // Worn from before capes were kept (or from another PC): shown, not in the list.
+            let custom = worn.as_ref().filter(|h| {
+                !all_presets.iter().any(|p| p.is_texture(h)) && !own.iter().any(|o| o == *h)
+            });
+            if let Some(hash) = custom {
+                let key = format!("acape:{hash}");
+                let tex = self.cape_card_texture(&ctx, &key, None, now);
+                if cape_card(ui, p, tex, Icon::Close, "Your cape", None, true).hovered() {
+                    hovered_card = Some(key);
+                }
+            }
+            if let Some(hash) = wear_own {
+                self.wear_own_cape(&hash);
+            }
+            if let Some(hash) = forget_own {
+                self.forget_own_cape(&hash);
+            }
             for preset in &presets {
                 let animate_on = !self.settings.capes_still.contains(&preset.id);
                 let shown = match (&preset.still, animate_on) {
@@ -389,25 +442,7 @@ impl ArcticApp {
                     pick = Some((Some(preset.choice(animate_on)), Some(key)));
                 }
             }
-            let custom = worn
-                .as_ref()
-                .filter(|h| !all_presets.iter().any(|p| p.is_texture(h)));
-            if let Some(hash) = custom {
-                let key = format!("acape:{hash}");
-                let tex = self.cape_card_texture(&ctx, &key, None, now);
-                if cape_card(ui, p, tex, Icon::Close, "Your cape", None, true).hovered() {
-                    hovered_card = Some(key);
-                }
-            }
             self.skins.animating = hovered_card;
-            if can_wear {
-                let r = cape_card(ui, p, None, Icon::Plus, "Your own…", None, false).on_hover_text(
-                    "Use your own cape image: 64×32 up to 1024×512; stack up to 32 frames (12288 pixels tall) to animate it, at 8 frames a second",
-                );
-                if r.clicked() {
-                    upload = true;
-                }
-            }
         });
         ui.add_space(12.0);
         if upload {
@@ -761,6 +796,22 @@ fn animate(ctx: &egui::Context, texture: &super::SkinTexture, now: f64) -> egui:
 
 /// A cape card: the cape's back, big, and its name; an icon for "none"
 /// or "your own".
+/// An empty card with a plus: adds something (a skin, a cape) to the list it starts.
+fn add_card(ui: &mut egui::Ui, p: &Palette, size: [f32; 2], name: &str) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(size.into(), Sense::click());
+    let hover = card_back(ui, p, rect, &response);
+    let area = Rect::from_min_max(rect.min + vec2(10.0, 12.0), rect.max - vec2(10.0, 48.0));
+    let r = Rect::from_center_size(area.center(), vec2(26.0, 26.0));
+    crate::art::icons::draw(
+        ui.painter(),
+        Icon::Plus,
+        r,
+        lerp_color(p.muted, p.accent, hover),
+    );
+    card_label(ui, p, rect, name, None, hover);
+    response.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
 fn cape_card(
     ui: &mut egui::Ui,
     p: &Palette,

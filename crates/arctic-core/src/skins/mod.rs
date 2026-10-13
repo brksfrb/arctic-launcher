@@ -2,6 +2,7 @@
 //! for changing the account's real skin and cape (see [`api`]).
 
 pub mod api;
+pub mod capes;
 
 use std::fs;
 use std::path::{Path, PathBuf};

@@ -139,6 +139,8 @@ pub struct SkinsUi {
     pub pitch: f32,
     pub renaming: Option<(String, String)>,
     pub view: SkinsView,
+    /// Capes you uploaded yourself (hashes, newest first): see arctic_core::skins::capes.
+    pub own_capes: Vec<String>,
     pub gallery: gallery::GalleryUi,
     /// Filters the list shown (skins, capes or cosmetics by name).
     pub search: String,
@@ -153,6 +155,33 @@ pub struct SkinsUi {
 impl ArcticApp {
     fn skins_dir(&self) -> PathBuf {
         Library::dir(self.dirs.profile_root())
+    }
+
+    pub(super) fn own_capes_dir(&self) -> PathBuf {
+        arctic_core::skins::capes::dir(self.dirs.profile_root())
+    }
+
+    /// Wear one of your own capes again (sent as its image, which the server keeps by hash).
+    pub(super) fn wear_own_cape(&mut self, hash: &str) {
+        match arctic_core::skins::capes::read(&self.own_capes_dir(), hash) {
+            Ok(png) => self.set_arctic_cape(
+                Some(CapeChoice::Custom(Texture::Png(png))),
+                Some(format!("acape:{hash}")),
+            ),
+            Err(e) => self
+                .toasts
+                .push(Kind::Error, "Could not read that cape", e.to_string()),
+        }
+    }
+
+    /// Take one of your own capes off the list (if it's worn, it stays worn).
+    pub(super) fn forget_own_cape(&mut self, hash: &str) {
+        match arctic_core::skins::capes::remove(&self.own_capes_dir(), hash) {
+            Ok(()) => self.skins.own_capes.retain(|h| h != hash),
+            Err(e) => self
+                .toasts
+                .push(Kind::Error, "Could not remove that cape", e.to_string()),
+        }
     }
 
     /// Load the library the first time the tab opens (per profile).
@@ -200,6 +229,7 @@ impl ArcticApp {
         if crate::devshot::enabled() && std::env::var_os("ARCTIC_DEVSHOT_YAW").is_some() {
             self.skins.dragged_at = -1.0;
         }
+        self.skins.own_capes = arctic_core::skins::capes::list(&self.own_capes_dir());
         match Library::load(&dir) {
             Ok(mut lib) => {
                 if let Err(e) = lib.dedupe(&dir) {
@@ -726,6 +756,14 @@ impl ArcticApp {
             }
             Event::CapeFile(result) => match result {
                 Ok(Some(bytes)) => {
+                    // Kept with your other capes, to wear again later in one click.
+                    match arctic_core::skins::capes::save(&self.own_capes_dir(), &bytes) {
+                        Ok(hash) => {
+                            self.skins.own_capes.retain(|h| h != &hash);
+                            self.skins.own_capes.insert(0, hash);
+                        }
+                        Err(e) => log::warn!("keeping the cape: {e}"),
+                    }
                     // Shown by its hash once saved; until then the old cape stays.
                     self.set_arctic_cape(Some(CapeChoice::Custom(Texture::Png(bytes))), None);
                     self.skins.trying.cape = None;
