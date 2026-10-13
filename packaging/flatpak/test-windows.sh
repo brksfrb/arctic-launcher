@@ -21,6 +21,11 @@ import -window root "$results/launcher.png"
 flatpak kill "$app"
 wait "$pid" || true
 
+timeout 240 flatpak run --command=arctic "$app" --json launch --instance flatpak-packs --offline FlatpakTest --memory 2G --wait > "$results/packs.log" 2>&1
+grep -F 'packstest: passed' "$results/packs.log"
+if grep -F 'packstest: FAILED' "$results/packs.log"; then exit 1; fi
+cp -a "${2:?packs game directory}/screenshots" "$results/packs-screenshots"
+
 flatpak run --command=arctic "$app" --json launch --instance flatpak-test --offline FlatpakTest --memory 2G --wait > "$results/game.log" 2>&1 &
 pid=$!
 ready=false

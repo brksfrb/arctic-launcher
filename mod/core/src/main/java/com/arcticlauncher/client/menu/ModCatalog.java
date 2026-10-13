@@ -242,8 +242,8 @@ final class ModCatalog {
 						f.toggle("Background", "The dark box behind it", () -> c.scoreboardBackground, on -> c.scoreboardBackground = on);
 					}));
 		}
-		out.add(new Mod("packs", "Resource Packs", "Your packs, and new ones from Modrinth", "packs", Category.VISUAL,
-				"texture pack modrinth").page(PacksTab::new));
+		out.add(new Mod("packs", "Packs & Shaders", "Resource packs and shaders from Modrinth", "packs", Category.VISUAL,
+				"texture resource pack shader iris modrinth").page(PacksTab::new));
 	}
 
 	private static void chat(List<Mod> out, final ClientConfig c) {

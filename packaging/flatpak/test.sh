@@ -47,5 +47,14 @@ flatpak run --command=arctic "$app" instances create flatpak-test --version 1.21
 flatpak run --command=arctic "$app" instances edit flatpak-test --arctic-client on --performance off --memory 2G
 timeout 900 flatpak run --command=arctic "$app" launch --instance flatpak-test --offline FlatpakTest --memory 2G --dry-run > "$results/prepare.log" 2>&1
 
-xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- bash "$here/test-windows.sh" "$results"
+# Exercise the custom pack picker on the version that exposed Fabric's internal packs.
+flatpak run --command=arctic "$app" instances create flatpak-packs --version 1.21.11 --loader fabric
+flatpak run --command=arctic "$app" instances edit flatpak-packs --arctic-client on --performance on --shaders on --memory 2G \
+  --jvm-args='-Darctic.selftest=packs -Darctic.selftest.requireHidden=true -Darctic.selftest.shader=Arctic-test-shader'
+timeout 900 flatpak run --command=arctic "$app" launch --instance flatpak-packs --offline FlatpakTest --memory 2G --dry-run > "$results/packs-prepare.log" 2>&1
+game_dir=$(flatpak run --command=arctic "$app" --json instances show flatpak-packs | jq -r '.game_dir')
+mkdir -p "$game_dir/shaderpacks/Arctic-test-shader/shaders"
+printf '# Minimal shader fixture for the Iris load/unload check.\n' > "$game_dir/shaderpacks/Arctic-test-shader/shaders/shaders.properties"
+
+xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- bash "$here/test-windows.sh" "$results" "$game_dir"
 echo 'Flatpak installation, signed update, launcher, and Fabric game checks passed.'

@@ -11,6 +11,7 @@ import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.packs.PackBrowser;
 import com.arcticlauncher.client.packs.PackIcons;
 import com.arcticlauncher.client.packs.PackInfo;
+import com.arcticlauncher.client.packs.ShaderPacks;
 import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Button;
 import com.arcticlauncher.client.ui.Scroll;
@@ -39,6 +40,21 @@ final class PacksTab implements MenuTab {
 	/** Kept while the game runs. */
 	private static int view;
 	private static String query = "";
+	private static boolean shader;
+	private static final String[] QUERIES = {"", ""};
+	private static final int[] SORT = {0, 0}, CATEGORY = {0, 0}, DETAIL = {0, 0};
+	private static final boolean[] THIS_VERSION = {true, true};
+	private static final String[] SORT_IDS = {"downloads", "relevance", "updated", "newest"};
+	private static final String[] SORT_LABELS = {"Most downloaded", "Best match", "Recently updated", "Newest"};
+	private static final String[][] CATEGORIES = {
+			{"", "combat", "cursed", "decoration", "modded", "realistic", "simplistic", "themed", "tweaks", "utility", "vanilla-like"},
+			{"", "cartoon", "cursed", "fantasy", "realistic", "semi-realistic", "vanilla-like"}};
+	private static final String[][] DETAILS = {
+			{"", "8x-", "16x", "32x", "48x", "64x", "128x", "256x", "512x+"},
+			{"", "potato", "low", "medium", "high", "screenshot"}};
+	private int expandedFilter;
+	private Scroll currentScroll;
+	private long refreshedAt;
 	/** What you've set (on packs, top first); null = nothing changed yet. */
 	private static List<String> pending;
 
@@ -54,26 +70,50 @@ final class PacksTab implements MenuTab {
 
 	/** Open on a view (0 yours, 1 Modrinth) with a search typed in. */
 	static void show(int v, String search) {
+		shader = false;
 		view = v;
 		query = search == null ? "" : search;
+		QUERIES[0] = query;
+	}
+
+	static void showShaders(int v, String search) {
+		shader = true;
+		view = v;
+		query = search == null ? "" : search;
+		QUERIES[1] = query;
+	}
+
+	private static int kind() {
+		return shader ? 1 : 0;
+	}
+
+	private static PackBrowser browser() {
+		return shader ? ArcticClient.shaderBrowser() : ArcticClient.packs();
+	}
+
+	private static PackBrowser.Filters filters() {
+		int k = kind();
+		return new PackBrowser.Filters(SORT_IDS[SORT[k]], THIS_VERSION[k], CATEGORIES[k][CATEGORY[k]], DETAILS[k][DETAIL[k]]);
 	}
 
 	PacksTab() {
 		search.text(query);
 		search.onChange(() -> {
 			query = search.text();
+			QUERIES[kind()] = query;
 			typedAt = System.currentTimeMillis();
 		});
 	}
 
 	@Override
 	public String title() {
-		return "Resource Packs";
+		return "Packs & Shaders";
 	}
 
 	@Override
 	public String hint() {
-		return "Turn packs on and off, or find new ones on Modrinth.";
+		return shader && !ArcticClient.shaders().available() ? ShaderPacks.NEEDS_IRIS
+				: "Turn packs on and off, or find new ones on Modrinth.";
 	}
 
 	@Override
@@ -81,7 +121,13 @@ final class PacksTab implements MenuTab {
 		if (applying != null) {
 			return applying;
 		}
-		String s = ArcticClient.packs().status();
+		if (shader && ArcticClient.shaders().changing()) {
+			return ArcticClient.shaders().status();
+		}
+		String s = browser().status();
+		if (shader && browser().busy() == null && !ArcticClient.shaders().status().isEmpty()) {
+			return ArcticClient.shaders().status();
+		}
 		return view == 1 && !s.isEmpty() ? s : null;
 	}
 
@@ -94,20 +140,38 @@ final class PacksTab implements MenuTab {
 	public void build(final Host host, int x, int top, int w, int bottom) {
 		this.x = x;
 		this.w = w;
+		for (int i = 0; i < 2; i++) {
+			final boolean shaders = i == 1;
+			host.add(new Button(shaders ? "Shaders" : "Resource packs", () -> {
+				shader = shaders;
+				query = QUERIES[kind()];
+				search.text(query);
+				typedAt = 0;
+				expandedFilter = 0;
+				resetScroll();
+				host.rebuild();
+			}).selected(shader == shaders)).bounds(x + i * (CHIP_W + GAP), top, CHIP_W, CHIP_H);
+		}
+		top += CHIP_H + GAP;
 		for (int i = 0; i < VIEWS.length; i++) {
 			final int v = i;
 			host.add(new Button(VIEWS[i], () -> {
 				view = v;
+				resetScroll();
 				host.rebuild();
 			}).selected(view == i)).bounds(x + i * (CHIP_W + GAP), top, CHIP_W, CHIP_H);
 		}
-		final java.io.File folder = ArcticClient.platform().resourcePackDir();
+		final java.io.File folder = browser().folder();
 		host.add(new Button("Open folder", () -> openFolder(folder))).bounds(x + w - 80, top, 80, CHIP_H);
 		int y = top + CHIP_H + 8;
 		listTop = y;
-		packs = ArcticClient.platform().resourcePacks();
+		packs = shader ? new ArrayList<PackInfo>() : ArcticClient.platform().resourcePacks();
 		if (view == 0) {
-			yours(host, y, bottom);
+			if (shader) {
+				shaders(host, y, bottom);
+			} else {
+				yours(host, y, bottom);
+			}
 		} else {
 			browse(host, y, bottom);
 		}
@@ -130,7 +194,7 @@ final class PacksTab implements MenuTab {
 		final List<String> wanted = pending != null ? pending : current;
 		boolean changed = pending != null && !pending.equals(current);
 		int listBottom = bottom - (changed ? BTN_H + 8 : 0);
-		Scroll scroll = host.scroll(x, y, x + w, listBottom);
+		Scroll scroll = currentScroll = host.scroll(x, y, x + w, listBottom);
 		// On ones in your order first, then the rest.
 		List<PackInfo> ordered = new ArrayList<PackInfo>();
 		for (String id : wanted) {
@@ -213,19 +277,89 @@ final class PacksTab implements MenuTab {
 
 	// ---- Browse ----------------------------------------------------------------------
 
+	private void resetScroll() {
+		if (currentScroll != null) {
+			currentScroll.scrollTo(0);
+		}
+	}
+
+	private void shaders(final Host host, int y, int bottom) {
+		ShaderPacks shaders = ArcticClient.shaders();
+		Scroll scroll = currentScroll = host.scroll(x, y, x + w, bottom);
+		String active = shaders.active();
+		List<java.io.File> files = shaders.installed();
+		empty = files.isEmpty();
+		for (java.io.File file : files) {
+			String name = file.getName();
+			boolean on = name.equals(active);
+			scroll.add(host.add(new PackRow(name, on ? "Active shader" : "Installed shader", () -> null, ACTION_W + 4, !on)
+					.bounds(x, y, w - 8, PackRow.H)));
+			scroll.add(host.add(new Button(on ? "Turn off" : "Turn on", () -> shaders.select(on ? null : name))
+					.selected(on).enabled(shaders.available() && !shaders.changing())
+					.bounds(x + w - 8 - ACTION_W, y + (PackRow.H - BTN_H) / 2, ACTION_W, BTN_H)));
+			y += PackRow.H + 2;
+		}
+		scroll.settle();
+	}
+
 	private void browse(final Host host, int y, int bottom) {
-		final PackBrowser browser = ArcticClient.packs();
-		browser.search(query);
-		host.add(search).bounds(x, y, w, FIELD_H);
-		listTop = y + FIELD_H + 6;
-		Scroll scroll = host.scroll(x, listTop, x + w, bottom);
+		final PackBrowser browser = browser();
+		if (typedAt == 0) {
+			browser.search(query, filters());
+		}
+		host.add(search).bounds(x, y, w - 60, FIELD_H);
+		host.add(new Button("Refresh", browser::retry).enabled(!browser.searching())).bounds(x + w - 56, y, 56, FIELD_H);
+		y += FIELD_H + GAP;
+		final int k = kind();
+		int cw = (w - GAP * 2) / 3;
+		String[] titles = {SORT_LABELS[SORT[k]], "Category: " + label(CATEGORIES[k][CATEGORY[k]]),
+				(shader ? "Impact: " : "Resolution: ") + label(DETAILS[k][DETAIL[k]])};
+		for (int i = 0; i < 3; i++) {
+			final int filter = i + 1;
+			host.add(new Button(titles[i] + " ▾", () -> {
+				expandedFilter = expandedFilter == filter ? 0 : filter;
+				resetScroll();
+				host.rebuild();
+			}).selected(expandedFilter == filter)).bounds(x + i * (cw + GAP), y, cw, CHIP_H);
+		}
+		y += CHIP_H + GAP;
+		for (int i = 0; i < 2; i++) {
+			final boolean compatible = i == 0;
+			host.add(new Button(compatible ? "Minecraft " + ArcticClient.platform().minecraftVersion() : "All versions", () -> {
+				THIS_VERSION[k] = compatible;
+				resetScroll();
+				host.rebuild();
+			}).selected(THIS_VERSION[k] == compatible)).bounds(x + i * (CHIP_W + GAP), y, CHIP_W, CHIP_H);
+		}
+		listTop = y + CHIP_H + GAP;
+		Scroll scroll = currentScroll = host.scroll(x, listTop, x + w, bottom);
+		int ry = listTop;
+		if (expandedFilter != 0) {
+			final int filter = expandedFilter;
+			String[] choices = filter == 1 ? SORT_LABELS : filter == 2 ? CATEGORIES[k] : DETAILS[k];
+			int selected = filter == 1 ? SORT[k] : filter == 2 ? CATEGORY[k] : DETAIL[k];
+			for (int i = 0; i < choices.length; i++) {
+				final int choice = i;
+				scroll.add(host.add(new Button(filter == 1 ? choices[i] : label(choices[i]), () -> {
+					if (filter == 1) SORT[k] = choice;
+					else if (filter == 2) CATEGORY[k] = choice;
+					else DETAIL[k] = choice;
+					expandedFilter = 0;
+					resetScroll();
+					host.rebuild();
+				}).selected(selected == i).bounds(x + (i % 3) * (cw + GAP), ry + (i / 3) * (CHIP_H + GAP), cw, CHIP_H)));
+			}
+			ry += ((choices.length + 2) / 3) * (CHIP_H + GAP) + GAP;
+		}
 		final PackIcons icons = ArcticClient.packIcons();
 		List<PackBrowser.Pack> list = browser.results();
 		empty = list.isEmpty();
 		int rowW = w - 8;
-		int ry = listTop;
 		for (final PackBrowser.Pack pack : list) {
 			String by = "by " + pack.author + " · " + downloads(pack.downloads) + " · " + pack.description;
+			if (!pack.compatible) {
+				by = "Not listed for Minecraft " + ArcticClient.platform().minecraftVersion() + " · " + by;
+			}
 			scroll.add(host.add(new PackRow(pack.title, by, () -> icons.remote(pack.iconUrl), ACTION_W + 4, false)
 					.bounds(x, ry, rowW, PackRow.H)));
 			scroll.add(host.add(action(host, browser, pack).bounds(x + rowW - ACTION_W, ry + (PackRow.H - BTN_H) / 2, ACTION_W, BTN_H)));
@@ -245,7 +379,17 @@ final class PacksTab implements MenuTab {
 		}
 		final String file = browser.installedFile(pack.id);
 		if (file == null) {
-			return new Button("Install", () -> browser.install(pack)).primary().enabled(browser.busy() == null);
+			return new Button(pack.compatible ? "Install" : "Other version", () -> {
+				ArcticClient.shaders().clearStatus();
+				browser.install(pack);
+			})
+					.primary().enabled(browser.busy() == null && pack.compatible);
+		}
+		if (shader) {
+			ShaderPacks shaders = ArcticClient.shaders();
+			boolean on = file.equals(shaders.active());
+			return new Button(!shaders.available() ? "Installed" : on ? "Turn off" : "Turn on", () -> shaders.select(on ? null : file))
+					.selected(on).enabled(shaders.available() && !shaders.changing());
 		}
 		final PackInfo info = byFile(file);
 		if (info != null && info.enabled) {
@@ -284,7 +428,17 @@ final class PacksTab implements MenuTab {
 		return n >= 1000 ? n / 1000 + "k downloads" : n + " downloads";
 	}
 
+	private static String label(String value) {
+		if (value.isEmpty()) {
+			return "All";
+		}
+		return Character.isDigit(value.charAt(0)) ? value : Character.toUpperCase(value.charAt(0)) + value.substring(1).replace('-', ' ');
+	}
+
 	private static void openFolder(java.io.File folder) {
+		if (folder == null) {
+			return;
+		}
 		try {
 			folder.mkdirs();
 			java.awt.Desktop.getDesktop().open(folder);
@@ -297,25 +451,33 @@ final class PacksTab implements MenuTab {
 	public void tick(Host host) {
 		if (view == 1 && typedAt > 0 && System.currentTimeMillis() - typedAt > SEARCH_DELAY_MS) {
 			typedAt = 0;
-			ArcticClient.packs().search(query);
+			resetScroll();
+			browser().search(query, filters());
+		}
+		if (view == 0 && System.currentTimeMillis() - refreshedAt > 2000) {
+			refreshedAt = System.currentTimeMillis();
+			host.rebuild();
 		}
 	}
 
 	@Override
 	public void draw(Gfx g, Style s, int mx, int my) {
-		if (!empty) {
+		if (!empty || expandedFilter != 0) {
 			return;
 		}
 		String text = view == 0 ? "No packs yet. Browse Modrinth, or drop zips in the folder."
-				: ArcticClient.packs().searching() ? "Searching…" : "";
+				: browser().searching() ? "Searching…" : "No packs match. Adjust the filters or refresh.";
 		Draw.centered(g, text, x + w / 2, listTop + 30, s.muted, false);
 	}
 
 	@Override
 	public String state() {
-		PackBrowser b = ArcticClient.packs();
-		StringBuilder out = new StringBuilder().append(view).append('/').append(b.busy()).append('/').append(b.searching())
+		PackBrowser b = browser();
+		StringBuilder out = new StringBuilder().append(shader).append('/').append(view).append('/').append(b.busy()).append('/').append(b.searching())
 				.append('/').append(b.hasMore()).append('/').append(applying).append('/');
+		if (shader) {
+			out.append(ArcticClient.shaders().active()).append('/').append(ArcticClient.shaders().changing()).append('/');
+		}
 		for (PackBrowser.Pack p : b.results()) {
 			out.append(p.id).append(',');
 		}

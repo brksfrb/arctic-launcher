@@ -32,6 +32,8 @@ public final class ArcticClient {
 	private static com.arcticlauncher.client.packs.PackIcons packIcons;
 	private static com.arcticlauncher.client.feature.ScreenshotCopy screenshotCopy;
 	private static com.arcticlauncher.client.packs.PackBrowser packs;
+	private static com.arcticlauncher.client.packs.PackBrowser shaderBrowser;
+	private static com.arcticlauncher.client.packs.ShaderPacks shaders;
 	/** A duel request from the launcher counts for this long after launching. */
 	private static final long DUEL_REQUEST_SECONDS = 180;
 	private static boolean waypointKeyWasDown;
@@ -64,6 +66,9 @@ public final class ArcticClient {
 		voice = new com.arcticlauncher.client.voice.VoiceLink(p, session.bridgePort, session.bridgeSecret);
 		voice.start();
 		packs = new com.arcticlauncher.client.packs.PackBrowser(p, p.configDir());
+		shaders = new com.arcticlauncher.client.packs.ShaderPacks(p);
+		shaderBrowser = new com.arcticlauncher.client.packs.PackBrowser(p, p.configDir(),
+				com.arcticlauncher.client.packs.PackBrowser.Kind.SHADER, shaders);
 		packIcons = new com.arcticlauncher.client.packs.PackIcons(p, session.bridgePort, session.bridgeSecret);
 		screenshotCopy = new com.arcticlauncher.client.feature.ScreenshotCopy(session.bridgePort, session.bridgeSecret);
 		com.arcticlauncher.client.replay.Replays.init(p, session.bridgePort, session.bridgeSecret);
@@ -290,6 +295,14 @@ public final class ArcticClient {
 
 	public static com.arcticlauncher.client.packs.PackBrowser packs() {
 		return packs;
+	}
+
+	public static com.arcticlauncher.client.packs.PackBrowser shaderBrowser() {
+		return shaderBrowser;
+	}
+
+	public static com.arcticlauncher.client.packs.ShaderPacks shaders() {
+		return shaders;
 	}
 
 	public static com.arcticlauncher.client.together.Duel duel() {

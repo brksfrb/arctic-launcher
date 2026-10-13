@@ -78,6 +78,12 @@ public final class Menus {
 		selectedId = "packs";
 	}
 
+	/** Shaders on your packs or the Modrinth browser. */
+	public static void selectShaders(boolean browse, String search) {
+		PacksTab.showShaders(browse ? 1 : 0, search);
+		selectedId = "packs";
+	}
+
 	public static Page selected() {
 		return page(selectedId);
 	}

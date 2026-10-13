@@ -135,7 +135,7 @@ final class WorldStats {
 		applyPacks(mc, repo);
 	}
 
-	/** Every pack but Arctic's own: on ones top first, then the rest by name. */
+	/** User-visible packs: on ones top first, then the rest by name. */
 	static java.util.List<com.arcticlauncher.client.packs.PackInfo> packs(java.io.File folder) {
 		net.minecraft.server.packs.repository.PackRepository repo = Minecraft.getInstance().getResourcePackRepository();
 		repo.reload();
@@ -144,7 +144,7 @@ final class WorldStats {
 		java.util.List<com.arcticlauncher.client.packs.PackInfo> off = new java.util.ArrayList<>();
 		for (net.minecraft.server.packs.repository.Pack p : availablePacks(repo)) {
 			String id = p.getId();
-			if (id.startsWith("arctic")) {
+			if (id.startsWith("arctic") || com.arcticlauncher.client.packs.PackVisibility.isHidden(p)) {
 				continue;
 			}
 			java.io.File file = id.startsWith("file/") ? new java.io.File(folder, id.substring("file/".length())) : null;
@@ -169,7 +169,8 @@ final class WorldStats {
 			net.minecraft.server.packs.repository.Pack p = repo.getPack(id);
 			if (id.startsWith("arctic")) {
 				arctic.add(id);
-			} else if (p != null && p.isRequired() && !enabledTopFirst.contains(id)) {
+			} else if (p != null && (p.isRequired() || com.arcticlauncher.client.packs.PackVisibility.isHidden(p))
+					&& !enabledTopFirst.contains(id)) {
 				bottomFirst.add(id);
 			}
 		}

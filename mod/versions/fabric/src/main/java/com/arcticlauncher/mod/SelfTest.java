@@ -49,6 +49,10 @@ final class SelfTest {
 	private SelfTest() {}
 
 	static void maybeStart() {
+		if ("packs".equals(System.getProperty("arctic.selftest"))) {
+			packsTour();
+			return;
+		}
 		//#if MC >= 1.15
 		if (ReplayTest.requested()) {
 			ReplayTest.start();
@@ -119,6 +123,84 @@ final class SelfTest {
 		}
 		switchAccountCheck();
 		waitForLook(0);
+	}
+
+	/** Isolated pack-picker smoke test, run in CI with Fabric API and Iris installed. */
+	private static void packsTour() {
+		Runnable[] steps = {
+				() -> {
+					java.util.List<com.arcticlauncher.client.packs.PackInfo> visible = WorldStats.packs();
+					int hidden = 0;
+					//#if MC >= 1.16
+					java.util.Collection<?> available = Minecraft.getInstance().getResourcePackRepository().getAvailablePacks();
+					//#else
+					java.util.Collection<?> available = Minecraft.getInstance().getResourcePackRepository().getAvailable();
+					//#endif
+					for (Object pack : available) {
+						if (com.arcticlauncher.client.packs.PackVisibility.isHidden(pack)) hidden++;
+					}
+					if (Boolean.getBoolean("arctic.selftest.requireHidden") && hidden == 0) {
+						throw new IllegalStateException("Test needs Fabric's hidden resource packs installed");
+					}
+					for (com.arcticlauncher.client.packs.PackInfo pack : visible) {
+						if (pack.title.startsWith("Fabric Mod ")) {
+							throw new IllegalStateException("Internal Fabric pack is visible: " + pack.id);
+						}
+					}
+					ArcticMod.LOG.info("packstest: {} visible packs, {} hidden; Iris available={}", visible.size(), hidden, ArcticClient.shaders().available());
+					java.util.List<String> enabled = new java.util.ArrayList<>();
+					for (com.arcticlauncher.client.packs.PackInfo pack : visible) if (pack.enabled) enabled.add(pack.id);
+					WorldStats.setPacks(enabled);
+					Menus.selectPacks(false, "");
+					ArcticClient.platform().openPage(Menus.selected());
+					soon(() -> shot("packs-installed"));
+				},
+				() -> {
+					Menus.selectPacks(true, "");
+					ArcticClient.platform().openPage(Menus.selected());
+				},
+				() -> {
+					if (ArcticClient.packs().results().isEmpty()) throw new IllegalStateException("Resource search returned no packs: " + ArcticClient.packs().status());
+					shot("packs-browse");
+					Menus.selectShaders(true, "");
+					ArcticClient.platform().openPage(Menus.selected());
+				},
+				() -> {
+					if (ArcticClient.shaderBrowser().results().isEmpty()) throw new IllegalStateException("Shader search returned no packs: " + ArcticClient.shaderBrowser().status());
+					shot("shaders-browse");
+					Menus.selectShaders(false, "");
+					ArcticClient.platform().openPage(Menus.selected());
+					soon(() -> shot("shaders-installed"));
+					String fixture = System.getProperty("arctic.selftest.shader");
+					if (fixture != null) {
+						if (!ArcticClient.shaders().available()) throw new IllegalStateException("Iris is missing");
+						ArcticClient.shaders().select(fixture);
+					}
+				},
+				() -> {
+					String fixture = System.getProperty("arctic.selftest.shader");
+					if (fixture != null) {
+						if (!fixture.equals(ArcticClient.shaders().active())) throw new IllegalStateException(ArcticClient.shaders().status());
+						ArcticClient.shaders().select(null);
+					}
+				},
+				() -> {
+					if (ArcticClient.shaders().active() != null) throw new IllegalStateException("Shaders did not turn off");
+					ArcticMod.LOG.info("packstest: passed");
+					Minecraft.getInstance().stop();
+				}
+		};
+		for (int i = 0; i < steps.length; i++) {
+			final Runnable step = steps[i];
+			TIMER.schedule(() -> Minecraft.getInstance().execute(() -> {
+				try {
+					step.run();
+				} catch (Throwable e) {
+					ArcticMod.LOG.error("packstest: FAILED", e);
+					Minecraft.getInstance().stop();
+				}
+			}), 10L + i * 15L, TimeUnit.SECONDS);
+		}
 	}
 
 	/** Play as another (offline) account and back, as the account page and session renewal do. */
