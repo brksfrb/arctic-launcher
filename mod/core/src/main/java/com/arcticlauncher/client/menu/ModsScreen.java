@@ -22,6 +22,11 @@ final class ModsScreen extends Page {
 	private static final int GAP = 6;
 	private static final int MIN_CARD_W = 96;
 	private static final int HUD_W = 60;
+	private static final int STYLE_W = 70;
+	/** Room the "Arctic / Mods" title takes on the left; header buttons stay right of it. */
+	private static final int TITLE_ROOM = 80;
+	/** Menu Style is a header button (always in sight), not a card. */
+	private static final String STYLE_ID = "style";
 	private static final int SEARCH_W = 150;
 	private static final int FIELD_H = 18;
 	private static final int CHIP_H = 16;
@@ -77,10 +82,17 @@ final class ModsScreen extends Page {
 		}
 		add(search).bounds(px + pw - TabPage.PAD - SEARCH_W - 22, py + (TabPage.HEADER - FIELD_H) / 2, SEARCH_W, FIELD_H);
 		add(new Button("×", this::close)).bounds(px + pw - TabPage.PAD - FIELD_H, py + (TabPage.HEADER - FIELD_H) / 2, FIELD_H, FIELD_H);
+		int headerY = py + (TabPage.HEADER - FIELD_H) / 2;
+		int hudX = px + pw - TabPage.PAD - SEARCH_W - 22 - CHIP_GAP - HUD_W;
+		int styleX = hudX;
 		if (ArcticClient.platform().hasFeatures()) {
 			// The HUD layout, from anywhere (outside a world it shows sample values).
 			add(new Button("Edit HUD", () -> ArcticClient.platform().openPage(new HudEditor())))
-					.bounds(px + pw - TabPage.PAD - SEARCH_W - 22 - CHIP_GAP - HUD_W, py + (TabPage.HEADER - FIELD_H) / 2, HUD_W, FIELD_H);
+					.bounds(hudX, headerY, HUD_W, FIELD_H);
+			styleX = hudX - CHIP_GAP - STYLE_W;
+		}
+		if (styleX >= px + TabPage.PAD + TITLE_ROOM) {
+			add(new Button("Menu Style", this::openStyle)).bounds(styleX, headerY, STYLE_W, FIELD_H);
 		}
 		if (keepSearchFocus) {
 			keepSearchFocus = false;
@@ -118,9 +130,25 @@ final class ModsScreen extends Page {
 		return title.length() * 6;
 	}
 
-	private static List<Mod> visible() {
+	private void openStyle() {
+		for (Mod m : ModCatalog.all()) {
+			if (m.id.equals(STYLE_ID)) {
+				ArcticClient.platform().openPage(Menus.pageFor(m, this));
+				return;
+			}
+		}
+	}
+
+	private List<Mod> visible() {
+		// Menu Style has its header button; it shows as a card only when searched for (or when
+		// the window is too narrow for the button).
+		boolean styleButton = width > 0 && px + pw - TabPage.PAD - SEARCH_W - 22 - CHIP_GAP - HUD_W
+				- (ArcticClient.platform().hasFeatures() ? CHIP_GAP + STYLE_W : 0) >= px + TabPage.PAD + TITLE_ROOM;
 		List<Mod> out = new ArrayList<Mod>();
 		for (Mod m : ModCatalog.all()) {
+			if (styleButton && m.id.equals(STYLE_ID) && query.trim().isEmpty()) {
+				continue;
+			}
 			if ((category == Mod.Category.ALL || m.category == category) && m.matches(query)) {
 				out.add(m);
 			}
