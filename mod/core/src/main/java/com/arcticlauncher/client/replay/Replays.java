@@ -38,6 +38,8 @@ public final class Replays {
 
 	private static Platform platform;
 	private static Recorder recorder;
+	/** The live connection that has actually reached a world. Older games show the title while logging in. */
+	private static Recorder.Take worldTake;
 	/** Inside {@link #frame()}. */
 	private static boolean inFrame;
 	private static Ffmpeg ffmpeg;
@@ -119,9 +121,10 @@ public final class Replays {
 	/** Keys never retrigger merely because a screen opened or closed while held. */
 	public static void tick(boolean screenOpen) {
 		boolean atTitle = platform.atTitleScreen();
+		if (viewer == null && platform.inWorld()) worldTake = recorder == null ? null : recorder.current();
 		// Minecraft can discard a connection without ticking handleDisconnection again.
-		// Reaching the title screen is also a definitive end to its recording session.
-		if (atTitle) endRecording();
+		// Only a return from a world ends it: 1.8.9 also shows the title during login.
+		if (atTitle && worldTake != null && recorder.current() == worldTake) endRecording();
 		boolean save = platform.isKeyDown(ArcticClient.config().replayKey);
 		boolean record = platform.isKeyDown(ArcticClient.config().replayRecordKey);
 		if (viewer != null) {
@@ -145,6 +148,7 @@ public final class Replays {
 	private static void endRecording() {
 		Recorder.Take take = recorder == null ? null : recorder.current();
 		if (take != null) take.end();
+		worldTake = null;
 	}
 
 	public static boolean recording() { return recorder != null && recorder.recording(); }

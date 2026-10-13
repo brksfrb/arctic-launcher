@@ -7,6 +7,9 @@ capture_results() {
   if [ -n "${title_game_dir:-}" ] && [ -d "$title_game_dir/screenshots" ]; then
     cp -a "$title_game_dir/screenshots" "$results/title-screenshots"
   fi
+  if [ -n "${title_game_dir:-}" ] && [ -d "$title_game_dir/replay_videos" ]; then
+    cp -a "$title_game_dir/replay_videos" "$results/replay-videos"
+  fi
 }
 trap capture_results EXIT
 pulseaudio --start --exit-idle-time=-1
