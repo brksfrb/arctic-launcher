@@ -92,6 +92,9 @@ class RecorderTest {
 			p[0] = (byte) (i % 2 == 0 ? 1 : 2);
 			p[1] = (byte) (i % 4);
 			take.packet(p);
+			// Each packet a moment after the last (a fast machine would otherwise record them all at
+			// the same millisecond, inside the kept window).
+			Thread.sleep(1);
 		}
 		Thread.sleep(5);
 		byte[] last = new byte[100];

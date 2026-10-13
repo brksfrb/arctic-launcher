@@ -222,6 +222,8 @@ public final class Recorder {
 		private long packetBytes;
 		/** Compaction is due again past this (it grows when compaction gains little). */
 		private long compactNext;
+		/** Time of the oldest packet in the file (-1: none yet). */
+		private int firstTime = -1;
 		private long selfBytes;
 		private boolean broken;
 		/** Recording stopped on purpose (size limit or a nearly full drive); what's recorded is kept as is. */
@@ -312,6 +314,9 @@ public final class Recorder {
 					packets.writeInt(data.length);
 					packets.write(data);
 					packetBytes += 8 + data.length;
+					if (firstTime < 0) {
+						firstTime = t;
+					}
 					checkLimits();
 				} catch (IOException e) {
 					broken = true;
@@ -389,6 +394,13 @@ public final class Recorder {
 				compactNext = Long.MAX_VALUE;
 				return;
 			}
+			int window = Math.max(keepMs, clipSeconds.getAsInt() * 2000);
+			if (firstTime >= lastTime - window) {
+				// All of it is within the kept window: nothing to cut yet, which says nothing about
+				// what compaction will gain later. Try again further on.
+				compactNext = packetBytes + compactAt;
+				return;
+			}
 			if (keptAs != null) {
 				write();
 				keptAs = null;
@@ -403,7 +415,6 @@ public final class Recorder {
 				deflater.end();
 				packets = null;
 				Index index = Index.of(packetsFile, packetBytes, classifier);
-				int window = Math.max(keepMs, clipSeconds.getAsInt() * 2000);
 				int cut = index.firstAt(lastTime - window);
 				int[] earlier = SeekPlan.plan(index.category, index.key, 0, cut);
 				int windowStart = cut < index.count ? index.time[cut] : lastTime;
@@ -437,6 +448,7 @@ public final class Recorder {
 				packets = out;
 				packetsFile = next;
 				packetBytes = written;
+				firstTime = written > 0 ? windowStart : -1;
 			} catch (IOException | RuntimeException e) {
 				broken = true;
 				log.accept("replay: compaction failed, recording stopped: " + e);
