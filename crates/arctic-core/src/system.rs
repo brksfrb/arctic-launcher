@@ -26,13 +26,26 @@ pub fn memory_for_mods(setting: u32, mods: usize) -> u32 {
 
 pub fn playable_memory_mb(asked: u32) -> u32 {
     match total_memory_mb() {
-        Some(total) => {
-            let room =
-                (total.saturating_sub(u64::from(FLOOR_RECOMMENDED_MB)) as u32).max(MIN_MEMORY_MB);
-            asked.min(room)
-        }
+        Some(total) => asked.min(room_mb(total, commit_limit_mb())),
         None => asked,
     }
+}
+
+/// The most memory a game can be given on a computer with `total` MB installed and `commit` MB
+/// that Windows (or Linux, with swap) can hand out in all: the installed memory less 2 GB for
+/// the system, or, when the page file can back it, up to all of the installed memory. Small
+/// computers then start big packs as other launchers do (slower, from the page file), and a
+/// setting above the installed memory is still brought down.
+fn room_mb(total: u64, commit: Option<u64>) -> u32 {
+    let keep = u64::from(FLOOR_RECOMMENDED_MB);
+    let by_memory = total.saturating_sub(keep);
+    let by_commit = commit.map_or(0, |c| c.saturating_sub(keep).min(total));
+    (by_memory.max(by_commit).min(u64::from(u32::MAX)) as u32).max(MIN_MEMORY_MB)
+}
+
+/// Memory plus page file (swap) in MiB, if it can be read.
+fn commit_limit_mb() -> Option<u64> {
+    imp::commit_limit_bytes().map(|b| b / (1024 * 1024))
 }
 
 /// Installed physical memory in MiB, if it can be read.
@@ -117,6 +130,16 @@ mod imp {
         let ok = unsafe { GlobalMemoryStatusEx(&mut status) };
         (ok != 0).then_some(status.ullTotalPhys)
     }
+
+    /// The commit limit: installed memory plus the page file.
+    pub fn commit_limit_bytes() -> Option<u64> {
+        // SAFETY: as above.
+        let mut status: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
+        status.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
+        // SAFETY: `status` is a valid, initialized MEMORYSTATUSEX.
+        let ok = unsafe { GlobalMemoryStatusEx(&mut status) };
+        (ok != 0).then_some(status.ullTotalPageFile)
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -142,6 +165,11 @@ mod imp {
             .ok()?;
         String::from_utf8_lossy(&out.stdout).trim().parse().ok()
     }
+
+    /// macOS grows its swap as needed: no fixed limit to go by.
+    pub fn commit_limit_bytes() -> Option<u64> {
+        None
+    }
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]
@@ -163,6 +191,13 @@ mod imp {
         let text = std::fs::read_to_string("/proc/meminfo").ok()?;
         super::parse_meminfo(&text)
     }
+
+    /// Memory plus swap.
+    pub fn commit_limit_bytes() -> Option<u64> {
+        let text = std::fs::read_to_string("/proc/meminfo").ok()?;
+        let swap = super::meminfo_field(&text, "SwapTotal:")?;
+        Some(super::parse_meminfo(&text)? + swap)
+    }
 }
 
 /// `+0300` / `-0530` → seconds east of UTC.
@@ -182,7 +217,13 @@ fn parse_utc_offset(text: &str) -> Option<i64> {
 /// `MemTotal:  16318376 kB` → bytes.
 #[cfg_attr(any(windows, target_os = "macos"), allow(dead_code))]
 fn parse_meminfo(text: &str) -> Option<u64> {
-    let line = text.lines().find(|l| l.starts_with("MemTotal:"))?;
+    meminfo_field(text, "MemTotal:")
+}
+
+/// A `/proc/meminfo` field (in kB there) → bytes.
+#[cfg_attr(any(windows, target_os = "macos"), allow(dead_code))]
+fn meminfo_field(text: &str, name: &str) -> Option<u64> {
+    let line = text.lines().find(|l| l.starts_with(name))?;
     let kb: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
     Some(kb * 1024)
 }
@@ -190,6 +231,18 @@ fn parse_meminfo(text: &str) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_small_computer_with_a_page_file_can_give_all_its_memory() {
+        // 4 GB installed, 2 GB kept for the system without a page file to lean on.
+        assert_eq!(room_mb(3966, None), 1918);
+        assert_eq!(room_mb(3966, Some(3966)), 1918);
+        // With a page file: up to all of the installed memory, not beyond it.
+        assert_eq!(room_mb(3966, Some(10_000)), 3966);
+        // A roomy computer is unchanged.
+        assert_eq!(room_mb(16_384, Some(30_000)), 16_384);
+        assert_eq!(room_mb(16_384, None), 14_336);
+    }
 
     #[test]
     fn recommendation_is_a_quarter_within_bounds() {
