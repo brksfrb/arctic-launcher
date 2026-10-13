@@ -13,6 +13,10 @@ const MOUSE: &str = "key.mouse.";
 const UNKNOWN: &str = "key.keyboard.unknown";
 /// Minecraft's code for mouse button n (LWJGL 2 games).
 const MOUSE_OFFSET: i32 = -100;
+const RENDER_DISTANCE: &str = "renderDistance";
+/// The farthest render distance given to games before 1.13: they go through every chunk section in
+/// range each frame, so a newer game's 32 there costs half the frame rate for nothing a server sends.
+pub const OLD_GAME_MAX_RENDER_DISTANCE: i64 = 16;
 
 /// Modern key name (after `key.keyboard.`) and its LWJGL 2 code.
 const CODES: &[(&str, i32)] = &[
@@ -130,7 +134,7 @@ pub fn uses_key_codes(game: Option<&str>) -> bool {
     game.is_some_and(|g| g.starts_with("1.") && compare_versions(g, "1.13").is_lt())
 }
 
-/// The settings as that game version stores them.
+/// The settings as that game version stores them (and the render distance it can carry).
 pub fn for_game(values: &BTreeMap<String, String>, game: Option<&str>) -> BTreeMap<String, String> {
     let codes = uses_key_codes(game);
     values
@@ -138,12 +142,45 @@ pub fn for_game(values: &BTreeMap<String, String>, game: Option<&str>) -> BTreeM
         .map(|(k, v)| {
             let v = if k.starts_with(KEY_PREFIX) {
                 if codes { to_code(v) } else { to_name(v) }
+            } else if codes && k == RENDER_DISTANCE {
+                capped_render_distance(v)
             } else {
                 v.clone()
             };
             (k.clone(), v)
         })
         .collect()
+}
+
+fn capped_render_distance(value: &str) -> String {
+    match value.trim().parse::<i64>() {
+        Ok(n) if n > OLD_GAME_MAX_RENDER_DISTANCE => OLD_GAME_MAX_RENDER_DISTANCE.to_string(),
+        _ => value.to_owned(),
+    }
+}
+
+/// Whether an `options.txt` was written by a game before 1.13 (its keys are LWJGL 2 codes).
+pub fn written_by_old_game(options: &BTreeMap<String, String>) -> bool {
+    options
+        .iter()
+        .any(|(k, v)| k.starts_with(KEY_PREFIX) && v.trim().parse::<i32>().is_ok())
+}
+
+/// What an old game hands back to share: its render distance at the cap it was given is the
+/// newer games' farther one, not a choice to come closer.
+pub fn from_old_game(captured: &mut BTreeMap<String, String>, known: &BTreeMap<String, String>) {
+    let at_cap = captured
+        .get(RENDER_DISTANCE)
+        .and_then(|v| v.trim().parse::<i64>().ok())
+        == Some(OLD_GAME_MAX_RENDER_DISTANCE);
+    if let Some(farther) = known.get(RENDER_DISTANCE).filter(|v| {
+        v.trim()
+            .parse::<i64>()
+            .is_ok_and(|n| n > OLD_GAME_MAX_RENDER_DISTANCE)
+    }) && at_cap
+    {
+        captured.insert(RENDER_DISTANCE.to_owned(), farther.clone());
+    }
 }
 
 /// A key name as an LWJGL 2 code (codes are kept as they are).
@@ -228,6 +265,35 @@ mod tests {
         assert_eq!(modern["key_key.pickItem"], "key.mouse.middle");
         assert_eq!(modern["key_key.x"], UNKNOWN);
         assert_eq!(for_game(&old, None)["key_key.jump"], "key.keyboard.space");
+    }
+
+    #[test]
+    fn old_games_get_at_most_16_chunks_and_give_the_farther_one_back() {
+        let shared: BTreeMap<String, String> =
+            [("renderDistance".to_owned(), "32".to_owned())].into();
+        assert_eq!(for_game(&shared, Some("1.8.9"))["renderDistance"], "16");
+        assert_eq!(for_game(&shared, Some("1.20.1"))["renderDistance"], "32");
+        assert_eq!(for_game(&shared, None)["renderDistance"], "32");
+        let near: BTreeMap<String, String> = [("renderDistance".to_owned(), "8".to_owned())].into();
+        assert_eq!(for_game(&near, Some("1.8.9"))["renderDistance"], "8");
+
+        // Back from 1.8.9 at the cap: the newer games keep their 32.
+        let mut captured: BTreeMap<String, String> = [
+            ("renderDistance".to_owned(), "16".to_owned()),
+            ("key_key.jump".to_owned(), "57".to_owned()),
+        ]
+        .into();
+        assert!(written_by_old_game(&captured));
+        from_old_game(&mut captured, &shared);
+        assert_eq!(captured["renderDistance"], "32");
+        // Chosen closer there: that is shared.
+        let mut closer: BTreeMap<String, String> =
+            [("renderDistance".to_owned(), "10".to_owned())].into();
+        from_old_game(&mut closer, &shared);
+        assert_eq!(closer["renderDistance"], "10");
+        let modern: BTreeMap<String, String> =
+            [("key_key.jump".to_owned(), "key.keyboard.space".to_owned())].into();
+        assert!(!written_by_old_game(&modern));
     }
 
     #[test]
