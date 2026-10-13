@@ -41,11 +41,11 @@ A good first batch, so every section looks full without being overwhelming:
 
 | What | Amount | Notes |
 |---|---|---|
-| Gallery skins | 40–60 | A mix: about a third slim; themes, jobs, animals, fantasy, winter |
-| Still capes | 12–20 | |
-| Animated capes | 6–10 | These stand out; keep them tasteful |
-| 3D cosmetics | 30–40 | Head 10–12, face 6–8, back 6–8 (wings first), shoulders 4–6, body 4–6. Each at the quality bar below |
-| Emotes | 20–30 | Replace the current 12; see the emote quality bar |
+| Gallery skins | 100 | Spread across adventure, fantasy, gamer, animals, PvP and casual collections; include both classic and slim models |
+| Still capes | 22 | Every design needs matching Elytra art |
+| Animated capes | 17 | Every frame needs matching Elytra art and a still image |
+| 3D cosmetics | 71 | Cover head, face, back, shoulders and body at the quality bar below |
+| Emotes | 29 | Use the expressive emote quality bar below |
 
 Later batches can be any size. The client handles up to 500 cosmetics and 200 capes.
 
@@ -61,13 +61,16 @@ Later batches can be any size. The client handles up to 500 cosmetics and 200 ca
 
 ```json
 [
-  { "file": "ice_mage.png", "name": "Ice Mage", "model": "slim" },
-  { "file": "night_guard.png", "name": "Night Guard", "model": "classic" }
+  { "file": "ice_mage.png", "name": "Ice Mage", "model": "slim", "category": "fantasy" },
+  { "file": "night_guard.png", "name": "Night Guard", "model": "classic", "category": "adventure" }
 ]
 ```
 
 They show in the gallery as made by **Arctic**, and each is added once (editing the list later
 won't duplicate them). The same skin image can't be added twice.
+The `category` must be `adventure`, `fantasy`, `gamer`, `animals`, `pvp`, or `casual`.
+Player-shared skins appear under `community` after moderation. Updating an Arctic seed's category
+relabels it on the next server start without clearing its download count.
 
 ### Variety (don't make one skin 40 times)
 

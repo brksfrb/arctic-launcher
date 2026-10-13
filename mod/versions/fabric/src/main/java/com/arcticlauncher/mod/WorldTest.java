@@ -49,6 +49,10 @@ final class WorldTest {
 	});
 
 	private static java.util.concurrent.ScheduledFuture<?> unpauser;
+	private static java.util.concurrent.ScheduledFuture<?> cosmeticPreview;
+	private static volatile String previewCosmetic;
+	private static java.util.concurrent.ScheduledFuture<?> capePreview;
+	private static volatile String previewCape;
 
 	static void start() {
 		ArcticMod.LOG.info("worldtest: scheduled");
@@ -177,6 +181,21 @@ final class WorldTest {
 		String emoteShots = System.getProperty("arctic.emoteshots");
 		if (emoteShots != null) {
 			emoteTour(emoteShots.split(","));
+			return;
+		}
+		String cosmeticShots = System.getProperty("arctic.cosmeticshots");
+		if (cosmeticShots != null) {
+			cosmeticTour(cosmeticShots.split(","), false);
+			return;
+		}
+		String cosmeticSides = System.getProperty("arctic.cosmeticsides");
+		if (cosmeticSides != null) {
+			cosmeticTour(cosmeticSides.split(","), true);
+			return;
+		}
+		String capeShots = System.getProperty("arctic.capeshots");
+		if (capeShots != null) {
+			capeTour(capeShots.split(","));
 			return;
 		}
 		ClientConfig c = ArcticClient.config();
@@ -650,7 +669,7 @@ final class WorldTest {
 
 	/**
 	 * -Darctic.emoteshots=id,id: each emote held still at a quarter, half and three quarters of it,
-	 * shot from the front and the back, then the game quits.
+ * shot from the front and the back with stable filenames, then the game quits.
 	 */
 	private static void emoteTour(String[] ids) {
 		emoteTour(ids, 0);
@@ -671,7 +690,13 @@ final class WorldTest {
 		Minecraft mc = Minecraft.getInstance();
 		Compat.setYRot(mc.player, 0);
 		Compat.setXRot(mc.player, 10);
-		long at = 500;
+		// Starting the first emote makes Features switch to third-person back on
+		// its next tick. Let that happen before choosing the first shot's camera.
+		if (ids.length > 0) {
+			com.arcticlauncher.client.looks.Cosmetics.Emote first = ArcticClient.looks().cosmetics().emote(ids[0].trim());
+			if (first != null) ArcticClient.looks().cosmetics().holdLocal(ArcticClient.platform().worldPlayerId(), first, 0);
+		}
+		long at = 2500;
 		for (String raw : ids) {
 			String id = raw.trim();
 			for (float moment : EMOTE_MOMENTS) {
@@ -687,7 +712,7 @@ final class WorldTest {
 						Compat.setCamera(camera);
 						ArcticClient.looks().cosmetics().holdLocal(ArcticClient.platform().worldPlayerId(), e, a.length * moment);
 					}), at, TimeUnit.MILLISECONDS);
-					TIMER.schedule(() -> run(() -> shot(name)), at + 700, TimeUnit.MILLISECONDS);
+					TIMER.schedule(() -> run(() -> cosmeticShot(name)), at + 700, TimeUnit.MILLISECONDS);
 					at += 1200;
 				}
 			}
@@ -696,6 +721,248 @@ final class WorldTest {
 			ArcticMod.LOG.info("worldtest: done");
 			Minecraft.getInstance().stop();
 		}), at + 1000, TimeUnit.MILLISECONDS);
+	}
+
+	/**
+	 * -Darctic.cosmeticshots=id,id: load each item in the actual player renderer, then shoot
+	 * front, back, and a second back frame to reveal placement and idle motion. Use an isolated
+	 * game directory: createTestWorld clears old self-test worlds in that directory.
+	 */
+	private static void cosmeticTour(String[] rawIds, boolean sideViews) {
+		java.util.List<String> ids = new java.util.ArrayList<String>();
+		for (String raw : rawIds) {
+			String id = raw.trim();
+			if (!id.isEmpty()) {
+				ids.add(id);
+			}
+		}
+		if (ids.isEmpty()) {
+			ArcticMod.LOG.error("worldtest: FAILED no cosmetic ids supplied");
+			Minecraft.getInstance().stop();
+			return;
+		}
+		Compat.setScreen(null);
+		Minecraft mc = Minecraft.getInstance();
+		Compat.setYRot(mc.player, 0);
+		Compat.setXRot(mc.player, 10);
+		if (sideViews) ArcticClient.features().simulate(false, true);
+		mc.options.pauseOnLostFocus = false;
+		//#if MC >= 26.2
+		if (!mc.gui.hud.isHidden()) {
+			mc.gui.hud.toggle();
+		}
+		//#else
+		mc.options.hideGui = true;
+		//#endif
+		// A clean sky platform keeps grass, trees and terrain from hiding small accessories.
+		command("fill ~-8 219 ~-8 ~8 219 ~8 minecraft:light_gray_concrete");
+		command("fill ~-8 220 ~-8 ~8 230 ~8 minecraft:air");
+		command("tp @s ~ 220 ~");
+		command("time set noon");
+		command("weather clear");
+		ArcticMod.LOG.info("worldtest: checking {} cosmetics", ids.size());
+		cosmeticPreview = TIMER.scheduleAtFixedRate(() -> {
+			String id = previewCosmetic;
+			if (id != null) {
+				ArcticClient.looks().tryOn(java.util.Collections.singletonList(id));
+			}
+		}, 0, 100, TimeUnit.MILLISECONDS);
+		TIMER.schedule(() -> run(() -> cosmeticStep(ids, 0, 0, sideViews)), 2, TimeUnit.SECONDS);
+	}
+
+	/** Keep the selected item visible while its files load and between the screenshots. */
+	private static void cosmeticStep(java.util.List<String> ids, int index, int attempt, boolean sideViews) {
+		if (index >= ids.size()) {
+			if (sideViews) ArcticClient.features().simulate(false, false);
+			previewCosmetic = null;
+			cosmeticPreview.cancel(false);
+			ArcticClient.looks().tryOn(java.util.Collections.<String>emptyList());
+			ArcticMod.LOG.info("worldtest: cosmetic check done");
+			TIMER.schedule(() -> run(() -> Minecraft.getInstance().stop()), 1, TimeUnit.SECONDS);
+			return;
+		}
+		String id = ids.get(index);
+		previewCosmetic = id;
+		ArcticClient.looks().tryOn(java.util.Collections.singletonList(id));
+		com.arcticlauncher.client.looks.Cosmetics.Item item = ArcticClient.looks().cosmetics().drawable(id);
+		if (item == null) {
+			if (attempt >= 100) {
+				ArcticMod.LOG.error("worldtest: FAILED cosmetic {} did not load", id);
+				cosmeticStep(ids, index + 1, 0, sideViews);
+			} else {
+				TIMER.schedule(() -> run(() -> cosmeticStep(ids, index, attempt + 1, sideViews)), 500, TimeUnit.MILLISECONDS);
+			}
+			return;
+		}
+		ArcticMod.LOG.info("worldtest: cosmetic {} loaded in slot {} (mesh parsed {}, mesh baked {})",
+				id, item.slot, item.meshModel != null,
+				com.arcticlauncher.mod.cosmetic.MeshModels.get(id) != null);
+		if (sideViews) {
+			Compat.setCamera(1);
+			if (!ArcticClient.features().turn(600, 0)) ArcticMod.LOG.error("worldtest: FAILED freelook for cosmetic side review");
+			TIMER.schedule(() -> run(() -> {
+				cosmeticShot("cosmetic-" + id + "-side-right");
+				ArcticClient.features().turn(-1200, 0);
+			}), 700, TimeUnit.MILLISECONDS);
+			TIMER.schedule(() -> run(() -> {
+				cosmeticShot("cosmetic-" + id + "-side-left");
+				ArcticClient.features().turn(600, 0);
+			}), 1500, TimeUnit.MILLISECONDS);
+			TIMER.schedule(() -> run(() -> cosmeticStep(ids, index + 1, 0, true)), 2300, TimeUnit.MILLISECONDS);
+			return;
+		}
+		Compat.setCamera(2);
+		TIMER.schedule(() -> run(() -> {
+			ArcticClient.looks().tryOn(java.util.Collections.singletonList(id));
+			cosmeticShot("cosmetic-" + id + "-front");
+			Compat.setCamera(1);
+		}), 700, TimeUnit.MILLISECONDS);
+		TIMER.schedule(() -> run(() -> {
+			ArcticClient.looks().tryOn(java.util.Collections.singletonList(id));
+			cosmeticShot("cosmetic-" + id + "-back");
+		}), 1500, TimeUnit.MILLISECONDS);
+		TIMER.schedule(() -> run(() -> {
+			ArcticClient.looks().tryOn(java.util.Collections.singletonList(id));
+			cosmeticShot("cosmetic-" + id + "-motion");
+			cosmeticStep(ids, index + 1, 0, false);
+		}), 2300, TimeUnit.MILLISECONDS);
+	}
+
+	/** Save outside Minecraft's screenshots folder so Arctic's screenshot notice stays out of later frames. */
+	private static void cosmeticShot(String name) {
+		//#if MC >= 26.2
+		Minecraft mc = Minecraft.getInstance();
+		java.io.File dir = new java.io.File(mc.gameDirectory, "cosmetic-qa");
+		dir.mkdirs();
+		Screenshot.takeScreenshot(mc.gameRenderer.mainRenderTarget(), image -> {
+			try {
+				image.writeToFile(new java.io.File(dir, name + ".png"));
+				ArcticMod.LOG.info("worldtest: screenshot {}", name);
+			} catch (Exception e) {
+				ArcticMod.LOG.error("worldtest: FAILED screenshot {}", name, e);
+			} finally {
+				image.close();
+			}
+		});
+		//#else
+		shot(name);
+		//#endif
+	}
+
+	/** Check live cape and elytra rendering using catalog textures in an isolated test world. */
+	private static void capeTour(String[] rawIds) {
+		java.util.List<String> ids = new java.util.ArrayList<String>();
+		for (String raw : rawIds) {
+			String id = raw.trim();
+			if (!id.isEmpty()) {
+				ids.add(id);
+			}
+		}
+		if (ids.isEmpty()) {
+			ArcticMod.LOG.error("worldtest: FAILED no cape ids supplied");
+			Minecraft.getInstance().stop();
+			return;
+		}
+		Compat.setScreen(null);
+		Minecraft mc = Minecraft.getInstance();
+		Compat.setYRot(mc.player, 0);
+		Compat.setXRot(mc.player, 10);
+		mc.options.pauseOnLostFocus = false;
+		//#if MC >= 26.2
+		if (!mc.gui.hud.isHidden()) {
+			mc.gui.hud.toggle();
+		}
+		//#else
+		mc.options.hideGui = true;
+		//#endif
+		command("fill ~-8 219 ~-8 ~8 219 ~8 minecraft:light_gray_concrete");
+		command("tp @s ~ 220 ~");
+		command("time set noon");
+		command("weather clear");
+		command("item replace entity @s armor.chest with minecraft:elytra");
+		if (Boolean.getBoolean("arctic.capeflight")) {
+			command("gamemode survival");
+			command("effect give @s minecraft:resistance 9999 255 true");
+		}
+		ArcticClient.looks().open();
+		ArcticMod.LOG.info("worldtest: checking {} capes on elytra", ids.size());
+		capePreview = TIMER.scheduleAtFixedRate(() -> {
+			String id = previewCape;
+			if (id != null) {
+				showCapePreview(id);
+			}
+		}, 0, 100, TimeUnit.MILLISECONDS);
+		TIMER.schedule(() -> run(() -> capeStep(ids, 0, 0)), 2, TimeUnit.SECONDS);
+	}
+
+	private static void showCapePreview(String id) {
+		boolean still = id.endsWith("~still");
+		ArcticClient.looks().tryCape(still ? id.substring(0, id.length() - 6) : id, still);
+	}
+
+	private static void capeStep(java.util.List<String> ids, int index, int attempt) {
+		if (index >= ids.size()) {
+			previewCape = null;
+			capePreview.cancel(false);
+			ArcticClient.looks().tryCape(null);
+			ArcticMod.LOG.info("worldtest: cape check done");
+			TIMER.schedule(() -> run(() -> Minecraft.getInstance().stop()), 1, TimeUnit.SECONDS);
+			return;
+		}
+		String id = ids.get(index);
+		boolean still = id.endsWith("~still");
+		String presetId = still ? id.substring(0, id.length() - 6) : id;
+		previewCape = id;
+		showCapePreview(id);
+		com.arcticlauncher.client.looks.Preset preset = ArcticClient.looks().preset(presetId);
+		String hash = preset == null ? null : still ? preset.still : preset.texture;
+		if (hash == null || !ArcticClient.looks().texture(hash)) {
+			if (attempt >= 100) {
+				ArcticMod.LOG.error("worldtest: FAILED cape {} did not load", id);
+				capeStep(ids, index + 1, 0);
+			} else {
+				TIMER.schedule(() -> run(() -> capeStep(ids, index, attempt + 1)), 500, TimeUnit.MILLISECONDS);
+			}
+			return;
+		}
+		ArcticMod.LOG.info("worldtest: cape {} ready with {} frames", id, still ? 1 : preset.frames);
+		boolean flight = Boolean.getBoolean("arctic.capeflight");
+		if (flight) {
+			command("tp @s 0 300 0");
+			TIMER.schedule(() -> run(() -> {
+				Minecraft mc = Minecraft.getInstance();
+				net.minecraft.client.server.IntegratedServer server = mc.getSingleplayerServer();
+				if (server == null || mc.player == null) {
+					ArcticMod.LOG.error("worldtest: FAILED cape {} flight server unavailable", id);
+					return;
+				}
+				java.util.UUID playerId = mc.player.getUUID();
+				server.execute(() -> {
+					net.minecraft.server.level.ServerPlayer player = server.getPlayerList().getPlayer(playerId);
+					if (player != null) player.startFallFlying();
+				});
+			}), 350, TimeUnit.MILLISECONDS);
+			TIMER.schedule(() -> run(() -> ArcticClient.features().simulate(false, true)), 600, TimeUnit.MILLISECONDS);
+			TIMER.schedule(() -> run(() -> ArcticClient.features().turn(200, 333)), 900, TimeUnit.MILLISECONDS);
+		}
+		int extra = flight ? 1000 : 0;
+		Compat.setCamera(1);
+		TIMER.schedule(() -> run(() -> {
+			if (flight) ArcticMod.LOG.info("worldtest: cape {} flight pose {}", id, Minecraft.getInstance().player.isFallFlying());
+			cosmeticShot("cape-" + id + (flight ? "-flight-above" : "-back"));
+			if (flight) ArcticClient.features().turn(0, -666);
+			if (!flight) Compat.setCamera(2);
+		}), 700 + extra, TimeUnit.MILLISECONDS);
+		TIMER.schedule(() -> run(() -> {
+			cosmeticShot("cape-" + id + (flight ? "-flight-below" : "-front"));
+			if (flight) ArcticClient.features().turn(0, 666);
+			if (!flight) Compat.setCamera(1);
+		}), 1500 + extra, TimeUnit.MILLISECONDS);
+		TIMER.schedule(() -> run(() -> {
+			cosmeticShot("cape-" + id + (flight ? "-flight-later" : "-motion"));
+			if (flight) ArcticClient.features().simulate(false, false);
+			capeStep(ids, index + 1, 0);
+		}), 2300 + extra, TimeUnit.MILLISECONDS);
 	}
 
 	private static void command(String command) {

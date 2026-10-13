@@ -241,6 +241,8 @@ public final class Looks {
 	}
 
 	private volatile java.util.List<String> tryOn;
+	private volatile String tryCapeHash;
+	private volatile long tryCapeUntil;
 
 	private volatile java.util.Map<String, Fit> tryFits;
 	private volatile long tryOnUntil;
@@ -262,6 +264,18 @@ public final class Looks {
 		tryFits = fits;
 		tryOn = ids;
 		tryOnUntil = System.currentTimeMillis() + TRY_ON_MS;
+	}
+
+	/** Preview a catalog cape on the local player without publishing a look. Refresh while showing it. */
+	public void tryCape(String presetId) {
+		tryCape(presetId, false);
+	}
+
+	/** Preview a preset's static fallback when animation is switched off. */
+	public void tryCape(String presetId, boolean still) {
+		Preset p = preset(presetId);
+		tryCapeHash = p == null ? null : still && p.still != null ? p.still : p.texture;
+		tryCapeUntil = System.currentTimeMillis() + TRY_ON_MS;
 	}
 
 	/** The Looks menu is showing: pick up changes made in the launcher quickly. */
@@ -300,11 +314,18 @@ public final class Looks {
 		}
 		// Hovering a cosmetic in the Looks menu: shown on you, only here.
 		java.util.List<String> trying = tryOn;
+		String capeTrying = tryCapeHash;
+		boolean previewCape = mine && capeTrying != null && now < tryCapeUntil;
 		if (mine && trying != null && now < tryOnUntil) {
-			return look == null ? new Look(null, false, null, trying, true, now,
+			return look == null ? new Look(null, false, previewCape ? capeTrying : null, trying, true, now,
 					tryFits != null ? tryFits : java.util.Collections.<String, Fit>emptyMap())
-					: new Look(look.skin, look.slim, look.cape, trying, look.arctic, look.fetched,
+					: new Look(look.skin, look.slim, previewCape ? capeTrying : look.cape, trying, look.arctic, look.fetched,
 							tryFits != null ? tryFits : look.fits);
+		}
+		if (previewCape) {
+			return look == null ? new Look(null, false, capeTrying,
+					java.util.Collections.<String>emptyList(), true, now)
+					: new Look(look.skin, look.slim, capeTrying, look.cosmetics, look.arctic, look.fetched, look.fits);
 		}
 		return look == null || look.isEmpty() ? null : look;
 	}

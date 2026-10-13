@@ -1,17 +1,17 @@
 # Request: play the reviewed expressive emotes in Arctic
 
-**Status (2026-10-10): done.** All 17 studies are live emotes (new ids, the old wave/bow/clap/facepalm
+**Status (2026-10-12): implemented; full visual verification remains.** All 17 studies are live emotes (new ids, the old wave/bow/clap/facepalm
 kept). `crates/arctic-cosmetics/assets/tools/import_emote_specs.py` converts a study into a game emote;
 the client's expressive rig (`mod/core/.../looks/Rig.java`, `SkinLimbs.java`) plays root motion, a
 bending torso, split chest/pelvis, elbows and knees on every version from 1.8.9 to 26.3. The server
 only lists these emotes to clients that ask for the rig (`/v1/cosmetics?rig=2`). The wheel has pages.
 Not done: an intro/loop/outro sequence (Twerk plays its 3.5 s once) and reduced-motion handling.
 
-The [17-emote review pack](emote-art-pack/README.md) has authored motion curves and angle-checked videos. It is not ready to copy into `assets/emotes/`: its `motion-spec.json` files are design data, not Bedrock `.animation.json` files, and the preview MP4s are not game assets. Keep the prototypes out of the live catalog until the motions are retargeted and checked in-game.
+The [17-emote review pack](emote-art-pack/README.md) contains the source motion curves and videos. The runtime assets have already been retargeted into `assets/emotes/`; source `motion-spec.json` files and MP4s are not game assets. The first in-game Minecraft 26.3 pose audit captured all 17 from the front and back at three moments each, with no missing animation. That proves loading and representative poses, while continuous motion and the remaining acceptance checks below still require review.
 
-## Current gap
+## Remaining quality gap
 
-`mod/core/.../looks/Animation.java` already parses per-bone rotation and position tracks with linear, Catmull-Rom, and step interpolation. The Fabric and legacy `PlayerModelEmoteMixin` paths currently apply those tracks to six independent vanilla player parts: head, body, two arms, and two legs. That is enough for simple gestures but does not reproduce several reviewed motions: parented chest/head motion, a separate pelvis, bent elbows and knees, grounded feet during a squat, or a render-only whole-player turn and lift. Applying only the six tracks would distort the poses and lose the contact points.
+The expressive rig now supports parented torso motion, a separate chest and pelvis, elbow and knee segments, and render-only root motion. The unanswered question is whether the retargeted timing, body contact, ground contact, and outer skin layers remain convincing in real playback across classic/slim models and supported versions. The 26.3 still-sheet audit is an initial check, not a substitute for that motion review.
 
 ## Requested support
 
@@ -21,4 +21,4 @@ The [17-emote review pack](emote-art-pack/README.md) has authored motion curves 
 4. Sample the same clip time locally and for other Arctic players, with an immediate, clean interruption when the player starts moving or the emote is stopped. Keep the current server/presence safeguards. Offer sensible reduced-motion behavior for looping emotes.
 5. Retarget each approved prototype into a versioned runtime asset with validated duration, joint names, key count, finite transforms, bounded offsets, and an idle/rest pose. Avoid shipping MP4s as runtime content. Verify on supported Minecraft versions and classic/slim player models from front, back, three-quarter, and side views before adding catalog entries.
 
-The in-game emote wheel currently lays all entries around one circle. If most of this pack is added, provide favorites or paging so the wheel remains usable. Keep these emotes free, consistent with the content pack decision.
+The wheel now has pages; favorites remain an optional usability improvement. Keep these emotes free, consistent with the content pack decision.

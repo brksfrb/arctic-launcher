@@ -5,31 +5,56 @@
 ## Why
 
 Minecraft hides the cape while a player wears an elytra and draws the elytra from the **same cape
-image** instead, using the wing area to the right of the cape (x 22–45 in 64-wide units). Only 5 of
-the 39 Arctic capes have anything painted there, and those 5 only have a plain gradient (see
-[Current state](#current-state)). Without wing art, a player who equips an elytra would lose the cape
+image** instead, using the wing area to the right of the cape (x 22–45 in 64-wide units). Before
+the art pass, only 5 of the 39 Arctic capes had pixels there, and those 5 had plain gradients (see
+[the baseline](#before-the-art-pass)). Without wing art, a player who equips an elytra loses the cape
 look entirely.
 
-As a stopgap the client now paints wings itself when a cape's wing area is empty
-(`mod/core/src/main/java/com/arcticlauncher/client/looks/CapeFormat.java`): it stretches the cape's
-10×16 faces onto the 10×20 wing faces. That only copies the cape, distorted, and has no wing shape:
+As a stopgap for other capes, the client paints wings when a frame's wing area is empty
+(`mod/core/src/main/java/com/arcticlauncher/client/looks/CapeFormat.java`). It stretches the cape's
+10×16 faces onto the 10×20 wing faces, putting the visible cape back on the outside and filling
+the wing edges. The result still lacks a designed wing silhouette and motif placement.
 
-- the motif is squashed and repeated on both wings, and it reads as a rectangle, not a wing;
-- nothing is painted on the wing edges;
-- see [Known issue in the stopgap](#known-issue-in-the-stopgap): it also puts the cape's art on the
-  wrong side of the wing.
-
-Designed art replaces the stopgap. **If any pixel in a frame's wing box (x 22–45, y 0–21 in 64-wide
-units) is not fully transparent, the client uses the image exactly as painted.** The client only checks
-frame 0 of a strip, so every frame must be painted (see [Animated capes](#animated-capes)).
+Designed art replaces the stopgap. **If a frame's wing box (x 22–45, y 0–21 in 64-wide units) is
+painted, the client uses that frame's art.** It checks each frame separately, so every frame must
+have wing art for consistent animation (see [Animated capes](#animated-capes)).
 
 **Art delivered (2026-10-11):** wing art has now been packed into all 39 catalog capes, all eight
 runtime `-still.png` fallbacks, and every 512/1024 review atlas in
-[`cape-art-pack`](cape-art-pack/README.md). The original cape UV pixels, dimensions, and frame
-counts are unchanged. The catalog and client code were not changed by the art pass. The painted
-wing faces and edges are present in every animation frame. See the
-[`elytra-review.png`](cape-art-pack/elytra-review.png) contact sheet and the packing script in the
-art pack. In-game angle and flight review remains to be done on a running client.
+[`cape-art-pack`](cape-art-pack/README.md). The visible cape UV pixels and frame counts are
+unchanged; all 29 runtime atlases were later enlarged to 512 pixels wide for more detailed wing
+art. The catalog and client code were not changed by the art pass. The painted
+wing faces are present in every animation frame. Their edge strips are painted where the cut-out
+silhouette reaches the wing boundary; transparent stretches remain transparent. The 17 animated
+designs have a light sweep over the wing artwork, with matching first and last frames. See the
+[`elytra-review.png`](cape-art-pack/elytra-review.png) contact sheet,
+[`elytra-motion.gif`](cape-art-pack/elytra-motion.gif), and the packing script in the art pack.
+**Standing in-game review (2026-10-12):** an isolated Arctic Minecraft 26.3 client equipped
+elytra, loaded all 39 catalog capes, and saved back, front, and later back captures for each
+(117 screenshots, no missing texture). All 17 animated capes changed visibly between the two
+back captures. A second pass loaded all eight `-still.png` variants and saved another 24
+captures with no missing textures. This verifies the painted wing art reaches the actual
+elytra renderer in both animation modes. A later 26.3 run captured all 47 cape variants
+from above and underneath while gliding; all entered the flight pose, with no missing textures.
+The [flight contact sheets](cape-art-pack/flight-review-above-1.png) and other pages linked in
+the art pack record the views. The full 47-variant flight pass was repeated against this
+repository's local cosmetics server, rather than relying on the public catalog: all 47 textures
+loaded and all 47 reported the gliding pose. A separate local Minecraft 1.21.11 pass also loaded
+all 47 variants in the gliding pose with 141 captures and no failed cape test. Its clean
+[above](cape-art-pack/flight-review-mc-12111-above-1.png) and
+[underneath](cape-art-pack/flight-review-mc-12111-below-1.png) sheets record the first pages;
+the art-pack README links the rest. Other supported game versions remain unreviewed in flight.
+A separate standing pass against the local server loaded all 47 variants and saved 141 back,
+front, and movement captures with zero self-test failures. The
+[standing contact sheets](cape-art-pack/standing-review-1.png) and other pages in the art pack
+record the shoulder fit and front clearance. These still images do not establish frame pacing
+or animation smoothness during regular gameplay.
+
+The standing captures exposed a design gap: older capes used the same procedural wing
+composition with different colors. All 29 runtime designs received distinct two-sided
+paintings on 2026-10-12 and were checked in actual gliding and standing views. The ten HD
+designs already had individual two-sided wing paintings. Every catalog design now has
+individual illustrated wing motifs rather than the repeated procedural placeholder art.
 
 ## How the game draws the elytra
 
@@ -126,9 +151,8 @@ size, with the same care as the cape: don't enlarge a small wing.
 
 ## Animated capes
 
-- **Every frame needs its own wing art.** The client looks only at frame 0 to decide whether a cape
-  has wing art. If frame 0 is painted and a later frame is not, that frame draws no wings at all, so
-  the elytra flickers out once per loop.
+- **Every frame needs its own wing art.** The client checks frames individually. An empty wing box
+  on any frame gets stopgap wings for that frame, making the design switch during the loop.
 - The wings play at the cape's `fps` with the same frame count. Carry the cape's motion onto the
   wings (the aurora drifts across the wing, the snow keeps falling) and make the last frame lead back
   into the first just as the cape does.
@@ -242,14 +266,15 @@ included below.
 | `rune_awaken` | Rune Awaken | 256×128 | 8 | — | no | Dark stone wings whose runes light up in sequence |
 | `prism_shimmer` | Prism Shimmer | 256×128 | 8 | — | no | Glassy wings with a rainbow shimmer sweeping across |
 
-No catalog cape is 512 wide today; the 512 row in the coordinates table is for new capes and for the
-512-wide versions in the cape art pack.
+At the baseline, no catalog cape was 512 wide. `living_aurora`, `ocean_current`,
+`glacial_heartbeat`, `prism_shimmer`, `raven_wing`, `cloud_sailing`, `cobalt_circuit`,
+`copper_compass`, `moonlit_pines`, and `ember_forge` now have 512-wide
+runtime atlases; the table above
+records their original dimensions so the before/after comparison remains useful.
 
-## Known issue in the stopgap
+## Stopgap behavior
 
-The stopgap in `CapeFormat.java` copies the cape's outer art (64-unit 1,1 10×16) onto **24,2** and
-the cape's inner side (12,1) onto **36,2**. By the vanilla model above, 36,2 is the outer face that
-others see and 24,2 the underside, so the auto-painted wings currently show the cape's plain inner
-side from behind and put the motif underneath. Designed art avoids this entirely, but until every
-cape has it, the stopgap's two target rectangles should be swapped (outer art to 36,2, inner to
-24,2). That is a code change and is not part of this art request.
+`CapeFormat.java` now copies the cape's visible back (64-unit 1,1 10×16) onto the wing's outside
+at **36,2** and its plain inner side onto **24,2**. It also fills the thin edges and checks every
+frame. Designed art remains the preferred result because it can shape the wing and place the motif
+for the 10×20 surface.

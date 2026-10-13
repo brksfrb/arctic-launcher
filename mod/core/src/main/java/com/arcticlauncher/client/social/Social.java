@@ -314,6 +314,11 @@ public final class Social {
 
 	/** A new screenshot in the game folder: pop up with its picture. */
 	private void watchScreenshots() {
+		// World/visual self-tests take several screenshots per second. Their review
+		// images must not contain the previous shot's thumbnail notification.
+		if (System.getProperty("arctic.selftest") != null) {
+			return;
+		}
 		File dir = new File(platform.configDir().getParentFile(), "screenshots");
 		File[] files = dir.listFiles((d, n) -> n.toLowerCase(java.util.Locale.ROOT).endsWith(".png"));
 		if (files == null) {

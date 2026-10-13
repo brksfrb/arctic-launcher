@@ -1,10 +1,12 @@
 # Request: sculpted 3D cosmetics in Arctic
 
+**Status (October 2026):** The constrained GLB path is implemented in the content server, launcher preview and game adapters, with sculpted items in the live catalog. This document remains the acceptance checklist for in-game alignment, lighting, motion and multi-player performance. Those visual checks are not complete for every item.
+
 ## Why
 
 Arctic's current cosmetic path loads Bedrock-style geometry made from bones and cubes. Per-face textures, thin cards, idle animation, and fullbright glow are useful, but they cannot reproduce a sculpted feather, curved shell, tapered horn, or continuous wing profile without stacking many boxes or using a flat painted plane. That is the gap seen in the wing and shoulder prototypes: a back view can look convincing while the side reveals a card, excess depth, or a misplaced attachment. More saturation, bloom, or motion alone will not fix the shape.
 
-This document requests a new capability for future cosmetics. It does not change the live catalog, existing models, or game behavior.
+This document originally requested the mesh capability. The implementation now coexists with the cuboid catalog; the requirements below describe the intended quality bar and remaining verification.
 
 ## Proposed outcome
 
