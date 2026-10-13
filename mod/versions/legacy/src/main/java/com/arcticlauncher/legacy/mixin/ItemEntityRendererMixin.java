@@ -51,17 +51,47 @@ abstract class ItemEntityRendererMixin {
 	/** The item's tilt this frame (degrees around its sideways axis; -90 is lying face up). */
 	@Unique
 	private static float arctic$tilt;
+	/** How far it's lifted onto the top of thin snow (which has no height to stand on). */
+	@Unique
+	private static float arctic$lift;
 
 	@Inject(method = "method_10221", at = @At("HEAD"))
 	private void arctic$start(ItemEntity item, double x, double y, double z, float tickDelta, BakedModel model,
 			CallbackInfoReturnable<Integer> cir) {
 		ClientConfig config = ArcticClient.config();
-		arctic$item = config != null && config.itemPhysics && !item.isTouchingWater() ? item : null;
+		boolean on = config != null && config.itemPhysics && !item.isTouchingWater();
+		// Held in the air by a server (a display): drawn as the game draws it.
+		arctic$item = on && !com.arcticlauncher.client.items.HeldItem.held((com.arcticlauncher.legacy.ItemPhysicsMotion) item,
+				item.onGround, arctic$noGravity(item), item.y, System.nanoTime()) ? item : null;
 		arctic$tickDelta = tickDelta;
 		arctic$flat = !model.hasDepth();
 		if (arctic$item != null) {
 			arctic$tilt = arctic$moveTilt((com.arcticlauncher.legacy.ItemPhysicsMotion) item, !item.onGround, arctic$flat);
+			arctic$lift = item.onGround ? arctic$snowLift(item) : 0f;
 		}
+	}
+
+	@Unique
+	private static boolean arctic$noGravity(ItemEntity item) {
+		//#if MC >= 1.10
+		return item.hasNoGravity();
+		//#else
+		return false;
+		//#endif
+	}
+
+	/** A single layer of snow has no height at all to stand on: a lying item is lifted onto the snow's top, not hidden in it. */
+	@Unique
+	private static float arctic$snowLift(ItemEntity item) {
+		net.minecraft.util.math.BlockPos pos = new net.minecraft.util.math.BlockPos(MathHelper.floor(item.x), MathHelper.floor(item.y),
+				MathHelper.floor(item.z));
+		net.minecraft.block.BlockState block = item.world.getBlockState(pos);
+		if (!(block.getBlock() instanceof net.minecraft.block.SnowLayerBlock)) {
+			return 0f;
+		}
+		double top = pos.getY() + block.get(net.minecraft.block.SnowLayerBlock.LAYERS) / 8.0;
+		double lift = top - item.y;
+		return lift > 0 && lift < 1 ? (float) lift : 0f;
 	}
 
 	/**
@@ -94,6 +124,7 @@ abstract class ItemEntityRendererMixin {
 		ItemEntity item = arctic$item;
 		if (item != null) {
 			y -= MathHelper.sin((item.getAge() + arctic$tickDelta) / 10.0F + item.hoverHeight) * 0.1F + 0.1F;
+			y += arctic$lift;
 			if (arctic$flat) {
 				// Standing up the sprite's half height holds it off the ground; lying down, its stack does.
 				float radians = arctic$tilt * ((float) Math.PI / 180f);

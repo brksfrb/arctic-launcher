@@ -28,4 +28,25 @@ abstract class ItemEntityMotionMixin implements ItemPhysicsMotion {
 		arctic$tilt = tilt;
 		arctic$tiltAt = at;
 	}
+
+	@Unique
+	private double arctic$airY;
+	@Unique
+	private long arctic$airAt;
+
+	@Override
+	public double arctic$airY() {
+		return arctic$airY;
+	}
+
+	@Override
+	public long arctic$airAt() {
+		return arctic$airAt;
+	}
+
+	@Override
+	public void arctic$setAir(double y, long at) {
+		arctic$airY = y;
+		arctic$airAt = at;
+	}
 }

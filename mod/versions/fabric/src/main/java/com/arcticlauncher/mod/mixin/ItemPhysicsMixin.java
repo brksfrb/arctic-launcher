@@ -144,6 +144,42 @@ abstract class ItemPhysicsMixin {
 		return config != null && config.itemPhysics;
 	}
 
+	/** Whether a server holds the item in the air (a display): it's drawn as the game draws it. */
+	@Unique
+	private static boolean arctic$held(ItemEntity entity) {
+		return com.arcticlauncher.client.items.HeldItem.held((ItemPhysicsState.Motion) entity, arctic$grounded(entity),
+				entity.isNoGravity(), entity.getY(), System.nanoTime());
+	}
+
+	@Unique
+	private static boolean arctic$grounded(ItemEntity entity) {
+		//#if MC >= 1.20
+		return entity.onGround();
+		//#elif MC >= 1.16
+		return entity.isOnGround();
+		//#else
+		return entity.onGround;
+		//#endif
+	}
+
+	/** Thin snow has no height to stand on (a single layer none at all): a lying item is lifted onto its top, not hidden in it. */
+	@Unique
+	private static float arctic$snowLift(ItemEntity entity) {
+		net.minecraft.client.multiplayer.ClientLevel level = net.minecraft.client.Minecraft.getInstance().level;
+		if (level == null) {
+			return 0F;
+		}
+		net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos(net.minecraft.util.Mth.floor(entity.getX()),
+				net.minecraft.util.Mth.floor(entity.getY()), net.minecraft.util.Mth.floor(entity.getZ()));
+		net.minecraft.world.level.block.state.BlockState block = level.getBlockState(pos);
+		if (!(block.getBlock() instanceof net.minecraft.world.level.block.SnowLayerBlock)) {
+			return 0F;
+		}
+		double top = pos.getY() + block.getValue(net.minecraft.world.level.block.SnowLayerBlock.LAYERS) / 8.0;
+		double lift = top - entity.getY();
+		return lift > 0 && lift < 1 ? (float) lift : 0F;
+	}
+
 	/**
 	 * The item's tilt this frame: turning over while it falls, easing to its resting angle once it lands
 	 * (flat items face up or down, whichever is nearer; blocks onto their nearest side) instead of snapping.
@@ -238,13 +274,14 @@ abstract class ItemPhysicsMixin {
 	@Inject(method = "extract" + "RenderState(Lnet/minecraft/world/entity/item/ItemEntity;Lnet/minecraft/client/renderer/entity/state/ItemEntityRenderState;F)V",
 			at = @At("TAIL"))
 	private void arctic$notePlace(ItemEntity entity, ItemEntityRenderState state, float partialTicks, CallbackInfo ci) {
-		int place = entity.isInLiquid() ? ItemPhysicsState.FLOATING
+		int place = entity.isInLiquid() || arctic$held(entity) ? ItemPhysicsState.FLOATING
 				: entity.onGround() ? ItemPhysicsState.ON_GROUND : ItemPhysicsState.IN_AIR;
 		ItemPhysicsState physics = (ItemPhysicsState) state;
 		physics.arctic$setPlace(place);
 		if (place == ItemPhysicsState.FLOATING || !arctic$on() || state.item.isEmpty()) {
 			return;
 		}
+		physics.arctic$setLift(place == ItemPhysicsState.ON_GROUND ? arctic$snowLift(entity) : 0F);
 		physics.arctic$setTilt(arctic$moveTilt((ItemPhysicsState.Motion) entity, place == ItemPhysicsState.IN_AIR,
 				arctic$flat(state)));
 	}
@@ -328,7 +365,7 @@ abstract class ItemPhysicsMixin {
 		}
 		float tilt = ((ItemPhysicsState) state).arctic$tilt();
 		// Lifted so the lowest point of the turned model (stack included) touches the ground, at any tilt.
-		pose.translate(0F, -arctic$lowest(state, tilt), 0F);
+		pose.translate(0F, ((ItemPhysicsState) state).arctic$lift() - arctic$lowest(state, tilt), 0F);
 		arctic$tiltBy(pose, tilt);
 	}
 //#else
@@ -342,7 +379,7 @@ abstract class ItemPhysicsMixin {
 	@Inject(method = DRAW, at = @At("HEAD"))
 	private void arctic$start(ItemEntity entity, float yaw, float partialTicks, PoseStack pose, MultiBufferSource buffers, int light, CallbackInfo ci) {
 		// In water and lava it bobs as usual.
-		arctic$drawing = arctic$on() && !entity.getItem().isEmpty() && !entity.isInWater() && !entity.isInLava();
+		arctic$drawing = arctic$on() && !entity.getItem().isEmpty() && !entity.isInWater() && !entity.isInLava() && !arctic$held(entity);
 		arctic$angle = entity.bobOffs;
 	}
 
@@ -378,21 +415,12 @@ abstract class ItemPhysicsMixin {
 		if (!arctic$drawing) {
 			return;
 		}
-		float tilt = arctic$moveTilt((ItemPhysicsState.Motion) entity, !arctic$grounded(entity), arctic$flat);
+		boolean grounded = arctic$grounded(entity);
+		float tilt = arctic$moveTilt((ItemPhysicsState.Motion) entity, !grounded, arctic$flat);
+		float lift = grounded ? arctic$snowLift(entity) : 0F;
 		// Lifted so the lowest point of the turned model (stack included) touches the ground, at any tilt.
-		pose.translate(0F, -arctic$groundLowest(arctic$flat, arctic$renderedAmount(entity.getItem().getCount()), tilt), 0F);
+		pose.translate(0F, lift - arctic$groundLowest(arctic$flat, arctic$renderedAmount(entity.getItem().getCount()), tilt), 0F);
 		arctic$tiltBy(pose, tilt);
-	}
-
-	@Unique
-	private static boolean arctic$grounded(ItemEntity entity) {
-		//#if MC >= 1.20
-		return entity.onGround();
-		//#elif MC >= 1.16
-		return entity.isOnGround();
-		//#else
-		return entity.onGround;
-		//#endif
 	}
 //#endif
 }

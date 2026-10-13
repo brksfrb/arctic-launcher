@@ -18,8 +18,13 @@ public interface ItemPhysicsState {
 
 	void arctic$setTilt(float tilt);
 
-	/** The tilt a dropped item carries from frame to frame (on the item entity itself). */
-	interface Motion {
+	/** How far it's lifted onto what it rests in (the top of thin snow, which has no height to stand on). */
+	float arctic$lift();
+
+	void arctic$setLift(float lift);
+
+	/** The tilt a dropped item carries from frame to frame (on the item entity itself), and whether a server holds it in the air. */
+	interface Motion extends com.arcticlauncher.client.items.HeldItem.Track {
 		float arctic$tilt();
 
 		/** When the tilt was last moved on (System.nanoTime), 0 before the first time. */
