@@ -118,6 +118,10 @@ public final class Replays {
 
 	/** Keys never retrigger merely because a screen opened or closed while held. */
 	public static void tick(boolean screenOpen) {
+		boolean atTitle = platform.atTitleScreen();
+		// Minecraft can discard a connection without ticking handleDisconnection again.
+		// Reaching the title screen is also a definitive end to its recording session.
+		if (atTitle) endRecording();
 		boolean save = platform.isKeyDown(ArcticClient.config().replayKey);
 		boolean record = platform.isKeyDown(ArcticClient.config().replayRecordKey);
 		if (viewer != null) {
@@ -129,14 +133,18 @@ public final class Replays {
 				// A duplicate binding performs one predictable action, never both.
 				if (record && !recordKeyWasDown && !ArcticClient.config().replayRecordKey.equals(ArcticClient.config().replayKey)) toggleRecording();
 			}
-			if (pending != null && backend != null && platform.atTitleScreen() && ++titleTicks > OPEN_AFTER_TICKS) {
+			if (pending != null && backend != null && atTitle && ++titleTicks > OPEN_AFTER_TICKS) {
 				File file = pending; pending = null; watch(file);
-			} else if (platform.atTitleScreen() && !opening && pending == null && recorder.current() == null
+			} else if (atTitle && !opening && pending == null && recorder.current() == null
 					&& ArcticClient.config().replayAutoExport && !exportsPaused && exports.size() > 0) {
 				if (++exportTitleTicks >= 200 && ffmpeg.get() != null) renderNext();
 			} else exportTitleTicks = 0;
 		}
 		saveKeyWasDown = save; recordKeyWasDown = record;
+	}
+	private static void endRecording() {
+		Recorder.Take take = recorder == null ? null : recorder.current();
+		if (take != null) take.end();
 	}
 
 	public static boolean recording() { return recorder != null && recorder.recording(); }
@@ -250,6 +258,8 @@ public final class Replays {
 
 	private static void start(ReplayData data, java.util.function.Consumer<ReplayViewer> then) {
 		opening = false;
+		// Opening a replay also leaves the live world, without necessarily visiting the title.
+		endRecording();
 		final File sidecar = keyframeFile(data.file);
 		final ReplayViewer[] created = new ReplayViewer[1];
 		ReplayViewer v = new ReplayViewer(data, backend, platform, loadKeyframes(sidecar), () -> saveKeyframes(sidecar, created[0]));
