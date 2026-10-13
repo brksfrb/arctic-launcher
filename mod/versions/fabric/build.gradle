@@ -222,6 +222,10 @@ processResources {
 			smoothFontManager: atLeast('1.21.9') && !atLeast('26.1'),
 			// The smooth font's slightly heavier outline needs FreeType (1.20.5+).
 			fontWeight: atLeast('1.20.5'),
+			// Smooth letters' edges in the text's own color: the game's grayscale text shader (1.17+) darkens
+			// them; its source is changed as it's loaded (ShaderManager from 1.21.2, Program before).
+			textShader: atLeast('1.21.2'),
+			textShaderOld: atLeast('1.17') && !atLeast('1.21.2'),
 			// Block states' caches made on all cores (names as in the game: unobfuscated from 26.1).
 			fastStart: atLeast('26.1'),
 			// The startup timeline, class pre-loader and the agent behind it: Java 17+ (1.18 and later).

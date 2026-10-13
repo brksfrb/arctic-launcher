@@ -38,7 +38,9 @@
 		"FontHintingMixin",
 		"FontBitmapHintingMixin",<% } %><% if (smoothFontManager) { %>
 		"SmoothFontManagerMixin",
-		"SmoothFontGlyphInfoMixin",<% } %><% if (startup) { %>
+		"SmoothFontGlyphInfoMixin",<% } %><% if (textShader) { %>
+		"TextShaderMixin",<% } %><% if (textShaderOld) { %>
+		"TextShaderOldMixin",<% } %><% if (startup) { %>
 		"MainStartMixin",
 		"MinecraftReadyMixin",
 		"FirstScreenMixin",
@@ -66,7 +68,6 @@
 		"OptionsPacksMixin",
 		"FontShadowMixin",
 		"FontMaskMixin",
-		"TextShaderMixin",
 		"TitleFontMixin"<% } %><% if (cosmeticsSubmit) { %>,
 		"AvatarRendererMixin",
 		"AvatarRenderStateMixin"<% } %><% if (cosmeticsBuffers) { %>,
