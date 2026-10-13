@@ -51,7 +51,7 @@ jobs:
       - name: Packaging tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends flatpak appstream desktop-file-utils xvfb xauth x11-utils imagemagick dbus-x11
+          sudo apt-get install -y --no-install-recommends flatpak appstream appstream-compose desktop-file-utils xvfb xauth x11-utils imagemagick dbus-x11 pulseaudio libflite1
       - name: Sign and package
         env:
           PRIVATE_KEY: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}

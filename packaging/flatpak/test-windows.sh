@@ -3,6 +3,8 @@ set -euo pipefail
 results=${1:?test results directory}
 app=com.arcticlauncher.ArcticLauncher
 trap 'flatpak kill "$app" 2>/dev/null || true' EXIT
+pulseaudio --start --exit-idle-time=-1
+pactl load-module module-null-sink sink_name=ci
 
 flatpak run "$app" --no-intro > "$results/launcher.log" 2>&1 &
 pid=$!
@@ -32,6 +34,7 @@ sleep 20
 kill -0 "$pid"
 xwininfo -root -tree > "$results/game-windows.txt"
 grep -Ei 'minecraft|arctic' "$results/game-windows.txt"
+if grep -E 'Error starting SoundSystem|Error while loading the narrator' "$results/game.log"; then exit 1; fi
 import -window root "$results/game.png"
 flatpak kill "$app"
 wait "$pid" || true

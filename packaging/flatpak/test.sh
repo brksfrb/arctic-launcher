@@ -14,6 +14,8 @@ exec > >(tee "$results/checks.log") 2>&1
 cp -a "$output/site/repo" "$output/test-repo"
 cp -a "$output/build" "$output/test-build"
 flatpak remote-add --user --gpg-import="$here/public-key.gpg" arctic-test "file://$output/test-repo"
+flatpak update --user --appstream arctic-test
+find "$HOME/.local/share/flatpak/appstream/arctic-test" -name appstream.xml.gz -exec gzip -cd {} + | grep -F "<id>$app</id>"
 flatpak install --user --assumeyes --noninteractive arctic-test "$app"
 flatpak run --command=arctic "$app" --version
 flatpak run --command=arctic "$app" --json update | jq -e '.managed_by == "flatpak"'

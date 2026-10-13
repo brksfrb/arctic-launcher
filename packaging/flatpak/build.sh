@@ -28,11 +28,21 @@ install -Dm755 "$input/arctic" "$build/files/bin/arctic"
 install -Dm644 "$input/icon.png" "$build/files/share/icons/hicolor/256x256/apps/$app.png"
 install -Dm644 "$here/$app.desktop" "$build/files/share/applications/$app.desktop"
 install -Dm644 "$here/../../LICENSE" "$build/files/share/licenses/$app/LICENSE"
+# Minecraft's narrator loads Flite dynamically; it is not in the base runtime.
+mkdir -p "$build/files/lib"
+cp -a /usr/lib/x86_64-linux-gnu/libflite*.so* "$build/files/lib/"
+ln -s libflite.so.1 "$build/files/lib/libflite.so"
+ln -s libflite_cmu_us_kal.so.1 "$build/files/lib/libflite_cmu_us_kal.so"
+install -Dm644 /usr/share/doc/libflite1/copyright "$build/files/share/licenses/flite/copyright"
 mkdir -p "$build/files/share/metainfo"
 sed -e "s/@VERSION@/$version/g" -e "s/@DATE@/$date/g" \
   "$here/$app.metainfo.xml" > "$build/files/share/metainfo/$app.metainfo.xml"
 desktop-file-validate "$build/files/share/applications/$app.desktop"
 appstreamcli validate --no-net "$build/files/share/metainfo/$app.metainfo.xml"
+appstreamcli compose --prefix=/ --origin="$app" --components="$app" \
+  --data-dir="$build/files/share/app-info/xmls" \
+  --icons-dir="$build/files/share/app-info/icons/flatpak" "$build/files"
+test -s "$build/files/share/app-info/xmls/$app.xml.gz"
 
 # Java games still need X11 on Wayland desktops. Network is also used by login and local
 # game/voice bridges. File picking uses XDG portals.
