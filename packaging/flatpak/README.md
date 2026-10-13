@@ -37,6 +37,8 @@ a routine release step. Its public fingerprint is:
 GitHub Pages must use **GitHub Actions** as its deployment source. The workflow needs
 `pages: write`, `id-token: write` and the `github-pages` environment. Repository files
 are deployment artifacts rather than committed generated binaries.
+The environment's deployment rules must allow tags matching `v*`: stable release
+workflows run from the release tag. GitHub's initial `main`-only rule is insufficient.
 
 ## Sandbox behavior
 
