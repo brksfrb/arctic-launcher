@@ -143,13 +143,14 @@ pub fn paint(
     faces.sort_by(|a, b| a.depth.total_cmp(&b.depth));
     // A tall player sets the usual scale. Wide wings need a smaller one so
     // their tips stay in the preview at every yaw, including three-quarter.
-    let mut radius = 0.0_f32;
-    let mut near = 0.0_f32;
-    for p in faces.iter().flat_map(|face| face.corners) {
-        radius = radius.max(p[0].hypot(p[2]));
-        near = near.max(p[2]);
-    }
-    let perspective = CAMERA / (CAMERA - near).max(1.0);
+    // Only what's the same at every yaw goes in (the distance from the turning
+    // axis, and the nearest any point can come: that distance), or the preview
+    // would zoom in and out as it turns.
+    let radius = faces
+        .iter()
+        .flat_map(|face| face.corners)
+        .fold(0.0_f32, |r, p| r.max(p[0].hypot(p[2])));
+    let perspective = CAMERA / (CAMERA - radius).max(1.0);
     let width_scale = if radius > 0.0 {
         1.08 * (rect.width() / 2.0 - 8.0).max(1.0) / (radius * perspective)
     } else {
