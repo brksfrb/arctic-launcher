@@ -18,11 +18,18 @@ pub struct GalleryResult {
 }
 
 impl Tasks {
-    pub fn gallery_search(&self, request: u64, sort: GallerySort, query: String, offset: usize) {
+    pub fn gallery_search(
+        &self,
+        request: u64,
+        sort: GallerySort,
+        query: String,
+        category: String,
+        offset: usize,
+    ) {
         self.run(move |t| {
             let base = cosmetics::base_url();
             let cache = t.dirs().cache().join("arctic-looks");
-            let result = cosmetics::gallery(&base, sort, &query, offset)
+            let result = cosmetics::gallery_in_collection(&base, sort, &query, &category, offset)
                 .map(|page| {
                     let hashes = page.items.iter().map(|i| i.texture.clone()).collect();
                     let textures = in_parallel(hashes, |hash: String| {

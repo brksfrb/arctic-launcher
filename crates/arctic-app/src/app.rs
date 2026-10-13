@@ -899,6 +899,7 @@ impl ArcticApp {
             | Event::PlayerSkin(..)
             | Event::SkinFile(..)
             | Event::ArcticLook(..)
+            | Event::ArcticCatalog(..)
             | Event::CapeFile(..)
             | Event::Gallery(..)
             | Event::GalleryTaken(..)
@@ -1023,6 +1024,7 @@ impl eframe::App for ArcticApp {
             .update(&self.dirs, &self.settings.voice, self.accounts.active());
         self.voice.tick();
         self.together_bridge();
+        self.forget_unused_capes();
         if std::env::var("ARCTIC_DEVSHOT_PAGE").as_deref() == Ok("modpacks")
             && crate::devshot::enabled()
             && !self.inst.modpacks_open

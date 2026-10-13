@@ -3,6 +3,8 @@
 //! each cosmetic slot) next to the list for the one picked. Pointing at
 //! something tries it on in the preview; clicking wears it.
 
+use std::collections::HashSet;
+
 use arctic_core::skins::Variant;
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontId, Rect, RichText, Sense, Stroke, StrokeKind, pos2,
@@ -103,10 +105,19 @@ impl ArcticApp {
         let Some(account) = self.accounts.active() else {
             ui.label(
                 RichText::new(
-                    "Add an account to wear cosmetics. You can still collect skins below.",
+                    "Explore the collection below. Add an account to wear capes and cosmetics.",
                 )
                 .color(p.muted),
             );
+            if self
+                .skins
+                .public_catalog
+                .as_ref()
+                .is_some_and(Result::is_err)
+                && ui.link("Collection unavailable · Retry").clicked()
+            {
+                self.request_skin_state(true);
+            }
             ui.add_space(6.0);
             return;
         };
@@ -254,9 +265,22 @@ impl ArcticApp {
         } else {
             self.skins.zoom
         };
-        let model_rect = Rect::from_center_size(rect.center() + vec2(0.0, 6.0), rect.size() * zoom);
+        // Head and face details need an upper-body camera. A full-body view
+        // makes glasses, crowns and small masks almost impossible to judge.
+        let head_focus = matches!(self.skins.section, Section::Slot("head" | "face"));
+        let (base_zoom, y_offset) = match self.skins.section {
+            // Hats may extend several pixels above the player's head. Leave
+            // space for their full silhouette while keeping the head close.
+            Section::Slot("head") => (1.55, rect.height() * 0.42),
+            Section::Slot("face") => (1.55, rect.height() * 0.29),
+            _ => (1.0, 6.0),
+        };
+        let model_rect = Rect::from_center_size(
+            rect.center() + vec2(0.0, y_offset),
+            rect.size() * zoom * base_zoom,
+        );
         let painter = ui.painter().with_clip_rect(rect);
-        // No skin yet: a plain figure, so a cape or cosmetics still show.
+        // No skin yet: a display model, so a cape or cosmetics still show.
         let key = current
             .skin_key
             .clone()
@@ -333,8 +357,21 @@ impl ArcticApp {
                 FontId::proportional(12.0),
                 p.accent,
             );
+        } else if current.skin_key.is_none() && !head_focus {
+            painter.text(
+                rect.left_top() + vec2(12.0, 10.0),
+                Align2::LEFT_TOP,
+                "Display model",
+                FontId::proportional(12.0),
+                p.muted,
+            );
         }
-        response.on_hover_text("Drag to turn · scroll to zoom · double-click to reset");
+        let hint = if current.skin_key.is_none() {
+            "Display model · drag to turn · scroll to zoom · double-click to reset"
+        } else {
+            "Drag to turn · scroll to zoom · double-click to reset"
+        };
+        response.on_hover_text(hint);
     }
 
     /// What you're wearing, each with a way to take it off, and how saving goes.
@@ -499,19 +536,30 @@ impl ArcticApp {
     /// Skins, Capes, then one row per cosmetic slot (with how many there are).
     fn category_rail(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        let counts: Vec<(&'static str, usize)> = SLOTS
-            .iter()
-            .map(|slot| {
-                let n = self.arctic_state().map_or(0, |s| {
-                    super::cards::cosmetic_entries(s)
+        let mut counts = [0; SLOTS.len()];
+        if let Some(state) = self.catalog_state() {
+            let mut seen = HashSet::new();
+            for (id, slot) in state
+                .meshes
+                .iter()
+                .map(|(item, _)| (item.id.as_str(), item.slot.as_str()))
+                .chain(
+                    state
+                        .items
                         .iter()
-                        .filter(|e| slot_key(&e.slot) == *slot)
-                        .count()
-                });
-                (*slot, n)
-            })
-            .collect();
-        let capes = self.arctic_state().map(|s| s.presets.len());
+                        .map(|(item, _)| (item.id.as_str(), item.slot.as_str())),
+                )
+            {
+                if seen.insert(id)
+                    && let Some(index) = SLOTS
+                        .iter()
+                        .position(|candidate| *candidate == slot_key(slot))
+                {
+                    counts[index] += 1;
+                }
+            }
+        }
+        let capes = self.catalog_state().map(|s| s.presets.len());
         let mut pick = None;
         if rail_row(ui, p, "Skins", None, self.skins.section == Section::Skins) {
             pick = Some(Section::Skins);
@@ -522,7 +570,7 @@ impl ArcticApp {
         ui.add_space(10.0);
         ui.label(RichText::new("COSMETICS").small().color(p.muted));
         ui.add_space(2.0);
-        for (slot, n) in counts {
+        for (slot, n) in SLOTS.into_iter().zip(counts) {
             if rail_row(
                 ui,
                 p,

@@ -292,6 +292,8 @@ pub struct GalleryItem {
     /// Texture hash.
     pub texture: String,
     pub model: String,
+    #[serde(default)]
+    pub category: String,
     pub author: String,
     #[serde(default)]
     pub downloads: i64,
@@ -325,6 +327,17 @@ pub const GALLERY_PAGE: usize = 48;
 
 /// Browse the gallery (`query` matches names and authors); `offset` pages on.
 pub fn gallery(base: &str, sort: GallerySort, query: &str, offset: usize) -> Result<GalleryPage> {
+    gallery_in_collection(base, sort, query, "", offset)
+}
+
+/// Browse one curated skin collection; an empty category includes everything.
+pub fn gallery_in_collection(
+    base: &str,
+    sort: GallerySort,
+    query: &str,
+    category: &str,
+    offset: usize,
+) -> Result<GalleryPage> {
     let sort = match sort {
         GallerySort::Popular => "popular",
         GallerySort::New => "new",
@@ -342,7 +355,9 @@ pub fn gallery(base: &str, sort: GallerySort, query: &str, offset: usize) -> Res
         })
         .collect();
     get(
-        &format!("{base}/v1/gallery?sort={sort}&q={q}&offset={offset}&limit={GALLERY_PAGE}"),
+        &format!(
+            "{base}/v1/gallery?sort={sort}&q={q}&category={category}&offset={offset}&limit={GALLERY_PAGE}"
+        ),
         None,
     )
 }

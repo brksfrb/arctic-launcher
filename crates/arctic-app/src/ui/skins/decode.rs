@@ -16,6 +16,8 @@ const UPLOAD_BUDGET: usize = 24 << 20;
 struct Job {
     key: String,
     png: Vec<u8>,
+    max_width: u32,
+    still: bool,
 }
 
 /// A decoded cape: its frames top to bottom (None: not a cape image).
@@ -48,8 +50,9 @@ impl Decoder {
         self.pending.contains(key)
     }
 
-    /// Decode `png` in the background (once per key until it's finished).
-    pub fn request(&mut self, ctx: &egui::Context, key: &str, png: Vec<u8>) {
+    /// Decode `png` in the background (once per key until it's finished), frames at most
+    /// `max_width` wide; `still`: the first frame only.
+    pub fn request(&mut self, ctx: &egui::Context, key: &str, png: Vec<u8>, max_width: u32, still: bool) {
         if !self.pending.insert(key.to_owned()) {
             return;
         }
@@ -59,6 +62,8 @@ impl Decoder {
         let job = Job {
             key: key.to_owned(),
             png,
+            max_width,
+            still,
         };
         if jobs.send(job).is_err() {
             log::warn!("cape decoder stopped");
@@ -103,7 +108,12 @@ fn spawn(ctx: &egui::Context, done: Sender<Decoded>) -> Sender<Job> {
                     let Ok(job) = job else {
                         return;
                     };
-                    let frames = cape_frames(&job.png);
+                    let frames = cape_frames(&job.png, job.max_width).map(|mut frames| {
+                        if job.still {
+                            frames.truncate(1);
+                        }
+                        frames
+                    });
                     if done
                         .send(Decoded {
                             key: job.key,
@@ -123,8 +133,10 @@ fn spawn(ctx: &egui::Context, done: Sender<Decoded>) -> Sender<Job> {
     tx
 }
 
-/// A cape image's frames (one, or a stack of animation frames).
-pub(super) fn cape_frames(png: &[u8]) -> Option<Vec<ColorImage>> {
+/// A cape image's frames (one, or a stack of animation frames), scaled down to `max_width` if
+/// wider: a card shows a cape a hundred pixels tall, and every frame of a 1024-wide animated
+/// cape is 2 MB of video memory.
+pub(super) fn cape_frames(png: &[u8], max_width: u32) -> Option<Vec<ColorImage>> {
     // Only cape-sized images get decoded (a bad file could claim any size).
     if !arctic_core::cosmetics::is_cape_png(png) {
         return None;
@@ -140,7 +152,17 @@ pub(super) fn cape_frames(png: &[u8]) -> Option<Vec<ColorImage>> {
             .map(|i| {
                 let start = i * frame_h as usize * row;
                 let bytes = &raw[start..start + frame_h as usize * row];
-                ColorImage::from_rgba_unmultiplied([w as usize, frame_h as usize], bytes)
+                if w <= max_width {
+                    return ColorImage::from_rgba_unmultiplied([w as usize, frame_h as usize], bytes);
+                }
+                let (sw, sh) = (max_width, (frame_h * max_width / w).max(1));
+                match image::RgbaImage::from_raw(w, frame_h, bytes.to_vec()) {
+                    Some(frame) => {
+                        let small = image::imageops::resize(&frame, sw, sh, image::imageops::FilterType::Triangle);
+                        ColorImage::from_rgba_unmultiplied([sw as usize, sh as usize], small.as_raw())
+                    }
+                    None => ColorImage::from_rgba_unmultiplied([w as usize, frame_h as usize], bytes),
+                }
             })
             .collect(),
     )

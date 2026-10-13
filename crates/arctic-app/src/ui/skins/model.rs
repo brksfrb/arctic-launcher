@@ -115,13 +115,7 @@ pub fn paint(
     meshes: &[WornMesh],
     pose: Pose,
 ) {
-    let scale = rect.height() / (HEIGHT + 6.0);
-    let center = rect.center();
     let view = |p: V3| -> V3 { rotate_view(p, pose) };
-    let project = |p: V3| -> Pos2 {
-        let k = CAMERA / (CAMERA - p[2]);
-        pos2(center.x + p[0] * scale * k, center.y - p[1] * scale * k)
-    };
     let mut faces = build_faces(
         &parts(variant, has_overlay, pose.swing),
         skin,
@@ -147,6 +141,26 @@ pub fn paint(
     // One depth order for body, cape and cosmetics, so each hides the others
     // correctly; consecutive faces with the same texture share a mesh.
     faces.sort_by(|a, b| a.depth.total_cmp(&b.depth));
+    // A tall player sets the usual scale. Wide wings need a smaller one so
+    // their tips stay in the preview at every yaw, including three-quarter.
+    let mut radius = 0.0_f32;
+    let mut near = 0.0_f32;
+    for p in faces.iter().flat_map(|face| face.corners) {
+        radius = radius.max(p[0].hypot(p[2]));
+        near = near.max(p[2]);
+    }
+    let perspective = CAMERA / (CAMERA - near).max(1.0);
+    let width_scale = if radius > 0.0 {
+        1.08 * (rect.width() / 2.0 - 8.0).max(1.0) / (radius * perspective)
+    } else {
+        f32::INFINITY
+    };
+    let scale = (rect.height() / (HEIGHT + 6.0)).min(width_scale);
+    let center = rect.center();
+    let project = |p: V3| -> Pos2 {
+        let k = CAMERA / (CAMERA - p[2]);
+        pos2(center.x + p[0] * scale * k, center.y - p[1] * scale * k)
+    };
     super::gpu::draw(painter, &faces, &project);
 }
 

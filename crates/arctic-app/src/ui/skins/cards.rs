@@ -334,19 +334,21 @@ impl ArcticApp {
     /// animation icon; the Animate switch is in the Equipped card.
     fn arctic_capes(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        let Some(state) = self.arctic_state().cloned() else {
-            ui.label(RichText::new("Arctic capes show once your look has loaded.").color(p.muted));
+        let Some(state) = self.catalog_state() else {
+            ui.label(RichText::new("Arctic capes are loading.").color(p.muted));
             return;
         };
+        let all_presets = state.presets.clone();
+        let worn_cape = state.look.cape.clone();
+        let can_wear = self.arctic_state().is_some();
         let ctx = ui.ctx().clone();
         let worn = match &self.skins.trying.cape {
             Some(Some(key)) => key.strip_prefix("acape:").map(str::to_owned),
             Some(None) => None,
-            None => state.look.cape.clone(),
+            None => worn_cape,
         };
         let now = ui.input(|i| i.time);
-        let presets: Vec<_> = state
-            .presets
+        let presets: Vec<_> = all_presets
             .iter()
             .filter(|c| self.matches_search(&c.name))
             .cloned()
@@ -359,9 +361,10 @@ impl ArcticApp {
             if r.hovered() {
                 self.skins.hover = Some(Hover::Cape(None));
             }
-            if r.clicked() && worn.is_some() {
+            if r.clicked() && worn.is_some() && can_wear {
                 pick = Some((None, None));
             }
+            let mut hovered_card = None;
             for preset in &presets {
                 let animate_on = !self.settings.capes_still.contains(&preset.id);
                 let shown = match (&preset.still, animate_on) {
@@ -369,7 +372,7 @@ impl ArcticApp {
                     _ => preset.texture.clone(),
                 };
                 let key = format!("acape:{shown}");
-                let tex = self.skin_texture(&ctx, &key).map(|t| animate(&ctx, t, now));
+                let tex = self.cape_card_texture(&ctx, &key, preset.still.as_deref(), now);
                 let active = worn.as_deref().is_some_and(|h| preset.is_texture(h));
                 let r = cape_card(ui, p, tex, Icon::Close, &preset.name, None, active);
                 if preset.has_still() {
@@ -377,25 +380,30 @@ impl ArcticApp {
                 }
                 if r.hovered() {
                     self.skins.hover = Some(Hover::Cape(Some(key.clone())));
+                    hovered_card = Some(key.clone());
                 }
-                if r.clicked() && !active {
+                if r.clicked() && !active && can_wear {
                     pick = Some((Some(preset.choice(animate_on)), Some(key)));
                 }
             }
             let custom = worn
                 .as_ref()
-                .filter(|h| !state.presets.iter().any(|p| p.is_texture(h)));
+                .filter(|h| !all_presets.iter().any(|p| p.is_texture(h)));
             if let Some(hash) = custom {
-                let tex = self
-                    .skin_texture(&ctx, &format!("acape:{hash}"))
-                    .map(|t| animate(&ctx, t, now));
-                cape_card(ui, p, tex, Icon::Close, "Your cape", None, true);
+                let key = format!("acape:{hash}");
+                let tex = self.cape_card_texture(&ctx, &key, None, now);
+                if cape_card(ui, p, tex, Icon::Close, "Your cape", None, true).hovered() {
+                    hovered_card = Some(key);
+                }
             }
-            let r = cape_card(ui, p, None, Icon::Plus, "Your own…", None, false).on_hover_text(
-                "Use your own cape image: 64×32 up to 1024×512; stack up to 32 frames (12288 pixels tall) to animate it, at 8 frames a second",
-            );
-            if r.clicked() {
-                upload = true;
+            self.skins.animating = hovered_card;
+            if can_wear {
+                let r = cape_card(ui, p, None, Icon::Plus, "Your own…", None, false).on_hover_text(
+                    "Use your own cape image: 64×32 up to 1024×512; stack up to 32 frames (12288 pixels tall) to animate it, at 8 frames a second",
+                );
+                if r.clicked() {
+                    upload = true;
+                }
             }
         });
         ui.add_space(12.0);
@@ -467,12 +475,17 @@ impl ArcticApp {
     /// ones, the sculpted ones, and a white texel for the sculpted ones that
     /// are painted with vertex colors alone.
     pub(super) fn cosmetic_models(&mut self, ctx: &egui::Context, ids: &[String]) -> WornModels {
-        let Some(state) = self.arctic_state().cloned() else {
+        if ids.is_empty() {
+            return WornModels::default();
+        }
+        let Some(entries) = self.catalog_state().map(|state| {
+            cosmetic_entries_matching(state, |id| ids.iter().any(|wanted| wanted == id))
+        }) else {
             return WornModels::default();
         };
         let fits = self.current_fits();
         let mut out = WornModels::default();
-        for entry in cosmetic_entries(&state) {
+        for entry in entries {
             if !ids.contains(&entry.id) {
                 continue;
             }
@@ -513,24 +526,24 @@ impl ArcticApp {
     /// One slot's cosmetics: pointing at one tries it on, clicking wears it
     /// (replacing what's in that slot) or takes it off.
     pub(super) fn cosmetics_header(&mut self, ui: &mut egui::Ui, slot: &'static str) {
-        self.list_header(
-            ui,
-            slot_name(slot),
-            "One per slot. Point at one to try it on; click to wear it, again to take it off.",
-            true,
-        );
+        let hint = if self.arctic_state().is_some() {
+            "One per slot. Point at one to try it on; click to wear it, again to take it off."
+        } else {
+            "Point at one to try it on. Add an account to wear it."
+        };
+        self.list_header(ui, slot_name(slot), hint, true);
     }
 
     pub(super) fn cosmetics_body(&mut self, ui: &mut egui::Ui, slot: &'static str) {
         let p = self.palette();
-        let Some(state) = self.arctic_state().cloned() else {
-            ui.label(RichText::new("Cosmetics show once your look has loaded.").color(p.muted));
+        let Some(entries) = self.catalog_state().map(cosmetic_entries) else {
+            ui.label(RichText::new("Cosmetics are loading.").color(p.muted));
             return;
         };
+        let can_wear = self.arctic_state().is_some();
         let ctx = ui.ctx().clone();
         let now = ui.input(|i| i.time);
         let worn_ids = self.worn_ids();
-        let entries = cosmetic_entries(&state);
         let items: Vec<&Entry3d> = entries
             .iter()
             .filter(|e| slot_key(&e.slot) == slot && self.matches_search(&e.name))
@@ -585,7 +598,7 @@ impl ArcticApp {
                     self.skins.hover = Some(Hover::Cosmetics(after(&entry.id, worn)));
                     ctx.request_repaint();
                 }
-                if r.clicked() {
+                if r.clicked() && can_wear {
                     pick = Some(after(&entry.id, worn));
                 }
             }
@@ -708,6 +721,28 @@ fn section_label(ui: &mut egui::Ui, p: &Palette, text: &str) {
 }
 
 /// The frame to show now; keeps repainting while a cape is animated.
+impl ArcticApp {
+    /// A cape card's picture: standing still, or the whole animation while it's hovered (the
+    /// still picture meanwhile, until the animation has loaded). An animated preset's own still
+    /// image (`still`, a single frame) is used when it has one, so the frame stack is only
+    /// decoded for the cape being pointed at.
+    fn cape_card_texture(&mut self, ctx: &egui::Context, key: &str, still: Option<&str>, now: f64) -> Option<egui::TextureId> {
+        if self.skins.animating.as_deref() == Some(key)
+            && let Some(t) = self.skin_texture(ctx, key)
+        {
+            return Some(animate(ctx, t, now));
+        }
+        if let Some(still) = still {
+            let still_key = format!("acape:{still}");
+            if self.skin_png(&still_key).is_some() {
+                return self.skin_texture(ctx, &still_key).map(|t| t.handle.id());
+            }
+        }
+        self.skin_texture(ctx, &format!("{key}{}", super::STILL))
+            .map(|t| t.handle.id())
+    }
+}
+
 fn animate(ctx: &egui::Context, texture: &super::SkinTexture, now: f64) -> egui::TextureId {
     if texture.animated() {
         ctx.request_repaint_after(std::time::Duration::from_secs_f64(texture.frame_secs));
@@ -817,9 +852,17 @@ pub(super) enum Shape3d {
 }
 
 pub(super) fn cosmetic_entries(state: &crate::skin_tasks::ArcticState) -> Vec<Entry3d> {
+    cosmetic_entries_matching(state, |_| true)
+}
+
+fn cosmetic_entries_matching(
+    state: &crate::skin_tasks::ArcticState,
+    include: impl Fn(&str) -> bool,
+) -> Vec<Entry3d> {
     let mut out: Vec<Entry3d> = state
         .meshes
         .iter()
+        .filter(|(item, _)| include(&item.id))
         .map(|(item, mesh)| Entry3d {
             id: item.id.clone(),
             name: item.name.clone(),
@@ -831,7 +874,7 @@ pub(super) fn cosmetic_entries(state: &crate::skin_tasks::ArcticState) -> Vec<En
         })
         .collect();
     for (item, geometry) in &state.items {
-        if !out.iter().any(|e| e.id == item.id) {
+        if include(&item.id) && !out.iter().any(|e| e.id == item.id) {
             out.push(Entry3d {
                 id: item.id.clone(),
                 name: item.name.clone(),

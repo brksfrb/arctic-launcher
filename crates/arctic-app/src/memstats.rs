@@ -92,7 +92,7 @@ pub fn report(ctx: &egui::Context) -> String {
         *grouped.entry(format!("{name} {}x{}", meta.size[0], meta.size[1])).or_default() += meta.bytes_used();
     }
     let mut textures: Vec<(String, usize)> = grouped.into_iter().collect();
-    textures.sort_by(|a, b| b.1.cmp(&a.1));
+    textures.sort_by_key(|t| std::cmp::Reverse(t.1));
     out += &format!(
         "GPU textures: {} totaling {:.1} MB\n",
         textures.len(),

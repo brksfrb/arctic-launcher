@@ -109,6 +109,8 @@ pub enum Event {
     PlayerSkin(String, Outcome<(Vec<u8>, arctic_core::skins::Variant)>),
     /// The Arctic look of an account (account id, result).
     ArcticLook(String, Outcome<crate::skin_tasks::ArcticState>),
+    /// Public capes and cosmetics, available without an account.
+    ArcticCatalog(Outcome<crate::skin_tasks::ArcticState>),
     /// A picked cape image, or `None` if cancelled.
     CapeFile(Outcome<Option<Vec<u8>>>),
     /// A picked skin file (name, bytes), or `None` if cancelled.

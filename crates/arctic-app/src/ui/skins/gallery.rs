@@ -14,11 +14,22 @@ use crate::toasts::Kind;
 use crate::widgets;
 
 const SEARCH_DELAY: f64 = 0.35;
+const COLLECTIONS: [(&str, &str); 8] = [
+    ("", "All"),
+    ("adventure", "Adventure"),
+    ("fantasy", "Fantasy"),
+    ("gamer", "Gamer"),
+    ("animals", "Animals"),
+    ("pvp", "PvP"),
+    ("casual", "Casual"),
+    ("community", "Community"),
+];
 
 #[derive(Default)]
 pub struct GalleryUi {
     pub query: String,
     pub sort: GallerySort,
+    pub category: &'static str,
     request: u64,
     pub loading: bool,
     pub page: Option<Result<Vec<GalleryItem>, String>>,
@@ -69,6 +80,19 @@ impl ArcticApp {
                 ui.spinner();
             }
         });
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            for (key, label) in COLLECTIONS {
+                if ui
+                    .selectable_label(self.skins.gallery.category == key, label)
+                    .clicked()
+                    && self.skins.gallery.category != key
+                {
+                    self.skins.gallery.category = key;
+                    search = true;
+                }
+            }
+        });
         if search {
             self.skins.gallery.typed_at = None;
             self.run_gallery_search();
@@ -87,10 +111,7 @@ impl ArcticApp {
             }
             Some(Ok(items)) if items.is_empty() => {
                 ui.label(
-                    RichText::new(
-                        "Nothing here yet. Share a skin from your library to start the gallery.",
-                    )
-                    .color(p.muted),
+                    RichText::new("No skins match this collection and search.").color(p.muted),
                 );
                 return;
             }
@@ -150,8 +171,15 @@ impl ArcticApp {
         let g = &mut self.skins.gallery;
         g.request += 1;
         g.loading = true;
-        self.tasks
-            .gallery_search(g.request, g.sort, g.query.trim().to_owned(), 0);
+        g.page = None;
+        g.total = 0;
+        self.tasks.gallery_search(
+            g.request,
+            g.sort,
+            g.query.trim().to_owned(),
+            g.category.to_owned(),
+            0,
+        );
     }
 
     /// The next page of the same search.
@@ -166,8 +194,13 @@ impl ArcticApp {
         let offset = items.len();
         g.request += 1;
         g.loading = true;
-        self.tasks
-            .gallery_search(g.request, g.sort, g.query.trim().to_owned(), offset);
+        self.tasks.gallery_search(
+            g.request,
+            g.sort,
+            g.query.trim().to_owned(),
+            g.category.to_owned(),
+            offset,
+        );
     }
 
     /// A gallery skin's right-click menu.

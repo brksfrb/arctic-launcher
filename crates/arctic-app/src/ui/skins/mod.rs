@@ -106,6 +106,10 @@ pub struct SkinsUi {
     failed: HashSet<String>,
     /// Capes being decoded in the background.
     decoder: decode::Decoder,
+    /// The cape card under the pointer: the only one animating.
+    animating: Option<String>,
+    /// When each cape texture was last drawn (unused ones are let go, see `forget_unused_capes`).
+    used: HashMap<String, std::time::Instant>,
     pub section: Section,
     pub trying: Trying,
     /// The newest look asked for (sent or queued): later clicks build on it.
@@ -126,6 +130,9 @@ pub struct SkinsUi {
     /// Account id → Arctic look.
     pub arctic: HashMap<String, Result<ArcticState, String>>,
     pub arctic_busy: bool,
+    /// Public catalog shown before sign-in (or when account look loading fails).
+    pub public_catalog: Option<Result<ArcticState, String>>,
+    pub public_catalog_busy: bool,
     pub player_name: String,
     pub looking_up: bool,
     pub yaw: f32,
@@ -176,7 +183,10 @@ impl ArcticApp {
             Some("capes") => Section::Capes,
             Some("cosmetics") => Section::Slot("head"),
             Some("face") => Section::Slot("face"),
+            Some("back") => Section::Slot("back"),
             Some("shoulders") => Section::Slot("shoulders"),
+            Some("arms") => Section::Slot("arms"),
+            Some("body") => Section::Slot("body"),
             _ => Section::default(),
         };
         self.skins = SkinsUi {
@@ -223,11 +233,22 @@ impl ArcticApp {
     /// again with `force`.
     fn request_skin_state(&mut self, force: bool) {
         let Some(account) = self.accounts.active().cloned() else {
+            if (force || self.skins.public_catalog.is_none()) && !self.skins.public_catalog_busy {
+                self.skins.public_catalog_busy = true;
+                self.tasks.arctic_catalog();
+            }
             return;
         };
         if (force || !self.skins.arctic.contains_key(&account.id)) && !self.skins.arctic_busy {
             self.skins.arctic_busy = true;
             self.tasks.arctic_look(account.clone(), None, None);
+        }
+        if matches!(self.skins.arctic.get(&account.id), Some(Err(_)))
+            && self.skins.public_catalog.is_none()
+            && !self.skins.public_catalog_busy
+        {
+            self.skins.public_catalog_busy = true;
+            self.tasks.arctic_catalog();
         }
         if account.is_microsoft()
             && (force || !self.skins.account.contains_key(&account.id))
@@ -249,6 +270,16 @@ impl ArcticApp {
     pub(crate) fn arctic_state(&self) -> Option<&ArcticState> {
         let account = self.accounts.active()?;
         self.skins.arctic.get(&account.id)?.as_ref().ok()
+    }
+
+    /// Read-only assets for the cards and preview; wearing still needs `arctic_state`.
+    pub(crate) fn catalog_state(&self) -> Option<&ArcticState> {
+        self.arctic_state().or_else(|| {
+            self.skins
+                .public_catalog
+                .as_ref()
+                .and_then(|result| result.as_ref().ok())
+        })
     }
 
     /// Wear a change right away (`show` puts it in the preview) and save it:
@@ -413,8 +444,12 @@ impl ArcticApp {
         self.skins.lib_hashes.get(id).cloned()
     }
 
-    /// Texture for a key (see `SkinsUi`), uploading on first use.
+    /// Texture for a key (see `SkinsUi`), uploading on first use. A cape key ending in
+    /// [`STILL`] is its first frame only.
     pub(crate) fn skin_texture(&mut self, ctx: &egui::Context, key: &str) -> Option<&SkinTexture> {
+        if is_cape(key) {
+            self.skins.used.insert(key.to_owned(), std::time::Instant::now());
+        }
         if key == MANNEQUIN && !self.skins.textures.contains_key(key) {
             self.skins.textures.insert(key.to_owned(), mannequin(ctx));
         }
@@ -432,10 +467,10 @@ impl ArcticApp {
             if self.skins.decoder.is_pending(key) {
                 return None;
             }
-            let png = self.skin_png(key)?;
+            let png = self.skin_png(full_key(key))?;
             // Capes can be huge stacks of frames: decoded in the background.
-            if key.starts_with("mccape:") || key.starts_with("acape:") {
-                self.skins.decoder.request(ctx, key, png);
+            if is_cape(key) {
+                self.skins.decoder.request(ctx, key, png, CAPE_WIDTH, key.ends_with(STILL));
                 return None;
             }
             let Some(mut texture) = upload(ctx, key, &png) else {
@@ -468,10 +503,27 @@ impl ArcticApp {
         }
     }
 
+    /// Let go of cape textures not drawn for a while: the Cosmetics tab's capes after leaving
+    /// it, or ones scrolled away. They're decoded again when they come back.
+    pub(crate) fn forget_unused_capes(&mut self) {
+        let now = std::time::Instant::now();
+        let stale: Vec<String> = self
+            .skins
+            .used
+            .iter()
+            .filter(|(_, at)| now.duration_since(**at) > UNUSED_CAPE)
+            .map(|(k, _)| k.clone())
+            .collect();
+        for key in stale {
+            self.skins.used.remove(&key);
+            self.skins.textures.remove(&key);
+        }
+    }
+
     /// The playback speed a preset cape asks for (`acape:` keys; others play at the default).
     fn cape_frame_secs(&self, key: &str) -> Option<f64> {
-        let hash = key.strip_prefix("acape:")?;
-        let presets = &self.arctic_state()?.presets;
+        let hash = full_key(key).strip_prefix("acape:")?;
+        let presets = &self.catalog_state()?.presets;
         presets
             .iter()
             .find(|p| p.is_texture(hash))
@@ -483,7 +535,7 @@ impl ArcticApp {
         if let Some(rest) = key.strip_prefix("amesh:") {
             let (hash, number) = rest.split_once(':')?;
             let (_, mesh) = self
-                .arctic_state()?
+                .catalog_state()?
                 .meshes
                 .iter()
                 .find(|(item, _)| item.mesh == hash)?;
@@ -500,7 +552,7 @@ impl ArcticApp {
             .or_else(|| key.strip_prefix("acape:"))
             .or_else(|| key.strip_prefix("acos:"))
         {
-            return self.arctic_state()?.png(hash).map(<[u8]>::to_vec);
+            return self.catalog_state()?.png(hash).map(<[u8]>::to_vec);
         }
         let account = self.accounts.active()?;
         let state = self.skins.account.get(&account.id)?.as_ref().ok()?;
@@ -637,6 +689,13 @@ impl ArcticApp {
                 self.skins.account.insert(account_id, result);
             }
             Event::ArcticLook(account_id, result) => self.on_look_saved(account_id, result),
+            Event::ArcticCatalog(result) => {
+                self.skins.public_catalog_busy = false;
+                if let Err(e) = &result {
+                    log::warn!("public looks catalog: {e}");
+                }
+                self.skins.public_catalog = Some(result);
+            }
             Event::PlayerSkin(name, result) => {
                 self.skins.looking_up = false;
                 match result {
@@ -729,36 +788,94 @@ fn upload_mesh_texture(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<Ski
     })
 }
 
-/// Texture key of the plain figure shown when there's no skin yet.
+/// Texture key of the display model shown when there's no skin yet.
 pub(crate) const MANNEQUIN: &str = "mannequin";
 
-/// A plain, featureless figure in the skin layout (so cosmetics can be
-/// previewed before any skin is chosen). Drawn in code: no bundled art.
+/// A small, original Minecraft-style skin for trying on cosmetics before a
+/// player skin is selected. Only the standard 64×64 base UV islands are drawn.
 fn mannequin(ctx: &egui::Context) -> SkinTexture {
     let mut rgba = vec![0u8; 64 * 64 * 4];
-    // (x, y, w, h, shade) of each base-layer region in the 64×64 layout.
-    let regions: [(usize, usize, usize, usize, u8); 6] = [
-        (0, 0, 32, 16, 196),   // head
-        (16, 16, 24, 16, 176), // body
-        (40, 16, 16, 16, 186), // right arm
-        (32, 48, 16, 16, 186), // left arm
-        (0, 16, 16, 16, 160),  // right leg
-        (16, 48, 16, 16, 160), // left leg
-    ];
-    for (x0, y0, w, h, shade) in regions {
+    let mut paint = |x0: usize, y0: usize, w: usize, h: usize, color: [u8; 4]| {
         for y in y0..y0 + h {
             for x in x0..x0 + w {
                 let i = (y * 64 + x) * 4;
-                // A faint checker keeps the shape readable when turning.
-                let tint = if (x + y) % 2 == 0 { 0 } else { 8 };
-                rgba[i..i + 4].copy_from_slice(&[
-                    shade - tint,
-                    shade - tint + 6,
-                    shade - tint + 14,
-                    255,
-                ]);
+                rgba[i..i + 4].copy_from_slice(&color);
             }
         }
+    };
+    const HAIR: [u8; 4] = [37, 34, 53, 255];
+    const HAIR_LIGHT: [u8; 4] = [72, 65, 92, 255];
+    const SKIN: [u8; 4] = [226, 169, 129, 255];
+    const SKIN_SIDE: [u8; 4] = [198, 133, 104, 255];
+    const EYE: [u8; 4] = [29, 39, 55, 255];
+    const JACKET: [u8; 4] = [39, 87, 139, 255];
+    const JACKET_SIDE: [u8; 4] = [31, 66, 111, 255];
+    const JACKET_BACK: [u8; 4] = [35, 76, 124, 255];
+    const TRIM: [u8; 4] = [82, 211, 215, 255];
+    const SHIRT: [u8; 4] = [235, 227, 205, 255];
+    const PANTS: [u8; 4] = [42, 54, 78, 255];
+    const PANTS_SIDE: [u8; 4] = [33, 43, 64, 255];
+    const BOOTS: [u8; 4] = [24, 35, 52, 255];
+
+    // Head: a readable, deliberately simple face, with shaded sides and a
+    // short blocky fringe. The back stays quiet beneath capes and headpieces.
+    paint(8, 0, 8, 8, HAIR);
+    paint(16, 0, 8, 8, HAIR);
+    paint(0, 8, 8, 8, SKIN_SIDE);
+    paint(8, 8, 8, 8, SKIN);
+    paint(16, 8, 8, 8, SKIN_SIDE);
+    paint(24, 8, 8, 8, HAIR);
+    paint(0, 8, 8, 3, HAIR);
+    paint(16, 8, 8, 3, HAIR);
+    paint(8, 8, 8, 2, HAIR);
+    paint(8, 10, 2, 1, HAIR);
+    paint(14, 10, 2, 1, HAIR);
+    paint(10, 11, 1, 2, EYE);
+    paint(13, 11, 1, 2, EYE);
+    paint(11, 14, 2, 1, SKIN_SIDE);
+    paint(9, 1, 5, 1, HAIR_LIGHT);
+    paint(25, 9, 5, 1, HAIR_LIGHT);
+
+    // Jacket: clear cyan shoulder line and cuffs, restrained back detail so
+    // the cape or cosmetic remains the focus of the try-on.
+    paint(20, 16, 8, 4, JACKET);
+    paint(28, 16, 8, 4, JACKET_SIDE);
+    paint(16, 20, 4, 12, JACKET_SIDE);
+    paint(20, 20, 8, 12, JACKET);
+    paint(28, 20, 4, 12, JACKET_SIDE);
+    paint(32, 20, 8, 12, JACKET_BACK);
+    paint(20, 20, 8, 1, TRIM);
+    paint(32, 20, 8, 1, TRIM);
+    paint(23, 21, 2, 9, SHIRT);
+    paint(23, 22, 2, 1, TRIM);
+    paint(20, 30, 8, 2, JACKET_SIDE);
+    paint(33, 23, 1, 5, TRIM);
+    paint(38, 23, 1, 5, TRIM);
+
+    // Both classic-width arms use the same colors but their own UV islands.
+    for (x, y) in [(40, 16), (32, 48)] {
+        paint(x + 4, y, 4, 4, JACKET);
+        paint(x + 8, y, 4, 4, JACKET_SIDE);
+        paint(x, y + 4, 4, 12, JACKET_SIDE);
+        paint(x + 4, y + 4, 4, 12, JACKET);
+        paint(x + 8, y + 4, 4, 12, JACKET_SIDE);
+        paint(x + 12, y + 4, 4, 12, JACKET_BACK);
+        paint(x + 4, y + 4, 4, 1, TRIM);
+        paint(x + 4, y + 12, 4, 1, TRIM);
+        paint(x, y + 13, 16, 3, SKIN_SIDE);
+        paint(x + 4, y + 13, 4, 3, SKIN);
+    }
+
+    // Trouser legs and boots are dark enough to keep bright cosmetics legible.
+    for (x, y) in [(0, 16), (16, 48)] {
+        paint(x + 4, y, 4, 4, PANTS);
+        paint(x + 8, y, 4, 4, PANTS_SIDE);
+        paint(x, y + 4, 4, 12, PANTS_SIDE);
+        paint(x + 4, y + 4, 4, 12, PANTS);
+        paint(x + 8, y + 4, 4, 12, PANTS_SIDE);
+        paint(x + 12, y + 4, 4, 12, PANTS_SIDE);
+        paint(x, y + 13, 16, 3, BOOTS);
+        paint(x + 5, y + 6, 1, 6, JACKET_SIDE);
     }
     let color = ColorImage::from_rgba_unmultiplied([64, 64], &rgba);
     SkinTexture {
@@ -795,7 +912,25 @@ fn upload_plain(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTextur
 
 /// A cape texture; animated capes become one texture per frame.
 fn upload_cape(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture> {
-    cape_texture(ctx, key, decode::cape_frames(png)?)
+    cape_texture(ctx, key, decode::cape_frames(png, CAPE_WIDTH)?)
+}
+
+/// Appended to a cape key for its first frame alone: cards stand still until hovered.
+pub(super) const STILL: &str = "@still";
+/// Capes are kept at most this wide. A card shows the back ~110 px tall and the 3D preview
+/// about as big; a 512-wide cape's back is 128 pixels, and each frame is a quarter of a
+/// 1024-wide one's 2 MB.
+const CAPE_WIDTH: u32 = 512;
+/// A cape texture not drawn for this long is let go.
+const UNUSED_CAPE: std::time::Duration = std::time::Duration::from_secs(20);
+
+fn is_cape(key: &str) -> bool {
+    key.starts_with("mccape:") || key.starts_with("acape:")
+}
+
+/// The key without the still-frame suffix.
+fn full_key(key: &str) -> &str {
+    key.strip_suffix(STILL).unwrap_or(key)
 }
 
 /// Decoded cape frames as textures (one per frame).
