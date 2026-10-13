@@ -23,9 +23,49 @@ pub struct DiscoverUi {
     list: Option<Outcome<Vec<PublicServer>>>,
     access: Access,
     search: String,
+    sort: Sort,
     /// "Surprise me" result, shown first.
     picked: Option<String>,
     form: Option<ListForm>,
+}
+
+/// How the list is ordered. Random (the server's own new order every time) is the point of the
+/// list and the default; the others are there for a look at the biggest, the smallest or a name.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Sort {
+    #[default]
+    Random,
+    MostPlayers,
+    FewestPlayers,
+    Name,
+}
+
+impl Sort {
+    const ALL: [(Sort, &'static str); 4] = [
+        (Sort::Random, "Random"),
+        (Sort::MostPlayers, "Most players"),
+        (Sort::FewestPlayers, "Fewest players"),
+        (Sort::Name, "Name"),
+    ];
+
+    fn label(self) -> &'static str {
+        Self::ALL
+            .iter()
+            .find(|(s, _)| *s == self)
+            .map_or("Random", |(_, l)| l)
+    }
+
+    /// Ordered in place; servers that don't answer go last when sorting by players.
+    fn apply(self, list: &mut [&PublicServer]) {
+        match self {
+            Sort::Random => {}
+            Sort::MostPlayers => {
+                list.sort_by_key(|s| (!s.online, std::cmp::Reverse(s.players)));
+            }
+            Sort::FewestPlayers => list.sort_by_key(|s| (!s.online, s.players)),
+            Sort::Name => list.sort_by_cached_key(|s| s.name.to_lowercase()),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -129,6 +169,13 @@ impl ArcticApp {
                     .hint_text("Search names and tags")
                     .desired_width(200.0),
             );
+            egui::ComboBox::from_id_salt("discover-sort")
+                .selected_text(format!("Sort: {}", self.discover.sort.label()))
+                .show_ui(ui, |ui| {
+                    for (sort, label) in Sort::ALL {
+                        ui.selectable_value(&mut self.discover.sort, sort, label);
+                    }
+                });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if widgets::button(ui, p, None, "Surprise me", true).clicked() {
                     self.surprise();
@@ -184,8 +231,18 @@ impl ArcticApp {
                 let (partners, others): (Vec<&PublicServer>, Vec<&PublicServer>) = shown
                     .into_iter()
                     .partition(|s| partners_tab || s.partner_tier == "exclusive");
-                let mut partners = partners;
+                let (mut partners, mut others) = (partners, others);
+                self.discover.sort.apply(&mut partners);
+                self.discover.sort.apply(&mut others);
+                // Stable: within each tier, the order picked above stays.
                 partners.sort_by_key(|s| s.partner_tier != "exclusive");
+                // "Surprise me" keeps its pick on top.
+                if let Some(picked) = &self.discover.picked
+                    && let Some(i) = others.iter().position(|s| &s.id == picked)
+                {
+                    let s = others.remove(i);
+                    others.insert(0, s);
+                }
                 let top = if partners_tab {
                     "Partners"
                 } else {
@@ -469,5 +526,36 @@ impl ArcticApp {
             Ok(state) => (false, format!("Its state: {state}")),
             Err(e) => (true, e),
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn server(name: &str, players: u32, online: bool) -> PublicServer {
+        serde_json::from_value(serde_json::json!({
+            "id": name, "address": name, "name": name, "players": players, "online": online
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn sorting_keeps_random_and_puts_silent_servers_last() {
+        let all = [
+            server("b", 10, true),
+            server("a", 500, true),
+            server("c", 900, false),
+            server("D", 40, true),
+        ];
+        let names = |sort: Sort| {
+            let mut list: Vec<&PublicServer> = all.iter().collect();
+            sort.apply(&mut list);
+            list.iter().map(|s| s.name.clone()).collect::<Vec<_>>().join(",")
+        };
+        assert_eq!(names(Sort::Random), "b,a,c,D");
+        assert_eq!(names(Sort::MostPlayers), "a,D,b,c");
+        assert_eq!(names(Sort::FewestPlayers), "b,D,a,c");
+        assert_eq!(names(Sort::Name), "a,b,c,D");
     }
 }

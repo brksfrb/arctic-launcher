@@ -67,6 +67,12 @@ public final class ServersPage extends Page {
 	/** On the Discover tab: Arctic's public servers (null while loading). */
 	private boolean discover;
 	private volatile List<Servers.Entry> publicList;
+	/** The list in the server's own new random order, and each server's players as listed (-1: not answering). */
+	private volatile List<Servers.Entry> publicRandom;
+	private final java.util.Map<String, Integer> publicPlayers = new java.util.concurrent.ConcurrentHashMap<String, Integer>();
+	/** How Discover is ordered (see {@link #SORTS}); random is the point of it and the default. */
+	private int sort;
+	private static final String[] SORTS = {"Random", "Most players", "Fewest players", "Name"};
 	private volatile String publicError;
 	private int selectedPublic = -1;
 
@@ -153,9 +159,45 @@ public final class ServersPage extends Page {
 			}
 		}).enabled(any)).bounds(left + bw + GAP, y, LIST_W - bw - GAP, BUTTON_H);
 		y += BUTTON_H + GAP;
-		add(new Button(tr("selectServer.refresh", "Refresh"), this::loadPublic)).bounds(left, y, bw, BUTTON_H);
+		int tw = (LIST_W - GAP * 2) / 3;
+		add(new Button(tr("selectServer.refresh", "Refresh"), this::loadPublic)).bounds(left, y, tw, BUTTON_H);
+		add(new Button("Sort: " + SORTS[sort], () -> {
+			sort = (sort + 1) % SORTS.length;
+			publicList = sorted(publicRandom);
+			selectedPublic = -1;
+			rebuild();
+		})).bounds(left + tw + GAP, y, tw, BUTTON_H);
 		add(new Button(tr("gui.back", "Back"), () -> platform.openPage(ArcticClient.titleMenu())))
-				.bounds(left + bw + GAP, y, LIST_W - bw - GAP, BUTTON_H);
+				.bounds(left + (tw + GAP) * 2, y, LIST_W - (tw + GAP) * 2, BUTTON_H);
+	}
+
+	/** {@code list} in the chosen order; servers not answering go last when sorting by players. */
+	private List<Servers.Entry> sorted(List<Servers.Entry> list) {
+		if (list == null || sort == 0) {
+			return list;
+		}
+		List<Servers.Entry> out = new java.util.ArrayList<Servers.Entry>(list);
+		java.util.Comparator<Servers.Entry> order;
+		if (sort == 3) {
+			order = (a, b) -> a.name.compareToIgnoreCase(b.name);
+		} else {
+			final boolean most = sort == 1;
+			order = (a, b) -> {
+				int pa = playersOf(a);
+				int pb = playersOf(b);
+				if ((pa < 0) != (pb < 0)) {
+					return pa < 0 ? 1 : -1;
+				}
+				return most ? Integer.compare(pb, pa) : Integer.compare(pa, pb);
+			};
+		}
+		java.util.Collections.sort(out, order);
+		return out;
+	}
+
+	private int playersOf(Servers.Entry e) {
+		Integer n = publicPlayers.get(e.address);
+		return n == null ? -1 : n;
 	}
 
 	private void tab(boolean toDiscover) {
@@ -173,6 +215,7 @@ public final class ServersPage extends Page {
 	/** Arctic's public list, in the background; each server is asked how it is, too. */
 	private void loadPublic() {
 		publicList = null;
+		publicRandom = null;
 		publicError = null;
 		selectedPublic = -1;
 		Thread t = new Thread(() -> {
@@ -181,10 +224,14 @@ public final class ServersPage extends Page {
 				List<Servers.Entry> list = new java.util.ArrayList<Servers.Entry>();
 				for (com.google.gson.JsonElement e : new com.google.gson.JsonParser().parse(json).getAsJsonObject().getAsJsonArray("servers")) {
 					com.google.gson.JsonObject o = e.getAsJsonObject();
-					list.add(new Servers.Entry(o.get("name").getAsString(), o.get("address").getAsString()));
+					String address = o.get("address").getAsString();
+					list.add(new Servers.Entry(o.get("name").getAsString(), address));
+					boolean online = !o.has("online") || o.get("online").getAsBoolean();
+					publicPlayers.put(address, online && o.has("players") ? o.get("players").getAsInt() : -1);
 				}
 				servers.pingAll(list);
-				publicList = list;
+				publicRandom = list;
+				publicList = sorted(list);
 			} catch (Exception e) {
 				publicError = "Couldn't load the server list";
 			}
