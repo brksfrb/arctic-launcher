@@ -38,13 +38,29 @@ fn zoom_for(ctx: &egui::Context, size: u16) -> Option<f32> {
     if size != 0 {
         return Some(f32::from(size.clamp(50, 200)) / 100.0);
     }
-    let (monitor, native) = ctx.input(|i| {
+    let (monitor, native, ppp) = ctx.input(|i| {
         let v = i.viewport();
-        (v.monitor_size, v.native_pixels_per_point)
+        (
+            v.monitor_size,
+            v.native_pixels_per_point,
+            i.pixels_per_point,
+        )
     });
-    // The monitor comes in points at the current zoom: back to pixels, then to the system's points.
-    let pixels = monitor? * ctx.pixels_per_point();
-    Some(auto_zoom(pixels / native?))
+    let native = native?;
+    // Measured once per display scaling and kept: the monitor's size comes in points at the zoom
+    // of the moment, and measuring again right after a change of zoom (before that size caught
+    // up) gave a different answer every other frame, the interface pulsing between two sizes.
+    let id = egui::Id::new("arctic-auto-zoom");
+    if let Some((for_native, zoom)) = ctx.data(|d| d.get_temp::<(f32, f32)>(id))
+        && (for_native - native).abs() < 1e-3
+    {
+        return Some(zoom);
+    }
+    // Back to pixels (at the zoom it was measured with), then to the system's points.
+    let pixels = monitor? * ppp;
+    let zoom = auto_zoom(pixels / native);
+    ctx.data_mut(|d| d.insert_temp(id, (native, zoom)));
+    Some(zoom)
 }
 
 /// Auto's zoom for a screen this many points (at the system's scaling) across and down.
