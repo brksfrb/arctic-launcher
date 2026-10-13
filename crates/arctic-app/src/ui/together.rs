@@ -123,12 +123,19 @@ impl ArcticApp {
                 guests,
             } => {
                 ui.label(RichText::new("Your invite code").small().color(p.muted));
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(&code).monospace().size(13.0).color(p.accent));
+                // Copy first, then the code wrapping in what's left: on one line it ran out of the
+                // card (and under the next one) in a narrow window.
+                ui.horizontal_top(|ui| {
                     if widgets::icon_button(ui, p, Icon::Copy, "Copy code").clicked() {
                         ui.ctx().copy_text(code.clone());
                         self.toasts.push(Kind::Success, "Invite code copied", "");
                     }
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(&code).monospace().size(13.0).color(p.accent),
+                        )
+                        .wrap(),
+                    );
                 });
                 ui.add_space(8.0);
                 match world {
