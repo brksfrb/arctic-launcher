@@ -319,11 +319,12 @@ fn theme_tile(ui: &mut egui::Ui, tp: &Palette, name: &str, selected: bool) -> bo
     );
     let base = preview.bottom();
     let peaks = [
-        egui::pos2(preview.left() + 4.0, base),
+        // From where the tile's rounded corners end, or the mountains poke out of them.
+        egui::pos2(preview.left() + 10.0, base),
         egui::pos2(preview.left() + 38.0, base - 30.0),
         egui::pos2(preview.left() + 64.0, base - 12.0),
         egui::pos2(preview.left() + 86.0, base - 26.0),
-        egui::pos2(preview.right() - 4.0, base),
+        egui::pos2(preview.right() - 10.0, base),
     ];
     painter.add(egui::Shape::convex_polygon(
         vec![peaks[0], peaks[1], peaks[2], peaks[4]],

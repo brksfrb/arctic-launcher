@@ -95,24 +95,22 @@ fn tile(ui: &mut egui::Ui, p: &Palette, style: ClientStyle, selected: bool, widt
     let c = preview(style);
     let painter = ui.painter();
     let preview_rect = Rect::from_min_size(rect.min, vec2(width, preview_h));
-    painter.rect_filled(
-        preview_rect,
-        CornerRadius::same(10),
-        lerp_color(c.sky_top, c.sky_bottom, 0.4),
-    );
-    let ground = Rect::from_min_max(
-        Pos2::new(preview_rect.left(), preview_rect.bottom() - 10.0),
-        preview_rect.max,
+    // The whole tile in the ground's color, then the sky over all but its bottom strip: a strip
+    // drawn on its own is too thin for the tile's rounding, and its corners stuck out.
+    painter.rect_filled(preview_rect, CornerRadius::same(10), c.ground);
+    let sky = Rect::from_min_max(
+        preview_rect.min,
+        Pos2::new(preview_rect.right(), preview_rect.bottom() - 10.0),
     );
     painter.rect_filled(
-        ground,
+        sky,
         CornerRadius {
-            nw: 0,
-            ne: 0,
-            sw: 10,
-            se: 10,
+            nw: 10,
+            ne: 10,
+            sw: 0,
+            se: 0,
         },
-        c.ground,
+        lerp_color(c.sky_top, c.sky_bottom, 0.4),
     );
     let button_w = (width * 0.55).round();
     let mut button = Rect::from_center_size(
