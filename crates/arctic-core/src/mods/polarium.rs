@@ -22,6 +22,10 @@ const MOD_ID: &str = "polarium";
 /// (Minecraft version, jar) for every version Polarium has a build for.
 const JARS: &[(&str, &[u8])] = &[
     (
+        "26.3",
+        include_bytes!("../../../../mod/dist/polarium/polarium-26.3.jar"),
+    ),
+    (
         "26.2",
         include_bytes!("../../../../mod/dist/polarium/polarium-26.2.jar"),
     ),
@@ -148,8 +152,8 @@ mod tests {
         let mods = dir.path().join("mods");
         sync(&mods, "26.2", true).unwrap();
         assert!(installed(&mods));
-        // The same folder played on 26.3 (no build): the 26.2 jar must go, or Fabric refuses to start.
-        sync(&mods, "26.3", true).unwrap();
+        // The same folder played on 26.1 (no build): the 26.2 jar must go, or Fabric refuses to start.
+        sync(&mods, "26.1", true).unwrap();
         assert!(!installed(&mods));
         sync(&mods, "1.21.11", true).unwrap();
         assert!(!installed(&mods));
