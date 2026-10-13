@@ -70,7 +70,7 @@ public final class ArcticButton {
 						if (x < ox + other.getWidth() + 3 && x + 79 > ox && y < oy + Compat.widgetHeight(other) + 3 && y + 23 > oy) { free = false; break; }
 					}
 					if (!free) continue;
-					//#if MC >= 1.19.4
+					//#if MC >= 1.19.3
 					button.setX(x); button.setY(y);
 					//#else
 					button.x = x; button.y = y;
