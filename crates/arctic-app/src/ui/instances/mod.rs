@@ -11,6 +11,7 @@ mod mods_page;
 mod packs;
 mod replays;
 pub mod retarget;
+mod trash;
 mod worlds;
 
 use std::collections::{HashMap, HashSet};
@@ -135,6 +136,8 @@ pub struct InstancesUi {
     pub import: Option<worlds::ImportDialog>,
     /// The modpack browser is open (instead of the grid).
     pub modpacks_open: bool,
+    /// The trash dialog (removed instances).
+    pub trash: trash::TrashUi,
     /// Project being installed ("" for an imported file).
     pub pack_installing: Option<String>,
     /// Resource packs and shaders page.
@@ -249,6 +252,8 @@ impl ArcticApp {
 
     fn instances_grid(&mut self, ui: &mut egui::Ui) {
         self.take_dropped_modpack(ui);
+        let ctx = ui.ctx().clone();
+        self.trash_dialog(&ctx);
         let p = self.palette();
         crate::widgets::row(ui, |ui| {
             ui.vertical(|ui| {
@@ -277,6 +282,15 @@ impl ArcticApp {
                     .clicked()
                 {
                     self.open_share_import();
+                }
+                // Removed instances can come back: easy to find, not only in a folder.
+                let removed = self.trash_count();
+                if removed > 0
+                    && widgets::button(ui, p, Some(Icon::Trash), &format!("Trash ({removed})"), false)
+                        .on_hover_text("Removed instances, to bring back or delete for good")
+                        .clicked()
+                {
+                    self.open_trash();
                 }
             });
         });

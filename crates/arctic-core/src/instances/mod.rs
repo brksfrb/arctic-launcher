@@ -368,6 +368,93 @@ pub fn remove(dirs: &DataDirs, id: &str) -> Result<()> {
     std::fs::rename(&from, &to).map_err(|e| Error::io(&from, e))
 }
 
+/// A removed instance, in `instances/.trash`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Trashed {
+    pub dir: std::path::PathBuf,
+    pub name: String,
+    /// When it was removed (Unix seconds), from the folder's name.
+    pub removed: u64,
+}
+
+/// How many removed instances there are (folders only; cheap enough for every frame).
+pub fn trash_len(dirs: &DataDirs) -> usize {
+    std::fs::read_dir(dirs.instances().join(TRASH_DIR))
+        .map_or(0, |e| e.flatten().filter(|e| e.path().is_dir()).count())
+}
+
+/// Removed instances, last removed first.
+pub fn trashed(dirs: &DataDirs) -> Vec<Trashed> {
+    let Ok(entries) = std::fs::read_dir(dirs.instances().join(TRASH_DIR)) else {
+        return Vec::new();
+    };
+    let mut out: Vec<Trashed> = entries
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .map(|e| {
+            let dir = e.path();
+            let folder = e.file_name().to_string_lossy().into_owned();
+            let removed = folder
+                .rsplit_once('-')
+                .and_then(|(_, at)| at.parse().ok())
+                .unwrap_or(0);
+            let name = load_json::<Instance>(&dir.join(INSTANCE_FILE))
+                .ok()
+                .flatten()
+                .map_or_else(
+                    || {
+                        folder
+                            .rsplit_once('-')
+                            .map_or(folder.clone(), |(id, _)| id.to_owned())
+                    },
+                    |i| i.name,
+                );
+            Trashed { dir, name, removed }
+        })
+        .collect();
+    out.sort_by_key(|t| std::cmp::Reverse(t.removed));
+    out
+}
+
+/// The trash folder `dir` is in, if it really is one of its removed instances.
+fn in_trash(dirs: &DataDirs, dir: &Path) -> Result<()> {
+    let trash = dirs.instances().join(TRASH_DIR);
+    if dir.parent() == Some(trash.as_path()) && dir.is_dir() {
+        Ok(())
+    } else {
+        Err(Error::Other(format!(
+            "{} isn't in the trash",
+            dir.display()
+        )))
+    }
+}
+
+/// Bring a removed instance back (under a new id if its old one is taken now).
+pub fn restore(dirs: &DataDirs, dir: &Path) -> Result<Instance> {
+    in_trash(dirs, dir)?;
+    let file = dir.join(INSTANCE_FILE);
+    let mut instance: Instance =
+        load_json(&file)?.ok_or_else(|| Error::Other("it has no instance.json".into()))?;
+    let id = if dirs.instance_dir(&instance.id).exists() || instance.id.is_empty() {
+        unique_id(dirs, &instance.name)
+    } else {
+        instance.id.clone()
+    };
+    let to = dirs.instance_dir(&id);
+    std::fs::rename(dir, &to).map_err(|e| Error::io(dir, e))?;
+    if id != instance.id {
+        instance.id = id;
+        instance.save(dirs)?;
+    }
+    Ok(instance)
+}
+
+/// Delete a removed instance for good.
+pub fn delete_trashed(dirs: &DataDirs, dir: &Path) -> Result<()> {
+    in_trash(dirs, dir)?;
+    std::fs::remove_dir_all(dir).map_err(|e| Error::io(dir, e))
+}
+
 fn unique_id(dirs: &DataDirs, name: &str) -> String {
     let slug = name
         .to_lowercase()
@@ -431,6 +518,32 @@ pub fn list_custom(dirs: &DataDirs) -> Result<Vec<Instance>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn removed_instances_are_listed_restored_and_deleted() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path().join("data"));
+        let first = create(&dirs, "Mine", "1.21.11", Loader::Vanilla).unwrap();
+        remove(&dirs, &first.id).unwrap();
+        assert!(list_custom(&dirs).unwrap().is_empty());
+        let trash = trashed(&dirs);
+        assert_eq!(trash.len(), 1);
+        assert_eq!(trash[0].name, "Mine");
+        // Another instance took its id meanwhile: it comes back under a new one.
+        let other = create(&dirs, "Mine", "1.20.1", Loader::Vanilla).unwrap();
+        assert_eq!(other.id, first.id);
+        let back = restore(&dirs, &trash[0].dir).unwrap();
+        assert_ne!(back.id, first.id);
+        assert_eq!(list_custom(&dirs).unwrap().len(), 2);
+        assert!(trashed(&dirs).is_empty());
+        // Gone for good.
+        remove(&dirs, &back.id).unwrap();
+        let trash = trashed(&dirs);
+        delete_trashed(&dirs, &trash[0].dir).unwrap();
+        assert!(trashed(&dirs).is_empty());
+        // Only folders in the trash.
+        assert!(delete_trashed(&dirs, &dirs.instance_dir(&other.id)).is_err());
+    }
 
     #[test]
     fn game_folder_moves_with_its_files_or_is_used_as_it_is() {
