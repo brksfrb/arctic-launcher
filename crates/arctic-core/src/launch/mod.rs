@@ -614,7 +614,20 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
         }
         _ => Vec::new(),
     };
-    let asked = req.instance.max_memory_mb.unwrap_or(settings.max_memory_mb);
+    let asked = match req.instance.max_memory_mb {
+        Some(own) => own,
+        None => {
+            let mods = mod_count(&inst.game_dir.join("mods"));
+            let asked = crate::system::memory_for_mods(settings.max_memory_mb, mods);
+            if asked > settings.max_memory_mb {
+                log::info!(
+                    "{mods} mods: giving the game {asked} MB (more than the {} MB setting)",
+                    settings.max_memory_mb
+                );
+            }
+            asked
+        }
+    };
     let max_memory_mb = crate::system::playable_memory_mb(asked);
     if max_memory_mb < asked {
         log::warn!(
@@ -726,6 +739,20 @@ fn quick_play(
         QuickPlay::World(_) => log::info!("this version can't open a world directly"),
         QuickPlay::Duel { .. } | QuickPlay::Replay(_) => {}
     }
+}
+
+/// Mods that will load (`.jar` files in the mods folder; switched-off ones end in `.disabled`).
+fn mod_count(mods: &Path) -> usize {
+    std::fs::read_dir(mods).map_or(0, |entries| {
+        entries
+            .flatten()
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .is_some_and(|x| x.eq_ignore_ascii_case("jar"))
+            })
+            .count()
+    })
 }
 
 fn takes_placeholder(version: &VersionJson, key: &str) -> bool {

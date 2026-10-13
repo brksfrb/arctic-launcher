@@ -11,6 +11,19 @@ const FLOOR_RECOMMENDED_MB: u32 = 2 * 1024;
 /// Memory the game is given at most, whatever the setting: what's installed minus room for the
 /// system. A setting above what the computer has makes Java fail before the game opens
 /// ("Native memory allocation failed").
+/// Big modpacks need more than a quarter of the RAM to load a world (Cobbleverse, 300 mods, runs
+/// out at 4 GB): (mods in the folder, at least this much memory). Only ever raises the setting.
+const PACK_MEMORY: [(usize, u32); 3] = [(250, 8192), (150, 6144), (80, 5120)];
+
+/// The memory for a game with `mods` mods when the player hasn't set one for its instance: the
+/// global setting, or more for a big pack (then capped by what the computer can spare).
+pub fn memory_for_mods(setting: u32, mods: usize) -> u32 {
+    PACK_MEMORY
+        .iter()
+        .find(|(at_least, _)| mods >= *at_least)
+        .map_or(setting, |(_, mb)| setting.max(*mb))
+}
+
 pub fn playable_memory_mb(asked: u32) -> u32 {
     match total_memory_mb() {
         Some(total) => {
@@ -186,6 +199,16 @@ mod tests {
         assert_eq!(recommended_memory_mb(Some(10_000)), 2048);
         assert_eq!(recommended_memory_mb(Some(13_000)), 3072);
         assert_eq!(recommended_memory_mb(None), 4096);
+    }
+
+    #[test]
+    fn big_packs_get_more_memory_and_nothing_gets_less() {
+        assert_eq!(memory_for_mods(4096, 12), 4096);
+        assert_eq!(memory_for_mods(4096, 90), 5120);
+        assert_eq!(memory_for_mods(4096, 160), 6144);
+        assert_eq!(memory_for_mods(4096, 300), 8192);
+        // A bigger setting stays.
+        assert_eq!(memory_for_mods(12288, 300), 12288);
     }
 
     #[test]
