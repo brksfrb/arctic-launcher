@@ -98,6 +98,13 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean atTitleScreen() {
+		Screen screen = Compat.screen();
+		return !inWorld() && (screen instanceof net.minecraft.client.gui.screens.TitleScreen || (screen instanceof PageScreen
+				&& ((PageScreen) screen).page() instanceof com.arcticlauncher.client.menu.TitleMenu));
+	}
+
+	@Override
 	public double[] position() {
 		LocalPlayer p = mc().player;
 		if (p == null) {
@@ -520,8 +527,8 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public void openPage(Page page) {
-		// Back to the title: Minecraft's own when other mods add to it (see VanillaTitle).
-		if (page instanceof com.arcticlauncher.client.menu.TitleMenu && VanillaTitle.keep()) {
+		// Keep the native screen lifecycle and all other mods' controls.
+		if (page instanceof com.arcticlauncher.client.menu.TitleMenu) {
 			Compat.setScreen(new net.minecraft.client.gui.screens.TitleScreen());
 			return;
 		}

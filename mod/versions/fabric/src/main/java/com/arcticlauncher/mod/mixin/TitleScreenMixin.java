@@ -25,11 +25,6 @@ abstract class TitleScreenMixin extends Screen {
 		super(title);
 	}
 
-	@Inject(method = "init", at = @At("TAIL"))
-	private void arctic$button(CallbackInfo ci) {
-		addRenderableWidget(ArcticButton.create());
-	}
-
 	//#if MC < 1.20.6
 	// Before 1.20.6 there's no generic Screen.renderPanorama hook (see ScreenMixin):
 	// only the title screen draws one, directly, so redirect that call instead.

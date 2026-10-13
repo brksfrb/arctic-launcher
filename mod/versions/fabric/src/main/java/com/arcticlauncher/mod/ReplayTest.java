@@ -29,6 +29,7 @@ final class ReplayTest {
 		return t;
 	});
 	private static final int WAIT_LIMIT_S = 120;
+	private static final AtomicReference<File> manual = new AtomicReference<File>();
 
 	private ReplayTest() {}
 
@@ -45,8 +46,11 @@ final class ReplayTest {
 					&& Minecraft.getInstance().level != null, () -> after(3, () -> {
 				shot("replay from launcher");
 				Replays.stopWatching();
-				log("PASSED");
-				after(2, () -> Minecraft.getInstance().stop());
+				com.arcticlauncher.client.ArcticClient.config().replayAutoExport = true;
+				Replays.resumeExports();
+				when("queued MP4 exported after leaving", () -> Replays.queuedVideos() == 0 && Replays.viewer() == null, () -> {
+					log("PASSED"); after(2, () -> Minecraft.getInstance().stop());
+				});
 			}));
 			return;
 		}
@@ -106,7 +110,10 @@ final class ReplayTest {
 			fail("nothing is recording in the world");
 			return;
 		}
-		log("recording");
+		com.arcticlauncher.client.ArcticClient.config().clipSeconds = 3;
+		com.arcticlauncher.client.ArcticClient.config().replayAutoExport = false;
+		if (!Replays.recorder().startRecording(manual::set)) { fail("manual recording did not start in an existing world"); return; }
+		log("recording; independent 3s clip buffer enabled");
 		command("time set noon");
 		command("summon minecraft:pig ~3 ~ ~");
 		command("summon minecraft:zombie ~-4 ~ ~2");
@@ -144,9 +151,23 @@ final class ReplayTest {
 		}, () -> {
 			log("thumbnail " + hasThumbnail(saved.get()));
 			log("file " + saved.get().getName() + " (" + saved.get().length() / 1024 + " KB)");
-			com.arcticlauncher.client.ArcticClient.platform().leaveWorld();
-			when("left the world", () -> Minecraft.getInstance().level == null
-					&& !com.arcticlauncher.mod.replay.ReplayCompat.messageShowing(), () -> after(3, () -> watch(saved.get())));
+			if (!Replays.recording()) { fail("saving a clip stopped manual recording"); return; }
+			long clipSize = saved.get().length();
+			after(2, () -> {
+				if (!Replays.recorder().stopRecording()) { fail("manual recording already stopped"); return; }
+				when("manual recording saved separately", () -> manual.get() != null, () -> {
+					if (saved.get().equals(manual.get()) || saved.get().length() != clipSize) { fail("clip was changed by the manual recording"); return; }
+					com.arcticlauncher.client.ArcticClient.platform().leaveWorld();
+					when("left the world", () -> Minecraft.getInstance().level == null
+							&& !com.arcticlauncher.mod.replay.ReplayCompat.messageShowing(), () -> after(3, () -> {
+						Replays.watch(manual.get());
+						when("manual replay opened from mid-world bootstrap", () -> Replays.viewer() != null && Replays.viewer().ready(), () -> {
+							if (Replays.viewer().duration() < 12_000) { fail("manual recording was truncated"); return; }
+							Replays.stopWatching(); after(2, () -> watch(saved.get()));
+						});
+					}));
+				});
+			});
 		});
 	}
 
@@ -232,8 +253,11 @@ final class ReplayTest {
 			}
 			Replays.stopWatching();
 			when("back at the title", () -> Minecraft.getInstance().level == null && Replays.viewer() == null, () -> {
-				log("PASSED");
-				after(2, () -> Minecraft.getInstance().stop());
+				com.arcticlauncher.client.ArcticClient.config().replayAutoExport = true;
+				Replays.resumeExports();
+				when("queued MP4 exported after leaving", () -> Replays.queuedVideos() == 0 && Replays.viewer() == null, () -> {
+					log("PASSED"); after(2, () -> Minecraft.getInstance().stop());
+				});
 			});
 		});
 	}

@@ -13,13 +13,15 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 
 /** Every vanilla button gets the Arctic style's background (sliders a track). */
 @Mixin(ButtonWidget.class)
-abstract class ButtonWidgetMixin {
+abstract class ButtonWidgetMixin implements com.arcticlauncher.legacy.LegacyButtonBounds {
 	private static final int DANGER = 0xFFF87171;
 
 	@Shadow
 	protected int width;
 	@Shadow
 	protected int height;
+	@Override public int arctic$width() { return width; }
+	@Override public int arctic$height() { return height; }
 	@Shadow
 	public int x;
 	@Shadow

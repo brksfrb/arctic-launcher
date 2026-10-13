@@ -12,8 +12,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Replays: the recording switch and key, and your saved replays (watch
- * one, make a video of its latest clip, or delete it).
+ * Instant clips, manual recording controls, queued videos and saved replays.
  */
 final class ReplaysTab implements MenuTab {
 	private static final int ROW_H = 30;
@@ -33,7 +32,7 @@ final class ReplaysTab implements MenuTab {
 
 	@Override
 	public String hint() {
-		return "Every session records; the replay key keeps it.";
+		return "Save a moment or record from start to stop.";
 	}
 
 	@Override
@@ -46,10 +45,26 @@ final class ReplaysTab implements MenuTab {
 		final ClientConfig c = ArcticClient.config();
 		Form f = new Form(host, x, top, w, bottom);
 		f.section("Recording");
-		f.toggleKey("Record every session", "Nothing is kept until you press the key", () -> c.replayRecording,
-				on -> c.replayRecording = on, Form.key(() -> c.replayKey, k -> c.replayKey = k));
+		f.key("Save instant clip", "Saves 3D + queues MP4; never changes your recording", Form.key(() -> c.replayKey, k -> c.replayKey = k));
+		f.key("Start / stop recording", "Begins now; saves when stopped or when you leave", Form.key(() -> c.replayRecordKey, k -> c.replayRecordKey = k));
+		if (c.replayKey.equals(c.replayRecordKey)) f.note("Choose different keys for the two actions.");
 		f.stepper("Clip length", () -> c.clipSeconds, v -> c.clipSeconds = (int) v, MIN_CLIP, MAX_CLIP, CLIP_STEP, "%.0fs");
-		f.note("The key keeps the whole session and marks a clip of the last seconds.");
+		f.note(Replays.recordingStatus());
+		if (ArcticClient.platform().inWorld()) {
+			int row = f.row(24);
+			f.put(new Button(Replays.recording() ? "Stop and save recording" : "Start recording", () -> { Replays.toggleRecording(); host.rebuild(); }), f.x, row, 160, 18);
+		}
+		f.section("Videos (" + Replays.queuedVideos() + " queued)");
+		f.toggle("Render after leaving", "720p / 30 FPS, one video at a time", () -> c.replayAutoExport, on -> c.replayAutoExport = on);
+		f.note("Videos wait at the title screen. Esc pauses the queue. Videos have no audio yet.");
+		if (Replays.exportsPaused()) {
+			int row = f.row(24);
+			f.put(new Button("Resume video queue", () -> { Replays.resumeExports(); host.rebuild(); }), f.x, row, 140, 18);
+		}
+		if (Replays.queuedVideos() > 0 && Replays.ffmpeg().get() == null) {
+			int row = f.row(24);
+			f.put(new Button("Get video encoder", () -> Replays.ffmpeg().download()), f.x, row, 140, 18);
+		}
 
 		List<Replays.Info> replays = Replays.list();
 		f.section("Saved (" + replays.size() + ")");

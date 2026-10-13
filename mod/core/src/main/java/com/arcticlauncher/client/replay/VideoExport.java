@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
  */
 public final class VideoExport implements ReplayBackend.FrameSink {
 	/** Frames waiting for FFmpeg at most (each a full screen of pixels). */
-	private static final int QUEUE = 4;
+	private static final int QUEUE = 2;
 	private static final long FINISH_WAIT_MS = 10_000;
 
 	private final File ffmpeg;
@@ -88,6 +88,14 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 		return done;
 	}
 
+	boolean readyForFrame() { return delivered >= requested; }
+
+	/** At most 720p, preserving aspect ratio and even encoder dimensions; never upscale. */
+	static int[] outputSize(int w, int h) {
+		double scale = Math.min(1, Math.min(1280.0 / w, 720.0 / h));
+		return new int[] {Math.max(2, ((int) (w * scale)) & ~1), Math.max(2, ((int) (h * scale)) & ~1)};
+	}
+
 	/** A grabbed frame (render thread): copied, then queued for FFmpeg. */
 	@Override
 	public void frame(int w, int h, ByteBuffer rgba, boolean bottomUp) {
@@ -97,28 +105,23 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 		}
 		try {
 			if (process == null) {
-				startFfmpeg(w, h);
-			}
-			if (w != width || h != height) {
-				// The window was resized mid-export: FFmpeg expects the first size.
-				return;
+				int[] size = outputSize(w, h);
+				startFfmpeg(size[0], size[1]);
 			}
 			ByteBuffer copy = spare.poll();
-			if (copy == null || copy.capacity() < w * h * 4) {
-				copy = ByteBuffer.allocateDirect(w * h * 4);
+			if (copy == null || copy.capacity() < width * height * 4) {
+				copy = ByteBuffer.allocateDirect(width * height * 4);
 			}
 			copy.clear();
-			int row = w * 4;
+			copy.order(rgba.order());
 			int base = rgba.position();
-			for (int y = 0; y < h; y++) {
-				ByteBuffer src = rgba.duplicate();
-				int from = base + (bottomUp ? h - 1 - y : y) * row;
-				src.limit(from + row);
-				src.position(from);
-				copy.put(src);
+			for (int y = 0; y < height; y++) {
+				int sy = y * h / height;
+				int row = base + (bottomUp ? h - 1 - sy : sy) * w * 4;
+				for (int x = 0; x < width; x++) copy.putInt(rgba.getInt(row + (x * w / width) * 4));
 			}
 			copy.flip();
-			frames.put(copy);
+			while (!cancelled && failed == null && !frames.offer(copy, 100, TimeUnit.MILLISECONDS)) { /* bounded backpressure */ }
 		} catch (IOException e) {
 			failed = "The video encoder didn't start: " + e.getMessage();
 		} catch (InterruptedException e) {
@@ -142,7 +145,7 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 				ffmpeg.getAbsolutePath(), "-y", "-loglevel", "error",
 				"-f", "rawvideo", "-pix_fmt", "rgba", "-s", w + "x" + h, "-r", Integer.toString(fps), "-i", "-",
 				"-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
-				"-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
+				"-filter_threads", "1", "-c:v", "libx264", "-threads", "2", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
 				"-movflags", "+faststart", output.getAbsolutePath(),
 		};
 		for (String a : args) {
@@ -153,6 +156,7 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 		final WritableByteChannel out = Channels.newChannel(process.getOutputStream());
 		writer = new Thread(() -> write(out), "arctic-video");
 		writer.setDaemon(true);
+		writer.setPriority(Thread.MIN_PRIORITY + 1);
 		writer.start();
 	}
 
@@ -201,6 +205,10 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 
 	private void complete() {
 		try {
+			if (!process.waitFor(30, TimeUnit.SECONDS)) {
+				failed = "The video encoder timed out.";
+				process.destroyForcibly();
+			}
 			int code = process.waitFor();
 			if (code != 0 && !cancelled && failed == null) {
 				failed = "The video encoder failed (code " + code + ")";
@@ -240,7 +248,7 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 				}
 			}
 			if (!done) {
-				// Frames that never arrived: finish with what came.
+				if (delivered < requested) failed = "A replay frame could not be captured.";
 				delivered = requested;
 			}
 		}, "arctic-video-wait");

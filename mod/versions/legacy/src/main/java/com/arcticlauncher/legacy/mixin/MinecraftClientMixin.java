@@ -33,19 +33,6 @@ abstract class MinecraftClientMixin {
 			// A replay's pause menu is its own controls.
 			return new LegacyPageScreen(new com.arcticlauncher.client.replay.ReplayMenu(), null);
 		}
-		// No screen outside a world means the title screen: vanilla builds its
-		// own inside setScreen, after this point, so catch that case too.
-		boolean title = screen instanceof TitleScreen || (screen == null && world == null);
-		if (title && ArcticClient.restyles()) {
-			return new LegacyPageScreen(ArcticClient.titleMenu(), null);
-		}
-		if (screen instanceof net.minecraft.client.gui.screen.multiplayer.MultiplayerScreen && ArcticClient.restyles()) {
-			return new LegacyPageScreen(new com.arcticlauncher.client.servers.ServersPage(), null);
-		}
-		if (screen instanceof net.minecraft.client.gui.screen.DisconnectedScreen && ArcticClient.restyles()) {
-			String[] text = com.arcticlauncher.legacy.LegacyDisconnectText.read(screen);
-			return new LegacyPageScreen(new com.arcticlauncher.client.servers.DisconnectedPage(text[0], text[1]), null);
-		}
 		return screen;
 	}
 }

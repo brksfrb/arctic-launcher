@@ -63,6 +63,7 @@ public final class ReplayViewer {
 	private boolean joined;
 	private boolean screenOpen;
 	private VideoExport export;
+	private long exportFrameAt;
 	private String problem;
 	/** When the world first showed (ms): the timeline starts here, not at the login. */
 	private int start;
@@ -127,6 +128,12 @@ public final class ReplayViewer {
 
 	/** Before a frame is drawn (game thread). */
 	void frame() {
+		if (export != null) {
+			// Pace rendering as well as encoding: never spin the GPU at an uncapped frame rate.
+			long wait = exportFrameAt + 1_000_000_000L / 30 - System.nanoTime();
+			if (wait > 0) java.util.concurrent.locks.LockSupport.parkNanos(wait);
+			exportFrameAt = System.nanoTime();
+		}
 		long now = System.nanoTime();
 		double realMs = lastFrame < 0 ? 0 : Math.min(MAX_FRAME_MS, (now - lastFrame) / 1e6);
 		lastFrame = now;
@@ -169,8 +176,10 @@ public final class ReplayViewer {
 			stopExport();
 			return;
 		}
-		backend.capture(export);
-		if (!export.advance()) {
+		if (!export.readyForFrame()) return;
+		VideoExport job = export;
+		backend.capture(job);
+		if (!job.advance()) {
 			stopExport();
 		}
 	}
@@ -584,6 +593,8 @@ public final class ReplayViewer {
 	public boolean fastJumps() {
 		return data.classified();
 	}
+
+	public boolean ready() { return joined && backend.ready() && !backend.loading(); }
 
 	public double cameraSpeed() {
 		return free.speed();

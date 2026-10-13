@@ -22,7 +22,7 @@ public final class ReplayMenu extends Page {
 	private static final int ROW = 18;
 	private static final int GAP = 4;
 	private static final int PAD = 8;
-	private static final int FPS = 60;
+	private static final int FPS = 30;
 	private static final int FOLLOW_W = 120;
 
 	private boolean choosingPlayer;

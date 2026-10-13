@@ -155,11 +155,12 @@ public final class ClientConfig {
 	public String hudStyle = "clean";
 	/** Waypoints drawn where they are in the world (not just on the Compass). */
 	public boolean waypointsInWorld = true;
-	/** Every session records quietly; the replay key keeps it (otherwise it's deleted on leaving). */
-	public boolean replayRecording = true;
-	/** Saves the session so far as a replay, with a moment marked at the press. */
+	/** Render queued MP4 clips at the title screen after leaving the world. */
+	public boolean replayAutoExport = true;
+	/** Saves only the recent rolling window, independently of manual recording. */
 	public String replayKey = "key.keyboard.f9";
-	/** How far back a saved moment reaches (seconds), for 2D clips. */
+	public String replayRecordKey = "key.keyboard.f10";
+	/** How far back instant 3D and video clips reach (seconds). */
 	public int clipSeconds = 30;
 
 	private transient File file;
@@ -236,9 +237,13 @@ public final class ClientConfig {
 		if (replayKey == null) {
 			replayKey = "key.keyboard.f9";
 		}
+		if (replayRecordKey == null) {
+			replayRecordKey = "key.keyboard.f10";
+		}
 		if (clipSeconds <= 0) {
 			clipSeconds = 30;
 		}
+		clipSeconds = Math.min(120, clipSeconds);
 		if (proxy == null) {
 			proxy = new ProxyConfig();
 		}

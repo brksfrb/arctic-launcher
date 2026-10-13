@@ -106,6 +106,13 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean atTitleScreen() {
+		Screen screen = mc().currentScreen;
+		return !inWorld() && (screen instanceof TitleScreen || (screen instanceof LegacyPageScreen
+				&& ((LegacyPageScreen) screen).page() instanceof com.arcticlauncher.client.menu.TitleMenu));
+	}
+
+	@Override
 	public double[] position() {
 		ClientPlayerEntity p = mc().player;
 		return p == null ? null : new double[] {p.x, p.y, p.z, p.yaw, p.pitch};
@@ -930,6 +937,9 @@ public final class LegacyPlatform implements Platform {
 
 	@Override
 	public void openPage(Page page) {
+		if (page instanceof com.arcticlauncher.client.menu.TitleMenu) {
+			mc().setScreen(new TitleScreen()); return;
+		}
 		// One Arctic page replaces another, so Escape goes back to what was
 		// under the menu instead of through every page visited.
 		Screen current = mc().currentScreen;

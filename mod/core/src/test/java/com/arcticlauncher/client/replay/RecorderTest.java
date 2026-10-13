@@ -1,245 +1,115 @@
 package com.arcticlauncher.client.replay;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
+import static org.junit.jupiter.api.Assertions.*;
 import java.io.File;
-import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class RecorderTest {
-	@TempDir
-	Path dir;
-
-	private Recorder recorder(boolean on) {
-		return new Recorder(dir.toFile(), () -> on, () -> 20, message -> {});
+	@TempDir Path dir;
+	final AtomicLong clock = new AtomicLong();
+	private Recorder recorder(long maxBytes, long freeBytes) {
+		return new Recorder(dir.toFile(), () -> 30, message -> {}, () -> (p, key) -> {
+			key[0] = 1;
+			return p.get(0) == 1 ? Category.CHUNK : Category.TRANSIENT;
+		}, maxBytes, freeBytes, 10_000, clock::get);
 	}
-
-	private static void await(Recorder r) throws InterruptedException {
-		CountDownLatch done = new CountDownLatch(1);
-		r.afterWrites(done::countDown);
-		assertTrue(done.await(10, TimeUnit.SECONDS));
+	private Recorder recorder() { return recorder(512L << 20, 0); }
+	private void at(int millis) { clock.set(millis * 1_000_000L); }
+	private static void await(Recorder r) throws Exception {
+		CountDownLatch done = new CountDownLatch(1); r.afterWrites(done::countDown);
+		assertTrue(done.await(10, TimeUnit.SECONDS), "writer stalled");
 	}
-
+	private File clip(Recorder r) throws Exception {
+		AtomicReference<File> saved = new AtomicReference<>();
+		assertTrue(r.saveMoment(saved::set)); await(r);
+		assertNotNull(saved.get()); return saved.get();
+	}
 	private static SelfSample sample(double x) {
-		SelfSample s = new SelfSample();
-		s.x = x;
-		s.y = 64;
-		s.yaw = 350;
-		s.slot = 3;
-		s.health = 20;
-		s.fov = 70;
-		return s;
+		SelfSample s = new SelfSample(); s.x = x; s.y = 64; s.slot = 3; s.health = 20; s.fov = 70; return s;
 	}
-
-	@Test
-	void aSessionStopsBeingRecordedAtTheSizeLimitButStaysSavable() throws Exception {
-		// 1 KB of packets at most; plenty of free space is required of nobody here.
-		Recorder r = new Recorder(dir.toFile(), () -> true, () -> 20, message -> {}, 1024, 0);
-		Recorder.Take take = r.begin("busy.example.net", false, 775, "26.3");
-		for (int i = 0; i < 200; i++) {
-			take.packet(new byte[100]);
+	@Test void instantClipWorksWithoutManualRecordingAndRetainsBootstrap() throws Exception {
+		Recorder r = recorder(); Recorder.Take t = r.begin("s", false, 775, "26.3");
+		UUID uuid = UUID.randomUUID(); t.self(42, "Steve", uuid);
+		t.packet(new byte[] {1, 42}); t.sample(sample(0));
+		at(20_000); t.packet(new byte[] {2, 20}); t.sample(sample(20));
+		at(40_000); t.packet(new byte[] {2, 40}); t.sample(sample(40));
+		at(60_000); t.packet(new byte[] {2, 60}); t.sample(sample(60));
+		assertFalse(r.recording());
+		try (ReplayData d = ReplayData.open(clip(r), dir.resolve("cache").toFile())) {
+			assertEquals(30_000, d.duration()); assertEquals(3, d.count());
+			assertEquals(42, d.packet(0).get(1)); assertEquals(0, d.time(0));
+			assertEquals(40, d.packet(1).get(1)); assertEquals(10_000, d.time(1));
+			assertEquals(60, d.packet(2).get(1)); assertEquals(30_000, d.time(2));
+			assertEquals(uuid.toString(), d.extras.selfUuid); assertEquals(42, d.meta.selfId);
+			assertTrue(d.self.length <= 3); assertEquals(0, d.self[0].time);
 		}
-		await(r);
-		File temp = new File(r.tempDir(), "x");
-		long written = 0;
-		for (File f : r.tempDir().listFiles()) {
-			if (f.getName().endsWith(".tmcpr")) {
-				written = f.length();
-			}
-		}
-		// Far fewer than the 200 * 108 bytes offered, and not a byte past the limit plus one packet.
-		assertTrue(written > 0 && written <= 1024 + 108, "wrote " + written);
-		assertFalse(temp.exists());
-		AtomicReference<File> saved = new AtomicReference<File>();
-		CountDownLatch done = new CountDownLatch(1);
-		r.saveMoment(f -> {
-			saved.set(f);
-			done.countDown();
-		});
-		assertTrue(done.await(10, TimeUnit.SECONDS));
-		assertNotNull(saved.get());
-		assertTrue(saved.get().isFile());
-		take.end();
-		await(r);
+		t.end(); await(r); assertEquals(0, r.tempDir().listFiles().length);
 	}
-
-	@Test
-	void aLongSessionIsCompactedToTheWorldAsItWasAndKeepsRecording() throws Exception {
-		// Packet 1 is a chunk (its second byte says which), anything else something passing.
-		ReplayBackend.Classifier sorter = (packet, key) -> {
-			if (packet.get(0) == 1) {
-				key[0] = packet.get(1);
-				return Category.CHUNK;
-			}
-			return Category.TRANSIENT;
-		};
-		// Compacted past 4 KB; nothing of the session is kept whole (no clip either).
-		Recorder r = new Recorder(dir.toFile(), () -> true, () -> 0, message -> {}, 1L << 30, 0, 4096, 0, () -> sorter);
-		Recorder.Take take = r.begin("busy.example.net", false, 775, "26.3");
-		for (int i = 0; i < 400; i++) {
-			byte[] p = new byte[100];
-			p[0] = (byte) (i % 2 == 0 ? 1 : 2);
-			p[1] = (byte) (i % 4);
-			take.packet(p);
-			// Each packet a moment after the last (a fast machine would otherwise record them all at
-			// the same millisecond, inside the kept window).
-			Thread.sleep(1);
+	@Test void clipsDoNotStopRewriteOrTruncateManualRecording() throws Exception {
+		Recorder r = recorder(); Recorder.Take t = r.begin("s", true, 775, "26.3");
+		t.packet(new byte[] {1, 10});
+		at(10_000); AtomicReference<File> manual = new AtomicReference<>();
+		assertTrue(r.startRecording(manual::set));
+		at(20_000); t.packet(new byte[] {2, 20});
+		at(40_000); t.packet(new byte[] {2, 40}); File first = clip(r); byte[] bytes = Files.readAllBytes(first.toPath());
+		assertTrue(r.recording()); assertNull(manual.get());
+		at(70_000); t.packet(new byte[] {2, 70}); File second = clip(r);
+		assertNotEquals(first, second); assertTrue(r.recording());
+		at(80_000); t.packet(new byte[] {2, 80}); assertTrue(r.stopRecording()); await(r);
+		assertFalse(r.recording()); assertNotNull(manual.get());
+		assertArrayEquals(bytes, Files.readAllBytes(first.toPath()));
+		try (ReplayData d = ReplayData.open(manual.get(), dir.resolve("manual").toFile())) {
+			assertEquals(70_000, d.duration()); assertEquals(5, d.count());
+			assertEquals(20, d.packet(1).get(1)); assertEquals(10_000, d.time(1));
+			assertEquals(80, d.packet(4).get(1));
 		}
-		Thread.sleep(5);
-		byte[] last = new byte[100];
-		last[0] = 2;
-		last[1] = 99;
-		take.packet(last);
-		await(r);
-		AtomicReference<File> saved = new AtomicReference<File>();
-		CountDownLatch done = new CountDownLatch(1);
-		assertTrue(r.saveMoment(f -> {
-			saved.set(f);
-			done.countDown();
-		}));
-		assertTrue(done.await(10, TimeUnit.SECONDS));
-		try (ReplayData data = ReplayData.open(saved.get(), dir.resolve("cache").toFile())) {
-			// Far fewer than the 401 recorded: the newest copy of each chunk, and what came after.
-			assertTrue(data.count() < 50, "kept " + data.count());
-			ByteBuffer newest = data.packet(data.count() - 1);
-			assertEquals(2, newest.get(0));
-			assertEquals(99, newest.get(1));
+		assertNotNull(clip(r)); t.end(); await(r);
+	}
+	@Test void startStopStartWhileWriterIsBusyAndLeavingSavesEachRecording() throws Exception {
+		Recorder r = recorder(); Recorder.Take t = r.begin("s", true, 1, "26.3"); t.packet(new byte[] {1});
+		AtomicReference<File> first = new AtomicReference<>(), second = new AtomicReference<>();
+		at(1_000); assertTrue(r.startRecording(first::set)); at(2_000); t.packet(new byte[] {2, 2});
+		assertTrue(r.stopRecording()); at(3_000); assertTrue(r.startRecording(second::set));
+		at(4_000); t.packet(new byte[] {2, 4}); t.end(); await(r);
+		assertNotNull(first.get()); assertNotNull(second.get()); assertNotEquals(first.get(), second.get());
+		try (ReplayData d = ReplayData.open(second.get(), dir.resolve("second").toFile())) {
+			assertEquals(1_000, d.duration()); assertEquals(2, d.count()); assertEquals(4, d.packet(1).get(1));
 		}
-		take.end();
-		await(r);
+		assertNull(r.current()); assertFalse(r.recording()); assertEquals(0, r.tempDir().listFiles().length);
 	}
-
-	@Test
-	void aNearlyFullDriveStopsRecordingToo() throws Exception {
-		// Asking for more free space than any drive has.
-		Recorder r = new Recorder(dir.toFile(), () -> true, () -> 20, message -> {}, 1L << 40, Long.MAX_VALUE);
-		Recorder.Take take = r.begin("busy.example.net", false, 775, "26.3");
-		for (int i = 0; i < 50; i++) {
-			take.packet(new byte[100]);
+	@Test void storageLimitUsesCompressedSizeAndRollingSelfTrackStaysSmall() throws Exception {
+		Recorder r = recorder(100_000, 0); Recorder.Take t = r.begin("s", false, 1, "26.3");
+		byte[] chunk = new byte[1_000_000]; chunk[0] = 1; t.packet(chunk);
+		for (int i = 1; i <= 240; i++) { at(i * 1_000); t.packet(new byte[] {2}); t.sample(sample(i)); }
+		await(r); assertTrue(r.startRecording(f -> {}), "compressed world data should fit"); assertTrue(r.stopRecording());
+		try (ReplayData d = ReplayData.open(clip(r), dir.resolve("rolling").toFile())) {
+			assertEquals(30_000, d.duration()); assertTrue(d.count() <= 32); assertTrue(d.self.length <= 32);
 		}
-		await(r);
-		long written = 0;
-		for (File f : r.tempDir().listFiles()) {
-			if (f.getName().endsWith(".tmcpr")) {
-				written = f.length();
-			}
-		}
-		assertTrue(written <= 108, "wrote " + written);
-		take.end();
-		await(r);
+		t.end(); await(r);
 	}
-
-	@Test
-	void aKeptSessionReadsBackWithItsPacketsSamplesAndMoments() throws Exception {
-		Recorder r = recorder(true);
-		Recorder.Take take = r.begin("play.example.net", false, 775, "26.3");
-		UUID me = UUID.randomUUID();
-		take.self(42, "Steve", me);
-		take.packet(new byte[] {1, 2, 3});
-		take.sample(sample(1));
-		take.packet(new byte[] {4});
-		take.sample(sample(2));
-		AtomicReference<File> saved = new AtomicReference<File>();
-		CountDownLatch kept = new CountDownLatch(1);
-		assertTrue(r.saveMoment(f -> {
-			saved.set(f);
-			kept.countDown();
-		}));
-		assertTrue(kept.await(10, TimeUnit.SECONDS));
-		assertNotNull(saved.get());
-		assertTrue(saved.get().getName().startsWith("play.example.net "));
-
-		try (ReplayData data = ReplayData.open(saved.get(), dir.resolve("cache").toFile())) {
-			assertEquals(2, data.count());
-			ByteBuffer first = data.packet(0);
-			byte[] bytes = new byte[first.remaining()];
-			first.get(bytes);
-			assertArrayEquals(new byte[] {1, 2, 3}, bytes);
-			assertEquals(1, data.packet(1).remaining());
-			assertEquals("26.3", data.meta.mcversion);
-			assertEquals(775, data.meta.protocol);
-			assertEquals(42, data.meta.selfId);
-			assertEquals("Steve", data.extras.selfName);
-			assertEquals(me.toString(), data.extras.selfUuid);
-			assertEquals(1, data.extras.moments.size());
-			assertEquals(20, data.extras.clipSeconds);
-			SelfSample s = data.selfAt(0);
-			assertNotNull(s);
-			assertEquals(3, s.slot);
-			assertEquals(350, s.yaw, 1e-6);
-		}
-		take.end();
-		await(r);
+	@Test void lowDiskStopsBufferWithoutDiscardingExistingData() throws Exception {
+		Recorder r = recorder(1L << 30, Long.MAX_VALUE); Recorder.Take t = r.begin("s", false, 1, "26.3");
+		t.packet(new byte[] {1}); await(r);
+		assertFalse(r.startRecording(f -> {})); assertNotNull(clip(r)); t.end(); await(r);
 	}
-
-	@Test
-	void anUnkeptSessionLeavesNothingBehind() throws Exception {
-		Recorder r = recorder(true);
-		Recorder.Take take = r.begin("Singleplayer", true, 775, "26.3");
-		take.packet(new byte[] {9, 9});
-		take.end();
-		await(r);
-		File[] left = r.tempDir().listFiles();
-		assertTrue(left == null || left.length == 0);
-		assertFalse(new File(dir.toFile(), "replay_recordings").exists());
-		assertNull(r.current());
+	@Test void aPausedWorldDoesNotLengthenTheManualRecording() throws Exception {
+		Recorder r = recorder(); Recorder.Take t = r.begin("s", true, 1, "26.3"); t.packet(new byte[] {1});
+		AtomicReference<File> saved = new AtomicReference<>(); r.startRecording(saved::set);
+		at(5_000); t.paused(true); at(60_000); assertEquals(5_000, t.time()); t.paused(false);
+		at(65_000); t.packet(new byte[] {2}); r.stopRecording(); await(r);
+		try (ReplayData d = ReplayData.open(saved.get(), dir.resolve("pause").toFile())) { assertEquals(10_000, d.duration()); }
+		t.end(); await(r);
 	}
-
-	@Test
-	void recordingOffRecordsNothing() {
-		Recorder r = recorder(false);
-		assertNull(r.begin("x", false, 1, "26.3"));
-		assertFalse(r.saveMoment(null));
-	}
-
-	@Test
-	void pausedTimeDoesNotCount() throws Exception {
-		Recorder r = recorder(true);
-		Recorder.Take take = r.begin("Singleplayer", true, 775, "26.3");
-		take.paused(true);
-		int before = take.time();
-		Thread.sleep(60);
-		assertEquals(before, take.time());
-		take.paused(false);
-		take.end();
-		await(r);
-	}
-
-	@Test
-	void findsPacketsByTimeAndInterpolatesTheSelf() throws Exception {
-		Recorder r = recorder(true);
-		Recorder.Take take = r.begin("s", false, 1, "26.3");
-		take.sample(sample(0));
-		Thread.sleep(120);
-		take.sample(sample(10));
-		take.packet(new byte[] {1});
-		CountDownLatch kept = new CountDownLatch(1);
-		AtomicReference<File> saved = new AtomicReference<File>();
-		r.saveMoment(f -> {
-			saved.set(f);
-			kept.countDown();
-		});
-		assertTrue(kept.await(10, TimeUnit.SECONDS));
-		try (ReplayData data = ReplayData.open(saved.get(), dir.resolve("cache").toFile())) {
-			assertEquals(0, data.indexAfter(-1));
-			assertEquals(1, data.indexAfter(data.time(0)));
-			int a = data.self[0].time;
-			int b = data.self[1].time;
-			SelfSample mid = data.selfAt((a + b) / 2.0);
-			assertTrue(mid.x > 2 && mid.x < 8, "x " + mid.x);
-		}
-		take.end();
-		await(r);
+	@Test void nothingIsSavedWithoutEitherControl() throws Exception {
+		Recorder r = recorder(); Recorder.Take t = r.begin("s", true, 1, "26.3"); t.packet(new byte[] {1}); t.end(); await(r);
+		assertFalse(r.savedDir().exists()); assertFalse(r.saveMoment(null)); assertEquals(0, r.tempDir().listFiles().length);
 	}
 }

@@ -74,10 +74,15 @@ public final class DisconnectedPage extends Page {
 		return ArcticClient.platform().translate(key, english);
 	}
 
-	private boolean autoOn() {
+	public boolean autoOn() {
 		ClientConfig c = ArcticClient.config();
 		return c.autoReconnect && address != null && !cancelled && tries < MAX_TRIES;
 	}
+
+	public boolean canReconnect() { return address != null; }
+	public void cancelReconnect() { cancelled = true; }
+	public long secondsLeft() { return Math.max(0, (deadline() - System.currentTimeMillis() + 999) / 1000); }
+	public void tickReconnect() { if (autoOn() && secondsLeft() == 0) { cancelled = true; reconnect(); } }
 
 	private long deadline() {
 		return shownAt + ArcticClient.config().reconnectSeconds * 1000L;
@@ -135,7 +140,7 @@ public final class DisconnectedPage extends Page {
 				.bounds(left, y, BUTTON_W, BUTTON_H);
 	}
 
-	private void reconnect() {
+	public void reconnect() {
 		if (address == null) {
 			return;
 		}

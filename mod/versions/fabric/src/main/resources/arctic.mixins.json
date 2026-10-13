@@ -19,7 +19,7 @@
 		"ServerPingPoolMixin",
 		"PlayerTabOverlayMixin",
 		"PlayerTierMixin",
-		"GuiMixin",
+		"NativeMenuMixin",
 		"HudMixin",
 		"KeyboardHandlerMixin",
 		"MouseHandlerMixin",

@@ -43,6 +43,12 @@ final class TitleCompatTest {
 		});
 		steps.add(() -> {
 			assertTitle(!expected.isEmpty());
+			Screen custom = new net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen(new TitleScreen()) {};
+			Compat.setScreen(custom);
+			if (Compat.screen() != custom) throw new IllegalStateException("A mod's multiplayer screen was replaced");
+			ArcticMod.LOG.info("titlecompat: preserved custom multiplayer screen");
+		});
+		steps.add(() -> {
 			ArcticMod.LOG.info("titlecompat: passed ({})", expected.isEmpty() ? "plain" : expected);
 			Minecraft.getInstance().stop();
 		});
@@ -67,8 +73,7 @@ final class TitleCompatTest {
 
 	private static void assertTitle(boolean otherMods) {
 		Screen screen = Compat.screen();
-		boolean right = otherMods ? screen instanceof TitleScreen
-				: screen instanceof PageScreen && ((PageScreen) screen).page() instanceof com.arcticlauncher.client.menu.TitleMenu;
+		boolean right = screen instanceof TitleScreen;
 		if (!right) throw new IllegalStateException("Unexpected title screen: " + screen);
 	}
 

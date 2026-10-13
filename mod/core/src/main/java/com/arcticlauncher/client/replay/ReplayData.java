@@ -40,7 +40,7 @@ public final class ReplayData implements Closeable {
 	/** Packet count, and per packet: arrival (ms), where its bytes start, their length. */
 	final int count;
 	final int[] time;
-	final int[] offset;
+	final long[] offset;
 	final int[] length;
 	/** The recording player, once a tick. */
 	final SelfSample[] self;
@@ -49,7 +49,7 @@ public final class ReplayData implements Closeable {
 	volatile long[] key;
 
 	private ReplayData(File file, ReplayMeta meta, ReplayMeta.Extras extras, RandomAccessFile raf, File cacheFile,
-			int count, int[] time, int[] offset, int[] length, SelfSample[] self) {
+			int count, int[] time, long[] offset, int[] length, SelfSample[] self) {
 		this.file = file;
 		this.meta = meta;
 		this.extras = extras;
@@ -84,10 +84,6 @@ public final class ReplayData implements Closeable {
 		}
 		RandomAccessFile raf = new RandomAccessFile(packets, "r");
 		try {
-			long size = raf.length();
-			if (size > Integer.MAX_VALUE) {
-				throw new IOException("replay too large (" + (size >> 20) + " MB)");
-			}
 			return index(mcpr, meta, extras, raf, packets, self);
 		} catch (IOException | RuntimeException e) {
 			raf.close();
@@ -128,11 +124,11 @@ public final class ReplayData implements Closeable {
 			throws IOException {
 		int cap = 1 << 16;
 		int[] time = new int[cap];
-		int[] offset = new int[cap];
+		long[] offset = new long[cap];
 		int[] length = new int[cap];
 		int n = 0;
 		long limit = raf.length();
-		int at = 0;
+		long at = 0;
 		try (DataInputStream in = new DataInputStream(new BufferedInputStream(new java.io.FileInputStream(cacheFile), 1 << 16))) {
 			while (at + HEADER <= limit) {
 				int t = in.readInt();
@@ -343,5 +339,6 @@ public final class ReplayData implements Closeable {
 	@Override
 	public void close() throws IOException {
 		raf.close();
+		cacheFile.delete();
 	}
 }

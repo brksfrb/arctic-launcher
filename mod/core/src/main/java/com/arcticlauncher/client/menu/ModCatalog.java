@@ -115,9 +115,8 @@ final class ModCatalog {
 				}));
 		// Only where this version can record and play replays.
 		if (com.arcticlauncher.client.replay.Replays.canWatch()) {
-			out.add(new Mod("replays", "Replays", "Every session records; keep one, watch it, make videos", "replay", Category.GAMEPLAY,
+			out.add(new Mod("replays", "Replays", "Instant clips, start/stop recording and queued videos", "replay", Category.GAMEPLAY,
 					"replay record clip video camera recording")
-					.toggle(() -> c.replayRecording, on -> c.replayRecording = on)
 					.page(ReplaysTab::new));
 		}
 		out.add(new Mod("death", "Death Position", "A pop-up with where you died, and a Death waypoint", "death", Category.GAMEPLAY, "coords")

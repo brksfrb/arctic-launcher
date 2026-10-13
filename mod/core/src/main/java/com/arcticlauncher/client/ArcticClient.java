@@ -204,6 +204,10 @@ public final class ArcticClient {
 				com.arcticlauncher.client.waypoints.WorldMarkers.render(g, style(), platform, waypoints.here(platform));
 			}
 			hud.render(g, style(), false);
+			if (com.arcticlauncher.client.replay.Replays.recording()) {
+				String recording = "REC · " + com.arcticlauncher.client.replay.Replays.recordingStatus();
+				g.text(recording, 6, 6, 0xFFFF6767, true);
+			}
 		}
 		if (platform.inWorld()) {
 			if (!platform.hudHidden()) {

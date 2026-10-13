@@ -4,6 +4,7 @@
 	"compatibilityLevel": "JAVA_8",
 	"client": [
 		"MinecraftClientMixin",
+		"NativeMenuMixin",
 		"WindowSizeMixin",
 		"ClientBrandMixin",
 		"KeyBindingMixin",

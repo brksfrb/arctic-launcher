@@ -19,6 +19,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(Screen.class)
 abstract class ScreenMixin {
+	@Inject(method = "extractRenderState", at = @At("HEAD"))
+	//#if MC >= 1.20
+	private void arctic$layout(GuiGraphicsExtractor g, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+	//#elif MC >= 1.16
+	private void arctic$layout(com.mojang.blaze3d.vertex.PoseStack pose, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+	//#else
+	private void arctic$layout(int mouseX, int mouseY, float delta, CallbackInfo ci) {
+	//#endif
+		com.arcticlauncher.mod.ArcticButton.layout((Screen) (Object) this);
+	}
+
 	//#if MC >= 1.20.6
 	@Inject(method = "extractPanorama", at = @At("HEAD"), cancellable = true)
 	private void arctic$backdrop(GuiGraphicsExtractor g, float delta, CallbackInfo ci) {

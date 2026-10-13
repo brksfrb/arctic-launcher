@@ -35,6 +35,9 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	/** True while playing (a world is loaded). */
 	boolean inWorld();
 
+	/** Safe place to start deferred replay exports (never while browsing another menu). */
+	default boolean atTitleScreen() { return false; }
+
 	/** Player {x, y, z, yaw, pitch}, or null outside a world. */
 	double[] position();
 

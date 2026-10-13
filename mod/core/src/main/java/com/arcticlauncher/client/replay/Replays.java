@@ -21,8 +21,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 /**
- * Replays: recording every session (kept with the replay key), the list of
- * saved ones, and watching one. Adapters register a {@link ReplayBackend}
+ * Replays: instant clips, independent manual recordings, deferred video exports
+ * and playback. Adapters register a {@link ReplayBackend}
  * and forward frames, keys and connection events here.
  */
 public final class Replays {
@@ -46,6 +46,12 @@ public final class Replays {
 	private static File gameDir;
 	private static boolean opening;
 	private static boolean saveKeyWasDown;
+	private static boolean recordKeyWasDown;
+	private static ExportQueue exports;
+	private static File autoFile;
+	private static boolean autoWaiting;
+	private static boolean exportsPaused;
+	private static int exportTitleTicks;
 	/** A replay to open once the title screen is up (asked for by the launcher). */
 	private static File pending;
 	private static int titleTicks;
@@ -60,8 +66,9 @@ public final class Replays {
 		File config = p.configDir();
 		gameDir = config.getAbsoluteFile().getParentFile();
 		// The adapter's packet sorter compacts long sessions (it's there once the adapter has registered).
-		recorder = new Recorder(gameDir, () -> ArcticClient.config().replayRecording, () -> ArcticClient.config().clipSeconds,
+		recorder = new Recorder(gameDir, () -> ArcticClient.config().clipSeconds,
 				message -> p.log(true, message), () -> backend == null ? null : backend.classifier(null));
+		exports = new ExportQueue(gameDir);
 		ffmpeg = new Ffmpeg(bridgePort, bridgeSecret);
 		// Ask early, so export buttons know right away.
 		ffmpeg.get();
@@ -109,25 +116,76 @@ public final class Replays {
 		titleTicks = 0;
 	}
 
-	/** Each tick: the replay key keeps the session. */
+	/** Keys never retrigger merely because a screen opened or closed while held. */
 	public static void tick(boolean screenOpen) {
+		boolean save = platform.isKeyDown(ArcticClient.config().replayKey);
+		boolean record = platform.isKeyDown(ArcticClient.config().replayRecordKey);
 		if (viewer != null) {
 			viewer.screenOpen(screenOpen);
-			return;
+			if (autoWaiting && viewer.ready()) beginQueuedExport();
+		} else {
+			if (!screenOpen && platform.inWorld()) {
+				if (save && !saveKeyWasDown) saveMoment();
+				// A duplicate binding performs one predictable action, never both.
+				if (record && !recordKeyWasDown && !ArcticClient.config().replayRecordKey.equals(ArcticClient.config().replayKey)) toggleRecording();
+			}
+			if (pending != null && backend != null && platform.atTitleScreen() && ++titleTicks > OPEN_AFTER_TICKS) {
+				File file = pending; pending = null; watch(file);
+			} else if (platform.atTitleScreen() && !opening && pending == null && recorder.current() == null
+					&& ArcticClient.config().replayAutoExport && !exportsPaused && exports.size() > 0) {
+				if (++exportTitleTicks >= 200 && ffmpeg.get() != null) renderNext();
+			} else exportTitleTicks = 0;
 		}
-		if (pending != null && backend != null && !platform.inWorld() && ++titleTicks > OPEN_AFTER_TICKS) {
-			File file = pending;
-			pending = null;
-			watch(file);
-		}
-		boolean down = !screenOpen && platform.isKeyDown(ArcticClient.config().replayKey);
-		if (down && !saveKeyWasDown) {
-			saveMoment();
-		}
-		saveKeyWasDown = down;
+		saveKeyWasDown = save; recordKeyWasDown = record;
 	}
 
-	/** Keep this session as a replay, marking this moment (with a picture of it where the game can take one). */
+	public static boolean recording() { return recorder != null && recorder.recording(); }
+	public static String recordingStatus() { return recording() ? "Recording " + clock(recorder.recordingMillis()) + String.format(java.util.Locale.ROOT, " · %.1f MB", recorder.recordingBytes() / (1024.0 * 1024.0)) : "Instant clips ready"; }
+	public static void toggleRecording() {
+		if (recorder == null) return;
+		if (recorder.stopRecording()) { Notices.post("Saving recording", "Instant clips are still available."); return; }
+		if (recorder.startRecording(file -> Notices.post(file == null ? "Recording not saved" : "Recording saved",
+				file == null ? "Couldn't write the file." : file.getName()))) {
+			Notices.post("Recording started", "Press " + platform.keyLabel(ArcticClient.config().replayRecordKey) + " to stop. Instant clips work separately.");
+		} else Notices.post("Cannot start recording", "Join a world first, or check the replay buffer notice.");
+	}
+
+	public static int queuedVideos() { return exports == null ? 0 : exports.size(); }
+	public static boolean exportsPaused() { return exportsPaused; }
+	public static void resumeExports() { exportsPaused = false; exportTitleTicks = 200; }
+	private static void renderNext() {
+		autoFile = exports.next();
+		if (autoFile == null) return;
+		if (!autoFile.isFile()) { removeExport(autoFile); autoFile = null; return; }
+		// A failed open must not retry continuously; successful completion clears this guard.
+		exportsPaused = true;
+		watch(autoFile, v -> autoWaiting = true);
+	}
+	private static void beginQueuedExport() {
+		autoWaiting = false;
+		final File replay = autoFile;
+		final ReplayViewer v = viewer;
+		File exe = ffmpeg.get();
+		if (replay == null || exe == null) { stopWatching(); return; }
+		File out = new File(videoFolder(), replay.getName().replace(".mcpr", ".mp4"));
+		final VideoExport[] job = new VideoExport[1];
+		job[0] = new VideoExport(exe, out, v.start(), v.duration(), 30, () -> platform.runOnGameThread(() -> {
+			VideoExport done = job[0];
+			if (!done.cancelled() && done.error() == null) {
+				removeExport(replay); exportsPaused = false;
+				Notices.post("Video saved", out.getName() + " · in replay_videos");
+			} else Notices.post("Video queue paused", done.cancelled() ? "Your 3D clip is saved. Resume videos from Replays." : done.error());
+			if (viewer == v) stopWatching();
+			autoFile = null; exportTitleTicks = 0;
+		}));
+		v.export(job[0], ReplayViewer.Mode.FIRST_PERSON);
+		if (v.exporting() == null) { stopWatching(); Notices.post("Video queue paused", "Export is unavailable here. Your 3D clip is saved."); }
+	}
+	private static void removeExport(File file) {
+		try { exports.remove(file); } catch (IOException e) { platform.log(true, "replay: queue save failed: " + e); }
+	}
+
+	/** Save the recent window with a thumbnail; never alter an active manual recording. */
 	public static void saveMoment() {
 		if (recorder == null) {
 			return;
@@ -146,17 +204,13 @@ public final class Replays {
 	private static void keep(byte[] thumbnail) {
 		boolean saving = recorder.saveMoment(thumbnail, file -> {
 			if (file != null) {
-				Notices.post("Replay saved", file.getName().replace(".mcpr", "") + " · the last "
-						+ ArcticClient.config().clipSeconds + "s are marked as a clip");
-			} else {
-				Notices.post("Replay not saved", "Couldn't write the file.");
-			}
+				try {
+					exports.add(file);
+					Notices.post("3D clip saved", "MP4 queued for after you leave the world. Recording continues.");
+				} catch (IOException e) { Notices.post("3D clip saved", "Couldn't queue the MP4. Export it from Replays."); }
+			} else Notices.post("Clip not saved", "No replay data is available, or the file couldn't be written.");
 		});
-		if (!saving) {
-			Notices.post("Nothing to save", ArcticClient.config().replayRecording
-					? "Replays record from the moment you join a world or server."
-					: "Replay recording is off. Turn it on in the Replays settings.");
-		}
+		if (!saving) Notices.post("Nothing to save yet", "Join a world to start the instant replay buffer.");
 	}
 
 	// ---- Watching -------------------------------------------------------------
@@ -213,6 +267,7 @@ public final class Replays {
 
 	/** Leave the replay (back to the title screen). */
 	public static void stopWatching() {
+		autoWaiting = false;
 		ReplayViewer v = viewer;
 		viewer = null;
 		if (v != null) {
@@ -222,6 +277,7 @@ public final class Replays {
 
 	/** The adapter's replay connection closed by itself (like an error): tidy up. */
 	public static void connectionClosed() {
+		autoWaiting = false;
 		ReplayViewer v = viewer;
 		viewer = null;
 		if (v != null) {
@@ -385,6 +441,7 @@ public final class Replays {
 	}
 
 	public static boolean delete(Info info) {
+		removeExport(info.file);
 		new File(gameDir, ".arctic/replay-paths/" + info.file.getName() + ".json").delete();
 		return info.file.delete();
 	}
