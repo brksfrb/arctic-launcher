@@ -213,6 +213,8 @@ public final class ServersPage extends Page {
 		addressField.onEnter(this::submit);
 		if (editing != null) {
 			addressField.text(editing.address);
+		} else if (direct && ArcticClient.config().lastDirect != null) {
+			addressField.text(ArcticClient.config().lastDirect);
 		}
 		focus(direct ? addressField : nameField);
 		y += BUTTON_H + GAP * 2;
@@ -233,6 +235,8 @@ public final class ServersPage extends Page {
 			return;
 		}
 		if (mode == Mode.DIRECT) {
+			ArcticClient.config().lastDirect = address;
+			ArcticClient.saveConfig();
 			platform.connectTo(address);
 			return;
 		}

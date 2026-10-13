@@ -104,6 +104,8 @@ public final class ClientConfig {
 	/** After a disconnect, join the same server again by itself (after {@link #reconnectSeconds}). */
 	public boolean autoReconnect;
 	public int reconnectSeconds = 5;
+	/** The address last joined with Direct Connection (the field starts with it, as in vanilla). */
+	public String lastDirect = "";
 	/** Tier tags: players' PvP tiers by their names (Tiers.SOURCES[tierSource]; tierMode "" = their best). */
 	public boolean tierTags = true;
 	public int tierSource;
