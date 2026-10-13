@@ -57,13 +57,18 @@ final class ModSettingsTab implements MenuTab {
 		g.fill(x0, y0 + preview[3] * 2 / 3, x1, y1, 0xFF5E9E3B);
 		Draw.outline(g, x0, y0, x1, y1, 1, s.border);
 		Hud hud = ArcticClient.hud();
-		float scale = hud.slot(mod.widget).scale;
-		int ww = Math.round(mod.widget.width(g) * scale);
-		int hh = Math.round(mod.widget.height() * scale);
-		int[] rect = {(x0 + x1 - ww) / 2, (y0 + y1 - hh) / 2, ww, hh};
-		g.scissor(x0, y0, x1, y1);
-		hud.draw(g, s, mod.widget, rect, true);
-		g.endScissor();
+		hud.inCard(true);
+		try {
+			float scale = hud.slot(mod.widget).scale;
+			int ww = Math.round(mod.widget.width(g) * scale);
+			int hh = Math.round(mod.widget.height() * scale);
+			int[] rect = {(x0 + x1 - ww) / 2, (y0 + y1 - hh) / 2, ww, hh};
+			g.scissor(x0, y0, x1, y1);
+			hud.draw(g, s, mod.widget, rect, true);
+			g.endScissor();
+		} finally {
+			hud.inCard(false);
+		}
 		Draw.centered(g, "Preview", (x0 + x1) / 2, y1 + 4, s.muted, false);
 	}
 }

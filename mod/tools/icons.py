@@ -29,6 +29,7 @@ FROM_LUCIDE = {
     "autogg": "trophy",
     "back": "chevron-left",
     "biome": "mountain-snow",
+    "bossbar": "crown",
     "camera": "camera",
     "chat": "message-square",
     "chunk": "grid-3x3",

@@ -37,7 +37,11 @@ final class VanillaPart extends HudWidget {
 		seenAt = System.currentTimeMillis();
 	}
 
+	/** Where the game draws it now, or null when it isn't on screen (or this is a settings card's preview box). */
 	private int[] showing() {
+		if (ArcticClient.hud().inCard()) {
+			return null;
+		}
 		int[] n = natural;
 		return n != null && System.currentTimeMillis() - seenAt < SHOWN_MS ? n : null;
 	}

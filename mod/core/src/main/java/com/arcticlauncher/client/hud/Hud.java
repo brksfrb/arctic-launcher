@@ -106,6 +106,18 @@ public final class Hud {
 		previewing = on;
 	}
 
+	/** Whether this draw is a settings card's preview box (away from the game's own HUD). */
+	private boolean inCard;
+
+	public boolean inCard() {
+		return inCard;
+	}
+
+	/** A settings card is drawing a widget in its preview box: the game's own parts show stand-ins there. */
+	public void inCard(boolean on) {
+		inCard = on;
+	}
+
 	static long frame() {
 		return frame;
 	}
