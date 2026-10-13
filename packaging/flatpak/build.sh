@@ -34,6 +34,10 @@ cp -a /usr/lib/x86_64-linux-gnu/libflite*.so* "$build/files/lib/"
 ln -s libflite.so.1 "$build/files/lib/libflite.so"
 ln -s libflite_cmu_us_kal.so.1 "$build/files/lib/libflite_cmu_us_kal.so"
 install -Dm644 /usr/share/doc/libflite1/copyright "$build/files/share/licenses/flite/copyright"
+# Legacy Fabric's LWJGL 2 checks for the xrandr executable before enabling its
+# display backend. The base runtime has the library but does not ship this tool.
+install -Dm755 /usr/bin/xrandr "$build/files/bin/xrandr"
+install -Dm644 /usr/share/doc/x11-xserver-utils/copyright "$build/files/share/licenses/xrandr/copyright"
 mkdir -p "$build/files/share/metainfo"
 sed -e "s/@VERSION@/$version/g" -e "s/@DATE@/$date/g" \
   "$here/$app.metainfo.xml" > "$build/files/share/metainfo/$app.metainfo.xml"

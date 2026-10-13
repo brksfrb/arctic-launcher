@@ -11,6 +11,21 @@ capture_results() {
 trap capture_results EXIT
 pulseaudio --start --exit-idle-time=-1
 pactl load-module module-null-sink sink_name=ci
+flatpak run --command=xrandr "$app" --query > "$results/display-modes.txt"
+
+# A JVM stalled on its render thread cannot run the in-game timeout callback.
+# Preserve its thread dump before the outer timeout kills this disposable CI game.
+run_replay() {
+  local instance=$1 log=$2 game_pid diagnostic_pid result=0
+  timeout 420 flatpak run --command=arctic "$app" --json launch --instance "$instance" --offline FlatpakTest --memory 2G --wait > "$log" 2>&1 &
+  game_pid=$!
+  (sleep 200; if kill -0 "$game_pid" 2>/dev/null; then pkill -QUIT -x java || true; fi) &
+  diagnostic_pid=$!
+  wait "$game_pid" || result=$?
+  kill "$diagnostic_pid" 2>/dev/null || true
+  wait "$diagnostic_pid" 2>/dev/null || true
+  return "$result"
+}
 
 flatpak run "$app" --no-intro > "$results/launcher.log" 2>&1 &
 pid=$!
@@ -69,7 +84,7 @@ for variant in plain flashback; do
   enabled=off
   if [ "$variant" = flashback ]; then enabled=on; fi
   flatpak run --command=arctic "$app" mods toggle "$flashback_file" --instance flatpak-title "$enabled"
-  if ! timeout 420 flatpak run --command=arctic "$app" --json launch --instance flatpak-title --offline FlatpakTest --memory 2G --wait > "$results/replay-$variant.log" 2>&1; then
+  if ! run_replay flatpak-title "$results/replay-$variant.log"; then
     replay_failed=true
     flatpak kill "$app" 2>/dev/null || true
   fi
@@ -77,7 +92,7 @@ for variant in plain flashback; do
     replay_failed=true
   fi
 done
-if ! timeout 420 flatpak run --command=arctic "$app" --json launch --instance flatpak-legacy --offline FlatpakTest --memory 2G --wait > "$results/replay-legacy.log" 2>&1; then
+if ! run_replay flatpak-legacy "$results/replay-legacy.log"; then
   replay_failed=true
   flatpak kill "$app" 2>/dev/null || true
 fi
