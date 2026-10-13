@@ -30,9 +30,9 @@ const SAVED_NOTE_SECS: f64 = 3.0;
 const AUTO_TURN_AFTER: f64 = 4.0;
 const AUTO_TURN_SPEED: f32 = 0.35;
 const ZOOM: std::ops::RangeInclusive<f32> = 0.4..=4.0;
-/// Zooming in drifts toward the head (this share of the figure's height above its middle per step
-/// of zoom), so close up you look at the face and what's worn there, not the belt.
-const ZOOM_TOWARD_HEAD: f32 = 0.34;
+/// Zooming in grows the figure around its face (skin pixels above the feet), so close up you look
+/// at the face and what's worn there, not the belt.
+const ZOOM_FOCUS: f32 = 28.0;
 /// Cosmetic slots in the order they're listed.
 pub(super) const SLOTS: [&str; 6] = ["head", "face", "back", "shoulders", "arms", "body"];
 
@@ -278,11 +278,14 @@ impl ArcticApp {
             Section::Slot("face") => (1.55, rect.height() * 0.29),
             _ => (1.0, 6.0),
         };
-        let toward_head = (zoom - 1.0).max(0.0) * rect.height() * base_zoom * ZOOM_TOWARD_HEAD;
-        let model_rect = Rect::from_center_size(
-            rect.center() + vec2(0.0, y_offset + toward_head),
-            rect.size() * zoom * base_zoom,
-        );
+        let model_rect =
+            Rect::from_center_size(rect.center() + vec2(0.0, y_offset), rect.size() * base_zoom);
+        // Out from the middle, in toward the face.
+        let focus = if zoom >= 1.0 { ZOOM_FOCUS } else { 16.0 };
+        let camera = model::Zoom {
+            factor: zoom,
+            focus,
+        };
         let painter = ui.painter().with_clip_rect(rect);
         // No skin yet: a display model, so a cape or cosmetics still show.
         let key = current
@@ -325,7 +328,7 @@ impl ArcticApp {
         match self.skin_texture(&ctx, &key) {
             Some(tex) => {
                 let variant = current.variant.unwrap_or(tex.guessed);
-                model::paint(
+                model::paint_zoomed(
                     &painter,
                     model_rect,
                     tex.handle.id(),
@@ -335,6 +338,7 @@ impl ArcticApp {
                     &worn,
                     &worn_meshes,
                     pose,
+                    camera,
                 );
                 ctx.request_repaint();
             }

@@ -115,6 +115,51 @@ pub fn paint(
     meshes: &[WornMesh],
     pose: Pose,
 ) {
+    paint_zoomed(
+        painter,
+        rect,
+        skin,
+        variant,
+        has_overlay,
+        cape,
+        cosmetics,
+        meshes,
+        pose,
+        Zoom::default(),
+    );
+}
+
+/// The player's zoom in the big preview: `factor` times the fitted size, with the point at
+/// `focus` (height in skin pixels, feet at 0) staying where it is.
+#[derive(Debug, Clone, Copy)]
+pub struct Zoom {
+    pub factor: f32,
+    pub focus: f32,
+}
+
+impl Default for Zoom {
+    fn default() -> Self {
+        Self {
+            factor: 1.0,
+            focus: HEIGHT / 2.0,
+        }
+    }
+}
+
+/// [`paint`], zoomed.
+#[allow(clippy::too_many_arguments)]
+pub fn paint_zoomed(
+    painter: &egui::Painter,
+    rect: Rect,
+    skin: TextureId,
+    variant: Variant,
+    has_overlay: bool,
+    cape: Option<TextureId>,
+    cosmetics: &[Worn],
+    meshes: &[WornMesh],
+    pose: Pose,
+    zoom: Zoom,
+) {
     let view = |p: V3| -> V3 { rotate_view(p, pose) };
     let mut faces = build_faces(
         &parts(variant, has_overlay, pose.swing),
@@ -156,8 +201,11 @@ pub fn paint(
     } else {
         f32::INFINITY
     };
-    let scale = (rect.height() / (HEIGHT + 6.0)).min(width_scale);
-    let center = rect.center();
+    let fitted = (rect.height() / (HEIGHT + 6.0)).min(width_scale);
+    let scale = fitted * zoom.factor;
+    // Grown around the focus, wherever the fit put it (wide wings make the figure smaller).
+    let focus = zoom.focus - HEIGHT / 2.0;
+    let center = rect.center() + egui::vec2(0.0, focus * fitted * (zoom.factor - 1.0));
     let project = |p: V3| -> Pos2 {
         let k = CAMERA / (CAMERA - p[2]);
         pos2(center.x + p[0] * scale * k, center.y - p[1] * scale * k)
