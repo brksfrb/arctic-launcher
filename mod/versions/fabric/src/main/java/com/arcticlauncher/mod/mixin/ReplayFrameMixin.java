@@ -13,6 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 abstract class ReplayFrameMixin {
 	@Inject(method = "runTick", at = @At("HEAD"))
 	private void arctic$replayFrame(boolean advanceGameTime, CallbackInfo ci) {
+		com.arcticlauncher.mod.ReplayTest.frame();
 		Replays.frame();
 		// A game controller moves the player and the pointer each frame.
 		com.arcticlauncher.client.ArcticClient.frame(com.arcticlauncher.mod.Compat.screen() != null);

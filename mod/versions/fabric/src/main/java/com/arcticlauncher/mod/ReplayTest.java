@@ -22,7 +22,13 @@ import net.minecraft.client.Minecraft;
  * each camera and grabs a frame the way video export does, then quits.
  * Every step logs "replaytest: …"; a failure logs "replaytest: FAILED".
  */
-final class ReplayTest {
+public final class ReplayTest {
+	// Disconnect clears Minecraft's executor queue. A poll queued behind the
+	// export's stopWatching callback would be discarded and executeBlocking
+	// would wait forever even though the export succeeded. Frames keep running
+	// across world changes and while a replay is paused.
+	private static final java.util.Queue<Runnable> QUEUED = new java.util.concurrent.ConcurrentLinkedQueue<Runnable>();
+	private static boolean inFrame;
 	private static final ScheduledExecutorService TIMER = Executors.newSingleThreadScheduledExecutor(r -> {
 		Thread t = new Thread(r, "arctic-replaytest");
 		t.setDaemon(true);
@@ -58,7 +64,7 @@ final class ReplayTest {
 	}
 
 	private static void run(Runnable r) {
-		Minecraft.getInstance().execute(() -> {
+		QUEUED.add(() -> {
 			try {
 				r.run();
 			} catch (RuntimeException e) {
@@ -68,13 +74,24 @@ final class ReplayTest {
 		});
 	}
 
+	/** Development actions run outside Minecraft's disposable connection queue. */
+	public static void frame() {
+		if (inFrame || QUEUED.isEmpty()) return;
+		inFrame = true;
+		try {
+			for (Runnable r; (r = QUEUED.poll()) != null;) r.run();
+		} finally {
+			inFrame = false;
+		}
+	}
+
 	private static void log(String message) {
 		ArcticMod.LOG.info("replaytest: {}", message);
 	}
 
 	private static void fail(String why) {
 		ArcticMod.LOG.error("replaytest: FAILED {}", why);
-		Minecraft.getInstance().execute(() -> Minecraft.getInstance().stop());
+		run(() -> Minecraft.getInstance().stop());
 	}
 
 	/** Run {@code then} on the game thread once {@code ready} holds (checked each 250 ms). */
@@ -83,16 +100,17 @@ final class ReplayTest {
 		TIMER.schedule(new Runnable() {
 			@Override
 			public void run() {
-				AtomicReference<Boolean> ok = new AtomicReference<Boolean>();
-				Minecraft.getInstance().executeBlocking(() -> ok.set(ready.getAsBoolean()));
-				if (Boolean.TRUE.equals(ok.get())) {
-					log(what);
-					ReplayTest.run(then);
-				} else if (System.currentTimeMillis() > deadline) {
-					fail("timed out waiting: " + what);
-				} else {
-					TIMER.schedule(this, 250, TimeUnit.MILLISECONDS);
-				}
+				Runnable poll = this;
+				ReplayTest.run(() -> {
+					if (ready.getAsBoolean()) {
+						log(what);
+						then.run();
+					} else if (System.currentTimeMillis() > deadline) {
+						fail("timed out waiting: " + what);
+					} else {
+						TIMER.schedule(poll, 250, TimeUnit.MILLISECONDS);
+					}
+				});
 			}
 		}, 250, TimeUnit.MILLISECONDS);
 	}
