@@ -164,11 +164,16 @@ impl ArcticApp {
                 }
             }
             ui.add_space(8.0);
-            ui.add(
-                widgets::text_field(&mut self.discover.search)
-                    .hint_text("Search names and tags")
-                    .desired_width(200.0),
-            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.add(
+                    widgets::text_field(&mut self.discover.search)
+                        .hint_text("Search names and tags")
+                        .desired_width(ui.available_width().clamp(140.0, 240.0)),
+                );
+            });
+        });
+        // Their own row: next to the filters and search there wasn't room, and the button hid them.
+        crate::widgets::row(ui, |ui| {
             egui::ComboBox::from_id_salt("discover-sort")
                 .selected_text(format!("Sort: {}", self.discover.sort.label()))
                 .show_ui(ui, |ui| {
