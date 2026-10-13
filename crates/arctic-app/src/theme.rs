@@ -243,7 +243,8 @@ pub fn apply(ctx: &egui::Context, p: &Palette) {
     ctx.set_theme(theme);
     v.override_text_color = Some(p.text);
     v.panel_fill = p.bg;
-    v.window_fill = p.surface;
+    // Menus, dropdowns and tooltips (egui's popups) sit over the scenery like dialogs do.
+    v.window_fill = dialog_fill(p);
     v.extreme_bg_color = if p.dark {
         p.bg.gamma_multiply(0.7)
     } else {
@@ -289,9 +290,7 @@ pub fn apply(ctx: &egui::Context, p: &Palette) {
     });
 }
 
-/// Frosted-ice card: translucent so the scenery shows through, with a
-/// faint edge and a soft drop shadow.
-/// A dialog's background. Glass's see-through surface reads poorly over the aurora once a
+/// A dialog's (and a popup's) background. Glass's see-through surface reads poorly over the aurora once a
 /// dialog's text sits on it (dialogs aren't blurred like the panes), so there it's the night's
 /// own color, nearly solid; the other themes use their surface as it is.
 pub fn dialog_fill(p: &Palette) -> Color32 {
@@ -305,6 +304,8 @@ pub fn dialog_fill(p: &Palette) -> Color32 {
 /// How solid Glass dialogs are (of 255).
 const DIALOG_GLASS_ALPHA: u8 = 242;
 
+/// Frosted-ice card: translucent so the scenery shows through, with a
+/// faint edge and a soft drop shadow.
 pub fn card(p: &Palette) -> egui::Frame {
     egui::Frame::new()
         .fill(p.card_fill)
