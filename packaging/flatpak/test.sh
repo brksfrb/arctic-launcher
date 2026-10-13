@@ -56,5 +56,14 @@ game_dir=$(flatpak run --command=arctic "$app" --json instances show flatpak-pac
 mkdir -p "$game_dir/shaderpacks/Arctic-test-shader/shaders"
 printf '# Minimal shader fixture for the Iris load/unload check.\n' > "$game_dir/shaderpacks/Arctic-test-shader/shaders/shaders.properties"
 
-xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- bash "$here/test-windows.sh" "$results" "$game_dir"
+# Real title-screen integrations: test the event-based Mod Menu and Flashback's applied mixin,
+# separately and together, so neither can accidentally cover a broken detection path in the other.
+flatpak run --command=arctic "$app" instances create flatpak-title --version 26.3 --loader fabric
+flatpak run --command=arctic "$app" instances edit flatpak-title --arctic-client on --performance off --memory 2G
+flatpak run --command=arctic "$app" mods install modmenu --instance flatpak-title
+flatpak run --command=arctic "$app" mods install flashback --instance flatpak-title
+timeout 900 flatpak run --command=arctic "$app" launch --instance flatpak-title --offline FlatpakTest --memory 2G --dry-run > "$results/title-prepare.log" 2>&1
+title_game_dir=$(flatpak run --command=arctic "$app" --json instances show flatpak-title | jq -r '.game_dir')
+
+xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- bash "$here/test-windows.sh" "$results" "$game_dir" "$title_game_dir"
 echo 'Flatpak installation, signed update, launcher, and Fabric game checks passed.'

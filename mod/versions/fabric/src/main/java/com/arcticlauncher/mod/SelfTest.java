@@ -49,6 +49,12 @@ final class SelfTest {
 	private SelfTest() {}
 
 	static void maybeStart() {
+		//#if MC >= 1.19.4
+		if ("title-compat".equals(System.getProperty("arctic.selftest"))) {
+			TitleCompatTest.start();
+			return;
+		}
+		//#endif
 		if ("packs".equals(System.getProperty("arctic.selftest"))) {
 			packsTour();
 			return;
@@ -428,7 +434,7 @@ final class SelfTest {
 		TIMER.schedule(() -> Minecraft.getInstance().execute(r), STEP_SECONDS, TimeUnit.SECONDS);
 	}
 
-	private static void shot(String name) {
+	static void shot(String name) {
 		Minecraft mc = Minecraft.getInstance();
 		//#if MC >= 26.2
 		Screenshot.grab(mc, false);
