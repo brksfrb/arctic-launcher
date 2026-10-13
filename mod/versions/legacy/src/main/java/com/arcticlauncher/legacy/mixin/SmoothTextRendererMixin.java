@@ -24,6 +24,9 @@ abstract class SmoothTextRendererMixin {
 	private float x;
 	@Shadow
 	private float y;
+	/** In obfuscated text (§k): the game swaps each letter for a random one as wide (in whole pixels). */
+	@Shadow
+	private boolean obfuscated;
 
 	@Shadow
 	public abstract boolean isUnicode();
@@ -76,7 +79,10 @@ abstract class SmoothTextRendererMixin {
 		}
 		LegacySmoothFont.Glyph glyph = LegacySmoothFont.glyph(c);
 		if (glyph != null) {
-			cir.setReturnValue(LegacySmoothFont.draw(glyph, x, y, italic));
+			float moved = LegacySmoothFont.draw(glyph, x, y, italic);
+			// The stand-in is as wide in whole pixels, not exactly: moving by its exact width would
+			// shift the rest of the line every frame.
+			cir.setReturnValue(obfuscated ? (float) Math.round(moved) : moved);
 		}
 	}
 

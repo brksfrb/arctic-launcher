@@ -220,6 +220,12 @@ public final class LegacySmoothFont {
 			texture.clearGlId();
 		}
 		texture = new NativeImageBackedTexture(image);
+		// Smooth when text is drawn bigger than the atlas (titles are 4x): the game's nearest-pixel
+		// filter turns the letters' soft edges into grey blocks. At 1:1 the glyphs sit on whole pixels
+		// either way.
+		GlStateManager.bindTexture(texture.getGlId());
+		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
 		glyphs = made;
 		scale = s;
 		ArcticLegacy.LOG.info("smooth font: {} characters at GUI scale {} ({}x{})", chars.size(), s, width, height);
