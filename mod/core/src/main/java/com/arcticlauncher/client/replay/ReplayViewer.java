@@ -145,6 +145,9 @@ public final class ReplayViewer {
 			double target = pendingSeek;
 			pendingSeek = -1;
 			seekNow(target);
+			// Rebuilding the world is not elapsed playback or free-camera movement.
+			realMs = 0;
+			lastFrame = System.nanoTime();
 		}
 		if (export != null) {
 			time = export.frameTime();
@@ -338,11 +341,22 @@ public final class ReplayViewer {
 	}
 
 	private void seekNow(double target) {
+		backend.beginSeek();
+		try {
+			seekWorld(target);
+		} finally {
+			backend.endSeek();
+		}
+	}
+
+	private void seekWorld(double target) {
 		long start = System.nanoTime();
 		int to = data.indexAfter(target);
 		byte[] cats = data.category;
 		long[] keys = data.key;
-		if (to < cursor) {
+		boolean backwards = to < cursor;
+		float[] look = backwards ? backend.look() : null;
+		if (backwards) {
 			String error = backend.restart(data);
 			if (error != null) {
 				problem = error;
@@ -357,7 +371,7 @@ public final class ReplayViewer {
 			}
 		}
 		if (cats != null) {
-			int[] plan = SeekPlan.plan(cats, keys, cursor, to);
+			int[] plan = SeekPlan.plan(cats, keys, cursor, to, data.removals);
 			for (int i : plan) {
 				apply(i, true);
 			}
@@ -369,6 +383,12 @@ public final class ReplayViewer {
 		}
 		time = target;
 		lastSelf = data.selfIndexAt(target) - 1;
+		self();
+		if (backwards && mode == Mode.FREE && placed) {
+			backend.camera(free.x, free.y, free.z, look[0], look[1], 0, false);
+		}
+		camera(0);
+		if (mode == Mode.FOLLOW) backend.follow(followId);
 		status = null;
 	}
 

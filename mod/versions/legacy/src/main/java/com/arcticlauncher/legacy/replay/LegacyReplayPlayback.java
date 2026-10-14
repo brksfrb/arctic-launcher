@@ -72,6 +72,8 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 	private Entity following;
 	private boolean firstPerson;
 	private ByteBuffer pixels;
+	private boolean seeking;
+	private net.minecraft.client.gui.screen.Screen seekScreen;
 
 	@Override
 	public int protocol() {
@@ -92,8 +94,32 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 	@Override
 	public String restart(ReplayData data) {
 		retire();
-		leaveWorld();
+		// The recorded login replaces the world without unloading resource packs.
 		return connect();
+	}
+
+	@Override
+	public void beginSeek() {
+		seekScreen = loading() ? null : MinecraftClient.getInstance().currentScreen;
+		seeking = true;
+	}
+
+	@Override
+	public void endSeek() {
+		seeking = false;
+		if (ready() && loading()) MinecraftClient.getInstance().setScreen(seekScreen);
+		seekScreen = null;
+	}
+
+	public boolean seeking() { return seeking; }
+
+	public boolean suppressSeekScreen(net.minecraft.client.gui.screen.Screen screen) {
+		return seeking && (screen == null || screen instanceof net.minecraft.client.gui.screen.DownloadingTerrainScreen);
+	}
+
+	@Override
+	public boolean loading() {
+		return MinecraftClient.getInstance().currentScreen instanceof net.minecraft.client.gui.screen.DownloadingTerrainScreen;
 	}
 
 	private static void leaveWorld() {
@@ -175,6 +201,7 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 				return new LoginSuccessS2CPacket(CAMERA);
 			case "login": {
 				GameJoinS2CPacket p = (GameJoinS2CPacket) packet;
+				if (seeking) MinecraftClient.getInstance().player = null;
 				selfId = p.getEntityId();
 				placed = false;
 				return new GameJoinS2CPacket(CAMERA_ID, SPECTATOR, p.isHardcore(), p.getChunkLoadDistance(), p.getDifficulty(),
@@ -209,12 +236,14 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 	@Override
 	public boolean ready() {
 		MinecraftClient mc = MinecraftClient.getInstance();
-		return connection != null && mc.world != null && mc.player != null
-				&& connection.getPacketListener() instanceof ClientPlayNetworkHandler;
+		return selfId != -1 && connection != null && mc.world != null && mc.player != null
+				&& mc.getNetworkHandler() == connection.getPacketListener();
 	}
 
 	@Override
 	public void stop() {
+		seeking = false;
+		seekScreen = null;
 		retire();
 		connection = null;
 		channel = null;

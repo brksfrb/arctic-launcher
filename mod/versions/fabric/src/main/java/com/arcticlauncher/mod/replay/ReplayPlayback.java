@@ -75,6 +75,8 @@ public final class ReplayPlayback implements ReplayBackend {
 	private boolean bodyHidden;
 	private Entity following;
 	private boolean firstPerson;
+	private boolean seeking;
+	private net.minecraft.client.gui.screens.Screen seekScreen;
 
 	@Override
 	public int protocol() {
@@ -99,8 +101,27 @@ public final class ReplayPlayback implements ReplayBackend {
 	public String restart(ReplayData data) {
 		Minecraft mc = Minecraft.getInstance();
 		retire();
-		ReplayCompat.disconnect(ReplayCompat.message("Jumping…"));
+		// The recorded login replaces the world. A full disconnect also reloads
+		// resources, clears queued work and renders a menu in the middle of a seek.
 		return connect(mc);
+	}
+
+	@Override
+	public void beginSeek() {
+		seekScreen = loading() ? null : com.arcticlauncher.mod.Compat.screen();
+		seeking = true;
+	}
+
+	@Override
+	public void endSeek() {
+		seeking = false;
+		if (ready() && (loading() || ReplayCompat.messageShowing())) ReplayCompat.setScreen(seekScreen);
+		seekScreen = null;
+	}
+
+	/** Suppress only the seek's loading/close transitions, never normal joins or error screens. */
+	public boolean suppressSeekScreen(net.minecraft.client.gui.screens.Screen screen) {
+		return seeking && (screen == null || loadingScreen(screen) || ReplayCompat.messageScreen(screen));
 	}
 
 	private String connect(Minecraft mc) {
@@ -184,6 +205,8 @@ public final class ReplayPlayback implements ReplayBackend {
 				return ReplayCompat.loginFinished(packet, CAMERA);
 			case "login": {
 				ClientboundLoginPacket p = (ClientboundLoginPacket) packet;
+				// Login otherwise reuses the old camera, including its world and connection.
+				if (seeking) Minecraft.getInstance().player = null;
 				selfId = ReplayCompat.playerId(p);
 				placed = false;
 				return ReplayCompat.login(p, CAMERA_ID);
@@ -232,12 +255,16 @@ public final class ReplayPlayback implements ReplayBackend {
 	@Override
 	public boolean ready() {
 		Minecraft mc = Minecraft.getInstance();
-		return connection != null && mc.level != null && mc.player != null && connection.getPacketListener() instanceof ClientPacketListener;
+		return selfId != -1 && connection != null && mc.level != null && mc.player != null
+				&& mc.getConnection() == connection.getPacketListener();
 	}
 
 	@Override
 	public boolean loading() {
-		net.minecraft.client.gui.screens.Screen s = com.arcticlauncher.mod.Compat.screen();
+		return loadingScreen(com.arcticlauncher.mod.Compat.screen());
+	}
+
+	private static boolean loadingScreen(net.minecraft.client.gui.screens.Screen s) {
 		//#if MC >= 1.21.9
 		return s instanceof net.minecraft.client.gui.screens.LevelLoadingScreen;
 		//#else
@@ -249,6 +276,8 @@ public final class ReplayPlayback implements ReplayBackend {
 	@Override
 	public void stop() {
 		Minecraft mc = Minecraft.getInstance();
+		seeking = false;
+		seekScreen = null;
 		retire();
 		connection = null;
 		channel = null;

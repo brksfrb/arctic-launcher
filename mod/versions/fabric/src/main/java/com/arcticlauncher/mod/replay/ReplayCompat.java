@@ -214,7 +214,10 @@ public final class ReplayCompat {
 
 	/** One of those message screens is showing. */
 	public static boolean messageShowing() {
-		net.minecraft.client.gui.screens.Screen s = com.arcticlauncher.mod.Compat.screen();
+		return messageScreen(com.arcticlauncher.mod.Compat.screen());
+	}
+
+	static boolean messageScreen(net.minecraft.client.gui.screens.Screen s) {
 		//#if MC >= 1.20.5
 		return s instanceof net.minecraft.client.gui.screens.GenericMessageScreen;
 		//#else

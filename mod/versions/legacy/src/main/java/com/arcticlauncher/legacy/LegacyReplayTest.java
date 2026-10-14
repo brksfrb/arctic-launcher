@@ -177,6 +177,7 @@ final class LegacyReplayTest {
 				when("jumped back", () -> v.status() == null && v.time() < v.start() + 2500
 						&& MinecraftClient.getInstance().world != null, () -> after(3, () -> {
 					LegacyWorldTest.shot("replay jumped back");
+					if (!testSeekView()) return;
 					v.setMode(ReplayViewer.Mode.FIRST_PERSON);
 					after(2, () -> {
 						LegacyWorldTest.shot("replay first person");
@@ -199,6 +200,31 @@ final class LegacyReplayTest {
 				}));
 			}));
 		});
+	}
+
+	private static boolean testSeekView() {
+		ReplayViewer v = Replays.viewer();
+		v.setMode(ReplayViewer.Mode.FREE);
+		if (!v.paused()) v.togglePause();
+		double[] camera = com.arcticlauncher.client.ArcticClient.platform().camera();
+		LegacyReplayPlayback.INSTANCE.camera(camera[0], camera[1], camera[2], 37, -12, 0, false);
+		com.arcticlauncher.client.ArcticClient.platform().openPage(new ReplayMenu());
+		net.minecraft.client.gui.screen.Screen editor = MinecraftClient.getInstance().currentScreen;
+		for (int i = 0; i < 3; i++) {
+			v.seek(v.duration() * 0.8); Replays.frame(true);
+			net.minecraft.client.world.ClientWorld old = MinecraftClient.getInstance().world;
+			v.seek(v.start() + 250); Replays.frame(true);
+			double[] at = com.arcticlauncher.client.ArcticClient.platform().camera();
+			if (!v.ready() || v.status() != null || !v.paused() || MinecraftClient.getInstance().currentScreen != editor
+					|| MinecraftClient.getInstance().world == old || Math.abs(v.time() - v.start() - 250) > 1
+					|| Math.abs(at[3] - 37) > 0.1 || Math.abs(at[4] + 12) > 0.1) {
+				fail("rewind lost its editor, camera, clock or rebuilt world"); return false;
+			}
+		}
+		MinecraftClient.getInstance().setScreen(null);
+		v.togglePause();
+		log("repeated paused rewinds kept editor and camera without a loading screen");
+		return true;
 	}
 
 	private static void grabFrame() {

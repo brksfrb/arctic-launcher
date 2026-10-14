@@ -47,6 +47,8 @@ public final class ReplayData implements Closeable {
 	/** Filled in by {@link #classify} (null until then). */
 	volatile byte[] category;
 	volatile long[] key;
+	/** Published with category; old clips also benefit from skipping retired entity lifetimes. */
+	java.util.Map<Integer, int[]> removals = java.util.Collections.emptyMap();
 
 	private ReplayData(File file, ReplayMeta meta, ReplayMeta.Extras extras, RandomAccessFile raf, File cacheFile,
 			int count, int[] time, long[] offset, int[] length, SelfSample[] self) {
@@ -241,6 +243,7 @@ public final class ReplayData implements Closeable {
 		byte[] cat = new byte[count];
 		long[] keys = new long[count];
 		long[] out = new long[1];
+		java.util.Map<Integer, int[]> removed = new java.util.HashMap<Integer, int[]>();
 		try (DataInputStream in = new DataInputStream(new BufferedInputStream(new java.io.FileInputStream(cacheFile), 1 << 18))) {
 			byte[] buf = new byte[1 << 16];
 			for (int i = 0; i < count; i++) {
@@ -251,7 +254,12 @@ public final class ReplayData implements Closeable {
 				}
 				in.readFully(buf, 0, len);
 				out[0] = 0;
-				cat[i] = classifier.classify(ByteBuffer.wrap(buf, 0, len).slice(), out);
+				ByteBuffer packet = ByteBuffer.wrap(buf, 0, len).slice();
+				cat[i] = classifier.classify(packet, out);
+				if (cat[i] == Category.ENTITY_REMOVE) {
+					int[] ids = classifier.removedEntities(packet);
+					if (ids != null) removed.put(i, ids);
+				}
 				keys[i] = out[0];
 			}
 		} catch (IOException | RuntimeException e) {
@@ -259,6 +267,7 @@ public final class ReplayData implements Closeable {
 			return;
 		}
 		key = keys;
+		removals = removed;
 		category = cat;
 	}
 

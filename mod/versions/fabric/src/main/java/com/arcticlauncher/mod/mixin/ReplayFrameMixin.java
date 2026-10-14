@@ -11,6 +11,18 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** A replay moves on before each frame (packets, camera) and grabs it after (video export). */
 @Mixin(Minecraft.class)
 abstract class ReplayFrameMixin {
+	//#if MC >= 1.16
+	// Newer Minecraft forces a render from inside its login/respawn handler.
+	//#if MC >= 1.21.9
+	@Inject(method = "setScreenAndShow", at = @At("HEAD"), cancellable = true)
+	//#else
+	@Inject(method = "forceSetScreen", at = @At("HEAD"), cancellable = true)
+	//#endif
+	private void arctic$seekWithoutForcedFrame(net.minecraft.client.gui.screens.Screen screen, CallbackInfo ci) {
+		if (com.arcticlauncher.mod.replay.ReplayPlayback.INSTANCE.suppressSeekScreen(screen)) ci.cancel();
+	}
+	//#endif
+
 	@Inject(method = "runTick", at = @At("HEAD"))
 	private void arctic$replayFrame(boolean advanceGameTime, CallbackInfo ci) {
 		com.arcticlauncher.mod.ReplayTest.frame();
