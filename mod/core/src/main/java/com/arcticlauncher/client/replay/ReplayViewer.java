@@ -59,6 +59,8 @@ public final class ReplayViewer {
 	private int lastSelf = -1;
 	/** A jump asked for, done at the start of the next frame (so "Jumping…" shows first). */
 	private double pendingSeek = -1;
+	/** Some game versions render recursively from a packet handler. Never advance half a seek. */
+	private boolean seeking;
 	private String status;
 	private boolean joined;
 	private boolean screenOpen;
@@ -128,6 +130,7 @@ public final class ReplayViewer {
 
 	/** Before a frame is drawn (game thread). */
 	void frame() {
+		if (seeking) return;
 		if (export != null) {
 			// Pace rendering as well as encoding: never spin the GPU at an uncapped frame rate.
 			long wait = exportFrameAt + 1_000_000_000L / 30 - System.nanoTime();
@@ -175,7 +178,7 @@ public final class ReplayViewer {
 		// seek and camera change must be applied before we capture frame zero.
 		// Seeking can rebuild the world: don't encode the terrain-loading screen
 		// or advance the export timeline while that world is still joining.
-		if (export == null || pendingSeek >= 0 || !ready()) {
+		if (export == null || seeking || pendingSeek >= 0 || !ready()) {
 			return;
 		}
 		if (export.failed() != null) {
@@ -341,11 +344,13 @@ public final class ReplayViewer {
 	}
 
 	private void seekNow(double target) {
-		backend.beginSeek(export != null);
+		seeking = true;
 		try {
+			backend.beginSeek(export != null);
 			seekWorld(target);
 		} finally {
-			backend.endSeek();
+			try { backend.endSeek(); }
+			finally { seeking = false; }
 		}
 	}
 

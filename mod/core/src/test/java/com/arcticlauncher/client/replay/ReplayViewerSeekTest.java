@@ -20,12 +20,12 @@ class ReplayViewerSeekTest {
 	@TempDir Path dir;
 
 	private final class World implements AutoCloseable {
-		boolean ready, seeking, failRestart;
+		boolean ready, seeking, failRestart, nestedFrame;
 		int resets, followed = -1;
 		float yaw = 37, pitch = -12;
 		final List<Integer> packets = new ArrayList<>();
 		final List<String> events = new ArrayList<>();
-		final ReplayViewer viewer;
+		ReplayViewer viewer;
 
 		World() throws Exception { this(false); }
 
@@ -47,6 +47,10 @@ class ReplayViewerSeekTest {
 					case "endSeek": seeking = false; events.add("end"); break;
 					case "restart":
 						assertTrue(seeking); resets++; ready = false; packets.clear(); yaw = pitch = 0; followed = -1;
+						if (nestedFrame) {
+							int before = events.size(); viewer.frame(); viewer.afterFrame();
+							assertEquals(before, events.size(), "A nested game frame must not touch a half-rebuilt world");
+						}
 						return failRestart ? "reset failed" : null;
 					case "apply": packets.add((int) ((ByteBuffer) args[0]).get()); ready = true; break;
 					case "look": return new float[]{yaw, pitch};
@@ -118,6 +122,15 @@ class ReplayViewerSeekTest {
 			world.viewer.seek(7000); world.viewer.frame();
 			assertEquals(java.util.Arrays.asList(1, 3), world.packets);
 			assertEquals(1, world.resets); assertTrue(world.viewer.ready());
+		}
+	}
+
+	@Test void aForcedFrameInsideThePacketHandlerDoesNotAdvanceTheReplay() throws Exception {
+		try (World world = new World()) {
+			world.nestedFrame = true;
+			world.viewer.seek(100); world.viewer.frame();
+			assertEquals(java.util.Arrays.asList(1, 2), world.packets);
+			assertTrue(world.viewer.ready()); assertEquals(100, world.viewer.time());
 		}
 	}
 }

@@ -114,10 +114,10 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 		exportSeek = false;
 	}
 
-	public boolean seeking() { return seeking && !exportSeek; }
+	public boolean seeking() { return seeking; }
 
 	public boolean suppressSeekScreen(net.minecraft.client.gui.screen.Screen screen) {
-		return seeking() && (screen == null || screen instanceof net.minecraft.client.gui.screen.DownloadingTerrainScreen);
+		return seeking && !exportSeek && (screen == null || screen instanceof net.minecraft.client.gui.screen.DownloadingTerrainScreen);
 	}
 
 	@Override

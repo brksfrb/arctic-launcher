@@ -127,6 +127,13 @@ public final class ReplayPlayback implements ReplayBackend {
 		return seeking && !exportSeek && (screen == null || loadingScreen(screen) || ReplayCompat.messageScreen(screen));
 	}
 
+	/** Exports keep the terrain-ready screen, but never render halfway through a packet batch. */
+	public boolean deferSeekFrame(net.minecraft.client.gui.screens.Screen screen) {
+		if (!seeking || !(screen == null || loadingScreen(screen) || ReplayCompat.messageScreen(screen))) return false;
+		if (exportSeek) ReplayCompat.setScreen(screen);
+		return true;
+	}
+
 	private String connect(Minecraft mc) {
 		try {
 			selfId = -1;
