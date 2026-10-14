@@ -514,7 +514,7 @@ public final class Recorder {
 		// Only the older bootstrap needs a seek plan. The recent interval is copied in full.
 		Index index = Index.before(source, classifier == null ? (p, k) -> Category.ALWAYS : classifier, from);
 		int cut = index.count;
-		int[] earlier = SeekPlan.plan(index.category, index.key, 0, cut);
+		int[] earlier = SeekPlan.plan(index.category, index.key, 0, cut, index.removals);
 		try (DataInputStream in = source.packets()) {
 			byte[] buf = new byte[1 << 16];
 			int e = 0;
@@ -604,6 +604,7 @@ public final class Recorder {
 		int count;
 		byte[] category = new byte[1 << 12];
 		long[] key = new long[1 << 12];
+		final java.util.Map<Integer, int[]> removals = new java.util.HashMap<Integer, int[]>();
 
 		static Index before(Snapshot source, ReplayBackend.Classifier classifier, int before) throws IOException {
 			Index index = new Index();
@@ -624,7 +625,13 @@ public final class Recorder {
 					in.readFully(buf, 0, len);
 					read += 8 + len;
 					out[0] = 0;
-					index.add(classifier.classify(java.nio.ByteBuffer.wrap(buf, 0, len).slice(), out), out[0]);
+					java.nio.ByteBuffer packet = java.nio.ByteBuffer.wrap(buf, 0, len).slice();
+					byte category = classifier.classify(packet, out);
+					if (category == Category.ENTITY_REMOVE) {
+						int[] ids = classifier.removedEntities(packet);
+						if (ids != null) index.removals.put(index.count, ids);
+					}
+					index.add(category, out[0]);
 				}
 			}
 			return index;

@@ -29,6 +29,12 @@ public final class Category {
 	public static final byte ENTITY_OTHER = 9;
 	/** Never shown in a replay (keep-alives, disconnects, screens that would pop up). */
 	public static final byte DROP = 10;
+	/** Entities leave the world (ids supplied separately by the classifier). */
+	public static final byte ENTITY_REMOVE = 11;
+	/** An entity's absolute head rotation (key: its id). */
+	public static final byte ENTITY_HEAD = 12;
+	/** An entity's absolute velocity (key: its id). */
+	public static final byte ENTITY_MOTION = 13;
 
 	private Category() {}
 

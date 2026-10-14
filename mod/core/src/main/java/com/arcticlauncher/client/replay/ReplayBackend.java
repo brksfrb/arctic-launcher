@@ -16,6 +16,8 @@ public interface ReplayBackend {
 	interface Classifier {
 		/** The category of {@code packet} (its id, then its body); may put a key in {@code key[0]}. */
 		byte classify(ByteBuffer packet, long[] key);
+		/** Ids removed by an ENTITY_REMOVE packet; null if its format is unknown. */
+		default int[] removedEntities(ByteBuffer packet) { return null; }
 	}
 
 	/** The network protocol this game speaks (a replay must match it); 0 if unknown. */

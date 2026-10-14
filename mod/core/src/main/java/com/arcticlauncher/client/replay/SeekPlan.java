@@ -17,10 +17,18 @@ public final class SeekPlan {
 	 * and {@code key} are {@link ReplayData}'s classification.
 	 */
 	public static int[] plan(byte[] category, long[] key, int from, int to) {
+		return plan(category, key, from, to, java.util.Collections.emptyMap());
+	}
+
+	/** Removal lists are sparse: one packet may remove several entities. */
+	static int[] plan(byte[] category, long[] key, int from, int to, java.util.Map<Integer, int[]> removals) {
 		int[] out = new int[Math.max(16, (to - from) / 8)];
 		int n = 0;
 		LongSet chunksLater = new LongSet();
 		LongSet placedLater = new LongSet();
+		LongSet retiredLater = new LongSet();
+		LongSet headLater = new LongSet();
+		LongSet motionLater = new LongSet();
 		boolean respawnLater = false;
 		for (int i = to - 1; i >= from; i--) {
 			byte c = category[i];
@@ -43,18 +51,30 @@ public final class SeekPlan {
 					keep = !respawnLater && !chunksLater.contains(k);
 					break;
 				case Category.ENTITY_ADD:
-					keep = !respawnLater;
+					keep = !respawnLater && !retiredLater.contains(k);
 					// Moves before it were for an earlier entity with this id.
 					placedLater.add(k);
+					retiredLater.add(k);
 					break;
 				case Category.ENTITY_POS:
-					keep = !respawnLater && placedLater.add(k);
+					keep = !respawnLater && !retiredLater.contains(k) && placedLater.add(k);
 					break;
 				case Category.ENTITY_MOVE:
-					keep = !respawnLater && !placedLater.contains(k);
+					keep = !respawnLater && !retiredLater.contains(k) && !placedLater.contains(k);
 					break;
 				case Category.ENTITY_OTHER:
+					keep = !respawnLater && !retiredLater.contains(k);
+					break;
+				case Category.ENTITY_HEAD:
+					keep = !respawnLater && !retiredLater.contains(k) && headLater.add(k);
+					break;
+				case Category.ENTITY_MOTION:
+					keep = !respawnLater && !retiredLater.contains(k) && motionLater.add(k);
+					break;
+				case Category.ENTITY_REMOVE:
 					keep = !respawnLater;
+					int[] ids = removals.get(i);
+					if (ids != null) for (int id : ids) retiredLater.add(id);
 					break;
 				default:
 					// TRANSIENT and DROP: nothing to see when jumping.

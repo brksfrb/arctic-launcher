@@ -249,4 +249,31 @@ class RecorderTest {
 		}
 		t.end(); await(r);
 	}
+	@Test void oldEntityLifetimesAreCompactedButTheClipAndManualHistoryRemainIntact() throws Exception {
+		Recorder r = new Recorder(dir.toFile(), () -> 30, message -> {}, () -> new PacketSorter(
+				new String[][] {{"login_finished"}, {}, {"add_entity", "rotate_head", "set_entity_motion", "remove_entities"}},
+				false, false), 512L << 20, 0, 10_000, clock::get);
+		Recorder.Take t = r.begin("lifecycle", false, 1, "test");
+		t.packet(new byte[] {0}); // Login, then play ids.
+		AtomicReference<File> manual = new AtomicReference<>(); assertTrue(r.startRecording(manual::set));
+		t.packet(new byte[] {0, 7});
+		for (int i = 0; i < 5000; i++) { t.packet(new byte[] {1, 7, (byte) i}); t.packet(new byte[] {2, 7, (byte) i}); }
+		at(5_000); t.packet(new byte[] {3, 1, 7});
+		at(40_000); t.packet(new byte[] {0, 8}); await(r); // Compact the old lifetime.
+		at(45_000); t.packet(new byte[] {1, 8, 1}); t.packet(new byte[] {1, 8, 2});
+		at(50_000); t.packet(new byte[] {3, 1, 8}); await(r);
+		File saved = clip(r);
+		try (ReplayData data = ReplayData.open(saved, dir.resolve("entities").toFile())) {
+			assertEquals(6, data.count()); // Login + old removal + every packet inside the clip.
+			assertEquals(30_000, data.duration());
+			assertEquals(20_000, data.time(2)); assertEquals(25_000, data.time(3));
+			assertEquals(1, data.packet(3).get(2)); assertEquals(2, data.packet(4).get(2));
+			assertEquals(3, data.packet(5).get(0));
+		}
+		assertTrue(r.stopRecording()); await(r);
+		try (ReplayData data = ReplayData.open(manual.get(), dir.resolve("entity-manual").toFile())) {
+			assertEquals(10_007, data.count()); assertEquals(50_000, data.duration());
+		}
+		t.end(); await(r);
+	}
 }

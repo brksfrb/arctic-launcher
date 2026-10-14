@@ -54,6 +54,10 @@ public final class PacketSorter implements ReplayBackend.Classifier {
 				"move_minecart_along_track"}) {
 			CATEGORY.put(n, Category.ENTITY_OTHER);
 		}
+		CATEGORY.put("remove_entities", Category.ENTITY_REMOVE);
+		CATEGORY.put("remove_entity", Category.ENTITY_REMOVE);
+		CATEGORY.put("rotate_head", Category.ENTITY_HEAD);
+		CATEGORY.put("set_entity_motion", Category.ENTITY_MOTION);
 		for (String n : new String[] {"keep_alive", "ping", "disconnect", "login_disconnect", "set_health",
 				"player_combat_kill", "open_screen", "open_book", "open_sign_editor", "horse_screen_open",
 				"mount_screen_open", "merchant_offers", "container_close", "set_camera", "player_look_at", "move_vehicle",
@@ -185,6 +189,33 @@ public final class PacketSorter implements ReplayBackend.Classifier {
 		return c;
 	}
 
+	@Override
+	public int[] removedEntities(ByteBuffer packet) {
+		String name = nameAt(packet);
+		if (!"remove_entities".equals(name) && !"remove_entity".equals(name)) return null;
+		try {
+			ByteBuffer b = packet.duplicate();
+			readVarInt(b);
+			int count = "remove_entity".equals(name) ? 1 : readVarInt(b);
+			if (count < 0 || count > b.remaining()) return null;
+			int[] ids = new int[count];
+			for (int i = 0; i < count; i++) {
+				// A truncated or oversized VarInt must not retire an unrelated entity.
+				int value = 0;
+				boolean complete = false;
+				for (int shift = 0; shift < 35; shift += 7) {
+					int k = b.get() & 255;
+					if (shift == 28 && (k & 240) != 0) return null;
+					value |= (k & 127) << shift;
+					if (k < 128) { complete = true; break; }
+				}
+				if (!complete) return null;
+				ids[i] = value;
+			}
+			return b.hasRemaining() ? null : ids;
+		} catch (RuntimeException e) { return null; }
+	}
+
 	/** Follow the phase switch a packet makes. */
 	private void advance(String name) {
 		if (phase == LOGIN && ("login_finished".equals(name) || "game_profile".equals(name))) {
@@ -209,7 +240,12 @@ public final class PacketSorter implements ReplayBackend.Classifier {
 			case Category.ENTITY_ADD:
 			case Category.ENTITY_POS:
 			case Category.ENTITY_MOVE:
+			case Category.ENTITY_HEAD:
+			case Category.ENTITY_MOTION:
 				return readVarInt(b);
+			case Category.ENTITY_OTHER:
+				// Attachment packets have version-specific layouts; keep them conservatively.
+				return "set_entity_link".equals(name) ? Long.MIN_VALUE : readVarInt(b);
 			default:
 				return 0;
 		}

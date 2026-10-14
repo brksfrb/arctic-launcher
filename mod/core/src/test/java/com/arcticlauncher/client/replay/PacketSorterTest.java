@@ -3,6 +3,8 @@ package com.arcticlauncher.client.replay;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.nio.ByteBuffer;
 import org.junit.jupiter.api.Test;
@@ -122,5 +124,23 @@ class PacketSorterTest {
 		long old = ((long) (50 & 0x3FFFFFF) << 38) | ((long) (70 & 0xFFF) << 26) | (-70 & 0x3FFFFFF);
 		assertEquals(Category.BLOCK, s.classify(packet(3, old), key));
 		assertEquals(Category.chunk(3, -5), key[0]);
+	}
+
+	@Test
+	void readsEntityLifecycleAndIndependentStateKeys() {
+		PacketSorter s = new PacketSorter(new String[][] {{"login_finished"}, {},
+				{"remove_entities", "remove_entity", "rotate_head", "set_entity_motion", "set_entity_data", "set_entity_link"}}, false, false);
+		long[] key = new long[1]; s.classify(packet(0), key);
+		assertEquals(Category.ENTITY_REMOVE, s.classify(packet(0, "2", "7", "300"), key));
+		assertArrayEquals(new int[] {7, 300}, s.removedEntities(packet(0, "2", "7", "300")));
+		assertArrayEquals(new int[] {300}, s.removedEntities(packet(1, "300")));
+		assertEquals(Category.ENTITY_HEAD, s.classify(packet(2, "300"), key)); assertEquals(300, key[0]);
+		assertEquals(Category.ENTITY_MOTION, s.classify(packet(3, "7"), key)); assertEquals(7, key[0]);
+		assertEquals(Category.ENTITY_OTHER, s.classify(packet(4, "9"), key)); assertEquals(9, key[0]);
+		assertEquals(Category.ENTITY_OTHER, s.classify(packet(5, 9), key)); assertEquals(Long.MIN_VALUE, key[0]);
+		assertNull(s.removedEntities(packet(0, "2", "7")));
+		assertNull(s.removedEntities(ByteBuffer.wrap(new byte[] {0, 1, (byte) 0x80})));
+		assertNull(s.removedEntities(ByteBuffer.wrap(new byte[] {0, 1, (byte) 0xff, (byte) 0xff, (byte) 0xff, (byte) 0xff, 0x7f})));
+		assertNull(s.removedEntities(packet(2, "7")));
 	}
 }

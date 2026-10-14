@@ -106,4 +106,33 @@ class SeekPlanTest {
 		assertTrue(set.contains(31 * 4999L));
 		assertEquals(false, set.contains(7));
 	}
+
+	@Test
+	void removedEntitiesLeaveNoOldSpawnMovementOrPartialState() {
+		byte[] cats = {Category.ENTITY_ADD, Category.ENTITY_OTHER, Category.ENTITY_ADD,
+				Category.ENTITY_MOVE, Category.ENTITY_OTHER, Category.ENTITY_REMOVE, Category.ENTITY_OTHER};
+		long[] keys = {7, 7, 8, 7, 8, 0, 8};
+		assertArrayEquals(new int[] {2, 4, 5, 6}, SeekPlan.plan(cats, keys, 0, cats.length,
+				java.util.Collections.singletonMap(5, new int[] {7, 9})));
+		// Without a decoded removal list the old history must stay conservative.
+		assertArrayEquals(new int[] {0, 1, 2, 3, 4, 5, 6}, plan(cats, keys));
+	}
+
+	@Test
+	void reusedEntityIdsKeepOnlyTheNewLifetime() {
+		byte[] cats = {Category.ENTITY_ADD, Category.ENTITY_OTHER, Category.ENTITY_REMOVE,
+				Category.ENTITY_ADD, Category.ENTITY_OTHER, Category.ENTITY_MOVE};
+		long[] keys = {7, 7, 0, 7, 7, 7};
+		assertArrayEquals(new int[] {2, 3, 4, 5}, SeekPlan.plan(cats, keys, 0, cats.length,
+				java.util.Collections.singletonMap(2, new int[] {7})));
+	}
+
+	@Test
+	void keepsLatestHeadAndVelocityButEveryPartialMetadataUpdate() {
+		byte[] cats = {Category.ENTITY_ADD, Category.ENTITY_HEAD, Category.ENTITY_MOTION,
+				Category.ENTITY_OTHER, Category.ENTITY_HEAD, Category.ENTITY_MOTION, Category.ENTITY_OTHER,
+				Category.ENTITY_HEAD, Category.ENTITY_MOTION};
+		long[] keys = {7, 7, 7, 7, 7, 7, 7, 8, 8};
+		assertArrayEquals(new int[] {0, 3, 4, 5, 6, 7, 8}, plan(cats, keys));
+	}
 }
