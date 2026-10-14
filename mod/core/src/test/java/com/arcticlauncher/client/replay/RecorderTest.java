@@ -167,4 +167,27 @@ class RecorderTest {
 		} finally { resume.countDown(); t.end(); await(r); }
 		assertEquals(0, r.tempDir().listFiles().length);
 	}
+	@Test void stoppingDuringCleanupStillKeepsTheLastValidClip() throws Exception {
+		CountDownLatch compacting = new CountDownLatch(1), resume = new CountDownLatch(1);
+		Recorder r = new Recorder(dir.toFile(), () -> 30, message -> {}, () -> (p, key) -> {
+			if (Thread.currentThread().getName().equals("arctic-replay-compact")) {
+				compacting.countDown();
+				try { if (!resume.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("test timed out"); }
+				catch (InterruptedException e) { throw new IllegalStateException(e); }
+			}
+			return p.get(0) == 1 ? Category.CHUNK : Category.TRANSIENT;
+		}, 512L << 20, 0, 10_000, clock::get);
+		Recorder.Take t = r.begin("overflow", false, 775, "26.3");
+		try {
+			t.packet(new byte[] {1, 42}); at(40_000); t.packet(new byte[] {2, 40});
+			assertTrue(compacting.await(10, TimeUnit.SECONDS));
+			t.packet(new byte[(64 << 20) + 1]); // Deliberately exceed the bounded queue.
+			assertFalse(r.bufferReady());
+			resume.countDown(); await(r);
+			try (ReplayData data = ReplayData.open(clip(r), dir.resolve("last-good").toFile())) {
+				assertEquals(2, data.count()); assertEquals(42, data.packet(0).get(1)); assertEquals(40, data.packet(1).get(1));
+			}
+		} finally { resume.countDown(); t.end(); await(r); }
+		assertEquals(0, r.tempDir().listFiles().length);
+	}
 }
