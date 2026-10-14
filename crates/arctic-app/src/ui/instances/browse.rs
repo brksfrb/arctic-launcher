@@ -118,8 +118,14 @@ impl ArcticApp {
             }
             Some(Ok(page)) => page.hits.clone(),
         };
-        let installed: HashSet<String> = match &self.inst.mod_files {
-            Some((id, files)) if *id == instance.id => files
+        let installed: HashSet<String> = match self
+            .inst
+            .mod_scans
+            .get(&instance.id)
+            .and_then(|s| s.data.as_ref())
+        {
+            Some(data) => data
+                .files
                 .iter()
                 .filter_map(|f| f.tracked.as_ref().map(|m| m.project_id.clone()))
                 .collect(),

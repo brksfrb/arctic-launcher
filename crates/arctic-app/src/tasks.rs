@@ -91,6 +91,8 @@ pub enum Event {
     LoaderVersions(LoaderKind, String, Outcome<Vec<LoaderVersion>>),
     /// Mod search results for request id.
     ModSearch(u64, Outcome<SearchPage>),
+    /// Installed mod scan (instance, request, changed snapshot).
+    ModsScanned(String, u64, Outcome<Option<crate::mod_tasks::ModSnapshot>>),
     ModProgress(ProgressSnapshot),
     /// (instance id, project id, result)
     ModInstalled(String, String, Outcome<Vec<InstalledMod>>),

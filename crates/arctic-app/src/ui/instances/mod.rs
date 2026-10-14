@@ -18,7 +18,7 @@ use std::collections::{HashMap, HashSet};
 
 use arctic_core::instances::{self, Instance};
 use arctic_core::loaders::{LoaderKind, LoaderVersion};
-use arctic_core::mods::{self, ModFile, SearchPage, SortBy};
+use arctic_core::mods::{SearchPage, SortBy};
 use eframe::egui::{self, Align2, FontId, RichText, vec2};
 
 pub use create::CreateForm;
@@ -116,10 +116,8 @@ pub struct InstancesUi {
     pub create: Option<CreateForm>,
     pub confirm_delete: bool,
     pub rename: Option<String>,
-    /// Mods folder listing for the open instance.
-    pub mod_files: Option<(String, Vec<ModFile>)>,
-    /// What the open mods folder looked like when last checked: (egui time, fingerprint).
-    pub mod_watch: (f64, u64),
+    /// Cached lists and background checks, retained when switching instances.
+    pub(crate) mod_scans: HashMap<String, crate::mod_tasks::ModScan>,
     /// Installed-mod filter, kept separate from the Modrinth search.
     pub mod_filter: (String, String),
     /// Mods that won't start together, and a Play they stopped.
@@ -377,26 +375,24 @@ impl ArcticApp {
         self.inst.import = None;
         self.inst.confirm_delete = false;
         self.inst.rename = None;
-        self.refresh_mods(id);
+        self.check_mods(id, false);
     }
 
-    /// Re-read the mods folder of `id`.
+    /// Re-read after a local edit; coalesced if a scan is already running.
     pub(crate) fn refresh_mods(&mut self, id: &str) {
+        self.check_mods(id, true);
+    }
+
+    /// Opening and drawing a page only schedules work, never reads its JARs.
+    pub(super) fn check_mods(&mut self, id: &str, force: bool) {
         let Some(instance) = self.instance_by_id(id) else {
             return;
         };
-        let mods_dir = instance.game_dir(&self.dirs).join("mods");
-        let index = mods::index_path(&self.dirs.instance_dir(id));
-        // The bundled Arctic mod and Polarium are managed by the launcher, not listed.
-        let files = mods::list(&mods_dir, &index)
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|f| {
-                f.file_name != arctic_core::arctic_mod::FILE_NAME
-                    && f.file_name != mods::polarium::FILE_NAME
-            })
-            .collect();
-        self.inst.mod_files = Some((id.to_owned(), files));
+        let key = crate::mod_tasks::ScanKey::new(instance, &self.dirs);
+        let state = self.inst.mod_scans.entry(id.to_owned()).or_default();
+        if let Some((request, previous)) = state.begin(key.clone(), force) {
+            self.tasks.scan_mods(id.to_owned(), request, key, previous);
+        }
     }
 
     /// Texture URI for an icon URL, fetching it on first use.
@@ -415,6 +411,16 @@ impl ArcticApp {
     /// Background results for this module.
     pub(crate) fn on_instances_event(&mut self, event: Event, ctx: &egui::Context) {
         match event {
+            Event::ModsScanned(id, request, result) => {
+                if self
+                    .inst
+                    .mod_scans
+                    .get_mut(&id)
+                    .is_some_and(|state| state.complete(request, result))
+                {
+                    self.refresh_mods(&id);
+                }
+            }
             Event::LoaderGames(kind, result) => {
                 let state = match result {
                     Ok(list) => Load::Ready(list.into_iter().collect()),

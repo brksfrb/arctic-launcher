@@ -41,7 +41,7 @@ impl ArcticApp {
             return Vec::new();
         };
         let mods_dir = instance.game_dir(&self.dirs).join("mods");
-        let stamp = super::mods_page::folder_stamp(&mods_dir);
+        let stamp = crate::mod_tasks::folder_stamp(&mods_dir).unwrap_or_default();
         if let Some((id, s, found)) = &self.inst.clashes.checked
             && *id == instance.id
             && *s == stamp
@@ -142,7 +142,15 @@ impl ArcticApp {
 
     /// The Mods page's warning: the same list, above the mods.
     pub(super) fn clash_card(&mut self, ui: &mut egui::Ui, instance: &Instance) {
-        let clashes = self.mod_clashes(instance);
+        let Some(data) = self
+            .inst
+            .mod_scans
+            .get(&instance.id)
+            .and_then(|s| s.data.clone())
+        else {
+            return;
+        };
+        let clashes = &data.clashes;
         if clashes.is_empty() {
             return;
         }
@@ -156,7 +164,7 @@ impl ArcticApp {
             };
             ui.label(RichText::new(title).strong().color(p.warn));
             ui.add_space(6.0);
-            fix = self.clash_rows(ui, p, &clashes);
+            fix = self.clash_rows(ui, p, clashes);
         });
         ui.add_space(8.0);
         if let Some(fix) = fix {

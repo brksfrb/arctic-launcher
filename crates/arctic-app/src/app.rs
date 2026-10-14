@@ -841,6 +841,7 @@ impl ArcticApp {
             e @ (Event::LoaderGames(..)
             | Event::LoaderVersions(..)
             | Event::ModSearch(..)
+            | Event::ModsScanned(..)
             | Event::ModProgress(..)
             | Event::ModInstalled(..)
             | Event::RetargetChecked(..)

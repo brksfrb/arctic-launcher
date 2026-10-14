@@ -15,6 +15,7 @@ mod icon_raster;
 mod logbook;
 mod memstats;
 mod migrate_tasks;
+mod mod_tasks;
 mod motion;
 mod pack_tasks;
 mod runs;

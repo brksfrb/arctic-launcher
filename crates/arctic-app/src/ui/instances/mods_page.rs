@@ -13,31 +13,6 @@ use crate::toasts::Kind;
 use crate::widgets;
 
 const ICON: f32 = 36.0;
-/// While the Mods page is open, the folder is looked at this often (seconds).
-const MODS_RESCAN_EVERY: f64 = 2.0;
-
-/// A cheap fingerprint of a folder: its files' names, sizes and times.
-pub(super) fn folder_stamp(dir: &std::path::Path) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut entries: Vec<_> = std::fs::read_dir(dir)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .map(|e| {
-            let meta = e.metadata().ok();
-            (
-                e.file_name(),
-                meta.as_ref().map(|m| m.len()),
-                meta.and_then(|m| m.modified().ok()),
-            )
-        })
-        .collect();
-    entries.sort();
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    entries.hash(&mut hasher);
-    hasher.finish()
-}
-
 impl ArcticApp {
     pub(super) fn mods_page(&mut self, ui: &mut egui::Ui, instance: &Instance) {
         let p = self.palette();
@@ -45,20 +20,22 @@ impl ArcticApp {
             self.inst.mod_filter = (instance.id.clone(), String::new());
         }
         let mods_dir = instance.game_dir(&self.dirs).join("mods");
-        self.rescan_mods_if_changed(ui, &instance.id, &mods_dir);
         self.add_dropped_mods(ui, &instance.id, &mods_dir);
-        let files = match &self.inst.mod_files {
-            Some((id, files)) if *id == instance.id => files.clone(),
-            _ => {
-                self.refresh_mods(&instance.id);
-                Vec::new()
-            }
-        };
+        let state = self.inst.mod_scans.get(&instance.id);
+        let data = state.and_then(|s| s.data.clone());
+        let error = state.and_then(|s| s.error.clone());
+        let files = data.as_ref().map_or(&[][..], |d| d.files.as_slice());
         crate::widgets::row(ui, |ui| {
             let enabled = files.iter().filter(|f| f.enabled).count();
-            ui.label(
-                RichText::new(format!("{} mods · {enabled} enabled", files.len())).color(p.muted),
-            );
+            if data.is_none() && error.is_none() {
+                ui.spinner();
+                ui.label(RichText::new("Loading mods…").color(p.muted));
+            } else if data.is_some() {
+                ui.label(
+                    RichText::new(format!("{} mods · {enabled} enabled", files.len()))
+                        .color(p.muted),
+                );
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if widgets::button(ui, p, Some(Icon::Plus), "Add mods", true).clicked() {
                     self.inst.page = InstancePage::Browse;
@@ -83,6 +60,17 @@ impl ArcticApp {
             }
         });
         ui.add_space(8.0);
+        if let Some(error) = error {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(format!("Could not refresh mods: {error}")).color(p.error));
+                if widgets::button(ui, p, None, "Retry", false).clicked() {
+                    self.refresh_mods(&instance.id);
+                }
+            });
+        }
+        if data.is_none() {
+            return;
+        }
         self.clash_card(ui, instance);
         if files.is_empty() {
             theme::card(p).show(ui, |ui| {
@@ -109,7 +97,8 @@ impl ArcticApp {
         let matches: Vec<_> = files
             .iter()
             .filter(|file| {
-                file.file_name.to_lowercase().contains(&query)
+                query.is_empty()
+                    || file.file_name.to_lowercase().contains(&query)
                     || file.tracked.as_ref().is_some_and(|m| {
                         m.title.to_lowercase().contains(&query)
                             || m.version_number.to_lowercase().contains(&query)
@@ -128,9 +117,12 @@ impl ArcticApp {
                         .color(p.muted),
                 );
             }
-            for file in matches {
-                changed |= self.mod_row(ui, file, &mods_dir, &index);
-            }
+            visible_rows(ui, matches.len(), |ui, row| {
+                let file = matches[row];
+                ui.push_id((&instance.id, &file.file_name, file.enabled), |ui| {
+                    changed |= self.mod_row(ui, file, &mods_dir, &index);
+                });
+            });
         });
         if changed {
             self.refresh_mods(&instance.id);
@@ -206,23 +198,6 @@ impl ArcticApp {
         added > 0
     }
 
-    /// Jars added, removed or replaced in the folder (by hand, or by a game
-    /// that updates its mods) show up here without leaving the page.
-    fn rescan_mods_if_changed(&mut self, ui: &egui::Ui, id: &str, mods_dir: &std::path::Path) {
-        let now = ui.input(|i| i.time);
-        ui.ctx()
-            .request_repaint_after(std::time::Duration::from_secs_f64(MODS_RESCAN_EVERY));
-        if now - self.inst.mod_watch.0 < MODS_RESCAN_EVERY {
-            return;
-        }
-        let stamp = folder_stamp(mods_dir);
-        let changed = stamp != self.inst.mod_watch.1;
-        self.inst.mod_watch = (now, stamp);
-        if changed {
-            self.refresh_mods(id);
-        }
-    }
-
     /// One installed mod. Returns true if the folder changed.
     fn mod_row(
         &mut self,
@@ -236,20 +211,29 @@ impl ArcticApp {
         ui.horizontal(|ui| {
             let icon_url = file.tracked.as_ref().and_then(|m| m.icon_url.clone());
             mod_icon(ui, self, icon_url.as_deref());
-            ui.vertical(|ui| {
-                let title = file
-                    .tracked
-                    .as_ref()
-                    .map_or(file.file_name.as_str(), |m| m.title.as_str());
-                let color = if file.enabled { p.text } else { p.muted };
-                ui.label(RichText::new(title).strong().color(color));
-                let detail = match &file.tracked {
-                    Some(m) if m.dependency => format!("{} · dependency", m.version_number),
-                    Some(m) => m.version_number.clone(),
-                    None => format!("{} · {}", file.file_name, format_bytes(file.size)),
-                };
-                ui.label(RichText::new(detail).small().color(p.muted));
-            });
+            let text_width = (ui.available_width() - 110.0).max(40.0);
+            ui.allocate_ui_with_layout(
+                vec2(text_width, ICON),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    let title = file
+                        .tracked
+                        .as_ref()
+                        .map_or(file.file_name.as_str(), |m| m.title.as_str());
+                    let color = if file.enabled { p.text } else { p.muted };
+                    ui.add(egui::Label::new(RichText::new(title).strong().color(color)).truncate())
+                        .on_hover_text(title);
+                    let detail = match &file.tracked {
+                        Some(m) if m.dependency => format!("{} · dependency", m.version_number),
+                        Some(m) => m.version_number.clone(),
+                        None => format!("{} · {}", file.file_name, format_bytes(file.size)),
+                    };
+                    ui.add(
+                        egui::Label::new(RichText::new(&detail).small().color(p.muted)).truncate(),
+                    )
+                    .on_hover_text(detail);
+                },
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if widgets::icon_button(ui, p, Icon::Trash, "Remove").clicked() {
                     match mods::remove(mods_dir, index, &file.file_name) {
@@ -297,6 +281,73 @@ pub(super) fn mod_icon(ui: &mut egui::Ui, app: &mut ArcticApp, url: Option<&str>
             ui.painter()
                 .rect_filled(rect, CornerRadius::same(8), p.surface_hover);
             icons::draw(ui.painter(), Icon::Layers, rect.shrink(10.0), p.muted);
+        }
+    }
+}
+
+/// Use the page's existing scroll area, but only create widgets and request
+/// icons for visible rows. The full height keeps its scrollbar accurate.
+fn visible_rows(ui: &mut egui::Ui, count: usize, mut draw: impl FnMut(&mut egui::Ui, usize)) {
+    if count == 0 {
+        return;
+    }
+    let text_height = ui.text_style_height(&egui::TextStyle::Body)
+        + ui.text_style_height(&egui::TextStyle::Small)
+        + ui.spacing().item_spacing.y;
+    let height = ICON.max(text_height) + 12.0;
+    let (rect, _) = ui.allocate_exact_size(
+        vec2(ui.available_width(), count as f32 * height),
+        Sense::hover(),
+    );
+    let clip = ui.clip_rect();
+    if !rect.intersects(clip) {
+        return;
+    }
+    let first = (((clip.top() - rect.top()) / height).floor().max(0.0) as usize).min(count);
+    let end = (((clip.bottom() - rect.top()) / height).ceil().max(0.0) as usize).min(count);
+    for row in first..end {
+        let row_rect = egui::Rect::from_min_size(
+            rect.min + vec2(0.0, row as f32 * height),
+            vec2(rect.width(), height),
+        );
+        let mut child = ui.new_child(egui::UiBuilder::new().id_salt(row).max_rect(row_rect));
+        draw(&mut child, row);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn large_mod_list_only_builds_visible_rows_including_after_scrolling() {
+        let ctx = egui::Context::default();
+        for offset in [0.0, 24_000.0, 479_600.0] {
+            let mut rows = Vec::new();
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    vec2(800.0, 400.0),
+                )),
+                ..Default::default()
+            };
+            let output = ctx.run_ui(input, |ui| {
+                rows.clear();
+                let rect = ui.max_rect().translate(vec2(0.0, -offset));
+                let mut content = ui.new_child(egui::UiBuilder::new().max_rect(rect));
+                visible_rows(&mut content, 10_000, |_, row| rows.push(row));
+            });
+            output.drop_without_applying_deltas();
+            assert!(!rows.is_empty());
+            assert!(
+                rows.len() < 20,
+                "built {} rows at offset {offset}",
+                rows.len()
+            );
+            if offset > 0.0 {
+                assert!(rows[0] > 0);
+            }
+            assert!(rows.windows(2).all(|w| w[1] == w[0] + 1));
         }
     }
 }
