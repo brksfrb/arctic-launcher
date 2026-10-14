@@ -23,7 +23,7 @@ save_results() {
   fi
 }
 trap save_results EXIT
-for version in 26.3 26.2 1.8.9; do
+for version in 1.8.9 26.2 26.3; do
   game=""
   id="audio-$version"
   arctic instances create "$id" --version "$version" --loader fabric

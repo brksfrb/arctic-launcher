@@ -222,7 +222,7 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 				}
 			}
 		} catch (IOException e) {
-			if (!cancelled) {
+			if (!cancelled && failed == null) {
 				failed = "The video encoder stopped: " + e.getMessage();
 			}
 		} catch (InterruptedException e) {

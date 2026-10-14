@@ -51,13 +51,13 @@ abstract class AudioDecoder implements Closeable {
 		}
 	}
 	private static final class Legacy extends AudioDecoder {
-		private final Object codec;
+		private Object codec;
 		private final Class<?> api;
 		private final File file;
 		private short[] pending;
 		Legacy(File file) throws Exception {
 			this.file = file;
-			api = Class.forName("paulscode.sound.codecs.CodecJOrbis"); codec = api.newInstance();
+			api = Class.forName("paulscode.sound.codecs.CodecJOrbis");
 			Class<?> vorbis = Class.forName("com.jcraft.jorbis.VorbisFile");
 			Object info = vorbis.getConstructor(String.class).newInstance(file.getAbsolutePath());
 			try { length = (Long) vorbis.getMethod("pcm_total", int.class).invoke(info, -1); }
@@ -65,6 +65,8 @@ abstract class AudioDecoder implements Closeable {
 			init();
 		}
 		private void init() throws Exception {
+			// This old codec destroys its Vorbis state in cleanup; initialize cannot recreate it.
+			codec = api.newInstance();
 			if (!(Boolean) api.getMethod("initialize", java.net.URL.class).invoke(codec, file.toURI().toURL())) throw new IOException("Cannot decode game sound");
 			javax.sound.sampled.AudioFormat format = (javax.sound.sampled.AudioFormat) api.getMethod("getAudioFormat").invoke(codec);
 			channels = format.getChannels(); rate = (int) format.getSampleRate();
@@ -80,7 +82,7 @@ abstract class AudioDecoder implements Closeable {
 			return data;
 		}
 		@Override void seek(double seconds) throws Exception {
-			api.getMethod("cleanup").invoke(codec); pending = null; init();
+			close(); pending = null; init();
 			long skip = Math.max(0, (long) (seconds * rate)) * channels;
 			while (skip > 0) {
 				short[] data = read(); if (data.length == 0) return;
@@ -89,7 +91,9 @@ abstract class AudioDecoder implements Closeable {
 			}
 		}
 		@Override public void close() throws IOException {
-			try { api.getMethod("cleanup").invoke(codec); } catch (Exception e) { throw new IOException(e); }
+			try { if (codec != null) api.getMethod("cleanup").invoke(codec); }
+			catch (Exception e) { throw new IOException(e); }
+			finally { codec = null; }
 		}
 	}
 }
