@@ -36,8 +36,8 @@ public interface ReplayBackend {
 	/** Begin again from an empty world (for jumping back): like {@link #start}, without menus. */
 	String restart(ReplayData data);
 
-	/** Keep the replay's view/editor in place while recorded state is rebuilt this frame. */
-	default void beginSeek() {}
+	/** Keep the view/editor in place; exports still wait for Minecraft's terrain-ready signal. */
+	default void beginSeek(boolean exporting) {}
 
 	/** Finish the seek after world, body and camera are restored; also called on failure. */
 	default void endSeek() {}

@@ -31,10 +31,12 @@ class ReplayViewerExportTest {
 		AtomicInteger captures = new AtomicInteger();
 		AtomicBoolean cameraPlaced = new AtomicBoolean();
 		AtomicBoolean loading = new AtomicBoolean();
+		AtomicBoolean terrainWaitRequested = new AtomicBoolean();
 		ReplayBackend backend = (ReplayBackend) Proxy.newProxyInstance(ReplayBackend.class.getClassLoader(), new Class<?>[] {ReplayBackend.class},
 				(proxy, method, args) -> {
 					if (method.getName().equals("ready")) return true;
 					if (method.getName().equals("loading")) return loading.get();
+					if (method.getName().equals("beginSeek")) terrainWaitRequested.set((Boolean) args[0]);
 					if (method.getName().equals("camera") && Boolean.TRUE.equals(args[6])) cameraPlaced.set(true);
 					if (method.getName().equals("capture")) { assertTrue(cameraPlaced.get()); captures.incrementAndGet(); }
 					return method.getReturnType() == boolean.class ? false : null;
@@ -49,6 +51,7 @@ class ReplayViewerExportTest {
 				viewer.afterFrame();
 				assertEquals(0, captures.get()); assertEquals(0, job.frameTime());
 				loading.set(true); viewer.frame(); viewer.afterFrame();
+				assertTrue(terrainWaitRequested.get(), "Exports must keep waiting for the rebuilt terrain");
 				assertEquals(0, captures.get(), "Loading terrain must not become the first video frame");
 				assertEquals(0, job.frameTime(), "Waiting for terrain must not consume any recorded time");
 				loading.set(false);

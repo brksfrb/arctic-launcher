@@ -341,7 +341,7 @@ public final class ReplayViewer {
 	}
 
 	private void seekNow(double target) {
-		backend.beginSeek();
+		backend.beginSeek(export != null);
 		try {
 			seekWorld(target);
 		} finally {

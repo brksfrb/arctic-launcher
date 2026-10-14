@@ -76,6 +76,7 @@ public final class ReplayPlayback implements ReplayBackend {
 	private Entity following;
 	private boolean firstPerson;
 	private boolean seeking;
+	private boolean exportSeek;
 	private net.minecraft.client.gui.screens.Screen seekScreen;
 
 	@Override
@@ -107,21 +108,23 @@ public final class ReplayPlayback implements ReplayBackend {
 	}
 
 	@Override
-	public void beginSeek() {
+	public void beginSeek(boolean exporting) {
 		seekScreen = loading() ? null : com.arcticlauncher.mod.Compat.screen();
+		exportSeek = exporting;
 		seeking = true;
 	}
 
 	@Override
 	public void endSeek() {
 		seeking = false;
-		if (ready() && (loading() || ReplayCompat.messageShowing())) ReplayCompat.setScreen(seekScreen);
+		if (!exportSeek && ready() && (loading() || ReplayCompat.messageShowing())) ReplayCompat.setScreen(seekScreen);
 		seekScreen = null;
+		exportSeek = false;
 	}
 
 	/** Suppress only the seek's loading/close transitions, never normal joins or error screens. */
 	public boolean suppressSeekScreen(net.minecraft.client.gui.screens.Screen screen) {
-		return seeking && (screen == null || loadingScreen(screen) || ReplayCompat.messageScreen(screen));
+		return seeking && !exportSeek && (screen == null || loadingScreen(screen) || ReplayCompat.messageScreen(screen));
 	}
 
 	private String connect(Minecraft mc) {

@@ -73,6 +73,7 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 	private boolean firstPerson;
 	private ByteBuffer pixels;
 	private boolean seeking;
+	private boolean exportSeek;
 	private net.minecraft.client.gui.screen.Screen seekScreen;
 
 	@Override
@@ -99,22 +100,24 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 	}
 
 	@Override
-	public void beginSeek() {
+	public void beginSeek(boolean exporting) {
 		seekScreen = loading() ? null : MinecraftClient.getInstance().currentScreen;
+		exportSeek = exporting;
 		seeking = true;
 	}
 
 	@Override
 	public void endSeek() {
 		seeking = false;
-		if (ready() && loading()) MinecraftClient.getInstance().setScreen(seekScreen);
+		if (!exportSeek && ready() && loading()) MinecraftClient.getInstance().setScreen(seekScreen);
 		seekScreen = null;
+		exportSeek = false;
 	}
 
-	public boolean seeking() { return seeking; }
+	public boolean seeking() { return seeking && !exportSeek; }
 
 	public boolean suppressSeekScreen(net.minecraft.client.gui.screen.Screen screen) {
-		return seeking && (screen == null || screen instanceof net.minecraft.client.gui.screen.DownloadingTerrainScreen);
+		return seeking() && (screen == null || screen instanceof net.minecraft.client.gui.screen.DownloadingTerrainScreen);
 	}
 
 	@Override
