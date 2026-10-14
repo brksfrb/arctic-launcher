@@ -42,6 +42,7 @@ public final class Recorder {
 		Thread t = new Thread(r, "arctic-replay-compact"); t.setDaemon(true); t.setPriority(Thread.MIN_PRIORITY); return t;
 	});
 	private volatile Take current;
+	private final java.util.concurrent.atomic.AtomicInteger pendingSaves = new java.util.concurrent.atomic.AtomicInteger();
 	private final java.util.concurrent.ExecutorService saves = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
 		Thread t = new Thread(r, "arctic-replay-save"); t.setDaemon(true); t.setPriority(Thread.MIN_PRIORITY); return t;
 	});
@@ -95,6 +96,8 @@ public final class Recorder {
 	public Take current() { return current; }
 	public boolean recording() { Take t = current; return t != null && t.recording; }
 	public boolean bufferReady() { Take t = current; return t != null && !t.failed && !t.ended; }
+	/** Files being written or waiting for the save worker, including manual recordings. */
+	public int pendingSaves() { return pendingSaves.get(); }
 	public long recordingBytes() { Take t = current; return t == null ? 0 : t.manualDiskBytes; }
 	public int recordingMillis() { Take t = current; return recording() ? Math.max(0, t.time() - t.manualFrom) : 0; }
 
@@ -334,9 +337,13 @@ public final class Recorder {
 			try {
 				Snapshot view = snapshot(streams);
 				for (Stream stream : streams) stream.retain();
+				pendingSaves.incrementAndGet();
 				saves.execute(() -> {
 					try { File file = save(view, from, to, kind, thumbnail); if (done != null) done.accept(file); }
-					finally { for (Stream stream : streams) stream.release(); }
+					finally {
+						pendingSaves.decrementAndGet();
+						for (Stream stream : streams) stream.release();
+					}
 				});
 			} catch (IOException e) { log.accept("replay: snapshot failed: " + e); if (done != null) done.accept(null); }
 		}
@@ -357,18 +364,24 @@ public final class Recorder {
 				extras.clipSeconds = clipSeconds.getAsInt(); extras.moments.add(to - from);
 				try (ZipOutputStream zip = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(part), BUFFER))) {
 					zip.setLevel(6);
+					// Batch packet headers, entity updates and track fields before ZIP compression.
+					// Buffering only the file underneath ZIP still calls zlib for every tiny write.
+					DataOutputStream track = new DataOutputStream(new BufferedOutputStream(zip, BUFFER));
 					entry(zip, META_ENTRY, GSON.toJson(meta).getBytes(StandardCharsets.UTF_8));
 					entry(zip, EXTRAS_ENTRY, GSON.toJson(extras).getBytes(StandardCharsets.UTF_8));
 					zip.putNextEntry(new ZipEntry(PACKETS_ENTRY));
 					if (from == 0) {
-						try (InputStream in = stream.packets()) { copyLength(in, zip, stream.packetBytes); }
-					} else copyRange(stream, new DataOutputStream(zip), null, from, to, from, sorter.get(), null);
+						try (InputStream in = stream.packets()) { copyLength(in, track, stream.packetBytes); }
+					} else copyRange(stream, track, null, from, to, from, sorter.get(), null);
+					track.flush();
 					zip.closeEntry();
 					zip.putNextEntry(new ZipEntry(SELF_ENTRY));
-					copySelf(stream, new DataOutputStream(zip), from, to, from, null);
+					copySelf(stream, track, from, to, from, null);
+					track.flush();
 					zip.closeEntry();
 					zip.putNextEntry(new ZipEntry(AudioEvent.ENTRY));
-					copyAudio(stream, new DataOutputStream(zip), from, to, from, null);
+					copyAudio(stream, track, from, to, from, null);
+					track.flush();
 					zip.closeEntry();
 					if (thumbnail != null) entry(zip, THUMB_ENTRY, thumbnail);
 				}
@@ -498,16 +511,21 @@ public final class Recorder {
 	/** Keep a bootstrap checkpoint before from and only the requested interval after it. */
 	private static void copyRange(Snapshot source, DataOutputStream packets, DataOutputStream self, int from, int to, int base,
 			ReplayBackend.Classifier classifier, Stream counts) throws IOException {
-		Index index = Index.of(source, classifier == null ? (p, k) -> Category.ALWAYS : classifier);
-		int cut = index.firstAt(from);
+		// Only the older bootstrap needs a seek plan. The recent interval is copied in full.
+		Index index = Index.before(source, classifier == null ? (p, k) -> Category.ALWAYS : classifier, from);
+		int cut = index.count;
 		int[] earlier = SeekPlan.plan(index.category, index.key, 0, cut);
 		try (DataInputStream in = source.packets()) {
 			byte[] buf = new byte[1 << 16];
 			int e = 0;
-			for (int i = 0; i < index.count; i++) {
+			long read = 0;
+			for (int i = 0; read < source.packetBytes; i++) {
 				int t = in.readInt(); int len = in.readInt();
+				if (len < 0 || len > source.packetBytes - read - 8) throw new IOException("damaged recording");
+				if (t > to) break;
 				if (buf.length < len) buf = new byte[len];
 				in.readFully(buf, 0, len);
+				read += 8 + len;
 				boolean bootstrap = i < cut && e < earlier.length && earlier[e] == i;
 				if (bootstrap) e++;
 				if (t <= to && (i >= cut || bootstrap)) {
@@ -581,14 +599,13 @@ public final class Recorder {
 		}
 	}
 
-	/** Each recorded packet's time and category, read front to back (for compaction). */
+	/** Classify only packets older than a clip, to reconstruct its starting world. */
 	static final class Index {
 		int count;
-		int[] time = new int[1 << 12];
 		byte[] category = new byte[1 << 12];
 		long[] key = new long[1 << 12];
 
-		static Index of(Snapshot source, ReplayBackend.Classifier classifier) throws IOException {
+		static Index before(Snapshot source, ReplayBackend.Classifier classifier, int before) throws IOException {
 			Index index = new Index();
 			long[] out = new long[1];
 			long read = 0;
@@ -596,8 +613,9 @@ public final class Recorder {
 				byte[] buf = new byte[1 << 16];
 				while (read < source.packetBytes) {
 					int t = in.readInt();
+					if (t >= before) break;
 					int len = in.readInt();
-					if (len < 0) {
+					if (len < 0 || len > source.packetBytes - read - 8) {
 						throw new IOException("damaged recording");
 					}
 					if (buf.length < len) {
@@ -606,37 +624,21 @@ public final class Recorder {
 					in.readFully(buf, 0, len);
 					read += 8 + len;
 					out[0] = 0;
-					index.add(t, classifier.classify(java.nio.ByteBuffer.wrap(buf, 0, len).slice(), out), out[0]);
+					index.add(classifier.classify(java.nio.ByteBuffer.wrap(buf, 0, len).slice(), out), out[0]);
 				}
 			}
 			return index;
 		}
 
-		private void add(int t, byte c, long k) {
-			if (count == time.length) {
-				time = java.util.Arrays.copyOf(time, count * 2);
+		private void add(byte c, long k) {
+			if (count == category.length) {
 				category = java.util.Arrays.copyOf(category, count * 2);
 				key = java.util.Arrays.copyOf(key, count * 2);
 			}
-			time[count] = t;
 			category[count] = c;
 			key[count] = k;
 			count++;
 		}
 
-		/** The first packet at or after {@code t} ({@link #count} if none). */
-		int firstAt(int t) {
-			int lo = 0;
-			int hi = count;
-			while (lo < hi) {
-				int mid = (lo + hi) >>> 1;
-				if (time[mid] < t) {
-					lo = mid + 1;
-				} else {
-					hi = mid;
-				}
-			}
-			return lo;
-		}
 	}
 }

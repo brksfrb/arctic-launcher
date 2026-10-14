@@ -12,6 +12,11 @@ on:
         required: false
         default: false
         type: boolean
+      replays_only:
+        description: 'Only rerun replays when menu routing is unchanged and already verified'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -92,6 +97,7 @@ jobs:
       - name: Record and export audible clips
         env:
           ARCTIC_MENU_ONLY: ${{ inputs.menus_only }}
+          ARCTIC_REPLAY_ONLY: ${{ inputs.replays_only }}
         run: xvfb-run -a -s '-screen 0 1280x800x24' bash packaging/replay-audio-test.sh
       - uses: actions/upload-artifact@v4
         if: always()

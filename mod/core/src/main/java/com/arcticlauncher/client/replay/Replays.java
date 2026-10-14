@@ -152,7 +152,12 @@ public final class Replays {
 	}
 
 	public static boolean recording() { return recorder != null && recorder.recording(); }
+	public static int pendingSaves() { return recorder == null ? 0 : recorder.pendingSaves(); }
 	public static String recordingStatus() {
+		int saving = pendingSaves();
+		return bufferStatus() + (saving == 0 ? "" : " · Saving " + saving + (saving == 1 ? " replay" : " replays"));
+	}
+	private static String bufferStatus() {
 		if (recording()) return "Recording " + clock(recorder.recordingMillis()) + String.format(java.util.Locale.ROOT, " · %.1f MB", recorder.recordingBytes() / (1024.0 * 1024.0));
 		if (recorder == null || recorder.current() == null) return "Join a world to buffer instant clips";
 		return recorder.bufferReady() ? "Instant clips ready" : "Replay buffer stopped";
@@ -203,9 +208,16 @@ public final class Replays {
 
 	/** Save the recent window with a thumbnail; never alter an active manual recording. */
 	public static void saveMoment() {
-		if (recorder == null) {
+		if (recorder == null || recorder.current() == null) {
+			Notices.post("Nothing to save yet", "Join a world to start the instant replay buffer.");
 			return;
 		}
+		// A crowded-world save can take seconds. Acknowledge the key before even capturing its thumbnail.
+		int ahead = recorder.pendingSaves();
+		String moment = "Last " + ArcticClient.config().clipSeconds + "s";
+		Notices.post(ahead == 0 ? "Saving clip" : "Clip queued", ahead == 0
+				? moment + " is saving. You can keep playing."
+				: moment + " queued behind " + ahead + (ahead == 1 ? " replay." : " replays."));
 		if (backend != null && recorder.current() != null) {
 			try {
 				backend.capture((w, h, rgba, bottomUp) -> keep(Thumbnail.png(w, h, rgba, bottomUp)));

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Disposable CI only. No release, account, user's instances, or desktop access.
 set -euo pipefail
+if [ "${ARCTIC_MENU_ONLY:-false}" = true ] && [ "${ARCTIC_REPLAY_ONLY:-false}" = true ]; then
+  echo 'Choose either menus_only or replays_only, not both.' >&2
+  exit 1
+fi
 mkdir -p audio-test-results
 export PATH="$PWD/audio-test-bin:$PATH"
 root="$RUNNER_TEMP/arctic-audio"
@@ -50,6 +54,7 @@ for version in 1.8.9 26.2 26.3; do
 done
 
 # Check Arctic's default multiplayer browser and preserved third-party menus.
+if [ "${ARCTIC_REPLAY_ONLY:-false}" = true ]; then exit 0; fi
 for menu_version in 26.2 26.3; do
 id=menu-compat-$menu_version
 arctic instances create "$id" --version "$menu_version" --loader fabric

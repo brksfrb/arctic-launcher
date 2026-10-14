@@ -190,4 +190,63 @@ class RecorderTest {
 		} finally { resume.countDown(); t.end(); await(r); }
 		assertEquals(0, r.tempDir().listFiles().length);
 	}
+	@Test void pendingSavesTrackQueuedClipsWithoutInterruptingManualRecording() throws Exception {
+		CountDownLatch saving = new CountDownLatch(1), resume = new CountDownLatch(1);
+		Recorder r = new Recorder(dir.toFile(), () -> 30, message -> {}, () -> (p, key) -> {
+			if (Thread.currentThread().getName().equals("arctic-replay-save")) {
+				saving.countDown();
+				try { if (!resume.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("test timed out"); }
+				catch (InterruptedException e) { throw new IllegalStateException(e); }
+			}
+			return p.get(0) == 1 ? Category.CHUNK : Category.TRANSIENT;
+		}, 512L << 20, 0, Integer.MAX_VALUE, clock::get);
+		Recorder.Take t = r.begin("busy-save", false, 775, "26.3");
+		AtomicReference<File> first = new AtomicReference<>(), second = new AtomicReference<>(), manual = new AtomicReference<>();
+		try {
+			t.packet(new byte[] {1, 42}); assertTrue(r.startRecording(manual::set));
+			at(40_000); t.packet(new byte[] {2, 40});
+			assertTrue(r.saveMoment(first::set)); assertTrue(saving.await(10, TimeUnit.SECONDS));
+			assertEquals(1, r.pendingSaves());
+			at(41_000); t.packet(new byte[] {2, 41}); assertTrue(r.saveMoment(second::set));
+			CountDownLatch written = new CountDownLatch(1); r.afterPackets(written::countDown);
+			assertTrue(written.await(3, TimeUnit.SECONDS), "Saving blocked incoming packets");
+			assertEquals(2, r.pendingSaves()); assertTrue(r.recording());
+			resume.countDown(); await(r);
+			assertEquals(0, r.pendingSaves()); assertNotNull(first.get()); assertNotNull(second.get());
+			try (ReplayData a = ReplayData.open(first.get(), dir.resolve("first-queued").toFile());
+					ReplayData b = ReplayData.open(second.get(), dir.resolve("second-queued").toFile())) {
+				assertEquals(2, a.count()); assertEquals(40, a.packet(1).get(1));
+				assertEquals(3, b.count()); assertEquals(41, b.packet(2).get(1));
+				assertEquals(30_000, a.duration()); assertEquals(30_000, b.duration());
+			}
+			assertTrue(r.stopRecording()); await(r); assertNotNull(manual.get()); assertEquals(0, r.pendingSaves());
+		} finally { resume.countDown(); t.end(); await(r); }
+	}
+	@Test void failedFileWriteClearsPendingStatus() throws Exception {
+		Recorder r = recorder(); Recorder.Take t = r.begin("unwritable", true, 1, "test"); t.packet(new byte[] {1});
+		Files.write(r.savedDir().toPath(), new byte[] {1}); // A file occupies the directory's path.
+		CountDownLatch notified = new CountDownLatch(1); AtomicReference<File> result = new AtomicReference<>();
+		assertTrue(r.saveMoment(file -> { result.set(file); notified.countDown(); }));
+		await(r); assertEquals(0, notified.getCount()); assertNull(result.get()); assertEquals(0, r.pendingSaves());
+		t.end(); await(r); assertEquals(0, r.tempDir().listFiles().length);
+	}
+	@Test void clipOnlyIndexesBootstrapAndKeepsEveryRecentPacket() throws Exception {
+		java.util.concurrent.atomic.AtomicInteger classified = new java.util.concurrent.atomic.AtomicInteger();
+		Recorder r = new Recorder(dir.toFile(), () -> 30, message -> {}, () -> (p, key) -> {
+			classified.incrementAndGet(); key[0] = 1;
+			return p.get(0) == 1 ? Category.CHUNK : Category.TRANSIENT;
+		}, 512L << 20, 0, Integer.MAX_VALUE, clock::get);
+		Recorder.Take t = r.begin("index-prefix", true, 1, "test");
+		t.packet(new byte[] {1, 1}); at(5_000); t.packet(new byte[] {1, 2});
+		at(10_000); t.packet(new byte[] {2, 10}); // Exactly at the clip boundary is recent, not bootstrap.
+		at(20_000); t.packet(new byte[] {2, 20}); at(40_000); t.packet(new byte[] {2, 40});
+		File saved = clip(r); assertEquals(2, classified.get(), "Recent packets should not need an index");
+		try (ReplayData data = ReplayData.open(saved, dir.resolve("prefix-only").toFile())) {
+			assertEquals(4, data.count()); assertEquals(2, data.packet(0).get(1));
+			assertEquals(10, data.packet(1).get(1)); assertEquals(0, data.time(1));
+			assertEquals(20, data.packet(2).get(1)); assertEquals(40, data.packet(3).get(1));
+			assertEquals(30_000, data.duration());
+		}
+		t.end(); await(r);
+	}
 }

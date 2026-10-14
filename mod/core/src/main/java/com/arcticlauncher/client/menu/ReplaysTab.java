@@ -39,7 +39,7 @@ final class ReplaysTab implements MenuTab {
 	public String state() {
 		ClientConfig c = ArcticClient.config();
 		return Replays.list().size() + ":" + Replays.recording() + ":" + Replays.queuedVideos() + ":" + Replays.exportsPaused()
-				+ ":" + Replays.ffmpeg().state() + ":" + c.replayKey + ":" + c.replayRecordKey;
+				+ ":" + Replays.ffmpeg().state() + ":" + c.replayKey + ":" + c.replayRecordKey + ":" + Replays.pendingSaves();
 	}
 
 	@Override
