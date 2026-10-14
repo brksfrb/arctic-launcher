@@ -36,6 +36,7 @@ public final class ArcticButton {
 		} else if (screen instanceof net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen) {
 			add.accept(create("Arctic servers", () -> ServerMenus.open(screen)));
 		} else if (screen instanceof net.minecraft.client.gui.screens.DisconnectedScreen) {
+			add.accept(create("Arctic disconnect", () -> ServerMenus.open(screen)));
 			com.arcticlauncher.client.servers.DisconnectedPage reconnect = new com.arcticlauncher.client.servers.DisconnectedPage("", "");
 			if (reconnect.canReconnect()) {
 				Button join = create("Reconnect", reconnect::reconnect); add.accept(join);

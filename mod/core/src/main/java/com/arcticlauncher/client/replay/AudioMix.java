@@ -10,12 +10,14 @@ final class AudioMix implements Closeable {
 	private final ZipFile zip;
 	private final DataInputStream events;
 	private final ReplayBackend backend;
+	private final java.util.function.Supplier<AudioEvent> live;
 	private final Map<String, File> assets = new HashMap<String, File>();
 	private final Map<Integer, Voice> voices = new LinkedHashMap<Integer, Voice>();
 	private AudioEvent next;
 	private long sample;
 	private final Map<Integer, AudioEvent> initial = new LinkedHashMap<Integer, AudioEvent>();
 	AudioMix(File replay, ReplayBackend backend, int from) throws IOException {
+		live = null;
 		this.backend = backend;
 		zip = new ZipFile(replay);
 		ZipEntry entry = zip.getEntry(AudioEvent.ENTRY);
@@ -27,15 +29,24 @@ final class AudioMix implements Closeable {
 			advance();
 		}
 	}
+	AudioMix(ReplayBackend backend, int from, java.util.function.Supplier<AudioEvent> live) {
+		this.backend = backend; this.live = live; zip = null; events = null;
+		sample = (long) from * RATE / 1000;
+		advanceLive();
+	}
+	private void advanceLive() { next = live.get(); }
 	private void advance() throws IOException {
+		if (live != null) { advanceLive(); return; }
 		if (events == null) { next = null; return; }
 		try { next = AudioEvent.read(events); } catch (EOFException end) { next = null; }
 	}
 	/** Always exactly frames of signed 16-bit little-endian stereo, including silence. */
 	byte[] block(int frames) throws IOException {
+		if (next == null && live != null) advanceLive();
 		byte[] out = new byte[frames * 4];
 		try {
 			for (AudioEvent e : initial.values()) {
+				if (e.left < .0001f && e.right < .0001f) continue;
 				if (voices.size() >= 256) throw new IOException("Too many simultaneous replay sounds");
 				voices.put(e.id, new Voice(e.at((int) (sample * 1000 / RATE), 0), asset(e.resource)));
 			}
@@ -45,7 +56,7 @@ final class AudioMix implements Closeable {
 				while (next != null && next.time <= ms) {
 					AudioEvent e = next;
 					Voice voice = voices.get(e.id);
-					if (e.resource.isEmpty()) {
+					if (e.resource.isEmpty() || (e.left < .0001f && e.right < .0001f)) {
 						if (voice != null) { voice.close(); voices.remove(e.id); }
 					} else if (voice == null || !voice.event.resource.equals(e.resource)) {
 						if (voice != null) voice.close();
@@ -97,7 +108,7 @@ final class AudioMix implements Closeable {
 		voices.clear();
 		for (File asset : assets.values()) asset.delete();
 		assets.clear();
-		try { if (events != null) events.close(); } finally { zip.close(); }
+		try { if (events != null) events.close(); } finally { if (zip != null) zip.close(); }
 	}
 	private static final class Voice implements Closeable {
 		AudioEvent event;

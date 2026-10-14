@@ -43,6 +43,7 @@ public final class DisconnectedPage extends Page {
 	private final Platform platform = ArcticClient.platform();
 	private final String title;
 	private final String reason;
+	private final Runnable vanillaScreen;
 	private final String address = lastServer;
 	private final long shownAt = System.currentTimeMillis();
 	private boolean cancelled;
@@ -50,8 +51,13 @@ public final class DisconnectedPage extends Page {
 	private int reasonLines = 1;
 
 	public DisconnectedPage(String title, String reason) {
+		this(title, reason, null);
+	}
+
+	public DisconnectedPage(String title, String reason, Runnable vanillaScreen) {
 		this.title = title == null || title.isEmpty() ? "Connection Lost" : title;
 		this.reason = reason == null ? "" : reason;
+		this.vanillaScreen = vanillaScreen;
 	}
 
 	/** Every tick: remember where you are, so a disconnect knows where to go back. */
@@ -94,7 +100,7 @@ public final class DisconnectedPage extends Page {
 	}
 
 	private int buttons() {
-		return 2 + (address != null ? 1 : 0) + (autoOn() ? 1 : 0);
+		return 2 + (address != null ? 1 : 0) + (autoOn() ? 1 : 0) + (vanillaScreen != null ? 1 : 0);
 	}
 
 	/**
@@ -138,6 +144,10 @@ public final class DisconnectedPage extends Page {
 		y += BUTTON_H + GAP;
 		add(new Button(tr("gui.toTitle", "Back to Title Screen"), () -> platform.openPage(ArcticClient.titleMenu())))
 				.bounds(left, y, BUTTON_W, BUTTON_H);
+		if (vanillaScreen != null) {
+			y += BUTTON_H + GAP;
+			add(new Button("Vanilla disconnect screen", vanillaScreen)).bounds(left, y, BUTTON_W, BUTTON_H);
+		}
 	}
 
 	public void reconnect() {

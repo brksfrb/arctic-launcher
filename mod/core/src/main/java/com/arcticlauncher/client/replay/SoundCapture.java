@@ -14,7 +14,7 @@ public final class SoundCapture {
 	public boolean begin() {
 		Recorder r = Replays.recorder();
 		Recorder.Take current = r == null ? null : r.current();
-		if (current != take) { active.clear(); take = current; }
+		if (current != take) { active.clear(); take = current; Replays.resetLiveAudio(); }
 		seen.clear();
 		return take != null && !Replays.watching();
 	}
@@ -40,7 +40,7 @@ public final class SoundCapture {
 		AudioEvent e = old == null ? new AudioEvent() : old.at(now, 0);
 		e.time = now; e.id = old == null ? ++nextId : old.id; e.resource = resource;
 		e.left = left; e.right = right; e.pitch = pitch; e.loop = loop;
-		active.put(key, e); take.audio(e);
+		active.put(key, e); take.audio(e); Replays.liveAudio(e);
 	}
 	public void end() {
 		if (take == null) return;
@@ -49,7 +49,7 @@ public final class SoundCapture {
 			Map.Entry<Object, AudioEvent> entry = it.next();
 			if (seen.containsKey(entry.getKey())) continue;
 			AudioEvent e = new AudioEvent(); e.id = entry.getValue().id; e.time = take.time();
-			take.audio(e); it.remove();
+			take.audio(e); Replays.liveAudio(e); it.remove();
 		}
 	}
 }

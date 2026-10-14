@@ -91,6 +91,9 @@ public interface ReplayBackend {
 	 */
 	void capture(FrameSink done);
 
+	/** Live capture may downscale on the GPU before readback; it must not advance replay playback. */
+	default void captureLive(FrameSink done, int height) { capture(done); }
+
 	/** Open a resolved sound from the same resource packs used by the game. Export worker only. */
 	default java.io.InputStream audioResource(String resource) throws java.io.IOException {
 		throw new java.io.IOException("Game audio resources are unavailable");

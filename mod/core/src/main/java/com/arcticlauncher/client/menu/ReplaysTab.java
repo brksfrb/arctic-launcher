@@ -38,7 +38,8 @@ final class ReplaysTab implements MenuTab {
 	@Override
 	public String state() {
 		ClientConfig c = ArcticClient.config();
-		return Replays.list().size() + ":" + Replays.recording() + ":" + Replays.queuedVideos() + ":" + Replays.exportsPaused()
+		return Replays.list().size() + ":" + Replays.recording() + ":" + Replays.queuedVideos()
+				+ ":" + (Replays.liveVideo() == null ? "" : Replays.liveVideo().status())
 				+ ":" + Replays.ffmpeg().state() + ":" + c.replayKey + ":" + c.replayRecordKey + ":" + Replays.pendingSaves();
 	}
 
@@ -47,7 +48,7 @@ final class ReplaysTab implements MenuTab {
 		final ClientConfig c = ArcticClient.config();
 		Form f = new Form(host, x, top, w, bottom);
 		f.section("Recording");
-		f.key("Save instant clip", "Saves 3D + queues MP4; never changes your recording", Form.key(() -> c.replayKey, k -> c.replayKey = k));
+		f.key("Save instant clip", "Saves recent gameplay video + 3D; your recording continues", Form.key(() -> c.replayKey, k -> c.replayKey = k));
 		f.key("Start / stop recording", "Begins now; saves when stopped or when you leave", Form.key(() -> c.replayRecordKey, k -> c.replayRecordKey = k));
 		if (c.replayKey.equals(c.replayRecordKey)) f.note("Choose different keys for the two actions.");
 		f.stepper("Clip length", () -> c.clipSeconds, v -> c.clipSeconds = (int) v, MIN_CLIP, MAX_CLIP, CLIP_STEP, "%.0fs");
@@ -56,22 +57,22 @@ final class ReplaysTab implements MenuTab {
 			int row = f.row(24);
 			f.put(new Button(Replays.recording() ? "Stop and save recording" : "Start recording", () -> { Replays.toggleRecording(); host.rebuild(); }), f.x, row, 160, 18);
 		}
-		f.section("Videos (" + Replays.queuedVideos() + " queued)");
-		f.toggle("Render automatically at title", "Uses the game window to play and export saved clips", () -> c.replayAutoExport, on -> c.replayAutoExport = on);
-		f.note("720p / 30 FPS with game audio. You can't play while rendering. Esc pauses the queue.");
+		f.section("Gameplay videos" + (Replays.queuedVideos() > 0 ? " (" + Replays.queuedVideos() + " saving)" : ""));
+		f.toggle("Capture gameplay video", "Records the game window with audio while you play", () -> c.replayVideoEnabled, on -> c.replayVideoEnabled = on);
+		f.choice("Video resolution", new String[]{"720p", "1080p"}, () -> c.replayVideoHeight >= 1080 ? 1 : 0, i -> c.replayVideoHeight = i == 1 ? 1080 : 720);
+		f.choice("Video frame rate", new String[]{"30 FPS", "60 FPS"}, () -> c.replayVideoFps >= 60 ? 1 : 0, i -> c.replayVideoFps = i == 1 ? 60 : 30);
+		f.note("Changes apply on the next world join. Higher settings use more GPU, CPU and storage.");
+		if (Replays.liveVideo() != null) f.note(Replays.liveVideo().status());
+		f.note("F9 saves the recent video; start/stop saves the whole recording. No replay opens afterward.");
 		int videoRow = f.row(24);
 		f.put(new Button("Open videos folder", () -> {
 			try { Replays.videoFolder().mkdirs(); java.awt.Desktop.getDesktop().open(Replays.videoFolder()); }
 			catch (Exception e) { com.arcticlauncher.client.notice.Notices.post("Videos folder", Replays.videoFolder().getPath()); }
 		}), f.x, videoRow, 140, 18);
-		if (Replays.queuedVideos() > 0) {
+		if (Replays.legacyQueuedVideos() > 0) f.note("Older clips have 3D data only. Render them explicitly from the replay editor if needed.");
+		if (Replays.liveVideo() != null && Replays.liveVideo().encoder().get() == null) {
 			int row = f.row(24);
-			f.put(new Button("Render queued videos", () -> { Replays.resumeExports(); host.rebuild(); }), f.x, row, 140, 18);
-			f.note("Return to the title screen to render. Saved 3D replays stay available either way.");
-		}
-		if (Replays.queuedVideos() > 0 && Replays.ffmpeg().get() == null) {
-			int row = f.row(24);
-			f.put(new Button("Get video encoder", () -> Replays.ffmpeg().download()), f.x, row, 140, 18);
+			f.put(new Button("Get video encoder", () -> Replays.liveVideo().encoder().download()), f.x, row, 140, 18);
 		}
 
 		List<Replays.Info> replays = Replays.list();
@@ -94,7 +95,7 @@ final class ReplaysTab implements MenuTab {
 			f.put(watch.enabled(Replays.canWatch()), bx, by, WATCH_W, BTN_H);
 			bx += WATCH_W + GAP;
 			final int moment = info.extras.moments.isEmpty() ? -1 : info.extras.moments.get(info.extras.moments.size() - 1);
-			Button clip = new Button("Clip", () -> Replays.watch(info.file, v -> ReplayMenu.exportClip(v, moment)));
+			Button clip = new Button("Render", () -> Replays.watch(info.file, v -> ReplayMenu.exportClip(v, moment)));
 			if (inWorld) clip.confirm("Leave?");
 			f.put(clip.enabled(Replays.canWatch() && moment >= 0), bx, by, CLIP_W, BTN_H);
 			bx += CLIP_W + GAP;

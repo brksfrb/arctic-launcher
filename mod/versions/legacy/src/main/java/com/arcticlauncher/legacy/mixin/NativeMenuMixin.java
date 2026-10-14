@@ -29,6 +29,7 @@ abstract class NativeMenuMixin extends Screen {
 		} else if ((Object) this instanceof MultiplayerScreen) {
 			arctic$add("Arctic servers", () -> com.arcticlauncher.legacy.ServerMenus.open((Screen) (Object) this));
 		} else {
+			arctic$add("Arctic disconnect", () -> com.arcticlauncher.legacy.ServerMenus.open((Screen) (Object) this));
 			arctic$reconnect = new com.arcticlauncher.client.servers.DisconnectedPage("", "");
 			if (arctic$reconnect.canReconnect()) {
 				arctic$add("Reconnect", arctic$reconnect::reconnect);

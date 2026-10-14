@@ -95,6 +95,11 @@ pub trait Accounts: Send + Sync + 'static {
         r#"{"state":"unavailable"}"#.to_owned()
     }
 
+    /// Native FFmpeg supports the live screen recorder's segmented, copy-only MP4 saves.
+    fn capture_encoder(&self, _start: bool) -> String {
+        r#"{"state":"unavailable"}"#.to_owned()
+    }
+
     /// The launcher's skin library (JSON): `[{"id", "name", "slim", "png"}]`,
     /// `png` in base64, for the game's skin picker.
     fn skins(&self) -> Result<String> {
@@ -282,6 +287,8 @@ fn respond(request: &Request, accounts: &dyn Accounts) -> (&'static str, String)
         }
         ("GET", "/v1/ffmpeg") => ("200 OK", accounts.ffmpeg(false)),
         ("POST", "/v1/ffmpeg") => ("200 OK", accounts.ffmpeg(true)),
+        ("GET", "/v1/ffmpeg/capture") => ("200 OK", accounts.capture_encoder(false)),
+        ("POST", "/v1/ffmpeg/capture") => ("200 OK", accounts.capture_encoder(true)),
         ("POST", "/v1/voice") => match accounts.voice(&request.body) {
             Ok(reply) => ("200 OK", reply),
             Err(e) => error("501 Not Implemented", &e.to_string()),
@@ -337,6 +344,9 @@ mod tests {
     struct Fake;
 
     impl Accounts for Fake {
+        fn capture_encoder(&self, start: bool) -> String {
+            serde_json::json!({ "state": if start { "downloading" } else { "ready" }, "builtin": false }).to_string()
+        }
         fn list(&self) -> Vec<AccountEntry> {
             vec![AccountEntry {
                 id: "a1".into(),
@@ -390,6 +400,10 @@ mod tests {
                 .starts_with("HTTP/1.1 502")
         );
         assert!(call(&info, "GET", "/v1/other", &info.secret).starts_with("HTTP/1.1 404"));
+        let encoder = call(&info, "GET", "/v1/ffmpeg/capture", &info.secret);
+        assert!(encoder.starts_with("HTTP/1.1 200") && encoder.contains("\"builtin\":false"));
+        assert!(call(&info, "POST", "/v1/ffmpeg/capture", &info.secret).contains("downloading"));
+        assert!(call(&info, "GET", "/v1/ffmpeg/capture", "wrong").starts_with("HTTP/1.1 401"));
     }
 
     #[test]

@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.WeakHashMap;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.DisconnectedScreen;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 
 /** Arctic's browser is the default; the native list is an explicit, per-screen choice. */
@@ -22,7 +23,9 @@ public final class ServerMenus {
 
 	private static boolean prefersArctic(Screen screen) {
 		// A mod's own multiplayer screen must never be redirected.
-		return ArcticClient.restyles() && screen != null && screen.getClass() == JoinMultiplayerScreen.class && !VANILLA.contains(screen);
+		return ArcticClient.restyles() && screen != null
+				&& (screen.getClass() == JoinMultiplayerScreen.class || screen.getClass() == DisconnectedScreen.class)
+				&& !VANILLA.contains(screen);
 	}
 
 	/** Closing Right Shift must restore the selected browser, without a native-screen flash. */
@@ -33,9 +36,15 @@ public final class ServerMenus {
 
 	public static void open(Screen original) {
 		VANILLA.remove(original);
-		ArcticClient.platform().openPage(new ServersPage(() -> {
+		Runnable vanilla = () -> {
 			VANILLA.add(original);
 			Compat.setScreen(original);
-		}));
+		};
+		if (original instanceof DisconnectedScreen) {
+			ArcticClient.platform().openPage(new com.arcticlauncher.client.servers.DisconnectedPage(
+					original.getTitle().getString(), DisconnectText.reason(original), vanilla));
+		} else {
+			ArcticClient.platform().openPage(new ServersPage(vanilla));
+		}
 	}
 }

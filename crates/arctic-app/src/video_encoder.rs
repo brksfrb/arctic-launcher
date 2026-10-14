@@ -12,6 +12,35 @@ use std::path::Path;
 /// The command-line switch that runs the encoder instead of the launcher.
 pub const SWITCH: &str = "--encode-video";
 
+/// The live recorder's encoder and copy-only remuxer run below the game's priority.
+pub fn run_tool(args: &[String]) -> i32 {
+    let Some((exe, arguments)) = args.split_first() else {
+        return 2;
+    };
+    #[cfg(unix)]
+    let mut command = {
+        let mut command = std::process::Command::new("/usr/bin/nice");
+        command.args(["-n", "10", exe]);
+        command
+    };
+    #[cfg(not(unix))]
+    let mut command = std::process::Command::new(exe);
+    command.args(arguments);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // BELOW_NORMAL_PRIORITY_CLASS | CREATE_NO_WINDOW.
+        command.creation_flags(0x0000_4000 | 0x0800_0000);
+    }
+    match command.status() {
+        Ok(status) => status.code().unwrap_or(1),
+        Err(error) => {
+            eprintln!("video encoder: {error}");
+            1
+        }
+    }
+}
+
 /// Bits per pixel per frame: about CRF 18 x264 for Minecraft's detail.
 const BITS_PER_PIXEL: f64 = 0.18;
 const MIN_BITRATE: u32 = 2_000_000;

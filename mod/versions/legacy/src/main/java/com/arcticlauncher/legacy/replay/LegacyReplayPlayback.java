@@ -454,4 +454,10 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 		pixels.rewind();
 		sink.frame(w, h, pixels, true);
 	}
+
+	@Override
+	public void captureLive(FrameSink sink, int height) {
+		MinecraftClient mc = MinecraftClient.getInstance();
+		if (!LiveFrames.capture(mc.width, mc.height, height, sink)) capture(sink);
+	}
 }

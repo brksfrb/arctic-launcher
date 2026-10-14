@@ -155,8 +155,12 @@ public final class ClientConfig {
 	public String hudStyle = "clean";
 	/** Waypoints drawn where they are in the world (not just on the Compass). */
 	public boolean waypointsInWorld = true;
-	/** Opt-in: use the game window to render queued MP4 clips at the title screen. */
+	/** Legacy setting, retained when reading old configs; never starts playback anymore. */
 	public boolean replayAutoExport;
+	/** Encode the game framebuffer while playing, alongside the independent 3D recording. */
+	public boolean replayVideoEnabled = true;
+	public int replayVideoHeight = 720;
+	public int replayVideoFps = 30;
 	/** Saves only the recent rolling window, independently of manual recording. */
 	public String replayKey = "key.keyboard.f9";
 	public String replayRecordKey = "key.keyboard.f10";
@@ -244,6 +248,8 @@ public final class ClientConfig {
 			clipSeconds = 30;
 		}
 		clipSeconds = Math.min(120, clipSeconds);
+		replayVideoHeight = replayVideoHeight >= 1080 ? 1080 : 720;
+		replayVideoFps = replayVideoFps >= 60 ? 60 : 30;
 		if (proxy == null) {
 			proxy = new ProxyConfig();
 		}

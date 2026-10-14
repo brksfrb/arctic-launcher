@@ -6,6 +6,7 @@
 		"MinecraftClientMixin",
 		"NativeMenuMixin",
 		"TitleScreenMixin",
+		"TitleKeyMixin",
 		"WindowSizeMixin",
 		"ClientBrandMixin",
 		"KeyBindingMixin",

@@ -43,7 +43,8 @@ class ReplaySaveFeedbackTest {
 			capture.get().frame(1, 1, ByteBuffer.wrap(new byte[] {0, 0, 0, -1}), false);
 			CountDownLatch done = new CountDownLatch(1); recorder.afterWrites(done::countDown);
 			assertTrue(done.await(10, TimeUnit.SECONDS)); assertEquals(0, recorder.pendingSaves());
-			assertEquals(1, Replays.queuedVideos());
+			assertEquals(0, Replays.legacyQueuedVideos(), "Saving a clip must never queue automatic replay playback");
+			assertEquals(1, recorder.savedDir().listFiles((d, name) -> name.endsWith(".mcpr")).length);
 			assertEquals("3D clip saved", title(notices.get(notices.size() - 1)));
 			take.end(); Replays.saveMoment();
 			assertEquals("Nothing to save yet", title(notices.get(notices.size() - 1)));

@@ -461,6 +461,14 @@ public final class ReplayPlayback implements ReplayBackend {
 	public void capture(FrameSink sink) {
 		ReplayFrames.capture(sink);
 	}
+	@Override
+	public void captureLive(FrameSink sink, int height) {
+		//#if MC < 1.21.5
+		com.mojang.blaze3d.pipeline.RenderTarget target = ReplayCompat.mainTarget();
+		if (LiveFrames.capture(target.width, target.height, height, sink)) return;
+		//#endif
+		ReplayFrames.capture(sink);
+	}
 
 	@Override
 	public java.io.InputStream audioResource(String resource) throws java.io.IOException {

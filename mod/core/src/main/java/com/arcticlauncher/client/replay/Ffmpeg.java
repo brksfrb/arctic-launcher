@@ -15,6 +15,9 @@ public final class Ffmpeg {
 
 	private final String bridgeUrl;
 	private final String secret;
+	private final boolean nativeOnly;
+	private volatile File runner;
+	private volatile boolean asking;
 	private volatile File found;
 	/** {@link #found} is Arctic Launcher's built-in encoder, not FFmpeg. */
 	private volatile boolean builtin;
@@ -24,8 +27,14 @@ public final class Ffmpeg {
 	private volatile long checkedAt;
 
 	public Ffmpeg(int bridgePort, String bridgeSecret) {
+		this(bridgePort, bridgeSecret, false);
+	}
+
+	public Ffmpeg(int bridgePort, String bridgeSecret, boolean nativeOnly) {
 		this.bridgeUrl = bridgePort > 0 && bridgeSecret != null ? "http://127.0.0.1:" + bridgePort : null;
 		this.secret = bridgeSecret;
+		this.nativeOnly = nativeOnly;
+		if (nativeOnly && bridgeUrl != null) ask("GET", null);
 	}
 
 	/** FFmpeg's path, or null while it's missing or downloading (then see {@link #state}). */
@@ -44,7 +53,7 @@ public final class Ffmpeg {
 			return found;
 		}
 		long now = System.currentTimeMillis();
-		if (now - checkedAt > POLL_MS) {
+		if (!asking && now - checkedAt > POLL_MS) {
 			checkedAt = now;
 			ask("GET", null);
 		}
@@ -71,6 +80,7 @@ public final class Ffmpeg {
 
 	/** Ask the launcher to download FFmpeg. */
 	public void download() {
+		if (asking || "downloading".equals(state)) return;
 		state = "downloading";
 		progress = 0;
 		ask("POST", "{}");
@@ -80,13 +90,15 @@ public final class Ffmpeg {
 		if (bridgeUrl == null) {
 			return;
 		}
+		asking = true;
 		Thread t = new Thread(() -> {
 			try {
-				String json = Http.send(method, bridgeUrl + "/v1/ffmpeg", secret, body);
+				String json = Http.send(method, bridgeUrl + (nativeOnly ? "/v1/ffmpeg/capture" : "/v1/ffmpeg"), secret, body);
 				JsonObject o = new JsonParser().parse(json).getAsJsonObject();
 				state = o.has("state") ? o.get("state").getAsString() : "missing";
 				progress = o.has("progress") ? o.get("progress").getAsFloat() : 0;
 				error = o.has("error") && !o.get("error").isJsonNull() ? o.get("error").getAsString() : null;
+				if (o.has("runner") && !o.get("runner").isJsonNull()) runner = new File(o.get("runner").getAsString());
 				if (o.has("path") && !o.get("path").isJsonNull()) {
 					File f = new File(o.get("path").getAsString());
 					if (f.isFile()) {
@@ -97,10 +109,22 @@ public final class Ffmpeg {
 				}
 			} catch (Exception e) {
 				error = e.getMessage();
-			}
+			} finally { asking = false; }
 		}, "arctic-ffmpeg");
 		t.setDaemon(true);
 		t.start();
+	}
+
+	/** All tool work inherits a background process priority when the launcher is available. */
+	ProcessBuilder command(java.util.List<String> args) {
+		java.util.List<String> command = new java.util.ArrayList<String>();
+		if (runner != null && runner.isFile()) {
+			command.add(runner.getAbsolutePath()); command.add("--video-tool");
+		} else if (!System.getProperty("os.name", "").toLowerCase().contains("win") && new File("/usr/bin/nice").isFile()) {
+			command.add("/usr/bin/nice"); command.add("-n"); command.add("10");
+		}
+		command.addAll(args);
+		return new ProcessBuilder(command);
 	}
 
 	private static File onPath() {

@@ -145,6 +145,16 @@ impl bridge::Accounts for AppAccounts {
     }
 
     fn ffmpeg(&self, start: bool) -> String {
+        if crate::video_encoder::available()
+            && let Ok(exe) = std::env::current_exe()
+        {
+            return serde_json::json!({ "state": "ready", "path": exe, "builtin": true })
+                .to_string();
+        }
+        self.capture_encoder(start)
+    }
+
+    fn capture_encoder(&self, start: bool) -> String {
         use arctic_core::ffmpeg;
         let dirs = self
             .0
@@ -153,15 +163,10 @@ impl bridge::Accounts for AppAccounts {
             .tasks
             .dirs()
             .clone();
-        // Windows' own encoder, run through this launcher: nothing to fetch.
-        if crate::video_encoder::available()
-            && let Ok(exe) = std::env::current_exe()
-        {
-            return serde_json::json!({ "state": "ready", "path": exe, "builtin": true })
-                .to_string();
-        }
         if let Some(path) = ffmpeg::find(&dirs) {
-            return serde_json::json!({ "state": "ready", "path": path }).to_string();
+            return serde_json::json!({ "state": "ready", "path": path,
+                "runner": std::env::current_exe().ok() })
+            .to_string();
         }
         let mut shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         let job = &mut shared.ffmpeg;

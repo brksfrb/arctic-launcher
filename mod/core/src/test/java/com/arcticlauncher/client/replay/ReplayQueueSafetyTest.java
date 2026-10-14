@@ -66,46 +66,46 @@ class ReplayQueueSafetyTest {
 		}
 
 		Runnable unpackQueuedReplay() throws Exception {
-			Replays.resumeExports();
-			java.lang.reflect.Method render = Replays.class.getDeclaredMethod("renderNext"); render.setAccessible(true); render.invoke(null);
+			Replays.watch(clip.toFile());
 			Runnable callback = callbacks.poll(10, TimeUnit.SECONDS); assertNotNull(callback); return callback;
 		}
 
 		public void close() throws Exception {
+			Replays.liveVideo().close();
 			Replays.stopWatching();
 			if (Replays.recorder().current() != null) Replays.recorder().current().end();
 			for (Map.Entry<Field, Object> e : previous.entrySet()) e.getKey().set(null, e.getValue());
 		}
 	}
 
-	@Test void previousQueueWaitsForAnExplicitResumeEvenWhenAutomaticRenderingWasEnabled() throws Exception {
+	@Test void oldAutomaticSettingAndQueueCanNeverOpenAReplay() throws Exception {
 		try (Session s = new Session()) {
 			assertFalse(s.config.replayAutoExport, "Rendering in the game window must be opt-in");
 			s.config.replayAutoExport = true;
 			for (int i = 0; i < 300; i++) Replays.tick(true);
-			assertTrue(Replays.exportsPaused()); assertEquals(1, Replays.queuedVideos());
+			assertEquals(1, Replays.legacyQueuedVideos()); assertEquals(0, Replays.queuedVideos());
 			assertEquals(0, s.starts); assertTrue(s.callbacks.isEmpty());
 		}
 	}
 
-	@Test void finishingAnAutomaticOpenCannotDisconnectANewLiveConnection() throws Exception {
+	@Test void oldQueueCannotInterruptANewLiveConnection() throws Exception {
 		try (Session s = new Session()) {
-			Runnable finish = s.unpackQueuedReplay();
+			s.config.replayAutoExport = true;
 			s.title = false; s.world = true;
 			Recorder.Take live = Replays.recorder().begin("test", true, 1, "test");
-			finish.run();
+			for (int i = 0; i < 300; i++) Replays.tick(true);
 			assertEquals(0, s.starts); assertNull(Replays.viewer());
-			assertSame(live, Replays.recorder().current()); assertTrue(Replays.exportsPaused());
-			assertEquals(1, Replays.queuedVideos()); assertTrue(Files.isRegularFile(s.clip));
+			assertSame(live, Replays.recorder().current());
+			assertEquals(1, Replays.legacyQueuedVideos()); assertTrue(Files.isRegularFile(s.clip));
 		}
 	}
 
 	@Test void leavingThenReturningToTitleStillCancelsThePendingQueueOpen() throws Exception {
 		try (Session s = new Session()) {
-			Runnable finish = s.unpackQueuedReplay();
+			s.config.replayAutoExport = true;
 			s.title = false; Replays.tick(true);
-			s.title = true; finish.run();
-			assertEquals(0, s.starts); assertNull(Replays.viewer()); assertTrue(Replays.exportsPaused());
+			s.title = true; for (int i = 0; i < 300; i++) Replays.tick(true);
+			assertEquals(0, s.starts); assertNull(Replays.viewer()); assertTrue(s.callbacks.isEmpty());
 		}
 	}
 

@@ -28,6 +28,7 @@ final class LegacyReplayTest {
 	});
 	private static final int WAIT_LIMIT_S = 120;
 	private static final AtomicReference<File> manual = new AtomicReference<File>();
+	private static long videoSince;
 
 	private LegacyReplayTest() {}
 
@@ -90,6 +91,7 @@ final class LegacyReplayTest {
 	}
 
 	private static void record() {
+		if (!Replays.liveVideo().capturing()) { when("live video capture ready", () -> Replays.liveVideo().capturing(), LegacyReplayTest::record); return; }
 		if (Replays.recorder().current() == null) {
 			fail("nothing is recording in the world");
 			return;
@@ -97,6 +99,8 @@ final class LegacyReplayTest {
 		com.arcticlauncher.client.ArcticClient.config().clipSeconds = 3;
 		com.arcticlauncher.client.ArcticClient.config().replayAutoExport = false;
 		if (!Replays.recorder().startRecording(manual::set)) { fail("manual recording did not start in an existing world"); return; }
+		videoSince = System.currentTimeMillis();
+		Replays.liveVideo().startRecording();
 		log("recording; independent 3s clip buffer enabled");
 		LegacyWorldTest.command("time set 6000");
 		for (int i = 0; i < 8; i++) {
@@ -143,6 +147,7 @@ final class LegacyReplayTest {
 			long clipSize = saved.get().length();
 			after(2, () -> {
 				if (!Replays.recorder().stopRecording()) { fail("manual recording already stopped"); return; }
+				Replays.liveVideo().stopRecording();
 				when("manual recording saved separately", () -> manual.get() != null, () -> {
 					if (saved.get().equals(manual.get()) || saved.get().length() != clipSize) { fail("clip was changed by manual recording"); return; }
 					com.arcticlauncher.client.ArcticClient.platform().leaveWorld();
@@ -260,11 +265,18 @@ final class LegacyReplayTest {
 			Replays.stopWatching();
 			when("back at the title", () -> MinecraftClient.getInstance().world == null && Replays.viewer() == null, () -> {
 				com.arcticlauncher.client.ArcticClient.config().replayAutoExport = true;
-				Replays.resumeExports();
-				when("queued MP4 exported after leaving", () -> Replays.queuedVideos() == 0 && Replays.viewer() == null, () -> {
+
+				when("live MP4 finalized without opening a replay", () -> Replays.queuedVideos() == 0 && Replays.viewer() == null, () -> {
+					if (!liveVideosSaved()) { fail("live capture did not save both MP4s" + Replays.liveVideo().status()); return; }
 					log("PASSED"); after(2, () -> MinecraftClient.getInstance().scheduleStop());
 				});
 			});
 		});
+	}
+	private static boolean liveVideosSaved() {
+		File[] files = Replays.videoFolder().listFiles((d, name) -> name.endsWith(".mp4") && (name.startsWith("Clip ") || name.startsWith("Recording ")));
+		int found = 0;
+		if (files != null) for (File file : files) if (file.lastModified() >= videoSince && file.length() > 512) found++;
+		return found >= 2;
 	}
 }

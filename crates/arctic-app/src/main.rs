@@ -60,6 +60,10 @@ const DEFAULT_WINDOW: [f32; 2] = [1180.0, 720.0];
 const ICON_SIZE: u32 = 64;
 
 fn main() -> eframe::Result {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("--video-tool") {
+        std::process::exit(video_encoder::run_tool(&args[1..]));
+    }
     let dirs = match DataDirs::resolve() {
         Ok(dirs) => dirs,
         Err(e) => {
@@ -67,7 +71,6 @@ fn main() -> eframe::Result {
             std::process::exit(1);
         }
     };
-    let args: Vec<String> = std::env::args().skip(1).collect();
     // The game exporting a replay video (see video_encoder): no window.
     if args.first().map(String::as_str) == Some(video_encoder::SWITCH) {
         std::process::exit(video_encoder::run(&args[1..]));
