@@ -158,7 +158,7 @@ def check(version):
                 problems.append(f"{f}: target class missing {owner}")
             elif not jar.has_member(owner_cls, name):
                 problems.append(f"{f}: target {owner}.{name} missing")
-        for ann in re.finditer(r"@(?:Inject|Redirect|ModifyArg|ModifyArgs|ModifyVariable|WrapOperation)\((.*?)\)\n\s*(?://[^\n]*\n\s*)*(?:private|public|protected)([^{;]*)", src, re.S):
+        for ann in re.finditer(r"@(?:Inject|Redirect|ModifyArg|ModifyArgs|ModifyVariable|WrapOperation|WrapWithCondition|ModifyExpressionValue)\((.*?)\)\n\s*(?://[^\n]*\n\s*)*(?:private|public|protected)([^{;]*)", src, re.S):
             a = ann.group(1)
             mm = re.search(r'method\s*=\s*(?:"([^"]+)"|(\w+))', a)
             # @Local(argsOnly = true) needs the hooked method to take an argument of that type.
