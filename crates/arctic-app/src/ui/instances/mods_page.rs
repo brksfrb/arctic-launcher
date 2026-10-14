@@ -41,6 +41,9 @@ pub(super) fn folder_stamp(dir: &std::path::Path) -> u64 {
 impl ArcticApp {
     pub(super) fn mods_page(&mut self, ui: &mut egui::Ui, instance: &Instance) {
         let p = self.palette();
+        if self.inst.mod_filter.0 != instance.id {
+            self.inst.mod_filter = (instance.id.clone(), String::new());
+        }
         let mods_dir = instance.game_dir(&self.dirs).join("mods");
         self.rescan_mods_if_changed(ui, &instance.id, &mods_dir);
         self.add_dropped_mods(ui, &instance.id, &mods_dir);
@@ -67,6 +70,19 @@ impl ArcticApp {
             });
         });
         ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            ui.add(
+                widgets::text_field(&mut self.inst.mod_filter.1)
+                    .hint_text("Search installed mods…")
+                    .desired_width((ui.available_width() - 80.0).max(120.0)),
+            );
+            if !self.inst.mod_filter.1.is_empty()
+                && widgets::button(ui, p, None, "Clear", false).clicked()
+            {
+                self.inst.mod_filter.1.clear();
+            }
+        });
+        ui.add_space(8.0);
         self.clash_card(ui, instance);
         if files.is_empty() {
             theme::card(p).show(ui, |ui| {
@@ -89,10 +105,30 @@ impl ArcticApp {
             return;
         }
         let index = mods::index_path(&self.dirs.instance_dir(&instance.id));
+        let query = self.inst.mod_filter.1.trim().to_lowercase();
+        let matches: Vec<_> = files
+            .iter()
+            .filter(|file| {
+                file.file_name.to_lowercase().contains(&query)
+                    || file.tracked.as_ref().is_some_and(|m| {
+                        m.title.to_lowercase().contains(&query)
+                            || m.version_number.to_lowercase().contains(&query)
+                            || m.project_id.to_lowercase().contains(&query)
+                    })
+            })
+            .collect();
         let mut changed = false;
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            for file in &files {
+            if matches.is_empty() {
+                ui.label(RichText::new("No installed mods match your search.").color(p.muted));
+            } else if !query.is_empty() {
+                ui.label(
+                    RichText::new(format!("{} of {} mods", matches.len(), files.len()))
+                        .color(p.muted),
+                );
+            }
+            for file in matches {
                 changed |= self.mod_row(ui, file, &mods_dir, &index);
             }
         });

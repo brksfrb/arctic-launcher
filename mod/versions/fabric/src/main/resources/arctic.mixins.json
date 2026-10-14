@@ -92,6 +92,7 @@
 		"ItemEntityRenderStateMixin"<% } %><% if (replay) { %>,
 		"ConnectionReplayMixin",
 		"ReplayTimerMixin",
+		"ReplaySoundMixin",
 		"ReplayFrameMixin",
 		"LivingEntitySwingMixin"<% } %><% if (replayWindow) { %>,
 		"WindowFrameMixin"<% } %><% if (oldWorldCreation) { %>,

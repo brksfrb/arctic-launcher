@@ -39,6 +39,16 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 	private volatile boolean done;
 	private Process process;
 	private Thread writer;
+	private File audioReplay;
+	private ReplayBackend audioBackend;
+	private boolean interleavedAudio;
+	private java.net.ServerSocket audioServer;
+	private volatile java.net.Socket audioSocket;
+	private Thread audioWriter;
+	void audio(File replay, ReplayBackend backend) { audioReplay = replay; audioBackend = backend; }
+	private int audioFrames(long frame) {
+		return (int) (((frame + 1) * AudioMix.RATE / fps) - (frame * AudioMix.RATE / fps));
+	}
 	private int width;
 	private int height;
 
@@ -137,6 +147,11 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 		output.getParentFile().mkdirs();
 		List<String> cmd = new ArrayList<String>();
 		Ffmpeg finder = Replays.ffmpeg();
+		interleavedAudio = audioReplay != null && finder != null && finder.builtin(ffmpeg);
+		if (audioReplay != null && !interleavedAudio) {
+			audioServer = new java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"));
+			audioServer.setSoTimeout(60_000);
+		}
 		String[] args = finder != null && finder.builtin(ffmpeg) ? new String[] {
 				// Arctic Launcher's encoder: RGBA frames in, MP4 out.
 				ffmpeg.getAbsolutePath(), "--encode-video", Integer.toString(w), Integer.toString(h),
@@ -148,11 +163,19 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 				"-filter_threads", "1", "-c:v", "libx264", "-threads", "2", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
 				"-movflags", "+faststart", output.getAbsolutePath(),
 		};
-		for (String a : args) {
-			cmd.add(a);
+		for (String a : args) cmd.add(a);
+		if (interleavedAudio) cmd.add("--audio");
+		else if (audioServer != null) {
+			int inputEnd = cmd.indexOf("-vf");
+			cmd.addAll(inputEnd, java.util.Arrays.asList("-f", "s16le", "-ar", "48000", "-ac", "2", "-i",
+					"tcp://127.0.0.1:" + audioServer.getLocalPort(), "-c:a", "aac", "-b:a", "96k"));
 		}
 		process = new ProcessBuilder(cmd).redirectErrorStream(true).start();
 		drain(process.getInputStream());
+		if (audioServer != null) {
+			audioWriter = new Thread(() -> writeAudio(), "arctic-video-audio");
+			audioWriter.setDaemon(true); audioWriter.setPriority(Thread.MIN_PRIORITY + 1); audioWriter.start();
+		}
 		final WritableByteChannel out = Channels.newChannel(process.getOutputStream());
 		writer = new Thread(() -> write(out), "arctic-video");
 		writer.setDaemon(true);
@@ -177,13 +200,19 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 	}
 
 	private void write(WritableByteChannel out) {
-		try {
+		long written = 0;
+		try (AudioMix audio = interleavedAudio ? new AudioMix(audioReplay, audioBackend, from) : null) {
 			while (true) {
 				ByteBuffer f = frames.poll(200, TimeUnit.MILLISECONDS);
 				if (f != null) {
 					while (f.hasRemaining()) {
 						out.write(f);
 					}
+					if (audio != null) {
+						ByteBuffer pcm = ByteBuffer.wrap(audio.block(audioFrames(written)));
+						while (pcm.hasRemaining()) out.write(pcm);
+					}
+					written++;
 					spare.offer(f);
 					continue;
 				}
@@ -203,6 +232,27 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 		}
 	}
 
+	private void writeAudio() {
+		try (java.net.ServerSocket server = audioServer;
+				java.net.Socket socket = server.accept();
+				AudioMix mix = new AudioMix(audioReplay, audioBackend, from)) {
+			audioSocket = socket;
+			java.io.OutputStream out = socket.getOutputStream();
+			long total = (long) Math.floor((to - from) * (double) fps / 1000) + 1;
+			for (long i = 0; i < total && !cancelled; i++) out.write(mix.block(audioFrames(i)));
+		} catch (IOException e) {
+			if (!cancelled && failed == null) {
+				failed = "Game audio could not be exported: " + e.getMessage();
+				process.destroy();
+			}
+		}
+	}
+
+	private void closeAudio() {
+		try { if (audioServer != null) audioServer.close(); } catch (IOException ignored) {}
+		try { if (audioSocket != null) audioSocket.close(); } catch (IOException ignored) {}
+	}
+
 	private void complete() {
 		try {
 			if (!process.waitFor(30, TimeUnit.SECONDS)) {
@@ -210,12 +260,14 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 				process.destroyForcibly();
 			}
 			int code = process.waitFor();
+			if (audioWriter != null) audioWriter.join(2000);
 			if (code != 0 && !cancelled && failed == null) {
 				failed = "The video encoder failed (code " + code + ")";
 			}
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 		}
+		closeAudio();
 		if (cancelled || failed != null) {
 			output.delete();
 		}
@@ -258,6 +310,7 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 
 	void cancel() {
 		cancelled = true;
+		closeAudio();
 		frames.clear();
 		if (process != null) {
 			process.destroy();

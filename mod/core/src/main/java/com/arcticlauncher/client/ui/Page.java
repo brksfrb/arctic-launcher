@@ -37,6 +37,7 @@ public abstract class Page {
 		TextField keep = focused;
 		focus(null);
 		widgets.clear();
+		pressed = null;
 		build();
 		if (keep != null && widgets.contains(keep)) {
 			focus(keep);

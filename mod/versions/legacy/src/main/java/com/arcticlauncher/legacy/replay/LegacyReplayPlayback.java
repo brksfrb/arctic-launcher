@@ -397,6 +397,11 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 
 	/** The frame on screen (just before it's shown), read with OpenGL. */
 	@Override
+	public java.io.InputStream audioResource(String resource) throws java.io.IOException {
+		return MinecraftClient.getInstance().getResourceManager().getResource(new net.minecraft.util.Identifier(resource)).getInputStream();
+	}
+
+	@Override
 	public void capture(FrameSink sink) {
 		MinecraftClient mc = MinecraftClient.getInstance();
 		int w = mc.width;

@@ -417,6 +417,17 @@ public final class ReplayPlayback implements ReplayBackend {
 	}
 
 	@Override
+	public java.io.InputStream audioResource(String resource) throws java.io.IOException {
+		String[] parts = resource.split(":", 2);
+		net.minecraft.resources.Identifier id = com.arcticlauncher.mod.Compat.id(parts.length == 2 ? parts[0] : "minecraft", parts[parts.length - 1]);
+		//#if MC >= 1.19
+		return Minecraft.getInstance().getResourceManager().open(id);
+		//#else
+		return Minecraft.getInstance().getResourceManager().getResource(id).getInputStream();
+		//#endif
+	}
+
+	@Override
 	public String exportBlocked() {
 		//#if MC < 26.3
 		// Frames are read back with OpenGL, which VulkanMod doesn't draw with.

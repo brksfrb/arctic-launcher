@@ -120,6 +120,8 @@ pub struct InstancesUi {
     pub mod_files: Option<(String, Vec<ModFile>)>,
     /// What the open mods folder looked like when last checked: (egui time, fingerprint).
     pub mod_watch: (f64, u64),
+    /// Installed-mod filter, kept separate from the Modrinth search.
+    pub mod_filter: (String, String),
     /// Mods that won't start together, and a Play they stopped.
     pub clashes: clashes::ClashState,
     pub search: SearchState,

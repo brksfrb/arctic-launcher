@@ -21,6 +21,11 @@ const MAX_BITRATE: u32 = 80_000_000;
 /// returns the process exit code.
 pub fn run(args: &[String]) -> i32 {
     let parsed = (|| {
+        let args = if args.last().is_some_and(|v| v == "--audio") {
+            &args[..args.len() - 1]
+        } else {
+            args
+        };
         let [w, h, fps, out] = args else {
             return None;
         };
@@ -30,7 +35,14 @@ pub fn run(args: &[String]) -> i32 {
         eprintln!("usage: {SWITCH} <width> <height> <fps> <out.mp4>");
         return 2;
     };
-    match encode(std::io::stdin().lock(), width, height, fps, Path::new(out)) {
+    match encode_av(
+        std::io::stdin().lock(),
+        width,
+        height,
+        fps,
+        Path::new(out),
+        args.last().is_some_and(|v| v == "--audio"),
+    ) {
         Ok(()) => 0,
         Err(e) => {
             eprintln!("video export: {e}");
@@ -58,23 +70,43 @@ fn bitrate(width: u32, height: u32, fps: u32) -> u32 {
 
 /// Encode RGBA frames from `input` into an MP4 at `out`.
 pub fn encode(
-    mut input: impl Read,
+    input: impl Read,
     width: u32,
     height: u32,
     fps: u32,
     out: &Path,
 ) -> Result<(), String> {
+    encode_av(input, width, height, fps, out, false)
+}
+
+/// With audio, every RGBA frame is followed by its exact 48 kHz stereo PCM interval.
+fn encode_av(
+    mut input: impl Read,
+    width: u32,
+    height: u32,
+    fps: u32,
+    out: &Path,
+    audio: bool,
+) -> Result<(), String> {
     let (w, h) = even_size(width, height);
     if w == 0 || h == 0 || fps == 0 {
         return Err(format!("bad size {width}x{height} at {fps} fps"));
     }
-    let mut writer = mf::Writer::open(out, w, h, fps, bitrate(w, h, fps))?;
+    let mut writer = mf::Writer::open(out, w, h, fps, bitrate(w, h, fps), audio)?;
     let mut rgba = vec![0u8; width as usize * height as usize * 4];
     let mut nv12 = vec![0u8; w as usize * h as usize * 3 / 2];
     let mut frames = 0u64;
     while read_frame(&mut input, &mut rgba)? {
         rgba_to_nv12(&rgba, width as usize, w as usize, h as usize, &mut nv12);
         writer.write(&nv12, frames)?;
+        if audio {
+            let samples = (frames + 1) * 48_000 / u64::from(fps) - frames * 48_000 / u64::from(fps);
+            let mut pcm = vec![0u8; samples as usize * 4];
+            input
+                .read_exact(&mut pcm)
+                .map_err(|e| format!("reading audio: {e}"))?;
+            writer.write_audio(&pcm, frames)?;
+        }
         frames += 1;
     }
     if frames == 0 {
@@ -190,20 +222,28 @@ mod mf {
         writer: IMFSinkWriter,
         stream: u32,
         fps: u32,
+        audio_stream: Option<u32>,
     }
 
     impl Writer {
-        pub fn open(out: &Path, w: u32, h: u32, fps: u32, bitrate: u32) -> Result<Self, String> {
+        pub fn open(
+            out: &Path,
+            w: u32,
+            h: u32,
+            fps: u32,
+            bitrate: u32,
+            audio: bool,
+        ) -> Result<Self, String> {
             start()?;
             // The graphics card's encoder when there is one; if it won't
             // take this video, Windows' own.
             let hardware = std::env::var_os("ARCTIC_SOFTWARE_ENCODER").is_none();
             let first = if hardware {
-                Self::try_open(out, w, h, fps, bitrate, true)
+                Self::try_open(out, w, h, fps, bitrate, true, audio)
             } else {
                 Err("hardware encoder off".into())
             };
-            first.or_else(|_| Self::try_open(out, w, h, fps, bitrate, false))
+            first.or_else(|_| Self::try_open(out, w, h, fps, bitrate, false, audio))
         }
 
         fn try_open(
@@ -213,6 +253,7 @@ mod mf {
             fps: u32,
             bitrate: u32,
             hardware: bool,
+            audio: bool,
         ) -> Result<Self, String> {
             let err = |what: &str| {
                 let what = what.to_owned();
@@ -249,20 +290,61 @@ mod mf {
                 writer
                     .SetInputMediaType(stream, &input, None)
                     .map_err(err("no H.264 encoder takes these frames"))?;
+                let audio_stream = if audio {
+                    let target = audio_type(&MFAudioFormat_AAC).map_err(err("AAC"))?;
+                    target
+                        .SetUINT32(&MF_MT_AUDIO_AVG_BYTES_PER_SECOND, 12_000)
+                        .map_err(err("AAC bitrate"))?;
+                    target
+                        .SetUINT32(&MF_MT_AAC_PAYLOAD_TYPE, 0)
+                        .map_err(err("AAC payload"))?;
+                    let stream = writer.AddStream(&target).map_err(err("AAC stream"))?;
+                    let pcm = audio_type(&MFAudioFormat_PCM).map_err(err("PCM"))?;
+                    pcm.SetUINT32(&MF_MT_AUDIO_BLOCK_ALIGNMENT, 4)
+                        .map_err(err("PCM alignment"))?;
+                    pcm.SetUINT32(&MF_MT_AUDIO_AVG_BYTES_PER_SECOND, 192_000)
+                        .map_err(err("PCM rate"))?;
+                    writer
+                        .SetInputMediaType(stream, &pcm, None)
+                        .map_err(err("AAC encoder"))?;
+                    Some(stream)
+                } else {
+                    None
+                };
                 writer.BeginWriting().map_err(err("starting"))?;
                 Ok(Self {
                     writer,
                     stream,
                     fps,
+                    audio_stream,
                 })
             }
         }
 
         /// Frame number `index`, as NV12.
         pub fn write(&mut self, nv12: &[u8], index: u64) -> Result<(), String> {
+            self.write_sample(self.stream, nv12, index)
+        }
+
+        pub fn write_audio(&mut self, pcm: &[u8], index: u64) -> Result<(), String> {
+            if let Some(stream) = self.audio_stream {
+                self.write_sample(stream, pcm, index)
+            } else {
+                Ok(())
+            }
+        }
+
+        fn write_sample(&mut self, stream: u32, nv12: &[u8], index: u64) -> Result<(), String> {
             let fps = i64::from(self.fps);
-            let at = index as i64 * TICKS / fps;
-            let next = (index as i64 + 1) * TICKS / fps;
+            let (at, next) = if Some(stream) == self.audio_stream {
+                // Use the same integer sample boundaries as the sender, including non-divisor FPS.
+                (
+                    index as i64 * 48_000 / fps * TICKS / 48_000,
+                    (index as i64 + 1) * 48_000 / fps * TICKS / 48_000,
+                )
+            } else {
+                (index as i64 * TICKS / fps, (index as i64 + 1) * TICKS / fps)
+            };
             unsafe {
                 let len = nv12.len() as u32;
                 let buffer = MFCreateMemoryBuffer(len).map_err(|e| format!("buffer: {e}"))?;
@@ -286,13 +368,25 @@ mod mf {
                     .SetSampleDuration(next - at)
                     .map_err(|e| format!("sample: {e}"))?;
                 self.writer
-                    .WriteSample(self.stream, &sample)
+                    .WriteSample(stream, &sample)
                     .map_err(|e| format!("encoding: {e}"))
             }
         }
 
         pub fn finish(self) -> Result<(), String> {
             unsafe { self.writer.Finalize() }.map_err(|e| format!("finishing the file: {e}"))
+        }
+    }
+
+    unsafe fn audio_type(subtype: &GUID) -> windows::core::Result<IMFMediaType> {
+        unsafe {
+            let t = MFCreateMediaType()?;
+            t.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio)?;
+            t.SetGUID(&MF_MT_SUBTYPE, subtype)?;
+            t.SetUINT32(&MF_MT_AUDIO_NUM_CHANNELS, 2)?;
+            t.SetUINT32(&MF_MT_AUDIO_SAMPLES_PER_SECOND, 48_000)?;
+            t.SetUINT32(&MF_MT_AUDIO_BITS_PER_SAMPLE, 16)?;
+            Ok(t)
         }
     }
 
@@ -331,11 +425,15 @@ mod mf {
     pub struct Writer;
 
     impl Writer {
-        pub fn open(_: &Path, _: u32, _: u32, _: u32, _: u32) -> Result<Self, String> {
+        pub fn open(_: &Path, _: u32, _: u32, _: u32, _: u32, _: bool) -> Result<Self, String> {
             Err("the built-in encoder is Windows-only; use FFmpeg".into())
         }
 
         pub fn write(&mut self, _: &[u8], _: u64) -> Result<(), String> {
+            Ok(())
+        }
+
+        pub fn write_audio(&mut self, _: &[u8], _: u64) -> Result<(), String> {
             Ok(())
         }
 
@@ -419,5 +517,29 @@ mod tests {
         let mp4 = std::fs::read(&out).unwrap();
         assert!(mp4.len() > 1000, "{} bytes", mp4.len());
         assert_eq!(&mp4[4..8], b"ftyp");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn encodes_synchronized_aac_and_video() {
+        assert!(available(), "Windows CI must provide the built-in encoder");
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("with-audio.mp4");
+        let mut input = Vec::new();
+        // A deliberately non-divisor frame rate checks integer PCM boundaries too.
+        for frame in 0..29u64 {
+            input.extend_from_slice(&[64, 120, 180, 255].repeat(64 * 64));
+            for sample in frame * 48_000 / 29..(frame + 1) * 48_000 / 29 {
+                let value = ((sample as f64 * 440.0 * std::f64::consts::TAU / 48_000.0).sin()
+                    * 8000.0) as i16;
+                input.extend_from_slice(&value.to_le_bytes());
+                input.extend_from_slice(&value.to_le_bytes());
+            }
+        }
+        encode_av(input.as_slice(), 64, 64, 29, &out, true).unwrap();
+        let mp4 = std::fs::read(out).unwrap();
+        assert!(mp4.windows(4).any(|w| w == b"soun"), "missing audio track");
+        assert!(mp4.windows(4).any(|w| w == b"mp4a"), "missing AAC audio");
+        assert!(mp4.windows(4).any(|w| w == b"vide"), "missing video track");
     }
 }

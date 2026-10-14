@@ -506,6 +506,7 @@ public final class ReplayViewer {
 		}
 		setMode(camera == Mode.PATH ? Mode.FREE : camera);
 		mode = camera;
+		job.audio(data.file, backend);
 		export = job;
 		backend.cleanView(camera == Mode.PATH);
 		paused = false;

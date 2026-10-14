@@ -43,6 +43,7 @@
 		"ClientConnectionReplayMixin",
 		"ClientTickTrackerMixin",
 		"MinecraftClientReplayMixin",
+		"ReplaySoundMixin",
 		"ClientConnectionProxyMixin",
 		"ServerLookupMixin",
 		"ServerListPingerProxyMixin",

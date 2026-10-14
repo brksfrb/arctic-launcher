@@ -150,6 +150,8 @@ public final class ReplayTest {
 			});
 		}
 		after(11, ReplayTest::keep);
+		after(9, () -> command("playsound minecraft:block.note_block.pling master @a ~ ~ ~ 1 1"));
+		after(10, () -> command("playsound minecraft:block.note_block.bell master @a ~ ~ ~ 1 1"));
 	}
 
 	private static void keep() {

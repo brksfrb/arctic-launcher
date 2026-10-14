@@ -93,6 +93,7 @@ final class TabPage extends Page {
 			@Override
 			public Scroll scroll(int x0, int y0, int x1, int y1) {
 				scroll = new Scroll(x0, y0, x1, y1, scrollOffset);
+				TabPage.this.add(scroll.bar());
 				return scroll;
 			}
 		}, contentX(), contentTop(), contentW(), py + ph - PAD);

@@ -205,6 +205,17 @@ public final class Recorder {
 			});
 		}
 
+		public synchronized void audio(final AudioEvent event) {
+			if (ended || failed) return;
+			tasks.add(() -> {
+				if (ring == null || failed) return;
+				try {
+					ring.audio(event);
+					if (manual != null) manual.audio(event.at(event.time, manualBase));
+				} catch (IOException e) { fail(e.toString()); }
+			});
+		}
+
 		private void maintain(int t) throws IOException {
 			if (t - compactedAt >= compactInterval && t > clipSeconds.getAsInt() * 1000) {
 				ReplayBackend.Classifier classifier = sorter.get();
@@ -322,6 +333,9 @@ public final class Recorder {
 					zip.putNextEntry(new ZipEntry(SELF_ENTRY));
 					copySelf(stream, new DataOutputStream(zip), from, to, from, null);
 					zip.closeEntry();
+					zip.putNextEntry(new ZipEntry(AudioEvent.ENTRY));
+					copyAudio(stream, new DataOutputStream(zip), from, to, from, null);
+					zip.closeEntry();
 					if (thumbnail != null) entry(zip, THUMB_ENTRY, thumbnail);
 				}
 				Files.move(part.toPath(), out.toPath(), StandardCopyOption.REPLACE_EXISTING);
@@ -338,6 +352,10 @@ public final class Recorder {
 	private final class Stream {
 		final File packetFile;
 		final File selfFile;
+		final File audioFile;
+		final Deflater audioDeflater = new Deflater(3, true);
+		final DataOutputStream audio;
+		long audioCount;
 		final Deflater deflater = new Deflater(3, true);
 		final DataOutputStream packets;
 		final DataOutputStream self;
@@ -345,37 +363,41 @@ public final class Recorder {
 		long selfBytes;
 		private int readers;
 		private boolean retired;
-		Snapshot view() throws IOException { flush(); return new Snapshot(packetFile, selfFile, packetBytes, selfBytes); }
+		Snapshot view() throws IOException { flush(); return new Snapshot(packetFile, selfFile, audioFile, packetBytes, selfBytes, audioCount); }
 		synchronized void retain() { readers++; }
 		synchronized void release() { readers--; removeRetired(); }
-		private void removeRetired() { if (retired && readers == 0) { packetFile.delete(); selfFile.delete(); } }
+		private void removeRetired() { if (retired && readers == 0) { packetFile.delete(); selfFile.delete(); audioFile.delete(); } }
 		Stream() throws IOException {
 			tempDir.mkdirs();
 			String id = UUID.randomUUID().toString();
 			packetFile = new File(tempDir, id + ".tmcpr");
 			selfFile = new File(tempDir, id + ".self");
+			audioFile = new File(tempDir, id + ".audio");
+			audio = new DataOutputStream(new DeflaterOutputStream(new BufferedOutputStream(new FileOutputStream(audioFile), BUFFER / 8), audioDeflater, BUFFER / 8, true));
 			packets = new DataOutputStream(new DeflaterOutputStream(new BufferedOutputStream(new FileOutputStream(packetFile), BUFFER), deflater, BUFFER, true));
 			self = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(selfFile), BUFFER / 8));
 		}
 		void packet(int t, byte[] data) throws IOException { packets.writeInt(t); packets.writeInt(data.length); packets.write(data); packetBytes += 8 + data.length; }
 		void sample(SelfSample s) throws IOException { s.write(self); selfBytes += SelfSample.BYTES; }
-		void flush() throws IOException { packets.flush(); self.flush(); }
-		long diskBytes() { return packetFile.length() + selfFile.length(); }
+		void audio(AudioEvent event) throws IOException { event.write(audio); audioCount++; }
+		void flush() throws IOException { packets.flush(); self.flush(); audio.flush(); }
+		long diskBytes() { return packetFile.length() + selfFile.length() + audioFile.length(); }
 		synchronized void delete() {
 			if (retired) return;
 			retired = true;
 			try { packets.close(); } catch (IOException ignored) {} finally { deflater.end(); }
 			try { self.close(); } catch (IOException ignored) {}
+			try { audio.close(); } catch (IOException ignored) {} finally { audioDeflater.end(); }
 			removeRetired();
 		}
 	}
 
 	/** Frozen lengths allow saving while recording continues to append to the same file. */
 	private static final class Snapshot {
-		final File packetFile, selfFile;
-		final long packetBytes, selfBytes;
-		Snapshot(File packetFile, File selfFile, long packetBytes, long selfBytes) {
-			this.packetFile = packetFile; this.selfFile = selfFile; this.packetBytes = packetBytes; this.selfBytes = selfBytes;
+		final File packetFile, selfFile, audioFile;
+		final long packetBytes, selfBytes, audioCount;
+		Snapshot(File packetFile, File selfFile, File audioFile, long packetBytes, long selfBytes, long audioCount) {
+			this.packetFile = packetFile; this.selfFile = selfFile; this.audioFile = audioFile; this.audioCount = audioCount; this.packetBytes = packetBytes; this.selfBytes = selfBytes;
 		}
 	}
 	private static void copyLength(InputStream in, OutputStream out, long length) throws IOException {
@@ -405,6 +427,13 @@ public final class Recorder {
 			}
 		}
 		if (self != null) copySelf(source, self, from, to, base, counts);
+		if (counts != null) copyAudio(source, counts.audio, from, to, base, counts);
+	}
+
+	private static void copyAudio(Snapshot source, DataOutputStream out, int from, int to, int base, Stream counts) throws IOException {
+		try (DataInputStream in = packetReader(source.audioFile)) {
+			AudioEvent.copy(in, source.audioCount, out, from, to, base, counts == null ? null : n -> counts.audioCount += n);
+		}
 	}
 
 	private static void copySelf(Snapshot source, DataOutputStream out, int from, int to, int base, Stream counts) throws IOException {

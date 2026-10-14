@@ -83,6 +83,11 @@ public interface ReplayBackend {
 	 */
 	void capture(FrameSink done);
 
+	/** Open a resolved sound from the same resource packs used by the game. Export worker only. */
+	default java.io.InputStream audioResource(String resource) throws java.io.IOException {
+		throw new java.io.IOException("Game audio resources are unavailable");
+	}
+
 	/** Why videos can't be made here (shown instead of starting one), or null when they can. */
 	default String exportBlocked() {
 		return null;

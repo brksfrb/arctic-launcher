@@ -53,6 +53,27 @@ class RecorderTest {
 		}
 		t.end(); await(r); assertEquals(0, r.tempDir().listFiles().length);
 	}
+	@Test void audioSurvivesCompactionAndManualRecordingKeepsItsOwnTimeline() throws Exception {
+		Recorder r = recorder(); Recorder.Take t = r.begin("audio", true, 775, "26.3");
+		t.packet(new byte[] {1});
+		AudioEvent music = new AudioEvent(); music.id = 1; music.resource = "minecraft:sounds/music/game.ogg";
+		music.left = music.right = .5f; music.loop = true; t.audio(music);
+		at(10_000); AtomicReference<File> manual = new AtomicReference<>(); assertTrue(r.startRecording(manual::set));
+		at(20_000); t.audio(music.at(20_000, 0)); t.sample(sample(20));
+		at(60_000); t.sample(sample(60)); File clip = clip(r);
+		assertTrue(r.recording());
+		at(70_000); assertTrue(r.stopRecording()); await(r);
+		try (java.util.zip.ZipFile z = new java.util.zip.ZipFile(clip);
+				java.io.DataInputStream in = new java.io.DataInputStream(z.getInputStream(z.getEntry(AudioEvent.ENTRY)))) {
+			AudioEvent e = AudioEvent.read(in); assertEquals(0, e.time); assertEquals(30, e.position);
+		}
+		try (java.util.zip.ZipFile z = new java.util.zip.ZipFile(manual.get());
+				java.io.DataInputStream in = new java.io.DataInputStream(z.getInputStream(z.getEntry(AudioEvent.ENTRY)))) {
+			AudioEvent e = AudioEvent.read(in); assertEquals(0, e.time); assertEquals(10, e.position);
+			e = AudioEvent.read(in); assertEquals(10_000, e.time); assertEquals(20, e.position);
+		}
+		t.end(); await(r); assertEquals(0, r.tempDir().listFiles().length);
+	}
 	@Test void clipsDoNotStopRewriteOrTruncateManualRecording() throws Exception {
 		Recorder r = recorder(); Recorder.Take t = r.begin("s", true, 775, "26.3");
 		t.packet(new byte[] {1, 10});

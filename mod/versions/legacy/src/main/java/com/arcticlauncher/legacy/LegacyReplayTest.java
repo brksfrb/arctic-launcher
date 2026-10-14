@@ -116,6 +116,11 @@ final class LegacyReplayTest {
 			});
 		}
 		after(11, LegacyReplayTest::keep);
+		//#if MC >= 1.9
+		after(9, () -> LegacyWorldTest.command("playsound minecraft:block.note.pling master @a ~ ~ ~ 1 1"));
+		//#else
+		after(9, () -> LegacyWorldTest.command("playsound note.pling @a ~ ~ ~ 1 1"));
+		//#endif
 	}
 
 	private static void keep() {
