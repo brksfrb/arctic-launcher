@@ -100,14 +100,14 @@ public final class TitleCompatTest {
 		steps.add(() -> {
 			assertServers();
 			pageKey(Keys.ESCAPE);
-			assertTitle(!expected.isEmpty());
+			assertReturnedToTitle();
 			Compat.setScreen(new JoinMultiplayerScreen(new TitleScreen()));
 		});
 		steps.add(() -> {
 			assertServers();
 			selectVanilla();
 			Compat.screen().onClose();
-			assertTitle(!expected.isEmpty());
+			assertReturnedToTitle();
 			Compat.setScreen(new JoinMultiplayerScreen(new TitleScreen()));
 		});
 		steps.add(() -> {
@@ -140,6 +140,12 @@ public final class TitleCompatTest {
 	private static void assertServers() {
 		if (!(Compat.screen() instanceof PageScreen) || !(((PageScreen) Compat.screen()).page() instanceof ServersPage))
 			throw new IllegalStateException("Expected Arctic's server browser: " + Compat.screen());
+	}
+
+	private static void assertReturnedToTitle() {
+		// This checks navigation before the first frame; title widget layout is checked by rendered().
+		if (!(Compat.screen() instanceof TitleScreen))
+			throw new IllegalStateException("Expected the title screen after leaving multiplayer: " + Compat.screen());
 	}
 
 	private static void assertVanilla() {
