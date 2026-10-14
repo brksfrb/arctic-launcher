@@ -100,6 +100,6 @@ public final class LegacyPageScreen extends Screen {
 
 	/** Back to where the page was opened from. */
 	public void close() {
-		client.setScreen(parent);
+		ServerMenus.returnTo(parent);
 	}
 }

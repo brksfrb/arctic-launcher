@@ -178,6 +178,6 @@ public final class PageScreen extends Screen {
 
 	@Override
 	public void onClose() {
-		Compat.setScreen(parent);
+		ServerMenus.returnTo(parent);
 	}
 }

@@ -42,7 +42,7 @@ public final class ServersPage extends Page {
 
 	private final Platform platform = ArcticClient.platform();
 	private final Servers servers;
-	private final Runnable modControls;
+	private final Runnable vanillaList;
 	private final LanScan lan = new LanScan();
 	private List<Servers.Entry> entries;
 	/** Where each row is drawn now (it slides toward its place), by entry. */
@@ -82,8 +82,8 @@ public final class ServersPage extends Page {
 	}
 
 	/** The original multiplayer screen stays available with every mod's controls. */
-	public ServersPage(Runnable modControls) {
-		this.modControls = modControls;
+	public ServersPage(Runnable vanillaList) {
+		this.vanillaList = vanillaList;
 		servers = new Servers(platform, platform.configDir().getAbsoluteFile().getParentFile());
 		entries = servers.load();
 		servers.pingStale(entries);
@@ -124,11 +124,11 @@ public final class ServersPage extends Page {
 			buildForm();
 			return;
 		}
-		int tab = Math.min(96, (width - (modControls == null ? 20 : 96) - GAP) / 2);
+		int tab = Math.min(96, (width - (vanillaList == null ? 20 : 122) - GAP) / 2);
 		int tabsLeft = (width - tab * 2 - GAP) / 2;
-		if (modControls != null) {
-			tabsLeft = Math.max(90, tabsLeft);
-			add(new Button("Mod controls", modControls)).bounds(4, 8, 82, 18);
+		if (vanillaList != null) {
+			tabsLeft = Math.max(118, tabsLeft);
+			add(new Button("Vanilla server list", vanillaList)).bounds(4, 8, 110, 18);
 		}
 		add(new Button("My Servers", () -> tab(false)).selected(!discover)).bounds(tabsLeft, 8, tab, 18);
 		add(new Button("Discover", () -> tab(true)).selected(discover)).bounds(tabsLeft + tab + GAP, 8, tab, 18);

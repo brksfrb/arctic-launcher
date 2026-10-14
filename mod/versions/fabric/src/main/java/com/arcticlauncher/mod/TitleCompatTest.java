@@ -2,6 +2,8 @@
 package com.arcticlauncher.mod;
 
 import com.arcticlauncher.client.ArcticClient;
+import com.arcticlauncher.client.Keys;
+import com.arcticlauncher.client.servers.ServersPage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -11,12 +13,15 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 
 /** Opt-in CI check: actual third-party buttons must open their screens and survive returning. */
 public final class TitleCompatTest {
 	private TitleCompatTest() {}
 	private static TitleScreen fresh;
 	private static boolean firstFrameChecked;
+	private static Screen customMultiplayer;
+	private static Screen nativeMultiplayer;
 
 	/** Check the first frame, before the native two-second fade could finish. */
 	public static void rendered(TitleScreen screen) {
@@ -62,28 +67,52 @@ public final class TitleCompatTest {
 		});
 		steps.add(() -> {
 			assertTitle(!expected.isEmpty());
-			Screen custom = new net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen(new TitleScreen()) {};
-			Compat.setScreen(custom);
-			if (Compat.screen() != custom) throw new IllegalStateException("A mod's multiplayer screen was replaced");
-			ArcticMod.LOG.info("titlecompat: preserved custom multiplayer screen");
+			customMultiplayer = new JoinMultiplayerScreen(new TitleScreen()) {};
+			Compat.setScreen(customMultiplayer);
 		});
 		steps.add(() -> {
-			Compat.setScreen(new net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen(new TitleScreen()));
+			if (Compat.screen() != customMultiplayer) throw new IllegalStateException("A mod's multiplayer screen was replaced");
+			ArcticMod.LOG.info("titlecompat: preserved custom multiplayer screen after ticks");
+			nativeMultiplayer = new JoinMultiplayerScreen(new TitleScreen());
+			Compat.setScreen(nativeMultiplayer);
 		});
 		steps.add(() -> {
-			Screen screen = Compat.screen();
-			if (!(screen instanceof PageScreen) || !(((PageScreen) screen).page() instanceof com.arcticlauncher.client.servers.ServersPage)) {
-				throw new IllegalStateException("Arctic's server browser did not open by default");
-			}
-			com.arcticlauncher.client.ui.Page page = ((PageScreen) screen).page();
-			page.mouseClicked(20, 16, com.arcticlauncher.client.Keys.MOUSE_LEFT);
-			page.mouseReleased(20, 16, com.arcticlauncher.client.Keys.MOUSE_LEFT);
+			assertServers();
+			SelfTest.shot("servers-default");
+			roundTripArcticMenu();
+			assertServers(); // Must already be Arctic, before another tick could hide a native-screen flash.
+			ArcticMod.LOG.info("titlecompat: Right Shift then Escape immediately restores Arctic servers");
+			selectVanilla();
 		});
 		steps.add(() -> {
-			if (!(Compat.screen() instanceof net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen)) {
-				throw new IllegalStateException("Mod controls did not keep the original multiplayer screen open");
-			}
-			ArcticMod.LOG.info("titlecompat: Arctic servers default and native mod controls both work");
+			assertVanilla(); // Explicit selection must survive ticks and keep the actual modded screen.
+			ArcticClient.screenKeyPressed(Keys.RIGHT_SHIFT);
+			pageKey(Keys.ESCAPE);
+			assertVanilla();
+			clickNativeButton("Arctic servers");
+			assertServers();
+			roundTripArcticMenu();
+			assertServers();
+			ArcticMod.LOG.info("titlecompat: explicit vanilla choice, Right Shift return and switch back work");
+			// Native child screens can return via setScreen, outside PageScreen.onClose.
+			Compat.setScreen(nativeMultiplayer);
+		});
+		steps.add(() -> {
+			assertServers();
+			pageKey(Keys.ESCAPE);
+			assertTitle(!expected.isEmpty());
+			Compat.setScreen(new JoinMultiplayerScreen(new TitleScreen()));
+		});
+		steps.add(() -> {
+			assertServers();
+			selectVanilla();
+			Compat.screen().onClose();
+			assertTitle(!expected.isEmpty());
+			Compat.setScreen(new JoinMultiplayerScreen(new TitleScreen()));
+		});
+		steps.add(() -> {
+			assertServers();
+			ArcticMod.LOG.info("titlecompat: native return routes recover Arctic; fresh multiplayer opens Arctic after leaving vanilla");
 		});
 		steps.add(() -> {
 			ArcticMod.LOG.info("titlecompat: passed ({})", expected.isEmpty() ? "plain" : expected);
@@ -106,6 +135,46 @@ public final class TitleCompatTest {
 				}
 			}), 15 + i * 3L, TimeUnit.SECONDS);
 		}
+	}
+
+	private static void assertServers() {
+		if (!(Compat.screen() instanceof PageScreen) || !(((PageScreen) Compat.screen()).page() instanceof ServersPage))
+			throw new IllegalStateException("Expected Arctic's server browser: " + Compat.screen());
+	}
+
+	private static void assertVanilla() {
+		if (Compat.screen() != nativeMultiplayer)
+			throw new IllegalStateException("Expected the explicitly selected original multiplayer screen: " + Compat.screen());
+	}
+
+	private static void pageKey(int key) {
+		if (!(Compat.screen() instanceof PageScreen)) throw new IllegalStateException("Expected an Arctic page: " + Compat.screen());
+		((PageScreen) Compat.screen()).page().keyPressed(key, 0);
+	}
+
+	private static void roundTripArcticMenu() {
+		pageKey(Keys.RIGHT_SHIFT);
+		if (!(Compat.screen() instanceof PageScreen) || ((PageScreen) Compat.screen()).page() instanceof ServersPage)
+			throw new IllegalStateException("Right Shift did not open the Arctic menu");
+		pageKey(Keys.ESCAPE);
+	}
+
+	private static void selectVanilla() {
+		com.arcticlauncher.client.ui.Page page = ((PageScreen) Compat.screen()).page();
+		page.mouseClicked(20, 16, Keys.MOUSE_LEFT);
+		page.mouseReleased(20, 16, Keys.MOUSE_LEFT);
+	}
+
+	private static void clickNativeButton(String label) {
+		for (Object child : Compat.screen().children()) {
+			if (child instanceof AbstractWidget && label.equals(((AbstractWidget) child).getMessage().getString())) {
+				AbstractWidget button = (AbstractWidget) child;
+				if (!button.visible || !button.active) throw new IllegalStateException("Unavailable button: " + label);
+				Compat.click(Compat.screen(), button.getX() + button.getWidth() / 2.0, button.getY() + button.getHeight() / 2.0);
+				return;
+			}
+		}
+		throw new IllegalStateException("Missing button: " + label);
 	}
 
 	private static void assertTitle(boolean otherMods) {
