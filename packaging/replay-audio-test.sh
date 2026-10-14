@@ -32,8 +32,17 @@ for version in 1.8.9 26.2 26.3; do
   game=$(arctic --json instances show "$id" | jq -r '.game_dir')
   # Each test gets a separate data directory and disposable game settings.
   mkdir -p "$game"
-  printf 'soundCategory_master:1.0\nsoundCategory_music:0.0\nsoundCategory_blocks:1.0\n' >> "$game/options.txt"
-  command timeout 420 "$PWD/audio-test-bin/arctic" --data-dir "$root" launch --instance "$id" --offline AudioTest --memory 2G --wait > "audio-test-results/$version-game.log" 2>&1
+  # Xvfb has no window manager to grant focus, so legacy Minecraft must not open its pause menu.
+  printf 'pauseOnLostFocus:false\nsoundCategory_master:1.0\nsoundCategory_music:0.0\nsoundCategory_blocks:1.0\n' >> "$game/options.txt"
+  command timeout 420 "$PWD/audio-test-bin/arctic" --data-dir "$root" launch --instance "$id" --offline AudioTest --memory 2G --wait > "audio-test-results/$version-game.log" 2>&1 &
+  game_pid=$!
+  (sleep 180; if kill -0 "$game_pid" 2>/dev/null; then pkill -QUIT -x java || true; fi) &
+  diagnostic_pid=$!
+  result=0
+  wait "$game_pid" || result=$?
+  kill "$diagnostic_pid" 2>/dev/null || true
+  wait "$diagnostic_pid" 2>/dev/null || true
+  if [ "$result" != 0 ]; then tail -n 80 "audio-test-results/$version-game.log"; exit "$result"; fi
   grep -F 'replaytest: PASSED' "audio-test-results/$version-game.log"
   save_results
   python3 packaging/verify-replay-audio.py "audio-test-results/$version/replay_videos"
