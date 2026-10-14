@@ -6,7 +6,7 @@ import net.minecraft.client.option.GameOptions;
 import net.minecraft.client.sound.SoundCategory;
 import net.minecraft.client.sound.SoundInstance;
 import net.minecraft.client.sound.SoundSystem;
-//#if MC < 1.12
+//#if MC < 1.9
 import net.minecraft.client.sound.Sound;
 //#endif
 import org.spongepowered.asm.mixin.Final;
@@ -21,7 +21,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 abstract class ReplaySoundMixin {
 	@Shadow @Final private Map<SoundInstance, String> field_8196;
 	@Shadow @Final private GameOptions options;
-	//#if MC >= 1.12
+	//#if MC >= 1.9
 	@Shadow protected abstract float method_12539(SoundInstance s);
 	@Shadow protected abstract float method_12540(SoundInstance s);
 	//#else
@@ -35,7 +35,7 @@ abstract class ReplaySoundMixin {
 	private void arctic$capture(CallbackInfo ci) {
 		if (!arctic$audio.begin()) return;
 		for (SoundInstance s : field_8196.keySet()) {
-			//#if MC >= 1.12
+			//#if MC >= 1.9
 			if (s.method_12533() == null) continue;
 			String path = s.method_12533().method_12523().toString();
 			float volume = method_12540(s), pitch = method_12539(s);

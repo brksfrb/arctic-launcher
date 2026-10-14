@@ -35,14 +35,19 @@ pub fn run(args: &[String]) -> i32 {
         eprintln!("usage: {SWITCH} <width> <height> <fps> <out.mp4>");
         return 2;
     };
-    match encode_av(
-        std::io::stdin().lock(),
-        width,
-        height,
-        fps,
-        Path::new(out),
-        args.last().is_some_and(|v| v == "--audio"),
-    ) {
+    let result = if args.last().is_some_and(|v| v == "--audio") {
+        encode_av(
+            std::io::stdin().lock(),
+            width,
+            height,
+            fps,
+            Path::new(out),
+            true,
+        )
+    } else {
+        encode(std::io::stdin().lock(), width, height, fps, Path::new(out))
+    };
+    match result {
         Ok(()) => 0,
         Err(e) => {
             eprintln!("video export: {e}");
