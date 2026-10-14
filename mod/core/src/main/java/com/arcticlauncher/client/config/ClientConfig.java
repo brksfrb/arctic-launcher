@@ -155,8 +155,8 @@ public final class ClientConfig {
 	public String hudStyle = "clean";
 	/** Waypoints drawn where they are in the world (not just on the Compass). */
 	public boolean waypointsInWorld = true;
-	/** Render queued MP4 clips at the title screen after leaving the world. */
-	public boolean replayAutoExport = true;
+	/** Opt-in: use the game window to render queued MP4 clips at the title screen. */
+	public boolean replayAutoExport;
 	/** Saves only the recent rolling window, independently of manual recording. */
 	public String replayKey = "key.keyboard.f9";
 	public String replayRecordKey = "key.keyboard.f10";

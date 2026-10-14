@@ -47,12 +47,15 @@ public final class Replays {
 	private static ReplayViewer viewer;
 	private static File gameDir;
 	private static boolean opening;
+	/** Remembers leaving the title even if the player returns before unpacking completes. */
+	private static boolean queuedOpenCancelled;
 	private static boolean saveKeyWasDown;
 	private static boolean recordKeyWasDown;
 	private static ExportQueue exports;
 	private static File autoFile;
 	private static boolean autoWaiting;
 	private static boolean exportsPaused;
+	private static boolean exportsRequested;
 	private static int exportTitleTicks;
 	/** A replay to open once the title screen is up (asked for by the launcher). */
 	private static File pending;
@@ -71,6 +74,10 @@ public final class Replays {
 		recorder = new Recorder(gameDir, () -> ArcticClient.config().clipSeconds,
 				message -> p.log(true, message), () -> backend == null ? null : backend.classifier(null));
 		exports = new ExportQueue(gameDir);
+		// A queue left by a previous run must not take over the next game launch.
+		exportsPaused = exports.size() > 0;
+		exportsRequested = false;
+		if (exportsPaused) Notices.post("Videos waiting", "Resume saved videos from Arctic → Replays when you're ready.");
 		ffmpeg = new Ffmpeg(bridgePort, bridgeSecret);
 		// Ask early, so export buttons know right away.
 		ffmpeg.get();
@@ -121,6 +128,10 @@ public final class Replays {
 	/** Keys never retrigger merely because a screen opened or closed while held. */
 	public static void tick(boolean screenOpen) {
 		boolean atTitle = platform.atTitleScreen();
+		if (opening && autoFile != null && !canOpenQueuedReplay()) {
+			queuedOpenCancelled = true;
+			exportTitleTicks = 0;
+		}
 		if (viewer == null && platform.inWorld()) worldTake = recorder == null ? null : recorder.current();
 		// Minecraft can discard a connection without ticking handleDisconnection again.
 		// Only a return from a world ends it: 1.8.9 also shows the title during login.
@@ -139,7 +150,7 @@ public final class Replays {
 			if (pending != null && backend != null && atTitle && ++titleTicks > OPEN_AFTER_TICKS) {
 				File file = pending; pending = null; watch(file);
 			} else if (atTitle && !opening && pending == null && recorder.current() == null
-					&& ArcticClient.config().replayAutoExport && !exportsPaused && exports.size() > 0) {
+					&& (ArcticClient.config().replayAutoExport || exportsRequested) && !exportsPaused && exports.size() > 0) {
 				if (++exportTitleTicks >= 200 && ffmpeg.get() != null) renderNext();
 			} else exportTitleTicks = 0;
 		}
@@ -173,14 +184,15 @@ public final class Replays {
 
 	public static int queuedVideos() { return exports == null ? 0 : exports.size(); }
 	public static boolean exportsPaused() { return exportsPaused; }
-	public static void resumeExports() { exportsPaused = false; exportTitleTicks = 200; }
+	public static void resumeExports() { exportsRequested = true; exportsPaused = false; exportTitleTicks = 200; }
 	private static void renderNext() {
 		autoFile = exports.next();
 		if (autoFile == null) return;
 		if (!autoFile.isFile()) { removeExport(autoFile); autoFile = null; return; }
 		// A failed open must not retry continuously; successful completion clears this guard.
 		exportsPaused = true;
-		watch(autoFile, v -> autoWaiting = true);
+		Notices.post("Rendering queued video", "The saved replay will play to make your MP4. Esc pauses the queue.");
+		watch(autoFile, v -> autoWaiting = true, true);
 	}
 	private static void beginQueuedExport() {
 		autoWaiting = false;
@@ -194,6 +206,7 @@ public final class Replays {
 			VideoExport done = job[0];
 			if (!done.cancelled() && done.error() == null) {
 				removeExport(replay); exportsPaused = false;
+				if (exports.size() == 0) exportsRequested = false;
 				Notices.post("Video saved", out.getName() + " · in replay_videos");
 			} else Notices.post("Video queue paused", done.cancelled() ? "Your 3D clip is saved. Resume videos from Replays." : done.error());
 			if (viewer == v) stopWatching();
@@ -234,7 +247,8 @@ public final class Replays {
 			if (file != null) {
 				try {
 					exports.add(file);
-					Notices.post("3D clip saved", "MP4 queued for after you leave the world."
+					Notices.post("3D clip saved", (ArcticClient.config().replayAutoExport
+							? "MP4 will use the game window at the title screen." : "Render its MP4 from Arctic → Replays.")
 							+ (recorder.recording() ? " Your recording continues." : ""));
 				} catch (IOException e) { Notices.post("3D clip saved", "Couldn't queue the MP4. Export it from Replays."); }
 			} else Notices.post("Clip not saved", "No replay data is available, or the file couldn't be written.");
@@ -251,29 +265,54 @@ public final class Replays {
 
 	/** Watch, then run {@code then} with the viewer once it's open (like exporting a clip). */
 	public static void watch(final File file, final java.util.function.Consumer<ReplayViewer> then) {
+		watch(file, then, false);
+	}
+
+	private static boolean canOpenQueuedReplay() {
+		return platform.atTitleScreen() && !platform.inWorld() && recorder.current() == null
+				&& (ArcticClient.config().replayAutoExport || exportsRequested);
+	}
+
+	private static void watch(final File file, final java.util.function.Consumer<ReplayViewer> then, final boolean queued) {
 		if (backend == null || viewer != null || opening) {
 			return;
 		}
 		opening = true;
+		queuedOpenCancelled = false;
 		Notices.post("Opening replay", file.getName().replace(".mcpr", ""));
 		Thread t = new Thread(() -> {
 			try {
 				final ReplayData data = ReplayData.open(file, new File(gameDir, ".arctic/replay-cache"));
 				if (data.meta.protocol != 0 && backend.protocol() != 0 && data.meta.protocol != backend.protocol()) {
 					data.close();
-					opening = false;
-					Notices.post("Can't open this replay", "It was recorded on Minecraft " + data.meta.mcversion
-							+ ". Open it from an instance of that version.");
+					platform.runOnGameThread(() -> openFailed("It was recorded on Minecraft " + data.meta.mcversion
+							+ ". Open it from an instance of that version."));
 					return;
 				}
-				platform.runOnGameThread(() -> start(data, then));
+				platform.runOnGameThread(() -> finishOpening(data, then, queued));
 			} catch (IOException | RuntimeException e) {
-				opening = false;
-				Notices.post("Can't open this replay", String.valueOf(e.getMessage()));
+				platform.runOnGameThread(() -> openFailed(String.valueOf(e.getMessage())));
 			}
 		}, "arctic-replay-open");
 		t.setDaemon(true);
 		t.start();
+	}
+
+	private static void openFailed(String message) {
+		opening = false;
+		autoFile = null;
+		Notices.post("Can't open this replay", message);
+	}
+
+	/** Recheck on the game thread: unpacking can outlast a player's server join. */
+	private static void finishOpening(ReplayData data, java.util.function.Consumer<ReplayViewer> then, boolean queued) {
+		if (queued && (queuedOpenCancelled || !canOpenQueuedReplay())) {
+			try { data.close(); } catch (IOException ignored) { }
+			opening = false;
+			autoFile = null;
+			return;
+		}
+		start(data, then);
 	}
 
 	private static void start(ReplayData data, java.util.function.Consumer<ReplayViewer> then) {

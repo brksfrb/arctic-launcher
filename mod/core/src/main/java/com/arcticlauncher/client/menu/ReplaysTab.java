@@ -57,16 +57,17 @@ final class ReplaysTab implements MenuTab {
 			f.put(new Button(Replays.recording() ? "Stop and save recording" : "Start recording", () -> { Replays.toggleRecording(); host.rebuild(); }), f.x, row, 160, 18);
 		}
 		f.section("Videos (" + Replays.queuedVideos() + " queued)");
-		f.toggle("Render after leaving", "720p / 30 FPS, one video at a time", () -> c.replayAutoExport, on -> c.replayAutoExport = on);
-		f.note("Videos wait at the title screen. Esc pauses the queue. New recordings include game audio.");
+		f.toggle("Render automatically at title", "Uses the game window to play and export saved clips", () -> c.replayAutoExport, on -> c.replayAutoExport = on);
+		f.note("720p / 30 FPS with game audio. You can't play while rendering. Esc pauses the queue.");
 		int videoRow = f.row(24);
 		f.put(new Button("Open videos folder", () -> {
 			try { Replays.videoFolder().mkdirs(); java.awt.Desktop.getDesktop().open(Replays.videoFolder()); }
 			catch (Exception e) { com.arcticlauncher.client.notice.Notices.post("Videos folder", Replays.videoFolder().getPath()); }
 		}), f.x, videoRow, 140, 18);
-		if (Replays.exportsPaused()) {
+		if (Replays.queuedVideos() > 0) {
 			int row = f.row(24);
-			f.put(new Button("Resume video queue", () -> { Replays.resumeExports(); host.rebuild(); }), f.x, row, 140, 18);
+			f.put(new Button("Render queued videos", () -> { Replays.resumeExports(); host.rebuild(); }), f.x, row, 140, 18);
+			f.note("Return to the title screen to render. Saved 3D replays stay available either way.");
 		}
 		if (Replays.queuedVideos() > 0 && Replays.ffmpeg().get() == null) {
 			int row = f.row(24);
