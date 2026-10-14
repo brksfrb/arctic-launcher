@@ -49,6 +49,24 @@ final class TitleCompatTest {
 			ArcticMod.LOG.info("titlecompat: preserved custom multiplayer screen");
 		});
 		steps.add(() -> {
+			Compat.setScreen(new net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen(new TitleScreen()));
+		});
+		steps.add(() -> {
+			Screen screen = Compat.screen();
+			if (!(screen instanceof PageScreen) || !(((PageScreen) screen).page() instanceof com.arcticlauncher.client.servers.ServersPage)) {
+				throw new IllegalStateException("Arctic's server browser did not open by default");
+			}
+			com.arcticlauncher.client.ui.Page page = ((PageScreen) screen).page();
+			page.mouseClicked(20, 16, com.arcticlauncher.client.Keys.MOUSE_LEFT);
+			page.mouseReleased(20, 16, com.arcticlauncher.client.Keys.MOUSE_LEFT);
+		});
+		steps.add(() -> {
+			if (!(Compat.screen() instanceof net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen)) {
+				throw new IllegalStateException("Mod controls did not keep the original multiplayer screen open");
+			}
+			ArcticMod.LOG.info("titlecompat: Arctic servers default and native mod controls both work");
+		});
+		steps.add(() -> {
 			ArcticMod.LOG.info("titlecompat: passed ({})", expected.isEmpty() ? "plain" : expected);
 			Minecraft.getInstance().stop();
 		});

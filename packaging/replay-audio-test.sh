@@ -47,3 +47,30 @@ for version in 1.8.9 26.2 26.3; do
   save_results
   python3 packaging/verify-replay-audio.py "audio-test-results/$version/replay_videos"
 done
+
+# Check Arctic's default multiplayer browser and preserved third-party menus.
+id=menu-compat
+arctic instances create "$id" --version 26.3 --loader fabric
+arctic instances edit "$id" --arctic-client on --performance off --memory 2G
+arctic mods install modmenu --instance "$id"
+arctic mods install flashback --instance "$id"
+timeout 900 "$PWD/audio-test-bin/arctic" --data-dir "$root" launch --instance "$id" --offline MenuTest --memory 2G --dry-run > audio-test-results/menu-prepare.log 2>&1
+menu_game=$(arctic --json instances show "$id" | jq -r '.game_dir')
+modmenu_file=$(find "$menu_game/mods" -maxdepth 1 -type f -iname 'modmenu-*.jar' -printf '%f\n')
+flashback_file=$(find "$menu_game/mods" -maxdepth 1 -type f -iname 'flashback*.jar' -printf '%f\n')
+test -n "$modmenu_file" && test -n "$flashback_file"
+for variant in plain modmenu flashback both; do
+  expected=""; menu=off; replay=off
+  case "$variant" in
+    modmenu) menu=on; expected=modmenu ;;
+    flashback) replay=on; expected=flashback ;;
+    both) menu=on; replay=on; expected=modmenu,flashback ;;
+  esac
+  arctic mods toggle "$modmenu_file" --instance "$id" "$menu"
+  arctic mods toggle "$flashback_file" --instance "$id" "$replay"
+  arctic instances edit "$id" --jvm-args="-Darctic.selftest=title-compat -Darctic.selftest.titleMods=$expected"
+  timeout 240 "$PWD/audio-test-bin/arctic" --data-dir "$root" launch --instance "$id" --offline MenuTest --memory 2G --wait > "audio-test-results/menu-$variant.log" 2>&1
+  grep -F 'titlecompat: passed' "audio-test-results/menu-$variant.log"
+  if grep -F 'titlecompat: FAILED' "audio-test-results/menu-$variant.log"; then exit 1; fi
+done
+cp -a "$menu_game/screenshots" audio-test-results/menu-screenshots

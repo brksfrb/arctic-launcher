@@ -30,7 +30,7 @@ public final class ArcticButton {
 			add.accept(create("Replays", () -> ArcticClient.platform().openPage(com.arcticlauncher.client.menu.Menus.page("replays"))));
 			add.accept(create("Edit HUD", () -> ArcticClient.platform().openPage(new com.arcticlauncher.client.menu.HudEditor())));
 		} else if (screen instanceof net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen) {
-			add.accept(create("Server tools", () -> ArcticClient.platform().openPage(new com.arcticlauncher.client.servers.ServersPage())));
+			add.accept(create("Arctic servers", () -> ServerMenus.open(screen)));
 		} else if (screen instanceof net.minecraft.client.gui.screens.DisconnectedScreen) {
 			com.arcticlauncher.client.servers.DisconnectedPage reconnect = new com.arcticlauncher.client.servers.DisconnectedPage("", "");
 			if (reconnect.canReconnect()) {

@@ -25,6 +25,7 @@ abstract class MinecraftClientMixin {
 	@Inject(method = "tick", at = @At("TAIL"))
 	private void arctic$tick(CallbackInfo ci) {
 		LegacyHooks.tick(currentScreen != null);
+		com.arcticlauncher.legacy.ServerMenus.tick();
 	}
 
 	@ModifyVariable(method = "setScreen", at = @At("HEAD"), argsOnly = true)
