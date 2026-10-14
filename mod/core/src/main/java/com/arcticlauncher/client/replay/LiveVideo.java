@@ -12,6 +12,7 @@ public final class LiveVideo {
 	private final File root, videos;
 	private volatile File ready;
 	private volatile String codec = "libx264", state = "Preparing video encoder";
+	private volatile String captureFailure;
 	private volatile LiveVideoSession session;
 	private volatile boolean closed;
 	private Thread prepare;
@@ -33,12 +34,16 @@ public final class LiveVideo {
 			boolean requested = false, recovered = false;
 			while (!closed) {
 				try {
+					if (ArcticClient.config() != null && !ArcticClient.config().replayVideoEnabled) {
+						state = "Gameplay video off"; Thread.sleep(1000); continue;
+					}
 					File tool = encoder.get();
 					if (tool != null && ready == null) {
 						codec = LiveVideoSession.chooseCodec(encoder, tool);
 						if (!recovered) { recovered = true; LiveVideoSession.recover(root, videos, encoder, tool, LiveVideo::notice); }
 						ready = tool; state = "Gameplay video ready";
 					}
+					if (ready != null) state = "Gameplay video ready";
 					if (tool == null) {
 						state = "downloading".equals(encoder.state()) ? "Preparing video encoder · " + Math.round(encoder.progress() * 100) + "%"
 								: "Gameplay video needs FFmpeg · Get video encoder below";
@@ -69,6 +74,7 @@ public final class LiveVideo {
 	}
 	public Ffmpeg encoder() { return encoder; }
 	public String status() {
+		if (captureFailure != null) return captureFailure;
 		LiveVideoSession active = session;
 		return active == null ? state : active.error() != null ? "Video stopped: " + active.error() : "Capturing gameplay · " + active.description();
 	}
@@ -86,7 +92,7 @@ public final class LiveVideo {
 		if (!playing || !enabled || take == null || backend == null || backend.exportBlocked() != null) {
 			stop(); return;
 		}
-		if (take != lastTake) { stop(); lastTake = take; stoppedForTake = false; }
+		if (take != lastTake) { stop(); lastTake = take; stoppedForTake = false; captureFailure = null; }
 		LiveVideoSession active = session;
 		if (active != null) active.retain(seconds);
 		if (active != null && active.error() != null) { stoppedForTake = true; return; }
@@ -125,7 +131,7 @@ public final class LiveVideo {
 	}
 	private void captureFailed(Recorder.Take owner, RuntimeException error) {
 		stop(); lastTake = owner; stoppedForTake = true;
-		state = "Video capture unavailable: " + error.getMessage(); notice(state + ". 3D recording continues.");
+		captureFailure = "Video capture unavailable: " + error.getMessage(); notice(captureFailure + ". 3D recording continues.");
 	}
 
 	public static int[] size(int w, int h, int height) {
@@ -139,10 +145,10 @@ public final class LiveVideo {
 	void resetAudio() { synchronized (sounds) { sounds.clear(); } }
 	boolean clip(int seconds) {
 		LiveVideoSession s = session;
-		if (s == null || s.error() != null) { notice("Video buffer isn't ready yet. " + state); return false; }
+		if (s == null || s.error() != null) { notice("Video buffer isn't ready yet. " + status()); return false; }
 		s.clip(seconds); return true;
 	}
-	public void startRecording() { LiveVideoSession s = session; if (s != null) s.startRecording(); else notice("Video buffer isn't ready yet. " + state); }
+	public void startRecording() { LiveVideoSession s = session; if (s != null && s.error() == null) s.startRecording(); else notice("Video buffer isn't ready yet. " + status()); }
 	public void stopRecording() { LiveVideoSession s = session; if (s != null) s.stopRecording(); }
 	private void stop() {
 		LiveVideoSession old = session; session = null; lastTake = null; nextFrame = 0;

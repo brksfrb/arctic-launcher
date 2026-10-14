@@ -53,4 +53,3 @@ final class LiveFrames {
         return true;
     }
 }
-
