@@ -152,7 +152,11 @@ public final class Replays {
 	}
 
 	public static boolean recording() { return recorder != null && recorder.recording(); }
-	public static String recordingStatus() { return recording() ? "Recording " + clock(recorder.recordingMillis()) + String.format(java.util.Locale.ROOT, " · %.1f MB", recorder.recordingBytes() / (1024.0 * 1024.0)) : "Instant clips ready"; }
+	public static String recordingStatus() {
+		if (recording()) return "Recording " + clock(recorder.recordingMillis()) + String.format(java.util.Locale.ROOT, " · %.1f MB", recorder.recordingBytes() / (1024.0 * 1024.0));
+		if (recorder == null || recorder.current() == null) return "Join a world to buffer instant clips";
+		return recorder.bufferReady() ? "Instant clips ready" : "Replay buffer stopped";
+	}
 	public static void toggleRecording() {
 		if (recorder == null) return;
 		if (recorder.stopRecording()) { Notices.post("Saving recording", "Instant clips are still available."); return; }

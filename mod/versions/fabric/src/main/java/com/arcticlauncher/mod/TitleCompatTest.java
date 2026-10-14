@@ -13,13 +13,32 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 
 /** Opt-in CI check: actual third-party buttons must open their screens and survive returning. */
-final class TitleCompatTest {
+public final class TitleCompatTest {
 	private TitleCompatTest() {}
+	private static TitleScreen fresh;
+	private static boolean firstFrameChecked;
+
+	/** Check the first frame, before the native two-second fade could finish. */
+	public static void rendered(TitleScreen screen) {
+		if (screen != fresh || firstFrameChecked) return;
+		firstFrameChecked = true;
+		try {
+			assertTitle(false);
+			for (Object child : screen.children()) {
+				if (child instanceof AbstractWidget && ((AbstractWidget) child).visible
+						&& ((com.arcticlauncher.mod.mixin.WidgetAlphaAccess) child).arctic$alpha() < .99f)
+					throw new IllegalStateException("Transparent title label on first frame: " + ((AbstractWidget) child).getMessage().getString());
+			}
+			ArcticMod.LOG.info("titlecompat: first frame labels visible and Arctic centered");
+		} catch (Throwable error) { ArcticMod.LOG.error("titlecompat: FAILED", error); Minecraft.getInstance().stop(); }
+	}
 
 	static void start() {
 		String expected = System.getProperty("arctic.selftest.titleMods", "");
 		List<Runnable> steps = new ArrayList<>();
+		steps.add(() -> { fresh = new TitleScreen(true); Compat.setScreen(fresh); });
 		steps.add(() -> {
+			if (!firstFrameChecked) throw new IllegalStateException("First title frame was not checked");
 			for (String id : new String[]{"modmenu", "flashback"}) {
 				boolean wanted = java.util.Arrays.asList(expected.split(",")).contains(id);
 				if (FabricLoader.getInstance().isModLoaded(id) != wanted) {
@@ -93,6 +112,12 @@ final class TitleCompatTest {
 		Screen screen = Compat.screen();
 		boolean right = screen instanceof TitleScreen;
 		if (!right) throw new IllegalStateException("Unexpected title screen: " + screen);
+		AbstractWidget arctic = null;
+		for (Object child : screen.children()) {
+			if (child instanceof AbstractWidget && "Arctic".equals(((AbstractWidget) child).getMessage().getString())) arctic = (AbstractWidget) child;
+		}
+		if (arctic == null || !arctic.active || !arctic.visible || Math.abs(arctic.getX() + arctic.getWidth() / 2.0 - screen.width / 2.0) > 1)
+			throw new IllegalStateException("Arctic button is not centered and available");
 	}
 
 	private static void visit(List<Runnable> steps, String destination, String... widgetTypes) {

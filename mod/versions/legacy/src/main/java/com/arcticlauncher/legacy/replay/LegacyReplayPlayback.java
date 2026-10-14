@@ -183,6 +183,10 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 			case "respawn": {
 				PlayerRespawnS2CPacket p = (PlayerRespawnS2CPacket) packet;
 				placed = false;
+				if (body != null && !bodyHidden) {
+					((ClientWorld) body.world).removeEntity(body.getEntityId());
+				}
+				body = null;
 				return new PlayerRespawnS2CPacket(p.getDimensionId(), p.getDifficulty(), p.getGeneratorType(), SPECTATOR);
 			}
 			case "player_position":
@@ -246,6 +250,7 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 				bodyHidden = true;
 			}
 			camera.setHealth(Math.max(1, s.health));
+			camera.deathTime = 0;
 			camera.getHungerManager().setFoodLevel(s.food);
 			if (swing) {
 				swingArm(camera);
@@ -276,6 +281,8 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 		body.setHeadYaw(s.headYaw);
 		body.setSneaking(s.has(SelfSample.SNEAKING));
 		body.setSprinting(s.has(SelfSample.SPRINTING));
+		body.setHealth(Math.max(0, s.health));
+		if (s.health > 0) body.deathTime = 0;
 		equip(body, camera, s.slot);
 		if (swing) {
 			swingArm(body);

@@ -49,12 +49,13 @@ for version in 1.8.9 26.2 26.3; do
 done
 
 # Check Arctic's default multiplayer browser and preserved third-party menus.
-id=menu-compat
-arctic instances create "$id" --version 26.3 --loader fabric
+for menu_version in 26.2 26.3; do
+id=menu-compat-$menu_version
+arctic instances create "$id" --version "$menu_version" --loader fabric
 arctic instances edit "$id" --arctic-client on --performance off --memory 2G
 arctic mods install modmenu --instance "$id"
 arctic mods install flashback --instance "$id"
-timeout 900 "$PWD/audio-test-bin/arctic" --data-dir "$root" launch --instance "$id" --offline MenuTest --memory 2G --dry-run > audio-test-results/menu-prepare.log 2>&1
+timeout 900 "$PWD/audio-test-bin/arctic" --data-dir "$root" launch --instance "$id" --offline MenuTest --memory 2G --dry-run > "audio-test-results/menu-$menu_version-prepare.log" 2>&1
 menu_game=$(arctic --json instances show "$id" | jq -r '.game_dir')
 modmenu_file=$(find "$menu_game/mods" -maxdepth 1 -type f -iname 'modmenu-*.jar' -printf '%f\n')
 flashback_file=$(find "$menu_game/mods" -maxdepth 1 -type f -iname 'flashback*.jar' -printf '%f\n')
@@ -69,8 +70,9 @@ for variant in plain modmenu flashback both; do
   arctic mods toggle "$modmenu_file" --instance "$id" "$menu"
   arctic mods toggle "$flashback_file" --instance "$id" "$replay"
   arctic instances edit "$id" --jvm-args="-Darctic.selftest=title-compat -Darctic.selftest.titleMods=$expected"
-  timeout 240 "$PWD/audio-test-bin/arctic" --data-dir "$root" launch --instance "$id" --offline MenuTest --memory 2G --wait > "audio-test-results/menu-$variant.log" 2>&1
-  grep -F 'titlecompat: passed' "audio-test-results/menu-$variant.log"
-  if grep -F 'titlecompat: FAILED' "audio-test-results/menu-$variant.log"; then exit 1; fi
+  timeout 240 "$PWD/audio-test-bin/arctic" --data-dir "$root" launch --instance "$id" --offline MenuTest --memory 2G --wait > "audio-test-results/menu-$menu_version-$variant.log" 2>&1
+  grep -F 'titlecompat: passed' "audio-test-results/menu-$menu_version-$variant.log"
+  if grep -F 'titlecompat: FAILED' "audio-test-results/menu-$menu_version-$variant.log"; then exit 1; fi
 done
-cp -a "$menu_game/screenshots" audio-test-results/menu-screenshots
+cp -a "$menu_game/screenshots" "audio-test-results/menu-$menu_version-screenshots"
+done

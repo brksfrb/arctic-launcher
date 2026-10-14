@@ -9,9 +9,13 @@ public final class ArcticButton {
 	private ArcticButton() {}
 
 	private static final java.util.Set<Button> OWN = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<Button, Boolean>());
+	private static final java.util.Set<Button> MAIN = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<Button, Boolean>());
 	private static final java.util.Map<net.minecraft.client.gui.screens.Screen, Runnable> TICKS = new java.util.WeakHashMap<>();
 
-	public static Button create() { return create("Arctic", () -> ArcticClient.platform().openPage(ArcticClient.arcticMenu())); }
+	public static Button create() {
+		Button button = create("Arctic", () -> ArcticClient.platform().openPage(ArcticClient.arcticMenu()));
+		MAIN.add(button); return button;
+	}
 	public static Button create(String label, Runnable action) {
 		Button made;
 		//#if MC >= 1.19.3
@@ -61,6 +65,11 @@ public final class ArcticButton {
 		}
 		for (Button button : ours) {
 			if (!button.visible) continue;
+			if (ArcticClient.restyles() && screen instanceof net.minecraft.client.gui.screens.TitleScreen
+					&& MAIN.contains(button) && centerTitleAction(screen, button, placed)) {
+				placed.add(button); continue;
+			}
+			button.setWidth(76);
 			boolean found = false;
 			for (int y = 4; y + 20 <= screen.height - 4 && !found; y += 24) {
 				for (int x = 4; x + 76 <= screen.width - 4; x += 80) {
@@ -79,5 +88,59 @@ public final class ArcticButton {
 				}
 			}
 		}
+	}
+
+	/** Resize the two vanilla actions in place; their callbacks and third-party widgets stay intact. */
+	private static boolean centerTitleAction(net.minecraft.client.gui.screens.Screen screen, Button arctic,
+			java.util.List<net.minecraft.client.gui.components.AbstractWidget> placed) {
+		net.minecraft.client.gui.components.AbstractWidget options = null, quit = null;
+		for (net.minecraft.client.gui.components.AbstractWidget widget : placed) {
+			if (widget.getClass() != Button.class) continue;
+			//#if MC >= 1.16
+			String key = Compat.translationKey(widget.getMessage());
+			if ("menu.options".equals(key)) options = widget;
+			if ("menu.quit".equals(key)) quit = widget;
+			//#else
+			String label = widget.getMessage();
+			if (ArcticClient.platform().translate("menu.options", "Options...").equals(label)) options = widget;
+			if (ArcticClient.platform().translate("menu.quit", "Quit Game").equals(label)) quit = widget;
+			//#endif
+		}
+		if (options != null && quit != null && Compat.widgetY(options) == Compat.widgetY(quit)) {
+			int left = Compat.widgetX(options), right = Compat.widgetX(quit) + quit.getWidth(), y = Compat.widgetY(options);
+			int third = (right - left - 8) / 3;
+			if (third >= 50 && free(left + third + 4, y, third, placed, options, quit)) {
+				options.setWidth(third);
+				bounds(arctic, left + third + 4, y, third);
+				bounds(quit, left + (third + 4) * 2, y, right - left - (third + 4) * 2);
+				return true;
+			}
+		}
+		// A mod changed the vanilla row: keep its layout and put our action in a free centered row.
+		for (int y = screen.height / 4 + 48; y + 20 < screen.height - 16; y += 24) {
+			if (free(screen.width / 2 - 38, y, 76, placed, null, null)) {
+				bounds(arctic, screen.width / 2 - 38, y, 76); return true;
+			}
+		}
+		return false;
+	}
+
+	private static boolean free(int x, int y, int width, java.util.List<net.minecraft.client.gui.components.AbstractWidget> placed,
+			net.minecraft.client.gui.components.AbstractWidget exceptA, net.minecraft.client.gui.components.AbstractWidget exceptB) {
+		for (net.minecraft.client.gui.components.AbstractWidget other : placed) {
+			if (other == exceptA || other == exceptB) continue;
+			int ox = Compat.widgetX(other), oy = Compat.widgetY(other);
+			if (x < ox + other.getWidth() + 3 && x + width + 3 > ox && y < oy + Compat.widgetHeight(other) + 3 && y + 23 > oy) return false;
+		}
+		return true;
+	}
+
+	private static void bounds(net.minecraft.client.gui.components.AbstractWidget widget, int x, int y, int width) {
+		//#if MC >= 1.19.3
+		widget.setX(x); widget.setY(y);
+		//#else
+		widget.x = x; widget.y = y;
+		//#endif
+		widget.setWidth(width);
 	}
 }

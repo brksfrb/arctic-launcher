@@ -2,7 +2,6 @@ package com.arcticlauncher.client.menu;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.MenuAction;
-import com.arcticlauncher.client.gfx.Draw;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Button;
@@ -13,15 +12,6 @@ public final class TitleMenu extends Page {
 	private static final int BUTTON_W = 200;
 	private static final int BUTTON_H = 20;
 	private static final int GAP = 4;
-	private static final int ICON = 24;
-	/**
-	 * The wordmark is a picture made for each GUI scale (1–8) and drawn one
-	 * image pixel per screen pixel: scaled-up text blurs into gray edges.
-	 * Sizes of {@code assets/arctic/wordmark-<scale>.png}.
-	 */
-	private static final int[][] WORDMARK = {
-		{88, 18}, {175, 37}, {263, 55}, {351, 74}, {438, 92}, {526, 111}, {613, 129}, {701, 147},
-	};
 
 	@Override
 	public boolean ownBackground() {
@@ -45,10 +35,6 @@ public final class TitleMenu extends Page {
 	/** The game's own word for it in the player's language (these buttons stand in for its own). */
 	private static String tr(String key, String english) {
 		return ArcticClient.platform().translate(key, english);
-	}
-
-	private int logoTop() {
-		return Math.max(6, height / 4 - 36);
 	}
 
 	@Override
@@ -99,20 +85,7 @@ public final class TitleMenu extends Page {
 
 	@Override
 	protected void drawBehind(Gfx g, Style s, int mx, int my) {
-		int top = logoTop();
-		g.texture("icon", width / 2 - ICON / 2, top, ICON, ICON, 0, 0, 256, 256, 256, 256);
-		float ps = g.pixelScale();
-		int scale = Math.max(1, Math.min(WORDMARK.length, Math.round(ps)));
-		int w = WORDMARK[scale - 1][0];
-		int h = WORDMARK[scale - 1][1];
-		int wordTop = top + ICON + 6;
-		g.push();
-		g.scale(1f / ps);
-		g.texture("asset:wordmark-" + scale, Math.round(width * ps / 2f - w / 2f), Math.round(wordTop * ps), w, h, 0, 0,
-				w, h, w, h);
-		g.pop();
-		String sub = "Minecraft " + ArcticClient.platform().minecraftVersion();
-		Draw.centered(g, sub, width / 2, wordTop + Math.round(h / ps) + 5, s.accent, true);
+		TitleBranding.draw(g, width, height);
 	}
 
 	@Override

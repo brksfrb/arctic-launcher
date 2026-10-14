@@ -190,6 +190,10 @@ public final class ReplayPlayback implements ReplayBackend {
 			}
 			case "respawn":
 				placed = false;
+				// Same-dimension respawns keep the client world, so the old stand-in would otherwise
+				// keep its death animation and metadata even after the real player is alive again.
+				if (body != null) hideBody((ClientLevel) ReplayCompat.level(body));
+				body = null;
 				return ReplayCompat.respawn((ClientboundRespawnPacket) packet);
 			case "player_position":
 				if (placed) {
@@ -268,6 +272,7 @@ public final class ReplayPlayback implements ReplayBackend {
 		if (firstPerson) {
 			hideBody(level);
 			camera.setHealth(Math.max(1, s.health));
+			camera.deathTime = 0;
 			camera.getFoodData().setFoodLevel(s.food);
 			if (swing) {
 				ReplayCompat.swing(camera);
@@ -300,6 +305,8 @@ public final class ReplayPlayback implements ReplayBackend {
 			bodyTime = s.time;
 		}
 		pose(body, s);
+		body.setHealth(Math.max(0, s.health));
+		if (s.health > 0) body.deathTime = 0;
 		equip(body, camera, s.slot);
 		if (swing) {
 			ReplayCompat.swing(body);

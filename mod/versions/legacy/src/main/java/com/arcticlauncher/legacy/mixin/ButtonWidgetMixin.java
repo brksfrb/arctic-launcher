@@ -21,6 +21,7 @@ abstract class ButtonWidgetMixin implements com.arcticlauncher.legacy.LegacyButt
 	@Shadow
 	protected int height;
 	@Override public int arctic$width() { return width; }
+	@Override public void arctic$width(int width) { this.width = width; }
 	@Override public int arctic$height() { return height; }
 	@Shadow
 	public int x;

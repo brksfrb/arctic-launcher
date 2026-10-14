@@ -5,6 +5,7 @@
 	"client": [
 		"MinecraftClientMixin",
 		"NativeMenuMixin",
+		"TitleScreenMixin",
 		"WindowSizeMixin",
 		"ClientBrandMixin",
 		"KeyBindingMixin",

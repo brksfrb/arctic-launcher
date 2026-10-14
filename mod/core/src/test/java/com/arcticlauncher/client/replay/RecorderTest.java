@@ -133,4 +133,38 @@ class RecorderTest {
 		Recorder r = recorder(); Recorder.Take t = r.begin("s", true, 1, "26.3"); t.packet(new byte[] {1}); t.end(); await(r);
 		assertFalse(r.savedDir().exists()); assertFalse(r.saveMoment(null)); assertEquals(0, r.tempDir().listFiles().length);
 	}
+	@Test void slowCompactionDoesNotBlockLivePacketsAndSnapshotsKeepBothSegments() throws Exception {
+		CountDownLatch compacting = new CountDownLatch(1), resume = new CountDownLatch(1);
+		AtomicReference<String> error = new AtomicReference<>();
+		Recorder r = new Recorder(dir.toFile(), () -> 30, error::set, () -> (p, key) -> {
+			if (Thread.currentThread().getName().equals("arctic-replay-compact")) {
+				compacting.countDown();
+				try { if (!resume.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("test timed out"); }
+				catch (InterruptedException e) { throw new IllegalStateException(e); }
+			}
+			return p.get(0) == 1 ? Category.CHUNK : Category.TRANSIENT;
+		}, 512L << 20, 0, 10_000, clock::get);
+		Recorder.Take t = r.begin("crowded", false, 775, "26.3");
+		try {
+			t.packet(new byte[] {1, 42}); at(40_000); t.packet(new byte[] {2, 40});
+			assertTrue(compacting.await(10, TimeUnit.SECONDS));
+			// More than the entire queue budget passes through while cleanup is deliberately stuck.
+			byte[] traffic = new byte[1024]; traffic[0] = 2;
+			for (int tick = 0; tick < 80; tick++) {
+				at(40_001 + tick);
+				for (int player = 0; player < 1000; player++) t.packet(traffic);
+				CountDownLatch written = new CountDownLatch(1); r.afterPackets(written::countDown);
+				assertTrue(written.await(3, TimeUnit.SECONDS), "cleanup blocked the recording writer");
+			}
+			AtomicReference<File> saved = new AtomicReference<>(); CountDownLatch done = new CountDownLatch(1);
+			assertTrue(r.saveMoment(file -> { saved.set(file); done.countDown(); }));
+			assertTrue(done.await(10, TimeUnit.SECONDS), "saving a clip waited for cleanup");
+			assertNotNull(saved.get()); assertNull(error.get());
+			try (ReplayData d = ReplayData.open(saved.get(), dir.resolve("busy").toFile())) {
+				assertEquals(80_002, d.count()); assertEquals(42, d.packet(0).get(1));
+				assertEquals(30_000, d.duration());
+			}
+		} finally { resume.countDown(); t.end(); await(r); }
+		assertEquals(0, r.tempDir().listFiles().length);
+	}
 }

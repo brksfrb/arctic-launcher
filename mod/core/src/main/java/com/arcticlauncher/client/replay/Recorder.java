@@ -38,6 +38,9 @@ public final class Recorder {
 	private final int compactInterval;
 	private final java.util.function.LongSupplier nanoTime;
 	private final LinkedBlockingQueue<Runnable> tasks = new LinkedBlockingQueue<Runnable>();
+	private final java.util.concurrent.ExecutorService compactions = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+		Thread t = new Thread(r, "arctic-replay-compact"); t.setDaemon(true); t.setPriority(Thread.MIN_PRIORITY); return t;
+	});
 	private volatile Take current;
 	private final java.util.concurrent.ExecutorService saves = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
 		Thread t = new Thread(r, "arctic-replay-save"); t.setDaemon(true); t.setPriority(Thread.MIN_PRIORITY); return t;
@@ -87,9 +90,11 @@ public final class Recorder {
 
 	public File savedDir() { return savedDir; }
 	File tempDir() { return tempDir; }
-	void afterWrites(Runnable r) { tasks.add(() -> saves.execute(r)); }
+	void afterPackets(Runnable r) { tasks.add(r); }
+	void afterWrites(Runnable r) { tasks.add(() -> compactions.execute(() -> tasks.add(() -> saves.execute(r)))); }
 	public Take current() { return current; }
 	public boolean recording() { Take t = current; return t != null && t.recording; }
+	public boolean bufferReady() { Take t = current; return t != null && !t.failed && !t.ended; }
 	public long recordingBytes() { Take t = current; return t == null ? 0 : t.manualDiskBytes; }
 	public int recordingMillis() { Take t = current; return recording() ? Math.max(0, t.time() - t.manualFrom) : 0; }
 
@@ -99,7 +104,7 @@ public final class Recorder {
 		Take take = new Take(server, singleplayer, protocol, mcVersion);
 		current = take;
 		tasks.add(() -> {
-			try { take.ring = new Stream(); } catch (IOException e) { take.fail(e.toString()); }
+			try { take.ring = new Ring(); } catch (IOException e) { take.fail(e.toString()); }
 		});
 		return take;
 	}
@@ -138,7 +143,8 @@ public final class Recorder {
 		private volatile String selfName;
 		private volatile UUID selfUuid;
 		// Writer thread only. Ring and manual never share writable files.
-		private Stream ring;
+		private Ring ring;
+		private boolean compacting;
 		private Stream manual;
 		private Consumer<File> manualDone;
 		private int manualBase;
@@ -169,7 +175,7 @@ public final class Recorder {
 			if (ended || failed || data == null) return;
 			if (pending + data.length > MAX_PENDING_BYTES) {
 				failed = true;
-				tasks.add(() -> fail("the disk cannot keep up; recording was stopped instead of dropping packets"));
+				tasks.add(() -> fail("replay data arrived faster than it could be processed (64 MB queued); recording stopped to protect game memory"));
 				return;
 			}
 			final int t = time();
@@ -178,7 +184,7 @@ public final class Recorder {
 				synchronized (Take.this) { pending -= data.length; }
 				if (ring == null || failed) return;
 				try {
-					ring.packet(t, data);
+					ring.active().packet(t, data);
 					latest = t;
 					if (manual != null) manual.packet(Math.max(0, t - manualBase), data);
 					maintain(t);
@@ -192,7 +198,7 @@ public final class Recorder {
 			tasks.add(() -> {
 				if (ring == null || failed) return;
 				try {
-					ring.sample(sample);
+					ring.active().sample(sample);
 					latest = sample.time;
 					if (manual != null) {
 						int t = sample.time;
@@ -210,22 +216,44 @@ public final class Recorder {
 			tasks.add(() -> {
 				if (ring == null || failed) return;
 				try {
-					ring.audio(event);
+					ring.active().audio(event);
 					if (manual != null) manual.audio(event.at(event.time, manualBase));
 				} catch (IOException e) { fail(e.toString()); }
 			});
 		}
 
 		private void maintain(int t) throws IOException {
-			if (t - compactedAt >= compactInterval && t > clipSeconds.getAsInt() * 1000) {
+			if (!compacting && t - compactedAt >= compactInterval && t > clipSeconds.getAsInt() * 1000) {
 				ReplayBackend.Classifier classifier = sorter.get();
 				if (classifier != null) {
-					Stream next = new Stream();
-					try {
-						copyRange(ring.view(), next.packets, next.self, Math.max(0, t - clipSeconds.getAsInt() * 1000), t, 0, classifier, next);
-					} catch (IOException | RuntimeException e) { next.delete(); throw e; }
-					ring.delete();
-					ring = next;
+					final Ring buffer = ring;
+					final Snapshot source = buffer.view();
+					final java.util.List<Stream> prefix = new java.util.ArrayList<Stream>(buffer.streams);
+					final int from = Math.max(0, t - clipSeconds.getAsInt() * 1000);
+					// Freeze the old segments; incoming packets immediately go to a fresh one.
+					buffer.streams.add(new Stream());
+					for (Stream stream : prefix) stream.retain();
+					compacting = true;
+					compactions.execute(() -> {
+						Stream next = null;
+						try {
+							next = new Stream();
+							copyRange(source, next.packets, next.self, from, t, 0, classifier, next);
+							next.flush();
+							final Stream compacted = next;
+							tasks.add(() -> {
+								if (ring == buffer) {
+									buffer.streams.subList(0, prefix.size()).clear();
+									buffer.streams.add(0, compacted);
+								} else compacted.delete();
+								for (Stream stream : prefix) stream.delete();
+								compacting = false;
+							});
+						} catch (IOException | RuntimeException e) {
+							if (next != null) next.delete();
+							tasks.add(() -> { compacting = false; if (!ended && !failed) fail("buffer cleanup failed: " + e); });
+						} finally { for (Stream stream : prefix) stream.release(); }
+					});
 				}
 				compactedAt = t;
 			}
@@ -296,13 +324,19 @@ public final class Recorder {
 			if (manual != null) finishManual(time());
 		}
 		private void saveLater(Stream stream, int from, int to, String kind, byte[] thumbnail, Consumer<File> done) {
-			if (stream == null) { if (done != null) done.accept(null); return; }
+			saveLater(stream == null ? java.util.Collections.emptyList() : java.util.Collections.singletonList(stream), from, to, kind, thumbnail, done);
+		}
+		private void saveLater(Ring buffer, int from, int to, String kind, byte[] thumbnail, Consumer<File> done) {
+			saveLater(buffer == null ? java.util.Collections.emptyList() : new java.util.ArrayList<Stream>(buffer.streams), from, to, kind, thumbnail, done);
+		}
+		private void saveLater(java.util.List<Stream> streams, int from, int to, String kind, byte[] thumbnail, Consumer<File> done) {
+			if (streams.isEmpty()) { if (done != null) done.accept(null); return; }
 			try {
-				Snapshot view = stream.view();
-				stream.retain();
+				Snapshot view = snapshot(streams);
+				for (Stream stream : streams) stream.retain();
 				saves.execute(() -> {
 					try { File file = save(view, from, to, kind, thumbnail); if (done != null) done.accept(file); }
-					finally { stream.release(); }
+					finally { for (Stream stream : streams) stream.release(); }
 				});
 			} catch (IOException e) { log.accept("replay: snapshot failed: " + e); if (done != null) done.accept(null); }
 		}
@@ -327,7 +361,7 @@ public final class Recorder {
 					entry(zip, EXTRAS_ENTRY, GSON.toJson(extras).getBytes(StandardCharsets.UTF_8));
 					zip.putNextEntry(new ZipEntry(PACKETS_ENTRY));
 					if (from == 0) {
-						try (InputStream in = packetReader(stream.packetFile)) { copyLength(in, zip, stream.packetBytes); }
+						try (InputStream in = stream.packets()) { copyLength(in, zip, stream.packetBytes); }
 					} else copyRange(stream, new DataOutputStream(zip), null, from, to, from, sorter.get(), null);
 					zip.closeEntry();
 					zip.putNextEntry(new ZipEntry(SELF_ENTRY));
@@ -348,6 +382,28 @@ public final class Recorder {
 
 	private static void notice(String title, String text) { com.arcticlauncher.client.notice.Notices.post(title, text); }
 
+	/** Only the last segment is writable. Compaction replaces a frozen prefix without copying live traffic. */
+	private final class Ring {
+		final java.util.List<Stream> streams = new java.util.ArrayList<Stream>();
+		Ring() throws IOException { streams.add(new Stream()); }
+		Stream active() { return streams.get(streams.size() - 1); }
+		Snapshot view() throws IOException { return snapshot(streams); }
+		void flush() throws IOException { active().flush(); }
+		long diskBytes() { long bytes = 0; for (Stream stream : streams) bytes += stream.diskBytes(); return bytes; }
+		void delete() { for (Stream stream : streams) stream.delete(); }
+	}
+	private Snapshot snapshot(java.util.List<Stream> streams) throws IOException {
+		java.util.List<Snapshot> parts = new java.util.ArrayList<Snapshot>();
+		for (Stream stream : streams) parts.add(stream.view());
+		return new Snapshot(parts);
+	}
+	private static final class CountedOutput extends FilterOutputStream {
+		long bytes;
+		CountedOutput(OutputStream out) { super(out); }
+		@Override public void write(int b) throws IOException { out.write(b); bytes++; }
+		@Override public void write(byte[] b, int off, int len) throws IOException { out.write(b, off, len); bytes += len; }
+	}
+
 	/** A compressed packet stream and a small self track, owned exclusively by the writer thread. */
 	private final class Stream {
 		final File packetFile;
@@ -355,6 +411,7 @@ public final class Recorder {
 		final File audioFile;
 		final Deflater audioDeflater = new Deflater(3, true);
 		final DataOutputStream audio;
+		final CountedOutput audioCounter;
 		long audioCount;
 		final Deflater deflater = new Deflater(3, true);
 		final DataOutputStream packets;
@@ -363,7 +420,7 @@ public final class Recorder {
 		long selfBytes;
 		private int readers;
 		private boolean retired;
-		Snapshot view() throws IOException { flush(); return new Snapshot(packetFile, selfFile, audioFile, packetBytes, selfBytes, audioCount); }
+		Snapshot view() throws IOException { flush(); return new Snapshot(packetFile, selfFile, audioFile, packetBytes, selfBytes, audioCount, audioCounter.bytes); }
 		synchronized void retain() { readers++; }
 		synchronized void release() { readers--; removeRetired(); }
 		private void removeRetired() { if (retired && readers == 0) { packetFile.delete(); selfFile.delete(); audioFile.delete(); } }
@@ -373,7 +430,8 @@ public final class Recorder {
 			packetFile = new File(tempDir, id + ".tmcpr");
 			selfFile = new File(tempDir, id + ".self");
 			audioFile = new File(tempDir, id + ".audio");
-			audio = new DataOutputStream(new DeflaterOutputStream(new BufferedOutputStream(new FileOutputStream(audioFile), BUFFER / 8), audioDeflater, BUFFER / 8, true));
+			audioCounter = new CountedOutput(new DeflaterOutputStream(new BufferedOutputStream(new FileOutputStream(audioFile), BUFFER / 8), audioDeflater, BUFFER / 8, true));
+			audio = new DataOutputStream(audioCounter);
 			packets = new DataOutputStream(new DeflaterOutputStream(new BufferedOutputStream(new FileOutputStream(packetFile), BUFFER), deflater, BUFFER, true));
 			self = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(selfFile), BUFFER / 8));
 		}
@@ -395,9 +453,40 @@ public final class Recorder {
 	/** Frozen lengths allow saving while recording continues to append to the same file. */
 	private static final class Snapshot {
 		final File packetFile, selfFile, audioFile;
-		final long packetBytes, selfBytes, audioCount;
-		Snapshot(File packetFile, File selfFile, File audioFile, long packetBytes, long selfBytes, long audioCount) {
+		final long packetBytes, selfBytes, audioCount, audioBytes;
+		final java.util.List<Snapshot> parts;
+		Snapshot(File packetFile, File selfFile, File audioFile, long packetBytes, long selfBytes, long audioCount, long audioBytes) {
 			this.packetFile = packetFile; this.selfFile = selfFile; this.audioFile = audioFile; this.audioCount = audioCount; this.packetBytes = packetBytes; this.selfBytes = selfBytes;
+			this.audioBytes = audioBytes; parts = null;
+		}
+		Snapshot(java.util.List<Snapshot> parts) {
+			this.parts = parts; packetFile = selfFile = audioFile = null;
+			long p = 0, s = 0, a = 0, ab = 0;
+			for (Snapshot part : parts) { p += part.packetBytes; s += part.selfBytes; a += part.audioCount; ab += part.audioBytes; }
+			packetBytes = p; selfBytes = s; audioCount = a; audioBytes = ab;
+		}
+		DataInputStream packets() throws IOException { return reader(0); }
+		DataInputStream self() throws IOException { return reader(1); }
+		DataInputStream audio() throws IOException { return reader(2); }
+		private DataInputStream reader(int track) throws IOException {
+			if (parts != null) {
+				java.util.List<InputStream> inputs = new java.util.ArrayList<InputStream>();
+				try {
+					for (Snapshot part : parts) inputs.add(part.reader(track));
+					return new DataInputStream(new SequenceInputStream(java.util.Collections.enumeration(inputs)));
+				} catch (IOException e) { for (InputStream input : inputs) try { input.close(); } catch (IOException ignored) {} throw e; }
+			}
+			InputStream input = track == 1 ? new BufferedInputStream(new FileInputStream(selfFile)) : packetReader(track == 0 ? packetFile : audioFile);
+			final long length = track == 0 ? packetBytes : track == 1 ? selfBytes : audioBytes;
+			return new DataInputStream(new FilterInputStream(input) {
+				long left = length;
+				@Override public int read() throws IOException { if (left == 0) return -1; int value = in.read(); if (value < 0) throw new EOFException(); left--; return value; }
+				@Override public int read(byte[] b, int off, int len) throws IOException {
+					if (len == 0) return 0;
+					if (left == 0) return -1;
+					int n = in.read(b, off, (int) Math.min(left, len)); if (n < 0) throw new EOFException(); left -= n; return n;
+				}
+			});
 		}
 	}
 	private static void copyLength(InputStream in, OutputStream out, long length) throws IOException {
@@ -408,10 +497,10 @@ public final class Recorder {
 	/** Keep a bootstrap checkpoint before from and only the requested interval after it. */
 	private static void copyRange(Snapshot source, DataOutputStream packets, DataOutputStream self, int from, int to, int base,
 			ReplayBackend.Classifier classifier, Stream counts) throws IOException {
-		Index index = Index.of(source.packetFile, source.packetBytes, classifier == null ? (p, k) -> Category.ALWAYS : classifier);
+		Index index = Index.of(source, classifier == null ? (p, k) -> Category.ALWAYS : classifier);
 		int cut = index.firstAt(from);
 		int[] earlier = SeekPlan.plan(index.category, index.key, 0, cut);
-		try (DataInputStream in = packetReader(source.packetFile)) {
+		try (DataInputStream in = source.packets()) {
 			byte[] buf = new byte[1 << 16];
 			int e = 0;
 			for (int i = 0; i < index.count; i++) {
@@ -431,13 +520,13 @@ public final class Recorder {
 	}
 
 	private static void copyAudio(Snapshot source, DataOutputStream out, int from, int to, int base, Stream counts) throws IOException {
-		try (DataInputStream in = packetReader(source.audioFile)) {
+		try (DataInputStream in = source.audio()) {
 			AudioEvent.copy(in, source.audioCount, out, from, to, base, counts == null ? null : n -> counts.audioCount += n);
 		}
 	}
 
 	private static void copySelf(Snapshot source, DataOutputStream out, int from, int to, int base, Stream counts) throws IOException {
-		try (DataInputStream in = new DataInputStream(new BufferedInputStream(new FileInputStream(source.selfFile)))) {
+		try (DataInputStream in = source.self()) {
 			SelfSample before = null;
 			for (long read = 0; read < source.selfBytes; read += SelfSample.BYTES) {
 				SelfSample s = SelfSample.read(in);
@@ -498,13 +587,13 @@ public final class Recorder {
 		byte[] category = new byte[1 << 12];
 		long[] key = new long[1 << 12];
 
-		static Index of(File file, long length, ReplayBackend.Classifier classifier) throws IOException {
+		static Index of(Snapshot source, ReplayBackend.Classifier classifier) throws IOException {
 			Index index = new Index();
 			long[] out = new long[1];
 			long read = 0;
-			try (DataInputStream in = packetReader(file)) {
+			try (DataInputStream in = source.packets()) {
 				byte[] buf = new byte[1 << 16];
-				while (read < length) {
+				while (read < source.packetBytes) {
 					int t = in.readInt();
 					int len = in.readInt();
 					if (len < 0) {

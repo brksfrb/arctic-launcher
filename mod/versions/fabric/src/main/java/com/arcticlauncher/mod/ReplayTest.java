@@ -150,6 +150,8 @@ public final class ReplayTest {
 			});
 		}
 		after(11, ReplayTest::keep);
+		after(4, () -> command("kill @s"));
+		after(6, () -> { if (Minecraft.getInstance().player != null) Minecraft.getInstance().player.respawn(); });
 		after(9, () -> command("playsound minecraft:block.note_block.pling master @a ~ ~ ~ 1 1"));
 		after(10, () -> command("playsound minecraft:block.note_block.bell master @a ~ ~ ~ 1 1"));
 	}
@@ -183,7 +185,7 @@ public final class ReplayTest {
 						Replays.watch(manual.get());
 						when("manual replay opened from mid-world bootstrap", () -> Replays.viewer() != null && Replays.viewer().ready(), () -> {
 							if (Replays.viewer().duration() < 12_000) { fail("manual recording was truncated"); return; }
-							Replays.stopWatching(); after(2, () -> watch(saved.get()));
+							testRespawn(() -> { Replays.stopWatching(); after(2, () -> watch(saved.get())); });
 						});
 					}));
 				});
@@ -192,6 +194,50 @@ public final class ReplayTest {
 	}
 
 	// ---- Watching ----------------------------------------------------------------
+
+	private static void testRespawn(Runnable done) {
+		int deadAt = -1, aliveAt = -1, selfId;
+		try (com.arcticlauncher.client.replay.ReplayData data = com.arcticlauncher.client.replay.ReplayData.open(manual.get(),
+				new File(manual.get().getParentFile(), "respawn-test-cache"))) {
+			selfId = data.meta.selfId;
+			for (int i = 0; data.selfSample(i) != null; i++) {
+				com.arcticlauncher.client.replay.SelfSample sample = data.selfSample(i);
+				if (sample.health <= 0 && deadAt < 0) deadAt = sample.time;
+				if (sample.health > 0 && deadAt >= 0) { aliveAt = sample.time; break; }
+			}
+		} catch (java.io.IOException e) { throw new IllegalStateException(e); }
+		if (deadAt < 0 || aliveAt <= deadAt) { fail("death/respawn was not recorded"); return; }
+		final int alive = aliveAt, id = selfId, dead = deadAt;
+		ReplayViewer v = Replays.viewer(); v.setMode(ReplayViewer.Mode.FREE);
+		if (!v.paused()) v.togglePause();
+		v.seek(deadAt + Math.min(250, (aliveAt - deadAt) / 2));
+		when("dead player replay pose", () -> v.ready() && v.status() == null, () -> {
+			net.minecraft.world.entity.Entity body = Minecraft.getInstance().level.getEntity(id);
+			if (!(body instanceof net.minecraft.world.entity.LivingEntity) || ((net.minecraft.world.entity.LivingEntity) body).getHealth() > 0) {
+				fail("recorded death did not reach the stand-in player"); return;
+			}
+			v.togglePause();
+			when("played through respawn", () -> v.time() >= alive + 300 && v.status() == null, () -> {
+				if (!v.paused()) v.togglePause();
+				if (!aliveBody(id)) return;
+				v.seek(dead);
+				when("rewound across respawn", () -> v.status() == null, () -> {
+					v.seek(alive + 300);
+					when("sought forward across respawn", () -> v.status() == null, () -> {
+						if (!aliveBody(id)) return;
+						log("death and respawn pose passed during playback and seeking"); done.run();
+					});
+				});
+			});
+		});
+	}
+	private static boolean aliveBody(int id) {
+		net.minecraft.world.entity.Entity entity = Minecraft.getInstance().level.getEntity(id);
+		if (!(entity instanceof net.minecraft.world.entity.LivingEntity)) { fail("missing respawned player model"); return false; }
+		net.minecraft.world.entity.LivingEntity body = (net.minecraft.world.entity.LivingEntity) entity;
+		if (body.getHealth() <= 0 || body.deathTime != 0) { fail("respawned player still has the death pose"); return false; }
+		return true;
+	}
 
 	private static void watch(File file) {
 		Replays.watch(file);

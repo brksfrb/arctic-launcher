@@ -18,10 +18,11 @@ abstract class NativeMenuMixin extends Screen {
 	@Unique private final java.util.Map<ButtonWidget, Runnable> arctic$actions = new java.util.LinkedHashMap<>();
 	@Unique private com.arcticlauncher.client.servers.DisconnectedPage arctic$reconnect;
 	@Unique private ButtonWidget arctic$cancel;
+	@Unique private ButtonWidget arctic$main;
 	@Inject(method = "init", at = @At("TAIL"))
 	private void arctic$init(CallbackInfo ci) {
 		arctic$actions.clear(); arctic$reconnect = null; arctic$cancel = null;
-		arctic$add("Arctic", () -> ArcticClient.platform().openPage(ArcticClient.arcticMenu()));
+		arctic$main = arctic$add("Arctic", () -> ArcticClient.platform().openPage(ArcticClient.arcticMenu()));
 		if ((Object) this instanceof TitleScreen) {
 			arctic$add("Replays", () -> ArcticClient.platform().openPage(com.arcticlauncher.client.menu.Menus.page("replays")));
 			arctic$add("Edit HUD", () -> ArcticClient.platform().openPage(new com.arcticlauncher.client.menu.HudEditor()));
@@ -54,6 +55,10 @@ abstract class NativeMenuMixin extends Screen {
 		for (ButtonWidget b : buttons) if (!arctic$actions.containsKey(b) && b.visible) placed.add(b);
 		for (ButtonWidget button : arctic$actions.keySet()) {
 			if (!button.visible) continue;
+			if (button == arctic$main && (Object) this instanceof TitleScreen && ArcticClient.restyles() && arctic$center(button, placed)) {
+				placed.add(button); continue;
+			}
+			((com.arcticlauncher.legacy.LegacyButtonBounds) button).arctic$width(76);
 			boolean found = false;
 			for (int y = 4; y + 20 <= height - 4 && !found; y += 24) {
 				for (int x = 4; x + 76 <= width - 4; x += 80) {
@@ -66,5 +71,42 @@ abstract class NativeMenuMixin extends Screen {
 				}
 			}
 		}
+	}
+
+	@Unique private boolean arctic$center(ButtonWidget main, java.util.List<ButtonWidget> placed) {
+		ButtonWidget options = null, quit = null;
+		for (ButtonWidget b : placed) {
+			if (b.getClass() != ButtonWidget.class) continue;
+			if (b.id == 0) options = b;
+			if (b.id == 4) quit = b;
+		}
+		if (options != null && quit != null && options.y == quit.y) {
+			int left = options.x, right = quit.x + ((com.arcticlauncher.legacy.LegacyButtonBounds) quit).arctic$width();
+			int third = (right - left - 8) / 3;
+			if (third >= 50 && arctic$free(left + third + 4, options.y, third, placed, options, quit)) {
+				((com.arcticlauncher.legacy.LegacyButtonBounds) options).arctic$width(third);
+				main.x = left + third + 4; main.y = options.y;
+				((com.arcticlauncher.legacy.LegacyButtonBounds) main).arctic$width(third);
+				quit.x = left + (third + 4) * 2;
+				((com.arcticlauncher.legacy.LegacyButtonBounds) quit).arctic$width(right - quit.x);
+				return true;
+			}
+		}
+		for (int y = height / 4 + 48; y + 20 < height - 16; y += 24) {
+			if (arctic$free(width / 2 - 38, y, 76, placed, null, null)) {
+				main.x = width / 2 - 38; main.y = y;
+				((com.arcticlauncher.legacy.LegacyButtonBounds) main).arctic$width(76); return true;
+			}
+		}
+		return false;
+	}
+
+	@Unique private boolean arctic$free(int x, int y, int w, java.util.List<ButtonWidget> placed, ButtonWidget a, ButtonWidget b) {
+		for (ButtonWidget other : placed) {
+			if (other == a || other == b) continue;
+			com.arcticlauncher.legacy.LegacyButtonBounds size = (com.arcticlauncher.legacy.LegacyButtonBounds) other;
+			if (x < other.x + size.arctic$width() + 3 && x + w + 3 > other.x && y < other.y + size.arctic$height() + 3 && y + 23 > other.y) return false;
+		}
+		return true;
 	}
 }

@@ -27,6 +27,7 @@
 		"PauseScreenMixin"<% if (panoramaHook) { %>,
 		"ScreenMixin"<% } %>,
 		"TitleScreenMixin",
+		"WidgetAlphaAccess",
 		"ServerTimeMixin",
 		"ChatPlaceholderMixin",
 		"MinecraftTickMixin",<% if (postBlur) { %>
