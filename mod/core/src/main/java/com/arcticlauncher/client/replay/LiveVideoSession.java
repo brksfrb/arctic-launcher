@@ -280,7 +280,11 @@ final class LiveVideoSession {
 				"-map", "0:v:0", "-map", "0:a:0", "-c", "copy", "-avoid_negative_ts", "disabled", "-use_editlist", "1", "-movflags", "+faststart", part.getAbsolutePath());
 		Process p = encoder.command(args).redirectOutput(ProcessBuilder.Redirect.INHERIT).redirectError(ProcessBuilder.Redirect.INHERIT).start();
 		try {
-			if (!p.waitFor(30, TimeUnit.SECONDS)) { p.destroyForcibly(); throw new IOException("MP4 finalization timed out"); }
+			long bytes = 0; for (Segment segment : selected) bytes += segment.file.length();
+			// Long recordings can require several passes over gigabytes of compressed data.
+			// Bound time by the actual copy workload rather than treating them like short clips.
+			long waitSeconds = 30 + bytes / (2L * 1024 * 1024);
+			if (!p.waitFor(waitSeconds, TimeUnit.SECONDS)) { p.destroyForcibly(); throw new IOException("MP4 finalization timed out"); }
 			if (p.exitValue() != 0 || part.length() == 0) throw new IOException("MP4 finalization failed");
 			Files.move(part.toPath(), out.toPath(), StandardCopyOption.REPLACE_EXISTING);
 		} finally { list.delete(); part.delete(); }
