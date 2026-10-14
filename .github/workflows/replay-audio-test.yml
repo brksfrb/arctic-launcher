@@ -20,7 +20,8 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x mod/gradlew
-          python3 mod/build.py 26.3 26.2 1.21.11 1.8.9 --jobs 2
+          # The launcher validates that its embedded bundle has every supported target.
+          python3 mod/build.py --jobs 4
           export CARGO_TARGET_DIR="$HOME/arctic-target"
           cargo build --release --locked -p arctic-cli
           mkdir audio-test-bin
