@@ -214,10 +214,10 @@ final class LegacyReplayTest {
 			v.seek(v.duration() * 0.8); Replays.frame(true);
 			net.minecraft.client.world.ClientWorld old = MinecraftClient.getInstance().world;
 			v.seek(v.start() + 250); Replays.frame(true);
-			double[] at = com.arcticlauncher.client.ArcticClient.platform().camera();
+			float[] look = LegacyReplayPlayback.INSTANCE.look();
 			if (!v.ready() || v.status() != null || !v.paused() || MinecraftClient.getInstance().currentScreen != editor
 					|| MinecraftClient.getInstance().world == old || Math.abs(v.time() - v.start() - 250) > 1
-					|| Math.abs(at[3] - 37) > 0.1 || Math.abs(at[4] + 12) > 0.1) {
+					|| Math.abs(look[0] - 37) > 0.1 || Math.abs(look[1] + 12) > 0.1) {
 				fail("rewind lost its editor, camera, clock or rebuilt world"); return false;
 			}
 		}

@@ -360,7 +360,7 @@ public final class ReplayViewer {
 		byte[] cats = data.category;
 		long[] keys = data.key;
 		boolean backwards = to < cursor;
-		float[] look = backwards ? backend.look() : null;
+		float[] look = backend.look();
 		if (backwards) {
 			String error = backend.restart(data);
 			if (error != null) {
@@ -389,7 +389,7 @@ public final class ReplayViewer {
 		time = target;
 		lastSelf = data.selfIndexAt(target) - 1;
 		self();
-		if (backwards && mode == Mode.FREE && placed) {
+		if (mode == Mode.FREE && placed) {
 			backend.camera(free.x, free.y, free.z, look[0], look[1], 0, false);
 		}
 		camera(0);
