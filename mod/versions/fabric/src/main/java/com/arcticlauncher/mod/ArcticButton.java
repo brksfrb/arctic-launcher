@@ -95,7 +95,8 @@ public final class ArcticButton {
 			java.util.List<net.minecraft.client.gui.components.AbstractWidget> placed) {
 		net.minecraft.client.gui.components.AbstractWidget options = null, quit = null;
 		for (net.minecraft.client.gui.components.AbstractWidget widget : placed) {
-			if (widget.getClass() != Button.class) continue;
+			// Newer versions return Button.Plain from the same vanilla builder used above.
+			if (widget.getClass() != arctic.getClass()) continue;
 			//#if MC >= 1.16
 			String key = Compat.translationKey(widget.getMessage());
 			if ("menu.options".equals(key)) options = widget;

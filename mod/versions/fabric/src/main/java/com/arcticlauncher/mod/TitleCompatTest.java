@@ -117,7 +117,8 @@ public final class TitleCompatTest {
 			if (child instanceof AbstractWidget && "Arctic".equals(((AbstractWidget) child).getMessage().getString())) arctic = (AbstractWidget) child;
 		}
 		if (arctic == null || !arctic.active || !arctic.visible || Math.abs(arctic.getX() + arctic.getWidth() / 2.0 - screen.width / 2.0) > 1)
-			throw new IllegalStateException("Arctic button is not centered and available");
+			throw new IllegalStateException("Arctic button is not centered and available: " + (arctic == null ? "missing" :
+					arctic.getClass().getName() + " at " + arctic.getX() + "," + arctic.getY() + " width " + arctic.getWidth()) + " on width " + screen.width);
 	}
 
 	private static void visit(List<Runnable> steps, String destination, String... widgetTypes) {

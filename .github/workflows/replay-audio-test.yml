@@ -7,6 +7,11 @@ on:
         description: 'Reuse replay-audio-bin from this run (blank rebuilds on Ryzen)'
         required: false
         type: string
+      menus_only:
+        description: 'Only rerun menus when replay code is unchanged and already verified'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -34,12 +39,28 @@ jobs:
           mkdir audio-test-bin
           cp "$CARGO_TARGET_DIR/release/arctic" audio-test-bin/
           cp mod/dist/arctic-client.pack audio-test-bin/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: replay-audio-bin
+          path: audio-test-bin/
+          retention-days: 3
+  windows:
+    needs: build
+    if: inputs.build_run == ''
+    runs-on: [self-hosted, linux, x64, ryzen]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: replay-audio-bin
+          path: audio-test-bin
       - name: Build Windows test candidate
         env:
           ARCTIC_MSA_CLIENT_ID: ${{ secrets.ARCTIC_MSA_CLIENT_ID }}
         shell: bash
         run: |
           set -euo pipefail
+          cp audio-test-bin/arctic-client.pack mod/dist/arctic-client.pack
           export CARGO_TARGET_DIR="$HOME/arctic-target"
           cargo xwin build --release --locked --target x86_64-pc-windows-msvc -p arctic-app -p arctic-cli
           mkdir windows-test
@@ -50,11 +71,6 @@ jobs:
           name: replay-audio-windows
           path: windows-test/
           retention-days: 7
-      - uses: actions/upload-artifact@v4
-        with:
-          name: replay-audio-bin
-          path: audio-test-bin/
-          retention-days: 3
   game:
     needs: build
     if: ${{ !cancelled() && (needs.build.result == 'success' || inputs.build_run != '') }}
@@ -74,6 +90,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends xvfb xauth x11-xserver-utils libgl1-mesa-dri mesa-vulkan-drivers vulkan-tools mesa-utils libasound2t64 pulseaudio libflite1 ffmpeg
           chmod +x audio-test-bin/arctic
       - name: Record and export audible clips
+        env:
+          ARCTIC_MENU_ONLY: ${{ inputs.menus_only }}
         run: xvfb-run -a -s '-screen 0 1280x800x24' bash packaging/replay-audio-test.sh
       - uses: actions/upload-artifact@v4
         if: always()

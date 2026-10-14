@@ -24,6 +24,7 @@ save_results() {
 }
 trap save_results EXIT
 for version in 1.8.9 26.2 26.3; do
+  if [ "${ARCTIC_MENU_ONLY:-false}" = true ]; then break; fi
   game=""
   id="audio-$version"
   arctic instances create "$id" --version "$version" --loader fabric
