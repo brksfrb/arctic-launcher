@@ -170,7 +170,9 @@ public final class ReplayViewer {
 	void afterFrame() {
 		// Export can start during a game tick, after frame() already ran. Its
 		// seek and camera change must be applied before we capture frame zero.
-		if (export == null || !joined || pendingSeek >= 0) {
+		// Seeking can rebuild the world: don't encode the terrain-loading screen
+		// or advance the export timeline while that world is still joining.
+		if (export == null || pendingSeek >= 0 || !ready()) {
 			return;
 		}
 		if (export.failed() != null) {
