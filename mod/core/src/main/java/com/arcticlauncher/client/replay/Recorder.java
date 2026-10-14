@@ -430,9 +430,10 @@ public final class Recorder {
 			packetFile = new File(tempDir, id + ".tmcpr");
 			selfFile = new File(tempDir, id + ".self");
 			audioFile = new File(tempDir, id + ".audio");
-			audioCounter = new CountedOutput(new DeflaterOutputStream(new BufferedOutputStream(new FileOutputStream(audioFile), BUFFER / 8), audioDeflater, BUFFER / 8, true));
+			audioCounter = new CountedOutput(new BufferedOutputStream(new DeflaterOutputStream(new BufferedOutputStream(new FileOutputStream(audioFile), BUFFER / 8), audioDeflater, BUFFER / 8, true), BUFFER / 8));
 			audio = new DataOutputStream(audioCounter);
-			packets = new DataOutputStream(new DeflaterOutputStream(new BufferedOutputStream(new FileOutputStream(packetFile), BUFFER), deflater, BUFFER, true));
+			// Batch small entity updates before entering zlib; crowded worlds send thousands per tick.
+			packets = new DataOutputStream(new BufferedOutputStream(new DeflaterOutputStream(new BufferedOutputStream(new FileOutputStream(packetFile), BUFFER), deflater, BUFFER, true), BUFFER));
 			self = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(selfFile), BUFFER / 8));
 		}
 		void packet(int t, byte[] data) throws IOException { packets.writeInt(t); packets.writeInt(data.length); packets.write(data); packetBytes += 8 + data.length; }
