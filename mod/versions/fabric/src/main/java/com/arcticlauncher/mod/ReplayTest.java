@@ -216,25 +216,48 @@ public final class ReplayTest {
 					v.setMode(ReplayViewer.Mode.FIRST_PERSON);
 					after(2, () -> {
 						shot("replay first person");
-						v.setMode(ReplayViewer.Mode.FREE);
-						v.addKeyframe();
-						v.jump(2000);
-						after(2, () -> {
-							v.addKeyframe();
-							v.playPath();
-							after(2, () -> {
-								shot("replay path");
-								Compat.setScreen(null);
-								com.arcticlauncher.client.ArcticClient.platform().openPage(new ReplayMenu());
-								after(2, () -> {
-									shot("replay menu");
-									grabFrame();
-								});
-							});
+						testPath(() -> {
+							shot("replay path");
+							com.arcticlauncher.client.ArcticClient.platform().openPage(new ReplayMenu());
+							after(2, () -> { shot("replay menu"); grabFrame(); });
 						});
 					});
 				}));
 			}));
+		});
+	}
+
+	/** Keyframe editing while paused must not trap the camera behind a closed menu. */
+	private static void testPath(Runnable done) {
+		final ReplayViewer v = Replays.viewer();
+		v.setMode(ReplayViewer.Mode.FREE);
+		if (!v.paused()) v.togglePause();
+		v.clearKeyframes();
+		v.seek(v.start() + 250);
+		when("ready for paused keyframe", () -> v.ready() && v.status() == null, () -> {
+			v.addKeyframe(); v.addKeyframe();
+			if (v.keyframes().size() != 1) { fail("paused keyframe was duplicated"); return; }
+			com.arcticlauncher.client.ArcticClient.platform().openPage(new ReplayMenu());
+			after(1, () -> {
+				Compat.setScreen(null);
+				double[] before = com.arcticlauncher.client.ArcticClient.platform().camera();
+				Minecraft.getInstance().options.keyUp.setDown(true);
+				after(1, () -> {
+					Minecraft.getInstance().options.keyUp.setDown(false);
+					double[] at = com.arcticlauncher.client.ArcticClient.platform().camera();
+					double moved = Math.abs(at[0] - before[0]) + Math.abs(at[1] - before[1]) + Math.abs(at[2] - before[2]);
+					if (moved < 0.5 || !v.paused()) { fail("camera stuck after closing paused keyframe editor"); return; }
+					v.seek(v.start() + 1250);
+					when("second keyframe time", () -> v.ready() && v.status() == null, () -> {
+						v.addKeyframe();
+						if (!v.canPlayPath()) { fail("two distinct keyframes did not make a path"); return; }
+						v.playPath();
+						when("edited path completed", () -> v.mode() == ReplayViewer.Mode.FREE, () -> {
+							log("paused keyframe camera and path controls passed"); done.run();
+						});
+					});
+				});
+			});
 		});
 	}
 

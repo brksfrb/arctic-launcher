@@ -431,13 +431,17 @@ public final class ReplayViewer {
 	}
 
 	public void addKeyframe() {
+		if (!ready() || pendingSeek >= 0 || export != null) return;
 		double[] c = platform.camera();
 		if (c == null) {
 			return;
 		}
 		double[] at = {c[0], c[1], c[2], c[3], c[4], c.length > 5 ? c[5] : 70};
+		for (int i = keyframes.size() - 1; i >= 0; i--) {
+			if (keyframes.get(i).time == (int) time) keyframes.remove(i);
+		}
 		keyframes.add(new Keyframe((int) time, at));
-		onKeyframesChanged.run();
+		keyframesChanged();
 	}
 
 	/** Remove the keyframe nearest the current time. */
@@ -450,20 +454,32 @@ public final class ReplayViewer {
 		}
 		if (nearest != null) {
 			keyframes.remove(nearest);
-			onKeyframesChanged.run();
+			keyframesChanged();
 		}
 	}
 
 	public void clearKeyframes() {
 		keyframes.clear();
+		keyframesChanged();
+	}
+
+	private void keyframesChanged() {
+		if (mode == Mode.PATH && export == null) {
+			CameraPath updated = new CameraPath(keyframes);
+			if (updated.usable()) path = updated;
+			else setMode(Mode.FREE);
+		}
+		touched();
 		onKeyframesChanged.run();
 	}
+
+	public boolean canPlayPath() { return new CameraPath(keyframes).usable(); }
 
 	/** Fly the path from its first keyframe. */
 	public void playPath() {
 		CameraPath p = new CameraPath(keyframes);
 		if (!p.usable()) {
-			problem = "Add two or more keyframes first (K).";
+			problem = "Add keyframes at two different times first (K).";
 			return;
 		}
 		if (mode == Mode.FOLLOW) {
@@ -499,7 +515,7 @@ public final class ReplayViewer {
 		if (camera == Mode.PATH) {
 			CameraPath p = new CameraPath(keyframes);
 			if (!p.usable()) {
-				problem = "Add two or more keyframes first (K).";
+				problem = "Add keyframes at two different times first (K).";
 				return;
 			}
 			path = p;

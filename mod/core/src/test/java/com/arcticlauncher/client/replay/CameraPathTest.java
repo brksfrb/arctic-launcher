@@ -56,4 +56,13 @@ class CameraPathTest {
 		assertFalse(new CameraPath(Arrays.asList(key(0, 0, 0))).usable());
 		assertTrue(new CameraPath(Arrays.asList(key(0, 0, 0), key(1, 0, 0))).usable());
 	}
+
+	@Test
+	void pausedEditsKeepTheLatestPositionAtEachTime() {
+		assertFalse(new CameraPath(Arrays.asList(key(500, 1, 0), key(500, 2, 0))).usable());
+		CameraPath path = new CameraPath(Arrays.asList(key(0, 1, 0), key(1000, 5, 0), key(0, 3, 0)));
+		assertTrue(path.usable());
+		assertEquals(3, path.at(0)[0], 1e-9);
+		assertEquals(4, path.at(500)[0], 1e-9);
+	}
 }

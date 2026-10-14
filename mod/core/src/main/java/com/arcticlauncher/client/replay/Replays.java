@@ -302,7 +302,7 @@ public final class Replays {
 	}
 
 	/** Before each frame is drawn. */
-	public static void frame() {
+	public static void frame(boolean screenOpen) {
 		// Handling a packet can run a whole game tick of its own (joining a world
 		// on 1.20.1 and older does), which must not feed the next packets early.
 		if (viewer == null || inFrame) {
@@ -310,6 +310,9 @@ public final class Replays {
 		}
 		inFrame = true;
 		try {
+			// Pausing stops game ticks, but opening/closing the editor must still
+			// release the free camera. Read the actual screen every rendered frame.
+			viewer.screenOpen(screenOpen);
 			viewer.frame();
 		} finally {
 			inFrame = false;

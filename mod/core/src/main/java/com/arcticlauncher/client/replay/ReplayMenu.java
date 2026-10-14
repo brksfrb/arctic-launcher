@@ -100,9 +100,9 @@ public final class ReplayMenu extends Page {
 		row.add("Play path", 56, () -> {
 			v.playPath();
 			close();
-		}).enabled(v.keyframes().size() >= 2);
+		}).enabled(v.canPlayPath());
 		row.gap();
-		row.add("Export path", 66, () -> exportPath()).enabled(v.keyframes().size() >= 2);
+		row.add("Export path", 66, () -> exportPath()).enabled(v.canPlayPath());
 		row.add("Export clip", 62, () -> exportClip()).enabled(!v.moments().isEmpty() || v.duration() > 0);
 		row.gap();
 		row.add("Leave", 44, () -> {

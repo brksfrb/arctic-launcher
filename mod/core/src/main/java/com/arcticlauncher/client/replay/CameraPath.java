@@ -24,6 +24,11 @@ public final class CameraPath {
 				return Integer.compare(a.time, b.time);
 			}
 		});
+		// Older saved paths could contain multiple positions at a paused time.
+		// Keep the most recent edit rather than making a zero-duration segment.
+		for (int i = this.keys.size() - 2; i >= 0; i--) {
+			if (this.keys.get(i).time == this.keys.get(i + 1).time) this.keys.remove(i);
+		}
 		unwrapYaw(this.keys);
 	}
 
