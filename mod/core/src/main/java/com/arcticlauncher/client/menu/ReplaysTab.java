@@ -58,7 +58,7 @@ final class ReplaysTab implements MenuTab {
 		}
 		f.section("Videos (" + Replays.queuedVideos() + " queued)");
 		f.toggle("Render after leaving", "720p / 30 FPS, one video at a time", () -> c.replayAutoExport, on -> c.replayAutoExport = on);
-		f.note("Videos wait at the title screen. Esc pauses the queue. Videos include recorded game audio.");
+		f.note("Videos wait at the title screen. Esc pauses the queue. New recordings include game audio.");
 		int videoRow = f.row(24);
 		f.put(new Button("Open videos folder", () -> {
 			try { Replays.videoFolder().mkdirs(); java.awt.Desktop.getDesktop().open(Replays.videoFolder()); }

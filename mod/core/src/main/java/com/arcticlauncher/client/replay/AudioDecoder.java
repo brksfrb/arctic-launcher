@@ -58,6 +58,10 @@ abstract class AudioDecoder implements Closeable {
 		Legacy(File file) throws Exception {
 			this.file = file;
 			api = Class.forName("paulscode.sound.codecs.CodecJOrbis"); codec = api.newInstance();
+			Class<?> vorbis = Class.forName("com.jcraft.jorbis.VorbisFile");
+			Object info = vorbis.getConstructor(String.class).newInstance(file.getAbsolutePath());
+			try { length = (Long) vorbis.getMethod("pcm_total", int.class).invoke(info, -1); }
+			finally { vorbis.getMethod("close").invoke(info); }
 			init();
 		}
 		private void init() throws Exception {

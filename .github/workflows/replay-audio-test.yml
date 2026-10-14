@@ -27,6 +27,22 @@ jobs:
           mkdir audio-test-bin
           cp "$CARGO_TARGET_DIR/release/arctic" audio-test-bin/
           cp mod/dist/arctic-client.pack audio-test-bin/
+      - name: Build Windows test candidate
+        env:
+          ARCTIC_MSA_CLIENT_ID: ${{ secrets.ARCTIC_MSA_CLIENT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export CARGO_TARGET_DIR="$HOME/arctic-target"
+          cargo xwin build --release --locked --target x86_64-pc-windows-msvc -p arctic-app -p arctic-cli
+          mkdir windows-test
+          cp "$CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/arctic-launcher.exe" windows-test/arctic-launcher-windows-x64.exe
+          cp "$CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/arctic.exe" windows-test/arctic-windows-x64.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: replay-audio-windows
+          path: windows-test/
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
           name: replay-audio-bin

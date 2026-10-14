@@ -134,6 +134,7 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 			while (!cancelled && failed == null && !frames.offer(copy, 100, TimeUnit.MILLISECONDS)) { /* bounded backpressure */ }
 		} catch (IOException e) {
 			failed = "The video encoder didn't start: " + e.getMessage();
+			closeAudio();
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 		} finally {
