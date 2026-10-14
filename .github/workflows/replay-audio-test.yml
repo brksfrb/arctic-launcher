@@ -1,13 +1,20 @@
 name: Replay audio test
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: 'Reuse replay-audio-bin from this run (blank rebuilds on Ryzen)'
+        required: false
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   build:
+    if: inputs.build_run == ''
     runs-on: [self-hosted, linux, x64, ryzen]
     steps:
       - uses: actions/checkout@v5
@@ -50,6 +57,7 @@ jobs:
           retention-days: 3
   game:
     needs: build
+    if: ${{ !cancelled() && (needs.build.result == 'success' || inputs.build_run != '') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -58,10 +66,12 @@ jobs:
         with:
           name: replay-audio-bin
           path: audio-test-bin
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build_run || github.run_id }}
       - name: Test tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xvfb xauth x11-xserver-utils libgl1-mesa-dri libasound2t64 pulseaudio libflite1 ffmpeg
+          sudo apt-get install -y --no-install-recommends xvfb xauth x11-xserver-utils libgl1-mesa-dri mesa-vulkan-drivers vulkan-tools mesa-utils libasound2t64 pulseaudio libflite1 ffmpeg
           chmod +x audio-test-bin/arctic
       - name: Record and export audible clips
         run: xvfb-run -a -s '-screen 0 1280x800x24' bash packaging/replay-audio-test.sh
