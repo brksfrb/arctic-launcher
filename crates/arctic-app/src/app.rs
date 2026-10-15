@@ -645,6 +645,30 @@ impl ArcticApp {
             );
             return;
         }
+        // The default instance's mods folder holds one Minecraft version's performance mods at a
+        // time. Starting another version would have to swap them out under the game that's
+        // running (Windows refuses: the files are in use), so say so instead of failing midway.
+        if instance.is_default()
+            && let Some(other) = self
+                .runs
+                .active()
+                .find(|r| r.instance_id == instance.id && r.version != version.id)
+            && (instance.performance
+                || instance
+                    .game_dir(&self.dirs)
+                    .join("arctic-performance.json")
+                    .exists())
+        {
+            self.toasts.push(
+                Kind::Info,
+                format!("Vanilla is playing {} right now", other.version),
+                format!(
+                    "Vanilla's mods are for one version at a time. Close that game to play {},                      or make a separate instance for it (Instances → New).",
+                    version.id
+                ),
+            );
+            return;
+        }
         self.warn_if_proxy_misses_servers(&instance, &version.id);
         self.discord.game_started(
             format!("Minecraft {}", version.id),
