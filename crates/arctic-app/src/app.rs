@@ -661,10 +661,10 @@ impl ArcticApp {
         {
             self.toasts.push(
                 Kind::Info,
-                format!("Vanilla is playing {} right now", other.version),
+                format!("Vanilla is already running {}", other.version),
                 format!(
-                    "Vanilla's mods are for one version at a time. Close that game to play {},                      or make a separate instance for it (Instances → New).",
-                    version.id
+                    "To play {} at the same time, make a new instance for it (Instances → New).                      Or close the {} game first.",
+                    version.id, other.version
                 ),
             );
             return;
