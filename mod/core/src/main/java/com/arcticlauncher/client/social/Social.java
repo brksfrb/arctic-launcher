@@ -35,7 +35,8 @@ public final class Social {
 	private static final long MESSAGES_EVERY_S = 5;
 	/** Friends and invites every this many message checks. */
 	private static final int FRIENDS_EVERY = 6;
-	private static final long SCREENSHOTS_EVERY_MS = 1000;
+	/** How often the screenshots folder is looked at: only its modified time, so it's cheap. */
+	private static final long SCREENSHOTS_EVERY_MS = 150;
 	/** Screenshots are sent at most this wide (the server takes 2 MB). */
 	private static final int[] SEND_WIDTHS = {1280, 960, 720};
 	private static final int MAX_UPLOAD = 2 * 1024 * 1024;
@@ -313,6 +314,9 @@ public final class Social {
 	}
 
 	/** A new screenshot in the game folder: pop up with its picture. */
+	/** The screenshots folder's modified time when it was last listed. */
+	private long screenshotsDirSeen;
+
 	private void watchScreenshots() {
 		// World/visual self-tests take several screenshots per second. Their review
 		// images must not contain the previous shot's thumbnail notification.
@@ -320,6 +324,12 @@ public final class Social {
 			return;
 		}
 		File dir = new File(platform.configDir().getParentFile(), "screenshots");
+		// Nothing was added since the last look: nothing to list.
+		long changed = dir.lastModified();
+		if (changed == screenshotsDirSeen) {
+			return;
+		}
+		screenshotsDirSeen = changed;
 		File[] files = dir.listFiles((d, n) -> n.toLowerCase(java.util.Locale.ROOT).endsWith(".png"));
 		if (files == null) {
 			return;
@@ -336,8 +346,16 @@ public final class Social {
 		screenshotsSeen = newest.lastModified();
 		lastScreenshot = newest;
 		try {
-			// The game may still be writing it.
-			Thread.sleep(300);
+			// The game may still be writing it: ready once its size stops changing.
+			long size = -1;
+			for (int i = 0; i < 25; i++) {
+				long now = newest.length();
+				if (now > 0 && now == size) {
+					break;
+				}
+				size = now;
+				Thread.sleep(40);
+			}
 			BufferedImage img = ImageIO.read(newest);
 			if (img == null) {
 				return;
@@ -348,15 +366,10 @@ public final class Social {
 			final File shot = newest;
 			final com.arcticlauncher.client.feature.ScreenshotCopy copier = com.arcticlauncher.client.ArcticClient.screenshotCopy();
 			if (com.arcticlauncher.client.ArcticClient.config().copyScreenshots && copier != null) {
-				// Said once the copy is done: "copied" only when it really is on the clipboard.
-				copier.copy(shot, ok -> {
-					if (ok) {
-						Notices.post("Screenshot copied", shot.getName(), "look:" + hash, thumb.getWidth(), thumb.getHeight());
-					} else {
-						Notices.post("Screenshot saved (couldn't copy it)", shot.getName(), "look:" + hash, thumb.getWidth(),
-								thumb.getHeight(), "Copy", () -> copier.copy(shot, again -> Notices.relabel("Copy", again ? "Copied" : "Failed")));
-					}
-				});
+				// The pop-up is up at once; its button says "Copying" until the picture really is
+				// on the clipboard, then "Copied" (or "Copy" to try again).
+				Notices.post("Screenshot saved", shot.getName(), "look:" + hash, thumb.getWidth(), thumb.getHeight(), "Copying...", null);
+				copier.copy(shot, ok -> Notices.relabel("Copying...", ok ? "Copied" : "Failed"));
 			} else {
 				Notices.post("Screenshot saved", shot.getName(), "look:" + hash, thumb.getWidth(), thumb.getHeight(), "Copy",
 						copier == null ? null : () -> copier.copy(shot, ok -> Notices.relabel("Copy", ok ? "Copied" : "Failed")));

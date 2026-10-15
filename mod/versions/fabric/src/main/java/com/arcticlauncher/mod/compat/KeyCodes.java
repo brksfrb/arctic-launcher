@@ -20,6 +20,11 @@ public final class KeyCodes {
 	public static final int P = InputConstants.KEY_P;
 	public static final int V = InputConstants.KEY_V;
 	public static final int A = InputConstants.KEY_A;
+	public static final int C = InputConstants.KEY_C;
+	public static final int X = InputConstants.KEY_X;
+	public static final int DELETE = InputConstants.KEY_DELETE;
+	public static final int HOME = InputConstants.KEY_HOME;
+	public static final int END = InputConstants.KEY_END;
 	public static final int LEFT = InputConstants.KEY_LEFT;
 	public static final int RIGHT = InputConstants.KEY_RIGHT;
 	public static final int UP = InputConstants.KEY_UP;
@@ -38,6 +43,11 @@ public final class KeyCodes {
 	public static final int P = 80;
 	public static final int V = 86;
 	public static final int A = 65;
+	public static final int C = 67;
+	public static final int X = 88;
+	public static final int DELETE = 261;
+	public static final int HOME = 268;
+	public static final int END = 269;
 	public static final int LEFT = 263;
 	public static final int RIGHT = 262;
 	public static final int UP = 265;

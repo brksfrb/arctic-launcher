@@ -470,6 +470,15 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean shiftDown() {
+		//#if MC >= 1.21.9
+		return mc().hasShiftDown();
+		//#else
+		return net.minecraft.client.gui.screens.Screen.hasShiftDown();
+		//#endif
+	}
+
+	@Override
 	public boolean controlDown() {
 		//#if MC >= 1.21.9
 		return mc().hasControlDown();

@@ -931,6 +931,11 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean shiftDown() {
+		return Screen.hasShiftDown();
+	}
+
+	@Override
 	public void setClipboard(String text) {
 		Screen.setClipboard(text);
 	}

@@ -40,6 +40,16 @@ public final class Input {
 				return Keys.V;
 			case com.arcticlauncher.mod.compat.KeyCodes.A:
 				return Keys.A;
+			case com.arcticlauncher.mod.compat.KeyCodes.C:
+				return Keys.C;
+			case com.arcticlauncher.mod.compat.KeyCodes.X:
+				return Keys.X;
+			case com.arcticlauncher.mod.compat.KeyCodes.DELETE:
+				return Keys.DELETE;
+			case com.arcticlauncher.mod.compat.KeyCodes.HOME:
+				return Keys.HOME;
+			case com.arcticlauncher.mod.compat.KeyCodes.END:
+				return Keys.END;
 			// The replay's controls.
 			case com.arcticlauncher.mod.compat.KeyCodes.P:
 				return Keys.P;

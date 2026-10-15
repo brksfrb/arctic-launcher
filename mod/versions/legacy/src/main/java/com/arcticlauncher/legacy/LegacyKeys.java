@@ -151,6 +151,16 @@ public final class LegacyKeys {
 				return Keys.V;
 			case Keyboard.KEY_A:
 				return Keys.A;
+			case Keyboard.KEY_C:
+				return Keys.C;
+			case Keyboard.KEY_X:
+				return Keys.X;
+			case Keyboard.KEY_DELETE:
+				return Keys.DELETE;
+			case Keyboard.KEY_HOME:
+				return Keys.HOME;
+			case Keyboard.KEY_END:
+				return Keys.END;
 			// The replay's controls.
 			case Keyboard.KEY_P:
 				return 80;

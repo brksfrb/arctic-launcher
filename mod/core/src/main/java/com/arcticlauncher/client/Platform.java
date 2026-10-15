@@ -140,6 +140,10 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	}
 
 	/** Ctrl (Cmd on macOS) is held. */
+	default boolean shiftDown() {
+		return false;
+	}
+
 	default boolean controlDown() {
 		return false;
 	}

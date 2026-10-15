@@ -90,7 +90,11 @@ final class WorldStats {
 		}
 		if (mc.getSingleplayerServer() != null) {
 			//#if MC >= 1.16
-			return "sp:" + mc.getSingleplayerServer().getWorldData().getLevelName();
+			// The save's folder, not its name: several worlds can be called "New World", and a
+			// death waypoint or marker of one must never show in another.
+			java.nio.file.Path folder = mc.getSingleplayerServer()
+					.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).normalize().getFileName();
+			return "sp:" + (folder != null ? folder.toString() : mc.getSingleplayerServer().getWorldData().getLevelName());
 			//#else
 			return "sp:" + mc.getSingleplayerServer().getLevelName();
 			//#endif
