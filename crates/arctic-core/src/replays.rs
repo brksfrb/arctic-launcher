@@ -218,7 +218,7 @@ pub fn list_videos(game_dir: &Path) -> Vec<Video> {
             })
         })
         .collect();
-    out.sort_by(|a, b| b.modified.cmp(&a.modified));
+    out.sort_by_key(|v| std::cmp::Reverse(v.modified));
     out
 }
 

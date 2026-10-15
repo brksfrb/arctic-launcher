@@ -19,7 +19,7 @@ fn desktop_folder() -> Option<PathBuf> {
     let home = std::env::var_os("USERPROFILE").map(PathBuf::from);
     let one_drive = ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"]
         .iter()
-        .filter_map(|v| std::env::var_os(v))
+        .filter_map(std::env::var_os)
         .map(|p| PathBuf::from(p).join("Desktop"));
     one_drive
         .chain(home.map(|h| h.join("Desktop")))
