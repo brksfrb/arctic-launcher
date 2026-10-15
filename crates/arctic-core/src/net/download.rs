@@ -16,6 +16,32 @@ use crate::{Error, Progress, ProgressInfo, Result};
 /// so their throughput is bounded by round trips, not bandwidth; many
 /// parallel keep-alive connections hide that latency.
 pub const WORKERS: usize = 64;
+/// Downloads at a time in gentle mode (a computer that freezes under load).
+const GENTLE_WORKERS: usize = 6;
+const GENTLE_CONNECTIONS: usize = 2;
+
+static GENTLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Download gently (few connections, for a PC that can't take a burst) from now on.
+pub fn set_gentle(on: bool) {
+    GENTLE.store(on, Ordering::Relaxed);
+}
+
+fn workers() -> usize {
+    if GENTLE.load(Ordering::Relaxed) {
+        GENTLE_WORKERS
+    } else {
+        WORKERS
+    }
+}
+
+fn connections() -> usize {
+    if GENTLE.load(Ordering::Relaxed) {
+        GENTLE_CONNECTIONS
+    } else {
+        CONNECTIONS
+    }
+}
 /// Workers that pull from the large end of the queue. Large files saturate
 /// bandwidth while everyone else chews through the small ones in parallel,
 /// so total time is roughly max(bytes / bandwidth, files / request rate).
@@ -155,7 +181,7 @@ pub fn download_all(stage: &str, jobs: Vec<DownloadJob>, progress: Progress) -> 
     let queue = Mutex::new((0usize, pending.len()));
     let first_error: Mutex<Option<Error>> = Mutex::new(None);
     std::thread::scope(|scope| {
-        for worker in 0..WORKERS.min(pending.len()) {
+        for worker in 0..workers().min(pending.len()) {
             let (queue, first_error, pending, reporter) =
                 (&queue, &first_error, &pending, &reporter);
             scope.spawn(move || {
@@ -399,7 +425,7 @@ fn download_segmented(
     let (tx, rx) = std::sync::mpsc::channel::<ChunkNews>();
     // Detached: a fetch stuck in a read can't be interrupted, and the file needn't wait for it
     // once its chunk is in (it checks before writing, and writes the same bytes anyway).
-    for _ in 0..CONNECTIONS.min(chunks.list.len()) {
+    for _ in 0..connections().min(chunks.list.len()) {
         let (chunks, tx) = (chunks.clone(), tx.clone());
         std::thread::spawn(move || {
             loop {

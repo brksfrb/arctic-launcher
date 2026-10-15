@@ -23,15 +23,32 @@ const POLL: Duration = Duration::from_millis(250);
 /// The Arctic Client's line once the loading screen is gone.
 pub const READY_MARKER: &str = "[Arctic startup]";
 
-/// Start the process above normal priority (unless `ARCTIC_GAME_PRIORITY=normal`).
+static GENTLE: AtomicBool = AtomicBool::new(false);
+
+/// Gentle mode: the starting game goes behind other programs instead of ahead of them (it
+/// still gets back to normal when it's ready), for a PC that freezes under load.
+pub fn set_gentle(on: bool) {
+    GENTLE.store(on, Ordering::Relaxed);
+}
+
+/// Start the process above normal priority (unless `ARCTIC_GAME_PRIORITY=normal`), or below it in
+/// gentle mode.
 pub fn boost(cmd: &mut Command) {
-    if std::env::var("ARCTIC_GAME_PRIORITY").is_ok_and(|v| v == "normal") {
+    let gentle = GENTLE.load(Ordering::Relaxed);
+    if !gentle && std::env::var("ARCTIC_GAME_PRIORITY").is_ok_and(|v| v == "normal") {
         return;
     }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        cmd.creation_flags(windows_sys::Win32::System::Threading::ABOVE_NORMAL_PRIORITY_CLASS);
+        use windows_sys::Win32::System::Threading::{
+            ABOVE_NORMAL_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS,
+        };
+        cmd.creation_flags(if gentle {
+            BELOW_NORMAL_PRIORITY_CLASS
+        } else {
+            ABOVE_NORMAL_PRIORITY_CLASS
+        });
     }
     #[cfg(not(windows))]
     let _ = cmd;

@@ -27,6 +27,9 @@ pub struct Settings {
     pub fullscreen: bool,
     /// Maximize the game window once it opens.
     pub game_maximized: bool,
+    /// Prepare and start the game without using everything the PC has: a few downloads at a
+    /// time and the game starting at low priority, for computers that freeze under load.
+    pub gentle_launch: bool,
     /// Extra JVM flags, whitespace separated.
     pub extra_jvm_args: String,
     /// Use this `java(w).exe` instead of a managed runtime.
@@ -242,6 +245,7 @@ impl Default for Settings {
             window_height: DEFAULT_HEIGHT,
             fullscreen: false,
             game_maximized: false,
+            gentle_launch: false,
             extra_jvm_args: String::new(),
             java_override: None,
             last_version: None,

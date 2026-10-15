@@ -349,6 +349,9 @@ fn finish_assets_later(dirs: &DataDirs, index_name: String, later: Vec<DownloadJ
 /// installer needs its client jar and Java), then the loader profile is
 /// layered on top and its extra libraries are downloaded.
 pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
+    // "Gentle launch": few downloads at a time, and the game starts behind other programs.
+    crate::net::set_gentle(req.settings.gentle_launch);
+    priority::set_gentle(req.settings.gentle_launch);
     // A proxy that is on but unusable must stop the launch: starting
     // without it would quietly connect directly.
     let proxy = ProxySettings::load(req.dirs);

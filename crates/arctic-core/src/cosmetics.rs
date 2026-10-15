@@ -526,23 +526,36 @@ pub fn token_for(dirs: &DataDirs, base: &str, account: &Account) -> Result<Strin
     {
         return Ok(token.clone());
     }
+    log::info!(
+        "Arctic sign-in for {} ({}) at {base}",
+        account.username,
+        if account.is_microsoft() {
+            "Microsoft"
+        } else {
+            "offline"
+        }
+    );
     let session = match &account.kind {
         AccountKind::Microsoft(ms) => sign_in_microsoft(
             base,
             &ms.access_token.reveal(),
             &account.uuid,
             &account.username,
-        )?,
+        )
+        .inspect_err(|e| log::warn!("Arctic sign-in for {} failed: {e}", account.username))?,
         #[cfg(any(feature = "offline-accounts", test))]
         AccountKind::Offline => {
             let key = usable_key(entry);
             // Save the key before using it, so a claimed name is never lost.
             save_json(&path, &creds)?;
-            let session = sign_in_offline(base, &account.username, &key)?;
+            let session = sign_in_offline(base, &account.username, &key).inspect_err(|e| {
+                log::warn!("Arctic sign-in for {} failed: {e}", account.username)
+            })?;
             creds = load_json(&path)?.unwrap_or_default();
             session
         }
     };
+    log::info!("Arctic sign-in for {} worked", account.username);
     let entry = creds.accounts.entry(account.uuid.clone()).or_default();
     entry.token = Some(session.token.clone());
     entry.expires = session.expires;
@@ -559,6 +572,9 @@ pub fn token_for(dirs: &DataDirs, base: &str, account: &Account) -> Result<Strin
 fn usable_key(entry: &mut Credential) -> String {
     let fine = |k: &str| (32..=128).contains(&k.len()) && k.bytes().all(|b| b.is_ascii_hexdigit());
     if !entry.key.as_deref().is_some_and(fine) {
+        log::warn!(
+            "the stored offline key can't be used (missing, empty or unreadable): making a new one"
+        );
         entry.key = Some(
             uuid::Uuid::new_v4().simple().to_string() + &uuid::Uuid::new_v4().simple().to_string(),
         );

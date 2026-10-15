@@ -103,6 +103,14 @@ impl ArcticApp {
                 );
         });
 
+        section(ui, p, "Launching", |ui| {
+            ui.checkbox(&mut s.gentle_launch, "Gentle launch")
+                .on_hover_text(
+                    "Downloads a few files at a time and starts the game at low priority, so a \
+                     computer that freezes under load stays usable. Starting takes longer.",
+                );
+        });
+
         section(ui, p, "Memory", |ui| {
             memory_slider(
                 ui,
