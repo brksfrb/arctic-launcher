@@ -177,6 +177,14 @@ public final class ClientConfig {
 	public String replayRecordKey = "key.keyboard.f10";
 	/** How far back instant 3D and video clips reach (seconds). */
 	public int clipSeconds = 30;
+	/** Chat lines the game keeps to scroll back through (the game's own is 100). */
+	public int chatHistory = 10_000;
+	/** Type ":heart:" and it sends the symbol. */
+	public boolean chatEmoji = true;
+	/** Saved chat filters (the History tab and the filtered-chat HUD widget). */
+	public java.util.List<ChatFilter> chatFilters = new java.util.ArrayList<ChatFilter>();
+	/** The filter the filtered-chat widget shows (a name from {@link #chatFilters}). */
+	public String chatFeedFilter = "";
 
 	private transient File file;
 
@@ -248,6 +256,13 @@ public final class ClientConfig {
 		}
 		if (voiceKey == null) {
 			voiceKey = "key.keyboard.v";
+		}
+		chatHistory = Math.max(100, Math.min(100_000, chatHistory));
+		if (chatFilters == null) {
+			chatFilters = new java.util.ArrayList<ChatFilter>();
+		}
+		if (chatFeedFilter == null) {
+			chatFeedFilter = "";
 		}
 		if (replayKey == null) {
 			replayKey = "key.keyboard.f9";

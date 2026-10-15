@@ -50,6 +50,7 @@ final class Widgets {
 			}
 		});
 		all.add(coords());
+		all.add(new ChatFeed());
 		all.add(direction());
 		all.add(new Speed());
 		all.add(new TextWidget("biome", "Biome", "The biome you're in", false) {

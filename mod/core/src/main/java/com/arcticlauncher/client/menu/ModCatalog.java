@@ -263,6 +263,13 @@ final class ModCatalog {
 							on -> c.chatPlaceholders = on);
 					f.note("Also: " + QuickMessages.PLACEHOLDERS);
 				}));
+		out.add(new Mod("chathistory", "Chat History", "Search every line, filters, a second chat and a longer scrollback", "search",
+				Category.CHAT, "search find filter log scrollback unlimited keyword second chat")
+				.page(ChatTab::new));
+		out.add(new Mod("emoji", "Emoji and Symbols", "Hearts, stars and arrows: pick one, or type :heart:", "chat", Category.CHAT,
+				"unicode emoji symbols heart star shortcode")
+				.toggle(() -> c.chatEmoji, on -> c.chatEmoji = on)
+				.page(EmojiTab::new));
 		out.add(new Mod("messages", "Quick Messages", "Keys that send a line or a command", "messages", Category.CHAT, "macro bind")
 				.settings(ChatForms::quickMessages));
 		out.add(new Mod("autogg", "Auto GG", "Say gg when a minigame ends", "autogg", Category.CHAT, "good game hypixel")

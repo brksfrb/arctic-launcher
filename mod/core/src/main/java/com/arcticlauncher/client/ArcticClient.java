@@ -260,6 +260,15 @@ public final class ArcticClient {
 	/** A chat line arrived (for Auto GG). */
 	public static void chatLine(String text) {
 		AUTO_GG.onChat(text, config.autoGg, config.autoGgMessage);
+		String server = platform == null ? null : platform.server();
+		CHAT_LOG.add(text, server == null || "Singleplayer".equals(server) ? "" : server);
+	}
+
+	private static final com.arcticlauncher.client.feature.ChatLog CHAT_LOG = new com.arcticlauncher.client.feature.ChatLog();
+
+	/** Every chat line since the game started, for search and filters. */
+	public static com.arcticlauncher.client.feature.ChatLog chatLog() {
+		return CHAT_LOG;
 	}
 
 	private static final com.arcticlauncher.client.feature.Stopwatch STOPWATCH = new com.arcticlauncher.client.feature.Stopwatch();

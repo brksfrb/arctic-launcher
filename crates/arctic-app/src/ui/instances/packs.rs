@@ -4,6 +4,7 @@
 use std::collections::HashSet;
 
 use arctic_core::instances::Instance;
+use arctic_core::mods::pack_groups::PackGroups;
 use arctic_core::mods::packs::{self, Pack, PackKind};
 use arctic_core::mods::{ProjectHit, SearchPage, SearchQuery, SortBy};
 use eframe::egui::{self, RichText};
@@ -31,6 +32,10 @@ pub struct PacksUi {
     showing: Option<(String, PackKind, std::path::PathBuf)>,
     rescan_at: f64,
     installed: Vec<Pack>,
+    /// The groups the packs are filed under (shared with the game).
+    groups: PackGroups,
+    /// The name being typed for a new group.
+    new_group: String,
     installing: HashSet<String>,
     typed_at: Option<f64>,
 }
@@ -46,6 +51,8 @@ impl Default for PacksUi {
             showing: None,
             rescan_at: 0.0,
             installed: Vec::new(),
+            groups: PackGroups::default(),
+            new_group: String::new(),
             installing: HashSet::new(),
             typed_at: None,
         }
@@ -111,8 +118,9 @@ impl ArcticApp {
     }
 
     fn refresh_packs(&mut self, instance: &Instance) {
-        self.inst.packs.installed =
-            packs::list(self.inst.packs.kind, &instance.game_dir(&self.dirs));
+        let game_dir = instance.game_dir(&self.dirs);
+        self.inst.packs.installed = packs::list(self.inst.packs.kind, &game_dir);
+        self.inst.packs.groups = PackGroups::load(&game_dir);
     }
 
     fn installed_packs(&mut self, ui: &mut egui::Ui, instance: &Instance) {
@@ -135,7 +143,25 @@ impl ArcticApp {
                 ui.label(RichText::new("None yet: find some below.").color(p.muted));
                 return;
             }
-            for pack in &list {
+            // Grouped packs sit together under the group's name; the rest come first.
+            let groups = self.inst.packs.groups.clone();
+            let mut ordered: Vec<&Pack> = list.iter().collect();
+            ordered.sort_by_key(|pk| {
+                groups
+                    .group_of(kind, &pk.file_name)
+                    .map(str::to_lowercase)
+                    .unwrap_or_default()
+            });
+            let mut shown_group: Option<String> = None;
+            for pack in ordered {
+                let group = groups.group_of(kind, &pack.file_name).map(str::to_owned);
+                if group != shown_group {
+                    if let Some(name) = &group {
+                        ui.add_space(4.0);
+                        ui.label(RichText::new(name).strong().color(p.accent));
+                    }
+                    shown_group = group.clone();
+                }
                 crate::widgets::row(ui, |ui| {
                     let size = if pack.size > 0 {
                         format!("{:.1} MB", pack.size as f64 / MB)
@@ -155,6 +181,7 @@ impl ArcticApp {
                                 ),
                             }
                         }
+                        self.pack_group_menu(ui, instance, kind, &game_dir, pack, group.as_deref());
                         let label = if pack.active { "On" } else { "Off" };
                         if widgets::button(ui, p, None, label, pack.active).clicked() {
                             match packs::set_active(kind, &game_dir, &pack.file_name, !pack.active)
@@ -171,6 +198,60 @@ impl ArcticApp {
                 });
             }
         });
+    }
+
+    /// "Group" on a pack's row: file it under a group, a new one, or none.
+    fn pack_group_menu(
+        &mut self,
+        ui: &mut egui::Ui,
+        instance: &Instance,
+        kind: PackKind,
+        game_dir: &std::path::Path,
+        pack: &Pack,
+        current: Option<&str>,
+    ) {
+        let mut choice: Option<Option<String>> = None;
+        let names = self.inst.packs.groups.names(kind);
+        egui::ComboBox::from_id_salt(("pack_group", &pack.file_name))
+            .selected_text(current.unwrap_or("Group"))
+            .width(110.0)
+            .show_ui(ui, |ui| {
+                if ui.selectable_label(current.is_none(), "No group").clicked() {
+                    choice = Some(None);
+                }
+                for name in &names {
+                    if ui
+                        .selectable_label(current == Some(name.as_str()), name)
+                        .clicked()
+                    {
+                        choice = Some(Some(name.clone()));
+                    }
+                }
+                ui.separator();
+                let field = ui.add(
+                    widgets::text_field(&mut self.inst.packs.new_group)
+                        .hint_text("New group…")
+                        .desired_width(120.0),
+                );
+                let typed = self.inst.packs.new_group.trim().to_owned();
+                if field.lost_focus()
+                    && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                    && !typed.is_empty()
+                {
+                    choice = Some(Some(typed));
+                    self.inst.packs.new_group.clear();
+                }
+            });
+        if let Some(group) = choice {
+            let mut groups = PackGroups::load(game_dir);
+            groups.set(kind, &pack.file_name, group.as_deref());
+            match groups.save(game_dir) {
+                Ok(()) => self.refresh_packs(instance),
+                Err(e) => self
+                    .toasts
+                    .push(Kind::Error, "Couldn't save the group", e.to_string()),
+            }
+        }
     }
 
     fn rp_search_bar(&mut self, ui: &mut egui::Ui, instance: &Instance) {

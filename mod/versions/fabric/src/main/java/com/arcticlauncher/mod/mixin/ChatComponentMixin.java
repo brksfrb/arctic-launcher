@@ -18,11 +18,18 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Constant;
+import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
-/** Chat timestamps, repeated lines stacked as "(x3)", and mentions of you marked. */
+/** Chat timestamps, repeated lines stacked as "(x3)", mentions of you marked, and a longer history. */
 @Mixin(ChatComponent.class)
 abstract class ChatComponentMixin {
+	@Unique
+	private static final int STACK_REFRESH_ALWAYS = 500;
+	@Unique
+	private static final long STACK_REFRESH_MS = 250;
+
 	@Shadow
 	@Final
 	private List<GuiMessage> allMessages;
@@ -32,6 +39,25 @@ abstract class ChatComponentMixin {
 
 	@Unique
 	private int arctic$repeats;
+
+	/** When the visible lines were last rebuilt for a stacked line (a long history makes that slow). */
+	@Unique
+	private long arctic$stackRefreshAt;
+
+	/** How many messages the chat keeps: the game's 100 become the player's setting. */
+	@ModifyConstant(
+			//#if MC >= 1.20.6
+			method = {"addMessageToDisplayQueue", "addMessageToQueue"},
+			//#elif MC >= 1.19
+			method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;ILnet/minecraft/client/GuiMessageTag;Z)V",
+			//#else
+			method = "addMessage(Lnet/minecraft/network/chat/Component;IIZ)V",
+			//#endif
+			constant = @Constant(intValue = 100))
+	private int arctic$history(int vanilla) {
+		ClientConfig c = ArcticClient.config();
+		return c == null ? vanilla : c.chatHistory;
+	}
 
 	@Shadow
 	//#if MC >= 1.20.6
@@ -69,13 +95,19 @@ abstract class ChatComponentMixin {
 			//#else
 			allMessages.remove(0);
 			//#endif
-			//#if MC >= 1.20.6
-			refreshTrimmedMessages();
-			//#elif MC >= 1.19
-			refreshTrimmedMessage();
-			//#else
-			rescaleChat();
-			//#endif
+			// Rebuilding every visible line costs time in proportion to the history: a burst of the
+			// same line rebuilds at most a few times a second (the lines catch up on the next one).
+			long now = System.currentTimeMillis();
+			if (allMessages.size() <= STACK_REFRESH_ALWAYS || now - arctic$stackRefreshAt >= STACK_REFRESH_MS) {
+				arctic$stackRefreshAt = now;
+				//#if MC >= 1.20.6
+				refreshTrimmedMessages();
+				//#elif MC >= 1.19
+				refreshTrimmedMessage();
+				//#else
+				rescaleChat();
+				//#endif
+			}
 			out = message.copy().append(com.arcticlauncher.mod.Compat.literal(" (x" + arctic$repeats + ")").withStyle(ChatFormatting.GRAY));
 		} else {
 			arctic$lastText = text;

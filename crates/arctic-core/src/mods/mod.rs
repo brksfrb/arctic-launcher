@@ -12,6 +12,7 @@ mod identify;
 mod index;
 pub mod modpack;
 mod modrinth;
+pub mod pack_groups;
 pub mod packs;
 pub mod performance;
 pub mod polarium;

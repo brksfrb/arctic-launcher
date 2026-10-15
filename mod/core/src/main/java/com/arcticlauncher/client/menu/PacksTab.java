@@ -10,6 +10,7 @@ import com.arcticlauncher.client.gfx.Draw;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.packs.PackBrowser;
 import com.arcticlauncher.client.packs.PackIcons;
+import com.arcticlauncher.client.packs.PackGroups;
 import com.arcticlauncher.client.packs.PackInfo;
 import com.arcticlauncher.client.packs.ShaderPacks;
 import com.arcticlauncher.client.style.Style;
@@ -41,6 +42,10 @@ final class PacksTab implements MenuTab {
 	private static int view;
 	private static String query = "";
 	private static boolean shader;
+	/** The group the list is narrowed to: "" = every pack, NO_GROUP = the ones in none. */
+	private static String groupFilter = "";
+	private static final String NO_GROUP = "\u0000none";
+	private static final int GROUP_W = 44;
 	private static final String[] QUERIES = {"", ""};
 	private static final int[] SORT = {0, 0}, CATEGORY = {0, 0}, DETAIL = {0, 0};
 	private static final boolean[] THIS_VERSION = {true, true};
@@ -59,6 +64,9 @@ final class PacksTab implements MenuTab {
 	private static List<String> pending;
 
 	private final TextField search = new TextField("Search Modrinth packs", MAX_QUERY, TextField.ANY);
+	/** A new group's name, typed before its first pack's Group button is clicked. */
+	private final TextField newGroup = new TextField("New group name", 24, TextField.ANY);
+	private PackGroups groups;
 	private long typedAt;
 	/** Your packs as the game has them now. */
 	private List<PackInfo> packs = new ArrayList<PackInfo>();
@@ -178,6 +186,66 @@ final class PacksTab implements MenuTab {
 		}
 	}
 
+	// ---- Groups --------------------------------------------------------------------
+
+	private String groupKind() {
+		return shader ? PackGroups.SHADER : PackGroups.RESOURCE;
+	}
+
+	/** Does a pack in {@code group} show under the chosen filter? */
+	private static boolean inFilter(String group) {
+		if (groupFilter.isEmpty()) {
+			return true;
+		}
+		return NO_GROUP.equals(groupFilter) ? group == null : groupFilter.equalsIgnoreCase(group);
+	}
+
+	/** "All, No group, each group" chips and the new-group box; returns where the list starts. */
+	private int groupBar(final Host host, int y) {
+		groups = PackGroups.load(ArcticClient.platform().configDir());
+		List<String> names = groups.names(groupKind());
+		if (!groupFilter.isEmpty() && !NO_GROUP.equals(groupFilter) && !names.contains(groupFilter)) {
+			groupFilter = "";
+		}
+		List<String> ids = new ArrayList<String>();
+		List<String> labels = new ArrayList<String>();
+		ids.add("");
+		labels.add("All");
+		if (!names.isEmpty()) {
+			ids.add(NO_GROUP);
+			labels.add("No group");
+		}
+		for (String name : names) {
+			ids.add(name);
+			labels.add(name);
+		}
+		int field = 96;
+		int room = w - field - GAP;
+		int cw = Math.max(40, Math.min(90, (room - GAP * (ids.size() - 1)) / ids.size()));
+		for (int i = 0; i < ids.size() && (i + 1) * (cw + GAP) <= room + GAP; i++) {
+			final String id = ids.get(i);
+			host.add(new Button(labels.get(i), () -> {
+				groupFilter = id;
+				resetScroll();
+				host.rebuild();
+			}).selected(groupFilter.equals(id))).bounds(x + i * (cw + GAP), y, cw, CHIP_H);
+		}
+		host.add(newGroup).bounds(x + w - field, y, field, CHIP_H);
+		return y + CHIP_H + GAP;
+	}
+
+	/** The row's Group button: moves the pack to the next group, or to the one typed in the box. */
+	private Button groupButton(final Host host, final String fileName, final String current) {
+		final String typed = newGroup.text().trim();
+		String label = typed.isEmpty() ? (current == null ? "Group" : "Next") : "Set";
+		return new Button(label, () -> {
+			String target = typed.isEmpty() ? groups.next(groupKind(), current) : typed;
+			groups.set(groupKind(), fileName, target);
+			newGroup.text("");
+			host.rebuild();
+		});
+	}
+
 	// ---- Your packs ----------------------------------------------------------------
 
 	private List<String> enabledNow() {
@@ -194,6 +262,7 @@ final class PacksTab implements MenuTab {
 		final List<String> current = enabledNow();
 		final List<String> wanted = pending != null ? pending : current;
 		boolean changed = pending != null && !pending.equals(current);
+		y = groupBar(host, y);
 		int listBottom = bottom - (changed ? BTN_H + 8 : 0);
 		Scroll scroll = currentScroll = host.scroll(x, y, x + w, listBottom);
 		// On ones in your order first, then the rest.
@@ -210,6 +279,14 @@ final class PacksTab implements MenuTab {
 				ordered.add(p);
 			}
 		}
+		// Narrowed to a group: packs without a file (the game's own) belong to none.
+		for (int i = ordered.size() - 1; i >= 0; i--) {
+			PackInfo p = ordered.get(i);
+			String group = p.file == null ? null : groups.groupOf(PackGroups.RESOURCE, p.file.getName());
+			if (!inFilter(group)) {
+				ordered.remove(i);
+			}
+		}
 		empty = ordered.isEmpty();
 		final PackIcons icons = ArcticClient.packIcons();
 		int rowW = w - 8;
@@ -217,9 +294,17 @@ final class PacksTab implements MenuTab {
 		for (final PackInfo p : ordered) {
 			final boolean on = wanted.contains(p.id);
 			final int at = wanted.indexOf(p.id);
-			int right = SWITCH_W + (on ? (ARROW_W + 2) * 2 : 0) + 4;
-			scroll.add(host.add(new PackRow(p.title, p.description.replace('\n', ' '), () -> icons.local(p.file), right, !on)
+			final String group = p.file == null ? null : groups.groupOf(PackGroups.RESOURCE, p.file.getName());
+			int arrows = on ? (ARROW_W + 2) * 2 : 0;
+			int right = SWITCH_W + arrows + (p.file == null ? 0 : GROUP_W + 2) + 4;
+			String line = (group == null ? "" : "[" + group + "] ") + p.description.replace('\n', ' ');
+			scroll.add(host.add(new PackRow(p.title, line, () -> icons.local(p.file), right, !on)
 					.bounds(x, ry, rowW, PackRow.H)));
+			if (p.file != null) {
+				int gx = x + rowW - SWITCH_W - arrows - GROUP_W - 2;
+				scroll.add(host.add(groupButton(host, p.file.getName(), group)
+						.bounds(gx, ry + (PackRow.H - BTN_H) / 2, GROUP_W, BTN_H)));
+			}
 			Toggle t = new Toggle("", null, Form.binding(() -> on, v -> {
 				List<String> next = new ArrayList<String>(wanted);
 				if (v) {
@@ -286,15 +371,25 @@ final class PacksTab implements MenuTab {
 
 	private void shaders(final Host host, int y, int bottom) {
 		ShaderPacks shaders = ArcticClient.shaders();
+		y = groupBar(host, y);
 		Scroll scroll = currentScroll = host.scroll(x, y, x + w, bottom);
 		String active = shaders.active();
-		List<java.io.File> files = shaders.installed();
+		List<java.io.File> files = new ArrayList<java.io.File>();
+		for (java.io.File candidate : shaders.installed()) {
+			if (inFilter(groups.groupOf(PackGroups.SHADER, candidate.getName()))) {
+				files.add(candidate);
+			}
+		}
 		empty = files.isEmpty();
 		for (java.io.File file : files) {
 			String name = file.getName();
 			boolean on = name.equals(active);
-			scroll.add(host.add(new PackRow(name, on ? "Active shader" : "Installed shader", () -> null, ACTION_W + 4, !on)
+			String group = groups.groupOf(PackGroups.SHADER, name);
+			String line = (group == null ? "" : "[" + group + "] ") + (on ? "Active shader" : "Installed shader");
+			scroll.add(host.add(new PackRow(name, line, () -> null, ACTION_W + GROUP_W + 8, !on)
 					.bounds(x, y, w - 8, PackRow.H)));
+			scroll.add(host.add(groupButton(host, name, group)
+					.bounds(x + w - 8 - ACTION_W - GROUP_W - 4, y + (PackRow.H - BTN_H) / 2, GROUP_W, BTN_H)));
 			scroll.add(host.add(new Button(on ? "Turn off" : "Turn on", () -> shaders.select(on ? null : name))
 					.selected(on).enabled(shaders.available() && !shaders.changing())
 					.bounds(x + w - 8 - ACTION_W, y + (PackRow.H - BTN_H) / 2, ACTION_W, BTN_H)));

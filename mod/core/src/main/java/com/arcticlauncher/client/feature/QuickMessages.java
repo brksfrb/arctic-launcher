@@ -48,10 +48,15 @@ public final class QuickMessages {
 	public static String fillTyped(String text) {
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
 		Platform platform = com.arcticlauncher.client.ArcticClient.platform();
-		if (text == null || text.indexOf('{') < 0 || c == null || !c.chatPlaceholders || platform == null) {
+		if (text == null || c == null) {
 			return text;
 		}
-		return fill(text, platform);
+		// ":heart:" and friends first, so a symbol can sit in a placeholder's line too.
+		String out = c.chatEmoji ? Emoji.expand(text) : text;
+		if (out.indexOf('{') < 0 || !c.chatPlaceholders || platform == null) {
+			return out;
+		}
+		return fill(out, platform);
 	}
 
 	/** The text with its placeholders filled in. */
