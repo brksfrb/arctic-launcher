@@ -28,6 +28,7 @@ impl ArcticApp {
         let p = self.palette();
         widgets::page_header(ui, p, "Settings", "Changes are saved automatically.");
         let mut performance = self.instance.performance;
+        let mut choose_picture = false;
         let s = &mut self.settings;
 
         section(ui, p, "Appearance", |ui| {
@@ -47,6 +48,19 @@ impl ArcticApp {
                 ui.selectable_value(&mut s.backdrop, Backdrop::Scenery, "Arctic scenery");
                 ui.selectable_value(&mut s.backdrop, Backdrop::Picture, "Your screenshot")
                     .on_hover_text("Your newest screenshot, or the version's title screen");
+                if ui
+                    .selectable_label(s.backdrop == Backdrop::Custom, "Your picture…")
+                    .on_hover_text(match &s.custom_backdrop {
+                        Some(path) => format!("Choose another picture. Now: {}", path.display()),
+                        None => "Choose a picture of your own".to_owned(),
+                    })
+                    .clicked()
+                {
+                    match &s.custom_backdrop {
+                        Some(_) if s.backdrop != Backdrop::Custom => s.backdrop = Backdrop::Custom,
+                        _ => choose_picture = true,
+                    }
+                }
             });
             ui.checkbox(&mut s.animations, "Animated background")
                 .on_hover_text("Aurora, snowfall and shooting stars. Pauses while you play.");
@@ -267,6 +281,23 @@ impl ArcticApp {
             {
                 self.start_onboarding();
             }
+            if widgets::button(ui, p, None, "Desktop shortcut", false)
+                .on_hover_text("Puts an Arctic Launcher shortcut on your desktop")
+                .clicked()
+            {
+                match crate::desktop_shortcut::create() {
+                    Ok(path) => self.toasts.push(
+                        crate::toasts::Kind::Success,
+                        "Desktop shortcut made",
+                        path.display().to_string(),
+                    ),
+                    Err(e) => self.toasts.push(
+                        crate::toasts::Kind::Error,
+                        "Couldn't make the shortcut",
+                        e,
+                    ),
+                }
+            }
             if widgets::button(ui, p, None, "Restore defaults", false).clicked() {
                 self.settings = Settings {
                     last_version: self.settings.last_version.clone(),
@@ -274,6 +305,9 @@ impl ArcticApp {
                 };
             }
         });
+        if choose_picture {
+            self.tasks.pick_backdrop();
+        }
         if performance != self.instance.performance {
             let id = self.instance.id.clone();
             if performance {

@@ -47,6 +47,10 @@ final class ReplaysTab implements MenuTab {
 	public void build(final Host host, int x, int top, int w, int bottom) {
 		final ClientConfig c = ArcticClient.config();
 		Form f = new Form(host, x, top, w, bottom);
+		f.toggle("Replay", "Instant clips, recordings and gameplay video. Off uses no CPU, memory or disk; applies from the next world join", () -> c.replayEnabled, on -> { c.replayEnabled = on; host.rebuild(); });
+		if (!c.replayEnabled) {
+			f.note("Replay is off. Saved replays below still play.");
+		}
 		f.section("Recording");
 		f.key("Save instant clip", "Saves recent gameplay video + 3D; your recording continues", Form.key(() -> c.replayKey, k -> c.replayKey = k));
 		f.key("Start / stop recording", "Begins now; saves when stopped or when you leave", Form.key(() -> c.replayRecordKey, k -> c.replayRecordKey = k));
@@ -65,10 +69,8 @@ final class ReplaysTab implements MenuTab {
 		if (Replays.liveVideo() != null) f.note(Replays.liveVideo().status());
 		f.note("F9 saves the recent video; start/stop saves the whole recording. No replay opens afterward.");
 		int videoRow = f.row(24);
-		f.put(new Button("Open videos folder", () -> {
-			try { Replays.videoFolder().mkdirs(); java.awt.Desktop.getDesktop().open(Replays.videoFolder()); }
-			catch (Exception e) { com.arcticlauncher.client.notice.Notices.post("Videos folder", Replays.videoFolder().getPath()); }
-		}), f.x, videoRow, 140, 18);
+		f.put(new Button("Open videos folder", () -> com.arcticlauncher.client.feature.FolderOpener.open(Replays.videoFolder())),
+				f.x, videoRow, 140, 18);
 		if (Replays.legacyQueuedVideos() > 0) f.note("Older clips have 3D data only. Render them explicitly from the replay editor if needed.");
 		if (Replays.liveVideo() != null && Replays.liveVideo().encoder().get() == null) {
 			int row = f.row(24);

@@ -49,6 +49,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	/** The server's address, "Singleplayer", or null outside a world. */
 	String server();
 
+	/** The multiplayer server the game is connecting to or is on (null: none, or singleplayer). */
+	default String connectingServer() {
+		return null;
+	}
+
 	/** World time in ticks (day = time / 24000), or -1 outside a world. */
 	long dayTime();
 

@@ -11,6 +11,8 @@ public final class Keys {
 	public static final int BACKSPACE = 259;
 	public static final int A = 65;
 	public static final int V = 86;
+	public static final int C = 67;
+	public static final int X = 88;
 	public static final int K = 75;
 	public static final int P = 80;
 	public static final int RIGHT = 262;

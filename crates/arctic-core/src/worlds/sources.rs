@@ -30,17 +30,49 @@ pub fn sources(dirs: &DataDirs, exclude: &Path) -> Vec<Source> {
             add(format!("{launcher}: {name}"), game_dir.join("saves"));
         }
     }
-    let mut all = instances::list_custom(dirs).unwrap_or_default();
-    if let Ok(default) = instances::load_default(dirs) {
-        all.insert(0, default);
-    }
-    for instance in all {
+    for instance in profile_instances(dirs, dirs) {
         add(
             format!("Instance: {}", instance.name),
             instance.game_dir(dirs).join("saves"),
         );
     }
+    // The other profiles' instances too, for someone who started a new profile.
+    let store = crate::storage::load_json::<crate::profiles::ProfileStore>(&dirs.profiles_file())
+        .ok()
+        .flatten();
+    for profile in store.iter().flat_map(|s| s.profiles.iter()) {
+        let other = dirs.with_profile(&profile.id);
+        if other.profile_root() == dirs.profile_root() {
+            continue;
+        }
+        // Looking at another profile must never create files in it.
+        if !other.instances().is_dir() {
+            continue;
+        }
+        for instance in profile_instances(&other, dirs) {
+            add(
+                format!("{}: {}", profile.name, instance.name),
+                instance.game_dir(&other).join("saves"),
+            );
+        }
+    }
     out
+}
+
+/// The default instance and the custom ones of the profile `dirs` is scoped to.
+fn profile_instances(dirs: &DataDirs, current: &DataDirs) -> Vec<instances::Instance> {
+    let mut all = instances::list_custom(dirs).unwrap_or_default();
+    let has_default = dirs
+        .instance_dir(instances::VANILLA_ID)
+        .join("instance.json")
+        .is_file();
+    // The profile in use makes its default when missing; another profile is only read.
+    if (has_default || dirs.profile_root() == current.profile_root())
+        && let Ok(default) = instances::load_default(dirs)
+    {
+        all.insert(0, default);
+    }
+    all
 }
 
 /// The official launcher's `.minecraft`.

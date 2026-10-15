@@ -169,6 +169,8 @@ pub enum Event {
     Screenshots(Vec<arctic_core::screenshots::Shot>),
     ScreenshotThumb(PathBuf, Outcome<Vec<u8>>),
     ScreenshotCopied(Outcome<()>),
+    /// The image chosen for the launcher's background (`None`: the dialog was closed).
+    BackdropPicked(Option<PathBuf>),
     /// The game asked to add an account (show the sign-in).
     AddAccountFromGame,
     /// The game asked to add an offline account with this name.

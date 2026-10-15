@@ -191,10 +191,17 @@ fn sync_options(
         && modified(&newest).is_some_and(|t| shared_time.is_none_or(|s| t > s))
         && let Ok(captured) = Defaults::capture(newest.parent().unwrap_or(Path::new(".")))
         && !captured.is_empty()
-        && keep_acknowledged(&known, captured.clone()).values != known.values
     {
-        known = keep_acknowledged(&known, captured);
-        crate::storage::save_json(shared, &known)?;
+        // What the newest file says wins, but a setting it doesn't have stays: an older game
+        // drops options it doesn't know (1.8.9 has no entity distance), and playing it must not
+        // reset them for every newer game.
+        let mut merged = known.clone();
+        merged.values.extend(captured.values);
+        let merged = keep_acknowledged(&known, merged);
+        if merged.values != known.values {
+            known = merged;
+            crate::storage::save_json(shared, &known)?;
+        }
     }
     let Some((game_dir, version)) = launching else {
         return Ok(());
@@ -374,5 +381,24 @@ mod tests {
         assert!(text.contains("fov:0.5"), "{text}");
         // 1.8.9 stores keys as LWJGL 2 codes.
         assert!(text.contains("key_key.jump:57"), "{text}");
+    }
+
+    #[test]
+    fn an_older_game_dropping_a_setting_does_not_reset_it_everywhere() {
+        let (_tmp, dirs, a, b) = setup();
+        let (modern, legacy) = (
+            a.game_dir(&dirs).join(OPTIONS),
+            b.game_dir(&dirs).join(OPTIONS),
+        );
+        std::fs::write(&modern, "fov:0.5\nentityDistanceScaling:2.0\n").unwrap();
+        sync(&dirs, SharedSettings::default(), None).unwrap();
+        later();
+        // 1.8.9 plays and saves a file without the option it doesn't know.
+        std::fs::write(&legacy, "fov:0.25\n").unwrap();
+        sync(&dirs, SharedSettings::default(), None).unwrap();
+        sync(&dirs, SharedSettings::default(), Some((&a, "26.1"))).unwrap();
+        let text = std::fs::read_to_string(&modern).unwrap();
+        assert!(text.contains("entityDistanceScaling:2.0"), "{text}");
+        assert!(text.contains("fov:0.25"), "{text}");
     }
 }

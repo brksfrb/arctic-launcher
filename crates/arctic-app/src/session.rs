@@ -70,11 +70,12 @@ impl ProfileData {
 /// Cached avatars for instant display; refresh stale Microsoft ones.
 fn load_faces(dirs: &DataDirs, accounts: &AccountStore, tasks: &Tasks) -> HashMap<String, Face> {
     let mut faces = HashMap::new();
-    for account in accounts.accounts.iter().filter(|a| a.is_microsoft()) {
+    for account in &accounts.accounts {
+        // Offline accounts have the face of the skin they wear (kept when it was last seen).
         if let Some(face) = avatar::cached_face(dirs, &account.uuid) {
             faces.insert(account.uuid.clone(), face);
         }
-        if avatar::needs_refresh(dirs, &account.uuid) {
+        if account.is_microsoft() && avatar::needs_refresh(dirs, &account.uuid) {
             tasks.fetch_face(account.uuid.clone());
         }
     }

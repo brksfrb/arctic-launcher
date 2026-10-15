@@ -16,6 +16,8 @@ use crate::theme;
 use crate::toasts::Kind;
 use crate::widgets;
 
+/// Most gameplay videos listed at once (the folder holds the rest).
+const MAX_VIDEOS: usize = 30;
 /// Thumbnails are 16:9.
 const THUMB: egui::Vec2 = vec2(96.0, 54.0);
 
@@ -44,6 +46,7 @@ impl ArcticApp {
             });
         });
         ui.add_space(8.0);
+        self.videos_card(ui, &game_dir);
         if list.is_empty() {
             theme::card(p).show(ui, |ui| {
                 ui.set_width(ui.available_width());
@@ -73,6 +76,81 @@ impl ArcticApp {
                 ui.add_space(4.0);
             }
         });
+    }
+
+    /// The gameplay videos (MP4) the game saved: play in the system's player, show, trash.
+    fn videos_card(&mut self, ui: &mut egui::Ui, game_dir: &std::path::Path) {
+        let p = self.palette();
+        let videos = replays::list_videos(game_dir);
+        if videos.is_empty() {
+            return;
+        }
+        theme::card(p).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(
+                RichText::new(format!("Gameplay videos ({})", videos.len()))
+                    .size(17.0)
+                    .strong()
+                    .color(p.text),
+            );
+            ui.add_space(4.0);
+            let mut trashed = false;
+            for video in videos.iter().take(MAX_VIDEOS) {
+                crate::widgets::row(ui, |ui| {
+                    ui.vertical(|ui| {
+                        let name = video
+                            .path
+                            .file_stem()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_default();
+                        ui.add(egui::Label::new(RichText::new(name).color(p.text)).truncate());
+                        ui.label(
+                            RichText::new(format!(
+                                "{} · {}",
+                                super::worlds::ago(Some(video.modified)),
+                                format_bytes(video.size)
+                            ))
+                            .small()
+                            .color(p.muted),
+                        );
+                    });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if widgets::icon_button(ui, p, Icon::Trash, "Move to trash").clicked() {
+                            match replays::trash_video(video) {
+                                Ok(()) => trashed = true,
+                                Err(e) => self.toasts.push(
+                                    Kind::Error,
+                                    "Could not move the video",
+                                    e.to_string(),
+                                ),
+                            }
+                        }
+                        if widgets::icon_button(ui, p, Icon::Folder, "Show in folder").clicked()
+                            && let Some(dir) = video.path.parent()
+                        {
+                            let _ = open::that_detached(dir);
+                        }
+                        if widgets::button(ui, p, Some(Icon::Play), "Play", true).clicked() {
+                            let _ = open::that_detached(&video.path);
+                        }
+                    });
+                });
+                ui.add_space(4.0);
+            }
+            if videos.len() > MAX_VIDEOS {
+                ui.label(
+                    RichText::new(format!(
+                        "The newest {MAX_VIDEOS} are shown; the rest are in the folder."
+                    ))
+                    .small()
+                    .color(p.muted),
+                );
+            }
+            if trashed {
+                ui.ctx().request_repaint();
+            }
+        });
+        ui.add_space(8.0);
     }
 
     fn replay_row(&mut self, ui: &mut egui::Ui, instance: &Instance, replay: &Replay) {

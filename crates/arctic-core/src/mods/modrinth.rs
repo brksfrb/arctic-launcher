@@ -188,10 +188,13 @@ pub(super) fn pick_version<'a>(
 }
 
 /// Loaders whose mods run on `loader`. Quilt loads Fabric mods, which is
-/// also what Modrinth's own app assumes.
-pub(super) fn compatible_loaders(loader: LoaderKind) -> Vec<&'static str> {
+/// also what Modrinth's own app assumes. Fabric before 1.14 is Legacy Fabric, whose mods
+/// Modrinth files under "legacy-fabric" (Legacy OptiFabric, say).
+pub(super) fn compatible_loaders(loader: LoaderKind, game: &str) -> Vec<&'static str> {
+    let legacy = crate::loaders::is_legacy_fabric(game.trim());
     match loader {
         LoaderKind::Quilt => vec!["quilt", "fabric"],
+        LoaderKind::Fabric if legacy => vec!["fabric", "legacy-fabric"],
         other => vec![other.modrinth_id()],
     }
 }
@@ -232,7 +235,7 @@ fn search_facets(query: &SearchQuery) -> String {
         facets.push(vec![format!("versions:{}", query.game_version.trim())]);
     }
     if let Some(loader) = query.loader {
-        let any_of = compatible_loaders(loader)
+        let any_of = compatible_loaders(loader, &query.game_version)
             .into_iter()
             .map(|l| format!("categories:{l}"))
             .collect();

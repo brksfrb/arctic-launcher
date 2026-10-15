@@ -129,7 +129,7 @@ public final class Replays {
 		if (viewer != null) {
 			viewer.screenOpen(screenOpen);
 		} else {
-			if (!screenOpen && platform.inWorld()) {
+			if (!screenOpen && platform.inWorld() && ArcticClient.config().replayEnabled) {
 				if (save && !saveKeyWasDown) saveMoment();
 				// A duplicate binding performs one predictable action, never both.
 				if (record && !recordKeyWasDown && !ArcticClient.config().replayRecordKey.equals(ArcticClient.config().replayKey)) toggleRecording();
@@ -315,7 +315,7 @@ public final class Replays {
 		if (liveVideo != null && platform != null && ArcticClient.config() != null) {
 			com.arcticlauncher.client.config.ClientConfig c = ArcticClient.config();
 			liveVideo.frame(recorder == null ? null : recorder.current(), backend, viewer == null && platform.inWorld(),
-					c.replayVideoEnabled, c.replayVideoHeight, c.replayVideoFps, c.clipSeconds);
+					c.replayEnabled && c.replayVideoEnabled, c.replayVideoHeight, c.replayVideoFps, c.clipSeconds);
 		}
 	}
 

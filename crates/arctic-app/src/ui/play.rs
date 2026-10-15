@@ -42,6 +42,13 @@ impl ArcticApp {
                 self.instance_switcher(ui, &instance);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     self.account_chip(ui);
+                    ui.add_space(4.0);
+                    if widgets::icon_button(ui, p, Icon::Gear, "Instance settings").clicked() {
+                        let now = ui.input(|i| i.time);
+                        self.set_tab(Tab::Instances, now);
+                        self.open_instance(&instance.id);
+                        self.inst.page = crate::ui::InstancePage::Settings;
+                    }
                 });
             });
             ui.add_space(12.0);

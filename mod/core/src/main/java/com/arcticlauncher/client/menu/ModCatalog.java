@@ -18,8 +18,6 @@ final class ModCatalog {
 	/** Unset, the pointer takes the menu's accent color. */
 	private static final int[] POINTER_COLORS = {0xFF7DD3FC, 0xFFFFFFFF, 0xFF86EFAC, 0xFFFDE047, 0xFFF87171, 0xFFE879F9};
 	private static final int[] HIT_COLORS = {0xFFFFFFFF, 0xFF7DD3FC, 0xFF86EFAC, 0xFFFDE047, 0xFFF97316, 0xFFE879F9};
-	private static final String[] ZOOM_FEEL = {"Slower", "Slow", "Normal", "Fast"};
-	private static final int[] ZOOM_FEEL_PERCENT = {50, 75, 100, 150};
 	private static final String[] TIMES = {"Day", "Noon", "Sunset", "Night", "Midnight"};
 	private static final int[] TIME_TICKS = {1000, 6000, 12500, 13500, 18000};
 	private static final String[] WIDTHS = {"Thin", "Normal", "Thick"};
@@ -43,7 +41,7 @@ final class ModCatalog {
 		out.add(hudStyle(c));
 		for (final HudWidget w : ArcticClient.hud().widgets()) {
 			final HudSlot slot = ArcticClient.hud().slot(w);
-			Mod m = new Mod("hud." + w.id, w.name, w.description, w.id, Category.HUD, "hud widget")
+			Mod m = new Mod("hud." + w.id, w.name, w.description, w.id, Category.HUD, "hud widget" + widgetKeywords(w.id))
 					// Where it was placed is kept while it's off.
 					.toggle(() -> slot.enabled, on -> slot.enabled = on)
 					.settings((host, f) -> {
@@ -86,8 +84,7 @@ final class ModCatalog {
 					f.section("Feel");
 					f.toggle("Smooth camera while zoomed", "Like OptiFine's zoom: the view glides instead of snapping",
 							() -> c.zoomSmoothCamera, on -> c.zoomSmoothCamera = on);
-					f.choice("Zoom sensitivity", ZOOM_FEEL, () -> indexOf(ZOOM_FEEL_PERCENT, c.zoomSensitivity),
-							i -> c.zoomSensitivity = ZOOM_FEEL_PERCENT[i]);
+					f.stepper("Zoom sensitivity", () -> c.zoomSensitivity, v -> c.zoomSensitivity = (int) v, 10, 200, 5, "%.0f%%");
 				}));
 		out.add(new Mod("freelook", "Freelook", "Hold a key to look around without turning", "freelook", Category.GAMEPLAY, "perspective 360")
 				.toggle(() -> c.freelookEnabled, on -> c.freelookEnabled = on)
@@ -142,12 +139,20 @@ final class ModCatalog {
 					f.section("Reconnect");
 					String[] delays = new String[com.arcticlauncher.client.servers.DisconnectedPage.DELAYS.length];
 					for (int i = 0; i < delays.length; i++) {
-						delays[i] = com.arcticlauncher.client.servers.DisconnectedPage.DELAYS[i] + " s";
+						delays[i] = com.arcticlauncher.client.servers.DisconnectedPage.duration(com.arcticlauncher.client.servers.DisconnectedPage.DELAYS[i]);
 					}
 					f.choice("Wait before rejoining", delays,
-							() -> Math.max(0, indexOf(com.arcticlauncher.client.servers.DisconnectedPage.DELAYS, c.reconnectSeconds)),
-							i -> c.reconnectSeconds = com.arcticlauncher.client.servers.DisconnectedPage.DELAYS[i]);
-					f.note("It gives up after 5 tries in a row. The Reconnect button is there either way.");
+							() -> Math.max(0, indexOf(com.arcticlauncher.client.servers.DisconnectedPage.DELAYS, c.reconnectDelayMillis())),
+							i -> c.reconnectMillis = com.arcticlauncher.client.servers.DisconnectedPage.DELAYS[i]);
+					int[] tryChoices = com.arcticlauncher.client.servers.DisconnectedPage.TRIES;
+					String[] tries = new String[tryChoices.length];
+					for (int i = 0; i < tries.length; i++) {
+						tries[i] = tryChoices[i] + (tryChoices[i] == 1 ? " try" : " tries");
+					}
+					f.choice("Give up after", tries,
+							() -> Math.max(0, indexOf(tryChoices, c.reconnectTries)),
+							i -> c.reconnectTries = tryChoices[i]);
+					f.note("The Reconnect button is there either way. Playing for a minute resets the count.");
 				}));
 	}
 
@@ -356,6 +361,18 @@ final class ModCatalog {
 			out[i] = values[i] + unit;
 		}
 		return out;
+	}
+
+	/** Other words a player might search a widget by. */
+	private static String widgetKeywords(String id) {
+		switch (id) {
+			case "effects": return " potion potions status buff buffs debuff";
+			case "armor": return " durability gear";
+			case "keystrokes": return " wasd keys cps";
+			case "arrows": return " bow ammo";
+			case "bossbar": return " boss bar dragon wither";
+			default: return "";
+		}
 	}
 
 	private static int indexOf(int[] values, int v) {

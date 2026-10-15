@@ -33,12 +33,16 @@ impl WorldBackdrop {
         dirs: &DataDirs,
         game_dir: PathBuf,
         version: Option<String>,
+        custom: Option<PathBuf>,
     ) {
-        let key = format!(
-            "{}|{}",
-            game_dir.display(),
-            version.as_deref().unwrap_or("")
-        );
+        let key = match &custom {
+            Some(path) => format!("custom|{}", path.display()),
+            None => format!(
+                "{}|{}",
+                game_dir.display(),
+                version.as_deref().unwrap_or("")
+            ),
+        };
         if key == self.key {
             self.poll(ctx);
             return;
@@ -50,8 +54,13 @@ impl WorldBackdrop {
         let dirs = dirs.clone();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
-            let image = arctic_core::screenshots::backdrop(&dirs, &game_dir, version.as_deref())
-                .and_then(|(bytes, panorama)| prepare(&bytes, panorama));
+            let image = match custom {
+                Some(path) => std::fs::read(path)
+                    .ok()
+                    .and_then(|bytes| prepare(&bytes, false)),
+                None => arctic_core::screenshots::backdrop(&dirs, &game_dir, version.as_deref())
+                    .and_then(|(bytes, panorama)| prepare(&bytes, panorama)),
+            };
             let _ = tx.send(image);
             ctx.request_repaint();
         });

@@ -21,7 +21,11 @@ impl ArcticApp {
         let now = ctx.input(|i| i.time);
         let backdrop = ctx.layer_painter(egui::LayerId::background());
         let mut painted = false;
-        if self.settings.backdrop == arctic_core::settings::Backdrop::Picture {
+        use arctic_core::settings::Backdrop;
+        let custom = (self.settings.backdrop == Backdrop::Custom)
+            .then(|| self.settings.custom_backdrop.clone())
+            .flatten();
+        if self.settings.backdrop == Backdrop::Picture || custom.is_some() {
             let instance = self.selected_instance();
             let game_dir = instance.game_dir(&self.dirs);
             let version = instance
@@ -29,7 +33,7 @@ impl ArcticApp {
                 .clone()
                 .or_else(|| self.settings.last_version.clone());
             self.world_backdrop
-                .want(&ctx, &self.dirs, game_dir, version);
+                .want(&ctx, &self.dirs, game_dir, version, custom);
             if !self.world_backdrop.missing() {
                 self.world_backdrop
                     .paint(&backdrop, ctx.content_rect(), p.bg);

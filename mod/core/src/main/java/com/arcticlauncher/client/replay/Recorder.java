@@ -104,6 +104,10 @@ public final class Recorder {
 	/** Always retain the login/bootstrap, so F9 and F10 can be used without reconnecting. */
 	public synchronized Take begin(String server, boolean singleplayer, int protocol, String mcVersion) {
 		if (current != null) current.end();
+		if (com.arcticlauncher.client.ArcticClient.config() != null && !com.arcticlauncher.client.ArcticClient.config().replayEnabled) {
+			current = null;
+			return null;
+		}
 		Take take = new Take(server, singleplayer, protocol, mcVersion);
 		current = take;
 		tasks.add(() -> {

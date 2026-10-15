@@ -11,6 +11,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 mod fabric_like;
+pub use fabric_like::is_legacy_fabric;
 mod forge;
 mod forge_meta;
 mod installer;

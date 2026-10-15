@@ -136,7 +136,7 @@ pub struct ArcticApp {
     pub(crate) voice: crate::voice::VoiceHub,
     pub(crate) voice_ui: crate::ui::VoiceSettingsUi,
     pub(crate) accounts: AccountStore,
-    faces: HashMap<String, Face>,
+    pub(crate) faces: HashMap<String, Face>,
     pub(crate) instance: Instance,
     pub(crate) custom_instances: Vec<Instance>,
     pub(crate) manifest: ManifestState,
@@ -885,6 +885,13 @@ impl ArcticApp {
             Event::Screenshots(list) => self.on_screenshot_list(list),
             Event::ScreenshotThumb(path, result) => self.on_screenshot_thumb(ctx, path, result),
             Event::ScreenshotCopied(result) => self.on_screenshot_copied(result),
+            Event::BackdropPicked(picked) => {
+                if let Some(path) = picked {
+                    self.settings.custom_backdrop = Some(path);
+                    self.settings.backdrop = arctic_core::settings::Backdrop::Custom;
+                    self.persist_settings();
+                }
+            }
             Event::WearSkinFromGame(id) => self.wear_skin_from_game(id),
             Event::AddAccountFromGame => {
                 // Straight to Microsoft's sign-in in the browser; the game

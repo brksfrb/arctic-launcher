@@ -186,10 +186,79 @@ pub fn trash(replay: &Replay) -> Result<()> {
     Ok(())
 }
 
+/// Where the Arctic Client keeps gameplay videos (MP4), in a game folder.
+pub const VIDEO_FOLDER: &str = "replay_videos";
+
+/// A gameplay video the Arctic Client saved.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Video {
+    pub path: PathBuf,
+    pub size: u64,
+    pub modified: std::time::SystemTime,
+}
+
+/// The saved gameplay videos of a game folder, newest first.
+pub fn list_videos(game_dir: &Path) -> Vec<Video> {
+    let Ok(entries) = fs::read_dir(game_dir.join(VIDEO_FOLDER)) else {
+        return Vec::new();
+    };
+    let mut out: Vec<Video> = entries
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path()
+                .extension()
+                .is_some_and(|x| x.eq_ignore_ascii_case("mp4"))
+        })
+        .filter_map(|e| {
+            let meta = e.metadata().ok().filter(|m| m.is_file())?;
+            Some(Video {
+                path: e.path(),
+                size: meta.len(),
+                modified: meta.modified().ok()?,
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| b.modified.cmp(&a.modified));
+    out
+}
+
+/// Move a video to the folder's `.trash` (nothing is deleted).
+pub fn trash_video(video: &Video) -> Result<()> {
+    let dir = video
+        .path
+        .parent()
+        .map(|p| p.join(TRASH))
+        .ok_or_else(|| Error::Other("video has no folder".into()))?;
+    fs::create_dir_all(&dir).at(&dir)?;
+    let to = dir.join(video.path.file_name().unwrap_or_default());
+    fs::rename(&video.path, &to).at(&to)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn videos_are_listed_newest_first_and_trashed_not_deleted() {
+        let dir = tempfile::tempdir().unwrap();
+        let videos = dir.path().join(VIDEO_FOLDER);
+        fs::create_dir_all(&videos).unwrap();
+        fs::write(videos.join("old.mp4"), b"a").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        fs::write(videos.join("new.MP4"), b"bb").unwrap();
+        fs::write(videos.join("notes.txt"), b"x").unwrap();
+        let list = list_videos(dir.path());
+        let names: Vec<_> = list
+            .iter()
+            .map(|v| v.path.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["new.MP4", "old.mp4"]);
+        trash_video(&list[0]).unwrap();
+        assert!(videos.join(TRASH).join("new.MP4").is_file());
+        assert_eq!(list_videos(dir.path()).len(), 1);
+    }
 
     #[test]
     fn leftover_recordings_are_cleared() {

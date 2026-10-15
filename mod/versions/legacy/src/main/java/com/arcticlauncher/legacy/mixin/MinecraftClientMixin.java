@@ -28,6 +28,13 @@ abstract class MinecraftClientMixin {
 		com.arcticlauncher.legacy.ServerMenus.tick();
 	}
 
+	@Inject(method = "setScreen", at = @At("HEAD"), cancellable = true)
+	private void arctic$serverMenus(Screen screen, CallbackInfo ci) {
+		if (com.arcticlauncher.legacy.ServerMenus.intercept(screen)) {
+			ci.cancel();
+		}
+	}
+
 	@ModifyVariable(method = "setScreen", at = @At("HEAD"), argsOnly = true)
 	private Screen arctic$title(Screen screen) {
 		if (screen instanceof net.minecraft.client.gui.screen.GameMenuScreen && com.arcticlauncher.client.replay.Replays.watching()) {

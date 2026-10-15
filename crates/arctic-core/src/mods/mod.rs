@@ -146,7 +146,7 @@ pub fn install(
     progress: Progress,
 ) -> Result<Vec<InstalledMod>> {
     progress(ProgressInfo::stage("Resolving dependencies"));
-    let loaders = modrinth::compatible_loaders(loader);
+    let loaders = modrinth::compatible_loaders(loader, game_version);
     let target = Target {
         loaders: &loaders,
         game_version,
@@ -235,7 +235,7 @@ fn plan_many(
     current: &ModIndex,
     mods_dir: &Path,
 ) -> (Vec<Planned>, Vec<Failed>) {
-    let loaders = modrinth::compatible_loaders(loader);
+    let loaders = modrinth::compatible_loaders(loader, game_version);
     let target = Target {
         loaders: &loaders,
         game_version,

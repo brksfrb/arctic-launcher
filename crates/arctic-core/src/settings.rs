@@ -63,6 +63,8 @@ pub struct Settings {
     pub theme: ThemeMode,
     /// What's behind the launcher.
     pub backdrop: Backdrop,
+    /// The image used when the backdrop is [`Backdrop::Custom`].
+    pub custom_backdrop: Option<PathBuf>,
     pub on_game_start: GameStartAction,
     /// What happens to a crash report when the game crashes.
     pub crash_reports: CrashReports,
@@ -214,6 +216,8 @@ pub enum Backdrop {
     /// Your own Minecraft: the newest screenshot from the instance, or the
     /// title screen panorama of its version, dimmed.
     Picture,
+    /// An image the player chose ([`Settings::custom_backdrop`]), dimmed like the screenshot.
+    Custom,
 }
 
 /// Launcher color theme.
@@ -256,6 +260,7 @@ impl Default for Settings {
             start_maximized: false,
             theme: ThemeMode::Default,
             backdrop: Backdrop::Scenery,
+            custom_backdrop: None,
             on_game_start: GameStartAction::KeepOpen,
             crash_reports: CrashReports::Ask,
             discord_presence: true,

@@ -45,12 +45,7 @@ final class CrosshairTab implements MenuTab {
 		if ("image".equals(c.style)) {
 			int row = f.row(BTN_H + 4);
 			f.put(new Button("Open the folder for " + CrosshairConfig.IMAGE_FILE, () -> {
-				java.io.File file = Crosshair.imageFile();
-				try {
-					java.awt.Desktop.getDesktop().open(file.getParentFile());
-				} catch (Exception e) {
-					com.arcticlauncher.client.notice.Notices.post("Couldn't open the folder", file.getParent());
-				}
+				com.arcticlauncher.client.feature.FolderOpener.open(Crosshair.imageFile().getParentFile());
 			}), f.x, row, f.w, BTN_H);
 		}
 		f.stepper("Size", () -> c.size, v -> c.size = (int) v, 1, 12, 1, "%.0f");

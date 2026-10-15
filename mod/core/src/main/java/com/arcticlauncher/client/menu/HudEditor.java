@@ -343,7 +343,9 @@ public final class HudEditor extends Page {
 	private void hide(HudWidget w) {
 		HudSlot slot = ArcticClient.hud().slot(w);
 		slot.enabled = false;
-		// Where it was placed is kept, for when it's shown again.
+		// It was dropped on the bar, so that spot is under the bar: showing it again lays it out
+		// where it would have gone, never back under the bar where it can't be grabbed.
+		slot.placed = false;
 		ArcticClient.saveConfig();
 	}
 

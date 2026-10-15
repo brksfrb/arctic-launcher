@@ -255,6 +255,12 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public String connectingServer() {
+		Minecraft mc = mc();
+		return mc.hasSingleplayerServer() || mc.getCurrentServer() == null ? null : mc.getCurrentServer().ip;
+	}
+
+	@Override
 	public String server() {
 		Minecraft mc = mc();
 		if (mc.level == null) {
@@ -763,18 +769,18 @@ final class FabricPlatform implements Platform {
 						: net.minecraft.client.multiplayer.ServerData.ServerPackStatus.DISABLED);
 			}
 			//#if MC < 1.17
-			mc.setScreen(new net.minecraft.client.gui.screens.ConnectScreen(new net.minecraft.client.gui.screens.TitleScreen(), mc, data));
+			mc.setScreen(new net.minecraft.client.gui.screens.ConnectScreen(new net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen(new net.minecraft.client.gui.screens.TitleScreen()), mc, data));
 			//#elif MC < 1.20
-			net.minecraft.client.gui.screens.ConnectScreen.startConnecting(new net.minecraft.client.gui.screens.TitleScreen(), mc,
+			net.minecraft.client.gui.screens.ConnectScreen.startConnecting(new net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen(new net.minecraft.client.gui.screens.TitleScreen()), mc,
 					net.minecraft.client.multiplayer.resolver.ServerAddress.parseString(address), data);
 			//#elif MC >= 1.20.6
 			net.minecraft.client.gui.screens.ConnectScreen.startConnecting(
-					new net.minecraft.client.gui.screens.TitleScreen(), mc,
+					new net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen(new net.minecraft.client.gui.screens.TitleScreen()), mc,
 					net.minecraft.client.multiplayer.resolver.ServerAddress.parseString(address), data, false, null);
 			//#else
 			// Before 1.20.6 startConnecting had no trailing TransferState parameter.
 			net.minecraft.client.gui.screens.ConnectScreen.startConnecting(
-					new net.minecraft.client.gui.screens.TitleScreen(), mc,
+					new net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen(new net.minecraft.client.gui.screens.TitleScreen()), mc,
 					net.minecraft.client.multiplayer.resolver.ServerAddress.parseString(address), data, false);
 			//#endif
 		});

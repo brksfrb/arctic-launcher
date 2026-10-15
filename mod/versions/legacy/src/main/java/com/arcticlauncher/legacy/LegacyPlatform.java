@@ -272,6 +272,12 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public String connectingServer() {
+		MinecraftClient mc = mc();
+		return mc.isInSingleplayer() || mc.getCurrentServerEntry() == null ? null : mc.getCurrentServerEntry().address;
+	}
+
+	@Override
 	public String server() {
 		MinecraftClient mc = mc();
 		if (mc.world == null) {
@@ -1096,7 +1102,7 @@ public final class LegacyPlatform implements Platform {
 			if (acceptPacks != null) {
 				server.setResourcePackState(acceptPacks ? ServerInfo.ResourcePackState.ENABLED : ServerInfo.ResourcePackState.DISABLED);
 			}
-			mc.setScreen(new ConnectScreen(new TitleScreen(), mc, server));
+			mc.setScreen(new ConnectScreen(new MultiplayerScreen(new TitleScreen()), mc, server));
 		});
 		return true;
 	}

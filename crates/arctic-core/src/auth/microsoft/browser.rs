@@ -20,9 +20,33 @@ use crate::{Error, Result};
 
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const ACCEPT_POLL: Duration = Duration::from_millis(100);
-const DONE_PAGE: &str = "<!doctype html><html><head><meta charset=\"utf-8\"><title>Arctic Launcher</title></head>\
-<body style=\"font-family:sans-serif;background:#0b1320;color:#e6f1ff;text-align:center;padding-top:15vh\">\
-<h2>You can close this tab and return to Arctic Launcher.</h2></body></html>";
+/// What the browser shows after signing in: self-contained (it's served from a loopback
+/// port, with nothing else to load), dark, matching the launcher's look.
+const DONE_PAGE: &str = concat!(
+    "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">",
+    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
+    "<title>Signed in - Arctic Launcher</title><style>",
+    "*{box-sizing:border-box}html,body{height:100%;margin:0}",
+    "body{display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;",
+    "color:#e6f1ff;background:radial-gradient(120% 90% at 50% 0%,#14304d 0%,#0b1320 55%,#070c16 100%)}",
+    ".card{width:min(420px,calc(100vw - 32px));padding:40px 32px 32px;text-align:center;border-radius:20px;",
+    "background:rgba(255,255,255,.04);border:1px solid rgba(125,211,252,.18);",
+    "box-shadow:0 24px 80px rgba(2,8,20,.55)}",
+    ".flake{width:64px;height:64px;margin:0 auto 20px;color:#7dd3fc}",
+    ".tick{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;",
+    "background:#22c55e;color:#04210f;font-weight:700;margin-bottom:14px}",
+    "h1{font-size:22px;margin:0 0 8px;font-weight:650}p{margin:0;color:#9fb6d3;line-height:1.5;font-size:15px}",
+    ".fine{margin-top:24px;font-size:12px;color:#5f7794}",
+    "</style></head><body><main class=\"card\">",
+    "<svg class=\"flake\" viewBox=\"0 0 64 64\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\">",
+    "<path d=\"M32 6v52M9.5 19l45 26M54.5 19l-45 26\"/>",
+    "<path d=\"M26 10l6 6 6-6M26 54l6-6 6 6M6 27l8.5 2.3-2.3 8.5M58 37l-8.5-2.3 2.3-8.5M6 37l8.5-2.3-2.3-8.5M58 27l-8.5 2.3 2.3 8.5\"/>",
+    "</svg><div class=\"tick\">&#10003;</div>",
+    "<h1>You're signed in</h1>",
+    "<p>You can close this tab and go back to Arctic Launcher.</p>",
+    "<p class=\"fine\">Arctic Launcher</p>",
+    "</main></body></html>"
+);
 
 pub(super) fn authorize(cfg: &MsaConfig, cancel: &AtomicBool) -> Result<MsaTokens> {
     let v4 = TcpListener::bind("127.0.0.1:0")

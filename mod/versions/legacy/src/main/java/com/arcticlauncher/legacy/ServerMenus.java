@@ -29,6 +29,15 @@ public final class ServerMenus {
 				&& !VANILLA.contains(screen);
 	}
 
+	/** A native screen is about to open: Arctic's takes its place without the native one showing first. */
+	public static boolean intercept(Screen screen) {
+		if (!prefersArctic(screen)) {
+			return false;
+		}
+		open(screen);
+		return true;
+	}
+
 	/** Closing Right Shift must restore the selected browser, without a native-screen flash. */
 	public static void returnTo(Screen screen) {
 		if (prefersArctic(screen)) open(screen);

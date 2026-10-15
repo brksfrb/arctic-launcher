@@ -216,10 +216,12 @@ fn console<'a>(
                 return;
             }
             let row_height = ui.text_style_height(&TextStyle::Monospace);
-            egui::ScrollArea::both()
+            // Holding the mouse down (selecting) stops the view snapping back to new lines.
+            let selecting = ui.input(|i| i.pointer.primary_down());
+            let area = egui::ScrollArea::both()
                 .auto_shrink(false)
                 .max_height(height)
-                .stick_to_bottom(follow)
+                .stick_to_bottom(follow && !selecting)
                 .show_rows(ui, row_height, indices.len(), |ui, range| {
                     for l in indices[range].iter().filter_map(|&i| line(i)) {
                         let color = match l.level {
@@ -234,5 +236,17 @@ fn console<'a>(
                         );
                     }
                 });
+            // Dragging a selection past the top or bottom edge scrolls on, faster the further out.
+            if selecting
+                && let Some(pointer) = ui.input(|i| i.pointer.interact_pos())
+                && area.inner_rect.x_range().contains(pointer.x)
+            {
+                let above = (area.inner_rect.top() - pointer.y).clamp(0.0, 60.0);
+                let below = (pointer.y - area.inner_rect.bottom()).clamp(0.0, 60.0);
+                if above > 0.0 || below > 0.0 {
+                    ui.scroll_with_delta(egui::vec2(0.0, (above - below) * 0.6));
+                    ui.ctx().request_repaint();
+                }
+            }
         });
 }

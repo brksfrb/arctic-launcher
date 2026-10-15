@@ -17,10 +17,10 @@ import java.util.List;
  * auto-reconnect on (Arctic → Reconnect), it joins again after a countdown, a few times at most.
  */
 public final class DisconnectedPage extends Page {
-	/** Seconds the auto-reconnect countdown can be set to. */
-	public static final int[] DELAYS = {3, 5, 10, 30, 60};
-	/** Tries in a row before auto-reconnect gives up (a server that keeps refusing). */
-	private static final int MAX_TRIES = 5;
+	/** Milliseconds the auto-reconnect countdown can be set to. */
+	public static final int[] DELAYS = {100, 250, 500, 1000, 2000, 3000, 5000, 10000, 30000, 60000};
+	/** Tries in a row auto-reconnect can be set to give up after (a server that keeps refusing). */
+	public static final int[] TRIES = {1, 2, 3, 5, 10, 20, 50};
 	/** Playing this long resets the count of tries. */
 	private static final long PLAYED_MS = 60_000;
 	private static final int BUTTON_W = 200;
@@ -63,6 +63,13 @@ public final class DisconnectedPage extends Page {
 	/** Every tick: remember where you are, so a disconnect knows where to go back. */
 	public static void tick(Platform p) {
 		String server = p.inWorld() ? p.server() : null;
+		if (server == null) {
+			// Still joining (or kicked on the way in): that's the server to come back to.
+			String joining = p.connectingServer();
+			if (joining != null && !joining.isEmpty()) {
+				lastServer = joining;
+			}
+		}
 		if (server == null || "Singleplayer".equals(server)) {
 			inWorldSince = 0;
 			return;
@@ -82,16 +89,35 @@ public final class DisconnectedPage extends Page {
 
 	public boolean autoOn() {
 		ClientConfig c = ArcticClient.config();
-		return c.autoReconnect && address != null && !cancelled && tries < MAX_TRIES;
+		return c.autoReconnect && address != null && !cancelled && tries < maxTries();
+	}
+
+	private static int maxTries() {
+		return Math.max(1, ArcticClient.config().reconnectTries);
+	}
+
+	/** "1.5 s", "250 ms": a wait or countdown. */
+	public static String duration(long millis) {
+		if (millis < 1000) {
+			return millis + " ms";
+		}
+		return millis % 1000 == 0 ? (millis / 1000) + " s" : String.format(java.util.Locale.ROOT, "%.1f s", millis / 1000.0);
 	}
 
 	public boolean canReconnect() { return address != null; }
 	public void cancelReconnect() { cancelled = true; }
-	public long secondsLeft() { return Math.max(0, (deadline() - System.currentTimeMillis() + 999) / 1000); }
-	public void tickReconnect() { if (autoOn() && secondsLeft() == 0) { cancelled = true; reconnect(); } }
+	/** Whole seconds left, rounded up (0 once it's time). */
+	public long secondsLeft() { return Math.max(0, (millisLeft() + 999) / 1000); }
+	/** What the countdown says on a button: "Reconnect 4s", or milliseconds under a second. */
+	public String countdown() { return millisLeft() < 1000 ? millisLeft() + "ms" : secondsLeft() + "s"; }
+	public void tickReconnect() { if (autoOn() && millisLeft() == 0) { cancelled = true; reconnect(); } }
+
+	private long millisLeft() {
+		return Math.max(0, deadline() - System.currentTimeMillis());
+	}
 
 	private long deadline() {
-		return shownAt + ArcticClient.config().reconnectSeconds * 1000L;
+		return shownAt + ArcticClient.config().reconnectDelayMillis();
 	}
 
 	@Override
@@ -192,9 +218,9 @@ public final class DisconnectedPage extends Page {
 				reconnect();
 				return;
 			}
-			String text = "Reconnecting in " + (left + 999) / 1000 + " s…";
+			String text = "Reconnecting in " + (left < 1000 ? left + " ms" : (left + 999) / 1000 + " s") + "…";
 			if (tries > 0) {
-				text += " (try " + (tries + 1) + " of " + MAX_TRIES + ")";
+				text += " (try " + (tries + 1) + " of " + maxTries() + ")";
 			}
 			Draw.centered(g, text, width / 2, at[3], s.accent, false);
 		}

@@ -673,6 +673,29 @@ impl ArcticApp {
 
     /// A load or save came back: show the server's look, or send the change
     /// that was queued meanwhile.
+    /// An offline account's avatar is the face of the skin it wears (Microsoft accounts get theirs
+    /// from Mojang).
+    fn update_offline_face(&mut self, account_id: &str, state: &ArcticState) {
+        let Some(account) = self
+            .accounts
+            .accounts
+            .iter()
+            .find(|a| a.id == account_id && !a.is_microsoft())
+        else {
+            return;
+        };
+        let Some(png) = state.look.skin.as_deref().and_then(|h| state.png(h)) else {
+            return;
+        };
+        match arctic_core::auth::avatar::face_from_skin(png) {
+            Ok(face) => {
+                arctic_core::auth::avatar::store_face(&self.dirs, &account.uuid, &face);
+                self.faces.insert(account.uuid.clone(), face);
+            }
+            Err(e) => log::debug!("avatar from the worn skin: {e}"),
+        }
+    }
+
     fn on_look_saved(&mut self, account_id: String, result: Result<ArcticState, String>) {
         self.skins.arctic_busy = false;
         self.skins.failed.clear();
@@ -691,6 +714,9 @@ impl ArcticApp {
             }
             result => {
                 let ok = result.is_ok();
+                if let Ok(state) = &result {
+                    self.update_offline_face(&account_id, state);
+                }
                 self.skins.arctic.insert(account_id.clone(), result);
                 let active = self.accounts.active().cloned();
                 let state = self.arctic_state().cloned();

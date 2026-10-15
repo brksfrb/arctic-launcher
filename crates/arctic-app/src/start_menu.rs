@@ -56,7 +56,7 @@ fn make(data_root: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn write_link(exe: &Path, lnk: &Path) -> windows::core::Result<()> {
+pub(crate) fn write_link(exe: &Path, lnk: &Path) -> windows::core::Result<()> {
     // SAFETY: COM is set up for this thread only and torn down below; the shell link object
     // and its IPersistFile view are used on this thread and dropped before CoUninitialize.
     unsafe {

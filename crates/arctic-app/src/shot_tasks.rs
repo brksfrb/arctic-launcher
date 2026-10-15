@@ -21,6 +21,18 @@ impl Tasks {
         });
     }
 
+    /// Ask for a picture to use behind the launcher.
+    pub fn pick_backdrop(&self) {
+        self.run(|t| {
+            let picked = rfd::FileDialog::new()
+                .set_title("Choose a background picture")
+                .add_filter("Picture", &["png", "jpg", "jpeg", "webp", "bmp"])
+                .pick_file();
+            t.note_if_picker_missing(&picked);
+            t.send(Event::BackdropPicked(picked));
+        });
+    }
+
     pub fn screenshot_copy(&self, path: PathBuf) {
         self.run(move |t| {
             let result = copy_image(&path);

@@ -34,7 +34,7 @@ public final class LiveVideo {
 			boolean requested = false, recovered = false;
 			while (!closed) {
 				try {
-					if (ArcticClient.config() != null && !ArcticClient.config().replayVideoEnabled) {
+					if (ArcticClient.config() != null && (!ArcticClient.config().replayVideoEnabled || !ArcticClient.config().replayEnabled)) {
 						state = "Gameplay video off"; Thread.sleep(1000); continue;
 					}
 					File tool = encoder.get();

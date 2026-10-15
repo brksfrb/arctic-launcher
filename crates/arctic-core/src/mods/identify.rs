@@ -56,7 +56,7 @@ pub fn recognize(
     for chunk in keys.chunks(BATCH) {
         found.extend(lookup_retrying(chunk)?);
     }
-    let loaders = modrinth::compatible_loaders(loader);
+    let loaders = modrinth::compatible_loaders(loader, game_version);
     let mut report = Recognized::default();
     let mut entries = Vec::new();
     for (sha, file) in &hashes {

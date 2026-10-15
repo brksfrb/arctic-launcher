@@ -8,8 +8,8 @@ import com.arcticlauncher.client.style.Skin;
 import com.arcticlauncher.client.style.Style;
 
 /**
- * A one-line text box: type, Backspace (Ctrl+Backspace: a word), Ctrl+V to
- * paste, Ctrl+A to select everything (the next key replaces it). Password
+ * A one-line text box: type, Backspace (Ctrl+Backspace: a word), Ctrl+C / Ctrl+X to
+ * copy / cut the line, Ctrl+V to paste, Ctrl+A to select everything (the next key replaces it). Password
  * boxes show dots. Focus comes from its {@link Page}.
  */
 public class TextField extends Widget {
@@ -138,6 +138,17 @@ public class TextField extends Widget {
 		boolean ctrl = ArcticClient.platform().controlDown();
 		if (key == Keys.A && ctrl) {
 			allSelected = !text.isEmpty();
+			return true;
+		}
+		if ((key == Keys.C || key == Keys.X) && ctrl && !password) {
+			// Nothing selected means the whole line, so an address can always be copied.
+			if (!text.isEmpty()) {
+				ArcticClient.platform().setClipboard(text);
+				if (key == Keys.X) {
+					allSelected = false;
+					set("");
+				}
+			}
 			return true;
 		}
 		if (key == Keys.BACKSPACE) {

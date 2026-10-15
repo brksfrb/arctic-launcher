@@ -5,6 +5,7 @@ mod app;
 mod art;
 mod auto_update;
 mod bridge_host;
+mod desktop_shortcut;
 mod devshot;
 mod discord;
 mod fonts;

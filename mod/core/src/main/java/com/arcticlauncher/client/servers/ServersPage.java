@@ -272,8 +272,15 @@ public final class ServersPage extends Page {
 			y += BUTTON_H + GAP + 10;
 		}
 		addressField = add(new TextField(tr("addServer.enterIp", "Server Address"), 256, TextField.ANY));
-		addressField.bounds(x, y, w, BUTTON_H);
+		int copyW = 44;
+		addressField.bounds(x, y, w - copyW - GAP, BUTTON_H);
 		addressField.onEnter(this::submit);
+		add(new Button("Copy", () -> {
+			String a = addressField.text().trim();
+			if (!a.isEmpty()) {
+				platform.setClipboard(a);
+			}
+		})).bounds(x + w - copyW, y, copyW, BUTTON_H);
 		if (editing != null) {
 			addressField.text(editing.address);
 		} else if (direct && ArcticClient.config().lastDirect != null) {

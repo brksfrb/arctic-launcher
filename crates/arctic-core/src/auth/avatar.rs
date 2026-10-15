@@ -81,6 +81,15 @@ pub fn cached_face(dirs: &DataDirs, uuid: &str) -> Option<Face> {
     Face::from_bytes(&fs::read(cache_path(dirs, uuid)).ok()?)
 }
 
+/// Remember `face` for `uuid` (an offline account's, from the skin it wears).
+pub fn store_face(dirs: &DataDirs, uuid: &str, face: &Face) {
+    let path = cache_path(dirs, uuid);
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(&path, face.to_bytes());
+}
+
 /// True when the cached face is missing or older than a day.
 pub fn needs_refresh(dirs: &DataDirs, uuid: &str) -> bool {
     fs::metadata(cache_path(dirs, uuid))

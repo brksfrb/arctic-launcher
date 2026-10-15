@@ -53,7 +53,7 @@ pub fn check(
     let tracked = ModIndex::load(index)?;
     let listed = files::list(mods_dir, &tracked)?;
     progress(ProgressInfo::stage("Looking for new versions"));
-    let loaders = modrinth::compatible_loaders(loader);
+    let loaders = modrinth::compatible_loaders(loader, game_version);
     let found: Vec<Result<Option<String>>> = std::thread::scope(|s| {
         let handles: Vec<_> = listed
             .iter()

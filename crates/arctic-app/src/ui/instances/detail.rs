@@ -291,6 +291,23 @@ impl ArcticApp {
         );
         let vanilla = instance.loader.kind().is_none();
         if !fabric_like && !vanilla {
+            // Forge and NeoForge: say why there's no switch, instead of leaving it a mystery.
+            ui.add_space(12.0);
+            theme::card(p).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.label(
+                    RichText::new("Arctic Client")
+                        .size(17.0)
+                        .strong()
+                        .color(p.text),
+                );
+                ui.label(
+                    RichText::new(
+                        "The Arctic Client runs on Vanilla, Fabric and Quilt instances, not on Forge or NeoForge yet. Make a Vanilla or Fabric instance of the same version to play with it.",
+                    )
+                    .color(p.muted),
+                );
+            });
             return;
         }
         // The default instance follows the Play tab's version.

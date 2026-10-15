@@ -44,9 +44,9 @@ public final class ArcticButton {
 				TICKS.put(screen, () -> {
 					cancel.visible = reconnect.autoOn();
 					//#if MC >= 1.16
-					join.setMessage(Compat.literal(reconnect.autoOn() ? "Reconnect " + reconnect.secondsLeft() + "s" : "Reconnect"));
+					join.setMessage(Compat.literal(reconnect.autoOn() ? "Reconnect " + reconnect.countdown() : "Reconnect"));
 					//#else
-					join.setMessage(reconnect.autoOn() ? "Reconnect " + reconnect.secondsLeft() + "s" : "Reconnect");
+					join.setMessage(reconnect.autoOn() ? "Reconnect " + reconnect.countdown() : "Reconnect");
 					//#endif
 					reconnect.tickReconnect();
 				});

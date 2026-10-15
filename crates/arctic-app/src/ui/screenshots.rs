@@ -25,8 +25,25 @@ enum Thumb {
     Failed,
 }
 
+/// How the big preview is opening or closing: the picture grows out of its cell and shrinks
+/// back into it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum Motion {
+    #[default]
+    Settled,
+    Opening,
+    Closing,
+}
+
+/// How long the picture takes to grow or shrink (seconds).
+const MOTION_SECS: f64 = 0.22;
+
 #[derive(Default)]
 pub struct ScreenshotsUi {
+    /// Where the open picture's cell is on screen (it grows from and shrinks back to it).
+    cell: Option<egui::Rect>,
+    motion: Motion,
+    motion_started: f64,
     shots: Option<Vec<Shot>>,
     thumbs: HashMap<PathBuf, Thumb>,
     /// Instance id to show, or every instance.
@@ -129,6 +146,9 @@ impl ArcticApp {
             .on_hover_text(format!("{} · {}", shot.instance_name, when(shot.taken)));
         if response.clicked() {
             self.shots.open = Some(shot.clone());
+            self.shots.cell = Some(response.rect);
+            self.shots.motion = Motion::Opening;
+            self.shots.motion_started = ui.input(|i| i.time);
         }
     }
 
@@ -195,6 +215,9 @@ impl ArcticApp {
         let p = self.palette();
         let mut close = false;
         let uri = crate::widgets::file_uri(&shot.path);
+        if self.shots.motion != Motion::Settled && self.animate_preview(ctx, &uri) {
+            return;
+        }
         let modal = Modal::new(Id::new("shot_preview"))
             .frame(super::instances::dialog_frame(p))
             .show(ctx, |ui| {
@@ -275,8 +298,65 @@ impl ArcticApp {
                 });
             });
         if close || modal.should_close() {
-            self.shots.open = None;
+            if self.shots.cell.is_some() {
+                self.shots.motion = Motion::Closing;
+                self.shots.motion_started = ctx.input(|i| i.time);
+                ctx.request_repaint();
+            } else {
+                self.shots.open = None;
+            }
         }
+    }
+
+    /// One frame of the picture growing out of its cell (or shrinking back into it). True while
+    /// it's moving, so the dialog waits.
+    fn animate_preview(&mut self, ctx: &egui::Context, uri: &str) -> bool {
+        let t = ((ctx.input(|i| i.time) - self.shots.motion_started) / MOTION_SECS).clamp(0.0, 1.0);
+        let closing = self.shots.motion == Motion::Closing;
+        let Some(cell) = self.shots.cell else {
+            self.shots.motion = Motion::Settled;
+            return false;
+        };
+        if t >= 1.0 {
+            self.shots.motion = Motion::Settled;
+            if closing {
+                self.shots.open = None;
+                self.shots.cell = None;
+                return true;
+            }
+            return false;
+        }
+        // Where the dialog's picture ends up: as large as the window allows, in its middle.
+        let screen = ctx.content_rect();
+        let room = screen.size() * vec2(0.9, 0.82) - vec2(0.0, 60.0);
+        let aspect = cell.width() / cell.height().max(1.0);
+        let fitted = if room.x / room.y > aspect {
+            vec2(room.y * aspect, room.y)
+        } else {
+            vec2(room.x, room.x / aspect)
+        };
+        let target = egui::Rect::from_center_size(screen.center() - vec2(0.0, 20.0), fitted);
+        let eased = 1.0 - (1.0 - t as f32).powi(3);
+        let progress = if closing { 1.0 - eased } else { eased };
+        let rect = egui::Rect::from_min_max(
+            cell.min.lerp(target.min, progress),
+            cell.max.lerp(target.max, progress),
+        );
+        let dim = (progress * 140.0) as u8;
+        egui::Area::new(Id::new("shot_motion"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(screen.min)
+            .interactable(false)
+            .show(ctx, |ui| {
+                ui.painter()
+                    .rect_filled(screen, 0.0, egui::Color32::from_black_alpha(dim));
+                egui::Image::new(uri.to_owned())
+                    .corner_radius(CornerRadius::same(8))
+                    .fit_to_exact_size(rect.size())
+                    .paint_at(ui, rect);
+            });
+        ctx.request_repaint();
+        true
     }
 
     pub(crate) fn on_screenshot_list(&mut self, shots: Vec<Shot>) {

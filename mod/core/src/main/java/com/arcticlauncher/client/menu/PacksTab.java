@@ -440,12 +440,7 @@ final class PacksTab implements MenuTab {
 		if (folder == null) {
 			return;
 		}
-		try {
-			folder.mkdirs();
-			java.awt.Desktop.getDesktop().open(folder);
-		} catch (Exception e) {
-			com.arcticlauncher.client.notice.Notices.post("Couldn't open the folder", folder.getPath());
-		}
+		com.arcticlauncher.client.feature.FolderOpener.open(folder);
 	}
 
 	@Override

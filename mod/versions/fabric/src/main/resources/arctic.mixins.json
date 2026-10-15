@@ -30,7 +30,8 @@
 		"WidgetAlphaAccess",
 		"ServerTimeMixin",
 		"ChatPlaceholderMixin",
-		"MinecraftTickMixin",<% if (postBlur) { %>
+		"MinecraftTickMixin",
+		"ServerMenuScreenMixin",<% if (postBlur) { %>
 		"MotionBlurPostMixin",
 		"EffectsPackMixin",<% } %><% if (oldMotionBlur) { %>
 		"MotionBlurOldMixin",<% } %><% if (smoothFontSet) { %>

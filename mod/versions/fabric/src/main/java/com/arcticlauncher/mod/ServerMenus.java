@@ -28,6 +28,18 @@ public final class ServerMenus {
 				&& !VANILLA.contains(screen);
 	}
 
+	/**
+	 * A native server list or disconnect screen is about to open: show Arctic's instead, so the
+	 * game's own screen is never on screen for a frame first. True when it took over.
+	 */
+	public static boolean intercept(Screen screen) {
+		if (!prefersArctic(screen)) {
+			return false;
+		}
+		open(screen);
+		return true;
+	}
+
 	/** Closing Right Shift must restore the selected browser, without a native-screen flash. */
 	public static void returnTo(Screen screen) {
 		if (prefersArctic(screen)) open(screen);

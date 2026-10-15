@@ -55,7 +55,7 @@ pub fn install_exact(
             found.insert(v.id.clone(), v);
         }
     }
-    let loaders = modrinth::compatible_loaders(loader);
+    let loaders = modrinth::compatible_loaders(loader, game_version);
     let mut report = ExactReport::default();
     let mut plan = Vec::new();
     let mut seen = HashSet::new();
