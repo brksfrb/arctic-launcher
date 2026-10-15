@@ -86,6 +86,14 @@ final class ModCatalog {
 							() -> c.zoomSmoothCamera, on -> c.zoomSmoothCamera = on);
 					f.stepper("Zoom sensitivity", () -> c.zoomSensitivity, v -> c.zoomSensitivity = (int) v, 10, 200, 5, "%.0f%%");
 				}));
+		out.add(new Mod("emotes", "Emotes", "Hold a key, point at an emote, let go: others see it", "looks", Category.SOCIAL,
+				"emote wheel dance wave key rebind")
+				.settings((host, f) -> {
+					f.section("Key");
+					f.key("Emote wheel key", "Hold it, move the mouse to an emote, let go",
+							Form.key(() -> c.emoteKey, k -> c.emoteKey = k));
+					f.note("Pick your look and emotes in Arctic Launcher → Cosmetics.");
+				}));
 		out.add(new Mod("freelook", "Freelook", "Hold a key to look around without turning", "freelook", Category.GAMEPLAY, "perspective 360")
 				.toggle(() -> c.freelookEnabled, on -> c.freelookEnabled = on)
 				.settings((host, f) -> {
