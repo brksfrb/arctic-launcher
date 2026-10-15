@@ -169,6 +169,7 @@ public final class Looks {
 	 */
 	private void checkIn() {
 		if (token == null) {
+			checkInResult = "not signed in: the game was started without the launcher's Arctic session";
 			return;
 		}
 		UUID inWorld = platform.inWorld() ? platform.worldPlayerId() : null;
@@ -182,14 +183,70 @@ public final class Looks {
 		try {
 			sendCheckIn(as);
 			playingAs = as;
+			checkInAt = now;
+			checkInResult = as == null ? "signed off (not in a world)" : "ok, as " + as;
 			if (inWorld != null && changed) {
 				// Show our own snowflake without waiting for the cache.
 				players.remove(inWorld);
 				pending.add(inWorld);
 			}
 		} catch (Exception e) {
+			checkInAt = now;
+			checkInResult = "failed: " + e;
 			platform.log(false, "Arctic check-in: " + e);
 		}
+	}
+
+	/** Why a check-in last did what it did, for {@link #diagnostics()}. */
+	private volatile String checkInResult = "none yet";
+	private volatile long checkInAt;
+
+	/**
+	 * What this client knows about looks, in plain lines (the "Cosmetics check" page): whether
+	 * it's signed in to Arctic, which UUID it is in the world as, and what it found for the
+	 * players it has asked about.
+	 */
+	public List<String> diagnostics() {
+		List<String> out = new ArrayList<String>();
+		UUID account = null;
+		try {
+			account = platform.playerId();
+		} catch (RuntimeException ignored) {
+			// no session yet
+		}
+		UUID world = platform.worldPlayerId();
+		out.add("Signed in to Arctic: " + (token == null ? "no" : "yes"));
+		out.add("Account: " + (account == null ? "?" : compact(account)));
+		out.add("In this world as: " + (world == null ? "not in a world" : compact(world)));
+		long ago = checkInAt == 0 ? -1 : (System.currentTimeMillis() - checkInAt) / 1000;
+		out.add("Last check-in: " + (ago < 0 ? "none yet" : ago + " s ago") + " - " + checkInResult);
+		int arctic = 0;
+		for (Look look : players.values()) {
+			if (look.arctic) {
+				arctic++;
+			}
+		}
+		out.add("Players looked up: " + players.size() + ", on Arctic now: " + arctic);
+		int shown = 0;
+		for (Map.Entry<UUID, Look> e : players.entrySet()) {
+			if (shown++ >= 12) {
+				break;
+			}
+			Look look = e.getValue();
+			String id = compact(e.getKey());
+			out.add(id.substring(0, 8) + (isMe(e.getKey()) ? " (you)" : "") + ": "
+					+ (look.arctic ? "on Arctic" : "not on Arctic") + ", skin " + (look.skin != null ? "yes" : "no")
+					+ ", cape " + (look.cape != null ? "yes" : "no") + ", cosmetics " + look.cosmetics.size());
+		}
+		return out;
+	}
+
+	/** Check in again now instead of at the next poll (the page's button). */
+	public void checkInNow() {
+		lastCheckIn = 0;
+		playingAs = null;
+		pending.addAll(players.keySet());
+		version.incrementAndGet();
 	}
 
 	private void sendCheckIn(String as) throws java.io.IOException {

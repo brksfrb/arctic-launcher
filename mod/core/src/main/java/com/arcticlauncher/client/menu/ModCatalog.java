@@ -286,6 +286,9 @@ final class ModCatalog {
 				.page(FriendsPage::new));
 		out.add(new Mod("account", "Account", "Switch accounts, or use a proxy", "account", Category.CLIENT, "proxy login")
 				.page(AccountPage::new));
+		out.add(new Mod("lookscheck", "Cosmetics Check", "Why can't others see my look? What this game found", "looks", Category.CLIENT,
+				"cosmetics skin cape check-in debug missing invisible")
+				.page(LooksCheckTab::new));
 		out.add(new Mod("style", "Menu Style", "How the menus look; smooth font", "style", Category.CLIENT, "theme font fancy")
 				.page(StyleTab::new));
 	}
