@@ -535,13 +535,7 @@ pub fn token_for(dirs: &DataDirs, base: &str, account: &Account) -> Result<Strin
         )?,
         #[cfg(any(feature = "offline-accounts", test))]
         AccountKind::Offline => {
-            let key = entry
-                .key
-                .get_or_insert_with(|| {
-                    uuid::Uuid::new_v4().simple().to_string()
-                        + &uuid::Uuid::new_v4().simple().to_string()
-                })
-                .clone();
+            let key = usable_key(entry);
             // Save the key before using it, so a claimed name is never lost.
             save_json(&path, &creds)?;
             let session = sign_in_offline(base, &account.username, &key)?;
@@ -555,6 +549,23 @@ pub fn token_for(dirs: &DataDirs, base: &str, account: &Account) -> Result<Strin
     entry.server = base.to_owned();
     save_json(&path, &creds)?;
     Ok(session.token)
+}
+
+/// The offline key of an account: the stored one, or a new one when there's none or it can't be
+/// used. A stored key that can't be decrypted (the file came from another PC or user, or the
+/// system's machine id changed) reads as empty, and the server refuses an empty key as
+/// "invalid name or key" for good; a new key at least gets a clear answer (the name is claimed:
+/// use the recovery code) instead.
+fn usable_key(entry: &mut Credential) -> String {
+    let fine = |k: &str| (32..=128).contains(&k.len()) && k.bytes().all(|b| b.is_ascii_hexdigit());
+    if !entry.key.as_deref().is_some_and(fine) {
+        entry.key = Some(
+            uuid::Uuid::new_v4().simple().to_string() + &uuid::Uuid::new_v4().simple().to_string(),
+        );
+        // Whatever token went with the old key is no good either.
+        entry.token = None;
+    }
+    entry.key.clone().unwrap_or_default()
 }
 
 /// An offline account on a new PC: the profile's recovery code moves its
@@ -770,6 +781,33 @@ pub fn cape_frames(width: u32, height: u32) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn an_unreadable_or_missing_offline_key_is_replaced_never_sent_empty() {
+        for stored in [None, Some(String::new()), Some("not hex".to_owned())] {
+            let mut entry = Credential {
+                key: stored,
+                token: Some("old".into()),
+                ..Credential::default()
+            };
+            let key = usable_key(&mut entry);
+            assert_eq!(key.len(), 64);
+            assert!(key.bytes().all(|b| b.is_ascii_hexdigit()));
+            assert_eq!(entry.token, None, "the old key's token goes too");
+        }
+        let good = "ab".repeat(32);
+        let mut entry = Credential {
+            key: Some(good.clone()),
+            token: Some("t".into()),
+            ..Credential::default()
+        };
+        assert_eq!(usable_key(&mut entry), good);
+        assert_eq!(
+            entry.token.as_deref(),
+            Some("t"),
+            "a good key is left alone"
+        );
+    }
+
     use super::*;
 
     #[test]
