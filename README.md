@@ -98,9 +98,13 @@
 - **Performance, built in.** One switch adds Sodium, Lithium, FerriteCore, ImmediatelyFast,
   EntityCulling and ModernFix to Vanilla for much higher FPS, fetched from Modrinth for your version.
   It's on by default and works on any version Fabric supports.
-- **Your accounts, side by side.** Sign in with Microsoft in the browser or with a short
-  code. Keep several accounts and switch in one click. Sign-ins stay on your PC, encrypted
-  for your user account, and never leave it except to Microsoft and Mojang.
+- **Your accounts, side by side, with or without Microsoft.** Sign in with Microsoft in the
+  browser or with a short code, or add an **offline account** (any name, no Microsoft account
+  needed) for singleplayer, LAN and offline-mode servers. Offline accounts get Arctic skins,
+  capes, cosmetics, emotes and friends too. Keep several accounts and switch in one click.
+  Servers that check accounts still need a Microsoft account that owns Minecraft: Java Edition.
+  Sign-ins stay on your PC, encrypted for your user account, and never leave it except to
+  Microsoft and Mojang.
 - **Profiles.** Keep completely separate setups on one PC, each with its own accounts,
   settings, instances and worlds. Switch from the top of the sidebar.
 - **Screenshots in one place.** Every instance's screenshots, newest first: open, copy,
