@@ -30,6 +30,9 @@ pub struct Settings {
     /// Prepare and start the game without using everything the PC has: a few downloads at a
     /// time and the game starting at low priority, for computers that freeze under load.
     pub gentle_launch: bool,
+    /// A launcher waiting in the tray restarts into an installed update by itself (off: the new
+    /// version is used the next time it's opened, or from the banner's "Restart now").
+    pub restart_hidden_for_updates: bool,
     /// Extra JVM flags, whitespace separated.
     pub extra_jvm_args: String,
     /// Use this `java(w).exe` instead of a managed runtime.
@@ -246,6 +249,7 @@ impl Default for Settings {
             fullscreen: false,
             game_maximized: false,
             gentle_launch: false,
+            restart_hidden_for_updates: false,
             extra_jvm_args: String::new(),
             java_override: None,
             last_version: None,

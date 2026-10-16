@@ -999,7 +999,7 @@ impl ArcticApp {
         if result.is_ok() {
             crate::auto_update::mark_installed();
             if (self.settings.auto_install_updates || info.required)
-                && crate::auto_update::restart_if_unnoticed()
+                && crate::auto_update::restart_if_unnoticed(info.required)
             {
                 return;
             }
@@ -1055,6 +1055,7 @@ impl eframe::App for ArcticApp {
         self.window_and_tray(&ctx, frame);
         crate::auto_update::sync(
             self.settings.auto_install_updates,
+            self.settings.restart_hidden_for_updates,
             self.settings.update_channel,
             self.runs.any_active(),
         );
