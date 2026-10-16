@@ -25,10 +25,13 @@ static BETA: AtomicBool = AtomicBool::new(false);
 static BUSY: AtomicBool = AtomicBool::new(false);
 /// A newer version is already swapped in; only a restart is left.
 static INSTALLED: AtomicBool = AtomicBool::new(false);
+/// The player lets a launcher in the tray restart itself into an installed update.
+static RESTART_HIDDEN: AtomicBool = AtomicBool::new(false);
 
 /// Every frame: what the update thread needs to know.
-pub fn sync(auto_install: bool, channel: UpdateChannel, busy: bool) {
+pub fn sync(auto_install: bool, restart_hidden: bool, channel: UpdateChannel, busy: bool) {
     AUTO_INSTALL.store(auto_install, Ordering::Relaxed);
+    RESTART_HIDDEN.store(restart_hidden, Ordering::Relaxed);
     BETA.store(channel == UpdateChannel::Beta, Ordering::Relaxed);
     BUSY.store(busy, Ordering::Relaxed);
 }
@@ -38,10 +41,15 @@ pub fn mark_installed() {
     INSTALLED.store(true, Ordering::Relaxed);
 }
 
-/// Restart into the new version now, if nobody would notice: hidden in the tray, nothing running.
+/// Restart into the new version now, if nobody would notice: hidden in the tray, nothing running,
+/// and the player allows it (or the update is required, `force`). Otherwise the new version is
+/// used the next time the launcher is opened, or from the banner's "Restart now".
 /// Returns whether the restart was started (the old launcher then closes).
-pub fn restart_if_unnoticed() -> bool {
-    if !crate::window::hidden() || BUSY.load(Ordering::Relaxed) {
+pub fn restart_if_unnoticed(force: bool) -> bool {
+    if !crate::window::hidden()
+        || BUSY.load(Ordering::Relaxed)
+        || !(force || RESTART_HIDDEN.load(Ordering::Relaxed))
+    {
         return false;
     }
     match update::restart_with(&["--hidden"]) {
@@ -71,7 +79,7 @@ pub fn spawn(dirs: DataDirs, tasks: Tasks) {
                 if AUTO_INSTALL.load(Ordering::Relaxed) && !INSTALLED.load(Ordering::Relaxed) {
                     check_and_install(&dirs, &tasks);
                 }
-                if INSTALLED.load(Ordering::Relaxed) && restart_if_unnoticed() {
+                if INSTALLED.load(Ordering::Relaxed) && restart_if_unnoticed(false) {
                     return;
                 }
             }
