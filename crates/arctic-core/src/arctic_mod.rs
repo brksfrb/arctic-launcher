@@ -189,6 +189,7 @@ fn dev_pack() -> Option<Pack> {
 type JarCache = Mutex<HashMap<&'static str, Arc<Vec<u8>>>>;
 
 /// The mod's jar for `game_version` (built once per target).
+#[cfg(test)]
 fn jar_for(game_version: &str) -> Option<Arc<Vec<u8>>> {
     jar_of(build_for(game_version)?)
 }
