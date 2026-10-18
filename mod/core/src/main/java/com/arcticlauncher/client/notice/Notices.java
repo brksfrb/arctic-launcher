@@ -54,6 +54,15 @@ public final class Notices {
 		long showMs() {
 			return action != null ? SHOW_ACTION_MS : SHOW_MS;
 		}
+
+		/** Start the way out now (no more than once). */
+		void close(long now) {
+			long ends = showMs();
+			if (now - shownAt < ends) {
+				shownAt = now - ends;
+			}
+			onAction = null;
+		}
 	}
 
 	private static final List<Notice> QUEUE = new ArrayList<Notice>();
