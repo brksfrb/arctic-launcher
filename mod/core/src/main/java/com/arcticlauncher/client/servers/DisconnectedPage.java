@@ -44,7 +44,7 @@ public final class DisconnectedPage extends Page {
 	private final String title;
 	private final String reason;
 	private final Runnable vanillaScreen;
-	private final String address = lastServer;
+	private final String address = rememberCurrent(ArcticClient.platform());
 	private final long shownAt = System.currentTimeMillis();
 	private boolean cancelled;
 	/** Lines the reason takes (known once drawn: the page lays itself out again if it changes). */
@@ -60,8 +60,12 @@ public final class DisconnectedPage extends Page {
 		this.vanillaScreen = vanillaScreen;
 	}
 
-	/** Every tick: remember where you are, so a disconnect knows where to go back. */
-	public static void tick(Platform p) {
+	/**
+	 * The server the game is in or joining right now, kept as the one to come back to. Read again when
+	 * the page opens too: a join that fails at once (an outdated client, say) ends before any tick has
+	 * seen it, and Reconnect would otherwise go to the last server that worked.
+	 */
+	private static String rememberCurrent(Platform p) {
 		String server = p.inWorld() ? p.server() : null;
 		if (server == null) {
 			// Still joining (or kicked on the way in): that's the server to come back to.
@@ -69,7 +73,16 @@ public final class DisconnectedPage extends Page {
 			if (joining != null && !joining.isEmpty()) {
 				lastServer = joining;
 			}
+		} else if (!"Singleplayer".equals(server)) {
+			lastServer = server;
 		}
+		return lastServer;
+	}
+
+	/** Every tick: remember where you are, so a disconnect knows where to go back. */
+	public static void tick(Platform p) {
+		rememberCurrent(p);
+		String server = p.inWorld() ? p.server() : null;
 		if (server == null || "Singleplayer".equals(server)) {
 			inWorldSince = 0;
 			return;
