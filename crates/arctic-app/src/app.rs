@@ -200,6 +200,9 @@ pub struct ArcticApp {
     forwarded: std::sync::mpsc::Receiver<Vec<String>>,
     tray: Option<crate::tray::Tray>,
     window_known: bool,
+    /// Since when the window has been hidden in the tray (Windows hands the tray over after a while).
+    #[cfg_attr(not(windows), allow(dead_code))]
+    hidden_since: Option<std::time::Instant>,
     /// Maximize on the first frame (creating the window maximized is
     /// unreliable on Windows: wrong restore size, flicker).
     maximize_pending: bool,
@@ -272,6 +275,7 @@ impl ArcticApp {
             forwarded,
             tray: None,
             window_known: false,
+            hidden_since: None,
             maximize_pending: data.settings.start_maximized,
             pending_launch: startup.launch.clone(),
             msa_configured: MsaConfig::load(&dirs).is_ok(),
@@ -724,6 +728,8 @@ impl ArcticApp {
             crate::trim::now(ctx);
         }
         crate::trim::tick(ctx, self.runs.any_game(), self.tab as usize);
+        #[cfg(windows)]
+        self.hand_tray_over(ctx, tray_on);
         let now = ctx.input(|i| i.time);
         let actions: Vec<_> = self
             .tray
@@ -754,6 +760,37 @@ impl ArcticApp {
                 self.pending_launch = opts.launch;
                 self.run_pending_launch();
             }
+        }
+    }
+
+    /// Hidden in the tray for a while with nothing running: a small process keeps the icon from
+    /// here on (see `tray_host`), and this one closes, giving back the window's memory.
+    #[cfg(windows)]
+    fn hand_tray_over(&mut self, ctx: &egui::Context, tray_on: bool) {
+        if !tray_on || !crate::window::hidden() || crate::tray::quitting() {
+            self.hidden_since = None;
+            return;
+        }
+        let since = *self
+            .hidden_since
+            .get_or_insert_with(std::time::Instant::now);
+        let left = crate::tray_host::HAND_OVER_AFTER.saturating_sub(since.elapsed());
+        if !left.is_zero() {
+            ctx.request_repaint_after(left);
+            return;
+        }
+        if self.runs.any_active() {
+            // A game or a launch is going: look again later.
+            self.hidden_since = Some(std::time::Instant::now());
+            return;
+        }
+        self.persist_settings();
+        if crate::tray_host::start() {
+            log::info!("the tray icon is kept by a small process now");
+            crate::tray::set_quitting();
+            crate::window::close();
+        } else {
+            self.hidden_since = Some(std::time::Instant::now());
         }
     }
 

@@ -36,6 +36,7 @@ mod theme_fade;
 mod titlebar;
 mod toasts;
 mod tray;
+mod tray_host;
 mod trim;
 mod ui;
 mod video_encoder;
@@ -85,6 +86,12 @@ fn main() -> eframe::Result {
         single_instance::Claim::Forwarded => return Ok(()),
         single_instance::Claim::Primary(rx) => rx,
     };
+    // Hidden in the tray (a hidden start, or the launcher handing the tray over): keep only the
+    // icon, not a whole window's memory. Another start or the menu brings the launcher back.
+    let tray_setting = arctic_core::settings::Settings::load(&dirs).map_or(true, |s| s.tray);
+    if tray_host::wanted(&args, tray_setting) {
+        tray_host::run(&dirs, forwarded);
+    }
     logbook::init(dirs.launcher_logs().join("launcher.log"));
     // After moving the data folder: the old copy goes now that nothing holds its files.
     let root = dirs.root().to_path_buf();
