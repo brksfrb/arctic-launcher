@@ -126,6 +126,9 @@ final class ModCatalog {
 		}
 		out.add(new Mod("death", "Death Position", "A pop-up with where you died, and a Death waypoint", "death", Category.GAMEPLAY, "coords")
 				.toggle(() -> c.deathNotice, on -> c.deathNotice = on));
+		out.add(new Mod("pingtags", "Ping Tags", "Other players' ping in front of their name tag: 48ms | Steve", "tiers", Category.SOCIAL,
+				"ping latency nametag lag ms")
+				.toggle(() -> c.pingNametags, on -> c.pingNametags = on));
 		out.add(new Mod("durability", "Low Durability", "A pop-up when armor or your tool is about to break", "durability",
 				Category.GAMEPLAY, "armor tool break warning")
 				.toggle(() -> c.durabilityWarning, on -> c.durabilityWarning = on));

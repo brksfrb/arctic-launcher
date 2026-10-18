@@ -32,6 +32,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	/** Latency to the server in ms, or -1 in singleplayer / menus. */
 	int ping();
 
+	/** Another player's ping (from the player list) in ms, or -1 when unknown (or in singleplayer). */
+	default int ping(java.util.UUID player) {
+		return -1;
+	}
+
 	/** True while playing (a world is loaded). */
 	boolean inWorld();
 
