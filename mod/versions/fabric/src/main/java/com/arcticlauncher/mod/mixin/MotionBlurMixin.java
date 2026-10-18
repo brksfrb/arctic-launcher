@@ -2,6 +2,7 @@
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.client.ArcticClient;
+import com.arcticlauncher.client.MotionBlurTiming;
 import com.arcticlauncher.client.config.ClientConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
@@ -36,13 +37,14 @@ abstract class MotionBlurMixin {
 	private static Identifier arctic$blur() {
 		ClientConfig config = ArcticClient.config();
 		if (config == null || !config.motionBlur) {
+			MotionBlurTiming.reset();
 			return null;
 		}
-		int strength = Math.max(1, Math.min(4, config.motionBlurStrength));
+		String suffix = MotionBlurTiming.effectSuffix(config.motionBlurStrength, MotionBlurTiming.tick());
 		//#if MC >= 26.3
-		String name = "motion_blur_" + strength;
+		String name = "motion_blur_" + suffix;
 		//#else
-		String name = "motion_blur_gl_" + strength;
+		String name = "motion_blur_gl_" + suffix;
 		//#endif
 		return Identifier.fromNamespaceAndPath("arctic", name);
 	}
