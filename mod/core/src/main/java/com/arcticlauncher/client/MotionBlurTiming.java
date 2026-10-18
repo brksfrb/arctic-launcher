@@ -4,14 +4,13 @@ package com.arcticlauncher.client;
  * How much of the last frame motion blur keeps. A fixed share per frame makes the trail as long as the
  * frame rate is low (a smear at 60 FPS, nothing at 300), so the share follows from the frame time:
  * each strength has a trail half-life in milliseconds, and the share is 0.5 ^ (frame ms / half-life).
- * The post-effect paths (26.1+) can't change a uniform per frame, so they pick one of effects baked
- * for {@link #BUCKET_MS} frame times (mod/tools/motion_blur.py writes them; keep the numbers in step).
+ * Used by the OpenGL path (1.15 to 26.0) and the old Legacy Fabric one. The post effects of 26.1+ can't
+ * change a uniform per frame: they have one fixed strength per level and let go of the old frame where
+ * the picture changed (see mod/tools/motion_blur.py).
  */
 public final class MotionBlurTiming {
 	/** Trail half-life in ms for strength 1 (Low) to 4 (Max). */
 	public static final float[] HALF_LIFE_MS = {12f, 20f, 30f, 45f};
-	/** Frame times the baked effects stand for, ascending. */
-	public static final float[] BUCKET_MS = {3f, 5f, 8f, 11f, 14f, 17f, 22f, 30f};
 
 	private static final float MIN_MS = 1f;
 	private static final float MAX_MS = 50f;
@@ -43,22 +42,5 @@ public final class MotionBlurTiming {
 	public static float weight(int strength, float frameMs) {
 		int level = Math.max(1, Math.min(HALF_LIFE_MS.length, strength));
 		return (float) Math.pow(0.5, frameMs / HALF_LIFE_MS[level - 1]);
-	}
-
-	/** The baked effect closest to this frame time. */
-	public static int bucket(float frameMs) {
-		int best = 0;
-		for (int i = 1; i < BUCKET_MS.length; i++) {
-			if (Math.abs(BUCKET_MS[i] - frameMs) < Math.abs(BUCKET_MS[best] - frameMs)) {
-				best = i;
-			}
-		}
-		return best;
-	}
-
-	/** Name suffix of the baked effect: strength 1-4, bucket index. */
-	public static String effectSuffix(int strength, float frameMs) {
-		int level = Math.max(1, Math.min(HALF_LIFE_MS.length, strength));
-		return level + "_" + bucket(frameMs);
 	}
 }

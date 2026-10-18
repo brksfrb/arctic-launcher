@@ -2,7 +2,6 @@ package com.arcticlauncher.mod.mixin;
 
 //#if MC >= 1.21.6 && MC < 26.1
 import com.arcticlauncher.client.ArcticClient;
-import com.arcticlauncher.client.MotionBlurTiming;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.mod.VulkanCompat;
 import com.mojang.blaze3d.resource.CrossFrameResourcePool;
@@ -40,7 +39,7 @@ abstract class MotionBlurPostMixin {
 		if (!VulkanCompat.postBlur() || config == null || !config.motionBlur || minecraft.level == null) {
 			return;
 		}
-		String suffix = MotionBlurTiming.effectSuffix(config.motionBlurStrength, MotionBlurTiming.tick());
+		int suffix = Math.max(1, Math.min(4, config.motionBlurStrength));
 		Identifier id = Identifier.fromNamespaceAndPath("arctic", "motion_blur_gl_" + suffix);
 		PostChain chain = minecraft.getShaderManager().getPostChain(id, LevelTargetBundle.MAIN_TARGETS);
 		if (chain != null) {
