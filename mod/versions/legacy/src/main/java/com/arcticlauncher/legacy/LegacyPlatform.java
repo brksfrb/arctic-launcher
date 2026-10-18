@@ -101,6 +101,16 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public int ping(java.util.UUID player) {
+		MinecraftClient mc = mc();
+		if (mc.getNetworkHandler() == null || mc.isInSingleplayer()) {
+			return -1;
+		}
+		PlayerListEntry entry = mc.getNetworkHandler().getPlayerListEntry(player);
+		return entry == null ? -1 : entry.getLatency();
+	}
+
+	@Override
 	public boolean inWorld() {
 		return mc().world != null && mc().player != null;
 	}

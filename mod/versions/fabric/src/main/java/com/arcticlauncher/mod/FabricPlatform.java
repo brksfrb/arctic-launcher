@@ -93,6 +93,17 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public int ping(java.util.UUID player) {
+		Minecraft mc = mc();
+		ClientPacketListener connection = mc.getConnection();
+		if (connection == null || mc.hasSingleplayerServer()) {
+			return -1;
+		}
+		PlayerInfo info = connection.getPlayerInfo(player);
+		return info == null ? -1 : info.getLatency();
+	}
+
+	@Override
 	public boolean inWorld() {
 		return mc().level != null && mc().player != null;
 	}
