@@ -126,7 +126,8 @@ public final class DisconnectedPage extends Page {
 	}
 
 	private int buttons() {
-		return 2 + (address != null ? 1 : 0) + (autoOn() ? 1 : 0) + (vanillaScreen != null ? 1 : 0);
+		// Reconnect (when there's an address), Back to Server List, and one row of smaller ones.
+		return 2 + (address != null ? 1 : 0);
 	}
 
 	/**
@@ -158,21 +159,25 @@ public final class DisconnectedPage extends Page {
 			add(new Button("Reconnect", this::reconnect).primary()).bounds(left, y, BUTTON_W, BUTTON_H);
 			y += BUTTON_H + GAP;
 		}
-		if (autoOn()) {
-			add(new Button("Don't reconnect", () -> {
-				cancelled = true;
-				rebuild();
-			})).bounds(left, y, BUTTON_W, BUTTON_H);
-			y += BUTTON_H + GAP;
-		}
 		// The game's own wording: "gui.toMenu" is its "Back to Server List".
 		add(new Button(tr("gui.toMenu", "Back to Server List"), () -> platform.openPage(new ServersPage()))).bounds(left, y, BUTTON_W, BUTTON_H);
 		y += BUTTON_H + GAP;
-		add(new Button(tr("gui.toTitle", "Back to Title Screen"), () -> platform.openPage(ArcticClient.titleMenu())))
-				.bounds(left, y, BUTTON_W, BUTTON_H);
+		// The less common ones share a row, so the page isn't a wall of buttons.
+		List<Button> small = new java.util.ArrayList<Button>();
+		small.add(new Button("Title Screen", () -> platform.openPage(ArcticClient.titleMenu())));
+		if (autoOn()) {
+			small.add(new Button("Stop retrying", () -> {
+				cancelled = true;
+				rebuild();
+			}));
+		}
 		if (vanillaScreen != null) {
-			y += BUTTON_H + GAP;
-			add(new Button("Vanilla disconnect screen", vanillaScreen)).bounds(left, y, BUTTON_W, BUTTON_H);
+			small.add(new Button("Vanilla screen", vanillaScreen));
+		}
+		int gap = 6;
+		int each = (BUTTON_W - gap * (small.size() - 1)) / small.size();
+		for (int i = 0; i < small.size(); i++) {
+			add(small.get(i)).bounds(left + i * (each + gap), y, each, BUTTON_H);
 		}
 	}
 
