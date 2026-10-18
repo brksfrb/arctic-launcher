@@ -290,8 +290,15 @@ impl ArcticApp {
             Some(LoaderKind::Fabric | LoaderKind::Quilt)
         );
         let vanilla = instance.loader.kind().is_none();
-        if !fabric_like && !vanilla {
-            // Forge and NeoForge: say why there's no switch, instead of leaving it a mystery.
+        // Forge has the Arctic mod too where there's a Forge build (1.8.9).
+        let forge_like = matches!(instance.loader.kind(), Some(LoaderKind::Forge))
+            && instance
+                .version
+                .as_deref()
+                .or(self.settings.last_version.as_deref())
+                .is_some_and(arctic_mod::supports_forge);
+        if !fabric_like && !forge_like && !vanilla {
+            // NeoForge, and Forge versions without a build: say why there's no switch, instead of leaving it a mystery.
             ui.add_space(12.0);
             theme::card(p).show(ui, |ui| {
                 ui.set_width(ui.available_width());
@@ -303,7 +310,7 @@ impl ArcticApp {
                 );
                 ui.label(
                     RichText::new(
-                        "The Arctic Client runs on Vanilla, Fabric and Quilt instances, not on Forge or NeoForge yet. Make a Vanilla or Fabric instance of the same version to play with it.",
+                        "The Arctic Client runs on Vanilla, Fabric and Quilt instances, and on Forge 1.8.9. Not on this loader or version yet: make a Vanilla or Fabric instance of the same version to play with it.",
                     )
                     .color(p.muted),
                 );
@@ -315,7 +322,13 @@ impl ArcticApp {
             .version
             .clone()
             .or_else(|| self.settings.last_version.clone());
-        let supported = version.as_deref().is_some_and(arctic_mod::supports);
+        let supported = version.as_deref().is_some_and(|v| {
+            if forge_like {
+                arctic_mod::supports_forge(v)
+            } else {
+                arctic_mod::supports(v)
+            }
+        });
         let (title, about, toggle) = if vanilla {
             (
                 "Arctic Client",

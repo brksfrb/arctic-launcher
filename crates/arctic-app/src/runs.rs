@@ -485,7 +485,13 @@ impl ArcticApp {
                     | arctic_core::loaders::LoaderKind::NeoForge
             )
         );
-        if instance.arctic_mod && !forge && arctic_core::arctic_mod::supports(version_id) {
+        let client = if forge {
+            arctic_core::arctic_mod::supports_forge(version_id)
+                && instance.loader.kind() == Some(arctic_core::loaders::LoaderKind::Forge)
+        } else {
+            arctic_core::arctic_mod::supports(version_id)
+        };
+        if instance.arctic_mod && client {
             return;
         }
         self.toasts.push(

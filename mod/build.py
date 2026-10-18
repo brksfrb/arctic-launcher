@@ -107,9 +107,10 @@ def pack(targets):
     files. Index: {"jars": {build: [[name, file number or -1 for a folder], ...]},
     "sizes": [bytes of each file]}."""
     files, sizes, numbers, jars = [], [], {}, {}
-    for target in targets:
-        version = target["build"]
-        path = DIST / f"arctic-mod-{version}.jar"
+    # The Forge flavour of 1.8.9 (forge/build_forge.py) travels in the pack under its own key.
+    built = [(t["build"], DIST / f"arctic-mod-{t['build']}.jar") for t in targets]
+    built.append(("forge-1.8.9", DIST / "arctic-forge-1.8.9.jar"))
+    for version, path in built:
         if not path.exists():
             print(f"not packed: {path.name} isn't built")
             continue
@@ -131,7 +132,7 @@ def pack(targets):
     raw = MAGIC + struct.pack("<I", len(index)) + index + b"".join(files)
     packed = lzma.compress(raw, format=lzma.FORMAT_ALONE, preset=9 | lzma.PRESET_EXTREME)
     PACK.write_bytes(packed)
-    jar_bytes = sum((DIST / f"arctic-mod-{v}.jar").stat().st_size for v in jars)
+    jar_bytes = sum(p.stat().st_size for v, p in built if v in jars)
     print(f"packed {len(jars)} jars ({jar_bytes / 1e6:.1f} MB) into {PACK.name}: {len(packed) / 1e6:.2f} MB")
 
 
@@ -156,6 +157,10 @@ def main() -> None:
             for f in failed:
                 print(f, file=sys.stderr)
             sys.exit(1)
+        if not wanted or "forge-1.8.9" in wanted:
+            forge = subprocess.run([sys.executable, str(MOD / "forge" / "build_forge.py"), *OFFLINE], cwd=MOD)
+            if forge.returncode != 0:
+                sys.exit(1)
     pack(targets)
 
 

@@ -466,6 +466,15 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 }
                 timer.step("performance mods");
                 share_session = req.instance.arctic_mod && arctic_mod::supports(&vanilla.id);
+            } else if kind == loaders::LoaderKind::Forge {
+                // Forge instances: the Arctic Client's Forge build, where there is one (1.8.9).
+                arctic_mod::sync_forge(
+                    &game_dir.join("mods"),
+                    &vanilla.id,
+                    req.instance.arctic_mod,
+                )?;
+                share_session = req.instance.arctic_mod && arctic_mod::supports_forge(&vanilla.id);
+                timer.step("arctic client");
             }
             profile
         }
