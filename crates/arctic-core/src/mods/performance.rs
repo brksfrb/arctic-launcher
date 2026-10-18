@@ -444,7 +444,7 @@ mod tests {
             .unwrap();
         assert_eq!(installed(dir.path()), vec!["Sodium".to_owned()]);
 
-        sync(dir.path(), "26.3", false, false, false, &|_| {}).unwrap();
+        sync(dir.path(), "26.3", false, false, &[], false, &|_| {}).unwrap();
         assert!(!mods.join("sodium.jar").exists());
         assert!(mods.join("mine.jar").exists());
         assert!(installed(dir.path()).is_empty());
@@ -469,7 +469,7 @@ mod tests {
         };
         save_json(&state_path(dir.path()), &state).unwrap();
         // Would fail (and log) if it tried Modrinth with a fake version.
-        sync(dir.path(), "26.3", true, false, false, &|_| {}).unwrap();
+        sync(dir.path(), "26.3", true, false, &[], false, &|_| {}).unwrap();
         assert!(mods.join("sodium.jar").exists());
     }
 
@@ -492,7 +492,7 @@ mod tests {
         };
         save_json(&state_path(dir.path()), &state).unwrap();
         let start = std::time::Instant::now();
-        sync(dir.path(), "0.0-test", true, false, false, &|_| {}).unwrap();
+        sync(dir.path(), "0.0-test", true, false, &[], false, &|_| {}).unwrap();
         // The set is used as it is; Modrinth is asked on another thread.
         assert!(start.elapsed() < std::time::Duration::from_millis(500));
         assert!(mods.join("sodium.jar").exists());
@@ -531,14 +531,14 @@ mod tests {
         assert!(!mods.join("sodium-26.2.jar").exists());
         installed_set(dir.path(), "26.3", "sodium-26.3.jar");
         // Back to 26.2 through sync: no network, the stashed set returns.
-        sync(dir.path(), "26.2", true, false, false, &|_| {}).unwrap();
+        sync(dir.path(), "26.2", true, false, &[], false, &|_| {}).unwrap();
         assert_eq!(
             std::fs::read(mods.join("sodium-26.2.jar")).unwrap(),
             b"26.2"
         );
         assert!(!mods.join("sodium-26.3.jar").exists());
         assert!(
-            stash_dir(dir.path(), "26.3", false)
+            stash_dir(dir.path(), "26.3", false, "")
                 .join("sodium-26.3.jar")
                 .exists()
         );
