@@ -37,6 +37,8 @@ impl StartupOptions {
                 "--hidden" => opts.hidden = true,
                 // Read by single_instance (taking over from the updated launcher).
                 crate::single_instance::REPLACE_FLAG => {}
+                // Read by main (the tray-only process).
+                crate::tray_host::FLAG => {}
                 other => log::warn!("ignoring unknown argument {other}"),
             }
         }
