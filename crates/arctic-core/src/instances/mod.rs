@@ -152,6 +152,9 @@ pub struct Instance {
     /// Vanilla instances: add Iris so shader packs work.
     #[serde(default)]
     pub shaders: bool,
+    /// Extra mods the player switched on (Modrinth project ids from `mods::performance::OPTIONAL`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extras: Vec<String>,
     /// Keeps its own settings (HUD, keys, FOV, server list) instead of sharing
     /// them with the profile's other instances (see `shared`).
     #[serde(default)]
@@ -180,6 +183,7 @@ impl Instance {
             jvm_args: String::new(),
             performance: true,
             shaders: false,
+            extras: Vec::new(),
             own_settings: false,
             game_folder: None,
         }
@@ -243,6 +247,7 @@ pub fn create(dirs: &DataDirs, name: &str, game_version: &str, loader: Loader) -
         jvm_args: String::new(),
         performance: true,
         shaders: false,
+        extras: Vec::new(),
         own_settings: false,
         game_folder: None,
     };

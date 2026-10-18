@@ -446,6 +446,25 @@ impl ArcticApp {
                         .color(p.muted),
                 );
             }
+            // Extras: useful mods on their own switches, so nobody has to search for them.
+            ui.add_space(8.0);
+            ui.label(RichText::new("Extra mods").strong().color(p.text));
+            for (project, name, about) in arctic_core::mods::performance::OPTIONAL {
+                let mut wanted = instance.extras.iter().any(|e| e == project);
+                if ui
+                    .checkbox(&mut wanted, format!("{name}: {about}"))
+                    .changed()
+                {
+                    let id = instance.id.clone();
+                    let project = (*project).to_owned();
+                    self.update_instance(&id, move |i| {
+                        i.extras.retain(|e| *e != project);
+                        if wanted {
+                            i.extras.push(project);
+                        }
+                    });
+                }
+            }
         });
     }
 
