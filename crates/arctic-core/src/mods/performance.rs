@@ -26,6 +26,14 @@ pub const MODS: &[(&str, &str)] = &[
     ("NNAgCjsB", "EntityCulling"),
 ];
 
+/// Extras the player can add to any Fabric/Quilt/Vanilla instance (Modrinth project id, name, what it
+/// does): not part of the Performance set, each its own switch on the instance.
+pub const OPTIONAL: &[(&str, &str, &str)] = &[(
+    "kYuIpRLv",
+    "Wavey Capes",
+    "Capes that wave and flutter when you move.",
+)];
+
 /// The mod ids (as their jars declare them) each one goes by, then mods that
 /// do the same job in its place: with any of them already in a modded
 /// instance, it's left out.
@@ -41,6 +49,7 @@ fn provided_by(project: &str) -> (&'static [&'static str], &'static [&'static st
         "5ZwdcRci" => (&["immediatelyfast"], &[]),
         "NNAgCjsB" => (&["entityculling"], &[]),
         super::packs::IRIS => (&["iris"], &["optifabric", "oculus"]),
+        "kYuIpRLv" => (&["waveycapes"], &[]),
         _ => (&[], &[]),
     }
 }
@@ -109,6 +118,9 @@ struct State {
     /// Iris was included (shaders on).
     #[serde(default)]
     shaders: bool,
+    /// The extras included (their project ids, sorted, joined by "+").
+    #[serde(default)]
+    extras: String,
     /// Unix seconds of the last successful check.
     checked: u64,
     /// A background check found newer builds: the next start installs them.
@@ -126,12 +138,15 @@ fn state_path(game_dir: &Path) -> PathBuf {
 
 /// Where another game version's set waits while this one is in use, so
 /// switching back is a move instead of a new download.
-fn stash_dir(game_dir: &Path, game_version: &str, shaders: bool) -> PathBuf {
-    let key = if shaders {
+fn stash_dir(game_dir: &Path, game_version: &str, shaders: bool, extras: &str) -> PathBuf {
+    let mut key = if shaders {
         format!("{game_version}-shaders")
     } else {
         game_version.to_owned()
     };
+    if !extras.is_empty() {
+        key = format!("{key}-{extras}");
+    }
     game_dir.join(".arctic").join("performance").join(key)
 }
 
@@ -141,7 +156,7 @@ fn stash(game_dir: &Path, state: &State) -> Result<()> {
     if state.game_version.is_empty() || !index.exists() {
         return Ok(());
     }
-    let to = stash_dir(game_dir, &state.game_version, state.shaders);
+    let to = stash_dir(game_dir, &state.game_version, state.shaders, &state.extras);
     if to.exists() {
         std::fs::remove_dir_all(&to).map_err(|e| crate::Error::io(&to, e))?;
     }
@@ -164,8 +179,8 @@ fn stash(game_dir: &Path, state: &State) -> Result<()> {
 
 /// Bring back a stashed set for this version if it's complete and recent;
 /// true when it's in place.
-fn unstash(game_dir: &Path, game_version: &str, shaders: bool) -> Result<bool> {
-    let from = stash_dir(game_dir, game_version, shaders);
+fn unstash(game_dir: &Path, game_version: &str, shaders: bool, extras: &str) -> Result<bool> {
+    let from = stash_dir(game_dir, game_version, shaders, extras);
     let index = from.join("arctic-performance.json");
     let Some(state) = load_json::<State>(&from.join("arctic-performance-state.json"))? else {
         return Ok(false);
@@ -201,6 +216,7 @@ pub fn sync(
     game_version: &str,
     enabled: bool,
     shaders: bool,
+    extras: &[String],
     modded: bool,
     progress: Progress,
 ) -> Result<()> {
@@ -210,11 +226,18 @@ pub fn sync(
     if shaders {
         wanted.push((super::packs::IRIS, "Iris"));
     }
+    // The chosen extras that exist, in a fixed order (so the same choice is the same key).
+    let chosen: Vec<&(&str, &str, &str)> = OPTIONAL
+        .iter()
+        .filter(|(id, _, _)| extras.iter().any(|e| e == id))
+        .collect();
+    wanted.extend(chosen.iter().map(|(id, name, _)| (*id, *name)));
+    let extras_key = chosen.iter().map(|(id, _, _)| *id).collect::<Vec<_>>().join("+");
     if wanted.is_empty() {
         super::slim_api::undo(&mods_dir)?;
         return remove_all(game_dir);
     }
-    if modded && state.game_version == game_version && state.shaders == shaders {
+    if modded && state.game_version == game_version && state.shaders == shaders && state.extras == extras_key {
         super::slim_api::undo(&mods_dir)?;
         leave_players_mods(game_dir, &mut wanted)?;
         if wanted.is_empty() {
@@ -222,12 +245,12 @@ pub fn sync(
         }
     }
     let index = index_path(game_dir);
-    if state.game_version != game_version || state.shaders != shaders {
+    if state.game_version != game_version || state.shaders != shaders || state.extras != extras_key {
         // Another version's set: keep it for later, and bring back this one's if we have it.
         super::slim_api::undo(&mods_dir)?;
         stash(game_dir, &state)?;
         remove_all(game_dir)?;
-        if unstash(game_dir, game_version, shaders)? {
+        if unstash(game_dir, game_version, shaders, &extras_key)? {
             return Ok(());
         }
     } else if !state.update_waiting && all_present(&index, &mods_dir)? {
@@ -277,6 +300,7 @@ pub fn sync(
             &State {
                 game_version: game_version.to_owned(),
                 shaders,
+                extras: extras_key,
                 checked: crate::auth::now_secs(),
                 update_waiting: false,
             },
@@ -430,6 +454,7 @@ mod tests {
         let state = State {
             game_version: "26.3".into(),
             shaders: false,
+            extras: String::new(),
             checked: crate::auth::now_secs(),
             update_waiting: false,
         };
@@ -452,6 +477,7 @@ mod tests {
         let state = State {
             game_version: "0.0-test".into(),
             shaders: false,
+            extras: String::new(),
             checked: 0,
             update_waiting: false,
         };
@@ -475,6 +501,7 @@ mod tests {
         let state = State {
             game_version: version.into(),
             shaders: false,
+            extras: String::new(),
             checked: crate::auth::now_secs(),
             update_waiting: false,
         };
