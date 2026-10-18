@@ -232,12 +232,20 @@ pub fn sync(
         .filter(|(id, _, _)| extras.iter().any(|e| e == id))
         .collect();
     wanted.extend(chosen.iter().map(|(id, name, _)| (*id, *name)));
-    let extras_key = chosen.iter().map(|(id, _, _)| *id).collect::<Vec<_>>().join("+");
+    let extras_key = chosen
+        .iter()
+        .map(|(id, _, _)| *id)
+        .collect::<Vec<_>>()
+        .join("+");
     if wanted.is_empty() {
         super::slim_api::undo(&mods_dir)?;
         return remove_all(game_dir);
     }
-    if modded && state.game_version == game_version && state.shaders == shaders && state.extras == extras_key {
+    if modded
+        && state.game_version == game_version
+        && state.shaders == shaders
+        && state.extras == extras_key
+    {
         super::slim_api::undo(&mods_dir)?;
         leave_players_mods(game_dir, &mut wanted)?;
         if wanted.is_empty() {
@@ -245,7 +253,8 @@ pub fn sync(
         }
     }
     let index = index_path(game_dir);
-    if state.game_version != game_version || state.shaders != shaders || state.extras != extras_key {
+    if state.game_version != game_version || state.shaders != shaders || state.extras != extras_key
+    {
         // Another version's set: keep it for later, and bring back this one's if we have it.
         super::slim_api::undo(&mods_dir)?;
         stash(game_dir, &state)?;
