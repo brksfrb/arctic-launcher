@@ -10,7 +10,8 @@ import com.arcticlauncher.client.style.Style;
 /**
  * Small pop-ups in the top-right corner: a friend's message, an invite, a
  * screenshot just taken (with its picture). Drawn over the game and over
- * Arctic's menus; each slides in, stays a few seconds and fades.
+ * Arctic's menus; each slides in, stays a few seconds, then slides out and fades (a click
+ * closes it the same way).
  */
 public final class Notices {
 	private static final long SHOW_MS = 5000;
@@ -96,7 +97,8 @@ public final class Notices {
 				return true;
 			}
 			if (n.card != null && inside(n.card, mx, my)) {
-				QUEUE.remove(i);
+				// Closes the way a notice ends by itself: slides out and fades.
+				n.close(System.currentTimeMillis());
 				return true;
 			}
 		}
@@ -135,8 +137,10 @@ public final class Notices {
 				QUEUE.remove(i--);
 				continue;
 			}
-			float alpha = age > show ? 1f - (age - show) / (float) FADE_MS : 1f;
-			float slide = Math.min(1f, age / 180f);
+			// In: slides in. Out (by itself or closed by a click): slides back out while fading.
+			float out = age > show ? (age - show) / (float) FADE_MS : 0f;
+			float alpha = 1f - out;
+			float slide = age > show ? 1f - out : Math.min(1f, age / 180f);
 			y += draw(g, s, n, y, alpha, slide) + GAP;
 			shown++;
 		}
