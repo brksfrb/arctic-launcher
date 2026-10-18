@@ -87,7 +87,7 @@ final class LegacyKeysTest {
 		java.lang.reflect.Field widgets = com.arcticlauncher.client.ui.Page.class.getDeclaredField("widgets"); widgets.setAccessible(true);
 		java.lang.reflect.Field label = com.arcticlauncher.client.ui.Button.class.getDeclaredField("label"); label.setAccessible(true);
 		for (Object widget : (java.util.List<?>) widgets.get(page)) {
-			if (widget instanceof com.arcticlauncher.client.ui.Button && "Vanilla disconnect screen".equals(label.get(widget))) {
+			if (widget instanceof com.arcticlauncher.client.ui.Button && "Vanilla screen".equals(label.get(widget))) {
 				((com.arcticlauncher.client.ui.Button) widget).click(0, 0, com.arcticlauncher.client.Keys.MOUSE_LEFT);
 				break;
 			}
