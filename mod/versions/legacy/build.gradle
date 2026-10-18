@@ -8,6 +8,9 @@ plugins {
 // versions sits in //#if MC >= 1.12 … //#else … //#endif blocks, like the
 // modern adapter (versions/fabric).
 def mc = project.minecraft_version
+// -Pforge=true: the Forge 1.8.9 flavour (mod/forge/build_forge.py remaps it to Forge's names). Mixins that
+// use MixinExtras (not available to Forge's Mixin) are replaced by the ones in src/forge.
+def forge = project.findProperty('forge') == 'true'
 
 /** Minecraft version as numbers, for comparing (26.1.2 → [26, 1, 2]). */
 def parseVersion = { String v -> v.tokenize('.').collect { it as int } }
@@ -102,7 +105,10 @@ def applyRenames = { String text ->
 	}
 }
 
-def preprocessedJava = layout.buildDirectory.dir("preprocessed/${mc}/java")
+/** The mixins the Forge flavour replaces (they use MixinExtras). */
+def forgeReplaced = ['ClientConnectionProxyMixin.java', 'LoginSessionMixin.java', 'TitleScreenMixin.java']
+
+def preprocessedJava = layout.buildDirectory.dir(forge ? "preprocessed-forge/${mc}/java" : "preprocessed/${mc}/java")
 
 tasks.register('preprocessJava') {
 	inputs.dir 'src/main/java'
@@ -117,14 +123,26 @@ tasks.register('preprocessJava') {
 		root.eachFileRecurse(groovy.io.FileType.FILES) { f ->
 			def rel = root.toPath().relativize(f.toPath()).toString()
 			def target = new File(outDir, rel)
+			if (forge && forgeReplaced.contains(f.name)) {
+				return
+			}
 			target.parentFile.mkdirs()
 			target.text = applyRenames(preprocessSource(f.getText('UTF-8'), rel))
+		}
+		if (forge) {
+			def forgeRoot = file('src/forge/java')
+			forgeRoot.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+				def rel = forgeRoot.toPath().relativize(f.toPath()).toString()
+				def target = new File(outDir, rel)
+				target.parentFile.mkdirs()
+				target.text = applyRenames(preprocessSource(f.getText('UTF-8'), rel))
+			}
 		}
 	}
 }
 
 base {
-	archivesName = "arctic-mod-${mc}"
+	archivesName = forge ? "arctic-forge-${mc}" : "arctic-mod-${mc}"
 }
 
 // The shared Arctic Client core (Java 8) is compiled into this adapter.
@@ -143,6 +161,10 @@ dependencies {
 	minecraft "com.mojang:minecraft:${mc}"
 	mappings(legacy.yarn(mc, project.yarn_build))
 	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	if (forge) {
+		// Only the Forge entry class (FML's @Mod and events) compiles against this.
+		compileOnly files(project.findProperty('forge_jar') ?: 'forge-universal.jar')
+	}
 }
 
 // The Minecraft versions this jar loads on (-Pcovers from targets.json).

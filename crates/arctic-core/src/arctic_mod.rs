@@ -19,6 +19,25 @@ pub const COSMETICS_URL_ENV: &str = "ARCTIC_COSMETICS_URL";
 // mod/dist/arctic-client.pack.
 include!(concat!(env!("OUT_DIR"), "/arctic_jars.rs"));
 
+/// The Forge build (remapped to Forge's names: mod/forge/build_forge.py) is in the pack under
+/// `forge-<game version>`; only 1.8.9 has one so far.
+const FORGE_BUILDS: &[(&str, &str)] = &[("1.8.9", "forge-1.8.9")];
+
+/// The Forge build for `game_version`, if there is one.
+fn forge_build_for(game_version: &str) -> Option<&'static str> {
+    FORGE_BUILDS
+        .iter()
+        .find(|(v, _)| *v == game_version)
+        .map(|(_, build)| *build)
+}
+
+/// True if the mod exists for this Minecraft version on Forge (and the bundled pack has it).
+pub fn supports_forge(game_version: &str) -> bool {
+    forge_build_for(game_version)
+        .zip(pack())
+        .is_some_and(|(build, pack)| pack.jars.contains_key(build))
+}
+
 /// The build target that serves `game_version`.
 fn build_for(game_version: &str) -> Option<&'static str> {
     COVERS
@@ -171,8 +190,12 @@ type JarCache = Mutex<HashMap<&'static str, Arc<Vec<u8>>>>;
 
 /// The mod's jar for `game_version` (built once per target).
 fn jar_for(game_version: &str) -> Option<Arc<Vec<u8>>> {
+    jar_of(build_for(game_version)?)
+}
+
+/// The jar of build target `build` (built once).
+fn jar_of(build: &'static str) -> Option<Arc<Vec<u8>>> {
     static JARS: OnceLock<JarCache> = OnceLock::new();
-    let build = build_for(game_version)?;
     let mut jars = JARS.get_or_init(Default::default).lock().ok()?;
     if let Some(jar) = jars.get(build) {
         return Some(jar.clone());
@@ -188,9 +211,22 @@ const STAMP_NAME: &str = ".arctic-mod.stamp";
 
 /// Put the mod in `mods_dir` (when enabled and available) or take it out.
 pub fn sync(mods_dir: &Path, game_version: &str, enabled: bool) -> Result<()> {
+    sync_build(mods_dir, build_for(game_version), enabled)
+}
+
+/// The same for a Forge instance: the Forge build of the mod.
+pub fn sync_forge(mods_dir: &Path, game_version: &str, enabled: bool) -> Result<()> {
+    sync_build(
+        mods_dir,
+        forge_build_for(game_version).filter(|_| supports_forge(game_version)),
+        enabled,
+    )
+}
+
+fn sync_build(mods_dir: &Path, build: Option<&'static str>, enabled: bool) -> Result<()> {
     let path = mods_dir.join(FILE_NAME);
     let stamp_path = mods_dir.join(STAMP_NAME);
-    let Some(build) = build_for(game_version).filter(|_| enabled) else {
+    let Some(build) = build.filter(|_| enabled) else {
         let _ = fs::remove_file(&stamp_path);
         return match path.exists() {
             true => fs::remove_file(&path).at(&path),
@@ -204,7 +240,7 @@ pub fn sync(mods_dir: &Path, game_version: &str, enabled: bool) -> Result<()> {
     {
         return Ok(());
     }
-    let Some(jar) = jar_for(game_version) else {
+    let Some(jar) = jar_of(build) else {
         return Ok(());
     };
     fs::create_dir_all(mods_dir).at(mods_dir)?;
