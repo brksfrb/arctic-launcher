@@ -81,6 +81,10 @@ impl ArcticApp {
         let Some(account) = self.accounts.active().cloned() else {
             return;
         };
+        // First on the page, on its own: it used to sit in the header of the list, where some
+        // people never saw it.
+        self.add_friend_card(ui);
+        ui.add_space(12.0);
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
             let view = match &self.friends.view {
@@ -129,6 +133,55 @@ impl ArcticApp {
         self.chat_viewer(&ui.ctx().clone());
     }
 
+    /// "Add a friend": its own card at the top of the page, with your own code to give out.
+    fn add_friend_card(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
+        let code = match &self.friends.view {
+            Some(Ok((profile, _))) if !profile.code.is_empty() => Some(profile.code.clone()),
+            _ => None,
+        };
+        theme::card(p).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(RichText::new("Add a friend").size(18.0).strong().color(p.text));
+            ui.label(
+                RichText::new(
+                    "Type their friend code or their Microsoft account's name. They need to use Arctic too.",
+                )
+                .color(p.muted),
+            );
+            ui.add_space(8.0);
+            crate::widgets::row(ui, |ui| {
+                let can_add = !self.friends.add_name.trim().is_empty() && !self.friends.busy;
+                let field = ui.add(
+                    widgets::text_field(&mut self.friends.add_name)
+                        .hint_text("Friend code or Microsoft name")
+                        .char_limit(16)
+                        .desired_width(260.0),
+                );
+                let add = ui
+                    .add_enabled_ui(can_add, |ui| {
+                        widgets::button(ui, p, Some(Icon::Plus), "Add friend", true)
+                    })
+                    .inner
+                    .clicked();
+                let enter = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                if (add || (enter && can_add)) && !self.friends.busy {
+                    let name = std::mem::take(&mut self.friends.add_name).trim().to_owned();
+                    self.friend_act(FriendAction::Request(name));
+                }
+                if let Some(code) = &code {
+                    ui.add_space(12.0);
+                    ui.label(RichText::new("Your code").color(p.muted));
+                    ui.label(RichText::new(code).monospace().color(p.accent));
+                    if widgets::icon_button(ui, p, Icon::Copy, "Copy your friend code").clicked() {
+                        ui.ctx().copy_text(code.clone());
+                        self.toasts.push(Kind::Success, "Friend code copied", "");
+                    }
+                }
+            });
+        });
+    }
+
     fn friends_header(&mut self, ui: &mut egui::Ui, profile: &Profile) {
         let p = self.palette();
         crate::widgets::row(ui, |ui| {
@@ -153,24 +206,6 @@ impl ArcticApp {
                 }
                 if self.friends.busy || self.friends.loading {
                     ui.spinner();
-                }
-                let can_add = !self.friends.add_name.trim().is_empty() && !self.friends.busy;
-                let add = ui
-                    .add_enabled_ui(can_add, |ui| {
-                        widgets::button(ui, p, Some(Icon::Plus), "Add", false)
-                    })
-                    .inner
-                    .clicked();
-                let field = ui.add(
-                    widgets::text_field(&mut self.friends.add_name)
-                        .hint_text("Friend code or Microsoft name")
-                        .char_limit(16)
-                        .desired_width(170.0),
-                );
-                let enter = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                if (add || (enter && can_add)) && !self.friends.busy {
-                    let name = std::mem::take(&mut self.friends.add_name).trim().to_owned();
-                    self.friend_act(FriendAction::Request(name));
                 }
             });
         });
