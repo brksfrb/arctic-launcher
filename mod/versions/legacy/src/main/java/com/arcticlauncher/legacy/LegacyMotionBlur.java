@@ -1,6 +1,7 @@
 package com.arcticlauncher.legacy;
 
 import com.arcticlauncher.client.ArcticClient;
+import com.arcticlauncher.client.MotionBlurTiming;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.mojang.blaze3d.platform.GLX;
 import com.mojang.blaze3d.platform.GlStateManager;
@@ -15,8 +16,6 @@ import org.lwjgl.opengl.GL14;
  * kept as the next frame's "last frame": out = mix(now, previous, strength), previous = out.
  */
 public final class LegacyMotionBlur {
-	/** How much of the last frame stays, for strength 1 (Low) to 4 (Max); as on 26.x (mod/tools/motion_blur.py). */
-	private static final float[] STRENGTHS = {0.5f, 0.65f, 0.78f, 0.88f};
 	private static final int SRC_ALPHA = 770;
 	private static final int ONE_MINUS_SRC_ALPHA = 771;
 	/** GL_CONSTANT_ALPHA and GL_ONE_MINUS_CONSTANT_ALPHA (OpenGL 1.4; LWJGL 2's GL14 doesn't name them). */
@@ -49,15 +48,16 @@ public final class LegacyMotionBlur {
 			main.bind(true);
 			return;
 		}
-		int level = Math.max(1, Math.min(STRENGTHS.length, config.motionBlurStrength));
+		float frameMs = MotionBlurTiming.tick();
 		main.bind(true);
-		draw(previous, width, height, STRENGTHS[level - 1]);
+		draw(previous, width, height, MotionBlurTiming.weight(config.motionBlurStrength, frameMs));
 		copy(main, previous, width, height);
 		main.bind(true);
 	}
 
 	/** Motion blur off (or the window is gone): the last frame isn't kept. */
 	private static void release() {
+		MotionBlurTiming.reset();
 		if (previous != null) {
 			previous.delete();
 			previous = null;

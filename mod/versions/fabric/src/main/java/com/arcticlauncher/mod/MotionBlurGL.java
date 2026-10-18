@@ -2,6 +2,7 @@ package com.arcticlauncher.mod;
 
 //#if MC < 26.1
 import com.arcticlauncher.client.ArcticClient;
+import com.arcticlauncher.client.MotionBlurTiming;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import java.nio.IntBuffer;
@@ -24,8 +25,6 @@ import org.lwjgl.opengl.GL33;
  * it touches is put back, so Minecraft's state tracking stays right.
  */
 public final class MotionBlurGL {
-	/** Strength 1-4 as how much of the previous frame stays (the same as the 26.1+ effect). */
-	private static final float[] STRENGTHS = {0.5f, 0.65f, 0.78f, 0.88f};
 	/** GL_BLEND_COLOR (not among LWJGL's GL14 constants). */
 	private static final int GL_BLEND_COLOR = 0x8005;
 
@@ -73,6 +72,7 @@ public final class MotionBlurGL {
 		Minecraft mc = Minecraft.getInstance();
 		if (c == null || !c.motionBlur || mc.level == null || broken || VULKAN_MOD || VulkanCompat.postBlur()) {
 			hasPrevious = false;
+			MotionBlurTiming.reset();
 			return;
 		}
 		if (!GL.getCapabilities().OpenGL30) {
@@ -89,9 +89,9 @@ public final class MotionBlurGL {
 		try {
 			prepare(target.width, target.height, texture);
 			String debug = DEBUG_FRAMES > 0 ? "now " + probe(mainFramebuffer) + " prev " + probe(prevFramebuffer) : null;
+			float frameMs = MotionBlurTiming.tick();
 			if (hasPrevious) {
-				float strength = STRENGTHS[Math.max(1, Math.min(STRENGTHS.length, c.motionBlurStrength)) - 1];
-				blend(strength);
+				blend(MotionBlurTiming.weight(c.motionBlurStrength, frameMs));
 			}
 			if (debug != null) {
 				DEBUG_FRAMES--;
