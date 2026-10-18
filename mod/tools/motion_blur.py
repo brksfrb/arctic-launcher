@@ -6,7 +6,7 @@ Writes mod/versions/fabric/src/main/resources/resourcepacks/client/assets/arctic
 Each frame is blended with the last blended frame, kept in a persistent target:
 out = mix(now, previous, strength), previous = out. A previous frame that wasn't kept
 (cleared to transparent black) isn't blended in. One post effect per strength
-and frame-time bucket (post-effect uniforms are fixed in the JSON), per shader dialect: 26.3's
+(post-effect uniforms are fixed in the JSON) and per shader dialect: 26.3's
 shaders are Vulkan-style GLSL, 26.1 and 26.2 plain GLSL 330.
 """
 import json
@@ -15,11 +15,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent / "versions/fabric/src/main/resources/resourcepacks/client"
 ASSETS = ROOT / "assets/arctic"
 
-# Strength 1 (Low) to 4 (Max): trail half-life in ms. The share of the previous frame kept is
-# 0.5 ^ (frame ms / half-life), so a frame's effect is baked for each of BUCKET_MS (the game picks
-# the closest to the measured frame time). Keep both lists the same as MotionBlurTiming.java.
-HALF_LIFE_MS = {1: 12.0, 2: 20.0, 3: 30.0, 4: 45.0}
-BUCKET_MS = [3.0, 5.0, 8.0, 11.0, 14.0, 17.0, 22.0, 30.0]
+# Strength 1 (Low) to 4 (Max): how much of the previous frame stays where the picture is still.
+STRENGTHS = {1: 0.45, 2: 0.6, 3: 0.72, 4: 0.82}
 
 # Shader dialect -> (fragment shader name, shader source).
 DIALECTS = {
@@ -42,7 +39,11 @@ void main() {
     // A kept frame is opaque; a previous-frame buffer some drivers lose (or wipe) reads as
     // transparent black: blend only with what was really kept, or the picture darkens.
     vec4 previous = texture(PrevSampler, texCoord);
-    fragColor = vec4(mix(now, previous.rgb, Strength * previous.a), 1.0);
+    // Where the picture changed a lot (you turned), the old frame is let go at once, so nothing
+    // stays behind; where it barely changed, it smooths. A fixed blend left a ghost on every flick.
+    float change = length(now - previous.rgb);
+    float keep = Strength * previous.a * (1.0 - smoothstep(0.04, 0.35, change));
+    fragColor = vec4(mix(now, previous.rgb, keep), 1.0);
 }
 """),
     "_gl": ("motion_blur_gl", """#version 330
@@ -63,7 +64,11 @@ void main() {
     // A kept frame is opaque; a previous-frame buffer some drivers lose (or wipe) reads as
     // transparent black: blend only with what was really kept, or the picture darkens.
     vec4 previous = texture(PrevSampler, texCoord);
-    fragColor = vec4(mix(now, previous.rgb, Strength * previous.a), 1.0);
+    // Where the picture changed a lot (you turned), the old frame is let go at once, so nothing
+    // stays behind; where it barely changed, it smooths. A fixed blend left a ghost on every flick.
+    float change = length(now - previous.rgb);
+    float keep = Strength * previous.a * (1.0 - smoothstep(0.04, 0.35, change));
+    fragColor = vec4(mix(now, previous.rgb, keep), 1.0);
 }
 """),
 }
@@ -112,11 +117,9 @@ def main():
         old.unlink()
     for suffix, (shader, source) in DIALECTS.items():
         (ASSETS / f"shaders/post/{shader}.fsh").write_text(source, encoding="utf-8", newline="\n")
-        for level, half_life in HALF_LIFE_MS.items():
-            for bucket, ms in enumerate(BUCKET_MS):
-                strength = round(0.5 ** (ms / half_life), 4)
-                path = ASSETS / f"post_effect/motion_blur{suffix}_{level}_{bucket}.json"
-                path.write_text(json.dumps(effect(shader, strength), indent=2) + "\n", encoding="utf-8", newline="\n")
+        for level, strength in STRENGTHS.items():
+            path = ASSETS / f"post_effect/motion_blur{suffix}_{level}.json"
+            path.write_text(json.dumps(effect(shader, strength), indent=2) + "\n", encoding="utf-8", newline="\n")
     # 1.21.6 (format 63) on: before 1.21.9 the game reads pack_format/supported_formats, after it
     # min_format/max_format.
     meta = {"pack": {

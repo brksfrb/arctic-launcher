@@ -9,7 +9,7 @@
   "passes": [
     {
       "vertex_shader": "minecraft:core/screenquad",
-      "fragment_shader": "arctic:post/motion_blur",
+      "fragment_shader": "arctic:post/motion_blur_gl",
       "inputs": [
         {
           "sampler_name": "In",
@@ -26,7 +26,7 @@
           {
             "name": "Strength",
             "type": "float",
-            "value": 0.6752
+            "value": 0.6
           }
         ]
       }
