@@ -16,9 +16,9 @@ void main() {
     // A kept frame is opaque; a previous-frame buffer some drivers lose (or wipe) reads as
     // transparent black: blend only with what was really kept, or the picture darkens.
     vec4 previous = texture(PrevSampler, texCoord);
-    // Where the picture changed a lot (you turned), the old frame is let go at once, so nothing
-    // stays behind; where it barely changed, it smooths. A fixed blend left a ghost on every flick.
+    // Only where the picture changed completely (a flick, a teleport) the old frame is let go, so a
+    // ghost of the old view never stays; ordinary movement keeps the full blur.
     float change = length(now - previous.rgb);
-    float keep = Strength * previous.a * (1.0 - smoothstep(0.04, 0.35, change));
+    float keep = Strength * previous.a * (1.0 - smoothstep(0.3, 0.8, change));
     fragColor = vec4(mix(now, previous.rgb, keep), 1.0);
 }
