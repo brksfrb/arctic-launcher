@@ -1,4 +1,4 @@
-//! SOCKS5 proxy for the launcher's own traffic and the game.
+//! SOCKS5 or HTTP proxy for the launcher's own traffic and the game.
 //!
 //! Kept in `proxy.json` next to `accounts.json` (it can hold a password),
 //! not in `settings.json`. The launcher's HTTP goes through it with remote
@@ -11,6 +11,25 @@ use serde::{Deserialize, Serialize};
 use crate::Result;
 use crate::storage::{DataDirs, load_json, save_json};
 
+/// Which protocol the proxy speaks.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProxyKind {
+    #[default]
+    Socks5,
+    /// An HTTP proxy (CONNECT tunnels).
+    Http,
+}
+
+impl ProxyKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Socks5 => "SOCKS5",
+            Self::Http => "HTTP",
+        }
+    }
+}
+
 /// The usual SOCKS port, used when none is given.
 pub const DEFAULT_PORT: u16 = 1080;
 const MAX_HOST_LEN: usize = 253;
@@ -20,6 +39,7 @@ const MAX_CREDENTIAL_LEN: usize = 255;
 #[serde(default)]
 pub struct ProxySettings {
     pub enabled: bool,
+    pub kind: ProxyKind,
     pub host: String,
     pub port: u16,
     pub username: String,
@@ -35,6 +55,7 @@ impl Default for ProxySettings {
     fn default() -> Self {
         Self {
             enabled: false,
+            kind: ProxyKind::Socks5,
             host: String::new(),
             port: DEFAULT_PORT,
             username: String::new(),
@@ -82,7 +103,7 @@ impl ProxySettings {
             return Err("Enter the proxy's port (1080 is common).".into());
         }
         if self.username.len() > MAX_CREDENTIAL_LEN || self.password.len() > MAX_CREDENTIAL_LEN {
-            return Err("The user name or password is too long for SOCKS5.".into());
+            return Err("The user name or password is too long.".into());
         }
         if !self.password.is_empty() && self.username.is_empty() {
             return Err("A password needs a user name too.".into());
@@ -98,8 +119,8 @@ impl ProxySettings {
             .trim_end_matches(']')
     }
 
-    /// `socks5h://` URL for the launcher's HTTP client (the proxy resolves
-    /// names, so lookups don't leak to the local DNS).
+    /// `socks5h://` (or `http://`) URL for the launcher's HTTP client (the
+    /// proxy resolves names, so lookups don't leak to the local DNS).
     pub fn url(&self) -> String {
         let host = if self.bare_host().contains(':') {
             format!("[{}]", self.bare_host())
@@ -113,11 +134,19 @@ impl ProxySettings {
         } else {
             format!("{}:{}@", encode(&self.username), encode(&self.password))
         };
-        format!("socks5h://{auth}{host}:{}", self.port)
+        let scheme = match self.kind {
+            ProxyKind::Socks5 => "socks5h",
+            ProxyKind::Http => "http",
+        };
+        format!("{scheme}://{auth}{host}:{}", self.port)
     }
 
     /// Minecraft's own proxy arguments (its login, skin and Realms services).
     pub fn game_args(&self) -> Vec<String> {
+        // Minecraft's arguments only speak SOCKS; an HTTP proxy goes in as Java properties.
+        if self.kind == ProxyKind::Http {
+            return Vec::new();
+        }
         let mut args = vec![
             "--proxyHost".into(),
             self.bare_host().to_owned(),
@@ -129,6 +158,32 @@ impl ProxySettings {
             args.extend(["--proxyPass".into(), self.password.clone()]);
         }
         args
+    }
+}
+
+impl ProxySettings {
+    /// Java properties that send the game's own web requests (login, skins) through an HTTP proxy.
+    pub fn jvm_flags(&self) -> Vec<String> {
+        if self.kind != ProxyKind::Http {
+            return Vec::new();
+        }
+        let host = self.bare_host();
+        let port = self.port;
+        let mut flags = vec![
+            format!("-Dhttp.proxyHost={host}"),
+            format!("-Dhttp.proxyPort={port}"),
+            format!("-Dhttps.proxyHost={host}"),
+            format!("-Dhttps.proxyPort={port}"),
+            // Java refuses Basic logins for HTTPS tunnels unless this is emptied.
+            "-Djdk.http.auth.tunneling.disabledSchemes=".to_owned(),
+        ];
+        if !self.username.is_empty() {
+            flags.push(format!("-Dhttp.proxyUser={}", self.username));
+            flags.push(format!("-Dhttp.proxyPassword={}", self.password));
+            flags.push(format!("-Dhttps.proxyUser={}", self.username));
+            flags.push(format!("-Dhttps.proxyPassword={}", self.password));
+        }
+        flags
     }
 }
 
@@ -189,6 +244,24 @@ mod tests {
             password: pass.into(),
             ..ProxySettings::default()
         }
+    }
+
+    #[test]
+    fn an_http_proxy_gets_an_http_url_and_java_properties() {
+        let mut p = proxy("proxy.example", "me", "pw");
+        p.kind = ProxyKind::Http;
+        p.port = 8080;
+        assert_eq!(p.url(), "http://me:pw@proxy.example:8080");
+        // Minecraft's --proxy* arguments only speak SOCKS.
+        assert!(p.game_args().is_empty());
+        let flags = p.jvm_flags();
+        assert!(flags.contains(&"-Dhttps.proxyHost=proxy.example".to_owned()));
+        assert!(flags.contains(&"-Dhttps.proxyPort=8080".to_owned()));
+        assert!(proxy("proxy.example", "", "").jvm_flags().is_empty());
+        // Older proxy.json files have no type: SOCKS5.
+        let old: ProxySettings =
+            serde_json::from_str(r#"{"enabled":true,"host":"h","port":1}"#).unwrap();
+        assert_eq!(old.kind, ProxyKind::Socks5);
     }
 
     #[test]

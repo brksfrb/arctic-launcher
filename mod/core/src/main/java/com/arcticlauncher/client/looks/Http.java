@@ -14,7 +14,7 @@ public final class Http {
 	private static final int READ_MS = 10000;
 	private static final int MAX_BYTES = 4 * 1024 * 1024;
 
-	/** Through the user's SOCKS5 proxy when one is set. */
+	/** Through the user's proxy when one is set. */
 	private static volatile java.net.Proxy proxy = java.net.Proxy.NO_PROXY;
 
 	private Http() {}
@@ -33,7 +33,7 @@ public final class Http {
 	/** Send requests through this proxy (null = directly). */
 	public static void useProxy(com.arcticlauncher.client.config.ProxyConfig p) {
 		proxy = p == null ? java.net.Proxy.NO_PROXY
-				: new java.net.Proxy(java.net.Proxy.Type.SOCKS, java.net.InetSocketAddress.createUnresolved(p.host(), p.port));
+				: new java.net.Proxy(p.isHttp() ? java.net.Proxy.Type.HTTP : java.net.Proxy.Type.SOCKS, java.net.InetSocketAddress.createUnresolved(p.host(), p.port));
 	}
 
 	static byte[] get(String url, String token) throws IOException {

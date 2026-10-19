@@ -2,7 +2,6 @@ package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.client.config.ProxyConfig;
 import com.arcticlauncher.client.net.ProxyRoutes;
-import com.arcticlauncher.client.net.Socks5Handler;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
@@ -78,7 +77,7 @@ abstract class ConnectionProxyMixin {
 		return original.call(bootstrap, new ChannelInitializer<Channel>() {
 			@Override
 			protected void initChannel(Channel channel) {
-				channel.pipeline().addLast("arctic_socks5", new Socks5Handler(host, port, proxy.username, proxy.password));
+				channel.pipeline().addLast("arctic_socks5", ProxyRoutes.tunnel(proxy, host, port));
 				channel.pipeline().addLast(game);
 			}
 		});

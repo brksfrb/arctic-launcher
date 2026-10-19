@@ -131,7 +131,7 @@ final class AccountTab {
 			draft = ArcticClient.config().proxy.copy();
 		}
 		int y = top;
-		host.add(new Toggle("Use a SOCKS5 proxy", "Servers and Arctic connect through it", new Toggle.Binding() {
+		host.add(new Toggle("Use a proxy", "Servers and Arctic connect through it", new Toggle.Binding() {
 			@Override
 			public boolean get() {
 				return draft.enabled;
@@ -144,6 +144,24 @@ final class AccountTab {
 			}
 		})).bounds(x, y, w, ROW);
 		y += ROW + 6;
+		int typeW = (w - GAP) / 2;
+		host.add(new Button("SOCKS5", new Runnable() {
+			@Override
+			public void run() {
+				draft.type = "socks5";
+				note = "";
+				host.rebuild();
+			}
+		}).selected(!draft.isHttp())).bounds(x, y, typeW, 20);
+		host.add(new Button("HTTP", new Runnable() {
+			@Override
+			public void run() {
+				draft.type = "http";
+				note = "";
+				host.rebuild();
+			}
+		}).selected(draft.isHttp())).bounds(x + typeW + GAP, y, w - typeW - GAP, 20);
+		y += 20 + GAP;
 		int hostW = w - PORT_W - GAP;
 		final TextField address = new TextField("Address, like 127.0.0.1", MAX_HOST, TextField.ANY).text(draft.host);
 		final TextField port = new TextField("Port", MAX_PORT_DIGITS, TextField.DIGITS)

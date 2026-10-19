@@ -94,13 +94,47 @@ public final class ServerPing {
 
 	private static Socket open(String host, int port) throws IOException {
 		ProxyConfig proxy = ProxyRoutes.current();
-		Socket socket = proxy != null && ProxyRoutes.routes(host)
+		boolean viaProxy = proxy != null && ProxyRoutes.routes(host);
+		if (viaProxy && proxy.isHttp()) {
+			return openThroughHttp(proxy, host, port);
+		}
+		Socket socket = viaProxy
 				? new Socket(new Proxy(Proxy.Type.SOCKS, InetSocketAddress.createUnresolved(proxy.host, proxy.port)))
 				: new Socket();
-		InetSocketAddress target = proxy != null && ProxyRoutes.routes(host) ? InetSocketAddress.createUnresolved(host, port)
+		InetSocketAddress target = viaProxy ? InetSocketAddress.createUnresolved(host, port)
 				: new InetSocketAddress(host, port);
 		socket.connect(target, TIMEOUT_MS);
 		return socket;
+	}
+
+	/** A tunnel to the server through an HTTP proxy (CONNECT). */
+	private static Socket openThroughHttp(ProxyConfig proxy, String host, int port) throws IOException {
+		Socket socket = new Socket();
+		try {
+			socket.connect(new InetSocketAddress(proxy.host(), proxy.port), TIMEOUT_MS);
+			socket.setSoTimeout(TIMEOUT_MS);
+			socket.getOutputStream().write(HttpConnectHandler.request(host, port, proxy.username, proxy.password)
+					.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			socket.getOutputStream().flush();
+			// The answer ends at the blank line; anything after it is the server's.
+			java.io.InputStream in = socket.getInputStream();
+			StringBuilder header = new StringBuilder();
+			while (!header.toString().endsWith("\r\n\r\n")) {
+				int b = in.read();
+				if (b < 0 || header.length() > 8192) {
+					throw new IOException("Proxy: the proxy closed the connection");
+				}
+				header.append((char) b);
+			}
+			String problem = HttpConnectHandler.problem(header.substring(0, header.indexOf("\r\n")));
+			if (problem != null) {
+				throw new IOException("Proxy: " + problem);
+			}
+			return socket;
+		} catch (IOException e) {
+			socket.close();
+			throw e;
+		}
 	}
 
 	/**

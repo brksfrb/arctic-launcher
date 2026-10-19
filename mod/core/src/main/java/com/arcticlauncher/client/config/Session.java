@@ -62,6 +62,8 @@ public final class Session {
 				proxy = new ProxyConfig();
 				Boolean on = bool(po, "enabled");
 				proxy.enabled = on != null && on;
+				String type = string(po, "type");
+				proxy.type = type == null || type.isEmpty() ? "socks5" : type;
 				proxy.host = string(po, "host");
 				proxy.port = (int) number(po, "port");
 				proxy.username = string(po, "username");

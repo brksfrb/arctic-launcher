@@ -1,7 +1,7 @@
 package com.arcticlauncher.client.config;
 
 /**
- * A SOCKS5 proxy for server connections and Arctic's own web requests.
+ * A SOCKS5 or HTTP proxy for server connections and Arctic's own web requests.
  * Set in the launcher (passed in the session file) or in game.
  */
 public final class ProxyConfig {
@@ -10,6 +10,8 @@ public final class ProxyConfig {
 	private static final int MAX_HOST = 253;
 
 	public boolean enabled;
+	/** "socks5" or "http". */
+	public String type = "socks5";
 	public String host = "";
 	public int port = DEFAULT_PORT;
 	public String username = "";
@@ -42,6 +44,10 @@ public final class ProxyConfig {
 		return null;
 	}
 
+	public boolean isHttp() {
+		return "http".equalsIgnoreCase(type);
+	}
+
 	public String host() {
 		return host == null ? "" : host.trim();
 	}
@@ -53,6 +59,7 @@ public final class ProxyConfig {
 	public ProxyConfig copy() {
 		ProxyConfig c = new ProxyConfig();
 		c.enabled = enabled;
+		c.type = type;
 		c.host = host;
 		c.port = port;
 		c.username = username;
@@ -61,6 +68,7 @@ public final class ProxyConfig {
 	}
 
 	void fillDefaults() {
+		type = "http".equalsIgnoreCase(type) ? "http" : "socks5";
 		if (host == null) {
 			host = "";
 		}
