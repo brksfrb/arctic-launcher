@@ -1,7 +1,8 @@
 //! The public server list: servers from the curated seed
-//! (`assets/servers.json`) and ones their owners submitted, proved by a
-//! code in the MOTD and approved by an admin. Everyone gets them in a new
-//! random order each time; nobody can pay for a better spot.
+//! (`assets/servers.json`) and ones their owners submitted. A signed-in
+//! player submits one and it waits for a moderator; everyone gets the
+//! approved list in a new random order each time. Nobody can pay for a
+//! better spot.
 
 use std::path::Path;
 
@@ -19,15 +20,15 @@ pub const MAX_DESCRIPTION: usize = 200;
 pub const MAX_TAGS: usize = 5;
 pub const MAX_TAG: usize = 16;
 const DAY: u64 = 24 * 60 * 60;
-const CODE_PREFIX: &str = "arctic-";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum State {
     /// From the seed file.
     Curated,
-    /// Submitted; the MOTD code hasn't been seen yet.
+    /// Older submissions that still waited on a MOTD code. New ones start
+    /// at pending; startup moves leftovers into that review queue.
     Unverified,
-    /// Code seen; waiting for an admin.
+    /// Waiting for a moderator.
     Pending,
     Listed,
     Rejected,
@@ -171,12 +172,6 @@ pub fn clean_tags(tags: &[String]) -> Vec<String> {
     out
 }
 
-/// The owner's code shows in the MOTD (formatting codes are already gone).
-pub fn motd_has_code(motd: &str, code: &str) -> bool {
-    motd.to_ascii_lowercase()
-        .contains(&code.to_ascii_lowercase())
-}
-
 fn random_id(len: usize) -> String {
     const ALPHABET: &[u8] = b"abcdefghjkmnpqrstuvwxyz23456789";
     let mut out = String::with_capacity(len);
@@ -241,7 +236,10 @@ impl Store {
         // A partner with no tier is a hosted one.
         conn.execute_batch(
             "UPDATE listed_servers SET partner_tier = 'hosted' WHERE partner != '' AND partner_tier = ''",
-        )
+        )?;
+        // Owners no longer put a code in the MOTD. Anything still waiting on
+        // that step joins the review queue, where a moderator can approve it.
+        conn.execute_batch("UPDATE listed_servers SET state = 'pending' WHERE state = 'unverified'")
     }
 
     /// Make a server a partner's (shown in the partners section), or an
@@ -345,7 +343,8 @@ impl Store {
             .optional()
     }
 
-    /// A new submission (or the owner's own earlier one, still unverified).
+    /// A new submission, straight into the review queue (or the owner's own
+    /// earlier one, if it was rejected or still unverified).
     pub fn listing_submit(
         &self,
         owner: &str,
@@ -370,7 +369,7 @@ impl Store {
             }
             self.conn().execute(
                 "UPDATE listed_servers SET name = ?2, description = ?3, tags = ?4,
-                     state = 'unverified' WHERE id = ?1",
+                     state = 'pending' WHERE id = ?1",
                 params![
                     id,
                     name,
@@ -389,10 +388,9 @@ impl Store {
             return Err(SubmitError::TooMany);
         }
         let id = random_id(8);
-        let code = format!("{CODE_PREFIX}{}", random_id(6));
         self.conn().execute(
             "INSERT INTO listed_servers (id, address, name, description, tags, state, owner, code, created)
-             VALUES (?1, ?2, ?3, ?4, ?5, 'unverified', ?6, ?7, ?8)",
+             VALUES (?1, ?2, ?3, ?4, ?5, 'pending', ?6, '', ?7)",
             params![
                 id,
                 address,
@@ -400,7 +398,6 @@ impl Store {
                 description,
                 serde_json::to_string(tags).unwrap_or_default(),
                 owner,
-                code,
                 now as i64
             ],
         )?;
@@ -454,6 +451,87 @@ impl Store {
         )?;
         Ok(())
     }
+
+    /// Change the fields a moderator is allowed to correct. `Ok(false)`: no
+    /// such server. Tags are passed through [`clean_tags`]. A cleared
+    /// `cracked` (`Some(None)`) is NULL, so the pinger may look again.
+    pub fn listing_edit(&self, id: &str, edit: &ListingEdit) -> rusqlite::Result<bool> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let exists: bool = tx
+            .query_row("SELECT 1 FROM listed_servers WHERE id = ?1", [id], |_| {
+                Ok(true)
+            })
+            .optional()?
+            .unwrap_or(false);
+        if !exists {
+            return Ok(false);
+        }
+        if let Some(name) = &edit.name {
+            tx.execute(
+                "UPDATE listed_servers SET name = ?2 WHERE id = ?1",
+                params![id, name],
+            )?;
+        }
+        if let Some(description) = &edit.description {
+            tx.execute(
+                "UPDATE listed_servers SET description = ?2 WHERE id = ?1",
+                params![id, description],
+            )?;
+        }
+        if let Some(tags) = &edit.tags {
+            let tags = serde_json::to_string(&clean_tags(tags)).unwrap_or_else(|_| "[]".into());
+            tx.execute(
+                "UPDATE listed_servers SET tags = ?2 WHERE id = ?1",
+                params![id, tags],
+            )?;
+        }
+        match edit.cracked {
+            Some(Some(cracked)) => {
+                tx.execute(
+                    "UPDATE listed_servers SET cracked = ?2 WHERE id = ?1",
+                    params![id, i64::from(cracked)],
+                )?;
+            }
+            Some(None) => {
+                tx.execute(
+                    "UPDATE listed_servers SET cracked = NULL WHERE id = ?1",
+                    params![id],
+                )?;
+            }
+            None => {}
+        }
+        match &edit.owner {
+            Some(Some(owner)) => {
+                tx.execute(
+                    "UPDATE listed_servers SET owner = ?2 WHERE id = ?1",
+                    params![id, owner],
+                )?;
+            }
+            Some(None) => {
+                tx.execute(
+                    "UPDATE listed_servers SET owner = NULL WHERE id = ?1",
+                    params![id],
+                )?;
+            }
+            None => {}
+        }
+        tx.commit()?;
+        Ok(true)
+    }
+}
+
+/// Fields a moderator may change. `None` leaves that column alone.
+/// `cracked` and `owner` use `Some(None)` to clear the stored value.
+#[derive(Debug, Default)]
+pub struct ListingEdit {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub tags: Option<Vec<String>>,
+    /// `Some(None)` stores NULL so the pinger checks again.
+    pub cracked: Option<Option<bool>>,
+    /// `Some(None)` clears the owner.
+    pub owner: Option<Option<String>>,
 }
 
 /// `servers.json` from the assets folder (missing = no curated servers).
@@ -589,20 +667,26 @@ mod tests {
         let first = store
             .listing_submit("alice", "mc.x.net", "X", "", &[], 10)
             .unwrap();
-        assert_eq!(first.state, State::Unverified);
-        assert!(first.code.starts_with("arctic-"));
-        // Resubmitting your own unverified server keeps its code.
-        let again = store
-            .listing_submit("alice", "mc.x.net", "X2", "", &[], 11)
-            .unwrap();
-        assert_eq!(
-            (again.id.as_str(), again.code.as_str(), again.name.as_str()),
-            (first.id.as_str(), first.code.as_str(), "X2")
-        );
+        assert_eq!(first.state, State::Pending);
+        assert!(first.code.is_empty());
+        // Already in review: the address stays taken, for the owner too.
+        assert!(matches!(
+            store.listing_submit("alice", "mc.x.net", "X2", "", &[], 11),
+            Err(SubmitError::Taken)
+        ));
         assert!(matches!(
             store.listing_submit("bob", "mc.x.net", "Mine", "", &[], 12),
             Err(SubmitError::Taken)
         ));
+        // A rejected one can be sent again, and lands back in the queue.
+        store.listing_set_state(&first.id, State::Rejected).unwrap();
+        let again = store
+            .listing_submit("alice", "mc.x.net", "X2", "", &[], 13)
+            .unwrap();
+        assert_eq!(
+            (again.id.as_str(), again.state, again.name.as_str()),
+            (first.id.as_str(), State::Pending, "X2")
+        );
         for i in 0..4 {
             store
                 .listing_submit("alice", &format!("s{i}.x.net"), "S", "", &[], 20)
@@ -612,8 +696,7 @@ mod tests {
             store.listing_submit("alice", "late.x.net", "L", "", &[], 30),
             Err(SubmitError::TooMany)
         ));
-        // Unverified and pending never show.
-        store.listing_set_state(&first.id, State::Pending).unwrap();
+        // Pending never shows until it's approved.
         store
             .listing_pinged(&first.id, Some(&Live::default()), 40)
             .unwrap();
@@ -623,9 +706,74 @@ mod tests {
     }
 
     #[test]
-    fn codes_and_tags() {
-        assert!(motd_has_code("Welcome! ARCTIC-ab12cd", "arctic-ab12cd"));
-        assert!(!motd_has_code("Welcome", "arctic-ab12cd"));
+    fn unverified_rows_join_the_review_queue() {
+        let store = Store::memory().unwrap();
+        store
+            .conn()
+            .execute(
+                "INSERT INTO listed_servers (id, address, name, description, tags, state, owner, code, created)
+                 VALUES ('old1', 'old.example.net', 'Old', '', '[]', 'unverified', 'alice', 'arctic-abc123', 1)",
+                [],
+            )
+            .unwrap();
+        store.migrate_listing().unwrap();
+        let pending = store.listing_in_state(State::Pending).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].address, "old.example.net");
+        assert!(
+            store
+                .listing_in_state(State::Unverified)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(store.listing_set_state("old1", State::Listed).unwrap());
+    }
+
+    #[test]
+    fn moderators_can_edit_a_listing() {
+        let store = Store::memory().unwrap();
+        let first = store
+            .listing_submit("alice", "mc.x.net", "X", "old", &["smp".into()], 10)
+            .unwrap();
+        store.listing_set_cracked(&first.id, true).unwrap();
+        let edit = ListingEdit {
+            name: Some("Y".into()),
+            description: Some("new".into()),
+            tags: Some(vec!["PvP".into(), "pvp".into(), "nope!".into()]),
+            cracked: Some(None),
+            owner: Some(Some("069a79f444e94726a5befca90e38aaf5".into())),
+        };
+        assert!(store.listing_edit(&first.id, &edit).unwrap());
+        let got = store.listing_get(&first.id).unwrap().unwrap();
+        assert_eq!(got.name, "Y");
+        assert_eq!(got.description, "new");
+        assert_eq!(got.tags, vec!["pvp"]);
+        assert_eq!(got.cracked, None);
+        assert_eq!(
+            got.owner.as_deref(),
+            Some("069a79f444e94726a5befca90e38aaf5")
+        );
+        assert!(
+            store
+                .listing_edit(
+                    &first.id,
+                    &ListingEdit {
+                        owner: Some(None),
+                        cracked: Some(Some(false)),
+                        ..ListingEdit::default()
+                    },
+                )
+                .unwrap()
+        );
+        let got = store.listing_get(&first.id).unwrap().unwrap();
+        assert_eq!(got.owner, None);
+        assert_eq!(got.cracked, Some(false));
+        assert_eq!(got.name, "Y");
+        assert!(!store.listing_edit("missing", &edit).unwrap());
+    }
+
+    #[test]
+    fn addresses_and_tags() {
         assert_eq!(
             clean_address("Play.Example.NET:25565").as_deref(),
             Some("play.example.net")

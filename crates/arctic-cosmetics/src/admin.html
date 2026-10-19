@@ -604,11 +604,11 @@ async function gallery(r) {
 // ---- servers -------------------------------------------------------------
 
 const SERVER_ACTIONS = {
-  pending: [["approve", "Approve", "good"], ["reject", "Reject", "bad"]],
-  unverified: [["login", "Login…", ""], ["approve", "Approve anyway", "good"], ["reject", "Reject", "bad"], ["remove", "Remove", "bad"]],
-  listed: [["login", "Login…", ""], ["partner", "Partner…", ""], ["reject", "Unlist", "bad"], ["remove", "Remove", "bad"]],
-  curated: [["login", "Login…", ""], ["partner", "Partner…", ""]],
-  rejected: [["approve", "Approve", "good"], ["remove", "Remove", "bad"]],
+  pending: [["edit", "Edit…", ""], ["approve", "Approve", "good"], ["reject", "Reject", "bad"]],
+  unverified: [["edit", "Edit…", ""], ["approve", "Approve", "good"], ["reject", "Reject", "bad"], ["remove", "Remove", "bad"]],
+  listed: [["edit", "Edit…", ""], ["partner", "Partner…", ""], ["reject", "Unlist", "bad"], ["remove", "Remove", "bad"]],
+  curated: [["edit", "Edit…", ""], ["partner", "Partner…", ""]],
+  rejected: [["edit", "Edit…", ""], ["approve", "Approve", "good"], ["remove", "Remove", "bad"]],
 };
 const SERVER_DONE = { approve: "Approved", reject: "Moved to rejected", remove: "Removed" };
 
@@ -633,20 +633,37 @@ async function partnerDialog(s) {
   return { action: "partner", group: values.group, tier: values.group ? values.tier : "hosted" };
 }
 
-async function loginDialog(s) {
+async function editDialog(s) {
+  const cracked = s.cracked === true ? "true" : s.cracked === false ? "false" : "clear";
   const values = await ask({
-    title: "Cracked or premium: " + s.name,
-    text: "The list checks this itself by starting a login. Set it here when the check can't tell, or is wrong. \"Automatic\" hands it back to the check.",
+    title: "Edit: " + (s.name || s.address),
+    text: "Clear the login check to let the pinger look again. Clear the owner so the real one can be set after they email.",
     fields: [
-      { name: "login", label: "This server takes", value: s.cracked === true ? "cracked" : s.cracked === false ? "premium" : "auto", options: [
-        ["premium", "Premium accounts only"],
-        ["cracked", "Cracked accounts too"],
-        ["auto", "Automatic (the check decides)"]] },
+      { name: "name", label: "Name", value: s.name || "", hint: "1 to 40 characters" },
+      { name: "description", label: "Description", value: s.description || "", hint: "200 characters at most" },
+      { name: "tags", label: "Tags", value: (s.tags || []).join(", "), hint: "Comma-separated. Letters, numbers and dashes; up to 5." },
+      { name: "cracked", label: "Login", value: cracked, options: [
+        ["clear", "Unknown (pinger checks again)"],
+        ["true", "Cracked"],
+        ["false", "Premium"]] },
+      { name: "owner", label: "Owner", value: s.owner || "", placeholder: "player id, empty to clear", hint: "The signed-in player's id." },
     ],
     confirm: "Save",
+    check(values) {
+      if (!values.name || [...values.name].length > 40) return "The name needs 1 to 40 characters.";
+      if ([...values.description].length > 200) return "The description is too long (200 characters at most).";
+      return null;
+    },
   });
   if (!values) return null;
-  return { action: "login", login: values.login };
+  return {
+    action: "edit",
+    name: values.name,
+    description: values.description,
+    tags: values.tags.split(",").map((t) => t.trim()).filter(Boolean),
+    cracked: values.cracked,
+    owner: values.owner,
+  };
 }
 
 async function servers(r) {
@@ -658,13 +675,14 @@ async function servers(r) {
       const b = el("button", { class: (tone || "") + " small", onclick: async () => {
         let body = { action };
         if (action === "partner") { body = await partnerDialog(s); if (!body) return; }
-        if (action === "login") { body = await loginDialog(s); if (!body) return; }
+        if (action === "edit") { body = await editDialog(s); if (!body) return; }
         if (action === "remove" && !(await sure("Remove " + s.name + "?", "It is deleted from every list. The owner can submit it again.", "Remove"))) return;
-        const ok = await act(b, () => api("/v1/admin/servers/" + encodeURIComponent(s.id), { method: "POST", body }),
-          action === "partner" ? (body.group ? "Partner saved" : "Now an ordinary server")
-            : action === "login" ? "Login saved: " + s.name : SERVER_DONE[action] + ": " + s.name);
+        const done = action === "partner" ? (body.group ? "Partner saved" : "Now an ordinary server")
+          : action === "edit" ? "Saved: " + (body.name || s.name)
+          : SERVER_DONE[action] + ": " + s.name;
+        const ok = await act(b, () => api("/v1/admin/servers/" + encodeURIComponent(s.id), { method: "POST", body }), done);
         if (!ok) return;
-        if (action === "partner" || action === "login") render(); else leave(item);
+        if (action === "partner" || action === "edit") render(); else leave(item);
       } }, label);
       return b;
     }) : [];
@@ -680,8 +698,9 @@ async function servers(r) {
           ...(s.tags || []).map((t) => chip("#" + t))),
         s.problem ? el("div", { class: "meta", style: "color:var(--bad)" }, "Can't reach it: " + s.problem) : null,
         s.description && s.description !== s.address ? el("div", { class: "text clamp" }, s.description) : null,
-        r.sub === "unverified" && s.code ? el("div", { class: "meta" }, "Waiting for the owner to put ", el("code", {}, s.code), " in the server's MOTD.") : null,
-        s.owner ? el("div", { class: "meta" }, "Submitted by ", el("span", { class: "mono" }, s.owner)) : null),
+        s.owner
+          ? el("div", { class: "meta" }, "Submitted by ", el("span", { class: "mono" }, s.owner))
+          : el("div", { class: "meta" }, "No owner")),
       el("div", { class: "side" }, buttons.length ? el("div", { class: "actions" }, ...buttons) : null));
     return searchable(item, s.name, s.address, s.description, s.tags, s.partner);
   });

@@ -1039,7 +1039,6 @@ impl ArcticApp {
             Event::ChatNew(after, result) => self.on_chat_new(after, result),
             Event::PublicServers(list) => self.on_public_servers(list),
             Event::ServerSubmitted(result) => self.on_server_submitted(result),
-            Event::ServerVerified(result) => self.on_server_verified(result),
             Event::Screenshots(list) => self.on_screenshot_list(list),
             Event::ScreenshotThumb(path, result) => self.on_screenshot_thumb(ctx, path, result),
             Event::ScreenshotCopied(result) => self.on_screenshot_copied(result),

@@ -1,7 +1,6 @@
 //! The public server list on the Arctic server: browse it (a new random
-//! order each time, nothing paid or pinned), list your own server (prove
-//! it with a code in the MOTD, then an admin approves), and the admin
-//! review itself.
+//! order each time, nothing paid or pinned), list your own server (it waits
+//! for a moderator), and the admin review itself.
 
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -67,11 +66,13 @@ impl Access {
     }
 }
 
-/// A submission: its id and the code to put in the MOTD.
+/// A submission waiting for review. `code` is empty: older servers sent one
+/// to put in the MOTD, and that step is gone.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Submitted {
     pub id: String,
     pub address: String,
+    #[serde(default)]
     pub code: String,
     pub state: String,
 }
@@ -134,7 +135,8 @@ pub fn submit(
     Ok(resp.body_mut().with_config().limit(4096).read_json()?)
 }
 
-/// Ask the Arctic server to look for the code; `pending` when it's found.
+/// The submission's state. Listings wait for review as soon as they're
+/// submitted; older launchers still call this.
 pub fn verify(base: &str, token: &str, id: &str) -> Result<String> {
     let mut resp = agent()
         .post(&format!("{base}/v1/servers/{id}/verify"))
@@ -166,7 +168,7 @@ pub fn review(base: &str, admin_key: &str, state: &str) -> Result<Vec<Value>> {
     Ok(v["servers"].as_array().cloned().unwrap_or_default())
 }
 
-/// Admin: `approve`, `reject` or `remove` a server.
+/// Admin: `approve`, `reject`, `remove`, `partner` or `edit` a server.
 pub fn decide(base: &str, admin_key: &str, id: &str, action: &str) -> Result<()> {
     let mut resp = agent()
         .post(&format!("{base}/v1/admin/servers/{id}"))

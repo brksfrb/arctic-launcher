@@ -168,8 +168,6 @@ pub enum Event {
     RecoveryCode(Outcome<String>),
     PublicServers(Outcome<Vec<arctic_core::servers::public::PublicServer>>),
     ServerSubmitted(Outcome<arctic_core::servers::public::Submitted>),
-    /// The submission's state after the MOTD check.
-    ServerVerified(Outcome<String>),
     Screenshots(Vec<arctic_core::screenshots::Shot>),
     ScreenshotThumb(PathBuf, Outcome<Vec<u8>>),
     ScreenshotCopied(Outcome<()>),
