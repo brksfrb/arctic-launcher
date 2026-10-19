@@ -13,6 +13,15 @@ use crate::toasts::Kind;
 use crate::widgets;
 
 const ICON: f32 = 36.0;
+
+/// Where an instance's "look for newer mods" stands.
+pub(crate) enum UpdateState {
+    Checking,
+    Ready(Vec<mods::ModUpdate>),
+    Applying,
+    Failed(String),
+}
+
 impl ArcticApp {
     pub(super) fn mods_page(&mut self, ui: &mut egui::Ui, instance: &Instance) {
         let p = self.palette();
@@ -44,6 +53,20 @@ impl ArcticApp {
                     let _ = std::fs::create_dir_all(&mods_dir);
                     let _ = open::that_detached(&mods_dir);
                 }
+                let busy = matches!(
+                    self.inst.mod_updates.get(&instance.id),
+                    Some(UpdateState::Checking | UpdateState::Applying)
+                );
+                if !busy
+                    && instance.loader.kind().is_some()
+                    && widgets::button(ui, p, Some(Icon::Import), "Look for updates", false)
+                        .clicked()
+                {
+                    self.inst
+                        .mod_updates
+                        .insert(instance.id.clone(), UpdateState::Checking);
+                    self.tasks.mod_updates_check(instance.clone());
+                }
             });
         });
         ui.add_space(8.0);
@@ -71,6 +94,7 @@ impl ArcticApp {
         if data.is_none() {
             return;
         }
+        self.mod_updates_card(ui, instance);
         self.clash_card(ui, instance);
         if files.is_empty() {
             theme::card(p).show(ui, |ui| {
@@ -126,6 +150,92 @@ impl ArcticApp {
         });
         if changed {
             self.refresh_mods(&instance.id);
+        }
+    }
+
+    /// The result of "Look for updates": the mods with a newer build, and a button to update them all.
+    fn mod_updates_card(&mut self, ui: &mut egui::Ui, instance: &Instance) {
+        let p = self.palette();
+        let Some(state) = self.inst.mod_updates.get(&instance.id) else {
+            return;
+        };
+        let mut apply: Option<Vec<String>> = None;
+        let mut dismiss = false;
+        theme::card(p).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            match state {
+                UpdateState::Checking => {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(RichText::new("Looking for newer builds…").color(p.muted));
+                    });
+                }
+                UpdateState::Applying => {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(RichText::new("Updating mods…").color(p.muted));
+                    });
+                }
+                UpdateState::Failed(e) => {
+                    ui.label(
+                        RichText::new(format!("Couldn't look for updates: {e}")).color(p.error),
+                    );
+                    if widgets::button(ui, p, None, "Close", false).clicked() {
+                        dismiss = true;
+                    }
+                }
+                UpdateState::Ready(list) if list.is_empty() => {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("All your mods are up to date.").color(p.text));
+                        if widgets::button(ui, p, None, "Close", false).clicked() {
+                            dismiss = true;
+                        }
+                    });
+                }
+                UpdateState::Ready(list) => {
+                    ui.label(
+                        RichText::new(format!(
+                            "{} update{} available",
+                            list.len(),
+                            if list.len() == 1 { "" } else { "s" }
+                        ))
+                        .size(17.0)
+                        .strong()
+                        .color(p.text),
+                    );
+                    ui.add_space(4.0);
+                    for update in list {
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(&update.title).color(p.text));
+                            ui.label(
+                                RichText::new(format!("{} → {}", update.current, update.latest))
+                                    .small()
+                                    .color(p.muted),
+                            );
+                        });
+                    }
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        if widgets::button(ui, p, Some(Icon::Import), "Update all", true).clicked()
+                        {
+                            apply = Some(list.iter().map(|u| u.project_id.clone()).collect());
+                        }
+                        if widgets::button(ui, p, None, "Not now", false).clicked() {
+                            dismiss = true;
+                        }
+                    });
+                }
+            }
+        });
+        ui.add_space(8.0);
+        if dismiss {
+            self.inst.mod_updates.remove(&instance.id);
+        }
+        if let Some(projects) = apply {
+            self.inst
+                .mod_updates
+                .insert(instance.id.clone(), UpdateState::Applying);
+            self.tasks.mod_updates_apply(instance.clone(), projects);
         }
     }
 

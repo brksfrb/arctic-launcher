@@ -227,6 +227,57 @@ pub fn updates_waiting(
     Ok(Some(!plan.iter().all(have)))
 }
 
+/// A newer build of a mod Arctic installed into an instance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModUpdate {
+    pub project_id: String,
+    pub title: String,
+    /// The installed file.
+    pub file_name: String,
+    /// Its version, and the newer one.
+    pub current: String,
+    pub latest: String,
+}
+
+/// The mods installed through Arctic (and switched on) that have a newer build for this game
+/// version and loader. Asks Modrinth about each mod side by side; mods it can't answer for are left
+/// out. Switched-off mods and mods the player added by hand are not looked at.
+pub fn available_updates(
+    game_version: &str,
+    loader: LoaderKind,
+    mods_dir: &Path,
+    index: &Path,
+) -> Result<Vec<ModUpdate>> {
+    let current = ModIndex::load(index)?;
+    let projects: Vec<&str> = current
+        .mods
+        .iter()
+        .filter(|m| mods_dir.join(&m.file_name).is_file())
+        .map(|m| m.project_id.as_str())
+        .collect();
+    if projects.is_empty() {
+        return Ok(Vec::new());
+    }
+    let (plan, _failed) = plan_many(&projects, game_version, loader, &current, mods_dir);
+    let mut updates: Vec<ModUpdate> = plan
+        .iter()
+        .filter_map(|planned| {
+            let have = current.mods.iter().find(|m| {
+                m.project_id == planned.version.project_id && mods_dir.join(&m.file_name).is_file()
+            })?;
+            (have.version_id != planned.version.id).then(|| ModUpdate {
+                project_id: have.project_id.clone(),
+                title: have.title.clone(),
+                file_name: have.file_name.clone(),
+                current: have.version_number.clone(),
+                latest: planned.version.version_number.clone(),
+            })
+        })
+        .collect();
+    updates.sort_by_key(|u| u.title.to_lowercase());
+    Ok(updates)
+}
+
 /// What installing `projects` would download (looked up side by side), and
 /// the projects that can't be installed, with why.
 fn plan_many(
