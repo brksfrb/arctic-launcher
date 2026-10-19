@@ -97,6 +97,10 @@ pub enum Event {
     /// (instance id, project id, result)
     ModInstalled(String, String, Outcome<Vec<InstalledMod>>),
     /// What an instance's mods become on another version: (instance id, version, result).
+    /// The newer builds of an instance's mods (from `mod_updates_check`).
+    ModUpdatesChecked(String, Outcome<Vec<arctic_core::mods::ModUpdate>>),
+    /// Mods brought up to date: how many were installed, and the projects that couldn't be.
+    ModUpdatesApplied(String, Outcome<(usize, Vec<String>)>),
     RetargetChecked(
         String,
         String,
@@ -442,6 +446,52 @@ impl Tasks {
                 }
             };
             t.send(Event::ModpackInstalled(result));
+        });
+    }
+
+    /// Look for newer builds of the mods Arctic installed into `instance`.
+    pub fn mod_updates_check(&self, instance: Instance) {
+        self.run(move |t| {
+            let result = match instance.loader.kind() {
+                Some(loader) => mods::available_updates(
+                    &instance.version.clone().unwrap_or_default(),
+                    loader,
+                    &instance.game_dir(&t.dirs).join("mods"),
+                    &mods::index_path(&t.dirs.instance_dir(&instance.id)),
+                )
+                .map_err(|e| e.to_string()),
+                None => Ok(Vec::new()),
+            };
+            t.send(Event::ModUpdatesChecked(instance.id, result));
+        });
+    }
+
+    /// Install the newest builds of `projects` (each replacing the old one).
+    pub fn mod_updates_apply(&self, instance: Instance, projects: Vec<String>) {
+        self.run(move |t| {
+            let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
+            let result = match instance.loader.kind() {
+                Some(loader) => {
+                    let refs: Vec<&str> = projects.iter().map(String::as_str).collect();
+                    mods::install_many(
+                        &refs,
+                        &instance.version.clone().unwrap_or_default(),
+                        loader,
+                        &instance.game_dir(&t.dirs).join("mods"),
+                        &mods::index_path(&t.dirs.instance_dir(&instance.id)),
+                        &progress,
+                    )
+                    .map(|(installed, failed)| {
+                        (
+                            installed.len(),
+                            failed.into_iter().map(|(project, _)| project).collect(),
+                        )
+                    })
+                    .map_err(|e| e.to_string())
+                }
+                None => Err("Vanilla instances can't load mods".to_owned()),
+            };
+            t.send(Event::ModUpdatesApplied(instance.id, result));
         });
     }
 

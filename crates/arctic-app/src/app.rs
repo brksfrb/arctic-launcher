@@ -905,6 +905,8 @@ impl ArcticApp {
             | Event::ModsScanned(..)
             | Event::ModProgress(..)
             | Event::ModInstalled(..)
+            | Event::ModUpdatesChecked(..)
+            | Event::ModUpdatesApplied(..)
             | Event::RetargetChecked(..)
             | Event::Retargeted(..)
             | Event::ModIcon(..)) => self.on_instances_event(e, ctx),

@@ -124,6 +124,8 @@ pub struct InstancesUi {
     pub clashes: clashes::ClashState,
     pub search: SearchState,
     pub installing: HashSet<String>,
+    /// Where each instance's mod update check stands.
+    pub mod_updates: HashMap<String, mods_page::UpdateState>,
     pub install_progress: Option<ProgressSnapshot>,
     pub icons: HashMap<String, IconState>,
     pub loader_games: HashMap<LoaderKind, Load<HashSet<String>>>,
@@ -467,6 +469,38 @@ impl ArcticApp {
                 }
             }
             Event::ModProgress(p) => self.inst.install_progress = Some(p),
+            Event::ModUpdatesChecked(instance, result) => {
+                let state = match result {
+                    Ok(list) => mods_page::UpdateState::Ready(list),
+                    Err(e) => mods_page::UpdateState::Failed(e),
+                };
+                self.inst.mod_updates.insert(instance, state);
+            }
+            Event::ModUpdatesApplied(instance, result) => {
+                self.inst.mod_updates.remove(&instance);
+                self.inst.install_progress = None;
+                match result {
+                    Ok((installed, failed)) => {
+                        let note = if failed.is_empty() {
+                            String::new()
+                        } else {
+                            format!("{} could not be updated.", failed.len())
+                        };
+                        self.toasts.push(
+                            Kind::Success,
+                            format!(
+                                "Updated {installed} file{}",
+                                if installed == 1 { "" } else { "s" }
+                            ),
+                            note,
+                        );
+                    }
+                    Err(e) => self.toasts.push(Kind::Error, "Could not update mods", e),
+                }
+                if self.inst.open.as_deref() == Some(instance.as_str()) {
+                    self.refresh_mods(&instance);
+                }
+            }
             Event::RetargetChecked(instance, version, result) => {
                 self.on_retarget_checked(instance, version, result)
             }
