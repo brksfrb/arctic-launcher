@@ -468,6 +468,34 @@ impl ArcticApp {
         });
     }
 
+    /// A crash's "Fix it": switch off the mods it names, or update the instance's loader.
+    pub(crate) fn apply_crash_fix(&mut self, instance_id: &str, fix: &arctic_core::crash::Fix) {
+        let found = if self.instance.id == instance_id {
+            Some(self.instance.clone())
+        } else {
+            self.custom_instances
+                .iter()
+                .find(|i| i.id == instance_id)
+                .cloned()
+        };
+        let Some(mut instance) = found else {
+            self.toasts
+                .push(Kind::Error, "Couldn't fix it", "That instance is gone.");
+            return;
+        };
+        match arctic_core::crash_fix::apply(&self.dirs, &mut instance, fix) {
+            Ok(done) => {
+                let loader = instance.loader.clone();
+                // A loader update is already saved; keep the open copy in step.
+                self.update_instance(instance_id, move |i| i.loader = loader);
+                self.toasts.push(Kind::Success, "Fixed", done);
+            }
+            Err(e) => self
+                .toasts
+                .push(Kind::Error, "Couldn't fix it", e.to_string()),
+        }
+    }
+
     /// Apply `change` to an instance and save it.
     pub(crate) fn update_instance(&mut self, id: &str, change: impl FnOnce(&mut Instance)) {
         let dirs = self.dirs.clone();

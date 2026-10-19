@@ -6,6 +6,16 @@ use std::sync::OnceLock;
 
 use regex::Regex;
 
+/// A fix the launcher can do for the player in one click (see `crash_fix`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Fix {
+    /// Switch these mods off (names as the log gives them; the files are renamed to
+    /// `.jar.disabled`, so the Mods page can switch them back on).
+    DisableMods(Vec<String>),
+    /// Move the instance's Fabric Loader to the newest stable build.
+    UpdateLoader,
+}
+
 /// What went wrong, for people rather than stack traces.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnosis {
@@ -15,6 +25,8 @@ pub struct Diagnosis {
     pub mods: Vec<String>,
     /// A game or loader library could not load: check its files on the next start.
     pub repair: bool,
+    /// What the launcher can do about it, if anything.
+    pub fix: Option<Fix>,
 }
 
 impl Diagnosis {
@@ -29,6 +41,7 @@ impl Diagnosis {
             detail: detail.into(),
             mods,
             repair: false,
+            fix: None,
         }
     }
 }
@@ -115,24 +128,30 @@ const RULES: &[Rule] = &[
             }
             let have = &c[5];
             if target == "minecraft" {
-                Diagnosis::new(
-                    format!("{} mod(s) are for another Minecraft version", names.len()),
-                    format!(
-                        "These mods are made for another Minecraft version than {have}: {}. They are probably left over from another version (an instance copied or switched to a newer game). Remove them, or update them from the instance's Mods page.",
-                        names.join(", ")
-                    ),
-                    names,
-                )
+                Diagnosis {
+                    fix: Some(Fix::DisableMods(names.clone())),
+                    ..Diagnosis::new(
+                        format!("{} mod(s) are for another Minecraft version", names.len()),
+                        format!(
+                            "These mods are made for another Minecraft version than {have}: {}. They are probably left over from another version (an instance copied or switched to a newer game). Switch them off, or update them from the instance's Mods page.",
+                            names.join(", ")
+                        ),
+                        names,
+                    )
+                }
             } else {
-                Diagnosis::new(
-                    "Fabric Loader is too old for these mods",
-                    format!(
-                        "{} need {} of Fabric Loader, but this instance has {have}. Update Fabric Loader in the instance's settings (Loader), or remove those mods.",
-                        names.join(", "),
-                        c[3].to_owned()
-                    ),
-                    names,
-                )
+                Diagnosis {
+                    fix: Some(Fix::UpdateLoader),
+                    ..Diagnosis::new(
+                        "Fabric Loader is too old for these mods",
+                        format!(
+                            "{} need {} of Fabric Loader, but this instance has {have}. Update Fabric Loader in the instance's settings (Loader), or remove those mods.",
+                            names.join(", "),
+                            c[3].to_owned()
+                        ),
+                        names,
+                    )
+                }
             }
         },
     },
@@ -704,7 +723,14 @@ mod tests {
         let d = diagnose(log).unwrap();
         assert_eq!(d.title, "2 mod(s) are for another Minecraft version");
         assert_eq!(d.mods, ["SpruceUI", "Pride Lib"]);
-        assert!(d.detail.contains("26.3") && d.detail.contains("Remove them"));
+        assert!(d.detail.contains("26.3") && d.detail.contains("Switch them off"));
+        assert_eq!(
+            d.fix,
+            Some(Fix::DisableMods(vec![
+                "SpruceUI".into(),
+                "Pride Lib".into()
+            ]))
+        );
     }
 
     #[test]
@@ -715,6 +741,7 @@ mod tests {
         assert_eq!(d.title, "Fabric Loader is too old for these mods");
         assert_eq!(d.mods, ["Fabric API", "ModernFix"]);
         assert!(d.detail.contains("0.16.10") && d.detail.contains("0.15.11"));
+        assert_eq!(d.fix, Some(Fix::UpdateLoader));
     }
 
     #[test]

@@ -122,6 +122,11 @@ impl Run {
 
     /// Why the game crashed, from its log and the crash report it wrote.
     fn diagnose(&self) -> Option<Diagnosis> {
+        crash::diagnose(&self.crash_text())
+    }
+
+    /// The end of the game's log and the crash report it wrote, as one text.
+    fn crash_text(&self) -> String {
         let skip = self.log.len().saturating_sub(DIAGNOSE_LINES);
         let mut text: String = self
             .log
@@ -134,7 +139,7 @@ impl Run {
             text.push('\n');
             text.push_str(&report);
         }
-        crash::diagnose(&text)
+        text
     }
 }
 
@@ -351,6 +356,7 @@ impl ArcticApp {
                 };
                 let watchdog = run.shutdown_watchdog_fired();
                 let title = run.title.clone();
+                let instance_id = run.instance_id.clone();
                 let diagnosis = matches!(code, Some(c) if c != 0 && !watchdog)
                     .then(|| run.diagnose())
                     .flatten();
@@ -367,10 +373,28 @@ impl ArcticApp {
                     }
                 }
                 let crashed = matches!(code, Some(c) if c != 0 && !watchdog);
+                let native_place = crashed
+                    .then(|| arctic_core::stability::place(&run.crash_text()))
+                    .flatten();
                 if crashed {
                     let report =
                         run.crash_report(diagnosis.as_ref().map_or("", |d| d.title.as_str()));
                     self.offer_crash_report(id, report);
+                }
+                // Native crashes in several different places point at the computer, not a mod.
+                if let Some(place) = native_place {
+                    match arctic_core::stability::record(
+                        &self.dirs,
+                        arctic_core::auth::now_secs(),
+                        &place,
+                    ) {
+                        Ok(Some(hint)) => {
+                            self.toasts
+                                .push(Kind::Info, "This may be a problem with your PC", hint)
+                        }
+                        Ok(None) => {}
+                        Err(e) => log::warn!("crash history: {e}"),
+                    }
                 }
                 // Back to the launcher once the last game is closed.
                 if self.minimized_for_game && !self.runs.any_game() {
@@ -378,7 +402,7 @@ impl ArcticApp {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
                     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                 }
-                self.report_exit(id, &title, code, watchdog, diagnosis);
+                self.report_exit(id, &title, &instance_id, code, watchdog, diagnosis);
             }
         }
     }
@@ -387,6 +411,7 @@ impl ArcticApp {
         &mut self,
         id: LaunchId,
         title: &str,
+        instance_id: &str,
         code: Option<i32>,
         watchdog: bool,
         diagnosis: Option<Diagnosis>,
@@ -399,6 +424,8 @@ impl ArcticApp {
                 "It was slow to shut down, which happens without internet.",
             ),
             Some(c) => {
+                // A crash the launcher can fix gets a "Fix it" button instead of the logs one.
+                let fix = diagnosis.as_ref().and_then(|d| d.fix.clone());
                 let (heading, body) = match diagnosis {
                     Some(d) => (format!("{title} crashed: {}", d.title), d.detail),
                     None => (
@@ -406,12 +433,15 @@ impl ArcticApp {
                         format!("Exit code {c}."),
                     ),
                 };
-                self.toasts.push_with_action(
-                    Kind::Error,
-                    heading,
-                    body,
-                    Some(ToastAction::ShowLogs(id)),
-                );
+                let action = match fix {
+                    Some(fix) => ToastAction::Fix {
+                        instance: instance_id.to_owned(),
+                        fix,
+                    },
+                    None => ToastAction::ShowLogs(id),
+                };
+                self.toasts
+                    .push_with_action(Kind::Error, heading, body, Some(action));
             }
             None => self
                 .toasts
