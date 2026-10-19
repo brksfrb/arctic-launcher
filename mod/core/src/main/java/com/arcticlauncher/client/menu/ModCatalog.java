@@ -176,6 +176,9 @@ final class ModCatalog {
 				.settings((host, f) -> {
 					f.section("Key");
 					f.key("Fullbright key", "Switches it on and off", Form.key(() -> c.fullbrightKey, k -> c.fullbrightKey = k));
+					f.section("Speed");
+					f.toggle("Skip light calculations", "Faster: the game stops working out light. Rejoin the world after switching it off",
+							() -> c.fullbrightSkipLight, on -> c.fullbrightSkipLight = on);
 				}));
 		out.add(new Mod("crosshair", "Crosshair", "Your own crosshair: shape, size, color", "crosshair", Category.VISUAL, "aim")
 				.toggle(() -> c.crosshair.enabled, on -> c.crosshair.enabled = on)
