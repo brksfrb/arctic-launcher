@@ -605,9 +605,9 @@ async function gallery(r) {
 
 const SERVER_ACTIONS = {
   pending: [["approve", "Approve", "good"], ["reject", "Reject", "bad"]],
-  unverified: [["approve", "Approve anyway", "good"], ["reject", "Reject", "bad"], ["remove", "Remove", "bad"]],
-  listed: [["partner", "Partner…", ""], ["reject", "Unlist", "bad"], ["remove", "Remove", "bad"]],
-  curated: [["partner", "Partner…", ""]],
+  unverified: [["login", "Login…", ""], ["approve", "Approve anyway", "good"], ["reject", "Reject", "bad"], ["remove", "Remove", "bad"]],
+  listed: [["login", "Login…", ""], ["partner", "Partner…", ""], ["reject", "Unlist", "bad"], ["remove", "Remove", "bad"]],
+  curated: [["login", "Login…", ""], ["partner", "Partner…", ""]],
   rejected: [["approve", "Approve", "good"], ["remove", "Remove", "bad"]],
 };
 const SERVER_DONE = { approve: "Approved", reject: "Moved to rejected", remove: "Removed" };
@@ -633,6 +633,22 @@ async function partnerDialog(s) {
   return { action: "partner", group: values.group, tier: values.group ? values.tier : "hosted" };
 }
 
+async function loginDialog(s) {
+  const values = await ask({
+    title: "Cracked or premium: " + s.name,
+    text: "The list checks this itself by starting a login. Set it here when the check can't tell, or is wrong. \"Automatic\" hands it back to the check.",
+    fields: [
+      { name: "login", label: "This server takes", value: s.cracked === true ? "cracked" : s.cracked === false ? "premium" : "auto", options: [
+        ["premium", "Premium accounts only"],
+        ["cracked", "Cracked accounts too"],
+        ["auto", "Automatic (the check decides)"]] },
+    ],
+    confirm: "Save",
+  });
+  if (!values) return null;
+  return { action: "login", login: values.login };
+}
+
 async function servers(r) {
   const data = await api("/v1/admin/servers?state=" + encodeURIComponent(r.sub));
   const list = data.servers || [];
@@ -642,11 +658,13 @@ async function servers(r) {
       const b = el("button", { class: (tone || "") + " small", onclick: async () => {
         let body = { action };
         if (action === "partner") { body = await partnerDialog(s); if (!body) return; }
+        if (action === "login") { body = await loginDialog(s); if (!body) return; }
         if (action === "remove" && !(await sure("Remove " + s.name + "?", "It is deleted from every list. The owner can submit it again.", "Remove"))) return;
         const ok = await act(b, () => api("/v1/admin/servers/" + encodeURIComponent(s.id), { method: "POST", body }),
-          action === "partner" ? (body.group ? "Partner saved" : "Now an ordinary server") : SERVER_DONE[action] + ": " + s.name);
+          action === "partner" ? (body.group ? "Partner saved" : "Now an ordinary server")
+            : action === "login" ? "Login saved: " + s.name : SERVER_DONE[action] + ": " + s.name);
         if (!ok) return;
-        if (action === "partner") render(); else leave(item);
+        if (action === "partner" || action === "login") render(); else leave(item);
       } }, label);
       return b;
     }) : [];

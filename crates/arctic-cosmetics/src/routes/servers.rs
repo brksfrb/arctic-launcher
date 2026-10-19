@@ -232,6 +232,9 @@ struct Decision {
     /// With `partner`: `exclusive` (our own servers) or `hosted` (default).
     #[serde(default)]
     tier: String,
+    /// With `login`: `premium`, `cracked` or `auto` (the automatic check decides again).
+    #[serde(default)]
+    login: String,
 }
 
 async fn decide(
@@ -248,10 +251,21 @@ async fn decide(
         "reject" => state.store.listing_set_state(&id, ListingState::Rejected),
         "remove" => state.store.listing_remove(&id),
         "partner" => state.store.listing_set_partner(&id, &d.group, &d.tier),
+        "login" => {
+            let cracked = match d.login.as_str() {
+                "cracked" => Some(true),
+                "premium" => Some(false),
+                "auto" => None,
+                _ => {
+                    return error(StatusCode::BAD_REQUEST, "login is premium, cracked or auto");
+                }
+            };
+            state.store.listing_set_login(&id, cracked)
+        }
         _ => {
             return error(
                 StatusCode::BAD_REQUEST,
-                "action is approve, reject, remove or partner",
+                "action is approve, reject, remove, partner or login",
             );
         }
     };
