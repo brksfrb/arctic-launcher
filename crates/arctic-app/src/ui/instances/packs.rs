@@ -100,7 +100,7 @@ impl ArcticApp {
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, p, Icon::Folder, "Open the folder").clicked() {
+                if widgets::button(ui, p, Some(Icon::Folder), "Open folder", false).clicked() {
                     let dir = instance
                         .game_dir(&self.dirs)
                         .join(self.inst.packs.kind.folder());
@@ -215,9 +215,12 @@ impl ArcticApp {
         egui::ComboBox::from_id_salt(("pack_group", &pack.file_name))
             .selected_text(current.unwrap_or("Group"))
             .width(110.0)
+            // Only a click outside closes it: a click in the "New group…" field must not.
+            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
             .show_ui(ui, |ui| {
                 if ui.selectable_label(current.is_none(), "No group").clicked() {
                     choice = Some(None);
+                    ui.close();
                 }
                 for name in &names {
                     if ui
@@ -225,6 +228,7 @@ impl ArcticApp {
                         .clicked()
                     {
                         choice = Some(Some(name.clone()));
+                        ui.close();
                     }
                 }
                 ui.separator();
@@ -240,6 +244,7 @@ impl ArcticApp {
                 {
                     choice = Some(Some(typed));
                     self.inst.packs.new_group.clear();
+                    ui.close();
                 }
             });
         if let Some(group) = choice {
