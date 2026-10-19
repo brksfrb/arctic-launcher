@@ -1090,6 +1090,11 @@ impl ArcticApp {
         if !self.settings.animations {
             return;
         }
+        // Nobody sees the scenery while the window is hidden in the tray or minimized: no frames.
+        // (Wayland can't hide a window, only minimize it, and kept drawing it before.)
+        if crate::window::hidden() || ctx.input(|i| i.viewport().minimized == Some(true)) {
+            return;
+        }
         let focused = ctx.input(|i| i.focused);
         let game_running = self.runs.any_game();
         match (focused, game_running) {
