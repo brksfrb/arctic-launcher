@@ -103,3 +103,23 @@ fn folder_names_are_safe() {
     assert_eq!(free_name(dir.path(), "a/b:c"), "a_b_c");
     assert_eq!(free_name(dir.path(), "  ..  "), "World");
 }
+
+#[test]
+fn a_newer_game_version_backs_up_the_recent_worlds_first() {
+    let game = tempfile::tempdir().unwrap();
+    let saves = game.path().join("saves");
+    make_world(&saves, "Castle", "Castle");
+    // First run in this folder: nothing to compare with, nothing backed up.
+    assert_eq!(backup_before_version_change(game.path(), "1.21.4"), 0);
+    // The same version again, or an older one: nothing.
+    assert_eq!(backup_before_version_change(game.path(), "1.21.4"), 0);
+    assert_eq!(backup_before_version_change(game.path(), "1.20.1"), 0);
+    // Going up from 1.20.1 to 1.21.4 backs up the worlds.
+    assert_eq!(backup_before_version_change(game.path(), "1.21.4"), 1);
+    let backups = game.path().join(BACKUPS_DIR);
+    let wait = std::time::Instant::now();
+    while std::fs::read_dir(&backups).map_or(0, |d| d.count()) == 0 {
+        assert!(wait.elapsed().as_secs() < 10, "the backup never appeared");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}

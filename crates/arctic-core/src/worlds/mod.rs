@@ -260,6 +260,46 @@ fn add_dir(
     Ok(())
 }
 
+/// The file in a game folder that says which game version ran there last.
+const LAST_VERSION_FILE: &str = ".arctic-last-version";
+/// A move to a newer game version backs up this many of the most recently played worlds.
+const AUTO_BACKUP_WORLDS: usize = 3;
+
+/// Opening a world in a newer Minecraft upgrades its files, and there is no way back. So when a
+/// game folder is about to run a newer version than the one that ran there last, the worlds played
+/// most recently are zipped into `backups` first (in the background, so the start isn't held up).
+/// Returns how many worlds are being backed up.
+pub fn backup_before_version_change(game_dir: &Path, version: &str) -> usize {
+    let marker = game_dir.join(LAST_VERSION_FILE);
+    let previous = fs::read_to_string(&marker)
+        .ok()
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty());
+    let _ = fs::write(&marker, version);
+    let newer = previous
+        .as_deref()
+        .is_some_and(|p| p != version && crate::arctic_mod::at_least(version, p));
+    if !newer {
+        return 0;
+    }
+    let recent: Vec<World> = list(&game_dir.join("saves"))
+        .into_iter()
+        .take(AUTO_BACKUP_WORLDS)
+        .collect();
+    let count = recent.len();
+    if count > 0 {
+        let backups = game_dir.join(BACKUPS_DIR);
+        std::thread::spawn(move || {
+            for world in recent {
+                if let Err(e) = backup(&world, &backups) {
+                    log::warn!("backup of {} before the version change: {e}", world.name);
+                }
+            }
+        });
+    }
+    count
+}
+
 /// Move a world to `saves/.trash` (kept, not deleted).
 pub fn trash(world: &World, saves_dir: &Path) -> Result<()> {
     let trash = saves_dir.join(TRASH_DIR);

@@ -391,6 +391,14 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         .or_else(|| req.settings.java_override.clone());
     progress(ProgressInfo::stage("Reading version"));
     let vanilla = load_version(dirs, req.version, &|_| {})?;
+    // Going up to a newer game version upgrades worlds for good: back the recent ones up first.
+    let backed_up = crate::worlds::backup_before_version_change(&game_dir, &vanilla.id);
+    if backed_up > 0 {
+        log::info!(
+            "backing up {backed_up} recent world(s) before {}",
+            vanilla.id
+        );
+    }
     timer.step("read version");
     let loader = effective_loader(dirs, req.instance, &vanilla.id);
     timer.step("pick loader");
