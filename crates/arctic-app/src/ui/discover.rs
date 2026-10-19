@@ -230,17 +230,14 @@ impl ArcticApp {
             .max_height(LIST_HEIGHT)
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                // Our own servers sit on top of every list; the Partners tab holds
-                // those and the servers hosted with Flash Hosting.
+                // No server is pinned to the top of the lists (nobody pays for a spot): the Partners tab
+                // alone holds the servers hosted with Flash Hosting, and ours.
                 let partners_tab = self.discover.access == Access::Partners;
-                let (partners, others): (Vec<&PublicServer>, Vec<&PublicServer>) = shown
-                    .into_iter()
-                    .partition(|s| partners_tab || s.partner_tier == "exclusive");
+                let (partners, others): (Vec<&PublicServer>, Vec<&PublicServer>) =
+                    shown.into_iter().partition(|_| partners_tab);
                 let (mut partners, mut others) = (partners, others);
                 self.discover.sort.apply(&mut partners);
                 self.discover.sort.apply(&mut others);
-                // Stable: within each tier, the order picked above stays.
-                partners.sort_by_key(|s| s.partner_tier != "exclusive");
                 // "Surprise me" keeps its pick on top.
                 if let Some(picked) = &self.discover.picked
                     && let Some(i) = others.iter().position(|s| &s.id == picked)
@@ -248,12 +245,7 @@ impl ArcticApp {
                     let s = others.remove(i);
                     others.insert(0, s);
                 }
-                let top = if partners_tab {
-                    "Partners"
-                } else {
-                    "Exclusive partners"
-                };
-                for (title, group) in [(top, partners), ("All servers", others)] {
+                for (title, group) in [("Partners", partners), ("All servers", others)] {
                     if group.is_empty() {
                         continue;
                     }
