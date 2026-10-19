@@ -211,6 +211,9 @@ pub struct ArcticApp {
     open_flushed: std::time::Instant,
     /// The first-close question about the tray is showing.
     pub(crate) close_prompt: bool,
+    /// The graphics driver draws in software (no GPU): animations and the glass blur stay off.
+    pub(crate) software_gl: bool,
+    gl_checked: bool,
     /// Maximize on the first frame (creating the window maximized is
     /// unreliable on Windows: wrong restore size, flicker).
     maximize_pending: bool,
@@ -287,6 +290,8 @@ impl ArcticApp {
             playtime: arctic_core::playtime::Stats::load(&dirs),
             open_flushed: std::time::Instant::now(),
             close_prompt: false,
+            software_gl: false,
+            gl_checked: false,
             maximize_pending: data.settings.start_maximized,
             pending_launch: startup.launch.clone(),
             msa_configured: MsaConfig::load(&dirs).is_ok(),
@@ -1152,10 +1157,40 @@ impl ArcticApp {
         }
     }
 
+    /// Whether the animated backdrop runs: chosen, and the GPU can afford it.
+    pub(crate) fn animated(&self) -> bool {
+        self.settings.animations && !self.software_gl
+    }
+
+    /// Once, on the first frame: ask the graphics driver what draws. Software rendering (llvmpipe on
+    /// a Chromebook's Linux, Windows' basic renderer, a VM) turns the animated backdrop and the
+    /// glass blur into a whole-PC slowdown, so both stay off there.
+    fn check_renderer(&mut self, frame: &eframe::Frame) {
+        if self.gl_checked {
+            return;
+        }
+        let Some(gl) = frame.gl() else {
+            return;
+        };
+        use eframe::glow::HasContext;
+        // SAFETY: a plain string query on the context eframe is drawing with.
+        let name = unsafe { gl.get_parameter_string(eframe::glow::RENDERER) };
+        self.gl_checked = true;
+        self.software_gl = is_software_renderer(&name);
+        log::info!(
+            "graphics: {name}{}",
+            if self.software_gl {
+                " (software: animations and glass blur off)"
+            } else {
+                ""
+            }
+        );
+    }
+
     /// Schedule the next frame for the animated backdrop. Must run inside
     /// the UI pass (repaint requests made outside it are dropped).
     fn pace_scenery(&self, ctx: &egui::Context) {
-        if !self.settings.animations {
+        if !self.animated() {
             return;
         }
         // Nobody sees the scenery while the window is hidden in the tray or minimized: no frames.
@@ -1177,6 +1212,7 @@ impl ArcticApp {
 impl eframe::App for ArcticApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         arctic_core::cosmetics::set_reduce_cape_motion(self.settings.reduce_cape_motion);
+        self.check_renderer(frame);
         let ctx = ui.ctx().clone();
         while let Ok(event) = self.events.try_recv() {
             self.handle_event(event, &ctx);
@@ -1276,5 +1312,42 @@ impl eframe::App for ArcticApp {
         if self.settings != self.saved_settings {
             let _ = self.settings.save(&self.dirs);
         }
+    }
+}
+
+/// A GL renderer name that is the CPU pretending to be a GPU.
+pub(crate) fn is_software_renderer(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    [
+        "llvmpipe",
+        "softpipe",
+        "swrast",
+        "software rasterizer",
+        "swiftshader",
+        "gdi generic",
+        "microsoft basic render",
+        "mesa offscreen",
+    ]
+    .iter()
+    .any(|soft| name.contains(soft))
+}
+
+#[cfg(test)]
+mod software_renderer_tests {
+    use super::is_software_renderer;
+
+    #[test]
+    fn software_drivers_are_told_from_gpus() {
+        assert!(is_software_renderer("llvmpipe (LLVM 17.0.6, 256 bits)"));
+        assert!(is_software_renderer("Software Rasterizer"));
+        assert!(is_software_renderer("GDI Generic"));
+        assert!(is_software_renderer("Google SwiftShader"));
+        assert!(!is_software_renderer(
+            "NVIDIA GeForce RTX 3080 Ti/PCIe/SSE2"
+        ));
+        assert!(!is_software_renderer(
+            "Mesa Intel(R) Iris(R) Xe Graphics (TGL GT2)"
+        ));
+        assert!(!is_software_renderer("AMD Radeon RX 6800 XT"));
     }
 }

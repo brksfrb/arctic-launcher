@@ -47,12 +47,12 @@ impl ArcticApp {
                 ctx.content_rect(),
                 &p.scene,
                 now as f32,
-                self.settings.animations,
+                self.animated(),
             );
         }
 
         // Glass: the backdrop, blurred, behind every card and the sidebar (found once laid out).
-        if p.glass {
+        if p.glass && !self.software_gl {
             backdrop.add(crate::glass::backdrop_callback(ctx.content_rect()));
         }
 
@@ -125,7 +125,7 @@ impl ArcticApp {
         self.close_prompt_dialog(&ctx);
         self.mod_clash_dialog(&ctx);
         self.required_update_overlay(&ctx);
-        if p.glass {
+        if p.glass && !self.software_gl {
             crate::glass::note_panes(&ctx, &[p.card_fill, p.nav_fill]);
         }
         self.friends_tick(now, self.tab == Tab::Together);
