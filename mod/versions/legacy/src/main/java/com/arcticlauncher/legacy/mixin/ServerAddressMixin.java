@@ -19,7 +19,8 @@ abstract class ServerAddressMixin {
 	@Inject(method = "resolveSrv", at = @At("HEAD"), cancellable = true)
 	private static void arctic$noSrv(String host, CallbackInfoReturnable<String[]> cir) {
 		if (ProxyRoutes.routes(host)) {
-			cir.setReturnValue(new String[] {host, Integer.toString(DEFAULT_PORT)});
+			String[] srv = ProxyRoutes.srv(host);
+			cir.setReturnValue(srv != null ? srv : new String[] {host, Integer.toString(DEFAULT_PORT)});
 		}
 	}
 }
