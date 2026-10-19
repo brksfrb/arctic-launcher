@@ -12,6 +12,9 @@ import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 /** Arctic's browser is the default; the native list is an explicit, per-screen choice. */
 public final class ServerMenus {
 	private static final Set<Screen> VANILLA = Collections.newSetFromMap(new WeakHashMap<Screen, Boolean>());
+	// Only the latest disconnect is kept (its page refers back to the screen, so a weak map would never let go).
+	private static Screen disconnectedScreen;
+	private static com.arcticlauncher.client.servers.DisconnectedPage disconnectedPage;
 	private ServerMenus() {}
 
 	public static void tick() {
@@ -53,8 +56,16 @@ public final class ServerMenus {
 			Compat.setScreen(original);
 		};
 		if (original instanceof DisconnectedScreen) {
-			ArcticClient.platform().openPage(new com.arcticlauncher.client.servers.DisconnectedPage(
-					original.getTitle().getString(), DisconnectText.reason(original), vanilla));
+			// Coming back from Right Shift shows the same page (already cancelled), not a fresh one
+			// whose auto-reconnect countdown would start over.
+			com.arcticlauncher.client.servers.DisconnectedPage page = disconnectedScreen == original ? disconnectedPage : null;
+			if (page == null) {
+				page = new com.arcticlauncher.client.servers.DisconnectedPage(
+						original.getTitle().getString(), DisconnectText.reason(original), vanilla);
+				disconnectedScreen = original;
+				disconnectedPage = page;
+			}
+			ArcticClient.platform().openPage(page);
 		} else {
 			ArcticClient.platform().openPage(new ServersPage(vanilla));
 		}

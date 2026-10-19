@@ -138,6 +138,24 @@ public final class DisconnectedPage extends Page {
 		return true;
 	}
 
+	@Override
+	public void removed() {
+		// Covered by another menu (Right Shift) or left: never count down to a rejoin behind it.
+		cancelled = true;
+		super.removed();
+	}
+
+	/**
+	 * Escape is "Back to Server List". Closing would reopen this very screen (its parent is the game's
+	 * disconnect screen), fresh, with the auto-reconnect countdown running again: Escape then kept
+	 * rejoining the server that had just kicked you.
+	 */
+	@Override
+	protected Page escapeTo() {
+		cancelled = true;
+		return new ServersPage();
+	}
+
 	private int buttons() {
 		// Reconnect (when there's an address), Back to Server List, and one row of smaller ones.
 		return 2 + (address != null ? 1 : 0);
