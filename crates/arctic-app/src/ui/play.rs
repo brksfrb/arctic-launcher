@@ -40,9 +40,10 @@ impl ArcticApp {
                 self.icon_picker(&emblem, &instance.id);
                 ui.add_space(6.0);
                 self.instance_switcher(ui, &instance);
-                // Right next to the name it belongs to (the account stays at the far end).
-                ui.add_space(2.0);
-                if widgets::icon_button(ui, p, Icon::Gear, "Instance settings").clicked() {
+                // Right next to the name it belongs to (the account stays at the far end), as tall
+                // as the instance's icon and name beside it.
+                ui.add_space(6.0);
+                if self.instance_settings_button(ui).clicked() {
                     let now = ui.input(|i| i.time);
                     self.set_tab(Tab::Instances, now);
                     self.open_instance(&instance.id);
@@ -150,6 +151,33 @@ impl ArcticApp {
             })
             .cloned()
             .collect()
+    }
+
+    /// The gear that opens the instance's settings: a square as big as the instance's icon.
+    fn instance_settings_button(&mut self, ui: &mut egui::Ui) -> egui::Response {
+        let p = self.palette();
+        let (rect, response) = ui.allocate_exact_size(vec2(64.0, 64.0), Sense::click());
+        let response = response
+            .on_hover_text("Instance settings")
+            .on_hover_cursor(CursorIcon::PointingHand);
+        let hover = ui
+            .ctx()
+            .animate_bool(response.id.with("settings_h"), response.hovered());
+        let radius = CornerRadius::same(14);
+        ui.painter().rect_filled(rect, radius, p.card_fill);
+        if hover > 0.0 {
+            ui.painter()
+                .rect_filled(rect, radius, p.surface_hover.gamma_multiply(hover));
+        }
+        ui.painter().rect_stroke(
+            rect,
+            radius,
+            Stroke::new(1.0, p.card_stroke),
+            egui::StrokeKind::Inside,
+        );
+        let icon = egui::Rect::from_center_size(rect.center(), vec2(30.0, 30.0));
+        icons::draw(ui.painter(), Icon::Gear, icon, p.text);
+        response
     }
 
     /// Instance name + subtitle; click to pick another instance.
