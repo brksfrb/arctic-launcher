@@ -15,10 +15,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * Fullbright draws with anyway, so the CPU time (chunk loads, block changes) is saved.
  * <p>
  * Every call that would queue work is dropped, and the run that would do it returns at once, so
- * nothing piles up. The names differ a little between versions (checkBlock, onBlockEmissionIncrease,
- * updateSectionStatus, enableLightSources / setLightEnabled, propagateLightSources, queueSectionData,
- * retainData; runUpdates / runLightUpdates), so each list holds the ones some version has and the
- * injection applies to whichever the running game has.
+ * nothing piles up. The names changed in 1.20 (onBlockEmissionIncrease and enableLightSources became
+ * setLightEnabled and propagateLightSources, runUpdates became runLightUpdates).
  */
 @Mixin(LevelLightEngine.class)
 abstract class LightEngineMixin {
@@ -33,16 +31,26 @@ abstract class LightEngineMixin {
 				&& engine.getClass() == LevelLightEngine.class;
 	}
 
+	//#if MC >= 1.20
+	@Inject(method = {"checkBlock", "updateSectionStatus", "setLightEnabled", "propagateLightSources", "queueSectionData",
+			"retainData"},
+			at = @At("HEAD"), cancellable = true)
+	//#else
 	@Inject(method = {"checkBlock", "onBlockEmissionIncrease", "updateSectionStatus", "enableLightSources",
-			"setLightEnabled", "propagateLightSources", "queueSectionData", "retainData"},
-			at = @At("HEAD"), cancellable = true, require = 0)
+			"queueSectionData", "retainData"},
+			at = @At("HEAD"), cancellable = true)
+	//#endif
 	private void arctic$dropWork(CallbackInfo ci) {
 		if (arctic$skip(this)) {
 			ci.cancel();
 		}
 	}
 
-	@Inject(method = {"runUpdates", "runLightUpdates"}, at = @At("HEAD"), cancellable = true, require = 0)
+	//#if MC >= 1.20
+	@Inject(method = "runLightUpdates", at = @At("HEAD"), cancellable = true)
+	//#else
+	@Inject(method = "runUpdates", at = @At("HEAD"), cancellable = true)
+	//#endif
 	private void arctic$noRun(CallbackInfoReturnable<Integer> cir) {
 		if (arctic$skip(this)) {
 			cir.setReturnValue(0);
