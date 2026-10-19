@@ -58,6 +58,63 @@ public final class ProxyRoutes {
 		return InetAddress.getByAddress(host, UNRESOLVED);
 	}
 
+	private static final java.util.Map<String, String[]> SRV = new java.util.concurrent.ConcurrentHashMap<String, String[]>();
+	private static final String[] NO_SRV = new String[0];
+
+	/**
+	 * The real (host, port) a server name points to by its {@code _minecraft._tcp} SRV record, or null
+	 * when it has none. Many servers (everything behind Cloudflare) only answer on that host, never on
+	 * the name's own address. SOCKS and HTTP proxies can't carry DNS, so the record is asked of a DNS-over-HTTPS
+	 * service through the proxy itself: nothing is looked up locally, and the lookup never shows your IP.
+	 */
+	public static String[] srv(String host) {
+		if (host == null || literal(host) != null) {
+			return null;
+		}
+		String key = host.toLowerCase(java.util.Locale.ROOT);
+		String[] cached = SRV.get(key);
+		if (cached == null) {
+			cached = lookupSrv(key);
+			SRV.put(key, cached);
+		}
+		return cached == NO_SRV ? null : cached.clone();
+	}
+
+	private static String[] lookupSrv(String host) {
+		try {
+			byte[] body = com.arcticlauncher.client.looks.Http.getBytes(
+					"https://dns.google/resolve?type=SRV&name=_minecraft._tcp." + host, null);
+			com.google.gson.JsonObject answer = new com.google.gson.Gson()
+					.fromJson(new String(body, java.nio.charset.StandardCharsets.UTF_8), com.google.gson.JsonObject.class);
+			com.google.gson.JsonArray records = answer == null ? null : answer.getAsJsonArray("Answer");
+			String[] best = null;
+			int bestPriority = Integer.MAX_VALUE;
+			if (records != null) {
+				for (com.google.gson.JsonElement e : records) {
+					com.google.gson.JsonObject record = e.getAsJsonObject();
+					if (!record.has("type") || record.get("type").getAsInt() != 33) {
+						continue;
+					}
+					// "priority weight port target."
+					String[] parts = record.get("data").getAsString().trim().split("\\s+");
+					if (parts.length < 4) {
+						continue;
+					}
+					int priority = Integer.parseInt(parts[0]);
+					String target = parts[3].endsWith(".") ? parts[3].substring(0, parts[3].length() - 1) : parts[3];
+					if (priority < bestPriority && !target.isEmpty()) {
+						bestPriority = priority;
+						best = new String[] {target, parts[2]};
+					}
+				}
+			}
+			return best == null ? NO_SRV : best;
+		} catch (Exception e) {
+			// No record found, or the lookup failed: the name's own address, as without SRV.
+			return NO_SRV;
+		}
+	}
+
 	/** The name (or IP) an address was made from, without a reverse DNS lookup. */
 	public static String nameOf(InetAddress address) {
 		// toString() is "name/ip", or "/ip" when there's no name.

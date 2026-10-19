@@ -80,6 +80,13 @@ const PROBE_UUID: [u8; 16] = *b"Arctic@\x00\x80\x00Check!";
 /// whether it asks for encryption. A cracked server would let the probe in,
 /// so the connection is closed at its first answer.
 pub fn login_check(address: &Address, protocol: i32) -> Result<Login> {
+    // Some servers report -1 (or 0) as their protocol; asking to log in with that gets us refused
+    // as an outdated client, so those get a modern one instead.
+    let protocol = if protocol <= 0 {
+        STATUS_PROTOCOL
+    } else {
+        protocol
+    };
     let mut stream = connect(address, None)?;
     stream
         .set_read_timeout(Some(TIMEOUT))
@@ -360,6 +367,22 @@ pub(crate) mod tests {
             let address = Address::parse(&format!("127.0.0.1:{port}")).unwrap();
             assert_eq!(login_check(&address, 772).unwrap(), expected);
         }
+    }
+
+    #[test]
+    fn a_server_reporting_no_protocol_is_probed_with_a_modern_one() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let seen = std::thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            let handshake = receive(&mut s).unwrap();
+            receive(&mut s).unwrap();
+            send(&mut s, &[2]).unwrap();
+            read_var_int(&mut &handshake[1..]).unwrap()
+        });
+        let address = Address::parse(&format!("127.0.0.1:{port}")).unwrap();
+        assert_eq!(login_check(&address, -1).unwrap(), Login::Cracked);
+        assert_eq!(seen.join().unwrap(), STATUS_PROTOCOL);
     }
 
     #[test]

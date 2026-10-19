@@ -21,13 +21,16 @@ abstract class ServerAddressMixin {
 	//#if MC >= 1.16
 	private static void arctic$noSrv(String host, CallbackInfoReturnable<com.mojang.datafixers.util.Pair<String, Integer>> cir) {
 		if (ProxyRoutes.routes(host)) {
-			cir.setReturnValue(com.mojang.datafixers.util.Pair.of(host, DEFAULT_PORT));
+			String[] srv = ProxyRoutes.srv(host);
+			cir.setReturnValue(srv != null ? com.mojang.datafixers.util.Pair.of(srv[0], Integer.parseInt(srv[1]))
+					: com.mojang.datafixers.util.Pair.of(host, DEFAULT_PORT));
 		}
 	}
 	//#else
 	private static void arctic$noSrv(String host, CallbackInfoReturnable<String[]> cir) {
 		if (ProxyRoutes.routes(host)) {
-			cir.setReturnValue(new String[] {host, Integer.toString(DEFAULT_PORT)});
+			String[] srv = ProxyRoutes.srv(host);
+			cir.setReturnValue(srv != null ? srv : new String[] {host, Integer.toString(DEFAULT_PORT)});
 		}
 	}
 	//#endif

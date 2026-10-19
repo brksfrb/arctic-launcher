@@ -158,7 +158,7 @@ public final class ServerPing {
 		if (port != null && port.matches("\\d{1,5}")) {
 			return new String[] {host, port, host};
 		}
-		String[] srv = srv(host);
+		String[] srv = ProxyRoutes.routes(host) ? ProxyRoutes.srv(host) : srv(host);
 		return srv != null ? new String[] {srv[0], srv[1], host} : new String[] {host, String.valueOf(DEFAULT_PORT), host};
 	}
 
