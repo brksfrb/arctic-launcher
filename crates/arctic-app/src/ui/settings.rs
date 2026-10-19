@@ -29,6 +29,7 @@ impl ArcticApp {
         widgets::page_header(ui, p, "Settings", "Changes are saved automatically.");
         let mut performance = self.instance.performance;
         let mut choose_picture = false;
+        let software_gl = self.software_gl;
         let s = &mut self.settings;
 
         section(ui, p, "Appearance", |ui| {
@@ -64,6 +65,15 @@ impl ArcticApp {
             });
             ui.checkbox(&mut s.animations, "Animated background")
                 .on_hover_text("Aurora, snowfall and shooting stars. Pauses while you play.");
+            if software_gl {
+                ui.label(
+                    RichText::new(
+                        "Off for now: your graphics driver draws in software (no GPU), where this slows the whole PC down. The glass blur is off too.",
+                    )
+                    .small()
+                    .color(p.warn),
+                );
+            }
             ui.checkbox(&mut s.reduce_cape_motion, "Freeze animated capes and cosmetics")
                 .on_hover_text("Animated capes and sculpted cosmetics stand still here. Only your own view changes; what you and others wear stays as chosen.");
             ui.checkbox(&mut s.intro, "Intro animation on start");
