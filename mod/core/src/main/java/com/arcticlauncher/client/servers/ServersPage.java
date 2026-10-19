@@ -8,6 +8,7 @@ import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Skin;
 import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Button;
+import com.arcticlauncher.client.ui.Hints;
 import com.arcticlauncher.client.ui.Page;
 import com.arcticlauncher.client.ui.TextField;
 import java.util.HashMap;
@@ -76,6 +77,10 @@ public final class ServersPage extends Page {
 	private static final String[] SORTS = {"Random", "Most players", "Fewest players", "Name"};
 	private volatile String publicError;
 	private int selectedPublic = -1;
+	/** Height of the abuse note under the Discover list, set while it's drawn. */
+	private int discoverNoteH;
+	private static final String ABUSE_LINE =
+			"See a misleading listing, or own this server and want it changed? Email abuse@arcticlauncher.com";
 
 	public ServersPage() {
 		this(null);
@@ -470,23 +475,31 @@ public final class ServersPage extends Page {
 
 	private void drawDiscover(Gfx g, Style s, int left, int top, int bottom, int mx, int my) {
 		List<Servers.Entry> list = publicList;
-		float max = list == null ? 0 : Math.max(0, list.size() * (ROW_H + ROW_GAP) - (bottom - top));
+		List<String> note = Hints.wrap(g, ABUSE_LINE, LIST_W - 8);
+		discoverNoteH = note.isEmpty() ? 0 : note.size() * 10 + 6;
+		int rowsBottom = bottom - discoverNoteH;
+		float max = list == null ? 0 : Math.max(0, list.size() * (ROW_H + ROW_GAP) - (rowsBottom - top));
 		scroll = Math.max(0, Math.min(max, scroll));
 		Skin.panel(g, s, left - 4, top - 4, left + LIST_W + 4, bottom + 4);
 		if (list == null) {
-			Draw.centered(g, publicError != null ? publicError : "Loading…", width / 2, (top + bottom) / 2 - 4, s.muted, false);
-			return;
-		}
-		g.scissor(left - 3, top - 3, left + LIST_W + 3, bottom + 3);
-		for (int i = 0; i < list.size(); i++) {
-			int ry = Math.round(top + slotTop(i) - scroll);
-			if (ry + ROW_H < top - 4 || ry > bottom + 4) {
-				continue;
+			Draw.centered(g, publicError != null ? publicError : "Loading…", width / 2, (top + rowsBottom) / 2 - 4, s.muted, false);
+		} else {
+			g.scissor(left - 3, top - 3, left + LIST_W + 3, rowsBottom + 3);
+			for (int i = 0; i < list.size(); i++) {
+				int ry = Math.round(top + slotTop(i) - scroll);
+				if (ry + ROW_H < top - 4 || ry > rowsBottom + 4) {
+					continue;
+				}
+				boolean over = mx >= left && mx < left + LIST_W && my >= ry && my < ry + ROW_H && my >= top && my < rowsBottom;
+				row(g, s, left, ry, list.get(i).name, list.get(i).address, i == selectedPublic, over);
 			}
-			boolean over = mx >= left && mx < left + LIST_W && my >= ry && my < ry + ROW_H && my >= top && my < bottom;
-			row(g, s, left, ry, list.get(i).name, list.get(i).address, i == selectedPublic, over);
+			g.endScissor();
 		}
-		g.endScissor();
+		int ny = rowsBottom + 2;
+		for (String line : note) {
+			g.text(line, left, ny, s.muted, false);
+			ny += 10;
+		}
 	}
 
 	private void drawLan(Gfx g, Style s, int left, int top, int bottom, int mx, int my) {
@@ -733,7 +746,8 @@ public final class ServersPage extends Page {
 
 	private boolean clickPublic(double mx, double my) {
 		List<Servers.Entry> list = publicList;
-		if (list == null || mx < listLeft() || mx >= listLeft() + LIST_W || my < listTop() || my >= listBottom()) {
+		int bottom = listBottom() - discoverNoteH;
+		if (list == null || mx < listLeft() || mx >= listLeft() + LIST_W || my < listTop() || my >= bottom) {
 			return false;
 		}
 		int row = (int) ((my - listTop() + scroll) / (ROW_H + ROW_GAP));

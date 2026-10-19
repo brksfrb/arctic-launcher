@@ -18,6 +18,12 @@ const TRY_NEXT_AFTER: Duration = Duration::from_millis(1500);
 const PING_WAIT: Duration = Duration::from_secs(2);
 /// Protocol number sent in the handshake; servers answer status for any.
 const STATUS_PROTOCOL: i32 = 772;
+/// 1.21.4. Large proxies advertise protocol -1 (the player count lives in
+/// the version name) and kick a login that uses it as an outdated client,
+/// so premium/cracked stays unknown. 769 is a recent protocol those proxies
+/// still accept: the answer is set-compression (cracked) or encryption
+/// (premium). A newer number can itself be kicked as outdated.
+const LOGIN_FALLBACK_PROTOCOL: i32 = 769;
 /// Largest status response accepted (favicons make them tens of KB).
 const MAX_PACKET: usize = 2 * 1024 * 1024;
 
@@ -76,10 +82,35 @@ pub enum Login {
 const PROBE_NAME: &str = "ArcticCheck";
 const PROBE_UUID: [u8; 16] = *b"Arctic@\x00\x80\x00Check!";
 
-/// Start a login as the server's own `protocol` (from its status) and see
-/// whether it asks for encryption. A cracked server would let the probe in,
-/// so the connection is closed at its first answer.
+/// Start a login and see whether the server asks for encryption. A cracked
+/// server would let the probe in, so the connection is closed at its first
+/// answer.
+///
+/// `protocol` is the one from the status ping. Zero and negative numbers
+/// aren't a real version (proxies send -1), so the probe uses protocol 769
+/// (1.21.4) instead. A kick that says the client is outdated is tried once
+/// more with that same fallback.
 pub fn login_check(address: &Address, protocol: i32) -> Result<Login> {
+    let first = if protocol > 0 {
+        protocol
+    } else {
+        LOGIN_FALLBACK_PROTOCOL
+    };
+    match login_once(address, first)? {
+        Login::Refused(reason) if first != LOGIN_FALLBACK_PROTOCOL && outdated_client(&reason) => {
+            login_once(address, LOGIN_FALLBACK_PROTOCOL)
+        }
+        other => Ok(other),
+    }
+}
+
+/// A disconnect that means the protocol number, not the account, was refused.
+fn outdated_client(reason: &str) -> bool {
+    let reason = reason.to_ascii_lowercase();
+    reason.contains("outdated_client") || reason.contains("outdated client")
+}
+
+fn login_once(address: &Address, protocol: i32) -> Result<Login> {
     let mut stream = connect(address, None)?;
     stream
         .set_read_timeout(Some(TIMEOUT))
@@ -360,6 +391,83 @@ pub(crate) mod tests {
             let address = Address::parse(&format!("127.0.0.1:{port}")).unwrap();
             assert_eq!(login_check(&address, 772).unwrap(), expected);
         }
+    }
+
+    /// Speaks `accept` as set-compression (cracked) and anything else as an
+    /// outdated-client kick. Returns how many connections it saw.
+    fn protocol_gate(accept: i32) -> (u16, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let seen = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let count = seen.clone();
+        std::thread::spawn(move || {
+            for _ in 0..8 {
+                let Ok((mut s, _)) = listener.accept() else {
+                    break;
+                };
+                seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let handshake = receive(&mut s).unwrap();
+                let mut h = handshake.as_slice();
+                let _ = read_var_int(&mut h).unwrap();
+                let protocol = read_var_int(&mut h).unwrap();
+                let _ = receive(&mut s);
+                if protocol == accept {
+                    send(&mut s, &[3, 0]).unwrap();
+                } else {
+                    let mut body = vec![0];
+                    string(
+                        &mut body,
+                        r#"{"translate":"multiplayer.disconnect.outdated_client"}"#,
+                    );
+                    send(&mut s, &body).unwrap();
+                }
+            }
+        });
+        (port, count)
+    }
+
+    #[test]
+    fn login_probe_falls_back_when_the_protocol_is_unusable() {
+        let (port, seen) = protocol_gate(LOGIN_FALLBACK_PROTOCOL);
+        let address = Address::parse(&format!("127.0.0.1:{port}")).unwrap();
+        // -1 and 0 never open a login: one connection, on the fallback.
+        assert_eq!(login_check(&address, -1).unwrap(), Login::Cracked);
+        assert_eq!(login_check(&address, 0).unwrap(), Login::Cracked);
+        // A real but rejected protocol is tried, then the fallback.
+        assert_eq!(
+            login_check(&address, STATUS_PROTOCOL).unwrap(),
+            Login::Cracked
+        );
+        assert_eq!(seen.load(std::sync::atomic::Ordering::Relaxed), 4);
+    }
+
+    #[test]
+    fn login_probe_keeps_a_refusal_that_is_not_the_protocol() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            let _ = receive(&mut s).unwrap();
+            let _ = receive(&mut s).unwrap();
+            let mut body = vec![0];
+            string(
+                &mut body,
+                r#"{"text":"You are not white-listed on this server."}"#,
+            );
+            send(&mut s, &body).unwrap();
+        });
+        let address = Address::parse(&format!("127.0.0.1:{port}")).unwrap();
+        match login_check(&address, 760).unwrap() {
+            Login::Refused(reason) => assert!(reason.to_ascii_lowercase().contains("white-listed")),
+            other => panic!("expected a refusal, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn outdated_client_kicks_are_recognized() {
+        assert!(outdated_client("multiplayer.disconnect.outdated_client"));
+        assert!(outdated_client("Outdated client! Please use 1.21.4"));
+        assert!(!outdated_client("You are not white-listed on this server."));
     }
 
     #[test]
