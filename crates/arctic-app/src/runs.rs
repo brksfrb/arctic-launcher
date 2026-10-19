@@ -357,6 +357,18 @@ impl ArcticApp {
                 let watchdog = run.shutdown_watchdog_fired();
                 let title = run.title.clone();
                 let instance_id = run.instance_id.clone();
+                // Time played: from the start to the exit, for games that really started.
+                if let Ok(played) = run.started.elapsed() {
+                    if let Err(e) = arctic_core::playtime::record(
+                        &self.dirs,
+                        &instance_id,
+                        played.as_secs(),
+                        arctic_core::auth::now_secs(),
+                    ) {
+                        log::warn!("play time: {e}");
+                    }
+                    self.playtime = arctic_core::playtime::Stats::load(&self.dirs);
+                }
                 let diagnosis = matches!(code, Some(c) if c != 0 && !watchdog)
                     .then(|| run.diagnose())
                     .flatten();
