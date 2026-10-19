@@ -91,6 +91,52 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
+        // Fabric's newer wording, with names in quotes and ranges:
+        //  "- Mod 'SpruceUI' (spruceui) 9.1 requires any version between 1.21.11- (inclusive) and 1.22- (exclusive) of 'Minecraft' (minecraft), but only the wrong version is present: 26.3!"
+        //  "- Mod 'ModernFix' (modernfix) 5.2 requires version 0.16.10 or later of mod 'Fabric Loader' (fabricloader), but only the wrong version is present: 0.15.11!"
+        pattern: r"Mod '([^']+)' \(([^)]+)\) \S+ requires (?:any version|version) (.+?) of (?:mod )?'[^']+' \((minecraft|fabricloader)\), but only the wrong version is present: ([^!\s]+)",
+        explain: |c, text| {
+            // Every mod the same complaint names, once each.
+            let target = c[4].to_owned();
+            let mut names: Vec<String> = Vec::new();
+            if let Ok(re) = Regex::new(&format!(
+                r"Mod '([^']+)' \([^)]+\) \S+ requires [^
+]*? \({target}\), but only the wrong version is present"
+            )) {
+                for m in re.captures_iter(text) {
+                    let name = m[1].to_owned();
+                    if !names.contains(&name) {
+                        names.push(name);
+                    }
+                }
+            }
+            if names.is_empty() {
+                names.push(c[1].to_owned());
+            }
+            let have = &c[5];
+            if target == "minecraft" {
+                Diagnosis::new(
+                    format!("{} mod(s) are for another Minecraft version", names.len()),
+                    format!(
+                        "These mods are made for another Minecraft version than {have}: {}. They are probably left over from another version (an instance copied or switched to a newer game). Remove them, or update them from the instance's Mods page.",
+                        names.join(", ")
+                    ),
+                    names,
+                )
+            } else {
+                Diagnosis::new(
+                    "Fabric Loader is too old for these mods",
+                    format!(
+                        "{} need {} of Fabric Loader, but this instance has {have}. Update Fabric Loader in the instance's settings (Loader), or remove those mods.",
+                        names.join(", "),
+                        c[3].to_owned()
+                    ),
+                    names,
+                )
+            }
+        },
+    },
+    Rule {
         // Fabric: "... requires version 1.21.4 of minecraft, but only the wrong version is present: 1.21.6!"
         pattern: r"Mod '([^']+)' \(([^)]+)\) \S+ requires (?:version )?([^,]+?) of (minecraft|java|fabricloader), but only the wrong version is present: ([^!\s]+)",
         explain: |c, _| {
@@ -647,6 +693,28 @@ mod tests {
         let d = diagnose(log).unwrap();
         assert_eq!(d.title, "Old Mod is for a different Minecraft version");
         assert!(d.detail.contains("1.20.1") && d.detail.contains("1.21.6"));
+    }
+
+    #[test]
+    fn leftover_mods_for_another_minecraft_version_are_named() {
+        let log = "Incompatible mods found!
+            	 - Replace mod 'LambDynamicLights (Runtime)' (lambdynlights_runtime) 4.9.1+1.21.11 with version 4.9.1+1.21.11 or later that is compatible with:
+            	 - Mod 'SpruceUI' (spruceui) 9.1.0+1.21.11 requires any version between 1.21.11- (inclusive) and 1.22- (exclusive) of 'Minecraft' (minecraft), but only the wrong version is present: 26.3!
+            	 - Mod 'Pride Lib' (pride) 1.5.1+1.21.11 requires any version between 1.21.11- (inclusive) and 1.22- (exclusive) of 'Minecraft' (minecraft), but only the wrong version is present: 26.3!";
+        let d = diagnose(log).unwrap();
+        assert_eq!(d.title, "2 mod(s) are for another Minecraft version");
+        assert_eq!(d.mods, ["SpruceUI", "Pride Lib"]);
+        assert!(d.detail.contains("26.3") && d.detail.contains("Remove them"));
+    }
+
+    #[test]
+    fn an_old_fabric_loader_is_named() {
+        let log = "	 - Mod 'Fabric API' (fabric-api) 0.92.12+1.20.1 requires version 0.16.10 or later of mod 'Fabric Loader' (fabricloader), but only the wrong version is present: 0.15.11!
+            	 - Mod 'ModernFix' (modernfix) 5.25.2+mc1.20.1 requires version 0.16.10 or later of mod 'Fabric Loader' (fabricloader), but only the wrong version is present: 0.15.11!";
+        let d = diagnose(log).unwrap();
+        assert_eq!(d.title, "Fabric Loader is too old for these mods");
+        assert_eq!(d.mods, ["Fabric API", "ModernFix"]);
+        assert!(d.detail.contains("0.16.10") && d.detail.contains("0.15.11"));
     }
 
     #[test]
