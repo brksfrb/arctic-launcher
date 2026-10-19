@@ -80,6 +80,8 @@ pub struct Settings {
     pub onboarded: bool,
     /// Keep running in the system tray when the window is closed.
     pub tray: bool,
+    /// The first-close question about the tray was asked (or the choice was made in setup).
+    pub tray_asked: bool,
     /// Versions starred in the version picker.
     pub favorite_versions: Vec<String>,
     /// Menu style of the Arctic Client in game.
@@ -274,6 +276,7 @@ impl Default for Settings {
             discord_presence: true,
             onboarded: false,
             tray: true,
+            tray_asked: false,
             favorite_versions: Vec::new(),
             client_style: ClientStyle::Arctic,
             client_style_set: 0,

@@ -209,6 +209,8 @@ pub struct ArcticApp {
     pub(crate) playtime: arctic_core::playtime::Stats,
     /// When the launcher's open time was last added to the stats.
     open_flushed: std::time::Instant,
+    /// The first-close question about the tray is showing.
+    pub(crate) close_prompt: bool,
     /// Maximize on the first frame (creating the window maximized is
     /// unreliable on Windows: wrong restore size, flicker).
     maximize_pending: bool,
@@ -284,6 +286,7 @@ impl ArcticApp {
             hidden_since: None,
             playtime: arctic_core::playtime::Stats::load(&dirs),
             open_flushed: std::time::Instant::now(),
+            close_prompt: false,
             maximize_pending: data.settings.start_maximized,
             pending_launch: startup.launch.clone(),
             msa_configured: MsaConfig::load(&dirs).is_ok(),
@@ -745,9 +748,17 @@ impl ArcticApp {
         let tray_on = self.settings.tray && self.tray.is_some();
         if tray_on && !crate::tray::quitting() && ctx.input(|i| i.viewport().close_requested()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            self.persist_settings();
-            crate::window::hide();
-            crate::trim::now(ctx);
+            if !self.settings.tray_asked && !self.close_prompt {
+                // The first time: ask what closing should do, with the window still up.
+                self.close_prompt = true;
+            } else {
+                // Closing again while the question is up (or any later time) just closes.
+                self.close_prompt = false;
+                self.settings.tray_asked = true;
+                self.persist_settings();
+                crate::window::hide();
+                crate::trim::now(ctx);
+            }
         }
         crate::trim::tick(ctx, self.runs.any_game(), self.tab as usize);
         #[cfg(windows)]
@@ -782,6 +793,63 @@ impl ArcticApp {
                 self.pending_launch = opts.launch;
                 self.run_pending_launch();
             }
+        }
+    }
+
+    /// The first time the window is closed: keep Arctic in the tray, or quit?
+    pub(crate) fn close_prompt_dialog(&mut self, ctx: &egui::Context) {
+        if !self.close_prompt {
+            return;
+        }
+        let p = self.palette();
+        let mut keep = false;
+        let mut quit = false;
+        egui::Window::new("close_prompt")
+            .title_bar(false)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.set_width(380.0);
+                ui.label(
+                    egui::RichText::new("Keep Arctic running in the tray?")
+                        .size(18.0)
+                        .strong()
+                        .color(p.text),
+                );
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new(
+                        "It hides next to the clock (look behind the little ^ arrow if you don't see it) \
+                         and opens again instantly when you click its icon. Right-click the icon to quit. \
+                         Closing the window again just closes it, without asking.",
+                    )
+                    .color(p.muted),
+                );
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    if crate::widgets::button(ui, p, None, "Keep in tray", true).clicked() {
+                        keep = true;
+                    }
+                    if crate::widgets::button(ui, p, None, "Quit Arctic", false).clicked() {
+                        quit = true;
+                    }
+                });
+            });
+        if keep {
+            self.close_prompt = false;
+            self.settings.tray = true;
+            self.settings.tray_asked = true;
+            self.persist_settings();
+            crate::window::hide();
+            crate::trim::now(ctx);
+        } else if quit {
+            self.close_prompt = false;
+            self.settings.tray = false;
+            self.settings.tray_asked = true;
+            self.persist_settings();
+            crate::tray::set_quitting();
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }
 
