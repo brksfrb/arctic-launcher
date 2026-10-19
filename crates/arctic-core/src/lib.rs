@@ -24,6 +24,7 @@ pub mod loaders;
 pub mod migrate;
 pub mod mods;
 pub mod net;
+pub mod playtime;
 pub mod profiles;
 pub mod proxy;
 pub mod replays;

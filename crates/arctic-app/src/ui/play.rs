@@ -64,6 +64,21 @@ impl ArcticApp {
                 );
             }
         });
+        // How long this instance has been played.
+        if let Some(entry) = self.playtime.of(&instance.id) {
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new(format!(
+                    "Played {} · {} session{} · last {}",
+                    arctic_core::playtime::format_duration(entry.total_secs),
+                    entry.sessions,
+                    if entry.sessions == 1 { "" } else { "s" },
+                    arctic_core::playtime::ago(entry.last_played, arctic_core::auth::now_secs()),
+                ))
+                .small()
+                .color(p.muted),
+            );
+        }
         ui.add_space(22.0);
         ui.horizontal(|ui| {
             self.play_button(ui);

@@ -203,6 +203,8 @@ pub struct ArcticApp {
     /// Since when the window has been hidden in the tray (Windows hands the tray over after a while).
     #[cfg_attr(not(windows), allow(dead_code))]
     hidden_since: Option<std::time::Instant>,
+    /// How long each instance has been played (see `arctic_core::playtime`).
+    pub(crate) playtime: arctic_core::playtime::Stats,
     /// Maximize on the first frame (creating the window maximized is
     /// unreliable on Windows: wrong restore size, flicker).
     maximize_pending: bool,
@@ -276,6 +278,7 @@ impl ArcticApp {
             tray: None,
             window_known: false,
             hidden_since: None,
+            playtime: arctic_core::playtime::Stats::load(&dirs),
             maximize_pending: data.settings.start_maximized,
             pending_launch: startup.launch.clone(),
             msa_configured: MsaConfig::load(&dirs).is_ok(),
