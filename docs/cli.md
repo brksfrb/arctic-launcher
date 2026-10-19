@@ -247,6 +247,7 @@ arctic servers list [--instance <I>] [--no-ping] | ping <ADDRESS> | add <ADDRESS
 arctic servers move <ADDRESS> [--before <ADDRESS>] [--instance <I>]
 arctic servers browse [--premium|--cracked] [--random]
 arctic servers submit <ADDRESS> --name N [--description D] [--tag T]... | verify <ID>
+    (submit goes straight to review; verify only reports that state)
 arctic servers review [--state pending] [--approve|--reject|--remove <ID>]   (needs ARCTIC_ADMIN_KEY)
 arctic friends list | add <CODE|NAME> | accept <NAME> | remove <NAME> [--account A]
 arctic friends recovery | restore <RECOVERY_CODE> [--account A]

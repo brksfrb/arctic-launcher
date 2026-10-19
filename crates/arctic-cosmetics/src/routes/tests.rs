@@ -369,6 +369,11 @@ async fn read_only_keys_read_everything_in_full_and_change_nothing() {
             "/v1/admin/servers/1".to_owned(),
             Some(json!({"action": "approve"})),
         ),
+        (
+            "POST",
+            "/v1/admin/servers/1".to_owned(),
+            Some(json!({"action": "edit", "name": "Nope"})),
+        ),
     ];
     for (method, uri, body) in refused {
         let (s, _) = admin_call(&app, READER, method, &uri, body).await;
@@ -1059,7 +1064,7 @@ fn fake_minecraft(motd: std::sync::Arc<std::sync::Mutex<String>>) -> u16 {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     std::thread::spawn(move || {
-        for stream in listener.incoming().take(16) {
+        for stream in listener.incoming().take(32) {
             let mut s = stream.unwrap();
             let handshake = packet(&mut s);
             if *handshake.last().unwrap() == 1 {
@@ -1084,14 +1089,13 @@ fn fake_minecraft(motd: std::sync::Arc<std::sync::Mutex<String>>) -> u16 {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn servers_submit_verify_and_review() {
+async fn servers_submit_and_review() {
     let app = app().await;
     let token = microsoft_token(&app).await;
     let (s, list) = call(&app, "GET", "/v1/servers", None, None).await;
     assert_eq!(s, StatusCode::OK);
     assert!(list["servers"].as_array().unwrap().is_empty());
 
-    // The code isn't known until submitting: the MOTD is filled in after.
     let motd = std::sync::Arc::new(std::sync::Mutex::new(String::from("Welcome!")));
     let port = fake_minecraft(motd.clone());
     let submission = json!({"address": format!("127.0.0.1:{port}"), "name": "Test SMP", "tags": ["SMP", "bad tag"]});
@@ -1099,18 +1103,18 @@ async fn servers_submit_verify_and_review() {
     assert_eq!(s, StatusCode::UNAUTHORIZED);
     let (s, v) = call(&app, "POST", "/v1/servers", Some(&token), Some(submission)).await;
     assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(v["state"], "pending");
     let id = v["id"].as_str().unwrap().to_owned();
-    *motd.lock().unwrap() = format!("Welcome! {}", v["code"].as_str().unwrap());
-    let (s, v) = call(
+    // The same address can't be submitted again while it waits.
+    let (s, _) = call(
         &app,
         "POST",
-        &format!("/v1/servers/{id}/verify"),
+        "/v1/servers",
         Some(&token),
-        None,
+        Some(json!({"address": format!("127.0.0.1:{port}"), "name": "Again"})),
     )
     .await;
-    assert_eq!(s, StatusCode::OK, "{v}");
-    assert_eq!(v["state"], "pending");
+    assert_eq!(s, StatusCode::CONFLICT);
 
     // Waiting for review: not public yet; admins see it, premium detected.
     let (_, list) = call(&app, "GET", "/v1/servers", None, None).await;
@@ -1149,9 +1153,87 @@ async fn servers_submit_verify_and_review() {
     assert_eq!(entry["id"], id.as_str());
     assert_eq!(entry["cracked"], false);
     assert_eq!(entry["players"], 2);
+    assert_eq!(entry["tags"], json!(["smp"]));
     // Asked live when the page loads: it answered, so there is no problem to show.
     assert_eq!(entry["online"], true);
     assert!(entry["problem"].is_null());
+
+    let (s, _) = admin(
+        "POST",
+        format!("/v1/admin/servers/{id}"),
+        Some(json!({"action": "edit", "name": "x".repeat(41)})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _) = admin(
+        "POST",
+        format!("/v1/admin/servers/{id}"),
+        Some(json!({"action": "edit", "description": "y".repeat(201)})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _) = admin(
+        "POST",
+        format!("/v1/admin/servers/{id}"),
+        Some(json!({"action": "edit", "owner": "not-a-player"})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _) = admin(
+        "POST",
+        format!("/v1/admin/servers/{id}"),
+        Some(json!({"action": "edit", "cracked": "maybe"})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _) = admin_call(
+        &app,
+        "reader-key-reader-key",
+        "POST",
+        &format!("/v1/admin/servers/{id}"),
+        Some(json!({"action": "edit", "name": "Nope"})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+
+    let owner = "069a79f4-44e9-4726-a5be-fca90e38aaf5";
+    let (s, _) = admin(
+        "POST",
+        format!("/v1/admin/servers/{id}"),
+        Some(json!({
+            "action": "edit",
+            "name": "Renamed SMP",
+            "description": "A calm one",
+            "tags": ["PvP", "pvp", "bad tag"],
+            "cracked": "true",
+            "owner": owner,
+        })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let (_, pending) = admin("GET", "/v1/admin/servers".into(), None).await;
+    let entry = &pending["servers"][0];
+    assert_eq!(entry["name"], "Renamed SMP");
+    assert_eq!(entry["description"], "A calm one");
+    assert_eq!(entry["tags"], json!(["pvp"]));
+    // A manual cracked value sticks; the pinger doesn't overwrite it.
+    assert_eq!(entry["cracked"], true);
+    assert_eq!(entry["owner"], "069a79f444e94726a5befca90e38aaf5");
+
+    let (s, _) = admin(
+        "POST",
+        format!("/v1/admin/servers/{id}"),
+        Some(json!({"action": "edit", "cracked": "clear", "owner": ""})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    // Cleared: the next look probes again (this fake server is premium).
+    let (_, pending) = admin("GET", "/v1/admin/servers".into(), None).await;
+    let entry = &pending["servers"][0];
+    assert_eq!(entry["cracked"], false);
+    assert!(entry["owner"].is_null());
+    assert_eq!(entry["name"], "Renamed SMP");
+
     let (_, me) = admin("GET", "/v1/admin/me".into(), None).await;
     assert_eq!(me["counts"]["servers"], 1);
     let (s, _) = admin(
@@ -1162,6 +1244,6 @@ async fn servers_submit_verify_and_review() {
     .await;
     assert_eq!(s, StatusCode::OK);
     let (_, list) = call(&app, "GET", "/v1/servers", None, None).await;
-    assert_eq!(list["servers"][0]["name"], "Test SMP");
+    assert_eq!(list["servers"][0]["name"], "Renamed SMP");
     assert!(list["servers"][0].get("code").is_none());
 }

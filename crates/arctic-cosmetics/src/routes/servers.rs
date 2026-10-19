@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::{Shared, db_error, error, moderator, now, player};
-use crate::listing::{self, Listing, Live, State as ListingState, SubmitError};
+use crate::listing::{self, Listing, ListingEdit, Live, State as ListingState, SubmitError};
 
 pub fn routes() -> Router<Shared> {
     Router::new()
@@ -51,7 +51,7 @@ struct Submission {
     tags: Vec<String>,
 }
 
-/// Signed-in owners submit; the answer holds the code for their MOTD.
+/// Signed-in owners submit. The server goes straight to the review queue.
 async fn submit(
     State(state): State<Shared>,
     headers: HeaderMap,
@@ -95,7 +95,9 @@ async fn submit(
     }
 }
 
-/// The owner asks us to look for the code; then it waits for an admin.
+/// Older launchers still call this after submitting. Listings already wait
+/// for review; this reports the state, and moves a leftover unverified one
+/// into the queue (no MOTD code).
 async fn verify(
     State(state): State<Shared>,
     headers: HeaderMap,
@@ -109,57 +111,13 @@ async fn verify(
         Ok(_) => return error(StatusCode::NOT_FOUND, "no such submission"),
         Err(e) => return db_error("server verify", e),
     };
-    if listing.state != ListingState::Unverified {
-        return Json(json!({ "state": listing.state.as_str() })).into_response();
-    }
-    let address = listing.address.clone();
-    let checked = tokio::task::spawn_blocking(move || check(&address)).await;
-    let (status, cracked) = match checked {
-        Ok(Ok(found)) => found,
-        Ok(Err(e)) => {
-            return error(
-                StatusCode::BAD_GATEWAY,
-                &format!("couldn't reach the server: {e}"),
-            );
+    if listing.state == ListingState::Unverified {
+        match state.store.listing_set_state(&id, ListingState::Pending) {
+            Ok(_) => return Json(json!({ "state": "pending" })).into_response(),
+            Err(e) => return db_error("server verify", e),
         }
-        Err(_) => return error(StatusCode::INTERNAL_SERVER_ERROR, "the check failed"),
-    };
-    if !listing::motd_has_code(&status.motd, &listing.code) {
-        return error(
-            StatusCode::PRECONDITION_FAILED,
-            &format!("\"{}\" isn't in the server's MOTD yet", listing.code),
-        );
     }
-    let live = Live {
-        players: status.online,
-        max_players: status.max,
-        version: status.version,
-    };
-    let saved = state
-        .store
-        .listing_set_state(&id, ListingState::Pending)
-        .and_then(|_| state.store.listing_pinged(&id, Some(&live), now()))
-        .and_then(|()| match cracked {
-            Some(c) => state.store.listing_set_cracked(&id, c),
-            None => Ok(()),
-        });
-    match saved {
-        Ok(()) => Json(json!({ "state": "pending" })).into_response(),
-        Err(e) => db_error("server verify", e),
-    }
-}
-
-/// A status ping and, when the server lets it, the premium/cracked probe.
-pub(crate) fn check(address: &str) -> arctic_ping::Result<(arctic_ping::Status, Option<bool>)> {
-    let status = arctic_ping::ping(address, None)?;
-    let cracked = arctic_ping::Address::parse(address)
-        .and_then(|a| arctic_ping::login_check(&a, status.protocol).ok())
-        .and_then(|login| match login {
-            arctic_ping::Login::Premium => Some(false),
-            arctic_ping::Login::Cracked => Some(true),
-            arctic_ping::Login::Refused(_) => None,
-        });
-    Ok((status, cracked))
+    Json(json!({ "state": listing.state.as_str() })).into_response()
 }
 
 #[derive(Deserialize)]
@@ -232,6 +190,72 @@ struct Decision {
     /// With `partner`: `exclusive` (our own servers) or `hosted` (default).
     #[serde(default)]
     tier: String,
+    /// With `edit`. Absent leaves the name.
+    #[serde(default)]
+    name: Option<String>,
+    /// With `edit`. Absent leaves the description.
+    #[serde(default)]
+    description: Option<String>,
+    /// With `edit`. Absent leaves the tags.
+    #[serde(default)]
+    tags: Option<Vec<String>>,
+    /// With `edit`: `true`, `false`, or `clear` (NULL, so the pinger looks again).
+    #[serde(default)]
+    cracked: Option<String>,
+    /// With `edit`: a player's id, or empty to clear. Absent leaves the owner.
+    #[serde(default)]
+    owner: Option<String>,
+}
+
+/// The edit fields on a decide call, or why they can't be applied.
+fn listing_edit_from(d: &Decision) -> Result<ListingEdit, &'static str> {
+    let mut edit = ListingEdit::default();
+    let mut any = false;
+    if let Some(name) = d.name.as_deref() {
+        let name = name.trim();
+        let n = name.chars().count();
+        if !(1..=listing::MAX_NAME).contains(&n) {
+            return Err("the name needs 1 to 40 characters");
+        }
+        edit.name = Some(name.to_owned());
+        any = true;
+    }
+    if let Some(description) = d.description.as_deref() {
+        let description = description.trim();
+        if description.chars().count() > listing::MAX_DESCRIPTION {
+            return Err("the description is too long (200 characters at most)");
+        }
+        edit.description = Some(description.to_owned());
+        any = true;
+    }
+    if let Some(tags) = d.tags.as_deref() {
+        edit.tags = Some(tags.to_vec());
+        any = true;
+    }
+    if let Some(cracked) = d.cracked.as_deref() {
+        edit.cracked = Some(match cracked.trim().to_ascii_lowercase().as_str() {
+            "true" | "cracked" => Some(true),
+            "false" | "premium" => Some(false),
+            "clear" | "unknown" | "" => None,
+            _ => return Err("cracked is true, false or clear"),
+        });
+        any = true;
+    }
+    if let Some(owner) = d.owner.as_deref() {
+        let owner = owner.trim().replace('-', "").to_ascii_lowercase();
+        edit.owner = Some(if owner.is_empty() {
+            None
+        } else if crate::auth::is_uuid(&owner) {
+            Some(owner)
+        } else {
+            return Err("the owner should be a player's id, or empty to clear");
+        });
+        any = true;
+    }
+    if !any {
+        return Err("nothing to change");
+    }
+    Ok(edit)
 }
 
 async fn decide(
@@ -243,15 +267,29 @@ async fn decide(
     let Some(name) = moderator(&state, &headers) else {
         return error(StatusCode::FORBIDDEN, "admins only");
     };
+    let edit = if d.action == "edit" {
+        match listing_edit_from(&d) {
+            Ok(edit) => Some(edit),
+            Err(msg) => return error(StatusCode::BAD_REQUEST, msg),
+        }
+    } else {
+        None
+    };
     let done = match d.action.as_str() {
         "approve" => state.store.listing_set_state(&id, ListingState::Listed),
         "reject" => state.store.listing_set_state(&id, ListingState::Rejected),
         "remove" => state.store.listing_remove(&id),
         "partner" => state.store.listing_set_partner(&id, &d.group, &d.tier),
+        "edit" => {
+            let Some(edit) = edit else {
+                return error(StatusCode::BAD_REQUEST, "nothing to change");
+            };
+            state.store.listing_edit(&id, &edit)
+        }
         _ => {
             return error(
                 StatusCode::BAD_REQUEST,
-                "action is approve, reject, remove or partner",
+                "action is approve, reject, remove, partner or edit",
             );
         }
     };
@@ -302,6 +340,7 @@ async fn ping_and_store(state: &Shared, list: &[Listing]) -> Vec<(String, Option
     };
     let now = now();
     let mut problems = Vec::with_capacity(list.len());
+    let mut probes = Vec::new();
     for (l, result) in list.iter().zip(results) {
         problems.push((l.id.clone(), result.as_ref().err().map(|e| e.to_string())));
         let live = result.as_ref().ok().map(|s| Live {
@@ -315,21 +354,33 @@ async fn ping_and_store(state: &Shared, list: &[Listing]) -> Vec<(String, Option
         if l.cracked.is_none()
             && let Ok(s) = result
         {
-            let (id, address, st) = (l.id.clone(), l.address.clone(), state.clone());
-            let protocol = s.protocol;
-            tokio::task::spawn_blocking(move || {
-                let found = arctic_ping::Address::parse(&address)
-                    .and_then(|a| arctic_ping::login_check(&a, protocol).ok());
-                let cracked = match found {
-                    Some(arctic_ping::Login::Premium) => Some(false),
-                    Some(arctic_ping::Login::Cracked) => Some(true),
-                    _ => None,
-                };
-                if let Some(c) = cracked {
-                    let _ = st.store.listing_set_cracked(&id, c);
+            probes.push((l.id.clone(), l.address.clone(), s.protocol));
+        }
+    }
+    if !probes.is_empty() {
+        let st = state.clone();
+        // Wait for the probes: the review page should show premium or cracked
+        // for what it just asked, and a cleared value gets filled in again.
+        let _ = tokio::task::spawn_blocking(move || {
+            std::thread::scope(|scope| {
+                for (id, address, protocol) in probes {
+                    let st = &st;
+                    scope.spawn(move || {
+                        let found = arctic_ping::Address::parse(&address)
+                            .and_then(|a| arctic_ping::login_check(&a, protocol).ok());
+                        let cracked = match found {
+                            Some(arctic_ping::Login::Premium) => Some(false),
+                            Some(arctic_ping::Login::Cracked) => Some(true),
+                            _ => None,
+                        };
+                        if let Some(c) = cracked {
+                            let _ = st.store.listing_set_cracked(&id, c);
+                        }
+                    });
                 }
             });
-        }
+        })
+        .await;
     }
     problems
 }
