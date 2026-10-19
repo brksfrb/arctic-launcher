@@ -49,7 +49,7 @@ impl Tasks {
         });
     }
 
-    /// Submit the player's own server; the answer holds the MOTD code.
+    /// Submit the player's own server. It waits for a moderator.
     pub fn public_submit(&self, account: arctic_core::auth::Account, form: SubmitForm) {
         self.run(move |t| {
             let result = (|| {
@@ -67,20 +67,6 @@ impl Tasks {
             })()
             .map_err(|e| e.to_string());
             t.send(Event::ServerSubmitted(result));
-        });
-    }
-
-    /// Ask the Arctic server to find the code in the MOTD.
-    pub fn public_verify(&self, account: arctic_core::auth::Account, id: String) {
-        self.run(move |t| {
-            let result = (|| {
-                let account = t.fresh_account(account)?;
-                let base = arctic_core::cosmetics::base_url();
-                let token = arctic_core::cosmetics::token_for(t.dirs(), &base, &account)?;
-                servers::public::verify(&base, &token, &id)
-            })()
-            .map_err(|e| e.to_string());
-            t.send(Event::ServerVerified(result));
         });
     }
 }

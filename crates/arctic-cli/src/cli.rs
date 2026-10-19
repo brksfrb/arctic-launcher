@@ -458,7 +458,7 @@ pub enum ServersCommand {
         #[arg(long)]
         instance: Option<String>,
     },
-    /// List your own server publicly: prints a code to put in its MOTD.
+    /// List your own server publicly. It waits for a moderator to approve it.
     Submit {
         address: String,
         #[arg(long)]
@@ -472,8 +472,7 @@ pub enum ServersCommand {
         #[arg(short, long)]
         account: Option<String>,
     },
-    /// Check that your submission's code is in the MOTD (then it waits
-    /// for approval).
+    /// Report a submission's state. It already waits for approval.
     Verify {
         id: String,
         #[arg(short, long)]

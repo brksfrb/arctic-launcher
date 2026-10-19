@@ -110,11 +110,11 @@ pub fn run(ctx: &Ctx, command: &ServersCommand) -> Result<i32> {
             let token = cosmetics::token_for(&ctx.dirs, &base, &account)?;
             let s = public::submit(&base, &token, address, name, description, tags)?;
             ctx.out.emit(
-                json!({"event": "submitted", "id": s.id, "address": s.address, "code": s.code}),
+                json!({"event": "submitted", "id": s.id, "address": s.address, "state": s.state}),
                 || {
                     format!(
-                        "Put \"{}\" anywhere in {}'s MOTD, then run:\n  arctic servers verify {}\nAfter that it waits for approval; the code can go once it's listed.",
-                        s.code, s.address, s.id
+                        "Submitted {}. It waits for approval before it shows on the list.",
+                        s.address
                     )
                 },
             );
@@ -127,7 +127,8 @@ pub fn run(ctx: &Ctx, command: &ServersCommand) -> Result<i32> {
             ctx.out.emit(
                 json!({"event": "verified", "id": id, "state": state}),
                 || match state.as_str() {
-                    "pending" => "Found the code. Your server now waits for approval.".to_owned(),
+                    "pending" => "It's waiting for approval.".to_owned(),
+                    "listed" => "It's listed.".to_owned(),
                     other => format!("Its state is: {other}"),
                 },
             );

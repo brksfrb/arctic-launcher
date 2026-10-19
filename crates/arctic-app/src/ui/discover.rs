@@ -16,6 +16,7 @@ use crate::widgets;
 const WIDTH: f32 = 640.0;
 const LIST_HEIGHT: f32 = 380.0;
 const MAX_TAGS: usize = 5;
+const ABUSE: &str = "See a misleading listing, or own this server and want it changed? Email abuse@arcticlauncher.com";
 
 #[derive(Default)]
 pub struct DiscoverUi {
@@ -73,7 +74,6 @@ struct ListForm {
     fields: SubmitForm,
     tags: String,
     busy: bool,
-    submitted: Option<Submitted>,
     /// What the last step said (error or state).
     message: Option<(bool, String)>,
 }
@@ -133,6 +133,8 @@ impl ArcticApp {
                     RichText::new("A new random order every time. Nobody pays for a spot.")
                         .color(p.muted),
                 );
+                ui.add_space(4.0);
+                ui.label(RichText::new(ABUSE).small().color(p.muted));
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                 if widgets::button(ui, p, Some(Icon::Plus), "List your server", false).clicked() {
@@ -384,110 +386,83 @@ impl ArcticApp {
         );
         ui.label(
             RichText::new(
-                "You get a code to put in your server's MOTD, which proves it's yours. \
-                 Then it waits for a quick review before it shows up.",
+                "Submit it for a short review. Once it's approved, it shows up for everyone.",
             )
             .color(p.muted),
         );
+        ui.add_space(4.0);
+        ui.label(RichText::new(ABUSE).small().color(p.muted));
         ui.add_space(10.0);
         let account = self.accounts.active().cloned();
         let Some(form) = self.discover.form.as_mut() else {
             return;
         };
-        if let Some(sub) = form.submitted.clone() {
-            ui.label(RichText::new("Put this anywhere in your MOTD:").color(p.text));
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(&sub.code).size(24.0).strong().color(p.accent));
-                if widgets::icon_button(ui, p, Icon::Copy, "Copy").clicked() {
-                    ui.ctx().copy_text(sub.code.clone());
-                }
+        egui::Grid::new("list_form")
+            .num_columns(2)
+            .spacing(vec2(12.0, 8.0))
+            .show(ui, |ui| {
+                ui.label(RichText::new("Address").color(p.muted));
+                ui.add(
+                    widgets::text_field(&mut form.fields.address)
+                        .hint_text("play.example.net")
+                        .desired_width(360.0),
+                );
+                ui.end_row();
+                ui.label(RichText::new("Name").color(p.muted));
+                ui.add(
+                    widgets::text_field(&mut form.fields.name)
+                        .char_limit(40)
+                        .desired_width(360.0),
+                );
+                ui.end_row();
+                ui.label(RichText::new("About it").color(p.muted));
+                ui.add(
+                    widgets::text_field(&mut form.fields.description)
+                        .hint_text("Optional, one line")
+                        .char_limit(200)
+                        .desired_width(360.0),
+                );
+                ui.end_row();
+                ui.label(RichText::new("Tags").color(p.muted));
+                ui.add(
+                    widgets::text_field(&mut form.tags)
+                        .hint_text("smp, pvp, minigames (up to 5)")
+                        .desired_width(360.0),
+                );
+                ui.end_row();
             });
-            ui.label(
-                RichText::new("Restart the server (or reload its MOTD), then check. You can remove the code once it's listed.")
-                    .small()
-                    .color(p.muted),
-            );
-            ui.add_space(8.0);
-            crate::widgets::row(ui, |ui| {
-                let check =
-                    !form.busy && widgets::button(ui, p, None, "Check my MOTD", true).clicked();
-                if form.busy {
-                    ui.spinner();
-                }
-                if check && let Some(account) = account.clone() {
-                    form.busy = true;
-                    form.message = None;
-                    self.tasks.public_verify(account, sub.id.clone());
-                }
-            });
-        } else {
-            egui::Grid::new("list_form")
-                .num_columns(2)
-                .spacing(vec2(12.0, 8.0))
-                .show(ui, |ui| {
-                    ui.label(RichText::new("Address").color(p.muted));
-                    ui.add(
-                        widgets::text_field(&mut form.fields.address)
-                            .hint_text("play.example.net")
-                            .desired_width(360.0),
-                    );
-                    ui.end_row();
-                    ui.label(RichText::new("Name").color(p.muted));
-                    ui.add(
-                        widgets::text_field(&mut form.fields.name)
-                            .char_limit(40)
-                            .desired_width(360.0),
-                    );
-                    ui.end_row();
-                    ui.label(RichText::new("About it").color(p.muted));
-                    ui.add(
-                        widgets::text_field(&mut form.fields.description)
-                            .hint_text("Optional, one line")
-                            .char_limit(200)
-                            .desired_width(360.0),
-                    );
-                    ui.end_row();
-                    ui.label(RichText::new("Tags").color(p.muted));
-                    ui.add(
-                        widgets::text_field(&mut form.tags)
-                            .hint_text("smp, pvp, minigames (up to 5)")
-                            .desired_width(360.0),
-                    );
-                    ui.end_row();
-                });
-            ui.add_space(8.0);
-            crate::widgets::row(ui, |ui| {
-                let ready = !form.busy
-                    && !form.fields.address.trim().is_empty()
-                    && !form.fields.name.trim().is_empty();
-                let submit = ui
-                    .add_enabled_ui(ready, |ui| {
-                        widgets::button(ui, p, None, "Get my code", true)
-                    })
-                    .inner
-                    .clicked();
-                if form.busy {
-                    ui.spinner();
-                }
-                if submit {
-                    match account.clone() {
-                        Some(account) => {
-                            form.fields.tags = form
-                                .tags
-                                .split(',')
-                                .map(|t| t.trim().to_owned())
-                                .filter(|t| !t.is_empty())
-                                .take(MAX_TAGS)
-                                .collect();
-                            form.busy = true;
-                            form.message = None;
-                            self.tasks.public_submit(account, form.fields.clone());
-                        }
-                        None => form.message = Some((true, "Add an account first.".into())),
+        ui.add_space(8.0);
+        crate::widgets::row(ui, |ui| {
+            let ready = !form.busy
+                && !form.fields.address.trim().is_empty()
+                && !form.fields.name.trim().is_empty();
+            let submit = ui
+                .add_enabled_ui(ready, |ui| {
+                    widgets::button(ui, p, None, "Submit for review", true)
+                })
+                .inner
+                .clicked();
+            if form.busy {
+                ui.spinner();
+            }
+            if submit {
+                match account.clone() {
+                    Some(account) => {
+                        form.fields.tags = form
+                            .tags
+                            .split(',')
+                            .map(|t| t.trim().to_owned())
+                            .filter(|t| !t.is_empty())
+                            .take(MAX_TAGS)
+                            .collect();
+                        form.busy = true;
+                        form.message = None;
+                        self.tasks.public_submit(account, form.fields.clone());
                     }
+                    None => form.message = Some((true, "Add an account first.".into())),
                 }
-            });
-        }
+            }
+        });
         if let Some((is_error, text)) = &form.message {
             ui.add_space(6.0);
             ui.label(RichText::new(text).color(if *is_error { p.error } else { p.accent }));
@@ -503,24 +478,11 @@ impl ArcticApp {
             return;
         };
         form.busy = false;
-        match result {
-            Ok(sub) => form.submitted = Some(sub),
-            Err(e) => form.message = Some((true, e)),
-        }
-    }
-
-    pub(crate) fn on_server_verified(&mut self, result: Outcome<String>) {
-        let Some(form) = self.discover.form.as_mut() else {
-            return;
-        };
-        form.busy = false;
         form.message = Some(match result {
-            Ok(state) if state == "pending" => (
+            Ok(_) => (
                 false,
-                "Found it! Your server now waits for a quick review.".into(),
+                "Submitted. It waits for a quick review before it shows up.".into(),
             ),
-            Ok(state) if state == "listed" => (false, "It's listed.".into()),
-            Ok(state) => (false, format!("Its state: {state}")),
             Err(e) => (true, e),
         });
     }
