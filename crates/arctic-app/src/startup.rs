@@ -55,6 +55,7 @@ fn parse_tab(name: &str) -> Option<Tab> {
         "together" => Some(Tab::Together),
         "logs" => Some(Tab::Logs),
         "screenshots" => Some(Tab::Screenshots),
+        "stats" => Some(Tab::Stats),
         "settings" => Some(Tab::Settings),
         "about" => Some(Tab::About),
         _ => None,

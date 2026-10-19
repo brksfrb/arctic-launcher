@@ -367,6 +367,14 @@ impl ArcticApp {
                     ) {
                         log::warn!("play time: {e}");
                     }
+                    // What the game itself recorded: stretches in servers, worlds and menus.
+                    if let Err(e) = arctic_core::playtime::ingest_game_log(
+                        &self.dirs,
+                        &instance_id,
+                        &run.game_dir,
+                    ) {
+                        log::warn!("play time from the game: {e}");
+                    }
                     self.playtime = arctic_core::playtime::Stats::load(&self.dirs);
                 }
                 let diagnosis = matches!(code, Some(c) if c != 0 && !watchdog)

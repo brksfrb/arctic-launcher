@@ -23,6 +23,7 @@ mod migrate;
 mod profiles;
 pub use migrate::MigrateUi;
 mod screenshots;
+mod stats;
 pub use screenshots::ScreenshotsUi;
 mod servers;
 pub use servers::ServersUi;

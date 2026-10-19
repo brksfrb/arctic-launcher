@@ -40,19 +40,21 @@ pub enum Tab {
     Skins,
     Together,
     Screenshots,
+    Stats,
     Logs,
     Settings,
     About,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 9] = [
+    pub const ALL: [Tab; 10] = [
         Tab::Play,
         Tab::Accounts,
         Tab::Instances,
         Tab::Skins,
         Tab::Together,
         Tab::Screenshots,
+        Tab::Stats,
         Tab::Logs,
         Tab::Settings,
         Tab::About,
@@ -205,6 +207,8 @@ pub struct ArcticApp {
     hidden_since: Option<std::time::Instant>,
     /// How long each instance has been played (see `arctic_core::playtime`).
     pub(crate) playtime: arctic_core::playtime::Stats,
+    /// When the launcher's open time was last added to the stats.
+    open_flushed: std::time::Instant,
     /// Maximize on the first frame (creating the window maximized is
     /// unreliable on Windows: wrong restore size, flicker).
     maximize_pending: bool,
@@ -279,6 +283,7 @@ impl ArcticApp {
             window_known: false,
             hidden_since: None,
             playtime: arctic_core::playtime::Stats::load(&dirs),
+            open_flushed: std::time::Instant::now(),
             maximize_pending: data.settings.start_maximized,
             pending_launch: startup.launch.clone(),
             msa_configured: MsaConfig::load(&dirs).is_ok(),
@@ -702,6 +707,20 @@ impl ArcticApp {
 
     /// Tray icon, close-to-tray and starts forwarded from other processes.
     fn window_and_tray(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
+        // How long the launcher window is open, added to the stats once a minute.
+        let open = self.open_flushed.elapsed();
+        if open >= std::time::Duration::from_secs(60) {
+            let secs = if crate::window::hidden() {
+                0
+            } else {
+                open.as_secs().min(300)
+            };
+            if let Err(e) = arctic_core::playtime::add_launcher_time(&self.dirs, secs) {
+                log::warn!("launcher open time: {e}");
+            }
+            self.open_flushed = std::time::Instant::now();
+            self.playtime = arctic_core::playtime::Stats::load(&self.dirs);
+        }
         if !self.window_known {
             self.window_known = true;
             crate::window::remember(frame);

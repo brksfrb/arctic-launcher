@@ -254,6 +254,8 @@ public final class ArcticClient {
 	private static final com.arcticlauncher.client.feature.QuickMessages QUICK_MESSAGES =
 			new com.arcticlauncher.client.feature.QuickMessages();
 	private static final com.arcticlauncher.client.feature.DeathWatch DEATHS = new com.arcticlauncher.client.feature.DeathWatch();
+	/** Where the time goes (servers, worlds, menus), for the launcher's Stats page. */
+	private static final com.arcticlauncher.client.feature.PlaytimeLog PLAYTIME = new com.arcticlauncher.client.feature.PlaytimeLog();
 	private static final com.arcticlauncher.client.feature.DurabilityWatch DURABILITY = new com.arcticlauncher.client.feature.DurabilityWatch();
 	private static final com.arcticlauncher.client.feature.AutoGg AUTO_GG = new com.arcticlauncher.client.feature.AutoGg();
 
@@ -343,6 +345,7 @@ public final class ArcticClient {
 	public static void tick(boolean screenOpen) {
 		com.arcticlauncher.client.replay.Replays.tick(screenOpen);
 		com.arcticlauncher.client.servers.DisconnectedPage.tick(platform);
+		PLAYTIME.tick(platform);
 		if (com.arcticlauncher.client.replay.Replays.watching()) {
 			return;
 		}
