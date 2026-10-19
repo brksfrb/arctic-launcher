@@ -17,7 +17,11 @@ public final class PingTags {
 		if (platform == null) {
 			return null;
 		}
-		int ms = platform.ping(player);
+		return format(platform.ping(player));
+	}
+
+	/** "48ms | " in its colour, or null when the ping isn't known. */
+	public static String format(int ms) {
 		return ms <= 0 ? null : "§" + colour(ms) + ms + "ms §8| §r";
 	}
 
