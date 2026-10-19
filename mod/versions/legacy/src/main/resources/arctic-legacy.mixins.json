@@ -19,6 +19,7 @@
 		"EntityMixin",
 		"ClientPlayerInteractionManagerMixin",
 		"WorldMixin",
+		"LightWorkMixin",
 		"PlayerListHudMixin",
 		"PlayerTierMixin",
 		"ScreenClickInvoker",
