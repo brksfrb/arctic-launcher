@@ -102,6 +102,7 @@ impl ArcticApp {
                         Tab::Skins => self.skins_tab(ui),
                         Tab::Together => self.together_tab(ui),
                         Tab::Screenshots => self.screenshots_tab(ui),
+                        Tab::Stats => self.stats_tab(ui),
                         Tab::Logs => self.logs_tab(ui),
                         Tab::Settings => self.settings_tab(ui),
                         Tab::About => self.about_tab(ui),

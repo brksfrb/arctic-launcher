@@ -23,6 +23,7 @@ fn tab_info(tab: Tab) -> (Icon, &'static str) {
         Tab::Skins => (Icon::Shirt, "Cosmetics"),
         Tab::Together => (Icon::Friends, "Friends"),
         Tab::Screenshots => (Icon::Image, "Screenshots"),
+        Tab::Stats => (Icon::Star, "Stats"),
         Tab::Logs => (Icon::Document, "Logs"),
         Tab::Settings => (Icon::Gear, "Settings"),
         Tab::About => (Icon::Info, "About"),
