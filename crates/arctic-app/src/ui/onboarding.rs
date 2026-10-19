@@ -87,6 +87,7 @@ impl ArcticApp {
         // Profiles from before onboarding existed are already set up.
         if skip || !self.accounts.accounts.is_empty() {
             self.settings.onboarded = true;
+            self.settings.tray_asked = true;
             return;
         }
         self.settings.max_memory_mb = system::recommended_memory_mb(system::total_memory_mb());
@@ -519,6 +520,7 @@ impl ArcticApp {
     fn finish_onboarding(&mut self, now: f64) {
         let first = self.onboarding.take().map_or(FirstPlay::Later, |o| o.first);
         self.settings.onboarded = true;
+        self.settings.tray_asked = true;
         self.persist_settings();
         match first {
             FirstPlay::Move => {
