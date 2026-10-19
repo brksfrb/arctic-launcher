@@ -21,6 +21,11 @@ abstract class PlayerListHudMixin {
 				cir.setReturnValue(tag.formatted() + cir.getReturnValue());
 			}
 		}
+		// Your own row, marked so it's easy to find in a long list.
+		if (com.arcticlauncher.client.feature.TabGlow.applies(entry.getProfile().getId())) {
+			cir.setReturnValue(com.arcticlauncher.client.feature.TabGlow.before() + cir.getReturnValue()
+					+ com.arcticlauncher.client.feature.TabGlow.after());
+		}
 		if (ArcticClient.looks() != null && ArcticClient.looks().isArctic(entry.getProfile().getId())) {
 			cir.setReturnValue(BADGE + cir.getReturnValue());
 		}

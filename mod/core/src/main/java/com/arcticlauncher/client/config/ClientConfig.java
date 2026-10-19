@@ -123,6 +123,8 @@ public final class ClientConfig {
 	public boolean tierTab = true;
 	/** Other players' ping in front of their name tag ("48ms | Steve"). */
 	public boolean pingNametags;
+	/** Your own row in the player list pulses so it's easy to find. */
+	public boolean tabGlowSelf;
 	/** Playing with a game controller. */
 	public com.arcticlauncher.client.controller.Controller.Settings controller = new com.arcticlauncher.client.controller.Controller.Settings();
 	/** SOCKS5 proxy for server connections and Arctic's web requests. */

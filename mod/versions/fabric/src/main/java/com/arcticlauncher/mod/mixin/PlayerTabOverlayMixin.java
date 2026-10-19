@@ -22,6 +22,13 @@ abstract class PlayerTabOverlayMixin {
 				cir.setReturnValue(Compat.empty().append(Compat.tierTag(tag)).append(cir.getReturnValue()));
 			}
 		}
+		// Your own row, marked so it's easy to find in a long list.
+		if (com.arcticlauncher.client.feature.TabGlow.applies(Compat.profileId(info.getProfile()))) {
+			cir.setReturnValue(Compat.empty()
+					.append(Compat.literal(com.arcticlauncher.client.feature.TabGlow.before()))
+					.append(cir.getReturnValue())
+					.append(Compat.literal(com.arcticlauncher.client.feature.TabGlow.after())));
+		}
 		// Before 1.16 text had no fonts, so there's no badge glyph to show.
 		if (Compat.BADGES && ArcticClient.looks() != null && ArcticClient.looks().isArctic(Compat.profileId(info.getProfile()))) {
 			Component badge = Compat.arcticBadge();
