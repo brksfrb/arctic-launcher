@@ -172,7 +172,7 @@ impl ArcticApp {
         ui.painter().rect_stroke(
             rect,
             radius,
-            Stroke::new(1.0, p.card_stroke),
+            egui::Stroke::new(1.0, p.card_stroke),
             egui::StrokeKind::Inside,
         );
         let icon = egui::Rect::from_center_size(rect.center(), vec2(30.0, 30.0));
