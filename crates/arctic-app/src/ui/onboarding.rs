@@ -261,12 +261,32 @@ impl ArcticApp {
             ui.add_space(6.0);
         }
         ui.add_space(6.0);
-        if cfg!(windows) {
-            ui.checkbox(
-                &mut self.settings.tray,
-                "Keep Arctic in the system tray when closed",
-            )
-            .on_hover_text("Reopens instantly. Quit from the tray icon.");
+        // The tray is easy to miss, so it gets a choice with a plain explanation (not just a checkbox).
+        if cfg!(any(windows, target_os = "linux")) {
+            ui.add_space(6.0);
+            ui.label(RichText::new("When you close the window").color(p.text));
+            ui.add_space(4.0);
+            let tray_choices = [
+                (
+                    true,
+                    Icon::Layers,
+                    "Keep Arctic in the system tray",
+                    "It hides next to the clock (look behind the little ^ arrow if you don't see it) and opens again instantly when you click its icon. Right-click the icon to quit.",
+                ),
+                (
+                    false,
+                    Icon::Close,
+                    "Quit the launcher",
+                    "Closing the window closes Arctic completely.",
+                ),
+            ];
+            for (tray, icon, title, desc) in tray_choices {
+                if option_tile(ui, p, icon, title, desc, true, self.settings.tray == tray) {
+                    self.settings.tray = tray;
+                }
+                ui.add_space(6.0);
+            }
+            ui.add_space(6.0);
         }
         ui.checkbox(
             &mut self.settings.start_maximized,
