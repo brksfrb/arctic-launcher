@@ -691,11 +691,14 @@ pub enum SettingsCommand {
 pub enum ProxyCommand {
     /// Show the current proxy.
     Show,
-    /// Use a SOCKS5 proxy (the proxy resolves server names too).
+    /// Use a SOCKS5 (or, with --http, HTTP) proxy; the proxy resolves server names too.
     Set {
         host: String,
         #[arg(default_value_t = arctic_core::proxy::DEFAULT_PORT)]
         port: u16,
+        /// An HTTP proxy instead of SOCKS5.
+        #[arg(long)]
+        http: bool,
         #[arg(long)]
         username: Option<String>,
         /// Kept in this profile's proxy.json on this PC only.

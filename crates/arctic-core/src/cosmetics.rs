@@ -712,6 +712,10 @@ pub fn write_mod_session(game_dir: &Path, session: &ModSession) -> Result<()> {
             // that part; Minecraft only proxies its own web services).
             "proxy": {
                 "enabled": proxy.active().is_some(),
+                "type": match proxy.kind {
+                    crate::proxy::ProxyKind::Socks5 => "socks5",
+                    crate::proxy::ProxyKind::Http => "http",
+                },
                 "host": proxy.bare_host(),
                 "port": proxy.port,
                 "username": proxy.username,

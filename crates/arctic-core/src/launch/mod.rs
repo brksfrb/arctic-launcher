@@ -770,6 +770,12 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
                     .as_ref()
                     .map_or(8, |j| j.major_version),
             ))
+            .chain(
+                proxy
+                    .active()
+                    .into_iter()
+                    .flat_map(ProxySettings::jvm_flags),
+            )
             .chain(proxy.active().map(|_| {
                 format!(
                     "-Djdk.net.hosts.file={}",

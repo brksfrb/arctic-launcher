@@ -16,12 +16,18 @@ pub fn proxy(ctx: &Ctx, cmd: &ProxyCommand) -> Result<i32> {
         ProxyCommand::Set {
             host,
             port,
+            http,
             username,
             password,
         } => {
             proxy.enabled = true;
             proxy.host = host.trim().to_owned();
             proxy.port = *port;
+            proxy.kind = if *http {
+                arctic_core::proxy::ProxyKind::Http
+            } else {
+                arctic_core::proxy::ProxyKind::Socks5
+            };
             proxy.username = username.clone().unwrap_or_default();
             proxy.password = password.clone().unwrap_or_default();
             proxy.validate().map_err(Error::Other)?;

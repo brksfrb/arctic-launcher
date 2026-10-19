@@ -2,7 +2,6 @@ package com.arcticlauncher.legacy.mixin;
 
 import com.arcticlauncher.client.config.ProxyConfig;
 import com.arcticlauncher.client.net.ProxyRoutes;
-import com.arcticlauncher.client.net.Socks5Handler;
 import io.netty.bootstrap.AbstractBootstrap;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
@@ -78,7 +77,7 @@ abstract class ClientConnectionProxyMixin implements PendingProxyConnection {
 			@Override
 			protected void initChannel(Channel channel) {
 				((PendingProxyConnection) connection).arctic$pendingProxy(channel);
-				channel.pipeline().addLast("arctic_socks5", new Socks5Handler(host, serverPort, proxy.username, proxy.password));
+				channel.pipeline().addLast("arctic_socks5", ProxyRoutes.tunnel(proxy, host, serverPort));
 				channel.pipeline().addLast(game);
 			}
 		});

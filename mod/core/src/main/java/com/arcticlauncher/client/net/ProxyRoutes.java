@@ -32,6 +32,12 @@ public final class ProxyRoutes {
 		return proxy;
 	}
 
+	/** The first handler of a server connection's pipeline: it opens the tunnel through the proxy. */
+	public static io.netty.channel.ChannelHandler tunnel(ProxyConfig proxy, String host, int port) {
+		return proxy.isHttp() ? new HttpConnectHandler(host, port, proxy.username, proxy.password)
+				: new Socks5Handler(host, port, proxy.username, proxy.password);
+	}
+
 	/** Whether a connection to {@code host} goes through the proxy. */
 	public static boolean routes(String host) {
 		return proxy != null && host != null && !isLocal(host);
@@ -106,7 +112,8 @@ public final class ProxyRoutes {
 			protected PasswordAuthentication getPasswordAuthentication() {
 				String protocol = getRequestingProtocol();
 				boolean socks = protocol != null && protocol.toUpperCase(java.util.Locale.ROOT).startsWith("SOCKS");
-				if (!socks || !p.host().equalsIgnoreCase(getRequestingHost())) {
+				boolean httpProxy = p.isHttp() && getRequestorType() == RequestorType.PROXY;
+				if (!(p.isHttp() ? httpProxy : socks) || !p.host().equalsIgnoreCase(getRequestingHost())) {
 					return null;
 				}
 				return new PasswordAuthentication(p.username, p.password.toCharArray());

@@ -1,6 +1,6 @@
-//! Settings → Network: the SOCKS5 proxy for the launcher and the game.
+//! Settings → Network: the SOCKS5 or HTTP proxy for the launcher and the game.
 
-use arctic_core::proxy::{DEFAULT_PORT, ProxySettings};
+use arctic_core::proxy::{DEFAULT_PORT, ProxyKind, ProxySettings};
 use eframe::egui::{self, RichText};
 
 use crate::app::ArcticApp;
@@ -31,15 +31,21 @@ impl ArcticApp {
     pub(crate) fn network_section(&mut self, ui: &mut egui::Ui, p: &Palette) {
         ui.label(
             RichText::new(
-                "Send the launcher and the game through a SOCKS5 proxy. Server connections go through it with the Arctic Client (Vanilla and Fabric instances); other instances only proxy Minecraft's login services.",
+                "Send the launcher and the game through a SOCKS5 or HTTP proxy. Server connections go through it with the Arctic Client (Vanilla and Fabric instances); other instances only proxy Minecraft's login services.",
             )
             .small()
             .color(p.muted),
         );
         ui.add_space(6.0);
         let draft = &mut self.network.draft;
-        ui.checkbox(&mut draft.enabled, "Use a SOCKS5 proxy");
+        ui.checkbox(&mut draft.enabled, "Use a proxy");
         ui.add_enabled_ui(draft.enabled, |ui| {
+            widgets::field_row(ui, |ui| {
+                ui.label("Type");
+                for kind in [ProxyKind::Socks5, ProxyKind::Http] {
+                    ui.selectable_value(&mut draft.kind, kind, kind.label());
+                }
+            });
             widgets::field_row(ui, |ui| {
                 ui.label("Address");
                 ui.add(
