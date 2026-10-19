@@ -434,16 +434,6 @@ impl Store {
         Ok(())
     }
 
-    /// A moderator's word on whether the server takes cracked accounts: `Some` fixes it (the probe
-    /// never changes it), `None` hands it back to the automatic check. False when there's no such server.
-    pub fn listing_set_login(&self, id: &str, cracked: Option<bool>) -> rusqlite::Result<bool> {
-        let changed = self.conn().execute(
-            "UPDATE listed_servers SET cracked = ?2 WHERE id = ?1",
-            params![id, cracked.map(i64::from)],
-        )?;
-        Ok(changed > 0)
-    }
-
     pub fn listing_set_cracked(&self, id: &str, cracked: bool) -> rusqlite::Result<()> {
         self.conn().execute(
             "UPDATE listed_servers SET cracked = ?2 WHERE id = ?1",
@@ -587,36 +577,6 @@ mod tests {
             ""
         );
         assert!(!store.listing_set_partner("nope", "x", "").unwrap());
-    }
-
-    #[test]
-    fn a_moderator_can_fix_or_clear_cracked_and_premium() {
-        let store = Store::memory().unwrap();
-        store.listing_seed(&[seed("a.example.net")], 100).unwrap();
-        let id = store.listing_in_state(State::Curated).unwrap()[0]
-            .id
-            .clone();
-        assert_eq!(
-            store.listing_in_state(State::Curated).unwrap()[0].cracked,
-            None
-        );
-        assert!(store.listing_set_login(&id, Some(true)).unwrap());
-        assert_eq!(
-            store.listing_in_state(State::Curated).unwrap()[0].cracked,
-            Some(true)
-        );
-        assert!(store.listing_set_login(&id, Some(false)).unwrap());
-        assert_eq!(
-            store.listing_in_state(State::Curated).unwrap()[0].cracked,
-            Some(false)
-        );
-        // Back to the automatic check.
-        assert!(store.listing_set_login(&id, None).unwrap());
-        assert_eq!(
-            store.listing_in_state(State::Curated).unwrap()[0].cracked,
-            None
-        );
-        assert!(!store.listing_set_login("nope", Some(true)).unwrap());
     }
 
     #[test]
