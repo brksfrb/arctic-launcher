@@ -43,6 +43,11 @@ pub enum ToastAction {
     SendCrash(crate::tasks::LaunchId),
     /// Open this release's notes (after an update).
     WhatsNew(String),
+    /// Do a crash's one-click fix on this instance.
+    Fix {
+        instance: String,
+        fix: arctic_core::crash::Fix,
+    },
 }
 
 impl ToastAction {
@@ -53,6 +58,7 @@ impl ToastAction {
             ToastAction::LinkAccount { .. } => "Link",
             ToastAction::SendCrash(_) => "Send report",
             ToastAction::WhatsNew(_) => "What's new",
+            ToastAction::Fix { .. } => "Fix it",
         }
     }
 }
