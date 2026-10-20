@@ -182,7 +182,20 @@ dependencies {
 	// 26.1 and later ship unobfuscated; older versions use Mojang's names.
 	if (project.hasProperty('mappings_file')) {
 		// 1.13.2: Mojang never published names for it; this file (mod/tools/mapgen) carries 1.14.4's across.
-		mappings files(project.mappings_file)
+		// Loom reads a mappings jar: the Tiny file goes into one (made here, before Loom needs it).
+		def tinyFile = file(project.mappings_file)
+		def mappingsJar = layout.buildDirectory.file("mappings/mappings-${mc}.jar").get().asFile
+		if (!mappingsJar.exists() || mappingsJar.lastModified() < tinyFile.lastModified()) {
+			mappingsJar.parentFile.mkdirs()
+			mappingsJar.withOutputStream { out ->
+				def zip = new java.util.zip.ZipOutputStream(out)
+				zip.putNextEntry(new java.util.zip.ZipEntry('mappings/mappings.tiny'))
+				zip.write(tinyFile.bytes)
+				zip.closeEntry()
+				zip.close()
+			}
+		}
+		mappings files(mappingsJar)
 	} else if (!atLeast('26.1')) {
 		mappings loom.officialMojangMappings()
 	}
