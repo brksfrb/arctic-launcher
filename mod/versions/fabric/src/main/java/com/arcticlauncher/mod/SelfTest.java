@@ -59,7 +59,7 @@ final class SelfTest {
 			packsTour();
 			return;
 		}
-		//#if MC >= 1.15
+		//#if MC >= 1.14
 		if (ReplayTest.requested()) {
 			ReplayTest.start();
 			return;
