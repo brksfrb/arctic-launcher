@@ -30,8 +30,8 @@
 		"PauseScreenMixin"<% if (panoramaHook) { %>,
 		"ScreenMixin"<% } %>,
 		"TitleScreenMixin",
-		"WidgetAlphaAccess",
-		"ServerTimeMixin",
+<% if (widgetAlpha) { %>		"WidgetAlphaAccess",
+<% } %>		"ServerTimeMixin",
 		"ChatPlaceholderMixin",
 		"MinecraftTickMixin",
 		"ServerMenuScreenMixin",<% if (postBlur) { %>
@@ -61,8 +61,8 @@
 <% } %>
 		"LightmapMixin",
 		"ChatComponentMixin",
-		"HudCrosshairMixin",
-		<% if (fireOverlay) { %>"ScreenEffectRendererMixin",<% } else { %>"FireOldMixin",<% } %>
+<% if (crosshairHook) { %>		"HudCrosshairMixin",
+<% } %>		<% if (fireOverlay) { %>"ScreenEffectRendererMixin",<% } else { %>"FireOldMixin",<% } %>
 		"LevelWeatherMixin",
 		"TimeLockMixin",
 		"MultiPlayerGameModeMixin"<% } %><% if (oldCamera) { %>,

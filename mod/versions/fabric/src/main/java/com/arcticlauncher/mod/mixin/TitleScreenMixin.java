@@ -102,10 +102,18 @@ abstract class TitleScreenMixin extends Screen {
 	private boolean arctic$logo(TitleScreen screen, int x, int y, int u, int v, int w, int h) {
 		return !ArcticClient.restyles();
 	}
+	//#if MC < 1.14
+	// 1.13 draws the edition with the static drawTexture(x, y, u, v, w, h, textureW, textureH) (floats).
+	@WrapWithCondition(method = "extractRenderState", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/screens/TitleScreen;drawTexture(IIFFIIFF)V"))
+	private boolean arctic$edition(int x, int y, float u, float v, int w, int h, float tw, float th) {
+		return !ArcticClient.restyles();
+	}
+	//#else
 	@WrapWithCondition(method = "extractRenderState", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/screens/TitleScreen;blit(IIFFIIII)V"))
 	private boolean arctic$edition(int x, int y, float u, float v, int w, int h, int tw, int th) {
 		return !ArcticClient.restyles();
 	}
+	//#endif
 	//#endif
 
 	//#if MC >= 26.1

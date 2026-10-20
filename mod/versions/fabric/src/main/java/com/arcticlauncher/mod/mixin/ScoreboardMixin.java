@@ -83,7 +83,14 @@ abstract class ScoreboardMixin {
 	}
 	//#endif
 
-	//#if MC >= 1.20.3 && MC < 1.21.3
+	//#if MC < 1.14
+	// 1.13 fills the sidebar's rows with fixed translucent black: transparent instead.
+	@ModifyArg(method = "displayScoreboardSidebar", index = 4,
+			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Gui;fill(IIIII)V"))
+	private int arctic$background(int color) {
+		return ArcticClient.config().scoreboardBackground ? color : 0;
+	}
+	//#elif MC >= 1.20.3 && MC < 1.21.3
 	// 1.20.3-1.21.2 draw the rows in a lambda inside displayScoreboardSidebar.
 	@ModifyArg(method = "method_55440",
 			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Options;getBackgroundColor(F)I"))
