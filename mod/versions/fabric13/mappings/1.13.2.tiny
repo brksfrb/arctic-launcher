@@ -1062,7 +1062,6 @@ c	net/minecraft/class_1150	net/minecraft/world/level/Level
 	f	Lorg/apache/logging/log4j/Logger;	field_17503	LOGGER
 	m	(F)F	method_3707	getStarBrightness
 	f	Ljava/util/List;	field_4536	blockEntityList
-	m	()Ljava/lang/String;	method_16330	lambda$fillReportDetails$4
 	m	(F)F	method_3713	getThunderLevel
 	f	Ljava/util/List;	field_4537	tickableBlockEntities
 	m	(F)V	method_6410	setThunderLevel
@@ -1805,7 +1804,6 @@ c	net/minecraft/class_1307	net/minecraft/world/level/block/WallBlock
 	f	[Lnet/minecraft/class_4100;	field_18577	shapeWithPostByIndex
 	f	[Lnet/minecraft/class_4100;	field_18578	collisionShapeWithPostByIndex
 c	net/minecraft/class_1308	net/minecraft/world/level/block/entity/BeaconBlockEntity
-	m	()V	method_8976	setRemoved
 	f	[[Lnet/minecraft/class_860;	field_5017	BEACON_EFFECTS
 	m	(I)Lnet/minecraft/class_860;	method_11645	getValidEffectById
 	f	Ljava/util/Set;	field_12838	VALID_EFFECTS
@@ -2215,7 +2213,6 @@ c	net/minecraft/class_1402	net/minecraft/world/entity/ambient/Bat
 	m	(Z)V	method_4514	setResting
 c	net/minecraft/class_141	net/minecraft/world/level/block/GrassBlock
 c	net/minecraft/class_1410	net/minecraft/world/entity/boss/wither/WitherBoss
-	m	(FFF)F	method_4535	rotlerp
 	m	(I)F	method_4532	getHeadYRot
 	m	(IDDDZ)V	method_4533	performRangedAttack
 	m	(II)V	method_4536	setAlternativeTarget
@@ -7724,7 +7721,6 @@ c	net/minecraft/class_2256	net/minecraft/world/level/levelgen/DebugLevelSource
 	f	I	field_10120	GRID_WIDTH
 	f	I	field_10121	GRID_HEIGHT
 c	net/minecraft/class_226	net/minecraft/world/level/block/entity/BlockEntity
-	m	()V	method_547	setRemoved
 	m	()Lnet/minecraft/class_2003;	method_544	getUpdatePacket
 	m	(DDD)D	method_536	distanceToSqr
 	m	(Lnet/minecraft/class_1150;)V	method_539	setLevel
@@ -7851,8 +7847,6 @@ c	net/minecraft/class_2285	net/minecraft/world/level/pathfinder/SwimNodeEvaluato
 	f	Z	field_19719	allowBreaching
 c	net/minecraft/class_2286	net/minecraft/world/level/pathfinder/WalkNodeEvaluator
 	m	(IIIIDLnet/minecraft/class_1354;)Lnet/minecraft/class_86;	method_11946	getLandNode
-	m	(Lnet/minecraft/class_871;III)Lnet/minecraft/class_2770;	method_11947	getBlockPathType
-	m	(Lnet/minecraft/class_871;Lnet/minecraft/class_2552;)Lnet/minecraft/class_2770;	method_11948	getBlockPathType
 	m	(Lnet/minecraft/class_1158;IIIIIIZZLjava/util/EnumSet;Lnet/minecraft/class_2770;Lnet/minecraft/class_2552;)Lnet/minecraft/class_2770;	method_14446	getBlockPathTypes
 	m	(Lnet/minecraft/class_1158;IIILnet/minecraft/class_2770;)Lnet/minecraft/class_2770;	method_14447	checkNeighbourBlocks
 	m	(Lnet/minecraft/class_1158;III)Lnet/minecraft/class_2770;	method_11949	getBlockPathTypeRaw
@@ -13632,8 +13626,6 @@ c	net/minecraft/class_3247$class_3771	net/minecraft/advancements/critereon/UsedT
 	m	(Lnet/minecraft/class_3597;)Lnet/minecraft/class_3247$class_3771;	method_16964	usedTotem
 	f	Lnet/minecraft/class_3200;	field_18714	item
 c	net/minecraft/class_3250	net/minecraft/world/level/pathfinder/FlyNodeEvaluator
-	m	(Lnet/minecraft/class_871;III)Lnet/minecraft/class_2770;	method_14444	getBlockPathType
-	m	(Lnet/minecraft/class_871;Lnet/minecraft/class_2552;)Lnet/minecraft/class_2770;	method_14445	getBlockPathType
 c	net/minecraft/class_3251	net/minecraft/client/HotbarManager
 	m	()V	method_14451	save
 	m	(I)Lnet/minecraft/class_3297;	method_14450	get
@@ -17408,7 +17400,6 @@ c	net/minecraft/class_388	net/minecraft/client/gui/screens/Screen
 	m	(I)Z	method_9588	isSelectAll
 	f	Lnet/minecraft/class_529;	field_20308	itemRenderer
 	f	Lnet/minecraft/class_1600;	field_1229	minecraft
-	m	()V	method_18608	onClose
 	m	(Ljava/net/URI;)V	method_9581	openLink
 	f	Z	field_1233	passEvents
 	m	()V	method_1030	removed
@@ -18888,7 +18879,6 @@ c	net/minecraft/class_4162	net/minecraft/client/gui/screens/inventory/AbstractCo
 	f	Ljava/util/concurrent/CompletableFuture;	field_20367	pendingSuggestions
 	f	Lnet/minecraft/class_4162$class_4163;	field_20368	suggestions
 	f	Z	field_20369	keepSuggestions
-	m	()V	method_18667	onClose
 c	net/minecraft/class_4162$class_4163	net/minecraft/client/gui/screens/inventory/AbstractCommandBlockEditScreen$SuggestionsList
 	m	()V	method_18672	useSuggestion
 	m	(D)Z	method_18673	mouseScrolled
@@ -20540,7 +20530,6 @@ c	net/minecraft/class_4370	net/minecraft/data/tags/TagsProvider
 	f	Lorg/apache/logging/log4j/Logger;	field_21484	LOGGER
 	f	Lcom/google/gson/Gson;	field_21485	GSON
 c	net/minecraft/class_4371	net/minecraft/nbt/CollectionTag
-	m	(I)Ljava/lang/Object;	get	remove
 c	net/minecraft/class_4372	net/minecraft/nbt/NbtOps
 	m	()Lnet/minecraft/class_4373;	method_20103	empty
 	m	(B)Lnet/minecraft/class_4373;	method_20104	createByte
@@ -22132,7 +22121,6 @@ c	net/minecraft/class_478	net/minecraft/client/multiplayer/MultiPlayerLevel
 	m	(Lnet/minecraft/class_2552;Lnet/minecraft/class_2232;)V	method_18973	setKnownState
 	f	Lnet/minecraft/class_1845;	field_1661	connection
 	m	()Lnet/minecraft/class_476;	method_12239	getChunkSource
-	m	()Ljava/lang/String;	method_18974	lambda$fillReportDetails$4
 	m	()Ljava/lang/String;	method_18975	lambda$fillReportDetails$3
 	f	Lnet/minecraft/class_1600;	field_1659	minecraft
 	f	I	field_13407	delayUntilNextMoodSound
@@ -23603,7 +23591,6 @@ c	net/minecraft/class_770	net/minecraft/server/dedicated/DedicatedServer
 	m	()V	method_2067	handleConsoleInputs
 	m	()Lnet/minecraft/class_769;	method_2068	getPlayerList
 	m	()Z	method_8111	convertOldUsers
-	m	()Lorg/apache/logging/log4j/Logger;	method_8112	access$000
 	m	()V	method_8113	waitForRetry
 	m	()Ljava/lang/String;	method_21231	lambda$fillReport$1
 	m	()Ljava/lang/String;	method_21232	lambda$fillReport$0
@@ -24717,7 +24704,6 @@ c	net/minecraft/class_871	net/minecraft/world/entity/Mob
 	m	()Z	method_2631	requiresCustomPersistence
 	m	()V	method_2632	checkDespawn
 	m	()V	method_2633	customServerAiStep
-	m	(FFF)F	method_2624	rotlerp
 	m	(Lnet/minecraft/class_2607;)V	method_10983	populateDefaultEquipmentSlots
 	m	(Lnet/minecraft/class_864;FF)V	method_2583	lookAt
 	m	(Lnet/minecraft/class_2968;F)V	method_13077	setDropChance
@@ -26236,7 +26222,6 @@ c	net/minecraft/server/MinecraftServer	net/minecraft/server/MinecraftServer
 	m	()Lnet/minecraft/class_4403;	method_20336	getCustomBossEvents
 	m	()Z	method_20337	isEnforceWhitelist
 	m	()F	method_20338	getAverageTickTime
-	m	()Lorg/apache/logging/log4j/Logger;	method_8156	access$000
 	m	()Ljava/lang/String;	method_20340	lambda$fillReport$5
 	m	()Ljava/lang/String;	method_2989	getMotd
 	f	J	field_11843	delayedTasksMaxNextTickTime
