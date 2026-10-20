@@ -230,10 +230,14 @@ def main():
     skipped = 0
     class_names = {}  # intermediary class -> named
     entries = defaultdict(dict)  # intermediary class -> {(kind, intermediary name, intermediary desc): named}
+    skip_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skip-1.13.2.txt")
+    skip = set()
+    if os.path.exists(skip_file):
+        skip = {ln.split("#")[0].strip().replace(".", "/") for ln in open(skip_file, encoding="utf-8") if ln.split("#")[0].strip()}
     for ca, cb in cmap.items():
         ic = off2int.get(cb)
         named_cls = obf_to_moj.get(ca)
-        if not ic or not named_cls:
+        if not ic or not named_cls or named_cls in skip:
             continue
         if re.search(r"\$\d+$", named_cls):
             # Anonymous classes: numbered in each version's own order; the remapper derives their names.

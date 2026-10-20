@@ -1,0 +1,4 @@
+# Mojmap classes whose 1.13.2 counterpart is so different that it keeps its Legacy Yarn name (the sources
+# for 1.13.2 use it as in the Legacy Fabric adapter) instead of being given the 1.14 name.
+net.minecraft.client.gui.components.AbstractWidget
+net.minecraft.client.Camera
