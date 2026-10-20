@@ -290,18 +290,34 @@ public final class Cosmetics {
 	/** Sooner when something unknown is worn (at most this often). */
 	private static final long MISSING_RETRY_MS = java.util.concurrent.TimeUnit.SECONDS.toMillis(30);
 
+	/** One catalog request at a time, and never two within this long of each other (a down server is not hammered). */
+	private final java.util.concurrent.atomic.AtomicBoolean loading = new java.util.concurrent.atomic.AtomicBoolean();
+	private volatile long lastAttempt;
+	private static final long MIN_GAP_MS = 3000;
+
+	/** Asked again once the catalog is older than {@code ageMs}. */
 	private void refreshAfter(long ageMs) {
-		if (catalogAsked && catalogAt > 0 && System.currentTimeMillis() - catalogAt > ageMs) {
-			catalogAsked = false;
-			askCatalog();
+		if (catalogAt > 0 && System.currentTimeMillis() - catalogAt > ageMs) {
+			startLoad();
 		}
 	}
 
+	/**
+	 * Called every frame by whoever needs an item: starts the first load, and a new one when the catalog gets
+	 * old. Many callers see "old" at the same moment (a load takes a while), so only one request goes out.
+	 */
 	private void askCatalog() {
-		refreshAfterTtl();
-		if (catalogAsked) {
+		if (!catalogAsked || (catalogAt > 0 && System.currentTimeMillis() - catalogAt > CATALOG_TTL_MS)) {
+			startLoad();
+		}
+	}
+
+	private void startLoad() {
+		long now = System.currentTimeMillis();
+		if (now - lastAttempt < MIN_GAP_MS || !loading.compareAndSet(false, true)) {
 			return;
 		}
+		lastAttempt = now;
 		catalogAsked = true;
 		worker.execute(new Runnable() {
 			@Override
@@ -310,7 +326,11 @@ public final class Cosmetics {
 					loadCatalog();
 				} catch (Exception | StackOverflowError e) {
 					platform.log(false, "Arctic cosmetics: " + e);
-					catalogAsked = false;
+					if (catalogAt == 0) {
+						catalogAsked = false;
+					}
+				} finally {
+					loading.set(false);
 				}
 			}
 		});
@@ -365,12 +385,6 @@ public final class Cosmetics {
 		emotes = Collections.unmodifiableList(keepLoadedEmotes(moves));
 		catalogAt = System.currentTimeMillis();
 		platform.log(false, "Arctic cosmetics: " + found.size() + " items, " + moves.size() + " emotes");
-	}
-
-	private void refreshAfterTtl() {
-		if (catalogAsked && catalogAt > 0 && System.currentTimeMillis() - catalogAt > CATALOG_TTL_MS) {
-			catalogAsked = false;
-		}
 	}
 
 	/** Items already loaded stay (their model is baked); only new or changed ones load. */
