@@ -29,6 +29,9 @@ MAX_SUPERS = 6
 
 def jar_for(version):
     found = glob.glob(f"{LOOM}/minecraft-merged-deobf/{version}/*.jar") + glob.glob(f"{LOOM}/minecraft-merged/{version}-loom*/*.jar")
+    # Legacy Fabric (1.13.2): the jar with the carried-over names, not the intermediary one next to it.
+    found += [j for j in glob.glob(f"{LOOM}/minecraft-merged-legacy*/{version}-*/*.jar")
+              if not os.path.basename(os.path.dirname(os.path.dirname(j))).endswith("-intermediary")]
     found = [j for j in found if not j.endswith("-sources.jar")]
     return found[0] if found else None
 
@@ -95,7 +98,7 @@ class Jar:
 def build_dir(version):
     """The fabric build folder holding this version's newest preprocessed sources: build.py
     compiles in worker copies (mod/build/workers/wN), a lone gradle build here."""
-    roots = [HERE] + glob.glob(os.path.join(HERE, "..", "..", "build", "workers", "*", "versions", "fabric"))
+    roots = [HERE, os.path.join(HERE, "..", "fabric13")] + glob.glob(os.path.join(HERE, "..", "..", "build", "workers", "*", "versions", "fabric*"))
     found = [r for r in roots if os.path.isdir(os.path.join(r, "build", "preprocessed", version))]
     if not found:
         return HERE
