@@ -65,6 +65,7 @@ class Matcher:
         self.members = {}  # (class_a, name, desc) -> (name_b, desc_b)
         self.members_rev = {}
         self.seeded = set()
+        self.strict = False
         self.anchored = set()
 
     # ---- descriptor normalisation: matched classes become a shared token, unmatched ones "?" ----
@@ -174,8 +175,10 @@ class Matcher:
             return -100
         da = self.norm_a(ma.desc)
         db = self.norm_b(mb.desc)
+        # A class neither version can pair says little: shapes that rest on one prove nothing.
+        wild = self.strict and ("L?;" in da or "L?;" in db)
         if da == db:
-            s += 8
+            s += 2 if wild else 8
         else:
             # Same shape if unmatched classes are wildcards.
             wa = re.sub(r"L<[^>]*>;|L\?;", "L?;", da)
@@ -188,7 +191,7 @@ class Matcher:
             clash = sum(1 for x, y in zip(ta, tb) if x != y and x.startswith("<") and y.startswith("<"))
             if clash:
                 return -100
-            s += 4
+            s += 1 if wild else 4
         self._shape = s
         if not obf_like(ma.name) and ma.name == mb.name:
             s += 6
@@ -221,8 +224,9 @@ class Matcher:
             return -100
         da = self.norm_a(fa.desc)
         db = self.norm_b(fb.desc)
+        wild = self.strict and ("L?;" in da or "L?;" in db)
         if da == db:
-            s = 8
+            s = 2 if wild else 8
         else:
             wa = re.sub(r"L<[^>]*>;|L\?;", "L?;", da)
             wb = re.sub(r"L<[^>]*>;|L\?;", "L?;", db)
@@ -232,7 +236,7 @@ class Matcher:
             tb = DESC_TOKEN.findall(db)
             if any(x != y and x.startswith("<") and y.startswith("<") for x, y in zip(ta, tb)):
                 return -100
-            s = 4
+            s = 1 if wild else 4
         if (fa.access & ACC_FINAL) == (fb.access & ACC_FINAL):
             s += 1
         if not obf_like(fa.name) and fa.name == fb.name:
@@ -488,6 +492,8 @@ class Matcher:
                 self.log(f"  rematch {phase}: +{added}")
                 if not added:
                     break
+        # The final member pairs: where a shape rests on a class neither version has, it needs more than the shape.
+        self.strict = True
         self.members = {}
         for ca, cb in self.cmap.items():
             self.match_members(ca, cb)
