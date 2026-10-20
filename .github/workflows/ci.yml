@@ -6,6 +6,11 @@ on:
   pull_request:
   # By hand too, to check a branch without a pull request.
   workflow_dispatch:
+    inputs:
+      only:
+        description: "Only these mod targets (space-separated builds, e.g. 1.14.4); empty: all"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -55,7 +60,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - id: list
-        run: echo "versions=$(jq -c '[.[].build]' mod/targets.json)" >> "$GITHUB_OUTPUT"
+        env:
+          ONLY: ${{ inputs.only }}
+        run: echo "versions=$(jq -c --arg only "$ONLY" '[.[].build | . as $b | select($only == "" or ($only | split(" ") | index($b)))]' mod/targets.json)" >> "$GITHUB_OUTPUT"
 
   mod:
     needs: mod-targets

@@ -1,7 +1,11 @@
 //#if MC < 1.20
 package com.arcticlauncher.mod.compat;
 
+//#if MC >= 1.15
 import com.mojang.blaze3d.systems.RenderSystem;
+//#else
+import com.mojang.blaze3d.platform.GlStateManager;
+//#endif
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -39,8 +43,10 @@ public final class GuiGraphics {
 	public void fill(int x0, int y0, int x1, int y1, int color) {
 		//#if MC >= 1.16
 		GuiComponent.fill(pose, x0, y0, x1, y1, color);
-		//#else
+		//#elif MC >= 1.15
 		GuiComponent.fill(pose.last().pose(), x0, y0, x1, y1, color);
+		//#else
+		GuiComponent.fill(x0, y0, x1, y1, color);
 		//#endif
 	}
 
@@ -55,17 +61,19 @@ public final class GuiGraphics {
 		void draw(PoseStack pose, int x0, int y0, int x1, int y1, int top, int bottom) {
 			//#if MC >= 1.16
 			fillGradient(pose, x0, y0, x1, y1, top, bottom);
-			//#else
+			//#elif MC >= 1.15
 			RenderSystem.pushMatrix();
 			RenderSystem.multMatrix(pose.last().pose());
 			fillGradient(x0, y0, x1, y1, top, bottom);
 			RenderSystem.popMatrix();
+			//#else
+			fillGradient(x0, y0, x1, y1, top, bottom);
 			//#endif
 		}
 	}
 
 	public int drawString(Font font, String text, int x, int y, int color, boolean shadow) {
-		RenderSystem.enableBlend();
+		enableBlend();
 		//#if MC >= 1.16
 		return shadow ? font.drawShadow(pose, text, x, y, color) : font.draw(pose, text, x, y, color);
 		//#else
@@ -77,8 +85,8 @@ public final class GuiGraphics {
 
 	public void blit(ResourceLocation texture, int x, int y, int w, int h, float u, float v, int regionW, int regionH, int texW, int texH) {
 		bind(texture);
-		RenderSystem.enableBlend();
-		RenderSystem.defaultBlendFunc();
+		enableBlend();
+		defaultBlendFunc();
 		//#if MC >= 1.16
 		GuiComponent.blit(pose, x, y, w, h, u, v, regionW, regionH, texW, texH);
 		//#else
@@ -90,10 +98,13 @@ public final class GuiGraphics {
 	public void blit(int x, int y, int w, int h, int z, TextureAtlasSprite sprite) {
 		//#if MC >= 1.19.3
 		bind(sprite.atlasLocation());
-		//#else
+		//#elif MC >= 1.15
 		bind(sprite.atlas().location());
+		//#else
+		// 1.14: the sprites in use here (effect icons) sit in the block atlas.
+		bind(net.minecraft.client.renderer.texture.TextureAtlas.LOCATION_BLOCKS);
 		//#endif
-		RenderSystem.enableBlend();
+		enableBlend();
 		//#if MC >= 1.16
 		GuiComponent.blit(pose, x, y, z, w, h, sprite);
 		//#else
@@ -117,6 +128,22 @@ public final class GuiGraphics {
 		//#endif
 	}
 
+	private static void enableBlend() {
+		//#if MC >= 1.15
+		RenderSystem.enableBlend();
+		//#else
+		GlStateManager.enableBlend();
+		//#endif
+	}
+
+	private static void defaultBlendFunc() {
+		//#if MC >= 1.15
+		RenderSystem.defaultBlendFunc();
+		//#else
+		GlStateManager.blendFunc(GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA);
+		//#endif
+	}
+
 	private void bind(ResourceLocation texture) {
 		//#if MC >= 1.17
 		RenderSystem.setShaderTexture(0, texture);
@@ -131,7 +158,10 @@ public final class GuiGraphics {
 	 * matrix before 1.19.4: apply this pose to it.
 	 */
 	private void withPose(Runnable draw) {
-		//#if MC < 1.17
+		//#if MC < 1.15
+		// 1.14: the pose is the GL matrix itself.
+		draw.run();
+		//#elif MC < 1.17
 		RenderSystem.pushMatrix();
 		RenderSystem.multMatrix(pose.last().pose());
 		draw.run();

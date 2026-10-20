@@ -1,3 +1,4 @@
+//#if MC >= 1.15
 package com.arcticlauncher.mod.cosmetic;
 
 import com.arcticlauncher.client.looks.Xform;
@@ -73,3 +74,4 @@ final class PoseXform extends Xform {
 		//#endif
 	}
 }
+//#endif

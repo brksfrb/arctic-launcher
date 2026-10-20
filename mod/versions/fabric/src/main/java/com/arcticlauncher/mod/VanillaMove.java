@@ -118,11 +118,16 @@ public final class VanillaMove {
 		pose.translate(x, y, 0);
 		pose.scale(s, s, 1);
 		pose.translate(-natural[0], -natural[1], 0);
-		//#else
+		//#elif MC >= 1.15
 		com.mojang.blaze3d.systems.RenderSystem.pushMatrix();
 		com.mojang.blaze3d.systems.RenderSystem.translatef(x, y, 0);
 		com.mojang.blaze3d.systems.RenderSystem.scalef(s, s, 1);
 		com.mojang.blaze3d.systems.RenderSystem.translatef(-natural[0], -natural[1], 0);
+		//#else
+		com.mojang.blaze3d.platform.GlStateManager.pushMatrix();
+		com.mojang.blaze3d.platform.GlStateManager.translatef(x, y, 0);
+		com.mojang.blaze3d.platform.GlStateManager.scalef(s, s, 1);
+		com.mojang.blaze3d.platform.GlStateManager.translatef(-natural[0], -natural[1], 0);
 		//#endif
 		return true;
 	}
@@ -136,8 +141,10 @@ public final class VanillaMove {
 		((net.minecraft.client.gui.GuiGraphics) graphics).pose().popPose();
 		//#elif MC >= 1.16
 		((com.mojang.blaze3d.vertex.PoseStack) graphics).popPose();
-		//#else
+		//#elif MC >= 1.15
 		com.mojang.blaze3d.systems.RenderSystem.popMatrix();
+		//#else
+		com.mojang.blaze3d.platform.GlStateManager.popMatrix();
 		//#endif
 	}
 }

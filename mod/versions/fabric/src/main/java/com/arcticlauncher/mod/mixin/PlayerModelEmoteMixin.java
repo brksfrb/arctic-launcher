@@ -75,18 +75,31 @@ abstract class PlayerModelEmoteMixin {
 	@Unique
 	private float[][] arctic$undo;
 
+	//#if MC >= 1.15
 	@Inject(method = "setupAnim(Lnet/minecraft/world/entity/LivingEntity;FFFFF)V", at = @At("HEAD"))
 	private void arctic$undoRig(LivingEntity entity, float limbSwing, float limbSwingAmount, float age, float headYaw, float headPitch,
 			CallbackInfo ci) {
+	//#else
+	// 1.14 passes the model scale after the angles.
+	@Inject(method = "setupAnim(Lnet/minecraft/world/entity/LivingEntity;FFFFFF)V", at = @At("HEAD"))
+	private void arctic$undoRig(LivingEntity entity, float limbSwing, float limbSwingAmount, float age, float headYaw, float headPitch,
+			float scale, CallbackInfo ci) {
+	//#endif
 		if (arctic$undo != null) {
 			arctic$apply(arctic$parts(), arctic$undo);
 			arctic$undo = null;
 		}
 	}
 
+	//#if MC >= 1.15
 	@Inject(method = "setupAnim(Lnet/minecraft/world/entity/LivingEntity;FFFFF)V", at = @At("TAIL"))
 	private void arctic$emote(LivingEntity entity, float limbSwing, float limbSwingAmount, float age, float headYaw, float headPitch,
 			CallbackInfo ci) {
+	//#else
+	@Inject(method = "setupAnim(Lnet/minecraft/world/entity/LivingEntity;FFFFFF)V", at = @At("TAIL"))
+	private void arctic$emote(LivingEntity entity, float limbSwing, float limbSwingAmount, float age, float headYaw, float headPitch,
+			float scale, CallbackInfo ci) {
+	//#endif
 		if (arctic$pose(entity.getUUID())) {
 			HumanoidModel<?> model = (HumanoidModel<?>) (Object) this;
 			leftSleeve.copyFrom(model.leftArm);
@@ -122,6 +135,12 @@ abstract class PlayerModelEmoteMixin {
 	private void arctic$hand(AvatarRenderState state, net.minecraft.world.entity.HumanoidArm arm, com.mojang.blaze3d.vertex.PoseStack pose,
 			CallbackInfo ci) {
 		arctic$forearm(arm, pose);
+	}
+	//#elif MC < 1.15
+	// 1.14 has no pose: the hand is placed on the global GL matrix, with the model's scale first.
+	@Inject(method = "translateToHand(FLnet/minecraft/world/entity/HumanoidArm;)V", at = @At("TAIL"))
+	private void arctic$hand(float scale, net.minecraft.world.entity.HumanoidArm arm, CallbackInfo ci) {
+		arctic$forearm(arm, new com.mojang.blaze3d.vertex.PoseStack());
 	}
 	//#else
 	@Inject(method = "translateToHand(Lnet/minecraft/world/entity/HumanoidArm;Lcom/mojang/blaze3d/vertex/PoseStack;)V", at = @At("TAIL"))

@@ -148,7 +148,7 @@ public final class ReplayTest {
 				if (m.player == null) {
 					return;
 				}
-				m.player.setPos(m.player.getX() + 1.5, m.player.getY(), m.player.getZ());
+				m.player.setPos(Compat.x(m.player) + 1.5, Compat.y(m.player), Compat.z(m.player));
 				com.arcticlauncher.mod.Compat.setYRot(m.player, step * 30f);
 				com.arcticlauncher.mod.replay.ReplayCompat.swing(m.player);
 				command("setblock ~ ~-1 ~2 minecraft:gold_block");
@@ -320,9 +320,9 @@ public final class ReplayTest {
 			after(1, () -> {
 				Compat.setScreen(null);
 				double[] before = com.arcticlauncher.client.ArcticClient.platform().camera();
-				Minecraft.getInstance().options.keyUp.setDown(true);
+				Compat.setDown(Minecraft.getInstance().options.keyUp, true);
 				after(1, () -> {
-					Minecraft.getInstance().options.keyUp.setDown(false);
+					Compat.setDown(Minecraft.getInstance().options.keyUp, false);
 					double[] at = com.arcticlauncher.client.ArcticClient.platform().camera();
 					double moved = Math.abs(at[0] - before[0]) + Math.abs(at[1] - before[1]) + Math.abs(at[2] - before[2]);
 					if (moved < 0.5 || !v.paused()) { fail("camera stuck after closing paused keyframe editor"); return; }

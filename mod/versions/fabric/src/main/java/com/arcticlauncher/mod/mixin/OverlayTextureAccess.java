@@ -1,3 +1,4 @@
+//#if MC >= 1.15
 package com.arcticlauncher.mod.mixin;
 
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -11,3 +12,4 @@ public interface OverlayTextureAccess {
 	@Accessor("texture")
 	DynamicTexture arctic$texture();
 }
+//#endif

@@ -112,7 +112,7 @@ final class PadTest {
 
 	private static double[] where() {
 		LocalPlayer p = Minecraft.getInstance().player;
-		return new double[] {p.getX(), p.getY(), p.getZ(), Compat.yRot(p)};
+		return new double[] {Compat.x(p), Compat.y(p), Compat.z(p), Compat.yRot(p)};
 	}
 
 	private static String screen() {

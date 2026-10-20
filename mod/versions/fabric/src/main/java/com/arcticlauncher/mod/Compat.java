@@ -212,10 +212,14 @@ public final class Compat {
 		pose.mulPose(com.mojang.math.Axis.ZP.rotation(z));
 		pose.mulPose(com.mojang.math.Axis.YP.rotation(y));
 		pose.mulPose(com.mojang.math.Axis.XP.rotation(x));
-		//#else
+		//#elif MC >= 1.15
 		pose.mulPose(com.mojang.math.Vector3f.ZP.rotation(z));
 		pose.mulPose(com.mojang.math.Vector3f.YP.rotation(y));
 		pose.mulPose(com.mojang.math.Vector3f.XP.rotation(x));
+		//#else
+		pose.rotate(z, 0f, 0f, 1f);
+		pose.rotate(y, 0f, 1f, 0f);
+		pose.rotate(x, 1f, 0f, 0f);
 		//#endif
 	}
 
@@ -589,6 +593,40 @@ public final class Compat {
 		//#endif
 	}
 
+	/** Holds a key mapping down or lets go of it (1.14 has no setDown: its key's state is set instead). */
+	public static void setDown(net.minecraft.client.KeyMapping mapping, boolean down) {
+		//#if MC >= 1.15
+		mapping.setDown(down);
+		//#else
+		net.minecraft.client.KeyMapping.set(com.mojang.blaze3d.platform.InputConstants.getKey(mapping.saveString()), down);
+		//#endif
+	}
+
+	/** An entity's position (the getters came with 1.15). */
+	public static double x(net.minecraft.world.entity.Entity e) {
+		//#if MC >= 1.15
+		return e.getX();
+		//#else
+		return e.x;
+		//#endif
+	}
+
+	public static double y(net.minecraft.world.entity.Entity e) {
+		//#if MC >= 1.15
+		return e.getY();
+		//#else
+		return e.y;
+		//#endif
+	}
+
+	public static double z(net.minecraft.world.entity.Entity e) {
+		//#if MC >= 1.15
+		return e.getZ();
+		//#else
+		return e.z;
+		//#endif
+	}
+
 	public static boolean removed(net.minecraft.world.entity.Entity e) {
 		//#if MC >= 1.17
 		return e.isRemoved();
@@ -602,12 +640,21 @@ public final class Compat {
 		//#if MC >= 1.17
 		e.setOldPosAndRot();
 		//#else
+		//#if MC >= 1.15
 		e.xo = e.getX();
 		e.yo = e.getY();
 		e.zo = e.getZ();
 		e.xOld = e.getX();
 		e.yOld = e.getY();
 		e.zOld = e.getZ();
+		//#else
+		e.xo = e.x;
+		e.yo = e.y;
+		e.zo = e.z;
+		e.xOld = e.x;
+		e.yOld = e.y;
+		e.zOld = e.z;
+		//#endif
 		e.yRotO = e.yRot;
 		e.xRotO = e.xRot;
 		//#endif
