@@ -8,7 +8,8 @@
 		"ButtonMixin",
 		"CheckboxMixin",
 		"EditBoxMixin",<% } %>
-		"AbstractClientPlayerMixin",
+<% if (widgets13) { %>		"ScreenButtonsAccess",
+<% } %>		"AbstractClientPlayerMixin",
 		"ClientBrandMixin",
 		"ConnectionProxyMixin",
 <% if (playerInfoRace) { %>		"PlayerInfoLookupMixin",

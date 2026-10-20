@@ -10,6 +10,8 @@ public final class ArcticButton {
 
 	private static final java.util.Set<Button> OWN = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<Button, Boolean>());
 	private static final java.util.Set<Button> MAIN = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<Button, Boolean>());
+	/** The numbers of Arctic's buttons on 1.13, clear of the game's own. */
+	private static final int OWN_IDS = 9500;
 	private static final java.util.Map<net.minecraft.client.gui.screens.Screen, Runnable> TICKS = new java.util.WeakHashMap<>();
 
 	public static Button create() {
@@ -22,8 +24,16 @@ public final class ArcticButton {
 		made = Button.builder(Compat.literal(label), b -> action.run()).bounds(4, 4, 76, 20).build();
 		//#elif MC >= 1.16
 		made = new Button(4, 4, 76, 20, Compat.literal(label), b -> action.run());
-		//#else
+		//#elif MC >= 1.14
 		made = new Button(4, 4, 76, 20, label, b -> action.run());
+		//#else
+		// 1.13: buttons are numbered, and a click is handled by the button itself (method_18374).
+		made = new Button(OWN_IDS + OWN.size(), 4, 4, 76, 20, label) {
+			@Override
+			public void method_18374(double x, double y) {
+				action.run();
+			}
+		};
 		//#endif
 		OWN.add(made); return made;
 	}
@@ -46,7 +56,7 @@ public final class ArcticButton {
 					//#if MC >= 1.16
 					join.setMessage(Compat.literal(reconnect.autoOn() ? "Reconnect " + reconnect.countdown() : "Reconnect"));
 					//#else
-					join.setMessage(reconnect.autoOn() ? "Reconnect " + reconnect.countdown() : "Reconnect");
+					Compat.setRawLabel(join, reconnect.autoOn() ? "Reconnect " + reconnect.countdown() : "Reconnect");
 					//#endif
 					reconnect.tickReconnect();
 				});
@@ -59,7 +69,7 @@ public final class ArcticButton {
 		Runnable tick = TICKS.get(screen); if (tick != null) tick.run();
 		java.util.List<net.minecraft.client.gui.components.AbstractWidget> placed = new java.util.ArrayList<>();
 		java.util.List<Button> ours = new java.util.ArrayList<>();
-		for (Object child : screen.children()) {
+		for (Object child : Compat.widgets(screen)) {
 			if (child instanceof Button && OWN.contains(child)) ours.add((Button) child);
 			else if (child instanceof net.minecraft.client.gui.components.AbstractWidget && ((net.minecraft.client.gui.components.AbstractWidget) child).visible)
 				placed.add((net.minecraft.client.gui.components.AbstractWidget) child);
@@ -77,7 +87,7 @@ public final class ArcticButton {
 					boolean free = true;
 					for (net.minecraft.client.gui.components.AbstractWidget other : placed) {
 						int ox = Compat.widgetX(other), oy = Compat.widgetY(other);
-						if (x < ox + other.getWidth() + 3 && x + 79 > ox && y < oy + Compat.widgetHeight(other) + 3 && y + 23 > oy) { free = false; break; }
+						if (x < ox + Compat.widgetWidth(other) + 3 && x + 79 > ox && y < oy + Compat.widgetHeight(other) + 3 && y + 23 > oy) { free = false; break; }
 					}
 					if (!free) continue;
 					//#if MC >= 1.19.3
@@ -103,13 +113,13 @@ public final class ArcticButton {
 			if ("menu.options".equals(key)) options = widget;
 			if ("menu.quit".equals(key)) quit = widget;
 			//#else
-			String label = widget.getMessage();
+			String label = Compat.rawLabel(widget);
 			if (ArcticClient.platform().translate("menu.options", "Options...").equals(label)) options = widget;
 			if (ArcticClient.platform().translate("menu.quit", "Quit Game").equals(label)) quit = widget;
 			//#endif
 		}
 		if (options != null && quit != null && Compat.widgetY(options) == Compat.widgetY(quit)) {
-			int left = Compat.widgetX(options), right = Compat.widgetX(quit) + quit.getWidth(), y = Compat.widgetY(options);
+			int left = Compat.widgetX(options), right = Compat.widgetX(quit) + Compat.widgetWidth(quit), y = Compat.widgetY(options);
 			int third = (right - left - 8) / 3;
 			if (third >= 50 && free(left + third + 4, y, third, placed, options, quit)) {
 				options.setWidth(third);
@@ -132,7 +142,7 @@ public final class ArcticButton {
 		for (net.minecraft.client.gui.components.AbstractWidget other : placed) {
 			if (other == exceptA || other == exceptB) continue;
 			int ox = Compat.widgetX(other), oy = Compat.widgetY(other);
-			if (x < ox + other.getWidth() + 3 && x + width + 3 > ox && y < oy + Compat.widgetHeight(other) + 3 && y + 23 > oy) return false;
+			if (x < ox + Compat.widgetWidth(other) + 3 && x + width + 3 > ox && y < oy + Compat.widgetHeight(other) + 3 && y + 23 > oy) return false;
 		}
 		return true;
 	}
