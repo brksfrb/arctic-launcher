@@ -20,6 +20,8 @@ env:
 
 jobs:
   check:
+    # Not when a few mod targets are being checked by hand (the "only" input).
+    if: ${{ inputs.only == '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -41,6 +43,7 @@ jobs:
   # The in-game client: its shared core's tests, then every Minecraft target compiled and
   # its mixin hooks checked against that version's game jar (no game is started).
   mod-core:
+    if: ${{ inputs.only == '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

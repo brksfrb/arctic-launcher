@@ -8,7 +8,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 //#if MC >= 1.21.6
 import net.minecraft.client.renderer.RenderPipelines;
-//#else
+//#elif MC >= 1.15
 import net.minecraft.client.renderer.RenderType;
 //#endif
 import net.minecraft.client.renderer.texture.DynamicTexture;

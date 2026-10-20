@@ -116,7 +116,7 @@ abstract class ItemPhysicsOldMixin {
 	private void arctic$height(float x, float y, float z) {
 		ItemEntity item = arctic$item;
 		if (item != null) {
-			y -= Mth.sin((item.age + arctic$tickDelta) / 10.0F + item.bobOffs) * 0.1F + 0.1F;
+			y -= Mth.sin((item.tickCount + arctic$tickDelta) / 10.0F + item.bobOffs) * 0.1F + 0.1F;
 			y += arctic$lift;
 			if (arctic$flat) {
 				// Standing up the sprite's half height holds it off the ground; lying down, its stack does.

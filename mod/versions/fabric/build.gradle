@@ -126,7 +126,7 @@ def renames = [
 def patternRenames = [
 		// 1.14 keeps the window in a field; Window's own getWindow() is the native handle.
 		['MC < 1.15', /\.getWindow\(\)(?=\.getWindow\(\))/, '.window'],
-		['MC < 1.15', /(?<!\.window)\.getWindow\(\)/, '.window'],
+		['MC < 1.15', /(?<!window)\.getWindow\(\)/, '.window'],
 ]
 
 def applyRenames = { String text ->
