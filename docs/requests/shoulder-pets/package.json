@@ -1,0 +1,1 @@
+{"private":true,"name":"arctic-pet-review","version":"0.0.0","type":"module","dependencies":{"three":"0.186.1","rollup":"3.29.5","@rollup/plugin-node-resolve":"15.3.1"}}
