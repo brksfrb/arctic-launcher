@@ -815,7 +815,7 @@ impl ArcticApp {
         let mut quit = false;
         // A modal: the window behind it is dimmed and can't be clicked while the question is up.
         egui::Modal::new(egui::Id::new("close_prompt"))
-            .frame(crate::ui::instances::dialog_frame(p))
+            .frame(crate::ui::dialog_frame(p))
             .show(ctx, |ui| {
                 ui.set_width(380.0);
                 ui.label(
