@@ -1177,6 +1177,11 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean hungerBarShown() {
+		return WorldStats.hungerBarShown();
+	}
+
+	@Override
 	public float[] food() {
 		return WorldStats.food();
 	}

@@ -393,6 +393,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return -1;
 	}
 
+	/** The game's hunger bar is on screen (survival, not riding a mount): where the saturation line goes. */
+	default boolean hungerBarShown() {
+		return false;
+	}
+
 	/** Hunger and saturation: {food 0-20, saturation}, or null. */
 	default float[] food() {
 		return null;
