@@ -122,6 +122,9 @@ def renames = [
 		['MC < 1.15', 'shiftKeyDown', 'sneakKeyDown'],
 		['MC < 1.15', 'isShiftKeyDown', 'isSneaking'],
 		['MC < 1.14', 'isSameThread', 'isOnThread'],
+		['MC < 1.14', 'net.minecraft.network.protocol.game.ClientboundRespawnPacket', 'net.minecraft.network.packet.s2c.play.PlayerRespawnS2CPacket'],
+		['MC < 1.14', 'ClientboundRespawnPacket', 'PlayerRespawnS2CPacket'],
+		['MC < 1.14', 'isVisuallySwimming', 'isSwimming'],
 		// 1.13: one widget class (Legacy Yarn's ButtonWidget) where 1.14 has AbstractWidget and Button.
 		['MC < 1.14', 'net.minecraft.client.gui.components.AbstractWidget', 'net.minecraft.client.gui.widget.ButtonWidget'],
 		['MC < 1.14', 'net.minecraft.client.gui.components.Button', 'net.minecraft.client.gui.widget.ButtonWidget'],
@@ -138,6 +141,9 @@ def patternRenames = [
 		// 1.13: the inventory and its slots, a model without type parameters.
 		['MC < 1.14', /\.getContainerSize\(/, '.getInvSize('],
 		['MC < 1.14', /(?<![A-Za-z0-9_])inventory\.getItem\(/, 'inventory.getInvStack('],
+		['MC < 1.14', /\.getItem\(slot\)/, '.getInvStack(slot)'],
+		['MC < 1.14', /level\.getEntity\(/, 'level.getEntityById('],
+		['MC < 1.14', /([A-Za-z.]+)\.copyFrom\(([^;]+)\);/, 'com.arcticlauncher.mod.Compat.copyPart($1, $2);'],
 		['MC < 1.14', /HumanoidModel<\?>/, 'HumanoidModel'],
 		['MC < 1.14', /PlayerModel<AbstractClientPlayer>/, 'PlayerModel'],
 		// 1.13's NativeImage and DynamicTexture close through AutoCloseable (their own close() isn't named).
