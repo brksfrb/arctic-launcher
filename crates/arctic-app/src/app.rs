@@ -48,7 +48,7 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 10] = [
+    pub const ALL: [Tab; 11] = [
         Tab::Play,
         Tab::Accounts,
         Tab::Instances,
