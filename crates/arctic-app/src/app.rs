@@ -813,11 +813,9 @@ impl ArcticApp {
         let p = self.palette();
         let mut keep = false;
         let mut quit = false;
-        egui::Window::new("close_prompt")
-            .title_bar(false)
-            .collapsible(false)
-            .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        // A modal: the window behind it is dimmed and can't be clicked while the question is up.
+        egui::Modal::new(egui::Id::new("close_prompt"))
+            .frame(crate::ui::instances::dialog_frame(p))
             .show(ctx, |ui| {
                 ui.set_width(380.0);
                 ui.label(
