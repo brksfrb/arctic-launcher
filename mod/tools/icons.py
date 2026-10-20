@@ -61,6 +61,7 @@ FROM_LUCIDE = {
     "looks": "shirt",
     "memory": "memory-stick",
     "messages": "message-square-text",
+    "nametag": "tag",
     "minimap": "map",
     "motionblur": "fast-forward",
     "itemphysics": "package-open",
