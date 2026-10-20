@@ -446,7 +446,8 @@ public final class ReplayPlayback implements ReplayBackend {
 		}
 		for (AbstractClientPlayer p : mc.level.players()) {
 			if (p != mc.player) {
-				out.add(new Object[] {p.getId(), ReplayCompat.name(p.getGameProfile()), p.getX(), p.getY(), p.getZ()});
+				out.add(new Object[] {p.getId(), ReplayCompat.name(p.getGameProfile()),
+						com.arcticlauncher.mod.Compat.x(p), com.arcticlauncher.mod.Compat.y(p), com.arcticlauncher.mod.Compat.z(p)});
 			}
 		}
 		return out;

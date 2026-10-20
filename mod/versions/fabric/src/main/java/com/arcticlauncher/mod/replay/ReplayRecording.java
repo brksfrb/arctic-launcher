@@ -93,9 +93,9 @@ public final class ReplayRecording {
 		}
 		take.self(p.getId(), ReplayCompat.name(p.getGameProfile()), p.getUUID());
 		SelfSample s = new SelfSample();
-		s.x = p.getX();
-		s.y = p.getY();
-		s.z = p.getZ();
+		s.x = com.arcticlauncher.mod.Compat.x(p);
+		s.y = com.arcticlauncher.mod.Compat.y(p);
+		s.z = com.arcticlauncher.mod.Compat.z(p);
 		s.yaw = com.arcticlauncher.mod.Compat.yRot(p);
 		s.pitch = com.arcticlauncher.mod.Compat.xRot(p);
 		s.headYaw = p.getYHeadRot();
