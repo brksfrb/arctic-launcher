@@ -20,6 +20,8 @@ pub struct CreateForm {
     pub loader_version: Option<String>,
     /// Keeps its own settings instead of sharing the other instances'.
     pub own_settings: bool,
+    /// Without the Arctic Client (or the Arctic mod): pure vanilla or just the other mods.
+    pub arctic_off: bool,
 }
 
 impl ArcticApp {
@@ -146,6 +148,19 @@ impl ArcticApp {
                     true,
                     "Its own: start fresh and keep them separate",
                 );
+                ui.add_space(10.0);
+                ui.label(RichText::new("ARCTIC").small().color(p.muted));
+                let mut arctic = !form.arctic_off;
+                if ui
+                    .checkbox(
+                        &mut arctic,
+                        "Play with the Arctic Client (menus, HUD, looks and more)",
+                    )
+                    .on_hover_text("Turn it off for pure vanilla or just your own mods. You can change it later in the instance's page.")
+                    .changed()
+                {
+                    form.arctic_off = !arctic;
+                }
                 ui.add_space(14.0);
                 crate::widgets::row(ui, |ui| {
                     if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
@@ -251,6 +266,7 @@ impl ArcticApp {
         let loader = Loader::new(form.loader, form.loader_version.clone().unwrap_or_default());
         match instances::create(&self.dirs, &name, &game, loader).and_then(|mut i| {
             i.own_settings = form.own_settings;
+            i.arctic_mod = !form.arctic_off;
             i.save(&self.dirs).map(|()| i)
         }) {
             Ok(instance) => {
