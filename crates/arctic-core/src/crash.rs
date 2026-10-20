@@ -156,6 +156,14 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
+        // Fabric's resolver also logs this in English whatever language the game runs in (the quoted
+        // "Mod 'X' ... requires" lines above are translated, and then match nothing):
+        //  "Reason: [HARD_DEP nuit_interop 1.0.0-beta.5 {depends nuit @ [1.0.0-beta.5]}, HARD_DEP macos_fix 1.16+1.21.11 {depends minecraft @ [<26.1]}]"
+        //  "Fix: add [], remove [], replace [[nuit 1.0.0-beta.4] -> add:nuit 1.0.0-beta.5 ([[1.0.0-beta.5,1.0.0-beta.5]])]"
+        pattern: r"HARD_DEP \S+ \S+ \{depends \S+ @",
+        explain: |_, text| resolution_log(text),
+    },
+    Rule {
         // Fabric: "... requires version 1.21.4 of minecraft, but only the wrong version is present: 1.21.6!"
         pattern: r"Mod '([^']+)' \(([^)]+)\) \S+ requires (?:version )?([^,]+?) of (minecraft|java|fabricloader), but only the wrong version is present: ([^!\s]+)",
         explain: |c, _| {
@@ -450,6 +458,75 @@ fn compiled() -> &'static [Regex] {
 const MAX_TEXT: usize = 2 * 1024 * 1024;
 
 /// Explain a crash from the game log and/or crash report text.
+/// What Fabric's English resolver lines say is wrong with the mods (see the rule that calls this).
+fn resolution_log(text: &str) -> Diagnosis {
+    let mut for_other_minecraft: Vec<String> = Vec::new();
+    let mut needs_newer_loader = false;
+    if let Ok(re) = Regex::new(r"HARD_DEP (\S+) \S+ \{depends (\S+) @") {
+        for m in re.captures_iter(text) {
+            match &m[2] {
+                "minecraft" if !for_other_minecraft.contains(&m[1].to_owned()) => {
+                    for_other_minecraft.push(m[1].to_owned());
+                }
+                "fabricloader" => needs_newer_loader = true,
+                _ => {}
+            }
+        }
+    }
+    // The loader's own suggestion: swap a mod for another version of it.
+    let mut updates: Vec<String> = Vec::new();
+    if let Ok(re) = Regex::new(r"\[(\S+) \S+\] -> add:(\S+) (\S+) ") {
+        for m in re.captures_iter(text) {
+            updates.push(format!("{} to {}", &m[1], &m[3]));
+        }
+    }
+    let have = Regex::new(r"Loading Minecraft (\S+) with")
+        .ok()
+        .and_then(|re| re.captures(text).map(|c| c[1].to_owned()))
+        .unwrap_or_else(|| "this one".to_owned());
+    let also = if updates.is_empty() {
+        String::new()
+    } else {
+        format!(" Also update {}.", updates.join(", "))
+    };
+    if !for_other_minecraft.is_empty() {
+        return Diagnosis {
+            fix: Some(Fix::DisableMods(for_other_minecraft.clone())),
+            ..Diagnosis::new(
+                format!(
+                    "{} mod(s) are for another Minecraft version",
+                    for_other_minecraft.len()
+                ),
+                format!(
+                    "These mods are made for another Minecraft version than {have}: {}. They are probably left over from another version (an instance copied or switched to a newer game). Switch them off, or update them from the instance's Mods page.{also}",
+                    for_other_minecraft.join(", ")
+                ),
+                for_other_minecraft,
+            )
+        };
+    }
+    if needs_newer_loader {
+        return Diagnosis {
+            fix: Some(Fix::UpdateLoader),
+            ..Diagnosis::new(
+                "Fabric Loader is too old for these mods",
+                format!(
+                    "Some mods need a newer Fabric Loader. Update it in the instance's settings (Loader), or remove those mods.{also}"
+                ),
+                Vec::new(),
+            )
+        };
+    }
+    if !updates.is_empty() {
+        return Diagnosis::new(
+            "Some mods need updating together",
+            format!("Mods in this instance don't match each other's versions:{also}"),
+            Vec::new(),
+        );
+    }
+    Diagnosis::new("", "", Vec::new())
+}
+
 pub fn diagnose(text: &str) -> Option<Diagnosis> {
     let start = text.len().saturating_sub(MAX_TEXT);
     let start = (start..text.len())
@@ -712,6 +789,24 @@ mod tests {
         let d = diagnose(log).unwrap();
         assert_eq!(d.title, "Old Mod is for a different Minecraft version");
         assert!(d.detail.contains("1.20.1") && d.detail.contains("1.21.6"));
+    }
+
+    #[test]
+    fn a_translated_fabric_message_is_read_from_the_english_resolver_lines() {
+        let log = "[15:09:04] [main/INFO] Loading Minecraft 26.2 with Fabric Loader 0.19.5
+[15:09:05] [main/INFO] Immediate reason: [HARD_DEP_NO_CANDIDATE nuit_interop 1.0.0-beta.5+mc26.2 {depends nuit @ [1.0.0-beta.5+mc26.2]}]
+[15:09:05] [main/INFO] Reason: [HARD_DEP nuit_interop 1.0.0-beta.5+mc26.2 {depends nuit @ [1.0.0-beta.5+mc26.2]}, HARD_DEP macos_input_fixes 1.16+1.21.11 {depends minecraft @ [<26.1]}]
+[15:09:05] [main/INFO] Fix: add [], remove [], replace [[nuit 1.0.0-beta.4+mc26.2] -> add:nuit 1.0.0-beta.5+mc26.2 ([[1.0.0-beta.5+mc26.2,1.0.0-beta.5+mc26.2]])]
+[15:09:05] [main/ERROR] Incompatible mods found!";
+        let d = diagnose(log).unwrap();
+        assert_eq!(d.title, "1 mod(s) are for another Minecraft version");
+        assert_eq!(d.mods, ["macos_input_fixes"]);
+        assert!(d.detail.contains("26.2"));
+        assert!(d.detail.contains("update nuit to 1.0.0-beta.5+mc26.2"));
+        assert_eq!(
+            d.fix,
+            Some(Fix::DisableMods(vec!["macos_input_fixes".into()]))
+        );
     }
 
     #[test]

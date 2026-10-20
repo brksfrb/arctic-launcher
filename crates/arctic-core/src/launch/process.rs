@@ -113,7 +113,7 @@ pub fn spawn(
                 let _ = child.kill();
             }
             match child.try_wait() {
-                Ok(Some(status)) => break status.code(),
+                Ok(Some(status)) => break exit_code(&status),
                 Ok(None) => std::thread::sleep(WATCH_INTERVAL),
                 Err(e) => {
                     log::error!("lost track of the game process: {e}");
@@ -127,6 +127,30 @@ pub fn spawn(
         on_event(GameEvent::Exited { code });
     });
     Ok(handle)
+}
+
+/// The game's exit code; a game the system stopped with a signal (Linux, macOS) counts as 128 plus the
+/// signal, like a shell reports it: 137 is the system killing it for running out of memory.
+fn exit_code(status: &std::process::ExitStatus) -> Option<i32> {
+    if let Some(code) = status.code() {
+        return Some(code);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(signal) = status.signal() {
+            log::warn!(
+                "the game was stopped by signal {signal}{}",
+                if signal == 9 {
+                    " (the system killed it, usually because it ran out of memory)"
+                } else {
+                    ""
+                }
+            );
+            return Some(128 + signal);
+        }
+    }
+    None
 }
 
 /// Start the game fully detached from this process: output goes straight
