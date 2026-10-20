@@ -1,0 +1,2 @@
+# Members the matcher can't pair: mojmap class, mojmap member, Legacy Yarn 1.13.2 class, its member.
+net.minecraft.client.Minecraft  execute  net.minecraft.client.MinecraftClient  submit

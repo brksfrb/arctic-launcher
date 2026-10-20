@@ -92,6 +92,68 @@ def read_mojmap(path):
     return cls, names
 
 
+def yarn_members(yarn_jar):
+    """Yarn: {(yarn class, yarn name): [(intermediary name, intermediary desc)]}, {yarn class: intermediary class}."""
+    names = defaultdict(list)
+    classes = {}
+    cur = None
+    cur_y = None
+    for line in read_tiny(yarn_jar, "mappings/mappings.tiny"):
+        p = line.split("	")
+        if p[0] == "c":
+            cur = p[1]
+            cur_y = p[2]
+            classes[p[2]] = p[1]
+        elif p[0] == "" and len(p) >= 5 and p[1] in ("f", "m"):
+            names[(cur_y, p[4])].append((p[3], p[2], p[1]))
+    return names, classes
+
+
+def apply_member_seeds(members, cmap, a, b, moj, cls_moj, off2int, yarn, inter_lines):
+    """member-seeds-1.13.2.txt: "mojmap class  mojmap member  yarn class  yarn member" forces one pairing."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "member-seeds-1.13.2.txt")
+    if not os.path.exists(path):
+        return
+    ynames, yclasses = yarn
+    int2off = {v: k for k, v in off2int.items()}
+    # official member of B by (official class, intermediary name)
+    off_member = {}
+    cur = None
+    for line in inter_lines:
+        p = line.split("	")
+        if p[0] == "c":
+            cur = p[1]
+        elif p[0] == "" and len(p) >= 5 and p[1] in ("f", "m"):
+            off_member[(cur, p[4])] = (p[3], p[2])
+    for line in open(path, encoding="utf-8"):
+        line = line.split("#")[0].strip()
+        if not line:
+            continue
+        mc, mn, yc, yn = line.split()
+        obf_a = cls_moj.get(mc)
+        yinter_cls = yclasses.get(yc.replace(".", "/"))
+        obf_b = int2off.get(yinter_cls) if yinter_cls else None
+        if not obf_a or not obf_b:
+            print("member seed: class not found:", line)
+            continue
+        obf_a = obf_a.replace(".", "/")
+        found_a = [(k[1], k[2]) for k, n in moj.items() if k[0] == obf_a and n == mn]
+        found_b = [off_member[(obf_b, inter)] for inter, _d, _k in ynames.get((yc.replace(".", "/"), yn), ()) if (obf_b, inter) in off_member]
+        if len(found_a) != 1 or len(found_b) != 1:
+            print(f"member seed ambiguous or missing ({len(found_a)} x {len(found_b)}):", line)
+            continue
+        name_a, desc_a = found_a[0]
+        name_b, desc_b = found_b[0]
+        if desc_a == "F":
+            print("member seed: fields aren't supported:", line)
+            continue
+        for key in [k for k, v in members.items() if (k[0] == obf_a and k[1] == name_a and k[2] == desc_a)
+                    or (cmap.get(k[0]) == obf_b and v[0] == name_b and v[1] == desc_b)]:
+            del members[key]
+        members[(obf_a, name_a, desc_a)] = (name_b, desc_b)
+        cmap.setdefault(obf_a, obf_b)
+
+
 def main():
     work, out = sys.argv[1], sys.argv[2]
     os.makedirs(work, exist_ok=True)
@@ -147,6 +209,7 @@ def main():
         json.dump({"classes": cmap, "members": [[k[0], k[1], k[2], v[0], v[1]] for k, v in members.items()]},
                   open(cache, "w", encoding="utf-8"))
     print("classes matched:", len(cmap), "members:", len(members))
+    apply_member_seeds(members, cmap, a, b, moj, cls_moj, off2int, yarn_members(yarn), read_tiny(inter, "mappings/mappings.tiny"))
 
     # B's members in intermediary
     inter_member = {}
