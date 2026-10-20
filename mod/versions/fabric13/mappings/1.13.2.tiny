@@ -14977,7 +14977,7 @@ c	net/minecraft/class_3208	net/minecraft/advancements/critereon/LocationPredicat
 	m	(Lnet/minecraft/class_1170;)Lnet/minecraft/class_3208;	method_16353	inBiome
 	m	(Lnet/minecraft/class_3793;)Lnet/minecraft/class_3208;	method_16354	inDimension
 c	net/minecraft/class_3209	net/minecraft/world/level/block/GlazedTerracottaBlock
-c	net/minecraft/class_321	net/minecraft/client/Camera
+c	net/minecraft/class_321	net/minecraft/client/render/Camera
 	f	Lnet/minecraft/class_236;	field_10294	position
 	f	F	field_890	rotationX
 	f	F	field_891	rotationXZ
@@ -17727,25 +17727,22 @@ c	net/minecraft/class_3558	net/minecraft/world/item/SpawnEggItem
 	m	()Ljava/lang/Iterable;	method_16129	eggs
 c	net/minecraft/class_3559	net/minecraft/world/item/StandingAndWallBlockItem
 	f	Lnet/minecraft/class_197;	field_17384	wallBlock
-c	net/minecraft/class_356	net/minecraft/client/gui/components/AbstractWidget
-	f	I	field_1050	width
-	f	I	field_1051	height
-	f	I	field_1052	x
+c	net/minecraft/class_356	net/minecraft/client/gui/widget/ButtonWidget
+	f	I	field_1049	width
+	f	I	field_1050	height
+	f	I	field_1051	x
+	f	I	field_1052	y
 	f	Ljava/lang/String;	field_1053	message
-	f	I	field_1054	y
+	f	I	field_1054	id
 	f	Z	field_1055	active
 	f	Z	field_1056	visible
-	f	Z	field_20064	focused
-	f	Z	field_5056	isHovered
+	f	Z	field_5056	hovered
 	f	Lnet/minecraft/class_1653;	field_6282	WIDGETS_LOCATION
-	m	(DDDD)V	method_18375	onDrag
-	m	(DD)Z	method_18377	isMouseOver
-	m	()Z	method_4229	isFocused
+	m	()Z	method_4229	isHovered
 	m	(II)V	method_4230	renderToolTip
 	m	(Lnet/minecraft/class_1909;)V	method_6687	playDownSound
-	m	(IIF)V	method_891	renderButton
 	m	(Z)I	method_892	getYImage
-	m	(Lnet/minecraft/class_1600;II)V	method_893	renderBg
+	m	(Lnet/minecraft/class_1600;II)V	method_893	mouseDragged
 	m	(I)V	method_9443	setWidth
 c	net/minecraft/class_3560	net/minecraft/class_3560
 c	net/minecraft/class_3561	net/minecraft/item/IToolMaterial
