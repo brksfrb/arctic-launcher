@@ -528,8 +528,24 @@ fn credentials_path(dirs: &DataDirs) -> PathBuf {
     dirs.profile_root().join(CREDENTIALS_FILE)
 }
 
+/// Signing in, saving a recovery code and recovering all read `cosmetics.json`, change it and write it
+/// back: two at once (the friends page and a token refresh start together) lose each other's changes, and
+/// a lost key locks an offline name. One at a time.
+static CREDENTIALS_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn held() -> std::sync::MutexGuard<'static, ()> {
+    CREDENTIALS_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// A session token for `account`, reusing a stored one while it's valid.
 pub fn token_for(dirs: &DataDirs, base: &str, account: &Account) -> Result<String> {
+    let _held = held();
+    token_for_locked(dirs, base, account)
+}
+
+fn token_for_locked(dirs: &DataDirs, base: &str, account: &Account) -> Result<String> {
     let path = credentials_path(dirs);
     let mut creds: Credentials = load_json(&path)?.unwrap_or_default();
     // Files from before encryption: save them encrypted right away.
@@ -586,7 +602,7 @@ pub fn token_for(dirs: &DataDirs, base: &str, account: &Account) -> Result<Strin
                         "Arctic: the key for {} is gone; using the recovery code saved on this PC",
                         account.username
                     );
-                    recover_offline(dirs, base, account, &code).map_err(|_| e)?;
+                    recover_offline_locked(dirs, base, account, &code).map_err(|_| e)?;
                     let fresh: Credentials = load_json(&path)?.unwrap_or_default();
                     return fresh
                         .accounts
@@ -609,7 +625,7 @@ pub fn token_for(dirs: &DataDirs, base: &str, account: &Account) -> Result<Strin
     let needs_recovery = !account.is_microsoft() && entry.recovery.is_none();
     save_json(&path, &creds)?;
     if needs_recovery {
-        save_recovery_code(dirs, base, account, &session.token);
+        save_recovery_code_locked(dirs, base, account, &session.token);
     }
     Ok(session.token)
 }
@@ -636,18 +652,23 @@ fn usable_key(entry: &mut Credential) -> String {
 
 /// Keep the profile's recovery code on this PC, made now when the profile has none (a code the player
 /// made themselves is never replaced behind their back). Quiet: it's retried at the next sign-in.
-fn save_recovery_code(dirs: &DataDirs, base: &str, account: &Account, token: &str) {
+fn save_recovery_code_locked(dirs: &DataDirs, base: &str, account: &Account, token: &str) {
     let made = match crate::friends::profile(base, token) {
         Ok(profile) if !profile.has_recovery => crate::friends::new_recovery(base, token).ok(),
         _ => None,
     };
     if let Some(code) = made {
-        remember_recovery_code(dirs, account, &code);
+        remember_recovery_code_locked(dirs, account, &code);
     }
 }
 
 /// Save a recovery code on this PC for `account` (so the PC can heal a lost key by itself).
 pub fn remember_recovery_code(dirs: &DataDirs, account: &Account, code: &str) {
+    let _held = held();
+    remember_recovery_code_locked(dirs, account, code);
+}
+
+fn remember_recovery_code_locked(dirs: &DataDirs, account: &Account, code: &str) {
     let path = credentials_path(dirs);
     let mut creds: Credentials = load_json(&path).ok().flatten().unwrap_or_default();
     creds
@@ -663,6 +684,16 @@ pub fn remember_recovery_code(dirs: &DataDirs, account: &Account, code: &str) {
 /// An offline account on a new PC: the profile's recovery code moves its
 /// name to a fresh key made here, and signs it in.
 pub fn recover_offline(dirs: &DataDirs, base: &str, account: &Account, code: &str) -> Result<()> {
+    let _held = held();
+    recover_offline_locked(dirs, base, account, code)
+}
+
+fn recover_offline_locked(
+    dirs: &DataDirs,
+    base: &str,
+    account: &Account,
+    code: &str,
+) -> Result<()> {
     if account.is_microsoft() {
         return Err(Error::Other(
             "Microsoft accounts don't need recovering".into(),

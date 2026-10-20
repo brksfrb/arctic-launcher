@@ -226,7 +226,19 @@ pub fn save_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).at(parent)?;
     }
-    let tmp = path.with_extension("json.tmp");
+    // A name of its own for every write: two writers of the same file (a sign-in and a refresh at once)
+    // that shared one temp file overwrote each other's half-written data, or one renamed the file out from
+    // under the other ("The system cannot find the file specified" at the rename).
+    static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let tmp = {
+        let mut name = path.as_os_str().to_os_string();
+        name.push(format!(
+            ".{}.{}.tmp",
+            std::process::id(),
+            WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        PathBuf::from(name)
+    };
     let bytes = serde_json::to_vec_pretty(value)?;
     if let Ok(old) = fs::read(path)
         && serde_json::from_slice::<serde::de::IgnoredAny>(&old).is_ok()
@@ -237,7 +249,11 @@ pub fn save_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     file.write_all(&bytes).at(&tmp)?;
     file.sync_all().at(&tmp)?;
     drop(file);
-    fs::rename(&tmp, path).at(path)
+    let renamed = fs::rename(&tmp, path).at(path);
+    if renamed.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    renamed
 }
 
 #[cfg(test)]
@@ -253,6 +269,34 @@ mod tests {
         let other = tempfile::tempdir().unwrap();
         std::fs::write(other.path().join("portable.txt"), b"").unwrap();
         assert!(is_portable(other.path()));
+    }
+
+    #[test]
+    fn writers_of_one_file_at_once_never_fail_or_mix() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("shared.json");
+        let threads: Vec<_> = (0..8u32)
+            .map(|t| {
+                let path = path.clone();
+                std::thread::spawn(move || {
+                    for i in 0..40u32 {
+                        save_json(&path, &vec![t; 200 + i as usize]).unwrap();
+                    }
+                })
+            })
+            .collect();
+        for thread in threads {
+            thread.join().unwrap();
+        }
+        let last: Vec<u32> = load_json(&path).unwrap().unwrap();
+        // One writer's complete list, not a mix of two.
+        assert!(last.iter().all(|n| *n == last[0]));
+        let leftovers = std::fs::read_dir(dir.path())
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().ends_with(".tmp"))
+            .count();
+        assert_eq!(leftovers, 0, "no temp files are left behind");
     }
 
     #[test]
