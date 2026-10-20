@@ -15,6 +15,7 @@ ACC_ABSTRACT = 0x0400
 ACC_INTERFACE = 0x0200
 ACC_ENUM = 0x4000
 ACC_FINAL = 0x0010
+ACC_VISIBILITY = 0x0007
 
 
 def obf_like(name):
@@ -196,6 +197,7 @@ class Matcher:
                 return -100
             s += 1 if wild else 4
         self._shape = s
+        s += 1 if (ma.access & ACC_VISIBILITY) == (mb.access & ACC_VISIBILITY) else -1
         if not obf_like(ma.name) and ma.name == mb.name:
             s += 6
         elif not obf_like(ma.name) and not obf_like(mb.name) and ma.name != mb.name and len(ma.name) > 4:
@@ -264,6 +266,8 @@ class Matcher:
             if any(x != y and x.startswith("<") and y.startswith("<") for x, y in zip(ta, tb)):
                 return -100
             s = 1 if wild else 4
+        # Visibility rarely changes between versions.
+        s += 2 if (fa.access & ACC_VISIBILITY) == (fb.access & ACC_VISIBILITY) else -2
         if ca is not None:
             s += min(21, 7 * self.mvotes[(ca, fa.name, "F:" + fa.desc)][(cb, fb.name, "F:" + fb.desc)])
         if (fa.access & ACC_FINAL) == (fb.access & ACC_FINAL):
