@@ -27,7 +27,7 @@ _OPLEN[0xC4] = -1  # wide
 
 
 class Method:
-    __slots__ = ("name", "desc", "access", "strings", "calls", "fields", "size", "ints")
+    __slots__ = ("name", "desc", "access", "strings", "calls", "fields", "size", "ints", "sig")
 
     def __init__(self, name, desc, access):
         self.name = name
@@ -38,15 +38,17 @@ class Method:
         self.fields = []
         self.size = 0
         self.ints = []
+        self.sig = None
 
 
 class Field:
-    __slots__ = ("name", "desc", "access")
+    __slots__ = ("name", "desc", "access", "sig")
 
     def __init__(self, name, desc, access):
         self.name = name
         self.desc = desc
         self.access = access
+        self.sig = None
 
 
 class Class:
@@ -146,8 +148,12 @@ def parse(data):
     for _ in range(fcount):
         access, nameix, descix = struct.unpack_from(">HHH", data, pos)
         pos += 6
-        _, pos = attrs(pos)
-        cls.fields.append(Field(u(nameix), u(descix), access))
+        falist, pos = attrs(pos)
+        field = Field(u(nameix), u(descix), access)
+        for aname, start, length in falist:
+            if aname == "Signature":
+                field.sig = u(struct.unpack_from(">H", data, start)[0])
+        cls.fields.append(field)
     (mcount,) = struct.unpack_from(">H", data, pos)
     pos += 2
     for _ in range(mcount):
@@ -156,6 +162,8 @@ def parse(data):
         method = Method(u(nameix), u(descix), access)
         alist, pos = attrs(pos)
         for aname, start, length in alist:
+            if aname == "Signature":
+                method.sig = u(struct.unpack_from(">H", data, start)[0])
             if aname == "Code":
                 maxs, maxl, codelen = struct.unpack_from(">HHI", data, start)
                 code = data[start + 8:start + 8 + codelen]

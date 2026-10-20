@@ -171,6 +171,8 @@ class Matcher:
             s += 3
         elif mb.name in ("<init>", "<clinit>"):
             return -100
+        if self.sig_agrees(ma.sig, mb.sig) < 0:
+            return -100
         if (ma.access & (ACC_STATIC | ACC_ABSTRACT)) != (mb.access & (ACC_STATIC | ACC_ABSTRACT)):
             return -100
         da = self.norm_a(ma.desc)
@@ -219,8 +221,31 @@ class Matcher:
         s += min(6, sum((ia & ib).values()))
         return s
 
+    SIG_CLASS = re.compile(r"L([^;<]+)(?=[;<])")
+
+    def sig_agrees(self, sa, sb):
+        """Generic signatures, when both members have them, must have the same shape. 1 agree, 0 unknown, -1 differ."""
+        if not sa or not sb:
+            return 0
+        ta = self.SIG_CLASS.sub(lambda m: "L<?>" if m.group(1) in self.a.classes else "L" + m.group(1), sa)
+        tb = self.SIG_CLASS.sub(lambda m: "L<?>" if m.group(1) in self.b.classes else "L" + m.group(1), sb)
+        if ta != tb:
+            return -1
+        # Same shape: do the type arguments that both sides know say the same?
+        xa = self.SIG_CLASS.sub(lambda m: "L<" + self.cmap.get(m.group(1), "?") + ">" if m.group(1) in self.a.classes else "L" + m.group(1), sa)
+        xb = self.SIG_CLASS.sub(lambda m: "L<" + (m.group(1) if m.group(1) in self.cmap_rev else "?") + ">" if m.group(1) in self.b.classes else "L" + m.group(1), sb)
+        if xa == xb:
+            return 1
+        ka = re.findall(r"L<([^>]*)>", xa)
+        kb = re.findall(r"L<([^>]*)>", xb)
+        if any(x != "?" and y != "?" and x != y for x, y in zip(ka, kb)):
+            return -1
+        return 0
+
     def field_score(self, fa, fb):
         if (fa.access & ACC_STATIC) != (fb.access & ACC_STATIC):
+            return -100
+        if self.sig_agrees(fa.sig, fb.sig) < 0:
             return -100
         da = self.norm_a(fa.desc)
         db = self.norm_b(fb.desc)
