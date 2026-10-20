@@ -65,6 +65,7 @@ class Matcher:
         self.members = {}  # (class_a, name, desc) -> (name_b, desc_b)
         self.members_rev = {}
         self.seeded = set()
+        self.anchored = set()
 
     # ---- descriptor normalisation: matched classes become a shared token, unmatched ones "?" ----
 
@@ -132,6 +133,7 @@ class Matcher:
         for key, la in sa.items():
             lb = sb.get(key)
             if lb and len(la) == 1 and len(lb) == 1 and self.link(la[0], lb[0]):
+                self.anchored.add(la[0])
                 count += 1
         self.log(f"anchors by strings: {count}")
         # Single long unusual strings, unique in both.
@@ -154,6 +156,7 @@ class Matcher:
         for ca, counter in votes.items():
             cb, v = counter.most_common(1)[0]
             if v >= 2 and len(counter) == 1 and self.link(ca, cb):
+                self.anchored.add(ca)
                 added += 1
         self.log(f"anchors by single strings (>= 2 shared): {added}")
 
@@ -186,6 +189,7 @@ class Matcher:
             if clash:
                 return -100
             s += 4
+        self._shape = s
         if not obf_like(ma.name) and ma.name == mb.name:
             s += 6
         elif not obf_like(ma.name) and not obf_like(mb.name) and ma.name != mb.name and len(ma.name) > 4:
@@ -201,8 +205,11 @@ class Matcher:
         # Same java.* calls
         ja = Counter(f"{c[0]}.{c[1]}{c[2]}" for c in ma.calls if not c[0] in self.a.classes)
         jb = Counter(f"{c[0]}.{c[1]}{c[2]}" for c in mb.calls if not c[0] in self.b.classes)
-        s += min(6, sum((ja & jb).values()))
-        s -= min(4, sum(((ja - jb) + (jb - ja)).values()) // 2)
+        s += min(16, 4 * sum((ja & jb).values()))
+        s -= min(8, 2 * sum(((ja - jb) + (jb - ja)).values()))
+        ia_ints = set(ma.ints)
+        ib_ints = set(mb.ints)
+        s += min(4, len(ia_ints & ib_ints))
         # Calls that stay in a matched pair of classes
         ia = Counter((self.cmap.get(c[0]), c[1] if not obf_like(c[1]) else "", self.norm_a(c[2])) for c in ma.calls if c[0] in self.cmap)
         ib = Counter((c[0] and self.cmap_rev.get(c[0]) and c[0], c[1] if not obf_like(c[1]) else "", self.norm_b(c[2])) for c in mb.calls if c[0] in self.cmap_rev)
@@ -234,30 +241,35 @@ class Matcher:
 
     @staticmethod
     def align(items_a, items_b, score, floor):
-        """Order-preserving best pairing (Needleman-Wunsch, no gap cost); returns [(i, j)]."""
+        """Pair members: best scores first (a pair must be the best choice for both sides, order breaks ties).
+        Returns [(i, j)] sorted by i."""
         n, m = len(items_a), len(items_b)
-        sc = [[0] * m for _ in range(n)]
+        if not n or not m:
+            return []
+        cand = []
         for i in range(n):
             for j in range(m):
                 v = score(items_a[i], items_b[j])
-                sc[i][j] = v if v >= floor else -1000
-        best = [[0] * (m + 1) for _ in range(n + 1)]
-        for i in range(1, n + 1):
-            for j in range(1, m + 1):
-                v = best[i - 1][j - 1] + sc[i - 1][j - 1] if sc[i - 1][j - 1] > -1000 else -1
-                best[i][j] = max(best[i - 1][j], best[i][j - 1], v)
+                if v >= floor:
+                    # Declaration order is a weak hint: members stay roughly where they were.
+                    v2 = v + 3.0 * (1.0 - abs(i / n - j / m))
+                    cand.append((v2, i, j))
+        cand.sort(reverse=True)
+        best_a = {}
+        best_b = {}
+        for v, i, j in cand:
+            best_a.setdefault(i, v)
+            best_b.setdefault(j, v)
+        used_a = set()
+        used_b = set()
         pairs = []
-        i, j = n, m
-        while i > 0 and j > 0:
-            if sc[i - 1][j - 1] > -1000 and best[i][j] == best[i - 1][j - 1] + sc[i - 1][j - 1]:
-                pairs.append((i - 1, j - 1))
-                i -= 1
-                j -= 1
-            elif best[i][j] == best[i - 1][j]:
-                i -= 1
-            else:
-                j -= 1
-        pairs.reverse()
+        for v, i, j in cand:
+            if i in used_a or j in used_b:
+                continue
+            used_a.add(i)
+            used_b.add(j)
+            pairs.append((i, j))
+        pairs.sort()
         return pairs
 
     def match_members(self, ca, cb):
@@ -314,9 +326,11 @@ class Matcher:
         if (A.access & ACC_INTERFACE) != (B.access & ACC_INTERFACE) or (A.access & ACC_ENUM) != (B.access & ACC_ENUM):
             return 0
         mp = self.align(A.methods, B.methods, lambda x, y: self.method_score(x, y, A, B), 9)
-        fp = self.align(A.fields, B.fields, lambda x, y: self.field_score(x, y), 5)
-        total = sum(self.method_score(A.methods[i], B.methods[j], A, B) for i, j in mp)
-        total += sum(self.field_score(A.fields[i], B.fields[j]) for i, j in fp)
+        # What the members share beyond having the same shape: strings, calls, numbers, names.
+        total = 0
+        for i, j in mp:
+            score = self.method_score(A.methods[i], B.methods[j], A, B)
+            total += max(0, score - self._shape)
         # Penalise very different sizes.
         na = len(A.methods) + len(A.fields)
         nb = len(B.methods) + len(B.fields)
@@ -384,9 +398,9 @@ class Matcher:
         scores = {}
         for ca, lst in cands.items():
             sc = sorted(((self.class_similarity(ca, cb), cb) for cb in lst), reverse=True)
-            if sc and sc[0][0] >= 30:
+            if sc and sc[0][0] >= 24:
                 second = sc[1][0] if len(sc) > 1 else 0
-                if sc[0][0] >= 1.4 * second:
+                if sc[0][0] >= 1.6 * second:
                     scores[ca] = sc[0]
         # Mutual best
         by_b = defaultdict(list)
@@ -395,7 +409,7 @@ class Matcher:
         added = 0
         for cb, lst in by_b.items():
             lst.sort(reverse=True)
-            if len(lst) > 1 and lst[0][0] < 1.4 * lst[1][0]:
+            if len(lst) > 1 and lst[0][0] < 1.6 * lst[1][0]:
                 continue
             if self.link(lst[0][1], cb):
                 added += 1
@@ -463,7 +477,7 @@ class Matcher:
                 if not n:
                     break
         for again in range(2):
-            bad = [ca for ca in self.weak_pairs() if ca not in self.seeded]
+            bad = [ca for ca in self.weak_pairs() if ca not in self.seeded and ca not in self.anchored]
             self.log(f"weak pairs dropped: {len(bad)}")
             if not bad:
                 break
