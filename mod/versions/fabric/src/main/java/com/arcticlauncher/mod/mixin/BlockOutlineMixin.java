@@ -62,7 +62,11 @@ abstract class BlockOutlineMixin {
 	}
 	//#elif MC < 1.15
 	// 1.14: a static renderShape(shape, x, y, z, r, g, b, a): the colour as four floats at 4-7.
+	//#if MC < 1.14
+	@ModifyArgs(method = "drawBlockOutline", at = @At(value = "INVOKE",
+	//#else
 	@ModifyArgs(method = "renderHitOutline", at = @At(value = "INVOKE",
+	//#endif
 			target = "Lnet/minecraft/client/renderer/LevelRenderer;renderShape(Lnet/minecraft/world/phys/shapes/VoxelShape;DDDFFFF)V"))
 	private void arctic$outline(Args args) {
 		int c = ArcticClient.config().outlineColor;

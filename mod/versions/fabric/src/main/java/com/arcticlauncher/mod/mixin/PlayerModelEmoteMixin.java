@@ -79,6 +79,11 @@ abstract class PlayerModelEmoteMixin {
 	@Inject(method = "setupAnim(Lnet/minecraft/world/entity/LivingEntity;FFFFF)V", at = @At("HEAD"))
 	private void arctic$undoRig(LivingEntity entity, float limbSwing, float limbSwingAmount, float age, float headYaw, float headPitch,
 			CallbackInfo ci) {
+	//#elif MC < 1.14
+	// 1.13: setAngles(angles..., scale, entity), the entity comes last.
+	@Inject(method = "setAngles(FFFFFFLnet/minecraft/world/entity/Entity;)V", at = @At("HEAD"))
+	private void arctic$undoRig(float limbSwing, float limbSwingAmount, float age, float headYaw, float headPitch, float scale,
+			net.minecraft.world.entity.Entity entity, CallbackInfo ci) {
 	//#else
 	// 1.14 passes the model scale after the angles.
 	@Inject(method = "setupAnim(Lnet/minecraft/world/entity/LivingEntity;FFFFFF)V", at = @At("HEAD"))
@@ -95,6 +100,10 @@ abstract class PlayerModelEmoteMixin {
 	@Inject(method = "setupAnim(Lnet/minecraft/world/entity/LivingEntity;FFFFF)V", at = @At("TAIL"))
 	private void arctic$emote(LivingEntity entity, float limbSwing, float limbSwingAmount, float age, float headYaw, float headPitch,
 			CallbackInfo ci) {
+	//#elif MC < 1.14
+	@Inject(method = "setAngles(FFFFFFLnet/minecraft/world/entity/Entity;)V", at = @At("TAIL"))
+	private void arctic$emote(float limbSwing, float limbSwingAmount, float age, float headYaw, float headPitch, float scale,
+			net.minecraft.world.entity.Entity entity, CallbackInfo ci) {
 	//#else
 	@Inject(method = "setupAnim(Lnet/minecraft/world/entity/LivingEntity;FFFFFF)V", at = @At("TAIL"))
 	private void arctic$emote(LivingEntity entity, float limbSwing, float limbSwingAmount, float age, float headYaw, float headPitch,
