@@ -62,6 +62,12 @@ final class WorldStats {
 		return new java.util.ArrayList<Object[]>(kinds.values());
 	}
 
+	/** The game draws the hunger bar: survival or adventure, and not riding a mount (which shows its health instead). */
+	static boolean hungerBarShown() {
+		LocalPlayer p = Minecraft.getInstance().player;
+		return p != null && !p.isCreative() && !p.isSpectator() && !(p.getVehicle() instanceof net.minecraft.world.entity.LivingEntity);
+	}
+
 	static float[] food() {
 		LocalPlayer p = Minecraft.getInstance().player;
 		if (p == null) {

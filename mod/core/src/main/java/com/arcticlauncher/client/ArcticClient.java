@@ -203,6 +203,9 @@ public final class ArcticClient {
 			if (config.waypointsInWorld) {
 				com.arcticlauncher.client.waypoints.WorldMarkers.render(g, style(), platform, waypoints.here(platform));
 			}
+			if (config.saturationBar) {
+				com.arcticlauncher.client.hud.SaturationBar.render(g, platform);
+			}
 			hud.render(g, style(), false);
 			if (com.arcticlauncher.client.replay.Replays.recording()) {
 				String recording = "REC · " + com.arcticlauncher.client.replay.Replays.recordingStatus();
