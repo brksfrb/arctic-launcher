@@ -76,7 +76,7 @@
   chat keys with {x} {y} {z}, waypoints, your own time of day, block outline and hit
   color, scoreboard tweaks, a streamer mode, and everyone's Arctic looks in game. Press Right Shift in game for the Arctic menu. It's on
   by default for Vanilla from 1.8.9 up to the newest release (1.8.9, 1.9.4, 1.10.2,
-  1.11.2, 1.12.2 and 1.15.2 onward), comes to Fabric and Quilt instances too, and you can turn
+  1.11.2, 1.12.2, 1.13.2, 1.14.4 and 1.15.2 onward), comes to Fabric and Quilt instances too, and you can turn
   it off per instance, or choose pure vanilla during setup.
 - **Tier Tags.** See players' PvP tiers by their names, in name tags and the tab list
   ("HT3 Sword | Steve"), from PvPTiers or SubTiers: their best tier or one game mode.
