@@ -11,6 +11,10 @@ on:
         description: "Versions to build (space-separated; empty: all of them)"
         required: false
         default: ""
+      gradle:
+        description: "Extra Gradle flags (for example --info)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -32,6 +36,7 @@ jobs:
       - name: Build
         env:
           VERSIONS: ${{ inputs.versions }}
+          ARCTIC_GRADLE_FLAGS: ${{ inputs.gradle }}
         # Four Gradle builds at once: the node's game servers come first (the runner only gets
         # spare CPU and memory there).
         run: |
