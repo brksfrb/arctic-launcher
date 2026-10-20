@@ -274,6 +274,50 @@ def main():
                 added += 1
     print("method entries added or aligned across overrides:", added)
 
+    # Whatever stays unmatched keeps the name Legacy Yarn gave it (most of what 1.13.2 shares with 1.12),
+    # so the sources can reach it where 1.14 differs; the rest stays class_123 / method_456.
+    yarn_class = {}
+    yarn_member = {}
+    cur = None
+    for line in read_tiny(yarn, "mappings/mappings.tiny"):
+        p = line.split("	")
+        if p[0] == "c":
+            cur = p[1]
+            if p[1] != p[2]:
+                yarn_class[p[1]] = p[2]
+        elif p[0] == "" and len(p) >= 5 and p[1] in ("f", "m") and p[3] != p[4]:
+            yarn_member[(cur, p[1], p[3], p[2])] = p[4]
+    taken = set(class_names.values())
+    new_classes = 0
+    for official, ic in off2int.items():
+        if ic in class_names or ic not in yarn_class or "$" in ic:
+            continue
+        y = yarn_class[ic]
+        if y in taken:
+            continue
+        taken.add(y)
+        class_names[ic] = y
+        new_classes += 1
+    # Inner classes follow their outer class's name when yarn names them; others derive theirs.
+    for official, ic in off2int.items():
+        if ic in class_names or ic not in yarn_class or "$" not in ic:
+            continue
+        outer = ic.rsplit("$", 1)[0]
+        y = yarn_class[ic]
+        if class_names.get(outer, yarn_class.get(outer)) and y not in taken:
+            taken.add(y)
+            class_names[ic] = y
+            new_classes += 1
+    new_members = 0
+    for (ic, kind, inter_name, idesc), y in yarn_member.items():
+        if (kind, inter_name, idesc) in entries[ic]:
+            continue
+        if kind == "m" and inter_name in votes:
+            continue
+        entries[ic][(kind, inter_name, idesc)] = y
+        new_members += 1
+    print(f"yarn names kept for {new_classes} classes and {new_members} members")
+
     def render():
         out_lines = ["tiny	2	0	intermediary	named"]
         for ic in sorted(set(class_names) | set(entries)):
