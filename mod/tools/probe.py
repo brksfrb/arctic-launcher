@@ -7,6 +7,7 @@ Each <what> is one of
     Class#name                 the members plus the bytecode of the methods called that
     Class#name(desc)ret        ... only the overload with that descriptor
     grep:Class:regex           the members of Class whose line matches the regex
+    classes:regex              the (outer) classes whose names match
     refs:regex                 every class in the jar that mentions the regex (class names, listing only)
 Uses the named jar the version's build left in Loom's cache (Mojang names on the Fabric adapter,
 Yarn on Legacy Fabric; names the mappings lack stay as class_123/method_456).
@@ -85,6 +86,13 @@ def main():
             for line in compact(javap(jar, cls)).splitlines():
                 if re.search(pattern, line):
                     print(line)
+            continue
+        if what.startswith("classes:"):
+            pattern = re.compile(what[8:])
+            with zipfile.ZipFile(jar) as z:
+                for n in sorted(z.namelist()):
+                    if n.endswith(".class") and pattern.search(n) and "$" not in n:
+                        print(n[:-6].replace("/", "."))
             continue
         if what.startswith("refs:"):
             pattern = re.compile(what[5:].encode())
