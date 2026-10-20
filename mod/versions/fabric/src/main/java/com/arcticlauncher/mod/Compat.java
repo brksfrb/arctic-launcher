@@ -532,7 +532,7 @@ public final class Compat {
 		return translationKey(w.getMessage());
 		//#else
 		for (String key : candidates) {
-			if (net.minecraft.client.resources.language.I18n.get(key).equals(w.getMessage())) {
+			if (net.minecraft.client.resources.language.I18n.get(key).equals(rawLabel(w))) {
 				return key;
 			}
 		}
@@ -540,15 +540,46 @@ public final class Compat {
 		//#endif
 	}
 
-	public static Object label(net.minecraft.client.gui.components.AbstractWidget w) {
+	/** Before 1.16 a label is a plain string (a field in 1.13, a getter from 1.14). */
+	public static String rawLabel(net.minecraft.client.gui.components.AbstractWidget w) {
+		//#if MC >= 1.14
 		return w.getMessage();
+		//#else
+		return w.message;
+		//#endif
+	}
+
+	/** A widget's width (a getter from 1.14). */
+	public static int widgetWidth(net.minecraft.client.gui.components.AbstractWidget w) {
+		//#if MC >= 1.14
+		return w.getWidth();
+		//#else
+		return w.method_6688();
+		//#endif
+	}
+
+	/** The widgets of a screen: its children from 1.14, its buttons before (see ScreenButtonsAccess). */
+	public static java.util.List<?> widgets(net.minecraft.client.gui.screens.Screen screen) {
+		//#if MC >= 1.14
+		return screen.children();
+		//#else
+		return ((com.arcticlauncher.mod.mixin.ScreenButtonsAccess) screen).arctic$buttons();
+		//#endif
+	}
+
+	public static Object label(net.minecraft.client.gui.components.AbstractWidget w) {
+		//#if MC >= 1.16
+		return w.getMessage();
+		//#else
+		return rawLabel(w);
+		//#endif
 	}
 
 	public static String labelText(net.minecraft.client.gui.components.AbstractWidget w) {
 		//#if MC >= 1.16
 		return w.getMessage().getString();
 		//#else
-		return w.getMessage();
+		return rawLabel(w);
 		//#endif
 	}
 
@@ -556,8 +587,16 @@ public final class Compat {
 		//#if MC >= 1.16
 		w.setMessage((net.minecraft.network.chat.Component) label);
 		//#else
-		w.setMessage(label instanceof net.minecraft.network.chat.Component
+		setRawLabel(w, label instanceof net.minecraft.network.chat.Component
 				? ((net.minecraft.network.chat.Component) label).getColoredString() : (String) label);
+		//#endif
+	}
+
+	public static void setRawLabel(net.minecraft.client.gui.components.AbstractWidget w, String label) {
+		//#if MC >= 1.14
+		w.setMessage(label);
+		//#else
+		w.message = label;
 		//#endif
 	}
 
