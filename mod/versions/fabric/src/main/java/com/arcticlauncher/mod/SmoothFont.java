@@ -71,8 +71,18 @@ public final class SmoothFont {
 	public static void changed() {
 		Minecraft mc = Minecraft.getInstance();
 		if (reloading == null || reloading.isDone()) {
-			reloading = mc.reloadResourcePacks();
+			reloading = reload(mc);
 		}
+	}
+
+	private static java.util.concurrent.CompletableFuture<Void> reload(Minecraft mc) {
+		//#if MC >= 1.14
+		return mc.reloadResourcePacks();
+		//#else
+		java.util.concurrent.CompletableFuture<Void> done = new java.util.concurrent.CompletableFuture<>();
+		mc.reloadResourcesConcurrently().addListener(() -> done.complete(null), Runnable::run);
+		return done;
+		//#endif
 	}
 
 	/** Each tick: the GUI scale changed since Inter was rasterized (like maximizing): reload. */
@@ -82,7 +92,7 @@ public final class SmoothFont {
 			return;
 		}
 		if (loaded != guiScale()) {
-			reloading = Minecraft.getInstance().reloadResourcePacks();
+			reloading = reload(Minecraft.getInstance());
 		}
 	}
 
@@ -185,9 +195,22 @@ public final class SmoothFont {
 			MemoryUtil.memFree(heldFont);
 		}
 		heldFont = font;
+		//#if MC >= 1.14
 		return new TrueTypeGlyphProvider(info, size, scale, 0f, STB_SHIFT_Y, "");
+		//#else
+		return new Inter13(info, size, scale, 0f, STB_SHIFT_Y, "");
+		//#endif
 		//#endif
 	}
+
+	//#if MC < 1.14
+	/** 1.13's provider has a protected constructor. */
+	private static final class Inter13 extends TrueTypeGlyphProvider {
+		Inter13(STBTTFontinfo info, float size, float oversample, float shiftX, float shiftY, String skip) {
+			super(info, size, oversample, shiftX, shiftY, skip);
+		}
+	}
+	//#endif
 
 	//#if MC < 1.15
 	private static ByteBuffer heldFont;

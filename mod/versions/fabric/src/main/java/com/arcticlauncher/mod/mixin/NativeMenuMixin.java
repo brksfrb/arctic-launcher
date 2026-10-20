@@ -14,7 +14,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** Add Arctic actions to the original screen; never replace or remove a widget owned by another mod. */
 @Mixin({TitleScreen.class, JoinMultiplayerScreen.class, DisconnectedScreen.class})
 abstract class NativeMenuMixin extends Screen {
+	//#if MC >= 1.14
 	private NativeMenuMixin(Component title) { super(title); }
+	//#else
+	private NativeMenuMixin() { super(); }
+	//#endif
 	@Inject(method = "init", at = @At("TAIL"))
 	private void arctic$actions(CallbackInfo ci) {
 		ArcticButton.addActions((Screen) (Object) this, button -> addRenderableWidget(button));

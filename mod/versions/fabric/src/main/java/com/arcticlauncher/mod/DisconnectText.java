@@ -12,7 +12,7 @@ public final class DisconnectText {
 	private DisconnectText() {}
 
 	public static String reason(Screen screen) {
-		Component title = screen.getTitle();
+		Component title = Compat.titleOf(screen);
 		for (Class<?> c = screen.getClass(); c != null && c != Screen.class; c = c.getSuperclass()) {
 			for (java.lang.reflect.Field f : c.getDeclaredFields()) {
 				if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) {

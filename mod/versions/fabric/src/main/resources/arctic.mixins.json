@@ -20,7 +20,8 @@
 		"ServerPingPoolMixin",
 		"PlayerTabOverlayMixin",
 		"PlayerTierMixin",
-		"LightEngineMixin",
+<% if (lightEngine) { %>		"LightEngineMixin",
+<% } %>
 		"NativeMenuMixin",
 		"HudMixin",
 		"KeyboardHandlerMixin",
@@ -56,7 +57,8 @@
 		"WindowMaximizeMixin",
 		"MinecraftMaximizeMixin",
 		"EntityTurnMixin"<% if (features) { %>,
-		"CameraMixin",
+<% if (cameraClass) { %>		"CameraMixin",
+<% } %>
 		"LightmapMixin",
 		"ChatComponentMixin",
 		"HudCrosshairMixin",

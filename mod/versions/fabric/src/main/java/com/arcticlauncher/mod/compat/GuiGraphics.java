@@ -89,8 +89,11 @@ public final class GuiGraphics {
 		defaultBlendFunc();
 		//#if MC >= 1.16
 		GuiComponent.blit(pose, x, y, w, h, u, v, regionW, regionH, texW, texH);
-		//#else
+		//#elif MC >= 1.14
 		withPose(() -> GuiComponent.blit(x, y, w, h, u, v, regionW, regionH, texW, texH));
+		//#else
+		// 1.13 names it drawTexture and takes the source region before the size drawn.
+		withPose(() -> GuiComponent.drawTexture(x, y, u, v, regionW, regionH, w, h, texW, texH));
 		//#endif
 	}
 
@@ -107,10 +110,23 @@ public final class GuiGraphics {
 		enableBlend();
 		//#if MC >= 1.16
 		GuiComponent.blit(pose, x, y, z, w, h, sprite);
-		//#else
+		//#elif MC >= 1.14
 		withPose(() -> GuiComponent.blit(x, y, z, w, h, sprite));
+		//#else
+		withPose(() -> Sprites.INSTANCE.draw(x, y, w, h, sprite));
 		//#endif
 	}
+
+	//#if MC < 1.14
+	/** 1.13 draws a sprite with an instance method of GuiComponent. */
+	private static final class Sprites extends GuiComponent {
+		static final Sprites INSTANCE = new Sprites();
+
+		void draw(int x, int y, int w, int h, TextureAtlasSprite sprite) {
+			drawSprite(x, y, sprite, w, h);
+		}
+	}
+	//#endif
 
 	public void renderItem(ItemStack stack, int x, int y) {
 		//#if MC >= 1.19.4

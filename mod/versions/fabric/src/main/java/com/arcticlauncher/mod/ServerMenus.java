@@ -61,7 +61,7 @@ public final class ServerMenus {
 			com.arcticlauncher.client.servers.DisconnectedPage page = disconnectedScreen == original ? disconnectedPage : null;
 			if (page == null) {
 				page = new com.arcticlauncher.client.servers.DisconnectedPage(
-						original.getTitle().getString(), DisconnectText.reason(original), vanilla);
+						Compat.titleOf(original).getString(), DisconnectText.reason(original), vanilla);
 				disconnectedScreen = original;
 				disconnectedPage = page;
 			}

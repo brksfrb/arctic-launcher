@@ -15,8 +15,13 @@ import net.minecraft.client.model.player.PlayerModel;
 //#else
 import net.minecraft.client.model.PlayerModel;
 //#endif
+//#if MC >= 1.14
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.layers.RenderLayer;
+//#else
+import net.minecraft.client.render.entity.feature.FeatureRenderer;
+import net.minecraft.client.renderer.entity.player.PlayerRenderer;
+//#endif
 import net.minecraft.resources.Identifier;
 //#if MC >= 1.21.9
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -94,7 +99,13 @@ public final class CosmeticsLayer extends RenderLayer<PlayerRenderState, PlayerM
 		}
 	}
 //#elif MC < 1.15
+//#if MC >= 1.14
 public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> {
+//#else
+// 1.13 has no layer class: a feature renderer is an interface the player renderer calls.
+public final class CosmeticsLayer implements FeatureRenderer<AbstractClientPlayer> {
+	private final PlayerRenderer renderer;
+//#endif
 	/** Players' looks found a moment ago: asked for every frame, kept for {@link #LOOK_REFRESH_MS}. */
 	private static final long LOOK_REFRESH_MS = 250;
 	private final java.util.Map<java.util.UUID, Found> found = new java.util.HashMap<>();
@@ -103,9 +114,21 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 		long at;
 	}
 
+	//#if MC >= 1.14
 	public CosmeticsLayer(RenderLayerParent<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> parent) {
 		super(parent);
 	}
+	//#else
+	public CosmeticsLayer(PlayerRenderer renderer) {
+		this.renderer = renderer;
+	}
+
+	/** Puts the lightmap coordinates back to the player's after a pass drew them full bright. */
+	private static void restoreLight(AbstractClientPlayer player) {
+		int light = player.getLightColor();
+		com.mojang.blaze3d.platform.GLX.glMultiTexCoord2f(com.mojang.blaze3d.platform.GLX.GL_TEXTURE1, light % 65536, light / 65536);
+	}
+	//#endif
 
 	/** Before 1.15 the layer draws in immediate mode on the matrix the player is already drawn with. */
 	@Override
@@ -132,7 +155,11 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 		{
 			PoseStack pose = new PoseStack();
 			// The glow pass puts the lightmap back to the player's own afterwards.
+			//#if MC >= 1.14
 			Canvas canvas = new Canvas(() -> setLightColor(player));
+			//#else
+			Canvas canvas = new Canvas(() -> restoreLight(player));
+			//#endif
 			draw(pose, canvas, 0, entry.look);
 			boolean slim = "slim".equals(player.getModelName());
 			drawLimbs(pose, canvas, 0, id, player.getSkinTextureLocation(), slim, new boolean[] {
@@ -145,7 +172,11 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 	}
 
 	@Override
+	//#if MC >= 1.14
 	public boolean colorsOnDamage() {
+	//#else
+	public boolean combineTextures() {
+	//#endif
 		return false;
 	}
 //#else
@@ -404,7 +435,11 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 		//#if MC >= 1.21.2
 		PlayerModel model = getParentModel();
 		//#else
+		//#if MC >= 1.14
 		PlayerModel<AbstractClientPlayer> model = getParentModel();
+		//#else
+		PlayerModel model = renderer.getModel();
+		//#endif
 		//#endif
 		switch (attach) {
 			case HEAD:

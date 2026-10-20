@@ -24,9 +24,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** Restyle the native title's artwork; keep its widgets and every mod's render hooks. */
 @Mixin(TitleScreen.class)
 abstract class TitleScreenMixin extends Screen {
+	//#if MC >= 1.14
 	private TitleScreenMixin(Component title) {
 		super(title);
 	}
+	//#else
+	private TitleScreenMixin() {
+		super();
+	}
+	//#endif
 
 	// Native titles fade text for two seconds. Our opaque button backgrounds made that look
 	// like missing labels. Leave the normal fade alone when the player chooses Vanilla style.
@@ -120,6 +126,19 @@ abstract class TitleScreenMixin extends Screen {
 	//#if MC < 1.20.6
 	// Before 1.20.6 there's no generic Screen.renderPanorama hook (see ScreenMixin):
 	// only the title screen draws one, directly, so redirect that call instead.
+	//#if MC < 1.14
+	// 1.13's panorama has no fade: its draw call takes only the partial tick (and is unnamed).
+	@Redirect(method = "extractRenderState",
+			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/PanoramaRenderer;method_19176(F)V"))
+	private void arctic$backdrop(PanoramaRenderer panorama, float partialTick) {
+		GfxImpl gfx = GfxImpl.of(new com.mojang.blaze3d.vertex.PoseStack());
+		if (ArcticClient.restyles()) {
+			Backdrop.render(gfx, ArcticClient.style());
+		} else {
+			panorama.method_19176(partialTick);
+		}
+	}
+	//#else
 	@Redirect(method = "extractRenderState",
 			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/PanoramaRenderer;render(FF)V"))
 	//#if MC >= 1.20
@@ -140,5 +159,6 @@ abstract class TitleScreenMixin extends Screen {
 			panorama.render(partialTick, alpha);
 		}
 	}
+	//#endif
 	//#endif
 }

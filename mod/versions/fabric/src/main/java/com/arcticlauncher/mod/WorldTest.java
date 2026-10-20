@@ -587,15 +587,19 @@ final class WorldTest {
 				},
 				() -> {
 					// One click on Save and Quit only asks; the world stays.
+					//#if MC >= 1.14
 					Compat.setScreen(new net.minecraft.client.gui.screens.PauseScreen(true));
+					//#else
+					Compat.setScreen(new net.minecraft.client.gui.screens.PauseScreen());
+					//#endif
 					TIMER.schedule(() -> run(() -> {
-						for (Object child : Compat.screen().children()) {
+						for (Object child : Compat.widgets(Compat.screen())) {
 							if (!(child instanceof net.minecraft.client.gui.components.Button)) {
 								continue;
 							}
 							net.minecraft.client.gui.components.Button b = (net.minecraft.client.gui.components.Button) child;
 							if ("menu.returnToMenu".equals(Compat.labelKey(b, java.util.Collections.singleton("menu.returnToMenu")))) {
-								Compat.click(Compat.screen(), Compat.widgetX(b) + b.getWidth() / 2.0, Compat.widgetY(b) + Compat.widgetHeight(b) / 2.0);
+								Compat.click(Compat.screen(), Compat.widgetX(b) + Compat.widgetWidth(b) / 2.0, Compat.widgetY(b) + Compat.widgetHeight(b) / 2.0);
 								ArcticMod.LOG.info("worldtest: after one quit click, still in world: {}, label: {}",
 										Minecraft.getInstance().level != null, Compat.labelText(b));
 							}

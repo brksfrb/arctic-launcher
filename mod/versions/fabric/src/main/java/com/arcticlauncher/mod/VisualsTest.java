@@ -79,7 +79,11 @@ final class VisualsTest {
 
 	private static void countItems(String when) {
 		int items = 0;
+		//#if MC >= 1.14
 		for (net.minecraft.world.entity.Entity e : Minecraft.getInstance().level.entitiesForRendering()) {
+		//#else
+		for (net.minecraft.world.entity.Entity e : Minecraft.getInstance().level.loadedEntities) {
+		//#endif
 			if (e instanceof net.minecraft.world.entity.item.ItemEntity) {
 				items++;
 			}

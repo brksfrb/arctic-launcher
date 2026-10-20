@@ -29,7 +29,9 @@ import net.minecraft.client.gui.screens.options.AccessibilityOptionsScreen;
 import net.minecraft.client.gui.screens.options.LanguageSelectScreen;
 import net.minecraft.client.gui.screens.options.OptionsScreen;
 //#else
+//#if MC >= 1.14
 import net.minecraft.client.gui.screens.AccessibilityOptionsScreen;
+//#endif
 import net.minecraft.client.gui.screens.LanguageSelectScreen;
 import net.minecraft.client.gui.screens.OptionsScreen;
 //#endif
@@ -203,11 +205,21 @@ final class FabricPlatform implements Platform {
 	@Override
 	public void back() {
 		net.minecraft.client.gui.screens.Screen screen = Compat.screen();
+		//#if MC >= 1.14
 		if (screen == null) {
 			mc().pauseGame(false);
 		} else if (screen.shouldCloseOnEsc()) {
 			screen.onClose();
 		}
+		//#else
+		if (screen == null) {
+			mc().openGameMenuScreen();
+		} else if (screen instanceof PageScreen) {
+			((PageScreen) screen).onClose();
+		} else if (screen.shouldCloseOnEsc()) {
+			Compat.setScreen(null);
+		}
+		//#endif
 	}
 
 	@Override
@@ -507,7 +519,11 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public String clipboard() {
+		//#if MC >= 1.14
 		String clip = mc().keyboardHandler.getClipboard();
+		//#else
+		String clip = mc().keyboardHandler.method_18177();
+		//#endif
 		return clip == null ? "" : clip;
 	}
 
@@ -608,7 +624,12 @@ final class FabricPlatform implements Platform {
 				Compat.setScreen(new LanguageSelectScreen(parent, mc.options, mc.getLanguageManager()));
 				break;
 			case ACCESSIBILITY:
+				//#if MC >= 1.14
 				Compat.setScreen(new AccessibilityOptionsScreen(parent, mc.options));
+				//#else
+				// 1.13 has no accessibility screen: its settings are among the others.
+				Compat.setScreen(Compat.optionsScreen(parent));
+				//#endif
 				break;
 			case QUIT:
 				mc.stop();
@@ -707,11 +728,19 @@ final class FabricPlatform implements Platform {
 	@Override
 	public int aimKind() {
 		Minecraft mc = mc();
+		//#if MC >= 1.14
 		if (!(mc.hitResult instanceof net.minecraft.world.phys.EntityHitResult)) {
 			return 0;
 		}
 		net.minecraft.world.phys.EntityHitResult hit = (net.minecraft.world.phys.EntityHitResult) mc.hitResult;
 		net.minecraft.world.entity.Entity e = hit.getEntity();
+		//#else
+		// 1.13 has one kind of hit result, with the entity in it.
+		if (mc.hitResult == null || mc.hitResult.type != net.minecraft.world.phys.HitResult.Type.ENTITY) {
+			return 0;
+		}
+		net.minecraft.world.entity.Entity e = mc.hitResult.entity;
+		//#endif
 		if (e instanceof net.minecraft.world.entity.player.Player) {
 			return 1;
 		}
@@ -728,6 +757,17 @@ final class FabricPlatform implements Platform {
 		if (mc.level == null) {
 			return null;
 		}
+		//#if MC < 1.14
+		// 1.13's camera is static state: the view entity, as the frame sees it.
+		net.minecraft.world.entity.Entity view = mc.getCameraEntity();
+		if (view == null) {
+			return null;
+		}
+		float t = mc.getFrameTime();
+		double[] out = {view.xo + (view.x - view.xo) * t, view.yo + (view.y - view.yo) * t + view.getEyeHeight(),
+				view.zo + (view.z - view.zo) * t, view.yRotO + (view.yRot - view.yRotO) * t,
+				view.xRotO + (view.xRot - view.xRotO) * t, 0};
+		//#else
 		//#if MC >= 26.2
 		net.minecraft.client.Camera cam = mc.gameRenderer.mainCamera();
 		//#else
@@ -739,6 +779,7 @@ final class FabricPlatform implements Platform {
 		//#else
 		net.minecraft.world.phys.Vec3 at = cam.getPosition();
 		double[] out = {at.x, at.y, at.z, cam.getYRot(), cam.getXRot(), 0};
+		//#endif
 		//#endif
 		//#if MC >= 26.1
 		out[5] = cam.getFov();
@@ -844,8 +885,13 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public void mentionSound() {
+		//#if MC >= 1.14
 		mc().getSoundManager().play(net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
 				net.minecraft.sounds.SoundEvents.EXPERIENCE_ORB_PICKUP, PING_PITCH, PING_VOLUME));
+		//#else
+		mc().getSoundManager().play(net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
+				net.minecraft.sound.Sounds.ENTITY_EXPERIENCE_ORB_PICKUP, PING_PITCH, PING_VOLUME));
+		//#endif
 	}
 
 	private static final float PING_PITCH = 1.6f;
@@ -1213,7 +1259,11 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public int entityCount() {
+		//#if MC >= 1.14
 		return mc().level == null ? -1 : mc().level.getEntityCount();
+		//#else
+		return mc().level == null ? -1 : mc().level.loadedEntities.size();
+		//#endif
 	}
 
 	@Override
@@ -1229,7 +1279,15 @@ final class FabricPlatform implements Platform {
 			return out;
 		}
 		UUID self = playerId();
+		//#if MC >= 1.14
 		for (AbstractClientPlayer p : mc.level.players()) {
+		//#else
+		for (net.minecraft.world.entity.player.Player player : mc.level.playerEntities) {
+			if (!(player instanceof AbstractClientPlayer)) {
+				continue;
+			}
+			AbstractClientPlayer p = (AbstractClientPlayer) player;
+		//#endif
 			if (!p.getUUID().equals(self)) {
 				out.add(new Object[] {p.getUUID(), Compat.playerName(p), Compat.x(p), Compat.y(p), Compat.z(p), (double) Compat.yRot(p)});
 			}
