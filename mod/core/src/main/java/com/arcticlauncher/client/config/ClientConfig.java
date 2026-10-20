@@ -162,6 +162,8 @@ public final class ClientConfig {
 	public int timeLockOff = -1;
 	/** A pop-up when armor or the held tool is about to break. */
 	public boolean durabilityWarning = true;
+	/** Saturation (the hidden part of hunger) drawn on the hunger bar. */
+	public boolean saturationBar;
 	/** A pop-up with your coordinates when you die. */
 	public boolean deathNotice = true;
 	/** New screenshots go straight onto the clipboard. */
