@@ -66,6 +66,7 @@ class Matcher:
         self.members_rev = {}
         self.seeded = set()
         self.strict = False
+        self.mvotes = defaultdict(Counter)
         self.anchored = set()
 
     # ---- descriptor normalisation: matched classes become a shared token, unmatched ones "?" ----
@@ -219,6 +220,7 @@ class Matcher:
         ia = Counter((self.cmap.get(c[0]), c[1] if not obf_like(c[1]) else "", self.norm_a(c[2])) for c in ma.calls if c[0] in self.cmap)
         ib = Counter((c[0] and self.cmap_rev.get(c[0]) and c[0], c[1] if not obf_like(c[1]) else "", self.norm_b(c[2])) for c in mb.calls if c[0] in self.cmap_rev)
         s += min(6, sum((ia & ib).values()))
+        s += min(21, 7 * self.mvotes[(ca.name, ma.name, ma.desc)][(cb.name, mb.name, mb.desc)])
         return s
 
     SIG_CLASS = re.compile(r"L([^;<]+)(?=[;<])")
@@ -242,7 +244,7 @@ class Matcher:
             return -1
         return 0
 
-    def field_score(self, fa, fb):
+    def field_score(self, fa, fb, ca=None, cb=None):
         if (fa.access & ACC_STATIC) != (fb.access & ACC_STATIC):
             return -100
         if self.sig_agrees(fa.sig, fb.sig) < 0:
@@ -262,6 +264,8 @@ class Matcher:
             if any(x != y and x.startswith("<") and y.startswith("<") for x, y in zip(ta, tb)):
                 return -100
             s = 1 if wild else 4
+        if ca is not None:
+            s += min(21, 7 * self.mvotes[(ca, fa.name, "F:" + fa.desc)][(cb, fb.name, "F:" + fb.desc)])
         if (fa.access & ACC_FINAL) == (fb.access & ACC_FINAL):
             s += 1
         if not obf_like(fa.name) and fa.name == fb.name:
@@ -307,7 +311,7 @@ class Matcher:
         B = self.b.classes[cb]
         votes = []
         mp = self.align(A.methods, B.methods, lambda x, y: self.method_score(x, y, A, B), 9)
-        fp = self.align(A.fields, B.fields, lambda x, y: self.field_score(x, y), 5)
+        fp = self.align(A.fields, B.fields, lambda x, y: self.field_score(x, y, ca, cb), 5)
         for i, j in fp:
             fa, fb = A.fields[i], B.fields[j]
             self.members[(ca, fa.name, "F:" + fa.desc)] = (fb.name, fb.desc)
@@ -316,6 +320,7 @@ class Matcher:
             ma, mb = A.methods[i], B.methods[j]
             self.members[(ca, ma.name, ma.desc)] = (mb.name, mb.desc)
             votes += self.type_votes(ma.desc, mb.desc)
+            self.usage_votes(ma, mb)
             # Calls and field uses into other classes at the same position
             ra = [c for c in ma.calls if c[0] in self.a.classes and c[0] != ca]
             rb = [c for c in mb.calls if c[0] in self.b.classes and c[0] != cb]
@@ -331,6 +336,29 @@ class Matcher:
                 if x in self.a.classes and y in self.b.classes:
                     votes.append((x, y, 3))
         return votes
+
+    def usage_votes(self, ma, mb):
+        """Matched methods use the same members in the same order: those members belong together."""
+        for kind in ("calls", "fields"):
+            ra = []
+            for ref in getattr(ma, kind):
+                if ref[0] in self.cmap and ref not in ra:
+                    ra.append(ref)
+            rb = []
+            for ref in getattr(mb, kind):
+                if ref[0] in self.cmap_rev and ref not in rb:
+                    rb.append(ref)
+            if len(ra) != len(rb) or len(ra) > 24:
+                continue
+            for x, y in zip(ra, rb):
+                if self.cmap.get(x[0]) != y[0]:
+                    continue
+                if kind == "calls":
+                    if re.sub(r"L<[^>]*>;|L\?;", "L?;", self.norm_a(x[2])) != re.sub(r"L<[^>]*>;|L\?;", "L?;", self.norm_b(y[2])):
+                        continue
+                    self.mvotes[(x[0], x[1], x[2])][(y[0], y[1], y[2])] += 1
+                else:
+                    self.mvotes[(x[0], x[1], "F:" + x[2])][(y[0], y[1], "F:" + y[2])] += 1
 
     def type_votes(self, da, db):
         ta = DESC_TOKEN.findall(da)
@@ -519,7 +547,9 @@ class Matcher:
                     break
         # The final member pairs: where a shape rests on a class neither version has, it needs more than the shape.
         self.strict = True
-        self.members = {}
-        for ca, cb in self.cmap.items():
-            self.match_members(ca, cb)
+        for round_ in range(3):
+            # Each pass learns which members the matched methods share, and the next one pairs by that.
+            self.members = {}
+            for ca, cb in self.cmap.items():
+                self.match_members(ca, cb)
         return self.cmap, self.members
