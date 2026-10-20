@@ -2,6 +2,8 @@
 
 mod about;
 mod accounts;
+mod bedrock;
+pub use bedrock::BedrockUi;
 mod client_style;
 mod dialogs;
 mod instances;

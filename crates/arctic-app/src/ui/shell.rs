@@ -99,6 +99,7 @@ impl ArcticApp {
                         Tab::Play => self.play_tab(ui),
                         Tab::Accounts => self.accounts_tab(ui),
                         Tab::Instances => self.instances_tab(ui),
+                        Tab::Bedrock => self.bedrock_tab(ui),
                         Tab::Skins => self.skins_tab(ui),
                         Tab::Together => self.together_tab(ui),
                         Tab::Screenshots => self.screenshots_tab(ui),

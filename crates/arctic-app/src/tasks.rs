@@ -166,6 +166,8 @@ pub enum Event {
     ServerSubmitted(Outcome<arctic_core::servers::public::Submitted>),
     /// The submission's state after the MOTD check.
     ServerVerified(Outcome<String>),
+    /// A Bedrock tab job (see `bedrock_tasks`).
+    Bedrock(crate::bedrock_tasks::BedrockEvent),
     Screenshots(Vec<arctic_core::screenshots::Shot>),
     ScreenshotThumb(PathBuf, Outcome<Vec<u8>>),
     ScreenshotCopied(Outcome<()>),
