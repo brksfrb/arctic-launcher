@@ -26,7 +26,16 @@ pub fn memory_for_mods(setting: u32, mods: usize) -> u32 {
 
 pub fn playable_memory_mb(asked: u32) -> u32 {
     match total_memory_mb() {
-        Some(total) => asked.min(room_mb(total, commit_limit_mb())),
+        // Windows pages out quietly, so its page file may back the game. Linux with little or no swap
+        // (zram, or none) doesn't: it kills the game when memory runs out, so only installed memory counts.
+        Some(total) => asked.min(room_mb(
+            total,
+            if cfg!(windows) {
+                commit_limit_mb()
+            } else {
+                None
+            },
+        )),
         None => asked,
     }
 }
