@@ -103,11 +103,18 @@ impl Run {
     fn crash_report(&self, title: &str) -> crash::Report {
         let lines: Vec<&str> = self.log.iter().map(|l| l.text.as_str()).collect();
         let written = newest_crash_report(&self.game_dir, self.started);
+        // What the launcher itself logged (a failed sign-in, a download, a launch step) often explains
+        // a crash the game's own log doesn't.
+        let launcher = crate::logbook::snapshot_if_changed(0)
+            .map(|(_, lines)| lines)
+            .unwrap_or_default();
+        let launcher: Vec<&str> = launcher.iter().map(|l| l.text.as_str()).collect();
         crash::Report::build(
             &self.version,
             "",
             title,
             &lines,
+            &launcher,
             written.as_deref(),
             self.java.as_deref(),
         )
