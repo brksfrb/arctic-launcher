@@ -69,7 +69,7 @@ def build_one(root, target):
     project = target.get("project", "fabric")
     started = time.time()
     result = subprocess.run(
-        [gradlew(root), *OFFLINE, "-p", f"versions/{project}", "build", "-q",
+        [gradlew(root), *OFFLINE, "-p", f"versions/{project}", "build", *([] if "--info" in OFFLINE else ["-q"]),
          f"-Pminecraft_version={version}", f"-Pcovers={covers}"],
         cwd=root, capture_output=True, text=True,
     )
@@ -145,6 +145,7 @@ def main() -> None:
         jobs = int(args[at + 1])
         del args[at:at + 2]
     only_pack = "--pack" in args
+    OFFLINE.extend(os.environ.get("ARCTIC_GRADLE_FLAGS", "").split())
     if "--offline" in args:
         OFFLINE.append("--offline")
     wanted = {a for a in args if a not in ("--pack", "--offline")}
