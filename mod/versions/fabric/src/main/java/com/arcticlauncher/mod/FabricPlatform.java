@@ -566,6 +566,11 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public void openPageOver(Page page) {
+		Compat.setScreen(new PageScreen(page, Compat.screen()));
+	}
+
+	@Override
 	public void closePage() {
 		if (Compat.screen() instanceof PageScreen) {
 			((PageScreen) Compat.screen()).onClose();

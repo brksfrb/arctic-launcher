@@ -23,10 +23,13 @@ final class ModsScreen extends Page {
 	private static final int MIN_CARD_W = 96;
 	private static final int HUD_W = 60;
 	private static final int STYLE_W = 70;
+	private static final int ACCOUNTS_W = 62;
 	/** Room the "Arctic / Mods" title takes on the left; header buttons stay right of it. */
 	private static final int TITLE_ROOM = 80;
 	/** Menu Style is a header button (always in sight), not a card. */
 	private static final String STYLE_ID = "style";
+	/** Accounts too: a header button, a card only when searched for (or when the window is narrow). */
+	private static final String ACCOUNT_ID = "account";
 	private static final int SEARCH_W = 150;
 	private static final int FIELD_H = 18;
 	private static final int CHIP_H = 16;
@@ -92,7 +95,11 @@ final class ModsScreen extends Page {
 			styleX = hudX - CHIP_GAP - STYLE_W;
 		}
 		if (styleX >= px + TabPage.PAD + TITLE_ROOM) {
-			add(new Button("Menu Style", this::openStyle)).bounds(styleX, headerY, STYLE_W, FIELD_H);
+			add(new Button("Menu Style", () -> openMod(STYLE_ID))).bounds(styleX, headerY, STYLE_W, FIELD_H);
+			int accountsX = styleX - CHIP_GAP - ACCOUNTS_W;
+			if (accountsX >= px + TabPage.PAD + TITLE_ROOM) {
+				add(new Button("Accounts", () -> openMod(ACCOUNT_ID))).bounds(accountsX, headerY, ACCOUNTS_W, FIELD_H);
+			}
 		}
 		if (keepSearchFocus) {
 			keepSearchFocus = false;
@@ -131,9 +138,9 @@ final class ModsScreen extends Page {
 		return title.length() * 6;
 	}
 
-	private void openStyle() {
+	private void openMod(String id) {
 		for (Mod m : ModCatalog.all()) {
-			if (m.id.equals(STYLE_ID)) {
+			if (m.id.equals(id)) {
 				ArcticClient.platform().openPage(Menus.pageFor(m, this));
 				return;
 			}
@@ -143,11 +150,13 @@ final class ModsScreen extends Page {
 	private List<Mod> visible() {
 		// Menu Style has its header button; it shows as a card only when searched for (or when
 		// the window is too narrow for the button).
-		boolean styleButton = width > 0 && px + pw - TabPage.PAD - SEARCH_W - 22 - CHIP_GAP - HUD_W
-				- (ArcticClient.platform().hasFeatures() ? CHIP_GAP + STYLE_W : 0) >= px + TabPage.PAD + TITLE_ROOM;
+		int left = px + pw - TabPage.PAD - SEARCH_W - 22 - CHIP_GAP - HUD_W
+				- (ArcticClient.platform().hasFeatures() ? CHIP_GAP + STYLE_W : 0);
+		boolean styleButton = width > 0 && left >= px + TabPage.PAD + TITLE_ROOM;
+		boolean accountsButton = styleButton && left - CHIP_GAP - ACCOUNTS_W >= px + TabPage.PAD + TITLE_ROOM;
 		List<Mod> out = new ArrayList<Mod>();
 		for (Mod m : ModCatalog.all()) {
-			if (styleButton && m.id.equals(STYLE_ID) && query.trim().isEmpty()) {
+			if (query.trim().isEmpty() && (styleButton && m.id.equals(STYLE_ID) || accountsButton && m.id.equals(ACCOUNT_ID))) {
 				continue;
 			}
 			if ((category == Mod.Category.ALL || m.category == category) && m.matches(query)) {

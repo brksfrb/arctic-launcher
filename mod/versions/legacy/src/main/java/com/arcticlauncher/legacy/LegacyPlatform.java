@@ -969,6 +969,11 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public void openPageOver(Page page) {
+		mc().setScreen(new LegacyPageScreen(page, mc().currentScreen));
+	}
+
+	@Override
 	public void closePage() {
 		if (mc().currentScreen instanceof LegacyPageScreen) {
 			((LegacyPageScreen) mc().currentScreen).close();
