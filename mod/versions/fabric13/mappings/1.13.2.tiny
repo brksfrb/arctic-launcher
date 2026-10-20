@@ -26307,7 +26307,7 @@ c	net/minecraft/class_744	net/minecraft/server/ServerInterface
 	m	(Ljava/lang/String;)V	method_2037	error
 	m	(Ljava/lang/String;)V	method_2038	debug
 	m	()Ljava/lang/String;	method_2039	getServerIp
-	m	()Ljava/lang/String;	method_2041	getMotd
+	m	()Ljava/lang/String;	method_2041	method_2041
 	m	()Ljava/lang/String;	method_2042	getServerVersion
 	m	()I	method_2043	getPlayerCount
 	m	()[Ljava/lang/String;	method_2045	getPlayerNames
