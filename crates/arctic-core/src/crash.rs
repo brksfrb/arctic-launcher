@@ -185,13 +185,24 @@ const RULES: &[Rule] = &[
     Rule {
         // Fabric: "- Mod 'X' (x) 1.0 is incompatible with any version of mod 'Y' (y), but a matching version is present"
         pattern: r"Mod '([^']+)' \(([^)]+)\) \S+ is incompatible with [^']*'([^']+)'",
-        explain: |c, _| {
+        explain: |c, text| {
+            // Often the clash is only an old version of one of them, and the loader says which to update.
+            let hint = update_hint(text).map_or_else(String::new, |h| {
+                format!(" Fabric Loader suggests: {h}. Otherwise remove one of them.")
+            });
             Diagnosis::new(
                 format!("{} and {} don't work together", &c[1], &c[3]),
-                format!(
-                    "{} doesn't work alongside {}. Remove one of them.",
-                    &c[1], &c[3]
-                ),
+                if hint.is_empty() {
+                    format!(
+                        "{} doesn't work alongside {}. Remove one of them.",
+                        &c[1], &c[3]
+                    )
+                } else {
+                    format!(
+                        "{} doesn't work alongside this version of {}.{hint}",
+                        &c[1], &c[3]
+                    )
+                },
                 vec![c[1].to_owned(), c[3].to_owned()],
             )
         },
@@ -458,6 +469,35 @@ fn compiled() -> &'static [Regex] {
 const MAX_TEXT: usize = 2 * 1024 * 1024;
 
 /// Explain a crash from the game log and/or crash report text.
+/// The loader's own suggestion from its English "Fix:" line: "update sodium to 0.8.12".
+fn update_hint(text: &str) -> Option<String> {
+    let re = Regex::new(r"\[([^\s\[\]]+) [^\s\]]+\] -> add:(\S+) (\S+) ").ok()?;
+    let updates: Vec<String> = re
+        .captures_iter(text)
+        .map(|m| format!("update {} to {}", &m[1], &m[3]))
+        .collect();
+    (!updates.is_empty()).then(|| updates.join(", "))
+}
+
+/// A game that stopped without writing a single line (only the launcher's banner is there): what it
+/// usually means. `None` when the game did write something (then its log has the answer).
+pub fn silent_exit(text: &str, code: i32) -> Option<Diagnosis> {
+    let wrote_something = text
+        .lines()
+        .map(str::trim)
+        .any(|l| !l.is_empty() && !l.starts_with("────"));
+    if wrote_something {
+        return None;
+    }
+    Some(Diagnosis::new(
+        "The game stopped before it wrote anything",
+        format!(
+            "Java ended right after it started (exit code {code}) without a message. Usually antivirus or a security tool blocked Java or a game file, the Java runtime is damaged, or the memory setting is more than the computer can give. Try: add the Arctic folder to your antivirus' exceptions, lower Maximum memory in Settings, and use Repair on the instance."
+        ),
+        Vec::new(),
+    ))
+}
+
 /// What Fabric's English resolver lines say is wrong with the mods (see the rule that calls this).
 fn resolution_log(text: &str) -> Diagnosis {
     let mut for_other_minecraft: Vec<String> = Vec::new();
@@ -800,6 +840,26 @@ mod tests {
         let d = diagnose(log).unwrap();
         assert_eq!(d.title, "Old Mod is for a different Minecraft version");
         assert!(d.detail.contains("1.20.1") && d.detail.contains("1.21.6"));
+    }
+
+    #[test]
+    fn a_clash_that_an_update_fixes_says_which_update() {
+        let log = "[18:37:08] [main/INFO] Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 ([[0.8.12,\u{221e})])]
+    \t - Mod 'More Culling' (moreculling) 1.0.10 is incompatible with version 0.6.13 or earlier of mod 'Sodium' (sodium), yet a conflicting version is present: 0.6.13+mc1.21.1!";
+        let d = diagnose(log).unwrap();
+        assert!(d.detail.contains("update sodium to 0.8.12"), "{}", d.detail);
+    }
+
+    #[test]
+    fn a_game_that_wrote_nothing_is_called_out() {
+        let banner = "──── Launching Fabric 1.21 (1.21) as Steve ────\n";
+        assert!(
+            silent_exit(banner, 1)
+                .unwrap()
+                .detail
+                .contains("exit code 1")
+        );
+        assert!(silent_exit("[12:00:00] [main/INFO] Loading Minecraft", 1).is_none());
     }
 
     #[test]
