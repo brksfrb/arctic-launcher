@@ -121,6 +121,11 @@ def renames = [
 		['MC < 1.15', 'keyShift', 'keySneak'],
 		['MC < 1.15', 'shiftKeyDown', 'sneakKeyDown'],
 		['MC < 1.15', 'isShiftKeyDown', 'isSneaking'],
+		// 1.13: one widget class (Legacy Yarn's ButtonWidget) where 1.14 has AbstractWidget and Button.
+		['MC < 1.14', 'net.minecraft.client.gui.components.AbstractWidget', 'net.minecraft.client.gui.widget.ButtonWidget'],
+		['MC < 1.14', 'net.minecraft.client.gui.components.Button', 'net.minecraft.client.gui.widget.ButtonWidget'],
+		['MC < 1.14', 'AbstractWidget', 'ButtonWidget'],
+		['MC < 1.14', 'Button', 'ButtonWidget'],
 		['MC < 1.15', 'setShiftKeyDown', 'setSneaking'],
 ]
 
@@ -238,8 +243,9 @@ processResources {
 			loader_min: loaderMin,
 			// Zoom, Freelook, Fullbright and the rest (see Compat.FEATURES): 1.20+ for now.
 			features: true,
-			// Minecraft's own buttons, sliders, checkboxes and text boxes in the Arctic style.
-			restyleWidgets: true,
+			// Minecraft's own buttons, sliders, checkboxes and text boxes in the Arctic style (1.13: Widgets13).
+			restyleWidgets: atLeast('1.14'),
+			widgets13: !atLeast('1.14'),
 			// Menus' backdrop: Screen's panorama from 1.20.6, its dirt background before (ScreenMixin).
 			panoramaHook: true,
 			// Before 26.1 zoom's FOV multiplier is applied on GameRenderer, not Camera.

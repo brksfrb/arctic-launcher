@@ -1,3 +1,4 @@
+//#if MC >= 1.14
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.mod.DisconnectConfirm;
@@ -17,3 +18,4 @@ abstract class ButtonMixin {
 		}
 	}
 }
+//#endif

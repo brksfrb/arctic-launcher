@@ -883,7 +883,6 @@ c	net/minecraft/class_1114	net/minecraft/world/item/crafting/Recipe
 	m	()Z	method_14251	isSpecial
 	m	()Lnet/minecraft/class_3114;	method_14252	getIngredients
 	m	()Ljava/lang/String;	method_14253	getGroup
-	m	(Lnet/minecraft/class_849;)Lnet/minecraft/class_3114;	method_16203	getRemainingItems
 	m	()Lnet/minecraft/class_1071;	method_3501	getOutput
 c	net/minecraft/class_1115	net/minecraft/world/item/crafting/ShapedRecipe
 	f	Lnet/minecraft/class_3114;	field_15686	recipeItems
@@ -1191,9 +1190,10 @@ c	net/minecraft/class_1150	net/minecraft/world/level/Level
 	f	[I	field_4531	updateLightBlocks
 	f	Z	field_4532	isClientSide
 	f	Z	field_4533	updatingBlockEntities
+	f	Ljava/util/List;	field_4536	blockEntityList
 	f	Ljava/util/List;	field_4537	blockEntitiesToUnload
 	f	J	field_4538	cloudColor
-	f	Ljava/util/List;	field_4541	blockEntityList
+	f	Ljava/util/List;	field_4541	loadedEntities
 	f	Ljava/util/List;	field_4542	unloadedEntities
 	f	Ljava/util/List;	field_4543	tickableBlockEntities
 	f	Ljava/util/List;	field_4544	playerEntities
@@ -1436,7 +1436,6 @@ c	net/minecraft/class_1161	net/minecraft/world/level/LightLayer
 	f	Lnet/minecraft/class_1161;	field_9220	BLOCK
 c	net/minecraft/class_1162	net/minecraft/world/level/NaturalSpawner
 	f	Lorg/apache/logging/log4j/Logger;	field_17508	LOGGER
-	m	(Lnet/minecraft/class_2613$class_3464;Lnet/minecraft/class_3599;Lnet/minecraft/class_2552;Lnet/minecraft/class_3460;)Z	method_16404	isSpawnPositionOk
 	m	(Lnet/minecraft/class_3598;Lnet/minecraft/class_1170;IILjava/util/Random;)V	method_16406	spawnMobsForChunkGeneration
 	m	(Lnet/minecraft/class_795;ZZZ)I	method_3796	tickSpawners
 	m	(Lnet/minecraft/class_1150;II)Lnet/minecraft/class_2552;	method_3799	findSpawnLocation
@@ -1501,11 +1500,10 @@ c	net/minecraft/class_1170	net/minecraft/world/level/biome/Biome
 	f	Lnet/minecraft/class_4000;	field_17566	surfaceBuilder
 	f	Lnet/minecraft/class_1170$class_3609;	field_17567	biomeCategory
 	f	Lnet/minecraft/class_1170$class_3610;	field_17568	precipitation
-	f	Ljava/util/Map;	field_17569	spawners
-	f	Ljava/util/Map;	field_17570	validFeatureStarts
+	f	Ljava/util/Map;	field_17569	carvers
 	f	Ljava/util/List;	field_17571	flowerFeatures
-	f	Ljava/util/Map;	field_17572	features
-	f	Ljava/util/Map;	field_17573	carvers
+	f	Ljava/util/Map;	field_17572	validFeatureStarts
+	f	Ljava/util/Map;	field_17573	spawners
 	f	F	field_4620	downfall
 	f	F	field_4621	temperature
 	f	F	field_4622	scale
@@ -1528,15 +1526,12 @@ c	net/minecraft/class_1170	net/minecraft/world/level/biome/Biome
 	m	(Lnet/minecraft/class_3599;Lnet/minecraft/class_2552;Z)Z	method_16427	shouldFreeze
 	m	(Lnet/minecraft/class_3801$class_3802;)Ljava/util/List;	method_16428	getCarvers
 	m	(Lnet/minecraft/class_3801$class_3802;Lnet/minecraft/class_3973;)V	method_16429	addCarver
-	m	(Lnet/minecraft/class_3801$class_3803;)Ljava/util/List;	method_16430	getFeaturesForStep
 	m	(Lnet/minecraft/class_3801$class_3803;Lnet/minecraft/class_2744;Lnet/minecraft/class_3598;JLnet/minecraft/class_3812;Lnet/minecraft/class_2552;)V	method_16431	generate
-	m	(Lnet/minecraft/class_3801$class_3803;Lnet/minecraft/class_3821;)V	method_16432	addFeature
 	m	(Lnet/minecraft/class_3902;)Z	method_16435	isValidStart
 	m	(Lnet/minecraft/class_3902;Lnet/minecraft/class_3845;)V	method_16436	addStructureStart
 	m	(Ljava/util/Random;Lnet/minecraft/class_3781;IIIDLnet/minecraft/class_2232;Lnet/minecraft/class_2232;IJ)V	method_16438	buildSurfaceAt
 	m	(Lnet/minecraft/class_3599;Lnet/minecraft/class_2552;)Z	method_16439	shouldSnow
 	m	(Lnet/minecraft/class_3801$class_3802;)Ljava/util/List;	method_16440	lambda$addCarver$2
-	m	(Lnet/minecraft/class_3902;)Lnet/minecraft/class_3845;	method_16441	getStructureConfiguration
 	m	()Lnet/minecraft/class_1170$class_3610;	method_16442	getPrecipitation
 	m	(Lnet/minecraft/class_3801$class_3802;)Ljava/util/List;	method_16443	lambda$getCarvers$3
 	m	()Ljava/util/List;	method_16444	getFlowerFeatures
@@ -1557,7 +1552,6 @@ c	net/minecraft/class_1170	net/minecraft/world/level/biome/Biome
 	m	(Lnet/minecraft/class_2552;)I	method_8591	getGrassColor
 	m	(Lnet/minecraft/class_2552;)I	method_8592	getFoliageColor
 c	net/minecraft/class_1170$class_1171	net/minecraft/world/level/biome/Biome$SpawnerData
-	f	Lnet/minecraft/class_3460;	field_17657	type
 	f	I	field_4663	minCount
 	f	I	field_4664	maxCount
 c	net/minecraft/class_1170$class_1743	net/minecraft/world/level/biome/Biome$BiomeTempCategory
@@ -1579,10 +1573,9 @@ c	net/minecraft/class_1170$class_3608	net/minecraft/world/level/biome/Biome$Biom
 	f	Ljava/lang/String;	field_17634	parent
 	m	(F)Lnet/minecraft/class_1170$class_3608;	method_16452	downfall
 	m	(I)Lnet/minecraft/class_1170$class_3608;	method_16453	waterFogColor
-	m	(Lnet/minecraft/class_1170$class_3608;)Lnet/minecraft/class_4000;	method_16454	access$000
 	m	(Lnet/minecraft/class_1170$class_3609;)Lnet/minecraft/class_1170$class_3608;	method_16455	biomeCategory
 	m	(Lnet/minecraft/class_1170$class_3610;)Lnet/minecraft/class_1170$class_3608;	method_16456	precipitation
-	m	(Lnet/minecraft/class_4000;)Lnet/minecraft/class_1170$class_3608;	method_16457	surfaceBuilder
+	m	(Lnet/minecraft/class_4000;)Lnet/minecraft/class_1170$class_3608;	method_16457	setSurfaceBuilder
 	m	(Ljava/lang/String;)Lnet/minecraft/class_1170$class_3608;	method_16458	parent
 	m	(F)Lnet/minecraft/class_1170$class_3608;	method_16459	depth
 	m	(I)Lnet/minecraft/class_1170$class_3608;	method_16460	waterColor
@@ -1693,8 +1686,8 @@ c	net/minecraft/class_1196	net/minecraft/world/level/chunk/LevelChunk
 	f	Ljava/util/Map;	field_18891	structureStarts
 	f	Ljava/util/Map;	field_18892	structuresRefences
 	f	[Lit/unimi/dsi/fastutil/shorts/ShortList;	field_18893	postProcessing
-	f	Lnet/minecraft/class_3604;	field_18894	liquidTicks
-	f	Lnet/minecraft/class_3604;	field_18895	blockTicks
+	f	Lnet/minecraft/class_3604;	field_18894	blockTicks
+	f	Lnet/minecraft/class_3604;	field_18895	liquidTicks
 	f	[Z	field_4726	columnSkyLightOutdated
 	f	Z	field_4727	loaded
 	f	Lnet/minecraft/class_1150;	field_4728	level
@@ -1721,9 +1714,9 @@ c	net/minecraft/class_1196	net/minecraft/world/level/chunk/LevelChunk
 	m	(Lnet/minecraft/class_3804$class_3805;[J)V	method_17073	setHeightmap
 	m	(Lnet/minecraft/class_2552;Lnet/minecraft/class_322;)Lnet/minecraft/class_226;	method_17074	promotePendingBlockEntity
 	m	(Ljava/lang/Class;Lnet/minecraft/class_231;Ljava/util/List;Ljava/util/function/Predicate;)V	method_17075	getEntitiesOfClass
-	m	(Ljava/util/Map;)V	method_17076	setAllReferences
+	m	(Ljava/util/Map;)V	method_17076	setAllStarts
 	m	(III)Lnet/minecraft/class_4024;	method_17078	getFluidState
-	m	(Ljava/util/Map;)V	method_17080	setAllStarts
+	m	(Ljava/util/Map;)V	method_17080	setAllReferences
 	m	(Lnet/minecraft/class_3804$class_3805;)Lnet/minecraft/class_3804;	method_17082	lambda$getOrCreateHeightmapUnprimed$1
 	m	(Ljava/lang/String;)Lit/unimi/dsi/fastutil/longs/LongSet;	method_17084	lambda$getReferencesForFeature$7
 	m	(III)Ljava/lang/String;	method_17085	lambda$getBlockState$2
@@ -1760,7 +1753,7 @@ c	net/minecraft/class_1196	net/minecraft/world/level/chunk/LevelChunk
 	m	(Lnet/minecraft/class_2552;)Lnet/minecraft/class_226;	method_9157	createBlockEntity
 	m	()Z	method_9158	isLightCorrect
 	m	()Lnet/minecraft/class_1150;	method_9159	getLevel
-	m	()Ljava/util/Map;	method_9161	getAllStarts
+	m	()Ljava/util/Map;	method_9161	getBlockEntities
 	m	()[Lnet/minecraft/class_2600;	method_9162	getEntitySections
 	m	()I	method_9165	getMinimumHeightMap
 	m	()J	method_9166	getInhabitedTime
@@ -2081,8 +2074,8 @@ c	net/minecraft/class_1261$class_1265	net/minecraft/world/level/levelgen/structu
 	m	(Ljava/util/List;Ljava/util/Random;IIILnet/minecraft/class_1354;I)Lnet/minecraft/class_1261$class_1265;	method_4062	create
 c	net/minecraft/class_1261$class_1266	net/minecraft/world/level/levelgen/structure/NetherBridgePieces$CastleCorridorTBalconyPiece
 	m	(Ljava/util/List;Ljava/util/Random;IIILnet/minecraft/class_1354;I)Lnet/minecraft/class_1261$class_1266;	method_4063	create
-c	net/minecraft/class_1261$class_1267	net/minecraft/structure/NetherFortressPieces$CorridorExit
-	m	(Ljava/util/List;Ljava/util/Random;IIILnet/minecraft/class_1354;I)Lnet/minecraft/class_1261$class_1267;	method_4064	create
+c	net/minecraft/class_1261$class_1267	net/minecraft/world/level/levelgen/structure/NetherBridgePieces$CastleEntrance
+	m	(Ljava/util/List;Ljava/util/Random;IIILnet/minecraft/class_1354;I)Lnet/minecraft/class_1261$class_1267;	method_4064	createPiece
 c	net/minecraft/class_1261$class_1268	net/minecraft/structure/NetherFortressPieces$CorridorCrossing
 	m	(Ljava/util/List;Ljava/util/Random;IIILnet/minecraft/class_1354;I)Lnet/minecraft/class_1261$class_1268;	method_4065	create
 c	net/minecraft/class_1261$class_1269	net/minecraft/structure/NetherFortressPieces$CorridorLeftTurn
@@ -2576,7 +2569,6 @@ c	net/minecraft/class_1358	net/minecraft/client/renderer/blockentity/BeaconRende
 	m	(DDDDDJII[FDD)V	method_12407	renderBeaconBeam
 	m	(Lnet/minecraft/class_1308;)Z	method_12409	shouldRenderOffScreen
 c	net/minecraft/class_1359	net/minecraft/client/renderer/blockentity/SkullBlockRenderer
-	f	Ljava/util/Map;	field_20865	MODEL_BY_TYPE
 	f	Ljava/util/Map;	field_20866	SKIN_BY_TYPE
 	f	Lnet/minecraft/class_1359;	field_5224	instance
 	m	(FFFLnet/minecraft/class_1354;FLnet/minecraft/class_1305$class_3722;Lcom/mojang/authlib/GameProfile;IF)V	method_10108	renderSkull
@@ -2600,24 +2592,24 @@ c	net/minecraft/class_1365	net/minecraft/util/math/PositionImpl
 	f	D	field_5256	z
 c	net/minecraft/class_1366	net/minecraft/core/Registry
 	f	Lorg/apache/logging/log4j/Logger;	field_21317	LOGGER
-	f	Lnet/minecraft/class_1366;	field_21318	SOUND_EVENT
-	f	Lnet/minecraft/class_1366;	field_21319	MOB_EFFECT
-	f	Lnet/minecraft/class_1366;	field_21320	ENCHANTMENT
-	f	Lnet/minecraft/class_1366;	field_21321	SURFACE_BUILDER
-	f	Lnet/minecraft/class_1366;	field_21322	CARVER
-	f	Lnet/minecraft/class_1366;	field_21323	FEATURE
-	f	Lnet/minecraft/class_1366;	field_21324	BIOME
-	f	Lnet/minecraft/class_1366;	field_21325	BIOME_SOURCE_TYPE
-	f	Lnet/minecraft/class_1366;	field_21326	CHUNK_GENERATOR_TYPE
-	f	Lnet/minecraft/class_1366;	field_21327	CUSTOM_STAT
-	f	Lnet/minecraft/class_1366;	field_21328	STRUCTURE_FEATURE
+	f	Lnet/minecraft/class_1366;	field_21318	CARVER
+	f	Lnet/minecraft/class_1366;	field_21319	BLOCK
+	f	Lnet/minecraft/class_1366;	field_21320	FLUID
+	f	Lnet/minecraft/class_1366;	field_21321	ACTIVITY
+	f	Lnet/minecraft/class_1366;	field_21322	RULE_TEST
+	f	Lnet/minecraft/class_1366;	field_21323	DIMENSION_TYPE
+	f	Lnet/minecraft/class_1366;	field_21324	CUSTOM_STAT
+	f	Lnet/minecraft/class_1366;	field_21325	BIOME
+	f	Lnet/minecraft/class_1366;	field_21326	BIOME_SOURCE_TYPE
+	f	Lnet/minecraft/class_1366;	field_21327	BLOCK_ENTITY_TYPE
+	f	Lnet/minecraft/class_1366;	field_21328	CHUNK_GENERATOR_TYPE
 	f	Lnet/minecraft/class_1366;	field_21329	STRUCTURE_PIECE
-	f	Lnet/minecraft/class_1366;	field_21330	STRUCTURE_PROCESSOR
-	f	Lnet/minecraft/class_1366;	field_21331	MENU
-	f	Lnet/minecraft/class_1366;	field_21332	STAT_TYPE
-	f	Lnet/minecraft/class_1366;	field_21333	RECIPE_SERIALIZER
-	f	Lnet/minecraft/class_1366;	field_21334	ACTIVITY
-	f	Lnet/minecraft/class_1366;	field_21335	SCHEDULE
+	f	Lnet/minecraft/class_1366;	field_21330	MENU
+	f	Lnet/minecraft/class_1366;	field_21331	STRUCTURE_POOL_ELEMENT
+	f	Lnet/minecraft/class_1366;	field_21332	STRUCTURE_PROCESSOR
+	f	Lnet/minecraft/class_1366;	field_21333	PARTICLE_TYPE
+	f	Lnet/minecraft/class_1366;	field_21334	SCHEDULE
+	f	Lnet/minecraft/class_1366;	field_21335	STAT_TYPE
 	m	(Ljava/lang/Object;)I	method_12580	getRawId
 	m	()Ljava/util/Set;	method_12583	getKeySet
 	m	(Ljava/util/Random;)Ljava/lang/Object;	method_12584	getRandom
@@ -2757,7 +2749,6 @@ c	net/minecraft/class_1410	net/minecraft/world/entity/boss/wither/WitherBoss
 	f	Lnet/minecraft/class_2921;	field_14721	DATA_ID_INV
 	f	Lnet/minecraft/class_2921;	field_14722	DATA_TARGET_C
 	f	Ljava/util/List;	field_16983	DATA_TARGETS
-	f	Ljava/util/function/Predicate;	field_16984	LIVING_ENTITY_SELECTOR
 	f	[F	field_5372	yRotOHeads
 	f	[F	field_5373	yRotHeads
 	f	[F	field_5374	xRotOHeads
@@ -2791,7 +2782,7 @@ c	net/minecraft/class_1414	net/minecraft/world/entity/monster/Witch
 	m	(Z)V	method_4556	setUsingItem
 c	net/minecraft/class_1415	net/minecraft/world/entity/projectile/FireworkRocketEntity
 	f	Lnet/minecraft/class_2921;	field_14806	DATA_ID_FIREWORKS_ITEM
-	f	Lnet/minecraft/class_2921;	field_15092	DATA_ATTACHED_TO_TARGET
+	f	Lnet/minecraft/class_2921;	field_15092	SHOOTER_ENTITY_ID
 	f	Lnet/minecraft/class_1699;	field_15093	attachedToEntity
 	f	I	field_5401	life
 	f	I	field_5402	lifetime
@@ -3735,7 +3726,7 @@ c	net/minecraft/class_1600	net/minecraft/client/Minecraft
 	f	Lnet/minecraft/class_1666;	field_6278	languageManager
 	f	Lorg/apache/logging/log4j/Logger;	field_7617	LOGGER
 	f	Lnet/minecraft/class_1885;	field_7619	skinManager
-	f	Ljava/util/Queue;	field_7620	progressTasks
+	f	Ljava/util/Queue;	field_7620	tasks
 	f	Ljava/lang/Thread;	field_7621	gameThread
 	f	Z	field_7622	demo
 	f	Lnet/minecraft/class_1862;	field_7624	mainRenderTarget
@@ -3899,7 +3890,7 @@ c	net/minecraft/class_1634	net/minecraft/client/renderer/entity/LeashKnotRendere
 c	net/minecraft/class_1635	net/minecraft/client/renderer/entity/LivingEntityRenderer
 	f	Lnet/minecraft/class_1636;	field_11121	WHITE_TEXTURE
 	f	Ljava/nio/FloatBuffer;	field_11122	tintBuffer
-	f	Ljava/util/List;	field_11123	layers
+	f	Ljava/util/List;	field_11123	features
 	f	Z	field_11124	onlySolidLayers
 	f	Lnet/minecraft/class_444;	field_6503	model
 	f	Lorg/apache/logging/log4j/Logger;	field_8009	LOGGER
@@ -4075,7 +4066,7 @@ c	net/minecraft/class_1653	net/minecraft/resources/ResourceLocation
 	m	(Ljava/lang/String;C)[Ljava/lang/String;	method_20446	decompose
 	m	()Ljava/lang/String;	method_5890	getNamespace
 	m	()Ljava/lang/String;	method_5891	getPath
-c	net/minecraft/class_1653$class_3346	net/minecraft/resources/ResourceLocation$Serializer
+c	net/minecraft/class_1653$class_3346	net/minecraft/util/Identifier$class_3346
 	m	(Lcom/google/gson/JsonElement;Ljava/lang/reflect/Type;Lcom/google/gson/JsonDeserializationContext;)Lnet/minecraft/class_1653;	method_14915	deserialize
 	m	(Lnet/minecraft/class_1653;Ljava/lang/reflect/Type;Lcom/google/gson/JsonSerializationContext;)Lcom/google/gson/JsonElement;	method_14916	serialize
 c	net/minecraft/class_1654	net/minecraft/resource/ResourceManager
@@ -4216,16 +4207,16 @@ c	net/minecraft/class_1698	net/minecraft/world/entity/decoration/LeashFenceKnotE
 c	net/minecraft/class_1699	net/minecraft/world/entity/LivingEntity
 	f	Ljava/util/Map;	field_11913	activeEffects
 	f	I	field_14542	invulnerableDuration
-	f	Lnet/minecraft/class_2921;	field_14543	DATA_HEALTH_ID
+	f	Lnet/minecraft/class_2921;	field_14543	DATA_LIVING_ENTITY_FLAGS
 	f	Lnet/minecraft/class_2961;	field_14544	swingingArm
 	f	Lnet/minecraft/class_2552;	field_14545	lastPos
 	f	Lnet/minecraft/class_1071;	field_14546	useItem
 	f	I	field_14547	fallFlyTicks
 	f	I	field_14548	useItemRemaining
-	f	Lnet/minecraft/class_2921;	field_14550	DATA_EFFECT_COLOR_ID
-	f	Lnet/minecraft/class_2921;	field_14551	DATA_EFFECT_AMBIENCE_ID
-	f	Lnet/minecraft/class_2921;	field_14552	DATA_ARROW_COUNT_ID
-	f	Lnet/minecraft/class_2921;	field_14553	SLEEPING_POS_ID
+	f	Lnet/minecraft/class_2921;	field_14550	DATA_HEALTH_ID
+	f	Lnet/minecraft/class_2921;	field_14551	DATA_EFFECT_COLOR_ID
+	f	Lnet/minecraft/class_2921;	field_14552	DATA_EFFECT_AMBIENCE_ID
+	f	Lnet/minecraft/class_2921;	field_14553	DATA_ARROW_COUNT_ID
 	f	Lnet/minecraft/class_856;	field_15029	lastDamageSource
 	f	J	field_15030	lastDamageStamp
 	f	Lorg/apache/logging/log4j/Logger;	field_15464	LOGGER
@@ -4482,7 +4473,6 @@ c	net/minecraft/class_1706	net/minecraft/world/entity/ai/attributes/BaseAttribut
 c	net/minecraft/class_1707	net/minecraft/world/entity/ai/attributes/ModifiableAttributeInstance
 	f	Lnet/minecraft/class_1706;	field_6822	attributeMap
 	f	Lnet/minecraft/class_1702;	field_6823	attribute
-	f	Ljava/util/Map;	field_6824	modifiers
 	f	Ljava/util/Map;	field_6825	modifiersByName
 	f	Ljava/util/Map;	field_6826	modifierById
 	f	D	field_6827	baseValue
@@ -5609,8 +5599,7 @@ c	net/minecraft/class_1770	net/minecraft/world/gen/feature/BlockFeature
 c	net/minecraft/class_1771	net/minecraft/world/gen/feature/DoublePlantFeature
 c	net/minecraft/class_1772	net/minecraft/world/gen/feature/IceDiskFeature
 	f	Lnet/minecraft/class_197;	field_7527	iceBlock
-c	net/minecraft/class_1773	net/minecraft/world/level/levelgen/feature/IceSpikeFeature
-	m	(Lnet/minecraft/class_3598;Lnet/minecraft/class_2744;Ljava/util/Random;Lnet/minecraft/class_2552;Lnet/minecraft/class_3871;)Z	method_17361	place
+c	net/minecraft/class_1773	net/minecraft/world/gen/feature/IceSpikeFeature
 c	net/minecraft/class_1774	net/minecraft/world/gen/feature/GiantJungleTreeFeature
 c	net/minecraft/class_1775	net/minecraft/world/gen/feature/GiantSpruceTreeFeature
 	f	Lnet/minecraft/class_2232;	field_10154	SPRUCE_LOGS
@@ -5726,7 +5715,7 @@ c	net/minecraft/class_1809	net/minecraft/realms/RealmsScreenProxy
 	m	(Ljava/lang/String;)I	method_6730	fontWidth
 	m	(Ljava/lang/String;III)V	method_6731	fontDrawShadow
 	m	()I	method_6732	getFontHeight
-	m	()Ljava/util/List;	method_6734	buttons
+	m	()Ljava/util/List;	method_6734	getButtons
 	m	(Ljava/lang/String;IIIZ)V	method_9544	drawString
 c	net/minecraft/class_1810	net/minecraft/realms/RealmsScrolledSelectionListProxy
 	f	Lnet/minecraft/realms/RealmsScrolledSelectionList;	field_7749	realmsScrolledSelectionList
@@ -6299,9 +6288,7 @@ c	net/minecraft/class_1942	net/minecraft/core/IdMapper
 	m	(Ljava/lang/Object;I)V	method_7323	addMapping
 	m	(Ljava/lang/Object;)I	method_7325	getId
 c	net/minecraft/class_1943	net/minecraft/core/MappedRegistry
-	f	Lnet/minecraft/class_2929;	field_13718	map
 	f	Lorg/apache/logging/log4j/Logger;	field_21312	LOGGER
-	f	Lcom/google/common/collect/BiMap;	field_21313	storage
 	f	[Ljava/lang/Object;	field_21314	randomCache
 	f	I	field_21315	nextId
 c	net/minecraft/class_1944	net/minecraft/nbt/NbtAccounter
@@ -8787,14 +8774,14 @@ c	net/minecraft/class_2252	net/minecraft/world/level/chunk/ProtoChunk
 	m	(Lnet/minecraft/class_197;)Z	method_17110	lambda$new$0
 	m	(Lnet/minecraft/class_3801$class_3802;Ljava/util/BitSet;)V	method_17111	setCarvingMask
 	m	(Lnet/minecraft/class_3804$class_3805;[J)V	method_17112	setHeightmap
-	m	(Ljava/util/Map;)V	method_17114	setAllReferences
+	m	(Ljava/util/Map;)V	method_17114	setAllStarts
 	m	(SI)V	method_17115	addLight
 	m	(SILnet/minecraft/class_1146;)Lnet/minecraft/class_2552;	method_17116	unpackOffsetCoordinates
 	m	(Z)V	method_17117	setUnsaved
 	m	(J)V	method_17121	setInhabitedTime
 	m	(Lnet/minecraft/class_3801$class_3802;)Ljava/util/BitSet;	method_17122	lambda$getCarvingMask$5
 	m	(Lnet/minecraft/class_322;)V	method_17124	addEntity
-	m	(Ljava/util/Map;)V	method_17125	setAllStarts
+	m	(Ljava/util/Map;)V	method_17125	setAllReferences
 	m	(SI)V	method_17126	addPackedPostProcess
 	m	(Lnet/minecraft/class_3804$class_3805;)Lnet/minecraft/class_3804;	method_17128	getOrCreateHeightmapUnprimed
 	m	(Lnet/minecraft/class_3804$class_3805;)Lnet/minecraft/class_3804;	method_17130	lambda$getOrCreateHeightmapUnprimed$2
@@ -8805,7 +8792,6 @@ c	net/minecraft/class_2252	net/minecraft/world/level/chunk/ProtoChunk
 	m	(Lnet/minecraft/class_2552;)S	method_17135	packOffsetCoordinates
 	m	()J	method_17136	getInhabitedTime
 	m	()Lnet/minecraft/class_3789;	method_17137	getLiquidTicks
-	m	()Lnet/minecraft/class_3789;	method_17138	getBlockTicks
 	m	()[Lit/unimi/dsi/fastutil/shorts/ShortList;	method_17139	getPackedLights
 	m	()Ljava/util/Set;	method_17140	getBlockEntitiesPos
 	m	()Ljava/util/Map;	method_17141	getBlockEntities
@@ -8904,9 +8890,9 @@ c	net/minecraft/class_2261$class_2279	net/minecraft/world/level/levelgen/structu
 	m	(Lnet/minecraft/class_3598;Lnet/minecraft/class_1251;IIZ)V	method_9256	generateDefaultFloor
 	m	(Lnet/minecraft/class_1251;IIII)Z	method_9257	chunkIntersects
 	m	(III)I	method_9258	getRoomIndex
-c	net/minecraft/class_2261$class_2280	net/minecraft/structure/OceanMonumentPieces$SimpleRoom
-	f	I	field_10209	roomType
-c	net/minecraft/class_2261$class_2281	net/minecraft/world/level/levelgen/structure/OceanMonumentPieces$OceanMonumentSimpleTopRoom
+c	net/minecraft/class_2261$class_2280	net/minecraft/world/level/levelgen/structure/OceanMonumentPieces$OceanMonumentSimpleRoom
+	f	I	field_10209	mainDesign
+c	net/minecraft/class_2261$class_2281	net/minecraft/structure/OceanMonumentPieces$SimpleTopRoom
 c	net/minecraft/class_2261$class_2282	net/minecraft/structure/OceanMonumentPieces$WingRoom
 c	net/minecraft/class_2261$class_2283	net/minecraft/world/level/levelgen/structure/OceanMonumentPieces$RoomDefinition
 	f	I	field_10216	scanIndex
@@ -9821,7 +9807,6 @@ c	net/minecraft/class_2431	net/minecraft/client/renderer/block/LiquidBlockRender
 	m	()V	method_9955	setupSprites
 c	net/minecraft/class_2432	net/minecraft/client/renderer/block/ModelBlockRenderer
 	f	Lnet/minecraft/class_2836;	field_13551	blockColors
-	f	Ljava/lang/ThreadLocal;	field_20773	CACHE
 	m	(Lnet/minecraft/class_3600;Lnet/minecraft/class_2232;Lnet/minecraft/class_2552;Lnet/minecraft/class_520;Ljava/util/List;[FLjava/util/BitSet;Lnet/minecraft/class_2432$class_2434;)V	method_12348	renderModelFaceAO
 	m	(Lnet/minecraft/class_3600;Lnet/minecraft/class_2232;Lnet/minecraft/class_2552;IZLnet/minecraft/class_520;Ljava/util/List;Ljava/util/BitSet;)V	method_19196	renderModelFaceFlat
 	m	(Lnet/minecraft/class_3600;Lnet/minecraft/class_2528;Lnet/minecraft/class_2232;Lnet/minecraft/class_2552;Lnet/minecraft/class_520;ZLjava/util/Random;J)Z	method_19197	tesselateBlock
@@ -10142,18 +10127,13 @@ c	net/minecraft/class_2476	net/minecraft/client/renderer/chunk/ChunkRenderDispat
 	m	(Lnet/minecraft/class_2481;)Z	method_10133	resortChunkTransparencyAsync
 	m	()Lnet/minecraft/class_2473;	method_10134	takeChunk
 	m	()V	method_10135	clearBatchQueue
-	m	(Lnet/minecraft/class_2165;Lnet/minecraft/class_520;Lnet/minecraft/class_2481;Lnet/minecraft/class_2478;D)Lcom/google/common/util/concurrent/ListenableFuture;	method_12419	uploadChunkLayer
 	m	()Z	method_12420	isQueueEmpty
 	m	()V	method_12421	dispose
 	m	(Lnet/minecraft/class_2473;)V	method_19339	lambda$resortChunkTransparencyAsync$1
 	m	(Lnet/minecraft/class_2165;Lnet/minecraft/class_520;Lnet/minecraft/class_2481;Lnet/minecraft/class_2478;D)V	method_19340	lambda$uploadChunkLayer$2
 	m	(Lnet/minecraft/class_2473;)V	method_19341	lambda$rebuildChunkAsync$0
-c	net/minecraft/class_2476$class_2889	net/minecraft/client/renderer/chunk/ChunkRenderDispatcher$PendingUpload
-	f	Lnet/minecraft/class_2476;	field_13611	this$0
-	f	Lcom/google/common/util/concurrent/ListenableFutureTask;	field_13612	future
-	f	D	field_13613	dist
+c	net/minecraft/class_2476$class_2889	net/minecraft/client/render/chunk/ChunkBuilder$class_2889
 	m	(Lnet/minecraft/class_2476$class_2889;)I	method_12423	compareTo
-	m	(Lnet/minecraft/class_2476$class_2889;)Lcom/google/common/util/concurrent/ListenableFutureTask;	method_12424	access$000
 c	net/minecraft/class_2477	net/minecraft/client/renderer/chunk/ChunkRenderWorker
 	f	Lorg/apache/logging/log4j/Logger;	field_11053	LOGGER
 	f	Lnet/minecraft/class_2476;	field_11054	dispatcher
@@ -10312,7 +10292,7 @@ c	net/minecraft/class_2494	net/minecraft/client/renderer/entity/layers/AbstractA
 	m	(Lnet/minecraft/class_1028;Z)Lnet/minecraft/class_1653;	method_10281	getArmorLocation
 	m	(Lnet/minecraft/class_1028;ZLjava/lang/String;)Lnet/minecraft/class_1653;	method_10282	getArmorLocation
 	m	(Lnet/minecraft/class_2968;)Z	method_12481	usesInnerModel
-c	net/minecraft/class_2495	net/minecraft/client/renderer/entity/layers/ArrowLayer
+c	net/minecraft/class_2495	net/minecraft/client/render/entity/feature/StuckArrowsFeatureRenderer
 	f	Lnet/minecraft/class_1635;	field_11153	entityRenderer
 c	net/minecraft/class_2496	net/minecraft/client/render/entity/feature/CapeFeatureRenderer
 	f	Lnet/minecraft/class_570;	field_11154	playerRenderer
@@ -10534,7 +10514,6 @@ c	net/minecraft/class_2532	net/minecraft/client/resources/model/ModelManager
 	f	Lnet/minecraft/class_1533;	field_11321	terrainAtlas
 	f	Lnet/minecraft/class_2429;	field_11322	blockModelShaper
 	f	Lnet/minecraft/class_2528;	field_11323	bakedModel
-	f	Ljava/util/Map;	field_21090	bakedRegistry
 	m	()Lnet/minecraft/class_2528;	method_10413	getBakedModel
 	m	()Lnet/minecraft/class_2429;	method_10416	getBlockModelShaper
 c	net/minecraft/class_2534	net/minecraft/client/resources/model/SimpleBakedModel
@@ -10649,13 +10628,13 @@ c	net/minecraft/class_2552	net/minecraft/core/BlockPos
 	m	(DDD)Lnet/minecraft/class_2552;	method_10486	offset
 	m	(III)Lnet/minecraft/class_2552;	method_10487	offset
 	m	(J)Lnet/minecraft/class_2552;	method_10488	fromLong
-	m	(Lnet/minecraft/class_2552;Lnet/minecraft/class_2552;)Ljava/lang/Iterable;	method_10489	iterate
+	m	(Lnet/minecraft/class_2552;Lnet/minecraft/class_2552;)Ljava/lang/Iterable;	method_10489	betweenClosed
 	m	(Lnet/minecraft/class_1354;)Lnet/minecraft/class_2552;	method_10490	relative
 	m	(Lnet/minecraft/class_1354;I)Lnet/minecraft/class_2552;	method_10491	relative
 	m	(Lnet/minecraft/class_1167;)Lnet/minecraft/class_2552;	method_10492	offset
 	m	()Lnet/minecraft/class_2552;	method_10493	west
 	m	(I)Lnet/minecraft/class_2552;	method_10494	east
-	m	(Lnet/minecraft/class_2552;Lnet/minecraft/class_2552;)Ljava/lang/Iterable;	method_10495	betweenClosed
+	m	(Lnet/minecraft/class_2552;Lnet/minecraft/class_2552;)Ljava/lang/Iterable;	method_10495	mutableIterate
 	m	(Lnet/minecraft/class_1167;)Lnet/minecraft/class_2552;	method_10496	subtract
 	m	()Lnet/minecraft/class_2552;	method_10497	south
 	m	(I)Lnet/minecraft/class_2552;	method_10498	west
@@ -10669,9 +10648,9 @@ c	net/minecraft/class_2552	net/minecraft/core/BlockPos
 	m	()J	method_10506	asLong
 	m	(I)Lnet/minecraft/class_2552;	method_10507	north
 	m	()Lnet/minecraft/class_2552;	method_12558	immutable
-	m	(IIIIII)Ljava/lang/Iterable;	method_13893	iterate
+	m	(IIIIII)Ljava/lang/Iterable;	method_13893	betweenClosed
 	m	(Lnet/minecraft/class_2734;)Lnet/minecraft/class_2552;	method_13894	rotate
-	m	(IIIIII)Ljava/lang/Iterable;	method_13895	betweenClosed
+	m	(IIIIII)Ljava/lang/Iterable;	method_13895	mutableIterate
 	m	(IIIIII)Ljava/util/Iterator;	method_19930	lambda$betweenClosed$3
 c	net/minecraft/class_2552$1	net/minecraft/util/math/BlockPos$1
 	m	()Lnet/minecraft/class_2552;	method_19932	computeNext
@@ -12039,13 +12018,12 @@ c	net/minecraft/class_2793	net/minecraft/world/level/storage/loot/functions/Ench
 c	net/minecraft/class_2793$class_2794	net/minecraft/world/level/storage/loot/functions/EnchantWithLevelsFunction$Serializer
 	m	(Lcom/google/gson/JsonObject;Lnet/minecraft/class_2793;Lcom/google/gson/JsonSerializationContext;)V	method_12026	serialize
 	m	(Lcom/google/gson/JsonObject;Lcom/google/gson/JsonDeserializationContext;[Lnet/minecraft/class_2816;)Lnet/minecraft/class_2793;	method_12027	deserialize
-c	net/minecraft/class_2795	net/minecraft/world/level/storage/loot/functions/LootItemFunction
+c	net/minecraft/class_2795	net/minecraft/world/level/storage/loot/functions/LootItemConditionalFunction
+	f	[Lnet/minecraft/class_2816;	field_13218	predicates
 c	net/minecraft/class_2795$class_2796	net/minecraft/class_2795$class_2796
 c	net/minecraft/class_2797	net/minecraft/world/level/storage/loot/functions/LootItemFunctions
 	f	Ljava/util/Map;	field_13221	FUNCTIONS_BY_NAME
 	f	Ljava/util/Map;	field_13222	FUNCTIONS_BY_CLASS
-	m	(Lnet/minecraft/class_2795$class_2796;)V	method_12034	register
-	m	(Lnet/minecraft/class_2795;)Lnet/minecraft/class_2795$class_2796;	method_12035	getSerializer
 	m	(Lnet/minecraft/class_1653;)Lnet/minecraft/class_2795$class_2796;	method_12036	getSerializer
 c	net/minecraft/class_2797$class_2798	net/minecraft/world/level/storage/loot/functions/LootItemFunctions$Serializer
 	m	(Lnet/minecraft/class_2795;Ljava/lang/reflect/Type;Lcom/google/gson/JsonSerializationContext;)Lcom/google/gson/JsonElement;	method_12037	serialize
@@ -12321,9 +12299,9 @@ c	net/minecraft/class_2890$class_3025	net/minecraft/client/renderer/debug/DebugR
 	m	(FJ)V	method_13452	render
 c	net/minecraft/class_2891	net/minecraft/client/renderer/debug/PathfindingRenderer
 	f	Lnet/minecraft/class_1600;	field_13622	minecraft
-	f	Ljava/util/Map;	field_13623	creationMap
-	f	Ljava/util/Map;	field_13624	pathMap
-	f	Ljava/util/Map;	field_13625	pathMaxDist
+	f	Ljava/util/Map;	field_13623	pathMap
+	f	Ljava/util/Map;	field_13624	pathMaxDist
+	f	Ljava/util/Map;	field_13625	creationMap
 	f	Lnet/minecraft/class_988;	field_14977	player
 	m	(ILnet/minecraft/class_85;F)V	method_12434	addPath
 c	net/minecraft/class_2892	net/minecraft/client/render/debug/class_2892
@@ -12532,21 +12510,21 @@ c	net/minecraft/class_2922	net/minecraft/network/syncher/EntityDataSerializer
 c	net/minecraft/class_2923	net/minecraft/network/syncher/EntityDataSerializers
 	f	Lnet/minecraft/class_2922;	field_13818	BYTE
 	f	Lnet/minecraft/class_2922;	field_13819	INT
-	f	Lnet/minecraft/class_2922;	field_13820	STRING
-	f	Lnet/minecraft/class_2922;	field_13821	COMPONENT
-	f	Lnet/minecraft/class_2922;	field_13822	OPTIONAL_COMPONENT
-	f	Lnet/minecraft/class_2922;	field_13823	BLOCK_STATE
-	f	Lnet/minecraft/class_2922;	field_13824	BOOLEAN
-	f	Lnet/minecraft/class_2922;	field_13825	ROTATIONS
-	f	Lnet/minecraft/class_2922;	field_13826	OPTIONAL_BLOCK_POS
-	f	Lnet/minecraft/class_2922;	field_13827	DIRECTION
-	f	Lnet/minecraft/class_2922;	field_13828	OPTIONAL_UUID
-	f	Lnet/minecraft/class_2922;	field_13829	COMPOUND_TAG
-	f	Lnet/minecraft/class_2922;	field_13830	OPTIONAL_UNSIGNED_INT
+	f	Lnet/minecraft/class_2922;	field_13820	FLOAT
+	f	Lnet/minecraft/class_2922;	field_13821	STRING
+	f	Lnet/minecraft/class_2922;	field_13822	COMPONENT
+	f	Lnet/minecraft/class_2922;	field_13823	ITEM_STACK
+	f	Lnet/minecraft/class_2922;	field_13824	BLOCK_STATE
+	f	Lnet/minecraft/class_2922;	field_13825	BOOLEAN
+	f	Lnet/minecraft/class_2922;	field_13826	ROTATIONS
+	f	Lnet/minecraft/class_2922;	field_13827	BLOCK_POS
+	f	Lnet/minecraft/class_2922;	field_13828	OPTIONAL_BLOCK_POS
+	f	Lnet/minecraft/class_2922;	field_13829	VILLAGER_DATA
+	f	Lnet/minecraft/class_2922;	field_13830	OPTIONAL_UUID
 	f	Lnet/minecraft/class_2929;	field_13831	SERIALIZERS
 	f	Lnet/minecraft/class_2922;	field_16356	POSE
-	f	Lnet/minecraft/class_2922;	field_21650	ITEM_STACK
-	f	Lnet/minecraft/class_2922;	field_21651	BLOCK_POS
+	f	Lnet/minecraft/class_2922;	field_21650	OPTIONAL_COMPONENT
+	f	Lnet/minecraft/class_2922;	field_21651	PARTICLE
 	m	(I)Lnet/minecraft/class_2922;	method_12718	getSerializer
 	m	(Lnet/minecraft/class_2922;)V	method_12719	registerSerializer
 	m	(Lnet/minecraft/class_2922;)I	method_12720	getSerializedId
@@ -13932,7 +13910,6 @@ c	net/minecraft/class_3042$class_3046	net/minecraft/world/entity/monster/Vex$Vex
 	f	Lnet/minecraft/class_3042;	field_15070	this$0
 c	net/minecraft/class_3047	net/minecraft/world/entity/monster/Vindicator
 	f	Z	field_15072	isJohnny
-	f	Ljava/util/function/Predicate;	field_17070	DOOR_BREAKING_PREDICATE
 	m	(Lnet/minecraft/class_3047;)Z	method_13596	access$200
 	m	()Ljava/util/function/Predicate;	method_13599	access$000
 c	net/minecraft/class_3047$class_3048	net/minecraft/entity/VindicationIllagerEntity$class_3048
@@ -13940,7 +13917,6 @@ c	net/minecraft/class_3049	net/minecraft/world/entity/monster/WitherSkeleton
 c	net/minecraft/class_3050	net/minecraft/world/entity/monster/ZombieVillager
 	f	Lnet/minecraft/class_2921;	field_15075	DATA_CONVERTING_ID
 	f	I	field_15076	villagerConversionTime
-	f	Lnet/minecraft/class_2921;	field_15077	DATA_VILLAGER_DATA
 	f	Ljava/util/UUID;	field_15618	conversionStarter
 	m	(Ljava/util/UUID;I)V	method_13608	startConverting
 	m	()I	method_13609	getVillagerData
@@ -14304,8 +14280,8 @@ c	net/minecraft/class_3136	net/minecraft/world/entity/animal/horse/AbstractHorse
 	f	F	field_15492	playerJumpPendingScale
 	f	Z	field_15493	isJumping
 	f	I	field_15494	gallopSoundCounter
-	f	Lnet/minecraft/class_2921;	field_15496	DATA_ID_OWNER_UUID
-	f	Lnet/minecraft/class_2921;	field_15497	DATA_ID_FLAGS
+	f	Lnet/minecraft/class_2921;	field_15496	DATA_ID_FLAGS
+	f	Lnet/minecraft/class_2921;	field_15497	DATA_ID_OWNER_UUID
 	f	I	field_15498	tailCounter
 	f	I	field_15499	eatingCounter
 	f	I	field_15500	mouthCounter
@@ -14319,7 +14295,6 @@ c	net/minecraft/class_3136	net/minecraft/world/entity/animal/horse/AbstractHorse
 	f	Lnet/minecraft/class_1702;	field_15508	JUMP_STRENGTH
 	f	I	field_15509	standCounter
 	f	I	field_15510	temper
-	f	Ljava/util/function/Predicate;	field_16982	PARENT_HORSE_SELECTOR
 	m	()Lnet/minecraft/class_2926;	method_13132	getAngrySound
 	m	(Lnet/minecraft/class_200;)V	method_13967	playGallopSound
 	m	(Lnet/minecraft/class_862;Lnet/minecraft/class_3136;)V	method_13968	setOffspringAttributes
@@ -14462,7 +14437,6 @@ c	net/minecraft/class_3155$class_3156	net/minecraft/advancements/critereon/Cured
 c	net/minecraft/class_3155$class_3157	net/minecraft/advancements/critereon/CuredZombieVillagerTrigger$TriggerInstance
 	f	Lnet/minecraft/class_3528;	field_15555	zombie
 	f	Lnet/minecraft/class_3528;	field_15556	villager
-	m	(Lnet/minecraft/class_798;Lnet/minecraft/class_982;Lnet/minecraft/class_985;)Z	method_14100	matches
 	m	()Lnet/minecraft/class_3155$class_3157;	method_15639	curedZombieVillager
 c	net/minecraft/class_3158	net/minecraft/world/entity/animal/Parrot
 	f	F	field_15557	flapping
@@ -15131,6 +15105,7 @@ c	net/minecraft/class_3238$class_3240	net/minecraft/class_3238$class_3240
 c	net/minecraft/class_3241	net/minecraft/advancements/critereon/TradeTrigger
 	f	Lnet/minecraft/class_1653;	field_15827	ID
 	f	Ljava/util/Map;	field_15828	players
+	m	(Lnet/minecraft/class_798;Lnet/minecraft/class_985;Lnet/minecraft/class_1071;)V	method_14419	trigger
 	m	()Lnet/minecraft/class_1653;	method_14420	access$000
 	m	(Lcom/google/gson/JsonObject;Lcom/google/gson/JsonDeserializationContext;)Lnet/minecraft/class_3241$class_3744;	method_14421	createInstance
 c	net/minecraft/class_3241$class_3242	net/minecraft/advancements/critereon/TradeTrigger$PlayerListeners
@@ -15212,7 +15187,6 @@ c	net/minecraft/class_3258	net/minecraft/client/gui/components/toasts/Advancemen
 	f	Lnet/minecraft/class_3326;	field_15901	advancement
 	f	Z	field_15902	playedSound
 c	net/minecraft/class_3259	net/minecraft/client/gui/components/toasts/RecipeToast
-	f	Ljava/util/List;	field_15903	recipes
 	f	J	field_15904	lastChanged
 	f	Z	field_15905	changed
 	m	(Lnet/minecraft/class_3264;Lnet/minecraft/class_1114;)V	method_14482	addOrUpdate
@@ -15484,7 +15458,6 @@ c	net/minecraft/class_3282	net/minecraft/client/gui/screens/recipebook/RecipeBoo
 	m	(IIF)V	method_14575	render
 	m	(IIZF)V	method_14578	renderGhostRecipe
 	m	(Lnet/minecraft/class_1026;)V	method_14579	slotClicked
-	m	(Lnet/minecraft/class_1114;Ljava/util/List;)V	method_14580	setupGhostRecipe
 	m	(Lnet/minecraft/class_3286;)Z	method_14581	lambda$updateCollections$5
 	m	(Lit/unimi/dsi/fastutil/objects/ObjectSet;Lnet/minecraft/class_3286;)Z	method_14582	lambda$updateCollections$4
 	m	(Ljava/lang/String;)V	method_14583	pirateSpeechForThePeople
@@ -15531,7 +15504,6 @@ c	net/minecraft/class_3283	net/minecraft/client/gui/screens/recipebook/RecipeBoo
 	m	(DDIIIII)Z	method_14605	mouseClicked
 	m	(Lnet/minecraft/class_1600;II)V	method_14606	init
 	m	(Lnet/minecraft/class_3282;)V	method_14607	addListener
-	m	(Ljava/util/List;)V	method_14608	recipesShown
 	m	(Ljava/util/List;Z)V	method_14609	updateCollections
 	m	()Lnet/minecraft/class_3286;	method_14610	getLastClickedRecipeCollection
 	m	()V	method_14611	setInvisible
@@ -15558,24 +15530,16 @@ c	net/minecraft/class_3285	net/minecraft/client/gui/screens/recipebook/RecipeBut
 	m	(II)V	method_14621	setPosition
 	m	()Z	method_14622	isOnlyOption
 	m	()Lnet/minecraft/class_1114;	method_14623	getRecipe
-	m	()Ljava/util/List;	method_14624	getOrderedRecipes
 	m	(Lnet/minecraft/class_3286;Lnet/minecraft/class_3283;)V	method_18803	init
 c	net/minecraft/class_3286	net/minecraft/client/gui/screens/recipebook/RecipeCollection
-	f	Ljava/util/List;	field_16079	recipes
 	f	Z	field_16083	singleResultItem
-	f	Ljava/util/Set;	field_20456	craftable
-	f	Ljava/util/Set;	field_20457	fitsDimensions
-	f	Ljava/util/Set;	field_20458	known
 	m	()Z	method_14625	hasKnownRecipes
 	m	(Lnet/minecraft/class_3175;IILnet/minecraft/class_4471;)V	method_14626	canCraft
 	m	(Lnet/minecraft/class_1114;)Z	method_14627	isCraftable
 	m	(Lnet/minecraft/class_4471;)V	method_14628	updateKnownRecipes
-	m	(Z)Ljava/util/List;	method_14629	getRecipes
 	m	()Z	method_14630	hasCraftable
 	m	(Lnet/minecraft/class_1114;)V	method_14631	add
-	m	(Z)Ljava/util/List;	method_14632	getDisplayRecipes
 	m	()Z	method_14633	hasFitting
-	m	()Ljava/util/List;	method_14634	getRecipes
 	m	()Z	method_14635	hasSingleResultItem
 c	net/minecraft/class_3287	net/minecraft/class_3287
 c	net/minecraft/class_3288	net/minecraft/client/gui/screens/recipebook/RecipeUpdateListener
@@ -15642,7 +15606,6 @@ c	net/minecraft/class_3302$class_3303	net/minecraft/class_3302$class_3303
 c	net/minecraft/class_3304	net/minecraft/client/searchtree/ReloadableIdSearchTree
 	f	Lnet/minecraft/class_3309;	field_16166	namespaceTree
 	f	Lnet/minecraft/class_3309;	field_16167	pathTree
-	f	Ljava/util/function/Function;	field_16168	idGetter
 	f	Ljava/util/List;	field_16170	contents
 	f	Lit/unimi/dsi/fastutil/objects/Object2IntMap;	field_16171	orderT
 	m	()V	method_14700	refresh
@@ -15653,8 +15616,7 @@ c	net/minecraft/class_3304$class_3305	net/minecraft/class_3304$class_3305
 c	net/minecraft/class_3304$class_4299	net/minecraft/class_3304$class_4299
 c	net/minecraft/class_3306	net/minecraft/client/searchtree/SearchRegistry
 	f	Lnet/minecraft/class_3306$class_3307;	field_16177	CREATIVE_NAMES
-	f	Lnet/minecraft/class_3306$class_3307;	field_16178	CREATIVE_TAGS
-	f	Ljava/util/Map;	field_16179	searchTrees
+	f	Lnet/minecraft/class_3306$class_3307;	field_16178	RECIPE_COLLECTIONS
 	m	(Lnet/minecraft/class_3306$class_3307;)Lnet/minecraft/class_3308;	method_14705	getTree
 c	net/minecraft/class_3306$class_3307	net/minecraft/client/searchtree/SearchRegistry$Key
 c	net/minecraft/class_3308	net/minecraft/client/searchtree/MutableSearchTree
@@ -15766,7 +15728,6 @@ c	net/minecraft/class_3319	net/minecraft/client/tutorial/TutorialSteps
 c	net/minecraft/class_3320	net/minecraft/client/ClientRecipeBook
 	f	Ljava/util/Map;	field_19902	collectionsByTab
 	f	Ljava/util/List;	field_19903	collections
-	m	(Lnet/minecraft/class_1002;)Ljava/util/List;	method_18137	getCategories
 	m	(Lnet/minecraft/class_4113;)Ljava/util/List;	method_18138	getCollection
 	m	(Lnet/minecraft/class_4113;)Lnet/minecraft/class_3286;	method_18139	createCollection
 	m	(Lnet/minecraft/class_4113;)Ljava/util/List;	method_18141	lambda$addToCollection$1
@@ -15778,10 +15739,8 @@ c	net/minecraft/class_3321	net/minecraft/server/commands/RecipeCommand
 	f	Lcom/mojang/brigadier/exceptions/SimpleCommandExceptionType;	field_21769	ERROR_GIVE_FAILED
 	f	Lcom/mojang/brigadier/exceptions/SimpleCommandExceptionType;	field_21770	ERROR_TAKE_FAILED
 	m	(Lnet/minecraft/class_3915;)Z	method_20910	lambda$register$0
-	m	(Lnet/minecraft/class_3915;Ljava/util/Collection;Ljava/util/Collection;)I	method_20911	giveRecipes
 	m	(Lcom/mojang/brigadier/CommandDispatcher;)V	method_20912	register
 	m	(Lcom/mojang/brigadier/context/CommandContext;)I	method_20913	lambda$register$4
-	m	(Lnet/minecraft/class_3915;Ljava/util/Collection;Ljava/util/Collection;)I	method_20914	takeRecipes
 	m	(Lcom/mojang/brigadier/context/CommandContext;)I	method_20915	lambda$register$3
 	m	(Lcom/mojang/brigadier/context/CommandContext;)I	method_20916	lambda$register$2
 	m	(Lcom/mojang/brigadier/context/CommandContext;)I	method_20917	lambda$register$1
@@ -16105,8 +16064,6 @@ c	net/minecraft/class_3356	net/minecraft/stats/ServerRecipeBook
 	m	(Lnet/minecraft/class_3331$class_3332;Lnet/minecraft/class_798;Ljava/util/List;)V	method_14996	sendRecipes
 	m	(Lnet/minecraft/class_798;)V	method_14997	sendInitialRecipeBook
 	m	()Lnet/minecraft/class_322;	method_14999	toNbt
-	m	(Ljava/util/Collection;Lnet/minecraft/class_798;)I	method_21411	addRecipes
-	m	(Ljava/util/Collection;Lnet/minecraft/class_798;)I	method_21412	removeRecipes
 c	net/minecraft/class_3357	net/minecraft/advancements/DisplayInfo
 	f	Lnet/minecraft/class_1982;	field_16474	title
 	f	Lnet/minecraft/class_1982;	field_16475	description
@@ -16823,50 +16780,48 @@ c	net/minecraft/class_3459	net/minecraft/world/effect/MobEffectUtil
 	m	(Lnet/minecraft/class_1699;)I	method_15555	getDigSpeedAmplification
 	m	(Lnet/minecraft/class_1699;)Z	method_15556	hasWaterBreathing
 c	net/minecraft/class_3460	net/minecraft/world/entity/EntityType
-	f	Lnet/minecraft/class_3460;	field_16706	FIREWORK_ROCKET
+	f	Lnet/minecraft/class_3460;	field_16706	GHAST
 	f	Lnet/minecraft/class_3460;	field_16707	FOX
-	f	Lnet/minecraft/class_3460;	field_16708	GHAST
-	f	Lnet/minecraft/class_3460;	field_16709	GIANT
-	f	Lnet/minecraft/class_3460;	field_16710	GUARDIAN
-	f	Lnet/minecraft/class_3460;	field_16711	HORSE
-	f	Lnet/minecraft/class_3460;	field_16712	HUSK
-	f	Lnet/minecraft/class_3460;	field_16713	ILLUSIONER
-	f	Lnet/minecraft/class_3460;	field_16714	ITEM
-	f	Lnet/minecraft/class_3460;	field_16715	ITEM_FRAME
-	f	Lnet/minecraft/class_3460;	field_16716	FIREBALL
-	f	Lnet/minecraft/class_3460;	field_16717	LEASH_KNOT
-	f	Lnet/minecraft/class_3460;	field_16718	LLAMA
-	f	Lnet/minecraft/class_3460;	field_16719	LLAMA_SPIT
+	f	Lnet/minecraft/class_3460;	field_16708	GUARDIAN
+	f	Lnet/minecraft/class_3460;	field_16709	HORSE
+	f	Lnet/minecraft/class_3460;	field_16710	HUSK
+	f	Lnet/minecraft/class_3460;	field_16711	ILLUSIONER
+	f	Lnet/minecraft/class_3460;	field_16712	ITEM
+	f	Lnet/minecraft/class_3460;	field_16713	ITEM_FRAME
+	f	Lnet/minecraft/class_3460;	field_16714	FIREBALL
+	f	Lnet/minecraft/class_3460;	field_16715	LEASH_KNOT
+	f	Lnet/minecraft/class_3460;	field_16716	LLAMA
+	f	Lnet/minecraft/class_3460;	field_16717	LLAMA_SPIT
+	f	Lnet/minecraft/class_3460;	field_16719	MINECART
 	f	Lnet/minecraft/class_3460;	field_16720	MAGMA_CUBE
-	f	Lnet/minecraft/class_3460;	field_16721	MINECART
+	f	Lnet/minecraft/class_3460;	field_16721	COMMAND_BLOCK_MINECART
 	f	Lnet/minecraft/class_3460;	field_16722	CHEST_MINECART
-	f	Lnet/minecraft/class_3460;	field_16723	COMMAND_BLOCK_MINECART
-	f	Lnet/minecraft/class_3460;	field_16724	FURNACE_MINECART
-	f	Lnet/minecraft/class_3460;	field_16725	HOPPER_MINECART
+	f	Lnet/minecraft/class_3460;	field_16723	HOPPER_MINECART
+	f	Lnet/minecraft/class_3460;	field_16725	PANDA
 	f	Lnet/minecraft/class_3460;	field_16726	SPAWNER_MINECART
 	f	Lnet/minecraft/class_3460;	field_16727	TNT_MINECART
 	f	Lnet/minecraft/class_3460;	field_16728	MULE
 	f	Lnet/minecraft/class_3460;	field_16729	MOOSHROOM
-	f	Lnet/minecraft/class_3460;	field_16730	OCELOT
-	f	Lnet/minecraft/class_3460;	field_16731	PAINTING
-	f	Lnet/minecraft/class_3460;	field_16732	EGG
+	f	Lnet/minecraft/class_3460;	field_16730	PARROT
+	f	Lnet/minecraft/class_3460;	field_16731	PIG
+	f	Lnet/minecraft/class_3460;	field_16732	VEX
 	f	Lnet/minecraft/class_3460;	field_16733	ENDER_PEARL
-	f	Lnet/minecraft/class_3460;	field_16734	EXPERIENCE_BOTTLE
-	f	Lnet/minecraft/class_3460;	field_16735	POTION
-	f	Lnet/minecraft/class_3460;	field_16736	TRIDENT
-	f	Lnet/minecraft/class_3460;	field_16737	VEX
+	f	Lnet/minecraft/class_3460;	field_16734	IRON_GOLEM
+	f	Lnet/minecraft/class_3460;	field_16735	VINDICATOR
+	f	Lnet/minecraft/class_3460;	field_16736	WITCH
+	f	Lnet/minecraft/class_3460;	field_16737	WITHER
 	f	Lnet/minecraft/class_3460;	field_16738	VILLAGER
-	f	Lnet/minecraft/class_3460;	field_16739	IRON_GOLEM
-	f	Lnet/minecraft/class_3460;	field_16740	VINDICATOR
+	f	Lnet/minecraft/class_3460;	field_16739	WITHER_SKULL
+	f	Lnet/minecraft/class_3460;	field_16740	WOLF
 	f	Lnet/minecraft/class_3460;	field_16741	PILLAGER
 	f	Lnet/minecraft/class_3460;	field_16742	WANDERING_TRADER
-	f	Lnet/minecraft/class_3460;	field_16743	WITCH
+	f	Lnet/minecraft/class_3460;	field_16743	RAVAGER
 	f	Lnet/minecraft/class_3460;	field_16744	AREA_EFFECT_CLOUD
-	f	Lnet/minecraft/class_3460;	field_16745	WITHER
-	f	Lnet/minecraft/class_3460;	field_16746	WITHER_SKELETON
-	f	Lnet/minecraft/class_3460;	field_16747	WITHER_SKULL
-	f	Lnet/minecraft/class_3460;	field_16748	WOLF
-	f	Lnet/minecraft/class_3460;	field_16749	ZOMBIE
+	f	Lnet/minecraft/class_3460;	field_16745	PHANTOM
+	f	Lnet/minecraft/class_3460;	field_16746	LIGHTNING_BOLT
+	f	Lnet/minecraft/class_3460;	field_16747	PLAYER
+	f	Lnet/minecraft/class_3460;	field_16748	FISHING_BOBBER
+	f	Lnet/minecraft/class_3460;	field_16749	TRIDENT
 	f	Lorg/apache/logging/log4j/Logger;	field_16750	LOGGER
 	f	Ljava/lang/Class;	field_16751	entityClass
 	f	Ljava/util/function/Function;	field_16752	entityFactory
@@ -16874,37 +16829,34 @@ c	net/minecraft/class_3460	net/minecraft/world/entity/EntityType
 	f	Z	field_16754	fireImmune
 	f	Ljava/lang/String;	field_16755	descriptionId
 	f	Lnet/minecraft/class_1982;	field_16756	description
-	f	Lnet/minecraft/class_3460;	field_16758	POLAR_BEAR
-	f	Lnet/minecraft/class_3460;	field_16759	TNT
-	f	Lnet/minecraft/class_3460;	field_16760	RABBIT
+	f	Lnet/minecraft/class_3460;	field_16758	PUFFERFISH
+	f	Lnet/minecraft/class_3460;	field_16759	ZOMBIE_PIGMAN
+	f	Lnet/minecraft/class_3460;	field_16760	POLAR_BEAR
 	f	Lnet/minecraft/class_3460;	field_16761	SALMON
-	f	Lnet/minecraft/class_3460;	field_16762	SHULKER
+	f	Lnet/minecraft/class_3460;	field_16762	RABBIT
 	f	Lnet/minecraft/class_3460;	field_16763	SHULKER_BULLET
-	f	Lnet/minecraft/class_3460;	field_16764	SILVERFISH
-	f	Lnet/minecraft/class_3460;	field_16765	SKELETON
-	f	Lnet/minecraft/class_3460;	field_16766	SKELETON_HORSE
-	f	Lnet/minecraft/class_3460;	field_16767	SLIME
-	f	Lnet/minecraft/class_3460;	field_16768	SMALL_FIREBALL
-	f	Lnet/minecraft/class_3460;	field_16769	SNOW_GOLEM
+	f	Lnet/minecraft/class_3460;	field_16764	SHEEP
+	f	Lnet/minecraft/class_3460;	field_16765	SHULKER
+	f	Lnet/minecraft/class_3460;	field_16767	SILVERFISH
+	f	Lnet/minecraft/class_3460;	field_16768	SKELETON
+	f	Lnet/minecraft/class_3460;	field_16769	SKELETON_HORSE
 	f	Lnet/minecraft/class_3460;	field_16770	SNOWBALL
-	f	Lnet/minecraft/class_3460;	field_16771	SPECTRAL_ARROW
-	f	Lnet/minecraft/class_3460;	field_16772	SQUID
+	f	Lnet/minecraft/class_3460;	field_16771	SMALL_FIREBALL
+	f	Lnet/minecraft/class_3460;	field_16772	SNOW_GOLEM
 	f	Lnet/minecraft/class_3460;	field_16773	STRAY
 	f	Lnet/minecraft/class_3460;	field_16774	TRADER_LLAMA
-	f	Lnet/minecraft/class_3460;	field_16775	TROPICAL_FISH
-	f	Lnet/minecraft/class_3460;	field_16776	TURTLE
-	f	Lnet/minecraft/class_3460;	field_16777	SPIDER
-	f	Lnet/minecraft/class_3460;	field_16778	SHEEP
-	f	Lnet/minecraft/class_3460;	field_16779	LIGHTNING_BOLT
-	f	Lnet/minecraft/class_3460;	field_16780	RAVAGER
-	f	Lnet/minecraft/class_3460;	field_16781	PHANTOM
-	f	Lnet/minecraft/class_3460;	field_16782	ZOMBIE_VILLAGER
-	f	Lnet/minecraft/class_3460;	field_16783	ZOMBIE_HORSE
+	f	Lnet/minecraft/class_3460;	field_16775	SPIDER
+	f	Lnet/minecraft/class_3460;	field_16776	SQUID
+	f	Lnet/minecraft/class_3460;	field_16777	EGG
+	f	Lnet/minecraft/class_3460;	field_16778	TROPICAL_FISH
+	f	Lnet/minecraft/class_3460;	field_16779	TURTLE
+	f	Lnet/minecraft/class_3460;	field_16782	EXPERIENCE_BOTTLE
+	f	Lnet/minecraft/class_3460;	field_16783	POTION
 	f	Lnet/minecraft/class_3460;	field_16784	ARMOR_STAND
 	f	Lnet/minecraft/class_3460;	field_16785	ARROW
 	f	Lnet/minecraft/class_3460;	field_16786	BAT
 	f	Lnet/minecraft/class_3460;	field_16787	BLAZE
-	f	Lnet/minecraft/class_3460;	field_16788	CAT
+	f	Lnet/minecraft/class_3460;	field_16788	BOAT
 	f	Lnet/minecraft/class_3460;	field_16789	CAVE_SPIDER
 	f	Lnet/minecraft/class_3460;	field_16790	CHICKEN
 	f	Lnet/minecraft/class_3460;	field_16791	COD
@@ -16914,17 +16866,17 @@ c	net/minecraft/class_3460	net/minecraft/world/entity/EntityType
 	f	Lnet/minecraft/class_3460;	field_16795	DOLPHIN
 	f	Lnet/minecraft/class_3460;	field_16796	DRAGON_FIREBALL
 	f	Lnet/minecraft/class_3460;	field_16797	DROWNED
-	f	Lnet/minecraft/class_3460;	field_16798	END_CRYSTAL
-	f	Lnet/minecraft/class_3460;	field_16799	ENDER_DRAGON
-	f	Lnet/minecraft/class_3460;	field_16800	ENDERMAN
-	f	Lnet/minecraft/class_3460;	field_16801	ENDERMITE
-	f	Lnet/minecraft/class_3460;	field_16802	EVOKER_FANGS
-	f	Lnet/minecraft/class_3460;	field_16803	EVOKER
-	f	Lnet/minecraft/class_3460;	field_16804	EXPERIENCE_ORB
-	f	Lnet/minecraft/class_3460;	field_16805	EYE_OF_ENDER
-	f	Lnet/minecraft/class_3460;	field_16806	FALLING_BLOCK
-	f	Lnet/minecraft/class_3460;	field_16807	ELDER_GUARDIAN
-	f	Lnet/minecraft/class_3460;	field_16808	BOAT
+	f	Lnet/minecraft/class_3460;	field_16798	ELDER_GUARDIAN
+	f	Lnet/minecraft/class_3460;	field_16799	END_CRYSTAL
+	f	Lnet/minecraft/class_3460;	field_16800	ENDER_DRAGON
+	f	Lnet/minecraft/class_3460;	field_16801	ENDERMAN
+	f	Lnet/minecraft/class_3460;	field_16802	ENDERMITE
+	f	Lnet/minecraft/class_3460;	field_16803	EVOKER_FANGS
+	f	Lnet/minecraft/class_3460;	field_16804	EVOKER
+	f	Lnet/minecraft/class_3460;	field_16805	EXPERIENCE_ORB
+	f	Lnet/minecraft/class_3460;	field_16806	EYE_OF_ENDER
+	f	Lnet/minecraft/class_3460;	field_16807	FALLING_BLOCK
+	f	Lnet/minecraft/class_3460;	field_16808	FIREWORK_ROCKET
 	m	()Z	method_15613	canSpawnFarFromPlayer
 	m	(ILnet/minecraft/class_1150;)Lnet/minecraft/class_864;	method_15614	create
 	m	(Lnet/minecraft/class_3460;)Lnet/minecraft/class_1653;	method_15615	getKey
@@ -17280,12 +17232,11 @@ c	net/minecraft/class_3492$class_3494	net/minecraft/world/entity/animal/Tropical
 	m	(Lnet/minecraft/class_3492$class_3494;)I	method_15796	access$200
 	m	(Lnet/minecraft/class_3492$class_3494;)I	method_15797	access$300
 c	net/minecraft/class_3495	net/minecraft/world/entity/animal/Turtle
-	f	Ljava/util/function/Predicate;	field_16957	BABY_ON_LAND_SELECTOR
 	f	Lnet/minecraft/class_2921;	field_16958	TRAVEL_POS
 	f	Lnet/minecraft/class_2921;	field_16959	GOING_HOME
 	f	Lnet/minecraft/class_2921;	field_16960	LAYING_EGG
-	f	Lnet/minecraft/class_2921;	field_16961	HAS_EGG
-	f	Lnet/minecraft/class_2921;	field_16962	HOME_POS
+	f	Lnet/minecraft/class_2921;	field_16961	HOME_POS
+	f	Lnet/minecraft/class_2921;	field_16962	HAS_EGG
 	f	Lnet/minecraft/class_2921;	field_16963	TRAVELLING
 	f	I	field_16964	layEggCounter
 	m	(Lnet/minecraft/class_3495;)Z	method_15799	access$200
@@ -17744,18 +17695,16 @@ c	net/minecraft/class_3574	net/minecraft/world/item/crafting/FireworkStarRecipe
 c	net/minecraft/class_3578	net/minecraft/class_3578
 c	net/minecraft/class_3579	net/minecraft/world/item/crafting/RecipeSerializer
 	f	Lnet/minecraft/class_3579$class_3580;	field_17449	MAP_CLONING
-	f	Lnet/minecraft/class_3579$class_3580;	field_17450	MAP_EXTENDING
+	f	Lnet/minecraft/class_3579$class_3580;	field_17450	BOOK_CLONING
 	f	Lnet/minecraft/class_3579$class_3580;	field_17451	FIREWORK_ROCKET
-	f	Lnet/minecraft/class_3579$class_3580;	field_17452	FIREWORK_STAR
-	f	Lnet/minecraft/class_3579$class_3580;	field_17453	FIREWORK_STAR_FADE
+	f	Lnet/minecraft/class_3579$class_3580;	field_17452	MAP_EXTENDING
 	f	Lnet/minecraft/class_3579$class_3580;	field_17454	TIPPED_ARROW
-	f	Lnet/minecraft/class_3579$class_3580;	field_17455	SHIELD_DECORATION
+	f	Lnet/minecraft/class_3579$class_3580;	field_17455	FIREWORK_STAR_FADE
 	f	Lnet/minecraft/class_3579$class_3580;	field_17456	SHULKER_BOX_COLORING
 	f	Lnet/minecraft/class_3579$class_3580;	field_17457	SUSPICIOUS_STEW
-	f	Lnet/minecraft/class_3579$class_3580;	field_17458	REPAIR_ITEM
-	f	Lnet/minecraft/class_3579$class_3580;	field_17459	BANNER_DUPLICATE
-	f	Lnet/minecraft/class_3579$class_3580;	field_17460	BOOK_CLONING
-	f	Lnet/minecraft/class_3579$class_3580;	field_17461	ARMOR_DYE
+	f	Lnet/minecraft/class_3579$class_3580;	field_17458	BANNER_DUPLICATE
+	f	Lnet/minecraft/class_3579$class_3580;	field_17460	SHIELD_DECORATION
+	f	Lnet/minecraft/class_3579$class_3580;	field_17461	REPAIR_ITEM
 c	net/minecraft/class_3579$class_3580	net/minecraft/world/item/crafting/SimpleRecipeSerializer
 	f	Ljava/util/function/Function;	field_17465	constructor
 c	net/minecraft/class_358	net/minecraft/client/gui/screens/ChatOptionsScreen
@@ -18480,22 +18429,20 @@ c	net/minecraft/class_3739	net/minecraft/world/level/block/entity/BlockEntityTyp
 	f	Lnet/minecraft/class_3739;	field_18597	FURNACE
 	f	Lnet/minecraft/class_3739;	field_18598	TRAPPED_CHEST
 	f	Lnet/minecraft/class_3739;	field_18599	ENDER_CHEST
-	f	Lnet/minecraft/class_3739;	field_18600	JUKEBOX
-	f	Lnet/minecraft/class_3739;	field_18601	DISPENSER
-	f	Lnet/minecraft/class_3739;	field_18602	SIGN
+	f	Lnet/minecraft/class_3739;	field_18601	DROPPER
+	f	Lnet/minecraft/class_3739;	field_18602	DISPENSER
 	f	Lnet/minecraft/class_3739;	field_18603	MOB_SPAWNER
-	f	Lnet/minecraft/class_3739;	field_18604	PISTON
-	f	Lnet/minecraft/class_3739;	field_18605	ENCHANTING_TABLE
-	f	Lnet/minecraft/class_3739;	field_18606	END_PORTAL
-	f	Lnet/minecraft/class_3739;	field_18607	BEACON
-	f	Lnet/minecraft/class_3739;	field_18608	SKULL
-	f	Lnet/minecraft/class_3739;	field_18609	HOPPER
-	f	Lnet/minecraft/class_3739;	field_18610	COMPARATOR
-	f	Lnet/minecraft/class_3739;	field_18611	BANNER
+	f	Lnet/minecraft/class_3739;	field_18604	SIGN
+	f	Lnet/minecraft/class_3739;	field_18606	PISTON
+	f	Lnet/minecraft/class_3739;	field_18607	BREWING_STAND
+	f	Lnet/minecraft/class_3739;	field_18608	DAYLIGHT_DETECTOR
+	f	Lnet/minecraft/class_3739;	field_18609	END_PORTAL
+	f	Lnet/minecraft/class_3739;	field_18610	BEACON
+	f	Lnet/minecraft/class_3739;	field_18611	SKULL
 	f	Lnet/minecraft/class_3739;	field_18612	END_GATEWAY
-	f	Lnet/minecraft/class_3739;	field_18613	COMMAND_BLOCK
-	f	Lnet/minecraft/class_3739;	field_18614	SHULKER_BOX
-	f	Lnet/minecraft/class_3739;	field_18615	BED
+	f	Lnet/minecraft/class_3739;	field_18613	HOPPER
+	f	Lnet/minecraft/class_3739;	field_18614	COMPARATOR
+	f	Lnet/minecraft/class_3739;	field_18615	LECTERN
 	f	Lnet/minecraft/class_3739;	field_18616	BARREL
 	f	Lnet/minecraft/class_3739;	field_18617	SMOKER
 	f	Lnet/minecraft/class_3739;	field_18618	BLAST_FURNACE
@@ -18640,15 +18587,15 @@ c	net/minecraft/class_3772	net/minecraft/world/level/block/state/properties/Bloc
 	f	Lnet/minecraft/class_2244;	field_18722	FACING
 	f	Lnet/minecraft/class_2244;	field_18723	FACING_HOPPER
 	f	Lnet/minecraft/class_2244;	field_18724	HORIZONTAL_FACING
-	f	Lnet/minecraft/class_2245;	field_18725	RAIL_SHAPE
-	f	Lnet/minecraft/class_2245;	field_18726	HALF
-	f	Lnet/minecraft/class_2245;	field_18727	DOUBLE_BLOCK_HALF
-	f	Lnet/minecraft/class_2245;	field_18728	WEST_REDSTONE
-	f	Lnet/minecraft/class_2245;	field_18729	ATTACH_FACE
+	f	Lnet/minecraft/class_2245;	field_18725	ATTACH_FACE
+	f	Lnet/minecraft/class_2245;	field_18726	EAST_REDSTONE
+	f	Lnet/minecraft/class_2245;	field_18727	NORTH_REDSTONE
+	f	Lnet/minecraft/class_2245;	field_18728	SOUTH_REDSTONE
+	f	Lnet/minecraft/class_2245;	field_18729	WEST_REDSTONE
 	f	Lnet/minecraft/class_2245;	field_18730	BELL_ATTACHMENT
-	f	Lnet/minecraft/class_2245;	field_18731	EAST_REDSTONE
-	f	Lnet/minecraft/class_2245;	field_18732	NORTH_REDSTONE
-	f	Lnet/minecraft/class_2245;	field_18733	SOUTH_REDSTONE
+	f	Lnet/minecraft/class_2245;	field_18731	HALF
+	f	Lnet/minecraft/class_2245;	field_18732	RAIL_SHAPE
+	f	Lnet/minecraft/class_2245;	field_18733	RAIL_SHAPE_STRAIGHT
 	f	Lnet/minecraft/class_2246;	field_18734	AGE_25
 	f	Lnet/minecraft/class_2246;	field_18735	AGE_3
 	f	Lnet/minecraft/class_2246;	field_18736	AGE_5
@@ -18676,9 +18623,9 @@ c	net/minecraft/class_3772	net/minecraft/world/level/block/state/properties/Bloc
 	f	Lnet/minecraft/class_2245;	field_18758	MODE_COMPARATOR
 	f	Lnet/minecraft/class_2245;	field_18759	DOOR_HINGE
 	f	Lnet/minecraft/class_2245;	field_18760	NOTEBLOCK_INSTRUMENT
-	f	Lnet/minecraft/class_2245;	field_18761	SLAB_TYPE
-	f	Lnet/minecraft/class_2245;	field_18762	STAIRS_SHAPE
-	f	Lnet/minecraft/class_2245;	field_18763	STRUCTUREBLOCK_MODE
+	f	Lnet/minecraft/class_2245;	field_18761	PISTON_TYPE
+	f	Lnet/minecraft/class_2245;	field_18762	SLAB_TYPE
+	f	Lnet/minecraft/class_2245;	field_18763	STAIRS_SHAPE
 	f	Lnet/minecraft/class_2245;	field_18764	BAMBOO_LEAVES
 	f	Lnet/minecraft/class_2243;	field_18765	BOTTOM
 	f	Lnet/minecraft/class_2243;	field_18766	CONDITIONAL
@@ -19111,7 +19058,6 @@ c	net/minecraft/class_3844	net/minecraft/world/level/levelgen/feature/Feature
 	f	Lnet/minecraft/class_3844;	field_19150	KELP
 	f	Lnet/minecraft/class_3844;	field_19151	CORAL_TREE
 	f	Z	field_19153	doUpdate
-	f	Ljava/util/List;	field_19154	NOISE_AFFECTING_FEATURES
 	f	Lnet/minecraft/class_3844;	field_19155	HAY_PILE
 	f	Lnet/minecraft/class_3844;	field_19156	ICE_PILE
 	f	Lnet/minecraft/class_3844;	field_19157	MELON_PILE
@@ -19143,15 +19089,15 @@ c	net/minecraft/class_3844	net/minecraft/world/level/levelgen/feature/Feature
 	f	Lnet/minecraft/class_3902;	field_19183	DESERT_PYRAMID
 	f	Lnet/minecraft/class_3902;	field_19184	IGLOO
 	f	Lnet/minecraft/class_3902;	field_19185	SHIPWRECK
-	f	Lnet/minecraft/class_3902;	field_19186	OCEAN_RUIN
-	f	Lnet/minecraft/class_3902;	field_19187	STRONGHOLD
+	f	Lnet/minecraft/class_3902;	field_19186	STRONGHOLD
+	f	Lnet/minecraft/class_3902;	field_19187	PILLAGER_OUTPOST
 	f	Lnet/minecraft/class_3902;	field_19188	OCEAN_MONUMENT
 	f	Lnet/minecraft/class_3902;	field_19189	NETHER_BRIDGE
 	f	Lnet/minecraft/class_3902;	field_19190	END_CITY
 	f	Lnet/minecraft/class_3902;	field_19191	BURIED_TREASURE
 	f	Lnet/minecraft/class_3902;	field_19192	VILLAGE
-	f	Lnet/minecraft/class_3902;	field_19193	JUNGLE_TEMPLE
-	f	Lnet/minecraft/class_3902;	field_19194	PILLAGER_OUTPOST
+	f	Lnet/minecraft/class_3902;	field_19193	OCEAN_RUIN
+	f	Lnet/minecraft/class_3902;	field_19194	JUNGLE_TEMPLE
 c	net/minecraft/class_3845	net/minecraft/world/level/levelgen/feature/FeatureConfiguration
 	f	Lnet/minecraft/class_3871;	field_19203	NONE
 c	net/minecraft/class_3846	net/minecraft/class_3846
@@ -19285,7 +19231,8 @@ c	net/minecraft/class_3883	net/minecraft/world/level/levelgen/feature/RandomScat
 c	net/minecraft/class_3884	net/minecraft/class_3884
 c	net/minecraft/class_3885	net/minecraft/class_3885
 c	net/minecraft/class_3886	net/minecraft/class_3886
-c	net/minecraft/class_3887	net/minecraft/class_3887
+c	net/minecraft/class_3887	net/minecraft/world/level/levelgen/feature/SeaPickleFeature
+	m	(Lnet/minecraft/class_3598;Lnet/minecraft/class_2744;Ljava/util/Random;Lnet/minecraft/class_2552;Lnet/minecraft/class_3828;)Z	method_17410	place
 c	net/minecraft/class_3888	net/minecraft/class_3888
 c	net/minecraft/class_3889	net/minecraft/class_3889
 c	net/minecraft/class_3890	net/minecraft/world/level/levelgen/feature/ShipwreckConfiguration
@@ -19499,27 +19446,12 @@ c	net/minecraft/class_3915	net/minecraft/commands/CommandSourceStack
 c	net/minecraft/class_3916	net/minecraft/world/level/levelgen/feature/WoodlandMansionFeature
 c	net/minecraft/class_3916$class_3071	net/minecraft/class_3916$class_3071
 c	net/minecraft/class_3917	net/minecraft/world/level/levelgen/flat/FlatLevelGeneratorSettings
-	f	Lnet/minecraft/class_3821;	field_19288	SWAMPHUT_COMPOSITE_FEATURE
-	f	Lnet/minecraft/class_3821;	field_19289	DESERT_PYRAMID_COMPOSITE_FEATURE
-	f	Lnet/minecraft/class_3821;	field_19290	JUNGLE_PYRAMID_COMPOSITE_FEATURE
-	f	Lnet/minecraft/class_3821;	field_19291	IGLOO_COMPOSITE_FEATURE
-	f	Lnet/minecraft/class_3821;	field_19292	SHIPWRECK_COMPOSITE_FEATURE
-	f	Lnet/minecraft/class_3821;	field_19293	OCEAN_MONUMENT_COMPOSITE_FEATURE
-	f	Lnet/minecraft/class_3821;	field_19294	WATER_LAKE_COMPOSITE_FEATURE
-	f	Lnet/minecraft/class_3821;	field_19295	LAVA_LAKE_COMPOSITE_FEATURE
-	f	Lnet/minecraft/class_3821;	field_19296	ENDCITY_COMPOSITE_FEATURE
-	f	Lnet/minecraft/class_3821;	field_19297	WOOLAND_MANSION_COMPOSITE_FEATURE
-	f	Lnet/minecraft/class_3821;	field_19298	FORTRESS_COMPOSITE_FEATURE
-	f	Lnet/minecraft/class_3821;	field_19299	OCEAN_RUIN_COMPOSITE_FEATURE
 	f	Ljava/util/List;	field_19300	layersInfo
 	f	Ljava/util/Map;	field_19301	structuresOptions
 	f	Lnet/minecraft/class_1170;	field_19302	biome
 	f	[Lnet/minecraft/class_2232;	field_19303	layers
 	f	Z	field_19304	voidGen
 	f	I	field_19305	seaLevel
-	f	Ljava/util/Map;	field_19306	STRUCTURE_FEATURES_STEP
-	f	Ljava/util/Map;	field_19307	STRUCTURE_FEATURES
-	f	Ljava/util/Map;	field_19308	STRUCTURE_FEATURES_DEFAULT
 	f	Lorg/apache/logging/log4j/Logger;	field_19309	LOGGER
 	m	()[Lnet/minecraft/class_2232;	method_17475	getLayers
 	m	(Lnet/minecraft/class_1170;)V	method_17476	setBiome
@@ -19654,7 +19586,7 @@ c	net/minecraft/class_3968	net/minecraft/class_3968
 c	net/minecraft/class_3969	net/minecraft/class_3969
 c	net/minecraft/class_3971	net/minecraft/class_3971
 c	net/minecraft/class_3972	net/minecraft/class_3972
-c	net/minecraft/class_3973	net/minecraft/world/level/levelgen/carver/ConfiguredWorldCarver
+c	net/minecraft/class_3973	net/minecraft/class_3973
 c	net/minecraft/class_3974	net/minecraft/world/level/levelgen/structure/DesertPyramidPiece
 	f	[Z	field_19348	hasPlacedChest
 c	net/minecraft/class_3975	net/minecraft/class_3975
@@ -19683,8 +19615,8 @@ c	net/minecraft/class_3979	net/minecraft/world/level/levelgen/structure/LegacySt
 	f	Ljava/util/Map;	field_19362	LEGACY_TO_CURRENT_MAP
 	f	Ljava/util/Map;	field_19363	CURRENT_TO_LEGACY_MAP
 	f	Z	field_19364	hasLegacyData
-	f	Ljava/util/Map;	field_19365	indexMap
-	f	Ljava/util/Map;	field_19366	dataMap
+	f	Ljava/util/Map;	field_19365	dataMap
+	f	Ljava/util/Map;	field_19366	indexMap
 	m	(II)Z	method_17609	isUnhandledStructureStart
 	m	(IILjava/lang/String;)Z	method_17610	hasLegacyStart
 	m	(J)V	method_17611	removeIndex
@@ -19826,9 +19758,7 @@ c	net/minecraft/class_3998	net/minecraft/world/level/levelgen/structure/template
 	m	(Lnet/minecraft/class_1653;)Lnet/minecraft/class_2765;	method_17689	loadFromGenerated
 	m	(Lnet/minecraft/class_1653;)Lnet/minecraft/class_2765;	method_17690	lambda$get$0
 c	net/minecraft/class_3999	net/minecraft/class_3999
-c	net/minecraft/class_4000	net/minecraft/world/level/levelgen/surfacebuilders/ConfiguredSurfaceBuilder
-	f	Lnet/minecraft/class_4014;	field_19438	config
-	m	()Lnet/minecraft/class_4014;	method_17700	getSurfaceBuilderConfiguration
+c	net/minecraft/class_4000	net/minecraft/gen/surfacebuilder/SurfaceBuilder
 c	net/minecraft/class_4001	net/minecraft/world/level/levelgen/surfacebuilders/DefaultSurfaceBuilder
 	m	(Ljava/util/Random;Lnet/minecraft/class_3781;Lnet/minecraft/class_1170;IIIDLnet/minecraft/class_2232;Lnet/minecraft/class_2232;IJLnet/minecraft/class_4013;)V	method_17702	apply
 	m	(Ljava/util/Random;Lnet/minecraft/class_3781;Lnet/minecraft/class_1170;IIIDLnet/minecraft/class_2232;Lnet/minecraft/class_2232;Lnet/minecraft/class_2232;Lnet/minecraft/class_2232;Lnet/minecraft/class_2232;I)V	method_17703	apply
@@ -20022,7 +19952,7 @@ c	net/minecraft/class_4030	net/minecraft/commands/arguments/DimensionTypeArgumen
 c	net/minecraft/class_4032	net/minecraft/world/level/material/WaterFluid
 c	net/minecraft/class_4032$class_4033	net/minecraft/class_4032$class_4033
 c	net/minecraft/class_4032$class_4034	net/minecraft/class_4032$class_4034
-c	net/minecraft/class_4035	net/minecraft/world/level/newbiome/area/Area
+c	net/minecraft/class_4035	net/minecraft/class_4035
 c	net/minecraft/class_4036	net/minecraft/class_4036
 c	net/minecraft/class_4037	net/minecraft/world/level/newbiome/area/AreaFactory
 c	net/minecraft/class_4038	net/minecraft/class_4038
@@ -20346,7 +20276,7 @@ c	net/minecraft/class_4099	net/minecraft/world/phys/shapes/SubShape
 	f	I	field_19859	endY
 	f	I	field_19860	endZ
 c	net/minecraft/class_410	net/minecraft/client/gui/screens/inventory/BookEditScreen
-	f	Ljava/util/List;	field_10474	pages
+	f	Ljava/util/List;	field_10474	bookText
 	f	I	field_10475	lastIndex
 	f	Lnet/minecraft/class_988;	field_1352	owner
 	f	Lnet/minecraft/class_1071;	field_1353	book
@@ -21027,7 +20957,6 @@ c	net/minecraft/class_4181	net/minecraft/commands/arguments/ResourceLocationArgu
 	m	(Lcom/mojang/brigadier/StringReader;)Lnet/minecraft/class_1653;	method_18905	parse
 	m	(Lcom/mojang/brigadier/context/CommandContext;Ljava/lang/String;)Lnet/minecraft/class_3326;	method_18906	getAdvancement
 	m	(Ljava/lang/Object;)Lcom/mojang/brigadier/Message;	method_18907	lambda$static$2
-	m	(Lcom/mojang/brigadier/context/CommandContext;Ljava/lang/String;)Lnet/minecraft/class_1114;	method_18908	getRecipe
 	m	(Ljava/lang/Object;)Lcom/mojang/brigadier/Message;	method_18909	lambda$static$1
 	m	(Lcom/mojang/brigadier/context/CommandContext;Ljava/lang/String;)Lnet/minecraft/class_1653;	method_18910	getId
 	m	(Ljava/lang/Object;)Lcom/mojang/brigadier/Message;	method_18911	lambda$static$0
@@ -21611,13 +21540,9 @@ c	net/minecraft/class_4245	net/minecraft/client/renderer/chunk/RenderChunkRegion
 c	net/minecraft/class_4245$class_4246	net/minecraft/class_4245$class_4246
 c	net/minecraft/class_4247	net/minecraft/client/renderer/debug/StructureRenderer
 	f	Lnet/minecraft/class_1600;	field_20883	minecraft
-	f	Ljava/util/Map;	field_20884	postMainBoxes
-	f	Ljava/util/Map;	field_20885	postPiecesBoxes
 c	net/minecraft/class_4248	net/minecraft/class_4248
 c	net/minecraft/class_4249	net/minecraft/client/renderer/debug/CaveDebugRenderer
 	f	Lnet/minecraft/class_1600;	field_20899	minecraft
-	f	Ljava/util/Map;	field_20900	tunnelsList
-	f	Ljava/util/Map;	field_20901	thicknessMap
 c	net/minecraft/class_425	net/minecraft/client/gui/screens/inventory/SignEditScreen
 	f	Lnet/minecraft/class_224;	field_1412	sign
 	f	I	field_1413	frame
@@ -21850,8 +21775,7 @@ c	net/minecraft/class_4287	net/minecraft/commands/arguments/coordinates/Vec3Argu
 	m	(Z)Lnet/minecraft/class_4287;	method_19565	vec3
 c	net/minecraft/class_4288	net/minecraft/client/resources/model/ModelBakery
 	f	Lnet/minecraft/class_1533;	field_21058	blockAtlas
-	f	Ljava/util/Map;	field_21059	bakedCache
-	f	Ljava/util/Map;	field_21060	BUILTIN_MODELS
+	f	Ljava/util/Map;	field_21060	STATIC_DEFINITIONS
 	f	Ljava/util/Map;	field_21061	bakedTopLevelModels
 	f	Ljava/util/Set;	field_21062	loadingStack
 	f	Lnet/minecraft/class_2449$class_4232;	field_21063	context
@@ -21876,7 +21800,7 @@ c	net/minecraft/class_4288	net/minecraft/client/resources/model/ModelBakery
 	f	Lnet/minecraft/class_4231;	field_21082	GENERATION_MARKER
 	f	Ljava/util/Set;	field_21083	UNREFERENCED_TEXTURES
 	f	Lorg/apache/logging/log4j/Logger;	field_21084	LOGGER
-	f	Ljava/util/Map;	field_21085	STATIC_DEFINITIONS
+	f	Ljava/util/Map;	field_21085	BUILTIN_MODELS
 	f	Lcom/google/common/base/Splitter;	field_21086	EQUAL_SPLITTER
 	f	Lcom/google/common/base/Splitter;	field_21087	COMMA_SPLITTER
 	f	Lnet/minecraft/class_2233;	field_21088	ITEM_FRAME_FAKE_DEFINITION
@@ -22690,9 +22614,7 @@ c	net/minecraft/class_4381	net/minecraft/network/protocol/game/ClientboundTagQue
 	m	()I	method_20268	getTransactionId
 	m	()Lnet/minecraft/class_322;	method_20269	getTag
 c	net/minecraft/class_4382	net/minecraft/network/protocol/game/ClientboundUpdateRecipesPacket
-	f	Ljava/util/List;	field_21574	recipes
 	m	(Lnet/minecraft/class_1993;)V	method_20272	apply
-	m	()Ljava/util/List;	method_20273	getRecipes
 c	net/minecraft/class_4383	net/minecraft/network/protocol/game/ClientboundUpdateTagsPacket
 	f	Lnet/minecraft/class_4488;	field_21575	tags
 	m	(Lnet/minecraft/class_1993;)V	method_20274	apply
@@ -22801,7 +22723,6 @@ c	net/minecraft/class_4396	net/minecraft/network/protocol/login/ServerboundCusto
 	f	Lnet/minecraft/class_1967;	field_21649	data
 	m	(Lnet/minecraft/class_2076;)V	method_20393	handle
 c	net/minecraft/class_4397	net/minecraft/recipebook/PlaceRecipe
-	m	(IIILnet/minecraft/class_1114;Ljava/util/Iterator;I)V	method_20429	placeRecipe
 c	net/minecraft/class_4398	net/minecraft/recipebook/ServerPlaceRecipe
 	f	Lorg/apache/logging/log4j/Logger;	field_21652	LOGGER
 	f	Lnet/minecraft/class_3175;	field_21653	stackedContents
@@ -23662,9 +23583,9 @@ c	net/minecraft/class_4475	net/minecraft/tags/BlockTags
 	m	(Lnet/minecraft/class_4487;)V	method_21439	reset
 	m	()I	method_21440	access$000
 	m	()Lnet/minecraft/class_4487;	method_21442	access$100
-c	net/minecraft/class_4475$class_4476	net/minecraft/tag/BlockTags$BlockTag
-	f	I	field_22182	version
-	f	Lnet/minecraft/class_4482;	field_22183	tag
+c	net/minecraft/class_4475$class_4476	net/minecraft/tags/BlockTags$Wrapper
+	f	I	field_22182	check
+	f	Lnet/minecraft/class_4482;	field_22183	actual
 	m	(Lnet/minecraft/class_197;)Z	method_21443	contains
 c	net/minecraft/class_4477	net/minecraft/tags/FluidTags
 	f	Lnet/minecraft/class_4482;	field_22184	WATER
@@ -23675,9 +23596,9 @@ c	net/minecraft/class_4477	net/minecraft/tags/FluidTags
 	m	(Lnet/minecraft/class_4487;)V	method_21446	reset
 	m	()I	method_21447	access$000
 	m	()Lnet/minecraft/class_4487;	method_21449	access$100
-c	net/minecraft/class_4477$class_4478	net/minecraft/tag/FluidTags$FluidTag
-	f	I	field_22188	version
-	f	Lnet/minecraft/class_4482;	field_22189	tag
+c	net/minecraft/class_4477$class_4478	net/minecraft/tags/FluidTags$Wrapper
+	f	I	field_22188	check
+	f	Lnet/minecraft/class_4482;	field_22189	actual
 	m	(Lnet/minecraft/class_4023;)Z	method_21450	contains
 c	net/minecraft/class_4479	net/minecraft/tags/ItemTags
 	f	Lnet/minecraft/class_4482;	field_22190	ANVIL
@@ -23717,7 +23638,9 @@ c	net/minecraft/class_4479	net/minecraft/tags/ItemTags
 	m	(Lnet/minecraft/class_4487;)V	method_21454	reset
 	m	()I	method_21455	access$000
 	m	()Lnet/minecraft/class_4487;	method_21457	access$100
-c	net/minecraft/class_4479$class_4480	net/minecraft/tag/ItemTags$class_4480
+c	net/minecraft/class_4479$class_4480	net/minecraft/tags/ItemTags$Wrapper
+	f	I	field_22222	check
+	f	Lnet/minecraft/class_4482;	field_22223	actual
 	m	(Lnet/minecraft/class_1069;)Z	method_21458	contains
 c	net/minecraft/class_448	net/minecraft/client/model/QuadrupedModel
 	f	Lnet/minecraft/class_467;	field_1508	head
@@ -23772,7 +23695,6 @@ c	net/minecraft/class_4487	net/minecraft/tags/TagCollection
 	f	Lcom/google/gson/Gson;	field_22234	GSON
 	f	I	field_22235	PATH_SUFFIX_LENGTH
 	f	Ljava/util/Map;	field_22236	tags
-	f	Ljava/util/function/Function;	field_22237	idToValue
 	f	Ljava/lang/String;	field_22239	directory
 	f	Z	field_22240	ordered
 	f	Ljava/lang/String;	field_22241	name
@@ -23785,12 +23707,11 @@ c	net/minecraft/class_4487	net/minecraft/tags/TagCollection
 c	net/minecraft/class_4488	net/minecraft/tags/TagManager
 	f	Lnet/minecraft/class_4481;	field_22242	blocks
 	f	Lnet/minecraft/class_4481;	field_22243	items
-	f	Lnet/minecraft/class_4481;	field_22244	entityTypes
+	f	Lnet/minecraft/class_4481;	field_22244	fluids
 	m	()Lnet/minecraft/class_4481;	method_21492	getBlocks
 	m	(Lnet/minecraft/class_1967;)V	method_21493	serializeToNetwork
 	m	()Lnet/minecraft/class_4481;	method_21494	getFluids
 	m	(Lnet/minecraft/class_1967;)Lnet/minecraft/class_4488;	method_21495	deserializeFromNetwork
-	m	()Lnet/minecraft/class_4481;	method_21496	getEntityTypes
 c	net/minecraft/class_4489	net/minecraft/class_4489
 c	net/minecraft/class_4489$1	net/minecraft/class_4489$1
 c	net/minecraft/class_449	net/minecraft/client/render/entity/model/SheepWoolEntityModel
@@ -25225,8 +25146,7 @@ c	net/minecraft/class_617$1	net/minecraft/client/gui/screen/ResourcePackScreen$1
 c	net/minecraft/class_617$2	net/minecraft/client/gui/screen/ResourcePackScreen$2
 c	net/minecraft/class_622	net/minecraft/client/sounds/SoundEngine
 	f	Ljava/util/Set;	field_13699	ONLY_WARN_ONCE
-	f	Ljava/util/List;	field_13700	tickingSounds
-	f	Ljava/util/List;	field_13701	listeners
+	f	Ljava/util/List;	field_13700	listeners
 	f	Ljava/util/List;	field_21131	preloadQueue
 	f	Lnet/minecraft/class_347;	field_2264	options
 	f	Z	field_2265	loaded
@@ -25234,10 +25154,8 @@ c	net/minecraft/class_622	net/minecraft/client/sounds/SoundEngine
 	f	Lorg/apache/logging/log4j/Logger;	field_8191	LOGGER
 	f	Lnet/minecraft/class_1909;	field_8192	manager
 	f	I	field_8194	tickCount
-	f	Ljava/util/Map;	field_8196	soundDeleteTime
-	f	Lcom/google/common/collect/Multimap;	field_8198	instanceBySource
-	f	Ljava/util/Map;	field_8200	instanceToChannel
-	f	Ljava/util/Map;	field_8201	queuedSounds
+	f	Ljava/util/List;	field_8199	tickingSounds
+	f	Ljava/util/Map;	field_8200	queuedSounds
 	m	(Lnet/minecraft/class_2907;)V	method_12536	addEventListener
 	m	(Lnet/minecraft/class_2907;)V	method_12538	removeEventListener
 	m	()V	method_1714	destroy
@@ -26141,7 +26059,6 @@ c	net/minecraft/class_795	net/minecraft/server/level/ServerLevel
 	m	(Lnet/minecraft/class_864;)V	method_21267	addFromAnotherDimension
 	m	()Lnet/minecraft/class_1545;	method_21268	getScoreboard
 	m	()Lnet/minecraft/class_3603;	method_21270	getLiquidTicks
-	m	()Lnet/minecraft/class_3603;	method_21271	getBlockTicks
 	m	()V	method_2130	stopWeather
 	m	()V	method_2131	runBlockEvents
 	m	(Lnet/minecraft/class_1166;)Z	method_2137	doBlockEvent
@@ -26502,10 +26419,10 @@ c	net/minecraft/class_824	net/minecraft/stats/Stats
 	f	Lnet/minecraft/class_4474;	field_22117	ITEM_USED
 	f	Lnet/minecraft/class_4474;	field_22118	ITEM_BROKEN
 	f	Lnet/minecraft/class_4474;	field_22119	ITEM_DROPPED
-	f	Lnet/minecraft/class_4474;	field_22120	ENTITY_KILLED
+	f	Lnet/minecraft/class_4474;	field_22120	ITEM_PICKED_UP
 	f	Lnet/minecraft/class_4474;	field_22121	ENTITY_KILLED_BY
-	f	Lnet/minecraft/class_4474;	field_22122	CUSTOM
-	f	Lnet/minecraft/class_4474;	field_22123	ITEM_PICKED_UP
+	f	Lnet/minecraft/class_4474;	field_22122	ENTITY_KILLED
+	f	Lnet/minecraft/class_4474;	field_22123	CUSTOM
 	f	Lnet/minecraft/class_1653;	field_22124	PLAY_ONE_MINUTE
 	f	Lnet/minecraft/class_1653;	field_22125	TIME_SINCE_REST
 	f	Lnet/minecraft/class_1653;	field_22126	SNEAK_TIME
@@ -26912,9 +26829,9 @@ c	net/minecraft/class_864	net/minecraft/world/entity/Entity
 	f	Lnet/minecraft/class_236;	field_11901	portalEntranceOffset
 	f	Lnet/minecraft/class_1354;	field_11902	portalEntranceForwards
 	f	Z	field_11904	outsideWorldBorder
-	f	Lnet/minecraft/class_2921;	field_14493	DATA_POSE
-	f	Lnet/minecraft/class_2921;	field_14494	DATA_CUSTOM_NAME_VISIBLE
-	f	Lnet/minecraft/class_2921;	field_14495	DATA_CUSTOM_NAME
+	f	Lnet/minecraft/class_2921;	field_14493	DATA_CUSTOM_NAME
+	f	Lnet/minecraft/class_2921;	field_14494	DATA_NO_GRAVITY
+	f	Lnet/minecraft/class_2921;	field_14495	DATA_SILENT
 	f	Ljava/util/Set;	field_14497	tags
 	f	Z	field_14498	teleportRequested
 	f	Lorg/apache/logging/log4j/Logger;	field_14499	LOGGER
@@ -26924,11 +26841,11 @@ c	net/minecraft/class_864	net/minecraft/world/entity/Entity
 	f	Ljava/lang/String;	field_14503	stringUUID
 	f	Z	field_14504	teleported
 	f	Lnet/minecraft/class_864;	field_14505	vehicle
-	f	Lnet/minecraft/class_2921;	field_14506	DATA_SILENT
-	f	Lnet/minecraft/class_2921;	field_14507	DATA_NO_GRAVITY
+	f	Lnet/minecraft/class_2921;	field_14506	DATA_SHARED_FLAGS_ID
+	f	Lnet/minecraft/class_2921;	field_14507	DATA_AIR_SUPPLY_ID
 	f	Ljava/util/List;	field_14508	passengers
 	f	I	field_14509	boardingCooldown
-	f	Lnet/minecraft/class_2921;	field_15028	DATA_AIR_SUPPLY_ID
+	f	Lnet/minecraft/class_2921;	field_15028	DATA_CUSTOM_NAME_VISIBLE
 	f	[D	field_15443	pistonDeltas
 	f	J	field_15444	pistonDeltasGameTime
 	f	Ljava/util/List;	field_15445	EMPTY_LIST
@@ -27330,6 +27247,7 @@ c	net/minecraft/class_871	net/minecraft/world/entity/Mob
 	m	()Lnet/minecraft/class_1699;	method_2623	getTarget
 	m	()Z	method_2631	requiresCustomPersistence
 	m	()V	method_2632	checkDespawn
+	m	()V	method_2633	customServerAiStep
 	m	()I	method_2636	getMaxHeadXRot
 	m	()I	method_2639	getMaxSpawnClusterSize
 	m	(F)V	method_2659	setYya
@@ -27505,8 +27423,6 @@ c	net/minecraft/class_885	net/minecraft/world/entity/ai/goal/RangedAttackGoal
 c	net/minecraft/class_886	net/minecraft/world/entity/ai/goal/AvoidEntityGoal
 	f	Ljava/lang/Class;	field_11929	avoidClass
 	f	Lnet/minecraft/class_85;	field_14575	path
-	f	Ljava/util/function/Predicate;	field_16839	predicateOnAvoidEntity
-	f	Ljava/util/function/Predicate;	field_16840	avoidPredicate
 	f	Lnet/minecraft/class_877;	field_3454	mob
 	f	Lnet/minecraft/class_864;	field_3457	targetEntity
 	f	F	field_3458	maxDist
@@ -27648,7 +27564,7 @@ c	net/minecraft/class_902	net/minecraft/world/entity/ai/goal/LookAtPlayerGoal
 	f	F	field_3521	lookDistance
 	f	I	field_3522	lookTime
 	f	F	field_3523	probability
-	f	Ljava/lang/Class;	field_3524	lookAtType
+	f	Ljava/lang/Class;	field_3524	targetType
 c	net/minecraft/class_903	net/minecraft/entity/ai/goal/LookAtCustomerGoal
 	f	Lnet/minecraft/class_985;	field_3525	villager
 c	net/minecraft/class_904	net/minecraft/entity/ai/goal/VillagerMatingGoal
@@ -27700,7 +27616,7 @@ c	net/minecraft/class_910	net/minecraft/world/entity/ai/goal/CatSitOnBlockGoal
 	f	Lnet/minecraft/class_947;	field_3562	ocelot
 c	net/minecraft/class_911	net/minecraft/world/entity/ai/goal/OfferFlowerGoal
 	f	Lnet/minecraft/class_952;	field_3570	golem
-	f	Lnet/minecraft/class_985;	field_3571	villager
+	f	Lnet/minecraft/class_985;	field_3571	targetVillager
 	f	I	field_3572	tick
 c	net/minecraft/class_912	net/minecraft/world/entity/ai/goal/OpenDoorGoal
 	f	Z	field_3573	closeDoor
@@ -27957,7 +27873,6 @@ c	net/minecraft/class_945	net/minecraft/world/entity/animal/AbstractGolem
 c	net/minecraft/class_946	net/minecraft/entity/passive/MooshroomEntity
 	m	(Lnet/minecraft/class_862;)Lnet/minecraft/class_946;	method_4520	breed
 c	net/minecraft/class_947	net/minecraft/world/entity/animal/Ocelot
-	f	Lnet/minecraft/class_2921;	field_14612	DATA_TRUSTING
 	f	Lnet/minecraft/class_3193;	field_16912	TEMPT_INGREDIENT
 	m	(I)V	method_2857	setCatVariant
 	m	()I	method_2858	getCatVariant
@@ -27974,9 +27889,9 @@ c	net/minecraft/class_948	net/minecraft/world/entity/animal/Pig
 	m	()Z	method_2860	hasSaddle
 	m	(Lnet/minecraft/class_862;)Lnet/minecraft/class_948;	method_4522	getBreedOffspring
 c	net/minecraft/class_949	net/minecraft/world/entity/animal/Sheep
-	f	Ljava/util/Map;	field_12006	ITEM_BY_DYE
+	f	Ljava/util/Map;	field_12006	COLORARRAY_BY_COLOR
 	f	Lnet/minecraft/class_2921;	field_14620	DATA_WOOL_ID
-	f	Ljava/util/Map;	field_16927	COLORARRAY_BY_COLOR
+	f	Ljava/util/Map;	field_16927	ITEM_BY_DYE
 	f	I	field_3707	eatAnimationTick
 	f	Lnet/minecraft/class_891;	field_3708	eatBlockGoal
 	m	(Ljava/util/Random;)Lnet/minecraft/class_2674;	method_11100	getRandomSheepColor
@@ -28467,8 +28382,8 @@ c	net/minecraft/class_980$class_1716	net/minecraft/entity/mob/SpiderEntity$Data
 c	net/minecraft/class_980$class_2661	net/minecraft/entity/mob/SpiderEntity$AttackGoal
 c	net/minecraft/class_980$class_2662	net/minecraft/entity/mob/SpiderEntity$FollowTargetGoal
 c	net/minecraft/class_982	net/minecraft/world/entity/monster/Zombie
-	f	Lnet/minecraft/class_2921;	field_14786	DATA_BABY_ID
-	f	Lnet/minecraft/class_2921;	field_14788	DATA_SPECIAL_TYPE_ID
+	f	Lnet/minecraft/class_2921;	field_14785	DATA_BABY_ID
+	f	Lnet/minecraft/class_2921;	field_14786	DATA_SPECIAL_TYPE_ID
 	f	Lnet/minecraft/class_2921;	field_17071	DATA_DROWNED_CONVERSION_ID
 	f	I	field_17072	conversionTime
 	f	I	field_17073	inWaterTime
@@ -28504,28 +28419,22 @@ c	net/minecraft/class_983	net/minecraft/entity/data/Merchant
 	f	Lnet/minecraft/class_988;	field_3943	player
 	f	Lnet/minecraft/class_1145;	field_3944	list
 c	net/minecraft/class_984	net/minecraft/world/entity/ReputationEventHandler
-c	net/minecraft/class_985	net/minecraft/world/entity/npc/Villager
+c	net/minecraft/class_985	net/minecraft/entity/passive/VillagerEntity
 	f	Lnet/minecraft/class_852;	field_12107	villagerInventory
 	f	[[[[Lnet/minecraft/class_985$class_2668;	field_12108	TRADES
 	f	Z	field_12109	willingToMate
-	f	I	field_12110	numberOfRestocksToday
+	f	I	field_12110	career
 	f	I	field_12111	careerLevel
-	f	Lnet/minecraft/class_2921;	field_14789	DATA_VILLAGER_DATA
 	f	Lorg/apache/logging/log4j/Logger;	field_15078	VILLAGER_LOGGER
-	f	I	field_3949	villagerXp
-	f	I	field_3951	updateMerchantTimer
-	f	Z	field_3952	increaseProfessionLevelOnUpdate
-	f	Lnet/minecraft/class_988;	field_3954	lastTradedPlayer
-	f	Lnet/minecraft/class_1145;	field_3955	gossips
+	f	I	field_3949	riches
+	f	Lnet/minecraft/class_988;	field_3954	customer
+	f	Lnet/minecraft/class_1145;	field_3955	offers
 	m	(Lnet/minecraft/class_1069;)Z	method_11219	canPickUp
-	m	()Z	method_11223	canBreed
 	m	()Z	method_11224	hasSeedToPlant
-	m	()V	method_11225	makeBread
-	m	(Lnet/minecraft/class_1986;)V	method_15917	lambda$getDisplayName$7
-	m	(Lnet/minecraft/class_1986;)V	method_15918	lambda$getDisplayName$8
+	m	()V	method_11226	getOffers
 	m	(I)V	method_3108	setProfession
 	m	()I	method_3115	profession
-	m	()Z	method_3118	hungry
+	m	()Z	method_3118	hasCustomer
 	m	(Lnet/minecraft/class_862;)Lnet/minecraft/class_985;	method_4565	breed
 c	net/minecraft/class_985$class_2663	net/minecraft/entity/passive/VillagerEntity$ItemTradeEntry
 	f	Lnet/minecraft/class_1069;	field_12112	item
@@ -28601,14 +28510,14 @@ c	net/minecraft/class_987	net/minecraft/world/entity/player/Inventory
 c	net/minecraft/class_988	net/minecraft/world/entity/player/Player
 	f	Z	field_12122	reducedDebugInfo
 	f	I	field_12123	enchantmentSeed
-	f	Lnet/minecraft/class_2921;	field_14792	DATA_SHOULDER_RIGHT
-	f	Lnet/minecraft/class_2921;	field_14793	DATA_SHOULDER_LEFT
+	f	Lnet/minecraft/class_2921;	field_14792	DATA_PLAYER_ABSORPTION_ID
+	f	Lnet/minecraft/class_2921;	field_14793	DATA_SCORE_ID
 	f	Lnet/minecraft/class_1071;	field_14794	lastItemInMainHand
 	f	Lnet/minecraft/class_2686;	field_14795	cooldowns
-	f	Lnet/minecraft/class_2921;	field_14796	DATA_PLAYER_ABSORPTION_ID
-	f	Lnet/minecraft/class_2921;	field_14797	DATA_SCORE_ID
-	f	Lnet/minecraft/class_2921;	field_15625	DATA_PLAYER_MODE_CUSTOMISATION
-	f	Lnet/minecraft/class_2921;	field_15626	DATA_PLAYER_MAIN_HAND
+	f	Lnet/minecraft/class_2921;	field_14796	DATA_PLAYER_MAIN_HAND
+	f	Lnet/minecraft/class_2921;	field_14797	DATA_PLAYER_MODE_CUSTOMISATION
+	f	Lnet/minecraft/class_2921;	field_15625	DATA_SHOULDER_RIGHT
+	f	Lnet/minecraft/class_2921;	field_15626	DATA_SHOULDER_LEFT
 	f	Z	field_17090	respawnForced
 	f	Z	field_17091	wasUnderwater
 	f	Lnet/minecraft/class_1023;	field_3971	enderChestInventory
@@ -28682,11 +28591,9 @@ c	net/minecraft/class_988	net/minecraft/world/entity/player/Player
 	m	(Lnet/minecraft/class_322;)V	method_14162	setShoulderEntityLeft
 	m	(Lnet/minecraft/class_322;)V	method_14163	playShoulderEntityAmbientSound
 	m	(Ljava/lang/String;Lnet/minecraft/class_1986;)V	method_15926	lambda$decorateDisplayNameComponent$6
-	m	(Ljava/util/Collection;)I	method_15927	resetRecipes
 	m	(Lnet/minecraft/class_1653;)V	method_15928	awardStat
 	m	(Lnet/minecraft/class_1653;I)V	method_15929	awardStat
 	m	(Lnet/minecraft/class_4472;I)V	method_15930	awardStat
-	m	(Ljava/util/Collection;)I	method_15931	awardRecipes
 	m	(Lnet/minecraft/class_4472;)V	method_15932	awardStat
 	m	(Lnet/minecraft/class_1982;)Lnet/minecraft/class_1982;	method_15933	decorateDisplayNameComponent
 	m	(I)V	method_15934	giveExperiencePoints
@@ -28767,8 +28674,8 @@ c	net/minecraft/class_99	net/minecraft/world/level/storage/LevelStorageSource
 c	net/minecraft/class_990	net/minecraft/world/entity/projectile/AbstractArrow
 	f	I	field_14798	life
 	f	Lnet/minecraft/class_990$class_3002;	field_14799	pickup
-	f	Lnet/minecraft/class_2921;	field_14801	DATA_OWNERUUID_ID
-	f	Lnet/minecraft/class_2921;	field_17094	PIERCE_LEVEL
+	f	Lnet/minecraft/class_2921;	field_14801	PIERCE_LEVEL
+	f	Lnet/minecraft/class_2921;	field_17094	DATA_OWNERUUID_ID
 	f	Lnet/minecraft/class_2232;	field_17095	lastState
 	f	Ljava/util/UUID;	field_17096	ownerUUID
 	f	D	field_4023	baseDamage
