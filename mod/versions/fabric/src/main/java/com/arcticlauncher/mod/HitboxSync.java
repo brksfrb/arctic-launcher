@@ -1,6 +1,6 @@
 package com.arcticlauncher.mod;
 
-//#if MC >= 1.15 && MC < 26.1
+//#if MC >= 1.15 && MC < 1.21.9
 import com.arcticlauncher.client.ArcticClient;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
@@ -11,14 +11,14 @@ import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
  * back when it is turned off (but only if this switched it on, so the player's own F3+B stays theirs).
  */
 public final class HitboxSync {
-	//#if MC >= 1.15 && MC < 26.1
+	//#if MC >= 1.15 && MC < 1.21.9
 	private static boolean ours;
 	//#endif
 
 	private HitboxSync() {}
 
 	public static void tick() {
-		//#if MC >= 1.15 && MC < 26.1
+		//#if MC >= 1.15 && MC < 1.21.9
 		if (ArcticClient.config() == null) {
 			return;
 		}
