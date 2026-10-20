@@ -122,6 +122,8 @@ def renames = [
 		['MC < 1.15', 'shiftKeyDown', 'sneakKeyDown'],
 		['MC < 1.15', 'isShiftKeyDown', 'isSneaking'],
 		['MC < 1.14', 'isSameThread', 'isOnThread'],
+		// SoundEngine's channel map has no name in the 1.13 mappings.
+		['MC < 1.14', 'instanceToChannel', 'field_8196'],
 		['MC < 1.14', 'net.minecraft.network.protocol.game.ClientboundRespawnPacket', 'net.minecraft.network.packet.s2c.play.PlayerRespawnS2CPacket'],
 		['MC < 1.14', 'ClientboundRespawnPacket', 'PlayerRespawnS2CPacket'],
 		['MC < 1.14', 'isVisuallySwimming', 'isSwimming'],
@@ -267,6 +269,9 @@ processResources {
 			// Before 26.1 zoom's FOV multiplier is applied on GameRenderer, not Camera.
 			oldCamera: !atLeast('26.1') && atLeast('1.14'),
 			cameraClass: atLeast('1.14'),
+			// 1.13 draws the crosshair inline in Gui.render and its buttons have no alpha.
+			crosshairHook: atLeast('1.14'),
+			widgetAlpha: atLeast('1.14'),
 			lightEngine: atLeast('1.14'),
 			// Needs the FreeType font code of 26.1+ (older versions use STB).
 			smoothFont: atLeast('26.1'),

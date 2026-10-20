@@ -15,8 +15,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(Window.class)
 abstract class WindowFrameMixin {
+	//#if MC < 1.14
+	// 1.13: the swap and event poll are in method_18301(boolean).
+	@Inject(method = "method_18301", at = @At("HEAD"))
+	private void arctic$replayFrameDone(boolean flag, CallbackInfo ci) {
+	//#else
 	@Inject(method = "updateDisplay", at = @At("HEAD"))
 	private void arctic$replayFrameDone(CallbackInfo ci) {
+	//#endif
 		Replays.afterFrame();
 	}
 }

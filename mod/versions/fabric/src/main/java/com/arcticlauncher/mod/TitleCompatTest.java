@@ -29,11 +29,13 @@ public final class TitleCompatTest {
 		firstFrameChecked = true;
 		try {
 			assertTitle(false);
+			//#if MC >= 1.14
 			for (Object child : screen.children()) {
 				if (child instanceof AbstractWidget && ((AbstractWidget) child).visible
 						&& ((com.arcticlauncher.mod.mixin.WidgetAlphaAccess) child).arctic$alpha() < .99f)
 					throw new IllegalStateException("Transparent title label on first frame: " + ((AbstractWidget) child).getMessage().getString());
 			}
+			//#endif
 			ArcticMod.LOG.info("titlecompat: first frame labels visible and Arctic centered");
 		} catch (Throwable error) { ArcticMod.LOG.error("titlecompat: FAILED", error); Minecraft.getInstance().stop(); }
 	}

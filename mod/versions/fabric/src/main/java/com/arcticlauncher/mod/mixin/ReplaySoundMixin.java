@@ -32,8 +32,13 @@ abstract class ReplaySoundMixin {
 	private void arctic$pitch(SoundInstance sound, CallbackInfoReturnable<Float> cir) {
 		arctic$levels.computeIfAbsent(sound, s -> new float[] {1, 1})[1] = cir.getReturnValue();
 	}
+	//#if MC < 1.14
+	@Inject(method = "tickNonPaused", at = @At("TAIL"))
+	private void arctic$capture(CallbackInfo ci) {
+	//#else
 	@Inject(method = "tick", at = @At("TAIL"))
 	private void arctic$capture(boolean paused, CallbackInfo ci) {
+	//#endif
 		arctic$levels.keySet().retainAll(instanceToChannel.keySet());
 		if (!arctic$audio.begin()) return;
 		for (SoundInstance s : instanceToChannel.keySet()) {
