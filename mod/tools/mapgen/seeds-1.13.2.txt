@@ -1,0 +1,9 @@
+# Classes the matcher can't pair by itself: mojmap name, then Legacy Yarn 1.13.2 (or intermediary) name.
+net.minecraft.client.Camera                  net.minecraft.client.render.Camera
+com.mojang.blaze3d.platform.InputConstants   net.minecraft.class_4107
+net.minecraft.world.effect.MobEffect         net.minecraft.entity.effect.StatusEffect
+net.minecraft.client.player.Input            net.minecraft.client.input.Input
+net.minecraft.client.player.KeyboardInput    net.minecraft.client.input.KeyboardInput
+net.minecraft.client.Options                 net.minecraft.client.option.GameOptions
+net.minecraft.server.MinecraftServer         net.minecraft.server.MinecraftServer
+net.minecraft.world.phys.EntityHitResult     net.minecraft.util.hit.EntityHitResult

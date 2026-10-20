@@ -43,6 +43,23 @@ def javap(jar, cls, code=False):
     return subprocess.run([JAVAP, "-cp", jar, *flags, cls], capture_output=True, text=True).stdout
 
 
+def compact(text):
+    """javap -s output with each member on one line: signature, then its descriptor."""
+    out = []
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("  ") and not line.startswith("   ") and i + 1 < len(lines) and "descriptor:" in lines[i + 1]:
+            out.append(line.strip().rstrip(";") + "   " + lines[i + 1].split("descriptor:")[1].strip())
+            i += 2
+        else:
+            if line.strip():
+                out.append(line.strip() if not line.startswith("  ") else line)
+            i += 1
+    return "\n".join(out)
+
+
 def body(text, name, desc):
     out = []
     for chunk in re.split(r"\n(?=  \S)", text):
@@ -65,7 +82,7 @@ def main():
             continue
         if what.startswith("grep:"):
             _, cls, pattern = what.split(":", 2)
-            for line in javap(jar, cls).splitlines():
+            for line in compact(javap(jar, cls)).splitlines():
                 if re.search(pattern, line):
                     print(line)
             continue
@@ -77,7 +94,7 @@ def main():
                         print(n[:-6].replace("/", "."))
             continue
         cls, _, method = what.partition("#")
-        print(javap(jar, cls))
+        print(compact(javap(jar, cls)))
         if method:
             name = method.split("(")[0]
             print(body(javap(jar, cls, code=True), name, method[len(name):]))
