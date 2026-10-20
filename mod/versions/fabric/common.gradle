@@ -207,8 +207,10 @@ dependencies {
 		// 1.13.2: Mojang never published names for it; this file (mod/tools/mapgen) carries 1.14.4's across.
 		// Loom reads a mappings jar: the Tiny file goes into one (made here, before Loom needs it).
 		def tinyFile = file(project.mappings_file)
-		def mappingsJar = layout.buildDirectory.file("mappings/mappings-${mc}.jar").get().asFile
-		if (!mappingsJar.exists() || mappingsJar.lastModified() < tinyFile.lastModified()) {
+		// Named by the mapping's content: a changed mapping is never served from an older jar or Loom cache.
+		def tinyHash = java.security.MessageDigest.getInstance('MD5').digest(tinyFile.bytes).encodeHex().toString().take(12)
+		def mappingsJar = layout.buildDirectory.file("mappings/mappings-${mc}-${tinyHash}.jar").get().asFile
+		if (!mappingsJar.exists()) {
 			mappingsJar.parentFile.mkdirs()
 			mappingsJar.withOutputStream { out ->
 				def zip = new java.util.zip.ZipOutputStream(out)
