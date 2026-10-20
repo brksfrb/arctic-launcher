@@ -295,7 +295,7 @@ public abstract class Page {
 
 	/** Right Shift: opens the Arctic menu over this page. */
 	protected boolean rightShift() {
-		ArcticClient.platform().openPage(ArcticClient.arcticMenu());
+		ArcticClient.platform().openPageOver(ArcticClient.arcticMenu());
 		return true;
 	}
 

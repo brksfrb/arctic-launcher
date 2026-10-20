@@ -191,6 +191,14 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	/** Show a core page, returning to the current screen when it closes. */
 	void openPage(Page page);
 
+	/**
+	 * Open {@code page} over the current screen, so closing it comes back to that screen (Right Shift
+	 * on a server list returns to the server list, not to what was under it). Defaults to openPage.
+	 */
+	default void openPageOver(Page page) {
+		openPage(page);
+	}
+
 	/** Close the current page, back to where it was opened from. */
 	void closePage();
 
