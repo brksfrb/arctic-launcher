@@ -1,4 +1,4 @@
-//#if MC >= 1.15
+//#if MC >= 1.14
 package com.arcticlauncher.mod.replay;
 
 import com.mojang.authlib.GameProfile;
