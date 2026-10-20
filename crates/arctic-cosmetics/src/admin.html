@@ -404,6 +404,7 @@ const TABS = [
   { id: "servers", label: "Servers", subs: [["pending", "Waiting"], ["unverified", "Unverified"], ["listed", "Listed"], ["curated", "Curated"], ["rejected", "Rejected"]] },
   { id: "suggestions", label: "Suggestions", subs: [["open", "Open"], ["done", "Done"], ["all", "All"]] },
   { id: "crashes", label: "Crashes", subs: [["open", "Open"], ["resolved", "Resolved"], ["all", "All"]] },
+  { id: "overview", label: "Overview", subs: [["now", "Now"]] },
   { id: "history", label: "History", subs: [["decisions", "Decisions"], ["reads", "Read-only keys"]] },
 ];
 
@@ -874,7 +875,27 @@ async function history(r) {
       : empty(reads ? "No reads by read-only keys yet." : "No decisions yet."));
 }
 
-const VIEWS = { gallery, servers, suggestions, crashes, history };
+async function overview(r) {
+  const data = await api("/v1/admin/stats");
+  const c = data.counts || {};
+  const d = data.downloads;
+  const tile = (label, value, note) => el("div", { class: "card" },
+    el("div", { class: "meta" }, label), el("h3", { style: "font-size:26px" }, value), note ? el("div", { class: "meta" }, note) : null);
+  const downloads = d
+    ? [tile("Launcher downloads", fmt(d.launcher.total), "every download of every release file, so not unique people"),
+       tile("Polarium downloads", fmt(d.polarium.total), "same: every download counts")]
+    : [tile("Downloads", "unavailable", "GitHub didn't answer; try again in a minute")];
+  return el("div", {},
+    el("div", { class: "grid" },
+      tile("Accounts known", fmt(c.accounts), "Minecraft accounts that ever saved their looks here"),
+      tile("Active in 30 days", fmt(c.accounts_30d), fmt(c.accounts_7d) + " in the last 7 days"),
+      tile("Friends profiles", fmt(c.profiles)),
+      tile("Crash reports", fmt(c.crash_reports)),
+      ...downloads,
+      tile("Launcher opens", "not tracked", "the launcher never tells this server when it starts")));
+}
+
+const VIEWS = { gallery, servers, suggestions, crashes, overview, history };
 
 // ---- start ---------------------------------------------------------------
 

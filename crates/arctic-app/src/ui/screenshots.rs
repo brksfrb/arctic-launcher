@@ -32,11 +32,17 @@ enum Motion {
     #[default]
     Settled,
     Opening,
+    /// The picture has arrived and the dialog is fading in under it: the grown picture fades out
+    /// over that, so there is no empty frame between the two.
+    Handoff,
     Closing,
 }
 
 /// How long the picture takes to grow or shrink (seconds).
 const MOTION_SECS: f64 = 0.22;
+
+/// How long the grown picture and the dialog cross-fade (seconds).
+const HANDOFF_SECS: f64 = 0.14;
 
 #[derive(Default)]
 pub struct ScreenshotsUi {
@@ -215,8 +221,13 @@ impl ArcticApp {
         let p = self.palette();
         let mut close = false;
         let uri = crate::widgets::file_uri(&shot.path);
-        if self.shots.motion != Motion::Settled && self.animate_preview(ctx, &uri) {
+        if matches!(self.shots.motion, Motion::Opening | Motion::Closing)
+            && self.animate_preview(ctx, &uri)
+        {
             return;
+        }
+        if self.shots.motion == Motion::Handoff {
+            self.handoff_overlay(ctx, &uri);
         }
         let modal = Modal::new(Id::new("shot_preview"))
             .frame(super::instances::dialog_frame(p))
@@ -318,12 +329,15 @@ impl ArcticApp {
             return false;
         };
         if t >= 1.0 {
-            self.shots.motion = Motion::Settled;
             if closing {
+                self.shots.motion = Motion::Settled;
                 self.shots.open = None;
                 self.shots.cell = None;
                 return true;
             }
+            // The dialog appears now; the picture stays on top of it while it fades in.
+            self.shots.motion = Motion::Handoff;
+            self.shots.motion_started = ctx.input(|i| i.time);
             return false;
         }
         // Where the dialog's picture ends up: as large as the window allows, in its middle.
@@ -357,6 +371,49 @@ impl ArcticApp {
             });
         ctx.request_repaint();
         true
+    }
+
+    /// The grown picture, fading out over the dialog that is fading in (same size and place, so it
+    /// reads as one thing settling instead of a flash).
+    fn handoff_overlay(&mut self, ctx: &egui::Context, uri: &str) {
+        let h =
+            ((ctx.input(|i| i.time) - self.shots.motion_started) / HANDOFF_SECS).clamp(0.0, 1.0);
+        let Some(cell) = self.shots.cell else {
+            self.shots.motion = Motion::Settled;
+            return;
+        };
+        if h >= 1.0 {
+            self.shots.motion = Motion::Settled;
+            return;
+        }
+        let screen = ctx.content_rect();
+        let room = screen.size() * vec2(0.9, 0.82) - vec2(0.0, 60.0);
+        let aspect = cell.width() / cell.height().max(1.0);
+        let fitted = if room.x / room.y > aspect {
+            vec2(room.y * aspect, room.y)
+        } else {
+            vec2(room.x, room.x / aspect)
+        };
+        let rect = egui::Rect::from_center_size(screen.center() - vec2(0.0, 20.0), fitted);
+        let left = 1.0 - h as f32;
+        egui::Area::new(Id::new("shot_handoff"))
+            .order(egui::Order::Tooltip)
+            .fixed_pos(screen.min)
+            .interactable(false)
+            .fade_in(false)
+            .show(ctx, |ui| {
+                ui.painter().rect_filled(
+                    screen,
+                    0.0,
+                    egui::Color32::from_black_alpha((140.0 * left) as u8),
+                );
+                egui::Image::new(uri.to_owned())
+                    .corner_radius(CornerRadius::same(8))
+                    .fit_to_exact_size(rect.size())
+                    .tint(egui::Color32::from_white_alpha((255.0 * left) as u8))
+                    .paint_at(ui, rect);
+            });
+        ctx.request_repaint();
     }
 
     pub(crate) fn on_screenshot_list(&mut self, shots: Vec<Shot>) {

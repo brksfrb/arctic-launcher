@@ -134,6 +134,24 @@ impl Store {
         Ok(store)
     }
 
+    /// Counts for the admin overview: accounts the server has seen (by the last time their looks
+    /// were saved), friends profiles and crash reports.
+    pub fn overview(&self, now: u64) -> rusqlite::Result<serde_json::Value> {
+        let conn = self.conn();
+        let count = |sql: &str, p: &[&dyn rusqlite::ToSql]| -> rusqlite::Result<i64> {
+            conn.query_row(sql, p, |r| r.get(0))
+        };
+        let week = now.saturating_sub(7 * 86_400) as i64;
+        let month = now.saturating_sub(30 * 86_400) as i64;
+        Ok(serde_json::json!({
+            "accounts": count("SELECT COUNT(*) FROM players", &[])?,
+            "accounts_7d": count("SELECT COUNT(*) FROM players WHERE updated >= ?1", &[&week])?,
+            "accounts_30d": count("SELECT COUNT(*) FROM players WHERE updated >= ?1", &[&month])?,
+            "profiles": count("SELECT COUNT(*) FROM arctic_profiles", &[])?,
+            "crash_reports": count("SELECT COUNT(*) FROM crashes", &[])?,
+        }))
+    }
+
     pub(crate) fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {
         self.db.lock().unwrap_or_else(|e| e.into_inner())
     }

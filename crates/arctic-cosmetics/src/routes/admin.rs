@@ -45,6 +45,7 @@ pub fn routes() -> Router<Shared> {
         .route("/v1/admin/gallery", routing::get(queue))
         .route("/v1/admin/gallery/{id}", routing::post(decide))
         .route("/v1/admin/log", routing::get(log))
+        .route("/v1/admin/stats", routing::get(stats))
         .route("/v1/admin/crashes", routing::get(crash_groups))
         .route(
             "/v1/admin/crashes/{id}",
@@ -114,6 +115,75 @@ async fn me(State(state): State<Shared>, headers: HeaderMap) -> Response {
         .into_response(),
         Err(e) => db_error("pending count", e),
     }
+}
+
+/// Release downloads asked of GitHub at most this often.
+const DOWNLOADS_EVERY: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+/// Downloads of the launcher's and Polarium's release files. GitHub counts every download, not
+/// every person, so these are not unique people. `None` when GitHub can't be reached.
+fn github_downloads() -> Option<serde_json::Value> {
+    static CACHE: OnceLock<Mutex<Option<(std::time::Instant, serde_json::Value)>>> =
+        OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(None));
+    if let Ok(held) = cache.lock()
+        && let Some((at, value)) = held.as_ref()
+        && at.elapsed() < DOWNLOADS_EVERY
+    {
+        return Some(value.clone());
+    }
+    let mut out = serde_json::Map::new();
+    for (key, repo) in [
+        ("launcher", "brksfrb/arctic-launcher"),
+        ("polarium", "brksfrb/polarium"),
+    ] {
+        let url = format!("https://api.github.com/repos/{repo}/releases?per_page=100");
+        let mut resp = ureq::get(&url)
+            .header("User-Agent", "arctic-cosmetics")
+            .header("Accept", "application/vnd.github+json")
+            .config()
+            .timeout_global(Some(std::time::Duration::from_secs(10)))
+            .build()
+            .call()
+            .ok()?;
+        let releases: Vec<serde_json::Value> = resp.body_mut().read_json().ok()?;
+        let mut total = 0_u64;
+        let mut per_release = Vec::new();
+        for release in releases.iter().filter(|r| r["draft"] != true) {
+            let downloads: u64 = release["assets"]
+                .as_array()
+                .map(|a| a.iter().filter_map(|x| x["download_count"].as_u64()).sum())
+                .unwrap_or(0);
+            total += downloads;
+            per_release.push(json!({"tag": release["tag_name"], "downloads": downloads}));
+        }
+        per_release.truncate(8);
+        out.insert(
+            key.to_owned(),
+            json!({"total": total, "releases": per_release}),
+        );
+    }
+    let value = serde_json::Value::Object(out);
+    if let Ok(mut held) = cache.lock() {
+        *held = Some((std::time::Instant::now(), value.clone()));
+    }
+    Some(value)
+}
+
+/// The overview tab: how many accounts the server knows, and the release downloads.
+async fn stats(State(state): State<Shared>, headers: HeaderMap) -> Response {
+    if caller(&state, &headers).is_none() {
+        return denied();
+    }
+    let counts = match state.store.overview(now()) {
+        Ok(counts) => counts,
+        Err(e) => return db_error("overview", e),
+    };
+    let downloads = tokio::task::spawn_blocking(github_downloads)
+        .await
+        .ok()
+        .flatten();
+    Json(json!({ "counts": counts, "downloads": downloads })).into_response()
 }
 
 /// What waits on each dashboard tab: gallery items and servers to review,
