@@ -76,5 +76,8 @@
   {"id": "honeybee_buddy", "name": "Honeybee Buddy", "slot": "shoulders"},
   {"id": "fox_festival_mask", "name": "Fox Festival Mask", "slot": "face"},
   {"id": "prism_bracers", "name": "Prism Bracers", "slot": "arms"},
-  {"id": "alchemist_bandolier", "name": "Alchemist Bandolier", "slot": "body"}
+  {"id": "alchemist_bandolier", "name": "Alchemist Bandolier", "slot": "body"},
+  {"id": "shadow_pup", "name": "Shadow Pup", "slot": "shoulders"},
+  {"id": "ember_hatchling", "name": "Ember Hatchling", "slot": "shoulders"},
+  {"id": "cloud_wisp", "name": "Cloud Wisp", "slot": "shoulders"}
 ]
