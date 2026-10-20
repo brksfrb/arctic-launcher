@@ -132,6 +132,9 @@ final class ModCatalog {
 		out.add(new Mod("tabglow", "Find Me in Tab", "Your own name in the player list pulses: » Steve «", "tiers", Category.SOCIAL,
 				"tab list find myself name highlight glow")
 				.toggle(() -> c.tabGlowSelf, on -> c.tabGlowSelf = on));
+		out.add(new Mod("hitboxes", "Hitboxes", "Every player's and mob's hitbox as a box, like F3+B in one click", "target",
+				Category.GAMEPLAY, "hitbox combat box f3 reach")
+				.toggle(() -> c.hitboxes, on -> c.hitboxes = on));
 		out.add(new Mod("saturation", "Saturation Bar", "Your hidden saturation as a gold line on the hunger bar", "food",
 				Category.HUD, "hunger food appleskin saturation")
 				.toggle(() -> c.saturationBar, on -> c.saturationBar = on));
