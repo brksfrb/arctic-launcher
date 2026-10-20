@@ -387,6 +387,8 @@ dependencies = [
  "thiserror 2.0.21",
  "ureq",
  "uuid 1.26.1",
+ "windows",
+ "windows-future",
  "windows-sys 0.61.2",
  "x11rb",
  "zeroize",

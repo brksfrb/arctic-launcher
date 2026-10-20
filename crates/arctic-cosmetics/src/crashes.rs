@@ -165,9 +165,30 @@ fn names_an_error(line: &str) -> bool {
     thrown || line.trim_start().starts_with("Error:")
 }
 
+/// Errors every session with a failed sign-in or no Realms access prints (an offline account, a token
+/// that expired, a blocked Realms call): they say nothing about why a game crashed, and if they count as
+/// "the first error", unrelated crashes land in one group.
+fn background_noise(line: &str) -> bool {
+    [
+        "InvalidCredentialsException",
+        "MinecraftClientHttpException",
+        "Realms authentication",
+        "Could not authorize you against Realms",
+        "SignedJWT",
+        "AuthenticationUnavailableException",
+    ]
+    .iter()
+    .any(|noise| line.contains(noise))
+}
+
+/// A line that names an exception worth grouping by.
+fn names_a_cause(line: &str) -> bool {
+    names_an_error(line) && !background_noise(line)
+}
+
 /// Groups reports of one crash: the game version plus the first line that names an exception.
 fn fingerprint(game: &str, title: &str, log: &str) -> String {
-    let cause = log.lines().find(|l| names_an_error(l)).unwrap_or(title);
+    let cause = log.lines().find(|l| names_a_cause(l)).unwrap_or(title);
     let digits_gone: String = cause.chars().filter(|c| !c.is_ascii_digit()).collect();
     let digest = Sha256::digest(format!("{game}|{digits_gone}").as_bytes());
     digest.iter().take(8).map(|b| format!("{b:02x}")).collect()
@@ -196,7 +217,7 @@ pub fn summarize(title: &str, log: &str) -> Summary {
     let diagnosis = (!title.is_empty() && title != "Crash").then(|| title.to_owned());
     let first_error = log
         .lines()
-        .find(|l| names_an_error(l) || jvm_fatal(l))
+        .find(|l| names_a_cause(l) || jvm_fatal(l))
         .map(short_line);
     let root_cause = log
         .lines()
@@ -710,5 +731,24 @@ mod tests {
         assert!(clipped.len() <= MAX_LOG_BYTES);
         assert!(clipped.ends_with("END"));
         assert_eq!(clean_field("a\nb\u{7}c "), "abc");
+    }
+    #[test]
+    fn failed_sign_in_noise_is_not_the_first_error() {
+        let log = "[17:57:02] [Download-2/ERROR] Failed to fetch user properties
+    com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401
+    net.minecraft.class_4355: Realms authentication error with message 'java.lang.RuntimeException: Failed to parse into SignedJWT: 0'
+java.lang.OutOfMemoryError: Java heap space";
+        let summary = summarize("Crash", log);
+        assert_eq!(
+            summary.first_error.as_deref(),
+            Some("java.lang.OutOfMemoryError: Java heap space")
+        );
+        // Two different crashes after the same noise are two groups.
+        let other = "com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401
+java.lang.NullPointerException: x";
+        assert_ne!(
+            fingerprint("1.21.11", "Crash", log),
+            fingerprint("1.21.11", "Crash", other)
+        );
     }
 }

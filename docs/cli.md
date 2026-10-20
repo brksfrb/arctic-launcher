@@ -239,6 +239,26 @@ A code (`abcd-efgh`) is stored on the Arctic server and needs a signed-in accoun
 (`arctic1.…`) and `.json` files work without it. Accounts, the proxy, Java paths and JVM
 arguments are never included, and everything imported is checked value by value first.
 
+### `arctic bedrock`
+
+Minecraft: Bedrock Edition (Minecraft for Windows). `--preview` works on Minecraft Preview
+instead, and `--account <ID>` picks an Xbox account's folder for worlds and servers (the ids
+are in `status`; the default is the one played last).
+
+```text
+arctic bedrock status | play
+arctic bedrock versions [--all] | install <VERSION|latest>
+arctic bedrock worlds list | import <MCWORLD_OR_FOLDER> | export <WORLD> [--to FILE] | backup <WORLD> | remove <WORLD>
+arctic bedrock packs list | import <MCPACK_OR_MCADDON> | remove <NAME|UUID>
+arctic bedrock servers list [--no-ping] | ping <ADDRESS> | add <ADDRESS> [--name N] | remove <ADDRESS>
+```
+
+`install` switches the installed game to any version since 1.21.120, older or newer: Windows
+downloads the package from Microsoft and installs it over the current one, keeping worlds,
+packs and settings. The game must be owned on the Microsoft account signed in to the
+Microsoft Store, and the Store may update it again later. Removed worlds and packs go to
+`com.mojang\arctic-trash`; backups go to `bedrock\backups` in Arctic's folder.
+
 ### `arctic worlds`, `waypoints`, `servers`, `friends`, `defaults`, `skin`, `look`, `proxy`, `settings`, `crash`, `together`
 
 ```text

@@ -46,6 +46,7 @@ pub fn routes() -> Router<Shared> {
         .route("/v1/admin/gallery/{id}", routing::post(decide))
         .route("/v1/admin/log", routing::get(log))
         .route("/v1/admin/stats", routing::get(stats))
+        .route("/v1/admin/names/release", routing::post(release_name))
         .route("/v1/admin/crashes", routing::get(crash_groups))
         .route(
             "/v1/admin/crashes/{id}",
@@ -168,6 +169,40 @@ fn github_downloads() -> Option<serde_json::Value> {
         *held = Some((std::time::Instant::now(), value.clone()));
     }
     Some(value)
+}
+
+#[derive(Deserialize)]
+struct ReleaseName {
+    name: String,
+}
+
+/// Free an offline name whose PC lost its key (a reinstall, a wiped profile), so the player's launcher
+/// can claim it again. Moderators only; the player's profile and friends are kept.
+async fn release_name(
+    State(state): State<Shared>,
+    headers: HeaderMap,
+    Json(body): Json<ReleaseName>,
+) -> Response {
+    let Some(moderator) = moderator(&state, &headers) else {
+        return error(StatusCode::FORBIDDEN, "admins only");
+    };
+    let name = body.name.trim();
+    let valid = !name.is_empty()
+        && name.len() <= 16
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+    if !valid {
+        return error(StatusCode::BAD_REQUEST, "that isn't a Minecraft name");
+    }
+    match state.store.release_key(&crate::images::offline_uuid(name)) {
+        Ok(true) => {
+            let _ = state
+                .store
+                .moderation_note(&moderator, "release", name, "offline name", now());
+            Json(json!({ "ok": true })).into_response()
+        }
+        Ok(false) => error(StatusCode::NOT_FOUND, "that name has no claim"),
+        Err(e) => db_error("release name", e),
+    }
 }
 
 /// The overview tab: how many accounts the server knows, and the release downloads.

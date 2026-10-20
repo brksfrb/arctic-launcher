@@ -875,6 +875,22 @@ async function history(r) {
       : empty(reads ? "No reads by read-only keys yet." : "No decisions yet."));
 }
 
+function releaseCard() {
+  const name = el("input", { placeholder: "Offline name, like Mr_ODS", maxlength: "16", "aria-label": "Offline name" });
+  const go = el("button", { class: "small" }, "Release");
+  go.onclick = async () => {
+    const who = name.value.trim();
+    if (!who) return;
+    if (!(await sure("Release " + who + "?", "Whoever's launcher signs in with this name next claims it. Use it for a player who lost their PC's key and recovery code; their profile and friends stay.", "Release"))) return;
+    const ok = await act(go, () => api("/v1/admin/names/release", { method: "POST", body: { name: who } }), "Released: " + who);
+    if (ok) name.value = "";
+  };
+  return el("div", { class: "card", style: "margin-top:12px;max-width:420px" },
+    el("h3", {}, "Release an offline name"),
+    el("div", { class: "meta" }, "For a player whose launcher lost its key (\"this name is used by another Arctic player\") and has no recovery code."),
+    el("div", { class: "actions", style: "margin-top:8px" }, name, go));
+}
+
 async function overview(r) {
   const data = await api("/v1/admin/stats");
   const c = data.counts || {};
@@ -892,7 +908,8 @@ async function overview(r) {
       tile("Friends profiles", fmt(c.profiles)),
       tile("Crash reports", fmt(c.crash_reports)),
       ...downloads,
-      tile("Launcher opens", "not tracked", "the launcher never tells this server when it starts")));
+      tile("Launcher opens", "not tracked", "the launcher never tells this server when it starts")),
+    canChange() ? releaseCard() : null);
 }
 
 const VIEWS = { gallery, servers, suggestions, crashes, overview, history };

@@ -197,6 +197,16 @@ impl Store {
     }
 
     /// Move an offline name to a new key (recovery on a new PC).
+    /// A moderator frees an offline name so its owner's launcher can claim it again (a PC that lost
+    /// its key). The profile and friends stay: they hang on the name's UUID. False when it has no claim.
+    pub fn release_key(&self, uuid: &str) -> rusqlite::Result<bool> {
+        let changed = self.conn().execute(
+            "UPDATE players SET key_hash = NULL WHERE uuid = ?1 AND key_hash IS NOT NULL",
+            params![uuid],
+        )?;
+        Ok(changed > 0)
+    }
+
     pub fn replace_key_hash(&self, uuid: &str, hash: &str) -> rusqlite::Result<()> {
         self.conn().execute(
             "UPDATE players SET key_hash = ?2 WHERE uuid = ?1",
@@ -311,6 +321,20 @@ mod tests {
         // Name updates keep the look.
         s.touch("a", "Alicia", 3).unwrap();
         assert_eq!(s.look("a").unwrap(), look);
+    }
+
+    #[test]
+    fn a_moderator_can_release_a_claimed_offline_name() {
+        let s = Store::memory().unwrap();
+        s.touch("o", "Steve", 1).unwrap();
+        // Nothing to release before it is claimed.
+        assert!(!s.release_key("o").unwrap());
+        s.set_key_hash("o", "h1").unwrap();
+        assert!(s.release_key("o").unwrap());
+        assert_eq!(s.key_hash("o").unwrap(), None);
+        // The next launcher claims it with its own key; the profile (looks) stays.
+        s.set_key_hash("o", "h2").unwrap();
+        assert_eq!(s.key_hash("o").unwrap().as_deref(), Some("h2"));
     }
 
     #[test]
