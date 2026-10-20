@@ -1,3 +1,4 @@
+//#if MC >= 1.14
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.client.ArcticClient;
@@ -57,3 +58,4 @@ abstract class LightEngineMixin {
 		}
 	}
 }
+//#endif

@@ -21,7 +21,11 @@ public final class PageScreen extends Screen {
 	}
 
 	public PageScreen(Page page, Screen parent) {
+		//#if MC >= 1.14
 		super(com.arcticlauncher.mod.Compat.literal("Arctic"));
+		//#else
+		super();
+		//#endif
 		this.page = page;
 		this.parent = parent;
 	}
@@ -30,10 +34,18 @@ public final class PageScreen extends Screen {
 		return page;
 	}
 
+	//#if MC >= 1.14
 	@Override
 	protected void init() {
 		page.init(width, height);
 	}
+	//#else
+	// 1.13 leaves this method (the screen's init) unnamed.
+	@Override
+	protected void method_1044() {
+		page.init(width, height);
+	}
+	//#endif
 
 	@Override
 	public void tick() {
@@ -141,17 +153,33 @@ public final class PageScreen extends Screen {
 	public boolean mouseScrolled(double x, double y, double scrollX, double scrollY) {
 		return page.mouseScrolled(x, y, scrollY);
 	}
-	//#else
+	//#elif MC >= 1.14
 	// Before 1.20.2 scrolling had no separate horizontal axis.
 	@Override
 	public boolean mouseScrolled(double x, double y, double scrollY) {
 		return page.mouseScrolled(x, y, scrollY);
 	}
+	//#else
+	// 1.13 doesn't say where the wheel turned: the pointer is where it is.
+	@Override
+	public boolean mouseScrolled(double scrollY) {
+		double[] at = Compat.guiMouse();
+		return page.mouseScrolled(at[0], at[1], scrollY);
+	}
 	//#endif
 
 	@Override
 	public boolean keyPressed(int key, int scancode, int modifiers) {
+		//#if MC >= 1.14
 		return page.keyPressed(Input.key(key), key);
+		//#else
+		boolean used = page.keyPressed(Input.key(key), key);
+		if (!used && key == 256 && page.closeOnEscape()) {
+			onClose();
+			return true;
+		}
+		return used;
+		//#endif
 	}
 
 	@Override
@@ -176,7 +204,9 @@ public final class PageScreen extends Screen {
 		return page.pausesGame();
 	}
 
+	//#if MC >= 1.14
 	@Override
+	//#endif
 	public void onClose() {
 		ServerMenus.returnTo(parent);
 	}

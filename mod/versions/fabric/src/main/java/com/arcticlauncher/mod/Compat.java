@@ -197,8 +197,10 @@ public final class Compat {
 		return InputConstants.isKeyDown(key.getValue());
 		//#elif MC >= 1.21.9
 		return InputConstants.isKeyDown(mc().getWindow(), key.getValue());
-		//#else
+		//#elif MC >= 1.14
 		return InputConstants.isKeyDown(mc().getWindow().getWindow(), key.getValue());
+		//#else
+		return org.lwjgl.glfw.GLFW.glfwGetKey(mc().getWindow().getWindow(), key.getValue()) == org.lwjgl.glfw.GLFW.GLFW_PRESS;
 		//#endif
 	}
 
@@ -317,8 +319,11 @@ public final class Compat {
 		net.minecraft.resources.ResourceLocation id = level.registryAccess()
 				.registryOrThrow(net.minecraft.core.Registry.BIOME_REGISTRY).getKey(level.getBiome(pos));
 		return id == null ? null : id.getPath();
-		//#else
+		//#elif MC >= 1.14
 		net.minecraft.resources.ResourceLocation id = net.minecraft.core.Registry.BIOME.getKey(level.getBiome(pos));
+		return id == null ? null : id.getPath();
+		//#else
+		net.minecraft.resources.ResourceLocation id = net.minecraft.core.Registry.BIOME.getKey(level.method_8577(pos));
 		return id == null ? null : id.getPath();
 		//#endif
 	}
@@ -639,6 +644,26 @@ public final class Compat {
 		//#else
 		net.minecraft.client.KeyMapping.set(com.mojang.blaze3d.platform.InputConstants.getKey(mapping.saveString()), down);
 		//#endif
+	}
+
+	/** A screen's title (1.13 screens have none). */
+	public static net.minecraft.network.chat.Component titleOf(net.minecraft.client.gui.screens.Screen screen) {
+		//#if MC >= 1.14
+		return screen.getTitle();
+		//#else
+		return empty();
+		//#endif
+	}
+
+	/** Closes an AutoCloseable (a NativeImage, a texture) without naming its close(); 1.13's isn't named. */
+	public static void closeQuietly(Object closeable) {
+		if (closeable instanceof AutoCloseable) {
+			try {
+				((AutoCloseable) closeable).close();
+			} catch (Exception ignored) {
+				// Nothing to do about it.
+			}
+		}
 	}
 
 	/** An entity's position (the getters came with 1.15). */

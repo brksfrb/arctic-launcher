@@ -16,7 +16,7 @@ abstract class MinecraftTickMixin {
 		ArcticClient.tick(Compat.screen() != null);
 		com.arcticlauncher.mod.ServerMenus.tick();
 		com.arcticlauncher.mod.DisconnectConfirm.tick();
-		//#if MC >= 1.14
+		//#if MC >= 1.13
 		com.arcticlauncher.mod.replay.ReplayRecording.tick();
 		//#endif
 		//#if MC >= 26.1

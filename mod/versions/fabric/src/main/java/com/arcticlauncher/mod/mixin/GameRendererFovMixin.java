@@ -1,3 +1,4 @@
+//#if MC >= 1.14
 package com.arcticlauncher.mod.mixin;
 
 //#if MC < 26.1
@@ -34,4 +35,5 @@ abstract class GameRendererFovMixin {
 	}
 	//#endif
 }
+//#endif
 //#endif

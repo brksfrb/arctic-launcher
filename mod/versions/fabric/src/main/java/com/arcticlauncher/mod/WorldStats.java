@@ -19,7 +19,11 @@ final class WorldStats {
 			return null;
 		}
 		BlockPos pos = Compat.blockPos(p);
+		//#if MC >= 1.14
 		return new int[] {mc.level.getBrightness(LightLayer.BLOCK, pos), mc.level.getBrightness(LightLayer.SKY, pos)};
+		//#else
+		return new int[] {mc.level.getLuminance(LightLayer.BLOCK, pos), mc.level.getLuminance(LightLayer.SKY, pos)};
+		//#endif
 	}
 
 	static int countItems(String idPart) {
@@ -119,7 +123,11 @@ final class WorldStats {
 		//#elif MC >= 1.16
 		return mc.level.dimension().location().getPath();
 		//#else
+		//#if MC >= 1.14
 		return net.minecraft.world.level.dimension.DimensionType.getName(mc.level.getDimension().getType()).getPath();
+		//#else
+		return net.minecraft.world.level.dimension.DimensionType.getName(mc.player.dimension).getPath();
+		//#endif
 		//#endif
 	}
 
@@ -242,7 +250,11 @@ final class WorldStats {
 			}
 		}
 		mc.options.save();
+		//#if MC >= 1.14
 		mc.reloadResourcePacks();
+		//#else
+		mc.reloadResources();
+		//#endif
 		//#endif
 	}
 

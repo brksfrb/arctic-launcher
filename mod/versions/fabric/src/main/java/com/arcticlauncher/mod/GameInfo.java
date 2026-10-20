@@ -122,8 +122,11 @@ public final class GameInfo {
 		return Compat.mobEffectSprite(e.getEffect());
 		//#elif MC >= 1.20.6
 		return Minecraft.getInstance().getMobEffectTextures().get(e.getEffect());
-		//#else
+		//#elif MC >= 1.14
 		return Minecraft.getInstance().getMobEffectTextures().get(e.getEffect());
+		//#else
+		// 1.13 draws effect icons from the inventory texture; the HUD shows them as text.
+		return null;
 		//#endif
 	}
 
@@ -168,11 +171,22 @@ public final class GameInfo {
 			SAMPLES.clear();
 			samplesLevel = level;
 		}
+		//#if MC >= 1.14
 		return SAMPLES.computeIfAbsent(id, k -> BuiltInRegistries.ITEM.getOptional(Identifier.tryParse(k)).map(ItemStack::new).orElse(null));
+		//#else
+		return SAMPLES.computeIfAbsent(id, k -> {
+			Identifier parsed = Identifier.tryParse(k);
+			return parsed != null && BuiltInRegistries.ITEM.containsKey(parsed) ? new ItemStack(BuiltInRegistries.ITEM.get(parsed)) : null;
+		});
+		//#endif
 	}
 
 	public static Object effectSprite(String id) {
+		//#if MC >= 1.14
 		return BuiltInRegistries.MOB_EFFECT.getOptional(Identifier.tryParse(id)).map(GameInfo::spriteFor).orElse(null);
+		//#else
+		return null;
+		//#endif
 	}
 
 	private static Object spriteFor(MobEffect effect) {
@@ -180,8 +194,10 @@ public final class GameInfo {
 		return Compat.mobEffectSprite(BuiltInRegistries.MOB_EFFECT.wrapAsHolder(effect));
 		//#elif MC >= 1.20.6
 		return Minecraft.getInstance().getMobEffectTextures().get(BuiltInRegistries.MOB_EFFECT.wrapAsHolder(effect));
-		//#else
+		//#elif MC >= 1.14
 		return Minecraft.getInstance().getMobEffectTextures().get(effect);
+		//#else
+		return null;
 		//#endif
 	}
 

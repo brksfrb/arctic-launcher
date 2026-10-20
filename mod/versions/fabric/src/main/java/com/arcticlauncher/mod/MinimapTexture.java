@@ -52,7 +52,11 @@ final class MinimapTexture {
 
 	/** The top block's height, or MIN_VALUE where the chunk isn't loaded. */
 	private static int top(ClientLevel level, int x, int z) {
+		//#if MC >= 1.14
 		if (!level.hasChunk(x >> 4, z >> 4)) {
+		//#else
+		if (((net.minecraft.world.chunk.ClientChunkProvider) level.getChunkSource()).method_17044(x >> 4, z >> 4, false, false) == null) {
+		//#endif
 			return Integer.MIN_VALUE;
 		}
 		return level.getHeight(Heightmap.Types.WORLD_SURFACE, x, z) - 1;

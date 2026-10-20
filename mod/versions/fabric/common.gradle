@@ -121,6 +121,7 @@ def renames = [
 		['MC < 1.15', 'keyShift', 'keySneak'],
 		['MC < 1.15', 'shiftKeyDown', 'sneakKeyDown'],
 		['MC < 1.15', 'isShiftKeyDown', 'isSneaking'],
+		['MC < 1.14', 'isSameThread', 'isOnThread'],
 		// 1.13: one widget class (Legacy Yarn's ButtonWidget) where 1.14 has AbstractWidget and Button.
 		['MC < 1.14', 'net.minecraft.client.gui.components.AbstractWidget', 'net.minecraft.client.gui.widget.ButtonWidget'],
 		['MC < 1.14', 'net.minecraft.client.gui.components.Button', 'net.minecraft.client.gui.widget.ButtonWidget'],
@@ -134,6 +135,13 @@ def patternRenames = [
 		// 1.14 keeps the window in a field; Window's own getWindow() is the native handle.
 		['MC < 1.15', /\.getWindow\(\)(?=\.getWindow\(\))/, '.window'],
 		['MC < 1.15', /(?<!window)\.getWindow\(\)/, '.window'],
+		// 1.13: the inventory and its slots, a model without type parameters.
+		['MC < 1.14', /\.getContainerSize\(/, '.getInvSize('],
+		['MC < 1.14', /(?<![A-Za-z0-9_])inventory\.getItem\(/, 'inventory.getInvStack('],
+		['MC < 1.14', /HumanoidModel<\?>/, 'HumanoidModel'],
+		['MC < 1.14', /PlayerModel<AbstractClientPlayer>/, 'PlayerModel'],
+		// 1.13's NativeImage and DynamicTexture close through AutoCloseable (their own close() isn't named).
+		['MC < 1.14', /(?<![A-Za-z0-9_])(image|texture)\.close\(\)/, 'com.arcticlauncher.mod.Compat.closeQuietly($1)'],
 		// 1.13 runs a task on the game's thread with submit(Runnable) (execute takes a Callable there).
 		['MC < 1.14', /(?<!TIMER)\.execute\(/, '.submit('],
 ]
@@ -251,7 +259,9 @@ processResources {
 			// Menus' backdrop: Screen's panorama from 1.20.6, its dirt background before (ScreenMixin).
 			panoramaHook: true,
 			// Before 26.1 zoom's FOV multiplier is applied on GameRenderer, not Camera.
-			oldCamera: !atLeast('26.1'),
+			oldCamera: !atLeast('26.1') && atLeast('1.14'),
+			cameraClass: atLeast('1.14'),
+			lightEngine: atLeast('1.14'),
 			// Needs the FreeType font code of 26.1+ (older versions use STB).
 			smoothFont: atLeast('26.1'),
 			// Motion blur as a post effect (and its pack) before 26.1, for VulkanMod.

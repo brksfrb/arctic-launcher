@@ -23,7 +23,7 @@ public final class ArcticMod implements ClientModInitializer {
 	public void onInitializeClient() {
 		ArcticClient.init(new FabricPlatform());
 		com.arcticlauncher.mod.svc.Greeter.listenToFabricApi();
-		//#if MC >= 1.14
+		//#if MC >= 1.13
 		com.arcticlauncher.client.replay.Replays.backend(com.arcticlauncher.mod.replay.ReplayPlayback.INSTANCE);
 		//#endif
 		SelfTest.maybeStart();

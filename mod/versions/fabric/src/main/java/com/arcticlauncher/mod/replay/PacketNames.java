@@ -32,28 +32,44 @@ final class PacketNames {
 		put(net.minecraft.network.protocol.game.ClientboundCooldownPacket.class, "cooldown");
 		put(net.minecraft.network.protocol.game.ClientboundEntityEventPacket.class, "entity_event");
 		put(net.minecraft.network.protocol.game.ClientboundExplodePacket.class, "explode");
+		//#if MC >= 1.14
 		put(net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket.class, "forget_level_chunk");
+		//#endif
 		put(net.minecraft.network.protocol.game.ClientboundGameEventPacket.class, "game_event");
+		//#if MC >= 1.14
 		put(net.minecraft.network.protocol.game.ClientboundHorseScreenOpenPacket.class, "horse_screen_open");
+		//#endif
 		put(net.minecraft.network.protocol.game.ClientboundLevelEventPacket.class, "level_event");
 		put(net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket.class, "level_particles");
+		//#if MC >= 1.14
 		put(net.minecraft.network.protocol.game.ClientboundLightUpdatePacket.class, "light_update");
+		//#endif
 		put(net.minecraft.network.protocol.game.ClientboundLoginPacket.class, "login");
 		put(net.minecraft.network.protocol.game.ClientboundMapItemDataPacket.class, "map_item_data");
+		//#if MC >= 1.14
 		put(net.minecraft.network.protocol.game.ClientboundMerchantOffersPacket.class, "merchant_offers");
+		//#endif
 		put(net.minecraft.network.protocol.game.ClientboundMoveEntityPacket.class, "move_entity");
 		put(net.minecraft.network.protocol.game.ClientboundMoveVehiclePacket.class, "move_vehicle");
+		//#if MC >= 1.14
 		put(net.minecraft.network.protocol.game.ClientboundOpenBookPacket.class, "open_book");
+		//#endif
+		//#if MC >= 1.14
 		put(net.minecraft.network.protocol.game.ClientboundOpenScreenPacket.class, "open_screen");
+		//#endif
 		put(net.minecraft.network.protocol.game.ClientboundOpenSignEditorPacket.class, "open_sign_editor");
+		//#if MC >= 1.14
 		put(net.minecraft.network.protocol.game.ClientboundPlaceGhostRecipePacket.class, "place_ghost_recipe");
+		//#endif
 		put(net.minecraft.network.protocol.game.ClientboundPlayerAbilitiesPacket.class, "player_abilities");
 		put(net.minecraft.network.protocol.game.ClientboundPlayerLookAtPacket.class, "player_look_at");
 		put(net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket.class, "player_position");
 		put(net.minecraft.network.protocol.game.ClientboundRecipePacket.class, "recipe");
 		put(net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket.class, "remove_entities");
 		put(net.minecraft.network.protocol.game.ClientboundRemoveMobEffectPacket.class, "remove_mob_effect");
+		//#if MC >= 1.14
 		put(net.minecraft.network.protocol.game.ClientboundRespawnPacket.class, "respawn");
+		//#endif
 		put(net.minecraft.network.protocol.game.ClientboundRotateHeadPacket.class, "rotate_head");
 		//#if MC >= 1.16
 		put(net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket.class, "section_blocks_update");
@@ -63,8 +79,12 @@ final class PacketNames {
 		put(net.minecraft.network.protocol.game.ClientboundSelectAdvancementsTabPacket.class, "select_advancements_tab");
 		put(net.minecraft.network.protocol.game.ClientboundSetCameraPacket.class, "set_camera");
 		put(net.minecraft.network.protocol.game.ClientboundSetCarriedItemPacket.class, "set_carried_item");
+		//#if MC >= 1.14
 		put(net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket.class, "set_chunk_cache_center");
+		//#endif
+		//#if MC >= 1.14
 		put(net.minecraft.network.protocol.game.ClientboundSetChunkCacheRadiusPacket.class, "set_chunk_cache_radius");
+		//#endif
 		//#if MC >= 1.16
 		put(net.minecraft.network.protocol.game.ClientboundSetDefaultSpawnPositionPacket.class, "set_default_spawn_position");
 		//#else
@@ -86,7 +106,9 @@ final class PacketNames {
 		put(net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket.class, "set_player_team");
 		put(net.minecraft.network.protocol.game.ClientboundSetScorePacket.class, "set_score");
 		put(net.minecraft.network.protocol.game.ClientboundSetTimePacket.class, "set_time");
+		//#if MC >= 1.14
 		put(net.minecraft.network.protocol.game.ClientboundSoundEntityPacket.class, "sound_entity");
+		//#endif
 		put(net.minecraft.network.protocol.game.ClientboundSoundPacket.class, "sound");
 		put(net.minecraft.network.protocol.game.ClientboundStopSoundPacket.class, "stop_sound");
 		put(net.minecraft.network.protocol.game.ClientboundTabListPacket.class, "tab_list");
@@ -147,7 +169,9 @@ final class PacketNames {
 		//#if MC < 1.19
 		put(net.minecraft.network.protocol.game.ClientboundAddMobPacket.class, "add_mob");
 		put(net.minecraft.network.protocol.game.ClientboundAddPaintingPacket.class, "add_painting");
+		//#if MC >= 1.14
 		put(net.minecraft.network.protocol.game.ClientboundBlockBreakAckPacket.class, "block_break_ack");
+		//#endif
 		put(net.minecraft.network.protocol.game.ClientboundChatPacket.class, "chat");
 		//#endif
 		//#if MC < 1.19.3

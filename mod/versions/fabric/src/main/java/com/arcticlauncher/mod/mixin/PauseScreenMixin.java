@@ -21,9 +21,15 @@ abstract class PauseScreenMixin extends Screen {
 	private boolean showPauseMenu;
 	//#endif
 
+	//#if MC >= 1.14
 	private PauseScreenMixin(Component title) {
 		super(title);
 	}
+	//#else
+	private PauseScreenMixin() {
+		super();
+	}
+	//#endif
 
 	@Inject(method = "init", at = @At("TAIL"))
 	private void arctic$button(CallbackInfo ci) {
