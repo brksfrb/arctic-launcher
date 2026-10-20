@@ -20,6 +20,7 @@ fn tab_info(tab: Tab) -> (Icon, &'static str) {
         Tab::Play => (Icon::Play, "Play"),
         Tab::Accounts => (Icon::User, "Accounts"),
         Tab::Instances => (Icon::Layers, "Instances"),
+        Tab::Bedrock => (Icon::Cube, "Bedrock"),
         Tab::Skins => (Icon::Shirt, "Cosmetics"),
         Tab::Together => (Icon::Friends, "Friends"),
         Tab::Screenshots => (Icon::Image, "Screenshots"),

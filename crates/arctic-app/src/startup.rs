@@ -51,6 +51,7 @@ fn parse_tab(name: &str) -> Option<Tab> {
         "play" => Some(Tab::Play),
         "accounts" => Some(Tab::Accounts),
         "instances" => Some(Tab::Instances),
+        "bedrock" => Some(Tab::Bedrock),
         "skins" => Some(Tab::Skins),
         "together" => Some(Tab::Together),
         "logs" => Some(Tab::Logs),

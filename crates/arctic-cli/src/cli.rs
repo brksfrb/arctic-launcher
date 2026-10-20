@@ -96,6 +96,9 @@ pub enum Command {
     /// with `arctic launch --server <address>`.
     #[command(subcommand)]
     Servers(ServersCommand),
+    /// Minecraft: Bedrock Edition on Windows: play it, switch its version,
+    /// and manage its worlds, packs and servers.
+    Bedrock(BedrockArgs),
     /// Friends: who's online and where, requests, invites, your profile.
     #[command(subcommand)]
     Friends(FriendsCommand),
@@ -415,6 +418,102 @@ impl FriendsCommand {
             | Self::Profile { account, .. } => account.as_deref(),
         }
     }
+}
+
+#[derive(Debug, Args)]
+pub struct BedrockArgs {
+    /// Minecraft Preview instead of the release.
+    #[arg(long, global = true)]
+    pub preview: bool,
+    /// The Xbox account folder for worlds and servers (an id from
+    /// `arctic bedrock status`). Default: the one played last.
+    #[arg(long, global = true, value_name = "ID")]
+    pub account: Option<String>,
+    #[command(subcommand)]
+    pub command: BedrockCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BedrockCommand {
+    /// Whether the game is installed, its version, and its data folders.
+    Status,
+    /// Start the game.
+    Play,
+    /// Versions that can be installed (1.21.120 and newer), newest first.
+    Versions {
+        /// Every version, not just the newest ones.
+        #[arg(long)]
+        all: bool,
+    },
+    /// Install a version over the installed game (newer or older). Windows
+    /// downloads it from Microsoft; the game must be owned on this PC's
+    /// Microsoft Store account. Worlds and settings are kept.
+    Install {
+        /// A version ("1.26.52", "1.26.52.3") or `latest`.
+        version: String,
+    },
+    /// Worlds: list, import, export, back up, remove.
+    #[command(subcommand)]
+    Worlds(BedrockWorldsCommand),
+    /// Resource, behavior and skin packs: list, import, remove.
+    #[command(subcommand)]
+    Packs(BedrockPacksCommand),
+    /// The game's server list, with who's online.
+    #[command(subcommand)]
+    Servers(BedrockServersCommand),
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BedrockWorldsCommand {
+    /// List worlds, most recently played first.
+    List,
+    /// Import a .mcworld file (or a world folder).
+    Import { path: PathBuf },
+    /// Save a world as a .mcworld file.
+    Export {
+        /// The world's name or folder.
+        world: String,
+        /// Where to write it (default: `<name>.mcworld` here).
+        #[arg(long)]
+        to: Option<PathBuf>,
+    },
+    /// Save a .mcworld copy in Arctic's Bedrock backups folder.
+    Backup { world: String },
+    /// Move a world to com.mojangrctic-trash (kept, not deleted).
+    Remove { world: String },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BedrockPacksCommand {
+    /// List installed packs.
+    List,
+    /// Import a .mcpack or .mcaddon file (or a pack folder).
+    Import { path: PathBuf },
+    /// Move a pack to com.mojangrctic-trash (kept, not deleted).
+    Remove {
+        /// The pack's name, folder or UUID.
+        pack: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BedrockServersCommand {
+    /// The game's server list, each pinged.
+    List {
+        /// Only list them; don't contact the servers.
+        #[arg(long)]
+        no_ping: bool,
+    },
+    /// Ping any Bedrock server (`host` or `host:port`, port 19132 by default).
+    Ping { address: String },
+    /// Add a server to the game's server list.
+    Add {
+        address: String,
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Remove a server from the game's server list.
+    Remove { address: String },
 }
 
 #[derive(Debug, Subcommand)]

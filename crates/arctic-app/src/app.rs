@@ -37,6 +37,7 @@ pub enum Tab {
     Play,
     Accounts,
     Instances,
+    Bedrock,
     Skins,
     Together,
     Screenshots,
@@ -46,10 +47,11 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 9] = [
+    pub const ALL: [Tab; 10] = [
         Tab::Play,
         Tab::Accounts,
         Tab::Instances,
+        Tab::Bedrock,
         Tab::Skins,
         Tab::Together,
         Tab::Screenshots,
@@ -187,6 +189,7 @@ pub struct ArcticApp {
     pub(crate) sharing: crate::ui::ShareUi,
     pub(crate) shots: crate::ui::ScreenshotsUi,
     pub(crate) servers: crate::ui::ServersUi,
+    pub(crate) bedrock: crate::ui::BedrockUi,
     pub(crate) discover: crate::ui::DiscoverUi,
     pub(crate) friends: crate::ui::FriendsUi,
     pub(crate) chat: crate::ui::ChatUi,
@@ -263,6 +266,7 @@ impl ArcticApp {
             sharing: crate::ui::ShareUi::default(),
             shots: crate::ui::ScreenshotsUi::default(),
             servers: crate::ui::ServersUi::default(),
+            bedrock: crate::ui::BedrockUi::default(),
             discover: crate::ui::DiscoverUi::default(),
             friends: crate::ui::FriendsUi::default(),
             chat: crate::ui::ChatUi::default(),
@@ -943,6 +947,7 @@ impl ArcticApp {
             Event::PublicServers(list) => self.on_public_servers(list),
             Event::ServerSubmitted(result) => self.on_server_submitted(result),
             Event::ServerVerified(result) => self.on_server_verified(result),
+            Event::Bedrock(e) => self.on_bedrock_event(e),
             Event::Screenshots(list) => self.on_screenshot_list(list),
             Event::ScreenshotThumb(path, result) => self.on_screenshot_thumb(ctx, path, result),
             Event::ScreenshotCopied(result) => self.on_screenshot_copied(result),

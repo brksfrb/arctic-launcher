@@ -83,6 +83,7 @@ fn run(cli: &Cli, out: Out) -> Result<i32, (Out, arctic_core::Error)> {
         Command::Worlds(cmd) => commands::worlds::run(&ctx, cmd),
         Command::Waypoints(cmd) => commands::waypoints::run(&ctx, cmd),
         Command::Servers(cmd) => commands::servers::run(&ctx, cmd),
+        Command::Bedrock(args) => commands::bedrock::run(&ctx, args),
         Command::Friends(cmd) => commands::friends::run(&ctx, cmd),
         Command::Defaults(cmd) => commands::defaults::run(&ctx, cmd),
         Command::Packs(cmd) => commands::packs::run(&ctx, cmd),
