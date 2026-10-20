@@ -4,6 +4,7 @@
 mod app;
 mod art;
 mod auto_update;
+mod bedrock_tasks;
 mod bridge_host;
 mod desktop_shortcut;
 mod devshot;

@@ -95,6 +95,10 @@
   arena with a kit and shares it through Play together; your friend joins from the invite.
 - **Resource packs without a restart.** Search Modrinth from the in-game menu and a pack
   is on a second later.
+- **Bedrock Edition too.** Play Minecraft for Windows (and Preview) from the Bedrock tab,
+  switch it to any version since 1.21.120 in a click, import and export worlds (.mcworld),
+  packs and add-ons (.mcpack, .mcaddon), back worlds up, and keep a server list with live
+  player counts and ping.
 - **Performance, built in.** One switch adds Sodium, Lithium, FerriteCore, ImmediatelyFast,
   EntityCulling and ModernFix to Vanilla for much higher FPS, fetched from Modrinth for your version.
   It's on by default and works on any version Fabric supports.
