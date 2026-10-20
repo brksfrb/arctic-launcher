@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.Shadow;
 /** Adds the Arctic button to the pause menu. */
 @Mixin(PauseScreen.class)
 abstract class PauseScreenMixin extends Screen {
-	//#if MC < 1.20.2
+	//#if MC >= 1.14 && MC < 1.20.2
 	// Before 1.20.2 there's no public showsPauseMenu(): shadow the private field instead.
 	@Shadow
 	private boolean showPauseMenu;
@@ -35,6 +35,9 @@ abstract class PauseScreenMixin extends Screen {
 	private void arctic$button(CallbackInfo ci) {
 		//#if MC >= 1.20.2
 		if (((PauseScreen) (Object) this).showsPauseMenu()) {
+		//#elif MC < 1.14
+		// 1.13: always the full menu.
+		if (true) {
 		//#else
 		if (showPauseMenu) {
 		//#endif
