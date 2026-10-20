@@ -90,4 +90,4 @@ jobs:
         if: ${{ always() && inputs.probe != '' }}
         env:
           PROBE: ${{ inputs.probe }}
-        run: python3 mod/versions/fabric/mixcheck.py --probe ${{ matrix.version }} $PROBE
+        run: python3 mod/tools/probe.py ${{ matrix.version }} $PROBE
