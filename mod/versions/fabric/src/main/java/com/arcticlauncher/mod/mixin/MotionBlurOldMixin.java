@@ -14,7 +14,7 @@ abstract class MotionBlurOldMixin {
 	//#if MC >= 1.21
 	@Inject(method = "render(Lnet/minecraft/client/DeltaTracker;Z)V",
 			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/GameRenderer;renderLevel(Lnet/minecraft/client/DeltaTracker;)V", shift = At.Shift.AFTER))
-	//#elif MC >= 1.20.5
+	//#elif MC >= 1.20.5 || MC < 1.15
 	@Inject(method = "render(FJZ)V",
 			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/GameRenderer;renderLevel(FJ)V", shift = At.Shift.AFTER))
 	//#else
