@@ -164,6 +164,8 @@ public final class ClientConfig {
 	public boolean durabilityWarning = true;
 	/** Saturation (the hidden part of hunger) drawn on the hunger bar. */
 	public boolean saturationBar;
+	/** Every entity's hitbox box drawn (like F3+B), from one switch. */
+	public boolean hitboxes;
 	/** A pop-up with your coordinates when you die. */
 	public boolean deathNotice = true;
 	/** New screenshots go straight onto the clipboard. */
