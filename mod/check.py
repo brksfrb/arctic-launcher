@@ -27,7 +27,7 @@ def check(target):
     covers = ",".join(target["covers"])
     print(f"== {version} ({project})", flush=True)
     compiled = subprocess.run(
-        [str(GRADLEW), *OFFLINE, "-p", f"versions/{project}", "compileJava", "processResources", "-q",
+        [str(GRADLEW), *OFFLINE, "-p", f"versions/{project}", "compileJava", "processResources", *(["-q"] if "--info" not in OFFLINE else []),
          f"-Pminecraft_version={version}", f"-Pcovers={covers}"],
         cwd=MOD,
     )
