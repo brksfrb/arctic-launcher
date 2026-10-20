@@ -1,0 +1,19 @@
+pluginManagement {
+	repositories {
+		maven {
+			name = 'Fabric'
+			url = 'https://maven.fabricmc.net/'
+		}
+		maven {
+			name = 'Legacy Fabric'
+			url = 'https://maven.legacyfabric.net/'
+		}
+		mavenCentral()
+		gradlePluginPortal()
+	}
+}
+
+// Arctic Client for Minecraft 1.13.2: the Fabric adapter's sources (versions/fabric), built on Legacy
+// Fabric with Mojang-style names carried over from 1.14.4 (mod/tools/mapgen). Build from mod/:
+// ./gradlew -p versions/fabric13 build -Pminecraft_version=1.13.2
+rootProject.name = 'arctic-mod-13'

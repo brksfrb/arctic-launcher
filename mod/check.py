@@ -32,7 +32,7 @@ def check(target):
     )
     if compiled.returncode != 0:
         return f"{version}: does not compile"
-    if project == "fabric" and subprocess.run([sys.executable, str(MIXCHECK), version]).returncode != 0:
+    if project in ("fabric", "fabric13") and subprocess.run([sys.executable, str(MIXCHECK), version]).returncode != 0:
         return f"{version}: mixin problems"
     return None
 

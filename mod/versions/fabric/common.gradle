@@ -1,0 +1,329 @@
+// The Fabric adapter's build, shared by versions/fabric and versions/fabric13 (see their build.gradle).
+// One source tree for every Fabric version of Minecraft. Pick the version
+// with -Pminecraft_version=1.21.11; code that differs between versions sits
+// in //#if MC >= 26.1 … //#else … //#endif blocks (see preprocess below).
+def mc = project.minecraft_version
+// The sources and resources live in versions/fabric; versions/fabric13 builds them from its own folder.
+def adapterRoot = project.hasProperty('adapter_root') ? file(project.adapter_root) : projectDir
+
+/** Minecraft version as numbers, for comparing (26.1.2 → [26, 1, 2]). */
+def parseVersion = { String v -> v.tokenize('.').collect { it as int } }
+
+def compareVersions = { String a, String b ->
+	def x = parseVersion(a)
+	def y = parseVersion(b)
+	for (int i = 0; i < Math.max(x.size(), y.size()); i++) {
+		int d = (i < x.size() ? x[i] : 0) <=> (i < y.size() ? y[i] : 0)
+		if (d != 0) {
+			return d
+		}
+	}
+	return 0
+}
+
+def atLeast = { String v -> compareVersions(mc, v) >= 0 }
+
+apply plugin: atLeast('26.1') ? 'net.fabricmc.fabric-loom' : 'net.fabricmc.fabric-loom-remap'
+if (project.hasProperty('legacy_fabric')) {
+	apply plugin: 'legacy-looming'
+}
+
+/** "MC >= 26.1 && MC < 26.3": comparisons joined by && or ||. */
+def evalCondition
+evalCondition = { String expr ->
+	if (expr.contains('||')) {
+		return expr.split(/\|\|/).any { evalCondition(it.trim()) }
+	}
+	return expr.split('&&').every { part ->
+		def m = part.trim() =~ /^MC\s*(>=|<=|==|!=|>|<)\s*([0-9.]+)$/
+		if (!m.matches()) {
+			throw new GradleException("bad //#if condition: ${part.trim()}")
+		}
+		int c = compareVersions(mc, m.group(2))
+		switch (m.group(1)) {
+			case '>=': return c >= 0
+			case '<=': return c <= 0
+			case '>': return c > 0
+			case '<': return c < 0
+			case '==': return c == 0
+			default: return c != 0
+		}
+	}
+}
+
+/** Keep the lines of active //#if branches; drop the rest. */
+def preprocessSource = { String text, String name ->
+	def out = new StringBuilder()
+	def stack = [] // each: [active, anyBranchTaken]
+	text.eachLine { line ->
+		def t = line.trim()
+		boolean outerActive = stack.every { it[0] }
+		if (t.startsWith('//#if ')) {
+			boolean on = outerActive && evalCondition(t.substring(6))
+			stack << [on, on]
+		} else if (t.startsWith('//#elif ')) {
+			def top = stack.last()
+			boolean parent = stack.size() == 1 || stack[0..-2].every { it[0] }
+			boolean on = parent && !top[1] && evalCondition(t.substring(8))
+			top[0] = on
+			top[1] = top[1] || on
+		} else if (t == '//#else') {
+			def top = stack.last()
+			boolean parent = stack.size() == 1 || stack[0..-2].every { it[0] }
+			top[0] = parent && !top[1]
+			top[1] = true
+		} else if (t == '//#endif') {
+			if (stack.isEmpty()) {
+				throw new GradleException("stray //#endif in ${name}")
+			}
+			stack.removeLast()
+		} else if (outerActive) {
+			out.append(line).append('\n')
+			return
+		}
+		// Keep line numbers stable for compiler errors.
+		out.append('\n')
+	}
+	if (!stack.isEmpty()) {
+		throw new GradleException("unclosed //#if in ${name}")
+	}
+	return out.toString()
+}
+
+/**
+ * Names Minecraft renamed, as [condition, today's name, the name then]:
+ * sources use today's names and older builds get the old ones.
+ */
+def renames = [
+		['MC < 26.1', 'GuiGraphicsExtractor', 'GuiGraphics'],
+		['MC < 26.1', 'extractRenderState', 'render'],
+		['MC < 26.1', 'extractBackground', 'renderBackground'],
+		['MC < 26.1', 'extractPanorama', 'renderPanorama'],
+		['MC < 26.1', 'extractDefaultSprite', 'renderDefaultSprite'],
+		['MC < 26.1', 'extractWidgetRenderState', 'renderWidget'],
+		['MC < 26.1', 'extractContents', 'renderContents'],
+		['MC < 1.21.11', 'Identifier', 'ResourceLocation'],
+		// Before 1.20 there was no GuiGraphics: a stand-in wraps the PoseStack.
+		['MC < 1.20', 'net.minecraft.client.gui.GuiGraphics', 'com.arcticlauncher.mod.compat.GuiGraphics'],
+		// Map colors were "material colors" before 1.20.
+		['MC < 1.20', 'MapColor', 'MaterialColor'],
+		// The key binds had no screen of their own before 1.18 (they were the Controls screen).
+		['MC < 1.18', 'KeyBindsScreen', 'ControlsScreen'],
+		['MC < 1.17', 'addRenderableWidget', 'addButton'],
+		// Before 1.16 texts were mutable Components, and packs "unopened packs".
+		['MC < 1.16', 'MutableComponent', 'Component'],
+		['MC < 1.16', 'net.minecraft.server.packs.repository.Pack', 'net.minecraft.server.packs.repository.UnopenedPack'],
+		// The static registries moved to BuiltInRegistries in 1.19.3.
+		['MC < 1.19.3', 'net.minecraft.core.registries.BuiltInRegistries', 'net.minecraft.core.Registry'],
+		['MC < 1.19.3', 'BuiltInRegistries', 'Registry'],
+		// 1.14 (official names exist from 1.14.4): the client level, the sneak key and input were named differently.
+		['MC < 1.15', 'ClientLevel', 'MultiPlayerLevel'],
+		['MC < 1.15', 'keyShift', 'keySneak'],
+		['MC < 1.15', 'shiftKeyDown', 'sneakKeyDown'],
+		['MC < 1.15', 'isShiftKeyDown', 'isSneaking'],
+		['MC < 1.15', 'setShiftKeyDown', 'setSneaking'],
+]
+
+/** Rewrites that need a pattern, as [condition, regex, replacement], applied after the names above. */
+def patternRenames = [
+		// 1.14 keeps the window in a field; Window's own getWindow() is the native handle.
+		['MC < 1.15', /\.getWindow\(\)(?=\.getWindow\(\))/, '.window'],
+		['MC < 1.15', /(?<!window)\.getWindow\(\)/, '.window'],
+]
+
+def applyRenames = { String text ->
+	def named = renames.findAll { evalCondition(it[0]) }.inject(text) { t, r ->
+		t.replaceAll('(?<![A-Za-z0-9_])' + r[1] + '(?![A-Za-z0-9_])', r[2])
+	}
+	patternRenames.findAll { evalCondition(it[0]) }.inject(named) { t, r ->
+		t.replaceAll(r[1], r[2])
+	}
+}
+
+def preprocessedJava = layout.buildDirectory.dir("preprocessed/${mc}/java")
+
+tasks.register('preprocessJava') {
+	inputs.dir new File(adapterRoot, 'src/main/java')
+	inputs.property 'minecraft_version', mc
+	outputs.dir preprocessedJava
+	// Cheap, and the rules above live in this script: always regenerate.
+	outputs.upToDateWhen { false }
+	doLast {
+		def outDir = preprocessedJava.get().asFile
+		project.delete(outDir)
+		def root = new File(adapterRoot, 'src/main/java')
+		root.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+			def rel = root.toPath().relativize(f.toPath()).toString()
+			def target = new File(outDir, rel)
+			target.parentFile.mkdirs()
+			target.text = applyRenames(preprocessSource(f.getText('UTF-8'), rel))
+		}
+	}
+}
+
+base {
+	archivesName = "arctic-mod-${mc}"
+}
+
+// The shared Arctic Client core is compiled into this adapter.
+sourceSets {
+	main {
+		java.srcDirs = [preprocessedJava, '../../core/src/main/java']
+		resources.srcDirs = [new File(adapterRoot, 'src/main/resources'), '../../core/src/main/resources']
+	}
+}
+
+tasks.named('compileJava') {
+	dependsOn 'preprocessJava'
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${mc}"
+	// 26.1 and later ship unobfuscated; older versions use Mojang's names.
+	if (project.hasProperty('mappings_file')) {
+		// 1.13.2: Mojang never published names for it; this file (mod/tools/mapgen) carries 1.14.4's across.
+		mappings file(project.mappings_file)
+	} else if (!atLeast('26.1')) {
+		mappings loom.officialMojangMappings()
+	}
+	// The class-loading agent (see ArcticAgent) edits Fabric Loader with ASM, which the game ships.
+	compileOnly 'org.ow2.asm:asm:9.9'
+	compileOnly 'org.ow2.asm:asm-tree:9.9'
+	if (atLeast('26.1')) {
+		implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	} else {
+		modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	}
+}
+
+// Compile against the Mixin that Fabric Loader 0.16-0.18 ship. In Fabric's Mixin 0.17.3+ a
+// @Redirect's `at` is an array, so a jar compiled against it stores a list there, and the
+// MixinExtras of older loaders can't read that: "ArrayList cannot be cast to AnnotationNode" at
+// start (COBBLEVERSE, Loader 0.18.4). The single form reads fine on every loader.
+configurations.named('compileClasspath') {
+	resolutionStrategy.force 'net.fabricmc:sponge-mixin:0.15.4+mixin.0.8.7'
+}
+
+/** The Java the game runs on for this version. */
+def javaVersion = atLeast('26.1') ? 25 : atLeast('1.20.5') ? 21 : atLeast('1.18') ? 17 : atLeast('1.17') ? 16 : 8
+
+// The Minecraft versions this jar loads on (-Pcovers=26.1,26.1.1,26.1.2,
+// from targets.json); just the built version by default.
+def covers = (project.findProperty('covers') ?: mc).tokenize(',')
+def minecraftRange = '[' + covers.collect { '"' + it.trim() + '"' }.join(', ') + ']'
+
+// The oldest Fabric Loader that can actually load this jar: the compile-time
+// loader_version for 1.21.6+ (already required), a much older one below that
+// so players on old Minecraft aren't forced onto a needlessly new loader.
+def loaderMin = atLeast('1.21.6') ? project.loader_version : '0.16.9'
+
+processResources {
+	def props = [
+			version: project.version,
+			minecraft_range: minecraftRange,
+			java: javaVersion,
+			loader_min: loaderMin,
+			// Zoom, Freelook, Fullbright and the rest (see Compat.FEATURES): 1.20+ for now.
+			features: true,
+			// Minecraft's own buttons, sliders, checkboxes and text boxes in the Arctic style.
+			restyleWidgets: true,
+			// Menus' backdrop: Screen's panorama from 1.20.6, its dirt background before (ScreenMixin).
+			panoramaHook: true,
+			// Before 26.1 zoom's FOV multiplier is applied on GameRenderer, not Camera.
+			oldCamera: !atLeast('26.1'),
+			// Needs the FreeType font code of 26.1+ (older versions use STB).
+			smoothFont: atLeast('26.1'),
+			// Motion blur as a post effect (and its pack) before 26.1, for VulkanMod.
+			postBlur: atLeast('1.21.6') && !atLeast('26.1'),
+			// Before 26.1 the smooth font is put into the default font by code (SmoothFont): through
+			// the font itself, or from 1.21.9 (where a font no longer knows its name) the font manager.
+			smoothFontSet: !atLeast('1.21.9'),
+			smoothFontManager: atLeast('1.21.9') && !atLeast('26.1'),
+			// The smooth font's slightly heavier outline needs FreeType (1.20.5+).
+			fontWeight: atLeast('1.20.5'),
+			// Smooth letters' edges in the text's own color: the game's grayscale text shader (1.17+) darkens
+			// them; its source is changed as it's loaded (ShaderManager from 1.21.2, Program before).
+			textShader: atLeast('1.21.2'),
+			textShaderOld: atLeast('1.17') && !atLeast('1.21.2'),
+			// Block states' caches made on all cores (names as in the game: unobfuscated from 26.1).
+			fastStart: atLeast('26.1'),
+			// The startup timeline, class pre-loader and the agent behind it: Java 17+ (1.18 and later).
+			startup: atLeast('1.18'),
+			// 3D cosmetics: a layer on the player renderer (three shapes across versions), and emotes.
+			cosmeticsSubmit: atLeast('1.21.9'),
+			cosmeticsBuffers: !atLeast('1.21.9'),
+			cosmeticsState: atLeast('1.21.2') && !atLeast('1.21.9'),
+			emotes: true,
+			accountSwitch: true,
+			// Scoreboard tweaks, hit color, the minimap, duels (1.19.4+), toasts: every version.
+			extras: true,
+			// Simple Voice Chat's messages and the hello for servers: every version (custom payloads are a
+			// channel + buffer before 1.20.2, CustomPacketPayload from there, with a codec from 1.20.5).
+			svc: true,
+			// 1.20.2+ read a payload by its id: a hook keeps the bytes of ours.
+			svcCodec: atLeast('1.20.2'),
+			// The hurt tint is a texture from 1.15; before, the renderer sets it up with each hurt mob.
+			overlayTexture: atLeast('1.15'),
+			// 1.15 brought the PoseStack (before, models draw through the global GL matrix).
+			poseStack: atLeast('1.15'),
+			// The burning overlay is a renderer of its own from 1.15 (the hand renderer's before).
+			fireOverlay: atLeast('1.15'),
+			// Block outline: every version (each draws it its own way).
+			outline: true,
+			// Motion blur as a post effect in the client's pack: 26.1's renderer.
+			visuals: atLeast('26.1'),
+			// Motion blur before 26.1: plain OpenGL after the world is drawn (MotionBlurGL).
+			oldMotionBlur: !atLeast('26.1'),
+			// Item physics: every version (three renderer shapes, see ItemPhysicsMixin); from 1.21.2 the
+			// item's render state carries where it is and how far it's turned.
+			itemPhysics: true,
+			itemPhysicsState: atLeast('1.21.2'),
+			// Replays (recording and watching): every version.
+			replay: true,
+			// Before 26.1 a replay grabs finished frames where the window shows them.
+			replayWindow: !atLeast('26.1'),
+			// Self-tests make worlds through the Create World screen before 1.19.4.
+			oldWorldCreation: !atLeast('1.19.4'),
+			// Server names were looked up by ServerNameResolver from 1.17; before, by
+			// the connect screen and the server list themselves (hooked separately).
+			resolver: atLeast('1.17'),
+			// 1.21.9+ look players up by name off the game's thread (player heads): made safe.
+			playerInfoRace: atLeast('1.21.9'),
+			// Toast slots were tracked from 1.19.
+			toastSlots: atLeast('1.19'),
+			// HUD widgets hand in last frame's GUI pieces again (26.1's GUI states).
+			guiReplay: atLeast('26.1'),
+	]
+	inputs.properties props
+	filesMatching(['fabric.mod.json', 'arctic.mixins.json']) {
+		expand props
+	}
+	// The resource packs are 26.1+ (the effects pack 1.21.6+); older builds keep only the smooth font's
+	// Inter (and its licence).
+	if (!atLeast('1.21.6')) {
+		exclude 'resourcepacks/client/**'
+	}
+	if (!atLeast('26.1')) {
+		exclude 'resourcepacks/smooth_font/pack.mcmeta'
+		exclude 'resourcepacks/smooth_font/assets/minecraft/**'
+		exclude 'resourcepacks/smooth_font/assets/arctic/font/*.json'
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = javaVersion
+	it.options.encoding = 'UTF-8'
+	it.options.compilerArgs += ['-Xmaxerrs', '1000']
+}
+
+java {
+	sourceCompatibility = JavaVersion.toVersion(javaVersion)
+	targetCompatibility = JavaVersion.toVersion(javaVersion)
+}
+
+// The jar is also a Java agent (started with -javaagent before the game, see ArcticAgent).
+tasks.named('jar') {
+	manifest {
+		attributes('Premain-Class': 'com.arcticlauncher.mod.startup.ArcticAgent')
+	}
+}
