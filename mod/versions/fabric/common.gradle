@@ -331,6 +331,8 @@ processResources {
 			// Server names were looked up by ServerNameResolver from 1.17; before, by
 			// the connect screen and the server list themselves (hooked separately).
 			resolver: atLeast('1.17'),
+			// 26.1+ keep the hitbox switch in the debug screen's entry list.
+			debugEntries: atLeast('26.1'),
 			// 1.21.9+ look players up by name off the game's thread (player heads): made safe.
 			playerInfoRace: atLeast('1.21.9'),
 			// Toast slots were tracked from 1.19.

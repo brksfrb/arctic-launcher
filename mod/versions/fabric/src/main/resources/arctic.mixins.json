@@ -21,8 +21,8 @@
 		"PlayerTabOverlayMixin",
 		"PlayerTierMixin",
 <% if (lightEngine) { %>		"LightEngineMixin",
-<% } %>
-		"NativeMenuMixin",
+<% } %><% if (debugEntries) { %>		"DebugEntriesMixin",
+<% } %>		"NativeMenuMixin",
 		"HudMixin",
 		"KeyboardHandlerMixin",
 		"MouseHandlerMixin",

@@ -101,6 +101,16 @@ impl ArcticApp {
                     // An offline name used on another PC: the recovery
                     // code made there brings the profile here.
                     if !account.is_microsoft() && e.contains("used by another") {
+                        ui.label(
+                            RichText::new(
+                                "An offline name is tied to a secret key kept on the PC where it was first used. \
+                                 This PC doesn't have that key (a new PC, a reinstall, or a wiped Arctic folder). \
+                                 If you made a recovery code before (Friends, Recovery code), enter it below. \
+                                 If you never did, ask in the Arctic Discord to have the name released.",
+                            )
+                            .small()
+                            .color(p.muted),
+                        );
                         self.restore_form(ui);
                     }
                     return;
@@ -200,7 +210,11 @@ impl ArcticApp {
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, p, Icon::Gear, "Profile & privacy").clicked() {
+                // A labelled button: a small gear alone hid the privacy settings from most people.
+                if widgets::button(ui, p, Some(Icon::Gear), "Privacy & profile", false)
+                    .on_hover_text("Choose what friends see: online status, the server you play on, invites, your name")
+                    .clicked()
+                {
                     self.friends.settings_open = !self.friends.settings_open;
                     self.friends.name_edit = profile.name.clone();
                 }
@@ -347,9 +361,9 @@ impl ArcticApp {
             None => {
                 ui.label(
                     RichText::new(if profile.has_recovery {
-                        "You made one before. A new one replaces it."
+                        "A recovery code exists. If this PC ever loses its key it uses its saved copy by itself; a new code replaces both."
                     } else {
-                        "Offline accounts belong to this PC. Make a code to move them to another one."
+                        "Offline accounts belong to this PC. Arctic makes a code on its own at the next sign-in and keeps it on this PC; make one here to see it and move to another PC."
                     })
                     .small()
                     .color(p.muted),

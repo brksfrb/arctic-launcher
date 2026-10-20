@@ -554,27 +554,38 @@ pub struct Report {
 
 /// Lines of the game log's end that are sent.
 const REPORT_LOG_LINES: usize = 150;
-/// Most of the log's end, and of the crash report's start, that are sent (bytes).
-const REPORT_LOG_BYTES: usize = 16 * 1024;
+/// Most of the log's end, and of the crash report's start, that are sent (bytes). All together they
+/// stay under what the server keeps (48 KB).
+const REPORT_LOG_BYTES: usize = 12 * 1024;
 const REPORT_CRASH_BYTES: usize = 24 * 1024;
 /// How Java was started: its flags and the classpath's file names.
-const REPORT_JAVA_BYTES: usize = 6 * 1024;
+const REPORT_JAVA_BYTES: usize = 5 * 1024;
+/// The launcher's own log (sign-in failures, downloads, launch steps): its last lines.
+const REPORT_LAUNCHER_LINES: usize = 80;
+const REPORT_LAUNCHER_BYTES: usize = 6 * 1024;
 
 impl Report {
-    /// `lines` is the game's log, `crash_report` the file Minecraft wrote (if it did), `java`
-    /// how Java was started (see `LaunchPlan::java_summary`). `title` is what Arctic made of it,
-    /// or empty.
+    /// `lines` is the game's log, `launcher_lines` the launcher's own log, `crash_report` the file
+    /// Minecraft wrote (if it did), `java` how Java was started (see `LaunchPlan::java_summary`).
+    /// `title` is what Arctic made of it, or empty.
     pub fn build(
         game: &str,
         loader: &str,
         title: &str,
         lines: &[&str],
+        launcher_lines: &[&str],
         crash_report: Option<&str>,
         java: Option<&str>,
     ) -> Self {
         let skip = lines.len().saturating_sub(REPORT_LOG_LINES);
         let tail = lines[skip..].join("\n");
         let mut text = tail_of(&tail, REPORT_LOG_BYTES).to_owned();
+        if !launcher_lines.is_empty() {
+            let skip = launcher_lines.len().saturating_sub(REPORT_LAUNCHER_LINES);
+            let launcher = launcher_lines[skip..].join("\n");
+            text.push_str("\n\n---- launcher log ----\n");
+            text.push_str(tail_of(&launcher, REPORT_LAUNCHER_BYTES));
+        }
         if let Some(java) = java {
             text.push_str("\n\n---- java ----\n");
             text.push_str(head_of(java, REPORT_JAVA_BYTES));
@@ -911,10 +922,12 @@ mod tests {
             "fabric",
             "Crash",
             &lines,
+            &lines,
             Some(&"y".repeat(200_000)),
             Some(&"z".repeat(50_000)),
         );
         assert!(report.log.len() < 48 * 1024);
+        assert!(report.log.contains("---- launcher log ----"));
         assert!(report.log.contains("---- crash report ----"));
         assert!(report.log.contains("---- java ----"));
     }
