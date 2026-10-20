@@ -120,6 +120,8 @@ def renames = [
 		['MC < 1.15', 'ClientLevel', 'MultiPlayerLevel'],
 		['MC < 1.15', 'keyShift', 'keySneak'],
 		['MC < 1.15', 'shiftKeyDown', 'sneakKeyDown'],
+		['MC < 1.15', 'isShiftKeyDown', 'isSneaking'],
+		['MC < 1.15', 'setShiftKeyDown', 'setSneaking'],
 ]
 
 /** Rewrites that need a pattern, as [condition, regex, replacement], applied after the names above. */
