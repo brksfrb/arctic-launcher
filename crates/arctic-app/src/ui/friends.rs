@@ -210,7 +210,11 @@ impl ArcticApp {
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, p, Icon::Gear, "Profile & privacy").clicked() {
+                // A labelled button: a small gear alone hid the privacy settings from most people.
+                if widgets::button(ui, p, Some(Icon::Gear), "Privacy & profile", false)
+                    .on_hover_text("Choose what friends see: online status, the server you play on, invites, your name")
+                    .clicked()
+                {
                     self.friends.settings_open = !self.friends.settings_open;
                     self.friends.name_edit = profile.name.clone();
                 }
