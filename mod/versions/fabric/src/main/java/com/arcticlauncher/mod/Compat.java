@@ -547,7 +547,9 @@ public final class Compat {
 
 	/** Before 1.16 a label is a plain string (a field in 1.13, a getter from 1.14). */
 	public static String rawLabel(net.minecraft.client.gui.components.AbstractWidget w) {
-		//#if MC >= 1.14
+		//#if MC >= 1.16
+		return w.getMessage().getString();
+		//#elif MC >= 1.14
 		return w.getMessage();
 		//#else
 		return w.message;
@@ -594,7 +596,9 @@ public final class Compat {
 	}
 
 	public static void setRawLabel(net.minecraft.client.gui.components.AbstractWidget w, String label) {
-		//#if MC >= 1.14
+		//#if MC >= 1.16
+		w.setMessage(literal(label));
+		//#elif MC >= 1.14
 		w.setMessage(label);
 		//#else
 		w.message = label;
