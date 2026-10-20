@@ -1114,6 +1114,7 @@ public final class LegacyPlatform implements Platform {
 
 	@Override
 	public boolean joinSaved(String name, String address, Boolean acceptPacks) {
+		com.arcticlauncher.client.servers.DisconnectedPage.joining(address);
 		MinecraftClient mc = mc();
 		LegacyHooks.onNextFrame(() -> {
 			leave(mc);

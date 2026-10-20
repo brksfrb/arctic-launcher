@@ -414,7 +414,7 @@ impl ArcticApp {
             ui.label(RichText::new("Performance").size(17.0).strong().color(p.text));
             ui.label(
                 RichText::new(
-                    "Adds Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, ModernFix and Polarium for much higher FPS and faster starts. Downloaded from Modrinth for your version (Polarium comes with Arctic); ones not updated yet are skipped.",
+                    "Adds Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, Particle Core, BadOptimizations, ModernFix and Polarium for much higher FPS and faster starts. Downloaded from Modrinth for your version (Polarium comes with Arctic); ones not updated yet are skipped.",
                 )
                 .color(p.muted),
             );

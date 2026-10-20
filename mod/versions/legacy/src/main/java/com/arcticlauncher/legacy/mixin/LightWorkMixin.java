@@ -21,7 +21,7 @@ abstract class LightWorkMixin {
 	@Final
 	public boolean isClient;
 
-	@Inject(method = "calculateLightAtPos", at = @At("HEAD"), cancellable = true)
+	@Inject(method = "calculateLightAtPos", at = @At("HEAD"), cancellable = true, require = 0)
 	private void arctic$skipLight(CallbackInfoReturnable<Boolean> cir) {
 		ClientConfig config = ArcticClient.config();
 		if (isClient && config != null && config.fullbright && config.fullbrightSkipLight) {

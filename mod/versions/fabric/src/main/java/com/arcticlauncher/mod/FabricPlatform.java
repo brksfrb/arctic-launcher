@@ -777,6 +777,7 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public boolean joinSaved(String name, String address, Boolean acceptPacks) {
+		com.arcticlauncher.client.servers.DisconnectedPage.joining(address);
 		Minecraft mc = mc();
 		mc.execute(() -> {
 			leaveWorld(mc);

@@ -34,11 +34,11 @@ abstract class LightEngineMixin {
 	//#if MC >= 1.20
 	@Inject(method = {"checkBlock", "updateSectionStatus", "setLightEnabled", "propagateLightSources", "queueSectionData",
 			"retainData"},
-			at = @At("HEAD"), cancellable = true)
+			at = @At("HEAD"), cancellable = true, require = 0)
 	//#else
 	@Inject(method = {"checkBlock", "onBlockEmissionIncrease", "updateSectionStatus", "enableLightSources",
 			"queueSectionData", "retainData"},
-			at = @At("HEAD"), cancellable = true)
+			at = @At("HEAD"), cancellable = true, require = 0)
 	//#endif
 	private void arctic$dropWork(CallbackInfo ci) {
 		if (arctic$skip(this)) {
@@ -47,9 +47,9 @@ abstract class LightEngineMixin {
 	}
 
 	//#if MC >= 1.20
-	@Inject(method = "runLightUpdates", at = @At("HEAD"), cancellable = true)
+	@Inject(method = "runLightUpdates", at = @At("HEAD"), cancellable = true, require = 0)
 	//#else
-	@Inject(method = "runUpdates", at = @At("HEAD"), cancellable = true)
+	@Inject(method = "runUpdates", at = @At("HEAD"), cancellable = true, require = 0)
 	//#endif
 	private void arctic$noRun(CallbackInfoReturnable<Integer> cir) {
 		if (arctic$skip(this)) {
