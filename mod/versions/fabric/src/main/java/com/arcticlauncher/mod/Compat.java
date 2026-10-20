@@ -556,11 +556,7 @@ public final class Compat {
 
 	/** A widget's width (a getter from 1.14). */
 	public static int widgetWidth(net.minecraft.client.gui.components.AbstractWidget w) {
-		//#if MC >= 1.14
 		return w.getWidth();
-		//#else
-		return w.method_6688();
-		//#endif
 	}
 
 	/** The widgets of a screen: its children from 1.14, its buttons before (see ScreenButtonsAccess). */
@@ -644,6 +640,27 @@ public final class Compat {
 		//#else
 		net.minecraft.client.KeyMapping.set(com.mojang.blaze3d.platform.InputConstants.getKey(mapping.saveString()), down);
 		//#endif
+	}
+
+	/** Leaves the world (1.13), then shows {@code screen}: the quit button's own two steps. */
+	public static void clearLevelOld(Minecraft mc, net.minecraft.client.gui.screens.Screen screen) {
+		//#if MC < 1.14
+		if (mc.level != null) {
+			mc.level.disconnect();
+		}
+		mc.connect((net.minecraft.client.multiplayer.MultiPlayerLevel) null);
+		mc.setScreen(screen);
+		//#endif
+	}
+
+	/** Puts one model part where another is (1.13's parts can't copy themselves). */
+	public static void copyPart(net.minecraft.client.model.geom.ModelPart to, net.minecraft.client.model.geom.ModelPart from) {
+		to.x = from.x;
+		to.y = from.y;
+		to.z = from.z;
+		to.xRot = from.xRot;
+		to.yRot = from.yRot;
+		to.zRot = from.zRot;
 	}
 
 	/** A screen's title (1.13 screens have none). */

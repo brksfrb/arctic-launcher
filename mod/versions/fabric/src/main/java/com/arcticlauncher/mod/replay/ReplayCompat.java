@@ -56,6 +56,8 @@ public final class ReplayCompat {
 	static String versionName() {
 		//#if MC >= 1.21.6
 		return net.minecraft.SharedConstants.getCurrentVersion().name();
+		//#elif MC < 1.14
+		return Minecraft.getInstance().getLaunchedVersion();
 		//#else
 		return net.minecraft.SharedConstants.getCurrentVersion().getName();
 		//#endif
@@ -101,8 +103,10 @@ public final class ReplayCompat {
 	static void addEntity(net.minecraft.client.multiplayer.ClientLevel level, net.minecraft.client.player.AbstractClientPlayer player) {
 		//#if MC >= 1.20.2
 		level.addEntity(player);
-		//#else
+		//#elif MC >= 1.14
 		level.addPlayer(player.getId(), player);
+		//#else
+		level.putNonPlayerEntity(player.getId(), player);
 		//#endif
 	}
 
@@ -198,8 +202,10 @@ public final class ReplayCompat {
 		Minecraft.getInstance().disconnect(screen, false);
 		//#elif MC >= 1.20.2
 		Minecraft.getInstance().disconnect(screen);
-		//#else
+		//#elif MC >= 1.14
 		Minecraft.getInstance().clearLevel(screen);
+		//#else
+		com.arcticlauncher.mod.Compat.clearLevelOld(Minecraft.getInstance(), screen);
 		//#endif
 	}
 
@@ -207,10 +213,36 @@ public final class ReplayCompat {
 	static net.minecraft.client.gui.screens.Screen message(String text) {
 		//#if MC >= 1.20.5
 		return new net.minecraft.client.gui.screens.GenericMessageScreen(com.arcticlauncher.mod.Compat.literal(text));
-		//#else
+		//#elif MC >= 1.14
 		return new net.minecraft.client.gui.screens.GenericDirtMessageScreen(com.arcticlauncher.mod.Compat.literal(text));
+		//#else
+		return new Message13(text);
 		//#endif
 	}
+
+	//#if MC < 1.14
+	/** 1.13 has no such screen: the dirt background and the line. */
+	private static final class Message13 extends net.minecraft.client.gui.screens.Screen {
+		private final String text;
+
+		Message13(String text) {
+			super();
+			this.text = text;
+		}
+
+		@Override
+		public boolean shouldCloseOnEsc() {
+			return false;
+		}
+
+		@Override
+		public void render(int mouseX, int mouseY, float delta) {
+			renderDirtBackground(0);
+			drawCenteredString(font, text, width / 2, 70, 0xFFFFFF);
+			super.render(mouseX, mouseY, delta);
+		}
+	}
+	//#endif
 
 	/** One of those message screens is showing. */
 	public static boolean messageShowing() {
@@ -220,8 +252,10 @@ public final class ReplayCompat {
 	static boolean messageScreen(net.minecraft.client.gui.screens.Screen s) {
 		//#if MC >= 1.20.5
 		return s instanceof net.minecraft.client.gui.screens.GenericMessageScreen;
-		//#else
+		//#elif MC >= 1.14
 		return s instanceof net.minecraft.client.gui.screens.GenericDirtMessageScreen;
+		//#else
+		return s instanceof Message13;
 		//#endif
 	}
 
@@ -362,6 +396,11 @@ public final class ReplayCompat {
 		// Before 1.19.3 there was only "keep everything" or not.
 		return new ClientboundRespawnPacket(p.getDimensionType(), p.getDimension(), p.getSeed(), GameType.SPECTATOR,
 				p.getPreviousPlayerGameType(), p.isDebug(), p.isFlat(), p.shouldKeepAllPlayerData(), p.getLastDeathLocation());
+		//#elif MC < 1.14
+		// 1.13: the dimension (an int), the difficulty and the game mode (a byte each), then the world type.
+		net.minecraft.network.FriendlyByteBuf bytes = bytesOf(p);
+		bytes.setByte(5, GameType.SPECTATOR.getId());
+		return reread(new ClientboundRespawnPacket(), bytes);
 		//#else
 		// Its encoding ends with the game mode, the previous one and three booleans.
 		net.minecraft.network.FriendlyByteBuf bytes = bytesOf(p);

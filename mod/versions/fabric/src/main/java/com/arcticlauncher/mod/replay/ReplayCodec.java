@@ -38,6 +38,8 @@ public final class ReplayCodec {
 	public static int protocolVersion() {
 		//#if MC >= 1.16
 		return SharedConstants.getProtocolVersion();
+		//#elif MC < 1.14
+		return 404;
 		//#else
 		return SharedConstants.getCurrentVersion().getProtocolVersion();
 		//#endif

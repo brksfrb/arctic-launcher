@@ -213,7 +213,7 @@ final class FabricPlatform implements Platform {
 		}
 		//#else
 		if (screen == null) {
-			mc().openGameMenuScreen();
+			Compat.setScreen(new net.minecraft.client.gui.screens.PauseScreen());
 		} else if (screen instanceof PageScreen) {
 			((PageScreen) screen).onClose();
 		} else if (screen.shouldCloseOnEsc()) {
@@ -736,7 +736,7 @@ final class FabricPlatform implements Platform {
 		net.minecraft.world.entity.Entity e = hit.getEntity();
 		//#else
 		// 1.13 has one kind of hit result, with the entity in it.
-		if (mc.hitResult == null || mc.hitResult.type != net.minecraft.world.phys.HitResult.Type.ENTITY) {
+		if (mc.hitResult == null || !"ENTITY".equals(String.valueOf(mc.hitResult.type))) {
 			return 0;
 		}
 		net.minecraft.world.entity.Entity e = mc.hitResult.entity;
@@ -807,8 +807,10 @@ final class FabricPlatform implements Platform {
 		mc.disconnectWithSavingScreen();
 		//#elif MC >= 1.20.2
 		mc.disconnect();
-		//#else
+		//#elif MC >= 1.14
 		mc.clearLevel();
+		//#else
+		Compat.clearLevelOld(mc, null);
 		//#endif
 	}
 

@@ -37,7 +37,9 @@ import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
 import net.minecraft.server.RunningOnDifferentThreadException;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
+//#if MC >= 1.14
 import net.minecraft.world.entity.Pose;
+//#endif
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 
@@ -277,9 +279,11 @@ public final class ReplayPlayback implements ReplayBackend {
 	private static boolean loadingScreen(net.minecraft.client.gui.screens.Screen s) {
 		//#if MC >= 1.21.9
 		return s instanceof net.minecraft.client.gui.screens.LevelLoadingScreen;
-		//#else
+		//#elif MC >= 1.14
 		return s instanceof net.minecraft.client.gui.screens.LevelLoadingScreen
 				|| s instanceof net.minecraft.client.gui.screens.ReceivingLevelScreen;
+		//#else
+		return s instanceof net.minecraft.client.gui.screen.DownloadingTerrainScreen;
 		//#endif
 	}
 
@@ -420,7 +424,11 @@ public final class ReplayPlayback implements ReplayBackend {
 		}
 		p.setPos(x, y - p.getEyeHeight(), z);
 		com.arcticlauncher.mod.Compat.settle(p);
+		//#if MC >= 1.14
 		p.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+		//#else
+		p.lerpMotion(0, 0, 0);
+		//#endif
 	}
 
 	@Override
@@ -444,7 +452,15 @@ public final class ReplayPlayback implements ReplayBackend {
 		if (mc.level == null) {
 			return out;
 		}
+		//#if MC >= 1.14
 		for (AbstractClientPlayer p : mc.level.players()) {
+		//#else
+		for (net.minecraft.world.entity.player.Player other : mc.level.playerEntities) {
+			if (!(other instanceof AbstractClientPlayer)) {
+				continue;
+			}
+			AbstractClientPlayer p = (AbstractClientPlayer) other;
+		//#endif
 			if (p != mc.player) {
 				out.add(new Object[] {p.getId(), ReplayCompat.name(p.getGameProfile()),
 						com.arcticlauncher.mod.Compat.x(p), com.arcticlauncher.mod.Compat.y(p), com.arcticlauncher.mod.Compat.z(p)});
