@@ -50,9 +50,18 @@ impl ArcticApp {
                     ("Launcher open", format_duration(stats.launcher_secs())),
                     ("Sessions", sessions.to_string()),
                 ];
-                for (label, value) in tiles {
+                for (index, (label, value)) in tiles.into_iter().enumerate() {
+                    if index > 0 {
+                        // A faint line between the figures, so they don't read as one sentence.
+                        let (rect, _) = ui.allocate_exact_size(vec2(1.0, 40.0), Sense::hover());
+                        ui.painter().line_segment(
+                            [rect.center_top(), rect.center_bottom()],
+                            egui::Stroke::new(1.0, p.card_stroke),
+                        );
+                        ui.add_space(10.0);
+                    }
                     ui.vertical(|ui| {
-                        ui.set_min_width(150.0);
+                        ui.set_min_width(170.0);
                         ui.label(RichText::new(label).small().color(p.muted));
                         ui.label(RichText::new(value).size(22.0).strong().color(p.text));
                     });
