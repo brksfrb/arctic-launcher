@@ -82,7 +82,14 @@ class Jar:
         if cls not in self.code_cache:
             self.code_cache[cls] = subprocess.run([JAVAP, "-cp", self.path, "-p", "-c", cls], capture_output=True, text=True).stdout
         name = method.split("(")[0]
-        return "\n".join(re.findall(r"\n  [^\n]*[ .]" + re.escape(name) + r"\([^\n]*\n(.*?)\n\n", self.code_cache[cls], re.S))
+        desc = method[len(name):]
+        # One chunk per member (they start two spaces in); an overload is told apart by its descriptor.
+        out = []
+        for chunk in re.split(r"\n(?=  \S)", self.code_cache[cls]):
+            head = chunk.split("\n", 1)[0]
+            if re.search(r"[ .]" + re.escape(name) + r"\(", head) and (not desc or ("descriptor: " + desc) in chunk):
+                out.append(chunk.split("\n", 1)[1] if "\n" in chunk else "")
+        return "\n".join(out)
 
 
 def build_dir(version):
