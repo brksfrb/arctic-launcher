@@ -123,14 +123,14 @@ final class PromoTest {
 				// The tab list (a single player only gets one with a list objective): tier tags by names.
 				later(t + 6, () -> {
 					command("scoreboard objectives setdisplay list arctic");
-					Minecraft.getInstance().options.keyPlayerList.setDown(true);
+					Compat.setDown(Minecraft.getInstance().options.keyPlayerList, true);
 				});
 				later(t + 7, () -> {
 					ArcticMod.LOG.info("promotest: name tag '{}'", Minecraft.getInstance().player.getDisplayName().getString());
 					WorldTest.shot("promo-tab");
 				});
 				later(t + 8, () -> {
-					Minecraft.getInstance().options.keyPlayerList.setDown(false);
+					Compat.setDown(Minecraft.getInstance().options.keyPlayerList, false);
 					command("bossbar remove arctic:demo");
 					command("scoreboard objectives remove arctic");
 				});

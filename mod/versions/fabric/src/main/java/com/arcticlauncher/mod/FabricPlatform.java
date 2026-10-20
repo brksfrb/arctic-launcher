@@ -21,7 +21,9 @@ import net.minecraft.client.Options;
 import net.minecraft.client.User;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
+//#if MC >= 1.15
 import net.minecraft.client.gui.screens.multiplayer.SafetyScreen;
+//#endif
 //#if MC >= 1.21
 import net.minecraft.client.gui.screens.options.AccessibilityOptionsScreen;
 import net.minecraft.client.gui.screens.options.LanguageSelectScreen;
@@ -121,7 +123,7 @@ final class FabricPlatform implements Platform {
 		if (p == null) {
 			return null;
 		}
-		return new double[] {p.getX(), p.getY(), p.getZ(), Compat.yRot(p), Compat.xRot(p)};
+		return new double[] {Compat.x(p), Compat.y(p), Compat.z(p), Compat.yRot(p), Compat.xRot(p)};
 	}
 
 	@Override
@@ -347,7 +349,7 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public void setKeyDown(GameKey key, boolean down) {
-		mapping(mc().options, key).setDown(down);
+		Compat.setDown(mapping(mc().options, key), down);
 	}
 
 	@Override
@@ -586,7 +588,11 @@ final class FabricPlatform implements Platform {
 				Compat.setScreen(new SelectWorldScreen(parent));
 				break;
 			case MULTIPLAYER:
+				//#if MC >= 1.15
 				Compat.setScreen(mc.options.skipMultiplayerWarning ? new JoinMultiplayerScreen(parent) : new SafetyScreen(parent));
+				//#else
+				Compat.setScreen(new JoinMultiplayerScreen(parent));
+				//#endif
 				break;
 			case REALMS:
 				//#if MC >= 1.16
@@ -1057,6 +1063,9 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public void setHitColor(int rgb) {
+		//#if MC < 1.15
+		// 1.14 sets the tint up with every hurt mob (HitColorOldMixin reads the setting then).
+		//#else
 		Minecraft mc = mc();
 		mc.execute(() -> {
 			net.minecraft.client.renderer.texture.DynamicTexture texture =
@@ -1079,6 +1088,7 @@ final class FabricPlatform implements Platform {
 			}
 			texture.upload();
 		});
+		//#endif
 	}
 
 	/** The game's hurt tint: red at 70% (0xB2). */
@@ -1216,7 +1226,7 @@ final class FabricPlatform implements Platform {
 		UUID self = playerId();
 		for (AbstractClientPlayer p : mc.level.players()) {
 			if (!p.getUUID().equals(self)) {
-				out.add(new Object[] {p.getUUID(), Compat.playerName(p), p.getX(), p.getY(), p.getZ(), (double) Compat.yRot(p)});
+				out.add(new Object[] {p.getUUID(), Compat.playerName(p), Compat.x(p), Compat.y(p), Compat.z(p), (double) Compat.yRot(p)});
 			}
 		}
 		return out;

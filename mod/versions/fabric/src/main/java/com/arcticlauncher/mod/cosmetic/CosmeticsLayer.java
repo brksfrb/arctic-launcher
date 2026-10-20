@@ -6,7 +6,9 @@ import com.arcticlauncher.client.looks.Cosmetics;
 import com.arcticlauncher.client.looks.Look;
 import com.arcticlauncher.client.looks.Xform;
 import com.mojang.blaze3d.vertex.PoseStack;
+//#if MC >= 1.15
 import com.mojang.blaze3d.vertex.VertexConsumer;
+//#endif
 import net.minecraft.client.model.geom.ModelPart;
 //#if MC >= 1.21.11
 import net.minecraft.client.model.player.PlayerModel;
@@ -19,12 +21,12 @@ import net.minecraft.resources.Identifier;
 //#if MC >= 1.21.9
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
-//#else
+//#elif MC >= 1.15
 import net.minecraft.client.renderer.MultiBufferSource;
 //#endif
 //#if MC >= 1.21.11
 import net.minecraft.client.renderer.rendertype.RenderTypes;
-//#else
+//#elif MC >= 1.15
 import net.minecraft.client.renderer.RenderType;
 //#endif
 //#if MC >= 1.21.2 && MC < 1.21.9
@@ -90,6 +92,61 @@ public final class CosmeticsLayer extends RenderLayer<PlayerRenderState, PlayerM
 					state.skin.model() == net.minecraft.client.resources.PlayerSkin.Model.SLIM,
 					new boolean[] {state.showRightSleeve, state.showLeftSleeve, state.showRightPants, state.showLeftPants, state.showJacket});
 		}
+	}
+//#elif MC < 1.15
+public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> {
+	/** Players' looks found a moment ago: asked for every frame, kept for {@link #LOOK_REFRESH_MS}. */
+	private static final long LOOK_REFRESH_MS = 250;
+	private final java.util.Map<java.util.UUID, Found> found = new java.util.HashMap<>();
+	private static final class Found {
+		Look look;
+		long at;
+	}
+
+	public CosmeticsLayer(RenderLayerParent<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> parent) {
+		super(parent);
+	}
+
+	/** Before 1.15 the layer draws in immediate mode on the matrix the player is already drawn with. */
+	@Override
+	public void render(AbstractClientPlayer player, float limbSwing, float limbSwingAmount, float partialTicks, float ageInTicks,
+			float netHeadYaw, float headPitch, float scale) {
+		if (player.isInvisible() || ArcticClient.looks() == null) {
+			return;
+		}
+		java.util.UUID id = player.getUUID();
+		long now = System.currentTimeMillis();
+		Found entry = found.get(id);
+		if (entry == null || now - entry.at > LOOK_REFRESH_MS) {
+			if (entry == null) {
+				if (found.size() > 256) {
+					found.clear();
+				}
+				entry = new Found();
+				found.put(id, entry);
+			}
+			entry.look = ArcticClient.looks().lookFor(id);
+			entry.at = now;
+			ArcticClient.looks().cosmetics().watch(id);
+		}
+		{
+			PoseStack pose = new PoseStack();
+			// The glow pass puts the lightmap back to the player's own afterwards.
+			Canvas canvas = new Canvas(() -> setLightColor(player));
+			draw(pose, canvas, 0, entry.look);
+			boolean slim = "slim".equals(player.getModelName());
+			drawLimbs(pose, canvas, 0, id, player.getSkinTextureLocation(), slim, new boolean[] {
+					player.isModelPartShown(net.minecraft.world.entity.player.PlayerModelPart.RIGHT_SLEEVE),
+					player.isModelPartShown(net.minecraft.world.entity.player.PlayerModelPart.LEFT_SLEEVE),
+					player.isModelPartShown(net.minecraft.world.entity.player.PlayerModelPart.RIGHT_PANTS_LEG),
+					player.isModelPartShown(net.minecraft.world.entity.player.PlayerModelPart.LEFT_PANTS_LEG),
+					player.isModelPartShown(net.minecraft.world.entity.player.PlayerModelPart.JACKET)});
+		}
+	}
+
+	@Override
+	public boolean colorsOnDamage() {
+		return false;
 	}
 //#else
 public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> {
@@ -172,6 +229,51 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 			target.order(1).submitCustomGeometry(pose, RenderType.entityTranslucentEmissive(texture), (p, out) -> emit.emit(new PoseXform(p, out)));
 			//#endif
 		}
+		//#elif MC < 1.15
+		private final Runnable restoreLight;
+
+		Canvas(Runnable restoreLight) {
+			this.restoreLight = restoreLight;
+		}
+
+		void base(PoseStack pose, Identifier texture, Emit emit) {
+			submit(texture, emit, false);
+		}
+
+		void glow(PoseStack pose, Identifier texture, Emit emit) {
+			boolean lighting = org.lwjgl.opengl.GL11.glIsEnabled(org.lwjgl.opengl.GL11.GL_LIGHTING);
+			com.mojang.blaze3d.platform.GlStateManager.disableLighting();
+			com.mojang.blaze3d.platform.GLX.glMultiTexCoord2f(com.mojang.blaze3d.platform.GLX.GL_TEXTURE1, 240f, 240f);
+			submit(texture, emit, true);
+			restoreLight.run();
+			if (lighting) {
+				com.mojang.blaze3d.platform.GlStateManager.enableLighting();
+			}
+		}
+
+		/** The quads go straight to GL, in view space, drawn with an identity model-view matrix. */
+		private void submit(Identifier texture, Emit emit, boolean glowing) {
+			net.minecraft.client.Minecraft.getInstance().getTextureManager().bind(texture);
+			boolean cull = org.lwjgl.opengl.GL11.glIsEnabled(org.lwjgl.opengl.GL11.GL_CULL_FACE);
+			com.mojang.blaze3d.platform.GlStateManager.disableCull();
+			com.mojang.blaze3d.platform.GlStateManager.enableBlend();
+			com.mojang.blaze3d.platform.GlStateManager.blendFunc(org.lwjgl.opengl.GL11.GL_SRC_ALPHA, org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA);
+			GlXform xf = new GlXform();
+			org.lwjgl.opengl.GL11.glPushMatrix();
+			org.lwjgl.opengl.GL11.glLoadIdentity();
+			org.lwjgl.opengl.GL11.glBegin(org.lwjgl.opengl.GL11.GL_QUADS);
+			try {
+				emit.emit(xf);
+			} finally {
+				org.lwjgl.opengl.GL11.glEnd();
+				org.lwjgl.opengl.GL11.glPopMatrix();
+			}
+			org.lwjgl.opengl.GL11.glColor4f(1f, 1f, 1f, 1f);
+			com.mojang.blaze3d.platform.GlStateManager.disableBlend();
+			if (cull) {
+				com.mojang.blaze3d.platform.GlStateManager.enableCull();
+			}
+		}
 		//#else
 		private final MultiBufferSource target;
 
@@ -215,7 +317,7 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 			}
 			for (com.arcticlauncher.client.looks.CuboidModel.Piece piece : baked.pieces) {
 				pose.pushPose();
-				part(piece.attach).translateAndRotate(pose);
+				place(part(piece.attach), pose);
 				fit(pose, fit);
 				canvas.base(pose, baked.texture, xf -> piece.emit(xf, light));
 				if (baked.glow != null) {
@@ -248,7 +350,7 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 			com.arcticlauncher.client.looks.CuboidModel.Piece piece = com.arcticlauncher.client.looks.SkinLimbs.piece(limb, slim, outer[limb.ordinal()]);
 			com.arcticlauncher.client.looks.Animation bend = animation.only(limb.joint);
 			pose.pushPose();
-			part(limb.attach).translateAndRotate(pose);
+			place(part(limb.attach), pose);
 			canvas.base(pose, skin, xf -> piece.emit(xf, light, bend, t));
 			pose.popPose();
 		}
@@ -259,7 +361,7 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 		boolean animate = !ArcticClient.config().reduceCapeMotion;
 		for (com.arcticlauncher.client.looks.MeshDraw.Group group : sculpted.groups) {
 			pose.pushPose();
-			part(group.attach).translateAndRotate(pose);
+			place(part(group.attach), pose);
 			fit(pose, fit);
 			for (int primitive : sculpted.primitives(group)) {
 				canvas.base(pose, sculpted.textureOf(primitive), xf -> sculpted.emit(primitive, group.attach, animate, xf, light, false));
@@ -286,6 +388,16 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 			// The render types draw both sides, so the mirrored faces still show.
 			pose.scale(-1f, 1f, 1f);
 		}
+	}
+
+	/** Moves the pose to where the model part is and turns it as the part is. */
+	private static void place(ModelPart part, PoseStack pose) {
+		//#if MC >= 1.15
+		part.translateAndRotate(pose);
+		//#else
+		// A model part's pixels are 1/16 of a block.
+		part.translateTo(0.0625f);
+		//#endif
 	}
 
 	private ModelPart part(Attach attach) {

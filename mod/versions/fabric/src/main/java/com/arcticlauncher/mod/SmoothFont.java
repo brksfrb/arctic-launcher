@@ -177,8 +177,21 @@ public final class SmoothFont {
 		// STB sizes a font by its line height (ascent to descent), FreeType (1.20.5+) by its em:
 		// the same em as there, so the text is the same size everywhere.
 		float size = SIZE * STBTruetype.stbtt_ScaleForMappingEmToPixels(info, 1f) / STBTruetype.stbtt_ScaleForPixelHeight(info, 1f);
+		//#if MC >= 1.15
 		return new TrueTypeGlyphProvider(font, info, size, scale, 0f, STB_SHIFT_Y, "");
+		//#else
+		// 1.14's provider doesn't own the font's memory: it is kept here until the next load replaces it.
+		if (heldFont != null) {
+			MemoryUtil.memFree(heldFont);
+		}
+		heldFont = font;
+		return new TrueTypeGlyphProvider(info, size, scale, 0f, STB_SHIFT_Y, "");
+		//#endif
 	}
+
+	//#if MC < 1.15
+	private static ByteBuffer heldFont;
+	//#endif
 	//#endif
 
 	/** Inter from the mod jar, in native memory (the provider frees it when closed). */

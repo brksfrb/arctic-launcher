@@ -116,11 +116,25 @@ def renames = [
 		// The static registries moved to BuiltInRegistries in 1.19.3.
 		['MC < 1.19.3', 'net.minecraft.core.registries.BuiltInRegistries', 'net.minecraft.core.Registry'],
 		['MC < 1.19.3', 'BuiltInRegistries', 'Registry'],
+		// 1.14 (official names exist from 1.14.4): the client level, the sneak key and input were named differently.
+		['MC < 1.15', 'ClientLevel', 'MultiPlayerLevel'],
+		['MC < 1.15', 'keyShift', 'keySneak'],
+		['MC < 1.15', 'shiftKeyDown', 'sneakKeyDown'],
+]
+
+/** Rewrites that need a pattern, as [condition, regex, replacement], applied after the names above. */
+def patternRenames = [
+		// 1.14 keeps the window in a field; Window's own getWindow() is the native handle.
+		['MC < 1.15', /\.getWindow\(\)(?=\.getWindow\(\))/, '.window'],
+		['MC < 1.15', /(?<!\.window)\.getWindow\(\)/, '.window'],
 ]
 
 def applyRenames = { String text ->
-	renames.findAll { evalCondition(it[0]) }.inject(text) { t, r ->
+	def named = renames.findAll { evalCondition(it[0]) }.inject(text) { t, r ->
 		t.replaceAll('(?<![A-Za-z0-9_])' + r[1] + '(?![A-Za-z0-9_])', r[2])
+	}
+	patternRenames.findAll { evalCondition(it[0]) }.inject(named) { t, r ->
+		t.replaceAll(r[1], r[2])
 	}
 }
 
@@ -243,6 +257,12 @@ processResources {
 			svc: true,
 			// 1.20.2+ read a payload by its id: a hook keeps the bytes of ours.
 			svcCodec: atLeast('1.20.2'),
+			// The hurt tint is a texture from 1.15; before, the renderer sets it up with each hurt mob.
+			overlayTexture: atLeast('1.15'),
+			// 1.15 brought the PoseStack (before, models draw through the global GL matrix).
+			poseStack: atLeast('1.15'),
+			// The burning overlay is a renderer of its own from 1.15 (the hand renderer's before).
+			fireOverlay: atLeast('1.15'),
 			// Block outline: every version (each draws it its own way).
 			outline: true,
 			// Motion blur as a post effect in the client's pack: 26.1's renderer.

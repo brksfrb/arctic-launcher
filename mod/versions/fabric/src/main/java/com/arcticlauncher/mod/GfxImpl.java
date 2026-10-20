@@ -245,8 +245,11 @@ public final class GfxImpl implements Gfx {
 		//#elif MC >= 1.19.4
 		net.minecraft.client.gui.screens.inventory.InventoryScreen.renderEntityInInventoryFollowsMouse(g.pose(), cx, cy, scale,
 				cx - mouseX, cy - mouseY, player);
-		//#else
+		//#elif MC >= 1.15
 		net.minecraft.client.gui.screens.inventory.InventoryScreen.renderEntityInInventory(cx, cy, scale,
+				cx - mouseX, cy - mouseY, player);
+		//#else
+		net.minecraft.client.gui.screens.inventory.InventoryScreen.renderPlayerModel(cx, cy, scale,
 				cx - mouseX, cy - mouseY, player);
 		//#endif
 		//#endif
