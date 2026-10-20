@@ -9,13 +9,14 @@ an old version fails here, long before anyone launches it. Exit code 1 if any
 target fails.
 """
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 MOD = Path(__file__).resolve().parent
-# Extra Gradle flags ("--offline", when a Maven is refusing Gradle).
-OFFLINE = []
+# Extra Gradle flags ("--offline", when a Maven is refusing Gradle); ARCTIC_GRADLE_FLAGS adds more (--stacktrace).
+OFFLINE = os.environ.get("ARCTIC_GRADLE_FLAGS", "").split()
 GRADLEW = MOD / ("gradlew.bat" if sys.platform == "win32" else "gradlew")
 MIXCHECK = MOD / "versions" / "fabric" / "mixcheck.py"
 
