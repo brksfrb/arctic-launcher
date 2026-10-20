@@ -727,6 +727,19 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean hungerBarShown() {
+		MinecraftClient mc = mc();
+		if (mc.player == null || mc.interactionManager == null || !mc.interactionManager.hasStatusBars()) {
+			return false;
+		}
+		//#if MC >= 1.9
+		return mc.player.getVehicle() == null || !(mc.player.getVehicle() instanceof net.minecraft.entity.LivingEntity);
+		//#else
+		return !mc.player.hasVehicle() || !(mc.player.vehicle instanceof net.minecraft.entity.LivingEntity);
+		//#endif
+	}
+
+	@Override
 	public float[] food() {
 		ClientPlayerEntity p = mc().player;
 		return p == null ? null : new float[] {p.getHungerManager().getFoodLevel(), p.getHungerManager().getSaturationLevel()};
