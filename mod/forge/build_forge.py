@@ -34,6 +34,12 @@ DOWNLOADS = {
     "mixin.jar": "https://repo.spongepowered.org/repository/maven-public/org/spongepowered/mixin/0.7.11-SNAPSHOT/"
                  "mixin-0.7.11-20180703.121122-1.jar",
 }
+MIXIN_SERVICES = {
+    "META-INF/services/org.spongepowered.asm.service.IMixinService",
+    "META-INF/services/org.spongepowered.asm.service.IMixinServiceBootstrap",
+    "META-INF/services/org.spongepowered.asm.service.IGlobalPropertyService",
+}
+
 MANIFEST = (
     "Manifest-Version: 1.0\r\n"
     "TweakClass: org.spongepowered.asm.launch.MixinTweaker\r\n"
@@ -151,6 +157,15 @@ def build():
             for info in src.infolist():
                 if info.filename.startswith("org/spongepowered/") or info.filename.startswith("mixin"):
                     add(info.filename, src.read(info))
+                # Mixin finds its launch service through these registrations: without them the game
+                # stops at "ServiceNotAvailableError: No mixin host service is available". (Its signature
+                # files stay out: they would not match a repacked jar.)
+                elif info.filename in MIXIN_SERVICES:
+                    add(info.filename, src.read(info))
+    with zipfile.ZipFile(out) as packed:
+        missing = [name for name in MIXIN_SERVICES if name not in packed.namelist()]
+    if missing:
+        raise SystemExit(f"the jar lacks Mixin's service registrations: {missing}")
     print(f"wrote {out} ({out.stat().st_size // 1024} KiB)")
 
 
