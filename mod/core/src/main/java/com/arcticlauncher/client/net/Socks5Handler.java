@@ -41,6 +41,7 @@ public final class Socks5Handler extends ChannelDuplexHandler {
 	private State state = State.GREETING;
 	private ByteBuf pending;
 	private ScheduledFuture<?> timeout;
+	private long startedNanos;
 
 	public Socks5Handler(String host, int port, String username, String password) {
 		this.host = host;
@@ -68,6 +69,7 @@ public final class Socks5Handler extends ChannelDuplexHandler {
 	@Override
 	public void channelActive(ChannelHandlerContext ctx) {
 		// Connected to the proxy; the game hears about it once the tunnel is up.
+		startedNanos = System.nanoTime();
 		try {
 			timeout = ctx.executor().schedule(() -> fail(ctx, "the proxy didn't answer in time"), TIMEOUT_SECONDS, TimeUnit.SECONDS);
 		} catch (UnsupportedOperationException e) {
@@ -177,6 +179,7 @@ public final class Socks5Handler extends ChannelDuplexHandler {
 
 	/** The tunnel is up: step aside and let the game start talking. */
 	private void open(ChannelHandlerContext ctx) {
+		ProxyRoutes.note("proxy: tunnel to " + host + ":" + port + " up in " + (System.nanoTime() - startedNanos) / 1_000_000L + " ms");
 		ByteBuf rest = pending.readableBytes() > 0 ? pending.readSlice(pending.readableBytes()).retain() : null;
 		ctx.pipeline().remove(this);
 		ctx.fireChannelActive();

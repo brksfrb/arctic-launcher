@@ -74,10 +74,22 @@ public final class ProxyRoutes {
 		String key = host.toLowerCase(java.util.Locale.ROOT);
 		String[] cached = SRV.get(key);
 		if (cached == null) {
+			long started = System.nanoTime();
 			cached = lookupSrv(key);
 			SRV.put(key, cached);
+			note("proxy: looked up " + key + "'s server record in " + (System.nanoTime() - started) / 1_000_000L + " ms"
+					+ (cached == NO_SRV ? " (none)" : " (" + cached[0] + ":" + cached[1] + ")"));
 		}
 		return cached == NO_SRV ? null : cached.clone();
+	}
+
+	/** A line in the game's log: where the time of a join through the proxy goes. */
+	static void note(String line) {
+		try {
+			com.arcticlauncher.client.ArcticClient.platform().log(false, line);
+		} catch (RuntimeException e) {
+			// No platform yet (tests): nothing to log to.
+		}
 	}
 
 	private static String[] lookupSrv(String host) {
