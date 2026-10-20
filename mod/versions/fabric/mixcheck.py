@@ -192,8 +192,26 @@ def check(version):
     return 1 if problems else 0
 
 
+def probe(version, cls, method=None):
+    """Print a game class's members (javap -p) and, with a method name, that method's bytecode."""
+    jar_path = jar_for(version)
+    if not jar_path:
+        print(f"{version}: compile it first (no named jar)")
+        return 1
+    jar = Jar(jar_path)
+    members = jar.members(cls)
+    print(members if members else f"{cls}: not in {version}")
+    if method:
+        for t in jar.hierarchy(cls)[:1]:
+            print(f"--- {t}.{method}")
+            print(jar.body(t, method))
+    return 0
+
+
 def main():
     versions = sys.argv[1:]
+    if versions[:1] == ["--probe"]:
+        sys.exit(probe(*versions[1:4]))
     if not versions:
         print(__doc__)
         sys.exit(2)

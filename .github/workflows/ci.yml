@@ -11,6 +11,10 @@ on:
         description: "Only these mod targets (space-separated builds, e.g. 1.14.4); empty: all"
         required: false
         default: ""
+      probe:
+        description: "After checking the mod targets, print a game class (and one method's bytecode): 'net.minecraft.X method'"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -82,3 +86,8 @@ jobs:
           java-version: 25
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x mod/gradlew && python3 mod/check.py ${{ matrix.version }}
+      - name: Probe a game class
+        if: ${{ always() && inputs.probe != '' }}
+        env:
+          PROBE: ${{ inputs.probe }}
+        run: python3 mod/versions/fabric/mixcheck.py --probe ${{ matrix.version }} $PROBE
