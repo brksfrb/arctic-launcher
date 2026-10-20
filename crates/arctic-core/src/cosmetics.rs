@@ -542,7 +542,56 @@ fn held() -> std::sync::MutexGuard<'static, ()> {
 /// A session token for `account`, reusing a stored one while it's valid.
 pub fn token_for(dirs: &DataDirs, base: &str, account: &Account) -> Result<String> {
     let _held = held();
-    token_for_locked(dirs, base, account)
+    let who = format!("{base}|{}", account.uuid);
+    if let Some(message) = cooling_down(&who) {
+        return Err(Error::Other(message));
+    }
+    match token_for_locked(dirs, base, account) {
+        Ok(token) => {
+            forget_failure(&who);
+            Ok(token)
+        }
+        Err(e) => {
+            remember_failure(&who, &e.to_string());
+            Err(e)
+        }
+    }
+}
+
+/// How long a failed sign-in is not tried again, doubling with each failure in a row. The friends page
+/// and the token refresh ask every few seconds; a name that is refused stays refused, and asking every
+/// four seconds only fills the log and loads the server.
+const RETRY_AFTER_SECS: [u64; 4] = [15, 30, 60, 60];
+
+type Failures = HashMap<String, (std::time::Instant, usize, String)>;
+
+fn failures() -> std::sync::MutexGuard<'static, Failures> {
+    static FAILURES: std::sync::OnceLock<std::sync::Mutex<Failures>> = std::sync::OnceLock::new();
+    FAILURES
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// The earlier failure's message while it's too soon to try again.
+fn cooling_down(who: &str) -> Option<String> {
+    let failures = failures();
+    let (at, count, message) = failures.get(who)?;
+    let wait = RETRY_AFTER_SECS[(count - 1).min(RETRY_AFTER_SECS.len() - 1)];
+    (at.elapsed().as_secs() < wait).then(|| message.clone())
+}
+
+fn remember_failure(who: &str, message: &str) {
+    let mut failures = failures();
+    let count = failures.get(who).map_or(0, |(_, n, _)| *n) + 1;
+    failures.insert(
+        who.to_owned(),
+        (std::time::Instant::now(), count, message.to_owned()),
+    );
+}
+
+fn forget_failure(who: &str) {
+    failures().remove(who);
 }
 
 fn token_for_locked(dirs: &DataDirs, base: &str, account: &Account) -> Result<String> {
@@ -685,7 +734,11 @@ fn remember_recovery_code_locked(dirs: &DataDirs, account: &Account, code: &str)
 /// name to a fresh key made here, and signs it in.
 pub fn recover_offline(dirs: &DataDirs, base: &str, account: &Account, code: &str) -> Result<()> {
     let _held = held();
-    recover_offline_locked(dirs, base, account, code)
+    let done = recover_offline_locked(dirs, base, account, code);
+    if done.is_ok() {
+        forget_failure(&format!("{base}|{}", account.uuid));
+    }
+    done
 }
 
 fn recover_offline_locked(
@@ -908,6 +961,19 @@ pub fn cape_frames(width: u32, height: u32) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_refused_sign_in_is_not_asked_again_at_once() {
+        let who = "https://example.invalid|test-account";
+        assert_eq!(cooling_down(who), None);
+        remember_failure(who, "this name is used by another Arctic player");
+        assert_eq!(
+            cooling_down(who).as_deref(),
+            Some("this name is used by another Arctic player")
+        );
+        forget_failure(who);
+        assert_eq!(cooling_down(who), None);
+    }
+
     #[test]
     fn the_offline_key_and_recovery_code_are_stored_readably() {
         let key = "cd".repeat(32);
