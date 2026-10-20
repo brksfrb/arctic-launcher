@@ -38,7 +38,10 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 [target."cfg(windows)".dependencies]
 junction = "2.1.0"
-windows-sys = { version = "0.61.2", features = ["Win32_System_SystemInformation", "Win32_System_Time", "Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Registry", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61.2", features = ["Win32_System_SystemInformation", "Win32_System_Time", "Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Registry", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+# Bedrock Edition: its Windows package (find, start, install a version).
+windows = { version = "0.62.2", features = ["ApplicationModel", "ApplicationModel_Core", "Foundation", "Foundation_Collections", "Management_Deployment"] }
+windows-future = "0.3.2"
 
 [target."cfg(not(windows))".dependencies]
 aes-gcm = "0.10"

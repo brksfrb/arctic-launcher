@@ -185,24 +185,58 @@ impl DataDirs {
     }
 }
 
-/// Load JSON from `path`, returning `None` if the file does not exist.
+/// The previous good copy of a JSON file, kept next to it.
+fn backup_path(path: &Path) -> PathBuf {
+    let mut name = path.as_os_str().to_os_string();
+    name.push(".bak");
+    PathBuf::from(name)
+}
+
+/// Load JSON from `path`, returning `None` if the file does not exist. A file a crash or a power cut
+/// left empty or cut short (it happens to files written just before) is read from its backup instead:
+/// better last time's settings, accounts and keys than none.
 pub fn load_json<T: DeserializeOwned>(path: &Path) -> Result<Option<T>> {
     match fs::read(path) {
-        Ok(bytes) => Ok(Some(serde_json::from_slice(&bytes)?)),
+        Ok(bytes) => match serde_json::from_slice(&bytes) {
+            Ok(value) => Ok(Some(value)),
+            Err(e) => {
+                let saved = fs::read(backup_path(path))
+                    .ok()
+                    .and_then(|b| serde_json::from_slice(&b).ok());
+                match saved {
+                    Some(value) => {
+                        log::warn!("{} is unreadable ({e}); using its backup", path.display());
+                        Ok(Some(value))
+                    }
+                    None => Err(e.into()),
+                }
+            }
+        },
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(Error::io(path, e)),
     }
 }
 
-/// Write JSON atomically (temp file + rename) so a crash never leaves a
-/// truncated settings/accounts file behind.
+/// Write JSON atomically (temp file + rename) so a crash never leaves a truncated settings/accounts
+/// file behind. The data is flushed to disk before the rename (a rename alone can survive a power cut
+/// while the new contents don't, which leaves an empty file), and the previous good copy is kept as
+/// `<file>.bak`.
 pub fn save_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
+    use std::io::Write;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).at(parent)?;
     }
     let tmp = path.with_extension("json.tmp");
     let bytes = serde_json::to_vec_pretty(value)?;
-    fs::write(&tmp, bytes).at(&tmp)?;
+    if let Ok(old) = fs::read(path)
+        && serde_json::from_slice::<serde::de::IgnoredAny>(&old).is_ok()
+    {
+        let _ = fs::write(backup_path(path), old);
+    }
+    let mut file = fs::File::create(&tmp).at(&tmp)?;
+    file.write_all(&bytes).at(&tmp)?;
+    file.sync_all().at(&tmp)?;
+    drop(file);
     fs::rename(&tmp, path).at(path)
 }
 
@@ -219,6 +253,21 @@ mod tests {
         let other = tempfile::tempdir().unwrap();
         std::fs::write(other.path().join("portable.txt"), b"").unwrap();
         assert!(is_portable(other.path()));
+    }
+
+    #[test]
+    fn a_file_cut_short_is_read_from_its_backup() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("k.json");
+        save_json(&path, &vec![1u32]).unwrap();
+        save_json(&path, &vec![1u32, 2]).unwrap();
+        // The power went: the file is empty.
+        std::fs::write(&path, b"").unwrap();
+        assert_eq!(load_json::<Vec<u32>>(&path).unwrap(), Some(vec![1]));
+        // No backup and an unreadable file is still an error, not an empty default.
+        let lone = dir.path().join("lone.json");
+        std::fs::write(&lone, b"{").unwrap();
+        assert!(load_json::<Vec<u32>>(&lone).is_err());
     }
 
     #[test]

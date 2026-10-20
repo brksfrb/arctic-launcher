@@ -168,6 +168,8 @@ pub enum Event {
     RecoveryCode(Outcome<String>),
     PublicServers(Outcome<Vec<arctic_core::servers::public::PublicServer>>),
     ServerSubmitted(Outcome<arctic_core::servers::public::Submitted>),
+    /// A Bedrock tab job (see `bedrock_tasks`).
+    Bedrock(crate::bedrock_tasks::BedrockEvent),
     Screenshots(Vec<arctic_core::screenshots::Shot>),
     ScreenshotThumb(PathBuf, Outcome<Vec<u8>>),
     ScreenshotCopied(Outcome<()>),

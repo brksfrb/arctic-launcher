@@ -475,7 +475,7 @@ fn resolution_log(text: &str) -> Diagnosis {
     }
     // The loader's own suggestion: swap a mod for another version of it.
     let mut updates: Vec<String> = Vec::new();
-    if let Ok(re) = Regex::new(r"\[(\S+) \S+\] -> add:(\S+) (\S+) ") {
+    if let Ok(re) = Regex::new(r"\[([^\s\[\]]+) [^\s\]]+\] -> add:(\S+) (\S+) ") {
         for m in re.captures_iter(text) {
             updates.push(format!("{} to {}", &m[1], &m[3]));
         }

@@ -200,6 +200,32 @@ Windows and Linux (x86-64) are supported from the same code. The differences are
 
 Rule evaluation maps the host to Mojang's `windows`/`linux`/`osx` names.
 
+## Bedrock Edition (`arctic-core::bedrock`)
+
+Windows only. Since 1.21.120 the game is a GDK package (`Microsoft.MinecraftUWP` for the
+release, `Microsoft.MinecraftWindowsBeta` for Preview) installed in `C:\XboxGames`; its data
+is in `%APPDATA%\Minecraft Bedrock\Users\`: `Shared\games\com.mojang` for packs and one
+folder per Xbox account for worlds, settings and the server list. An old UWP install's
+`LocalState\games\com.mojang` is read too.
+
+- **Finding and starting it** goes through Windows' `PackageManager` (WinRT): the package's
+  version and folder, and its app list entry to launch (the `minecraft:` link is the
+  fallback). "Running" is a `Minecraft.Windows.exe` from the package's folder.
+- **Versions** come from community archives of Microsoft's package links
+  (LiteLDev's `minecraft-windows-gdk-version-db`, then MinecraftBedrockArchiver's
+  `GdkLinks`), kept in `cache/bedrock-versions.json` for offline use; only `*.xboxlive.com`
+  / `.cn` `.msixvc` links are accepted. Installing hands the link to
+  `PackageManager.AddPackageByUriAsync` with `ForceUpdateFromAnyVersion`: Windows downloads
+  the encrypted package and unlocks it with the Store license, so nothing from the archives
+  but a link to Microsoft is trusted. Package version `1.26.5203.0` is game version 1.26.52.3.
+- **Worlds** (`minecraftWorlds\<id>`, name in `levelname.txt`) import from and export to
+  `.mcworld` (the folder's contents zipped). **Packs** are read from their `manifest.json`
+  (comments allowed, names looked up in `texts/en_US.lang`); `.mcpack` / `.mcaddon` files
+  are sorted into resource, behavior or skin packs by their modules, replacing a pack with the
+  same UUID. Removed worlds and packs move to `com.mojang\arctic-trash`.
+- **Servers** are `minecraftpe\external_servers.txt` (`id:name:host:port:time` lines) and
+  are pinged with RakNet's unconnected ping over UDP (`arctic_ping::ping_bedrock`).
+
 ## Profiles (`arctic-core::profiles`)
 
 `profiles.json` lists profiles and the active one. `DataDirs::with_profile(id)` scopes the
