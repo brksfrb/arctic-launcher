@@ -182,7 +182,7 @@ dependencies {
 	// 26.1 and later ship unobfuscated; older versions use Mojang's names.
 	if (project.hasProperty('mappings_file')) {
 		// 1.13.2: Mojang never published names for it; this file (mod/tools/mapgen) carries 1.14.4's across.
-		mappings file(project.mappings_file)
+		mappings files(project.mappings_file)
 	} else if (!atLeast('26.1')) {
 		mappings loom.officialMojangMappings()
 	}
