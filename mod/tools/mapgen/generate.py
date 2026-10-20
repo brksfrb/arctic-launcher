@@ -309,11 +309,24 @@ def main():
             class_names[ic] = y
             new_classes += 1
     new_members = 0
+    # A yarn name is only used where no other member of the class would end up with that name and descriptor.
+    in_use = defaultdict(set)
+    for official, cls in b.items():
+        ic = off2int.get(official, official)
+        for f in cls.fields:
+            inter_name = inter_member.get((official, f.name, f.desc), f.name)
+            in_use[ic].add(("f", entries[ic].get(("f", inter_name, to_inter_desc(f.desc)), inter_name), to_inter_desc(f.desc)))
+        for m in cls.methods:
+            inter_name = inter_member.get((official, m.name, m.desc), m.name)
+            in_use[ic].add(("m", entries[ic].get(("m", inter_name, to_inter_desc(m.desc)), inter_name), to_inter_desc(m.desc)))
     for (ic, kind, inter_name, idesc), y in yarn_member.items():
         if (kind, inter_name, idesc) in entries[ic]:
             continue
         if kind == "m" and inter_name in votes:
             continue
+        if (kind, y, idesc) in in_use[ic]:
+            continue
+        in_use[ic].add((kind, y, idesc))
         entries[ic][(kind, inter_name, idesc)] = y
         new_members += 1
     print(f"yarn names kept for {new_classes} classes and {new_members} members")
@@ -333,9 +346,9 @@ def main():
         if not clashes:
             break
         drop = {inter for _, inter in clashes}
-        print(f"clashes in round {rnd}: {len(clashes)}; leaving {len(drop)} methods unmapped")
+        print(f"clashes in round {rnd}: {len(clashes)}; leaving {len(drop)} members unmapped")
         for ic in entries:
-            for key in [k for k in entries[ic] if k[0] == "m" and k[1] in drop]:
+            for key in [k for k in entries[ic] if (k[0] == "m" and k[1] in drop) or (k[0] == "f" and "f:" + k[1] in drop)]:
                 del entries[ic][key]
         lines = render()
     with open(out, "w", encoding="utf-8", newline="\n") as f:

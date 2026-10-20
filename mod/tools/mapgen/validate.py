@@ -72,6 +72,8 @@ def find(work, tiny_lines):
         for key, lst in fields.items():
             if len(lst) > 1:
                 bad += 1
+                for x in lst:
+                    out.append((f"field clash in {cname.get(ic, ic)} {key[0]}", "f:" + imem.get((name, x.name, x.desc), x.name)))
         finals[name] = {k: imem.get((name, v[0].name, v[0].desc), v[0].name) for k, v in methods.items()}
     # A subclass method that gets the same final name and descriptor as a different method of a super class.
     supers = {}
