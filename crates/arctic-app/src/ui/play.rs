@@ -163,20 +163,21 @@ impl ArcticApp {
         let hover = ui
             .ctx()
             .animate_bool(response.id.with("settings_h"), response.hovered());
-        let radius = CornerRadius::same(14);
-        ui.painter().rect_filled(rect, radius, p.card_fill);
+        // No frame: just a faint wash on hover, and a bigger icon that brightens from muted.
         if hover > 0.0 {
-            ui.painter()
-                .rect_filled(rect, radius, p.surface_hover.gamma_multiply(hover));
+            ui.painter().rect_filled(
+                rect,
+                CornerRadius::same(14),
+                p.surface_hover.gamma_multiply(hover * 0.6),
+            );
         }
-        ui.painter().rect_stroke(
-            rect,
-            radius,
-            egui::Stroke::new(1.0, p.card_stroke),
-            egui::StrokeKind::Inside,
+        let icon = egui::Rect::from_center_size(rect.center(), vec2(44.0, 44.0));
+        icons::draw(
+            ui.painter(),
+            Icon::Gear,
+            icon,
+            lerp_color(p.muted, p.text, hover),
         );
-        let icon = egui::Rect::from_center_size(rect.center(), vec2(30.0, 30.0));
-        icons::draw(ui.painter(), Icon::Gear, icon, p.text);
         response
     }
 
