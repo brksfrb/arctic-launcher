@@ -283,7 +283,7 @@ public final class ReplayPlayback implements ReplayBackend {
 		return s instanceof net.minecraft.client.gui.screens.LevelLoadingScreen
 				|| s instanceof net.minecraft.client.gui.screens.ReceivingLevelScreen;
 		//#else
-		return s instanceof net.minecraft.client.gui.screen.DownloadingTerrainScreen;
+		return s instanceof net.minecraft.client.gui.screens.ReceivingLevelScreen;
 		//#endif
 	}
 
