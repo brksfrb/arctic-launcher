@@ -59,6 +59,7 @@ impl Tasks {
                     let code = t
                         .arctic_token(account.clone())
                         .and_then(|(base, token)| friends::new_recovery(&base, &token))
+                        .inspect(|code| cosmetics::remember_recovery_code(t.dirs(), &account, code))
                         .map_err(|e| e.to_string());
                     t.send(Event::RecoveryCode(code));
                 }

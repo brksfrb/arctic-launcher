@@ -488,9 +488,15 @@ fn url_segment(id: &str) -> String {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Credential {
-    /// Offline accounts: the key that claims the name on the server.
-    #[serde(default, with = "crate::secret::on_disk_opt")]
+    /// Offline accounts: the key that claims the name on the server. Kept as it is, not encrypted: it
+    /// only claims a name (names aren't identities), and an encrypted key stops reading when Windows'
+    /// machine or user identity changes, which locks the name for good. (Older encrypted keys still read.)
+    #[serde(default, with = "plain_key")]
     key: Option<String>,
+    /// Offline accounts: the profile's recovery code, saved here so this PC can take its own name back
+    /// if the key is ever lost.
+    #[serde(default)]
+    recovery: Option<String>,
     #[serde(default, with = "crate::secret::on_disk_opt")]
     token: Option<String>,
     #[serde(default)]
@@ -498,6 +504,18 @@ struct Credential {
     /// The server that issued `token` (tokens only work there).
     #[serde(default)]
     server: String,
+}
+
+mod plain_key {
+    use serde::{Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer>(value: &Option<String>, s: S) -> Result<S::Ok, S::Error> {
+        value.serialize(s)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
+        crate::secret::on_disk_opt::deserialize(d)
+    }
 }
 
 /// Per-profile store of cosmetics keys and tokens (`cosmetics.json`).
@@ -515,8 +533,7 @@ pub fn token_for(dirs: &DataDirs, base: &str, account: &Account) -> Result<Strin
     let path = credentials_path(dirs);
     let mut creds: Credentials = load_json(&path)?.unwrap_or_default();
     // Files from before encryption: save them encrypted right away.
-    if std::fs::read_to_string(&path).is_ok_and(|t| crate::secret::has_plain(&t, &["key", "token"]))
-    {
+    if std::fs::read_to_string(&path).is_ok_and(|t| crate::secret::has_plain(&t, &["token"])) {
         save_json(&path, &creds)?;
     }
     let entry = creds.accounts.entry(account.uuid.clone()).or_default();
@@ -548,11 +565,40 @@ pub fn token_for(dirs: &DataDirs, base: &str, account: &Account) -> Result<Strin
             let key = usable_key(entry);
             // Save the key before using it, so a claimed name is never lost.
             save_json(&path, &creds)?;
-            let session = sign_in_offline(base, &account.username, &key).inspect_err(|e| {
-                log::warn!("Arctic sign-in for {} failed: {e}", account.username)
-            })?;
-            creds = load_json(&path)?.unwrap_or_default();
-            session
+            match sign_in_offline(base, &account.username, &key) {
+                Ok(session) => {
+                    creds = load_json(&path)?.unwrap_or_default();
+                    session
+                }
+                Err(e) => {
+                    log::warn!("Arctic sign-in for {} failed: {e}", account.username);
+                    // The name is held by a key this PC no longer has, but this PC saved the profile's
+                    // recovery code: it takes its own name back, no one has to do anything.
+                    let saved = creds
+                        .accounts
+                        .get(&account.uuid)
+                        .and_then(|c| c.recovery.clone());
+                    let Some(code) = saved.filter(|_| e.to_string().contains("used by another"))
+                    else {
+                        return Err(e);
+                    };
+                    log::info!(
+                        "Arctic: the key for {} is gone; using the recovery code saved on this PC",
+                        account.username
+                    );
+                    recover_offline(dirs, base, account, &code).map_err(|_| e)?;
+                    let fresh: Credentials = load_json(&path)?.unwrap_or_default();
+                    return fresh
+                        .accounts
+                        .get(&account.uuid)
+                        .and_then(|c| c.token.clone())
+                        .ok_or_else(|| {
+                            Error::Other(
+                                "the saved recovery code worked but left no session".into(),
+                            )
+                        });
+                }
+            }
         }
     };
     log::info!("Arctic sign-in for {} worked", account.username);
@@ -560,7 +606,11 @@ pub fn token_for(dirs: &DataDirs, base: &str, account: &Account) -> Result<Strin
     entry.token = Some(session.token.clone());
     entry.expires = session.expires;
     entry.server = base.to_owned();
+    let needs_recovery = !account.is_microsoft() && entry.recovery.is_none();
     save_json(&path, &creds)?;
+    if needs_recovery {
+        save_recovery_code(dirs, base, account, &session.token);
+    }
     Ok(session.token)
 }
 
@@ -582,6 +632,32 @@ fn usable_key(entry: &mut Credential) -> String {
         entry.token = None;
     }
     entry.key.clone().unwrap_or_default()
+}
+
+/// Keep the profile's recovery code on this PC, made now when the profile has none (a code the player
+/// made themselves is never replaced behind their back). Quiet: it's retried at the next sign-in.
+fn save_recovery_code(dirs: &DataDirs, base: &str, account: &Account, token: &str) {
+    let made = match crate::friends::profile(base, token) {
+        Ok(profile) if !profile.has_recovery => crate::friends::new_recovery(base, token).ok(),
+        _ => None,
+    };
+    if let Some(code) = made {
+        remember_recovery_code(dirs, account, &code);
+    }
+}
+
+/// Save a recovery code on this PC for `account` (so the PC can heal a lost key by itself).
+pub fn remember_recovery_code(dirs: &DataDirs, account: &Account, code: &str) {
+    let path = credentials_path(dirs);
+    let mut creds: Credentials = load_json(&path).ok().flatten().unwrap_or_default();
+    creds
+        .accounts
+        .entry(account.uuid.clone())
+        .or_default()
+        .recovery = Some(code.to_owned());
+    if let Err(e) = save_json(&path, &creds) {
+        log::warn!("couldn't save the recovery code: {e}");
+    }
 }
 
 /// An offline account on a new PC: the profile's recovery code moves its
@@ -801,6 +877,22 @@ pub fn cape_frames(width: u32, height: u32) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_offline_key_and_recovery_code_are_stored_readably() {
+        let key = "cd".repeat(32);
+        let entry = Credential {
+            key: Some(key.clone()),
+            recovery: Some("abcd-efgh-ijkl-mnop".into()),
+            ..Credential::default()
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        // Not encrypted: it must keep reading if Windows' machine or user identity changes.
+        assert!(json.contains(&key));
+        let back: Credential = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.key.as_deref(), Some(key.as_str()));
+        assert_eq!(back.recovery.as_deref(), Some("abcd-efgh-ijkl-mnop"));
+    }
+
     #[test]
     fn an_unreadable_or_missing_offline_key_is_replaced_never_sent_empty() {
         for stored in [None, Some(String::new()), Some("not hex".to_owned())] {
