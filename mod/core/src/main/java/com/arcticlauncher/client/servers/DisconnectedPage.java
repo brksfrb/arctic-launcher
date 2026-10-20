@@ -79,6 +79,21 @@ public final class DisconnectedPage extends Page {
 		return lastServer;
 	}
 
+	/**
+	 * A join to {@code address} starts now. Reconnect must go to this one, even when the join fails
+	 * before any tick saw it (the game forgets its target as soon as the connection drops, and the last
+	 * server that worked would be offered instead).
+	 */
+	public static void joining(String address) {
+		if (address == null || address.isEmpty()) {
+			return;
+		}
+		if (!address.equalsIgnoreCase(lastServer)) {
+			tries = 0;
+		}
+		lastServer = address;
+	}
+
 	/** Every tick: remember where you are, so a disconnect knows where to go back. */
 	public static void tick(Platform p) {
 		rememberCurrent(p);

@@ -24,6 +24,8 @@ pub const MODS: &[(&str, &str)] = &[
     ("uXXizFIs", "FerriteCore"),
     ("5ZwdcRci", "ImmediatelyFast"),
     ("NNAgCjsB", "EntityCulling"),
+    ("RSeLon5O", "Particle Core"),
+    ("g96Z4WVZ", "BadOptimizations"),
 ];
 
 /// Extras the player can add to any Fabric/Quilt/Vanilla instance (Modrinth project id, name, what it
@@ -48,6 +50,8 @@ fn provided_by(project: &str) -> (&'static [&'static str], &'static [&'static st
         "uXXizFIs" => (&["ferritecore"], &[]),
         "5ZwdcRci" => (&["immediatelyfast"], &[]),
         "NNAgCjsB" => (&["entityculling"], &[]),
+        "RSeLon5O" => (&["particle_core"], &[]),
+        "g96Z4WVZ" => (&["badoptimizations"], &[]),
         super::packs::IRIS => (&["iris"], &["optifabric", "oculus"]),
         "kYuIpRLv" => (&["waveycapes"], &[]),
         _ => (&[], &[]),
