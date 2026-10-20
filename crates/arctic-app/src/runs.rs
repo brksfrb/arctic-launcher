@@ -100,7 +100,7 @@ impl Run {
     }
 
     /// The crash as a report, from the game log's end and the crash report it wrote.
-    fn crash_report(&self, title: &str) -> crash::Report {
+    fn crash_report(&self, title: &str, code: Option<i32>) -> crash::Report {
         let lines: Vec<&str> = self.log.iter().map(|l| l.text.as_str()).collect();
         let written = newest_crash_report(&self.game_dir, self.started);
         // What the launcher itself logged (a failed sign-in, a download, a launch step) often explains
@@ -109,6 +109,11 @@ impl Run {
             .map(|(_, lines)| lines)
             .unwrap_or_default();
         let launcher: Vec<&str> = launcher.iter().map(|l| l.text.as_str()).collect();
+        // How it ended: a game that wrote nothing at all is otherwise a report with nothing in it.
+        let java = self.java.as_deref().map(|j| match code {
+            Some(c) => format!("{j}\n(exit code {c})"),
+            None => j.to_owned(),
+        });
         crash::Report::build(
             &self.version,
             "",
@@ -116,7 +121,7 @@ impl Run {
             &lines,
             &launcher,
             written.as_deref(),
-            self.java.as_deref(),
+            java.as_deref(),
         )
     }
 
@@ -384,9 +389,12 @@ impl ArcticApp {
                     }
                     self.playtime = arctic_core::playtime::Stats::load(&self.dirs);
                 }
-                let diagnosis = matches!(code, Some(c) if c != 0 && !watchdog)
-                    .then(|| run.diagnose())
-                    .flatten();
+                let diagnosis = match code {
+                    Some(c) if c != 0 && !watchdog => run
+                        .diagnose()
+                        .or_else(|| crash::silent_exit(&run.crash_text(), c)),
+                    _ => None,
+                };
                 if let Some(d) = &diagnosis {
                     run.push_log([LogLine {
                         level: Level::Error,
@@ -405,7 +413,7 @@ impl ArcticApp {
                     .flatten();
                 if crashed {
                     let report =
-                        run.crash_report(diagnosis.as_ref().map_or("", |d| d.title.as_str()));
+                        run.crash_report(diagnosis.as_ref().map_or("", |d| d.title.as_str()), code);
                     self.offer_crash_report(id, report);
                 }
                 // Native crashes in several different places point at the computer, not a mod.
