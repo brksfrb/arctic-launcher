@@ -15,6 +15,7 @@ abstract class MinecraftTickMixin {
 	private void arctic$tick(CallbackInfo ci) {
 		ArcticClient.tick(Compat.screen() != null);
 		com.arcticlauncher.mod.ServerMenus.tick();
+		com.arcticlauncher.mod.HitboxSync.tick();
 		//#if MC >= 1.14
 		com.arcticlauncher.mod.CursorGuard.tick();
 		//#endif

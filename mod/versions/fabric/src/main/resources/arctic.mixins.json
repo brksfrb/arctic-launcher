@@ -19,7 +19,8 @@
 		"ServerPingPoolMixin",
 		"PlayerTabOverlayMixin",
 		"PlayerTierMixin",
-		"LightEngineMixin",
+		"LightEngineMixin",<% if (debugEntries) { %>
+		"DebugEntriesMixin",<% } %>
 		"NativeMenuMixin",
 		"HudMixin",
 		"KeyboardHandlerMixin",

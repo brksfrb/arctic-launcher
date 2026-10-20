@@ -77,8 +77,27 @@ public final class LegacyHooks {
 		}
 	}
 
+	private static boolean hitboxesOurs;
+
+	/** The Hitboxes mod: the game's F3+B flag, set while the switch is on (and only unset if this set it). */
+	private static void syncHitboxes() {
+		net.minecraft.client.render.entity.EntityRenderDispatcher dispatcher = MinecraftClient.getInstance().getEntityRenderManager();
+		if (dispatcher == null || ArcticClient.config() == null) {
+			return;
+		}
+		boolean want = ArcticClient.config().hitboxes;
+		if (want && !dispatcher.getRenderHitboxes()) {
+			dispatcher.setRenderHitboxes(true);
+			hitboxesOurs = true;
+		} else if (!want && hitboxesOurs) {
+			dispatcher.setRenderHitboxes(false);
+			hitboxesOurs = false;
+		}
+	}
+
 	public static void tick(boolean screenOpen) {
 		ArcticLegacy.PLATFORM.tick();
+		syncHitboxes();
 		com.arcticlauncher.legacy.replay.LegacyReplayRecording.tick();
 		ArcticClient.tick(screenOpen);
 	}
