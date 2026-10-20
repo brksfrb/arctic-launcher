@@ -134,6 +134,8 @@ def patternRenames = [
 		// 1.14 keeps the window in a field; Window's own getWindow() is the native handle.
 		['MC < 1.15', /\.getWindow\(\)(?=\.getWindow\(\))/, '.window'],
 		['MC < 1.15', /(?<!window)\.getWindow\(\)/, '.window'],
+		// 1.13 runs a task on the game's thread with submit(Runnable) (execute takes a Callable there).
+		['MC < 1.14', /(?<!TIMER)\.execute\(/, '.submit('],
 ]
 
 def applyRenames = { String text ->
