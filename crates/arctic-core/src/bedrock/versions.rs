@@ -1,7 +1,9 @@
 //! Bedrock versions that can be installed: every GDK build (1.21.120 and
-//! newer) of Release and Preview, with the links to Microsoft's packages.
-//! The list comes from community archives that record each build as it's
-//! published; it's kept on disk so it still shows offline.
+//! newer) of Release and Preview, with the links to Microsoft's packages,
+//! and the older UWP builds before that (known by their Windows Update id;
+//! `fe3` turns the id into a link when one is installed). The lists come
+//! from community archives that record each build as it's published; the
+//! result is kept on disk so it still shows offline.
 
 use std::cmp::Ordering;
 use std::path::Path;
@@ -16,6 +18,8 @@ use crate::{Error, Result};
 const VERSION_DB: &str = "https://raw.githubusercontent.com/LiteLDev/minecraft-windows-gdk-version-db/refs/heads/main/historical_versions.json";
 /// Used when the main list can't be reached: `{ "release": { "1.26.52.3": [urls] }, "preview": … }`.
 const FALLBACK_DB: &str = "https://raw.githubusercontent.com/MinecraftBedrockArchiver/GdkLinks/refs/heads/master/urls.json";
+/// The older (UWP) builds: `[["1.20.81.01", "<update id>", "0", "x64"], …]` (type 0 Release, 1 Beta, 2 Preview).
+const LEGACY_DB: &str = "https://www.raythnetwork.co.uk/versions.php?type=json";
 /// Where the last list is kept, in the launcher's cache folder.
 const CACHE_FILE: &str = "bedrock-versions.json";
 
@@ -25,14 +29,22 @@ pub struct Version {
     pub edition: Edition,
     /// "1.26.52.3".
     pub id: String,
-    /// Mirrors of the same package (Microsoft's CDN).
+    /// Mirrors of the same package (Microsoft's CDN); none for an older (UWP) build.
     pub urls: Vec<String>,
+    /// The Windows Update id of an older (UWP, before 1.21.120) build, whose link `fe3` looks up.
+    #[serde(default)]
+    pub update_id: Option<String>,
 }
 
 impl Version {
     /// The name players know ("1.26.52"; a Preview keeps its build number).
     pub fn display(&self) -> String {
         display(&self.id, self.edition)
+    }
+
+    /// An older build (the UWP app type before 1.21.120).
+    pub fn is_legacy(&self) -> bool {
+        self.update_id.is_some()
     }
 }
 
@@ -82,6 +94,21 @@ impl Catalog {
     pub fn latest(&self, edition: Edition) -> Option<&Version> {
         self.of(edition).first()
     }
+
+    /// Add the older builds the GDK list doesn't have.
+    pub(crate) fn add_legacy(&mut self, legacy: Vec<Version>) {
+        for version in legacy {
+            let list = match version.edition {
+                Edition::Release => &mut self.release,
+                Edition::Preview => &mut self.preview,
+            };
+            if !list.iter().any(|v| v.id == version.id) {
+                list.push(version);
+            }
+        }
+        self.release.sort_by(|a, b| compare(&b.id, &a.id));
+        self.preview.sort_by(|a, b| compare(&b.id, &a.id));
+    }
 }
 
 /// The list of builds: fetched, or the copy from last time when offline.
@@ -92,7 +119,13 @@ pub fn catalog(cache_dir: &Path) -> Result<Catalog> {
         fetch_fallback()
     });
     match fetched {
-        Ok(catalog) => {
+        Ok(mut catalog) => {
+            // The older builds are a bonus: without them the rest still works.
+            let legacy = fetch_legacy().unwrap_or_else(|e| {
+                log::warn!("the older Bedrock builds couldn't be listed ({e}), using the last list");
+                kept_legacy(&cached)
+            });
+            catalog.add_legacy(legacy);
             if let Err(e) = crate::storage::save_json(&cached, &catalog) {
                 log::warn!("couldn't keep the Bedrock version list: {e}");
             }
@@ -103,6 +136,51 @@ pub fn catalog(cache_dir: &Path) -> Result<Catalog> {
             _ => Err(e),
         },
     }
+}
+
+/// The older builds of the list kept from last time.
+fn kept_legacy(cached: &Path) -> Vec<Version> {
+    let Ok(Some(old)) = crate::storage::load_json::<Catalog>(cached) else {
+        return Vec::new();
+    };
+    old.release
+        .into_iter()
+        .chain(old.preview)
+        .filter(Version::is_legacy)
+        .collect()
+}
+
+fn fetch_legacy() -> Result<Vec<Version>> {
+    parse_legacy(&get_text(LEGACY_DB)?)
+}
+
+/// Release and Preview builds for 64-bit Windows (Beta needs a Microsoft account to download).
+pub(crate) fn parse_legacy(text: &str) -> Result<Vec<Version>> {
+    let rows: Vec<Vec<String>> = serde_json::from_str(text)?;
+    let list: Vec<Version> = rows
+        .into_iter()
+        .filter_map(|row| {
+            let [number, update_id, kind, arch] = <[String; 4]>::try_from(row).ok()?;
+            let edition = match kind.as_str() {
+                "0" => Edition::Release,
+                "2" => Edition::Preview,
+                _ => return None,
+            };
+            if arch != "x64" || !super::fe3::is_update_id(&update_id) {
+                return None;
+            }
+            Some(Version {
+                edition,
+                id: normalize(&number)?,
+                urls: Vec::new(),
+                update_id: Some(update_id),
+            })
+        })
+        .collect();
+    if list.is_empty() {
+        return Err(Error::Other("the older Bedrock builds list is empty".into()));
+    }
+    Ok(list)
 }
 
 #[derive(Deserialize)]
@@ -151,6 +229,7 @@ pub(crate) fn parse_main(text: &str) -> Result<Catalog> {
                     edition,
                     id: normalize(number)?,
                     urls: clean_urls(e.urls),
+                    update_id: None,
                 })
             })
             .collect();
@@ -179,6 +258,7 @@ pub(crate) fn parse_fallback(text: &str) -> Result<Catalog> {
                     edition,
                     id: normalize(id)?,
                     urls: clean_urls(urls.clone()),
+                    update_id: None,
                 })
             })
             .collect();
@@ -212,7 +292,7 @@ fn clean_urls(urls: Vec<String>) -> Vec<String> {
 }
 
 fn sorted(mut list: Vec<Version>) -> Vec<Version> {
-    list.retain(|v| !v.urls.is_empty());
+    list.retain(|v| !v.urls.is_empty() || v.is_legacy());
     list.sort_by(|a, b| compare(&b.id, &a.id));
     list.dedup_by(|a, b| a.id == b.id);
     list
@@ -272,11 +352,15 @@ pub fn install(
     }
     #[cfg(windows)]
     {
+        if version.is_legacy() {
+            return install_legacy(version, cancel, progress);
+        }
         let stage = format!(
             "Installing {} {}",
             version.edition.name(),
             version.display()
         );
+        make_room(version)?;
         let mut last = Error::Other("no download link for this version".into());
         for url in &version.urls {
             match super::package::install(url, &stage, cancel, progress) {
@@ -303,4 +387,83 @@ pub fn install(
         let _ = (version, cancel, progress);
         unreachable!()
     }
+}
+
+/// A GDK game and an older (UWP) one can't replace each other in place: take the installed one off
+/// first (its worlds and settings are kept, they live outside the package).
+#[cfg(windows)]
+fn make_room(version: &Version) -> Result<()> {
+    match super::find(version.edition) {
+        Some(installed) if installed.gdk == version.is_legacy() => {
+            super::package::remove(version.edition.package_family())
+        }
+        _ => Ok(()),
+    }
+}
+
+/// An older build: Microsoft's update service gives the link, the package is fetched here (it is
+/// signed by Microsoft and a plain zip), and Windows installs it.
+#[cfg(windows)]
+fn install_legacy(
+    version: &Version,
+    cancel: &AtomicBool,
+    progress: crate::Progress<'_>,
+) -> Result<()> {
+    use crate::error::IoContext;
+    use crate::net::{DownloadJob, download_all};
+    let update_id = version.update_id.as_deref().unwrap_or_default();
+    let name = format!("{} {}", version.edition.name(), version.display());
+    let url = super::fe3::resolve(update_id)?;
+    let dir = std::env::temp_dir().join("arctic-bedrock-install");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).at(&dir)?;
+    let result = (|| {
+        let file = dir.join("package.download");
+        download_all(
+            &format!("Downloading {name}"),
+            vec![DownloadJob {
+                url,
+                dest: file.clone(),
+                sha1: None,
+                size: None,
+                lzma: None,
+            }],
+            progress,
+        )?;
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(Error::Other("cancelled".into()));
+        }
+        let package = with_package_extension(&file)?;
+        make_room(version)?;
+        super::package::install(&file_uri(&package), &format!("Installing {name}"), cancel, progress)
+    })();
+    let _ = std::fs::remove_dir_all(&dir);
+    result
+}
+
+/// Windows tells a package from a bundle by its extension: look inside and name the file for what it is.
+#[cfg(windows)]
+fn with_package_extension(file: &Path) -> Result<std::path::PathBuf> {
+    use crate::error::IoContext;
+    let zip = std::fs::File::open(file).at(file)?;
+    let archive = zip::ZipArchive::new(zip)
+        .map_err(|_| Error::Other("what Microsoft sent isn't a game package".into()))?;
+    let bundle = archive
+        .file_names()
+        .any(|name| name.ends_with("AppxBundleManifest.xml"));
+    drop(archive);
+    let named = file.with_extension(if bundle { "appxbundle" } else { "appx" });
+    std::fs::rename(file, &named).at(file)?;
+    Ok(named)
+}
+
+/// `file:///C:/…` for a local path.
+#[cfg(windows)]
+fn file_uri(path: &Path) -> String {
+    let text = path.to_string_lossy().replace('\\', "/");
+    let text = text
+        .replace('%', "%25")
+        .replace(' ', "%20")
+        .replace('#', "%23");
+    format!("file:///{text}")
 }

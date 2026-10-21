@@ -10,7 +10,7 @@ use std::time::Duration;
 use windows::ApplicationModel::Package;
 use windows::Foundation::Uri;
 use windows::Management::Deployment::{
-    AddPackageOptions, DeploymentProgress, DeploymentResult, PackageManager,
+    AddPackageOptions, DeploymentProgress, DeploymentResult, PackageManager, RemovalOptions,
 };
 use windows::core::HSTRING;
 
@@ -56,6 +56,27 @@ pub(super) fn launch(family: &str) -> Result<()> {
         Ok(false) => Err(Error::Other("Windows didn't start it".into())),
         Err(e) => Err(Error::Other(e.message())),
     }
+}
+
+/// Take the installed package off the computer, keeping its data (an older install keeps its worlds
+/// and settings inside the package's data folder).
+pub(super) fn remove(family: &str) -> Result<()> {
+    let run = || -> windows::core::Result<()> {
+        let Some(package) = package(family)? else {
+            return Ok(());
+        };
+        let name = package.Id()?.FullName()?;
+        PackageManager::new()?
+            .RemovePackageWithOptionsAsync(&name, RemovalOptions::PreserveApplicationData)?
+            .join()?;
+        Ok(())
+    };
+    run().map_err(|e| {
+        Error::Other(format!(
+            "couldn't remove the installed game: {}",
+            install_error(&e)
+        ))
+    })
 }
 
 /// Install the package at `url` over whatever version is there (newer or
