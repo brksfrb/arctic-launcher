@@ -70,7 +70,9 @@ public final class LegacySmoothFont {
 	private LegacySmoothFont() {}
 
 	public static boolean on() {
-		return ArcticClient.config().fancy && !broken;
+		// Forge's loading screen draws text before the client has started: no config yet.
+		com.arcticlauncher.client.config.ClientConfig config = ArcticClient.config();
+		return config != null && config.fancy && !broken;
 	}
 
 	/** The glyph for a character, or null when Minecraft's own font should draw it. */

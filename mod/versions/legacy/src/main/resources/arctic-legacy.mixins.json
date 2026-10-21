@@ -1,7 +1,8 @@
 {
 	"required": <% if (forge) { %>false<% } else { %>true<% } %>,
 	"package": "com.arcticlauncher.legacy.mixin",
-	"compatibilityLevel": "JAVA_8",
+	"compatibilityLevel": "JAVA_8",<% if (forge) { %>
+	"minVersion": "0.7.11",<% } %>
 	"client": [
 		"MinecraftClientMixin",
 		"NativeMenuMixin",
