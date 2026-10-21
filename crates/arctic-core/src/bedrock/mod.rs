@@ -13,6 +13,7 @@
 
 mod archive;
 pub mod client;
+mod fe3;
 #[cfg(windows)]
 mod package;
 pub mod packs;
@@ -124,7 +125,8 @@ pub fn find(edition: Edition) -> Option<Install> {
         Some(Install {
             edition,
             version: versions::from_package_version(&package_version),
-            gdk: path.join("Minecraft.Windows.exe").is_file(),
+            // Only the GDK game has this file; the older app type has an AppxManifest.xml instead.
+            gdk: path.join("MicrosoftGame.Config").is_file(),
             path,
         })
     }

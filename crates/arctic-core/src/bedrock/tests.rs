@@ -204,3 +204,28 @@ fn reads_both_version_lists() {
     assert_eq!(c.release[0].id, "1.26.52.3");
     assert!(c.preview.is_empty());
 }
+
+#[test]
+fn reads_the_older_builds_and_adds_only_what_is_missing() {
+    let text = r#"[["1.20.81.01","48f0d81e-0cc1-4e97-ab85-c9d3d24e848f","0","x64"],
+        ["1.21.120.04","6f2ca544-e31c-4916-b888-bb2815be4c84","0","x64"],
+        ["1.21.0.3","0052663e-3323-4fc9-9ead-84567336093a","1","x64"],
+        ["1.20.50.3","58c5f0cd-09d7-4e99-a6b6-c3829fd62ac9","0","x86"],
+        ["1.19.0.5","not a guid","0","x64"],
+        ["1.21.120.20","c1872dc3-ddf8-4a91-844b-8dca1b681324","2","x64"]]"#;
+    let legacy = versions::parse_legacy(text).unwrap();
+    let ids: Vec<&str> = legacy.iter().map(|v| v.id.as_str()).collect();
+    assert_eq!(ids, ["1.20.81.1", "1.21.120.4", "1.21.120.20"]);
+    assert!(legacy.iter().all(|v| v.is_legacy() && v.urls.is_empty()));
+    assert_eq!(legacy[2].edition, Edition::Preview);
+
+    let main = r#"{"releaseVersions":[{"version":"Release 1.21.120.04","urls":["http://assets1.xboxlive.com/a.msixvc"]}]}"#;
+    let mut c = versions::parse_main(main).unwrap();
+    c.add_legacy(legacy);
+    let ids: Vec<&str> = c.release.iter().map(|v| v.id.as_str()).collect();
+    assert_eq!(ids, ["1.21.120.4", "1.20.81.1"]);
+    assert!(!c.release[0].is_legacy(), "the GDK build wins a tie");
+    assert!(c.release[1].is_legacy());
+    assert_eq!(c.preview[0].id, "1.21.120.20");
+    assert!(versions::parse_legacy("[]").is_err());
+}
