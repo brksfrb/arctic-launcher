@@ -13,6 +13,11 @@ use crate::loaders::LoaderKind;
 /// doesn't say or can't be read (it's then kept on).
 pub fn game_fits(jar: &Path, game: &str, loader: LoaderKind) -> Option<bool> {
     let game = numbers(game)?;
+    // Forge before 1.13 reads `mcmod.info` only: a `mods.toml` in such a jar (Entity Culling's 1.8.9
+    // build has one, with a newer game's range) is ignored by the game, so it says nothing.
+    if loader == LoaderKind::Forge && cmp(&game, &[1, 13]) == std::cmp::Ordering::Less {
+        return None;
+    }
     let mut zip = zip::ZipArchive::new(std::fs::File::open(jar).ok()?).ok()?;
     let mut read = |name: &str| {
         let mut s = String::new();
@@ -203,6 +208,32 @@ fn split_ranges(r: &str) -> Vec<&str> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_stray_mods_toml_in_an_old_forge_jar_says_nothing() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let jar = dir.path().join("culling.jar");
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(&jar).unwrap());
+        zip.start_file(
+            "META-INF/mods.toml",
+            zip::write::SimpleFileOptions::default(),
+        )
+        .unwrap();
+        zip.write_all(
+            b"[[dependencies.culling]]
+modId=\"minecraft\"
+mandatory=true
+versionRange=\"[1.16.5,1.17)\"
+",
+        )
+        .unwrap();
+        zip.finish().unwrap();
+        // Forge 1.8.9 never reads it; Forge 1.16.5 does (and this one fits).
+        assert_eq!(game_fits(&jar, "1.8.9", LoaderKind::Forge), None);
+        assert_eq!(game_fits(&jar, "1.16.5", LoaderKind::Forge), Some(true));
+        assert_eq!(game_fits(&jar, "1.18.2", LoaderKind::Forge), Some(false));
+    }
+
     use super::*;
 
     fn v(s: &str) -> Vec<u64> {
