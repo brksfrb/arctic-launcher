@@ -95,8 +95,23 @@ public final class LegacyHooks {
 		}
 	}
 
+	/**
+	 * The game's size follows its window. LWJGL 2 tells the game once ("resized"), and a window made
+	 * bigger while the game was still loading (the launcher maximizes it as it opens) can use that
+	 * up: the game then keeps drawing a small picture in the corner of a big black window.
+	 */
+	private static void syncWindowSize() {
+		MinecraftClient mc = MinecraftClient.getInstance();
+		int w = org.lwjgl.opengl.Display.getWidth();
+		int h = org.lwjgl.opengl.Display.getHeight();
+		if (w > 0 && h > 0 && !org.lwjgl.opengl.Display.isFullscreen() && (w != mc.width || h != mc.height)) {
+			mc.onResolutionChanged(w, h);
+		}
+	}
+
 	public static void tick(boolean screenOpen) {
 		ArcticLegacy.PLATFORM.tick();
+		syncWindowSize();
 		syncHitboxes();
 		com.arcticlauncher.legacy.replay.LegacyReplayRecording.tick();
 		ArcticClient.tick(screenOpen);

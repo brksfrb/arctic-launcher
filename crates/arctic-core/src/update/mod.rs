@@ -14,7 +14,7 @@
 
 use std::fs;
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
@@ -226,6 +226,35 @@ pub fn download_and_apply(dirs: &DataDirs, info: &UpdateInfo, progress: Progress
     Ok(())
 }
 
+/// The hidden copies of the launcher that a cut-short update leaves beside the executable
+/// (`.<name>.<random>.exe`, made by the self-replace step), removed. How many went.
+pub fn remove_update_leftovers() -> usize {
+    std::env::current_exe().map_or(0, |exe| remove_leftovers_beside(&exe))
+}
+
+fn remove_leftovers_beside(exe: &Path) -> usize {
+    let (Some(dir), Some(stem)) = (exe.parent(), exe.file_stem().and_then(|s| s.to_str())) else {
+        return 0;
+    };
+    let prefix = format!(".{stem}.");
+    let Ok(entries) = fs::read_dir(dir) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .filter(|entry| {
+            entry.path() != exe
+                && entry
+                    .file_name()
+                    .to_str()
+                    .is_some_and(|name| name.starts_with(&prefix))
+                && entry.file_type().is_ok_and(|kind| kind.is_file())
+        })
+        // One still running (the helper of an update in progress) can't be deleted: it stays.
+        .filter(|entry| fs::remove_file(entry.path()).is_ok())
+        .count()
+}
+
 /// Start the (new) executable and let the caller exit. `--replace` tells it
 /// to take over instead of handing off to this still-running process.
 pub fn restart() -> Result<()> {
@@ -245,6 +274,32 @@ pub fn restart_with(args: &[&str]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn leftovers_of_a_cut_short_update_are_removed() {
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("arctic-launcher-windows-x64.exe");
+        std::fs::write(&exe, b"launcher").unwrap();
+        std::fs::write(
+            dir.path()
+                .join(".arctic-launcher-windows-x64.arxohzxbnayhtyyv.exe"),
+            b"old",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path()
+                .join(".arctic-launcher-windows-x64.jhbacjhgszkeqflbk.exe"),
+            b"old",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join(".other-program.abc.exe"), b"theirs").unwrap();
+        std::fs::write(dir.path().join("notes.txt"), b"mine").unwrap();
+        assert_eq!(super::remove_leftovers_beside(&exe), 2);
+        assert!(exe.exists());
+        assert!(dir.path().join(".other-program.abc.exe").exists());
+        assert!(dir.path().join("notes.txt").exists());
+        assert_eq!(super::remove_leftovers_beside(&exe), 0);
+    }
+
     use super::*;
 
     fn release(tag: &str, prerelease: bool, body: &str, digest: Option<&str>) -> Release {

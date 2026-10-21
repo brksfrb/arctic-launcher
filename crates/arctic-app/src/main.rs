@@ -94,6 +94,13 @@ fn main() -> eframe::Result {
         tray_host::run(&dirs, forwarded);
     }
     logbook::init(dirs.launcher_logs().join("launcher.log"));
+    // Hidden copies of old launchers that a cut-short update left beside this one.
+    std::thread::spawn(|| {
+        let removed = arctic_core::update::remove_update_leftovers();
+        if removed > 0 {
+            log::info!("removed {removed} leftover file(s) of an interrupted update");
+        }
+    });
     // After moving the data folder: the old copy goes now that nothing holds its files.
     let root = dirs.root().to_path_buf();
     std::thread::spawn(move || arctic_core::storage::location::finish_move(&root));
