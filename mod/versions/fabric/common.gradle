@@ -97,6 +97,7 @@ def preprocessSource = { String text, String name ->
 def renames = [
 		['MC < 26.1', 'GuiGraphicsExtractor', 'GuiGraphics'],
 		['MC < 26.1', 'extractRenderState', 'render'],
+		['MC < 26.1', 'extractLines', 'renderLines'],
 		['MC < 26.1', 'extractBackground', 'renderBackground'],
 		['MC < 26.1', 'extractPanorama', 'renderPanorama'],
 		['MC < 26.1', 'extractDefaultSprite', 'renderDefaultSprite'],
@@ -334,7 +335,7 @@ processResources {
 			// 26.1+ keep the hitbox switch in the debug screen's entry list.
 			debugEntries: atLeast('1.21.9'),
 			// The F3 screen's two text lists (Debug Screen mod); from 1.21.9 it is a list of entries.
-			debugText: atLeast('1.17') && !atLeast('1.21.9'),
+			debugText: atLeast('1.17'),
 			// 1.21.9+ look players up by name off the game's thread (player heads): made safe.
 			playerInfoRace: atLeast('1.21.9'),
 			// Toast slots were tracked from 1.19.
