@@ -110,5 +110,14 @@
   {"file": "void_checkmate.png", "name": "Void Checkmate", "model": "slim", "category": "pvp"},
   {"file": "sunburst_striker.png", "name": "Sunburst Striker", "model": "classic", "category": "pvp"},
   {"file": "cherry_barista.png", "name": "Cherry Barista", "model": "slim", "category": "casual"},
-  {"file": "mint_pixel_hoodie.png", "name": "Mint Pixel Hoodie", "model": "classic", "category": "casual"}
+  {"file": "mint_pixel_hoodie.png", "name": "Mint Pixel Hoodie", "model": "classic", "category": "casual"},
+  {"file": "mc_steve.png", "name": "Steve (Minecraft)", "model": "classic", "category": "minecraft"},
+  {"file": "mc_alex.png", "name": "Alex (Minecraft)", "model": "slim", "category": "minecraft"},
+  {"file": "mc_ari.png", "name": "Ari (Minecraft)", "model": "classic", "category": "minecraft"},
+  {"file": "mc_efe.png", "name": "Efe (Minecraft)", "model": "classic", "category": "minecraft"},
+  {"file": "mc_kai.png", "name": "Kai (Minecraft)", "model": "classic", "category": "minecraft"},
+  {"file": "mc_makena.png", "name": "Makena (Minecraft)", "model": "slim", "category": "minecraft"},
+  {"file": "mc_noor.png", "name": "Noor (Minecraft)", "model": "slim", "category": "minecraft"},
+  {"file": "mc_sunny.png", "name": "Sunny (Minecraft)", "model": "classic", "category": "minecraft"},
+  {"file": "mc_zuri.png", "name": "Zuri (Minecraft)", "model": "classic", "category": "minecraft"}
 ]

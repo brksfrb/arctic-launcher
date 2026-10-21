@@ -19,6 +19,7 @@ pub const COLLECTIONS: &[&str] = &[
     "animals",
     "pvp",
     "casual",
+    "minecraft",
     "community",
 ];
 

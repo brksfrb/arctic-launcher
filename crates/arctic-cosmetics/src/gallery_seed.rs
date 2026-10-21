@@ -93,6 +93,7 @@ pub fn load(assets: &Path) -> Result<Vec<SeedSkin>, String> {
             "animals" => "animals",
             "pvp" => "pvp",
             "casual" => "casual",
+            "minecraft" => "minecraft",
             other => {
                 return Err(format!(
                     "gallery.json: {}: unknown category {other:?}",
