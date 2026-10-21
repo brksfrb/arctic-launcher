@@ -896,6 +896,28 @@ final class FabricPlatform implements Platform {
 		//#endif
 	}
 
+	@Override
+	public float[] health() {
+		return GameInfo.health();
+	}
+
+	@Override
+	public boolean lastTargetDead() {
+		return GameInfo.lastTargetDead();
+	}
+
+	@Override
+	public void playSound(int kind, float volume) {
+		//#if MC >= 1.14
+		net.minecraft.sounds.SoundEvent sound = kind == 1 ? net.minecraft.sounds.SoundEvents.ARROW_HIT_PLAYER
+				: kind == 3 ? net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP : net.minecraft.sounds.SoundEvents.EXPERIENCE_ORB_PICKUP;
+		//#else
+		net.minecraft.sound.Sound sound = kind == 1 ? net.minecraft.sound.Sounds.ENTITY_ARROW_HIT_PLAYER
+				: kind == 3 ? net.minecraft.sound.Sounds.ENTITY_PLAYER_LEVELUP : net.minecraft.sound.Sounds.ENTITY_EXPERIENCE_ORB_PICKUP;
+		//#endif
+		mc().getSoundManager().play(net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(sound, 1f, volume));
+	}
+
 	private static final float PING_PITCH = 1.6f;
 	private static final float PING_VOLUME = 0.5f;
 

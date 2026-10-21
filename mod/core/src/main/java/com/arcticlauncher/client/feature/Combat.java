@@ -11,6 +11,12 @@ public final class Combat {
 	private long lastHit;
 	private int combo;
 	private int lastHurtTime;
+	private Runnable onHit;
+
+	/** Told every time you hit something (called off the lock). */
+	public void onHit(Runnable listener) {
+		onHit = listener;
+	}
 
 	/** You hit something standing {@code reach} blocks away. */
 	public synchronized void attacked(double reach) {
@@ -18,6 +24,10 @@ public final class Combat {
 		combo = now - lastHit <= COMBO_WINDOW_MS ? combo + 1 : 1;
 		lastHit = now;
 		this.reach = reach;
+		Runnable listener = onHit;
+		if (listener != null) {
+			listener.run();
+		}
 	}
 
 	/** Each tick: getting hurt breaks the combo. */

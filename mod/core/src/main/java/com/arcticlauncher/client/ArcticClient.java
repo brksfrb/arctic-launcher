@@ -206,6 +206,9 @@ public final class ArcticClient {
 			if (config.saturationBar) {
 				com.arcticlauncher.client.hud.SaturationBar.render(g, platform);
 			}
+			if (features != null) {
+				features.combatFx().render(g, config, platform);
+			}
 			hud.render(g, style(), false);
 			if (com.arcticlauncher.client.replay.Replays.recording()) {
 				String recording = "REC · " + com.arcticlauncher.client.replay.Replays.recordingStatus();

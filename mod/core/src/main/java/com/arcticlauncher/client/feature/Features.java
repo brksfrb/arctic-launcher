@@ -53,12 +53,14 @@ public final class Features {
 	private boolean simulatedLook;
 
 	private final Combat combat = new Combat();
+	private final CombatFx combatFx = new CombatFx();
 	private final Toggle sprint = new Toggle(GameKey.SPRINT);
 	private final Toggle sneak = new Toggle(GameKey.SNEAK);
 
 	public Features(Platform platform, ClientConfig config) {
 		this.platform = platform;
 		this.config = config;
+		combat.onHit(() -> combatFx.hit(config, platform));
 	}
 
 	/** 20 times a second while in a world, before the game ticks. */
@@ -67,6 +69,7 @@ public final class Features {
 			sprint.tick(config.toggleSprint, screenOpen);
 			sneak.tick(config.toggleSneak, screenOpen);
 			combat.tick(platform.hurtTime());
+			combatFx.tick(config, platform);
 		}
 		boolean inGame = !screenOpen && platform.hasFeatures();
 		boolean wasZooming = zooming;
@@ -155,6 +158,10 @@ public final class Features {
 	public void simulate(boolean zoom, boolean look) {
 		simulatedZoom = zoom;
 		simulatedLook = look;
+	}
+
+	public CombatFx combatFx() {
+		return combatFx;
 	}
 
 	public Combat combat() {

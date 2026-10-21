@@ -79,6 +79,10 @@ final class SelfTest {
 			VisualsTest.start();
 			return;
 		}
+		if (CombatTest.requested()) {
+			CombatTest.start();
+			return;
+		}
 		if (PromoTest.requested()) {
 			PromoTest.start();
 			return;
