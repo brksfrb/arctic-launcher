@@ -182,19 +182,102 @@ pub fn sync_forge(
         }
         wanted.push(*project);
     }
-    if wanted.is_empty() {
-        return Ok(());
+    if !wanted.is_empty() {
+        let (_, failed) = super::install_many(
+            &wanted,
+            game_version,
+            LoaderKind::Forge,
+            &mods_dir,
+            &index,
+            progress,
+        )?;
+        for (id, e) in failed {
+            log::info!("{id} skipped for {game_version}: {e}");
+        }
     }
-    let (_, failed) = super::install_many(
-        &wanted,
-        game_version,
-        LoaderKind::Forge,
-        &mods_dir,
-        &index,
-        progress,
-    )?;
-    for (id, e) in failed {
-        log::info!("{id} skipped for {game_version}: {e}");
+    if ForgeIndex(&index).has(PATCHER) {
+        tame_patcher(game_dir);
+    }
+    Ok(())
+}
+
+/// Modrinth project of Patcher.
+const PATCHER: &str = "YknNc5nN";
+
+/// Is a project in our Forge index?
+struct ForgeIndex<'a>(&'a Path);
+
+impl ForgeIndex<'_> {
+    fn has(&self, project: &str) -> bool {
+        ModIndex::load(self.0).is_ok_and(|i| i.by_project(project).is_some())
+    }
+}
+
+/// OneConfig's key for its menu (LWJGL 2 key code) when nothing changed it: Right Shift, which is also
+/// Arctic's menu key (both opened, one after the other); and the key it is given here: Insert.
+const ONECONFIG_KEY: u64 = 54;
+const ONECONFIG_KEY_INSTEAD: u64 = 210;
+
+/// Patcher brings OneConfig, and two of their defaults clash with the Arctic Client: OneConfig's menu
+/// opens on Right Shift (Arctic's too), and Patcher's own font renderer replaces the game's, so
+/// Arctic's fancy font never draws. Moved aside once, as soon as the game has written both files
+/// (its first start); after that the player's choices stay.
+fn tame_patcher(game_dir: &Path) {
+    let marker = game_dir.join("arctic-patcher-settings.json");
+    if marker.exists() {
+        return;
+    }
+    let one_config = game_dir.join("OneConfig");
+    let preferences = one_config.join("Preferences.json");
+    let patcher = one_config
+        .join("profiles")
+        .join("Default Profile")
+        .join("patcher.json");
+    if !preferences.exists() || !patcher.exists() {
+        return;
+    }
+    let done = (|| -> Result<()> {
+        edit_json(&preferences, |json| {
+            let keys = json.pointer_mut("/oneConfigKeyBind/keyBinds")?;
+            let only_shift = keys
+                .as_array()
+                .is_some_and(|k| k.len() == 1 && k[0] == ONECONFIG_KEY);
+            only_shift.then(|| *keys = serde_json::json!([ONECONFIG_KEY_INSTEAD]))
+        })?;
+        edit_json(&patcher, |json| {
+            let object = json.as_object_mut()?;
+            let mut changed = false;
+            for key in ["optimizedFontRenderer", "cacheFontData"] {
+                if object
+                    .get(key)
+                    .is_some_and(|v| v == &serde_json::Value::Bool(true))
+                {
+                    object.insert(key.to_owned(), serde_json::Value::Bool(false));
+                    changed = true;
+                }
+            }
+            changed.then_some(())
+        })?;
+        save_json(
+            &marker,
+            &serde_json::json!({"menu_key": "Insert", "font_renderer": false}),
+        )
+    })();
+    if let Err(e) = done {
+        log::warn!("couldn't adjust Patcher's settings: {e}");
+    }
+}
+
+/// Read a JSON file, let `change` edit it (returning `Some` when it did), write it back if so.
+fn edit_json<T>(
+    path: &Path,
+    change: impl FnOnce(&mut serde_json::Value) -> Option<T>,
+) -> Result<()> {
+    let text = std::fs::read_to_string(path).map_err(|e| crate::Error::io(path, e))?;
+    let mut json: serde_json::Value = serde_json::from_str(&text)?;
+    if change(&mut json).is_some() {
+        let out = serde_json::to_string_pretty(&json)?;
+        std::fs::write(path, out).map_err(|e| crate::Error::io(path, e))?;
     }
     Ok(())
 }
@@ -506,6 +589,48 @@ pub fn installed_files(game_dir: &Path) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn patchers_clashing_defaults_are_changed_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let one = dir.path().join("OneConfig");
+        let profile = one.join("profiles").join("Default Profile");
+        std::fs::create_dir_all(&profile).unwrap();
+        std::fs::write(
+            one.join("Preferences.json"),
+            r#"{"oneConfigKeyBind":{"keyBinds":[54]},"enableBlur":true}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            profile.join("patcher.json"),
+            r#"{"optimizedFontRenderer":true,"cacheFontData":true,"shiftChat":false}"#,
+        )
+        .unwrap();
+        super::tame_patcher(dir.path());
+        let prefs: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(one.join("Preferences.json")).unwrap())
+                .unwrap();
+        assert_eq!(prefs["oneConfigKeyBind"]["keyBinds"][0], 210);
+        assert_eq!(prefs["enableBlur"], true);
+        let patcher: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(profile.join("patcher.json")).unwrap())
+                .unwrap();
+        assert_eq!(patcher["optimizedFontRenderer"], false);
+        assert_eq!(patcher["cacheFontData"], false);
+        assert_eq!(patcher["shiftChat"], false);
+        // The player turns the font renderer back on: it stays that way.
+        std::fs::write(
+            profile.join("patcher.json"),
+            r#"{"optimizedFontRenderer":true}"#,
+        )
+        .unwrap();
+        super::tame_patcher(dir.path());
+        assert!(
+            std::fs::read_to_string(profile.join("patcher.json"))
+                .unwrap()
+                .contains("true")
+        );
+    }
+
     #[test]
     fn forge_jars_are_told_by_their_names() {
         let words: &[&str] = &["patcher"];
