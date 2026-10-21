@@ -107,6 +107,8 @@ def applyRenames = { String text ->
 
 /** The mixins the Forge flavour replaces (they use MixinExtras). */
 def forgeReplaced = ['ClientConnectionProxyMixin.java', 'LoginSessionMixin.java', 'TitleScreenMixin.java']
+/** Left out of the Forge flavour: Forge loads ClientBrandRetriever before Mixin can patch it (and says "forge" itself). */
+def forgeSkipped = ['ClientBrandMixin.java']
 
 def preprocessedJava = layout.buildDirectory.dir(forge ? "preprocessed-forge/${mc}/java" : "preprocessed/${mc}/java")
 
@@ -123,7 +125,7 @@ tasks.register('preprocessJava') {
 		root.eachFileRecurse(groovy.io.FileType.FILES) { f ->
 			def rel = root.toPath().relativize(f.toPath()).toString()
 			def target = new File(outDir, rel)
-			if (forge && forgeReplaced.contains(f.name)) {
+			if (forge && (forgeReplaced.contains(f.name) || forgeSkipped.contains(f.name))) {
 				return
 			}
 			target.parentFile.mkdirs()
@@ -179,6 +181,8 @@ processResources {
 			achievements: !atLeast('1.12'),
 			// 1.8-only fixes (sign update chat spam, key presses reaching new screens).
 			mc18: !atLeast('1.9'),
+			// The Forge flavour leaves out the client brand mixin.
+			forge: forge,
 	]
 	inputs.properties props
 	filesMatching(['fabric.mod.json', 'arctic-legacy.mixins.json']) {
