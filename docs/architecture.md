@@ -221,7 +221,7 @@ folder per Xbox account for worlds, settings and the server list. An old UWP ins
   Builds before 1.21.120 are UWP `.appx` packages known only by a Windows Update id (the
   raythnetwork list, merged into the same catalog; Beta is skipped, it needs an account).
   `bedrock::fe3` asks Microsoft's update service for the link, the package is downloaded
-  into the temp folder and installed from the file; switching between the two kinds removes
+  into `cache/bedrock-packages` (the newest three are kept) and installed from the file; switching between the two kinds removes
   the installed package first with its data kept. A GDK install is told apart by its
   `MicrosoftGame.Config`.
 - **Worlds** (`minecraftWorlds\<id>`, name in `levelname.txt`) import from and export to

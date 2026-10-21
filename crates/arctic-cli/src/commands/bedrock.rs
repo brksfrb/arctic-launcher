@@ -176,7 +176,7 @@ fn install(ctx: &Ctx, edition: Edition, wanted: &str) -> Result<i32> {
         return Ok(0);
     }
     let cancel = AtomicBool::new(false);
-    let result = versions::install(&version, &cancel, &|p| {
+    let result = versions::install(&version, &ctx.root.cache(), &cancel, &|p| {
         // Windows only tells how far along it is, not bytes.
         let stage = format!("{}  {:>3}%", p.stage, p.done);
         ctx.out
