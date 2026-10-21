@@ -18,7 +18,6 @@ public final class Features {
 	private static final float MAX_FACTOR = 0.6f;
 	/** How far zoom goes this time (the wheel changes it; back to normal on release). */
 	private float factor = ZOOM_FACTOR;
-	private static final float ZOOM_SPEED = 12f;
 	/** Mouse-to-degrees factor, as vanilla turns the player. */
 	private static final double TURN_SCALE = 0.15;
 	private static final float MAX_PITCH = 90f;
@@ -29,6 +28,11 @@ public final class Features {
 
 	private boolean zooming;
 	private float zoom;
+	/** How far along zooming in (1) or out (0) is, in time: the curve turns it into {@link #zoom}. */
+	private float zoomProgress;
+	/** The zoom level on screen: eases to {@link #factor} when the wheel moves it. */
+	private float shownFactor = ZOOM_FACTOR;
+	private static final float SCROLL_EASE = 14f;
 	/** The smooth camera setting from before zooming, restored after. */
 	private boolean smoothCameraBefore;
 	private long lastFrame;
@@ -200,12 +204,42 @@ public final class Features {
 		float dt = lastFrame == 0 ? 0f : Math.min(0.1f, (now - lastFrame) / 1e9f);
 		lastFrame = now;
 		float target = zooming ? 1f : 0f;
-		float step = dt * ZOOM_SPEED * Math.max(0.15f, Math.abs(target - zoom));
-		zoom = zoom < target ? Math.min(target, zoom + step) : Math.max(target, zoom - step);
-		if (!zooming && zoom == 0f) {
-			factor = ZOOM_FACTOR;
+		float seconds = config.zoomDurationMs / 1000f;
+		if (config.zoomAnimation == 0 || seconds <= 0f) {
+			zoomProgress = target;
+		} else {
+			float step = dt / seconds;
+			zoomProgress = zoomProgress < target ? Math.min(target, zoomProgress + step) : Math.max(target, zoomProgress - step);
 		}
-		return 1f - (1f - factor) * zoom;
+		zoom = curve(config.zoomAnimation, zoomProgress);
+		if (!zooming && zoomProgress == 0f) {
+			factor = ZOOM_FACTOR;
+			shownFactor = ZOOM_FACTOR;
+		} else if (config.zoomSmoothScroll) {
+			shownFactor += (factor - shownFactor) * (1f - (float) Math.exp(-dt * SCROLL_EASE));
+		} else {
+			shownFactor = factor;
+		}
+		return 1f - (1f - shownFactor) * zoom;
+	}
+
+	/** The zoom curve {@code kind} (an index of {@code ClientConfig.ZOOM_CURVES}) at {@code p} (0 to 1). */
+	static float curve(int kind, float p) {
+		p = Math.max(0f, Math.min(1f, p));
+		switch (kind) {
+			case 0:
+				return p >= 0.5f ? 1f : 0f;
+			case 2: {
+				float inv = 1f - p;
+				return 1f - inv * inv * inv;
+			}
+			case 3:
+				return p < 0.5f ? 4f * p * p * p : 1f - (float) Math.pow(-2f * p + 2f, 3) / 2f;
+			case 4:
+				return p >= 1f ? 1f : 1f - (float) Math.pow(2.0, -10.0 * p);
+			default:
+				return p;
+		}
 	}
 
 	/**
@@ -218,7 +252,7 @@ public final class Features {
 			return 1.0;
 		}
 		double fov = Math.toRadians(Math.max(1.0, Math.min(170.0, platform.fovDegrees())));
-		double zoomedFov = fov * (1.0 - (1.0 - factor) * zoom);
+		double zoomedFov = fov * (1.0 - (1.0 - shownFactor) * zoom);
 		double zoomedTurn = Math.tan(zoomedFov / 2) / Math.tan(fov / 2);
 		// The player's own setting, faded in with the zoom.
 		return zoomedTurn * (1.0 + (config.zoomSensitivity / 100.0 - 1.0) * zoom);
