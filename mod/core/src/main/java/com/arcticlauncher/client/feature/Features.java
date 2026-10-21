@@ -230,8 +230,13 @@ public final class Features {
 			return;
 		}
 		if (on) {
-			smoothCameraBefore = platform.smoothCamera();
-			platform.smoothCamera(true);
+			boolean already = platform.smoothCamera();
+			// Already smooth as the zoom starts: another zoom (OptiFine's, on the same key) switched it on
+			// for itself. Putting "on" back afterwards left the camera smooth for good: go back to off.
+			smoothCameraBefore = false;
+			if (!already) {
+				platform.smoothCamera(true);
+			}
 		} else {
 			platform.smoothCamera(smoothCameraBefore);
 		}
