@@ -171,7 +171,8 @@ impl ArcticApp {
                 p.surface_hover.gamma_multiply(hover * 0.6),
             );
         }
-        let icon = egui::Rect::from_center_size(rect.center(), vec2(44.0, 44.0));
+        // Light lines like the text beside it: the stroke grows with the icon, so not too big.
+        let icon = egui::Rect::from_center_size(rect.center(), vec2(30.0, 30.0));
         icons::draw(
             ui.painter(),
             Icon::Gear,
