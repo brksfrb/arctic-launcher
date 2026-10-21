@@ -50,6 +50,11 @@ public final class ClientConfig {
 	public boolean zoomSmoothCamera = true;
 	/** How fast the mouse turns while zoomed, in percent of the automatic amount (50, 75, 100, 150). */
 	public int zoomSensitivity = 100;
+	/** The F3 screen with colored labels and values (see DebugStyle). */
+	public boolean debugStyle;
+	/** Colors (indexes of DebugStyle.COLORS) for the F3 screen's labels and values. */
+	public int debugLabelColor = 2;
+	public int debugValueColor = 0;
 	/** How the zoom moves in and out: an index into {@link #ZOOM_CURVES}. */
 	public int zoomAnimation = 2;
 	/** How long zooming in or out takes, in milliseconds (0: at once). */
@@ -244,6 +249,8 @@ public final class ClientConfig {
 		if (zoomKey == null) {
 			zoomKey = "key.keyboard.c";
 		}
+		debugLabelColor = Math.max(0, Math.min(7, debugLabelColor));
+		debugValueColor = Math.max(0, Math.min(7, debugValueColor));
 		zoomAnimation = Math.max(0, Math.min(ZOOM_CURVES.length - 1, zoomAnimation));
 		zoomDurationMs = Math.max(0, Math.min(1500, zoomDurationMs));
 		if (freelookKey == null) {

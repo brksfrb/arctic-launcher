@@ -32,6 +32,7 @@ FROM_LUCIDE = {
     "bossbar": "crown",
     "camera": "camera",
     "chat": "message-square",
+    "debugscreen": "bug",
     "chatfeed": "messages-square",
     "chunk": "grid-3x3",
     "clock": "clock",
