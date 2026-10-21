@@ -14,7 +14,7 @@ use crate::toasts::Kind;
 use crate::widgets;
 
 const SEARCH_DELAY: f64 = 0.35;
-const COLLECTIONS: [(&str, &str); 8] = [
+const COLLECTIONS: [(&str, &str); 9] = [
     ("", "All"),
     ("adventure", "Adventure"),
     ("fantasy", "Fantasy"),
@@ -22,6 +22,7 @@ const COLLECTIONS: [(&str, &str); 8] = [
     ("animals", "Animals"),
     ("pvp", "PvP"),
     ("casual", "Casual"),
+    ("minecraft", "Minecraft"),
     ("community", "Community"),
 ];
 
