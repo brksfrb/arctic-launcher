@@ -23,7 +23,7 @@ public final class LegacyDisconnectText {
 				if (value instanceof String && title.isEmpty()) {
 					title = net.minecraft.client.resource.language.I18n.translate((String) value);
 				} else if (value instanceof Text && reason.isEmpty()) {
-					reason = ((Text) value).asUnformattedString();
+					reason = ((Text) value).asFormattedString();
 				}
 			} catch (ReflectiveOperationException | RuntimeException ignored) {
 				// Not this one.
