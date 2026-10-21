@@ -201,6 +201,18 @@ public final class GameInfo {
 		//#endif
 	}
 
+	/** The creature you last hit is no longer alive. */
+	public static boolean lastTargetDead() {
+		Entity e = lastAttacked;
+		return e instanceof LivingEntity && !e.isAlive();
+	}
+
+	/** Your health and its maximum, in half hearts. */
+	public static float[] health() {
+		LocalPlayer p = player();
+		return p == null ? null : new float[] {p.getHealth(), p.getMaxHealth()};
+	}
+
 	/** What you aim at, or what you hit in the last few seconds. */
 	public static Object[] target() {
 		Entity aimed = Minecraft.getInstance().crosshairPickEntity;

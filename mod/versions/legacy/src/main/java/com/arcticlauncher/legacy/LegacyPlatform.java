@@ -909,7 +909,11 @@ public final class LegacyPlatform implements Platform {
 				continue;
 			}
 			count++;
+			//#if MC >= 1.9
+			soonest = Math.min(soonest, ((net.minecraft.entity.TntEntity) e).getFuse());
+			//#else
 			soonest = Math.min(soonest, ((net.minecraft.entity.TntEntity) e).fuseTimer);
+			//#endif
 		}
 		return count == 0 ? null : new int[] {Math.max(0, soonest), count};
 	}
@@ -950,6 +954,30 @@ public final class LegacyPlatform implements Platform {
 		mc().getSoundManager().play(PositionedSoundInstance.method_12521(net.minecraft.sound.Sounds.ENTITY_EXPERIENCE_ORB_PICKUP, MENTION_PITCH));
 		//#else
 		mc().getSoundManager().play(PositionedSoundInstance.master(new Identifier("random.orb"), MENTION_PITCH));
+		//#endif
+	}
+
+	@Override
+	public float[] health() {
+		ClientPlayerEntity p = mc().player;
+		return p == null ? null : new float[] {p.getHealth(), p.getMaxHealth()};
+	}
+
+	@Override
+	public boolean lastTargetDead() {
+		Entity e = lastAttacked;
+		return e instanceof net.minecraft.entity.LivingEntity && !e.isAlive();
+	}
+
+	@Override
+	public void playSound(int kind, float volume) {
+		//#if MC >= 1.9
+		net.minecraft.sound.Sound sound = kind == 1 ? net.minecraft.sound.Sounds.ENTITY_ARROW_HIT_PLAYER
+				: kind == 3 ? net.minecraft.sound.Sounds.ENTITY_PLAYER_LEVELUP : net.minecraft.sound.Sounds.ENTITY_EXPERIENCE_ORB_PICKUP;
+		mc().getSoundManager().play(PositionedSoundInstance.method_12521(sound, 1f));
+		//#else
+		String id = kind == 1 ? "random.successful_hit" : kind == 3 ? "random.levelup" : "random.orb";
+		mc().getSoundManager().play(PositionedSoundInstance.master(new Identifier(id), 1f));
 		//#endif
 	}
 

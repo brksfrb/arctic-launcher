@@ -174,6 +174,16 @@ public final class ClientConfig {
 	public int timeLockOff = -1;
 	/** A pop-up when armor or the held tool is about to break. */
 	public boolean durabilityWarning = true;
+	/** Combat feedback: a marker where you aim when you hit, sounds for hits and kills, and a low-health warning. */
+	public boolean hitMarker;
+	public int hitMarkerColor = 0xFFFFFFFF;
+	/** Sound for a hit / a kill: 0 off, 1 ding, 2 orb, 3 level-up. */
+	public int hitSound;
+	public int killSound;
+	public boolean lowHealthWarning;
+	/** The warning starts at this many hearts or fewer. */
+	public int lowHealthHearts = 3;
+	public boolean lowHealthBeep = true;
 	/** Saturation (the hidden part of hunger) drawn on the hunger bar. */
 	public boolean saturationBar;
 	/** Every entity's hitbox box drawn (like F3+B), from one switch. */

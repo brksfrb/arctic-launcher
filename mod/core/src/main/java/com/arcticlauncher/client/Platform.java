@@ -421,6 +421,19 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return -1;
 	}
 
+	/** Your health: {health, max} in half hearts, or null outside a world. */
+	default float[] health() {
+		return null;
+	}
+
+	/** Plays a short interface sound: 1 ding, 2 orb, 3 level-up (volume 0-1). */
+	default void playSound(int kind, float volume) {}
+
+	/** The creature you last hit has died (it is no longer alive in your world). */
+	default boolean lastTargetDead() {
+		return false;
+	}
+
 	/** Entities the world has loaded around you, or -1 outside a world. */
 	default int entityCount() {
 		return -1;

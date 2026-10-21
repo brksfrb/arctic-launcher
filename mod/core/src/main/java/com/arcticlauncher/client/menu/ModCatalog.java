@@ -7,6 +7,7 @@ import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.Platform;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.config.HudSlot;
+import com.arcticlauncher.client.feature.CombatFx;
 import com.arcticlauncher.client.feature.DebugStyle;
 import com.arcticlauncher.client.feature.QuickMessages;
 import com.arcticlauncher.client.hud.HudWidget;
@@ -156,6 +157,24 @@ final class ModCatalog {
 		out.add(new Mod("durability", "Low Durability", "A pop-up when armor or your tool is about to break", "durability",
 				Category.GAMEPLAY, "armor tool break warning")
 				.toggle(() -> c.durabilityWarning, on -> c.durabilityWarning = on));
+		out.add(new Mod("combatfx", "Combat Feedback", "A hit marker, hit and kill sounds, and a low-health warning", "target",
+				Category.GAMEPLAY, "hitmarker kill sound ding low health warning pvp")
+				.toggle(() -> c.hitMarker, on -> c.hitMarker = on)
+				.settings((host, f) -> {
+					f.section("Hit marker");
+					f.toggle("Hit marker", "A small X at your crosshair when you hit; red on a kill", () -> c.hitMarker,
+							on -> c.hitMarker = on);
+					f.swatches("Color", CombatFx.MARKER_COLORS, () -> c.hitMarkerColor, i -> c.hitMarkerColor = i);
+					f.section("Sounds");
+					f.choice("Hit sound", CombatFx.SOUNDS, () -> c.hitSound, i -> c.hitSound = i);
+					f.choice("Kill sound", CombatFx.SOUNDS, () -> c.killSound, i -> c.killSound = i);
+					f.section("Low health");
+					f.toggle("Low-health warning", "A red pulse at the screen edges", () -> c.lowHealthWarning,
+							on -> c.lowHealthWarning = on);
+					f.stepper("Hearts", () -> c.lowHealthHearts, v -> c.lowHealthHearts = (int) v, 1, 9, 1, "%.0f");
+					f.toggle("Warning beep", "A soft beep while it pulses", () -> c.lowHealthBeep, on -> c.lowHealthBeep = on);
+					f.note("A hit counts when you attack; the server may still ignore it.");
+				}));
 		out.add(new Mod("controller", "Controller", "Play with a gamepad: Xbox, PlayStation and others", "controller",
 				Category.GAMEPLAY, "gamepad joystick xbox playstation console")
 				.toggle(() -> c.controller.enabled, on -> c.controller.enabled = on)
