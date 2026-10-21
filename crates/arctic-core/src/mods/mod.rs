@@ -34,6 +34,13 @@ use crate::{Error, Progress, ProgressInfo, Result};
 pub use exact::{ExactReport, Skipped, Wanted, install_exact};
 pub use identify::{Recognized, recognize};
 use index::ModIndex;
+
+/// The file names an index of ours tracks (none when it can't be read).
+pub(crate) fn tracked_files(index: &Path) -> Vec<String> {
+    ModIndex::load(index)
+        .map(|i| i.mods.into_iter().map(|m| m.file_name).collect())
+        .unwrap_or_default()
+}
 use modrinth::{Project, Version};
 use resolve::{Planned, Target};
 
