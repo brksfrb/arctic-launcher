@@ -335,6 +335,7 @@ pub fn from_package_version(package: &str) -> String {
 /// Worlds and settings are kept: they live outside the package.
 pub fn install(
     version: &Version,
+    cache_dir: &Path,
     cancel: &AtomicBool,
     progress: crate::Progress<'_>,
 ) -> Result<()> {
@@ -353,7 +354,7 @@ pub fn install(
     #[cfg(windows)]
     {
         if version.is_legacy() {
-            return install_legacy(version, cancel, progress);
+            return install_legacy(version, cache_dir, cancel, progress);
         }
         let stage = format!(
             "Installing {} {}",
@@ -384,7 +385,7 @@ pub fn install(
     }
     #[cfg(not(windows))]
     {
-        let _ = (version, cancel, progress);
+        let _ = (version, cache_dir, cancel, progress);
         unreachable!()
     }
 }
@@ -401,44 +402,94 @@ fn make_room(version: &Version) -> Result<()> {
     }
 }
 
+/// How many older packages stay downloaded (each is a few hundred MB).
+#[cfg(windows)]
+const KEPT_PACKAGES: usize = 3;
+
 /// An older build: Microsoft's update service gives the link, the package is fetched here (it is
-/// signed by Microsoft and a plain zip), and Windows installs it.
+/// signed by Microsoft and a plain zip) and kept in `cache_dir`, so going back to a build needs no
+/// second download, and Windows installs it.
 #[cfg(windows)]
 fn install_legacy(
     version: &Version,
+    cache_dir: &Path,
     cancel: &AtomicBool,
     progress: crate::Progress<'_>,
 ) -> Result<()> {
     use crate::error::IoContext;
     use crate::net::{DownloadJob, download_all};
-    let update_id = version.update_id.as_deref().unwrap_or_default();
     let name = format!("{} {}", version.edition.name(), version.display());
-    let url = super::fe3::resolve(update_id)?;
-    let dir = std::env::temp_dir().join("arctic-bedrock-install");
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = cache_dir.join("bedrock-packages");
     std::fs::create_dir_all(&dir).at(&dir)?;
-    let result = (|| {
-        let file = dir.join("package.download");
-        download_all(
-            &format!("Downloading {name}"),
-            vec![DownloadJob {
-                url,
-                dest: file.clone(),
-                sha1: None,
-                size: None,
-                lzma: None,
-            }],
-            progress,
-        )?;
-        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
-            return Err(Error::Other("cancelled".into()));
+    let key = format!("{}-{}", version.edition.id(), version.id);
+    let package = match saved_package(&dir, &key) {
+        Some(package) => package,
+        None => {
+            let url = super::fe3::resolve(version.update_id.as_deref().unwrap_or_default())?;
+            let file = dir.join(format!("{key}.download"));
+            let _ = std::fs::remove_file(&file);
+            let fetched = download_all(
+                &format!("Downloading {name}"),
+                vec![DownloadJob {
+                    url,
+                    dest: file.clone(),
+                    sha1: None,
+                    size: None,
+                    lzma: None,
+                }],
+                progress,
+            );
+            if let Err(e) = fetched {
+                let _ = std::fs::remove_file(&file);
+                return Err(e);
+            }
+            if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                let _ = std::fs::remove_file(&file);
+                return Err(Error::Other("cancelled".into()));
+            }
+            let package = with_package_extension(&file).inspect_err(|_| {
+                let _ = std::fs::remove_file(&file);
+            })?;
+            prune_packages(&dir, &package);
+            package
         }
-        let package = with_package_extension(&file)?;
-        make_room(version)?;
-        super::package::install(&file_uri(&package), &format!("Installing {name}"), cancel, progress)
-    })();
-    let _ = std::fs::remove_dir_all(&dir);
-    result
+    };
+    make_room(version)?;
+    super::package::install(&file_uri(&package), &format!("Installing {name}"), cancel, progress)
+}
+
+/// The package kept for `key` ("release-1.20.81.1"), if it is still a whole zip.
+#[cfg(windows)]
+fn saved_package(dir: &Path, key: &str) -> Option<std::path::PathBuf> {
+    ["appx", "appxbundle"].into_iter().find_map(|ext| {
+        let path = dir.join(format!("{key}.{ext}"));
+        let whole = std::fs::File::open(&path)
+            .ok()
+            .is_some_and(|f| zip::ZipArchive::new(f).is_ok());
+        if whole {
+            Some(path)
+        } else {
+            let _ = std::fs::remove_file(&path);
+            None
+        }
+    })
+}
+
+/// Keep the newest few packages (never `keep`, the one just fetched).
+#[cfg(windows)]
+fn prune_packages(dir: &Path, keep: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut found: Vec<_> = entries
+        .flatten()
+        .filter(|e| e.path() != keep)
+        .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
+        .collect();
+    found.sort_by_key(|f| std::cmp::Reverse(f.0));
+    for (_, path) in found.into_iter().skip(KEPT_PACKAGES - 1) {
+        let _ = std::fs::remove_file(path);
+    }
 }
 
 /// Windows tells a package from a bundle by its extension: look inside and name the file for what it is.
