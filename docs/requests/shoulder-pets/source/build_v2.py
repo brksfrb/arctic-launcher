@@ -18,6 +18,12 @@ def smoothstep(start,end,value):
     return u*u*(3-2*u)
 
 
+def blink_scale(t, start):
+    """A quick close, tiny hold, and reopen; the lid is hinged at its top."""
+    closed=smoothstep(start,start+.07,t)*(1-smoothstep(start+.14,start+.23,t))
+    return [1.0,max(.001,closed),1.0]
+
+
 def paint(mesh, center, size, face, pattern, colors):
     """Place deliberate pixel clusters on a model face, not random noise."""
     cx,cy,cz=center;w,h,d=size;n=len(pattern);m=max(map(len,pattern))
@@ -45,7 +51,7 @@ def paint(mesh, center, size, face, pattern, colors):
 
 def shadow_pup():
     c=7.5
-    body=Sculpture(); head=Sculpture(); tail=Sculpture(); jaw=Sculpture()
+    body=Sculpture(); head=Sculpture(); tail=Sculpture(); jaw=Sculpture(); lids=Sculpture()
     # A low, broad animal body; the last version was tall like a tiny person.
     box(body,(c,26.15,.64),(4.85,4.25,4.78),DARK,BLACK,SOFT,MID)
     box(body,(c,27.91,-1.50),(3.76,.53,.41),SOFT,DARK,EDGE)
@@ -83,6 +89,8 @@ def shadow_pup():
         box(head,(c+sign*1.32,31.55,-3.84),(.22,.34,.12),BLACK)
         box(head,(c+sign*1.27,31.02,-3.70),(.88,.16,.13),AQUA)
         box(head,(c+sign*1.27,32.48,-3.59),(1.47,.26,.26),DARK)
+        box(lids,(c+sign*1.26,31.48,-3.98),(1.47,1.10,.15),SOFT,DARK,MID)
+        box(lids,(c+sign*1.26,30.96,-4.08),(1.17,.11,.11),BLACK)
     box(head,(c,29.45,-3.32),(3.52,1.67,1.37),MID,DARK,EDGE)
     box(head,(c,29.84,-4.15),(1.63,.78,.76),DARK,BLACK,MID)
     box(head,(c,29.72,-4.57),(1.31,.42,.16),BLACK)
@@ -97,21 +105,24 @@ def shadow_pup():
     for i in range(4):
         x=c+3.5+i*.63;y=28.0+i*.73
         box(tail,(x,y,3.05),(.68,.42,.31),BLACK,DARK)
-    hp=[c,30.62,-.94]; jp=[c,28.44,-3.74];tp=[c+2.17,26.80,2.12]
-    parts=[('pup_body',body,[0,0,0]),('pup_head',head,hp),('lower_jaw',jaw,jp),('long_tail',tail,tp)]
+    hp=[c,30.62,-.94]; jp=[c,28.44,-3.74];tp=[c+2.17,26.80,2.12]; ep=[c,32.03,-3.98]
+    parts=[('pup_body',body,[0,0,0]),('pup_head',head,hp),('lower_jaw',jaw,jp),
+           ('long_tail',tail,tp),('eyelids',lids,ep)]
     nodes=[{'name':'pup_body','mesh':0,'children':[1,3]},
-           {'name':'pup_head','mesh':1,'translation':hp,'children':[2]},
+           {'name':'pup_head','mesh':1,'translation':hp,'children':[2,4]},
            {'name':'lower_jaw','mesh':2,'translation':[jp[i]-hp[i] for i in range(3)]},
-           {'name':'long_tail','mesh':3,'translation':tp}]
+           {'name':'long_tail','mesh':3,'translation':tp},
+           {'name':'eyelids','mesh':4,'translation':[ep[i]-hp[i] for i in range(3)]}]
     tracks=[(1,'rotation',lambda t:quat_y(.075*math.sin(2*math.pi*t/3.2))),
             (2,'rotation',lambda t:quat_z(.05*math.sin(2*math.pi*t/3.2))),
-            (3,'rotation',lambda t:quat_z(.27*math.sin(8*math.pi*t/3.2)))]
+            (3,'rotation',lambda t:quat_z(.27*math.sin(8*math.pi*t/3.2))),
+            (4,'scale',lambda t:blink_scale(t,1.40))]
     save('shadow_pup',parts,nodes,tracks)
 
 
 def ember_hatchling():
     c=7.5
-    body=Sculpture();head=Sculpture();left=Sculpture();right=Sculpture();tail=Sculpture();jaw=Sculpture()
+    body=Sculpture();head=Sculpture();left=Sculpture();right=Sculpture();tail=Sculpture();jaw=Sculpture();lids=Sculpture()
     # Horizontal, hovering dragon with a clear belly and hanging claws.
     box(body,(c,29.04,.87),(3.96,3.05,5.94),DARK,BLACK,SOFT,MID)
     for side in ('left','right'):
@@ -150,6 +161,8 @@ def ember_hatchling():
         box(head,(c+sign*1.37,31.26,-4.56),(.29,.67,.10),BLACK)
         box(head,(c+sign*1.08,32.01,-4.57),(.22,.29,.09),WHITE)
         box(head,(c+sign*1.25,32.52,-4.37),(1.57,.27,.28),DARK)
+        box(lids,(c+sign*1.19,31.61,-4.76),(1.33,1.54,.16),SOFT,DARK,MID)
+        box(lids,(c+sign*1.19,30.88,-4.86),(1.10,.12,.12),BLACK)
     box(head,(c,29.56,-4.04),(3.97,1.32,2.26),MID,DARK,EDGE)
     for x in (c-1.18,c+1.18):
         box(head,(x,29.77,-5.23),(.40,.31,.18),BLACK)
@@ -227,12 +240,19 @@ def ember_hatchling():
             return [max(.001,s)]*3
         tracks.append((index,'translation',position))
         tracks.append((index,'scale',visibility))
+    ep=[c,32.38,-4.76]
+    index=len(parts)
+    parts.append(('eyelids',lids,ep))
+    nodes.append({'name':'eyelids','mesh':index,
+                  'translation':[ep[i]-hp[i] for i in range(3)]})
+    nodes[1]['children'].append(index)
+    tracks.append((index,'scale',lambda t:blink_scale(t,3.30)))
     save('ember_hatchling',parts,nodes,tracks,period=4.8,keys=120)
 
 
 def cloud_wisp():
     c=-7.5
-    body=Sculpture();legs=Sculpture()
+    body=Sculpture();legs=Sculpture();lids=Sculpture()
     # Restrained little ghast-like friend: a simple square face and two legs.
     box(body,(c,29.40,.05),(5.46,5.08,4.66),SNOW,SHADOW,WHITE,FROST)
     box(body,(c,31.82,-.12),(4.99,.26,4.12),WHITE,FROST)
@@ -242,15 +262,19 @@ def cloud_wisp():
         box(body,(x,29.93,-2.54),(.20,.19,.08),WHITE)
         box(body,(x,28.83,-2.46),(.92,.33,.15),PINK)
         box(body,(x,31.08,-2.43),(.38,.38,.13),SHADOW)
+        box(lids,(x,29.81,-2.67),(.86,.82,.14),SNOW,SHADOW,WHITE)
+        box(lids,(x,29.43,-2.76),(.68,.10,.10),SHADOW)
         box(legs,(x,25.69,.11),(1.07,2.37,1.54),FROST,SHADOW,SNOW)
         box(legs,(x,24.54,-.12),(1.05,.39,1.21),SHADOW,FROST,WHITE)
     box(body,(c,28.79,-2.51),(.71,.45,.17),BLACK)
-    bp=[c,29.40,.05];lp=[c,25.69,.11]
-    parts=[('wisp_body',body,[0,0,0]),('legs',legs,lp)]
-    nodes=[{'name':'wisp_body','mesh':0,'children':[1]},
-           {'name':'legs','mesh':1,'translation':lp}]
+    bp=[c,29.40,.05];lp=[c,25.69,.11];ep=[c,30.22,-2.67]
+    parts=[('wisp_body',body,[0,0,0]),('legs',legs,lp),('eyelids',lids,ep)]
+    nodes=[{'name':'wisp_body','mesh':0,'children':[1,2]},
+           {'name':'legs','mesh':1,'translation':lp},
+           {'name':'eyelids','mesh':2,'translation':ep}]
     tracks=[(0,'translation',lambda t:[0,.43*math.sin(2*math.pi*t/3.2),0]),
-            (1,'rotation',lambda t:quat_z(.04*math.sin(2*math.pi*t/3.2)))]
+            (1,'rotation',lambda t:quat_z(.04*math.sin(2*math.pi*t/3.2))),
+            (2,'scale',lambda t:blink_scale(t,1.90))]
     save('cloud_wisp',parts,nodes,tracks)
 
 
