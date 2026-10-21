@@ -198,7 +198,7 @@ pub fn cached(dirs: &DataDirs, client: Client) -> Option<PathBuf> {
                 Some((modified, dll))
             })
             .collect();
-    found.sort_by(|a, b| b.0.cmp(&a.0));
+    found.sort_by_key(|found| std::cmp::Reverse(found.0));
     found.into_iter().next().map(|(_, dll)| dll)
 }
 

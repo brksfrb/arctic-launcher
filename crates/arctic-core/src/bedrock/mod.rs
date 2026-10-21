@@ -230,6 +230,7 @@ fn attach(
 }
 
 /// Seconds between the game's process appearing and the client being loaded into it.
+#[cfg(windows)]
 const CLIENT_DELAY_SECS: u64 = 8;
 
 /// Is the game running now?
