@@ -85,8 +85,8 @@ def shadow_pup():
                  (x+sign*.80,34.39,-1.38),(x+sign*1.08,33.04,-1.18)]
         feather(head,outline,DARK,SOFT,edge=BLACK,thick=.76)
         box(head,(c+sign*1.26,31.35,-3.55),(1.34,1.08,.26),DARK,BLACK,SOFT)
-        box(head,(c+sign*1.26,31.73,-3.72),(.60,.68,.18),WHITE)
-        box(head,(c+sign*1.32,31.55,-3.84),(.22,.34,.12),BLACK)
+        box(head,(c+sign*1.26,31.50,-3.72),(.60,.68,.18),WHITE)
+        box(head,(c+sign*1.32,31.33,-3.84),(.22,.34,.12),BLACK)
         box(head,(c+sign*1.27,31.02,-3.70),(.88,.16,.13),AQUA)
         box(head,(c+sign*1.27,32.48,-3.59),(1.47,.26,.26),DARK)
         box(lids,(c+sign*1.26,31.48,-3.98),(1.47,1.10,.15),SOFT,DARK,MID)
