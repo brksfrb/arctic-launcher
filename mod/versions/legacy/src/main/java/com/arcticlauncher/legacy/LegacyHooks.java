@@ -105,7 +105,7 @@ public final class LegacyHooks {
 		int w = org.lwjgl.opengl.Display.getWidth();
 		int h = org.lwjgl.opengl.Display.getHeight();
 		if (w > 0 && h > 0 && !org.lwjgl.opengl.Display.isFullscreen() && (w != mc.width || h != mc.height)) {
-			mc.onResolutionChanged(w, h);
+			((com.arcticlauncher.legacy.mixin.MinecraftClientResizeInvoker) mc).arctic$resize(w, h);
 		}
 	}
 
