@@ -81,6 +81,11 @@ final class ModCatalog {
 				.settings((host, f) -> {
 					f.section("Key");
 					f.key("Zoom key", "Hold it to zoom; scroll while zooming to go further", Form.key(() -> c.zoomKey, k -> c.zoomKey = k));
+					f.section("Animation");
+					f.choice("Curve", ClientConfig.ZOOM_CURVES, () -> c.zoomAnimation, i -> c.zoomAnimation = i);
+					f.stepper("Duration", () -> c.zoomDurationMs, v -> c.zoomDurationMs = (int) v, 0, 1000, 50, "%.0f ms");
+					f.toggle("Smooth scroll zoom", "The wheel eases to the new zoom level instead of jumping",
+							() -> c.zoomSmoothScroll, on -> c.zoomSmoothScroll = on);
 					f.section("Feel");
 					f.toggle("Smooth camera while zoomed", "Like OptiFine's zoom: the view glides instead of snapping",
 							() -> c.zoomSmoothCamera, on -> c.zoomSmoothCamera = on);

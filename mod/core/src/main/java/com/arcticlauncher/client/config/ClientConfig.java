@@ -50,6 +50,13 @@ public final class ClientConfig {
 	public boolean zoomSmoothCamera = true;
 	/** How fast the mouse turns while zoomed, in percent of the automatic amount (50, 75, 100, 150). */
 	public int zoomSensitivity = 100;
+	/** How the zoom moves in and out: an index into {@link #ZOOM_CURVES}. */
+	public int zoomAnimation = 2;
+	/** How long zooming in or out takes, in milliseconds (0: at once). */
+	public int zoomDurationMs = 250;
+	/** The scroll wheel eases to its new zoom level instead of jumping. */
+	public boolean zoomSmoothScroll = true;
+	public static final String[] ZOOM_CURVES = {"Instant", "Linear", "Ease out", "Ease in and out", "Snappy"};
 	/** The Compass widget's middle tick (ARGB; 0 = the menu's accent color). */
 	public int compassPointer;
 	public String freelookKey = "key.keyboard.left.alt";
@@ -237,6 +244,8 @@ public final class ClientConfig {
 		if (zoomKey == null) {
 			zoomKey = "key.keyboard.c";
 		}
+		zoomAnimation = Math.max(0, Math.min(ZOOM_CURVES.length - 1, zoomAnimation));
+		zoomDurationMs = Math.max(0, Math.min(1500, zoomDurationMs));
 		if (freelookKey == null) {
 			freelookKey = "key.keyboard.left.alt";
 		}
