@@ -283,6 +283,7 @@ async fn challenge(State(state): State<Shared>) -> Response {
 }
 
 fn session(state: &AppState, uuid: &str, name: &str) -> Response {
+    state.store.note_active(uuid, now());
     if let Err(e) = state.store.touch(uuid, name, now()) {
         return db_error("touch", e);
     }
@@ -368,7 +369,9 @@ async fn offline(State(state): State<Shared>, Json(body): Json<OfflineBody>) -> 
 fn player(state: &AppState, headers: &HeaderMap) -> Option<String> {
     let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
     let token = value.strip_prefix("Bearer ")?;
-    auth::verify(&state.secret, token, now())
+    let uuid = auth::verify(&state.secret, token, now())?;
+    state.store.note_active(&uuid, now());
+    Some(uuid)
 }
 
 async fn my_look(State(state): State<Shared>, headers: HeaderMap) -> Response {

@@ -147,12 +147,21 @@ pub fn draw(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
             }
         }
         Icon::Gear => {
-            painter.circle_stroke(c, 0.42 * s, stroke);
-            painter.circle_stroke(c, 0.16 * s, stroke);
-            for k in 0..8 {
-                let d = Vec2::angled(k as f32 * TAU / 8.0);
-                line(d * 0.5, d * 0.78);
+            // A cog: eight teeth round a body, and a round hole.
+            const TEETH: usize = 8;
+            let slice = TAU / TEETH as f32;
+            let at = |angle: f32, radius: f32| Vec2::angled(angle) * radius;
+            let mut outline: Vec<Vec2> = Vec::new();
+            for k in 0..TEETH {
+                let a = k as f32 * slice;
+                outline.push(at(a - 0.5 * slice, 0.58));
+                outline.push(at(a - 0.30 * slice, 0.58));
+                outline.push(at(a - 0.17 * slice, 0.82));
+                outline.push(at(a + 0.17 * slice, 0.82));
+                outline.push(at(a + 0.30 * slice, 0.58));
             }
+            poly(&outline, true);
+            painter.circle_stroke(c, 0.24 * s, stroke);
         }
         Icon::Info => {
             painter.circle_stroke(c, 0.78 * s, stroke);

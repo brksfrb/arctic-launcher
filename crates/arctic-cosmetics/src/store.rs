@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 
 pub struct Store {
     db: Mutex<Connection>,
+    /// Accounts already noted as active today (see `activity`).
+    pub(crate) noted: Mutex<std::collections::HashMap<String, u64>>,
 }
 
 /// What other players see. Texture fields are content hashes (SHA-1 hex).
@@ -118,6 +120,7 @@ impl Store {
         )?;
         let store = Self {
             db: Mutex::new(conn),
+            noted: Mutex::new(std::collections::HashMap::new()),
         };
         store.migrate_gallery_looks()?;
         store.migrate_gallery_status()?;
@@ -131,12 +134,14 @@ impl Store {
         store.migrate_friends()?;
         store.migrate_chat()?;
         store.migrate_voice()?;
+        store.migrate_activity()?;
         Ok(store)
     }
 
     /// Counts for the admin overview: accounts the server has seen (by the last time their looks
     /// were saved), friends profiles and crash reports.
     pub fn overview(&self, now: u64) -> rusqlite::Result<serde_json::Value> {
+        let (active_1d, active_7d, active_30d) = self.active_counts(now)?;
         let conn = self.conn();
         let count = |sql: &str, p: &[&dyn rusqlite::ToSql]| -> rusqlite::Result<i64> {
             conn.query_row(sql, p, |r| r.get(0))
@@ -144,6 +149,11 @@ impl Store {
         let week = now.saturating_sub(7 * 86_400) as i64;
         let month = now.saturating_sub(30 * 86_400) as i64;
         Ok(serde_json::json!({
+            // Signed in or active on a day (counted since the server began keeping that), and the
+            // accounts first seen in the last week / month.
+            "active_1d": active_1d,
+            "active_7d": active_7d,
+            "active_30d": active_30d,
             "accounts": count("SELECT COUNT(*) FROM players", &[])?,
             "accounts_7d": count("SELECT COUNT(*) FROM players WHERE updated >= ?1", &[&week])?,
             "accounts_30d": count("SELECT COUNT(*) FROM players WHERE updated >= ?1", &[&month])?,

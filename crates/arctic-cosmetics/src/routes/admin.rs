@@ -3,6 +3,8 @@
 //! Read-only keys read everything the dashboard shows, in full, and change nothing:
 //!
 //! - `GET /v1/admin/gallery?queue=pending|listed|rejected|removed`: the skin gallery's queues
+//! - `GET /v1/admin/retention`: daily active accounts (30 days) and each week's new accounts and how
+//!   many were back a day, a week and a month later (counted from when the server began keeping it)
 //! - `GET /v1/admin/log` (`?reads=1`: read-only keys' reads): History
 //! - `GET /v1/admin/servers?state=pending|unverified|listed|curated|rejected` (see servers.rs)
 //! - `GET /v1/admin/crashes?status=open|resolved&os=&launcher=&game=&since=&limit=`:
@@ -46,6 +48,7 @@ pub fn routes() -> Router<Shared> {
         .route("/v1/admin/gallery/{id}", routing::post(decide))
         .route("/v1/admin/log", routing::get(log))
         .route("/v1/admin/stats", routing::get(stats))
+        .route("/v1/admin/retention", routing::get(retention))
         .route("/v1/admin/names/release", routing::post(release_name))
         .route("/v1/admin/crashes", routing::get(crash_groups))
         .route(
@@ -219,6 +222,17 @@ async fn stats(State(state): State<Shared>, headers: HeaderMap) -> Response {
         .ok()
         .flatten();
     Json(json!({ "counts": counts, "downloads": downloads })).into_response()
+}
+
+/// Daily active accounts and cohort retention (see `activity`).
+async fn retention(State(state): State<Shared>, headers: HeaderMap) -> Response {
+    if caller(&state, &headers).is_none() {
+        return denied();
+    }
+    match state.store.retention(now()) {
+        Ok(report) => Json(report).into_response(),
+        Err(e) => db_error("retention", e),
+    }
 }
 
 /// What waits on each dashboard tab: gallery items and servers to review,

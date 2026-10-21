@@ -16,6 +16,7 @@
 //! - `ARCTIC_COSMETICS_TRUST_PROXY=1`: rate-limit by `X-Forwarded-For` (only
 //!   behind a reverse proxy that sets it).
 
+mod activity;
 mod admin;
 mod auth;
 mod catalog;
