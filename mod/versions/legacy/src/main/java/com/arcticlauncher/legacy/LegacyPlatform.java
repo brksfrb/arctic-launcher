@@ -898,6 +898,23 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public int[] primedTnt(double range) {
+		if (mc().world == null || mc().player == null) {
+			return null;
+		}
+		int soonest = Integer.MAX_VALUE;
+		int count = 0;
+		for (net.minecraft.entity.Entity e : new java.util.ArrayList<net.minecraft.entity.Entity>(mc().world.loadedEntities)) {
+			if (!(e instanceof net.minecraft.entity.TntEntity) || e.squaredDistanceTo(mc().player) > range * range) {
+				continue;
+			}
+			count++;
+			soonest = Math.min(soonest, ((net.minecraft.entity.TntEntity) e).fuseTimer);
+		}
+		return count == 0 ? null : new int[] {Math.max(0, soonest), count};
+	}
+
+	@Override
 	public boolean canSimpleVoiceChat() {
 		return LegacySvc.ENABLED;
 	}
