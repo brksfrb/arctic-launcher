@@ -260,11 +260,11 @@ const RULES: &[Rule] = &[
     Rule {
         // Fabric: "Mixin apply for mod sodium failed sodium.mixins.json:..."
         pattern: r"Mixin apply for mod ([\w\-]+) failed",
-        explain: |c, _| broken_mod(&c[1]),
+        explain: |c, text| broken_mod(&c[1], text),
     },
     Rule {
         pattern: r"Mixin \[[^\]]+\] from mod ([\w\-]+)",
-        explain: |c, _| broken_mod(&c[1]),
+        explain: |c, text| broken_mod(&c[1], text),
     },
     Rule {
         pattern: r"class file version (\d+)\.\d+\).*?class file versions up to (\d+)\.\d+",
@@ -450,7 +450,41 @@ const RULES: &[Rule] = &[
     },
 ];
 
-fn broken_mod(id: &str) -> Diagnosis {
+/// The mod list of a Fabric crash report names each mod with its version, and a build for another
+/// Minecraft version says so ("1.8.3+mc1.21.4"): (the mod's version, the Minecraft version it is
+/// built for, the game's) when that is more than a patch release away from the game.
+fn built_for_another_game(id: &str, text: &str) -> Option<(String, String, String)> {
+    let game = Regex::new(r"(?m)^\s+minecraft: Minecraft (\S+)")
+        .ok()?
+        .captures(text)?[1]
+        .to_owned();
+    let entry = Regex::new(&format!(
+        r"(?m)^\s+{}: .*? (\S+\+mc([0-9][0-9.]*))\s*$",
+        regex::escape(id)
+    ))
+    .ok()?;
+    let found = entry.captures(text)?;
+    let (version, built_for) = (found[1].to_owned(), found[2].to_owned());
+    let parts = |v: &str| -> Vec<u32> { v.split('.').filter_map(|p| p.parse().ok()).collect() };
+    let (have, want) = (parts(&game), parts(&built_for));
+    let at = |p: &[u32], i: usize| p.get(i).copied().unwrap_or(0);
+    // 1.21 and 1.21.1 share their mods; 1.21.4 does not.
+    let other = at(&have, 0) != at(&want, 0)
+        || at(&have, 1) != at(&want, 1)
+        || at(&have, 2).abs_diff(at(&want, 2)) > 1;
+    other.then_some((version, built_for, game))
+}
+
+fn broken_mod(id: &str, text: &str) -> Diagnosis {
+    if let Some((version, built_for, game)) = built_for_another_game(id, text) {
+        return Diagnosis::new(
+            format!("{id} is for another Minecraft version"),
+            format!(
+                "{id} {version} is built for Minecraft {built_for}, but this game is {game}. Get its {game} version (the instance's Mods page, Look for updates), or remove it."
+            ),
+            vec![id.to_owned()],
+        );
+    }
     Diagnosis::new(
         format!("{id} failed to load"),
         format!(
@@ -968,6 +1002,33 @@ mod tests {
             diagnose(r"[main/INFO]: Found graphics adapter: AdapterInfo{vendor=NVIDIA, openglIcdFilePath='C:\Windows\System32\nvoglv64.dll'}")
                 .is_none()
         );
+    }
+
+    #[test]
+    fn a_mod_built_for_another_minecraft_version_says_so() {
+        let log =
+            "Mixin apply for mod reeses-sodium-options failed reeses-sodium-options.mixins.json
+            	minecraft: Minecraft 1.21
+            	reeses-sodium-options: Reese's Sodium Options 1.8.3+mc1.21.4
+            	sodium: Sodium 0.8.13+mc1.21.1
+";
+        let d = diagnose(log).unwrap();
+        assert_eq!(
+            d.title,
+            "reeses-sodium-options is for another Minecraft version"
+        );
+        assert!(
+            d.detail.contains("built for Minecraft 1.21.4"),
+            "{}",
+            d.detail
+        );
+        assert!(d.detail.contains("this game is 1.21"), "{}", d.detail);
+        // 1.21.1 builds run on 1.21: not a mismatch.
+        let near = "Mixin apply for mod sodium failed sodium.mixins.json
+            	minecraft: Minecraft 1.21
+            	sodium: Sodium 0.8.13+mc1.21.1
+";
+        assert_eq!(diagnose(near).unwrap().title, "sodium failed to load");
     }
 
     #[test]
