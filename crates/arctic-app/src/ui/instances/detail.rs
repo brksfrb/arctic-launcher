@@ -401,10 +401,18 @@ impl ArcticApp {
     fn performance_card(&mut self, ui: &mut egui::Ui, instance: &Instance) {
         use arctic_core::loaders::LoaderKind;
         let modded = instance.loader.kind().is_some();
-        if matches!(
-            instance.loader.kind(),
-            Some(LoaderKind::Forge | LoaderKind::NeoForge)
-        ) {
+        // Forge 1.8.9 has its own (smaller) set; other Forge and NeoForge instances none.
+        let forge = instance.loader.kind() == Some(LoaderKind::Forge)
+            && instance
+                .version
+                .as_deref()
+                .is_some_and(arctic_core::mods::performance::forge_supported);
+        if !forge
+            && matches!(
+                instance.loader.kind(),
+                Some(LoaderKind::Forge | LoaderKind::NeoForge)
+            )
+        {
             return;
         }
         let p = self.palette();
@@ -413,9 +421,11 @@ impl ArcticApp {
             ui.set_width(ui.available_width());
             ui.label(RichText::new("Performance").size(17.0).strong().color(p.text));
             ui.label(
-                RichText::new(
-                    "Adds Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, Particle Core, BadOptimizations, ModernFix and Polarium for much higher FPS and faster starts. Downloaded from Modrinth for your version (Polarium comes with Arctic); ones not updated yet are skipped.",
-                )
+                RichText::new(if forge {
+                    "Adds Patcher (performance and bug fixes) and Entity Culling (stops drawing what you can't see) for higher FPS. Downloaded from Modrinth; ones you already have are left as they are."
+                } else {
+                    "Adds Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, Particle Core, BadOptimizations, ModernFix and Polarium for much higher FPS and faster starts. Downloaded from Modrinth for your version (Polarium comes with Arctic); ones not updated yet are skipped."
+                })
                 .color(p.muted),
             );
             if modded {
@@ -447,6 +457,9 @@ impl ArcticApp {
                 );
             }
             // Extras: useful mods on their own switches, so nobody has to search for them.
+            if forge {
+                return;
+            }
             ui.add_space(8.0);
             ui.label(RichText::new("Extra mods").strong().color(p.text));
             for (project, name, about) in arctic_core::mods::performance::OPTIONAL {
