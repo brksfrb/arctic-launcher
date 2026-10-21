@@ -91,6 +91,9 @@ public final class LegacySmoothFont {
 		return g == null ? -1 : g.advance;
 	}
 
+	/** How far a bold character's second copy sits (GUI pixels): thicker, not doubled. */
+	public static final float BOLD_THICKEN = 0.35f;
+
 	/** Shadow offset: about half a GUI pixel, in whole screen pixels (a whole one looks doubled). */
 	public static float shadowOffset() {
 		int s = Math.max(1, scale);
