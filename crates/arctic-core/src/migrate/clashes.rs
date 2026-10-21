@@ -76,8 +76,30 @@ pub fn check(mods_dir: &Path, loader: LoaderKind, game: &str) -> Vec<Clash> {
     out.extend(breaks(&jars));
     out.extend(missing(mods_dir, loader, &jars));
     out.extend(too_old(&jars));
-    out.extend(wrong_game(mods_dir, loader, game, &jars));
+    out.extend(wrong_game(
+        mods_dir,
+        loader,
+        game,
+        &jars,
+        &managed_files(mods_dir),
+    ));
     out
+}
+
+/// Files the launcher keeps by itself (the Arctic Client, Polarium, the Performance mods): it puts the
+/// right ones in at every start, so a copy left from another game version (an instance's mods moved
+/// to another version) isn't a problem to report.
+fn managed_files(mods_dir: &Path) -> Vec<String> {
+    let mut files = vec![
+        crate::arctic_mod::FILE_NAME.to_owned(),
+        crate::mods::polarium::FILE_NAME.to_owned(),
+    ];
+    if let Some(game_dir) = mods_dir.parent() {
+        for index in ["arctic-performance.json", "arctic-performance-forge.json"] {
+            files.extend(crate::mods::tracked_files(&game_dir.join(index)));
+        }
+    }
+    files
 }
 
 fn read_all(mods_dir: &Path, loader: LoaderKind) -> Vec<Jar> {
@@ -392,8 +414,15 @@ fn too_old(jars: &[Jar]) -> Vec<Clash> {
     out
 }
 
-fn wrong_game(mods_dir: &Path, loader: LoaderKind, game: &str, jars: &[Jar]) -> Vec<Clash> {
+fn wrong_game(
+    mods_dir: &Path,
+    loader: LoaderKind,
+    game: &str,
+    jars: &[Jar],
+    managed: &[String],
+) -> Vec<Clash> {
     jars.iter()
+        .filter(|j| !managed.contains(&j.file))
         .filter(|j| super::ranges::game_fits(&mods_dir.join(&j.file), game, loader) == Some(false))
         .map(|j| Clash {
             problem: format!(

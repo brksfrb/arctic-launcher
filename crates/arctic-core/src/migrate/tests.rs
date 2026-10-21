@@ -562,3 +562,28 @@ fn a_clean_folder_and_forge_incompatibilities() {
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0].problem, "Alpha and Beta can't run together");
 }
+
+#[test]
+fn the_launchers_own_jars_left_from_another_version_are_not_reported() {
+    // An instance's mods moved to a 1.21.11 instance: the Arctic Client and Polarium of the old
+    // version are still in the folder, and the launcher replaces them when it starts.
+    let root = tempfile::tempdir().unwrap();
+    let game_dir = root.path();
+    let mods = game_dir.join("mods");
+    std::fs::create_dir_all(&mods).unwrap();
+    for file in ["arctic-mod.jar", "polarium-arctic.jar"] {
+        fabric_jar_with(
+            &mods,
+            file,
+            json!({"id": file, "name": file, "version": "1.0.0", "depends": {"minecraft": "26.3"}}),
+        );
+    }
+    fabric_jar_with(
+        &mods,
+        "someone-elses.jar",
+        json!({"id": "other", "name": "Other", "version": "1.0.0", "depends": {"minecraft": "26.3"}}),
+    );
+    let found = clashes(&mods, LoaderKind::Fabric, "1.21.11");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].problem.starts_with("Other"), "{found:?}");
+}
