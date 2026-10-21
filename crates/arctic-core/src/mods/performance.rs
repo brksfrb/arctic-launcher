@@ -113,6 +113,92 @@ fn leave_players_mods(game_dir: &Path, wanted: &mut Vec<(&str, &str)>) -> Result
     Ok(removed)
 }
 
+/// Forge 1.8.9, where Sodium and friends don't exist: the FPS mods that do (Modrinth project, name, and
+/// words of a jar's file name that mean the player already has it). Patcher also fixes bugs and adds
+/// quality-of-life tweaks; Entity Culling stops drawing what can't be seen.
+pub const FORGE_189: &[(&str, &str, &[&str])] = &[
+    ("YknNc5nN", "Patcher", &["patcher"]),
+    (
+        "NNAgCjsB",
+        "EntityCulling",
+        &["entityculling", "entity_culling", "entity-culling"],
+    ),
+];
+
+/// The only Forge game version with these mods (and with the Arctic Client for Forge).
+pub fn forge_supported(game_version: &str) -> bool {
+    game_version == "1.8.9"
+}
+
+fn forge_index_path(game_dir: &Path) -> PathBuf {
+    game_dir.join("arctic-performance-forge.json")
+}
+
+/// Does a jar named like this (lowercase) already do the job of one of `words`?
+fn named_like(file_name: &str, words: &[&str]) -> bool {
+    let name = file_name.to_ascii_lowercase();
+    name.ends_with(".jar") && words.iter().any(|w| name.contains(w))
+}
+
+/// The Forge 1.8.9 FPS mods, installed when `enabled` and taken out when not; the player's own copies
+/// are left as they are (and left alone). Installed once and kept: no update check at every start.
+pub fn sync_forge(
+    game_dir: &Path,
+    game_version: &str,
+    enabled: bool,
+    progress: Progress,
+) -> Result<()> {
+    let mods_dir = game_dir.join("mods");
+    let index = forge_index_path(game_dir);
+    let ours = ModIndex::load(&index)?;
+    if !enabled || !forge_supported(game_version) {
+        if ours.mods.is_empty() {
+            return Ok(());
+        }
+        for m in &ours.mods {
+            super::files::delete(&mods_dir, &m.file_name)?;
+        }
+        return std::fs::remove_file(&index).map_err(|e| crate::Error::io(&index, e));
+    }
+    let our_files: Vec<&str> = ours.mods.iter().map(|m| m.file_name.as_str()).collect();
+    let theirs: Vec<String> = std::fs::read_dir(&mods_dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|name| !our_files.contains(&name.as_str()))
+        .collect();
+    let mut wanted: Vec<&str> = Vec::new();
+    for (project, name, words) in FORGE_189 {
+        if ours
+            .by_project(project)
+            .is_some_and(|m| super::files::exists(&mods_dir, &m.file_name))
+        {
+            continue;
+        }
+        if theirs.iter().any(|file| named_like(file, words)) {
+            log::info!("{name}: the instance already has it; not added");
+            continue;
+        }
+        wanted.push(*project);
+    }
+    if wanted.is_empty() {
+        return Ok(());
+    }
+    let (_, failed) = super::install_many(
+        &wanted,
+        game_version,
+        LoaderKind::Forge,
+        &mods_dir,
+        &index,
+        progress,
+    )?;
+    for (id, e) in failed {
+        log::info!("{id} skipped for {game_version}: {e}");
+    }
+    Ok(())
+}
+
 /// Look for new builds (and mods that were missing) at most this often.
 const RECHECK_SECS: u64 = 7 * 24 * 60 * 60;
 
@@ -420,6 +506,17 @@ pub fn installed_files(game_dir: &Path) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn forge_jars_are_told_by_their_names() {
+        let words: &[&str] = &["patcher"];
+        assert!(super::named_like("Patcher-1.8.9-1.8.2.jar", words));
+        assert!(super::named_like("polypatcher-1.10.4.jar", words));
+        assert!(!super::named_like("OptiFine_1.8.9_HD_U_M5.jar", words));
+        assert!(!super::named_like("patcher-notes.txt", words));
+        assert!(super::forge_supported("1.8.9"));
+        assert!(!super::forge_supported("1.12.2"));
+    }
+
     use super::*;
     use crate::mods::InstalledMod;
 

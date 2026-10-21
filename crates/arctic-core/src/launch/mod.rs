@@ -484,6 +484,17 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 )?;
                 share_session = req.instance.arctic_mod && arctic_mod::supports_forge(&vanilla.id);
                 timer.step("arctic client");
+                // 1.8.9: Patcher and Entity Culling for FPS (the Performance switch); never stops a start.
+                progress(ProgressInfo::stage("Checking performance mods"));
+                if let Err(e) = crate::mods::performance::sync_forge(
+                    &game_dir,
+                    &vanilla.id,
+                    req.instance.performance,
+                    progress,
+                ) {
+                    log::warn!("performance mods for Forge: {e}");
+                }
+                timer.step("performance mods");
             }
             profile
         }
