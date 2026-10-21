@@ -146,7 +146,6 @@ impl ArcticApp {
         crate::widgets::row(ui, |ui| {
             for (access, label) in [
                 (Access::Any, "All"),
-                (Access::Premium, "Premium"),
                 (Access::Cracked, "Cracked"),
                 (Access::Partners, "Partners"),
             ] {
@@ -335,10 +334,12 @@ impl ArcticApp {
                                     RichText::new(format!("{} / {}", s.players, s.max_players))
                                         .color(p.text),
                                 );
+                                // Only the exception is tagged: a Microsoft account is the normal case.
                                 let (label, tip) = match s.cracked {
-                                    Some(false) => ("premium", "Needs a Microsoft account"),
-                                    Some(true) => ("cracked", "Lets any name in"),
-                                    None => ("", ""),
+                                    Some(true) => {
+                                        ("cracked", "Lets any name in: works with offline accounts")
+                                    }
+                                    _ => ("", ""),
                                 };
                                 if !label.is_empty() {
                                     ui.label(RichText::new(label).small().color(p.muted))
