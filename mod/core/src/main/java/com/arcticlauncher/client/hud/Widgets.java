@@ -14,6 +14,8 @@ final class Widgets {
 	private static final String[] COMPASS = {"S", "SW", "W", "NW", "N", "NE", "E", "SE"};
 	private static final long TICKS_PER_DAY = 24000;
 	private static final double MB = 1024 * 1024;
+	/** Lit TNT farther than this is not worth a countdown. */
+	private static final double TNT_RANGE = 64;
 	/** Item id part → label, for the Items widget. */
 	private static final String[][] COUNTED = {
 			{"totem_of_undying", "Totems"}, {"ender_pearl", "Pearls"}, {"golden_apple", "Gapples"},
@@ -120,6 +122,17 @@ final class Widgets {
 	/** Widgets many clients have: light, chunk, session, arrows, food, pack, date, last death. */
 	private static List<HudWidget> more() {
 		List<HudWidget> all = new ArrayList<HudWidget>();
+		all.add(new TextWidget("tnt", "TNT", "Seconds until the next lit TNT near you explodes", false) {
+			@Override
+			protected String value(boolean preview) {
+				int[] tnt = platform().primedTnt(TNT_RANGE);
+				if (tnt == null) {
+					return preview ? "3.5 s" : "--";
+				}
+				String time = Num.fixed(tnt[0] / 20.0, 1) + " s";
+				return tnt[1] > 1 ? time + " (x" + tnt[1] + ")" : time;
+			}
+		});
 		all.add(new TextWidget("light", "Light", "Block light where you stand (mobs spawn at 0)", false) {
 			@Override
 			protected String value(boolean preview) {

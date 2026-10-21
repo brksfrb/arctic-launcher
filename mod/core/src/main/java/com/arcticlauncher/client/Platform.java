@@ -426,6 +426,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return -1;
 	}
 
+	/** Lit TNT within {@code range} blocks of you: {fuse ticks left of the soonest, how many}, or null with none (or no support). */
+	default int[] primedTnt(double range) {
+		return null;
+	}
+
 	/** Other players in the world: {uuid, name, x, y, z, yaw}. */
 	List<Object[]> otherPlayers();
 

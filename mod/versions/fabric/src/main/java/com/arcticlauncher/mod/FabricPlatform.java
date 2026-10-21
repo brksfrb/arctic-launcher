@@ -1269,6 +1269,37 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public int[] primedTnt(double range) {
+		Minecraft mc = mc();
+		if (mc.level == null || mc.player == null) {
+			return null;
+		}
+		double px = Compat.x(mc.player);
+		double py = Compat.y(mc.player);
+		double pz = Compat.z(mc.player);
+		int soonest = Integer.MAX_VALUE;
+		int count = 0;
+		//#if MC >= 1.14
+		for (net.minecraft.world.entity.Entity e : mc.level.entitiesForRendering()) {
+		//#else
+		for (net.minecraft.world.entity.Entity e : mc.level.loadedEntities) {
+		//#endif
+			if (!(e instanceof net.minecraft.world.entity.item.PrimedTnt)) {
+				continue;
+			}
+			double dx = Compat.x(e) - px;
+			double dy = Compat.y(e) - py;
+			double dz = Compat.z(e) - pz;
+			if (dx * dx + dy * dy + dz * dz > range * range) {
+				continue;
+			}
+			count++;
+			soonest = Math.min(soonest, ((net.minecraft.world.entity.item.PrimedTnt) e).getFuse());
+		}
+		return count == 0 ? null : new int[] {Math.max(0, soonest), count};
+	}
+
+	@Override
 	public Object connectionKey() {
 		return mc().getConnection();
 	}
