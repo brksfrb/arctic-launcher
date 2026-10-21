@@ -27,6 +27,12 @@ abstract class SmoothTextRendererMixin {
 	/** In obfuscated text (§k): the game swaps each letter for a random one as wide (in whole pixels). */
 	@Shadow
 	private boolean obfuscated;
+	/** In bold text (§l): the game draws every character twice, a whole GUI pixel apart. */
+	@Shadow
+	private boolean bold;
+
+	/** Which of a bold character's two draws this is (they alternate; the second draws nothing here). */
+	private boolean arctic$boldSecond;
 
 	@Shadow
 	public abstract boolean isUnicode();
@@ -73,13 +79,26 @@ abstract class SmoothTextRendererMixin {
 		if (!arctic$smooth()) {
 			return;
 		}
+		// Bold: the game's way thickens a bitmap font with a second copy a whole pixel over, which on a
+		// thin font (and a big title) reads as two letters. One pass, thickened a little, instead.
+		boolean second = bold && arctic$boldSecond;
+		arctic$boldSecond = bold && !arctic$boldSecond;
 		if (c == ' ') {
 			cir.setReturnValue(LegacySmoothFont.advance(c));
 			return;
 		}
 		LegacySmoothFont.Glyph glyph = LegacySmoothFont.glyph(c);
 		if (glyph != null) {
+			if (second) {
+				cir.setReturnValue(LegacySmoothFont.advance(c));
+				return;
+			}
 			float moved = LegacySmoothFont.draw(glyph, x, y, italic);
+			if (bold) {
+				LegacySmoothFont.draw(glyph, x + LegacySmoothFont.BOLD_THICKEN, y, italic);
+				// The game adds a whole pixel after a bold character: keep only the thickening.
+				moved -= 1f - LegacySmoothFont.BOLD_THICKEN;
+			}
 			// The stand-in is as wide in whole pixels, not exactly: moving by its exact width would
 			// shift the rest of the line every frame.
 			cir.setReturnValue(obfuscated ? (float) Math.round(moved) : moved);
@@ -120,7 +139,7 @@ abstract class SmoothTextRendererMixin {
 			float advance = LegacySmoothFont.advance(c);
 			width += advance >= 0 ? advance : Math.max(0, getCharWidth(c));
 			if (bold && advance != 0) {
-				width += 1;
+				width += LegacySmoothFont.BOLD_THICKEN;
 			}
 		}
 		cir.setReturnValue((int) Math.ceil(width));
