@@ -56,8 +56,34 @@ public final class DisconnectedPage extends Page {
 
 	public DisconnectedPage(String title, String reason, Runnable vanillaScreen) {
 		this.title = title == null || title.isEmpty() ? "Connection Lost" : title;
-		this.reason = reason == null ? "" : reason;
+		String shown = reason == null ? "" : reason;
+		String hint = hint(shown);
+		this.reason = hint == null ? shown : shown + "\n\n" + hint;
 		this.vanillaScreen = vanillaScreen;
+	}
+
+	/**
+	 * What a bare or technical reason usually means, in plain words and whose side it is on; null when the
+	 * server gave a reason of its own (a ban, a whitelist, a full server: that text says it).
+	 */
+	static String hint(String reason) {
+		String r = reason.trim().toLowerCase(java.util.Locale.ROOT);
+		if (r.contains("timed out") || r.contains("readtimeout") || r.contains("timeout")) {
+			return "The server didn't answer in time. It may be busy, restarting or far away, or your connection dropped. Try again in a minute.";
+		}
+		if (r.contains("connection refused")) {
+			return "Nothing is listening at that address: the server is probably offline or restarting, or the address or port is wrong.";
+		}
+		if (r.contains("unknownhost") || r.contains("unknown host") || r.contains("no such host") || r.contains("can't resolve")) {
+			return "That address doesn't exist. Check how it is spelled.";
+		}
+		if (r.contains("connection reset") || r.contains("broken pipe") || r.contains("connection was aborted")) {
+			return "The connection was cut. It could be the server, or your network, firewall or VPN. Try again.";
+		}
+		if (r.isEmpty() || r.equals("disconnected")) {
+			return "The server closed the connection without saying why. It may be offline, full or restarting, or it may not accept this game version or account. Try again in a minute, and check that it answers in the server list.";
+		}
+		return null;
 	}
 
 	/**

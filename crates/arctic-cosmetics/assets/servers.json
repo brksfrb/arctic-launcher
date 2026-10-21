@@ -10,5 +10,8 @@
   {"address": "play.pika-network.net", "name": "PikaNetwork", "tags": ["minigames", "bedwars", "survival"]},
   {"address": "minehut.com", "name": "Minehut", "tags": ["community", "player-servers"]},
   {"address": "play.purpleprison.net", "name": "Purple Prison", "tags": ["prison"]},
-  {"address": "botpvp.flashhosting.net", "name": "BotPvP", "description": "Hosted by Flash Hosting, Arctic Launcher's hosting partner.", "tags": ["pvp"], "partner": "Flash Hosting", "partner_tier": "exclusive"}
+  {"address": "botpvp.flashhosting.net", "name": "BotPvP", "description": "Hosted by Flash Hosting, Arctic Launcher's hosting partner.", "tags": ["pvp"], "partner": "Flash Hosting", "partner_tier": "exclusive"},
+  {"address": "mc.universocraft.com", "name": "UniversoCraft", "tags": ["minigames", "survival"]},
+  {"address": "allaysmp.pro", "name": "AllaySMP", "tags": ["smp", "survival"]},
+  {"address": "anarchia.gg", "name": "Anarchia", "tags": ["anarchy", "survival"]}
 ]

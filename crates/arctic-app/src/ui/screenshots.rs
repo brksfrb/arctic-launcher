@@ -517,15 +517,19 @@ impl ArcticApp {
             return;
         }
         let mut picked = None;
-        egui::ComboBox::from_id_salt("send_shot")
-            .selected_text("Send to…")
-            .show_ui(ui, |ui| {
-                for (id, name) in &friends {
-                    if ui.selectable_label(false, name).clicked() {
-                        picked = Some((id.clone(), name.clone()));
+        // As tall as the buttons beside it, or it sits a few pixels off their line.
+        ui.scope(|ui| {
+            ui.spacing_mut().interact_size.y = widgets::BUTTON_HEIGHT;
+            egui::ComboBox::from_id_salt("send_shot")
+                .selected_text("Send to…")
+                .show_ui(ui, |ui| {
+                    for (id, name) in &friends {
+                        if ui.selectable_label(false, name).clicked() {
+                            picked = Some((id.clone(), name.clone()));
+                        }
                     }
-                }
-            });
+                });
+        });
         if let Some((id, name)) = picked
             && let Some(account) = self.accounts.active().cloned()
         {
