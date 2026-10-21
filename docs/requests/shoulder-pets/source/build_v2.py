@@ -89,8 +89,8 @@ def shadow_pup():
         box(head,(c+sign*1.32,31.33,-3.84),(.22,.34,.12),BLACK)
         box(head,(c+sign*1.27,31.02,-3.70),(.88,.16,.13),AQUA)
         box(head,(c+sign*1.27,32.48,-3.59),(1.47,.26,.26),DARK)
-        box(lids,(c+sign*1.26,31.48,-3.98),(1.47,1.10,.15),SOFT,DARK,MID)
-        box(lids,(c+sign*1.26,30.96,-4.08),(1.17,.11,.11),BLACK)
+        box(lids,(c+sign*1.26,31.48,-3.905),(1.47,1.10,.04),SOFT,DARK,MID)
+        box(lids,(c+sign*1.26,30.96,-3.94),(1.17,.11,.025),BLACK)
     box(head,(c,29.45,-3.32),(3.52,1.67,1.37),MID,DARK,EDGE)
     box(head,(c,29.84,-4.15),(1.63,.78,.76),DARK,BLACK,MID)
     box(head,(c,29.72,-4.57),(1.31,.42,.16),BLACK)
@@ -105,7 +105,7 @@ def shadow_pup():
     for i in range(4):
         x=c+3.5+i*.63;y=28.0+i*.73
         box(tail,(x,y,3.05),(.68,.42,.31),BLACK,DARK)
-    hp=[c,30.62,-.94]; jp=[c,28.44,-3.74];tp=[c+2.17,26.80,2.12]; ep=[c,32.03,-3.98]
+    hp=[c,30.62,-.94]; jp=[c,28.44,-3.74];tp=[c+2.17,26.80,2.12]; ep=[c,32.03,-3.905]
     parts=[('pup_body',body,[0,0,0]),('pup_head',head,hp),('lower_jaw',jaw,jp),
            ('long_tail',tail,tp),('eyelids',lids,ep)]
     nodes=[{'name':'pup_body','mesh':0,'children':[1,3]},
@@ -161,8 +161,8 @@ def ember_hatchling():
         box(head,(c+sign*1.37,31.26,-4.56),(.29,.67,.10),BLACK)
         box(head,(c+sign*1.08,32.01,-4.57),(.22,.29,.09),WHITE)
         box(head,(c+sign*1.25,32.52,-4.37),(1.57,.27,.28),DARK)
-        box(lids,(c+sign*1.19,31.61,-4.76),(1.33,1.54,.16),SOFT,DARK,MID)
-        box(lids,(c+sign*1.19,30.88,-4.86),(1.10,.12,.12),BLACK)
+        box(lids,(c+sign*1.19,31.61,-4.615),(1.33,1.54,.04),SOFT,DARK,MID)
+        box(lids,(c+sign*1.19,30.88,-4.65),(1.10,.12,.025),BLACK)
     box(head,(c,29.56,-4.04),(3.97,1.32,2.26),MID,DARK,EDGE)
     for x in (c-1.18,c+1.18):
         box(head,(x,29.77,-5.23),(.40,.31,.18),BLACK)
@@ -240,7 +240,7 @@ def ember_hatchling():
             return [max(.001,s)]*3
         tracks.append((index,'translation',position))
         tracks.append((index,'scale',visibility))
-    ep=[c,32.38,-4.76]
+    ep=[c,32.38,-4.615]
     index=len(parts)
     parts.append(('eyelids',lids,ep))
     nodes.append({'name':'eyelids','mesh':index,
@@ -262,12 +262,12 @@ def cloud_wisp():
         box(body,(x,29.93,-2.54),(.20,.19,.08),WHITE)
         box(body,(x,28.83,-2.46),(.92,.33,.15),PINK)
         box(body,(x,31.08,-2.43),(.38,.38,.13),SHADOW)
-        box(lids,(x,29.81,-2.67),(.86,.82,.14),SNOW,SHADOW,WHITE)
-        box(lids,(x,29.43,-2.76),(.68,.10,.10),SHADOW)
+        box(lids,(x,29.81,-2.58),(.86,.82,.04),SNOW,SHADOW,WHITE)
+        box(lids,(x,29.43,-2.615),(.68,.10,.025),SHADOW)
         box(legs,(x,25.69,.11),(1.07,2.37,1.54),FROST,SHADOW,SNOW)
         box(legs,(x,24.54,-.12),(1.05,.39,1.21),SHADOW,FROST,WHITE)
     box(body,(c,28.79,-2.51),(.71,.45,.17),BLACK)
-    bp=[c,29.40,.05];lp=[c,25.69,.11];ep=[c,30.22,-2.67]
+    bp=[c,29.40,.05];lp=[c,25.69,.11];ep=[c,30.22,-2.58]
     parts=[('wisp_body',body,[0,0,0]),('legs',legs,lp),('eyelids',lids,ep)]
     nodes=[{'name':'wisp_body','mesh':0,'children':[1,2]},
            {'name':'legs','mesh':1,'translation':lp},
