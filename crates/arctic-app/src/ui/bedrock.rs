@@ -424,10 +424,12 @@ impl ArcticApp {
         }
         ui.label(
             RichText::new(
-                "Switch the game to any version since 1.21.120 (older or newer). Windows downloads \
-                 it from Microsoft and installs it over the current one; your worlds, packs and \
-                 settings stay. You need to own Minecraft on the Microsoft account signed in to the \
-                 Microsoft Store. The Store may update the game again later.",
+                "Switch the game to another version (older or newer). Windows downloads it from \
+                 Microsoft and installs it over the current one; your worlds, packs and settings \
+                 stay. You need to own Minecraft on the Microsoft account signed in to the \
+                 Microsoft Store. The Store may update the game again later. Builds before \
+                 1.21.120 are the older kind of the game: clients can't be loaded into them, and \
+                 a world saved by a newer version may not open in them.",
             )
             .small()
             .color(p.muted),
@@ -501,6 +503,9 @@ impl ArcticApp {
                     }
                     if i == 0 {
                         ui.label(RichText::new("Latest").small().color(p.accent));
+                    }
+                    if version.is_legacy() {
+                        ui.label(RichText::new("Older kind").small().color(p.muted));
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if current {
