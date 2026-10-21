@@ -141,6 +141,10 @@ impl ArcticApp {
         });
         ui.add_space(8.0);
         self.bedrock_hero(ui);
+        if bedrock::supported() {
+            ui.add_space(10.0);
+            self.bedrock_client_card(ui);
+        }
         ui.add_space(14.0);
 
         let Some(scan) = self.bedrock.scans.get(&edition).cloned() else {
@@ -349,10 +353,65 @@ impl ArcticApp {
             });
         });
         if play {
-            self.tasks.bedrock_launch(edition);
+            let client = self
+                .settings
+                .bedrock_client
+                .as_deref()
+                .and_then(bedrock::client::Client::parse);
+            self.tasks.bedrock_launch(edition, client);
         }
         if cancel && let Some(i) = &self.bedrock.installing {
             i.cancel.store(true, Ordering::Relaxed);
+        }
+    }
+
+    /// The third-party client loaded into the game when it is started from here (or none).
+    fn bedrock_client_card(&mut self, ui: &mut egui::Ui) {
+        use bedrock::client::Client;
+        let p = self.palette();
+        let mut chosen = self
+            .settings
+            .bedrock_client
+            .as_deref()
+            .and_then(Client::parse);
+        let before = chosen;
+        theme::card(p).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(
+                RichText::new("Client")
+                    .size(17.0)
+                    .strong()
+                    .color(p.text),
+            );
+            ui.label(
+                RichText::new(
+                    "Bedrock has no mod loader. A client is a program loaded into the game when you press Play: it adds a HUD (FPS, CPS, keystrokes), zoom and more.",
+                )
+                .color(p.muted),
+            );
+            ui.add_space(6.0);
+            ui.radio_value(&mut chosen, None, "None: the game as it is");
+            for client in Client::ALL {
+                ui.radio_value(&mut chosen, Some(client), client.name())
+                    .on_hover_text(client.about());
+            }
+            if let Some(client) = chosen {
+                ui.add_space(4.0);
+                ui.label(RichText::new(client.about()).small().color(p.muted));
+                ui.label(
+                    RichText::new(format!(
+                        "{} is made by someone else, not Arctic, and is downloaded from its own releases when you press Play ({}). Some servers ban players for modified clients: check a server's rules before joining with one. Needs the newer game (1.21.120 and later).",
+                        client.name(),
+                        client.site()
+                    ))
+                    .small()
+                    .color(p.warn),
+                );
+            }
+        });
+        if chosen != before {
+            self.settings.bedrock_client = chosen.map(|c| c.id().to_owned());
+            self.persist_settings();
         }
     }
 

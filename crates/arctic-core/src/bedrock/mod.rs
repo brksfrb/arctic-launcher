@@ -12,6 +12,7 @@
 //! folders are empty.
 
 mod archive;
+pub mod client;
 #[cfg(windows)]
 mod package;
 pub mod packs;
@@ -163,6 +164,73 @@ pub fn launch(edition: Edition) -> Result<()> {
     #[cfg(not(windows))]
     unreachable!()
 }
+
+/// Start the game, and when `client` is chosen load it into the game once it is up (Windows). The
+/// loading runs on its own thread: this returns as soon as the game is started, and `report` hears what
+/// happened (a client that can't be downloaded or loaded never stops the game from starting). The
+/// handle is for callers that must wait for it (the command line).
+pub fn launch_with_client(
+    dirs: &crate::storage::DataDirs,
+    edition: Edition,
+    client: Option<client::Client>,
+    report: impl Fn(String) + Send + 'static,
+) -> Result<Option<std::thread::JoinHandle<()>>> {
+    launch(edition)?;
+    let Some(client) = client else {
+        return Ok(None);
+    };
+    let dirs = dirs.clone();
+    Ok(Some(std::thread::spawn(move || {
+        match attach(&dirs, edition, client, &report) {
+            Ok(()) => report(format!("{} is loaded", client.name())),
+            Err(e) => {
+                log::warn!("{}: {e}", client.name());
+                report(format!("{} couldn't be loaded: {e}", client.name()));
+            }
+        }
+    })))
+}
+
+/// Wait for the game's window, then load the client. The game needs a few seconds after its process
+/// appears before its graphics are up, as every client launcher also waits.
+fn attach(
+    dirs: &crate::storage::DataDirs,
+    edition: Edition,
+    client: client::Client,
+    report: &impl Fn(String),
+) -> Result<()> {
+    report(format!("Getting {}", client.name()));
+    let dll = client::prepare(dirs, client)?;
+    #[cfg(windows)]
+    {
+        let install =
+            find(edition).ok_or_else(|| Error::Other("the game isn't installed".into()))?;
+        if !install.gdk {
+            return Err(Error::Other(
+                "clients load into the newer GDK game (1.21.120 and later) only".into(),
+            ));
+        }
+        let mut pid = None;
+        for _ in 0..120 {
+            pid = package::process_id(&install.path);
+            if pid.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+        let pid = pid.ok_or_else(|| Error::Other("the game didn't start".into()))?;
+        std::thread::sleep(std::time::Duration::from_secs(CLIENT_DELAY_SECS));
+        client::inject(pid, &dll)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (edition, dll);
+        Err(Error::Other("clients can only be loaded on Windows".into()))
+    }
+}
+
+/// Seconds between the game's process appearing and the client being loaded into it.
+const CLIENT_DELAY_SECS: u64 = 8;
 
 /// Is the game running now?
 pub fn running(edition: Edition) -> bool {

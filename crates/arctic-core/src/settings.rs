@@ -54,6 +54,9 @@ pub struct Settings {
     pub launcher_version_seen: String,
     /// After an update, show what's new and what's fixed in a popup.
     pub show_release_notes: bool,
+    /// The third-party client loaded into Bedrock when it is started from the launcher (`latite`,
+    /// `flarial`), or none.
+    pub bedrock_client: Option<String>,
     /// Animated backdrop (aurora, snow, shooting stars).
     pub animations: bool,
     /// Animated capes stand still on their first frame in the launcher (a
@@ -263,6 +266,7 @@ impl Default for Settings {
             auto_install_updates: true,
             launcher_version_seen: String::new(),
             show_release_notes: true,
+            bedrock_client: None,
             animations: true,
             reduce_cape_motion: false,
             capes_still: Vec::new(),

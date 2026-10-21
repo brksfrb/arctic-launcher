@@ -61,11 +61,15 @@ impl Tasks {
         });
     }
 
-    pub fn bedrock_launch(&self, edition: Edition) {
+    /// Start Bedrock, with `client` (a third-party client) loaded into it when one is chosen.
+    pub fn bedrock_launch(&self, edition: Edition, client: Option<bedrock::client::Client>) {
         self.run(move |t| {
-            let result = bedrock::launch(edition)
-                .map(|()| format!("Starting {}", edition.name()))
-                .map_err(|e| e.to_string());
+            let reporter = t.clone();
+            let result = bedrock::launch_with_client(t.dirs(), edition, client, move |message| {
+                reporter.bedrock(BedrockEvent::Done(Ok(message)));
+            })
+            .map(|_| format!("Starting {}", edition.name()))
+            .map_err(|e| e.to_string());
             t.bedrock(BedrockEvent::Done(result));
             // It shows as running once its window is up.
             std::thread::sleep(std::time::Duration::from_secs(4));

@@ -226,6 +226,14 @@ folder per Xbox account for worlds, settings and the server list. An old UWP ins
 - **Servers** are `minecraftpe\external_servers.txt` (`id:name:host:port:time` lines) and
   are pinged with RakNet's unconnected ping over UDP (`arctic_ping::ping_bedrock`).
 
+- **Clients** (`bedrock::client`): Bedrock has no mod loader, so a client (Latite or Flarial, chosen in
+  the Bedrock tab or `settings.json`'s `bedrock_client`) is a DLL loaded into the running game, as other
+  launchers do it. The DLL comes from the client's own GitHub releases (SHA-256 checked against the digest
+  GitHub lists, kept in `cache/bedrock-clients`), and after Play the launcher waits for
+  `Minecraft.Windows.exe`, a few seconds for its graphics, then runs `LoadLibraryW` on a thread inside it.
+  GDK games only (1.21.120+). A client that can't be fetched or loaded never stops the game from starting.
+  Arctic doesn't write or ship these clients; the tab warns that servers may ban modified clients.
+
 ## Profiles (`arctic-core::profiles`)
 
 `profiles.json` lists profiles and the active one. `DataDirs::with_profile(id)` scopes the

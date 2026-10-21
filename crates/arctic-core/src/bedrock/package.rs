@@ -146,6 +146,11 @@ fn install_error(e: &windows::core::Error) -> String {
 
 /// Does a process run from inside `install_dir`?
 pub(super) fn running(install_dir: &Path) -> bool {
+    process_id(install_dir).is_some()
+}
+
+/// The id of the game's process running from inside `install_dir`.
+pub(super) fn process_id(install_dir: &Path) -> Option<u32> {
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
@@ -160,13 +165,13 @@ pub(super) fn running(install_dir: &Path) -> bool {
     unsafe {
         let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         if snapshot == INVALID_HANDLE_VALUE {
-            return false;
+            return None;
         }
         let mut entry: PROCESSENTRY32W = std::mem::zeroed();
         entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
-        let mut found = false;
+        let mut found = None;
         let mut more = Process32FirstW(snapshot, &mut entry) != 0;
-        while more && !found {
+        while more && found.is_none() {
             let len = entry
                 .szExeFile
                 .iter()
@@ -187,7 +192,9 @@ pub(super) fn running(install_dir: &Path) -> bool {
                     ) != 0
                     {
                         let path = String::from_utf16_lossy(&buf[..size as usize]).to_lowercase();
-                        found = path.starts_with(&dir);
+                        if path.starts_with(&dir) {
+                            found = Some(entry.th32ProcessID);
+                        }
                     }
                     CloseHandle(process);
                 }
