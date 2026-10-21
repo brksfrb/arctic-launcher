@@ -121,9 +121,10 @@ fn main() -> eframe::Result {
     }
 
     log::info!(
-        "{} {} — data dir {}",
+        "{} {} started {} — data dir {}",
         arctic_core::APP_NAME,
         arctic_core::APP_VERSION,
+        logbook::started_at(),
         dirs.root().display()
     );
 
