@@ -436,8 +436,16 @@ mod tests {
     fn the_bundled_gallery_loads() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
         let skins = load(&dir).unwrap();
-        assert_eq!(skins.len(), 112);
-        for collection in ["adventure", "fantasy", "gamer", "animals", "pvp", "casual"] {
+        assert_eq!(skins.len(), 121);
+        for collection in [
+            "adventure",
+            "fantasy",
+            "gamer",
+            "animals",
+            "pvp",
+            "casual",
+            "minecraft",
+        ] {
             assert!(
                 skins.iter().any(|skin| skin.category == collection),
                 "missing {collection}"
