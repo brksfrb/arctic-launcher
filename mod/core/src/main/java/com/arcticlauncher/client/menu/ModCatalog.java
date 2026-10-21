@@ -148,7 +148,7 @@ final class ModCatalog {
 					f.section("Colors");
 					f.choice("Labels", DebugStyle.COLORS, () -> c.debugLabelColor, i -> c.debugLabelColor = i);
 					f.choice("Values", DebugStyle.COLORS, () -> c.debugValueColor, i -> c.debugValueColor = i);
-					f.note("Press F3 to see it. Not on Minecraft 1.21.9 and newer yet.");
+					f.note("Press F3 to see it.");
 				}));
 		out.add(new Mod("saturation", "Saturation Bar", "Your hidden saturation as a gold line on the hunger bar", "food",
 				Category.HUD, "hunger food appleskin saturation")
