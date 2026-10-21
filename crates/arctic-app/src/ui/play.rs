@@ -36,19 +36,31 @@ impl ArcticApp {
         crate::theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
-                let emblem = widgets::instance_emblem(ui, p, &instance.icon, 64.0);
-                self.icon_picker(&emblem, &instance.id);
-                ui.add_space(6.0);
-                self.instance_switcher(ui, &instance);
-                // Right next to the name it belongs to (the account stays at the far end), as tall
-                // as the instance's icon and name beside it.
-                ui.add_space(6.0);
-                if self.instance_settings_button(ui).clicked() {
-                    let now = ui.input(|i| i.time);
-                    self.set_tab(Tab::Instances, now);
-                    self.open_instance(&instance.id);
-                    self.inst.page = crate::ui::InstancePage::Settings;
-                }
+                // One box for the instance: its icon, name and settings, so the gear isn't alone.
+                egui::Frame::new()
+                    .fill(p.surface.gamma_multiply(0.55))
+                    .corner_radius(CornerRadius::same(18))
+                    .inner_margin(egui::Margin::same(8))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            let emblem = widgets::instance_emblem(ui, p, &instance.icon, 64.0);
+                            self.icon_picker(&emblem, &instance.id);
+                            ui.add_space(6.0);
+                            self.instance_switcher(ui, &instance);
+                            ui.add_space(14.0);
+                            let (line, _) = ui.allocate_exact_size(vec2(1.0, 38.0), Sense::hover());
+                            ui.painter()
+                                .rect_filled(line, 0.0, p.muted.gamma_multiply(0.3));
+                            ui.add_space(2.0);
+                            if self.instance_settings_button(ui).clicked() {
+                                let now = ui.input(|i| i.time);
+                                self.set_tab(Tab::Instances, now);
+                                self.open_instance(&instance.id);
+                                self.inst.page = crate::ui::InstancePage::Settings;
+                            }
+                            ui.add_space(2.0);
+                        });
+                    });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     self.account_chip(ui);
                 });
@@ -153,8 +165,7 @@ impl ArcticApp {
             .collect()
     }
 
-    /// The gear that opens the instance's settings: a small framed button like the folder and log
-    /// buttons under it, centered on the instance's icon.
+    /// The gear that opens the instance's settings: the last part of the instance's box, after a divider.
     fn instance_settings_button(&mut self, ui: &mut egui::Ui) -> egui::Response {
         let p = self.palette();
         let (rect, response) = ui.allocate_exact_size(vec2(40.0, 40.0), Sense::click());
@@ -164,12 +175,13 @@ impl ArcticApp {
         let hover = ui
             .ctx()
             .animate_bool(response.id.with("settings_h"), response.hovered());
+        // Part of the instance's box: no frame of its own, only a wash when the pointer is on it.
         ui.painter().rect_filled(
             rect,
             CornerRadius::same(12),
-            lerp_color(p.surface.gamma_multiply(0.7), p.surface_hover, hover),
+            p.surface_hover.gamma_multiply(hover),
         );
-        let icon = egui::Rect::from_center_size(rect.center(), vec2(22.0, 22.0));
+        let icon = egui::Rect::from_center_size(rect.center(), vec2(24.0, 24.0));
         icons::draw(
             ui.painter(),
             Icon::Gear,
