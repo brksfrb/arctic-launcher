@@ -7,6 +7,7 @@ import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.Platform;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.config.HudSlot;
+import com.arcticlauncher.client.feature.DebugStyle;
 import com.arcticlauncher.client.feature.QuickMessages;
 import com.arcticlauncher.client.hud.HudWidget;
 import com.arcticlauncher.client.menu.Mod.Category;
@@ -140,6 +141,15 @@ final class ModCatalog {
 		out.add(new Mod("hitboxes", "Hitboxes", "Every player's and mob's hitbox as a box, like F3+B in one click", "target",
 				Category.GAMEPLAY, "hitbox combat box f3 reach")
 				.toggle(() -> c.hitboxes, on -> c.hitboxes = on));
+		out.add(new Mod("debugscreen", "Debug Screen", "A colorful F3 screen: labels and values in colors", "debugscreen",
+				Category.VISUAL, "f3 debug betterf3 coordinates info")
+				.toggle(() -> c.debugStyle, on -> c.debugStyle = on)
+				.settings((host, f) -> {
+					f.section("Colors");
+					f.choice("Labels", DebugStyle.COLORS, () -> c.debugLabelColor, i -> c.debugLabelColor = i);
+					f.choice("Values", DebugStyle.COLORS, () -> c.debugValueColor, i -> c.debugValueColor = i);
+					f.note("Press F3 to see it. Not on Minecraft 1.21.9 and newer yet.");
+				}));
 		out.add(new Mod("saturation", "Saturation Bar", "Your hidden saturation as a gold line on the hunger bar", "food",
 				Category.HUD, "hunger food appleskin saturation")
 				.toggle(() -> c.saturationBar, on -> c.saturationBar = on));
