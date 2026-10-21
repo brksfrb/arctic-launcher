@@ -218,6 +218,12 @@ folder per Xbox account for worlds, settings and the server list. An old UWP ins
   `PackageManager.AddPackageByUriAsync` with `ForceUpdateFromAnyVersion`: Windows downloads
   the encrypted package and unlocks it with the Store license, so nothing from the archives
   but a link to Microsoft is trusted. Package version `1.26.5203.0` is game version 1.26.52.3.
+  Builds before 1.21.120 are UWP `.appx` packages known only by a Windows Update id (the
+  raythnetwork list, merged into the same catalog; Beta is skipped, it needs an account).
+  `bedrock::fe3` asks Microsoft's update service for the link, the package is downloaded
+  into the temp folder and installed from the file; switching between the two kinds removes
+  the installed package first with its data kept. A GDK install is told apart by its
+  `MicrosoftGame.Config`.
 - **Worlds** (`minecraftWorlds\<id>`, name in `levelname.txt`) import from and export to
   `.mcworld` (the folder's contents zipped). **Packs** are read from their `manifest.json`
   (comments allowed, names looked up in `texts/en_US.lang`); `.mcpack` / `.mcaddon` files
