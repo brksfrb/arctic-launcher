@@ -1,5 +1,6 @@
 package com.arcticlauncher.client.servers;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -27,5 +28,13 @@ class DisconnectedHintTest {
 		assertNull(DisconnectedPage.hint("You are banned from this server."));
 		assertNull(DisconnectedPage.hint("You are not whitelisted on this server!"));
 		assertNull(DisconnectedPage.hint("Outdated client! Please use 1.21.4"));
+	}
+
+	@Test
+	void aWrappedLineKeepsItsColor() {
+		assertEquals("§c", DisconnectedPage.activeCodes("§cPlease connect"));
+		assertEquals("§b§l", DisconnectedPage.activeCodes("§cred §bblue §lbold"));
+		assertEquals("", DisconnectedPage.activeCodes("§cred§r plain"));
+		assertEquals("", DisconnectedPage.activeCodes("no codes"));
 	}
 }

@@ -58,7 +58,7 @@ public final class DisconnectedPage extends Page {
 		this.title = title == null || title.isEmpty() ? "Connection Lost" : title;
 		String shown = reason == null ? "" : reason;
 		String hint = hint(shown);
-		this.reason = hint == null ? shown : shown + "\n\n" + hint;
+		this.reason = hint == null ? shown : shown + "\n\n§r" + hint;
 		this.vanillaScreen = vanillaScreen;
 	}
 
@@ -303,21 +303,47 @@ public final class DisconnectedPage extends Page {
 		}
 	}
 
+	/** The § codes in force at the end of {@code text}: its last color, and any formatting after it. */
+	static String activeCodes(String text) {
+		String color = "";
+		StringBuilder format = new StringBuilder();
+		for (int i = 0; i + 1 < text.length(); i++) {
+			if (text.charAt(i) != '§') {
+				continue;
+			}
+			char code = Character.toLowerCase(text.charAt(++i));
+			if (code == 'r') {
+				color = "";
+				format.setLength(0);
+			} else if ((code >= '0' && code <= '9') || (code >= 'a' && code <= 'f')) {
+				color = "§" + code;
+				format.setLength(0);
+			} else if (code == 'k' || code == 'l' || code == 'm' || code == 'n' || code == 'o') {
+				format.append('§').append(code);
+			}
+		}
+		return color + format;
+	}
+
 	/** {@code text} broken into lines that fit {@code maxWidth} (at most {@link #MAX_LINES}). */
 	private static List<String> wrap(Gfx g, String text, int maxWidth) {
 		List<String> out = new ArrayList<String>();
+		// The color and formatting a line ends with starts the next one (a § code colors what follows it).
+		String active = "";
 		for (String paragraph : text.split("\n")) {
-			StringBuilder line = new StringBuilder();
+			StringBuilder line = new StringBuilder(active);
 			for (String word : paragraph.split(" ")) {
-				String next = line.length() == 0 ? word : line + " " + word;
-				if (g.textWidth(next) > maxWidth && line.length() > 0) {
+				String next = line.length() == active.length() ? active + word : line + " " + word;
+				if (g.textWidth(next) > maxWidth && line.length() > active.length()) {
 					out.add(line.toString());
-					line = new StringBuilder(word);
+					active = activeCodes(line.toString());
+					line = new StringBuilder(active + word);
 				} else {
 					line = new StringBuilder(next);
 				}
 			}
 			out.add(line.toString());
+			active = activeCodes(line.toString());
 		}
 		return out.size() > MAX_LINES ? out.subList(0, MAX_LINES) : out;
 	}
