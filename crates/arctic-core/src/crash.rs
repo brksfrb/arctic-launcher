@@ -183,6 +183,23 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
+        // Fabric: "- Mod 'Better Block Entities' (betterblockentities) 1.2 requires version 0.8.12 or later of mod 'Sodium' (sodium), but only the wrong version is present: 0.6.13+mc1.21.1!"
+        // (the Minecraft and Fabric Loader versions are handled above): the other mod is simply too old.
+        pattern: r"Mod '([^']+)' \(([^)]+)\) \S+ requires (?:any version|version) (.+?) of (?:mod )?'([^']+)' \(([^)]+)\), but only the wrong version is present: ([^!\s]+)",
+        explain: |c, text| {
+            let hint = update_hint(text)
+                .map_or_else(String::new, |h| format!(" Fabric Loader suggests: {h}."));
+            Diagnosis::new(
+                format!("{} is too old for {}", &c[4], &c[1]),
+                format!(
+                    "{} needs {} of {}, but this instance has {}. Update {} (from the instance's Mods page), or remove {}.{hint}",
+                    &c[1], &c[3], &c[4], &c[6], &c[4], &c[1]
+                ),
+                vec![c[1].to_owned(), c[4].to_owned()],
+            )
+        },
+    },
+    Rule {
         // Fabric: "- Mod 'X' (x) 1.0 is incompatible with any version of mod 'Y' (y), but a matching version is present"
         pattern: r"Mod '([^']+)' \(([^)]+)\) \S+ is incompatible with [^']*'([^']+)'",
         explain: |c, text| {
@@ -468,7 +485,6 @@ fn compiled() -> &'static [Regex] {
 /// The largest amount of text looked at (the end of it, where crashes are).
 const MAX_TEXT: usize = 2 * 1024 * 1024;
 
-/// Explain a crash from the game log and/or crash report text.
 /// The loader's own suggestion from its English "Fix:" line: "update sodium to 0.8.12".
 fn update_hint(text: &str) -> Option<String> {
     let re = Regex::new(r"\[([^\s\[\]]+) [^\s\]]+\] -> add:(\S+) (\S+) ").ok()?;
@@ -567,6 +583,7 @@ fn resolution_log(text: &str) -> Diagnosis {
     Diagnosis::new("", "", Vec::new())
 }
 
+/// Explain a crash from the game log and/or crash report text.
 pub fn diagnose(text: &str) -> Option<Diagnosis> {
     let start = text.len().saturating_sub(MAX_TEXT);
     let start = (start..text.len())
@@ -840,6 +857,16 @@ mod tests {
         let d = diagnose(log).unwrap();
         assert_eq!(d.title, "Old Mod is for a different Minecraft version");
         assert!(d.detail.contains("1.20.1") && d.detail.contains("1.21.6"));
+    }
+
+    #[test]
+    fn a_mod_that_needs_a_newer_other_mod_says_to_update_that_mod() {
+        let log = "[18:37:08] [main/INFO] Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 ([[0.8.12,\u{221e})])]
+    \t - Mod 'Better Block Entities' (betterblockentities) 1.2.1 requires version 0.8.12 or later of mod 'Sodium' (sodium), but only the wrong version is present: 0.6.13+mc1.21.1!";
+        let d = diagnose(log).unwrap();
+        assert_eq!(d.title, "Sodium is too old for Better Block Entities");
+        assert!(d.detail.contains("update sodium to 0.8.12"), "{}", d.detail);
+        assert!(d.detail.contains("0.6.13"), "{}", d.detail);
     }
 
     #[test]
