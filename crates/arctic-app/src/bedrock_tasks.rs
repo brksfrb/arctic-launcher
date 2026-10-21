@@ -89,7 +89,8 @@ impl Tasks {
             let progress = |p: ProgressInfo| {
                 t.bedrock(BedrockEvent::InstallProgress(ProgressSnapshot::from(p)));
             };
-            let result = versions::install(&version, &t.dirs().cache(), &cancel, &progress).map_err(|e| e.to_string());
+            let result = versions::install(&version, &t.dirs().cache(), &cancel, &progress)
+                .map_err(|e| e.to_string());
             t.bedrock(BedrockEvent::Installed(
                 version.edition,
                 version.id.clone(),

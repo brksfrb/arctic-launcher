@@ -48,13 +48,18 @@ pub(super) fn resolve(update_id: &str) -> Result<String> {
         .limit(MAX_ANSWER_BYTES)
         .read_to_string()?;
     pick(&xml).ok_or_else(|| {
-        Error::Other("Microsoft has no download for this version (it may have been withdrawn)".into())
+        Error::Other(
+            "Microsoft has no download for this version (it may have been withdrawn)".into(),
+        )
     })
 }
 
 /// The package link in the answer: the signed edge server first, then any other of Microsoft's.
 fn pick(xml: &str) -> Option<String> {
-    let urls: Vec<String> = urls(xml).into_iter().filter(|u| is_delivery_url(u)).collect();
+    let urls: Vec<String> = urls(xml)
+        .into_iter()
+        .filter(|u| is_delivery_url(u))
+        .collect();
     urls.iter()
         .find(|u| host(u).starts_with("tlu.dl."))
         .or_else(|| urls.first())
@@ -70,7 +75,8 @@ fn host(url: &str) -> String {
 }
 
 fn is_delivery_url(url: &str) -> bool {
-    (url.starts_with("https://") || url.starts_with("http://")) && host(url).ends_with(DELIVERY_HOST)
+    (url.starts_with("https://") || url.starts_with("http://"))
+        && host(url).ends_with(DELIVERY_HOST)
 }
 
 /// The `<Url>…</Url>` values of the answer, with XML escapes undone.
