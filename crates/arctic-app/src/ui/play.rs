@@ -153,26 +153,23 @@ impl ArcticApp {
             .collect()
     }
 
-    /// The gear that opens the instance's settings: a square as big as the instance's icon.
+    /// The gear that opens the instance's settings: a small framed button like the folder and log
+    /// buttons under it, centered on the instance's icon.
     fn instance_settings_button(&mut self, ui: &mut egui::Ui) -> egui::Response {
         let p = self.palette();
-        let (rect, response) = ui.allocate_exact_size(vec2(64.0, 64.0), Sense::click());
+        let (rect, response) = ui.allocate_exact_size(vec2(40.0, 40.0), Sense::click());
         let response = response
             .on_hover_text("Instance settings")
             .on_hover_cursor(CursorIcon::PointingHand);
         let hover = ui
             .ctx()
             .animate_bool(response.id.with("settings_h"), response.hovered());
-        // No frame: just a faint wash on hover, and a bigger icon that brightens from muted.
-        if hover > 0.0 {
-            ui.painter().rect_filled(
-                rect,
-                CornerRadius::same(14),
-                p.surface_hover.gamma_multiply(hover * 0.6),
-            );
-        }
-        // Light lines like the text beside it: the stroke grows with the icon, so not too big.
-        let icon = egui::Rect::from_center_size(rect.center(), vec2(30.0, 30.0));
+        ui.painter().rect_filled(
+            rect,
+            CornerRadius::same(12),
+            lerp_color(p.surface.gamma_multiply(0.7), p.surface_hover, hover),
+        );
+        let icon = egui::Rect::from_center_size(rect.center(), vec2(22.0, 22.0));
         icons::draw(
             ui.painter(),
             Icon::Gear,
