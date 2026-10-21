@@ -122,7 +122,9 @@ pub fn catalog(cache_dir: &Path) -> Result<Catalog> {
         Ok(mut catalog) => {
             // The older builds are a bonus: without them the rest still works.
             let legacy = fetch_legacy().unwrap_or_else(|e| {
-                log::warn!("the older Bedrock builds couldn't be listed ({e}), using the last list");
+                log::warn!(
+                    "the older Bedrock builds couldn't be listed ({e}), using the last list"
+                );
                 kept_legacy(&cached)
             });
             catalog.add_legacy(legacy);
@@ -178,7 +180,9 @@ pub(crate) fn parse_legacy(text: &str) -> Result<Vec<Version>> {
         })
         .collect();
     if list.is_empty() {
-        return Err(Error::Other("the older Bedrock builds list is empty".into()));
+        return Err(Error::Other(
+            "the older Bedrock builds list is empty".into(),
+        ));
     }
     Ok(list)
 }
@@ -455,7 +459,12 @@ fn install_legacy(
         }
     };
     make_room(version)?;
-    super::package::install(&file_uri(&package), &format!("Installing {name}"), cancel, progress)
+    super::package::install(
+        &file_uri(&package),
+        &format!("Installing {name}"),
+        cancel,
+        progress,
+    )
 }
 
 /// The package kept for `key` ("release-1.20.81.1"), if it is still a whole zip.
