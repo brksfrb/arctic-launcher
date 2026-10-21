@@ -419,6 +419,10 @@ final class ModCatalog {
 			case "keystrokes": return " wasd keys cps";
 			case "arrows": return " bow ammo";
 			case "bossbar": return " boss bar dragon wither";
+			case "cpu": case "syscpu": return " processor usage load performance resource";
+			case "sysram": case "alloc": return " memory ram usage performance resource";
+			case "gpu": case "vram": return " graphics card video memory usage performance resource";
+			case "frametime": case "lows": return " stutter lag frame fps percentile performance resource";
 			default: return "";
 		}
 	}

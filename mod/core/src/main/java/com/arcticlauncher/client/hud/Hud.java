@@ -212,6 +212,7 @@ public final class Hud {
 	 */
 	public Map<HudWidget, int[]> layout(Gfx g) {
 		frame++;
+		FrameStats.tick();
 		// Worked out again only when the screen, a widget's slot or a widget's size changed.
 		long[] from = new long[2 + widgets.size() * 4];
 		from[0] = g.width();
