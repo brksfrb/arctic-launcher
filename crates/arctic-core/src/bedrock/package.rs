@@ -226,3 +226,37 @@ pub(super) fn process_id(install_dir: &Path) -> Option<u32> {
         found
     }
 }
+
+/// Does the process `pid` own a visible window yet? The game's graphics come up with it, which is when
+/// a client can be loaded.
+pub(super) fn has_window(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{HWND, LPARAM};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
+    };
+
+    struct Search {
+        pid: u32,
+        found: bool,
+    }
+    unsafe extern "system" fn visit(window: HWND, param: LPARAM) -> i32 {
+        // SAFETY: `param` is the `Search` passed to `EnumWindows` below, alive for the whole call.
+        let search = unsafe { &mut *(param as *mut Search) };
+        let mut owner = 0u32;
+        // SAFETY: plain Win32 calls on the window handle Windows gave us.
+        unsafe {
+            GetWindowThreadProcessId(window, &mut owner);
+            if owner == search.pid && IsWindowVisible(window) != 0 {
+                search.found = true;
+                return 0;
+            }
+        }
+        1
+    }
+    let mut search = Search { pid, found: false };
+    // SAFETY: the callback only touches `search`, which outlives the call.
+    unsafe {
+        EnumWindows(Some(visit), &mut search as *mut Search as LPARAM);
+    }
+    search.found
+}
