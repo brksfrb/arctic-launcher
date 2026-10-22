@@ -38,6 +38,11 @@ abstract class PlayerTierMixin {
 			name = new LiteralText(ping).append(name);
 			changed = true;
 		}
+		// The snowflake of Arctic players, as in the player list.
+		if (ArcticClient.config().badgeNametags && ArcticClient.looks() != null && ArcticClient.looks().isArctic(player.getUuid())) {
+			name = new LiteralText("\u00a7b\u2744\u00a7r ").append(name);
+			changed = true;
+		}
 		if (changed) {
 			cir.setReturnValue(name);
 		}

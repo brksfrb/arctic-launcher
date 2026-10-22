@@ -183,6 +183,9 @@ public final class Hud {
 		slot = config.hud.get(w.id);
 		if (slot == null) {
 			slot = new HudSlot(w.onByDefault);
+			if (w instanceof TextWidget && ((TextWidget) w).iconFirst()) {
+				slot.labelMode = HudSlot.LABEL_ICON;
+			}
 			config.hud.put(w.id, slot);
 		}
 		if (!slot.styled) {

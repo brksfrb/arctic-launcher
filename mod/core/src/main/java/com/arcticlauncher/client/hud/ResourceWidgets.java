@@ -17,13 +17,13 @@ final class ResourceWidgets {
 			protected String value(boolean preview) {
 				return percent(Resources.gameCpu(), preview, 18);
 			}
-		});
+		}.icon("cpu", true));
 		all.add(new TextWidget("syscpu", "PC CPU", "How busy the whole processor is, everything running", false) {
 			@Override
 			protected String value(boolean preview) {
 				return percent(Resources.systemCpu(), preview, 42);
 			}
-		});
+		}.icon("syscpu", true));
 		all.add(new TextWidget("sysram", "PC RAM", "Memory in use on your computer, all programs", false) {
 			@Override
 			protected String value(boolean preview) {
@@ -33,7 +33,7 @@ final class ResourceWidgets {
 				}
 				return gb(m[0]) + " / " + gb(m[1]) + " GB";
 			}
-		});
+		}.icon("sysram", true));
 		all.add(new TextWidget("alloc", "Alloc", "How fast the game fills memory (MB per second); high numbers mean stutter from cleanups", false) {
 			@Override
 			protected String value(boolean preview) {
@@ -43,13 +43,13 @@ final class ResourceWidgets {
 				}
 				return Math.round(rate) + " MB/s";
 			}
-		});
+		}.icon("alloc", true));
 		all.add(new TextWidget("gpu", "GPU", "How busy the graphics card is (NVIDIA and AMD; some others on Windows)", false) {
 			@Override
 			protected String value(boolean preview) {
 				return percent(Gpu.load(), preview, 63);
 			}
-		});
+		}.icon("gpu", true));
 		all.add(new TextWidget("vram", "VRAM", "Video memory in use on the graphics card", false) {
 			@Override
 			protected String value(boolean preview) {
@@ -60,7 +60,7 @@ final class ResourceWidgets {
 				double total = Gpu.totalMb();
 				return total > 0 ? gb(used) + " / " + gb(total) + " GB" : gb(used) + " GB";
 			}
-		});
+		}.icon("vram", true));
 		all.add(new TextWidget("frametime", "Frame time", "How long a frame takes, on average (lower is smoother)", false) {
 			@Override
 			protected String value(boolean preview) {
@@ -70,7 +70,7 @@ final class ResourceWidgets {
 				}
 				return Num.fixed(ms, 1) + " ms";
 			}
-		});
+		}.icon("frametime", true));
 		all.add(new TextWidget("lows", "1% low", "The frame rate of your slowest frames: where stutter shows when FPS looks fine", false) {
 			@Override
 			protected String value(boolean preview) {
@@ -80,7 +80,7 @@ final class ResourceWidgets {
 				}
 				return String.valueOf(Math.round(fps));
 			}
-		});
+		}.icon("lows", true));
 		return all;
 	}
 

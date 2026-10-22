@@ -28,7 +28,7 @@ final class PvpWidgets {
 			protected String value(boolean preview) {
 				return blocking() || preview ? "ON" : "off";
 			}
-		});
+		}.itemIcon("shield", "iron_sword"));
 		all.add(new TextWidget("falldamage", "Fall", "What your fall costs if you land now (health points; 2 = a heart)", false) {
 			@Override
 			protected String value(boolean preview) {
@@ -38,7 +38,7 @@ final class PvpWidgets {
 				}
 				return fell <= SAFE_FALL ? "safe" : "-" + (int) Math.ceil(fell - SAFE_FALL) + " HP";
 			}
-		});
+		}.itemIcon("feather"));
 		all.add(new TextWidget("pearl", "Pearl", "The ender pearl cooldown (1.8: counted from when you throw one)", false) {
 			@Override
 			protected String value(boolean preview) {
@@ -48,7 +48,7 @@ final class PvpWidgets {
 				long left = pearlLeft();
 				return left <= 0 ? "ready" : Num.fixed(left / 1000.0, 1) + " s";
 			}
-		});
+		}.itemIcon("ender_pearl"));
 		return all;
 	}
 

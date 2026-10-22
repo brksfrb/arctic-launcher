@@ -31,6 +31,8 @@ public final class HudSlot {
 	public static final int LABEL_BEFORE = 0;
 	public static final int LABEL_AFTER = 1;
 	public static final int LABEL_NONE = 2;
+	/** An icon in place of the label (widgets that have one). */
+	public static final int LABEL_ICON = 3;
 
 	public int textColor = 0xFFFFFFFF;
 	/** The label's own color; 0 = the text color. */

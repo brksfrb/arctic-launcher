@@ -14,8 +14,6 @@ final class Widgets {
 	private static final String[] COMPASS = {"S", "SW", "W", "NW", "N", "NE", "E", "SE"};
 	private static final long TICKS_PER_DAY = 24000;
 	private static final double MB = 1024 * 1024;
-	/** Lit TNT farther than this is not worth a countdown. */
-	private static final double TNT_RANGE = 64;
 	/** Item id part → label, for the Items widget. */
 	private static final String[][] COUNTED = {
 			{"totem_of_undying", "Totems"}, {"ender_pearl", "Pearls"}, {"golden_apple", "Gapples"},
@@ -123,17 +121,6 @@ final class Widgets {
 	/** Widgets many clients have: light, chunk, session, arrows, food, pack, date, last death. */
 	private static List<HudWidget> more() {
 		List<HudWidget> all = new ArrayList<HudWidget>();
-		all.add(new TextWidget("tnt", "TNT", "Seconds until the next lit TNT near you explodes", false) {
-			@Override
-			protected String value(boolean preview) {
-				int[] tnt = platform().primedTnt(TNT_RANGE);
-				if (tnt == null) {
-					return preview ? "3.5 s" : "--";
-				}
-				String time = Num.fixed(tnt[0] / 20.0, 1) + " s";
-				return tnt[1] > 1 ? time + " (x" + tnt[1] + ")" : time;
-			}
-		});
 		all.add(new TextWidget("light", "Light", "Block light where you stand (mobs spawn at 0)", false) {
 			@Override
 			protected String value(boolean preview) {
@@ -227,7 +214,6 @@ final class Widgets {
 				return out.length() == 0 ? (preview ? "Totems 2  Pearls 16" : "--") : out.toString();
 			}
 		});
-		// What other players see above your head (your own tag isn't drawn in the game): ping, tier, name.
 		all.add(new TextWidget("nametag", "My name tag", "What others see above your head: ping, tier and name", false) {
 			@Override
 			protected String value(boolean preview) {
@@ -266,11 +252,17 @@ final class Widgets {
 			protected String value(boolean preview) {
 				double[] p = platform().position();
 				if (p == null) {
-					return "0 64 0";
+					p = new double[] {0, 64, 0};
 				}
-				return (int) Math.floor(p[0]) + " " + (int) Math.floor(p[1]) + " " + (int) Math.floor(p[2]);
+				int decimals = Math.max(0, Math.min(2, ArcticClient.config().coordDecimals));
+				return "X: " + number(p[0], decimals) + "  Y: " + number(p[1], decimals) + "  Z: " + number(p[2], decimals);
 			}
-		};
+		}.ownLabels();
+	}
+
+	/** A coordinate: whole blocks (rounded down, like the game's block position) or with decimals. */
+	private static String number(double value, int decimals) {
+		return decimals == 0 ? String.valueOf((int) Math.floor(value)) : Num.fixed(value, decimals);
 	}
 
 	private static HudWidget direction() {

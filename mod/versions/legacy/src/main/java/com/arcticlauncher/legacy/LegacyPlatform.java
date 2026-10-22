@@ -1011,6 +1011,42 @@ public final class LegacyPlatform implements Platform {
 		return changed;
 	}
 
+	/** The entities whose name this put on (so it can take it off). */
+	private final java.util.Set<Integer> tntNamed = new java.util.HashSet<Integer>();
+
+	@Override
+	public void tntLabels(boolean on) {
+		if (mc().world == null) {
+			tntNamed.clear();
+			return;
+		}
+		if (!on && tntNamed.isEmpty()) {
+			return;
+		}
+		for (Entity e : new ArrayList<Entity>(mc().world.loadedEntities)) {
+			if (!(e instanceof net.minecraft.entity.TntEntity)) {
+				continue;
+			}
+			if (on) {
+				int fuse;
+				//#if MC >= 1.9
+				fuse = ((net.minecraft.entity.TntEntity) e).getFuse();
+				//#else
+				fuse = ((net.minecraft.entity.TntEntity) e).fuseTimer;
+				//#endif
+				e.setCustomName((fuse <= 20 ? "\u00a7c" : "\u00a7e") + (Math.round(fuse / 2.0) / 10.0) + "s");
+				e.setCustomNameVisible(true);
+				tntNamed.add(e.getEntityId());
+			} else if (tntNamed.contains(e.getEntityId())) {
+				e.setCustomName("");
+				e.setCustomNameVisible(false);
+			}
+		}
+		if (!on) {
+			tntNamed.clear();
+		}
+	}
+
 	@Override
 	public boolean canPeekShulkers() {
 		//#if MC >= 1.11

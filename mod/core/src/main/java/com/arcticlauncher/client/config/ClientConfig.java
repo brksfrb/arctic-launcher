@@ -103,6 +103,14 @@ public final class ClientConfig {
 	public boolean fancy;
 	/** The smooth font keeps its anti-aliased (in-between shade) edges; off = every pixel fully on or off. */
 	public boolean fontAntialias;
+	/** Your own name tag shows above your head in third person (the game leaves it out). */
+	public boolean ownNametag = true;
+	/** The ping in milliseconds after each name in the player list. */
+	public boolean tabPing = true;
+	/** Digits after the point in the XYZ widget (0 = whole blocks). */
+	public int coordDecimals;
+	/** Lit TNT shows its seconds left above it. */
+	public boolean tntTimer;
 	/** Screens (inventory, chat, menus) stay open while standing in a nether portal. */
 	public boolean portalScreens = true;
 	/** The Arctic badge in front of Arctic players' name tags too (it is always in the player list). */

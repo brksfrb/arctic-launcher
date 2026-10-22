@@ -70,6 +70,7 @@ public final class Features {
 			sneak.tick(config.toggleSneak, screenOpen);
 			combat.tick(platform.hurtTime());
 			checkOtherZoom();
+			platform.tntLabels(config.tntTimer);
 			combatFx.tick(config, platform);
 		}
 		boolean inGame = !screenOpen && platform.hasFeatures();

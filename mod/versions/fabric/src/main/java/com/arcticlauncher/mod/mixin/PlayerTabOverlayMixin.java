@@ -29,6 +29,14 @@ abstract class PlayerTabOverlayMixin {
 					.append(cir.getReturnValue())
 					.append(Compat.literal(com.arcticlauncher.client.feature.TabGlow.after())));
 		}
+		// The ping in milliseconds after the name, green to red.
+		if (ArcticClient.config().tabPing) {
+			int ms = info.getLatency();
+			if (ms >= 0) {
+				String color = ms < 80 ? "\u00a7a" : ms < 160 ? "\u00a7e" : "\u00a7c";
+				cir.setReturnValue(Compat.empty().append(cir.getReturnValue()).append(Compat.literal(" " + color + ms + "ms")));
+			}
+		}
 		// Before 1.16 text had no fonts, so there's no badge glyph to show.
 		if (Compat.BADGES && ArcticClient.looks() != null && ArcticClient.looks().isArctic(Compat.profileId(info.getProfile()))) {
 			Component badge = Compat.arcticBadge();

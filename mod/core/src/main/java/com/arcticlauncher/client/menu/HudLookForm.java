@@ -15,16 +15,26 @@ final class HudLookForm {
 	private static final int SAME_AS_TEXT = 0xFF52525B;
 	/** Box colors (RGB; the opacity is set separately). */
 	private static final int[] BOX_COLORS = {0x000000, 0x18181B, 0x1E293B, 0x0C4A6E, 0x3B0764, 0x7F1D1D};
-	private static final String[] LABELS = {"FPS: 144", "144 FPS", "144"};
 
 	private HudLookForm() {}
 
 	static void build(final Host host, Form f, final HudWidget widget) {
 		final HudSlot s = ArcticClient.hud().slot(widget);
 		if (widget instanceof TextWidget) {
+			final TextWidget text = (TextWidget) widget;
 			f.section("Text");
-			f.choice("Label", LABELS, () -> s.labelMode, v -> s.labelMode = v);
-			f.toggle("Brackets", "Show it as [FPS: 144]", () -> s.brackets, on -> s.brackets = on);
+			if (text.hasLabel()) {
+				final int[] modes = text.labelModes();
+				f.choice("Label", text.labelChoices(), () -> {
+					for (int i = 0; i < modes.length; i++) {
+						if (modes[i] == s.labelMode) {
+							return i;
+						}
+					}
+					return 0;
+				}, v -> s.labelMode = modes[v]);
+			}
+			f.toggle("Brackets", "Show the value in [brackets]", () -> s.brackets, on -> s.brackets = on);
 		} else {
 			f.section("Text");
 		}
