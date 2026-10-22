@@ -19,6 +19,16 @@ public final class Menus {
 		return new ModsScreen();
 	}
 
+	/** The hub the Arctic button opens. */
+	public static Page hub() {
+		return new ArcticHub();
+	}
+
+	/** The number on the Arctic button: unread chat plus new features. */
+	public static int badge() {
+		return ArcticHub.badge();
+	}
+
 	public static void open() {
 		ArcticClient.platform().openPage(home());
 	}

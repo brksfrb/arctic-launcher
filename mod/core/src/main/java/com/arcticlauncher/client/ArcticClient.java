@@ -455,6 +455,18 @@ public final class ArcticClient {
 		return new TitleMenu();
 	}
 
+	/** What the Arctic button opens: the hub (Configure HUD, Mods, Replays, Friends...). */
+	public static Page hub() {
+		return Menus.hub();
+	}
+
+	/** The Arctic button's label: with the number of unread chats and new features, if any. */
+	public static String hubLabel() {
+		int n = config == null ? 0 : Menus.badge();
+		return n > 0 ? "Arctic (" + (n > 9 ? "9+" : String.valueOf(n)) + ")" : "Arctic";
+	}
+
+	/** Right Shift: the HUD screen in a world, the Mods menu elsewhere. */
 	public static Page arcticMenu() {
 		return Menus.home();
 	}

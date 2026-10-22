@@ -22,11 +22,8 @@ abstract class NativeMenuMixin extends Screen {
 	@Inject(method = "init", at = @At("TAIL"))
 	private void arctic$init(CallbackInfo ci) {
 		arctic$actions.clear(); arctic$reconnect = null; arctic$cancel = null;
-		arctic$main = arctic$add("Arctic", () -> ArcticClient.platform().openPage(ArcticClient.arcticMenu()));
-		if ((Object) this instanceof TitleScreen) {
-			arctic$add("Replays", () -> ArcticClient.platform().openPage(com.arcticlauncher.client.menu.Menus.page("replays")));
-			arctic$add("Edit HUD", () -> ArcticClient.platform().openPage(new com.arcticlauncher.client.menu.HudEditor()));
-		} else if ((Object) this instanceof MultiplayerScreen) {
+		arctic$main = arctic$add(ArcticClient.hubLabel(), () -> ArcticClient.platform().openPage(ArcticClient.hub()));
+		if ((Object) this instanceof MultiplayerScreen) {
 			arctic$add("Arctic servers", () -> com.arcticlauncher.legacy.ServerMenus.open((Screen) (Object) this));
 		} else {
 			arctic$add("Arctic disconnect", () -> com.arcticlauncher.legacy.ServerMenus.open((Screen) (Object) this));

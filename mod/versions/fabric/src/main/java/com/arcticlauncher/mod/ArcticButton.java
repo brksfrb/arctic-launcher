@@ -15,7 +15,7 @@ public final class ArcticButton {
 	private static final java.util.Map<net.minecraft.client.gui.screens.Screen, Runnable> TICKS = new java.util.WeakHashMap<>();
 
 	public static Button create() {
-		Button button = create("Arctic", () -> ArcticClient.platform().openPage(ArcticClient.arcticMenu()));
+		Button button = create(ArcticClient.hubLabel(), () -> ArcticClient.platform().openPage(ArcticClient.hub()));
 		MAIN.add(button); return button;
 	}
 	public static Button create(String label, Runnable action) {
@@ -40,10 +40,7 @@ public final class ArcticButton {
 
 	public static void addActions(net.minecraft.client.gui.screens.Screen screen, java.util.function.Consumer<Button> add) {
 		add.accept(create());
-		if (screen instanceof net.minecraft.client.gui.screens.TitleScreen) {
-			add.accept(create("Replays", () -> ArcticClient.platform().openPage(com.arcticlauncher.client.menu.Menus.page("replays"))));
-			add.accept(create("Edit HUD", () -> ArcticClient.platform().openPage(new com.arcticlauncher.client.menu.HudEditor())));
-		} else if (screen instanceof net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen) {
+		if (screen instanceof net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen) {
 			add.accept(create("Arctic servers", () -> ServerMenus.open(screen)));
 		} else if (screen instanceof net.minecraft.client.gui.screens.DisconnectedScreen) {
 			add.accept(create("Arctic disconnect", () -> ServerMenus.open(screen)));

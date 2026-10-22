@@ -49,23 +49,15 @@ public final class TitleMenu extends Page {
 		y += BUTTON_H + GAP * 3;
 		int third = (BUTTON_W - GAP * 2) / 3;
 		add(new Button(tr("menu.options", "Options"), run(MenuAction.OPTIONS))).bounds(left, y, third, BUTTON_H);
-		add(new Button("Arctic", new Runnable() {
+		add(new Button(ArcticClient.hubLabel(), new Runnable() {
 			@Override
 			public void run() {
-				ArcticClient.platform().openPage(Menus.page("mods"));
+				ArcticClient.platform().openPage(ArcticClient.hub());
 			}
 		})).bounds(left + third + GAP, y, third, BUTTON_H);
 		add(new Button(tr("menu.quit", "Quit"), run(MenuAction.QUIT))).bounds(left + (third + GAP) * 2, y, BUTTON_W - (third + GAP) * 2, BUTTON_H);
 		corner("Accessibility", MenuAction.ACCESSIBILITY, width - 6);
 		corner(tr("options.language", "Language"), MenuAction.LANGUAGE, width - 6 - 76 - GAP);
-		int right = width - 6 - (76 + GAP) * 2;
-		if (com.arcticlauncher.client.replay.Replays.canWatch()) {
-			add(new Button("Replays", () -> ArcticClient.platform().openPage(Menus.page("replays")))).bounds(right - 76, 6, 76, 16);
-			right -= 76 + GAP;
-		}
-		if (ArcticClient.platform().hasFeatures()) {
-			add(new Button("Edit HUD", () -> ArcticClient.platform().openPage(new HudEditor()))).bounds(right - 76, 6, 76, 16);
-		}
 	}
 
 	/** A small button in the top-right corner, right edge at {@code right}. */
