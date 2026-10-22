@@ -22,10 +22,12 @@ const PICKER_COUNT: usize = 12;
 const PICKER_W: f32 = 128.0;
 const PICKER_H: f32 = 72.0;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A screenshot of a chat, decoded here into a texture of its own (so it has a size from the start and
+/// does not wait on the generic image loaders).
+#[derive(Debug, Clone)]
 enum Picture {
     Loading,
-    Ready(String),
+    Ready(egui::TextureHandle, egui::Vec2),
     Failed,
 }
 
@@ -34,18 +36,19 @@ fn picture(
     ui: &mut egui::Ui,
     p: &crate::theme::Palette,
     state: Option<&Picture>,
+    id: &str,
     view: &mut Option<String>,
 ) {
     match state {
-        Some(Picture::Ready(uri)) => {
+        Some(Picture::Ready(texture, size)) => {
+            let fit = (IMAGE_W / size.x).min(IMAGE_H / size.y);
             let r = ui.add(
-                egui::Image::new(uri.clone())
-                    .max_size(vec2(IMAGE_W, IMAGE_H))
+                egui::Image::new(egui::load::SizedTexture::new(texture.id(), *size * fit))
                     .corner_radius(6)
                     .sense(egui::Sense::click()),
             );
             if r.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
-                *view = Some(uri.clone());
+                *view = Some(id.to_owned());
             }
         }
         Some(Picture::Failed) => {
@@ -182,7 +185,13 @@ impl ArcticApp {
                                     ui.set_max_width(BUBBLE_MAX);
                                     if let Some(image) = &m.image {
                                         want.push(image.clone());
-                                        picture(ui, p, self.chat.pictures.get(image), &mut view);
+                                        picture(
+                                            ui,
+                                            p,
+                                            self.chat.pictures.get(image),
+                                            image,
+                                            &mut view,
+                                        );
                                     }
                                     if !m.text.is_empty() {
                                         ui.add(
@@ -286,7 +295,11 @@ impl ArcticApp {
 
     /// A chat screenshot shown large.
     pub(crate) fn chat_viewer(&mut self, ctx: &egui::Context) {
-        let Some(uri) = self.chat.viewing.clone() else {
+        let Some(id) = self.chat.viewing.clone() else {
+            return;
+        };
+        let Some(Picture::Ready(texture, size)) = self.chat.pictures.get(&id).cloned() else {
+            self.chat.viewing = None;
             return;
         };
         let p = self.palette();
@@ -294,7 +307,11 @@ impl ArcticApp {
             .frame(super::instances::dialog_frame(p))
             .show(ctx, |ui| {
                 let max = ctx.content_rect().size() * 0.8;
-                ui.add(egui::Image::new(uri).max_size(max).corner_radius(8));
+                let fit = (max.x / size.x).min(max.y / size.y).min(1.0);
+                ui.add(
+                    egui::Image::new(egui::load::SizedTexture::new(texture.id(), size * fit))
+                        .corner_radius(8),
+                );
             });
         if modal.should_close() {
             self.chat.viewing = None;
@@ -307,13 +324,19 @@ impl ArcticApp {
         id: String,
         result: Outcome<Vec<u8>>,
     ) {
-        let picture = match result {
-            Ok(png) => {
-                let uri = format!("bytes://chat/{id}.png");
-                ctx.include_bytes(uri.clone(), png);
-                Picture::Ready(uri)
+        let picture = match result
+            .ok()
+            .and_then(|png| image::load_from_memory(&png).ok())
+        {
+            Some(decoded) => {
+                let rgba = decoded.to_rgba8();
+                let size = [rgba.width() as usize, rgba.height() as usize];
+                let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+                let texture =
+                    ctx.load_texture(format!("chat/{id}"), color, egui::TextureOptions::LINEAR);
+                Picture::Ready(texture, vec2(size[0] as f32, size[1] as f32))
             }
-            Err(_) => Picture::Failed,
+            None => Picture::Failed,
         };
         self.chat.pictures.insert(id, picture);
     }

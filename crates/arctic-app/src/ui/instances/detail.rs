@@ -193,6 +193,7 @@ impl ArcticApp {
         self.game_folder_card(ui, instance);
         self.arctic_mod_card(ui, instance);
         self.performance_card(ui, instance);
+        self.extras_card(ui, instance);
         self.settings_card(ui, instance);
         if instance.is_default() {
             return;
@@ -456,12 +457,27 @@ impl ArcticApp {
                         .color(p.muted),
                 );
             }
-            // Extras: useful mods on their own switches, so nobody has to search for them.
-            if forge {
-                return;
-            }
-            ui.add_space(8.0);
-            ui.label(RichText::new("Extra mods").strong().color(p.text));
+        });
+    }
+
+    /// Optional mods that are not about speed, each on its own switch (so nobody has to search for them).
+    fn extras_card(&mut self, ui: &mut egui::Ui, instance: &Instance) {
+        use arctic_core::loaders::LoaderKind;
+        if matches!(
+            instance.loader.kind(),
+            Some(LoaderKind::Forge | LoaderKind::NeoForge)
+        ) {
+            return;
+        }
+        let p = self.palette();
+        ui.add_space(12.0);
+        theme::card(p).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(RichText::new("Extras").size(17.0).strong().color(p.text));
+            ui.label(
+                RichText::new("Optional mods that aren't about speed. Each has its own switch.")
+                    .color(p.muted),
+            );
             for (project, name, about) in arctic_core::mods::performance::OPTIONAL {
                 let mut wanted = instance.extras.iter().any(|e| e == project);
                 if ui
