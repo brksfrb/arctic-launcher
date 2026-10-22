@@ -113,6 +113,8 @@ public final class ClientConfig {
 	public boolean emojiButton = true;
 	/** Your own name tag shows above your head in third person (the game leaves it out). */
 	public boolean ownNametag = true;
+	/** Players with an OptiFine cape (and none of Arctic's) show it, without OptiFine. */
+	public boolean optifineCapes = true;
 	/** The ping in milliseconds after each name in the player list. */
 	public boolean tabPing = true;
 	/** Digits after the point in the XYZ widget (0 = whole blocks). */

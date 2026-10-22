@@ -56,14 +56,14 @@ final class ModCatalog {
 		group(Category.INVENTORY, "slotlocks", "invsearch", "shulkerpeek");
 		group(Category.MOVEMENT, "zoom", "freelook", "sprint", "sneak", "portalscreens", "controller");
 		group(Category.TOOLS, "waypoints", "screenshots", "replays", "death", "leave", "reconnect");
-		group(Category.PLAYERS, "pingtags", "badgetags", "ownnametag", "tabping", "tabglow", "tiers");
+		group(Category.PLAYERS, "pingtags", "badgetags", "ownnametag", "ofcapes", "tabping", "tabglow", "tiers");
 		widgets("Performance", "fps", "ping", "tps", "frametime", "lows", "cpu", "syscpu", "sysram", "alloc", "gpu", "vram", "memory",
 				"entities");
 		widgets("PvP", "cps", "keystrokes", "armor", "effects", "arrows", "items", "held", "pearl", "blocking", "falldamage", "target");
 		widgets("World", "coords", "direction", "speed", "biome", "light", "chunk", "day", "worldtime", "clock", "date", "compass",
 				"minimap", "death", "stopwatch");
 		for (String id : new String[] {"combatfx", "slotlocks", "invsearch", "shulkerpeek", "particles", "helditem", "palette",
-				"portalscreens", "tnttimer", "ownnametag", "tabping", "badgetags", "hud.cpu", "hud.syscpu", "hud.sysram", "hud.alloc",
+				"portalscreens", "tnttimer", "ownnametag", "ofcapes", "tabping", "badgetags", "hud.cpu", "hud.syscpu", "hud.sysram", "hud.alloc",
 				"hud.gpu", "hud.vram", "hud.frametime", "hud.lows", "hud.blocking", "hud.falldamage", "hud.pearl"}) {
 			NEW_IDS.add(id);
 		}
@@ -239,6 +239,9 @@ final class ModCatalog {
 		out.add(new Mod("ownnametag", "Own Name Tag", "See your own name tag above your head in third person: badge, tier and name", "ownnametag", Category.SOCIAL,
 				"nametag tag above head self own name third person")
 				.toggle(() -> c.ownNametag, on -> c.ownNametag = on));
+		out.add(new Mod("ofcapes", "OptiFine Capes", "Show other players' OptiFine capes, without OptiFine (asks OptiFine's cape server for each player's name, as OptiFine does)", "looks", Category.SOCIAL,
+				"optifine cape capes cloak")
+				.toggle(() -> c.optifineCapes, on -> c.optifineCapes = on));
 		out.add(new Mod("tabping", "Tab Ping", "The ping in milliseconds after every name in the player list", "tabping", Category.SOCIAL,
 				"tab list ping latency ms players")
 				.toggle(() -> c.tabPing, on -> c.tabPing = on));
