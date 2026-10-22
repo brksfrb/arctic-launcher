@@ -126,6 +126,40 @@ public final class LegacyHooks {
 		}
 	}
 
+	// ---- Lock Slots ------------------------------------------------------------------
+
+	/** The number of {@code slot} in the player's inventory (0-8 hotbar … 40 off hand), or -1 in another container. */
+	private static int inventorySlot(net.minecraft.inventory.slot.Slot slot) {
+		return slot != null && slot.inventory instanceof net.minecraft.entity.player.PlayerInventory
+				? ((com.arcticlauncher.legacy.mixin.SlotInvAccess) slot).arctic$invSlot() : -1;
+	}
+
+	/** A click in an inventory screen on {@code slot}; {@code swapWith}: the hotbar slot of a number-key swap, else -1. True drops it. */
+	public static boolean slotClick(net.minecraft.inventory.slot.Slot slot, int swapWith) {
+		ClientConfig c = ArcticClient.config();
+		return c != null && ArcticClient.platform() != null
+				&& com.arcticlauncher.client.feature.SlotLocks.click(c, ArcticClient.platform(), inventorySlot(slot), swapWith);
+	}
+
+	/** A padlock on the slot when it is locked (drawn with the slot, so under tooltips). */
+	public static void drawPadlock(net.minecraft.inventory.slot.Slot slot) {
+		ClientConfig c = ArcticClient.config();
+		if (c == null || !c.slotLocks) {
+			return;
+		}
+		int index = inventorySlot(slot);
+		if (index >= 0 && com.arcticlauncher.client.feature.SlotLocks.locked(c, index)) {
+			com.arcticlauncher.client.feature.SlotLocks.draw(new LegacyGfx(), slot.x, slot.y);
+		}
+	}
+
+	/** The drop key is pressed while the slot in hand is locked. */
+	public static boolean dropLocked() {
+		ClientConfig c = ArcticClient.config();
+		net.minecraft.entity.player.ClientPlayerEntity p = MinecraftClient.getInstance().player;
+		return c != null && p != null && com.arcticlauncher.client.feature.SlotLocks.drop(c, p.inventory.selectedSlot);
+	}
+
 	/** Arctic draws the crosshair (the game's is hidden). */
 	public static boolean ownCrosshair() {
 		ClientConfig c = ArcticClient.config();
