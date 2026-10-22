@@ -9,7 +9,7 @@ use crate::theme;
 use crate::widgets;
 
 const WEBSITE: &str = "https://arcticlauncher.com";
-const DISCORD: &str = "https://discord.arcticlauncher.com";
+pub(crate) const DISCORD: &str = "https://discord.arcticlauncher.com";
 const SUPPORT_EMAIL: &str = "support@arcticlauncher.com";
 
 impl ArcticApp {
@@ -31,6 +31,13 @@ impl ArcticApp {
             });
             ui.add_space(8.0);
             ui.label("A lightweight, open-source Minecraft launcher.");
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new(
+                    "Need help, or want to hear about updates, promotions and giveaways? Join our Discord.",
+                )
+                .color(p.muted),
+            );
             ui.add_space(8.0);
             crate::widgets::row(ui, |ui| {
                 if widgets::button(ui, p, Some(Icon::External), "arcticlauncher.com", false)
