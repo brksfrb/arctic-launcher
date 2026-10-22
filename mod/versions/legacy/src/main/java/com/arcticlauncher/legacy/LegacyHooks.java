@@ -183,6 +183,20 @@ public final class LegacyHooks {
 		com.arcticlauncher.client.feature.ContainerPeek.draw(new LegacyGfx(), mouseX, mouseY, ArcticClient.platform().peek(slot.getStack()));
 	}
 
+	/** Pop-ups on the screens that cover the game; in the game the HUD shows them. */
+	public static void drawScreenNotices(net.minecraft.client.gui.screen.Screen screen) {
+		ClientConfig c = ArcticClient.config();
+		if (c == null || ArcticClient.platform() == null || screen instanceof LegacyPageScreen) {
+			return;
+		}
+		String name = screen.getClass().getSimpleName().toLowerCase(java.util.Locale.ROOT);
+		boolean covers = name.contains("terrain") || name.contains("loading") || name.contains("progress");
+		if (!ArcticClient.platform().inWorld() || covers) {
+			com.arcticlauncher.client.gfx.Draw.fancy = c.fancy;
+			com.arcticlauncher.client.notice.Notices.render(new LegacyGfx(), ArcticClient.style());
+		}
+	}
+
 	/** The emoji button of the chat screen (and its box). */
 	public static void drawEmoji(int mouseX, int mouseY, int width, int height) {
 		ClientConfig c = ArcticClient.config();

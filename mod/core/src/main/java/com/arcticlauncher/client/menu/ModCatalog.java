@@ -177,6 +177,8 @@ final class ModCatalog {
 					f.section("Colors");
 					f.choice("Labels", DebugStyle.COLORS, () -> c.debugLabelColor, i -> c.debugLabelColor = i);
 					f.choice("Values", DebugStyle.COLORS, () -> c.debugValueColor, i -> c.debugValueColor = i);
+					f.section("Size");
+					f.stepper("Text size", () -> c.debugScale, v -> c.debugScale = (int) v, 50, 300, 10, "%.0f%%");
 					f.section("Lines");
 					for (int g = 0; g < DebugStyle.GROUPS.length; g++) {
 						final int group = g;
