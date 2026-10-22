@@ -190,6 +190,9 @@ public final class ClientConfig {
 	public int[] lockedSlots = new int[0];
 	/** Ctrl+F in a chest or the inventory searches its items by name (see InventorySearch). */
 	public boolean containerSearch;
+	/** Particle Control: keep only this share (percent) of the particles. */
+	public boolean particleControl;
+	public int particleAmount = 50;
 	/** Ctrl+K opens the command palette (mods, servers, friends). */
 	public boolean commandPalette = true;
 	/** Saturation (the hidden part of hunger) drawn on the hunger bar. */

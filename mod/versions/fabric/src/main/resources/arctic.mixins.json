@@ -26,6 +26,7 @@
 <% } %><% if (slotLocks) { %>		"SlotAccess",
 		"SlotClickMixin",
 		"SlotLockDrawMixin",
+		"ParticleEngineMixin",
 		"ContainerSearchMixin",
 		"DropLockMixin",
 <% } %>		"NativeMenuMixin",
