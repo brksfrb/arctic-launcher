@@ -53,6 +53,7 @@ abstract class AbstractClientPlayerEntityMixin {
 
 	private Look look() {
 		return ArcticClient.looks() == null ? null
-				: ArcticClient.looks().lookFor(((AbstractClientPlayerEntity) (Object) this).getUuid());
+				: ArcticClient.looks().lookFor(((AbstractClientPlayerEntity) (Object) this).getUuid(),
+						((AbstractClientPlayerEntity) (Object) this).getGameProfile().getName());
 	}
 }

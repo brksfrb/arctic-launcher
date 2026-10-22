@@ -115,7 +115,8 @@ abstract class AbstractClientPlayerMixin {
 	//#endif
 
 	private Look look() {
-		return ArcticClient.looks().lookFor(((AbstractClientPlayer) (Object) this).getUUID());
+		AbstractClientPlayer self = (AbstractClientPlayer) (Object) this;
+		return ArcticClient.looks().lookFor(self.getUUID(), com.arcticlauncher.mod.Compat.profileName(self.getGameProfile()));
 	}
 
 	private static Identifier ready(String hash) {

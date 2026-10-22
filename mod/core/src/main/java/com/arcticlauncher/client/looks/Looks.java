@@ -80,6 +80,7 @@ public final class Looks {
 		}
 	});
 
+	private final OptifineCapes optifine = new OptifineCapes(this);
 	private final Map<UUID, Look> players = new ConcurrentHashMap<UUID, Look>();
 	private final Set<UUID> pending = Collections.newSetFromMap(new ConcurrentHashMap<UUID, Boolean>());
 	/** Texture hash → frame count (1 unless an animated cape). */
@@ -385,6 +386,37 @@ public final class Looks {
 					: new Look(look.skin, look.slim, capeTrying, look.cosmetics, look.arctic, look.fetched, look.fits);
 		}
 		return look == null || look.isEmpty() ? null : look;
+	}
+
+	/**
+	 * {@link #lookFor(UUID)}, and for a player with no cape of Arctic's, their OptiFine cape (by name) when
+	 * that setting is on.
+	 */
+	public Look lookFor(UUID player, String name) {
+		Look look = lookFor(player);
+		if (!config.optifineCapes || name == null || look != null && look.cape != null || !config.showCosmetics
+				|| !config.hiddenPlayers.isEmpty() && config.hiddenPlayers.contains(player.toString())
+				|| config.streamerMode && player.equals(platform.worldPlayerId())) {
+			return look;
+		}
+		String hash = optifine.hashFor(name);
+		if (hash == null) {
+			return look;
+		}
+		return look == null
+				? new Look(null, false, hash, java.util.Collections.<String>emptyList(), false, System.currentTimeMillis())
+				: new Look(look.skin, look.slim, hash, look.cosmetics, look.arctic, look.fetched, look.fits);
+	}
+
+	/** A cape from somewhere other than Arctic's server (OptiFine's): registered, never downloaded from the server. */
+	void adoptCape(String hash, byte[] png) {
+		capes.add(hash);
+		loading.add(hash);
+		platform.registerTexture(hash, CapeFormat.withElytra(png), true);
+	}
+
+	void log(String message) {
+		platform.log(false, message);
 	}
 
 	/** Whether this player is playing with Arctic (from the lookup cache; queues one if needed). */
@@ -711,7 +743,7 @@ public final class Looks {
 	}
 
 	/** Log a failure on the worker and carry on (only a real JVM failure escapes). */
-	private void survive(Throwable t, String what) {
+	void survive(Throwable t, String what) {
 		if (t instanceof VirtualMachineError && !(t instanceof StackOverflowError)) {
 			throw (VirtualMachineError) t;
 		}
