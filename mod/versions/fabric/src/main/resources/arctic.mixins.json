@@ -27,6 +27,7 @@
 		"SlotClickMixin",
 		"SlotLockDrawMixin",
 		"ParticleEngineMixin",
+		"HeldItemMixin",
 		"ContainerSearchMixin",
 		"DropLockMixin",
 <% } %>		"NativeMenuMixin",

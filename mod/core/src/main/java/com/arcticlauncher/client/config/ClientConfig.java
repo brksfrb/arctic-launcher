@@ -190,6 +190,12 @@ public final class ClientConfig {
 	public int[] lockedSlots = new int[0];
 	/** Ctrl+F in a chest or the inventory searches its items by name (see InventorySearch). */
 	public boolean containerSearch;
+	/** Held Item: where your hands and the item in them sit in first person (see HeldItemTweak). */
+	public boolean heldItem;
+	public int heldX;
+	public int heldY;
+	public int heldZ;
+	public int heldScale = 100;
 	/** Particle Control: keep only this share (percent) of the particles. */
 	public boolean particleControl;
 	public int particleAmount = 50;

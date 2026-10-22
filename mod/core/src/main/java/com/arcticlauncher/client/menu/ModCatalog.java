@@ -210,6 +210,18 @@ final class ModCatalog {
 					f.stepper("Show", () -> c.particleAmount, v -> c.particleAmount = (int) v, 0, 100, 10, "%.0f%%");
 					f.note("100% is the game's own amount; 0% shows none.");
 				}));
+		out.add(new Mod("helditem", "Held Item", "Move and resize your hands and the item you hold", "target",
+				Category.VISUAL, "hand item position size view model offset")
+				.toggle(() -> c.heldItem, on -> c.heldItem = on)
+				.settings((host, f) -> {
+					f.section("Position");
+					f.stepper("Right / left", () -> c.heldX, v -> c.heldX = (int) v, -50, 50, 5, "%.0f");
+					f.stepper("Up / down", () -> c.heldY, v -> c.heldY = (int) v, -50, 50, 5, "%.0f");
+					f.stepper("Away / closer", () -> c.heldZ, v -> c.heldZ = (int) v, -50, 50, 5, "%.0f");
+					f.section("Size");
+					f.stepper("Size", () -> c.heldScale, v -> c.heldScale = (int) v, 30, 150, 10, "%.0f%%");
+					f.note("Look at your hand in the game to see each change. 0 and 100% are the game's own.");
+				}));
 		out.add(new Mod("controller", "Controller", "Play with a gamepad: Xbox, PlayStation and others", "controller",
 				Category.GAMEPLAY, "gamepad joystick xbox playstation console")
 				.toggle(() -> c.controller.enabled, on -> c.controller.enabled = on)
