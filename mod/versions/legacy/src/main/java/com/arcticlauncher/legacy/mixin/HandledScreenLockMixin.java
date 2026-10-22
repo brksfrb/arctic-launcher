@@ -28,6 +28,19 @@ abstract class HandledScreenLockMixin {
 	}
 	//#endif
 
+	/** Inventory Search: its keys while a container screen is open. */
+	@Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
+	private void arctic$searchKey(char typed, int key, CallbackInfo ci) {
+		if (LegacyHooks.containerKey(typed, key)) {
+			ci.cancel();
+		}
+	}
+
+	@Inject(method = "render", at = @At("TAIL"))
+	private void arctic$searchLine(int mouseX, int mouseY, float delta, CallbackInfo ci) {
+		LegacyHooks.drawSearch();
+	}
+
 	@Inject(method = "drawSlot", at = @At("TAIL"))
 	private void arctic$padlock(Slot slot, CallbackInfo ci) {
 		LegacyHooks.drawPadlock(slot);

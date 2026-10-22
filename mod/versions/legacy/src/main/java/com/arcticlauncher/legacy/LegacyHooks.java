@@ -144,12 +144,33 @@ public final class LegacyHooks {
 	/** A padlock on the slot when it is locked (drawn with the slot, so under tooltips). */
 	public static void drawPadlock(net.minecraft.inventory.slot.Slot slot) {
 		ClientConfig c = ArcticClient.config();
-		if (c == null || !c.slotLocks) {
+		if (c == null) {
 			return;
 		}
-		int index = inventorySlot(slot);
+		int index = c.slotLocks ? inventorySlot(slot) : -1;
 		if (index >= 0 && com.arcticlauncher.client.feature.SlotLocks.locked(c, index)) {
 			com.arcticlauncher.client.feature.SlotLocks.draw(new LegacyGfx(), slot.x, slot.y);
+		}
+		if (c.containerSearch && com.arcticlauncher.client.feature.InventorySearch.filtering()) {
+			com.arcticlauncher.client.feature.InventorySearch.slot(new LegacyGfx(), slot.x, slot.y,
+					slot.hasStack() ? slot.getStack().getCustomName() : null);
+		}
+	}
+
+	/** Inventory Search: a key (LWJGL 2 code) and its character in a chest or inventory screen; true when it was used. */
+	public static boolean containerKey(char typed, int key) {
+		int core = key == 1 ? com.arcticlauncher.client.Keys.ESCAPE : key == 28 ? com.arcticlauncher.client.Keys.ENTER
+				: key == 14 ? com.arcticlauncher.client.Keys.BACKSPACE : key == 33 ? com.arcticlauncher.client.Keys.F : -1;
+		boolean used = core >= 0 && ArcticClient.containerKey(core, 1, net.minecraft.client.gui.screen.Screen.hasControlDown());
+		return (typed >= 32 && ArcticClient.containerChar(typed)) || used;
+	}
+
+	/** Inventory Search: its line over a chest or inventory screen (and the note that one is open). */
+	public static void drawSearch() {
+		ClientConfig c = ArcticClient.config();
+		com.arcticlauncher.client.feature.InventorySearch.seen();
+		if (c != null) {
+			com.arcticlauncher.client.feature.InventorySearch.render(new LegacyGfx(), c);
 		}
 	}
 
