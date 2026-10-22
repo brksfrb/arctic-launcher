@@ -218,35 +218,51 @@ fn console<'a>(
             let row_height = ui.text_style_height(&TextStyle::Monospace);
             // Holding the mouse down (selecting) stops the view snapping back to new lines.
             let selecting = ui.input(|i| i.pointer.primary_down());
-            let area = egui::ScrollArea::both()
-                .auto_shrink(false)
-                .max_height(height)
-                .stick_to_bottom(follow && !selecting)
-                .show_rows(ui, row_height, indices.len(), |ui, range| {
-                    for l in indices[range].iter().filter_map(|&i| line(i)) {
-                        let color = match l.level {
-                            Level::Error => p.error,
-                            Level::Warn => p.warn,
-                            Level::Debug => p.muted,
-                            Level::Info => p.text,
-                        };
-                        ui.add(
-                            egui::Label::new(RichText::new(&l.text).monospace().color(color))
-                                .extend(),
-                        );
-                    }
-                });
-            // Dragging a selection past the top or bottom edge scrolls on, faster the further out.
+            // Dragging a selection past the top or bottom edge scrolls on, faster the further out. The
+            // previous frame's view tells where the edges and the offset are.
+            let memory_id = ui.id().with("log_drag_scroll");
+            let last: Option<(f32, f32, f32)> = ui.data(|d| d.get_temp(memory_id));
+            let mut scroll_to = None;
             if selecting
-                && let Some(pointer) = ui.input(|i| i.pointer.interact_pos())
-                && area.inner_rect.x_range().contains(pointer.x)
+                && let Some((top, bottom, offset)) = last
+                && let Some(pointer) = ui.input(|i| i.pointer.latest_pos())
             {
-                let above = (area.inner_rect.top() - pointer.y).clamp(0.0, 60.0);
-                let below = (pointer.y - area.inner_rect.bottom()).clamp(0.0, 60.0);
+                let above = (top - pointer.y).clamp(0.0, 80.0);
+                let below = (pointer.y - bottom).clamp(0.0, 80.0);
                 if above > 0.0 || below > 0.0 {
-                    ui.scroll_with_delta(egui::vec2(0.0, (above - below) * 0.6));
+                    scroll_to = Some((offset + (below - above) * 0.5).max(0.0));
                     ui.ctx().request_repaint();
                 }
             }
+            let mut scroll = egui::ScrollArea::both()
+                .auto_shrink(false)
+                .max_height(height)
+                .stick_to_bottom(follow && !selecting);
+            if let Some(offset) = scroll_to {
+                scroll = scroll.vertical_scroll_offset(offset);
+            }
+            let area = scroll.show_rows(ui, row_height, indices.len(), |ui, range| {
+                for l in indices[range].iter().filter_map(|&i| line(i)) {
+                    let color = match l.level {
+                        Level::Error => p.error,
+                        Level::Warn => p.warn,
+                        Level::Debug => p.muted,
+                        Level::Info => p.text,
+                    };
+                    ui.add(
+                        egui::Label::new(RichText::new(&l.text).monospace().color(color)).extend(),
+                    );
+                }
+            });
+            ui.data_mut(|d| {
+                d.insert_temp(
+                    memory_id,
+                    (
+                        area.inner_rect.top(),
+                        area.inner_rect.bottom(),
+                        area.state.offset.y,
+                    ),
+                )
+            });
         });
 }
