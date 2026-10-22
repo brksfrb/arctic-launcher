@@ -45,6 +45,8 @@ pub enum Launcher {
     Lunar,
     Feather,
     Badlion,
+    FastClient,
+    SilentClient,
     /// A folder the player picked.
     Folder,
 }
@@ -66,6 +68,8 @@ impl Launcher {
             Launcher::Lunar => "Lunar Client",
             Launcher::Feather => "Feather Client",
             Launcher::Badlion => "Badlion Client",
+            Launcher::FastClient => "Fast Client",
+            Launcher::SilentClient => "Silent Client",
             Launcher::Folder => "Folder",
         }
     }
@@ -86,6 +90,8 @@ impl Launcher {
             Launcher::Lunar => "lunar",
             Launcher::Feather => "feather",
             Launcher::Badlion => "badlion",
+            Launcher::FastClient => "fastclient",
+            Launcher::SilentClient => "silentclient",
             Launcher::Folder => "folder",
         }
     }
