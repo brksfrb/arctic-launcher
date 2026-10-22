@@ -194,6 +194,14 @@ final class ModCatalog {
 					f.note("Matching items get a frame, the others are dimmed.");
 					f.note("Enter keeps the search, Escape clears it.");
 				}));
+		out.add(new Mod("palette", "Command Palette", "Ctrl+K: search mods, servers and friends and open them", "search",
+				Category.CLIENT, "search command ctrl k quick find launcher")
+				.toggle(() -> c.commandPalette, on -> c.commandPalette = on)
+				.settings((host, f) -> {
+					f.section("How it works");
+					f.note("Press Ctrl+K anywhere in the game, type, and press Enter.");
+					f.note("It finds mods and their settings, saved servers and friends.");
+				}));
 		out.add(new Mod("controller", "Controller", "Play with a gamepad: Xbox, PlayStation and others", "controller",
 				Category.GAMEPLAY, "gamepad joystick xbox playstation console")
 				.toggle(() -> c.controller.enabled, on -> c.controller.enabled = on)
