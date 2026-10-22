@@ -14,6 +14,9 @@ import org.lwjgl.util.freetype.FreeType;
 public final class FontWeight {
 	private static final int FT_LOAD_RENDER = 1 << 2;
 	private static final int FT_LOAD_NO_BITMAP = 1 << 3;
+	private static final int FT_LOAD_NO_HINTING = 1 << 1;
+	private static final int FT_LOAD_FORCE_AUTOHINT = 1 << 5;
+	private static final int FT_LOAD_TARGET_MONO = 2 << 16;
 	private static final int FT_LOAD_BITMAP_METRICS_ONLY = 1 << 22;
 	private static final int FT_RENDER_MODE_NORMAL = 0;
 	/** Extra stem weight in 1/64 pixel: sideways a little over a third of a pixel, a little upward. */
@@ -40,7 +43,14 @@ public final class FontWeight {
 		if (!on) {
 			return original.load(face, glyph, flags);
 		}
-		int error = original.load(face, glyph, (flags & ~FT_LOAD_RENDER & ~FT_LOAD_BITMAP_METRICS_ONLY) | FT_LOAD_NO_BITMAP);
+		boolean sharp = !com.arcticlauncher.client.ArcticClient.config().fontAntialias;
+		String variant = System.getProperty("arctic.sharp", "A");
+		int load = (flags & ~FT_LOAD_RENDER & ~FT_LOAD_BITMAP_METRICS_ONLY) | FT_LOAD_NO_BITMAP;
+		boolean hinted = sharp && !"A".equals(variant) && emboldenScaleOf(face, scale) <= 1.01f;
+		if (hinted) {
+			load = (load & ~FT_LOAD_NO_HINTING) | FT_LOAD_TARGET_MONO | ("C".equals(variant) ? FT_LOAD_FORCE_AUTOHINT : 0);
+		}
+		int error = original.load(face, glyph, load);
 		if (error != 0) {
 			return error;
 		}
@@ -50,17 +60,23 @@ public final class FontWeight {
 		}
 		// The same weight at every size: titles are rasterized several times larger.
 		float size = emboldenScale(face, scale);
-		FreeType.FT_Outline_EmboldenXY(slot.outline(), Math.round(EMBOLDEN_X * size), Math.round(EMBOLDEN_Y * size));
+		if (!hinted) {
+			FreeType.FT_Outline_EmboldenXY(slot.outline(), Math.round(EMBOLDEN_X * size), Math.round(EMBOLDEN_Y * size));
+		}
 		int rendered = FreeType.FT_Render_Glyph(slot, FT_RENDER_MODE_NORMAL);
 		// Chat-sized text is pixel-sharp unless anti-aliasing is asked for; titles (rasterized larger) stay smooth.
-		if (rendered == 0 && size <= 1.01f && !com.arcticlauncher.client.ArcticClient.config().fontAntialias) {
+		if (rendered == 0 && size <= 1.01f && sharp) {
 			sharpen(slot);
 		}
 		return rendered;
 	}
 
+	private static float emboldenScaleOf(FT_Face face, int scale) {
+		return emboldenScale(face, scale);
+	}
+
 	/** Every pixel of the glyph fully on or off: no in-between shades. Below this much coverage a pixel is off. */
-	private static final int SHARP_AT = 96;
+	private static final int SHARP_AT = 128;
 
 	private static void sharpen(FT_GlyphSlot slot) {
 		org.lwjgl.util.freetype.FT_Bitmap bitmap = slot.bitmap();
