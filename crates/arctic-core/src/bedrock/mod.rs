@@ -221,6 +221,14 @@ fn attach(
             std::thread::sleep(std::time::Duration::from_millis(500));
         }
         let pid = pid.ok_or_else(|| Error::Other("the game didn't start".into()))?;
+        // Its window shows up when its graphics do; loading a client while the game is still reading its
+        // resources makes the game report errors about them.
+        for _ in 0..120 {
+            if package::has_window(pid) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
         std::thread::sleep(std::time::Duration::from_secs(CLIENT_DELAY_SECS));
         client::inject(pid, &dll)
     }
@@ -231,9 +239,10 @@ fn attach(
     }
 }
 
-/// Seconds between the game's process appearing and the client being loaded into it.
+/// Seconds between the game's window showing and the client being loaded into it (the game keeps loading
+/// its resources for a while after the window is up).
 #[cfg(windows)]
-const CLIENT_DELAY_SECS: u64 = 8;
+const CLIENT_DELAY_SECS: u64 = 12;
 
 /// Is the game running now?
 pub fn running(edition: Edition) -> bool {
