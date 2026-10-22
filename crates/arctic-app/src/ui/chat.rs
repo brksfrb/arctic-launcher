@@ -64,6 +64,22 @@ fn picture(
     }
 }
 
+/// A friend's screenshot, decoded with limits: nothing wider or taller than a screenshot can be, and a
+/// small memory budget, so a crafted picture cannot make the launcher allocate without end.
+fn decode_limited(bytes: &[u8]) -> Option<image::DynamicImage> {
+    const MAX_SIDE: u32 = 4096;
+    const MAX_ALLOC: u64 = 96 * 1024 * 1024;
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .ok()?;
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_SIDE);
+    limits.max_image_height = Some(MAX_SIDE);
+    limits.max_alloc = Some(MAX_ALLOC);
+    reader.limits(limits);
+    reader.decode().ok()
+}
+
 #[derive(Default)]
 pub struct ChatUi {
     /// (friend profile id, name) of the open conversation.
@@ -324,10 +340,7 @@ impl ArcticApp {
         id: String,
         result: Outcome<Vec<u8>>,
     ) {
-        let picture = match result
-            .ok()
-            .and_then(|png| image::load_from_memory(&png).ok())
-        {
+        let picture = match result.ok().and_then(|png| decode_limited(&png)) {
             Some(decoded) => {
                 let rgba = decoded.to_rgba8();
                 let size = [rgba.width() as usize, rgba.height() as usize];
