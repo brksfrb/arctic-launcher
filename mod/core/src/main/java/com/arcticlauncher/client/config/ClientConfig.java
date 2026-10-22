@@ -190,6 +190,8 @@ public final class ClientConfig {
 	public int[] lockedSlots = new int[0];
 	/** Ctrl+F in a chest or the inventory searches its items by name (see InventorySearch). */
 	public boolean containerSearch;
+	/** Ctrl+K opens the command palette (mods, servers, friends). */
+	public boolean commandPalette = true;
 	/** Saturation (the hidden part of hunger) drawn on the hunger bar. */
 	public boolean saturationBar;
 	/** Every entity's hitbox box drawn (like F3+B), from one switch. */

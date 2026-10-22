@@ -408,7 +408,17 @@ public final class ArcticClient {
 			platform.openPage(Menus.home());
 			return true;
 		}
-		return false;
+		return paletteKey(key);
+	}
+
+	/** Ctrl+K opens the command palette. */
+	private static boolean paletteKey(int key) {
+		if (key != Keys.K || config == null || !config.commandPalette || !platform.hasFeatures()
+				|| !(platform.isKeyDown("key.keyboard.left.control") || platform.isKeyDown("key.keyboard.right.control"))) {
+			return false;
+		}
+		com.arcticlauncher.client.menu.CommandPalette.open();
+		return true;
 	}
 
 	/**
@@ -420,7 +430,7 @@ public final class ArcticClient {
 			platform.openPage(Menus.home());
 			return true;
 		}
-		return false;
+		return paletteKey(key);
 	}
 
 	/** A key in a chest or inventory screen (action: 0 release, 1 press, 2 repeat); true if Inventory Search used it. */
