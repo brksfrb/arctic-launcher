@@ -3,6 +3,7 @@ package com.arcticlauncher.mod;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
+import com.arcticlauncher.client.feature.InventorySearch;
 import com.arcticlauncher.client.feature.SlotLocks;
 import java.lang.reflect.Method;
 import java.util.concurrent.Executors;
@@ -70,9 +71,33 @@ final class SlotLockTest {
 				SlotLockTest::check,
 				() -> {
 					WorldTest.shot("slotlock-inventory");
+					c.containerSearch = true;
+					// Ctrl+F (the modifier is given here: a test has no keyboard), then the letters through the game's own handler.
+					ArcticMod.LOG.info("slotlocktest: Ctrl+F used = {}", ArcticClient.containerKey(com.arcticlauncher.client.Keys.F, 1, true));
+					type('d');
+					type('i');
+				},
+				() -> {
+					ArcticMod.LOG.info("slotlocktest: search active {} text '{}'", InventorySearch.active(), InventorySearch.query());
+					WorldTest.shot("search-dia");
+					backspace();
+					type('a');
+					type('p');
+				},
+				() -> {
+					ArcticMod.LOG.info("slotlocktest: search active {} text '{}' (expected 'dap': no match)", InventorySearch.active(), InventorySearch.query());
+					backspace();
+					backspace();
+					type('p');
+					type('p');
+					type('l');
+				},
+				() -> {
+					ArcticMod.LOG.info("slotlocktest: search text '{}' (expected 'dppl')", InventorySearch.query());
 				},
 				() -> {
 					c.slotLocks = false;
+					c.containerSearch = false;
 					c.lockedSlots = new int[0];
 					ArcticMod.LOG.info("slotlocktest: done");
 					Minecraft.getInstance().stop();
@@ -85,6 +110,7 @@ final class SlotLockTest {
 	}
 
 	private static void check() {
+		hooks();
 		Minecraft mc = Minecraft.getInstance();
 		net.minecraft.client.gui.screens.Screen screen = Compat.screen();
 		if (!(screen instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen)) {
@@ -114,6 +140,33 @@ final class SlotLockTest {
 		ArcticMod.LOG.info("slotlocktest: drop with an unlocked slot in hand: {} -> {} (expected one less)", beforeOpen,
 				Compat.inventory(mc.player).getItem(1).getCount());
 		Compat.setScreen(new net.minecraft.client.gui.screens.inventory.InventoryScreen(mc.player));
+	}
+
+	private static void type(int codePoint) {
+		ArcticClient.containerChar(codePoint);
+	}
+
+	private static void backspace() {
+		ArcticClient.containerKey(com.arcticlauncher.client.Keys.BACKSPACE, 1, false);
+	}
+
+	/** Mixin merges a hook's method into the game class when it applies: list the hooks that did. */
+	private static void hooks() {
+		Class<?>[] targets = {
+				net.minecraft.client.gui.screens.inventory.AbstractContainerScreen.class,
+				net.minecraft.client.player.LocalPlayer.class,
+				net.minecraft.client.multiplayer.MultiPlayerGameMode.class,
+				net.minecraft.client.KeyboardHandler.class,
+		};
+		for (Class<?> target : targets) {
+			StringBuilder names = new StringBuilder();
+			for (Method m : target.getDeclaredMethods()) {
+				if (m.getName().startsWith("arctic$")) {
+					names.append(m.getName()).append(' ');
+				}
+			}
+			ArcticMod.LOG.info("slotlocktest: hooks on {}: {}", target.getSimpleName(), names);
+		}
 	}
 
 	private static ItemStack carried(net.minecraft.world.inventory.AbstractContainerMenu menu) {

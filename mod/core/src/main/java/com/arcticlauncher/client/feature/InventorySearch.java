@@ -39,6 +39,16 @@ public final class InventorySearch {
 		lower = "";
 	}
 
+	/** What is typed in the search line. */
+	public static String query() {
+		return text;
+	}
+
+	/** Whether the search line is taking keys. */
+	public static boolean active() {
+		return active;
+	}
+
 	/** Whether a search is narrowing the items down right now. */
 	public static boolean filtering() {
 		return !lower.isEmpty();
