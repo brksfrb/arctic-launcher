@@ -183,6 +183,14 @@ public final class LegacyHooks {
 		com.arcticlauncher.client.feature.ContainerPeek.draw(new LegacyGfx(), mouseX, mouseY, ArcticClient.platform().peek(slot.getStack()));
 	}
 
+	/** The emoji button of the chat screen (and its box). */
+	public static void drawEmoji(int mouseX, int mouseY, int width, int height) {
+		ClientConfig c = ArcticClient.config();
+		if (c != null) {
+			com.arcticlauncher.client.feature.EmojiPicker.render(new LegacyGfx(), c, mouseX, mouseY, width, height);
+		}
+	}
+
 	/** The drop key is pressed while the slot in hand is locked. */
 	public static boolean dropLocked() {
 		ClientConfig c = ArcticClient.config();

@@ -48,6 +48,7 @@
 		"ParticleManagerMixin",
 		"ClientPlayerPortalMixin",
 		"OwnNametagLegacyMixin",
+		"ChatEmojiLegacyMixin",
 		"HeldItemTweakMixin",
 		"ClientPlayerDropMixin",
 		"ScreenMouseMixin",

@@ -30,6 +30,7 @@
 		"SlotLockDrawMixin",
 		"PortalScreenMixin",
 		"OwnNametagMixin",
+		"ChatEmojiMixin",
 		"ParticleEngineMixin",
 		"HeldItemMixin",
 		"ContainerSearchMixin",
