@@ -434,6 +434,26 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
+	/** The registry name of the item in the main or off hand ("ender_pearl", "shield"), or null for none (or no off hand). */
+	default String heldItemName(boolean offHand) {
+		return null;
+	}
+
+	/** Swords block on this version (1.8); from 1.9 only shields do. */
+	default boolean swordBlocks() {
+		return false;
+	}
+
+	/** Blocks you have fallen so far (0 on the ground). */
+	default float fallDistance() {
+		return 0;
+	}
+
+	/** No screen or menu is open over the game. */
+	default boolean noScreen() {
+		return false;
+	}
+
 	/** Entities the world has loaded around you, or -1 outside a world. */
 	default int entityCount() {
 		return -1;

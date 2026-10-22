@@ -921,6 +921,22 @@ final class FabricPlatform implements Platform {
 				1f, volume));
 	}
 
+	@Override
+	public String heldItemName(boolean offHand) {
+		return WorldStats.heldItemName(offHand);
+	}
+
+	@Override
+	public float fallDistance() {
+		LocalPlayer p = mc().player;
+		return p == null ? 0 : (float) p.fallDistance;
+	}
+
+	@Override
+	public boolean noScreen() {
+		return Compat.screen() == null;
+	}
+
 	private static final float PING_PITCH = 1.6f;
 	private static final float PING_VOLUME = 0.5f;
 
