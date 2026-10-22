@@ -142,6 +142,13 @@ public final class ArcticPacks implements RepositorySource {
 		return Minecraft.getInstance().getResourcePackRepository().getSelectedIds().contains(SMOOTH_FONT);
 	}
 
+	/** The smooth font's look changed: resources reload so its letters are built again. */
+	public static void reloadFonts() {
+		if (smoothFontOn() && (reloading == null || reloading.isDone())) {
+			reloading = Minecraft.getInstance().reloadResourcePacks();
+		}
+	}
+
 	/** Switch the smooth font; resources reload (a second or two). */
 	public static void setSmoothFont(boolean on) {
 		Minecraft mc = Minecraft.getInstance();

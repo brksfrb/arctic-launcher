@@ -459,6 +459,9 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return true;
 	}
 
+	/** The smooth font's look changed (anti-aliasing): build its letters again. */
+	default void reloadFonts() {}
+
 	/** Shulker Peek works on this version (shulker boxes came in 1.11). */
 	default boolean canPeekShulkers() {
 		return false;

@@ -51,7 +51,31 @@ public final class FontWeight {
 		// The same weight at every size: titles are rasterized several times larger.
 		float size = emboldenScale(face, scale);
 		FreeType.FT_Outline_EmboldenXY(slot.outline(), Math.round(EMBOLDEN_X * size), Math.round(EMBOLDEN_Y * size));
-		return FreeType.FT_Render_Glyph(slot, FT_RENDER_MODE_NORMAL);
+		int rendered = FreeType.FT_Render_Glyph(slot, FT_RENDER_MODE_NORMAL);
+		// Chat-sized text is pixel-sharp unless anti-aliasing is asked for; titles (rasterized larger) stay smooth.
+		if (rendered == 0 && size <= 1.01f && !com.arcticlauncher.client.ArcticClient.config().fontAntialias) {
+			sharpen(slot);
+		}
+		return rendered;
+	}
+
+	/** Every pixel of the glyph fully on or off: no in-between shades. Below this much coverage a pixel is off. */
+	private static final int SHARP_AT = 96;
+
+	private static void sharpen(FT_GlyphSlot slot) {
+		org.lwjgl.util.freetype.FT_Bitmap bitmap = slot.bitmap();
+		int rows = bitmap.rows();
+		int pitch = Math.abs(bitmap.pitch());
+		if (rows == 0 || pitch == 0 || bitmap.pixel_mode() != FreeType.FT_PIXEL_MODE_GRAY) {
+			return;
+		}
+		java.nio.ByteBuffer pixels = bitmap.buffer(rows * pitch);
+		if (pixels == null) {
+			return;
+		}
+		for (int i = 0; i < rows * pitch; i++) {
+			pixels.put(i, (byte) ((pixels.get(i) & 0xFF) >= SHARP_AT ? 0xFF : 0));
+		}
 	}
 
 	/** How much larger than chat text this face is rasterized (1 for chat, 4 for titles). */

@@ -69,6 +69,19 @@ public final class LegacySmoothFont {
 
 	private LegacySmoothFont() {}
 
+	/** The letters were last drawn with (or without) anti-aliasing. */
+	private static boolean builtAntialias;
+
+	private static boolean antialias() {
+		com.arcticlauncher.client.config.ClientConfig config = ArcticClient.config();
+		return config != null && config.fontAntialias;
+	}
+
+	/** Anti-aliasing was switched: the letters are drawn again at the next use. */
+	public static void rebuild() {
+		scale = 0;
+	}
+
 	public static boolean on() {
 		// Forge's loading screen draws text before the client has started: no config yet.
 		com.arcticlauncher.client.config.ClientConfig config = ArcticClient.config();
@@ -137,8 +150,9 @@ public final class LegacySmoothFont {
 			checkedScale = Math.max(1, new Window(MinecraftClient.getInstance()).getScaleFactor());
 			checkedAt = now;
 		}
-		if (checkedScale != scale) {
+		if (checkedScale != scale || builtAntialias != antialias()) {
 			try {
+				builtAntialias = antialias();
 				build(checkedScale);
 			} catch (Exception e) {
 				broken = true;
@@ -200,7 +214,8 @@ public final class LegacySmoothFont {
 		}
 		BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = image.createGraphics();
-		g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+		g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, antialias()
+				? RenderingHints.VALUE_TEXT_ANTIALIAS_ON : RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
 		g.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
 		g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
 		g.setFont(font);

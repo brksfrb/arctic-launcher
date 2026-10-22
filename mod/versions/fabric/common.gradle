@@ -342,6 +342,8 @@ processResources {
 			slotLocks: atLeast('1.14'),
 			// Softer shadows under the smooth font: the game's own shadow colour hook exists from 1.21.6.
 			fontShadow: atLeast('1.21.6'),
+			// Pixel-sharp glyphs through STB (1.20.5 and newer use FreeType, see FontWeight).
+			fontSharpStb: atLeast('1.14') && !atLeast('1.20.5'),
 			// 1.21.9+ look players up by name off the game's thread (player heads): made safe.
 			playerInfoRace: atLeast('1.21.9'),
 			// Toast slots were tracked from 1.19.
