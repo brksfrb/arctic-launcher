@@ -98,22 +98,30 @@ final class SlotLockTest {
 		ArcticMod.LOG.info("slotlocktest: slot 0 holds {} x{}, slot 1 holds {} x{}", locked.getItem().getItem(), locked.getItem().getCount(),
 				open.getItem().getItem(), open.getItem().getCount());
 		click(screen, locked);
-		ArcticMod.LOG.info("slotlocktest: pick up from the locked slot: cursor empty = {} (expected true)", menu.getCarried().isEmpty());
+		ArcticMod.LOG.info("slotlocktest: pick up from the locked slot: cursor empty = {} (expected true)", carried(menu).isEmpty());
 		click(screen, open);
-		ArcticMod.LOG.info("slotlocktest: pick up from an unlocked slot: cursor empty = {} (expected false)", menu.getCarried().isEmpty());
+		ArcticMod.LOG.info("slotlocktest: pick up from an unlocked slot: cursor empty = {} (expected false)", carried(menu).isEmpty());
 		click(screen, open);
 		Compat.setScreen(null);
 		Compat.selectSlot(mc.player, 0);
-		int before = mc.player.getInventory().getItem(0).getCount();
+		int before = Compat.inventory(mc.player).getItem(0).getCount();
 		drop(mc);
 		ArcticMod.LOG.info("slotlocktest: drop with the locked slot in hand: {} -> {} (expected unchanged)", before,
-				mc.player.getInventory().getItem(0).getCount());
+				Compat.inventory(mc.player).getItem(0).getCount());
 		Compat.selectSlot(mc.player, 1);
-		int beforeOpen = mc.player.getInventory().getItem(1).getCount();
+		int beforeOpen = Compat.inventory(mc.player).getItem(1).getCount();
 		drop(mc);
 		ArcticMod.LOG.info("slotlocktest: drop with an unlocked slot in hand: {} -> {} (expected one less)", beforeOpen,
-				mc.player.getInventory().getItem(1).getCount());
+				Compat.inventory(mc.player).getItem(1).getCount());
 		Compat.setScreen(new net.minecraft.client.gui.screens.inventory.InventoryScreen(mc.player));
+	}
+
+	private static ItemStack carried(net.minecraft.world.inventory.AbstractContainerMenu menu) {
+		//#if MC >= 1.17
+		return menu.getCarried();
+		//#else
+		return Minecraft.getInstance().player.inventory.getCarried();
+		//#endif
 	}
 
 	private static Slot slot(net.minecraft.world.inventory.AbstractContainerMenu menu, int inventoryIndex) {

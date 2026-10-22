@@ -20,6 +20,7 @@ public final class KeyCodes {
 	public static final int P = InputConstants.KEY_P;
 	public static final int V = InputConstants.KEY_V;
 	public static final int A = InputConstants.KEY_A;
+	public static final int F = InputConstants.KEY_F;
 	public static final int C = InputConstants.KEY_C;
 	public static final int X = InputConstants.KEY_X;
 	public static final int DELETE = InputConstants.KEY_DELETE;
@@ -43,6 +44,7 @@ public final class KeyCodes {
 	public static final int P = 80;
 	public static final int V = 86;
 	public static final int A = 65;
+	public static final int F = 70;
 	public static final int C = 67;
 	public static final int X = 88;
 	public static final int DELETE = 261;

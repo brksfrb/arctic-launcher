@@ -3,6 +3,8 @@ package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.mod.InventorySlots;
+import com.arcticlauncher.client.config.ClientConfig;
+import com.arcticlauncher.client.feature.InventorySearch;
 import com.arcticlauncher.client.feature.SlotLocks;
 import com.arcticlauncher.mod.GfxImpl;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -41,12 +43,16 @@ abstract class SlotLockDrawMixin {
 	//#endif
 
 	private static void arctic$draw(GfxImpl g, Slot slot) {
-		if (ArcticClient.config() == null || !ArcticClient.config().slotLocks) {
+		ClientConfig c = ArcticClient.config();
+		if (c == null) {
 			return;
 		}
 		int index = InventorySlots.index(slot);
-		if (index >= 0 && SlotLocks.locked(ArcticClient.config(), index)) {
+		if (c.slotLocks && index >= 0 && SlotLocks.locked(c, index)) {
 			SlotLocks.draw(g, slot.x, slot.y);
+		}
+		if (c.containerSearch && InventorySearch.filtering()) {
+			InventorySearch.slot(g, slot.x, slot.y, slot.hasItem() ? slot.getItem().getHoverName().getString() : null);
 		}
 	}
 }

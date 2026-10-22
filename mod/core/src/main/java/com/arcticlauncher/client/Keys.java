@@ -10,6 +10,7 @@ public final class Keys {
 	public static final int TAB = 258;
 	public static final int BACKSPACE = 259;
 	public static final int A = 65;
+	public static final int F = 70;
 	public static final int V = 86;
 	public static final int C = 67;
 	public static final int DELETE = 261;

@@ -185,6 +185,15 @@ final class ModCatalog {
 					f.note("A locked slot shows a padlock. Its item can't be clicked, shift-clicked,");
 					f.note("swapped with a number key or thrown out with the drop key.");
 				}));
+		out.add(new Mod("invsearch", "Inventory Search", "Ctrl+F in a chest or your inventory: find items by name", "search",
+				Category.GAMEPLAY, "chest search find item inventory shulker")
+				.toggle(() -> c.containerSearch, on -> c.containerSearch = on)
+				.settings((host, f) -> {
+					f.section("How it works");
+					f.note("Press Ctrl+F in any chest, barrel or your inventory and type.");
+					f.note("Matching items get a frame, the others are dimmed.");
+					f.note("Enter keeps the search, Escape clears it.");
+				}));
 		out.add(new Mod("controller", "Controller", "Play with a gamepad: Xbox, PlayStation and others", "controller",
 				Category.GAMEPLAY, "gamepad joystick xbox playstation console")
 				.toggle(() -> c.controller.enabled, on -> c.controller.enabled = on)

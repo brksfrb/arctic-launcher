@@ -188,6 +188,8 @@ public final class ClientConfig {
 	public boolean slotLocks;
 	public String slotLockKey = "key.keyboard.left.alt";
 	public int[] lockedSlots = new int[0];
+	/** Ctrl+F in a chest or the inventory searches its items by name (see InventorySearch). */
+	public boolean containerSearch;
 	/** Saturation (the hidden part of hunger) drawn on the hunger bar. */
 	public boolean saturationBar;
 	/** Every entity's hitbox box drawn (like F3+B), from one switch. */
