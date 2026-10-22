@@ -104,9 +104,16 @@ impl ArcticApp {
                 .color(p.muted),
             );
             ui.add_space(4.0);
-            super::client_style::picker(ui, p, s, super::client_style::SETTINGS_TILE_WIDTH);
-            ui.add_space(6.0);
-            super::client_style::fancy_toggle(ui, s);
+            ui.checkbox(&mut s.play_with_client, "Play with Arctic Client")
+                .on_hover_text(
+                    "On: games start with the Arctic Client (HUD, zoom, cosmetics, replays and more). Off: no game does, whatever its own switch says; the mod is taken out of the instance's mods folder.",
+                );
+            ui.add_space(4.0);
+            ui.add_enabled_ui(s.play_with_client, |ui| {
+                super::client_style::picker(ui, p, s, super::client_style::SETTINGS_TILE_WIDTH);
+                ui.add_space(6.0);
+                super::client_style::fancy_toggle(ui, s);
+            });
             ui.checkbox(&mut performance, "Boost FPS with performance mods")
                 .on_hover_text(
                     "Vanilla: adds Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, Particle Core, BadOptimizations, ModernFix and Polarium. Other instances have their own switch.",

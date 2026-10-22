@@ -104,6 +104,8 @@ pub struct Settings {
     pub show_sponsor: bool,
     /// A "Quick tip" card in the sidebar: one feature at a time.
     pub quick_tips: bool,
+    /// Games start with the Arctic Client (the mod). Off: no instance gets it, whatever its own switch says.
+    pub play_with_client: bool,
     /// How big the launcher's interface is, in percent on top of the system's display scaling;
     /// 0 is Auto (a little smaller on crowded screens, see arctic-app's zoom.rs).
     pub interface_size: u16,
@@ -289,6 +291,7 @@ impl Default for Settings {
             exit_games_with_launcher: false,
             show_sponsor: true,
             quick_tips: true,
+            play_with_client: true,
             interface_size: 0,
             high_performance_gpu: true,
             voice: VoiceSettings::default(),
@@ -324,6 +327,15 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn playing_with_the_client_is_on_unless_turned_off() {
+        assert!(Settings::default().play_with_client);
+        let old: Settings = serde_json::from_str("{}").unwrap();
+        assert!(old.play_with_client, "settings saved before the switch existed keep the client");
+        let off: Settings = serde_json::from_str(r#"{"play_with_client": false}"#).unwrap();
+        assert!(!off.play_with_client);
+    }
 
     #[test]
     fn sanitize_clamps_memory_and_resolution() {
