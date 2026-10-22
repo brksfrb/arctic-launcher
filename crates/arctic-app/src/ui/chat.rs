@@ -24,7 +24,7 @@ const PICKER_H: f32 = 72.0;
 
 /// A screenshot of a chat, decoded here into a texture of its own (so it has a size from the start and
 /// does not wait on the generic image loaders).
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 enum Picture {
     Loading,
     Ready(egui::TextureHandle, egui::Vec2),
