@@ -75,6 +75,17 @@ final class ModCatalog {
 		return NEW_IDS.contains(id) && (c.seenMods == null || !c.seenMods.contains(id));
 	}
 
+	/** How many NEW features nobody has opened yet. */
+	static int newCount() {
+		int n = 0;
+		for (String id : NEW_IDS) {
+			if (isNew(id)) {
+				n++;
+			}
+		}
+		return n;
+	}
+
 	static void markSeen(String id) {
 		ClientConfig c = ArcticClient.config();
 		if (NEW_IDS.contains(id) && isNew(id)) {

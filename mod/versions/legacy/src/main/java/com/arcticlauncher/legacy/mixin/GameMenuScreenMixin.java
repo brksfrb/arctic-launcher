@@ -16,7 +16,7 @@ abstract class GameMenuScreenMixin extends Screen {
 	private static final int ARCTIC_ID = 950;
 	/** Minecraft's "Disconnect" / "Save and Quit to Title" button. */
 	private static final int LEAVE_ID = 1;
-	private static final int ARCTIC_W = 64;
+	private static final int ARCTIC_W = 72;
 	private static final int ARCTIC_H = 20;
 	private static final int MARGIN = 6;
 
@@ -24,13 +24,13 @@ abstract class GameMenuScreenMixin extends Screen {
 	private void arctic$button(CallbackInfo ci) {
 		LegacyHooks.disarmLeave();
 		// Top left: Minecraft's achievement pop-ups use the top right.
-		buttons.add(new ButtonWidget(ARCTIC_ID, MARGIN, MARGIN, ARCTIC_W, ARCTIC_H, "Arctic"));
+		buttons.add(new ButtonWidget(ARCTIC_ID, MARGIN, MARGIN, ARCTIC_W, ARCTIC_H, ArcticClient.hubLabel()));
 	}
 
 	@Inject(method = "buttonClicked", at = @At("HEAD"), cancellable = true)
 	private void arctic$click(ButtonWidget button, CallbackInfo ci) {
 		if (button.id == ARCTIC_ID) {
-			ArcticClient.platform().openPage(ArcticClient.arcticMenu());
+			ArcticClient.platform().openPage(ArcticClient.hub());
 			ci.cancel();
 		} else if (button.id == LEAVE_ID && !LegacyHooks.confirmLeave(button)) {
 			ci.cancel();
