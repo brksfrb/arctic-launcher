@@ -927,6 +927,16 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean canPeekShulkers() {
+		return true;
+	}
+
+	@Override
+	public Object[] peek(Object stack) {
+		return WorldStats.peek(stack);
+	}
+
+	@Override
 	public float fallDistance() {
 		LocalPlayer p = mc().player;
 		return p == null ? 0 : (float) p.fallDistance;

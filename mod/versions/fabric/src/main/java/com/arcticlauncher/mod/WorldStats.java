@@ -36,6 +36,37 @@ final class WorldStats {
 		return stack.isEmpty() ? null : BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath();
 	}
 
+	/** The 27 slots of a shulker box item (null for empty ones), or null for any other item or an empty box. */
+	static Object[] peek(Object stackObject) {
+		ItemStack stack = (ItemStack) stackObject;
+		if (stack.isEmpty() || !BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath().endsWith("shulker_box")) {
+			return null;
+		}
+		net.minecraft.core.NonNullList<ItemStack> items = net.minecraft.core.NonNullList.withSize(27, ItemStack.EMPTY);
+		//#if MC >= 1.20.5
+		net.minecraft.world.item.component.ItemContainerContents contents = stack.get(net.minecraft.core.component.DataComponents.CONTAINER);
+		if (contents == null) {
+			return null;
+		}
+		contents.copyInto(items);
+		//#else
+		net.minecraft.nbt.CompoundTag tag = stack.getTagElement("BlockEntityTag");
+		if (tag == null || !tag.contains("Items", 9)) {
+			return null;
+		}
+		net.minecraft.world.ContainerHelper.loadAllItems(tag, items);
+		//#endif
+		Object[] out = new Object[27];
+		boolean any = false;
+		for (int i = 0; i < 27; i++) {
+			if (!items.get(i).isEmpty()) {
+				out[i] = items.get(i);
+				any = true;
+			}
+		}
+		return any ? out : null;
+	}
+
 	static int countItems(String idPart) {
 		LocalPlayer p = Minecraft.getInstance().player;
 		if (p == null) {

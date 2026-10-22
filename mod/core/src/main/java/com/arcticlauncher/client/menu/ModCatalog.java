@@ -222,6 +222,12 @@ final class ModCatalog {
 					f.stepper("Size", () -> c.heldScale, v -> c.heldScale = (int) v, 30, 150, 10, "%.0f%%");
 					f.note("Look at your hand in the game to see each change. 0 and 100% are the game's own.");
 				}));
+		// Shulker boxes exist from 1.11.
+		if (ArcticClient.platform() != null && ArcticClient.platform().canPeekShulkers()) {
+			out.add(new Mod("shulkerpeek", "Shulker Peek", "Hover a shulker box to see what is inside it", "search",
+					Category.GAMEPLAY, "shulker box peek preview contents chest inventory")
+					.toggle(() -> c.shulkerPeek, on -> c.shulkerPeek = on));
+		}
 		out.add(new Mod("controller", "Controller", "Play with a gamepad: Xbox, PlayStation and others", "controller",
 				Category.GAMEPLAY, "gamepad joystick xbox playstation console")
 				.toggle(() -> c.controller.enabled, on -> c.controller.enabled = on)

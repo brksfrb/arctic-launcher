@@ -454,6 +454,16 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
+	/** Shulker Peek works on this version (shulker boxes came in 1.11). */
+	default boolean canPeekShulkers() {
+		return false;
+	}
+
+	/** What a shulker box item holds: its 27 slots as the game's stacks (null for empty), or null for another item or an empty box. */
+	default Object[] peek(Object stack) {
+		return null;
+	}
+
 	/** Entities the world has loaded around you, or -1 outside a world. */
 	default int entityCount() {
 		return -1;
