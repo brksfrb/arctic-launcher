@@ -425,8 +425,13 @@ public final class ArcticClient {
 
 	/** A key in a chest or inventory screen (action: 0 release, 1 press, 2 repeat); true if Inventory Search used it. */
 	public static boolean containerKey(int key, int action) {
-		return config != null && platform != null && com.arcticlauncher.client.feature.InventorySearch.key(config, key, action,
+		return platform != null && containerKey(key, action,
 				platform.isKeyDown("key.keyboard.left.control") || platform.isKeyDown("key.keyboard.right.control"));
+	}
+
+	/** The same, with the Ctrl state given by the adapter. */
+	public static boolean containerKey(int key, int action, boolean ctrl) {
+		return config != null && com.arcticlauncher.client.feature.InventorySearch.key(config, key, action, ctrl);
 	}
 
 	/** A typed character in a chest or inventory screen; true if Inventory Search took it. */
