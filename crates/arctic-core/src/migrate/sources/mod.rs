@@ -25,6 +25,8 @@ pub fn scan() -> Scan {
     clients::lunar(&mut scan);
     clients::feather(&mut scan);
     clients::badlion(&mut scan);
+    clients::fastclient(&mut scan);
+    clients::silentclient(&mut scan);
     tidy(&mut scan);
     scan
 }

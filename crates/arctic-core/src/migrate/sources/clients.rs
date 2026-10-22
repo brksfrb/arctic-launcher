@@ -177,6 +177,36 @@ pub fn badlion(scan: &mut Scan) {
     }
 }
 
+pub fn fastclient(scan: &mut Scan) {
+    let home = dirs::home_dir();
+    let launcher_data = dirs::data_dir().map(|d| d.join("FastClient"));
+    let roots = hud::fastclient::roots(launcher_data.as_deref(), home.as_deref());
+    let before = scan.clients.len();
+    for root in &roots {
+        hud::fastclient::scan(root, launcher_data.as_deref(), scan);
+    }
+    if scan.clients.len() > before {
+        scan.seen.push((
+            Launcher::FastClient,
+            "Fast Client keeps its own game folders; only its HUD layout comes over".into(),
+        ));
+    }
+}
+
+pub fn silentclient(scan: &mut Scan) {
+    let Some(mc) = dot_minecraft() else {
+        return;
+    };
+    let before = scan.clients.len();
+    hud::silentclient::scan(&mc, scan);
+    if scan.clients.len() > before {
+        scan.seen.push((
+            Launcher::SilentClient,
+            "Silent Client keeps worlds and packs in .minecraft (import Minecraft Launcher's \"Latest release\")".into(),
+        ));
+    }
+}
+
 /// A client's own-mods folder named `<loader>-<version>` (`fabric-1.21.11`)
 /// or `<version>-<loader>` (`1.21-fabric`); empty folders are skipped.
 fn client_mods(launcher: Launcher, mods: &Path, game_dir: &Path) -> Option<Found> {

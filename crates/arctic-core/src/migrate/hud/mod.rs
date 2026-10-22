@@ -1,9 +1,11 @@
-//! HUD setups from LabyMod, Lunar, Badlion and Feather, turned into Arctic
+//! HUD setups from LabyMod, Lunar, Badlion, Feather, Fast Client and Silent Client, turned into Arctic
 //! Client settings. Positions keep their screen corner (or middle) and
 //! offset; widgets Arctic has no match for are listed, not guessed.
 
 pub mod badlion;
+pub mod fastclient;
 pub mod feather;
+pub mod silentclient;
 
 use std::path::Path;
 
@@ -420,6 +422,16 @@ fn blank_hud() -> Map<String, Value> {
 
 /// (ax, ay, dx, dy) from a screen area and an offset.
 type Anchor = (i64, i64, i64, i64);
+
+/// The GUI size (Minecraft's automatic GUI scale) of a screen of `display` pixels, so offsets come out in
+/// GUI pixels.
+fn gui_of((w, h): (f64, f64)) -> (f64, f64) {
+    let mut scale = 1.0;
+    while w / (scale + 1.0) >= 320.0 && h / (scale + 1.0) >= 240.0 {
+        scale += 1.0;
+    }
+    (w / scale, h / scale)
+}
 
 fn slot(enabled: bool, place: Option<Anchor>, scale: f64, background: bool) -> Value {
     let (ax, ay, dx, dy) = place.unwrap_or((0, 0, 0, 0));
