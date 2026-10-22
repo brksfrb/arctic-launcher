@@ -71,6 +71,10 @@ public final class CommandPalette extends Page {
 		all.add(new Entry("Edit HUD", "Action", "Move and resize your HUD widgets", "layout widgets",
 				() -> ArcticClient.platform().openPage(new HudEditor())));
 		all.add(new Entry("Mods", "Action", "All Arctic mods", "menu settings", Menus::mods));
+		for (final com.arcticlauncher.client.servers.QuickJoin.Mode mode : com.arcticlauncher.client.servers.QuickJoin.all(ArcticClient.platform())) {
+			all.add(new Entry(mode.label, "Quick join", mode.network + " - " + mode.command, "play game mode join " + mode.network,
+					() -> com.arcticlauncher.client.servers.QuickJoin.run(ArcticClient.platform(), mode)));
+		}
 		Social social = ArcticClient.social();
 		if (social != null && social.available()) {
 			for (Social.Friend f : social.friends()) {
