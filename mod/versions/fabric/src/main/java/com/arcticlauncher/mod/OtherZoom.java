@@ -16,7 +16,11 @@ final class OtherZoom {
 		boolean changed = false;
 		for (KeyMapping key : mc.options.keyMappings) {
 			if (OPTIFINE_ZOOM.equals(key.getName()) && !UNBOUND.equals(key.saveString())) {
+				//#if MC >= 1.21.2
+				key.setKey(InputConstants.UNKNOWN);
+				//#else
 				mc.options.setKey(key, InputConstants.UNKNOWN);
+				//#endif
 				changed = true;
 			}
 		}
