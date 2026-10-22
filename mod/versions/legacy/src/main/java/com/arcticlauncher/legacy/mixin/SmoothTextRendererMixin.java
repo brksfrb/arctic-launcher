@@ -155,5 +155,9 @@ abstract class SmoothTextRendererMixin {
 		float back = 1f - LegacySmoothFont.shadowOffset();
 		args.set(1, (float) args.get(1) - back);
 		args.set(2, (float) args.get(2) - back);
+		// A solid shadow behind thin anti-aliased letters shows through their edges as gray: half the opacity.
+		int shadowColor = args.get(3);
+		int alpha = (shadowColor >>> 24) == 0 ? 255 : shadowColor >>> 24;
+		args.set(3, (Math.round(alpha * 0.5f) << 24) | (shadowColor & 0xFFFFFF));
 	}
 }

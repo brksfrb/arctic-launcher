@@ -154,9 +154,31 @@ public final class GfxImpl implements Gfx {
 		//#if MC >= 26.1
 		g.text(font, text, x, y, color, shadow);
 		//#else
+		//#if MC < 1.21.6
+		if (shadow && SmoothFont.on() && text.indexOf('\u00a7') < 0) {
+			softShadowText(text, x, y, color);
+			return;
+		}
+		//#endif
 		g.drawString(font, text, x, y, color, shadow);
 		//#endif
 	}
+
+	//#if MC < 1.21.6
+	/**
+	 * Text with the smooth font and a shadow: a solid shadow behind thin anti-aliased letters shows through
+	 * their edges as gray, so the shadow is the same tint at half the opacity, half a GUI pixel behind.
+	 */
+	private void softShadowText(String text, int x, int y, int color) {
+		int alpha = (color >>> 24) == 0 ? 255 : color >>> 24;
+		int shadowColor = (Math.round(alpha * 0.5f) << 24) | ((color & 0xFCFCFC) >> 2);
+		float offset = SmoothFont.shadowOffset();
+		translate(offset, offset);
+		g.drawString(font, text, x, y, shadowColor, false);
+		translate(-offset, -offset);
+		g.drawString(font, text, x, y, (alpha << 24) | (color & 0xFFFFFF), false);
+	}
+	//#endif
 
 	@Override
 	public int textWidth(String text) {

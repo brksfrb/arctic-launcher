@@ -1,7 +1,11 @@
 package com.arcticlauncher.mod.mixin;
 
+//#if MC >= 1.21.6
 //#if MC >= 26.1
 import com.arcticlauncher.mod.ArcticPacks;
+//#else
+import com.arcticlauncher.mod.SmoothFont;
+//#endif
 import net.minecraft.network.chat.Style;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -21,7 +25,12 @@ abstract class FontShadowMixin {
 	@Inject(method = "getShadowColor", at = @At("RETURN"), cancellable = true)
 	private void arctic$soften(Style style, int color, CallbackInfoReturnable<Integer> cir) {
 		int shadow = cir.getReturnValueI();
-		if (shadow == 0 || style.getShadowColor() != null || !ArcticPacks.smoothFontCached()) {
+		//#if MC >= 26.1
+		boolean smooth = ArcticPacks.smoothFontCached();
+		//#else
+		boolean smooth = SmoothFont.on();
+		//#endif
+		if (shadow == 0 || style.getShadowColor() != null || !smooth) {
 			return;
 		}
 		int alpha = Math.round(((shadow >>> 24) & 0xFF) * ARCTIC_SOFT_SHADOW);
