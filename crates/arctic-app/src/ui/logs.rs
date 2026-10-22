@@ -234,6 +234,14 @@ fn console<'a>(
                     ui.ctx().request_repaint();
                 }
             }
+            // The scroll area ignores the wheel while a selection is being dragged; do it here.
+            if selecting && let Some((_, _, offset)) = last {
+                let wheel = ui.input(|i| i.smooth_scroll_delta().y);
+                if wheel != 0.0 {
+                    scroll_to = Some((scroll_to.unwrap_or(offset) - wheel).max(0.0));
+                    ui.ctx().request_repaint();
+                }
+            }
             let mut scroll = egui::ScrollArea::both()
                 .auto_shrink(false)
                 .max_height(height)
