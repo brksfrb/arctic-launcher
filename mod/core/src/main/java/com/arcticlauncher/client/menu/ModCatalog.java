@@ -29,6 +29,63 @@ final class ModCatalog {
 
 	private ModCatalog() {}
 
+	/** The Mods screen's filter chips for HUD widgets. */
+	static final String[] HUD_GROUPS = {"All", "Performance", "PvP", "World", "Info"};
+
+	/** Where each mod is listed (the cards themselves are declared below by what they do). */
+	private static final java.util.Map<String, Category> REGROUP = new java.util.HashMap<String, Category>();
+	/** The group of each HUD widget; the rest are "Info". */
+	private static final java.util.Map<String, String> WIDGET_GROUP = new java.util.HashMap<String, String>();
+	/** Features that came with the latest version: they carry a NEW mark until they are opened or switched. */
+	private static final java.util.Set<String> NEW_IDS = new java.util.HashSet<String>();
+
+	private static void group(Category category, String... ids) {
+		for (String id : ids) {
+			REGROUP.put(id, category);
+		}
+	}
+
+	private static void widgets(String group, String... ids) {
+		for (String id : ids) {
+			WIDGET_GROUP.put(id, group);
+		}
+	}
+
+	static {
+		group(Category.COMBAT, "combatfx", "tnttimer", "hitboxes", "durability", "hitcolor");
+		group(Category.INVENTORY, "slotlocks", "invsearch", "shulkerpeek");
+		group(Category.MOVEMENT, "zoom", "freelook", "sprint", "sneak", "portalscreens", "controller");
+		group(Category.TOOLS, "waypoints", "screenshots", "replays", "death", "leave", "reconnect");
+		group(Category.PLAYERS, "pingtags", "badgetags", "ownnametag", "tabping", "tabglow", "tiers");
+		widgets("Performance", "fps", "ping", "tps", "frametime", "lows", "cpu", "syscpu", "sysram", "alloc", "gpu", "vram", "memory",
+				"entities");
+		widgets("PvP", "cps", "keystrokes", "armor", "effects", "arrows", "items", "held", "pearl", "blocking", "falldamage", "target");
+		widgets("World", "coords", "direction", "speed", "biome", "light", "chunk", "day", "worldtime", "clock", "date", "compass",
+				"minimap", "death", "stopwatch");
+		for (String id : new String[] {"combatfx", "slotlocks", "invsearch", "shulkerpeek", "particles", "helditem", "palette",
+				"portalscreens", "tnttimer", "ownnametag", "tabping", "badgetags", "hud.cpu", "hud.syscpu", "hud.sysram", "hud.alloc",
+				"hud.gpu", "hud.vram", "hud.frametime", "hud.lows", "hud.blocking", "hud.falldamage", "hud.pearl"}) {
+			NEW_IDS.add(id);
+		}
+	}
+
+	/** Has the NEW mark: a feature of the latest version nobody has opened or switched yet. */
+	static boolean isNew(String id) {
+		ClientConfig c = ArcticClient.config();
+		return NEW_IDS.contains(id) && (c.seenMods == null || !c.seenMods.contains(id));
+	}
+
+	static void markSeen(String id) {
+		ClientConfig c = ArcticClient.config();
+		if (NEW_IDS.contains(id) && isNew(id)) {
+			if (c.seenMods == null) {
+				c.seenMods = new java.util.ArrayList<String>();
+			}
+			c.seenMods.add(id);
+			ArcticClient.saveConfig();
+		}
+	}
+
 	static List<Mod> all() {
 		final ClientConfig c = ArcticClient.config();
 		Platform p = ArcticClient.platform();
@@ -78,6 +135,16 @@ final class ModCatalog {
 			m.widget = w;
 			out.add(m);
 		}
+		for (Mod m : out) {
+			Category moved = REGROUP.get(m.id);
+			if (moved != null) {
+				m.category = moved;
+			}
+			if (m.id.startsWith("hud.")) {
+				String group = WIDGET_GROUP.get(m.id.substring(4));
+				m.group = group == null ? "Info" : group;
+			}
+		}
 		if (!p.hasScreenHooks()) {
 			// This version has no hooks for them: better not offered than switched on and silent.
 			List<String> missing = java.util.Arrays.asList("slotlocks", "invsearch", "particles", "helditem", "shulkerpeek");
@@ -121,7 +188,7 @@ final class ModCatalog {
 					f.key("Freelook key", "Hold it to look around", Form.key(() -> c.freelookKey, k -> c.freelookKey = k));
 					f.note("Some servers (like Hypixel) don't allow it; it stays off there.");
 				}));
-		out.add(new Mod("portalscreens", "Portal Screens", "Keep the inventory, chat and menus open while you stand in a nether portal", "target",
+		out.add(new Mod("portalscreens", "Portal Screens", "Keep the inventory, chat and menus open while you stand in a nether portal", "portalscreens",
 				Category.GAMEPLAY, "nether portal gui inventory chat menu close screen")
 				.toggle(() -> c.portalScreens, on -> c.portalScreens = on));
 		out.add(new Mod("tnttimer", "TNT Timer", "The seconds left on a lit TNT, floating above it", "tnt", Category.GAMEPLAY,
@@ -155,13 +222,13 @@ final class ModCatalog {
 		out.add(new Mod("pingtags", "Ping Tags", "Other players' ping in front of their name tag: 48ms | Steve", "tiers", Category.SOCIAL,
 				"ping latency nametag lag ms")
 				.toggle(() -> c.pingNametags, on -> c.pingNametags = on));
-		out.add(new Mod("badgetags", "Arctic Badge", "The snowflake in front of other Arctic players' name tags (1.16 and newer)", "tiers", Category.SOCIAL,
+		out.add(new Mod("badgetags", "Arctic Badge", "The snowflake in front of other Arctic players' name tags (1.16 and newer)", "badgetags", Category.SOCIAL,
 				"badge snowflake arctic nametag tag above head")
 				.toggle(() -> c.badgeNametags, on -> c.badgeNametags = on));
-		out.add(new Mod("ownnametag", "Own Name Tag", "See your own name tag above your head in third person: badge, tier and name", "nametag", Category.SOCIAL,
+		out.add(new Mod("ownnametag", "Own Name Tag", "See your own name tag above your head in third person: badge, tier and name", "ownnametag", Category.SOCIAL,
 				"nametag tag above head self own name third person")
 				.toggle(() -> c.ownNametag, on -> c.ownNametag = on));
-		out.add(new Mod("tabping", "Tab Ping", "The ping in milliseconds after every name in the player list", "ping", Category.SOCIAL,
+		out.add(new Mod("tabping", "Tab Ping", "The ping in milliseconds after every name in the player list", "tabping", Category.SOCIAL,
 				"tab list ping latency ms players")
 				.toggle(() -> c.tabPing, on -> c.tabPing = on));
 		out.add(new Mod("tabglow", "Find Me in Tab", "Your own name in the player list pulses: » Steve «", "tiers", Category.SOCIAL,
@@ -193,7 +260,7 @@ final class ModCatalog {
 		out.add(new Mod("durability", "Low Durability", "A pop-up when armor or your tool is about to break", "durability",
 				Category.GAMEPLAY, "armor tool break warning")
 				.toggle(() -> c.durabilityWarning, on -> c.durabilityWarning = on));
-		out.add(new Mod("combatfx", "Combat Feedback", "A hit marker, hit and kill sounds, and a low-health warning", "target",
+		out.add(new Mod("combatfx", "Combat Feedback", "A hit marker, hit and kill sounds, and a low-health warning", "combatfx",
 				Category.GAMEPLAY, "hitmarker kill sound ding low health warning pvp")
 				.toggle(() -> c.hitMarker, on -> c.hitMarker = on)
 				.settings((host, f) -> {
@@ -211,7 +278,7 @@ final class ModCatalog {
 					f.toggle("Warning beep", "A soft beep while it pulses", () -> c.lowHealthBeep, on -> c.lowHealthBeep = on);
 					f.note("A hit counts when you attack; the server may still ignore it.");
 				}));
-		out.add(new Mod("slotlocks", "Lock Slots", "Lock inventory slots so their items can't be moved or dropped by accident", "durability",
+		out.add(new Mod("slotlocks", "Lock Slots", "Lock inventory slots so their items can't be moved or dropped by accident", "slotlocks",
 				Category.GAMEPLAY, "inventory lock protect slot drop hotbar")
 				.toggle(() -> c.slotLocks, on -> c.slotLocks = on)
 				.settings((host, f) -> {
@@ -221,7 +288,7 @@ final class ModCatalog {
 					f.note("A locked slot shows a padlock. Its item can't be clicked, shift-clicked,");
 					f.note("swapped with a number key or thrown out with the drop key.");
 				}));
-		out.add(new Mod("invsearch", "Inventory Search", "Ctrl+F in a chest or your inventory: find items by name", "search",
+		out.add(new Mod("invsearch", "Inventory Search", "Ctrl+F in a chest or your inventory: find items by name", "invsearch",
 				Category.GAMEPLAY, "chest search find item inventory shulker")
 				.toggle(() -> c.containerSearch, on -> c.containerSearch = on)
 				.settings((host, f) -> {
@@ -230,7 +297,7 @@ final class ModCatalog {
 					f.note("Matching items get a frame, the others are dimmed.");
 					f.note("Enter keeps the search, Escape clears it.");
 				}));
-		out.add(new Mod("palette", "Command Palette", "Ctrl+K: search mods, servers and friends and open them", "search",
+		out.add(new Mod("palette", "Command Palette", "Ctrl+K: search mods, servers and friends and open them", "palette",
 				Category.CLIENT, "search command ctrl k quick find launcher")
 				.toggle(() -> c.commandPalette, on -> c.commandPalette = on)
 				.settings((host, f) -> {
@@ -238,7 +305,7 @@ final class ModCatalog {
 					f.note("Press Ctrl+K anywhere in the game, type, and press Enter.");
 					f.note("It finds mods and their settings, saved servers and friends.");
 				}));
-		out.add(new Mod("particles", "Particle Control", "Show only a share of the particles (fewer = more FPS and a clearer view)", "weather",
+		out.add(new Mod("particles", "Particle Control", "Show only a share of the particles (fewer = more FPS and a clearer view)", "particles",
 				Category.VISUAL, "particles fps performance crit smoke explosion")
 				.toggle(() -> c.particleControl, on -> c.particleControl = on)
 				.settings((host, f) -> {
@@ -246,7 +313,7 @@ final class ModCatalog {
 					f.stepper("Show", () -> c.particleAmount, v -> c.particleAmount = (int) v, 0, 100, 10, "%.0f%%");
 					f.note("100% is the game's own amount; 0% shows none.");
 				}));
-		out.add(new Mod("helditem", "Held Item", "Move and resize your hands and the item you hold", "target",
+		out.add(new Mod("helditem", "Held Item", "Move and resize your hands and the item you hold", "helditem",
 				Category.VISUAL, "hand item position size view model offset")
 				.toggle(() -> c.heldItem, on -> c.heldItem = on)
 				.settings((host, f) -> {
@@ -260,7 +327,7 @@ final class ModCatalog {
 				}));
 		// Shulker boxes exist from 1.11.
 		if (ArcticClient.platform() != null && ArcticClient.platform().canPeekShulkers()) {
-			out.add(new Mod("shulkerpeek", "Shulker Peek", "Hover a shulker box to see what is inside it", "search",
+			out.add(new Mod("shulkerpeek", "Shulker Peek", "Hover a shulker box to see what is inside it", "shulkerpeek",
 					Category.GAMEPLAY, "shulker box peek preview contents chest inventory")
 					.toggle(() -> c.shulkerPeek, on -> c.shulkerPeek = on));
 		}

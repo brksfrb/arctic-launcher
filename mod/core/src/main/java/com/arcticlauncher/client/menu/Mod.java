@@ -17,11 +17,17 @@ final class Mod {
 	enum Category {
 		ALL("All"),
 		HUD("HUD"),
+		COMBAT("Combat"),
+		INVENTORY("Inventory"),
+		MOVEMENT("Movement"),
+		TOOLS("Tools"),
 		VISUAL("Visual"),
-		GAMEPLAY("Gameplay"),
 		CHAT("Chat"),
+		PLAYERS("Players"),
 		SOCIAL("Social"),
-		CLIENT("Client");
+		CLIENT("Client"),
+		/** The old catch-all: every mod has been moved out of it (no chip). */
+		GAMEPLAY("Gameplay");
 
 		final String title;
 
@@ -40,7 +46,9 @@ final class Mod {
 	final String description;
 	/** Icon file in assets/arctic/icons (without .png). */
 	final String icon;
-	final Category category;
+	Category category;
+	/** For HUD widgets: which group of the HUD list it is in (see ModCatalog.HUD_GROUPS). */
+	String group = "Info";
 	/** Extra words the search matches. */
 	final String keywords;
 	private BooleanSupplier on;
