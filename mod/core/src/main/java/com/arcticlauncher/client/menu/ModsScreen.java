@@ -40,6 +40,8 @@ final class ModsScreen extends Page {
 	/** The tab is kept while the game runs; the search starts empty each time the menu opens. */
 	private static Mod.Category category = Mod.Category.ALL;
 	private static String query = "";
+	/** The HUD list's group chip (see ModCatalog.HUD_GROUPS). */
+	private static String hudGroup = "All";
 	private static int scrollOffset;
 
 	private final TextField search = new TextField("Search mods", MAX_QUERY, TextField.ANY);
@@ -99,6 +101,10 @@ final class ModsScreen extends Page {
 			int accountsX = styleX - CHIP_GAP - ACCOUNTS_W;
 			if (accountsX >= px + TabPage.PAD + TITLE_ROOM) {
 				add(new Button("Accounts", () -> openMod(ACCOUNT_ID))).bounds(accountsX, headerY, ACCOUNTS_W, FIELD_H);
+				int presetsX = accountsX - CHIP_GAP - 56;
+				if (presetsX >= px + TabPage.PAD + TITLE_ROOM && ArcticClient.platform().hasFeatures()) {
+					add(new Button("Presets", () -> ArcticClient.platform().openPage(new Presets()))).bounds(presetsX, headerY, 56, FIELD_H);
+				}
 			}
 		}
 		if (keepSearchFocus) {
@@ -108,6 +114,9 @@ final class ModsScreen extends Page {
 		int cy = py + TabPage.HEADER + 6;
 		int cx = x;
 		for (final Mod.Category cat : Mod.Category.values()) {
+			if (cat == Mod.Category.GAMEPLAY) {
+				continue;
+			}
 			int cw = Math.max(34, 12 + chipWidth(cat.title));
 			add(new Button(cat.title, () -> {
 				category = cat;
@@ -116,7 +125,22 @@ final class ModsScreen extends Page {
 			}).selected(cat == category)).bounds(cx, cy, cw, CHIP_H);
 			cx += cw + CHIP_GAP;
 		}
-		gridTop = cy + CHIP_H + 8;
+		int rowBottom = cy + CHIP_H;
+		if (category == Mod.Category.HUD) {
+			int gx = x;
+			int gy = cy + CHIP_H + 4;
+			for (final String group : ModCatalog.HUD_GROUPS) {
+				int gw = Math.max(34, 12 + chipWidth(group));
+				add(new Button(group, () -> {
+					hudGroup = group;
+					scrollOffset = 0;
+					rebuild();
+				}).selected(group.equals(hudGroup))).bounds(gx, gy, gw, CHIP_H);
+				gx += gw + CHIP_GAP;
+			}
+			rowBottom = gy + CHIP_H;
+		}
+		gridTop = rowBottom + 8;
 		int bottom = py + ph - TabPage.PAD;
 		scroll = new Scroll(x, gridTop, x + w, bottom, scrollOffset);
 		add(scroll.bar());
@@ -157,6 +181,9 @@ final class ModsScreen extends Page {
 		List<Mod> out = new ArrayList<Mod>();
 		for (Mod m : ModCatalog.all()) {
 			if (query.trim().isEmpty() && (styleButton && m.id.equals(STYLE_ID) || accountsButton && m.id.equals(ACCOUNT_ID))) {
+				continue;
+			}
+			if (category == Mod.Category.HUD && !"All".equals(hudGroup) && m.category == Mod.Category.HUD && !hudGroup.equals(m.group)) {
 				continue;
 			}
 			if ((category == Mod.Category.ALL || m.category == category) && m.matches(query)) {

@@ -51,6 +51,10 @@ final class ModCard extends Widget {
 			Draw.round(g, x + 2, by, x + w - 2, y + h - 2, 2, Draw.alpha(s.accent, overBar ? 0.5f : 0.3f));
 			Draw.centered(g, "Open", x + w / 2, by + (BAR - 2 - 8) / 2 + 1, s.text, true);
 		}
+		if (ModCatalog.isNew(mod.id)) {
+			Draw.round(g, x + 3, y + 4, x + 27, y + 14, 3, s.accent);
+			Draw.centered(g, "NEW", x + 15, y + 5, s.onAccent, false);
+		}
 		com.arcticlauncher.client.ui.Hints.offer(mod.description, x, y, w, h - BAR);
 		if (mod.hasSettings() && mod.hasSwitch()) {
 			g.texture("asset:icons/settings", x + w - GEAR - 4, y + 4, GEAR, GEAR, 0, 0, 32, 32, 32, 32);
@@ -62,6 +66,7 @@ final class ModCard extends Widget {
 		if (button != Keys.MOUSE_LEFT) {
 			return false;
 		}
+		ModCatalog.markSeen(mod.id);
 		if (mod.hasSwitch() && (onBar(my) || !mod.hasSettings())) {
 			mod.setOn(!mod.on());
 			changed.run();

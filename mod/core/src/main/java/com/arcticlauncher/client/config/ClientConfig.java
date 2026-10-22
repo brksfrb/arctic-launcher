@@ -107,6 +107,8 @@ public final class ClientConfig {
 	public boolean fancy;
 	/** The smooth font keeps its anti-aliased (in-between shade) edges; off = every pixel fully on or off. */
 	public boolean fontAntialias;
+	/** Mods whose "new" mark has been dealt with (opened or switched). */
+	public java.util.List<String> seenMods = new java.util.ArrayList<String>();
 	/** A smiley button at the end of the chat line opens a box of symbols. */
 	public boolean emojiButton = true;
 	/** Your own name tag shows above your head in third person (the game leaves it out). */
