@@ -58,7 +58,8 @@
 		"FontHintingMixin",
 		"FontBitmapHintingMixin",<% } %><% if (smoothFontManager) { %>
 		"SmoothFontManagerMixin",
-		"SmoothFontGlyphInfoMixin",<% } %><% if (textShader) { %>
+		"SmoothFontGlyphInfoMixin",<% } %><% if (glowText) { %>
+		"GlowTextMixin",<% } %><% if (textShader) { %>
 		"TextShaderMixin",<% } %><% if (textShaderOld) { %>
 		"TextShaderOldMixin",<% } %><% if (startup) { %>
 		"MainStartMixin",
