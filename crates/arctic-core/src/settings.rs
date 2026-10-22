@@ -332,7 +332,10 @@ mod tests {
     fn playing_with_the_client_is_on_unless_turned_off() {
         assert!(Settings::default().play_with_client);
         let old: Settings = serde_json::from_str("{}").unwrap();
-        assert!(old.play_with_client, "settings saved before the switch existed keep the client");
+        assert!(
+            old.play_with_client,
+            "settings saved before the switch existed keep the client"
+        );
         let off: Settings = serde_json::from_str(r#"{"play_with_client": false}"#).unwrap();
         assert!(!off.play_with_client);
     }
