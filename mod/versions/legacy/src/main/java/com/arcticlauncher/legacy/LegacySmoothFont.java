@@ -85,7 +85,40 @@ public final class LegacySmoothFont {
 	public static boolean on() {
 		// Forge's loading screen draws text before the client has started: no config yet.
 		com.arcticlauncher.client.config.ClientConfig config = ArcticClient.config();
-		return config != null && config.fancy && !broken;
+		boolean on = config != null && config.fancy && !broken;
+		if (on) {
+			yieldPatcher();
+		}
+		return on;
+	}
+
+	private static long patcherCheckedAt;
+	private static java.lang.reflect.Field patcherOptimized;
+	private static boolean patcherLooked;
+
+	/**
+	 * Patcher's "optimized font renderer" draws every string itself from the game's bitmap font, so Inter never
+	 * shows. While Fancy is on it is switched off in memory (Patcher's own settings file is not touched).
+	 */
+	private static void yieldPatcher() {
+		long now = System.nanoTime();
+		if (patcherLooked && patcherOptimized == null || now - patcherCheckedAt < 2_000_000_000L && patcherLooked) {
+			return;
+		}
+		patcherCheckedAt = now;
+		try {
+			if (!patcherLooked) {
+				patcherLooked = true;
+				patcherOptimized = Class.forName("club.sk1er.patcher.config.PatcherConfig").getField("optimizedFontRenderer");
+			}
+			if (patcherOptimized != null && patcherOptimized.getBoolean(null)) {
+				patcherOptimized.setBoolean(null, false);
+			}
+		} catch (ClassNotFoundException | NoSuchFieldException e) {
+			patcherOptimized = null;
+		} catch (Exception | LinkageError e) {
+			patcherOptimized = null;
+		}
 	}
 
 	/** The glyph for a character, or null when Minecraft's own font should draw it. */
