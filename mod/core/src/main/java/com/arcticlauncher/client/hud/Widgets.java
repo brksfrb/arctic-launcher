@@ -214,28 +214,6 @@ final class Widgets {
 				return out.length() == 0 ? (preview ? "Totems 2  Pearls 16" : "--") : out.toString();
 			}
 		});
-		all.add(new TextWidget("nametag", "My name tag", "What others see above your head: ping, tier and name", false) {
-			@Override
-			protected String value(boolean preview) {
-				String name = platform().playerName();
-				if (name == null || name.isEmpty()) {
-					name = preview ? "Steve" : "--";
-				}
-				StringBuilder out = new StringBuilder();
-				String ping = com.arcticlauncher.client.feature.PingTags.format(platform().ping());
-				if (ping == null && preview) {
-					ping = com.arcticlauncher.client.feature.PingTags.format(24);
-				}
-				if (ping != null) {
-					out.append(ping);
-				}
-				com.arcticlauncher.client.tiers.Tiers.Tag tag = ArcticClient.tiers().tag(platform().worldPlayerId(), name);
-				if (tag != null) {
-					out.append(tag.formatted());
-				}
-				return out.append(name).toString();
-			}
-		});
 		all.add(new TextWidget("death", "Last death", "Where you last died", false) {
 			@Override
 			protected String value(boolean preview) {
