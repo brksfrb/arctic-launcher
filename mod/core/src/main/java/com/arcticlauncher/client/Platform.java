@@ -454,6 +454,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
+	/** The screen, particle and hand hooks of Lock Slots, Inventory Search, Particle Control, Held Item and Shulker Peek exist on this version (not on 1.13.2). */
+	default boolean hasScreenHooks() {
+		return true;
+	}
+
 	/** Shulker Peek works on this version (shulker boxes came in 1.11). */
 	default boolean canPeekShulkers() {
 		return false;
