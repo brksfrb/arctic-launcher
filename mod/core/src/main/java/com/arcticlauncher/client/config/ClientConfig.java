@@ -103,6 +103,8 @@ public final class ClientConfig {
 	public boolean fancy;
 	/** The smooth font keeps its anti-aliased (in-between shade) edges; off = every pixel fully on or off. */
 	public boolean fontAntialias;
+	/** A smiley button at the end of the chat line opens a box of symbols. */
+	public boolean emojiButton = true;
 	/** Your own name tag shows above your head in third person (the game leaves it out). */
 	public boolean ownNametag = true;
 	/** The ping in milliseconds after each name in the player list. */

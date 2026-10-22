@@ -29,6 +29,8 @@ final class EmojiTab implements MenuTab {
 		final ClientConfig c = ArcticClient.config();
 		Form f = new Form(host, x, top, w, bottom);
 		f.section("Typing");
+		f.toggle("Chat button", "A smiley at the end of the chat line opens a box of symbols", () -> c.emojiButton,
+				on -> c.emojiButton = on);
 		f.toggle("Shortcodes", "Type :heart: or :star: and it sends the symbol", () -> c.chatEmoji, on -> c.chatEmoji = on);
 		StringBuilder sample = new StringBuilder();
 		int n = 0;
