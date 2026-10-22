@@ -936,6 +936,15 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean disableOtherZoom() {
+		//#if MC >= 1.14
+		return OtherZoom.disable(mc());
+		//#else
+		return false;
+		//#endif
+	}
+
+	@Override
 	public boolean canPeekShulkers() {
 		return true;
 	}

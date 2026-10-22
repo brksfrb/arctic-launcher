@@ -69,6 +69,7 @@ public final class Features {
 			sprint.tick(config.toggleSprint, screenOpen);
 			sneak.tick(config.toggleSneak, screenOpen);
 			combat.tick(platform.hurtTime());
+			checkOtherZoom();
 			combatFx.tick(config, platform);
 		}
 		boolean inGame = !screenOpen && platform.hasFeatures();
@@ -263,6 +264,21 @@ public final class Features {
 		double zoomedTurn = Math.tan(zoomedFov / 2) / Math.tan(fov / 2);
 		// The player's own setting, faded in with the zoom.
 		return zoomedTurn * (1.0 + (config.zoomSensitivity / 100.0 - 1.0) * zoom);
+	}
+
+	/** Told once per game start: OptiFine's own zoom was switched off so the two do not stack. */
+	private static boolean otherZoomChecked;
+
+	/** OptiFine's zoom on the same key zooms too: with Arctic's zoom on, OptiFine's key is unbound (once). */
+	private void checkOtherZoom() {
+		if (otherZoomChecked || !config.zoomEnabled) {
+			return;
+		}
+		otherZoomChecked = true;
+		if (platform.disableOtherZoom()) {
+			com.arcticlauncher.client.notice.Notices.post("OptiFine's zoom turned off",
+					"Arctic's zoom uses the same key; the two would zoom together. Bind OptiFine's again in Controls if you want it.");
+		}
 	}
 
 	/** While zoomed, the smooth (cinematic) camera like OptiFine's zoom; the player's own setting comes back after. */

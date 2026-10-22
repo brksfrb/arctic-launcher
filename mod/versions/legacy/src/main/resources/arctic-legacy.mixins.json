@@ -46,6 +46,7 @@
 		"SlotInvAccess",
 		"HandledScreenLockMixin",
 		"ParticleManagerMixin",
+		"ClientPlayerPortalMixin",
 		"HeldItemTweakMixin",
 		"ClientPlayerDropMixin",
 		"ScreenMouseMixin",
