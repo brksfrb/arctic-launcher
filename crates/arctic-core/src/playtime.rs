@@ -202,10 +202,17 @@ pub fn ingest_game_log(dirs: &DataDirs, instance_id: &str, game_dir: &Path) -> R
     Ok(added)
 }
 
-/// "3 h 20 min", "45 min", "under a minute".
+/// "2 d 4 h", "3 h 20 min", "45 min", "under a minute".
 pub fn format_duration(secs: u64) -> String {
     let minutes = secs / 60;
-    match (minutes / 60, minutes % 60) {
+    let hours = minutes / 60;
+    if hours >= 24 {
+        return match (hours / 24, hours % 24) {
+            (d, 0) => format!("{d} d"),
+            (d, h) => format!("{d} d {h} h"),
+        };
+    }
+    match (hours, minutes % 60) {
         (0, 0) => "under a minute".to_owned(),
         (0, m) => format!("{m} min"),
         (h, 0) => format!("{h} h"),
@@ -289,6 +296,8 @@ mod tests {
         assert_eq!(format_duration(45 * 60), "45 min");
         assert_eq!(format_duration(2 * 3600), "2 h");
         assert_eq!(format_duration(3 * 3600 + 20 * 60), "3 h 20 min");
+        assert_eq!(format_duration(26 * 3600), "1 d 2 h");
+        assert_eq!(format_duration(48 * 3600), "2 d");
         assert_eq!(ago(1_000, 1_000 + 100), "today");
         assert_eq!(ago(0, 86_400), "yesterday");
         assert_eq!(ago(0, 3 * 86_400), "3 days ago");
