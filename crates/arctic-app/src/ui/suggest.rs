@@ -89,6 +89,18 @@ impl ArcticApp {
                     .small()
                     .color(p.muted),
                 );
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new("Need an answer sooner? Our Discord is quick to help.")
+                            .small()
+                            .color(p.muted),
+                    );
+                    ui.hyperlink_to(
+                        RichText::new("Join the Discord").small(),
+                        crate::ui::about::DISCORD,
+                    );
+                });
                 ui.add_space(12.0);
                 crate::widgets::row(ui, |ui| {
                     if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
