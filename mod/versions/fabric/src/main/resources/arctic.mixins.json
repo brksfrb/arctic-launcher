@@ -31,6 +31,8 @@
 		"PortalScreenMixin",
 		"OwnNametagMixin",
 		"ChatEmojiMixin",
+		"ScreenNoticesMixin",
+		"DebugScaleMixin",
 		"ParticleEngineMixin",
 		"HeldItemMixin",
 		"ContainerSearchMixin",

@@ -54,6 +54,8 @@ public final class ClientConfig {
 	public boolean debugStyle;
 	/** Groups of F3 lines left out (a bit for each of DebugStyle.GROUPS). */
 	public int debugHidden;
+	/** The F3 screen text size in percent (100 = the game's). */
+	public int debugScale = 100;
 	/** Colors (indexes of DebugStyle.COLORS) for the F3 screen's labels and values. */
 	public int debugLabelColor = 2;
 	public int debugValueColor = 0;

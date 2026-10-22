@@ -49,6 +49,8 @@
 		"ClientPlayerPortalMixin",
 		"OwnNametagLegacyMixin",
 		"ChatEmojiLegacyMixin",
+		"ScreenNoticesLegacyMixin",
+		"DebugScaleLegacyMixin",
 		"HeldItemTweakMixin",
 		"ClientPlayerDropMixin",
 		"ScreenMouseMixin",

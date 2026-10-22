@@ -61,6 +61,14 @@ public final class DebugStyle {
 
 	private DebugStyle() {}
 
+	/** The F3 text size as a factor (1 when the mod is off or the size is the game's). */
+	public static float scale(ClientConfig config) {
+		if (config == null || !config.debugStyle) {
+			return 1f;
+		}
+		return Math.max(50, Math.min(300, config.debugScale)) / 100f;
+	}
+
 	public static boolean hidden(ClientConfig config, int group) {
 		return (config.debugHidden >> group & 1) != 0;
 	}
