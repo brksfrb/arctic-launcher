@@ -286,6 +286,23 @@ impl ArcticApp {
         use arctic_core::arctic_mod;
         use arctic_core::loaders::LoaderKind;
         let p = self.palette();
+        if !self.settings.play_with_client {
+            ui.add_space(12.0);
+            theme::card(p).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.label(
+                    RichText::new("The Arctic Client is off for every instance")
+                        .strong()
+                        .color(p.warn),
+                );
+                ui.label(
+                    RichText::new(
+                        "Settings → Arctic Client → Play with Arctic Client. Turn it on there for this instance's switch below to take effect.",
+                    )
+                    .color(p.muted),
+                );
+            });
+        }
         let fabric_like = matches!(
             instance.loader.kind(),
             Some(LoaderKind::Fabric | LoaderKind::Quilt)

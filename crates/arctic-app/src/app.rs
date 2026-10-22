@@ -48,16 +48,18 @@ pub enum Tab {
 }
 
 impl Tab {
+    /// In the order the sidebar lists them, in sections (see `SECTION_STARTS` in the sidebar): playing, you and
+    /// your friends, what the games made, then the launcher itself.
     pub const ALL: [Tab; 11] = [
         Tab::Play,
-        Tab::Accounts,
         Tab::Instances,
         Tab::Bedrock,
+        Tab::Accounts,
         Tab::Skins,
         Tab::Together,
         Tab::Screenshots,
-        Tab::Stats,
         Tab::Logs,
+        Tab::Stats,
         Tab::Settings,
         Tab::About,
     ];

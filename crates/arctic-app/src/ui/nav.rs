@@ -12,6 +12,9 @@ use crate::art::{self, lerp_color};
 
 const ITEM_HEIGHT: f32 = 40.0;
 const ITEM_GAP: f32 = 4.0;
+/// The sidebar's rows start a new section here (an index into `Tab::ALL`), with a bigger gap before them.
+const SECTION_STARTS: [usize; 3] = [3, 6, 9];
+const SECTION_GAP: f32 = 12.0;
 /// Highlight slide duration (cubic ease-out, so it feels snappy).
 const SLIDE_TIME: f32 = 0.14;
 
@@ -46,12 +49,28 @@ impl ArcticApp {
         // One allocation for the whole list; rows sit at fixed offsets so
         // the sliding highlight always lines up with them.
         let (area, _) = ui.allocate_exact_size(
-            vec2(width, count * ITEM_HEIGHT + (count - 1.0) * ITEM_GAP),
+            vec2(
+                width,
+                count * ITEM_HEIGHT
+                    + (count - 1.0) * ITEM_GAP
+                    + SECTION_STARTS.len() as f32 * SECTION_GAP,
+            ),
             Sense::hover(),
         );
+        // The extra gap before a section opens as the highlight slides across it.
+        let section_gaps = |index: f32| {
+            SECTION_STARTS
+                .iter()
+                .map(|start| (index - (*start as f32 - 1.0)).clamp(0.0, 1.0))
+                .sum::<f32>()
+                * SECTION_GAP
+        };
         let row_rect = |index: f32| {
             egui::Rect::from_min_size(
-                pos2(area.left(), area.top() + index * (ITEM_HEIGHT + ITEM_GAP)),
+                pos2(
+                    area.left(),
+                    area.top() + index * (ITEM_HEIGHT + ITEM_GAP) + section_gaps(index),
+                ),
                 vec2(width, ITEM_HEIGHT),
             )
         };

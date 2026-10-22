@@ -23,10 +23,38 @@ const THEMES: [(ThemeMode, &str); 4] = [
     (ThemeMode::Light, "Light"),
 ];
 
+/// The groups of the Settings page: one is shown at a time (picked with the chips at the top).
+const GROUPS: [&str; 4] = ["General", "Game", "Network & voice", "Data"];
+
+thread_local! {
+    /// The group being shown (the UI runs on one thread).
+    static GROUP: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Which group a section belongs to.
+fn group_of(title: &str) -> usize {
+    match title {
+        "Appearance" | "Arctic Client" | "Launching" | "Updates" => 0,
+        "Memory" | "Versions" | "Game window" | "Java" => 1,
+        "Network" | "Voice chat" => 2,
+        _ => 3,
+    }
+}
+
 impl ArcticApp {
     pub(crate) fn settings_tab(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         widgets::page_header(ui, p, "Settings", "Changes are saved automatically.");
+        let mut group = GROUP.with(|g| g.get());
+        ui.horizontal(|ui| {
+            for (i, name) in GROUPS.iter().enumerate() {
+                if ui.selectable_label(group == i, *name).clicked() {
+                    group = i;
+                }
+            }
+        });
+        GROUP.with(|g| g.set(group));
+        ui.add_space(8.0);
         let mut performance = self.instance.performance;
         let mut choose_picture = false;
         let software_gl = self.software_gl;
@@ -352,6 +380,9 @@ impl ArcticApp {
 }
 
 fn section(ui: &mut egui::Ui, p: &Palette, title: &str, body: impl FnOnce(&mut egui::Ui)) {
+    if group_of(title) != GROUP.with(|g| g.get()) {
+        return;
+    }
     theme::card(p).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.label(RichText::new(title).size(17.0).strong().color(p.text));
