@@ -997,6 +997,21 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean disableOtherZoom() {
+		boolean changed = false;
+		for (net.minecraft.client.option.KeyBinding key : mc().options.allKeys) {
+			if ("of.key.zoom".equals(key.getTranslationKey()) && key.getCode() != 0) {
+				key.setCode(0);
+				changed = true;
+			}
+		}
+		if (changed) {
+			net.minecraft.client.option.KeyBinding.updateKeysByCode();
+		}
+		return changed;
+	}
+
+	@Override
 	public boolean canPeekShulkers() {
 		//#if MC >= 1.11
 		return true;

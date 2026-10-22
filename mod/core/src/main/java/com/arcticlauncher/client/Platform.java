@@ -459,6 +459,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return true;
 	}
 
+	/** Another zoom on the game (OptiFine's) shares the zoom key with Arctic's: switch it off. True when it was found and changed. */
+	default boolean disableOtherZoom() {
+		return false;
+	}
+
 	/** The smooth font's look changed (anti-aliasing): build its letters again. */
 	default void reloadFonts() {}
 

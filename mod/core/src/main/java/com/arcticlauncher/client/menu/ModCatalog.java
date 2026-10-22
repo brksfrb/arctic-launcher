@@ -117,6 +117,9 @@ final class ModCatalog {
 					f.key("Freelook key", "Hold it to look around", Form.key(() -> c.freelookKey, k -> c.freelookKey = k));
 					f.note("Some servers (like Hypixel) don't allow it; it stays off there.");
 				}));
+		out.add(new Mod("portalscreens", "Portal Screens", "Keep the inventory, chat and menus open while you stand in a nether portal", "target",
+				Category.GAMEPLAY, "nether portal gui inventory chat menu close screen")
+				.toggle(() -> c.portalScreens, on -> c.portalScreens = on));
 		out.add(new Mod("sprint", "Toggle Sprint", "Press sprint once to keep sprinting", "sprint", Category.GAMEPLAY, "run")
 				.toggle(() -> c.toggleSprint, on -> c.toggleSprint = on));
 		out.add(new Mod("sneak", "Toggle Sneak", "Press sneak once to keep sneaking", "sneak", Category.GAMEPLAY, "crouch shift")

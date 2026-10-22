@@ -28,6 +28,7 @@
 <% } %><% if (slotLocks) { %>		"SlotAccess",
 		"SlotClickMixin",
 		"SlotLockDrawMixin",
+		"PortalScreenMixin",
 		"ParticleEngineMixin",
 		"HeldItemMixin",
 		"ContainerSearchMixin",

@@ -103,6 +103,8 @@ public final class ClientConfig {
 	public boolean fancy;
 	/** The smooth font keeps its anti-aliased (in-between shade) edges; off = every pixel fully on or off. */
 	public boolean fontAntialias;
+	/** Screens (inventory, chat, menus) stay open while standing in a nether portal. */
+	public boolean portalScreens = true;
 	/** The Arctic badge in front of Arctic players' name tags too (it is always in the player list). */
 	public boolean badgeNametags = true;
 	/** 1.8.9 - 1.12.2: vertex buffers were switched on once (they're off in Minecraft's defaults). */
