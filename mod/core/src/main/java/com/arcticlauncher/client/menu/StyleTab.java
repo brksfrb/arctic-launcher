@@ -47,7 +47,12 @@ final class StyleTab implements MenuTab {
 			c.fancy = on;
 			ArcticClient.platform().setSmoothFont(on);
 		}))).bounds(x, top + CARD_H + 8, w, ROW);
-		textY = top + CARD_H + 8 + ROW + 10;
+		host.add(new Toggle("Smooth edges", "Anti-aliased letter edges. Off: every pixel of a letter is fully on or off (sharper)",
+				Form.binding(() -> c.fontAntialias, on -> {
+					c.fontAntialias = on;
+					ArcticClient.platform().reloadFonts();
+				}))).bounds(x, top + CARD_H + 8 + ROW + 2, w, ROW);
+		textY = top + CARD_H + 8 + (ROW + 2) * 2 + 8;
 	}
 
 	@Override

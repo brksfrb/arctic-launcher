@@ -438,6 +438,11 @@ public final class LegacyPlatform implements Platform {
 	@Override
 	public void setSmoothFont(boolean on) {}
 
+	@Override
+	public void reloadFonts() {
+		LegacySmoothFont.rebuild();
+	}
+
 	/** Each tick: Fullbright raises gamma while on, and gives it back after. */
 	void tick() {
 		GameOptions options = mc().options;

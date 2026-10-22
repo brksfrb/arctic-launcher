@@ -101,6 +101,8 @@ public final class ClientConfig {
 	public boolean itemPhysics;
 	/** Fancy style: smooth font and smooth rounded shapes. */
 	public boolean fancy;
+	/** The smooth font keeps its anti-aliased (in-between shade) edges; off = every pixel fully on or off. */
+	public boolean fontAntialias;
 	/** 1.8.9 - 1.12.2: vertex buffers were switched on once (they're off in Minecraft's defaults). */
 	public boolean legacyVboOn;
 	/** The pause menu's leave button needs a second click. */

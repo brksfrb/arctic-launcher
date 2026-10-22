@@ -346,6 +346,15 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public void reloadFonts() {
+		//#if MC >= 26.1
+		ArcticPacks.reloadFonts();
+		//#else
+		SmoothFont.changed();
+		//#endif
+	}
+
+	@Override
 	public void setSmoothFont(boolean on) {
 		//#if MC >= 26.1
 		ArcticPacks.setSmoothFont(on);
