@@ -98,6 +98,7 @@ def renames = [
 		['MC < 26.1', 'GuiGraphicsExtractor', 'GuiGraphics'],
 		['MC < 26.1', 'extractRenderState', 'render'],
 		['MC < 26.1', 'extractLines', 'renderLines'],
+		['MC < 26.2', 'submitHandsWithItems', 'renderHandsWithItems'],
 		['MC < 26.1', 'extractBackground', 'renderBackground'],
 		['MC < 26.1', 'extractPanorama', 'renderPanorama'],
 		['MC < 26.1', 'extractDefaultSprite', 'renderDefaultSprite'],
