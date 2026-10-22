@@ -184,6 +184,10 @@ public final class ClientConfig {
 	/** The warning starts at this many hearts or fewer. */
 	public int lowHealthHearts = 3;
 	public boolean lowHealthBeep = true;
+	/** Locked inventory slots (see SlotLocks): off by default; the key is held while clicking a slot. */
+	public boolean slotLocks;
+	public String slotLockKey = "key.keyboard.left.alt";
+	public int[] lockedSlots = new int[0];
 	/** Saturation (the hidden part of hunger) drawn on the hunger bar. */
 	public boolean saturationBar;
 	/** Every entity's hitbox box drawn (like F3+B), from one switch. */

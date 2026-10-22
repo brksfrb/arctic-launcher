@@ -103,6 +103,8 @@ def renames = [
 		['MC < 26.1', 'extractDefaultSprite', 'renderDefaultSprite'],
 		['MC < 26.1', 'extractWidgetRenderState', 'renderWidget'],
 		['MC < 26.1', 'extractContents', 'renderContents'],
+		['MC < 26.1', 'ContainerInput', 'ClickType'],
+		['MC < 26.1', 'extractSlot', 'renderSlot'],
 		['MC < 1.21.11', 'Identifier', 'ResourceLocation'],
 		// Before 1.20 there was no GuiGraphics: a stand-in wraps the PoseStack.
 		['MC < 1.20', 'net.minecraft.client.gui.GuiGraphics', 'com.arcticlauncher.mod.compat.GuiGraphics'],
@@ -336,6 +338,7 @@ processResources {
 			debugEntries: atLeast('1.21.9'),
 			// The F3 screen's two text lists (Debug Screen mod); from 1.21.9 it is a list of entries.
 			debugText: atLeast('1.17'),
+			slotLocks: atLeast('1.14'),
 			// 1.21.9+ look players up by name off the game's thread (player heads): made safe.
 			playerInfoRace: atLeast('1.21.9'),
 			// Toast slots were tracked from 1.19.

@@ -175,6 +175,16 @@ final class ModCatalog {
 					f.toggle("Warning beep", "A soft beep while it pulses", () -> c.lowHealthBeep, on -> c.lowHealthBeep = on);
 					f.note("A hit counts when you attack; the server may still ignore it.");
 				}));
+		out.add(new Mod("slotlocks", "Lock Slots", "Lock inventory slots so their items can't be moved or dropped by accident", "durability",
+				Category.GAMEPLAY, "inventory lock protect slot drop hotbar")
+				.toggle(() -> c.slotLocks, on -> c.slotLocks = on)
+				.settings((host, f) -> {
+					f.section("Key");
+					f.key("Lock key", "Hold it and click a slot to lock or unlock it",
+							Form.key(() -> c.slotLockKey, k -> c.slotLockKey = k));
+					f.note("A locked slot shows a padlock. Its item can't be clicked, shift-clicked,");
+					f.note("swapped with a number key or thrown out with the drop key.");
+				}));
 		out.add(new Mod("controller", "Controller", "Play with a gamepad: Xbox, PlayStation and others", "controller",
 				Category.GAMEPLAY, "gamepad joystick xbox playstation console")
 				.toggle(() -> c.controller.enabled, on -> c.controller.enabled = on)
