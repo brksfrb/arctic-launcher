@@ -145,6 +145,9 @@ final class ModCatalog {
 		out.add(new Mod("pingtags", "Ping Tags", "Other players' ping in front of their name tag: 48ms | Steve", "tiers", Category.SOCIAL,
 				"ping latency nametag lag ms")
 				.toggle(() -> c.pingNametags, on -> c.pingNametags = on));
+		out.add(new Mod("badgetags", "Arctic Badge", "The snowflake in front of other Arctic players' name tags (1.16 and newer)", "tiers", Category.SOCIAL,
+				"badge snowflake arctic nametag tag above head")
+				.toggle(() -> c.badgeNametags, on -> c.badgeNametags = on));
 		out.add(new Mod("tabglow", "Find Me in Tab", "Your own name in the player list pulses: » Steve «", "tiers", Category.SOCIAL,
 				"tab list find myself name highlight glow")
 				.toggle(() -> c.tabGlowSelf, on -> c.tabGlowSelf = on));

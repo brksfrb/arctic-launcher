@@ -379,6 +379,7 @@ public final class ArcticClient {
 				DURABILITY.tick(platform);
 			}
 			AUTO_GG.tick(platform);
+			com.arcticlauncher.client.servers.QuickJoin.tick(platform);
 			STOPWATCH.tick(!screenOpen && platform.isKeyDown(config.stopwatchKey));
 		}
 	}
