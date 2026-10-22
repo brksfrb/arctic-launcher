@@ -964,6 +964,45 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public String heldItemName(boolean offHand) {
+		ClientPlayerEntity p = mc().player;
+		if (p == null) {
+			return null;
+		}
+		ItemStack stack;
+		//#if MC >= 1.9
+		stack = offHand ? p.getOffHandStack() : p.inventory.getMainHandStack();
+		//#else
+		stack = offHand ? null : p.inventory.getMainHandStack();
+		//#endif
+		if (!present(stack)) {
+			return null;
+		}
+		Identifier id = (Identifier) net.minecraft.item.Item.REGISTRY.getIdentifier(stack.getItem());
+		return id == null ? null : id.getPath();
+	}
+
+	@Override
+	public boolean swordBlocks() {
+		//#if MC >= 1.9
+		return false;
+		//#else
+		return true;
+		//#endif
+	}
+
+	@Override
+	public float fallDistance() {
+		ClientPlayerEntity p = mc().player;
+		return p == null ? 0 : p.fallDistance;
+	}
+
+	@Override
+	public boolean noScreen() {
+		return mc().currentScreen == null;
+	}
+
+	@Override
 	public boolean lastTargetDead() {
 		Entity e = lastAttacked;
 		return e instanceof net.minecraft.entity.LivingEntity && !e.isAlive();

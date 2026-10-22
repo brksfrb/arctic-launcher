@@ -26,6 +26,16 @@ final class WorldStats {
 		//#endif
 	}
 
+	/** The registry name of the item in the main or off hand, or null for none. */
+	static String heldItemName(boolean offHand) {
+		LocalPlayer p = Minecraft.getInstance().player;
+		if (p == null) {
+			return null;
+		}
+		ItemStack stack = offHand ? p.getOffhandItem() : p.getMainHandItem();
+		return stack.isEmpty() ? null : BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath();
+	}
+
 	static int countItems(String idPart) {
 		LocalPlayer p = Minecraft.getInstance().player;
 		if (p == null) {

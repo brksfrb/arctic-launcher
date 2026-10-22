@@ -464,6 +464,9 @@ final class ModCatalog {
 			case "armor": return " durability gear";
 			case "keystrokes": return " wasd keys cps";
 			case "arrows": return " bow ammo";
+			case "blocking": return " shield sword block parry pvp";
+			case "falldamage": return " fall damage height safe landing";
+			case "pearl": return " ender pearl cooldown throw";
 			case "tnt": return " fuse explode explosion countdown timer";
 			case "bossbar": return " boss bar dragon wither";
 			case "cpu": case "syscpu": return " processor usage load performance resource";

@@ -79,6 +79,7 @@ final class Widgets {
 			}
 		});
 		all.addAll(ResourceWidgets.all());
+		all.addAll(PvpWidgets.all());
 		all.add(new TextWidget("server", "Server", "The server you're playing on", false) {
 			@Override
 			protected String value(boolean preview) {
