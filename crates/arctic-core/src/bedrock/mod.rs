@@ -214,7 +214,7 @@ fn attach(
         }
         let mut pid = None;
         for _ in 0..120 {
-            pid = package::process_id(&install.path);
+            pid = package::process_id(&install.path, edition.package_family());
             if pid.is_some() {
                 break;
             }
@@ -248,7 +248,8 @@ const CLIENT_DELAY_SECS: u64 = 12;
 pub fn running(edition: Edition) -> bool {
     #[cfg(windows)]
     {
-        find(edition).is_some_and(|install| package::running(&install.path))
+        find(edition)
+            .is_some_and(|install| package::running(&install.path, edition.package_family()))
     }
     #[cfg(not(windows))]
     {

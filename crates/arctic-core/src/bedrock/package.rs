@@ -165,13 +165,18 @@ fn install_error(e: &windows::core::Error) -> String {
     format!("{} [0x{code:08X}]{hint}", e.message().trim())
 }
 
-/// Does a process run from inside `install_dir`?
-pub(super) fn running(install_dir: &Path) -> bool {
-    process_id(install_dir).is_some()
+/// Does the game run? (See [`process_id`].)
+pub(super) fn running(install_dir: &Path, family: &str) -> bool {
+    process_id(install_dir, family).is_some()
 }
 
-/// The id of the game's process running from inside `install_dir`.
-pub(super) fn process_id(install_dir: &Path) -> Option<u32> {
+/// The id of the game's process: one running from inside `install_dir`, or from the package's own folder
+/// under `WindowsApps` (the GDK game is installed under `C:\XboxGames` but runs from `WindowsApps`).
+pub(super) fn process_id(install_dir: &Path, family: &str) -> Option<u32> {
+    let package_folder = format!(
+        r"\{}_",
+        family.split('_').next().unwrap_or(family).to_lowercase()
+    );
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
@@ -213,7 +218,7 @@ pub(super) fn process_id(install_dir: &Path) -> Option<u32> {
                     ) != 0
                     {
                         let path = String::from_utf16_lossy(&buf[..size as usize]).to_lowercase();
-                        if path.starts_with(&dir) {
+                        if path.starts_with(&dir) || path.contains(&package_folder) {
                             found = Some(entry.th32ProcessID);
                         }
                     }
