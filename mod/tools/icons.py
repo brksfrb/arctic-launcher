@@ -23,6 +23,18 @@ SIZE = 64
 
 # Icon name (what the mod asks for) -> Lucide icon.
 FROM_LUCIDE = {
+    "alloc": "trending-up",
+    "blocking": "shield-half",
+    "cpu": "cpu",
+    "falldamage": "arrow-down-to-line",
+    "frametime": "chart-line",
+    "gpu": "gpu",
+    "lows": "trending-down",
+    "pearl": "circle-dot",
+    "syscpu": "monitor",
+    "sysram": "memory-stick",
+    "tnt": "bomb",
+    "vram": "hard-drive",
     "account": "user",
     "armor": "shield",
     "arrows": "bow-arrow",

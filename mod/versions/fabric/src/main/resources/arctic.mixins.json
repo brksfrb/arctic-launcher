@@ -29,6 +29,7 @@
 		"SlotClickMixin",
 		"SlotLockDrawMixin",
 		"PortalScreenMixin",
+		"OwnNametagMixin",
 		"ParticleEngineMixin",
 		"HeldItemMixin",
 		"ContainerSearchMixin",

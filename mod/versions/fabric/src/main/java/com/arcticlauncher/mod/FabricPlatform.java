@@ -945,6 +945,13 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public void tntLabels(boolean on) {
+		//#if MC >= 1.14
+		TntLabels.update(on);
+		//#endif
+	}
+
+	@Override
 	public boolean canPeekShulkers() {
 		return true;
 	}

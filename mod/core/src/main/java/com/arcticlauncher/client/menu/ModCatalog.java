@@ -65,6 +65,10 @@ final class ModCatalog {
 							f.toggle("Other players", "Arrows for the players near you", () -> c.minimapPlayers, on -> c.minimapPlayers = on);
 							f.toggle("Coordinates", "Your X and Z under the map", () -> c.minimapCoords, on -> c.minimapCoords = on);
 						}
+						if ("coords".equals(w.id)) {
+							f.section("Numbers");
+							f.stepper("Decimals", () -> c.coordDecimals, v -> c.coordDecimals = (int) v, 0, 2, 1, "%.0f");
+						}
 						if ("stopwatch".equals(w.id)) {
 							f.section("Key");
 							f.key("Stopwatch key", "Starts, stops and clears it", Form.key(() -> c.stopwatchKey, k -> c.stopwatchKey = k));
@@ -120,6 +124,9 @@ final class ModCatalog {
 		out.add(new Mod("portalscreens", "Portal Screens", "Keep the inventory, chat and menus open while you stand in a nether portal", "target",
 				Category.GAMEPLAY, "nether portal gui inventory chat menu close screen")
 				.toggle(() -> c.portalScreens, on -> c.portalScreens = on));
+		out.add(new Mod("tnttimer", "TNT Timer", "The seconds left on a lit TNT, floating above it", "tnt", Category.GAMEPLAY,
+				"tnt explosion fuse countdown timer bomb")
+				.toggle(() -> c.tntTimer, on -> c.tntTimer = on));
 		out.add(new Mod("sprint", "Toggle Sprint", "Press sprint once to keep sprinting", "sprint", Category.GAMEPLAY, "run")
 				.toggle(() -> c.toggleSprint, on -> c.toggleSprint = on));
 		out.add(new Mod("sneak", "Toggle Sneak", "Press sneak once to keep sneaking", "sneak", Category.GAMEPLAY, "crouch shift")
@@ -151,6 +158,12 @@ final class ModCatalog {
 		out.add(new Mod("badgetags", "Arctic Badge", "The snowflake in front of other Arctic players' name tags (1.16 and newer)", "tiers", Category.SOCIAL,
 				"badge snowflake arctic nametag tag above head")
 				.toggle(() -> c.badgeNametags, on -> c.badgeNametags = on));
+		out.add(new Mod("ownnametag", "Own Name Tag", "See your own name tag above your head in third person: badge, tier and name", "nametag", Category.SOCIAL,
+				"nametag tag above head self own name third person")
+				.toggle(() -> c.ownNametag, on -> c.ownNametag = on));
+		out.add(new Mod("tabping", "Tab Ping", "The ping in milliseconds after every name in the player list", "ping", Category.SOCIAL,
+				"tab list ping latency ms players")
+				.toggle(() -> c.tabPing, on -> c.tabPing = on));
 		out.add(new Mod("tabglow", "Find Me in Tab", "Your own name in the player list pulses: » Steve «", "tiers", Category.SOCIAL,
 				"tab list find myself name highlight glow")
 				.toggle(() -> c.tabGlowSelf, on -> c.tabGlowSelf = on));

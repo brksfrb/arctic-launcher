@@ -29,5 +29,12 @@ abstract class PlayerListHudMixin {
 		if (ArcticClient.looks() != null && ArcticClient.looks().isArctic(entry.getProfile().getId())) {
 			cir.setReturnValue(BADGE + cir.getReturnValue());
 		}
+		// The ping in milliseconds after the name, green to red.
+		if (ArcticClient.config().tabPing) {
+			int ms = entry.getLatency();
+			if (ms >= 0) {
+				cir.setReturnValue(cir.getReturnValue() + " " + (ms < 80 ? "\u00a7a" : ms < 160 ? "\u00a7e" : "\u00a7c") + ms + "ms");
+			}
+		}
 	}
 }

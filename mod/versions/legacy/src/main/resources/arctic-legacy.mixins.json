@@ -47,6 +47,7 @@
 		"HandledScreenLockMixin",
 		"ParticleManagerMixin",
 		"ClientPlayerPortalMixin",
+		"OwnNametagLegacyMixin",
 		"HeldItemTweakMixin",
 		"ClientPlayerDropMixin",
 		"ScreenMouseMixin",

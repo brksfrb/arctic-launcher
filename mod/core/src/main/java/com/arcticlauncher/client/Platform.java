@@ -454,6 +454,9 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
+	/** Lit TNT shows the seconds left above it ("2.4"); with {@code on} false the names are put back. Each tick. */
+	default void tntLabels(boolean on) {}
+
 	/** The screen, particle and hand hooks of Lock Slots, Inventory Search, Particle Control, Held Item and Shulker Peek exist on this version (not on 1.13.2). */
 	default boolean hasScreenHooks() {
 		return true;
