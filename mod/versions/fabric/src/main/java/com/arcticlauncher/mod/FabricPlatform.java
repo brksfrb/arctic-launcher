@@ -932,6 +932,15 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean hasScreenHooks() {
+		//#if MC >= 1.14
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	@Override
 	public Object[] peek(Object stack) {
 		return WorldStats.peek(stack);
 	}
