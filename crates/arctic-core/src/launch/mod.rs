@@ -349,6 +349,23 @@ fn finish_assets_later(dirs: &DataDirs, index_name: String, later: Vec<DownloadJ
 /// installer needs its client jar and Java), then the loader profile is
 /// layered on top and its extra libraries are downloaded.
 pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
+    // "Play with Arctic Client" is off in Settings: the game starts as if the instance had no client
+    // (the mod is taken out of its mods folder, no client flags or login sharing).
+    if !req.settings.play_with_client && req.instance.arctic_mod {
+        let mut instance = req.instance.clone();
+        instance.arctic_mod = false;
+        let without_client = LaunchRequest {
+            dirs: req.dirs,
+            version: req.version,
+            instance: &instance,
+            account: req.account,
+            settings: req.settings,
+            bridge: req.bridge,
+            copy: req.copy,
+            quick_play: req.quick_play.clone(),
+        };
+        return prepare(&without_client, progress);
+    }
     // "Gentle launch": few downloads at a time, and the game starts behind other programs.
     crate::net::set_gentle(req.settings.gentle_launch);
     priority::set_gentle(req.settings.gentle_launch);
