@@ -190,6 +190,8 @@ public final class ClientConfig {
 	public int[] lockedSlots = new int[0];
 	/** Ctrl+F in a chest or the inventory searches its items by name (see InventorySearch). */
 	public boolean containerSearch;
+	/** Shulker Peek: hover a shulker box to see inside it. */
+	public boolean shulkerPeek;
 	/** Held Item: where your hands and the item in them sit in first person (see HeldItemTweak). */
 	public boolean heldItem;
 	public int heldX;

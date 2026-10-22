@@ -174,6 +174,15 @@ public final class LegacyHooks {
 		}
 	}
 
+	/** Shulker Peek: what the box under the cursor holds. */
+	public static void drawPeek(net.minecraft.inventory.slot.Slot slot, int mouseX, int mouseY) {
+		ClientConfig c = ArcticClient.config();
+		if (c == null || !c.shulkerPeek || slot == null || !slot.hasStack() || ArcticClient.platform() == null) {
+			return;
+		}
+		com.arcticlauncher.client.feature.ContainerPeek.draw(new LegacyGfx(), mouseX, mouseY, ArcticClient.platform().peek(slot.getStack()));
+	}
+
 	/** The drop key is pressed while the slot in hand is locked. */
 	public static boolean dropLocked() {
 		ClientConfig c = ArcticClient.config();

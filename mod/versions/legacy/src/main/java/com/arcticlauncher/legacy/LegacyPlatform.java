@@ -992,6 +992,46 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean canPeekShulkers() {
+		//#if MC >= 1.11
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	//#if MC >= 1.11
+	@Override
+	public Object[] peek(Object stackObject) {
+		ItemStack stack = (ItemStack) stackObject;
+		if (!present(stack) || !stack.hasNbt()) {
+			return null;
+		}
+		Identifier id = (Identifier) net.minecraft.item.Item.REGISTRY.getIdentifier(stack.getItem());
+		if (id == null || !id.getPath().endsWith("shulker_box")) {
+			return null;
+		}
+		net.minecraft.nbt.NbtCompound tag = stack.getNbt().getCompound("BlockEntityTag");
+		if (!tag.contains("Items", 9)) {
+			return null;
+		}
+		net.minecraft.nbt.NbtList list = tag.getList("Items", 10);
+		Object[] out = new Object[27];
+		boolean any = false;
+		for (int i = 0; i < list.size(); i++) {
+			net.minecraft.nbt.NbtCompound entry = list.getCompound(i);
+			int slot = entry.getByte("Slot") & 255;
+			ItemStack item = new ItemStack(entry);
+			if (slot < out.length && present(item)) {
+				out[slot] = item;
+				any = true;
+			}
+		}
+		return any ? out : null;
+	}
+	//#endif
+
+	@Override
 	public float fallDistance() {
 		ClientPlayerEntity p = mc().player;
 		return p == null ? 0 : p.fallDistance;
