@@ -79,6 +79,12 @@ final class SelfTest {
 			VisualsTest.start();
 			return;
 		}
+		//#if MC >= 1.14
+		if (SlotLockTest.requested()) {
+			SlotLockTest.start();
+			return;
+		}
+		//#endif
 		if (CombatTest.requested()) {
 			CombatTest.start();
 			return;
