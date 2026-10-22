@@ -44,11 +44,12 @@ public final class FontWeight {
 			return original.load(face, glyph, flags);
 		}
 		boolean sharp = !com.arcticlauncher.client.ArcticClient.config().fontAntialias;
-		String variant = System.getProperty("arctic.sharp", "A");
 		int load = (flags & ~FT_LOAD_RENDER & ~FT_LOAD_BITMAP_METRICS_ONLY) | FT_LOAD_NO_BITMAP;
-		boolean hinted = sharp && !"A".equals(variant) && emboldenScaleOf(face, scale) <= 1.01f;
+		// Pixel-sharp text is fitted to the pixel grid (the 1-bit hinting target, with FreeType's own autohinter): stems
+		// come out whole pixels wide and spacing even. Thresholding an unfitted, anti-aliased glyph looks uneven.
+		boolean hinted = sharp && emboldenScale(face, scale) <= 1.01f;
 		if (hinted) {
-			load = (load & ~FT_LOAD_NO_HINTING) | FT_LOAD_TARGET_MONO | ("C".equals(variant) ? FT_LOAD_FORCE_AUTOHINT : 0);
+			load = (load & ~FT_LOAD_NO_HINTING) | FT_LOAD_TARGET_MONO | FT_LOAD_FORCE_AUTOHINT;
 		}
 		int error = original.load(face, glyph, load);
 		if (error != 0) {
@@ -69,10 +70,6 @@ public final class FontWeight {
 			sharpen(slot);
 		}
 		return rendered;
-	}
-
-	private static float emboldenScaleOf(FT_Face face, int scale) {
-		return emboldenScale(face, scale);
 	}
 
 	/** Every pixel of the glyph fully on or off: no in-between shades. Below this much coverage a pixel is off. */
