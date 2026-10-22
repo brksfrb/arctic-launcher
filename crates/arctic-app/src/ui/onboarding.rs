@@ -408,18 +408,20 @@ impl ArcticApp {
             "The Arctic Client restyles Minecraft's menus. Press Right Shift in game for HUD widgets, features and capes.",
         );
         ui.add_space(10.0);
-        let mut client = self.instance.arctic_mod;
+        let mut client = self.settings.play_with_client && self.instance.arctic_mod;
         if ui
             .checkbox(&mut client, "Play with the Arctic Client")
             .changed()
         {
+            // For every instance (Settings → Arctic Client has the same switch), and this first one.
+            self.settings.play_with_client = client;
             let id = self.instance.id.clone();
             self.update_instance(&id, |i| i.arctic_mod = client);
         }
         if !client {
             ui.label(
                 RichText::new(
-                    "Pure vanilla: no cosmetics or capes, no playing together with friends, no Arctic menu or HUD in game.                      Turn it back on any time in Instances → Vanilla.",
+                    "Pure vanilla: no cosmetics or capes, no playing together with friends, no Arctic menu or HUD in game.                      Turn it back on any time in Settings → Arctic Client.",
                 )
                 .small()
                 .color(p.warn),
