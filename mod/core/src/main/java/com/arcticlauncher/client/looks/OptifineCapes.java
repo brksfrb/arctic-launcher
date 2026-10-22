@@ -29,6 +29,8 @@ final class OptifineCapes {
 	private static final int MC_H = 32;
 	/** Valid Minecraft names only (the name goes into a URL). */
 	private static final int MAX_NAME = 16;
+	/** The widest image looked at (the widest cape Arctic takes). */
+	private static final int MAX_WIDTH = 1024;
 
 	/** Name → texture hash; "" when that player has no OptiFine cape. */
 	private final Map<String, String> found = new ConcurrentHashMap<String, String>();
@@ -111,13 +113,18 @@ final class OptifineCapes {
 
 	/** OptiFine's 46 × 22 layout moved into the corner of a 64 × 32 texture, as OptiFine does; others as they are. */
 	static byte[] layout(byte[] png) throws java.io.IOException {
+		// The size is read from the header first: nothing bigger than a cape is ever decoded.
+		int[] size = Looks.pngSize(png);
+		if (size == null || size[0] > MAX_WIDTH || size[1] > MAX_WIDTH) {
+			throw new java.io.IOException("not a cape-sized PNG");
+		}
+		int scale = size[0] / OWN_W;
+		if (scale < 1 || size[0] != OWN_W * scale || size[1] != OWN_H * scale) {
+			return png;
+		}
 		BufferedImage in = ImageIO.read(new ByteArrayInputStream(png));
 		if (in == null) {
 			throw new java.io.IOException("not a PNG");
-		}
-		int scale = in.getWidth() / OWN_W;
-		if (scale < 1 || in.getWidth() != OWN_W * scale || in.getHeight() != OWN_H * scale) {
-			return png;
 		}
 		BufferedImage out = new BufferedImage(MC_W * scale, MC_H * scale, BufferedImage.TYPE_INT_ARGB);
 		out.getGraphics().drawImage(in, 0, 0, null);
