@@ -32,6 +32,7 @@ impl ArcticApp {
             self.inst.search.sort = SortBy::Downloads;
             self.run_mod_search(instance, 0);
         }
+        self.install_bar(ui);
         let mut search = false;
         crate::widgets::row(ui, |ui| {
             let field = ui.add(
@@ -141,16 +142,54 @@ impl ArcticApp {
         if let Some(from) = super::more_on_scroll(ui, p, &self.inst.search) {
             self.run_mod_search(instance, from);
         }
-        if let Some(progress) = &self.inst.install_progress
-            && progress.bytes_total > 0
-        {
-            let f = progress.bytes_done as f32 / progress.bytes_total as f32;
-            ui.add(
-                egui::ProgressBar::new(f)
-                    .desired_width(320.0)
-                    .text(progress.stage.clone()),
+    }
+
+    /// What is being downloaded, as a bar over the whole width, right above the search field: the stage at
+    /// the left, the share done at the right. Shown whatever the results below are (or aren't).
+    fn install_bar(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
+        if self.inst.installing.is_empty() && self.inst.install_progress.is_none() {
+            return;
+        }
+        let (stage, share) = match &self.inst.install_progress {
+            Some(progress) if progress.bytes_total > 0 => (
+                progress.stage.clone(),
+                Some((progress.bytes_done as f32 / progress.bytes_total as f32).clamp(0.0, 1.0)),
+            ),
+            Some(progress) => (progress.stage.clone(), None),
+            None => ("Starting the download".to_owned(), None),
+        };
+        let (rect, _) =
+            ui.allocate_exact_size(egui::vec2(ui.available_width(), 20.0), egui::Sense::hover());
+        let painter = ui.painter();
+        painter.rect_filled(rect, 6.0, p.surface_hover);
+        if let Some(share) = share {
+            let filled = egui::Rect::from_min_size(
+                rect.min,
+                egui::vec2(rect.width() * share, rect.height()),
+            );
+            painter.rect_filled(filled, 6.0, p.accent.gamma_multiply(0.55));
+        }
+        let font = egui::FontId::proportional(13.0);
+        painter.text(
+            rect.left_center() + egui::vec2(8.0, 0.0),
+            egui::Align2::LEFT_CENTER,
+            stage,
+            font.clone(),
+            p.text,
+        );
+        if let Some(share) = share {
+            painter.text(
+                rect.right_center() - egui::vec2(8.0, 0.0),
+                egui::Align2::RIGHT_CENTER,
+                format!("{}%", (share * 100.0).round() as u32),
+                font,
+                p.text,
             );
         }
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_millis(200));
+        ui.add_space(6.0);
     }
 
     fn hit_row(
