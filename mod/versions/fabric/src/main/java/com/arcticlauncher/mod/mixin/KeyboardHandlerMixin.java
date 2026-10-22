@@ -43,18 +43,39 @@ abstract class KeyboardHandlerMixin {
 	//#if MC >= 1.21.9
 	@Inject(method = "keyPress", at = @At("HEAD"), cancellable = true)
 	private void arctic$key(long window, int action, KeyEvent event, CallbackInfo ci) {
-		if (handled(event.key(), action)) {
+		if (container(event.key(), action) || handled(event.key(), action)) {
+			ci.cancel();
+		}
+	}
+
+	/** Typing into Inventory Search. */
+	@Inject(method = "charTyped", at = @At("HEAD"), cancellable = true)
+	private void arctic$char(long window, net.minecraft.client.input.CharacterEvent event, CallbackInfo ci) {
+		if (Compat.screen() instanceof AbstractContainerScreen && ArcticClient.containerChar(event.codepoint())) {
 			ci.cancel();
 		}
 	}
 	//#else
 	@Inject(method = "keyPress", at = @At("HEAD"), cancellable = true)
 	private void arctic$key(long window, int key, int scancode, int action, int modifiers, CallbackInfo ci) {
-		if (handled(key, action)) {
+		if (container(key, action) || handled(key, action)) {
+			ci.cancel();
+		}
+	}
+
+	/** Typing into Inventory Search. */
+	@Inject(method = "charTyped", at = @At("HEAD"), cancellable = true)
+	private void arctic$char(long window, int codePoint, int modifiers, CallbackInfo ci) {
+		if (Compat.screen() instanceof AbstractContainerScreen && ArcticClient.containerChar(codePoint)) {
 			ci.cancel();
 		}
 	}
 	//#endif
+
+	/** Inventory Search's keys in a chest or inventory screen. */
+	private static boolean container(int key, int action) {
+		return Compat.screen() instanceof AbstractContainerScreen && ArcticClient.containerKey(Input.key(key), action);
+	}
 
 	private static boolean handled(int key, int action) {
 		if (action != com.arcticlauncher.mod.compat.KeyCodes.PRESS) {

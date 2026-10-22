@@ -40,6 +40,8 @@ public final class Input {
 				return Keys.V;
 			case com.arcticlauncher.mod.compat.KeyCodes.A:
 				return Keys.A;
+			case com.arcticlauncher.mod.compat.KeyCodes.F:
+				return Keys.F;
 			case com.arcticlauncher.mod.compat.KeyCodes.C:
 				return Keys.C;
 			case com.arcticlauncher.mod.compat.KeyCodes.X:
