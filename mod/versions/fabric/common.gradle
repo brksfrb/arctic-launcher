@@ -287,6 +287,8 @@ processResources {
 			// the font itself, or from 1.21.9 (where a font no longer knows its name) the font manager.
 			smoothFontSet: !atLeast('1.21.9'),
 			smoothFontManager: atLeast('1.21.9') && !atLeast('26.1'),
+			// Glow-ink text (outlined): the text is lifted off its outline so the smooth font's soft edges don't z-fight.
+			glowText: atLeast('1.21.9') && !atLeast('26.1'),
 			// The smooth font's slightly heavier outline needs FreeType (1.20.5+).
 			fontWeight: atLeast('1.20.5'),
 			// Smooth letters' edges in the text's own color: the game's grayscale text shader (1.17+) darkens
