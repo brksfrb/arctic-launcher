@@ -45,6 +45,7 @@
 		"PlayerInventoryMixin",
 		"SlotInvAccess",
 		"HandledScreenLockMixin",
+		"ParticleManagerMixin",
 		"ClientPlayerDropMixin",
 		"ScreenMouseMixin",
 		"NetworkStateAccess",

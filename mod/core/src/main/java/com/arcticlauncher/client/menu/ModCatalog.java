@@ -202,6 +202,14 @@ final class ModCatalog {
 					f.note("Press Ctrl+K anywhere in the game, type, and press Enter.");
 					f.note("It finds mods and their settings, saved servers and friends.");
 				}));
+		out.add(new Mod("particles", "Particle Control", "Show only a share of the particles (fewer = more FPS and a clearer view)", "weather",
+				Category.VISUAL, "particles fps performance crit smoke explosion")
+				.toggle(() -> c.particleControl, on -> c.particleControl = on)
+				.settings((host, f) -> {
+					f.section("Amount");
+					f.stepper("Show", () -> c.particleAmount, v -> c.particleAmount = (int) v, 0, 100, 10, "%.0f%%");
+					f.note("100% is the game's own amount; 0% shows none.");
+				}));
 		out.add(new Mod("controller", "Controller", "Play with a gamepad: Xbox, PlayStation and others", "controller",
 				Category.GAMEPLAY, "gamepad joystick xbox playstation console")
 				.toggle(() -> c.controller.enabled, on -> c.controller.enabled = on)
