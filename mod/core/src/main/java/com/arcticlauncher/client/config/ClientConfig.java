@@ -52,6 +52,8 @@ public final class ClientConfig {
 	public int zoomSensitivity = 100;
 	/** The F3 screen with colored labels and values (see DebugStyle). */
 	public boolean debugStyle;
+	/** Groups of F3 lines left out (a bit for each of DebugStyle.GROUPS). */
+	public int debugHidden;
 	/** Colors (indexes of DebugStyle.COLORS) for the F3 screen's labels and values. */
 	public int debugLabelColor = 2;
 	public int debugValueColor = 0;

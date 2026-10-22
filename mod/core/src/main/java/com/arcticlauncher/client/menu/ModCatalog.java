@@ -177,7 +177,13 @@ final class ModCatalog {
 					f.section("Colors");
 					f.choice("Labels", DebugStyle.COLORS, () -> c.debugLabelColor, i -> c.debugLabelColor = i);
 					f.choice("Values", DebugStyle.COLORS, () -> c.debugValueColor, i -> c.debugValueColor = i);
-					f.note("Press F3 to see it.");
+					f.section("Lines");
+					for (int g = 0; g < DebugStyle.GROUPS.length; g++) {
+						final int group = g;
+						f.toggle(DebugStyle.GROUPS[g].label, "Show these lines on the F3 screen", () -> !DebugStyle.hidden(c, group),
+								on -> DebugStyle.setHidden(c, group, !on));
+					}
+					f.note("Press F3 to see it. A line this does not know stays visible.");
 				}));
 		out.add(new Mod("saturation", "Saturation Bar", "Your hidden saturation as a gold line on the hunger bar", "food",
 				Category.HUD, "hunger food appleskin saturation")
