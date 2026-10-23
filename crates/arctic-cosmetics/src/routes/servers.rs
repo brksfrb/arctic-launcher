@@ -79,10 +79,19 @@ async fn submit(
         .store
         .listing_submit(&owner, &address, name, description, &tags, now())
     {
-        Ok(l) => Json(
-            json!({ "id": l.id, "address": l.address, "code": l.code, "state": l.state.as_str() }),
-        )
-        .into_response(),
+        Ok(l) => {
+            crate::push::notify(
+                &state,
+                "server",
+                "Server waiting for review".into(),
+                name.to_owned(),
+                "/admin#servers/pending".into(),
+            );
+            Json(
+                json!({ "id": l.id, "address": l.address, "code": l.code, "state": l.state.as_str() }),
+            )
+            .into_response()
+        }
         Err(SubmitError::Taken) => error(
             StatusCode::CONFLICT,
             "that server is already on the list or waiting",

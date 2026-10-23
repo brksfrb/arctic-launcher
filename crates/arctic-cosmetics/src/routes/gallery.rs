@@ -96,10 +96,19 @@ async fn publish(
         .store
         .gallery_publish(&id, &texture, model, &name, &uuid, &author, now())
     {
-        Ok(()) => Json(
-            json!({ "id": id, "name": name, "texture": texture, "model": model, "author": author, "pending": true }),
-        )
-        .into_response(),
+        Ok(()) => {
+            crate::push::notify(
+                &state,
+                "skin",
+                "Skin waiting for review".into(),
+                format!("{name} by {author}"),
+                "/admin#gallery/pending".into(),
+            );
+            Json(
+                json!({ "id": id, "name": name, "texture": texture, "model": model, "author": author, "pending": true }),
+            )
+            .into_response()
+        }
         Err(PublishError::Duplicate) => {
             error(StatusCode::CONFLICT, "this skin is already in the gallery")
         }
