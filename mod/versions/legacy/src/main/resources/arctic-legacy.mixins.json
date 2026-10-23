@@ -51,6 +51,7 @@
 		"ChatEmojiLegacyMixin",
 		"ScreenNoticesLegacyMixin",
 		"DebugScaleLegacyMixin",
+		"NoHurtCamLegacyMixin",
 		"HeldItemTweakMixin",
 		"ClientPlayerDropMixin",
 		"ScreenMouseMixin",
