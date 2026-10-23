@@ -12,7 +12,7 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use rusqlite::params;
 use serde_json::json;
-use web_push_native::jwt_simple::algorithms::ES256KeyPair;
+use web_push_native::jwt_simple::algorithms::{ECDSAP256PublicKeyLike, ES256KeyPair};
 use web_push_native::p256::PublicKey;
 use web_push_native::{Auth, WebPushBuilder};
 
