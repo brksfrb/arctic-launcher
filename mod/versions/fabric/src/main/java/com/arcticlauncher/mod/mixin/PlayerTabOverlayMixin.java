@@ -8,11 +8,49 @@ import net.minecraft.network.chat.Component;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+//#if MC >= 1.20
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+//#endif
 
 /** A snowflake before the names of players who are on Arctic too, and their PvP tier. */
 @Mixin(PlayerTabOverlay.class)
 abstract class PlayerTabOverlayMixin {
+	//#if MC >= 1.16 && MC < 26.1
+	/** The ping in milliseconds, green to red, in the place of the game's ping bars (right end of the row). */
+	@Inject(method = "renderPingIcon", at = @At("HEAD"), cancellable = true, require = 0)
+	//#if MC >= 1.20
+	private void arctic$ping(GuiGraphicsExtractor g, int width, int x, int y, PlayerInfo info, CallbackInfo ci) {
+		arctic$drawPing(new com.arcticlauncher.mod.GfxImpl(g), width, x, y, info, ci);
+	}
+	//#else
+	private void arctic$ping(com.mojang.blaze3d.vertex.PoseStack pose, int width, int x, int y, PlayerInfo info, CallbackInfo ci) {
+		arctic$drawPing(com.arcticlauncher.mod.GfxImpl.of(pose), width, x, y, info, ci);
+	}
+	//#endif
+
+	private static void arctic$drawPing(com.arcticlauncher.client.gfx.Gfx g, int width, int x, int y, PlayerInfo info, CallbackInfo ci) {
+		if (!ArcticClient.config().tabPing) {
+			return;
+		}
+		int ms = info.getLatency();
+		if (ms < 0) {
+			// Unknown: the game's own icon says so.
+			return;
+		}
+		String text = String.valueOf(ms);
+		int color = ms < 80 ? 0xFF55FF55 : ms < 160 ? 0xFFFFFF55 : 0xFFFF5555;
+		float scale = 0.8f;
+		g.push();
+		g.translate(x + width - 1 - g.textWidth(text) * scale, y + 1.5f);
+		g.scale(scale);
+		g.text(text, 0, 0, color, true);
+		g.pop();
+		ci.cancel();
+	}
+	//#endif
+
 	@Inject(method = "getNameForDisplay", at = @At("RETURN"), cancellable = true)
 	private void arctic$badge(PlayerInfo info, CallbackInfoReturnable<Component> cir) {
 		if (ArcticClient.config().tierTab) {
@@ -29,7 +67,8 @@ abstract class PlayerTabOverlayMixin {
 					.append(cir.getReturnValue())
 					.append(Compat.literal(com.arcticlauncher.client.feature.TabGlow.after())));
 		}
-		// The ping in milliseconds after the name, green to red.
+		//#if MC < 1.16 || MC >= 26.1
+		// Where the ping's icon can't be swapped for the number (see below): the ping after the name.
 		if (ArcticClient.config().tabPing) {
 			int ms = info.getLatency();
 			if (ms >= 0) {
@@ -37,6 +76,7 @@ abstract class PlayerTabOverlayMixin {
 				cir.setReturnValue(Compat.empty().append(cir.getReturnValue()).append(Compat.literal(" " + color + ms + "ms")));
 			}
 		}
+		//#endif
 		// Before 1.16 text had no fonts, so there's no badge glyph to show.
 		if (Compat.BADGES && ArcticClient.looks() != null && ArcticClient.looks().isArctic(Compat.profileId(info.getProfile()))) {
 			Component badge = Compat.arcticBadge();
