@@ -577,6 +577,49 @@ const GALLERY_ACTIONS = {
 };
 const GALLERY_DONE = { approve: "Approved", reject: "Rejected", restore: "Restored", remove: "Removed" };
 
+// The real thing: the skin on a 3D character you can turn by dragging (scroll to zoom). The viewer library
+// (skinview3d) loads the first time it is asked for, so the page stays light.
+const SKINVIEW3D = "https://cdn.jsdelivr.net/npm/skinview3d@3.1.0/bundles/skinview3d.bundle.js";
+let skinviewLoading = null;
+function loadSkinView() {
+  if (window.skinview3d) return Promise.resolve();
+  if (!skinviewLoading) {
+    skinviewLoading = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = SKINVIEW3D;
+      script.onload = resolve;
+      script.onerror = () => { skinviewLoading = null; reject(new Error("The 3D viewer couldn't be loaded.")); };
+      document.head.append(script);
+    });
+  }
+  return skinviewLoading;
+}
+
+async function skin3d(src, slim, name) {
+  const dialog = el("dialog", {});
+  const note = el("div", { class: "hint", style: "text-align:center" }, "Drag to turn, scroll to zoom");
+  const canvas = el("canvas", { style: "display:block;width:320px;height:420px;border-radius:10px" });
+  let viewer = null;
+  const close = () => { if (viewer) viewer.dispose(); dialog.close(); dialog.remove(); };
+  dialog.append(el("form", { method: "dialog", onsubmit: (e) => { e.preventDefault(); close(); } },
+    el("h3", {}, name), canvas, note,
+    el("div", { class: "buttons" }, el("button", { type: "submit", class: "ghost" }, "Close"))));
+  dialog.addEventListener("cancel", (e) => { e.preventDefault(); close(); });
+  dialog.addEventListener("click", (e) => { if (e.target === dialog) close(); });
+  document.body.append(dialog);
+  dialog.showModal();
+  try {
+    await loadSkinView();
+    viewer = new skinview3d.SkinViewer({ canvas, width: 320, height: 420, skin: src, model: slim ? "slim" : "default" });
+    viewer.autoRotate = true;
+    viewer.autoRotateSpeed = 0.6;
+    viewer.zoom = 0.85;
+  } catch (e) {
+    note.textContent = e.message || "The 3D viewer couldn't be shown.";
+    note.style.color = "var(--bad)";
+  }
+}
+
 // A skin as a character from the front and the back (body, arms, legs, head, with the outer layers), so a
 // reviewer sees what people will see. Clicking it shows the raw texture sheet, and back.
 function skinPreview(src, slim, name) {
@@ -644,7 +687,8 @@ function skinPreview(src, slim, name) {
   };
   canvas.onclick = toggle;
   raw.onclick = toggle;
-  return el("div", { style: "display:contents" }, canvas, raw);
+  const view3d = el("button", { type: "button", class: "ghost small", onclick: () => skin3d(src, slim, name) }, "3D view");
+  return el("div", { style: "display:contents" }, canvas, raw, view3d);
 }
 
 async function gallery(r) {
