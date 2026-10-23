@@ -366,6 +366,11 @@ async fn read_only_keys_read_everything_in_full_and_change_nothing() {
         ),
         (
             "POST",
+            "/v1/admin/gallery/some-skin/name".to_owned(),
+            Some(json!({"name": "Nope"})),
+        ),
+        (
+            "POST",
             "/v1/admin/servers/1".to_owned(),
             Some(json!({"action": "approve"})),
         ),
@@ -839,6 +844,167 @@ async fn gallery_share_browse_use_report() {
     );
     let (_, page) = call(&app, "GET", "/v1/gallery", None, None).await;
     assert_eq!(page["total"], 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn moderators_can_rename_pending_and_live_gallery_items() {
+    let app = app().await;
+    let token = microsoft_token(&app).await;
+    let skin = images::test_png(64, 64);
+    let (s, item) = call(
+        &app,
+        "POST",
+        "/v1/gallery",
+        Some(&token),
+        Some(json!({
+            "png": b64(&skin),
+            "model": "classic",
+            "name": "2025_08_27_momo-ayase-23495109"
+        })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{item}");
+    let id = item["id"].as_str().unwrap();
+
+    let (s, _) = admin_call(
+        &app,
+        "reader-key-reader-key",
+        "POST",
+        &format!("/v1/admin/gallery/{id}/name"),
+        Some(json!({"name": "Momo Ayase"})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, _) = admin_call(
+        &app,
+        "bad-key-bad-key-bad",
+        "POST",
+        &format!("/v1/admin/gallery/{id}/name"),
+        Some(json!({"name": "Momo Ayase"})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+
+    let (s, body) = admin_call(
+        &app,
+        "alice-key-alice-key",
+        "POST",
+        &format!("/v1/admin/gallery/{id}/name"),
+        Some(json!({"name": "  \u{0}  "})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["error"], "give the skin a name");
+    let (_, queue) = admin_call(
+        &app,
+        "alice-key-alice-key",
+        "GET",
+        "/v1/admin/gallery?queue=pending",
+        None,
+    )
+    .await;
+    assert_eq!(queue["items"][0]["name"], "2025_08_27_momo-ayase-23495109");
+
+    // Same cleaning as an upload: controls dropped, trimmed, cut to 32 characters.
+    let (s, renamed) = admin_call(
+        &app,
+        "alice-key-alice-key",
+        "POST",
+        &format!("/v1/admin/gallery/{id}/name"),
+        Some(json!({"name": "  Momo\u{0} Ayase  "})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{renamed}");
+    assert_eq!(renamed["name"], "Momo Ayase");
+    let (_, queue) = admin_call(
+        &app,
+        "alice-key-alice-key",
+        "GET",
+        "/v1/admin/gallery?queue=pending",
+        None,
+    )
+    .await;
+    assert_eq!(queue["items"][0]["name"], "Momo Ayase");
+    let (_, page) = call(&app, "GET", "/v1/gallery?q=Momo", None, None).await;
+    assert_eq!(page["total"], 0);
+
+    let (s, _) = admin_call(
+        &app,
+        "bob-key-bob-key-bob",
+        "POST",
+        &format!("/v1/admin/gallery/{id}"),
+        Some(json!({"action": "approve"})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let (_, page) = call(&app, "GET", "/v1/gallery?q=Momo", None, None).await;
+    assert_eq!(page["total"], 1);
+    assert_eq!(page["items"][0]["name"], "Momo Ayase");
+
+    let long = "x".repeat(40);
+    let (s, renamed) = admin_call(
+        &app,
+        "bob-key-bob-key-bob",
+        "POST",
+        &format!("/v1/admin/gallery/{id}/name"),
+        Some(json!({"name": long})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{renamed}");
+    assert_eq!(renamed["name"], "x".repeat(32));
+    let (_, page) = call(&app, "GET", "/v1/gallery?q=Momo", None, None).await;
+    assert_eq!(page["total"], 0);
+    let (_, page) = call(&app, "GET", "/v1/gallery", None, None).await;
+    assert_eq!(page["items"][0]["name"], "x".repeat(32));
+    let (_, queue) = admin_call(
+        &app,
+        "alice-key-alice-key",
+        "GET",
+        "/v1/admin/gallery?queue=approved",
+        None,
+    )
+    .await;
+    assert_eq!(queue["items"][0]["name"], "x".repeat(32));
+
+    // Saving the stored name does not add another history line.
+    let (s, _) = admin_call(
+        &app,
+        "bob-key-bob-key-bob",
+        "POST",
+        &format!("/v1/admin/gallery/{id}/name"),
+        Some(json!({"name": "x".repeat(32)})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let (s, missing) = admin_call(
+        &app,
+        "alice-key-alice-key",
+        "POST",
+        "/v1/admin/gallery/no-such-item/name",
+        Some(json!({"name": "Ayase"})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND, "{missing}");
+
+    let (_, log) = admin_call(&app, "alice-key-alice-key", "GET", "/v1/admin/log", None).await;
+    let renames: Vec<_> = log["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["action"] == "rename")
+        .collect();
+    assert_eq!(renames.len(), 2);
+    assert_eq!(renames[0]["moderator"], "bob");
+    assert_eq!(renames[0]["target"], id);
+    assert_eq!(
+        renames[0]["detail"],
+        format!("Momo Ayase → {} by Notch", "x".repeat(32))
+    );
+    assert_eq!(renames[1]["moderator"], "alice");
+    assert_eq!(
+        renames[1]["detail"],
+        "2025_08_27_momo-ayase-23495109 → Momo Ayase by Notch"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

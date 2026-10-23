@@ -327,6 +327,49 @@ impl Store {
         Ok(true)
     }
 
+    /// Change the name players see, whether the item is still waiting or
+    /// already in the gallery. `Ok(false)`: no such item. A name that is
+    /// already stored is left as it is, with nothing new in the history.
+    /// Callers pass a name from [`clean_name`]. The public gallery reads
+    /// this column on every browse, so the next list shows it.
+    pub fn gallery_rename(
+        &self,
+        id: &str,
+        name: &str,
+        moderator: &str,
+        now: u64,
+    ) -> rusqlite::Result<bool> {
+        let conn = self.conn();
+        let found: Option<(String, String)> = conn
+            .query_row(
+                "SELECT name, author_name FROM gallery WHERE id = ?1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        let Some((old, author)) = found else {
+            return Ok(false);
+        };
+        if old == name {
+            return Ok(true);
+        }
+        conn.execute(
+            "UPDATE gallery SET name = ?1 WHERE id = ?2",
+            params![name, id],
+        )?;
+        conn.execute(
+            "INSERT INTO moderation_log (at, moderator, action, target, detail)
+             VALUES (?1, ?2, 'rename', ?3, ?4)",
+            params![
+                now as i64,
+                moderator,
+                id,
+                format!("{old} → {name} by {author}")
+            ],
+        )?;
+        Ok(true)
+    }
+
     /// The latest moderation decisions, newest first.
     /// The log, newest first (the admin API reads it with its own query; tests read it here).
     #[cfg(test)]
@@ -616,6 +659,45 @@ mod tests {
         s.gallery_moderate("1", Action::Restore, "alice", 60)
             .unwrap();
         assert_eq!(s.gallery_page(Sort::New, "", 0, 10).unwrap().total, 1);
+    }
+
+    #[test]
+    fn rename_updates_waiting_and_live_names() {
+        let s = store();
+        s.gallery_publish("1", "t1", "classic", "2025_08_27_momo", "a", "Alice", 10)
+            .unwrap();
+        s.gallery_publish("2", "t2", "classic", "hashname", "a", "Alice", 20)
+            .unwrap();
+        assert!(s.gallery_rename("1", "Momo Ayase", "alice", 11).unwrap());
+        assert_eq!(
+            s.gallery_admin_list("pending").unwrap()[0].name,
+            "Momo Ayase"
+        );
+        // Saving the name it already has is not another decision.
+        assert!(s.gallery_rename("1", "Momo Ayase", "alice", 12).unwrap());
+        assert!(!s.gallery_rename("nope", "Nope", "alice", 13).unwrap());
+        s.gallery_moderate("2", Action::Approve, "bob", 14).unwrap();
+        assert!(s.gallery_rename("2", "Frost", "bob", 15).unwrap());
+        let page = s.gallery_page(Sort::New, "frost", 0, 10).unwrap();
+        assert_eq!(page.total, 1);
+        assert_eq!(page.items[0].name, "Frost");
+        assert_eq!(
+            s.gallery_page(Sort::New, "hashname", 0, 10).unwrap().total,
+            0
+        );
+        // Still waiting, so the new name is not public yet.
+        assert_eq!(s.gallery_page(Sort::New, "momo", 0, 10).unwrap().total, 0);
+        let renames: Vec<_> = s
+            .moderation_log(10)
+            .unwrap()
+            .into_iter()
+            .filter(|e| e.action == "rename")
+            .collect();
+        assert_eq!(renames.len(), 2);
+        assert_eq!(renames[0].moderator, "bob");
+        assert_eq!(renames[0].target, "2");
+        assert_eq!(renames[0].detail, "hashname → Frost by Alice");
+        assert_eq!(renames[1].detail, "2025_08_27_momo → Momo Ayase by Alice");
     }
 
     #[test]
