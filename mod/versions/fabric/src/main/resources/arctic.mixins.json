@@ -33,6 +33,7 @@
 		"ChatEmojiMixin",
 		"ScreenNoticesMixin",
 		"DebugScaleMixin",
+		"NoHurtCamMixin",
 		"ParticleEngineMixin",
 		"HeldItemMixin",
 		"ContainerSearchMixin",

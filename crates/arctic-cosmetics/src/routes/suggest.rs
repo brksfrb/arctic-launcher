@@ -51,7 +51,22 @@ async fn submit(
         log: &body.log,
     };
     match state.store.suggestion_add(&suggestion, now()) {
-        Ok(id) => Json(json!({ "id": id })).into_response(),
+        Ok(id) => {
+            let bug = body.kind.eq_ignore_ascii_case("bug");
+            crate::push::notify(
+                &state,
+                "suggestion",
+                if bug {
+                    "New bug report"
+                } else {
+                    "New suggestion"
+                }
+                .into(),
+                clean_text(&body.text).chars().take(120).collect(),
+                "/admin#suggestions".into(),
+            );
+            Json(json!({ "id": id })).into_response()
+        }
         Err(e) => db_error("suggestion", e),
     }
 }

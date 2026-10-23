@@ -123,6 +123,8 @@
   .card.leaving { opacity: 0; transform: scale(.97); }
   .card img { width: 100%; aspect-ratio: 1 / 1; object-fit: contain; image-rendering: pixelated; border-radius: 8px;
               background: repeating-conic-gradient(#8882 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
+  .card canvas.skin { width: 100%; aspect-ratio: 1 / 1; image-rendering: pixelated; border-radius: 8px; cursor: pointer;
+                      background: repeating-conic-gradient(#8882 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
   .card h3 { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
   .card .actions { justify-content: stretch; }
   .card .actions button { flex: 1; }
@@ -575,7 +577,7 @@ const GALLERY_ACTIONS = {
 };
 const GALLERY_DONE = { approve: "Approved", reject: "Rejected", restore: "Restored", remove: "Removed" };
 
-async function renameGalleryItem(it, card, title, img, button) {
+async function renameGalleryItem(it, card, title, button) {
   const values = await ask({
     title: "Rename “" + it.name + "”",
     text: "This is the name players see in the gallery.",
@@ -594,9 +596,126 @@ async function renameGalleryItem(it, card, title, img, button) {
   if (!ok || !saved || !saved.name) return;
   it.name = saved.name;
   title.textContent = saved.name;
-  img.alt = "Skin " + saved.name;
+  const raw = card.querySelector("img");
+  if (raw) raw.alt = "Skin " + saved.name;
+  const view3d = card.querySelector("[data-skin-name]");
+  if (view3d) view3d.dataset.skinName = saved.name;
   card.dataset.search = [saved.name, it.author, it.model].filter(Boolean).join(" ").toLowerCase();
   toast("Renamed: " + saved.name);
+}
+
+// The real thing: the skin on a 3D character you can turn by dragging (scroll to zoom). The viewer library
+// (skinview3d) loads the first time it is asked for, so the page stays light.
+const SKINVIEW3D = "/admin/skinview3d.js";
+let skinviewLoading = null;
+function loadSkinView() {
+  if (window.skinview3d) return Promise.resolve();
+  if (!skinviewLoading) {
+    skinviewLoading = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = SKINVIEW3D;
+      script.onload = resolve;
+      script.onerror = () => { skinviewLoading = null; reject(new Error("The 3D viewer couldn't be loaded.")); };
+      document.head.append(script);
+    });
+  }
+  return skinviewLoading;
+}
+
+async function skin3d(src, slim, name) {
+  const dialog = el("dialog", {});
+  const note = el("div", { class: "hint", style: "text-align:center" }, "Drag to turn, scroll to zoom");
+  const canvas = el("canvas", { style: "display:block;width:320px;height:420px;border-radius:10px" });
+  let viewer = null;
+  const close = () => { if (viewer) viewer.dispose(); dialog.close(); dialog.remove(); };
+  dialog.append(el("form", { method: "dialog", onsubmit: (e) => { e.preventDefault(); close(); } },
+    el("h3", {}, name), canvas, note,
+    el("div", { class: "buttons" }, el("button", { type: "submit", class: "ghost" }, "Close"))));
+  dialog.addEventListener("cancel", (e) => { e.preventDefault(); close(); });
+  dialog.addEventListener("click", (e) => { if (e.target === dialog) close(); });
+  document.body.append(dialog);
+  dialog.showModal();
+  try {
+    await loadSkinView();
+    viewer = new skinview3d.SkinViewer({ canvas, width: 320, height: 420, skin: src, model: slim ? "slim" : "default" });
+    viewer.autoRotate = true;
+    viewer.autoRotateSpeed = 0.6;
+    viewer.zoom = 0.85;
+  } catch (e) {
+    note.textContent = e.message || "The 3D viewer couldn't be shown.";
+    note.style.color = "var(--bad)";
+  }
+}
+
+// A skin as a character from the front and the back (body, arms, legs, head, with the outer layers), so a
+// reviewer sees what people will see. Clicking it shows the raw texture sheet, and back.
+function skinPreview(src, slim, name) {
+  const SCALE = 5, W = 16, H = 32, GAP = 4;
+  const canvas = el("canvas", { class: "skin", title: "Click for the raw texture", width: (W * 2 + GAP) * SCALE, height: W * 2 * SCALE });
+  const raw = el("img", { src, alt: "Skin " + name, loading: "lazy", style: "display:none" });
+  const img = new Image();
+  img.onload = () => { try {
+    const old = img.height === 32; // 64x32 skins have one arm and one leg, used for both sides
+    const aw = slim ? 3 : 4;
+    const view = document.createElement("canvas");
+    view.width = (W * 2 + GAP); view.height = H;
+    const g = view.getContext("2d");
+    g.imageSmoothingEnabled = false;
+    // part(source x, y, w, h, dest x, y, mirror)
+    const part = (sx, sy, w, h, dx, dy, mirror) => {
+      if (mirror) {
+        g.save(); g.translate(dx + w, dy); g.scale(-1, 1); g.drawImage(img, sx, sy, w, h, 0, 0, w, h); g.restore();
+      } else {
+        g.drawImage(img, sx, sy, w, h, dx, dy, w, h);
+      }
+    };
+    // One character seen from the front or the back, its top-left at ox. Each part is [x, y] of its face in the
+    // sheet (an arm's back face is one column further left on slim skins), drawn base layer first, outer layer after.
+    const body = (ox, f) => {
+      const slimBack = slim ? 1 : 0;
+      const parts = {
+        rArm: [f ? [44, 20] : [52 - slimBack, 20], f ? [44, 36] : [52 - slimBack, 36], aw],
+        lArm: [f ? [36, 52] : [44 - slimBack, 52], f ? [52, 52] : [60 - slimBack, 52], aw],
+        rLeg: [f ? [4, 20] : [12, 20], f ? [4, 36] : [12, 36], 4],
+        lLeg: [f ? [20, 52] : [28, 52], f ? [4, 52] : [12, 52], 4],
+      };
+      // Where each part stands: the right side of the character is on the viewer's left from the front.
+      const at = {
+        rArm: f ? ox + 4 - aw : ox + 12, lArm: f ? ox + 12 : ox + 4 - aw,
+        rLeg: f ? ox + 4 : ox + 8, lLeg: f ? ox + 8 : ox + 4,
+      };
+      const y = { rArm: 8, lArm: 8, rLeg: 20, lLeg: 20 };
+      for (const layer of [0, 1]) {
+        for (const name of ["rLeg", "lLeg", "rArm", "lArm"]) {
+          const [base, outer, w] = parts[name];
+          const left = name[0] === "l";
+          if (old && layer === 1) continue; // 64x32 skins have no outer layers below the head
+          const src = old && left && layer === 0 ? parts[name === "lArm" ? "rArm" : "rLeg"][0] : layer ? outer : base;
+          part(src[0], src[1], w, 12, at[name], y[name], old && left && layer === 0);
+        }
+        if (layer === 0) part(f ? 20 : 32, 20, 8, 12, ox + 4, 8, false);
+        else if (!old) part(f ? 20 : 32, 36, 8, 12, ox + 4, 8, false);
+        part(f ? (layer ? 40 : 8) : (layer ? 56 : 24), 8, 8, 8, ox + 4, 0, false);
+      }
+    };
+    body(0, true);
+    body(W + GAP, false);
+    const c = canvas.getContext("2d");
+    c.imageSmoothingEnabled = false;
+    const sw = (W * 2 + GAP) * SCALE, sh = H * SCALE, top = (canvas.height - sh) / 2;
+    c.drawImage(view, 0, 0, W * 2 + GAP, H, 0, top, sw, sh);
+  } catch (e) { canvas.style.display = "none"; raw.style.display = ""; } };
+  img.onerror = () => { canvas.style.display = "none"; raw.style.display = ""; };
+  img.src = src;
+  const toggle = () => {
+    const showRaw = raw.style.display === "none";
+    raw.style.display = showRaw ? "" : "none";
+    canvas.style.display = showRaw ? "none" : "";
+  };
+  canvas.onclick = toggle;
+  raw.onclick = toggle;
+  const view3d = el("button", { type: "button", class: "ghost small", dataset: { skinName: name }, onclick: () => skin3d(src, slim, view3d.dataset.skinName) }, "3D view");
+  return el("div", { style: "display:contents" }, canvas, raw, view3d);
 }
 
 async function gallery(r) {
@@ -605,7 +724,6 @@ async function gallery(r) {
   const renamable = canChange() && (r.sub === "pending" || r.sub === "approved");
   const cards = items.map((it) => {
     const card = el("div", { class: "card" });
-    const img = el("img", { src: "/v1/textures/" + encodeURIComponent(it.texture) + ".png", alt: "Skin " + it.name, loading: "lazy" });
     const title = el("h3", {}, it.name);
     const buttons = canChange() ? (GALLERY_ACTIONS[r.sub] || []).map(([action, label, tone]) => {
       const b = el("button", { class: tone + " small", onclick: async () => {
@@ -616,7 +734,7 @@ async function gallery(r) {
     }) : [];
     if (renamable) {
       const rename = el("button", { class: "ghost small" }, "Rename");
-      const open = () => renameGalleryItem(it, card, title, img, rename);
+      const open = () => renameGalleryItem(it, card, title, rename);
       rename.onclick = open;
       title.title = "Rename";
       title.style.cursor = "text";
@@ -624,7 +742,7 @@ async function gallery(r) {
       buttons.push(rename);
     }
     card.append(...[
-      img,
+      skinPreview("/v1/textures/" + encodeURIComponent(it.texture) + ".png", it.model === "slim", it.name),
       title,
       el("div", { class: "meta" }, el("span", {}, "by " + it.author), el("span", {}, it.model), timeEl(it.created)),
       el("div", { class: "chips" },

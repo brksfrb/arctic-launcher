@@ -118,6 +118,11 @@ final class ModsScreen extends Page {
 				continue;
 			}
 			int cw = Math.max(34, 12 + chipWidth(cat.title));
+			// Too many for one row (a small window or a big GUI scale): the rest goes on the next.
+			if (cx > x && cx + cw > x + w) {
+				cx = x;
+				cy += CHIP_H + CHIP_GAP;
+			}
 			add(new Button(cat.title, () -> {
 				category = cat;
 				scrollOffset = 0;
@@ -131,6 +136,10 @@ final class ModsScreen extends Page {
 			int gy = cy + CHIP_H + 4;
 			for (final String group : ModCatalog.HUD_GROUPS) {
 				int gw = Math.max(34, 12 + chipWidth(group));
+				if (gx > x && gx + gw > x + w) {
+					gx = x;
+					gy += CHIP_H + CHIP_GAP;
+				}
 				add(new Button(group, () -> {
 					hudGroup = group;
 					scrollOffset = 0;

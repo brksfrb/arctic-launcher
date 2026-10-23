@@ -135,6 +135,7 @@ impl Store {
         store.migrate_chat()?;
         store.migrate_voice()?;
         store.migrate_activity()?;
+        store.migrate_push()?;
         Ok(store)
     }
 

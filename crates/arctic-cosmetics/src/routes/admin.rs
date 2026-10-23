@@ -44,6 +44,7 @@ const READ_NOTE_EVERY: u64 = 60;
 pub fn routes() -> Router<Shared> {
     Router::new()
         .route("/admin", routing::get(page))
+        .route("/admin/skinview3d.js", routing::get(skin_viewer))
         .route("/v1/admin/me", routing::get(me))
         .route("/v1/admin/gallery", routing::get(queue))
         .route("/v1/admin/gallery/{id}", routing::post(decide))
@@ -68,6 +69,21 @@ pub fn routes() -> Router<Shared> {
         )
 }
 
+/// The 3D skin viewer the gallery opens (skinview3d, MIT, kept in the repo so the dashboard loads no
+/// code from anywhere else).
+const SKIN_VIEWER: &str = include_str!("../../assets/vendor/skinview3d.bundle.js");
+
+async fn skin_viewer() -> Response {
+    (
+        [
+            (header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
+            (header::CACHE_CONTROL, "public, max-age=86400"),
+        ],
+        SKIN_VIEWER,
+    )
+        .into_response()
+}
+
 /// The dashboard: one self-contained page that talks only to this server.
 async fn page(State(state): State<Shared>) -> Response {
     if state.admins.is_empty() {
@@ -78,8 +94,8 @@ async fn page(State(state): State<Shared>) -> Response {
             (
                 header::CONTENT_SECURITY_POLICY,
                 HeaderValue::from_static(
-                    "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; \
-                     img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; \
+                    "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; \
+                     img-src 'self' blob: data:; connect-src 'self'; base-uri 'none'; form-action 'none'; \
                      frame-ancestors 'none'",
                 ),
             ),

@@ -109,7 +109,39 @@ public final class LegacyHooks {
 		}
 	}
 
+	private static int cursorLogged;
+
+	/**
+	 * A screen is open but the pointer is hidden: it is given back (seen in fullscreen after the loading
+	 * screen). The game still has the mouse grabbed, or something left an empty cursor on the window.
+	 * A screen always wants the pointer, so this can only help.
+	 */
+	private static void cursorGuard() {
+		boolean grabbed = org.lwjgl.input.Mouse.isGrabbed();
+		boolean custom = org.lwjgl.input.Mouse.getNativeCursor() != null;
+		if (!grabbed && !custom) {
+			return;
+		}
+		try {
+			if (grabbed) {
+				org.lwjgl.input.Mouse.setGrabbed(false);
+			}
+			if (custom) {
+				org.lwjgl.input.Mouse.setNativeCursor(null);
+			}
+		} catch (org.lwjgl.LWJGLException | RuntimeException e) {
+			return;
+		}
+		if (cursorLogged < 5) {
+			cursorLogged++;
+			ArcticLegacy.LOG.info("Arctic: gave the mouse pointer back to an open screen (game grabbed: {}, own cursor on the window: {})", grabbed, custom);
+		}
+	}
+
 	public static void tick(boolean screenOpen) {
+		if (screenOpen) {
+			cursorGuard();
+		}
 		ArcticLegacy.PLATFORM.tick();
 		syncWindowSize();
 		syncHitboxes();

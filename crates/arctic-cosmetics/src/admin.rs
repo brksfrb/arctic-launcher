@@ -88,6 +88,13 @@ impl Moderators {
         self.keys.is_empty()
     }
 
+    /// Whether a moderator by this name still has a key (a removed key's phones stop hearing from us).
+    pub fn is_moderator(&self, name: &str) -> bool {
+        self.keys
+            .iter()
+            .any(|(n, _, role)| n == name && *role == Role::Moderator)
+    }
+
     /// Whose this key is and what it may do. Every key is compared, so the
     /// time taken doesn't say how close a guess was or whose it nearly was.
     pub fn identify(&self, key: &str) -> Option<(&str, Role)> {

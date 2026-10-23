@@ -73,6 +73,7 @@ pub fn router(state: Shared) -> Router {
         .merge(crash::routes())
         .merge(suggest::routes())
         .merge(content::routes())
+        .merge(notify::routes())
         .merge(shares::routes())
         .merge(servers::routes())
         .merge(friends::routes())
@@ -515,6 +516,7 @@ mod content;
 mod crash;
 mod friends;
 mod gallery;
+mod notify;
 mod servers;
 mod shares;
 mod suggest;

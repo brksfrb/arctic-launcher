@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Arctic</title>
+<link rel="manifest" href="/notify/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/notify/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Arctic">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b1220">
+<style>
+  :root { color-scheme: dark; --bg: #0b1220; --panel: #141d30; --line: #24314d; --text: #e8eefc; --muted: #93a3c4;
+          --accent: #6cc8ff; --good: #35d07f; --bad: #ff6b6b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 -apple-system, system-ui, "Segoe UI", sans-serif;
+         padding: max(20px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
+  main { max-width: 480px; margin: 0 auto; display: grid; gap: 16px; }
+  header { display: flex; align-items: center; gap: 12px; }
+  header img { width: 44px; height: 44px; border-radius: 10px; }
+  h1 { font-size: 22px; margin: 0; }
+  p { margin: 0; color: var(--muted); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 12px; }
+  .card h2 { margin: 0; font-size: 16px; }
+  label.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0;
+              border-top: 1px solid var(--line); }
+  label.row:first-of-type { border-top: 0; }
+  input[type=password], input[type=text] { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line);
+         background: #0e1627; color: var(--text); font-size: 16px; }
+  button { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: #1b2740; color: var(--text);
+           font-size: 16px; font-weight: 600; }
+  button.primary { background: var(--accent); color: #04121f; border-color: transparent; }
+  button.danger { color: var(--bad); }
+  button:disabled { opacity: .5; }
+  .actions { display: grid; gap: 10px; }
+  .note { font-size: 14px; }
+  .ok { color: var(--good); }
+  .bad { color: var(--bad); }
+  .switch { position: relative; width: 52px; height: 30px; flex: none; }
+  .switch input { opacity: 0; width: 100%; height: 100%; position: absolute; margin: 0; }
+  .switch span { position: absolute; inset: 0; background: #2a3650; border-radius: 30px; transition: background .15s; }
+  .switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%;
+                        background: #fff; transition: transform .15s; }
+  .switch input:checked + span { background: var(--good); }
+  .switch input:checked + span::after { transform: translateX(22px); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="/notify/icon-192.png" alt="">
+    <div>
+      <h1>Arctic</h1>
+      <p>Choose what reaches your phone.</p>
+    </div>
+  </header>
+
+  <section class="card" id="install" hidden>
+    <h2>Add Arctic to your Home Screen</h2>
+    <p>iPhone only sends notifications to apps on the Home Screen. Tap <b>Share</b>, then <b>Add to Home Screen</b>, and open Arctic from there.</p>
+  </section>
+
+  <section class="card" id="signin" hidden>
+    <h2>Sign in</h2>
+    <p>Your moderator key (the one you use on the dashboard). It stays on this phone.</p>
+    <input id="key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Moderator key">
+    <button class="primary" id="signInButton">Sign in</button>
+    <p class="note bad" id="signInError"></p>
+  </section>
+
+  <section class="card" id="enable" hidden>
+    <h2>Notifications</h2>
+    <p id="enableText">Turn them on for this phone.</p>
+    <button class="primary" id="enableButton">Turn on notifications</button>
+    <p class="note bad" id="enableError"></p>
+  </section>
+
+  <section class="card" id="topics" hidden>
+    <h2>Tell me about</h2>
+    <div id="topicList"></div>
+    <div class="actions">
+      <button id="testButton">Send a test</button>
+      <button class="danger" id="offButton">Turn off on this phone</button>
+    </div>
+    <p class="note" id="status"></p>
+  </section>
+
+  <p class="note" id="who"></p>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get: () => { try { return localStorage.getItem("arctic_key") || ""; } catch (e) { return ""; } },
+    set: (v) => { try { localStorage.setItem("arctic_key", v); } catch (e) { /* private mode */ } },
+    clear: () => { try { localStorage.removeItem("arctic_key"); } catch (e) { /* private mode */ } },
+  };
+  const standalone = window.navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  let config = null;
+  let registration = null;
+  let subscription = null;
+  let topicsOn = [];
+
+  const show = (id, on) => { $(id).hidden = !on; };
+  const say = (id, text, cls) => { const e = $(id); e.textContent = text || ""; e.className = "note " + (cls || ""); };
+
+  async function api(path, body) {
+    const response = await fetch(path, {
+      method: body === undefined ? "GET" : "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Key": store.get() },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const text = await response.text();
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; } catch (e) { /* not JSON */ }
+    if (!response.ok) { const err = new Error(data.error || ("Error " + response.status)); err.status = response.status; throw err; }
+    return data;
+  }
+
+  const keyBytes = (base64) => {
+    const pad = "=".repeat((4 - (base64.length % 4)) % 4);
+    const raw = atob((base64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  };
+
+  function drawTopics() {
+    const list = $("topicList");
+    list.textContent = "";
+    for (const t of config.topics) {
+      const row = document.createElement("label");
+      row.className = "row";
+      const text = document.createElement("span");
+      text.textContent = t.label;
+      const sw = document.createElement("span");
+      sw.className = "switch";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = topicsOn.includes(t.id);
+      input.addEventListener("change", async () => {
+        const next = config.topics.map((x) => x.id).filter((id) => id === t.id ? input.checked : topicsOn.includes(id));
+        try {
+          const saved = await api("/v1/notify/topics", { endpoint: subscription.endpoint, topics: next });
+          topicsOn = saved.topics;
+          say("status", "Saved.", "ok");
+        } catch (e) {
+          input.checked = !input.checked;
+          say("status", e.message, "bad");
+        }
+      });
+      sw.append(input, document.createElement("span"));
+      row.append(text, sw);
+      list.append(row);
+    }
+  }
+
+  async function refresh() {
+    show("signin", false); show("enable", false); show("topics", false);
+    if (!standalone && ios) { show("install", true); }
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      if (!(ios && !standalone)) { say("who", "This browser can't receive notifications.", "bad"); }
+      return;
+    }
+    if (ios && !standalone) { return; }
+    if (!store.get()) { show("signin", true); return; }
+    subscription = await registration.pushManager.getSubscription();
+    try {
+      const state = subscription ? await api("/v1/notify/state", { endpoint: subscription.endpoint }) : await api("/v1/notify/state", { endpoint: "none" });
+      say("who", "Signed in as " + state.name + ". ");
+      if (subscription && state.topics) {
+        topicsOn = state.topics;
+        drawTopics();
+        show("topics", true);
+        say("status", "");
+        return;
+      }
+      if (subscription) { await subscription.unsubscribe(); subscription = null; }
+      show("enable", true);
+      say("enableError", "");
+    } catch (e) {
+      if (e.status === 401) { store.clear(); show("signin", true); say("signInError", "That key isn't right."); }
+      else { say("who", e.message, "bad"); }
+    }
+  }
+
+  $("signInButton").addEventListener("click", () => {
+    const value = $("key").value.trim();
+    if (!value) { return; }
+    store.set(value);
+    $("key").value = "";
+    say("signInError", "");
+    refresh();
+  });
+
+  $("enableButton").addEventListener("click", async () => {
+    say("enableError", "");
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") { throw new Error("Notifications are blocked for Arctic. Allow them in Settings → Notifications → Arctic."); }
+      subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(config.key) });
+      const all = config.topics.map((t) => t.id);
+      const saved = await api("/v1/notify/subscribe", { subscription: subscription.toJSON(), topics: all });
+      topicsOn = saved.topics;
+      await refresh();
+    } catch (e) {
+      say("enableError", e.message, "bad");
+    }
+  });
+
+  $("testButton").addEventListener("click", async () => {
+    try {
+      const sent = await api("/v1/notify/test", { endpoint: subscription.endpoint });
+      say("status", sent.sent ? "Sent. It should arrive in a moment." : "Couldn't send. Try turning notifications off and on.", sent.sent ? "ok" : "bad");
+    } catch (e) { say("status", e.message, "bad"); }
+  });
+
+  $("offButton").addEventListener("click", async () => {
+    try {
+      await api("/v1/notify/unsubscribe", { endpoint: subscription.endpoint });
+      await subscription.unsubscribe();
+      subscription = null;
+    } catch (e) { say("status", e.message, "bad"); return; }
+    await refresh();
+  });
+
+  (async () => {
+    try {
+      config = await (await fetch("/v1/notify/config")).json();
+      if ("serviceWorker" in navigator) {
+        registration = await navigator.serviceWorker.register("/notify/sw.js", { scope: "/notify/" });
+        await navigator.serviceWorker.ready;
+      }
+    } catch (e) { say("who", "Can't reach the server.", "bad"); return; }
+    await refresh();
+  })();
+})();
+</script>
+</body>
+</html>
