@@ -120,8 +120,8 @@ struct EndpointBody {
     topics: Vec<String>,
 }
 
-fn who(state: &Shared, headers: &HeaderMap) -> Result<String, Response> {
-    moderator(state, headers).ok_or_else(|| error(StatusCode::UNAUTHORIZED, "wrong key"))
+fn denied() -> Response {
+    error(StatusCode::UNAUTHORIZED, "wrong key")
 }
 
 /// What this phone listens for (`null` when it isn't signed up), and whether the key is good.
@@ -130,9 +130,8 @@ async fn state(
     headers: HeaderMap,
     Json(body): Json<EndpointBody>,
 ) -> Response {
-    let owner = match who(&state, &headers) {
-        Ok(owner) => owner,
-        Err(denied) => return denied,
+    let Some(owner) = moderator(&state, &headers) else {
+        return denied();
     };
     match state.store.push_topics(&owner, &body.endpoint) {
         Ok(topics) => Json(json!({ "name": owner, "topics": topics })).into_response(),
@@ -145,9 +144,8 @@ async fn subscribe(
     headers: HeaderMap,
     Json(body): Json<SubscribeBody>,
 ) -> Response {
-    let owner = match who(&state, &headers) {
-        Ok(owner) => owner,
-        Err(denied) => return denied,
+    let Some(owner) = moderator(&state, &headers) else {
+        return denied();
     };
     let sub = Subscription {
         endpoint: body.subscription.endpoint,
@@ -170,9 +168,8 @@ async fn topics(
     headers: HeaderMap,
     Json(body): Json<EndpointBody>,
 ) -> Response {
-    let owner = match who(&state, &headers) {
-        Ok(owner) => owner,
-        Err(denied) => return denied,
+    let Some(owner) = moderator(&state, &headers) else {
+        return denied();
     };
     let chosen = push::clean_topics(&body.topics);
     match state.store.push_set_topics(&owner, &body.endpoint, &chosen) {
@@ -187,9 +184,8 @@ async fn unsubscribe(
     headers: HeaderMap,
     Json(body): Json<EndpointBody>,
 ) -> Response {
-    let owner = match who(&state, &headers) {
-        Ok(owner) => owner,
-        Err(denied) => return denied,
+    let Some(owner) = moderator(&state, &headers) else {
+        return denied();
     };
     match state.store.push_unsubscribe(&owner, &body.endpoint) {
         Ok(()) => Json(json!({ "ok": true })).into_response(),
@@ -203,9 +199,8 @@ async fn test(
     headers: HeaderMap,
     Json(body): Json<EndpointBody>,
 ) -> Response {
-    let owner = match who(&state, &headers) {
-        Ok(owner) => owner,
-        Err(denied) => return denied,
+    let Some(owner) = moderator(&state, &headers) else {
+        return denied();
     };
     let phone = match state.store.push_get(&owner, &body.endpoint) {
         Ok(Some(phone)) => phone,
