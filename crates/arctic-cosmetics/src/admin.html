@@ -579,7 +579,7 @@ const GALLERY_DONE = { approve: "Approved", reject: "Rejected", restore: "Restor
 
 // The real thing: the skin on a 3D character you can turn by dragging (scroll to zoom). The viewer library
 // (skinview3d) loads the first time it is asked for, so the page stays light.
-const SKINVIEW3D = "https://cdn.jsdelivr.net/npm/skinview3d@3.1.0/bundles/skinview3d.bundle.js";
+const SKINVIEW3D = "/admin/skinview3d.js";
 let skinviewLoading = null;
 function loadSkinView() {
   if (window.skinview3d) return Promise.resolve();
