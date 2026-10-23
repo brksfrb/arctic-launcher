@@ -199,21 +199,25 @@ impl Store {
         );
     }
 
-    /// Every phone listening for `topic`.
-    fn push_listeners(&self, topic: &str) -> rusqlite::Result<Vec<Subscription>> {
+    /// Every phone listening for `topic`, with the account it belongs to.
+    fn push_listeners(&self, topic: &str) -> rusqlite::Result<Vec<(String, Subscription)>> {
         let conn = self.conn();
-        let mut stmt = conn.prepare("SELECT endpoint, p256dh, auth, topics FROM push_subs")?;
+        let mut stmt =
+            conn.prepare("SELECT owner, endpoint, p256dh, auth, topics FROM push_subs")?;
         let rows = stmt.query_map([], |r| {
-            Ok(Subscription {
-                endpoint: r.get(0)?,
-                p256dh: r.get(1)?,
-                auth: r.get(2)?,
-                topics: split_topics(&r.get::<_, String>(3)?),
-            })
+            Ok((
+                r.get::<_, String>(0)?,
+                Subscription {
+                    endpoint: r.get(1)?,
+                    p256dh: r.get(2)?,
+                    auth: r.get(3)?,
+                    topics: split_topics(&r.get::<_, String>(4)?),
+                },
+            ))
         })?;
         Ok(rows
             .filter_map(Result::ok)
-            .filter(|s| s.topics.iter().any(|t| t == topic))
+            .filter(|(_, s)| s.topics.iter().any(|t| t == topic))
             .collect())
     }
 }
@@ -286,7 +290,12 @@ pub fn notify(
                 return;
             }
         };
-        for phone in phones {
+        for (owner, phone) in phones {
+            // A key that was taken back stops its phones too.
+            if !state.admins.is_moderator(&owner) {
+                state.store.push_forget(&phone.endpoint);
+                continue;
+            }
             send(&state.store, &phone, topic, &title, &body, &url);
         }
     });
@@ -391,7 +400,7 @@ mod tests {
         assert_eq!(crash.len(), 2);
         let skin = s.push_listeners("skin").unwrap();
         assert_eq!(skin.len(), 1);
-        assert_eq!(skin[0].endpoint, "https://p/2");
+        assert_eq!(skin[0].1.endpoint, "https://p/2");
         assert!(s.push_listeners("server").unwrap().is_empty());
     }
 
