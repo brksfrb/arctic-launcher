@@ -12,8 +12,9 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use rusqlite::params;
 use serde_json::json;
-use web_push_native::jwt_simple::algorithms::{ECDSAP256PublicKeyLike, ES256KeyPair};
+use web_push_native::jwt_simple::algorithms::ES256KeyPair;
 use web_push_native::p256::PublicKey;
+use web_push_native::p256::elliptic_curve::sec1::ToEncodedPoint;
 use web_push_native::{Auth, WebPushBuilder};
 
 use crate::routes::AppState;
@@ -94,8 +95,10 @@ impl Store {
                 })?
             }
         };
+        // Browsers want the uncompressed point (65 bytes); the key's own export may be the compressed one.
         let public = key_pair(&private)
-            .map(|pair| B64.encode(pair.public_key().to_bytes_uncompressed()))
+            .and_then(|pair| PublicKey::from_sec1_bytes(&pair.public_key().to_bytes()).ok())
+            .map(|key| B64.encode(key.to_encoded_point(false).as_bytes()))
             .ok_or_else(|| rusqlite::Error::InvalidParameterName("push key".into()))?;
         Ok((private, public))
     }
