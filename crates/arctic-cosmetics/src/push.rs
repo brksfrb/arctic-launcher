@@ -229,9 +229,43 @@ fn key_pair(private: &str) -> Option<ES256KeyPair> {
     ES256KeyPair::from_bytes(&B64.decode(private).ok()?).ok()
 }
 
-/// Whether a phone's endpoint is one a push service could have given (an https address, not too long).
+/// The push services phones use (a host is one of these, or a subdomain of one).
+const PUSH_HOSTS: [&str; 6] = [
+    "fcm.googleapis.com",
+    "push.apple.com",
+    "push.services.mozilla.com",
+    "notify.windows.com",
+    "android.googleapis.com",
+    "push.microsoft.com",
+];
+
+/// Whether a phone's endpoint is an address of a known push service: https on the usual port, no
+/// credentials, and a host that is (a subdomain of) one of [`PUSH_HOSTS`]. Anything else could aim the
+/// server at some other machine.
 pub fn endpoint_ok(endpoint: &str) -> bool {
-    endpoint.len() <= MAX_ENDPOINT && endpoint.starts_with("https://") && !endpoint.contains(' ')
+    if endpoint.len() > MAX_ENDPOINT
+        || endpoint
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control())
+    {
+        return false;
+    }
+    let Some(rest) = endpoint.strip_prefix("https://") else {
+        return false;
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    if authority.contains('@') {
+        return false;
+    }
+    let host = match authority.split_once(':') {
+        Some((host, "443")) => host,
+        Some(_) => return false,
+        None => authority,
+    };
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    PUSH_HOSTS
+        .iter()
+        .any(|allowed| host == *allowed || host.ends_with(&format!(".{allowed}")))
 }
 
 /// Tell the phones listening for `topic` (in the background): `title` and `body` are shown, `url` opens
@@ -292,6 +326,7 @@ pub fn send(
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(SEND_TIMEOUT))
         .http_status_as_error(false)
+        .max_redirects(0)
         .build()
         .into();
     let mut post = agent.post(parts.uri.to_string());
@@ -414,7 +449,19 @@ mod tests {
     #[test]
     fn only_https_endpoints_are_accepted() {
         assert!(endpoint_ok("https://web.push.apple.com/abc"));
-        assert!(!endpoint_ok("http://example.com/x"));
+        assert!(endpoint_ok("https://fcm.googleapis.com/fcm/send/xyz"));
+        assert!(endpoint_ok(
+            "https://updates.push.services.mozilla.com:443/wpush/v2/x"
+        ));
+        assert!(endpoint_ok("https://WEB.PUSH.APPLE.COM./abc"));
+        assert!(!endpoint_ok("http://web.push.apple.com/x"));
         assert!(!endpoint_ok("https://a b"));
+        // Not a push service, or made to look like one.
+        assert!(!endpoint_ok("https://example.com/push.apple.com"));
+        assert!(!endpoint_ok("https://evilpush.apple.com.example.com/x"));
+        assert!(!endpoint_ok("https://notpush.apple.com/x"));
+        assert!(!endpoint_ok("https://web.push.apple.com@169.254.169.254/x"));
+        assert!(!endpoint_ok("https://127.0.0.1/x"));
+        assert!(!endpoint_ok("https://web.push.apple.com:8080/x"));
     }
 }
