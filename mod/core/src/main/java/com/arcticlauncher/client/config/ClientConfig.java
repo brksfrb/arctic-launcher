@@ -117,6 +117,8 @@ public final class ClientConfig {
 	public boolean optifineCapes = true;
 	/** The ping in milliseconds after each name in the player list. */
 	public boolean tabPing = true;
+	/** The view does not tilt and shake when you take damage. */
+	public boolean noHurtCam;
 	/** Digits after the point in the XYZ widget (0 = whole blocks). */
 	public int coordDecimals;
 	/** Lit TNT shows its seconds left above it. */

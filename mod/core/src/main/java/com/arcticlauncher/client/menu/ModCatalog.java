@@ -63,7 +63,7 @@ final class ModCatalog {
 		widgets("World", "coords", "direction", "speed", "biome", "light", "chunk", "day", "worldtime", "clock", "date", "compass",
 				"minimap", "death", "stopwatch");
 		for (String id : new String[] {"combatfx", "slotlocks", "invsearch", "shulkerpeek", "particles", "helditem", "palette",
-				"portalscreens", "tnttimer", "ownnametag", "ofcapes", "tabping", "badgetags", "hud.cpu", "hud.syscpu", "hud.sysram", "hud.alloc",
+				"portalscreens", "tnttimer", "ownnametag", "ofcapes", "nohurtcam", "tabping", "badgetags", "hud.cpu", "hud.syscpu", "hud.sysram", "hud.alloc",
 				"hud.gpu", "hud.vram", "hud.frametime", "hud.lows", "hud.blocking", "hud.falldamage", "hud.pearl"}) {
 			NEW_IDS.add(id);
 		}
@@ -242,7 +242,10 @@ final class ModCatalog {
 		out.add(new Mod("ofcapes", "OptiFine Capes", "Show other players' OptiFine capes, without OptiFine (asks OptiFine's cape server for each player's name, as OptiFine does)", "looks", Category.SOCIAL,
 				"optifine cape capes cloak")
 				.toggle(() -> c.optifineCapes, on -> c.optifineCapes = on));
-		out.add(new Mod("tabping", "Tab Ping", "The ping in milliseconds after every name in the player list", "tabping", Category.SOCIAL,
+		out.add(new Mod("nohurtcam", "No Hurt Shake", "The view stops tilting and shaking when you take damage (1.14 to 1.21.11)", "particles", Category.VISUAL,
+				"hurt cam camera shake shaking tilt damage bob")
+				.toggle(() -> c.noHurtCam, on -> c.noHurtCam = on));
+		out.add(new Mod("tabping", "Tab Ping", "The ping in milliseconds in the player list, where the ping bars were", "tabping", Category.SOCIAL,
 				"tab list ping latency ms players")
 				.toggle(() -> c.tabPing, on -> c.tabPing = on));
 		out.add(new Mod("tabglow", "Find Me in Tab", "Your own name in the player list pulses: » Steve «", "tiers", Category.SOCIAL,
