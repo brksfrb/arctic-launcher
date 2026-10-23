@@ -123,6 +123,8 @@
   .card.leaving { opacity: 0; transform: scale(.97); }
   .card img { width: 100%; aspect-ratio: 1 / 1; object-fit: contain; image-rendering: pixelated; border-radius: 8px;
               background: repeating-conic-gradient(#8882 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
+  .card canvas.skin { width: 100%; aspect-ratio: 1 / 1; image-rendering: pixelated; border-radius: 8px; cursor: pointer;
+                      background: repeating-conic-gradient(#8882 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
   .card h3 { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
   .card .actions { justify-content: stretch; }
   .card .actions button { flex: 1; }
@@ -575,6 +577,76 @@ const GALLERY_ACTIONS = {
 };
 const GALLERY_DONE = { approve: "Approved", reject: "Rejected", restore: "Restored", remove: "Removed" };
 
+// A skin as a character from the front and the back (body, arms, legs, head, with the outer layers), so a
+// reviewer sees what people will see. Clicking it shows the raw texture sheet, and back.
+function skinPreview(src, slim, name) {
+  const SCALE = 5, W = 16, H = 32, GAP = 4;
+  const canvas = el("canvas", { class: "skin", title: "Click for the raw texture", width: (W * 2 + GAP) * SCALE, height: W * 2 * SCALE });
+  const raw = el("img", { src, alt: "Skin " + name, loading: "lazy", style: "display:none" });
+  const img = new Image();
+  img.onload = () => { try {
+    const old = img.height === 32; // 64x32 skins have one arm and one leg, used for both sides
+    const aw = slim ? 3 : 4;
+    const view = document.createElement("canvas");
+    view.width = (W * 2 + GAP); view.height = H;
+    const g = view.getContext("2d");
+    g.imageSmoothingEnabled = false;
+    // part(source x, y, w, h, dest x, y, mirror)
+    const part = (sx, sy, w, h, dx, dy, mirror) => {
+      if (mirror) {
+        g.save(); g.translate(dx + w, dy); g.scale(-1, 1); g.drawImage(img, sx, sy, w, h, 0, 0, w, h); g.restore();
+      } else {
+        g.drawImage(img, sx, sy, w, h, dx, dy, w, h);
+      }
+    };
+    // One character seen from the front or the back, its top-left at ox. Each part is [x, y] of its face in the
+    // sheet (an arm's back face is one column further left on slim skins), drawn base layer first, outer layer after.
+    const body = (ox, f) => {
+      const slimBack = slim ? 1 : 0;
+      const parts = {
+        rArm: [f ? [44, 20] : [52 - slimBack, 20], f ? [44, 36] : [52 - slimBack, 36], aw],
+        lArm: [f ? [36, 52] : [44 - slimBack, 52], f ? [52, 52] : [60 - slimBack, 52], aw],
+        rLeg: [f ? [4, 20] : [12, 20], f ? [4, 36] : [12, 36], 4],
+        lLeg: [f ? [20, 52] : [28, 52], f ? [4, 52] : [12, 52], 4],
+      };
+      // Where each part stands: the right side of the character is on the viewer's left from the front.
+      const at = {
+        rArm: f ? ox + 4 - aw : ox + 12, lArm: f ? ox + 12 : ox + 4 - aw,
+        rLeg: f ? ox + 4 : ox + 8, lLeg: f ? ox + 8 : ox + 4,
+      };
+      const y = { rArm: 8, lArm: 8, rLeg: 20, lLeg: 20 };
+      for (const layer of [0, 1]) {
+        for (const name of ["rLeg", "lLeg", "rArm", "lArm"]) {
+          const [base, outer, w] = parts[name];
+          const left = name[0] === "l";
+          if (old && layer === 1) continue; // 64x32 skins have no outer layers below the head
+          const src = old && left && layer === 0 ? parts[name === "lArm" ? "rArm" : "rLeg"][0] : layer ? outer : base;
+          part(src[0], src[1], w, 12, at[name], y[name], old && left && layer === 0);
+        }
+        if (layer === 0) part(f ? 20 : 32, 20, 8, 12, ox + 4, 8, false);
+        else if (!old) part(f ? 20 : 32, 36, 8, 12, ox + 4, 8, false);
+        part(f ? (layer ? 40 : 8) : (layer ? 56 : 24), 8, 8, 8, ox + 4, 0, false);
+      }
+    };
+    body(0, true);
+    body(W + GAP, false);
+    const c = canvas.getContext("2d");
+    c.imageSmoothingEnabled = false;
+    const sw = (W * 2 + GAP) * SCALE, sh = H * SCALE, top = (canvas.height - sh) / 2;
+    c.drawImage(view, 0, 0, W * 2 + GAP, H, 0, top, sw, sh);
+  } catch (e) { canvas.style.display = "none"; raw.style.display = ""; } };
+  img.onerror = () => { canvas.style.display = "none"; raw.style.display = ""; };
+  img.src = src;
+  const toggle = () => {
+    const showRaw = raw.style.display === "none";
+    raw.style.display = showRaw ? "" : "none";
+    canvas.style.display = showRaw ? "none" : "";
+  };
+  canvas.onclick = toggle;
+  raw.onclick = toggle;
+  return el("div", { style: "display:contents" }, canvas, raw);
+}
+
 async function gallery(r) {
   const data = await api("/v1/admin/gallery?queue=" + encodeURIComponent(r.sub));
   const items = data.items || [];
@@ -588,7 +660,7 @@ async function gallery(r) {
       return b;
     }) : [];
     card.append(...[
-      el("img", { src: "/v1/textures/" + encodeURIComponent(it.texture) + ".png", alt: "Skin " + it.name, loading: "lazy" }),
+      skinPreview("/v1/textures/" + encodeURIComponent(it.texture) + ".png", it.model === "slim", it.name),
       el("h3", {}, it.name),
       el("div", { class: "meta" }, el("span", {}, "by " + it.author), el("span", {}, it.model), timeEl(it.created)),
       el("div", { class: "chips" },
