@@ -429,6 +429,8 @@ impl ArcticApp {
         let p = self.palette();
         let ping = self.servers.status.get(&server.address);
         let mut join = false;
+        // Where the Join button is: the row's pick-up layer must not lie over it.
+        let mut join_rect = None;
         let row = crate::widgets::row(ui, |ui| {
             // Grip: a hint that the row can be picked up (anywhere on it).
             let (grip, _) = ui.allocate_exact_size(vec2(14.0, ICON), egui::Sense::hover());
@@ -498,10 +500,10 @@ impl ArcticApp {
                 }
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::button(ui, p, Some(Icon::Play), "Join", false)
-                    .on_hover_text(format!("Start {} and join", server.name))
-                    .clicked()
-                {
+                let button = widgets::button(ui, p, Some(Icon::Play), "Join", false)
+                    .on_hover_text(format!("Start {} and join", server.name));
+                join_rect = Some(button.rect);
+                if button.clicked() {
                     join = true;
                 }
                 ui.add_space(6.0);
@@ -513,14 +515,24 @@ impl ArcticApp {
         }
         let rect = row.response.rect;
         if let Some(index) = index {
-            // Over the row: only dragging (its buttons still take clicks).
-            let hold = ui
-                .interact(
-                    rect,
-                    ui.id().with(("server_hold", index)),
-                    egui::Sense::drag(),
-                )
-                .on_hover_cursor(egui::CursorIcon::Grab);
+            // Over the row: only dragging. The layer is made after the row's widgets, so it would lie over
+            // the Join button and take its clicks (and show the grab hand over it): over the button it
+            // only watches.
+            let on_join = join_rect.is_some_and(|r| ui.rect_contains_pointer(r));
+            let hold = ui.interact(
+                rect,
+                ui.id().with(("server_hold", index)),
+                if on_join {
+                    egui::Sense::hover()
+                } else {
+                    egui::Sense::drag()
+                },
+            );
+            let hold = if on_join {
+                hold
+            } else {
+                hold.on_hover_cursor(egui::CursorIcon::Grab)
+            };
             if hold.drag_started()
                 && self.servers.drag.is_none()
                 && let Some(at) = hold.interact_pointer_pos()
