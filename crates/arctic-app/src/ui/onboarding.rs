@@ -517,6 +517,20 @@ impl ArcticApp {
             &mut self.settings.discord_presence,
             "Show what you're playing on Discord",
         );
+        ui.add_space(10.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(
+                RichText::new(
+                    "Need help, or want to hear about updates, promotions and giveaways?",
+                )
+                .small()
+                .color(p.muted),
+            );
+            ui.hyperlink_to(
+                RichText::new("Join our Discord").small(),
+                crate::ui::about::DISCORD,
+            );
+        });
     }
 
     fn finish_onboarding(&mut self, now: f64) {
