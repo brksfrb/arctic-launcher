@@ -13,6 +13,8 @@ use crate::widgets;
 const NAV_WIDTH: f32 = 200.0;
 /// How far (px) a tab slides while fading in.
 const TAB_SLIDE: f32 = 14.0;
+/// Space between a page and the right edge of the window (the scroll bar sits on the edge itself).
+const PAGE_SIDE: i8 = 28;
 
 impl ArcticApp {
     pub(crate) fn shell(&mut self, ui: &mut egui::Ui) {
@@ -77,7 +79,14 @@ impl ArcticApp {
         }
 
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(28, 24)))
+            // No margin on the right: the scroll bar sits on the window's edge, and the page keeps its own
+            // space from it (PAGE_SIDE) inside the scroll area.
+            .frame(egui::Frame::new().inner_margin(egui::Margin {
+                left: PAGE_SIDE,
+                right: 0,
+                top: 24,
+                bottom: 24,
+            }))
             .show(ui, |ui| {
                 let t = eased(now, self.tab_changed_at, TAB_TRANSITION);
                 if t < 1.0 {
@@ -87,7 +96,12 @@ impl ArcticApp {
                 ui.add_space((1.0 - t) * TAB_SLIDE);
                 if self.tab == Tab::Skins {
                     // Scrolls inside itself: the character stays in view while the catalog scrolls.
-                    self.skins_tab(ui);
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin {
+                            right: PAGE_SIDE,
+                            ..egui::Margin::ZERO
+                        })
+                        .show(ui, |ui| self.skins_tab(ui));
                     return;
                 }
                 // A scroll position of its own for each page (one shared by all would carry the
@@ -95,18 +109,25 @@ impl ArcticApp {
                 egui::ScrollArea::vertical()
                     .id_salt(("page_scroll", self.tab as usize))
                     .auto_shrink(false)
-                    .show(ui, |ui| match self.tab {
-                        Tab::Play => self.play_tab(ui),
-                        Tab::Accounts => self.accounts_tab(ui),
-                        Tab::Instances => self.instances_tab(ui),
-                        Tab::Bedrock => self.bedrock_tab(ui),
-                        Tab::Skins => self.skins_tab(ui),
-                        Tab::Together => self.together_tab(ui),
-                        Tab::Screenshots => self.screenshots_tab(ui),
-                        Tab::Stats => self.stats_tab(ui),
-                        Tab::Logs => self.logs_tab(ui),
-                        Tab::Settings => self.settings_tab(ui),
-                        Tab::About => self.about_tab(ui),
+                    .show(ui, |ui| {
+                        egui::Frame::new()
+                            .inner_margin(egui::Margin {
+                                right: PAGE_SIDE,
+                                ..egui::Margin::ZERO
+                            })
+                            .show(ui, |ui| match self.tab {
+                                Tab::Play => self.play_tab(ui),
+                                Tab::Accounts => self.accounts_tab(ui),
+                                Tab::Instances => self.instances_tab(ui),
+                                Tab::Bedrock => self.bedrock_tab(ui),
+                                Tab::Skins => self.skins_tab(ui),
+                                Tab::Together => self.together_tab(ui),
+                                Tab::Screenshots => self.screenshots_tab(ui),
+                                Tab::Stats => self.stats_tab(ui),
+                                Tab::Logs => self.logs_tab(ui),
+                                Tab::Settings => self.settings_tab(ui),
+                                Tab::About => self.about_tab(ui),
+                            });
                     });
             });
 
