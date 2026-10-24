@@ -720,6 +720,30 @@ pub fn scrubbed_tail(text: &str, max: usize) -> String {
     scrub(tail_of(text, max), &Own::this_pc())
 }
 
+/// The part of Java's `hs_err_pid` file worth sending: the header, the summary (without the command line,
+/// which holds the game's arguments) and the thread that died. The process section onward (VM arguments,
+/// environment variables, loaded libraries, system details) is left out: it describes the PC, not the crash.
+pub fn trim_hs_err(text: &str) -> String {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        if line.trim_start().starts_with("--------------- ") && line.contains("P R O C E S S") {
+            break;
+        }
+        let lower = line.trim_start().to_ascii_lowercase();
+        if lower.starts_with("command line:")
+            || lower.starts_with("java_command:")
+            || lower.starts_with("jvm_args:")
+        {
+            continue;
+        }
+        out.push(line);
+    }
+    out.join(
+        "
+",
+    )
+}
+
 /// What identifies this PC's owner in paths and logs.
 pub struct Own {
     pub home: Option<String>,
@@ -790,6 +814,40 @@ pub fn scrub(text: &str, own: &Own) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn java_crash_files_are_cut_before_the_process_section() {
+        let file = "# A fatal error
+#  EXCEPTION_ACCESS_VIOLATION
+
+---------------  S U M M A R Y ------------
+
+Command Line: -Xmx2G --accessToken abc net.minecraft.client.main.Main
+
+Host: AMD Ryzen
+
+---------------  T H R E A D  ---------------
+
+Stack: [0x1,0x2]
+j  some.Frame()
+
+---------------  P R O C E S S  ---------------
+
+VM Arguments:
+jvm_args: -Xmx2G
+
+Environment Variables:
+USERNAME=someone
+";
+        let cut = trim_hs_err(file);
+        assert!(cut.contains("EXCEPTION_ACCESS_VIOLATION"));
+        assert!(cut.contains("Host: AMD Ryzen"));
+        assert!(cut.contains("j  some.Frame()"));
+        assert!(!cut.contains("accessToken"));
+        assert!(!cut.contains("Command Line"));
+        assert!(!cut.contains("Environment"));
+        assert!(!cut.contains("USERNAME"));
+    }
 
     #[test]
     fn a_big_pack_with_little_memory_gets_a_warning_not_a_diagnosis() {

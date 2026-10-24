@@ -206,7 +206,9 @@ fn newest_hs_err(game_dir: &std::path::Path, since: SystemTime) -> Option<String
             (modified >= since).then(|| (modified, e.path()))
         })
         .max_by_key(|(modified, _)| *modified)?;
-    std::fs::read_to_string(newest.1).ok()
+    std::fs::read_to_string(newest.1)
+        .ok()
+        .map(|text| crash::trim_hs_err(&text))
 }
 
 /// The crash report Minecraft wrote after `since`, if any.
