@@ -28,12 +28,8 @@ pub fn run(ctx: &Ctx, args: &BedrockArgs) -> Result<i32> {
     match &args.command {
         BedrockCommand::Status => status(ctx, edition),
         BedrockCommand::Play => {
-            let settings = arctic_core::settings::Settings::load(&ctx.dirs).unwrap_or_default();
-            let client = settings
-                .bedrock_client
-                .as_deref()
-                .and_then(bedrock::client::Client::parse);
-            let loading = bedrock::launch_with_client(&ctx.dirs, edition, client, |message| {
+            // No third-party clients for now: Arctic is building its own.
+            let loading = bedrock::launch_with_client(&ctx.dirs, edition, None, |message| {
                 eprintln!("{message}")
             })?;
             if let Some(loading) = loading {
