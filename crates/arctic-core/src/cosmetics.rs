@@ -402,6 +402,16 @@ pub fn gallery_share(
     }
 }
 
+/// Send the optional "how did you hear about us?" answer from setup: just the answer (and, for
+/// "other", a few words), nothing that identifies the player.
+pub fn send_heard(base: &str, source: &str, other: &str) -> Result<()> {
+    let _: serde_json::Value = post(
+        &format!("{base}/v1/heard"),
+        &serde_json::json!({ "source": source, "other": other }),
+    )?;
+    Ok(())
+}
+
 /// Send a crash report the player agreed to share.
 pub fn send_crash_report(base: &str, report: &crate::crash::Report) -> Result<()> {
     let mut resp = agent()

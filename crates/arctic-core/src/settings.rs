@@ -88,6 +88,8 @@ pub struct Settings {
     pub tray: bool,
     /// The first-close question about the tray was asked (or the choice was made in setup).
     pub tray_asked: bool,
+    /// The setup's "how did you hear about us?" question was shown (it is asked once).
+    pub heard_asked: bool,
     /// Versions starred in the version picker.
     pub favorite_versions: Vec<String>,
     /// Menu style of the Arctic Client in game.
@@ -287,6 +289,7 @@ impl Default for Settings {
             onboarded: false,
             tray: true,
             tray_asked: false,
+            heard_asked: false,
             favorite_versions: Vec::new(),
             client_style: ClientStyle::Arctic,
             client_style_set: 0,

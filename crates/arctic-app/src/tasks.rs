@@ -257,6 +257,16 @@ impl Tasks {
         std::thread::spawn(move || job(&me));
     }
 
+    /// Send the setup's optional "how did you hear about us?" answer (nothing happens if it fails).
+    pub fn send_heard(&self, source: &'static str, other: String) {
+        self.run(move |_| {
+            let base = arctic_core::cosmetics::base_url();
+            if let Err(e) = arctic_core::cosmetics::send_heard(&base, source, &other) {
+                log::debug!("could not send the answer: {e}");
+            }
+        });
+    }
+
     /// Send an idea or bug report in the background.
     pub fn send_suggestion(&self, suggestion: arctic_core::cosmetics::Suggestion) {
         self.run(move |t| {

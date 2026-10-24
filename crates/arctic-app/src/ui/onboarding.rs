@@ -40,10 +40,11 @@ enum Step {
     Memory,
     Client,
     Start,
+    Heard,
 }
 
 impl Step {
-    const ALL: [Step; 7] = [
+    const ALL: [Step; 8] = [
         Step::Welcome,
         Step::Look,
         Step::Behavior,
@@ -51,6 +52,7 @@ impl Step {
         Step::Memory,
         Step::Client,
         Step::Start,
+        Step::Heard,
     ];
 
     fn index(self) -> usize {
@@ -68,7 +70,28 @@ enum FirstPlay {
     Later,
 }
 
+/// What the setup's last question offers: (id sent to the server, label).
+const HEARD: [(&str, &str); 12] = [
+    ("youtube", "YouTube"),
+    ("tiktok", "TikTok"),
+    ("discord", "Discord"),
+    ("reddit", "Reddit"),
+    ("friend", "A friend"),
+    ("modrinth", "Modrinth"),
+    ("search", "Search"),
+    ("github", "GitHub"),
+    ("chatgpt", "ChatGPT"),
+    ("gemini", "Gemini"),
+    ("claude", "Claude"),
+    ("other", "Other"),
+];
+/// Longest "other" text (the server keeps this much).
+const HEARD_OTHER_MAX: usize = 60;
+
 pub struct Onboarding {
+    /// The answer picked for "how did you hear about us?" (an index into `HEARD`), if any.
+    heard: Option<usize>,
+    heard_other: String,
     step: Step,
     changed_at: f64,
     total_mb: Option<u64>,
@@ -107,6 +130,8 @@ impl ArcticApp {
             .unwrap_or(Step::Welcome);
         let others = other_launchers();
         self.onboarding = Some(Onboarding {
+            heard: None,
+            heard_other: String::new(),
             step,
             changed_at: 0.0,
             total_mb,
@@ -154,6 +179,7 @@ impl ArcticApp {
                         Step::Memory => self.memory_step(ui),
                         Step::Client => self.client_step(ui),
                         Step::Start => self.start_step(ui),
+                        Step::Heard => self.heard_step(ui),
                     }
                 });
                 ui.add_space(18.0);
@@ -166,16 +192,17 @@ impl ArcticApp {
                         go = Some(-1);
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let last = self.last_step();
                         let (label, icon) = match step {
                             Step::Welcome => ("Get started", Icon::Play),
-                            Step::Start => ("Start playing", Icon::Check),
+                            s if s == last => ("Start playing", Icon::Check),
                             Step::Account if self.accounts.active().is_none() => {
                                 ("Skip for now", Icon::Play)
                             }
                             _ => ("Next", Icon::Play),
                         };
                         if widgets::button(ui, p, Some(icon), label, true).clicked() {
-                            if step == Step::Start {
+                            if step == last {
                                 finish = true;
                             } else {
                                 go = Some(1);
@@ -455,6 +482,54 @@ impl ArcticApp {
         );
     }
 
+    /// The step with the finishing button: the question about where they heard of us comes last,
+    /// once (setup run again skips it).
+    fn last_step(&self) -> Step {
+        if self.settings.heard_asked {
+            Step::Start
+        } else {
+            Step::Heard
+        }
+    }
+
+    fn heard_step(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
+        heading(
+            ui,
+            p,
+            "How did you hear about Arctic?",
+            "Optional. Only your answer is sent: no name, account or device.",
+        );
+        ui.add_space(12.0);
+        let Some(o) = &mut self.onboarding else {
+            return;
+        };
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
+            for (i, (_, label)) in HEARD.iter().enumerate() {
+                let on = o.heard == Some(i);
+                if ui.selectable_label(on, *label).clicked() {
+                    o.heard = if on { None } else { Some(i) };
+                }
+            }
+        });
+        if o.heard.is_some_and(|i| HEARD[i].0 == "other") {
+            ui.add_space(10.0);
+            ui.add(
+                egui::TextEdit::singleline(&mut o.heard_other)
+                    .hint_text("Where?")
+                    .char_limit(HEARD_OTHER_MAX)
+                    .desired_width(260.0),
+            );
+        }
+        ui.add_space(12.0);
+        ui.label(
+            RichText::new("Not sure, or would rather not say? Just press Start playing.")
+                .small()
+                .color(p.muted),
+        );
+    }
+
     fn start_step(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         heading(ui, p, "What do you want to play?", "");
@@ -534,7 +609,18 @@ impl ArcticApp {
     }
 
     fn finish_onboarding(&mut self, now: f64) {
-        let first = self.onboarding.take().map_or(FirstPlay::Later, |o| o.first);
+        let onboarding = self.onboarding.take();
+        let first = onboarding.as_ref().map_or(FirstPlay::Later, |o| o.first);
+        // The question was on screen if setup got to its last step.
+        if let Some(o) = &onboarding
+            && o.step == Step::Heard
+        {
+            self.settings.heard_asked = true;
+            if let Some(i) = o.heard {
+                self.tasks
+                    .send_heard(HEARD[i].0, o.heard_other.trim().to_owned());
+            }
+        }
         self.settings.onboarded = true;
         self.settings.tray_asked = true;
         self.persist_settings();
