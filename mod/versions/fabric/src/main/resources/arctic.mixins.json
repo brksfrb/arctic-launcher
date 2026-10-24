@@ -35,6 +35,7 @@
 		"DebugScaleMixin",
 		"NoHurtCamMixin",
 		"FramerateLimitMixin",
+		"LightmapRefreshMixin",
 		"FramerateTrackerMixin",
 		"ParticleEngineMixin",
 		"HeldItemMixin",
