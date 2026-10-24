@@ -40,6 +40,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	/** True while playing (a world is loaded). */
 	boolean inWorld();
 
+	/** Whether the game's window is the one in use (Dynamic FPS slows the game down when it isn't). */
+	default boolean windowFocused() {
+		return true;
+	}
+
 	/** Safe place to start deferred replay exports (never while browsing another menu). */
 	default boolean atTitleScreen() { return false; }
 

@@ -119,6 +119,15 @@ public final class ClientConfig {
 	public boolean tabPing = true;
 	/** The view does not tilt and shake when you take damage. */
 	public boolean noHurtCam;
+	/** Dynamic FPS: a lower frame rate limit while the game isn't in use. */
+	public boolean dynamicFps = true;
+	/** The limit in another window (0 = none). */
+	public int dynFpsUnfocused = 15;
+	/** The limit after {@link #dynFpsIdleSeconds} with nothing moving (0 = none). */
+	public int dynFpsIdle = 30;
+	public int dynFpsIdleSeconds = 60;
+	/** The limit while a menu is open in the game (0 = none). */
+	public int dynFpsMenu = 60;
 	/** Digits after the point in the XYZ widget (0 = whole blocks). */
 	public int coordDecimals;
 	/** Lit TNT shows its seconds left above it. */

@@ -242,6 +242,17 @@ final class ModCatalog {
 		out.add(new Mod("ofcapes", "OptiFine Capes", "Show other players' OptiFine capes, without OptiFine (asks OptiFine's cape server for each player's name, as OptiFine does)", "looks", Category.SOCIAL,
 				"optifine cape capes cloak")
 				.toggle(() -> c.optifineCapes, on -> c.optifineCapes = on));
+		out.add(new Mod("dynamicfps", "Dynamic FPS", "A lower frame rate limit while the game is in another window, idle or in a menu (1.14 to 1.21.11 and 1.8.9 to 1.12.2)", "particles", Category.VISUAL,
+				"fps limit background unfocused idle afk battery save power performance")
+				.toggle(() -> c.dynamicFps, on -> c.dynamicFps = on)
+				.settings((host, f) -> {
+					f.section("Limits (0 = no limit of that kind)");
+					f.stepper("In another window", () -> c.dynFpsUnfocused, v -> c.dynFpsUnfocused = (int) v, 0, 60, 5, "%.0f FPS");
+					f.stepper("Idle", () -> c.dynFpsIdle, v -> c.dynFpsIdle = (int) v, 0, 120, 5, "%.0f FPS");
+					f.stepper("Idle after", () -> c.dynFpsIdleSeconds, v -> c.dynFpsIdleSeconds = (int) v, 10, 600, 10, "%.0f s");
+					f.stepper("In a menu", () -> c.dynFpsMenu, v -> c.dynFpsMenu = (int) v, 0, 240, 10, "%.0f FPS");
+					f.note("Idle means nothing moved: not you, not the mouse. The game's own limit still applies; this only lowers it.");
+				}));
 		out.add(new Mod("nohurtcam", "No Hurt Shake", "The view stops tilting and shaking when you take damage (1.14 to 1.21.11)", "particles", Category.VISUAL,
 				"hurt cam camera shake shaking tilt damage bob")
 				.toggle(() -> c.noHurtCam, on -> c.noHurtCam = on));
