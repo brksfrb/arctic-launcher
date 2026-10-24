@@ -1003,9 +1003,9 @@ async function crashDetail(r) {
     el("div", { class: "panel" },
       el("h4", {}, plural(reports.length, "report", "reports") + " of this crash"),
       el("div", { class: "table-wrap", style: "box-shadow:none" }, el("table", {},
-        el("thead", {}, el("tr", {}, ...["When", "Launcher", "System", "Minecraft"].map((h) => el("th", {}, h)))),
+        el("thead", {}, el("tr", {}, ...["When", "Launcher", "System", "Minecraft", "Contact"].map((h) => el("th", {}, h)))),
         el("tbody", {}, ...reports.map((x) => el("tr", {},
-          el("td", { title: fullTime(x.at) }, ago(x.at)), el("td", {}, x.launcher), el("td", {}, x.os), el("td", {}, [x.game, x.loader].filter(Boolean).join(" ")))))))),
+          el("td", { title: fullTime(x.at) }, ago(x.at)), el("td", {}, x.launcher), el("td", {}, x.os), el("td", {}, [x.game, x.loader].filter(Boolean).join(" ")), el("td", {}, x.contact || "")))))))),
     logPanel("Log", d.log || ""));
 }
 

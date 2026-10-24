@@ -32,6 +32,8 @@ pub struct Report<'a> {
     pub os: &'a str,
     pub title: &'a str,
     pub log: &'a str,
+    /// How the player said they can be reached (a Discord name, say), or empty.
+    pub contact: &'a str,
 }
 
 /// One group of the same crash.
@@ -110,6 +112,8 @@ pub struct ReportRow {
     pub game: String,
     pub loader: String,
     pub os: String,
+    /// How the sender can be reached, if they said.
+    pub contact: String,
 }
 
 /// What a crash list is narrowed to; `None` doesn't narrow.
@@ -313,7 +317,8 @@ impl Store {
                  os TEXT NOT NULL,
                  title TEXT NOT NULL,
                  log TEXT NOT NULL,
-                 fingerprint TEXT NOT NULL
+                 fingerprint TEXT NOT NULL,
+                 contact TEXT NOT NULL DEFAULT ''
              );
              CREATE INDEX IF NOT EXISTS crashes_fingerprint ON crashes (fingerprint, at);
              CREATE TABLE IF NOT EXISTS crash_status (
@@ -325,7 +330,13 @@ impl Store {
                  fixed_in TEXT,
                  newest_seen TEXT
              );",
-        )
+        )?;
+        // Tables made before reports had a contact get the column (the second time it already exists).
+        let _ = self.conn().execute(
+            "ALTER TABLE crashes ADD COLUMN contact TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+        Ok(())
     }
 
     /// Keep a report; returns its number.
@@ -334,8 +345,8 @@ impl Store {
         let print = fingerprint(report.game, report.title, log);
         let conn = self.conn();
         conn.execute(
-            "INSERT INTO crashes (at, launcher, game, loader, os, title, log, fingerprint)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO crashes (at, launcher, game, loader, os, title, log, fingerprint, contact)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 now as i64,
                 report.launcher,
@@ -344,7 +355,8 @@ impl Store {
                 report.os,
                 report.title,
                 log,
-                print
+                print,
+                report.contact
             ],
         )?;
         let id = conn.last_insert_rowid();
@@ -476,7 +488,7 @@ impl Store {
         };
         detail.reports = conn
             .prepare(
-                "SELECT id, at, launcher, game, loader, os FROM crashes
+                "SELECT id, at, launcher, game, loader, os, contact FROM crashes
                  WHERE fingerprint = ?1 ORDER BY id DESC LIMIT ?2",
             )?
             .query_map(params![detail.fingerprint, GROUP_REPORTS], |r| {
@@ -487,6 +499,7 @@ impl Store {
                     game: r.get(3)?,
                     loader: r.get(4)?,
                     os: r.get(5)?,
+                    contact: r.get(6)?,
                 })
             })?
             .collect::<rusqlite::Result<_>>()?;
@@ -564,6 +577,7 @@ mod tests {
             os: "windows",
             title: "Crash",
             log,
+            contact: "",
         }
     }
 

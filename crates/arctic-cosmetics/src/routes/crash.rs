@@ -26,6 +26,9 @@ struct Body {
     os: String,
     #[serde(default)]
     title: String,
+    /// Optional: how the player can be reached.
+    #[serde(default)]
+    contact: String,
     log: String,
 }
 
@@ -52,6 +55,7 @@ async fn submit(
         crashes::clean_field(&body.os),
         crashes::clean_field(&body.title),
     );
+    let contact = crashes::clean_field(&body.contact);
     let report = Report {
         launcher: &launcher,
         game: &game,
@@ -59,6 +63,7 @@ async fn submit(
         os: &os,
         title: &title,
         log: &body.log,
+        contact: &contact,
     };
     match state.store.crash_add(&report, now()) {
         Ok(id) => {

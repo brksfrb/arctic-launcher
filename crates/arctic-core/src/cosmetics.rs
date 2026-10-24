@@ -415,6 +415,7 @@ pub fn send_crash_report(base: &str, report: &crate::crash::Report) -> Result<()
             "loader": report.loader,
             "os": report.os,
             "title": report.title,
+            "contact": report.contact,
             "log": report.log,
         }))?;
     let status = resp.status().as_u16();
