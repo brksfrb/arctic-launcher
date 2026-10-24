@@ -449,6 +449,7 @@ public final class ServersPage extends Page {
 			}
 			boolean over = mode == Mode.LIST && !dragging && mx >= left && mx < left + LIST_W && my >= ry && my < ry + ROW_H
 					&& my >= top && my < bottom;
+			playHint = true;
 			row(g, s, left, ry, e.name, e.address, i == selected, over);
 		}
 		drawLan(g, s, left, top, bottom, mx, my);
@@ -458,7 +459,9 @@ public final class ServersPage extends Page {
 			Servers.Entry e = entries.get(pressed);
 			int ry = (int) Math.round(mouseY - grabDy);
 			Draw.round(g, left + 2, ry + 3, left + LIST_W + 2, ry + ROW_H + 3, 4, 0x55000000);
+			playHint = false;
 			row(g, s, left, ry, e.name, e.address, true, true);
+			playHint = true;
 			Draw.outline(g, left, ry, left + LIST_W, ry + ROW_H, 4, s.accent);
 		}
 		if (entries.isEmpty() && lan.worlds().isEmpty()) {
@@ -543,6 +546,12 @@ public final class ServersPage extends Page {
 			Draw.round(g, ix, iy, ix + ICON, iy + ICON, 3, s.field);
 			Draw.centered(g, "?", ix + ICON / 2, iy + ICON / 2 - 4, s.muted, false);
 		}
+		// As in the game's own list: over a row the icon dims and shows a play arrow; clicking the icon joins.
+		if (over && playHint) {
+			boolean onIcon = tipX >= ix && tipX < ix + ICON && tipY >= iy && tipY < iy + ICON;
+			g.fill(ix, iy, ix + ICON, iy + ICON, onIcon ? 0xB0000000 : 0x78000000);
+			playArrow(g, ix + ICON / 2, iy + ICON / 2, onIcon ? 0xFFFFFFFF : 0xFFC8D2DC);
+		}
 		int tx = x + ICON + 8;
 		int right = x + LIST_W - 6;
 		boolean up = a != null && a.status != null;
@@ -585,6 +594,23 @@ public final class ServersPage extends Page {
 		for (int i = 0; i < Math.min(2, lines.length); i++) {
 			g.text(Draw.fit(g, lines[i].replace("\r", ""), right - column - tx), tx, y + 15 + i * 10, 0xFFAAAAAA, false);
 		}
+	}
+
+	/** The rows are drawn as normal rows (not the one lifted in the hand), so they show the play arrow. */
+	private boolean playHint = true;
+
+	/** A play triangle pointing right, centred on (cx, cy). */
+	private static void playArrow(Gfx g, int cx, int cy, int color) {
+		for (int c = 0; c < 8; c++) {
+			int h = 14 - 2 * c;
+			g.fill(cx - 4 + c, cy - h / 2, cx - 3 + c, cy - h / 2 + h, color);
+		}
+	}
+
+	/** Whether the mouse is on the icon of a row (a click there joins at once). */
+	private boolean onRowIcon(double mx, double my, int row) {
+		float y = (float) (my - listTop() + scroll) - slotTop(row);
+		return mx >= listLeft() + 2 && mx < listLeft() + 2 + ICON && y >= 2 && y < 2 + ICON;
 	}
 
 	private static final int RED = 0xFFF87171;
@@ -725,6 +751,12 @@ public final class ServersPage extends Page {
 		String lanWorld = row < 0 ? lanAt(mx, my) : null;
 		if (row < 0 && lanWorld == null) {
 			return false;
+		}
+		if (row >= 0 && onRowIcon(mx, my, row)) {
+			// The play arrow: one click joins.
+			select(row, null);
+			joinSelected();
+			return true;
 		}
 		long now = System.nanoTime();
 		boolean twice = row == lastClickRow && now - lastClickAt < DOUBLE_CLICK_NS;
