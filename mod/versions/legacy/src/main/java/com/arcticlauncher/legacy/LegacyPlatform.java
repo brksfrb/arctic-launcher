@@ -116,6 +116,11 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean windowFocused() {
+		return org.lwjgl.opengl.Display.isActive();
+	}
+
+	@Override
 	public boolean atTitleScreen() {
 		Screen screen = mc().currentScreen;
 		return !inWorld() && (screen instanceof TitleScreen || (screen instanceof LegacyPageScreen

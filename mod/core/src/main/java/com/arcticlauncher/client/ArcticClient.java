@@ -349,6 +349,7 @@ public final class ArcticClient {
 	}
 
 	public static void tick(boolean screenOpen) {
+		com.arcticlauncher.client.feature.DynamicFps.tick(platform, screenOpen);
 		com.arcticlauncher.client.replay.Replays.tick(screenOpen);
 		com.arcticlauncher.client.servers.DisconnectedPage.tick(platform);
 		PLAYTIME.tick(platform);

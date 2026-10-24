@@ -113,6 +113,15 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean windowFocused() {
+		//#if MC >= 1.14
+		return mc().isWindowActive();
+		//#else
+		return true;
+		//#endif
+	}
+
+	@Override
 	public boolean atTitleScreen() {
 		Screen screen = Compat.screen();
 		return !inWorld() && (screen instanceof net.minecraft.client.gui.screens.TitleScreen || (screen instanceof PageScreen
