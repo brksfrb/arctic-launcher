@@ -1017,6 +1017,7 @@ impl ArcticApp {
                 "Install zenity or xdg-desktop-portal, or drop the file onto the launcher window.",
             ),
             Event::ModpackInstalled(result) => self.on_modpack_installed(result),
+            Event::InstanceDuplicated(result) => self.on_instance_duplicated(result),
             Event::MigrateScanned(folder, result) => {
                 self.on_migrate_scanned(folder.is_some(), result)
             }

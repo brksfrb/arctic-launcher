@@ -115,6 +115,9 @@ pub struct InstancesUi {
     pub page: InstancePage,
     pub create: Option<CreateForm>,
     pub confirm_delete: bool,
+    /// "Duplicate instance": copy the worlds too, and a copy is being made.
+    pub dup_worlds: bool,
+    pub duplicating: bool,
     pub rename: Option<String>,
     /// Cached lists and background checks, retained when switching instances.
     pub(crate) mod_scans: HashMap<String, crate::mod_tasks::ModScan>,

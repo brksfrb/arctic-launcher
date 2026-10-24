@@ -126,6 +126,8 @@ pub enum Event {
     WorldsDone(String, Outcome<String>),
     /// A modpack install or import finished (`None` = file dialog cancelled).
     ModpackInstalled(Outcome<Option<Instance>>),
+    /// An instance was duplicated (the copy).
+    InstanceDuplicated(Outcome<Instance>),
     /// Gallery search results (request id, result).
     Gallery(u64, Outcome<crate::gallery_tasks::GalleryResult>),
     /// A gallery skin was downloaded: (name, PNG, model, wear it).
@@ -406,6 +408,15 @@ impl Tasks {
         self.run(move |t| {
             let result = mods::search(&query).map_err(|e| e.to_string());
             t.send(Event::ModSearch(request, result));
+        });
+    }
+
+    /// Copy an instance (worlds too, if asked) into a new one.
+    pub fn duplicate_instance(&self, source: Instance, with_worlds: bool) {
+        self.run(move |t| {
+            let result = arctic_core::instances::duplicate(&t.dirs, &source, with_worlds)
+                .map_err(|e| e.to_string());
+            t.send(Event::InstanceDuplicated(result));
         });
     }
 
