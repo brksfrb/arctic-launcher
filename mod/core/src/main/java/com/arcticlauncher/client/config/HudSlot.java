@@ -50,6 +50,8 @@ public final class HudSlot {
 	public int radius;
 	/** The HUD style has been applied to it (or it was checked and kept as the player left it). */
 	public boolean styled;
+	/** Hidden while the player list (Tab) is held. */
+	public boolean hideOnTab;
 
 	public HudSlot() {}
 
@@ -85,6 +87,7 @@ public final class HudSlot {
 		c.labelMode = labelMode;
 		c.radius = radius;
 		c.styled = styled;
+		c.hideOnTab = hideOnTab;
 		return c;
 	}
 
@@ -109,6 +112,7 @@ public final class HudSlot {
 		h = h * 31 + (brackets ? 1 : 0);
 		h = h * 31 + labelMode;
 		h = h * 31 + radius;
+		h = h * 31 + (hideOnTab ? 1 : 0);
 		return h;
 	}
 }
