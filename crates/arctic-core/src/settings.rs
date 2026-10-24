@@ -77,7 +77,7 @@ pub struct Settings {
     pub on_game_start: GameStartAction,
     /// What happens to a crash report when the game crashes.
     pub crash_reports: CrashReports,
-    /// How to reach the player about a crash they reported (a Discord name, say): optional, sent with
+    /// How to reach the player about a crash they reported (a Discord name or an e-mail): optional, sent with
     /// the report.
     pub crash_contact: String,
     /// Show what you're playing on Discord.
