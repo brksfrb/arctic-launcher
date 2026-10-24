@@ -60,6 +60,7 @@
   {"id": "verdant_crown_wings", "name": "Verdant Crown Wings", "slot": "back"},
   {"id": "vesper_blade_wings", "name": "Vesper Blade Wings", "slot": "back"},
   {"id": "glacier_heron_wings", "name": "Glacier Heron Wings", "slot": "back"},
+  {"id": "glacier_heron_articulated_wings", "name": "Glacier Heron Wings (Articulated)", "slot": "back"},
   {"id": "vesper_bat_wings", "name": "Vesper Bat Wings", "slot": "back"},
   {"id": "moonwell_pack", "name": "Moonwell Pack", "slot": "back"},
   {"id": "starwell_lantern", "name": "Starwell Lantern", "slot": "back"},

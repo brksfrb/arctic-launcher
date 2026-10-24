@@ -226,15 +226,25 @@
     await refresh();
   });
 
+  // Not navigator.serviceWorker.ready: that waits for a worker whose scope covers this page's own address.
+  function whenActive(reg) {
+    return new Promise((resolve) => {
+      const worker = reg.active || reg.waiting || reg.installing;
+      if (!worker || worker.state === "activated") { resolve(); return; }
+      worker.addEventListener("statechange", () => { if (worker.state === "activated") { resolve(); } });
+      setTimeout(resolve, 5000);
+    });
+  }
+
   (async () => {
     try {
       config = await (await fetch("/v1/notify/config")).json();
       if ("serviceWorker" in navigator) {
         registration = await navigator.serviceWorker.register("/notify/sw.js", { scope: "/notify/" });
-        await navigator.serviceWorker.ready;
+        await whenActive(registration);
       }
-    } catch (e) { say("who", "Can't reach the server.", "bad"); return; }
-    await refresh();
+    } catch (e) { say("who", "Can't reach the server (" + (e && e.message ? e.message : e) + ").", "bad"); return; }
+    try { await refresh(); } catch (e) { say("who", "Something went wrong: " + (e && e.message ? e.message : e), "bad"); }
   })();
 })();
 </script>
