@@ -24,6 +24,7 @@
 <% } %><% if (debugEntries) { %>		"DebugEntriesMixin",
 <% } %><% if (debugText) { %>		"DebugTextMixin",
 <% } %>		"NativeMenuMixin",
+		"LightmapRefreshMixin",
 		"HudMixin",
 		"KeyboardHandlerMixin",
 		"MouseHandlerMixin",
