@@ -238,10 +238,10 @@ impl ArcticApp {
             });
             widgets::field_row(ui, |ui| {
                 ui.label("Contact for crashes")
-                    .on_hover_text("Optional. Sent with a crash report so we can write back to you (a Discord name, say). Leave it empty to stay anonymous.");
+                    .on_hover_text("Optional. Sent with a crash report so we can write back to you: a Discord name or an e-mail address. Leave it empty to stay anonymous.");
                 ui.add(
                     egui::TextEdit::singleline(&mut s.crash_contact)
-                        .hint_text("Discord name (optional)")
+                        .hint_text("Discord name or e-mail (optional)")
                         .char_limit(80)
                         .desired_width(240.0),
                 );
