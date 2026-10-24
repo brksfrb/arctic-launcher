@@ -2,6 +2,8 @@
 //! another loader (Fabric, Quilt, NeoForge, Forge) on the same Minecraft version, with the mods looked
 //! up on Modrinth first so you see which ones exist there.
 
+use std::collections::hash_map::Entry;
+
 use arctic_core::instances::{Instance, Loader};
 use arctic_core::loaders::LoaderKind;
 use arctic_core::mods::retarget::ModCheck;
@@ -39,19 +41,13 @@ impl ArcticApp {
         }
         // Which loaders have a build for this version, and the builds of the current one.
         for k in LoaderKind::ALL {
-            if !self.inst.loader_games.contains_key(&k) {
-                self.inst.loader_games.insert(k, Load::Loading);
+            if let Entry::Vacant(slot) = self.inst.loader_games.entry(k) {
+                slot.insert(Load::Loading);
                 self.tasks.loader_games(k);
             }
         }
-        if !self
-            .inst
-            .loader_versions
-            .contains_key(&(kind, game.clone()))
-        {
-            self.inst
-                .loader_versions
-                .insert((kind, game.clone()), Load::Loading);
+        if let Entry::Vacant(slot) = self.inst.loader_versions.entry((kind, game.clone())) {
+            slot.insert(Load::Loading);
             self.tasks.loader_versions(kind, game.clone());
         }
         let p = self.palette();
