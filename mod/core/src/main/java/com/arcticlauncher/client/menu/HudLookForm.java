@@ -63,6 +63,8 @@ final class HudLookForm {
 					v -> s.backgroundColor = ((int) Math.round(v * 2.55) << 24) | (s.backgroundColor & 0xFFFFFF), 0, 100, 5, "%.0f%%");
 			f.toggle("Border", "A thin line around the box", () -> s.border, on -> s.border = on);
 		}
+		f.section("Visibility");
+		f.toggle("Hide while Tab is held", "It steps aside while the player list is open", () -> s.hideOnTab, on -> s.hideOnTab = on);
 		f.section("Size");
 		f.stepper("Scale", () -> s.scale, v -> s.scale = (float) v, 0.5, 2.5, 0.1, "%.1fx");
 		f.note("Drag it on the HUD screen (Right Shift) to move it.");

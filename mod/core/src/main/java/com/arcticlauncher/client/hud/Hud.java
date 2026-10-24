@@ -379,7 +379,12 @@ public final class Hud {
 			lastSorted = sorted(rects);
 			lastSortedFrom = rects;
 		}
+		// The widgets that step aside while the player list is held (never in the editor's preview).
+		boolean tab = !preview && ArcticClient.platform() != null && ArcticClient.platform().isKeyDown("key.keyboard.tab");
 		for (Map.Entry<HudWidget, int[]> e : lastSorted) {
+			if (tab && slot(e.getKey()).hideOnTab) {
+				continue;
+			}
 			draw(g, s, e.getKey(), e.getValue(), preview);
 		}
 	}
