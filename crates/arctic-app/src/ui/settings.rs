@@ -236,6 +236,16 @@ impl ArcticApp {
                 ui.selectable_value(&mut s.crash_reports, CrashReports::Always, "Always send");
                 ui.selectable_value(&mut s.crash_reports, CrashReports::Never, "Never");
             });
+            widgets::field_row(ui, |ui| {
+                ui.label("Contact for crashes")
+                    .on_hover_text("Optional. Sent with a crash report so we can write back to you (a Discord name, say). Leave it empty to stay anonymous.");
+                ui.add(
+                    egui::TextEdit::singleline(&mut s.crash_contact)
+                        .hint_text("Discord name (optional)")
+                        .char_limit(80)
+                        .desired_width(240.0),
+                );
+            });
         });
 
         section(ui, p, "Java", |ui| {

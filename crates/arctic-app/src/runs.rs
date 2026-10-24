@@ -101,8 +101,16 @@ impl Run {
 
     /// The crash as a report, from the game log's end and the crash report it wrote.
     fn crash_report(&self, title: &str, code: Option<i32>) -> crash::Report {
-        let lines: Vec<&str> = self.log.iter().map(|l| l.text.as_str()).collect();
-        let written = newest_crash_report(&self.game_dir, self.started);
+        let mut lines: Vec<&str> = self.log.iter().map(|l| l.text.as_str()).collect();
+        // The game's own log file often says more than what it printed (a mod that quits quietly writes
+        // only there), and Java writes a file of its own when it dies.
+        let own_log = latest_log_tail(&self.game_dir, self.started);
+        if !own_log.is_empty() {
+            lines.push("---- logs/latest.log ----");
+            lines.extend(own_log.iter().map(String::as_str));
+        }
+        let written = newest_crash_report(&self.game_dir, self.started)
+            .or_else(|| newest_hs_err(&self.game_dir, self.started));
         // What the launcher itself logged (a failed sign-in, a download, a launch step) often explains
         // a crash the game's own log doesn't.
         let launcher = crate::logbook::snapshot_if_changed(0)
@@ -147,12 +155,58 @@ impl Run {
             .map(|l| l.text.as_str())
             .collect::<Vec<_>>()
             .join("\n");
-        if let Some(report) = newest_crash_report(&self.game_dir, self.started) {
+        if let Some(report) = newest_crash_report(&self.game_dir, self.started)
+            .or_else(|| newest_hs_err(&self.game_dir, self.started))
+        {
             text.push('\n');
             text.push_str(&report);
         }
+        let own_log = latest_log_tail(&self.game_dir, self.started);
+        if !own_log.is_empty() {
+            text.push('\n');
+            text.push_str(&own_log.join("\n"));
+        }
         text
     }
+}
+
+/// Lines of `logs/latest.log` that are looked at.
+const LATEST_LOG_LINES: usize = 120;
+
+/// The end of the game's own log file, when this run wrote it (a stale one from an earlier run isn't).
+fn latest_log_tail(game_dir: &std::path::Path, since: SystemTime) -> Vec<String> {
+    let path = game_dir.join("logs").join("latest.log");
+    let fresh = std::fs::metadata(&path)
+        .and_then(|m| m.modified())
+        .is_ok_and(|modified| modified >= since);
+    if !fresh {
+        return Vec::new();
+    }
+    let Ok(bytes) = std::fs::read(&path) else {
+        return Vec::new();
+    };
+    let text = String::from_utf8_lossy(&bytes);
+    let lines: Vec<&str> = text.lines().collect();
+    let skip = lines.len().saturating_sub(LATEST_LOG_LINES);
+    lines[skip..].iter().map(|l| (*l).to_owned()).collect()
+}
+
+/// The file Java writes when it dies (`hs_err_pid<number>.log`, in the game's folder), if this run made one.
+fn newest_hs_err(game_dir: &std::path::Path, since: SystemTime) -> Option<String> {
+    let newest = std::fs::read_dir(game_dir)
+        .ok()?
+        .flatten()
+        .filter(|e| {
+            let name = e.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with("hs_err_pid") && name.ends_with(".log")
+        })
+        .filter_map(|e| {
+            let modified = e.metadata().ok()?.modified().ok()?;
+            (modified >= since).then(|| (modified, e.path()))
+        })
+        .max_by_key(|(modified, _)| *modified)?;
+    std::fs::read_to_string(newest.1).ok()
 }
 
 /// The crash report Minecraft wrote after `since`, if any.
@@ -412,6 +466,11 @@ impl ArcticApp {
                     .then(|| arctic_core::stability::place(&run.crash_text()))
                     .flatten();
                 if crashed {
+                    run.push_log([LogLine {
+                        level: Level::Info,
+                        text: "Need help with this crash? Join our Discord: https://discord.arcticlauncher.com"
+                            .into(),
+                    }]);
                     let report =
                         run.crash_report(diagnosis.as_ref().map_or("", |d| d.title.as_str()), code);
                     self.offer_crash_report(id, report);
@@ -486,7 +545,14 @@ impl ArcticApp {
 
     /// What to do with a crash report, by the player's setting: nothing,
     /// send it, or ask with a button on a toast.
-    fn offer_crash_report(&mut self, id: LaunchId, report: crash::Report) {
+    fn offer_crash_report(&mut self, id: LaunchId, mut report: crash::Report) {
+        report.contact = self
+            .settings
+            .crash_contact
+            .trim()
+            .chars()
+            .take(80)
+            .collect();
         match self.settings.crash_reports {
             CrashReports::Never => {}
             CrashReports::Always => self.tasks.send_crash_report(report),

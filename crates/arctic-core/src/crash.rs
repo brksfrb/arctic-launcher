@@ -641,6 +641,8 @@ pub struct Report {
     pub os: String,
     pub title: String,
     pub log: String,
+    /// How the player can be reached (their own words, optional); filled in by the app when it sends.
+    pub contact: String,
 }
 
 /// Lines of the game log's end that are sent.
@@ -692,6 +694,7 @@ impl Report {
             os: std::env::consts::OS.to_owned(),
             title: title.to_owned(),
             log: scrub(&text, &Own::this_pc()),
+            contact: String::new(),
         }
     }
 }
