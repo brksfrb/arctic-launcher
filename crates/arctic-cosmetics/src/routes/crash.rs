@@ -67,13 +67,15 @@ async fn submit(
     };
     match state.store.crash_add(&report, now()) {
         Ok(id) => {
-            crate::push::notify(
-                &state,
-                "crash",
-                "New crash report".into(),
-                format!("Minecraft {game} / launcher {launcher}"),
-                "/admin#crashes".into(),
-            );
+            if state.store.crash_notify_worthy(id).unwrap_or(true) {
+                crate::push::notify(
+                    &state,
+                    "crash",
+                    "New crash report".into(),
+                    format!("Minecraft {game} / launcher {launcher}"),
+                    "/admin#crashes".into(),
+                );
+            }
             Json(json!({ "id": id })).into_response()
         }
         Err(e) => db_error("crash report", e),

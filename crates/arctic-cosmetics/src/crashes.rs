@@ -338,6 +338,30 @@ impl Store {
         );
         Ok(())
     }
+    /// Is report `id` worth a notification? A new crash (first report of its kind) or a
+    /// spike of one still open (the 5th, 25th and 100th report). Repeats of a known crash,
+    /// and crashes already closed, stay quiet: one player retrying must not buzz every time.
+    pub fn crash_notify_worthy(&self, id: i64) -> rusqlite::Result<bool> {
+        let conn = self.conn();
+        let print: String =
+            conn.query_row("SELECT fingerprint FROM crashes WHERE id = ?1", [id], |r| {
+                r.get(0)
+            })?;
+        let closed: bool = conn
+            .query_row(
+                "SELECT 1 FROM crash_status WHERE fingerprint = ?1 AND status = 'resolved'",
+                [&print],
+                |_| Ok(true),
+            )
+            .optional()?
+            .unwrap_or(false);
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM crashes WHERE fingerprint = ?1",
+            [&print],
+            |r| r.get(0),
+        )?;
+        Ok(!closed && matches!(count, 1 | 5 | 25 | 100))
+    }
 
     /// Keep a report; returns its number.
     pub fn crash_add(&self, report: &Report, now: u64) -> rusqlite::Result<i64> {
