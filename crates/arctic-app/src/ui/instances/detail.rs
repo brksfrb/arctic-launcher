@@ -157,6 +157,7 @@ impl ArcticApp {
             }
         });
         self.version_card(ui, instance);
+        self.loader_card(ui, instance);
         ui.add_space(12.0);
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());

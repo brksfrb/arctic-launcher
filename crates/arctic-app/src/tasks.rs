@@ -108,6 +108,14 @@ pub enum Event {
     ),
     /// An instance's mods moved to another version: (instance id, version, result).
     Retargeted(String, String, Outcome<Retargeted>),
+    /// What an instance's mods become under another loader: (instance id, loader, result).
+    LoaderChecked(
+        String,
+        LoaderKind,
+        Outcome<Vec<arctic_core::mods::retarget::ModCheck>>,
+    ),
+    /// An instance moved to another loader: (instance id, loader, result).
+    LoaderSwitched(String, LoaderKind, Outcome<Retargeted>),
     /// Icon bytes for a URL.
     ModIcon(String, Outcome<Vec<u8>>),
     /// Skin and capes of an account (account id, result).
@@ -559,6 +567,56 @@ impl Tasks {
                 })
             })();
             t.send(Event::Retargeted(instance.id, version, result));
+        });
+    }
+
+    /// Look up what the instance's mods become under `loader` (same Minecraft version).
+    pub fn loader_check(&self, instance: Instance, loader: LoaderKind) {
+        self.run(move |t| {
+            let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
+            let result = mods::retarget::check(
+                &instance.game_dir(&t.dirs).join("mods"),
+                &mods::index_path(&t.dirs.instance_dir(&instance.id)),
+                &instance.version.clone().unwrap_or_default(),
+                loader,
+                &progress,
+            )
+            .map_err(|e| e.to_string());
+            t.send(Event::LoaderChecked(instance.id, loader, result));
+        });
+    }
+
+    /// Move the instance's mods to `loader` (from a check for it) and find its newest build.
+    pub fn loader_switch(
+        &self,
+        instance: Instance,
+        loader: LoaderKind,
+        checks: Vec<arctic_core::mods::retarget::ModCheck>,
+    ) {
+        self.run(move |t| {
+            let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
+            let result = (|| -> Outcome<Retargeted> {
+                let game = instance.version.clone().unwrap_or_default();
+                // The build first: a loader without one for this version changes nothing.
+                let loader_version = arctic_core::loaders::default_loader_version(loader, &game)
+                    .map_err(|e| e.to_string())?;
+                let applied = mods::retarget::apply(
+                    &instance.game_dir(&t.dirs).join("mods"),
+                    &mods::index_path(&t.dirs.instance_dir(&instance.id)),
+                    &checks,
+                    &game,
+                    loader,
+                    &progress,
+                )
+                .map_err(|e| e.to_string())?;
+                Ok(Retargeted {
+                    loader_version,
+                    updated: applied.installed.len(),
+                    disabled: applied.disabled,
+                    failed: applied.failed.into_iter().map(|(p, _)| p).collect(),
+                })
+            })();
+            t.send(Event::LoaderSwitched(instance.id, loader, result));
         });
     }
 

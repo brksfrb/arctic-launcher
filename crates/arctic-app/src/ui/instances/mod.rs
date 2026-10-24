@@ -6,6 +6,7 @@ mod clashes;
 mod create;
 mod detail;
 mod icon_picker;
+mod loader_switch;
 mod modpacks;
 mod mods_page;
 mod packs;
@@ -149,6 +150,8 @@ pub struct InstancesUi {
     pub packs: packs::PacksUi,
     /// Moving the open instance to another Minecraft version.
     pub retarget: Option<retarget::RetargetUi>,
+    /// Moving the open instance to another mod loader.
+    pub loader_switch: Option<loader_switch::LoaderUi>,
 }
 
 impl ArcticApp {
@@ -509,6 +512,12 @@ impl ArcticApp {
             }
             Event::Retargeted(instance, version, result) => {
                 self.on_retargeted(instance, version, result)
+            }
+            Event::LoaderChecked(instance, loader, result) => {
+                self.on_loader_checked(instance, loader, result)
+            }
+            Event::LoaderSwitched(instance, loader, result) => {
+                self.on_loader_switched(instance, loader, result)
             }
             Event::ModInstalled(instance_id, project_id, result) => {
                 self.inst.installing.remove(&project_id);
