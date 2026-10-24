@@ -3,6 +3,7 @@
 //! Read-only keys read everything the dashboard shows, in full, and change nothing:
 //!
 //! - `GET /v1/admin/gallery?queue=pending|listed|rejected|removed`: the skin gallery's queues
+//! - `POST /v1/admin/gallery/{id}/name` with `{"name": "..."}`: rename a waiting or live item
 //! - `GET /v1/admin/retention`: daily active accounts (30 days) and each week's new accounts and how
 //!   many were back a day, a week and a month later (counted from when the server began keeping it)
 //! - `GET /v1/admin/log` (`?reads=1`: read-only keys' reads): History
@@ -27,7 +28,7 @@ use super::{Shared, caller, db_error, error, moderator, now};
 use crate::admin::Role;
 use crate::crashes::{self, Filter, Resolution};
 use crate::filters;
-use crate::gallery::Action;
+use crate::gallery::{self, Action};
 use crate::suggestions::Filter as SuggestionFilter;
 
 const PAGE: &str = include_str!("../admin.html");
@@ -47,6 +48,7 @@ pub fn routes() -> Router<Shared> {
         .route("/v1/admin/me", routing::get(me))
         .route("/v1/admin/gallery", routing::get(queue))
         .route("/v1/admin/gallery/{id}", routing::post(decide))
+        .route("/v1/admin/gallery/{id}/name", routing::post(rename_item))
         .route("/v1/admin/log", routing::get(log))
         .route("/v1/admin/stats", routing::get(stats))
         .route("/v1/admin/retention", routing::get(retention))
@@ -325,6 +327,34 @@ async fn decide(
         Ok(true) => Json(json!({ "ok": true })).into_response(),
         Ok(false) => error(StatusCode::NOT_FOUND, "not found"),
         Err(e) => db_error("moderation decision", e),
+    }
+}
+
+#[derive(Deserialize)]
+struct RenameBody {
+    name: String,
+}
+
+/// The name players see. The same rules as sharing a skin (`clean_name`):
+/// control characters dropped, trimmed, 1–32 characters. Pending and live
+/// items both take it. `GET /v1/gallery` reads the column, so the next browse
+/// shows the new name; nothing else is cached under the old one.
+async fn rename_item(
+    State(state): State<Shared>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<RenameBody>,
+) -> Response {
+    let Some(moderator) = moderator(&state, &headers) else {
+        return denied();
+    };
+    let Some(name) = gallery::clean_name(&body.name) else {
+        return error(StatusCode::BAD_REQUEST, "give the skin a name");
+    };
+    match state.store.gallery_rename(&id, &name, &moderator, now()) {
+        Ok(true) => Json(json!({ "ok": true, "name": name })).into_response(),
+        Ok(false) => error(StatusCode::NOT_FOUND, "not found"),
+        Err(e) => db_error("gallery rename", e),
     }
 }
 

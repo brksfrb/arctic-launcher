@@ -577,6 +577,33 @@ const GALLERY_ACTIONS = {
 };
 const GALLERY_DONE = { approve: "Approved", reject: "Rejected", restore: "Restored", remove: "Removed" };
 
+async function renameGalleryItem(it, card, title, button) {
+  const values = await ask({
+    title: "Rename “" + it.name + "”",
+    text: "This is the name players see in the gallery.",
+    fields: [{ name: "name", label: "Name", value: it.name, hint: "1 to 32 characters. A longer name is cut off." }],
+    confirm: "Save",
+    check(values) {
+      if (!values.name.replace(/[\u0000-\u001F\u007F]/g, "").trim()) return "Give the skin a name.";
+      return null;
+    },
+  });
+  if (!values || values.name === it.name) return;
+  let saved = null;
+  const ok = await act(button, async () => {
+    saved = await api("/v1/admin/gallery/" + encodeURIComponent(it.id) + "/name", { method: "POST", body: { name: values.name } });
+  });
+  if (!ok || !saved || !saved.name) return;
+  it.name = saved.name;
+  title.textContent = saved.name;
+  const raw = card.querySelector("img");
+  if (raw) raw.alt = "Skin " + saved.name;
+  const view3d = card.querySelector("[data-skin-name]");
+  if (view3d) view3d.dataset.skinName = saved.name;
+  card.dataset.search = [saved.name, it.author, it.model].filter(Boolean).join(" ").toLowerCase();
+  toast("Renamed: " + saved.name);
+}
+
 // The real thing: the skin on a 3D character you can turn by dragging (scroll to zoom). The viewer library
 // (skinview3d) loads the first time it is asked for, so the page stays light.
 const SKINVIEW3D = "/admin/skinview3d.js";
@@ -687,15 +714,17 @@ function skinPreview(src, slim, name) {
   };
   canvas.onclick = toggle;
   raw.onclick = toggle;
-  const view3d = el("button", { type: "button", class: "ghost small", onclick: () => skin3d(src, slim, name) }, "3D view");
+  const view3d = el("button", { type: "button", class: "ghost small", dataset: { skinName: name }, onclick: () => skin3d(src, slim, view3d.dataset.skinName) }, "3D view");
   return el("div", { style: "display:contents" }, canvas, raw, view3d);
 }
 
 async function gallery(r) {
   const data = await api("/v1/admin/gallery?queue=" + encodeURIComponent(r.sub));
   const items = data.items || [];
+  const renamable = canChange() && (r.sub === "pending" || r.sub === "approved");
   const cards = items.map((it) => {
     const card = el("div", { class: "card" });
+    const title = el("h3", {}, it.name);
     const buttons = canChange() ? (GALLERY_ACTIONS[r.sub] || []).map(([action, label, tone]) => {
       const b = el("button", { class: tone + " small", onclick: async () => {
         if (action === "remove" && !(await sure("Remove “" + it.name + "”?", "It leaves the gallery for good.", "Remove"))) return;
@@ -703,9 +732,18 @@ async function gallery(r) {
       } }, label);
       return b;
     }) : [];
+    if (renamable) {
+      const rename = el("button", { class: "ghost small" }, "Rename");
+      const open = () => renameGalleryItem(it, card, title, rename);
+      rename.onclick = open;
+      title.title = "Rename";
+      title.style.cursor = "text";
+      title.onclick = open;
+      buttons.push(rename);
+    }
     card.append(...[
       skinPreview("/v1/textures/" + encodeURIComponent(it.texture) + ".png", it.model === "slim", it.name),
-      el("h3", {}, it.name),
+      title,
       el("div", { class: "meta" }, el("span", {}, "by " + it.author), el("span", {}, it.model), timeEl(it.created)),
       el("div", { class: "chips" },
         it.reports ? chip(plural(it.reports, "report", "reports"), "bad") : null,
@@ -980,7 +1018,7 @@ async function history(r) {
   const rows = entries.map((e) => searchable(el("tr", {},
     el("td", { title: fullTime(e.at) }, ago(e.at)),
     el("td", {}, e.moderator),
-    el("td", {}, chip(e.action, { approve: "good", restore: "good", resolve: "good", reject: "bad", remove: "bad" }[e.action] || "")),
+    el("td", {}, chip(e.action, { approve: "good", restore: "good", resolve: "good", rename: "accent", reject: "bad", remove: "bad" }[e.action] || "")),
     el("td", { class: "mono" }, e.target || ""),
     el("td", {}, e.detail || "")), e.moderator, e.action, e.target, e.detail));
   return el("div", {}, toolbar(r),
