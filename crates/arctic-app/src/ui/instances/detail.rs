@@ -198,6 +198,7 @@ impl ArcticApp {
         if instance.is_default() {
             return;
         }
+        self.duplicate_card(ui, instance);
         ui.add_space(12.0);
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -219,6 +220,57 @@ impl ArcticApp {
                 }
             });
         });
+    }
+
+    /// "Duplicate instance": a copy to try other mods in without touching this one.
+    fn duplicate_card(&mut self, ui: &mut egui::Ui, instance: &Instance) {
+        let p = self.palette();
+        let running = self.runs.active_for(&instance.id, None).is_some();
+        ui.add_space(12.0);
+        theme::card(p).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(RichText::new("Duplicate instance").size(17.0).strong().color(p.text));
+            ui.label(
+                RichText::new(
+                    "A copy with its own folder: the same mods, packs, settings and configs. Handy for trying other mods without touching this one.",
+                )
+                .color(p.muted),
+            );
+            ui.add_space(6.0);
+            ui.checkbox(&mut self.inst.dup_worlds, "Copy the worlds too (can be big)");
+            ui.add_space(4.0);
+            if self.inst.duplicating {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(RichText::new("Copying…").color(p.muted));
+                });
+            } else if running {
+                ui.label(RichText::new("Close the game first.").color(p.warn));
+            } else if widgets::button(ui, p, Some(Icon::Layers), "Duplicate", false).clicked() {
+                self.inst.duplicating = true;
+                self.tasks
+                    .duplicate_instance(instance.clone(), self.inst.dup_worlds);
+            }
+        });
+    }
+
+    /// The copy is ready (or could not be made).
+    pub(crate) fn on_instance_duplicated(&mut self, result: Result<Instance, String>) {
+        self.inst.duplicating = false;
+        match result {
+            Ok(copy) => {
+                self.reload_instances();
+                self.toasts.push(
+                    Kind::Success,
+                    format!("Made {}", copy.name),
+                    "Press Play when you're ready.",
+                );
+                self.open_instance(&copy.id);
+            }
+            Err(e) => self
+                .toasts
+                .push(Kind::Error, "Couldn't duplicate the instance", e),
+        }
     }
 
     /// Per-instance Java executable and JVM flags.

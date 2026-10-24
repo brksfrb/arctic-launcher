@@ -5,6 +5,10 @@
 //! live next to it under `instances/<id>/` and reuse the shared libraries,
 //! assets and runtimes.
 
+mod duplicate;
+
+pub use duplicate::duplicate;
+
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
