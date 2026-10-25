@@ -315,7 +315,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-app"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "aes-gcm",
  "arboard",
@@ -345,7 +345,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-cli"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "arctic-core",
  "arctic-share",
@@ -357,7 +357,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-core"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "aes-gcm",
  "arctic-mesh",
@@ -397,7 +397,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-mesh"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "png",
  "serde_json",
@@ -405,7 +405,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-ping"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "base64 0.23.1",
  "serde_json",
@@ -414,7 +414,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-share"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "bytes",
  "data-encoding",
@@ -427,7 +427,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-voice"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "aes-gcm",
  "cpal",
