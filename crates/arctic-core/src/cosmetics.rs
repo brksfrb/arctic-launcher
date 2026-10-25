@@ -649,7 +649,31 @@ fn token_for_locked(dirs: &DataDirs, base: &str, account: &Account) -> Result<St
             let key = usable_key(dirs, &account.uuid, &account.username, entry)?;
             // Save the key before using it, so a claimed name is never lost.
             save_json(&path, &creds)?;
-            match sign_in_offline(base, &account.username, &key) {
+            // The name may be held by another key this PC has (an older one, one in another profile or
+            // a backup): all are tried before the key counts as lost.
+            let mut keys = vec![key.clone()];
+            keys.extend(other_keys(dirs, &account.uuid, &key));
+            let mut outcome = sign_in_offline(base, &account.username, &key);
+            for other in keys.iter().skip(1) {
+                if !outcome.as_ref().is_err_and(wrong_key) {
+                    break;
+                }
+                log::info!("Arctic: trying another saved key for {}", account.username);
+                if let Ok(session) = sign_in_offline(base, &account.username, other) {
+                    // This is the key that works: it becomes the newest everywhere.
+                    if let Err(e) =
+                        crate::offline_keys::remember(dirs, &account.uuid, &account.username, other)
+                    {
+                        log::warn!("couldn't save the working offline key: {e}");
+                    }
+                    let mut fresh: Credentials = load_json(&path)?.unwrap_or_default();
+                    fresh.accounts.entry(account.uuid.clone()).or_default().key =
+                        Some(other.clone());
+                    save_json(&path, &fresh)?;
+                    outcome = Ok(session);
+                }
+            }
+            match outcome {
                 Ok(session) => {
                     creds = load_json(&path)?.unwrap_or_default();
                     session
@@ -731,6 +755,47 @@ fn usable_key(dirs: &DataDirs, uuid: &str, name: &str, entry: &mut Credential) -
     // Whatever token went with the old key is no good either.
     entry.token = None;
     Ok(key)
+}
+
+/// The most keys tried for one sign-in.
+const MAX_KEY_TRIES: usize = 8;
+
+/// The key for `uuid` in a credentials file's text (readable, or the older encrypted kind).
+fn key_in_credentials(text: &str, uuid: &str) -> Option<String> {
+    serde_json::from_str::<Credentials>(text)
+        .ok()?
+        .accounts
+        .remove(uuid)?
+        .key
+}
+
+/// Every offline key this PC may have held for `uuid` besides `first`: the ledgers' history, then every
+/// `cosmetics.json` and ledger (backups and set-aside copies too) in the data folder and in every
+/// profile, including removed ones. A key counts as lost only when none of these works.
+fn other_keys(dirs: &DataDirs, uuid: &str, first: &str) -> Vec<String> {
+    let fine = |k: &str| (32..=128).contains(&k.len()) && k.bytes().all(|b| b.is_ascii_hexdigit());
+    let mut found = crate::offline_keys::history(dirs, uuid);
+    for file in crate::offline_keys::stored_files(dirs) {
+        let Ok(text) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        found.extend(key_in_credentials(&text, uuid));
+        found.extend(crate::offline_keys::keys_in_ledger(&text, uuid));
+    }
+    let mut keys: Vec<String> = Vec::new();
+    for key in found {
+        if key != first && fine(&key) && !keys.contains(&key) {
+            keys.push(key);
+        }
+    }
+    keys.truncate(MAX_KEY_TRIES - 1);
+    keys
+}
+
+/// The server says this name is held by another key (so another key may still be right).
+fn wrong_key(error: &Error) -> bool {
+    let text = error.to_string();
+    text.contains("used by another") || text.contains("invalid name or key")
 }
 
 /// Keep the profile's recovery code on this PC, made now when the profile has none (a code the player
@@ -1095,6 +1160,35 @@ mod tests {
             assert_eq!(usable_key(&dirs, "u1", "Alex", &mut entry).unwrap(), good);
             assert_eq!(entry.key.as_deref(), Some(good.as_str()));
         }
+    }
+
+    #[test]
+    fn keys_are_looked_for_in_every_profile_backup_and_ledger() {
+        let (_dir, dirs) = key_dirs();
+        let (a, b, c) = ("aa".repeat(32), "bb".repeat(32), "cc".repeat(32));
+        let creds = |key: &str| format!(r#"{{"accounts":{{"u1":{{"key":"{key}"}}}}}}"#);
+        // This profile's file has none; another profile and a set-aside copy have one each.
+        let here = dirs.with_profile("main");
+        std::fs::create_dir_all(here.profile_root()).unwrap();
+        std::fs::write(
+            here.profile_root().join("cosmetics.json"),
+            r#"{"accounts":{}}"#,
+        )
+        .unwrap();
+        let other = dirs.with_profile("old");
+        std::fs::create_dir_all(other.profile_root()).unwrap();
+        std::fs::write(other.profile_root().join("cosmetics.json"), creds(&b)).unwrap();
+        std::fs::write(
+            other.profile_root().join("cosmetics.json.unreadable-5"),
+            creds(&c),
+        )
+        .unwrap();
+        crate::offline_keys::remember(&here, "u1", "Alex", &a).unwrap();
+        let found = other_keys(&here, "u1", &a);
+        assert!(found.contains(&b), "another profile's file");
+        assert!(found.contains(&c), "a set-aside copy");
+        assert!(!found.contains(&a), "the first key isn't repeated");
+        assert!(other_keys(&here, "someone-else", &a).is_empty());
     }
 
     use super::*;
