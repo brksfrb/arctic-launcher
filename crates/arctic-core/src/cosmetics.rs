@@ -596,7 +596,15 @@ fn forget_failure(who: &str) {
 
 fn token_for_locked(dirs: &DataDirs, base: &str, account: &Account) -> Result<String> {
     let path = credentials_path(dirs);
-    let mut creds: Credentials = load_json(&path)?.unwrap_or_default();
+    let mut creds: Credentials = match load_json(&path) {
+        Ok(creds) => creds.unwrap_or_default(),
+        Err(e) => {
+            // Never overwritten: kept aside, and the offline key comes back from the ledgers.
+            log::warn!("{} is unreadable ({e}); keeping it aside", path.display());
+            crate::offline_keys::set_aside(&path);
+            Credentials::default()
+        }
+    };
     // Files from before encryption: save them encrypted right away.
     if std::fs::read_to_string(&path).is_ok_and(|t| crate::secret::has_plain(&t, &["token"])) {
         save_json(&path, &creds)?;
@@ -627,7 +635,7 @@ fn token_for_locked(dirs: &DataDirs, base: &str, account: &Account) -> Result<St
         .inspect_err(|e| log::warn!("Arctic sign-in for {} failed: {e}", account.username))?,
         #[cfg(any(feature = "offline-accounts", test))]
         AccountKind::Offline => {
-            let key = usable_key(entry);
+            let key = usable_key(dirs, &account.uuid, &account.username, entry)?;
             // Save the key before using it, so a claimed name is never lost.
             save_json(&path, &creds)?;
             match sign_in_offline(base, &account.username, &key) {
@@ -684,19 +692,34 @@ fn token_for_locked(dirs: &DataDirs, base: &str, account: &Account) -> Result<St
 /// system's machine id changed) reads as empty, and the server refuses an empty key as
 /// "invalid name or key" for good; a new key at least gets a clear answer (the name is claimed:
 /// use the recovery code) instead.
-fn usable_key(entry: &mut Credential) -> String {
+fn usable_key(dirs: &DataDirs, uuid: &str, name: &str, entry: &mut Credential) -> Result<String> {
     let fine = |k: &str| (32..=128).contains(&k.len()) && k.bytes().all(|b| b.is_ascii_hexdigit());
-    if !entry.key.as_deref().is_some_and(fine) {
-        log::warn!(
-            "the stored offline key can't be used (missing, empty or unreadable): making a new one"
-        );
-        entry.key = Some(
-            uuid::Uuid::new_v4().simple().to_string() + &uuid::Uuid::new_v4().simple().to_string(),
-        );
-        // Whatever token went with the old key is no good either.
-        entry.token = None;
+    if let Some(key) = entry.key.clone().filter(|k| fine(k)) {
+        // Make sure the extra copies have it too (older keys were only here).
+        if let Err(e) = crate::offline_keys::remember(dirs, uuid, name, &key) {
+            log::warn!("couldn't copy the offline key for {name} to the backup ledgers: {e}");
+        }
+        return Ok(key);
     }
-    entry.key.clone().unwrap_or_default()
+    // Missing or unreadable here: the ledgers still have it, so the name is never lost.
+    if let Some(key) = crate::offline_keys::recall(dirs, uuid).filter(|k| fine(k)) {
+        log::warn!(
+            "the stored offline key for {name} was missing: restored from the backup ledger"
+        );
+        entry.key = Some(key.clone());
+        // The token went with this file; sign in again with the key.
+        entry.token = None;
+        return Ok(key);
+    }
+    log::warn!("no offline key for {name} anywhere: making a new one");
+    let key =
+        uuid::Uuid::new_v4().simple().to_string() + &uuid::Uuid::new_v4().simple().to_string();
+    // Saved in the ledgers before it claims anything; with no place to save it, no name is claimed.
+    crate::offline_keys::remember(dirs, uuid, name, &key)?;
+    entry.key = Some(key.clone());
+    // Whatever token went with the old key is no good either.
+    entry.token = None;
+    Ok(key)
 }
 
 /// Keep the profile's recovery code on this PC, made now when the profile has none (a code the player
@@ -719,7 +742,17 @@ pub fn remember_recovery_code(dirs: &DataDirs, account: &Account, code: &str) {
 
 fn remember_recovery_code_locked(dirs: &DataDirs, account: &Account, code: &str) {
     let path = credentials_path(dirs);
-    let mut creds: Credentials = load_json(&path).ok().flatten().unwrap_or_default();
+    // A file that can't be read is left alone: writing a fresh one over it could destroy a key.
+    let mut creds: Credentials = match load_json(&path) {
+        Ok(creds) => creds.unwrap_or_default(),
+        Err(e) => {
+            log::warn!(
+                "couldn't save the recovery code: {} is unreadable ({e})",
+                path.display()
+            );
+            return;
+        }
+    };
     creds
         .accounts
         .entry(account.uuid.clone())
@@ -767,6 +800,8 @@ fn recover_offline_locked(
         return Err(Error::Other(server_error(&mut resp, status)));
     }
     let session: Session = resp.body_mut().with_config().limit(MAX_BYTES).read_json()?;
+    // The name now belongs to this key: it goes in the ledgers before anything else can fail.
+    crate::offline_keys::remember(dirs, &account.uuid, &account.username, &key)?;
     let path = credentials_path(dirs);
     let mut creds: Credentials = load_json(&path)?.unwrap_or_default();
     let entry = creds.accounts.entry(account.uuid.clone()).or_default();
@@ -990,31 +1025,65 @@ mod tests {
         assert_eq!(back.recovery.as_deref(), Some("abcd-efgh-ijkl-mnop"));
     }
 
+    fn key_dirs() -> (tempfile::TempDir, DataDirs) {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path().join("data"));
+        (dir, dirs)
+    }
+
     #[test]
-    fn an_unreadable_or_missing_offline_key_is_replaced_never_sent_empty() {
+    fn a_new_key_is_made_only_when_none_exists_and_is_never_sent_empty() {
         for stored in [None, Some(String::new()), Some("not hex".to_owned())] {
+            let (_dir, dirs) = key_dirs();
             let mut entry = Credential {
                 key: stored,
                 token: Some("old".into()),
                 ..Credential::default()
             };
-            let key = usable_key(&mut entry);
+            let key = usable_key(&dirs, "u1", "Alex", &mut entry).unwrap();
             assert_eq!(key.len(), 64);
             assert!(key.bytes().all(|b| b.is_ascii_hexdigit()));
             assert_eq!(entry.token, None, "the old key's token goes too");
+            // The new key is in the ledgers before it claims anything.
+            assert_eq!(
+                crate::offline_keys::recall(&dirs, "u1").as_deref(),
+                Some(key.as_str())
+            );
         }
+        let (_dir, dirs) = key_dirs();
         let good = "ab".repeat(32);
         let mut entry = Credential {
             key: Some(good.clone()),
             token: Some("t".into()),
             ..Credential::default()
         };
-        assert_eq!(usable_key(&mut entry), good);
+        assert_eq!(usable_key(&dirs, "u1", "Alex", &mut entry).unwrap(), good);
         assert_eq!(
             entry.token.as_deref(),
             Some("t"),
             "a good key is left alone"
         );
+    }
+
+    #[test]
+    fn a_key_lost_from_the_credentials_file_comes_back_from_the_ledger() {
+        let (_dir, dirs) = key_dirs();
+        let good = "ab".repeat(32);
+        let mut entry = Credential {
+            key: Some(good.clone()),
+            ..Credential::default()
+        };
+        usable_key(&dirs, "u1", "Alex", &mut entry).unwrap();
+        // cosmetics.json lost the key (a clobbered write, a reset, an unreadable file...).
+        for lost in [None, Some(String::new()), Some("garbage".to_owned())] {
+            let mut entry = Credential {
+                key: lost,
+                token: Some("t".into()),
+                ..Credential::default()
+            };
+            assert_eq!(usable_key(&dirs, "u1", "Alex", &mut entry).unwrap(), good);
+            assert_eq!(entry.key.as_deref(), Some(good.as_str()));
+        }
     }
 
     use super::*;
