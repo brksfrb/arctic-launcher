@@ -980,6 +980,11 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public int peekTint(Object stack) {
+		return WorldStats.peekTint(stack);
+	}
+
+	@Override
 	public float fallDistance() {
 		LocalPlayer p = mc().player;
 		return p == null ? 0 : (float) p.fallDistance;

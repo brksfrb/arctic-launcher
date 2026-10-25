@@ -355,9 +355,15 @@ final class ModCatalog {
 				}));
 		// Shulker boxes exist from 1.11.
 		if (ArcticClient.platform() != null && ArcticClient.platform().canPeekShulkers()) {
-			out.add(new Mod("shulkerpeek", "Shulker Peek", "Hover a shulker box to see what is inside it", "shulkerpeek",
-					Category.GAMEPLAY, "shulker box peek preview contents chest inventory")
-					.toggle(() -> c.shulkerPeek, on -> c.shulkerPeek = on));
+			out.add(new Mod("shulkerpeek", "Shulker Peek", "Hover a shulker box or chest to see what is inside it", "shulkerpeek",
+					Category.GAMEPLAY, "shulker box peek preview contents chest barrel inventory tooltip")
+					.toggle(() -> c.shulkerPeek, on -> c.shulkerPeek = on)
+					.settings((host, f) -> {
+						f.section("Preview");
+						f.choice("Show", new String[] {"Always", "While holding Shift"},
+								() -> c.shulkerPeekMode, i -> c.shulkerPeekMode = i);
+						f.note("Shift shows what is inside, packed. Shift and Alt together show every slot. Works for shulker boxes (they colour the window), chests, barrels, hoppers and other containers that carry their items.");
+					}));
 		}
 		out.add(new Mod("controller", "Controller", "Play with a gamepad: Xbox, PlayStation and others", "controller",
 				Category.GAMEPLAY, "gamepad joystick xbox playstation console")

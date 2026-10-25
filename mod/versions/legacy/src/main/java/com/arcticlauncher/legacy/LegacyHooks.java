@@ -208,11 +208,10 @@ public final class LegacyHooks {
 
 	/** Shulker Peek: what the box under the cursor holds. */
 	public static void drawPeek(net.minecraft.inventory.slot.Slot slot, int mouseX, int mouseY) {
-		ClientConfig c = ArcticClient.config();
-		if (c == null || !c.shulkerPeek || slot == null || !slot.hasStack() || ArcticClient.platform() == null) {
+		if (slot == null || !slot.hasStack()) {
 			return;
 		}
-		com.arcticlauncher.client.feature.ContainerPeek.draw(new LegacyGfx(), mouseX, mouseY, ArcticClient.platform().peek(slot.getStack()));
+		com.arcticlauncher.client.feature.ContainerPeek.hover(new LegacyGfx(), mouseX, mouseY, slot.getStack());
 	}
 
 	/** The ping number in the player list, in the place of the ping bars; false when the latency is unknown. */

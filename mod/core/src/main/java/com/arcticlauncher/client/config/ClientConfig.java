@@ -227,6 +227,8 @@ public final class ClientConfig {
 	public boolean containerSearch;
 	/** Shulker Peek: hover a shulker box to see inside it. */
 	public boolean shulkerPeek;
+	/** How Shulker Peek shows: 0 while hovering, 1 while Shift is held (see ContainerPeek). */
+	public int shulkerPeekMode = 1;
 	/** Held Item: where your hands and the item in them sit in first person (see HeldItemTweak). */
 	public boolean heldItem;
 	public int heldX;

@@ -1069,15 +1069,16 @@ public final class LegacyPlatform implements Platform {
 			return null;
 		}
 		Identifier id = (Identifier) net.minecraft.item.Item.REGISTRY.getIdentifier(stack.getItem());
-		if (id == null || !id.getPath().endsWith("shulker_box")) {
+		if (id == null) {
 			return null;
 		}
+		int size = com.arcticlauncher.client.feature.ContainerPeek.slotsFor(id.getPath());
 		net.minecraft.nbt.NbtCompound tag = stack.getNbt().getCompound("BlockEntityTag");
 		if (!tag.contains("Items", 9)) {
 			return null;
 		}
 		net.minecraft.nbt.NbtList list = tag.getList("Items", 10);
-		Object[] out = new Object[27];
+		Object[] out = new Object[size];
 		boolean any = false;
 		for (int i = 0; i < list.size(); i++) {
 			net.minecraft.nbt.NbtCompound entry = list.getCompound(i);
@@ -1089,6 +1090,16 @@ public final class LegacyPlatform implements Platform {
 			}
 		}
 		return any ? out : null;
+	}
+
+	@Override
+	public int peekTint(Object stackObject) {
+		ItemStack stack = (ItemStack) stackObject;
+		if (!present(stack)) {
+			return 0;
+		}
+		Identifier id = (Identifier) net.minecraft.item.Item.REGISTRY.getIdentifier(stack.getItem());
+		return id == null ? 0 : com.arcticlauncher.client.feature.ContainerPeek.tintFor(id.getPath());
 	}
 	//#endif
 

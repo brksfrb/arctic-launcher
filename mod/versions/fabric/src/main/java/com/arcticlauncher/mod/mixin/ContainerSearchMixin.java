@@ -44,7 +44,7 @@ abstract class ContainerSearchMixin {
 		}
 		InventorySearch.render(g, ArcticClient.config());
 		if (ArcticClient.config().shulkerPeek && hoveredSlot != null && hoveredSlot.hasItem()) {
-			ContainerPeek.draw(g, mouseX, mouseY, ArcticClient.platform().peek(hoveredSlot.getItem()));
+			ContainerPeek.hover(g, mouseX, mouseY, hoveredSlot.getItem());
 		}
 	}
 }

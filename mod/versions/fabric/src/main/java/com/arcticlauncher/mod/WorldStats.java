@@ -36,12 +36,13 @@ final class WorldStats {
 		return stack.isEmpty() ? null : BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath();
 	}
 
-	/** The 27 slots of a shulker box item (null for empty ones), or null for any other item or an empty box. */
+	/** The slots of a container item (shulker box, chest...: null for empty ones), or null for any other item or an empty one. */
 	static Object[] peek(Object stackObject) {
 		ItemStack stack = (ItemStack) stackObject;
-		if (stack.isEmpty() || !BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath().endsWith("shulker_box")) {
+		if (stack.isEmpty()) {
 			return null;
 		}
+		int size = com.arcticlauncher.client.feature.ContainerPeek.slotsFor(BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath());
 		net.minecraft.core.NonNullList<ItemStack> items = net.minecraft.core.NonNullList.withSize(27, ItemStack.EMPTY);
 		//#if MC >= 1.20.5
 		net.minecraft.world.item.component.ItemContainerContents contents = stack.get(net.minecraft.core.component.DataComponents.CONTAINER);
@@ -56,15 +57,21 @@ final class WorldStats {
 		}
 		net.minecraft.world.ContainerHelper.loadAllItems(tag, items);
 		//#endif
-		Object[] out = new Object[27];
+		Object[] out = new Object[size];
 		boolean any = false;
-		for (int i = 0; i < 27; i++) {
+		for (int i = 0; i < size; i++) {
 			if (!items.get(i).isEmpty()) {
 				out[i] = items.get(i);
 				any = true;
 			}
 		}
 		return any ? out : null;
+	}
+
+	/** The colour a shulker box item gives Shulker Peek's window (0 for other items). */
+	static int peekTint(Object stackObject) {
+		ItemStack stack = (ItemStack) stackObject;
+		return stack.isEmpty() ? 0 : com.arcticlauncher.client.feature.ContainerPeek.tintFor(BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath());
 	}
 
 	static int countItems(String idPart) {

@@ -480,9 +480,14 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
-	/** What a shulker box item holds: its 27 slots as the game's stacks (null for empty), or null for another item or an empty box. */
+	/** What a container item (shulker box, chest...) holds: its slots as the game's stacks (null for empty), or null for another item or an empty one. */
 	default Object[] peek(Object stack) {
 		return null;
+	}
+
+	/** The colour (0xRRGGBB) the container item gives Shulker Peek's window, 0 for the plain look. */
+	default int peekTint(Object stack) {
+		return 0;
 	}
 
 	/** Entities the world has loaded around you, or -1 outside a world. */
