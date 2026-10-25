@@ -117,6 +117,29 @@ def active_mixins(version):
         return None
 
 
+def listed_without_class(version, src_dir):
+    """Mixins the version's expanded arctic.mixins.json lists whose class its sources don't make (a mixin
+    file wrapped in //#if for other versions, but listed for all): Mixin throws ClassNotFoundException and
+    the game dies at startup ("A mod crashed on startup")."""
+    config = os.path.join(build_dir(version), "build", "resources", "main", "arctic.mixins.json")
+    try:
+        with open(config, encoding="utf-8") as f:
+            names = json.load(f).get("client", [])
+    except (OSError, ValueError):
+        names = sorted(active_mixins(version) or [])
+    missing = []
+    for name in names:
+        path = os.path.join(src_dir, *name.split(".")) + ".java"
+        try:
+            with open(path, encoding="utf-8") as f:
+                if "@Mixin(" in f.read():
+                    continue
+        except OSError:
+            pass
+        missing.append(name)
+    return missing
+
+
 def check(version):
     jar_path = jar_for(version)
     src_dir = os.path.join(build_dir(version), "build", "preprocessed", version, "java", "com", "arcticlauncher", "mod", "mixin")
@@ -126,6 +149,8 @@ def check(version):
     jar = Jar(jar_path)
     listed = active_mixins(version)
     problems = []
+    for name in listed_without_class(version, src_dir):
+        problems.append(f"{name}: listed in arctic.mixins.json but this version has no such class")
     for path in sorted(glob.glob(os.path.join(src_dir, "*.java"))):
         f = os.path.basename(path)
         src = open(path, encoding="utf-8").read()
