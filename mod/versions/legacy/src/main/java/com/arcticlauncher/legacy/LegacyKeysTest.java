@@ -84,16 +84,6 @@ final class LegacyKeysTest {
 		com.arcticlauncher.client.ui.Page page = ((LegacyPageScreen) mc.currentScreen).page();
 		java.lang.reflect.Field reason = page.getClass().getDeclaredField("reason"); reason.setAccessible(true);
 		if (!"Test reconnect failure".equals(reason.get(page))) throw new IllegalStateException("Lost disconnect reason");
-		java.lang.reflect.Field widgets = com.arcticlauncher.client.ui.Page.class.getDeclaredField("widgets"); widgets.setAccessible(true);
-		java.lang.reflect.Field label = com.arcticlauncher.client.ui.Button.class.getDeclaredField("label"); label.setAccessible(true);
-		for (Object widget : (java.util.List<?>) widgets.get(page)) {
-			if (widget instanceof com.arcticlauncher.client.ui.Button && "Vanilla screen".equals(label.get(widget))) {
-				((com.arcticlauncher.client.ui.Button) widget).click(0, 0, com.arcticlauncher.client.Keys.MOUSE_LEFT);
-				break;
-			}
-		}
-		ServerMenus.tick();
-		if (mc.currentScreen != original) throw new IllegalStateException("Explicit vanilla screen was not preserved");
 		ServerMenus.open(original);
 		if (!(mc.currentScreen instanceof LegacyPageScreen)) throw new IllegalStateException("Cannot switch back to Arctic");
 		mc.setScreen(new net.minecraft.client.gui.screen.DisconnectedScreen(title, "disconnect.lost", new net.minecraft.text.LiteralText("Next attempt")));
@@ -104,7 +94,7 @@ final class LegacyKeysTest {
 		mc.setScreen(custom); ServerMenus.tick();
 		if (mc.currentScreen != custom) throw new IllegalStateException("Replaced another mod's disconnect screen");
 		mc.setScreen(title);
-		ArcticLegacy.LOG.info("disconnectmenus: PASS Arctic default, reason, native switch, fresh retry and mod screen preservation");
+		ArcticLegacy.LOG.info("disconnectmenus: PASS Arctic default, reason, fresh retry and mod screen preservation");
 	}
 
 	private static void watch() {

@@ -15,6 +15,8 @@ public final class ServerMenus {
 	// Only the latest disconnect is kept (its page refers back to the screen, so a weak map would never let go).
 	private static Screen disconnectedScreen;
 	private static com.arcticlauncher.client.servers.DisconnectedPage disconnectedPage;
+	/** The player picked the game's own server list: its disconnect screen stays the game's too. */
+	private static boolean vanillaList;
 	private ServerMenus() {}
 
 	public static void tick() {
@@ -27,7 +29,8 @@ public final class ServerMenus {
 	private static boolean prefersArctic(Screen screen) {
 		// A mod's own multiplayer screen must never be redirected.
 		return ArcticClient.restyles() && screen != null
-				&& (screen.getClass() == JoinMultiplayerScreen.class || screen.getClass() == DisconnectedScreen.class)
+				&& (screen.getClass() == JoinMultiplayerScreen.class
+						|| (screen.getClass() == DisconnectedScreen.class && !vanillaList))
 				&& !VANILLA.contains(screen);
 	}
 
@@ -53,6 +56,7 @@ public final class ServerMenus {
 		VANILLA.remove(original);
 		Runnable vanilla = () -> {
 			VANILLA.add(original);
+			vanillaList = true;
 			Compat.setScreen(original);
 		};
 		if (original instanceof DisconnectedScreen) {
@@ -61,12 +65,13 @@ public final class ServerMenus {
 			com.arcticlauncher.client.servers.DisconnectedPage page = disconnectedScreen == original ? disconnectedPage : null;
 			if (page == null) {
 				page = new com.arcticlauncher.client.servers.DisconnectedPage(
-						Compat.titleOf(original).getString(), DisconnectText.reason(original), vanilla);
+						Compat.titleOf(original).getString(), DisconnectText.reason(original));
 				disconnectedScreen = original;
 				disconnectedPage = page;
 			}
 			ArcticClient.platform().openPage(page);
 		} else {
+			vanillaList = false;
 			ArcticClient.platform().openPage(new ServersPage(vanilla));
 		}
 	}

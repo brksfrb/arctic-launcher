@@ -43,7 +43,6 @@ public final class DisconnectedPage extends Page {
 	private final Platform platform = ArcticClient.platform();
 	private final String title;
 	private final String reason;
-	private final Runnable vanillaScreen;
 	private final String address = rememberCurrent(ArcticClient.platform());
 	private final long shownAt = System.currentTimeMillis();
 	private boolean cancelled;
@@ -51,15 +50,10 @@ public final class DisconnectedPage extends Page {
 	private int reasonLines = 1;
 
 	public DisconnectedPage(String title, String reason) {
-		this(title, reason, null);
-	}
-
-	public DisconnectedPage(String title, String reason, Runnable vanillaScreen) {
 		this.title = title == null || title.isEmpty() ? "Connection Lost" : title;
 		String shown = reason == null ? "" : reason;
 		String hint = hint(shown);
 		this.reason = hint == null ? shown : shown + "\n\n§r" + hint;
-		this.vanillaScreen = vanillaScreen;
 	}
 
 	/**
@@ -242,9 +236,6 @@ public final class DisconnectedPage extends Page {
 				cancelled = true;
 				rebuild();
 			}));
-		}
-		if (vanillaScreen != null) {
-			small.add(new Button("Vanilla screen", vanillaScreen));
 		}
 		int gap = 6;
 		int each = (BUTTON_W - gap * (small.size() - 1)) / small.size();

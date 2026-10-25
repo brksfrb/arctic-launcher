@@ -13,6 +13,8 @@ import net.minecraft.client.gui.screen.multiplayer.MultiplayerScreen;
 /** Arctic's browser is the default; the native list is an explicit, per-screen choice. */
 public final class ServerMenus {
 	private static final Set<Screen> VANILLA = Collections.newSetFromMap(new WeakHashMap<Screen, Boolean>());
+	/** The player picked the game's own server list: its disconnect screen stays the game's too. */
+	private static boolean vanillaList;
 	private ServerMenus() {}
 
 	public static void tick() {
@@ -25,7 +27,8 @@ public final class ServerMenus {
 	private static boolean prefersArctic(Screen screen) {
 		// A mod's own multiplayer screen must never be redirected.
 		return ArcticClient.restyles() && screen != null
-				&& (screen.getClass() == MultiplayerScreen.class || screen.getClass() == DisconnectedScreen.class)
+				&& (screen.getClass() == MultiplayerScreen.class
+						|| (screen.getClass() == DisconnectedScreen.class && !vanillaList))
 				&& !VANILLA.contains(screen);
 	}
 
@@ -48,12 +51,14 @@ public final class ServerMenus {
 		VANILLA.remove(original);
 		Runnable vanilla = () -> {
 			VANILLA.add(original);
+			vanillaList = true;
 			MinecraftClient.getInstance().setScreen(original);
 		};
 		if (original instanceof DisconnectedScreen) {
 			String[] text = LegacyDisconnectText.read(original);
-			ArcticClient.platform().openPage(new com.arcticlauncher.client.servers.DisconnectedPage(text[0], text[1], vanilla));
+			ArcticClient.platform().openPage(new com.arcticlauncher.client.servers.DisconnectedPage(text[0], text[1]));
 		} else {
+			vanillaList = false;
 			ArcticClient.platform().openPage(new ServersPage(vanilla));
 		}
 	}
