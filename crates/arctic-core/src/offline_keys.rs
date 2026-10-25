@@ -69,6 +69,70 @@ pub fn recall(dirs: &DataDirs, uuid: &str) -> Option<String> {
         .and_then(|a| a.keys.last().cloned())
 }
 
+/// Every key a ledger text holds for `uuid`, newest first (any ledger file, also from another profile).
+pub fn keys_in_ledger(text: &str, uuid: &str) -> Vec<String> {
+    let Ok(mut ledger) = serde_json::from_str::<Ledger>(text) else {
+        return Vec::new();
+    };
+    let mut keys = ledger
+        .accounts
+        .remove(uuid)
+        .map(|a| a.keys)
+        .unwrap_or_default();
+    keys.reverse();
+    keys
+}
+
+/// Every key the ledgers hold for `uuid`, newest first.
+pub fn history(dirs: &DataDirs, uuid: &str) -> Vec<String> {
+    places(dirs)
+        .iter()
+        .filter_map(|p| std::fs::read_to_string(p).ok())
+        .flat_map(|text| keys_in_ledger(&text, uuid))
+        .collect()
+}
+
+/// Files that may hold an offline key: `cosmetics.json` and the ledgers, with their backups and set-aside
+/// copies, in the data folder, in every profile and in removed profiles.
+pub fn stored_files(dirs: &DataDirs) -> Vec<PathBuf> {
+    /// Largest file read (these are tiny).
+    const MAX_BYTES: u64 = 4 << 20;
+    let mut folders = vec![dirs.root().to_path_buf(), dirs.profile_root().to_path_buf()];
+    let profiles = dirs.profiles_dir();
+    for entry in std::fs::read_dir(&profiles).into_iter().flatten().flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        if entry.file_name() == ".trash" {
+            folders.extend(
+                std::fs::read_dir(&path)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .map(|e| e.path())
+                    .filter(|p| p.is_dir()),
+            );
+        } else {
+            folders.push(path);
+        }
+    }
+    let mut files = Vec::new();
+    for folder in folders {
+        for entry in std::fs::read_dir(&folder).into_iter().flatten().flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let ours = name.starts_with("cosmetics.json") || name.starts_with(FILE);
+            let small = entry
+                .metadata()
+                .is_ok_and(|m| m.is_file() && m.len() <= MAX_BYTES);
+            if ours && small && !files.contains(&entry.path()) {
+                files.push(entry.path());
+            }
+        }
+    }
+    files
+}
+
 /// Write `key` into every ledger as the account's newest. Fails only when none could be written, so a
 /// name is never claimed with a key that was saved nowhere.
 pub fn remember(dirs: &DataDirs, uuid: &str, name: &str, key: &str) -> Result<()> {
