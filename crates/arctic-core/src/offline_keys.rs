@@ -31,12 +31,21 @@ struct Account {
     keys: Vec<String>,
 }
 
-/// Where the ledgers are (once if the profile folder is the data folder).
+/// A folder of the data folder that holds only a ledger, so there are two copies even when the profile
+/// folder is the data folder.
+const KEYS_DIR: &str = ".keys";
+
+/// Where the ledgers are: the profile folder, the data folder and its `.keys` folder (each once).
 fn places(dirs: &DataDirs) -> Vec<PathBuf> {
-    let mut places = vec![dirs.profile_root().join(FILE)];
-    let shared = dirs.root().join(FILE);
-    if !places.contains(&shared) {
-        places.push(shared);
+    let mut places = Vec::new();
+    for place in [
+        dirs.profile_root().join(FILE),
+        dirs.root().join(FILE),
+        dirs.root().join(KEYS_DIR).join(FILE),
+    ] {
+        if !places.contains(&place) {
+            places.push(place);
+        }
     }
     places
 }
@@ -97,7 +106,11 @@ pub fn history(dirs: &DataDirs, uuid: &str) -> Vec<String> {
 pub fn stored_files(dirs: &DataDirs) -> Vec<PathBuf> {
     /// Largest file read (these are tiny).
     const MAX_BYTES: u64 = 4 << 20;
-    let mut folders = vec![dirs.root().to_path_buf(), dirs.profile_root().to_path_buf()];
+    let mut folders = vec![
+        dirs.root().to_path_buf(),
+        dirs.root().join(KEYS_DIR),
+        dirs.profile_root().to_path_buf(),
+    ];
     let profiles = dirs.profiles_dir();
     for entry in std::fs::read_dir(&profiles).into_iter().flatten().flatten() {
         let path = entry.path();
