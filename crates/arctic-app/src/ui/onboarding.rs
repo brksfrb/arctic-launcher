@@ -16,6 +16,7 @@ use crate::art::icons::Icon;
 use crate::art::{brand_mark, lerp_color};
 use crate::motion::eased;
 use crate::theme::{self, Palette};
+use crate::toasts::Kind;
 use crate::widgets;
 
 const WIDTH: f32 = 500.0;
@@ -92,6 +93,9 @@ pub struct Onboarding {
     /// The answer picked for "how did you hear about us?" (an index into `HEARD`), if any.
     heard: Option<usize>,
     heard_other: String,
+    /// Put a launcher shortcut on the desktop when setup ends (on by default; the Start menu one
+    /// is made automatically on Windows).
+    desktop_shortcut: bool,
     step: Step,
     changed_at: f64,
     total_mb: Option<u64>,
@@ -132,6 +136,7 @@ impl ArcticApp {
         self.onboarding = Some(Onboarding {
             heard: None,
             heard_other: String::new(),
+            desktop_shortcut: true,
             step,
             changed_at: 0.0,
             total_mb,
@@ -324,6 +329,9 @@ impl ArcticApp {
             &mut self.settings.check_updates_on_start,
             "Check for launcher updates on start",
         );
+        if let Some(o) = &mut self.onboarding {
+            ui.checkbox(&mut o.desktop_shortcut, "Add a shortcut on the desktop");
+        }
     }
 
     fn account_step(&mut self, ui: &mut egui::Ui) {
@@ -611,6 +619,10 @@ impl ArcticApp {
     fn finish_onboarding(&mut self, now: f64) {
         let onboarding = self.onboarding.take();
         let first = onboarding.as_ref().map_or(FirstPlay::Later, |o| o.first);
+        // Skipping setup from the first screen makes no shortcut.
+        let desktop_shortcut = onboarding
+            .as_ref()
+            .is_some_and(|o| o.desktop_shortcut && o.step != Step::Welcome);
         // The question was on screen if setup got to its last step.
         if let Some(o) = &onboarding
             && o.step == Step::Heard
@@ -624,6 +636,10 @@ impl ArcticApp {
         self.settings.onboarded = true;
         self.settings.tray_asked = true;
         self.persist_settings();
+        if desktop_shortcut && let Err(e) = crate::desktop_shortcut::create() {
+            self.toasts
+                .push(Kind::Error, "Couldn't make the desktop shortcut", e);
+        }
         match first {
             FirstPlay::Move => {
                 self.set_tab(Tab::Instances, now);
