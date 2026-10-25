@@ -7,7 +7,7 @@
 use arctic_core::launch::logparse::{Level, LogLine};
 use eframe::egui::{self, CornerRadius, RichText, Stroke, TextStyle};
 
-use crate::app::{ArcticApp, LogSource};
+use crate::app::{ArcticApp, LogSend, LogSource};
 use crate::art::icons::Icon;
 use crate::logbook;
 use crate::theme::Palette;
@@ -91,6 +91,97 @@ impl ArcticApp {
         }
         let line = |i: usize| self.log_line(source, i);
         console(ui, p, &indices, &line, self.log_follow, source);
+    }
+
+    /// What "Send logs to staff" sends: the log shown (all of it, not the filtered lines), its name and
+    /// the Minecraft version it belongs to.
+    fn log_to_send(&self) -> (String, String, String) {
+        match self.log_source {
+            LogSource::Game(id) => match self.runs.get(id) {
+                Some(run) => (
+                    format!("Minecraft {}", run.version),
+                    run.version.clone(),
+                    run.log
+                        .iter()
+                        .map(|l| l.text.as_str())
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                ),
+                None => (String::new(), String::new(), String::new()),
+            },
+            LogSource::Launcher => (
+                "Launcher".to_owned(),
+                String::new(),
+                self.launcher_log
+                    .iter()
+                    .map(|l| l.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ),
+        }
+    }
+
+    /// "Send this log to the staff?": says what goes, then sends it.
+    pub(crate) fn send_logs_dialog(&mut self, ctx: &egui::Context) {
+        if self.log_send == LogSend::Idle {
+            return;
+        }
+        let p = self.palette();
+        let sending = self.log_send == LogSend::Sending;
+        let modal = egui::Modal::new(egui::Id::new("send_logs"))
+            .frame(super::dialogs::dialog_frame(p))
+            .show(ctx, |ui| {
+                ui.set_width(400.0);
+                ui.label(RichText::new("Send this log to the staff?").size(20.0).strong());
+                ui.label(
+                    RichText::new(
+                        "The log you are looking at goes to the Arctic staff, so they can read it without you copying text around. Your user name, your folders, e-mail and IP addresses and sign-in tokens are taken out first. Chat lines the game wrote to the log are in it. You get a short code to give them.",
+                    )
+                    .color(p.muted),
+                );
+                ui.add_space(12.0);
+                if sending {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(RichText::new("Sending…").color(p.muted));
+                    });
+                    return;
+                }
+                widgets::row(ui, |ui| {
+                    if widgets::button(ui, p, None, "Cancel", false).clicked() {
+                        self.log_send = LogSend::Idle;
+                    }
+                    if widgets::button(ui, p, Some(Icon::Share), "Send", true).clicked() {
+                        let (source, game, text) = self.log_to_send();
+                        if text.trim().is_empty() {
+                            self.log_send = LogSend::Idle;
+                            self.toasts.push(Kind::Info, "Nothing to send yet", "");
+                        } else {
+                            self.log_send = LogSend::Sending;
+                            self.tasks.send_log(source, game, text);
+                        }
+                    }
+                });
+            });
+        if modal.should_close() && !sending {
+            self.log_send = LogSend::Idle;
+        }
+    }
+
+    /// The staff have the log: the code is on the clipboard.
+    pub(crate) fn on_log_sent(&mut self, result: Result<String, String>, ctx: &egui::Context) {
+        self.log_send = LogSend::Idle;
+        match result {
+            Ok(code) => {
+                ctx.copy_text(code.clone());
+                self.toasts.push(
+                    Kind::Success,
+                    format!("Sent: {code}"),
+                    "The code is copied. Paste it in your ticket or message to the staff.",
+                );
+            }
+            Err(e) => self.toasts.push(Kind::Error, "Couldn't send the log", e),
+        }
     }
 
     fn log_line(&self, source: LogSource, i: usize) -> Option<&LogLine> {
@@ -177,6 +268,12 @@ impl ArcticApp {
             }
             if widgets::icon_button(ui, p, Icon::Copy, "Copy shown lines").clicked() {
                 copy = true;
+            }
+            if widgets::icon_button(ui, p, Icon::Share, "Send this log to the Arctic staff")
+                .clicked()
+                && self.log_send == LogSend::Idle
+            {
+                self.log_send = LogSend::Asking;
             }
         });
         copy

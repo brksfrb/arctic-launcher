@@ -412,6 +412,35 @@ pub fn send_heard(base: &str, source: &str, other: &str) -> Result<()> {
     Ok(())
 }
 
+/// A log the player chose to send to the staff.
+pub struct SharedLog<'a> {
+    pub launcher: &'a str,
+    pub game: &'a str,
+    pub os: &'a str,
+    /// Which log it is ("Minecraft 1.21.4", "Launcher").
+    pub source: &'a str,
+    pub log: &'a str,
+}
+
+/// Send a log to the staff; the answer is the short code the player gives in their ticket.
+pub fn send_log(base: &str, log: &SharedLog) -> Result<String> {
+    #[derive(Deserialize)]
+    struct Sent {
+        code: String,
+    }
+    let sent: Sent = post(
+        &format!("{base}/v1/logs"),
+        &serde_json::json!({
+            "launcher": log.launcher,
+            "game": log.game,
+            "os": log.os,
+            "source": log.source,
+            "log": log.log,
+        }),
+    )?;
+    Ok(sent.code)
+}
+
 /// Send a crash report the player agreed to share.
 pub fn send_crash_report(base: &str, report: &crate::crash::Report) -> Result<()> {
     let mut resp = agent()

@@ -50,6 +50,9 @@ pub type LaunchId = u64;
 
 pub(crate) type Outcome<T> = std::result::Result<T, String>;
 
+/// The most of a log that is sent to the staff (its end).
+const SENT_LOG_BYTES: usize = 300 * 1024;
+
 /// What moving an instance's mods to another version did.
 #[derive(Debug, Clone)]
 pub struct Retargeted {
@@ -145,6 +148,8 @@ pub enum Event {
     /// A crash report was sent.
     CrashReportSent(Outcome<()>),
     SuggestionSent(Outcome<()>),
+    /// A log sent to the staff: the code to give them.
+    LogSent(Outcome<String>),
     /// Other launchers looked through (the folder, if one was picked).
     MigrateScanned(Option<PathBuf>, crate::migrate_tasks::ScanResult),
     MigrateProgress(String, ProgressSnapshot),
@@ -264,6 +269,26 @@ impl Tasks {
             if let Err(e) = arctic_core::cosmetics::send_heard(&base, source, &other) {
                 log::debug!("could not send the answer: {e}");
             }
+        });
+    }
+
+    /// Send a log to the staff in the background (names and folders are taken out first).
+    pub fn send_log(&self, source: String, game: String, text: String) {
+        self.run(move |t| {
+            let base = arctic_core::cosmetics::base_url();
+            let log = arctic_core::crash::scrubbed_tail(&text, SENT_LOG_BYTES);
+            let result = arctic_core::cosmetics::send_log(
+                &base,
+                &arctic_core::cosmetics::SharedLog {
+                    launcher: arctic_core::APP_VERSION,
+                    game: &game,
+                    os: std::env::consts::OS,
+                    source: &source,
+                    log: &log,
+                },
+            )
+            .map_err(|e| e.to_string());
+            t.send(Event::LogSent(result));
         });
     }
 

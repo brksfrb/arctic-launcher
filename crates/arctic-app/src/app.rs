@@ -72,6 +72,14 @@ pub enum LogSource {
     Launcher,
 }
 
+/// "Send logs to staff" in the Logs tab: asked first, then on its way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LogSend {
+    Idle,
+    Asking,
+    Sending,
+}
+
 pub enum ManifestState {
     Loading,
     Ready(VersionManifest),
@@ -176,6 +184,8 @@ pub struct ArcticApp {
     pub(crate) log_source: LogSource,
     pub(crate) log_min_level: Level,
     pub(crate) log_search: String,
+    /// "Send logs to staff": asked first (true), then on its way.
+    pub(crate) log_send: LogSend,
     pub(crate) log_follow: bool,
     pub(crate) minimized_for_game: bool,
     /// (start time, button center) of the Play-press snowflake burst.
@@ -342,6 +352,7 @@ impl ArcticApp {
             log_source: LogSource::Launcher,
             log_min_level: Level::Debug,
             log_search: String::new(),
+            log_send: LogSend::Idle,
             log_follow: true,
             minimized_for_game: false,
             play_burst: None,
@@ -1103,6 +1114,7 @@ impl ArcticApp {
                 Err(e) => self.toasts.push(Kind::Error, "Couldn't send the report", e),
             },
             Event::SuggestionSent(result) => self.on_suggestion_sent(result),
+            Event::LogSent(result) => self.on_log_sent(result, ctx),
             Event::UpdateChecked(result) => self.on_update_checked(result),
             Event::ProxyTested(proxy, result) => self.on_proxy_tested(proxy, result),
             Event::UpdateInstalled(result) => self.on_update_installed(result),
