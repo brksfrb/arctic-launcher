@@ -17,11 +17,28 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.CleanupMode;
 import org.junit.jupiter.api.io.TempDir;
 
 class ReplayQueueSafetyTest {
-	@TempDir Path dir;
+	// Cleaned by hand: the replay unpacker may still be writing into the folder when the test ends, which
+	// made JUnit's own cleanup fail now and then.
+	@TempDir(cleanup = CleanupMode.NEVER) Path dir;
+
+	@AfterEach void removeDir() throws Exception {
+		for (int attempt = 0; attempt < 20 && Files.exists(dir); attempt++) {
+			try (java.util.stream.Stream<Path> files = Files.walk(dir)) {
+				files.sorted(java.util.Comparator.reverseOrder()).forEach(f -> f.toFile().delete());
+			} catch (java.io.IOException | java.io.UncheckedIOException ignored) {
+				// still being written: try again
+			}
+			if (Files.exists(dir)) {
+				Thread.sleep(100);
+			}
+		}
+	}
 
 	private final class Session implements AutoCloseable {
 		final Map<Field, Object> previous = new LinkedHashMap<>();
