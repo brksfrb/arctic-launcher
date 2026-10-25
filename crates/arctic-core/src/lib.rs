@@ -25,6 +25,7 @@ pub mod loaders;
 pub mod migrate;
 pub mod mods;
 pub mod net;
+pub mod offline_keys;
 pub mod playtime;
 pub mod profiles;
 pub mod proxy;
