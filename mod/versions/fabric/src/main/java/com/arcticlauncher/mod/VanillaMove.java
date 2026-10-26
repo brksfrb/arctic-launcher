@@ -14,6 +14,8 @@ public final class VanillaMove {
 	/** The scoreboard's box as last drawn {x, y, w, h}, or null. */
 	private static int[] scoreboard;
 	private static boolean capturing;
+	private static long capStarted;
+	private static final long CAPTURE_NANOS = 5_000_000L;
 	private static int capX0;
 	private static int capY0;
 	private static int capX1;
@@ -27,13 +29,21 @@ public final class VanillaMove {
 	/** Before the scoreboard is drawn; false: don't draw it. */
 	public static boolean scoreboardBegin(Object graphics) {
 		capturing = true;
+		capStarted = System.nanoTime();
 		capX0 = Integer.MAX_VALUE;
 		capY0 = Integer.MAX_VALUE;
 		capX1 = Integer.MIN_VALUE;
 		capY1 = Integer.MIN_VALUE;
 		float[] p = scoreboard == null ? null
 				: ArcticClient.hud().vanillaPlacement(VanillaParts.SCOREBOARD, scoreboard[0], scoreboard[1], scoreboard[2], scoreboard[3]);
-		scoreboardMoved = move(graphics, p, scoreboard);
+		// The game keeps its scoreboard against the right edge and halfway down, so only those stay put when
+		// its lines change length: moving by the box's left top would leave a leftover shift every time.
+		if (p != null && p.length > 0 && scoreboard != null) {
+			float[] anchored = {p[0] + scoreboard[2] * p[2], p[1] + scoreboard[3] * p[2] / 2, p[2]};
+			scoreboardMoved = move(graphics, anchored, new int[] {scoreboard[0] + scoreboard[2], scoreboard[1] + scoreboard[3] / 2});
+		} else {
+			scoreboardMoved = false;
+		}
 		if (p != null && p.length == 0) {
 			capturing = false;
 			return false;
@@ -43,7 +53,11 @@ public final class VanillaMove {
 
 	public static void scoreboardEnd(Object graphics) {
 		capturing = false;
-		if (capX1 > capX0 && capY1 > capY0) {
+		int w = Minecraft.getInstance().getWindow().getGuiScaledWidth();
+		int h = Minecraft.getInstance().getWindow().getGuiScaledHeight();
+		// A box wider than half the screen or taller than the screen isn't a scoreboard (fills of other parts
+		// got in): keep the last good one.
+		if (capX1 > capX0 && capY1 > capY0 && capX1 - capX0 <= w / 2 && capY1 - capY0 <= h) {
 			scoreboard = new int[] {capX0, capY0, capX1 - capX0, capY1 - capY0};
 		}
 		if (scoreboardMoved) {
@@ -54,7 +68,10 @@ public final class VanillaMove {
 
 	/** A background fill the game drew (while drawing the scoreboard, it's the scoreboard's). */
 	public static void filled(int x0, int y0, int x1, int y1) {
-		if (!capturing) {
+		// Drawing the scoreboard takes well under 5 ms: a capture still open after that never got its end
+		// (another mod cancelled the draw), and later fills belong to other parts.
+		if (!capturing || System.nanoTime() - capStarted > CAPTURE_NANOS) {
+			capturing = false;
 			return;
 		}
 		capX0 = Math.min(capX0, Math.min(x0, x1));

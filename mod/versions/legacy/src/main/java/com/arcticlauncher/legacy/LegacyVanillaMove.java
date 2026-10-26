@@ -13,6 +13,8 @@ import net.minecraft.client.util.Window;
 public final class LegacyVanillaMove {
 	private static int[] scoreboard;
 	private static boolean capturing;
+	private static long capStarted;
+	private static final long CAPTURE_NANOS = 5_000_000L;
 	private static int capX0;
 	private static int capY0;
 	private static int capX1;
@@ -25,13 +27,21 @@ public final class LegacyVanillaMove {
 	/** Before the scoreboard is drawn; false: don't draw it. */
 	public static boolean scoreboardBegin() {
 		capturing = true;
+		capStarted = System.nanoTime();
 		capX0 = Integer.MAX_VALUE;
 		capY0 = Integer.MAX_VALUE;
 		capX1 = Integer.MIN_VALUE;
 		capY1 = Integer.MIN_VALUE;
 		float[] p = scoreboard == null ? null
 				: ArcticClient.hud().vanillaPlacement(VanillaParts.SCOREBOARD, scoreboard[0], scoreboard[1], scoreboard[2], scoreboard[3]);
-		scoreboardMoved = move(p, scoreboard);
+		// The game keeps its scoreboard against the right edge and halfway down, so only those stay put when
+		// its lines change length: moving by the box's left top would leave a leftover shift every time.
+		if (p != null && p.length > 0 && scoreboard != null) {
+			float[] anchored = {p[0] + scoreboard[2] * p[2], p[1] + scoreboard[3] * p[2] / 2, p[2]};
+			scoreboardMoved = move(anchored, new int[] {scoreboard[0] + scoreboard[2], scoreboard[1] + scoreboard[3] / 2});
+		} else {
+			scoreboardMoved = false;
+		}
 		if (p != null && p.length == 0) {
 			capturing = false;
 			return false;
@@ -52,7 +62,10 @@ public final class LegacyVanillaMove {
 
 	/** A background fill the game drew (while drawing the scoreboard, it's the scoreboard's). */
 	public static void filled(int x0, int y0, int x1, int y1) {
-		if (!capturing) {
+		// Drawing the scoreboard takes well under 5 ms: a capture still open after that never got its end
+		// (another mod cancelled the draw), and later fills belong to other parts.
+		if (!capturing || System.nanoTime() - capStarted > CAPTURE_NANOS) {
+			capturing = false;
 			return;
 		}
 		capX0 = Math.min(capX0, Math.min(x0, x1));
