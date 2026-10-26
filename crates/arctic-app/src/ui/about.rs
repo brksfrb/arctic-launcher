@@ -54,6 +54,14 @@ impl ArcticApp {
                 if widgets::button(ui, p, Some(Icon::Friends), "Discord", false).clicked() {
                     ui.ctx().open_url(egui::OpenUrl::new_tab(DISCORD));
                 }
+                if widgets::button(ui, p, Some(Icon::Star), "Star us on GitHub", false)
+                    .on_hover_text("A star helps other players find Arctic")
+                    .clicked()
+                {
+                    ui.ctx().open_url(egui::OpenUrl::new_tab(format!(
+                        "https://github.com/{GITHUB_REPO}"
+                    )));
+                }
                 if widgets::button(
                     ui,
                     p,

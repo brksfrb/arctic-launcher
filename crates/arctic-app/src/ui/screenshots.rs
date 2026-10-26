@@ -44,12 +44,18 @@ const MOTION_SECS: f64 = 0.22;
 /// How long the grown picture and the dialog cross-fade (seconds).
 const HANDOFF_SECS: f64 = 0.14;
 
+/// How much taller the dialog is than its picture (the bar below it and the frame), until it has been
+/// measured: the grown picture stops where the dialog's picture will be, so nothing jumps.
+const DEFAULT_DIALOG_EXTRA: f32 = 86.0;
+
 #[derive(Default)]
 pub struct ScreenshotsUi {
     /// Where the open picture's cell is on screen (it grows from and shrinks back to it).
     cell: Option<egui::Rect>,
     motion: Motion,
     motion_started: f64,
+    /// The dialog's height minus its picture's, measured the last time it was shown (0 = not yet).
+    dialog_extra: f32,
     shots: Option<Vec<Shot>>,
     thumbs: HashMap<PathBuf, Thumb>,
     /// Instance id to show, or every instance.
@@ -214,6 +220,17 @@ impl ArcticApp {
             .map(|l| l.iter().take(n).cloned().collect())
     }
 
+    /// Where the dialog's picture sits: the dialog is centred with its bar below the picture, so the
+    /// picture's middle is half of that extra height above the screen's middle.
+    fn dialog_picture_center(&self, screen: egui::Rect) -> egui::Pos2 {
+        let extra = if self.shots.dialog_extra > 0.0 {
+            self.shots.dialog_extra
+        } else {
+            DEFAULT_DIALOG_EXTRA
+        };
+        screen.center() - vec2(0.0, extra / 2.0)
+    }
+
     fn screenshot_preview(&mut self, ctx: &egui::Context) {
         let Some(shot) = self.shots.open.clone() else {
             return;
@@ -229,6 +246,7 @@ impl ArcticApp {
         if self.shots.motion == Motion::Handoff {
             self.handoff_overlay(ctx, &uri);
         }
+        let mut picture_height = 0.0;
         let modal = Modal::new(Id::new("shot_preview"))
             .frame(super::instances::dialog_frame(p))
             .show(ctx, |ui| {
@@ -250,6 +268,7 @@ impl ArcticApp {
                         .corner_radius(CornerRadius::same(8))
                         .sense(Sense::click_and_drag()),
                 );
+                picture_height = image.rect.height();
                 zoom_and_pan(ui, &image, &mut zoom, &mut center);
                 ui.data_mut(|d| d.insert_temp(view_id, (zoom, center)));
                 ui.set_max_width(image.rect.width().max(480.0));
@@ -308,6 +327,11 @@ impl ArcticApp {
                     });
                 });
             });
+        // Remembered for the next opening, so the picture lands where the dialog puts it.
+        let extra = modal.response.rect.height() - picture_height;
+        if picture_height > 0.0 && extra > 20.0 {
+            self.shots.dialog_extra = extra;
+        }
         if close || modal.should_close() {
             if self.shots.cell.is_some() {
                 self.shots.motion = Motion::Closing;
@@ -349,7 +373,7 @@ impl ArcticApp {
         } else {
             vec2(room.x, room.x / aspect)
         };
-        let target = egui::Rect::from_center_size(screen.center() - vec2(0.0, 20.0), fitted);
+        let target = egui::Rect::from_center_size(self.dialog_picture_center(screen), fitted);
         let eased = 1.0 - (1.0 - t as f32).powi(3);
         let progress = if closing { 1.0 - eased } else { eased };
         let rect = egui::Rect::from_min_max(
@@ -394,7 +418,7 @@ impl ArcticApp {
         } else {
             vec2(room.x, room.x / aspect)
         };
-        let rect = egui::Rect::from_center_size(screen.center() - vec2(0.0, 20.0), fitted);
+        let rect = egui::Rect::from_center_size(self.dialog_picture_center(screen), fitted);
         let left = 1.0 - h as f32;
         egui::Area::new(Id::new("shot_handoff"))
             .order(egui::Order::Tooltip)
