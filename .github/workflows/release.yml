@@ -106,6 +106,43 @@ jobs:
           cargo build --release -p arctic-app -p arctic-cli --target aarch64-apple-darwin
           cargo build --release -p arctic-app -p arctic-cli --target x86_64-apple-darwin
 
+      # Signs with the Developer ID and notarizes when the Apple secrets are set; without them the app is
+      # ad-hoc signed as before.
+      - name: Apple signing
+        env:
+          APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          if [ -z "$APPLE_CERT_P12" ] || [ -z "$APPLE_API_KEY_P8" ]; then
+            echo "No Apple secrets: the Mac app is ad-hoc signed."
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/arctic.keychain-db"
+          password=$(openssl rand -base64 24)
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          echo "$APPLE_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$APPLE_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          # Apple's intermediate certificate, so the Developer ID is trusted.
+          curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$RUNNER_TEMP/dev-id-ca.cer" \
+            && security import "$RUNNER_TEMP/dev-id-ca.cer" -k "$keychain" -A || true
+          security set-key-partition-list -S apple-tool:,apple: -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity=$(security find-identity -v -p codesigning "$keychain" | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
+          [ -n "$identity" ] || { echo "no Developer ID Application identity found"; security find-identity -p codesigning "$keychain"; exit 1; }
+          echo "Signing as: $identity"
+          echo "$APPLE_API_KEY_P8" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+          {
+            echo "APPLE_SIGN_IDENTITY=$identity"
+            echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8"
+            echo "APPLE_API_KEY_ID=$APPLE_API_KEY_ID"
+            echo "APPLE_API_ISSUER=$APPLE_API_ISSUER"
+          } >> "$GITHUB_ENV"
+
       - name: Package
         run: |
           version=$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)
