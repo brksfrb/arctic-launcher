@@ -1,5 +1,6 @@
 package com.arcticlauncher.client.feature;
 
+import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.Keys;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.gfx.Gfx;
@@ -20,6 +21,8 @@ public final class InventorySearch {
 	private static boolean active;
 	private static String text = "";
 	private static String lower = "";
+	/** Everything in the line is selected (Ctrl+A): the next letter replaces it, Backspace clears it. */
+	private static boolean selectedAll;
 	private static long seenAt;
 
 	private InventorySearch() {}
@@ -37,6 +40,7 @@ public final class InventorySearch {
 		active = false;
 		text = "";
 		lower = "";
+		selectedAll = false;
 	}
 
 	/** What is typed in the search line. */
@@ -75,8 +79,26 @@ public final class InventorySearch {
 			reset();
 		} else if (key == Keys.ENTER) {
 			active = false;
+		} else if ((key == Keys.BACKSPACE || key == Keys.DELETE) && selectedAll) {
+			set("");
+		} else if (key == Keys.BACKSPACE && ctrl && !text.isEmpty()) {
+			set(withoutLastWord(text));
 		} else if (key == Keys.BACKSPACE && !text.isEmpty()) {
 			set(text.substring(0, text.length() - 1));
+		} else if (key == Keys.A && ctrl && action != ACTION_REPEAT) {
+			selectedAll = !text.isEmpty();
+		} else if (key == Keys.C && ctrl && action != ACTION_REPEAT && !text.isEmpty()) {
+			ArcticClient.platform().setClipboard(text);
+		} else if (key == Keys.X && ctrl && action != ACTION_REPEAT && !text.isEmpty()) {
+			ArcticClient.platform().setClipboard(text);
+			set("");
+		} else if (key == Keys.V && ctrl) {
+			String pasted = ArcticClient.platform().clipboard();
+			if (pasted != null && !pasted.isEmpty()) {
+				String clean = pasted.replaceAll("[\p{Cntrl}]", " ").trim();
+				String base = selectedAll ? "" : text;
+				set((base + clean).substring(0, Math.min(MAX_LENGTH, (base + clean).length())));
+			}
 		} else if (key == Keys.F && ctrl && action != ACTION_REPEAT) {
 			active = false;
 		}
@@ -88,13 +110,26 @@ public final class InventorySearch {
 		if (!c.containerSearch || !active) {
 			return false;
 		}
-		if (codePoint >= 32 && codePoint != 127 && text.length() < MAX_LENGTH) {
-			set(text + new String(Character.toChars(codePoint)));
+		if (codePoint >= 32 && codePoint != 127 && (selectedAll || text.length() < MAX_LENGTH)) {
+			set((selectedAll ? "" : text) + new String(Character.toChars(codePoint)));
 		}
 		return true;
 	}
 
+	/** The text without its last word and the spaces before it (Ctrl+Backspace). */
+	static String withoutLastWord(String value) {
+		int end = value.length();
+		while (end > 0 && value.charAt(end - 1) == ' ') {
+			end--;
+		}
+		while (end > 0 && value.charAt(end - 1) != ' ') {
+			end--;
+		}
+		return value.substring(0, end);
+	}
+
 	private static void set(String value) {
+		selectedAll = false;
 		text = value;
 		lower = value.trim().toLowerCase(Locale.ROOT);
 	}
@@ -129,6 +164,11 @@ public final class InventorySearch {
 		int x = (g.width() - w) / 2;
 		g.fill(x - 1, 5, x + w + 1, 21, active ? 0xFF5CE1E6 : 0xFF555555);
 		g.fill(x, 6, x + w, 20, 0xE0101820);
+		if (selectedAll && active) {
+			// Everything selected: a highlight behind the typed text.
+			int from = x + 7 + g.textWidth("Search: ");
+			g.fill(from - 1, 8, from + g.textWidth(text) + 1, 18, 0xA05CE1E6);
+		}
 		g.text(shown, x + 7, 9, 0xFFFFFFFF, true);
 		if (!active) {
 			g.text("Ctrl+F to edit", x + w + 6, 9, 0xFFAAAAAA, true);
