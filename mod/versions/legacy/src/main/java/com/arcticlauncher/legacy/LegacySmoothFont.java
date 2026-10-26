@@ -46,6 +46,8 @@ public final class LegacySmoothFont {
 		final float top;
 		final float width;
 		final float height;
+		/** The character (to find the same letter in the big atlas). */
+		char ch;
 		float u0;
 		float v0;
 		float u1;
@@ -66,6 +68,55 @@ public final class LegacySmoothFont {
 	private static int checkedScale;
 	private static long checkedAt;
 	private static boolean broken;
+	/** Smooth letters at several times the size, for titles and other big text in pixel-sharp mode (made when first needed). */
+	private static Atlas bigAtlas;
+	private static int bigFor;
+	/** Text bigger than this many times the GUI's size is drawn from the big atlas. */
+	private static final float BIG_AT = 2.5f;
+	/** The model view's uniform scale as the game has set it up (tracked from GlStateManager.scale/push/pop). */
+	private static float modelScale = 1f;
+	private static final float[] SCALE_STACK = new float[64];
+	private static int scaleDepth;
+
+	public static void matrixPush() {
+		if (scaleDepth < SCALE_STACK.length) {
+			SCALE_STACK[scaleDepth] = modelScale;
+		}
+		scaleDepth++;
+	}
+
+	public static void matrixPop() {
+		if (scaleDepth > 0) {
+			scaleDepth--;
+			if (scaleDepth < SCALE_STACK.length) {
+				modelScale = SCALE_STACK[scaleDepth];
+			}
+		}
+	}
+
+	public static void matrixScale(float factor) {
+		modelScale *= factor;
+	}
+
+	public static void matrixIdentity() {
+		modelScale = 1f;
+		scaleDepth = 0;
+	}
+
+	/** The big atlas, made when the first big text needs it. */
+	private static Atlas big() {
+		if (bigAtlas == null || bigFor != scale) {
+			try {
+				bigAtlas = make(Math.min(8, Math.max(1, scale) * 4), true);
+				bigFor = scale;
+			} catch (Exception e) {
+				bigAtlas = null;
+				bigFor = scale;
+				ArcticLegacy.LOG.warn("smooth font (big letters): {}", e.toString());
+			}
+		}
+		return bigAtlas;
+	}
 
 	private LegacySmoothFont() {}
 
@@ -152,6 +203,28 @@ public final class LegacySmoothFont {
 	 * the driver for its state stalls it, and the HUD draws hundreds of letters a frame.
 	 */
 	public static float draw(Glyph g, float penX, float penY, boolean italic) {
+		if (modelScale >= BIG_AT && !antialias()) {
+			Atlas atlas = big();
+			Glyph b = atlas != null && g.ch < atlas.glyphs.length ? atlas.glyphs[g.ch] : null;
+			if (b != null) {
+				float bx0 = penX + b.left;
+				float by0 = penY + BASELINE - b.top;
+				float bslant = italic ? 1f : 0f;
+				GlStateManager.bindTexture(atlas.texture.getGlId());
+				GL11.glBegin(GL11.GL_QUADS);
+				GL11.glTexCoord2f(b.u0, b.v0);
+				GL11.glVertex3f(bx0 + bslant, by0, 0f);
+				GL11.glTexCoord2f(b.u0, b.v1);
+				GL11.glVertex3f(bx0 - bslant, by0 + b.height, 0f);
+				GL11.glTexCoord2f(b.u1, b.v1);
+				GL11.glVertex3f(bx0 + b.width - bslant, by0 + b.height, 0f);
+				GL11.glTexCoord2f(b.u1, b.v0);
+				GL11.glVertex3f(bx0 + b.width + bslant, by0, 0f);
+				GL11.glEnd();
+				// The pen moves as the sharp letters do, so the layout the game measured holds.
+				return g.advance;
+			}
+		}
 		float s = scale;
 		// Whole screen pixels, so texels and pixels line up.
 		float x0 = Math.round((penX + g.left) * s) / s;
@@ -196,7 +269,32 @@ public final class LegacySmoothFont {
 		return texture != null;
 	}
 
+	/** The letters and the texture holding them, for one pixel scale. */
+	private static final class Atlas {
+		final Glyph[] glyphs;
+		final NativeImageBackedTexture texture;
+
+		Atlas(Glyph[] glyphs, NativeImageBackedTexture texture) {
+			this.glyphs = glyphs;
+			this.texture = texture;
+		}
+	}
+
 	private static void build(int s) throws Exception {
+		Atlas atlas = make(s, antialias());
+		if (texture != null) {
+			texture.clearGlId();
+		}
+		texture = atlas.texture;
+		glyphs = atlas.glyphs;
+		scale = s;
+		if (bigAtlas != null) {
+			bigAtlas.texture.clearGlId();
+			bigAtlas = null;
+		}
+	}
+
+	private static Atlas make(int s, boolean aa) throws Exception {
 		Font font;
 		try (InputStream in = LegacySmoothFont.class.getResourceAsStream(FILE)) {
 			if (in == null) {
@@ -220,7 +318,7 @@ public final class LegacySmoothFont {
 				float advance = (float) gv.getGlyphMetrics(0).getAdvanceX();
 				// Pixel-sharp text steps whole pixels from letter to letter: a letter drawn between two pixels
 				// is smeared across both.
-				advances.add(antialias() ? advance : Math.max(1f, Math.round(advance)));
+				advances.add(aa ? advance : Math.max(1f, Math.round(advance)));
 			}
 		}
 		// Shelf packing into a texture as wide as needed for the scale.
@@ -250,9 +348,9 @@ public final class LegacySmoothFont {
 		}
 		BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = image.createGraphics();
-		g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, antialias()
+		g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, aa
 				? RenderingHints.VALUE_TEXT_ANTIALIAS_ON : RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
-		g.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, antialias()
+		g.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, aa
 				? RenderingHints.VALUE_FRACTIONALMETRICS_ON : RenderingHints.VALUE_FRACTIONALMETRICS_OFF);
 		g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
 		g.setFont(font);
@@ -270,22 +368,19 @@ public final class LegacySmoothFont {
 			glyph.v0 = ys[i] / (float) height;
 			glyph.u1 = (xs[i] + b.width + PAD * 2) / (float) width;
 			glyph.v1 = (ys[i] + b.height + PAD * 2) / (float) height;
+			glyph.ch = c;
 			made[c] = glyph;
 		}
 		g.dispose();
-		if (texture != null) {
-			texture.clearGlId();
-		}
-		texture = new NativeImageBackedTexture(image);
-		// Smooth when text is drawn bigger than the atlas (titles are 4x): the game's nearest-pixel
-		// filter turns the letters' soft edges into grey blocks. At 1:1 the glyphs sit on whole pixels
-		// either way.
-		GlStateManager.bindTexture(texture.getGlId());
-		int filter = antialias() ? GL11.GL_LINEAR : GL11.GL_NEAREST;
+		NativeImageBackedTexture made2 = new NativeImageBackedTexture(image);
+		// Smooth letters are drawn with a smooth filter (titles are 4x); pixel-sharp ones with the
+		// nearest-pixel filter, so a letter on whole pixels stays whole.
+		GlStateManager.bindTexture(made2.getGlId());
+		int filter = aa ? GL11.GL_LINEAR : GL11.GL_NEAREST;
 		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, filter);
 		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, filter);
-		glyphs = made;
-		scale = s;
-		ArcticLegacy.LOG.info("smooth font: {} characters at GUI scale {} ({}x{})", chars.size(), s, width, height);
+		ArcticLegacy.LOG.info("smooth font: {} characters at GUI scale {} ({}x{}, {})", chars.size(), s, width, height,
+				aa ? "smooth" : "sharp");
+		return new Atlas(made, made2);
 	}
 }

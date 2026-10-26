@@ -28,6 +28,7 @@
 		"AbstractClientPlayerEntityMixin",
 		"TextRendererMixin",
 		"SmoothTextRendererMixin",
+		"GlScaleMixin",
 		"ButtonWidgetMixin",
 		"OptionSliderWidgetMixin",
 		"SliderWidgetMixin",
