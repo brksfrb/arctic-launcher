@@ -91,9 +91,15 @@ final class VanillaPart extends HudWidget {
 			return;
 		}
 		if (VanillaParts.BOSSBAR.equals(id)) {
+			// The game's own look: the name over a 182 x 5 bar, a dark tray with a one-pixel rim and the
+			// colour (pink here) filling it, lighter on top and darker below.
 			Draw.centered(g, "Boss bar", sampleW / 2, 0, 0xFFFFFFFF, true);
-			g.fill(0, 9, sampleW, 14, 0xFF4A1020);
-			g.fill(0, 9, sampleW * 2 / 3, 14, 0xFFE0365B);
+			g.fill(0, 9, sampleW, 14, 0xFF1B1B1B);
+			g.fill(1, 10, sampleW - 1, 13, 0xFF4A4A4A);
+			int fill = (sampleW - 2) * 2 / 3;
+			g.fill(1, 10, 1 + fill, 13, 0xFFEF4FB5);
+			g.fill(1, 10, 1 + fill, 11, 0xFFF9A6DC);
+			g.fill(1, 12, 1 + fill, 13, 0xFFB93388);
 			return;
 		}
 		g.fill(0, 0, sampleW, 10, 0x66000000);
