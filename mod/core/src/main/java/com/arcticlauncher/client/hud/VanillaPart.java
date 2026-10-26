@@ -55,21 +55,31 @@ final class VanillaPart extends HudWidget {
 	@Override
 	public int height() {
 		int[] n = showing();
-		return n != null ? n[3] : sampleH;
+		return (n != null ? n[3] : sampleH) + (VanillaParts.BOSSBAR.equals(id) ? BOSSBAR_BREATH : 0);
+	}
+
+	/** Pixels kept free under a boss bar, so a widget stacked below it doesn't touch it. */
+	private static final int BOSSBAR_BREATH = 4;
+
+	private int[] room(int[] rect) {
+		if (VanillaParts.BOSSBAR.equals(id)) {
+			rect[3] += BOSSBAR_BREATH;
+		}
+		return rect;
 	}
 
 	@Override
 	public int[] home(Gfx g) {
 		int[] n = showing();
 		if (n != null) {
-			return n.clone();
+			return room(n.clone());
 		}
 		if (!ArcticClient.hud().previewing()) {
 			// Nothing on screen: keep no room for it.
 			return new int[] {0, 0, 0, 0};
 		}
 		if (VanillaParts.BOSSBAR.equals(id)) {
-			return new int[] {(g.width() - sampleW) / 2, 3, sampleW, sampleH};
+			return room(new int[] {(g.width() - sampleW) / 2, 3, sampleW, sampleH});
 		}
 		return new int[] {g.width() - sampleW - 1, (g.height() - sampleH) / 2, sampleW, sampleH};
 	}
