@@ -401,6 +401,9 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
     ) {
         log::warn!("sharing between instances: {e}");
     }
+    if let Err(e) = crate::game_defaults::skip_multiplayer_warning(&game_dir) {
+        log::warn!("multiplayer warning: {e}");
+    }
     let java_override = req
         .instance
         .java_path

@@ -332,6 +332,31 @@ impl Defaults {
     }
 }
 
+/// Minecraft's "Third-Party Online Play" warning stays off in every game folder: it comes back on every
+/// Multiplayer visit until its box is ticked, and a new or reset folder would show it again. Written
+/// before the game starts (it saves its own settings on exit); `Ok(true)` when the file changed.
+pub fn skip_multiplayer_warning(game_dir: &Path) -> Result<bool> {
+    const KEY: &str = "skipMultiplayerWarning";
+    let path = game_dir.join(OPTIONS);
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(Error::io(&path, e)),
+    };
+    let mut values = parse(&text);
+    if values.get(KEY).map(String::as_str) == Some("true")
+        || crate::sharing::client::in_use(game_dir)
+    {
+        return Ok(false);
+    }
+    // A file with a version line holds keys the game knows; a missing file gets just this line.
+    let order = key_order(&text);
+    values.insert(KEY.to_owned(), "true".to_owned());
+    std::fs::create_dir_all(game_dir).map_err(|e| Error::io(game_dir, e))?;
+    std::fs::write(&path, render_ordered(&values, &order)).map_err(|e| Error::io(&path, e))?;
+    Ok(true)
+}
+
 fn valid_key(k: &str) -> bool {
     !k.is_empty()
         && k.len() <= MAX_KEY
@@ -448,6 +473,22 @@ mod tests {
         d.apply_to(dir.path(), Some("26.2")).unwrap();
         let text = std::fs::read_to_string(dir.path().join(OPTIONS)).unwrap();
         assert!(text.contains("key_key.pickItem:key.mouse.middle"), "{text}");
+    }
+
+    #[test]
+    fn the_multiplayer_warning_is_switched_off_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path().join("game");
+        assert!(skip_multiplayer_warning(&game).unwrap());
+        assert!(!skip_multiplayer_warning(&game).unwrap());
+        std::fs::write(
+            game.join("options.txt"),
+            "fov:0.5\nskipMultiplayerWarning:false\n",
+        )
+        .unwrap();
+        assert!(skip_multiplayer_warning(&game).unwrap());
+        let text = std::fs::read_to_string(game.join("options.txt")).unwrap();
+        assert!(text.contains("skipMultiplayerWarning:true") && text.contains("fov:0.5"));
     }
 
     #[test]
