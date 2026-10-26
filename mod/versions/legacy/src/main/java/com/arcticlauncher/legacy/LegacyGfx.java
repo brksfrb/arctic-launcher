@@ -42,6 +42,64 @@ final class LegacyGfx implements Gfx {
 		DrawableHelper.fill(x0, y0, x1, y1, color);
 	}
 
+	/**
+	 * A rounded panel as one batch: every row of the corners, the middle and the faded edge pixels go out between a
+	 * single begin and end, with the blend and texture state set once. Row by row through the game's own
+	 * rectangle drawing it was dozens of rectangles of about ten state changes each per panel, which the HUD's
+	 * panels added up to thousands of driver calls a frame.
+	 */
+	@Override
+	public boolean roundedFill(int x0, int y0, int x1, int y1, int r, int color) {
+		float alpha = (color >>> 24 & 255) / 255f;
+		if (alpha <= 0f) {
+			return true;
+		}
+		float red = (color >> 16 & 255) / 255f;
+		float green = (color >> 8 & 255) / 255f;
+		float blue = (color & 255) / 255f;
+		GlStateManager.enableBlend();
+		GlStateManager.disableTexture2D();
+		GlStateManager.blendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
+		GL11.glBegin(GL11.GL_QUADS);
+		GL11.glColor4f(red, green, blue, alpha);
+		int radius = Math.max(0, Math.min(r, Math.min(x1 - x0, y1 - y0) / 2));
+		for (int i = 0; i < radius; i++) {
+			float dy = radius - i - 0.5f;
+			float inset = radius - (float) Math.sqrt(Math.max(0f, radius * (float) radius - dy * dy));
+			int full = (int) Math.ceil(inset);
+			int top = y0 + i;
+			int bottom = y1 - 1 - i;
+			if (x1 - full > x0 + full) {
+				quad(x0 + full, top, x1 - full, top + 1);
+				quad(x0 + full, bottom, x1 - full, bottom + 1);
+			}
+			float coverage = full - inset;
+			if (coverage > 0.04f && full >= 1) {
+				GL11.glColor4f(red, green, blue, alpha * coverage);
+				quad(x0 + full - 1, top, x0 + full, top + 1);
+				quad(x1 - full, top, x1 - full + 1, top + 1);
+				quad(x0 + full - 1, bottom, x0 + full, bottom + 1);
+				quad(x1 - full, bottom, x1 - full + 1, bottom + 1);
+				GL11.glColor4f(red, green, blue, alpha);
+			}
+		}
+		if (y1 - radius > y0 + radius) {
+			quad(x0, y0 + radius, x1, y1 - radius);
+		}
+		GL11.glEnd();
+		GlStateManager.enableTexture2D();
+		GlStateManager.disableBlend();
+		GlStateManager.color(1f, 1f, 1f, 1f);
+		return true;
+	}
+
+	private static void quad(int x0, int y0, int x1, int y1) {
+		GL11.glVertex2f(x0, y1);
+		GL11.glVertex2f(x1, y1);
+		GL11.glVertex2f(x1, y0);
+		GL11.glVertex2f(x0, y0);
+	}
+
 	@Override
 	public void gradient(int x0, int y0, int x1, int y1, int top, int bottom) {
 		GRADIENT.draw(x0, y0, x1, y1, top, bottom);
