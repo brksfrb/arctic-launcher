@@ -241,7 +241,32 @@ public abstract class TextWidget extends HudWidget {
 		// The label keeps its own color; after the value, "FPS" is the label.
 		int first = labelFirst ? accent() : text();
 		int second = labelFirst ? text() : accent();
+		if (ownLabels && p[0].isEmpty()) {
+			drawOwnLabels(g, p[1], x, y);
+			return;
+		}
 		g.text(p[0], x, y, first, shadow());
 		g.text(p[1], x + partWidth0, y, second, shadow());
+	}
+
+	/** A value with its own labels ("X: 4  Y: 70  Z: 3"): each word ending in a colon is a label, in the accent colour. */
+	private void drawOwnLabels(Gfx g, String text, int x, int y) {
+		int at = x;
+		int i = 0;
+		while (i < text.length()) {
+			int word = i;
+			while (word < text.length() && text.charAt(word) != ' ') {
+				word++;
+			}
+			int end = word;
+			while (end < text.length() && text.charAt(end) == ' ') {
+				end++;
+			}
+			String token = text.substring(i, end);
+			boolean label = word > i && text.charAt(word - 1) == ':';
+			g.text(token, at, y, label ? accent() : text(), shadow());
+			at += g.textWidth(token);
+			i = end;
+		}
 	}
 }
