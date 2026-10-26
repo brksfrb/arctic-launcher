@@ -126,13 +126,6 @@ jobs:
           security set-keychain-settings -lut 21600 "$keychain"
           security unlock-keychain -p "$password" "$keychain"
           echo "$APPLE_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
-          # What arrived (sizes and a check only, never the values).
-          echo "p12 file: $(wc -c < "$RUNNER_TEMP/cert.p12") bytes; password: ${#APPLE_CERT_PASSWORD} characters"
-          if openssl pkcs12 -in "$RUNNER_TEMP/cert.p12" -passin env:APPLE_CERT_PASSWORD -noout 2>/dev/null; then
-            echo "openssl opens the p12 with that password"
-          else
-            echo "openssl cannot open the p12 with that password"
-          fi
           security import "$RUNNER_TEMP/cert.p12" -P "$APPLE_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
           # Apple's intermediate certificate, so the Developer ID is trusted.
           curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$RUNNER_TEMP/dev-id-ca.cer" \
