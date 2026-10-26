@@ -114,16 +114,27 @@ public final class ContainerPeek {
 		}
 		int y = Math.max(2, Math.min(g.height() - h - 2, mouseY - h / 2));
 		g.newLayer();
-		int frame = tint == 0 ? 0xFF1A1A2E : 0xFF000000 | tint;
-		int back = tint == 0 ? 0xF0100010 : 0xF0000000 | darker(tint);
-		g.fill(x - 1, y - 1, x + w + 1, y + h + 1, frame);
-		g.fill(x, y, x + w, y + h, back);
+		// A small copy of the game's own inventory look: a light panel with a bevel (a shulker box's colour
+		// tints it), and slots sunk into it.
+		int rim = tint == 0 ? 0xFF000000 : 0xFF000000 | darker(tint);
+		int panel = tint == 0 ? 0xFFC6C6C6 : 0xFF000000 | mix(tint, 0xC6C6C6, 0.62f);
+		int light = tint == 0 ? 0xFFFFFFFF : 0xFF000000 | mix(tint, 0xFFFFFF, 0.78f);
+		int shade = tint == 0 ? 0xFF555555 : 0xFF000000 | mix(tint, 0x000000, 0.45f);
+		g.fill(x - 1, y - 1, x + w + 1, y + h + 1, rim);
+		g.fill(x, y, x + w, y + h, panel);
+		g.fill(x, y, x + w - 1, y + 1, light);
+		g.fill(x, y, x + 1, y + h - 1, light);
+		g.fill(x + 1, y + h - 1, x + w, y + h, shade);
+		g.fill(x + w - 1, y + 1, x + w, y + h, shade);
 		for (int i = 0; i < shown.length; i++) {
 			int cx = x + PAD + i % cols * CELL;
 			int cy = y + PAD + i / cols * CELL;
-			g.fill(cx, cy, cx + CELL - 2, cy + CELL - 2, 0x40FFFFFF);
+			// The slot: dark edge above and left, light edge below and right, grey inside.
+			g.fill(cx, cy, cx + CELL, cy + CELL, 0xFFFFFFFF);
+			g.fill(cx, cy, cx + CELL - 1, cy + CELL - 1, 0xFF373737);
+			g.fill(cx + 1, cy + 1, cx + CELL - 1, cy + CELL - 1, 0xFF8B8B8B);
 			if (shown[i] != null) {
-				g.item(shown[i], cx, cy);
+				g.item(shown[i], cx + 1, cy + 1);
 			}
 		}
 	}
@@ -146,11 +157,16 @@ public final class ContainerPeek {
 		return out;
 	}
 
-	/** A dark version of the colour for the window's background (a quarter of it). */
+	/** A dark version of the colour (a third of it). */
 	private static int darker(int rgb) {
-		int r = (rgb >> 16 & 255) / 4;
-		int gr = (rgb >> 8 & 255) / 4;
-		int b = (rgb & 255) / 4;
-		return r << 16 | gr << 8 | b;
+		return mix(rgb, 0x000000, 0.66f);
+	}
+
+	/** {@code a} with {@code part} (0 to 1) of {@code b} mixed in. */
+	private static int mix(int a, int b, float part) {
+		int r = Math.round((a >> 16 & 255) * (1 - part) + (b >> 16 & 255) * part);
+		int g = Math.round((a >> 8 & 255) * (1 - part) + (b >> 8 & 255) * part);
+		int bl = Math.round((a & 255) * (1 - part) + (b & 255) * part);
+		return r << 16 | g << 8 | bl;
 	}
 }

@@ -29,7 +29,7 @@ class SaturationBarTest {
 					}
 					return null;
 				});
-		SaturationBar.overlay(g, 100, 50, SaturationBar.WHOLE);
+		SaturationBar.overlay(g, 100, 50, SaturationBar.WHOLE, 0x80FFD24A);
 		int pixels = 0;
 		for (int[] run : painted) {
 			assertEquals(run[1] + 1, run[3], "one row at a time");

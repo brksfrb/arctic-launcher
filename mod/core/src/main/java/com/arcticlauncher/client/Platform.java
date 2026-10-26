@@ -403,6 +403,14 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
+	/**
+	 * The food in your hand (main hand, else off hand) as {hunger it gives, saturation it adds}, or null when it
+	 * isn't food or this version doesn't tell (Saturation Bar flashes what eating it would do).
+	 */
+	default float[] heldFood() {
+		return null;
+	}
+
 	/** Hunger and saturation: {food 0-20, saturation}, or null. */
 	default float[] food() {
 		return null;

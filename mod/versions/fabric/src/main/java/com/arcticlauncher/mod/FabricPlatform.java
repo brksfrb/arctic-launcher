@@ -1334,6 +1334,11 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public float[] heldFood() {
+		return WorldStats.heldFood();
+	}
+
+	@Override
 	public String resourcePack() {
 		return WorldStats.resourcePack();
 	}

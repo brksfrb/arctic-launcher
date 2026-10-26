@@ -128,6 +128,30 @@ final class WorldStats {
 		return new float[] {p.getFoodData().getFoodLevel(), p.getFoodData().getSaturationLevel()};
 	}
 
+	/** The food in your hand as {hunger, saturation it adds}: from 1.20.5, where foods are item components. */
+	static float[] heldFood() {
+		//#if MC >= 1.20.5
+		LocalPlayer p = Minecraft.getInstance().player;
+		if (p == null) {
+			return null;
+		}
+		for (ItemStack stack : new ItemStack[] {p.getMainHandItem(), p.getOffhandItem()}) {
+			net.minecraft.world.food.FoodProperties food = stack.isEmpty() ? null : stack.get(net.minecraft.core.component.DataComponents.FOOD);
+			if (food != null) {
+				float nutrition = food.nutrition();
+				//#if MC >= 1.21.2
+				float saturation = food.saturation();
+				//#else
+				// Before 1.21.2 the number is a modifier: saturation = hunger * modifier * 2.
+				float saturation = nutrition * food.saturation() * 2f;
+				//#endif
+				return new float[] {nutrition, saturation};
+			}
+		}
+		//#endif
+		return null;
+	}
+
 	/** The highest resource pack you added (not the built-in ones). */
 	static String resourcePack() {
 		String top = null;
