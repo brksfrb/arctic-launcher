@@ -95,7 +95,12 @@ public final class InventorySearch {
 		} else if (key == Keys.V && ctrl) {
 			String pasted = ArcticClient.platform().clipboard();
 			if (pasted != null && !pasted.isEmpty()) {
-				String clean = pasted.replaceAll("[\p{Cntrl}]", " ").trim();
+				StringBuilder cleaned = new StringBuilder();
+				for (int i = 0; i < pasted.length(); i++) {
+					char ch = pasted.charAt(i);
+					cleaned.append(ch < ' ' || ch == 127 ? ' ' : ch);
+				}
+				String clean = cleaned.toString().trim();
 				String base = selectedAll ? "" : text;
 				set((base + clean).substring(0, Math.min(MAX_LENGTH, (base + clean).length())));
 			}
