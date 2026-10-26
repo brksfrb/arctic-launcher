@@ -40,6 +40,8 @@ pub struct GalleryUi {
     pub pngs: HashMap<String, Vec<u8>>,
     typed_at: Option<f64>,
     pub busy: bool,
+    /// A library skin about to be shared, and the name typed for it (asked first: no random file names).
+    naming: Option<(arctic_core::skins::SkinEntry, String)>,
 }
 
 impl ArcticApp {
@@ -236,15 +238,89 @@ impl ArcticApp {
         let share = ui
             .add_enabled(enabled, egui::Button::new("Share to gallery"))
             .on_hover_text("Everyone can find and use it in the Arctic gallery");
-        if share.clicked()
-            && let Ok(png) = arctic_core::skins::Library::read_png(&self.skins_dir(), &entry.id)
-        {
-            self.skins.gallery.busy = true;
-            self.tasks
-                .gallery_share(account, png, entry.variant, entry.name.clone());
+        if share.clicked() {
+            // The name is asked for first; a name that already is a real one is offered as it is.
+            let start = if arctic_core::skins::name_problem(&entry.name).is_none() {
+                entry.name.clone()
+            } else {
+                String::new()
+            };
+            self.skins.gallery.naming = Some((entry.clone(), start));
             return true;
         }
         false
+    }
+
+    /// "Name your skin": the gallery shows what you type here, so it has to be a real name.
+    pub(crate) fn gallery_name_dialog(&mut self, ctx: &egui::Context) {
+        let Some((entry, mut text)) = self.skins.gallery.naming.clone() else {
+            return;
+        };
+        let Some(account) = self.accounts.active().cloned() else {
+            self.skins.gallery.naming = None;
+            return;
+        };
+        let p = self.palette();
+        let problem = arctic_core::skins::name_problem(&text);
+        let mut share = false;
+        let mut cancel = false;
+        let modal = egui::Modal::new(egui::Id::new("gallery_name"))
+            .frame(crate::ui::dialogs::dialog_frame(p))
+            .show(ctx, |ui| {
+                ui.set_width(380.0);
+                ui.label(RichText::new("Name your skin").size(20.0).strong());
+                ui.label(
+                    RichText::new(
+                        "Everyone sees this name in the gallery. Pick one that says what the skin is, like \"Ice Knight\".",
+                    )
+                    .color(p.muted),
+                );
+                ui.add_space(10.0);
+                let field = ui.add(
+                    widgets::text_field(&mut text)
+                        .hint_text("Skin name")
+                        .char_limit(32)
+                        .desired_width(f32::INFINITY),
+                );
+                field.request_focus();
+                if !text.trim().is_empty()
+                    && let Some(why) = problem
+                {
+                    ui.add_space(4.0);
+                    ui.label(RichText::new(why).small().color(p.warn));
+                }
+                ui.add_space(12.0);
+                widgets::row(ui, |ui| {
+                    if widgets::button(ui, p, None, "Cancel", false).clicked() {
+                        cancel = true;
+                    }
+                    let ok = problem.is_none();
+                    let go = ui
+                        .add_enabled_ui(ok, |ui| widgets::button(ui, p, None, "Share", true))
+                        .inner;
+                    if go.clicked()
+                        || (ok && field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))
+                    {
+                        share = true;
+                    }
+                });
+            });
+        if cancel || modal.should_close() {
+            self.skins.gallery.naming = None;
+            return;
+        }
+        if share {
+            self.skins.gallery.naming = None;
+            if let Ok(png) = arctic_core::skins::Library::read_png(&self.skins_dir(), &entry.id) {
+                self.skins.gallery.busy = true;
+                self.tasks
+                    .gallery_share(account, png, entry.variant, text.trim().to_owned());
+            }
+            return;
+        }
+        if let Some(open) = &mut self.skins.gallery.naming {
+            open.1 = text;
+        }
     }
 
     pub(super) fn on_gallery_event(&mut self, event: Event) {

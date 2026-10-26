@@ -12,6 +12,30 @@ use serde::{Deserialize, Serialize};
 use crate::storage::{load_json, save_json};
 use crate::{Error, Result};
 
+/// Why a name isn't accepted for a skin shared to the gallery, or None when it is: at least 3 characters with a
+/// letter in them, and not a hash or a keyboard smash ("a3f9c2e81b", "qwrtpsdfg"). The server checks the same.
+pub fn name_problem(name: &str) -> Option<&'static str> {
+    let name = name.trim();
+    let chars = name.chars().count();
+    if chars < 3 {
+        return Some("Give it a name of at least 3 letters");
+    }
+    if !name.chars().any(char::is_alphabetic) {
+        return Some("A name needs letters in it");
+    }
+    let one_word = !name.chars().any(char::is_whitespace);
+    if one_word && chars >= 8 && name.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Some("That looks like a file code: call the skin what it is");
+    }
+    let vowels = name
+        .chars()
+        .any(|c| "aeiouyAEIOUY\u{e0}\u{e1}\u{e2}\u{e4}\u{e8}\u{e9}\u{ea}\u{ed}\u{ee}\u{f2}\u{f3}\u{f4}\u{f6}\u{f9}\u{fa}\u{fc}\u{131}\u{130}".contains(c));
+    if one_word && chars >= 6 && name.chars().all(|c| c.is_ascii_alphabetic()) && !vowels {
+        return Some("That does not look like a name: call the skin what it is");
+    }
+    None
+}
+
 /// Largest skin file accepted (real skins are a few KB).
 pub const MAX_SKIN_BYTES: usize = 256 * 1024;
 const LIBRARY_FILE: &str = "library.json";
