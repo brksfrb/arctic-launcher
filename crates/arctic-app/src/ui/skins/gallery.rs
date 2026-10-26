@@ -231,9 +231,9 @@ impl ArcticApp {
         ui: &mut egui::Ui,
         entry: &arctic_core::skins::SkinEntry,
     ) -> bool {
-        let Some(account) = self.accounts.active().cloned() else {
+        if self.accounts.active().is_none() {
             return false;
-        };
+        }
         let enabled = self.arctic_state().is_some() && !self.skins.gallery.busy;
         let share = ui
             .add_enabled(enabled, egui::Button::new("Share to gallery"))
