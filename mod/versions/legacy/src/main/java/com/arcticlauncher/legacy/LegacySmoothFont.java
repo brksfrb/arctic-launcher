@@ -318,8 +318,9 @@ public final class LegacySmoothFont {
 				float advance = (float) gv.getGlyphMetrics(0).getAdvanceX();
 				// Pixel-sharp text steps whole pixels from letter to letter: a letter drawn between two pixels
 				// is smeared across both.
-				// ...and always a pixel wider than the letter's own shape, so a letter never touches the next one.
-				float shape = (float) Math.ceil(gv.getOutline().getBounds2D().getMaxX()) + 1f;
+				// ...and never narrower than the letter's own shape (checked by drawing a sentence both ways), so a
+				// letter never runs into the next one.
+				float shape = (float) Math.ceil(gv.getOutline().getBounds2D().getMaxX());
 				advances.add(aa ? advance : Math.max(Math.max(1f, Math.round(advance)), shape));
 			}
 		}
