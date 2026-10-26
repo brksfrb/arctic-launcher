@@ -229,6 +229,10 @@ public final class ClientConfig {
 	public boolean shulkerPeek;
 	/** How Shulker Peek shows: 0 while hovering, 1 while Shift is held (see ContainerPeek). */
 	public int shulkerPeekMode = 1;
+	/** The key that shows the packed preview while held (see ContainerPeek). */
+	public String shulkerPeekKey = "key.keyboard.left.shift";
+	/** Held with it, the preview shows every slot. */
+	public String shulkerPeekFullKey = "key.keyboard.left.alt";
 	/** Held Item: where your hands and the item in them sit in first person (see HeldItemTweak). */
 	public boolean heldItem;
 	public int heldX;

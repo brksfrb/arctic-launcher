@@ -69,8 +69,12 @@ public final class ContainerPeek {
 		}
 	}
 
-	private static boolean down(Platform p, String left, String right) {
-		return p.isKeyDown(left) || p.isKeyDown(right);
+	/** The key is held (a left key counts with its right twin: either Shift). */
+	private static boolean down(Platform p, String key) {
+		if (key == null || key.isEmpty()) {
+			return false;
+		}
+		return p.isKeyDown(key) || (key.contains(".left.") && p.isKeyDown(key.replace(".left.", ".right.")));
 	}
 
 	/** The item under the cursor: draws what it holds when it is a container and the setting says so. */
@@ -81,13 +85,33 @@ public final class ContainerPeek {
 			return;
 		}
 		boolean full = c.shulkerPeekMode == ALWAYS;
+		if (!full && !down(p, c.shulkerPeekKey)) {
+			hint(g, p, c, mouseX, mouseY, stack);
+			return;
+		}
 		if (!full) {
-			if (!down(p, "key.keyboard.left.shift", "key.keyboard.right.shift")) {
-				return;
-			}
-			full = down(p, "key.keyboard.left.alt", "key.keyboard.right.alt");
+			full = down(p, c.shulkerPeekFullKey);
 		}
 		draw(g, mouseX, mouseY, p.peek(stack), p.peekTint(stack), full);
+	}
+
+	/** Over a container with things in it and no key held: says which keys show them. */
+	private static void hint(Gfx g, Platform p, ClientConfig c, int mouseX, int mouseY, Object stack) {
+		if (p.peek(stack) == null) {
+			return;
+		}
+		String text = p.keyLabel(c.shulkerPeekKey) + ": what is inside  ·  "
+				+ p.keyLabel(c.shulkerPeekKey) + " + " + p.keyLabel(c.shulkerPeekFullKey) + ": every slot";
+		int w = g.textWidth(text) + 10;
+		int x = mouseX - w - GAP_TO_MOUSE;
+		if (x < 2) {
+			x = Math.min(g.width() - w - 2, mouseX + 190);
+		}
+		int y = Math.max(2, Math.min(g.height() - 16, mouseY - 4));
+		g.newLayer();
+		g.fill(x - 1, y - 1, x + w + 1, y + 15, 0xFF000000);
+		g.fill(x, y, x + w, y + 14, 0xF0100010);
+		g.text(text, x + 5, y + 3, 0xFFAAAAAA, false);
 	}
 
 	/**

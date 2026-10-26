@@ -360,9 +360,14 @@ final class ModCatalog {
 					.toggle(() -> c.shulkerPeek, on -> c.shulkerPeek = on)
 					.settings((host, f) -> {
 						f.section("Preview");
-						f.choice("Show", new String[] {"Always", "While holding Shift"},
+						f.choice("Show", new String[] {"Always", "While holding a key"},
 								() -> c.shulkerPeekMode, i -> c.shulkerPeekMode = i);
-						f.note("Shift shows what is inside, packed. Shift and Alt together show every slot. Works for shulker boxes (they colour the window), chests, barrels, hoppers and other containers that carry their items.");
+						f.section("Keys");
+						f.key("Preview key", "Hold it over a container for what is inside, packed",
+								Form.key(() -> c.shulkerPeekKey, k -> c.shulkerPeekKey = k));
+						f.key("Every slot", "Hold it as well to see every slot where it lies",
+								Form.key(() -> c.shulkerPeekFullKey, k -> c.shulkerPeekFullKey = k));
+						f.note("Works for shulker boxes (they colour the window), chests, barrels, hoppers and other containers that carry their items. A line next to the cursor tells you the keys.");
 					}));
 		}
 		out.add(new Mod("controller", "Controller", "Play with a gamepad: Xbox, PlayStation and others", "controller",
