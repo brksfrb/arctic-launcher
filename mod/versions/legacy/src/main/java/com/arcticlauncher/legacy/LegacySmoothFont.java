@@ -217,7 +217,10 @@ public final class LegacySmoothFont {
 				Rectangle box = gv.getPixelBounds(frc, 0, 0);
 				chars.add((char) c);
 				boxes.add(box);
-				advances.add((float) gv.getGlyphMetrics(0).getAdvanceX());
+				float advance = (float) gv.getGlyphMetrics(0).getAdvanceX();
+				// Pixel-sharp text steps whole pixels from letter to letter: a letter drawn between two pixels
+				// is smeared across both.
+				advances.add(antialias() ? advance : Math.max(1f, Math.round(advance)));
 			}
 		}
 		// Shelf packing into a texture as wide as needed for the scale.
@@ -249,7 +252,8 @@ public final class LegacySmoothFont {
 		Graphics2D g = image.createGraphics();
 		g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, antialias()
 				? RenderingHints.VALUE_TEXT_ANTIALIAS_ON : RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
-		g.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
+		g.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, antialias()
+				? RenderingHints.VALUE_FRACTIONALMETRICS_ON : RenderingHints.VALUE_FRACTIONALMETRICS_OFF);
 		g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
 		g.setFont(font);
 		g.setColor(java.awt.Color.WHITE);
@@ -277,8 +281,9 @@ public final class LegacySmoothFont {
 		// filter turns the letters' soft edges into grey blocks. At 1:1 the glyphs sit on whole pixels
 		// either way.
 		GlStateManager.bindTexture(texture.getGlId());
-		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
-		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
+		int filter = antialias() ? GL11.GL_LINEAR : GL11.GL_NEAREST;
+		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, filter);
+		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, filter);
 		glyphs = made;
 		scale = s;
 		ArcticLegacy.LOG.info("smooth font: {} characters at GUI scale {} ({}x{})", chars.size(), s, width, height);
