@@ -149,11 +149,12 @@ impl ArcticApp {
         match self.accounts.active() {
             Some(account) => {
                 paint_face(ui.painter(), face_rect, &self.face(account), p.card_stroke);
+                let (name, font) = fit_name(ui, &account.username, 14.5, width - 52.0 - 30.0);
                 ui.painter().text(
                     rect.left_center() + vec2(52.0, -8.0),
                     Align2::LEFT_CENTER,
-                    &account.username,
-                    FontId::proportional(14.5),
+                    name,
+                    font,
                     p.text,
                 );
                 ui.painter().text(
@@ -210,11 +211,12 @@ impl ArcticApp {
                 vec2(22.0, 22.0),
             );
             paint_face(ui.painter(), face_rect, &self.face(account), p.card_stroke);
+            let (name, font) = fit_name(ui, &account.username, 14.0, rect.width() - 38.0 - 34.0);
             ui.painter().text(
                 rect.left_center() + vec2(38.0, 0.0),
                 Align2::LEFT_CENTER,
-                &account.username,
-                FontId::proportional(14.0),
+                name,
+                font,
                 p.text,
             );
             if active {
@@ -262,4 +264,32 @@ fn eased_slide(ctx: &egui::Context, target: f32, now: f64) -> f32 {
         ctx.request_repaint();
     }
     state.0 + (state.1 - state.0) * t
+}
+
+/// A name that fits `max` pixels: the font shrinks a little first, then the end becomes "…".
+fn fit_name(ui: &egui::Ui, text: &str, size: f32, max: f32) -> (String, FontId) {
+    let width = |text: &str, size: f32| {
+        ui.painter()
+            .layout_no_wrap(
+                text.to_owned(),
+                FontId::proportional(size),
+                egui::Color32::WHITE,
+            )
+            .size()
+            .x
+    };
+    let mut size = size;
+    while width(text, size) > max && size > 11.5 {
+        size -= 0.5;
+    }
+    let mut name = text.to_owned();
+    while width(&name, size) > max && name.chars().count() > 1 {
+        name.pop();
+        name = name.trim_end().to_owned();
+        if width(&format!("{name}…"), size) <= max {
+            name.push('…');
+            break;
+        }
+    }
+    (name, FontId::proportional(size))
 }

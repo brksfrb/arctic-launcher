@@ -49,6 +49,8 @@ public final class Hud {
 		Object sizedContent;
 		long sizedLook;
 		boolean sizedFancy;
+		/** The GUI scale it was measured at: text is rasterized per scale, so its width follows it. */
+		float sizedScale;
 		int width;
 		int height;
 		/** The last drawing, and what it showed where. */
@@ -57,6 +59,7 @@ public final class Hud {
 		long drawnLook;
 		boolean drawnPreview;
 		boolean drawnFancy;
+		float drawnScale;
 		Style drawnStyle;
 		int[] drawnRect;
 	}
@@ -82,13 +85,15 @@ public final class Hud {
 		Kept k = kept(w, slot, previewing);
 		long look = slot.look();
 		boolean fancy = com.arcticlauncher.client.gfx.Draw.fancy;
-		if (k.content == null || !k.content.equals(k.sizedContent) || k.sizedLook != look || k.sizedFancy != fancy) {
+		if (k.content == null || !k.content.equals(k.sizedContent) || k.sizedLook != look || k.sizedFancy != fancy
+				|| k.sizedScale != g.pixelScale()) {
 			w.use(slot);
 			k.width = w.width(g);
 			k.height = w.height();
 			k.sizedContent = k.content;
 			k.sizedLook = look;
 			k.sizedFancy = fancy;
+			k.sizedScale = g.pixelScale();
 		}
 		return k;
 	}
@@ -409,7 +414,7 @@ public final class Hud {
 		boolean fancy = com.arcticlauncher.client.gfx.Draw.fancy;
 		// Showing the same thing, the same way, in the same place: last frame's drawing again.
 		if (k.content != null && k.drawing != null && k.content.equals(k.drawnContent) && k.drawnLook == look && k.drawnPreview == preview
-				&& k.drawnFancy == fancy && k.drawnStyle == s && java.util.Arrays.equals(rect, k.drawnRect) && g.replay(k.drawing)) {
+				&& k.drawnFancy == fancy && k.drawnScale == g.pixelScale() && k.drawnStyle == s && java.util.Arrays.equals(rect, k.drawnRect) && g.replay(k.drawing)) {
 			return;
 		}
 		boolean recording = k.content != null && g.startRecording();
@@ -427,6 +432,7 @@ public final class Hud {
 		k.drawnLook = look;
 		k.drawnPreview = preview;
 		k.drawnFancy = fancy;
+		k.drawnScale = g.pixelScale();
 		k.drawnStyle = s;
 		k.drawnRect = rect.clone();
 	}
