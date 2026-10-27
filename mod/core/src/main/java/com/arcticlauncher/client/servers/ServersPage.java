@@ -601,11 +601,39 @@ public final class ServersPage extends Page {
 
 	/** A play triangle pointing right, centred on (cx, cy). */
 	private static void playArrow(Gfx g, int cx, int cy, int color) {
-		// 11 across, 14 high: a little wider than the old 8 x 14, which looked tall and thin.
-		for (int c = 0; c < 11; c++) {
-			int h = 14 - Math.round(c * 1.3f);
-			g.fill(cx - 5 + c, cy - h / 2, cx - 4 + c, cy - h / 2 + h, color);
+		// Drawn in screen pixels (not whole GUI pixels, which made stair steps), with the slanted edges
+		// blended: 11 x 15 GUI pixels, its middle on (cx, cy).
+		float ps = Math.max(1f, g.pixelScale());
+		float w = 11 * ps;
+		float h = 15 * ps;
+		float left = cx * ps - w / 3;
+		float mid = cy * ps;
+		g.push();
+		g.scale(1f / ps);
+		int columns = (int) Math.ceil(w);
+		for (int c = 0; c < columns; c++) {
+			float half = h / 2 * (1 - (c + 0.5f) / w);
+			float top = mid - half;
+			float bottom = mid + half;
+			int x = Math.round(left) + c;
+			int t = (int) Math.ceil(top);
+			int b = (int) Math.floor(bottom);
+			g.fill(x, t, x + 1, b, color);
+			float topCover = t - top;
+			if (topCover > 0.05f) {
+				g.fill(x, t - 1, x + 1, t, withCoverage(color, topCover));
+			}
+			float bottomCover = bottom - b;
+			if (bottomCover > 0.05f) {
+				g.fill(x, b, x + 1, b + 1, withCoverage(color, bottomCover));
+			}
 		}
+		g.pop();
+	}
+
+	/** {@code color} with its alpha scaled by {@code cover} (0 to 1). */
+	private static int withCoverage(int color, float cover) {
+		return ((int) ((color >>> 24) * cover) << 24) | (color & 0xFFFFFF);
 	}
 
 	/** Whether the mouse is on the icon of a row (a click there joins at once). */
