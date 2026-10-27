@@ -601,9 +601,10 @@ public final class ServersPage extends Page {
 
 	/** A play triangle pointing right, centred on (cx, cy). */
 	private static void playArrow(Gfx g, int cx, int cy, int color) {
-		for (int c = 0; c < 8; c++) {
-			int h = 14 - 2 * c;
-			g.fill(cx - 4 + c, cy - h / 2, cx - 3 + c, cy - h / 2 + h, color);
+		// 11 across, 14 high: a little wider than the old 8 x 14, which looked tall and thin.
+		for (int c = 0; c < 11; c++) {
+			int h = 14 - Math.round(c * 1.3f);
+			g.fill(cx - 5 + c, cy - h / 2, cx - 4 + c, cy - h / 2 + h, color);
 		}
 	}
 

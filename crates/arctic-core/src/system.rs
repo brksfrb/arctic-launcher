@@ -24,7 +24,37 @@ pub fn memory_for_mods(setting: u32, mods: usize) -> u32 {
         .map_or(setting, |(_, mb)| setting.max(*mb))
 }
 
+/// Memory Windows can still hand out right now (what the other programs and the page file leave) is
+/// what the game's heap grows into. Kept free for them to grow while the game runs.
+const COMMIT_SPARE_MB: u64 = 1536;
+
+#[cfg(windows)]
+fn available_commit_mb() -> Option<u64> {
+    imp::available_commit_bytes().map(|b| b / (1024 * 1024))
+}
+
+/// Only Windows hands out memory against a limit that other programs use up.
+#[cfg(not(windows))]
+fn available_commit_mb() -> Option<u64> {
+    None
+}
+
+/// `asked`, less if the memory Windows can still commit would run out before the heap is full: the game
+/// then dies in its first minutes with "Failed to commit memory (1455)".
+fn within_headroom(asked: u32, headroom_mb: Option<u64>) -> u32 {
+    match headroom_mb {
+        Some(free) => {
+            let cap = free
+                .saturating_sub(COMMIT_SPARE_MB)
+                .min(u64::from(u32::MAX)) as u32;
+            asked.min(cap.max(MIN_MEMORY_MB))
+        }
+        None => asked,
+    }
+}
+
 pub fn playable_memory_mb(asked: u32) -> u32 {
+    let asked = within_headroom(asked, available_commit_mb());
     match total_memory_mb() {
         // Windows pages out quietly, so its page file may back the game. Linux with little or no swap
         // (zram, or none) doesn't: it kills the game when memory runs out, so only installed memory counts.
@@ -149,6 +179,16 @@ mod imp {
         let ok = unsafe { GlobalMemoryStatusEx(&mut status) };
         (ok != 0).then_some(status.ullTotalPageFile)
     }
+
+    /// What can still be committed now: the commit limit less what everything running has committed.
+    pub fn available_commit_bytes() -> Option<u64> {
+        // SAFETY: as above.
+        let mut status: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
+        status.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
+        // SAFETY: `status` is a valid, initialized MEMORYSTATUSEX.
+        let ok = unsafe { GlobalMemoryStatusEx(&mut status) };
+        (ok != 0).then_some(status.ullAvailPageFile)
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -251,6 +291,17 @@ mod tests {
         // A roomy computer is unchanged.
         assert_eq!(room_mb(16_384, Some(30_000)), 16_384);
         assert_eq!(room_mb(16_384, None), 14_336);
+    }
+
+    #[test]
+    fn the_heap_never_asks_for_more_than_windows_can_still_commit() {
+        // 3.5 GB asked with 4 GB of commit left: 1.5 GB stays free for the other programs.
+        assert_eq!(within_headroom(3584, Some(4096)), 2560);
+        // Plenty left, or not readable: as asked.
+        assert_eq!(within_headroom(3584, Some(20_000)), 3584);
+        assert_eq!(within_headroom(3584, None), 3584);
+        // Never below the least a game can run with.
+        assert_eq!(within_headroom(3584, Some(500)), MIN_MEMORY_MB.min(3584));
     }
 
     #[test]
