@@ -1,6 +1,7 @@
 package com.arcticlauncher.client.looks;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import com.google.gson.JsonParser;
@@ -16,6 +17,8 @@ class CatalogEmotesTest {
 
 	@Test
 	void everyCatalogEmoteParses() throws IOException {
+		// The emotes live with the server, which is not part of this repository.
+		assumeTrue(EMOTES.isDirectory());
 		File[] files = EMOTES.listFiles((dir, name) -> name.endsWith(".animation.json"));
 		assertTrue(files != null && files.length > 0, "no emotes in " + EMOTES.getAbsolutePath());
 		for (File f : files) {
