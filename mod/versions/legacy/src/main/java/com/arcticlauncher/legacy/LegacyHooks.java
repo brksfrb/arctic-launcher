@@ -43,6 +43,29 @@ public final class LegacyHooks {
 		};
 	}
 
+	/** What the visible chunks were last worked out for: {yaw, pitch, fov}. */
+	private static float[] culledFor = new float[3];
+
+	/**
+	 * The game only works out which chunks are in view again when the player's
+	 * own angles or position change. Freelook turns the camera (not the
+	 * player) and Zoom narrows the view, so without this the chunks behind you
+	 * or outside the zoomed view stay missing until you move.
+	 */
+	public static void refreshVisibleChunks() {
+		Features f = ArcticClient.features();
+		MinecraftClient mc = MinecraftClient.getInstance();
+		if (f == null || mc.worldRenderer == null) {
+			return;
+		}
+		boolean free = f.freelook();
+		float[] now = {free ? f.lookYaw() : 0f, free ? f.lookPitch() : 0f, worldFov};
+		if (now[0] != culledFor[0] || now[1] != culledFor[1] || now[2] != culledFor[2]) {
+			culledFor = now;
+			mc.worldRenderer.scheduleTerrainUpdate();
+		}
+	}
+
 	/** {x, y, z, yaw, pitch, fov} for world markers, or null. */
 	static double[] camera() {
 		double[] c = camera;

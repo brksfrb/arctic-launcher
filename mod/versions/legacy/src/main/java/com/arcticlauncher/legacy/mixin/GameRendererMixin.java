@@ -35,6 +35,7 @@ abstract class GameRendererMixin {
 	@Inject(method = "transformCamera", at = @At("RETURN"))
 	private void arctic$freelookEnd(float tickDelta, CallbackInfo ci) {
 		LegacyHooks.freelookCamera(false);
+		LegacyHooks.refreshVisibleChunks();
 	}
 
 	/** Motion blur: after the world, before the HUD. */
