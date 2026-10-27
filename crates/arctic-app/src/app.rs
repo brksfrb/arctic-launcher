@@ -30,6 +30,8 @@ use crate::ui::{InstancesUi, ProfileDialog};
 const FRAME_FOCUSED: Duration = Duration::from_millis(33);
 const FRAME_UNFOCUSED: Duration = Duration::from_millis(100);
 /// The update check at start waits this long, so opening the launcher isn't slowed by it.
+/// How many tabs the back button remembers.
+const TAB_HISTORY: usize = 20;
 const START_UPDATE_CHECK_DELAY: Duration = Duration::from_secs(4);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,6 +140,8 @@ pub struct ArcticApp {
     events: Receiver<Event>,
     pub(crate) tab: Tab,
     pub(crate) tab_changed_at: f64,
+    /// Tabs left behind, for the mouse's back button.
+    tab_history: Vec<Tab>,
     pub(crate) settings: Settings,
     saved_settings: Settings,
     /// Saved proxy settings (the Network section edits a draft of them).
@@ -328,6 +332,7 @@ impl ArcticApp {
             events: rx,
             tab: startup.tab.unwrap_or(Tab::Play),
             tab_changed_at: 0.0,
+            tab_history: Vec::new(),
             accounts: AccountStore::default(),
             faces: HashMap::new(),
             instance: Instance::vanilla_default(),
@@ -507,6 +512,32 @@ impl ArcticApp {
 
     pub(crate) fn set_tab(&mut self, tab: Tab, now: f64) {
         if self.tab != tab {
+            if self.tab_history.len() >= TAB_HISTORY {
+                self.tab_history.remove(0);
+            }
+            self.tab_history.push(self.tab);
+            self.tab = tab;
+            self.tab_changed_at = now;
+        }
+    }
+
+    /// The mouse's back button (or Alt+Left): close the open modpack or instance page, else the previous tab.
+    fn go_back(&mut self, ctx: &egui::Context) {
+        let (back, now) = ctx.input(|i| {
+            (
+                i.pointer.button_pressed(egui::PointerButton::Extra1)
+                    || (i.modifiers.alt && i.key_pressed(egui::Key::ArrowLeft)),
+                i.time,
+            )
+        });
+        if !back {
+            return;
+        }
+        if self.tab == Tab::Instances && self.inst.modpacks_open {
+            self.inst.modpacks_open = false;
+        } else if self.tab == Tab::Instances && self.inst.open.is_some() {
+            self.inst.open = None;
+        } else if let Some(tab) = self.tab_history.pop() {
             self.tab = tab;
             self.tab_changed_at = now;
         }
@@ -1252,6 +1283,7 @@ impl eframe::App for ArcticApp {
         let together = self.together_status();
         self.discord
             .sync(self.settings.discord_presence, playing, together);
+        self.go_back(&ctx);
         self.shell(ui);
         self.splash.show(&ctx, self.palette());
         self.autosave_settings(&ctx);
