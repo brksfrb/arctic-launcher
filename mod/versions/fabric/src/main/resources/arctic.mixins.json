@@ -84,6 +84,7 @@
 <% if (crosshairHook) { %>		"HudCrosshairMixin",
 <% } %>		<% if (fireOverlay) { %>"ScreenEffectRendererMixin",<% } else { %>"FireOldMixin",<% } %>
 		"LevelWeatherMixin",
+		"OfflineLanMixin",
 		"TimeLockMixin",
 		"MultiPlayerGameModeMixin"<% } %><% if (oldCamera) { %>,
 		"GameRendererFovMixin"<% } %><% if (smoothFont) { %>,
