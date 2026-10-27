@@ -75,35 +75,6 @@ client and the launcher at a local cosmetics server. Adding
 `-Darctic.selftest=true` to the instance's JVM arguments makes the client screenshot each
 of its screens and quit, which is handy after changing an adapter.
 
-### The cosmetics server
-
-```sh
-ARCTIC_COSMETICS_SECRET=$(openssl rand -hex 32) \
-ARCTIC_COSMETICS_ASSETS=crates/arctic-cosmetics/assets \
-cargo run -p arctic-cosmetics
-```
-
-It listens on `0.0.0.0:8080` and stores data in `cosmetics.db`. For deployment there is a
-Dockerfile: `docker build -f crates/arctic-cosmetics/Dockerfile -t arctic-cosmetics .` (mount
-a volume at `/data`).
-
-Optional settings: `ARCTIC_COSMETICS_TRUST_PROXY=1` when it runs behind a reverse proxy
-(rate limits use `X-Forwarded-For`).
-
-Moderation: set `ARCTIC_COSMETICS_ADMIN_KEYS=name:key,name:key` (keys at least 16 characters,
-names letters, digits, `-` or `_`). Each moderator signs in at `/admin` with their own key; to
-add or remove a person, edit the list and restart. Shared skins wait there for approval before
-they show in the gallery; reported ones come back to the same queue, and every decision is
-recorded under the moderator's name. The same key works as an `X-Admin-Key` header for the API
-(`arctic servers review`, `DELETE /v1/gallery/{id}`). Without any keys, `/admin` is off. Put
-the page behind Cloudflare Access (admin.arcticlauncher.com) for a second lock. The older
-single `ARCTIC_COSMETICS_ADMIN_KEY` still works as the moderator `admin`.
-
-Crash reports: when the game crashes the launcher offers to send its log (Settings → Crash
-reports: ask, always or never). Names, folders, tokens, e-mails and IPs are removed before it
-leaves the PC. They arrive at `POST /v1/crash` (a few per address per hour), are grouped by
-cause, and show under Crashes in `/admin`.
-
 ## Checks
 
 ```sh

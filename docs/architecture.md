@@ -98,7 +98,6 @@ TODO: encrypt `accounts.json` at rest with Windows DPAPI.
 | `arctic-app` | The egui launcher |
 | `arctic-cli` | The `arctic` command |
 | `arctic-share` | Play together: peer-to-peer LAN tunnels (iroh) |
-| `arctic-cosmetics` | The Arctic cosmetics server (capes, sign-in via Mojang's session server) |
 | `mod/` | The Arctic Client (Java, Gradle): a shared core plus per-version adapters, bundled into the launcher as jars |
 
 ## Instances and mod loaders (`instances`, `loaders`)
@@ -144,7 +143,7 @@ builds a textured mesh per body part, back-face culls and depth-sorts the faces.
 ## Arctic looks and the mod
 
 A **look** is a skin (plus arm model) and a cape that the player picks locally. The launcher
-publishes it to the looks server (`arctic-cosmetics`), which stores textures by SHA-1 and
+publishes it to the looks server, which stores textures by SHA-1 and
 relays each player's look to every Arctic client. Nothing is owned or unlocked: presets are
 just textures everyone may use, and custom images are allowed (size-checked: 64×64 skins,
 2:1 capes up to 512×256).
