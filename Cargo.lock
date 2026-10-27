@@ -315,7 +315,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-app"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "aes-gcm",
  "arboard",
@@ -345,7 +345,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-cli"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "arctic-core",
  "arctic-share",
@@ -357,7 +357,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-core"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "aes-gcm",
  "arctic-mesh",
@@ -397,7 +397,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-mesh"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "png",
  "serde_json",
@@ -405,7 +405,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-ping"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "base64 0.23.1",
  "serde_json",
@@ -414,7 +414,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-share"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "bytes",
  "data-encoding",
@@ -427,7 +427,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-voice"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "aes-gcm",
  "cpal",
@@ -1045,7 +1045,7 @@ dependencies = [
 
 [[package]]
 name = "cmov"
-version = "0.5.4"
+version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
@@ -1970,7 +1970,7 @@ dependencies = [
 
 [[package]]
 name = "event-listener-strategy"
-version = "0.5.4"
+version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8be9f3dfaaffdae2972880079a491a1a8bb7cbed0b8dd7a347f668b4150a3b93"
 dependencies = [
