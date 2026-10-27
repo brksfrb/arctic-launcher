@@ -22,12 +22,13 @@ abstract class EntityMixin {
 		}
 	}
 
-	@ModifyVariable(method = "increaseTransforms", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	// Slots, not ordinals: this, yaw, pitch. The ordinal of a float argument left the pitch unscaled.
+	@ModifyVariable(method = "increaseTransforms", at = @At("HEAD"), argsOnly = true, index = 1)
 	private float arctic$zoomYaw(float yaw) {
 		return zoomed() ? yaw * (float) ArcticClient.features().sensitivityMultiplier() : yaw;
 	}
 
-	@ModifyVariable(method = "increaseTransforms", at = @At("HEAD"), argsOnly = true, ordinal = 1)
+	@ModifyVariable(method = "increaseTransforms", at = @At("HEAD"), argsOnly = true, index = 2)
 	private float arctic$zoomPitch(float pitch) {
 		return zoomed() ? pitch * (float) ArcticClient.features().sensitivityMultiplier() : pitch;
 	}
