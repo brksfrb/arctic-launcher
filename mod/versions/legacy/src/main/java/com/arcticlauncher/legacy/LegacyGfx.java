@@ -58,7 +58,7 @@ final class LegacyGfx implements Gfx {
 		float green = (color >> 8 & 255) / 255f;
 		float blue = (color & 255) / 255f;
 		GlStateManager.enableBlend();
-		GlStateManager.disableTexture2D();
+		GlStateManager.disableTexture();
 		GlStateManager.blendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
 		GL11.glBegin(GL11.GL_QUADS);
 		GL11.glColor4f(red, green, blue, alpha);
@@ -87,7 +87,7 @@ final class LegacyGfx implements Gfx {
 			quad(x0, y0 + radius, x1, y1 - radius);
 		}
 		GL11.glEnd();
-		GlStateManager.enableTexture2D();
+		GlStateManager.enableTexture();
 		GlStateManager.disableBlend();
 		GlStateManager.color(1f, 1f, 1f, 1f);
 		return true;
