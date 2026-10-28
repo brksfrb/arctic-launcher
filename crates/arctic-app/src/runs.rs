@@ -119,8 +119,11 @@ impl Run {
         let launcher: Vec<&str> = launcher.iter().map(|l| l.text.as_str()).collect();
         // How it ended: a game that wrote nothing at all is otherwise a report with nothing in it.
         let java = self.java.as_deref().map(|j| match code {
-            Some(c) => format!("{j}\n(exit code {c})"),
-            None => j.to_owned(),
+            Some(c) => format!(
+                "{j}\n(exit code {c})\n{}",
+                self.run_summary(written.is_some())
+            ),
+            None => format!("{j}\n{}", self.run_summary(written.is_some())),
         });
         crash::Report::build(
             &self.version,
@@ -130,6 +133,26 @@ impl Run {
             &launcher,
             written.as_deref(),
             java.as_deref(),
+        )
+    }
+
+    /// How the run went, for a crash that left no error text: how long the game lived, how much it
+    /// printed and whether it wrote a log of its own. Tells a game that died on start from one that
+    /// died mid-play.
+    fn run_summary(&self, has_report: bool) -> String {
+        let lived = self.started.elapsed().map_or(0, |d| d.as_secs());
+        let latest = self.game_dir.join("logs").join("latest.log");
+        let own = match std::fs::metadata(&latest) {
+            Err(_) => "none".to_owned(),
+            Ok(m) if m.modified().is_ok_and(|t| t < self.started) => {
+                "left over from an earlier run".to_owned()
+            }
+            Ok(m) => format!("{} bytes", m.len()),
+        };
+        format!(
+            "run: ended after {lived} s; {} lines printed; logs/latest.log: {own}; crash report or hs_err: {}",
+            self.log.len(),
+            if has_report { "yes" } else { "none" }
         )
     }
 
