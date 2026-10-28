@@ -561,6 +561,16 @@ final class ModCatalog {
 				"texture resource pack shader iris modrinth").page(PacksTab::new));
 	}
 
+	private static void chatField(Form f, String label, String hint, java.util.function.Supplier<String> get,
+			final java.util.function.Consumer<String> set) {
+		int top = f.row(Form.ROW);
+		f.put(new com.arcticlauncher.client.ui.Label(label, com.arcticlauncher.client.ui.Label.Kind.TEXT), f.x + 4, top, 110, Form.ROW);
+		final com.arcticlauncher.client.ui.TextField field = new com.arcticlauncher.client.ui.TextField(hint, 200,
+				com.arcticlauncher.client.ui.TextField.ANY).text(get.get());
+		field.onChange(() -> set.accept(field.text()));
+		f.put(field, f.x + 118, top, f.w - 118, Form.ROW - 4);
+	}
+
 	private static void chat(List<Mod> out, final ClientConfig c) {
 		out.add(new Mod("chat", "Chat", "Timestamps, stacked lines, mentions, placeholders", "chat", Category.CHAT,
 				"timestamp stack mention ping")
@@ -573,6 +583,20 @@ final class ModCatalog {
 					f.toggle("Placeholders", "Type {x} {y} {z} and it sends your position", () -> c.chatPlaceholders,
 							on -> c.chatPlaceholders = on);
 					f.note("Also: " + QuickMessages.PLACEHOLDERS);
+					f.section("Timestamp");
+					f.toggle("12-hour clock", "3:07 instead of 15:07", () -> c.chatStamp12h, on -> c.chatStamp12h = on);
+					f.toggle("AM / PM", "Add AM or PM after the time", () -> c.chatStampAmPm, on -> c.chatStampAmPm = on);
+					f.toggle("Seconds", "3:07:12 instead of 3:07", () -> c.chatStampSeconds, on -> c.chatStampSeconds = on);
+					f.toggle("Brackets", "[3:07] instead of 3:07", () -> c.chatStampBrackets, on -> c.chatStampBrackets = on);
+					f.toggle("Bold", "The time in bold", () -> c.chatStampBold, on -> c.chatStampBold = on);
+					f.toggle("Italic", "The time in italics", () -> c.chatStampItalic, on -> c.chatStampItalic = on);
+					f.section("Keep");
+					f.toggle("Keep chat when leaving", "The lines stay when you disconnect or change server", () -> c.chatKeep,
+							on -> c.chatKeep = on);
+					f.section("Mute");
+					f.note("Players whose lines never show, and words that hide any line with them. Separate with commas.");
+					chatField(f, "Muted players", "Steve, Alex", () -> c.chatMuted, v -> c.chatMuted = v);
+					chatField(f, "Hidden words", "spam, lag", () -> c.chatHiddenWords, v -> c.chatHiddenWords = v);
 				}));
 		out.add(new Mod("chathistory", "Chat History", "Search every line, filters, a second chat and a longer scrollback", "search",
 				Category.CHAT, "search find filter log scrollback unlimited keyword second chat")

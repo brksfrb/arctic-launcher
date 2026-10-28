@@ -2,8 +2,6 @@ package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.List;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.ChatComponent;
@@ -71,6 +69,41 @@ abstract class ChatComponentMixin {
 
 	@ModifyVariable(
 			//#if MC >= 26.1
+	/** Keep chat when leaving: the game clears the chat on disconnect; this lets it stay. */
+	@Inject(method = "clearMessages", at = @At("HEAD"), cancellable = true)
+	private void arctic$keep(CallbackInfo ci) {
+		ClientConfig c = ArcticClient.config();
+		if (c != null && c.chatKeep) {
+			ci.cancel();
+		}
+	}
+
+	/** Muted players and hidden words: the line never reaches the chat. */
+	@Inject(
+			//#if MC >= 26.1
+			method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/multiplayer/chat/GuiMessageSource;Lnet/minecraft/client/multiplayer/chat/GuiMessageTag;)V",
+			//#elif MC >= 1.19
+			method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/GuiMessageTag;)V",
+			//#else
+			method = "addMessage(Lnet/minecraft/network/chat/Component;I)V",
+			//#endif
+			at = @At("HEAD"),
+			cancellable = true)
+	//#if MC >= 26.1
+	private void arctic$mute(Component message, net.minecraft.network.chat.MessageSignature signature,
+			net.minecraft.client.multiplayer.chat.GuiMessageSource source, net.minecraft.client.multiplayer.chat.GuiMessageTag tag,
+			CallbackInfo ci) {
+	//#elif MC >= 1.19
+	private void arctic$mute(Component message, net.minecraft.network.chat.MessageSignature signature,
+			net.minecraft.client.GuiMessageTag tag, CallbackInfo ci) {
+	//#else
+	private void arctic$mute(Component message, int id, CallbackInfo ci) {
+	//#endif
+		if (ArcticClient.chatHidden(message.getString())) {
+			ci.cancel();
+		}
+	}
+
 			method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/multiplayer/chat/GuiMessageSource;Lnet/minecraft/client/multiplayer/chat/GuiMessageTag;)V",
 			//#elif MC >= 1.19
 			// Before 26.1 there's no separate GuiMessageSource: one 3-arg entry point.
@@ -121,9 +154,15 @@ abstract class ChatComponentMixin {
 			ArcticClient.platform().mentionSound();
 		}
 		if (c.chatTimestamps) {
-			String time = new SimpleDateFormat("HH:mm").format(new Date());
-			out = com.arcticlauncher.mod.Compat.empty()
-					.append(com.arcticlauncher.mod.Compat.literal("[" + time + "] ").withStyle(ChatFormatting.DARK_GRAY)).append(out);
+			net.minecraft.network.chat.MutableComponent stamp = com.arcticlauncher.mod.Compat
+					.literal(com.arcticlauncher.client.feature.ChatStamp.text(c)).withStyle(ChatFormatting.DARK_GRAY);
+			if (c.chatStampBold) {
+				stamp = stamp.withStyle(ChatFormatting.BOLD);
+			}
+			if (c.chatStampItalic) {
+				stamp = stamp.withStyle(ChatFormatting.ITALIC);
+			}
+			out = com.arcticlauncher.mod.Compat.empty().append(stamp).append(out);
 		}
 		return out;
 	}

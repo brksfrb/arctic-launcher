@@ -266,8 +266,17 @@ public final class ArcticClient {
 	private static final com.arcticlauncher.client.feature.AutoGg AUTO_GG = new com.arcticlauncher.client.feature.AutoGg();
 	private static final com.arcticlauncher.client.feature.AutoReplies AUTO_REPLIES = new com.arcticlauncher.client.feature.AutoReplies();
 
+	/** Should this chat line be dropped (a muted player, a hidden word)? */
+	public static boolean chatHidden(String text) {
+		return com.arcticlauncher.client.feature.ChatMute.hidden(text, config);
+	}
+
 	/** A chat line arrived (for Auto GG). */
 	public static void chatLine(String text) {
+		if (chatHidden(text)) {
+			// Muted lines leave no trace: not in the history, the search, Auto GG or Auto Text.
+			return;
+		}
 		AUTO_GG.onChat(text, config.autoGg, config.autoGgMessage);
 		AUTO_REPLIES.onChat(text, config.autoReply, config.autoReplies);
 		String server = platform == null ? null : platform.server();

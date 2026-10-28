@@ -205,6 +205,18 @@ public final class ClientConfig {
 	public String quickplayLast = "";
 	/** Auto Text: answers sent when a chat line contains a trigger. */
 	public boolean autoReply;
+	/** Chat Mute: players whose lines never show, and words that hide a line (comma-separated). */
+	public String chatMuted = "";
+	/** Timestamp spelling: 12-hour clock, AM/PM, seconds, [brackets], bold, italic. */
+	public boolean chatStamp12h;
+	public boolean chatStampAmPm;
+	public boolean chatStampSeconds;
+	public boolean chatStampBrackets = true;
+	public boolean chatStampBold;
+	public boolean chatStampItalic;
+	/** Keep the chat lines when you disconnect or change server. */
+	public boolean chatKeep;
+	public String chatHiddenWords = "";
 	/** The Items widget's list: item id (or part of it), optionally ":Label", separated by commas. */
 	public String countedItems = "totem_of_undying:Totems, ender_pearl:Pearls, golden_apple:Gapples";
 	public java.util.List<AutoReply> autoReplies = new java.util.ArrayList<AutoReply>();
@@ -372,6 +384,12 @@ public final class ClientConfig {
 		}
 		if (countedItems == null) {
 			countedItems = "totem_of_undying:Totems, ender_pearl:Pearls, golden_apple:Gapples";
+		}
+		if (chatMuted == null) {
+			chatMuted = "";
+		}
+		if (chatHiddenWords == null) {
+			chatHiddenWords = "";
 		}
 		if (autoReplies == null) {
 			autoReplies = new java.util.ArrayList<AutoReply>();

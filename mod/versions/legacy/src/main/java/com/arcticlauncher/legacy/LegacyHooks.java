@@ -319,8 +319,8 @@ public final class LegacyHooks {
 			ArcticClient.platform().mentionSound();
 		}
 		if (c.chatTimestamps) {
-			String time = new SimpleDateFormat("HH:mm").format(new Date());
-			out = new LiteralText("§8[" + time + "] §r").append(out);
+			out = new LiteralText("§8" + (c.chatStampBold ? "§l" : "") + (c.chatStampItalic ? "§o" : "")
+					+ com.arcticlauncher.client.feature.ChatStamp.text(c) + "§r").append(out);
 		}
 		return out;
 	}
