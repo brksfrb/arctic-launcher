@@ -438,11 +438,22 @@ final class ModCatalog {
 				.toggle(() -> c.lowFire, on -> c.lowFire = on));
 		if (p.oldAnimationsWork()) {
 			out.add(new Mod("oldanimations", "1.7 Animations", "The old PvP animations", "fire", Category.VISUAL, "blockhit block sword swing 1.7 old")
-					.toggle(() -> c.oldBlockHit, on -> c.oldBlockHit = on)
+					.toggle(() -> c.oldBlockHit || c.oldUseSwing || c.oldBow || c.oldSneak, on -> {
+						c.oldBlockHit = on;
+						c.oldUseSwing = on;
+						c.oldBow = on;
+						c.oldSneak = on;
+					})
 					.settings((host, f) -> {
-						f.section("Sword");
+						f.section("Hand");
 						f.toggle("Swing while blocking", "The sword swings when you hit while holding right-click", () -> c.oldBlockHit,
 								on -> c.oldBlockHit = on);
+						f.toggle("Swing while eating and drinking", "The hand swings while you use food, potions and a bow",
+								() -> c.oldUseSwing, on -> c.oldUseSwing = on);
+						f.toggle("Old bow", "The bow stretches along its own length as you draw it", () -> c.oldBow, on -> c.oldBow = on);
+						f.section("Camera");
+						f.toggle("Smooth sneaking", "The view sinks and rises when you sneak, not at once", () -> c.oldSneak,
+								on -> c.oldSneak = on);
 						f.note("Only what you see: blocking itself works as the server decides.");
 					}));
 		}

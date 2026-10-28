@@ -97,8 +97,11 @@ public final class ClientConfig {
 	/** Chat lines that say your name are marked, with a soft ping. */
 	public boolean chatMentions = true;
 	public boolean lowFire;
-	/** 1.7 animations: the sword swings while you block (1.8.9). */
+	/** 1.7 animations (1.8.9): the sword swings while you block; food and bows swing too; the bow stretches the 1.7 way; sneaking is smooth. */
 	public boolean oldBlockHit;
+	public boolean oldUseSwing;
+	public boolean oldBow;
+	public boolean oldSneak;
 	public boolean clearWeather;
 	/** Motion blur, and how strong (1 low to 4 max). */
 	public boolean motionBlur;
