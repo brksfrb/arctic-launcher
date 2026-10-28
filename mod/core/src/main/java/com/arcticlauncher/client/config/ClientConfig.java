@@ -288,6 +288,8 @@ public final class ClientConfig {
 	/** Particle Control: keep only this share (percent) of the particles. */
 	public boolean particleControl;
 	public int particleAmount = 50;
+	/** Particle kinds switched off (bit per {@code ParticleKinds.LABELS} entry). */
+	public int particleOff;
 	/** Ctrl+K opens the command palette (mods, servers, friends). */
 	public boolean commandPalette = true;
 	/** Saturation (the hidden part of hunger) drawn on the hunger bar. */
