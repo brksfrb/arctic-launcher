@@ -28,6 +28,9 @@ public final class LegacyHooks {
 	/** The camera last frame: {x, y, z, yaw, pitch}; null before the first. */
 	private static volatile double[] camera;
 
+	/** The held-item layer of players and mobs is drawing an item (see OldHeldLayerMixin). */
+	public static volatile boolean heldLayerActive;
+
 	private LegacyHooks() {}
 
 	/** Where the camera is this frame (called as the world's camera is set up). */

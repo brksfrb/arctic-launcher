@@ -102,6 +102,9 @@ public final class ClientConfig {
 	public boolean oldUseSwing;
 	public boolean oldBow;
 	public boolean oldSneak;
+	/** 1.7 item position: how flat items sit in the hand, in first and in third person (1.8.9). */
+	public boolean oldItemPosition;
+	public boolean oldThirdPerson;
 	public boolean clearWeather;
 	/** Motion blur, and how strong (1 low to 4 max). */
 	public boolean motionBlur;

@@ -114,7 +114,9 @@
 		"CustomPayloadHandlerMixin"<% } %><% if (svcCodec) { %>,
 		"CustomPayloadCodecMixin"<% } %><% if (outline) { %>,
 		"BlockOutlineMixin"<% } %><% if (visuals) { %>,
-		"MotionBlurMixin"<% } %><% if (itemPhysics) { %>,
+		"MotionBlurMixin",
+		"PostChainAccess",
+		"PostPassAccess"<% } %><% if (itemPhysics) { %>,
 		<% if (poseStack) { %>"ItemPhysicsMixin",<% } else { %>"ItemPhysicsOldMixin",<% } %>
 		"ItemEntityMotionMixin"<% } %><% if (itemPhysicsState) { %>,
 		"ItemEntityRenderStateMixin"<% } %><% if (replay) { %>,

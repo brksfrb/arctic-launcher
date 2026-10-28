@@ -438,11 +438,13 @@ final class ModCatalog {
 				.toggle(() -> c.lowFire, on -> c.lowFire = on));
 		if (p.oldAnimationsWork()) {
 			out.add(new Mod("oldanimations", "1.7 Animations", "The old PvP animations", "fire", Category.VISUAL, "blockhit block sword swing 1.7 old")
-					.toggle(() -> c.oldBlockHit || c.oldUseSwing || c.oldBow || c.oldSneak, on -> {
+					.toggle(() -> c.oldBlockHit || c.oldUseSwing || c.oldBow || c.oldSneak || c.oldItemPosition || c.oldThirdPerson, on -> {
 						c.oldBlockHit = on;
 						c.oldUseSwing = on;
 						c.oldBow = on;
 						c.oldSneak = on;
+						c.oldItemPosition = on;
+						c.oldThirdPerson = on;
 					})
 					.settings((host, f) -> {
 						f.section("Hand");
@@ -451,6 +453,10 @@ final class ModCatalog {
 						f.toggle("Swing while eating and drinking", "The hand swings while you use food, potions and a bow",
 								() -> c.oldUseSwing, on -> c.oldUseSwing = on);
 						f.toggle("Old bow", "The bow stretches along its own length as you draw it", () -> c.oldBow, on -> c.oldBow = on);
+						f.toggle("Item position", "Tools, swords and food sit in your hand the 1.7 way", () -> c.oldItemPosition,
+								on -> c.oldItemPosition = on);
+						f.toggle("Third person", "Players hold their items the 1.7 way, a blocking sword across the body",
+								() -> c.oldThirdPerson, on -> c.oldThirdPerson = on);
 						f.section("Camera");
 						f.toggle("Smooth sneaking", "The view sinks and rises when you sneak, not at once", () -> c.oldSneak,
 								on -> c.oldSneak = on);

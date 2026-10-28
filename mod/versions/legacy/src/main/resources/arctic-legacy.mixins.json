@@ -57,6 +57,8 @@
 		"HeldItemTweakMixin",
 		"OldAnimationsMixin",
 		"OldSneakMixin",
+		"OldItemPositionMixin",
+		"OldHeldLayerMixin",
 		"ClientPlayerDropMixin",
 		"ScreenMouseMixin",
 		"NetworkStateAccess",

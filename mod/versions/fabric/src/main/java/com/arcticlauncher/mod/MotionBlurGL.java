@@ -2,15 +2,21 @@ package com.arcticlauncher.mod;
 
 //#if MC < 26.1
 import com.arcticlauncher.client.ArcticClient;
-import com.arcticlauncher.client.MotionBlurTiming;
+import com.arcticlauncher.client.MotionBlurView;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import java.nio.IntBuffer;
 import java.nio.FloatBuffer;
+//#if MC >= 1.14
+import net.minecraft.client.Camera;
+//#else
+import net.minecraft.world.entity.Entity;
+//#endif
 import net.minecraft.client.Minecraft;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL12;
 import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL14;
 import org.lwjgl.opengl.GL20;
@@ -19,10 +25,10 @@ import org.lwjgl.opengl.GL33;
 
 /**
  * Motion blur before 26.1 (26.1+ uses a post effect in the client's pack): right after the world is
- * drawn, the previous frame is blended over the new one at the chosen strength, and the result is
- * kept for the next frame. Done with plain OpenGL on textures and framebuffers of its own, so it
- * doesn't depend on Minecraft's renderer (which changes nearly every version); every bit of GL state
- * it touches is put back, so Minecraft's state tracking stays right.
+ * drawn, a copy of the frame is smeared along the way the picture moved since the last frame (see
+ * {@link MotionBlurView}) and drawn back. Done with plain OpenGL on textures and framebuffers of its own,
+ * so it doesn't depend on Minecraft's renderer (which changes nearly every version); every bit of GL
+ * state it touches is put back, so Minecraft's state tracking stays right.
  */
 public final class MotionBlurGL {
 	/** GL_BLEND_COLOR (not among LWJGL's GL14 constants). */
@@ -30,15 +36,18 @@ public final class MotionBlurGL {
 
 	private static int width;
 	private static int height;
-	/** The previous frame. */
+	/** A copy of this frame, read from while the smeared one is drawn. */
 	private static int prevTexture;
 	private static int prevFramebuffer;
 	/** A framebuffer on the game's own frame texture (made for whichever texture is current). */
 	private static int mainFramebuffer;
 	private static int mainTexture;
-	private static boolean hasPrevious;
+	private static final MotionBlurView VIEW = new MotionBlurView();
 	private static int program;
-	private static int prevUniform;
+	private static int sceneUniform;
+	private static int toLastUniform;
+	private static int tanUniform;
+	private static int scaleUniform;
 	private static int vertexArray;
 	private static boolean broken;
 
@@ -54,25 +63,14 @@ public final class MotionBlurGL {
 	private static final class Samplers {
 		static final boolean SUPPORTED = GL.getCapabilities().OpenGL33;
 	}
-	private static int DEBUG_FRAMES = Boolean.getBoolean("arctic.blurdebug") ? 400 : 0;
-
 	private MotionBlurGL() {}
-
-	/** The centre pixel of a framebuffer, for -Darctic.blurdebug. */
-	private static String probe(int framebuffer) {
-		GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
-		java.nio.ByteBuffer px = BufferUtils.createByteBuffer(4);
-		GL11.glReadPixels(width / 2, height / 2, 1, 1, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, px);
-		return (px.get(0) & 255) + "," + (px.get(1) & 255) + "," + (px.get(2) & 255) + "," + (px.get(3) & 255);
-	}
 
 	/** After the world is drawn, before the HUD. */
 	public static void apply() {
 		ClientConfig c = ArcticClient.config();
 		Minecraft mc = Minecraft.getInstance();
 		if (c == null || !c.motionBlur || mc.level == null || broken || VULKAN_MOD || VulkanCompat.postBlur()) {
-			hasPrevious = false;
-			MotionBlurTiming.reset();
+			VIEW.reset();
 			return;
 		}
 		if (!GL.getCapabilities().OpenGL30) {
@@ -85,29 +83,50 @@ public final class MotionBlurGL {
 		if (texture <= 0) {
 			return;
 		}
+		float aspect = (float) target.width / Math.max(1, target.height);
+		//#if MC >= 1.21.11
+		Camera camera = mc.gameRenderer.getMainCamera();
+		float yaw = camera.yRot();
+		float pitch = camera.xRot();
+		//#elif MC >= 1.14
+		Camera camera = mc.gameRenderer.getMainCamera();
+		float yaw = camera.getYRot();
+		float pitch = camera.getXRot();
+		//#else
+		Entity view = mc.getCameraEntity();
+		if (view == null) {
+			return;
+		}
+		float partial = mc.getFrameTime();
+		float yaw = view.yRotO + (view.yRot - view.yRotO) * partial;
+		float pitch = view.xRotO + (view.xRot - view.xRotO) * partial;
+		//#endif
+		if (!VIEW.update(yaw, pitch, fovDegrees(mc), aspect, c.motionBlurStrength, System.nanoTime())) {
+			return;
+		}
 		Saved saved = Saved.read();
 		try {
 			prepare(target.width, target.height, texture);
-			String debug = DEBUG_FRAMES > 0 ? "now " + probe(mainFramebuffer) + " prev " + probe(prevFramebuffer) : null;
-			float frameMs = MotionBlurTiming.tick();
-			if (hasPrevious) {
-				blend(MotionBlurTiming.weight(c.motionBlurStrength, frameMs));
-			}
-			if (debug != null) {
-				DEBUG_FRAMES--;
-				ArcticMod.LOG.info("blurdebug {} out {} size {}x{} tex {}", debug, probe(mainFramebuffer), width, height, texture);
-			}
-			// Keep this frame for the next one.
+			// A copy of the frame to read from, while the smeared picture is drawn over the frame itself.
 			GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, mainFramebuffer);
 			GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, prevFramebuffer);
 			GL30.glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
-			hasPrevious = true;
+			smear();
 		} catch (RuntimeException e) {
 			broken = true;
 			ArcticMod.LOG.warn("motion blur: {}", e.toString());
 		} finally {
 			saved.restore();
 		}
+	}
+
+	/** The field of view the game is set to, in degrees (it can't see the sprint or zoom change on top). */
+	private static float fovDegrees(Minecraft mc) {
+		//#if MC >= 1.19
+		return mc.options.fov().get();
+		//#else
+		return (float) mc.options.fov;
+		//#endif
 	}
 
 	private static int colorTexture(RenderTarget target) {
@@ -129,8 +148,10 @@ public final class MotionBlurGL {
 			}
 			prevTexture = GL11.glGenTextures();
 			GL11.glBindTexture(GL11.GL_TEXTURE_2D, prevTexture);
-			GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST);
-			GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_NEAREST);
+			GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
+			GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+			GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
+			GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
 			GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, w, h, 0, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, (java.nio.ByteBuffer) null);
 			if (prevFramebuffer == 0) {
 				prevFramebuffer = GL30.glGenFramebuffers();
@@ -139,7 +160,6 @@ public final class MotionBlurGL {
 			GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, prevTexture, 0);
 			width = w;
 			height = h;
-			hasPrevious = false;
 		}
 		if (mainFramebuffer == 0) {
 			mainFramebuffer = GL30.glGenFramebuffers();
@@ -148,43 +168,50 @@ public final class MotionBlurGL {
 			GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, mainFramebuffer);
 			GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, texture, 0);
 			mainTexture = texture;
-			hasPrevious = false;
 		}
 	}
 
-	/** The previous frame over the new one: new * (1 - strength) + previous * strength. */
-	private static void blend(float strength) {
+	/** The copy of the frame, smeared along the movement and drawn over the frame. */
+	private static void smear() {
 		GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, mainFramebuffer);
 		GL11.glViewport(0, 0, width, height);
 		GL11.glDisable(GL11.GL_DEPTH_TEST);
 		GL11.glDisable(GL11.GL_CULL_FACE);
 		GL11.glDisable(GL11.GL_SCISSOR_TEST);
 		GL11.glDepthMask(false);
+		// The colour is replaced as it is; the frame's alpha stays (it isn't dependable).
 		GL11.glEnable(GL11.GL_BLEND);
-		// A constant blend: the frame textures' alpha isn't dependable. Destination alpha stays.
-		GL14.glBlendColor(0f, 0f, 0f, strength);
-		GL14.glBlendFuncSeparate(GL14.GL_CONSTANT_ALPHA, GL14.GL_ONE_MINUS_CONSTANT_ALPHA, GL11.GL_ZERO, GL11.GL_ONE);
+		GL14.glBlendFuncSeparate(GL11.GL_ONE, GL11.GL_ZERO, GL11.GL_ZERO, GL11.GL_ONE);
 		GL13.glActiveTexture(GL13.GL_TEXTURE0);
 		GL11.glBindTexture(GL11.GL_TEXTURE_2D, prevTexture);
 		// The game may leave a sampler object on unit 0 (1.21.x does): its mipmap filtering makes our
-		// texture, which has none, read as black, and the frame would be blended with black.
+		// texture, which has none, read as black.
 		if (Samplers.SUPPORTED) {
 			GL33.glBindSampler(0, 0);
 		}
-		//#if MC >= 1.17
-		// 1.17+ runs a core OpenGL 3.2 context: a fullscreen triangle with a tiny shader.
 		if (program == 0) {
 			program = makeProgram();
-			prevUniform = GL20.glGetUniformLocation(program, "Prev");
+			sceneUniform = GL20.glGetUniformLocation(program, "Scene");
+			toLastUniform = GL20.glGetUniformLocation(program, "ToLast");
+			tanUniform = GL20.glGetUniformLocation(program, "Tan");
+			scaleUniform = GL20.glGetUniformLocation(program, "Scale");
+			//#if MC >= 1.17
 			vertexArray = GL30.glGenVertexArrays();
+			//#endif
 		}
 		GL20.glUseProgram(program);
-		GL20.glUniform1i(prevUniform, 0);
+		GL20.glUniform1i(sceneUniform, 0);
+		FLOATS.clear();
+		FLOATS.put(VIEW.toLast).flip();
+		GL20.glUniformMatrix3fv(toLastUniform, false, FLOATS);
+		GL20.glUniform2f(tanUniform, VIEW.tanX, VIEW.tanY);
+		GL20.glUniform1f(scaleUniform, VIEW.scale);
+		//#if MC >= 1.17
+		// 1.17+ runs a core OpenGL 3.2 context: a fullscreen triangle.
 		GL30.glBindVertexArray(vertexArray);
 		GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, 3);
 		//#else
 		// Before 1.17 the context is a compatibility one: a plain textured quad.
-		GL20.glUseProgram(0);
 		GL11.glMatrixMode(GL11.GL_PROJECTION);
 		GL11.glPushMatrix();
 		GL11.glLoadIdentity();
@@ -224,8 +251,37 @@ public final class MotionBlurGL {
 		//#endif
 	}
 
-	//#if MC >= 1.17
+	/**
+	 * The smear: each pixel is the average of sixteen samples along the line it moved on since the last frame,
+	 * found by turning the pixel's view direction back by the camera's turn (see MotionBlurView). A little
+	 * noise per pixel moves the sixteen samples so they don't show as steps.
+	 */
+	private static final String SMEAR = "uniform sampler2D Scene;\n"
+			+ "uniform mat3 ToLast;\n"
+			+ "uniform vec2 Tan;\n"
+			+ "uniform float Scale;\n"
+			+ "const int SAMPLES = 16;\n"
+			+ "const float LONGEST = 0.25;\n"
+			+ "vec2 lastPosition(vec2 uv) {\n"
+			+ "  vec2 ndc = uv * 2.0 - 1.0;\n"
+			+ "  vec3 p = ToLast * vec3(ndc.x * Tan.x, ndc.y * Tan.y, -1.0);\n"
+			+ "  return vec2(p.x / -p.z / Tan.x, p.y / -p.z / Tan.y) * 0.5 + 0.5;\n"
+			+ "}\n"
+			+ "void main() {\n"
+			+ "  vec2 move = (lastPosition(uv) - uv) * Scale;\n"
+			+ "  float moved = length(move);\n"
+			+ "  if (moved > LONGEST) { move *= LONGEST / moved; }\n"
+			+ "  float noise = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n"
+			+ "  vec3 sum = vec3(0.0);\n"
+			+ "  for (int i = 0; i < SAMPLES; i++) {\n"
+			+ "    float t = (float(i) + noise) / float(SAMPLES) - 0.5;\n"
+			+ "    sum += SAMPLE(Scene, clamp(uv + move * t, 0.0, 1.0)).rgb;\n"
+			+ "  }\n"
+			+ "  FRAG_OUT(vec4(sum / float(SAMPLES), 1.0))\n"
+			+ "}\n";
+
 	private static int makeProgram() {
+		//#if MC >= 1.17
 		int vs = shader(GL20.GL_VERTEX_SHADER, "#version 150\n"
 				+ "out vec2 uv;\n"
 				+ "void main() {\n"
@@ -234,12 +290,24 @@ public final class MotionBlurGL {
 				+ "  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);\n"
 				+ "}\n");
 		int fs = shader(GL20.GL_FRAGMENT_SHADER, "#version 150\n"
-				+ "uniform sampler2D Prev;\n"
 				+ "in vec2 uv;\n"
 				+ "out vec4 color;\n"
+				+ "#define SAMPLE(s, c) texture(s, c)\n"
+				+ "#define FRAG_OUT(v) color = v;\n"
+				+ SMEAR);
+		//#else
+		int vs = shader(GL20.GL_VERTEX_SHADER, "#version 120\n"
+				+ "varying vec2 uv;\n"
 				+ "void main() {\n"
-				+ "  color = vec4(texture(Prev, uv).rgb, 1.0);\n"
+				+ "  uv = gl_MultiTexCoord0.xy;\n"
+				+ "  gl_Position = gl_Vertex;\n"
 				+ "}\n");
+		int fs = shader(GL20.GL_FRAGMENT_SHADER, "#version 120\n"
+				+ "varying vec2 uv;\n"
+				+ "#define SAMPLE(s, c) texture2D(s, c)\n"
+				+ "#define FRAG_OUT(v) gl_FragColor = v;\n"
+				+ SMEAR);
+		//#endif
 		int p = GL20.glCreateProgram();
 		GL20.glAttachShader(p, vs);
 		GL20.glAttachShader(p, fs);
@@ -261,7 +329,6 @@ public final class MotionBlurGL {
 		}
 		return s;
 	}
-	//#endif
 
 	private static void setEnabled(int cap, boolean on) {
 		if (on) {
