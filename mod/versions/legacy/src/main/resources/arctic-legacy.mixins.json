@@ -23,6 +23,7 @@
 		"WorldMixin",
 		"SoundVolumeMixin",
 		"MobSizeLegacyMixin",
+		"FogLegacyMixin",
 		"LightWorkMixin",
 		"PlayerListHudMixin",
 		"PlayerTierMixin",

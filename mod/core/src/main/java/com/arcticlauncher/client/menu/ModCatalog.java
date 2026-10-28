@@ -545,6 +545,15 @@ final class ModCatalog {
 					"chunk border grid f3 g slime lines")
 					.toggle(() -> c.chunkBorders, on -> c.chunkBorders = on));
 		}
+		if (p.fogWorks()) {
+			out.add(new Mod("fog", "Fog", "Push the fog away, or remove it", "weather", Category.VISUAL, "fog mist distance clear view")
+					.toggle(() -> c.fog, on -> c.fog = on)
+					.settings((host, f) -> {
+						f.section("Fog");
+						f.toggle("No fog at all", "Pushes the fog out of sight", () -> c.fogOff, on -> c.fogOff = on);
+						f.slider("Distance", () -> c.fogScale, v -> c.fogScale = v, 1.0, 10.0, 0.5, "%.1fx");
+					}));
+		}
 		out.add(new Mod("mobsize", "Mob Size", "Draw every creature but the players bigger or smaller (hitboxes stay as they are)", "target", Category.VISUAL,
 				"mob size scale big small tiny giant creatures animals")
 				.toggle(() -> c.mobSize, on -> c.mobSize = on)

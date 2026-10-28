@@ -376,6 +376,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
+	/** The Fog settings work on this version. */
+	default boolean fogWorks() {
+		return false;
+	}
+
 	/** The horse you ride or aim at: {speed in blocks per second, jump height in blocks, health, max health}, or null. */
 	default float[] horseStats() {
 		return null;

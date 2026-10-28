@@ -78,7 +78,8 @@
 		"WindowTitleMixin",
 		"MinecraftMaximizeMixin",
 		"EntityTurnMixin"<% if (features) { %>,
-<% if (cameraClass) { %>		"CameraMixin",
+<% if (fogHook) { %>		"FogMixin",
+<% } %><% if (cameraClass) { %>		"CameraMixin",
 <% } %>
 		"LightmapMixin",
 		"ChatComponentMixin",

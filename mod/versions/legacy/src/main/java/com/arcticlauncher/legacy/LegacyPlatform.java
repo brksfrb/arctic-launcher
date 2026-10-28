@@ -445,6 +445,11 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean fogWorks() {
+		return true;
+	}
+
+	@Override
 	public boolean horseStatsWorks() {
 		//#if MC < 1.11
 		return true;

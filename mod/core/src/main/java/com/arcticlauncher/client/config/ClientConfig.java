@@ -305,6 +305,10 @@ public final class ClientConfig {
 	public boolean chunkBorders;
 	/** Mob Size: creatures other than players drawn at this scale (0.25 to 3). */
 	public boolean mobSize;
+	/** Fog: stretch (1 to 10 times) or remove the fog. */
+	public boolean fog;
+	public boolean fogOff;
+	public double fogScale = 3.0;
 	public double mobSizeFactor = 1.5;
 	/** A pop-up with your coordinates when you die. */
 	public boolean deathNotice = true;
