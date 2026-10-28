@@ -125,9 +125,20 @@ pub fn flags(
     }
     // The client's jar is also a Java agent: it makes class loading take turns (so loading ahead
     // on another thread can't deadlock) and keeps the transformed classes. Without it neither is used.
-    let agent = game_dir.join("mods").join(crate::arctic_mod::FILE_NAME);
+    let mods = game_dir.join("mods");
+    let agent = mods.join(crate::arctic_mod::FILE_NAME);
     if !agent.is_file() || is_off(game_dir) {
         return Vec::new();
+    }
+    // A damaged jar (cut off, or taken by a virus scanner) makes the JVM stop before the game
+    // starts: put it in again, and without the agent if that doesn't help either.
+    if !crate::arctic_mod::jar_usable(&agent) {
+        log::warn!("{} is damaged; writing it again", agent.display());
+        if crate::arctic_mod::rewrite(&mods, game_version).is_err()
+            || !crate::arctic_mod::jar_usable(&agent)
+        {
+            return Vec::new();
+        }
     }
     let dir = game_dir.join(DIR);
     if fs::create_dir_all(&dir).is_err() {
