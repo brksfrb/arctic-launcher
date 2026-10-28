@@ -34,6 +34,15 @@ abstract class ChatHudMixin {
 		return c == null ? vanilla : c.chatHistory;
 	}
 
+	/** Hide the chat: none of its lines are drawn. */
+	@Inject(method = "render", at = @At("HEAD"), cancellable = true)
+	private void arctic$hide(CallbackInfo ci) {
+		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
+		if (c != null && c.chatOff) {
+			ci.cancel();
+		}
+	}
+
 	/** Keep chat when leaving: the game clears the chat on disconnect; this lets it stay. */
 	@Inject(method = {"clear()V", "clear(Z)V"}, at = @At("HEAD"), cancellable = true, require = 1)
 	private void arctic$keep(CallbackInfo ci) {

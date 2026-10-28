@@ -357,6 +357,12 @@ final class ModCatalog {
 					f.section("Amount");
 					f.stepper("Show", () -> c.particleAmount, v -> c.particleAmount = (int) v, 0, 100, 10, "%.0f%%");
 					f.note("100% is the game's own amount; 0% shows none.");
+					f.section("Kinds (off = never shown)");
+					for (int k = 0; k < com.arcticlauncher.client.feature.ParticleKinds.LABELS.length; k++) {
+						final int bit = 1 << k;
+						f.toggle(com.arcticlauncher.client.feature.ParticleKinds.LABELS[k], "",
+								() -> (c.particleOff & bit) == 0, on -> c.particleOff = on ? c.particleOff & ~bit : c.particleOff | bit);
+					}
 				}));
 		out.add(new Mod("helditem", "Held Item", "Move and resize your hands and the item you hold", "helditem",
 				Category.VISUAL, "hand item position size view model offset")
@@ -592,6 +598,9 @@ final class ModCatalog {
 					f.toggle("Brackets", "[3:07] instead of 3:07", () -> c.chatStampBrackets, on -> c.chatStampBrackets = on);
 					f.toggle("Bold", "The time in bold", () -> c.chatStampBold, on -> c.chatStampBold = on);
 					f.toggle("Italic", "The time in italics", () -> c.chatStampItalic, on -> c.chatStampItalic = on);
+					f.section("Show");
+					f.toggle("Hide the chat", "No chat lines on screen (you can still type, and the history keeps them)", () -> c.chatOff,
+							on -> c.chatOff = on);
 					f.section("Keep");
 					f.toggle("Keep chat when leaving", "The lines stay when you disconnect or change server", () -> c.chatKeep,
 							on -> c.chatKeep = on);

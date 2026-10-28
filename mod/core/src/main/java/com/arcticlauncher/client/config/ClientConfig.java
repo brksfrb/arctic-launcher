@@ -216,6 +216,8 @@ public final class ClientConfig {
 	public boolean chatStampItalic;
 	/** Keep the chat lines when you disconnect or change server. */
 	public boolean chatKeep;
+	/** Hide the chat lines on screen (messages still arrive, the history keeps them). */
+	public boolean chatOff;
 	/** Stacking: only lines within this many seconds of each other, and not blank lines or dividers. */
 	public boolean chatStackTimed;
 	public int chatStackSeconds = 10;

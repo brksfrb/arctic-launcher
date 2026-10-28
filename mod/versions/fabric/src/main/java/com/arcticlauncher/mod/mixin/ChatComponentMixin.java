@@ -69,6 +69,15 @@ abstract class ChatComponentMixin {
 	public void rescaleChat() {}
 	//#endif
 
+	/** Hide the chat: none of its lines are drawn. */
+	@Inject(method = "render", at = @At("HEAD"), cancellable = true)
+	private void arctic$hide(CallbackInfo ci) {
+		ClientConfig c = ArcticClient.config();
+		if (c != null && c.chatOff) {
+			ci.cancel();
+		}
+	}
+
 	/** Keep chat when leaving: the game clears the chat on disconnect; this lets it stay. */
 	@Inject(method = "clearMessages", at = @At("HEAD"), cancellable = true)
 	private void arctic$keep(CallbackInfo ci) {
