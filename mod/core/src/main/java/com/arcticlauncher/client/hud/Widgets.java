@@ -19,6 +19,9 @@ final class Widgets {
 			{"totem_of_undying", "Totems"}, {"ender_pearl", "Pearls"}, {"golden_apple", "Gapples"},
 	};
 
+	/** Item id part → label, for the Cooldowns widget. */
+	private static final String[][] COOLDOWNS = {{"ender_pearl", "Pearl"}, {"chorus_fruit", "Chorus"}, {"wind_charge", "Wind"}, {"shield", "Shield"}};
+
 	private Widgets() {}
 
 	/** The Items widget's list from the settings: {id part, label}. */
@@ -239,6 +242,21 @@ final class Widgets {
 				return out.length() == 0 ? (preview ? "Totems 2  Pearls 16" : "--") : out.toString();
 			}
 		});
+		if (platform().cooldownsWork()) {
+			all.add(new TextWidget("cooldowns", "Cooldowns", "Ender pearl, chorus fruit, wind charge and shield cooldowns", false) {
+				@Override
+				protected String value(boolean preview) {
+					StringBuilder out = new StringBuilder();
+					for (String[] kind : COOLDOWNS) {
+						float left = platform().cooldown(kind[0]);
+						if (left > 0f) {
+							out.append(out.length() == 0 ? "" : "  ").append(kind[1]).append(' ').append(Math.round(left * 100)).append('%');
+						}
+					}
+					return out.length() == 0 ? (preview ? "Pearl 60%" : "--") : out.toString();
+				}
+			});
+		}
 		if (platform().horseStatsWorks()) {
 			all.add(new TextWidget("horse", "Horse stats", "Speed and jump height of the horse you ride or aim at", false) {
 				@Override

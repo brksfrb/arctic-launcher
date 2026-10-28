@@ -366,6 +366,16 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	}
 
 	/** Chunk Borders can show the chunk edges: the game has its own F3+G drawing on this version. */
+	/** How much of the item cooldown of a carried item (id part) is left, 0 to 1; -1 when you don't carry it. */
+	default float cooldown(String idPart) {
+		return -1f;
+	}
+
+	/** Item cooldowns exist and can be read on this version (Fabric 1.14 and newer). */
+	default boolean cooldownsWork() {
+		return false;
+	}
+
 	/** The horse you ride or aim at: {speed in blocks per second, jump height in blocks, health, max health}, or null. */
 	default float[] horseStats() {
 		return null;

@@ -87,6 +87,7 @@
 		"LevelWeatherMixin",
 		"SoundVolumeMixin",
 		"TitleHideMixin",
+		"MobSizeMixin",
 		"OfflineLanMixin",
 		"TimeLockMixin",
 		"MultiPlayerGameModeMixin"<% } %><% if (oldCamera) { %>,

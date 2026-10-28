@@ -22,6 +22,7 @@
 		"ClientPlayerInteractionManagerMixin",
 		"WorldMixin",
 		"SoundVolumeMixin",
+		"MobSizeLegacyMixin",
 		"LightWorkMixin",
 		"PlayerListHudMixin",
 		"PlayerTierMixin",

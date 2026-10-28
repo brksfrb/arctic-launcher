@@ -90,6 +90,28 @@ final class WorldStats {
 		return n;
 	}
 
+	/** What is left of the cooldown of a carried item (0 to 1), or -1 when you don't carry it. */
+	static float cooldown(String idPart) {
+		//#if MC >= 1.14
+		LocalPlayer p = Minecraft.getInstance().player;
+		if (p == null) {
+			return -1f;
+		}
+		Inventory inventory = Compat.inventory(p);
+		for (int i = 0; i < inventory.getContainerSize(); i++) {
+			ItemStack stack = inventory.getItem(i);
+			if (!stack.isEmpty() && BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath().contains(idPart)) {
+				//#if MC >= 1.21.2
+				return p.getCooldowns().getCooldownPercent(stack, 0f);
+				//#else
+				return p.getCooldowns().getCooldownPercent(stack.getItem(), 0f);
+				//#endif
+			}
+		}
+		//#endif
+		return -1f;
+	}
+
 	/** Arrows by kind (their name tells tipped kinds apart): {stack, count}. */
 	static java.util.List<Object[]> arrows() {
 		LocalPlayer p = Minecraft.getInstance().player;

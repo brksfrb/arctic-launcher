@@ -303,6 +303,9 @@ public final class ClientConfig {
 	public boolean hitboxes;
 	/** Chunk Borders: the chunk edges as lines, like F3+G in one click. */
 	public boolean chunkBorders;
+	/** Mob Size: creatures other than players drawn at this scale (0.25 to 3). */
+	public boolean mobSize;
+	public double mobSizeFactor = 1.5;
 	/** A pop-up with your coordinates when you die. */
 	public boolean deathNotice = true;
 	/** New screenshots go straight onto the clipboard. */

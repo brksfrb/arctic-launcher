@@ -63,6 +63,7 @@ final class ModCatalog {
 		widgets("PvP", "cps", "keystrokes", "armor", "effects", "arrows", "items", "held", "pearl", "blocking", "falldamage", "target");
 		widgets("World", "coords", "direction", "speed", "biome", "light", "chunk", "day", "worldtime", "clock", "date", "compass",
 				"minimap", "death", "stopwatch", "aimed", "horse");
+		widgets("PvP", "cooldowns");
 		for (String id : new String[] {"combatfx", "slotlocks", "invsearch", "shulkerpeek", "particles", "helditem", "palette",
 				"portalscreens", "tnttimer", "ownnametag", "ofcapes", "nohurtcam", "tabping", "badgetags", "hud.cpu", "hud.syscpu", "hud.sysram", "hud.alloc",
 				"hud.gpu", "hud.vram", "hud.frametime", "hud.lows", "hud.blocking", "hud.falldamage", "hud.pearl"}) {
@@ -544,6 +545,13 @@ final class ModCatalog {
 					"chunk border grid f3 g slime lines")
 					.toggle(() -> c.chunkBorders, on -> c.chunkBorders = on));
 		}
+		out.add(new Mod("mobsize", "Mob Size", "Draw every creature but the players bigger or smaller (hitboxes stay as they are)", "target", Category.VISUAL,
+				"mob size scale big small tiny giant creatures animals")
+				.toggle(() -> c.mobSize, on -> c.mobSize = on)
+				.settings((host, f) -> {
+					f.section("Size");
+					f.slider("Scale", () -> c.mobSizeFactor, v -> c.mobSizeFactor = v, 0.25, 3.0, 0.05, "%.2fx");
+				}));
 		out.add(new Mod("titles", "Hide Titles", "The big title and subtitle in the middle of the screen never show", "fire", Category.VISUAL,
 				"title subtitle screen text announcement hide")
 				.toggle(() -> c.hideTitles, on -> c.hideTitles = on));
