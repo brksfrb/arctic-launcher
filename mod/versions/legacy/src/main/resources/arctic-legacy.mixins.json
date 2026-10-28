@@ -55,6 +55,7 @@
 		"NoHurtCamLegacyMixin",
 		"FramerateLimitLegacyMixin",
 		"HeldItemTweakMixin",
+		"OldAnimationsMixin",
 		"ClientPlayerDropMixin",
 		"ScreenMouseMixin",
 		"NetworkStateAccess",

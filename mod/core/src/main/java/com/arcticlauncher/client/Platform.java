@@ -350,6 +350,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
+	/** The 1.7 animations (swing while blocking) work on this version: only where swords block (1.8.9). */
+	default boolean oldAnimationsWork() {
+		return false;
+	}
+
 	/** Motion blur works on this version. */
 	default boolean motionBlurWorks() {
 		return false;

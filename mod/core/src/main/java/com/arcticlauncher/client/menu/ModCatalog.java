@@ -436,6 +436,16 @@ final class ModCatalog {
 				.toggle(() -> c.clearWeather, on -> c.clearWeather = on));
 		out.add(new Mod("fire", "Low Fire", "A shorter fire overlay when you're burning", "fire", Category.VISUAL, "burning overlay")
 				.toggle(() -> c.lowFire, on -> c.lowFire = on));
+		if (p.oldAnimationsWork()) {
+			out.add(new Mod("oldanimations", "1.7 Animations", "The old PvP animations", "fire", Category.VISUAL, "blockhit block sword swing 1.7 old")
+					.toggle(() -> c.oldBlockHit, on -> c.oldBlockHit = on)
+					.settings((host, f) -> {
+						f.section("Sword");
+						f.toggle("Swing while blocking", "The sword swings when you hit while holding right-click", () -> c.oldBlockHit,
+								on -> c.oldBlockHit = on);
+						f.note("Only what you see: blocking itself works as the server decides.");
+					}));
+		}
 		if (p.motionBlurWorks()) {
 			out.add(new Mod("motionblur", "Motion Blur", "A soft blur as you move and turn", "motionblur", Category.VISUAL, "smooth trail")
 					.toggle(() -> c.motionBlur, on -> c.motionBlur = on)

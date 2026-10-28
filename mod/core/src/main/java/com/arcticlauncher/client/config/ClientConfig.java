@@ -97,6 +97,8 @@ public final class ClientConfig {
 	/** Chat lines that say your name are marked, with a soft ping. */
 	public boolean chatMentions = true;
 	public boolean lowFire;
+	/** 1.7 animations: the sword swings while you block (1.8.9). */
+	public boolean oldBlockHit;
 	public boolean clearWeather;
 	/** Motion blur, and how strong (1 low to 4 max). */
 	public boolean motionBlur;

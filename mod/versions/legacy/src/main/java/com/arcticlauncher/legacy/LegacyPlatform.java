@@ -405,6 +405,15 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean oldAnimationsWork() {
+		//#if MC < 1.9
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	@Override
 	public boolean motionBlurWorks() {
 		return true;
 	}
