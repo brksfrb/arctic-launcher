@@ -113,7 +113,7 @@ impl Tasks {
         let started = std::time::Instant::now();
         while started.elapsed() < DISCORD_WAIT {
             std::thread::sleep(DISCORD_POLL);
-            if let Some(answer) = friends::discord_result(&base, &login.id)? {
+            if let Some(answer) = friends::discord_result(&base, &login)? {
                 let name = answer["discord"].as_str().unwrap_or("your Discord account");
                 return Ok(format!("Discord linked: {name}"));
             }

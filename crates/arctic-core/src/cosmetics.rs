@@ -962,7 +962,7 @@ pub fn discord_restore_poll(
     account: &Account,
     restore: &DiscordRestore,
 ) -> Result<bool> {
-    let Some(answer) = crate::friends::discord_result(base, &restore.login.id)? else {
+    let Some(answer) = crate::friends::discord_result(base, &restore.login)? else {
         return Ok(false);
     };
     let session: Session = serde_json::from_value(answer)?;

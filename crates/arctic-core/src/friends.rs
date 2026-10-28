@@ -240,6 +240,8 @@ pub fn new_recovery(base: &str, token: &str) -> Result<String> {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct DiscordLogin {
     pub id: String,
+    /// The secret this PC collects the result with (the browser never sees it).
+    pub poll: String,
     pub url: String,
 }
 
@@ -275,9 +277,10 @@ pub fn discord_restore_start(base: &str, name: &str, key: &str) -> Result<Discor
 }
 
 /// How a Discord login ended: `None` while the browser is still at it.
-pub fn discord_result(base: &str, id: &str) -> Result<Option<Value>> {
+pub fn discord_result(base: &str, login: &DiscordLogin) -> Result<Option<Value>> {
     let mut resp = agent()
-        .get(&format!("{base}/v1/discord/result/{id}"))
+        .get(&format!("{base}/v1/discord/result/{}", login.id))
+        .header("X-Arctic-Poll", &login.poll)
         .config()
         .http_status_as_error(false)
         .build()
