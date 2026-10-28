@@ -148,9 +148,6 @@ abstract class ChatComponentMixin {
 				//#endif
 			}
 			out = message.copy().append(com.arcticlauncher.mod.Compat.literal(" (x" + arctic$repeats + ")").withStyle(ChatFormatting.GRAY));
-		} else {
-			arctic$lastText = text;
-			arctic$repeats = 1;
 		}
 		if (c.chatMentions && com.arcticlauncher.client.feature.Mentions.mentions(text, ArcticClient.platform().playerName())) {
 			// Side by side under a plain parent: as the parent, the marker's color
