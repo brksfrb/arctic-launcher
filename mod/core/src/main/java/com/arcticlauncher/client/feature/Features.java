@@ -38,6 +38,8 @@ public final class Features {
 	private long lastFrame;
 
 	private boolean freelook;
+	/** Snaplook: held, the camera swings round to face you in third person (the player doesn't turn). */
+	private boolean snap;
 	/** The camera is in third person for your emote (see {@link #emoteView}). */
 	private boolean emoteView;
 	/** The server we last said bans Freelook (said once per server). */
@@ -90,6 +92,11 @@ public final class Features {
 		}
 		if (wantLook != freelook) {
 			setFreelook(wantLook);
+		}
+		boolean wantSnap = inGame && !freelook && config.snaplookEnabled && down(config.snaplookKey);
+		if (wantSnap != snap) {
+			snap = wantSnap;
+			platform.setThirdPerson(snap);
 		}
 		emoteView(screenOpen);
 		boolean fullbrightDown = inGame && down(config.fullbrightKey);
@@ -316,7 +323,7 @@ public final class Features {
 	// ---- Freelook --------------------------------------------------------------
 
 	public boolean freelook() {
-		return freelook;
+		return freelook || snap;
 	}
 
 	/** Mouse movement while freelooking turns the camera, not the player. */
@@ -330,11 +337,13 @@ public final class Features {
 	}
 
 	public float lookYaw() {
-		return lookYaw;
+		double[] p = snap && !freelook ? platform.position() : null;
+		return p != null ? (float) p[3] + 180f : lookYaw;
 	}
 
 	public float lookPitch() {
-		return lookPitch;
+		double[] p = snap && !freelook ? platform.position() : null;
+		return p != null ? -(float) p[4] : lookPitch;
 	}
 
 	// ---- Fullbright ------------------------------------------------------------

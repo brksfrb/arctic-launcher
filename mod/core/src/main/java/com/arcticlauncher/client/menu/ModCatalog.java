@@ -54,7 +54,7 @@ final class ModCatalog {
 	static {
 		group(Category.COMBAT, "combatfx", "tnttimer", "hitboxes", "durability", "hitcolor");
 		group(Category.INVENTORY, "slotlocks", "invsearch", "shulkerpeek");
-		group(Category.MOVEMENT, "zoom", "freelook", "sprint", "sneak", "portalscreens", "controller");
+		group(Category.MOVEMENT, "zoom", "freelook", "snaplook", "sprint", "sneak", "portalscreens", "controller");
 		group(Category.TOOLS, "quickplay", "waypoints", "screenshots", "replays", "death", "leave", "reconnect");
 		group(Category.PLAYERS, "pingtags", "badgetags", "ownnametag", "ofcapes", "tabping", "tabglow", "tiers");
 		widgets("Performance", "fps", "ping", "tps", "frametime", "lows", "cpu", "syscpu", "sysram", "alloc", "gpu", "vram", "memory",
@@ -207,6 +207,13 @@ final class ModCatalog {
 					f.section("Key");
 					f.key("Freelook key", "Hold it to look around", Form.key(() -> c.freelookKey, k -> c.freelookKey = k));
 					f.note("Some servers (like Hypixel) don't allow it; it stays off there.");
+				}));
+		out.add(new Mod("snaplook", "Snaplook", "Hold a key to see yourself from the front, then let go", "freelook", Category.GAMEPLAY,
+				"front view third person behind look back mirror")
+				.toggle(() -> c.snaplookEnabled, on -> c.snaplookEnabled = on)
+				.settings((host, f) -> {
+					f.section("Key");
+					f.key("Snaplook key", "Hold it to see yourself from the front", Form.key(() -> c.snaplookKey, k -> c.snaplookKey = k));
 				}));
 		out.add(new Mod("portalscreens", "Portal Screens", "Keep the inventory, chat and menus open while you stand in a nether portal", "portalscreens",
 				Category.GAMEPLAY, "nether portal gui inventory chat menu close screen")

@@ -69,6 +69,9 @@ public final class ClientConfig {
 	/** The Compass widget's middle tick (ARGB; 0 = the menu's accent color). */
 	public int compassPointer;
 	public String freelookKey = "key.keyboard.left.alt";
+	/** Snaplook: hold the key to see yourself from the front (the player keeps looking where they were). */
+	public boolean snaplookEnabled;
+	public String snaplookKey = "key.keyboard.unknown";
 	public String fullbrightKey = "key.keyboard.unknown";
 	/** Opens the emote wheel. */
 	public String emoteKey = "key.keyboard.b";
@@ -344,6 +347,9 @@ public final class ClientConfig {
 		debugValueColor = Math.max(0, Math.min(7, debugValueColor));
 		zoomAnimation = Math.max(0, Math.min(ZOOM_CURVES.length - 1, zoomAnimation));
 		zoomDurationMs = Math.max(0, Math.min(1500, zoomDurationMs));
+		if (snaplookKey == null) {
+			snaplookKey = "key.keyboard.unknown";
+		}
 		if (freelookKey == null) {
 			freelookKey = "key.keyboard.left.alt";
 		}
