@@ -31,6 +31,16 @@ import net.minecraft.world.effect.MobEffect;
  * reads the same everywhere. Mixin descriptors that differ live here too.
  */
 public final class Compat {
+
+	/** The registry path of a particle ("smoke", "flame", …), or null. */
+	public static String particlePath(net.minecraft.core.particles.ParticleOptions options) {
+		//#if MC >= 1.19.3
+		var id = net.minecraft.core.registries.BuiltInRegistries.PARTICLE_TYPE.getKey(options.getType());
+		//#else
+		net.minecraft.resources.ResourceLocation id = net.minecraft.core.Registry.PARTICLE_TYPE.getKey(options.getType());
+		//#endif
+		return id == null ? null : id.getPath();
+	}
 	/** GuiGraphics.blitSprite(pipeline, sprite, x, y, w, h, color). */
 	//#if MC >= 26.3
 	public static final String BLIT_SPRITE_TINTED = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;blitSprite(Lcom/mojang/renderpearl/api/pipeline/RenderPipeline;Lnet/minecraft/resources/Identifier;IIIII)V";

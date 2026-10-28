@@ -349,6 +349,12 @@ final class ModCatalog {
 					f.stepper("Right / left", () -> c.heldX, v -> c.heldX = (int) v, -50, 50, 5, "%.0f");
 					f.stepper("Up / down", () -> c.heldY, v -> c.heldY = (int) v, -50, 50, 5, "%.0f");
 					f.stepper("Away / closer", () -> c.heldZ, v -> c.heldZ = (int) v, -50, 50, 5, "%.0f");
+					f.section("Kinds (off = never shown)");
+					for (int k = 0; k < com.arcticlauncher.client.feature.ParticleKinds.LABELS.length; k++) {
+						final int bit = 1 << k;
+						f.toggle(com.arcticlauncher.client.feature.ParticleKinds.LABELS[k], "",
+								() -> (c.particleOff & bit) == 0, on -> c.particleOff = on ? c.particleOff & ~bit : c.particleOff | bit);
+					}
 					f.section("Size");
 					f.stepper("Size", () -> c.heldScale, v -> c.heldScale = (int) v, 30, 150, 10, "%.0f%%");
 					f.note("Look at your hand in the game to see each change. 0 and 100% are the game's own.");
