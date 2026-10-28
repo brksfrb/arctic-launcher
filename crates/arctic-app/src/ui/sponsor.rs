@@ -13,6 +13,9 @@ use crate::widgets;
 
 const NAME: &str = "Flash Hosting";
 const URL: &str = "https://flashhosting.net";
+/// The sidebar row's height and the gap the nav keeps above it.
+const SIDEBAR_ROW: f32 = 30.0;
+const SIDEBAR_GAP: f32 = 6.0;
 const PITCH: &str = "Minecraft servers that stay up 24/7, priced by player slots.";
 
 impl ArcticApp {
@@ -21,9 +24,13 @@ impl ArcticApp {
         if !self.settings.show_sponsor {
             return;
         }
+        // A short window: the menu comes first, so the row goes instead of painting over About.
+        if ui.available_height() < SIDEBAR_ROW + SIDEBAR_GAP {
+            return;
+        }
         let p = self.palette();
         let (rect, response) =
-            ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::click());
+            ui.allocate_exact_size(vec2(ui.available_width(), SIDEBAR_ROW), Sense::click());
         let hovered = response.hovered();
         if hovered {
             ui.painter()
