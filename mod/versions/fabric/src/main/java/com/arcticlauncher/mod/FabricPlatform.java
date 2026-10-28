@@ -1312,6 +1312,15 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean chunkBordersWorks() {
+		//#if MC >= 1.14
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	@Override
 	public boolean itemPhysicsWorks() {
 		return true;
 	}

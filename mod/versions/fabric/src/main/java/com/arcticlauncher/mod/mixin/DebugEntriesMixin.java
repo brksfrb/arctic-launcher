@@ -24,6 +24,9 @@ abstract class DebugEntriesMixin {
 		if (config != null && config.hitboxes && DebugScreenEntries.ENTITY_HITBOXES.equals(entry)) {
 			cir.setReturnValue(true);
 		}
+		if (config != null && config.chunkBorders && DebugScreenEntries.CHUNK_BORDERS.equals(entry)) {
+			cir.setReturnValue(true);
+		}
 	}
 }
 //#endif

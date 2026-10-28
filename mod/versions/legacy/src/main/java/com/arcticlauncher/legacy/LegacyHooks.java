@@ -103,6 +103,37 @@ public final class LegacyHooks {
 		}
 	}
 
+	private static boolean chunkBordersOurs;
+
+	/** Chunk Borders: the game's F3+G (1.10 and newer), switched on while the switch is on. */
+	private static void syncChunkBorders() {
+		//#if MC >= 1.10
+		if (ArcticClient.config() == null) {
+			return;
+		}
+		boolean want = ArcticClient.config().chunkBorders;
+		if (!want && !chunkBordersOurs) {
+			return;
+		}
+		net.minecraft.client.render.debug.DebugRenderer debug = MinecraftClient.getInstance().debugRenderer;
+		if (debug == null) {
+			return;
+		}
+		// The game only offers "toggle" (it returns the new state): toggling twice reads the state and changes nothing.
+		boolean shown = !debug.toggleChunkBorders();
+		debug.toggleChunkBorders();
+		if (want && !shown) {
+			debug.toggleChunkBorders();
+			chunkBordersOurs = true;
+		} else if (!want && chunkBordersOurs) {
+			if (shown) {
+				debug.toggleChunkBorders();
+			}
+			chunkBordersOurs = false;
+		}
+		//#endif
+	}
+
 	private static boolean hitboxesOurs;
 
 	/** The Hitboxes mod: the game's F3+B flag, set while the switch is on (and only unset if this set it). */
@@ -184,6 +215,7 @@ public final class LegacyHooks {
 		ArcticLegacy.PLATFORM.tick();
 		syncWindowSize();
 		syncHitboxes();
+		syncChunkBorders();
 		com.arcticlauncher.legacy.replay.LegacyReplayRecording.tick();
 		ArcticClient.tick(screenOpen);
 	}

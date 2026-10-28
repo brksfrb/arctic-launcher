@@ -365,6 +365,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
+	/** Chunk Borders can show the chunk edges: the game has its own F3+G drawing on this version. */
+	default boolean chunkBordersWorks() {
+		return false;
+	}
+
 	/** Item physics works on this version. */
 	default boolean itemPhysicsWorks() {
 		return false;

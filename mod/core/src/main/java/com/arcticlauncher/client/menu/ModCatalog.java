@@ -539,6 +539,11 @@ final class ModCatalog {
 						f.swatches("Hit color", HIT_COLORS, () -> 0xFF000000 | c.hitColor, v -> c.hitColor = v & 0xFFFFFF);
 					}));
 		}
+		if (p.chunkBordersWorks()) {
+			out.add(new Mod("chunkborders", "Chunk Borders", "The chunk edges drawn as lines, like F3+G in one click", "target", Category.GAMEPLAY,
+					"chunk border grid f3 g slime lines")
+					.toggle(() -> c.chunkBorders, on -> c.chunkBorders = on));
+		}
 		out.add(new Mod("titles", "Hide Titles", "The big title and subtitle in the middle of the screen never show", "fire", Category.VISUAL,
 				"title subtitle screen text announcement hide")
 				.toggle(() -> c.hideTitles, on -> c.hideTitles = on));

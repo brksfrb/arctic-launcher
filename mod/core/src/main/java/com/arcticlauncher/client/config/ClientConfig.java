@@ -301,6 +301,8 @@ public final class ClientConfig {
 	public boolean saturationBar;
 	/** Every entity's hitbox box drawn (like F3+B), from one switch. */
 	public boolean hitboxes;
+	/** Chunk Borders: the chunk edges as lines, like F3+G in one click. */
+	public boolean chunkBorders;
 	/** A pop-up with your coordinates when you die. */
 	public boolean deathNotice = true;
 	/** New screenshots go straight onto the clipboard. */
