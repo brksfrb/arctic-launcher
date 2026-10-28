@@ -245,7 +245,12 @@ pub struct DiscordLogin {
 
 /// Start linking this profile to a Discord account.
 pub fn discord_link_start(base: &str, token: &str) -> Result<DiscordLogin> {
-    json_of(call("POST", &format!("{base}/v1/discord/link"), token, None)?)
+    json_of(call(
+        "POST",
+        &format!("{base}/v1/discord/link"),
+        token,
+        None,
+    )?)
 }
 
 /// Take the Discord account off this profile.

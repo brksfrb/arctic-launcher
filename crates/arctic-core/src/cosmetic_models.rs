@@ -321,7 +321,9 @@ mod tests {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../arctic-cosmetics/assets/cosmetics");
         // The cosmetics live with the server, which is not part of this repository.
-        let Ok(entries) = std::fs::read_dir(&dir) else { return };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            return;
+        };
         let mut models = 0;
         for entry in entries {
             let path = entry.unwrap().path();
