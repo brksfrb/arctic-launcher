@@ -11,7 +11,7 @@ layout(std140) uniform MotionBlurConfig {
     vec4 ToLast0;
     vec4 ToLast1;
     vec4 ToLast2;
-    // tan(fov / 2) across, up, and how much of a frame's movement is smeared.
+    // tan(fov / 2) across, up, how much of a frame's movement is smeared, and the stretch from the middle.
     vec4 Params;
 };
 
@@ -25,12 +25,12 @@ vec2 lastPosition(vec2 at) {
 }
 
 void main() {
-    if (Params.z <= 0.0) {
+    if (Params.z <= 0.0 && Params.w <= 0.0) {
         fragColor = vec4(texture(InSampler, texCoord).rgb, 1.0);
         return;
     }
     // Where this pixel was in the last frame, turned back by the camera's turn: the smear runs along it.
-    vec2 move = (lastPosition(texCoord) - texCoord) * Params.z;
+    vec2 move = (lastPosition(texCoord) - texCoord) * Params.z + (texCoord - vec2(0.5)) * Params.w;
     float moved = length(move);
     if (moved > LONGEST) {
         move *= LONGEST / moved;

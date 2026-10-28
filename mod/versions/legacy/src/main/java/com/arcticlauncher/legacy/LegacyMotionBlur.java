@@ -42,6 +42,7 @@ public final class LegacyMotionBlur {
 			+ "uniform mat3 ToLast;\n"
 			+ "uniform vec2 Tan;\n"
 			+ "uniform float Scale;\n"
+			+ "uniform float Radial;\n"
 			+ "const int SAMPLES = 16;\n"
 			+ "const float LONGEST = 0.25;\n"
 			+ "vec2 lastPosition(vec2 at) {\n"
@@ -50,7 +51,7 @@ public final class LegacyMotionBlur {
 			+ "  return vec2(p.x / -p.z / Tan.x, p.y / -p.z / Tan.y) * 0.5 + 0.5;\n"
 			+ "}\n"
 			+ "void main() {\n"
-			+ "  vec2 move = (lastPosition(uv) - uv) * Scale;\n"
+			+ "  vec2 move = (lastPosition(uv) - uv) * Scale + (uv - vec2(0.5)) * Radial;\n"
 			+ "  float moved = length(move);\n"
 			+ "  if (moved > LONGEST) { move *= LONGEST / moved; }\n"
 			+ "  float noise = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n"
@@ -72,6 +73,7 @@ public final class LegacyMotionBlur {
 	private static int toLastUniform;
 	private static int tanUniform;
 	private static int scaleUniform;
+	private static int radialUniform;
 	private static boolean broken;
 
 	private LegacyMotionBlur() {}
@@ -93,8 +95,9 @@ public final class LegacyMotionBlur {
 		int width = main.textureWidth;
 		int height = main.textureHeight;
 		float fov = camera[5] > 0 ? (float) camera[5] : client.options.fov;
-		if (!VIEW.update((float) camera[3], (float) camera[4], fov, (float) width / Math.max(1, height),
-				config.motionBlurStrength, System.nanoTime())) {
+		if (!VIEW.update((float) camera[3], (float) camera[4], camera[0], camera[1], camera[2], fov,
+				(float) width / Math.max(1, height), config.motionBlurAmount, System.nanoTime(),
+				config.motionBlurMode != 2, config.motionBlurMode != 1)) {
 			return;
 		}
 		try {
@@ -142,6 +145,7 @@ public final class LegacyMotionBlur {
 		toLastUniform = GL20.glGetUniformLocation(p, "ToLast");
 		tanUniform = GL20.glGetUniformLocation(p, "Tan");
 		scaleUniform = GL20.glGetUniformLocation(p, "Scale");
+		radialUniform = GL20.glGetUniformLocation(p, "Radial");
 		return p;
 	}
 
@@ -184,6 +188,7 @@ public final class LegacyMotionBlur {
 			GL20.glUniformMatrix3(toLastUniform, false, MATRIX);
 			GL20.glUniform2f(tanUniform, VIEW.tanX, VIEW.tanY);
 			GL20.glUniform1f(scaleUniform, VIEW.scale);
+			GL20.glUniform1f(radialUniform, VIEW.radial);
 		}
 		GL11.glBegin(GL11.GL_QUADS);
 		GL11.glTexCoord2f(0f, 0f);

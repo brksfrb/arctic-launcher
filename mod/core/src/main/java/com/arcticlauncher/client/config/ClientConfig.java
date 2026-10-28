@@ -109,6 +109,10 @@ public final class ClientConfig {
 	/** Motion blur, and how strong (1 low to 4 max). */
 	public boolean motionBlur;
 	public int motionBlurStrength = 2;
+	/** How strong the blur is, 0 to 100 (the camera blur; the strength above is for the blend used under VulkanMod). */
+	public int motionBlurAmount = 35;
+	/** Which movement is blurred: 0 turning the view and walking toward or away from what you look at, 1 turning only, 2 moving only. */
+	public int motionBlurMode;
 	/** Dropped items lie flat on the ground and tumble as they fall. */
 	public boolean itemPhysics;
 	/** Fancy style: smooth font and smooth rounded shapes. */

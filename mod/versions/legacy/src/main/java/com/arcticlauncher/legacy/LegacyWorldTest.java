@@ -95,7 +95,7 @@ final class LegacyWorldTest {
 			TIMER.schedule(() -> run(() -> shot("blur-off")), 3, TimeUnit.SECONDS);
 			TIMER.schedule(() -> run(() -> {
 				c.motionBlur = true;
-				c.motionBlurStrength = 4;
+				c.motionBlurAmount = 100;
 			}), 4, TimeUnit.SECONDS);
 			TIMER.schedule(() -> run(() -> shot("blur-on")), 7, TimeUnit.SECONDS);
 			TIMER.schedule(() -> run(() -> {

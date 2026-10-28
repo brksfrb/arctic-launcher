@@ -146,11 +146,11 @@ final class VisualsTest {
 				},
 				() -> {
 					c.motionBlur = true;
-					c.motionBlurStrength = 4;
+					c.motionBlurAmount = 100;
 					spin("blur-max");
 				},
 				() -> {
-					c.motionBlurStrength = 2;
+					c.motionBlurAmount = 35;
 					spin("blur-medium");
 				},
 				() -> {

@@ -25,7 +25,7 @@ final class ModCatalog {
 	private static final String[] WIDTHS = {"Thin", "Normal", "Thick"};
 	private static final float[] WIDTH_VALUES = {1f, 2f, 3f};
 	/** Motion blur strengths, 1 to 4. */
-	private static final String[] BLUR = {"Low", "Medium", "High", "Max"};
+	private static final String[] BLUR_MODES = {"Turn + move", "Turning", "Moving"};
 
 	private ModCatalog() {}
 
@@ -468,8 +468,9 @@ final class ModCatalog {
 					.toggle(() -> c.motionBlur, on -> c.motionBlur = on)
 					.settings((host, f) -> {
 						f.section("Blur");
-						f.choice("Strength", BLUR, () -> Math.max(0, Math.min(BLUR.length - 1, c.motionBlurStrength - 1)),
-								i -> c.motionBlurStrength = i + 1);
+						f.choice("Mode", BLUR_MODES, () -> Math.max(0, Math.min(BLUR_MODES.length - 1, c.motionBlurMode)),
+								i -> c.motionBlurMode = i);
+						f.slider("Strength", () -> c.motionBlurAmount, v -> c.motionBlurAmount = (int) v, 0, 100, 1, "%.0f%%");
 						f.note("The HUD and menus stay sharp.");
 					}));
 		}

@@ -244,6 +244,19 @@ final class Form {
 		put(new com.arcticlauncher.client.ui.Button(text, run), x + LABEL_W, top + (ROW - CHOICE_H) / 2, 64, CHOICE_H);
 	}
 
+	/** "Label   ----o----   35%": a number on a track, set by click or drag. */
+	void slider(String label, final java.util.function.DoubleSupplier get, final java.util.function.DoubleConsumer set, double min,
+			double max, double step, final String format) {
+		int top = row(ROW);
+		rowLabel(top, label);
+		int right = x + w;
+		final Label value = new Label(String.format(java.util.Locale.ROOT, format, get.getAsDouble()), Label.Kind.TEXT);
+		put(new SliderBar(get, set, min, max, step,
+				() -> value.text(String.format(java.util.Locale.ROOT, format, get.getAsDouble())),
+				ArcticClient::saveConfig), x + LABEL_W, top, right - x - LABEL_W - STEP_VALUE_W - 8, ROW);
+		put(value, right - STEP_VALUE_W, top, STEP_VALUE_W, ROW);
+	}
+
 	/** "Label     <  Sword  >": one of many options, stepped through (too many for {@link #choice}). */
 	void cycle(String label, final String[] options, final java.util.function.IntSupplier get,
 			final java.util.function.IntConsumer set) {

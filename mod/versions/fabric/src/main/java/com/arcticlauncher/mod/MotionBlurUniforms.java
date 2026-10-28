@@ -30,7 +30,7 @@ public final class MotionBlurUniforms {
 	private static final int USAGE_UNIFORM = 128;
 	/** Frames a replaced buffer is kept before it is closed: it may still be in use by a frame in flight. */
 	private static final int KEEP = 4;
-	/** 4 vec4s: the three columns of the turn, then tan(fov/2) across and up and the smear's length. */
+	/** 4 vec4s: the three columns of the turn, then tan(fov/2) across and up, the smear's length and the stretch. */
 	private static final int SIZE = 64;
 
 	private static final MotionBlurView VIEW = new MotionBlurView();
@@ -59,7 +59,9 @@ public final class MotionBlurUniforms {
 		Camera camera = renderer.getMainCamera();
 		//#endif
 		float aspect = (float) minecraft.getWindow().getWidth() / Math.max(1, minecraft.getWindow().getHeight());
-		return VIEW.update(camera.yRot(), camera.xRot(), camera.getFov(), aspect, config.motionBlurStrength, System.nanoTime());
+		net.minecraft.world.phys.Vec3 at = camera.position();
+		return VIEW.update(camera.yRot(), camera.xRot(), at.x, at.y, at.z, camera.getFov(), aspect, config.motionBlurAmount,
+				System.nanoTime(), config.motionBlurMode != 2, config.motionBlurMode != 1);
 	}
 
 	/** Put the numbers from {@link #prepare} (or none, when {@code turning} is false) into the effect's buffer. */
@@ -76,7 +78,7 @@ public final class MotionBlurUniforms {
 						.putVec4(m[0], m[1], m[2], 0f)
 						.putVec4(m[3], m[4], m[5], 0f)
 						.putVec4(m[6], m[7], m[8], 0f)
-						.putVec4(VIEW.tanX, VIEW.tanY, turning ? VIEW.scale : 0f, 0f);
+						.putVec4(VIEW.tanX, VIEW.tanY, turning ? VIEW.scale : 0f, turning ? VIEW.radial : 0f);
 				Object buffer = RenderSystem.getDevice().createBuffer(() -> "Arctic motion blur", USAGE_UNIFORM, data.get());
 				retire(uniforms.put(BLOCK, buffer));
 			}

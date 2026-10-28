@@ -39,7 +39,8 @@ abstract class MotionBlurPostMixin {
 		if (!VulkanCompat.postBlur() || config == null || !config.motionBlur || minecraft.level == null) {
 			return;
 		}
-		int suffix = Math.max(1, Math.min(4, config.motionBlurStrength));
+		// The blend has four fixed strengths: the slider picks the nearest.
+		int suffix = Math.max(1, Math.min(4, 1 + Math.round(config.motionBlurAmount / 33f)));
 		Identifier id = Identifier.fromNamespaceAndPath("arctic", "motion_blur_gl_" + suffix);
 		PostChain chain = minecraft.getShaderManager().getPostChain(id, LevelTargetBundle.MAIN_TARGETS);
 		if (chain != null) {

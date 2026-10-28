@@ -48,6 +48,7 @@ public final class MotionBlurGL {
 	private static int toLastUniform;
 	private static int tanUniform;
 	private static int scaleUniform;
+	private static int radialUniform;
 	private static int vertexArray;
 	private static boolean broken;
 
@@ -88,10 +89,18 @@ public final class MotionBlurGL {
 		Camera camera = mc.gameRenderer.getMainCamera();
 		float yaw = camera.yRot();
 		float pitch = camera.xRot();
+		net.minecraft.world.phys.Vec3 at = camera.position();
+		double x = at.x;
+		double y = at.y;
+		double z = at.z;
 		//#elif MC >= 1.14
 		Camera camera = mc.gameRenderer.getMainCamera();
 		float yaw = camera.getYRot();
 		float pitch = camera.getXRot();
+		net.minecraft.world.phys.Vec3 at = camera.getPosition();
+		double x = at.x;
+		double y = at.y;
+		double z = at.z;
 		//#else
 		Entity view = mc.getCameraEntity();
 		if (view == null) {
@@ -100,8 +109,12 @@ public final class MotionBlurGL {
 		float partial = mc.getFrameTime();
 		float yaw = view.yRotO + (view.yRot - view.yRotO) * partial;
 		float pitch = view.xRotO + (view.xRot - view.xRotO) * partial;
+		double x = view.xOld + (view.x - view.xOld) * partial;
+		double y = view.yOld + (view.y - view.yOld) * partial;
+		double z = view.zOld + (view.z - view.zOld) * partial;
 		//#endif
-		if (!VIEW.update(yaw, pitch, fovDegrees(mc), aspect, c.motionBlurStrength, System.nanoTime())) {
+		if (!VIEW.update(yaw, pitch, x, y, z, fovDegrees(mc), aspect, c.motionBlurAmount, System.nanoTime(),
+				c.motionBlurMode != 2, c.motionBlurMode != 1)) {
 			return;
 		}
 		Saved saved = Saved.read();
@@ -195,6 +208,7 @@ public final class MotionBlurGL {
 			toLastUniform = GL20.glGetUniformLocation(program, "ToLast");
 			tanUniform = GL20.glGetUniformLocation(program, "Tan");
 			scaleUniform = GL20.glGetUniformLocation(program, "Scale");
+			radialUniform = GL20.glGetUniformLocation(program, "Radial");
 			//#if MC >= 1.17
 			vertexArray = GL30.glGenVertexArrays();
 			//#endif
@@ -206,6 +220,7 @@ public final class MotionBlurGL {
 		GL20.glUniformMatrix3fv(toLastUniform, false, FLOATS);
 		GL20.glUniform2f(tanUniform, VIEW.tanX, VIEW.tanY);
 		GL20.glUniform1f(scaleUniform, VIEW.scale);
+		GL20.glUniform1f(radialUniform, VIEW.radial);
 		//#if MC >= 1.17
 		// 1.17+ runs a core OpenGL 3.2 context: a fullscreen triangle.
 		GL30.glBindVertexArray(vertexArray);
@@ -260,6 +275,7 @@ public final class MotionBlurGL {
 			+ "uniform mat3 ToLast;\n"
 			+ "uniform vec2 Tan;\n"
 			+ "uniform float Scale;\n"
+			+ "uniform float Radial;\n"
 			+ "const int SAMPLES = 16;\n"
 			+ "const float LONGEST = 0.25;\n"
 			+ "vec2 lastPosition(vec2 uv) {\n"
@@ -268,7 +284,7 @@ public final class MotionBlurGL {
 			+ "  return vec2(p.x / -p.z / Tan.x, p.y / -p.z / Tan.y) * 0.5 + 0.5;\n"
 			+ "}\n"
 			+ "void main() {\n"
-			+ "  vec2 move = (lastPosition(uv) - uv) * Scale;\n"
+			+ "  vec2 move = (lastPosition(uv) - uv) * Scale + (uv - vec2(0.5)) * Radial;\n"
 			+ "  float moved = length(move);\n"
 			+ "  if (moved > LONGEST) { move *= LONGEST / moved; }\n"
 			+ "  float noise = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n"
