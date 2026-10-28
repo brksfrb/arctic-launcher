@@ -218,6 +218,9 @@ public final class ClientConfig {
 	public boolean chatKeep;
 	/** Hide the chat lines on screen (messages still arrive, the history keeps them). */
 	public boolean chatOff;
+	/** Sound Changer: single sounds quieter or louder. */
+	public boolean soundChanger;
+	public java.util.List<SoundRule> soundRules = new java.util.ArrayList<SoundRule>();
 	/** Stacking: only lines within this many seconds of each other, and not blank lines or dividers. */
 	public boolean chatStackTimed;
 	public int chatStackSeconds = 10;
@@ -397,6 +400,9 @@ public final class ClientConfig {
 		}
 		if (chatHiddenWords == null) {
 			chatHiddenWords = "";
+		}
+		if (soundRules == null) {
+			soundRules = new java.util.ArrayList<SoundRule>();
 		}
 		if (autoReplies == null) {
 			autoReplies = new java.util.ArrayList<AutoReply>();

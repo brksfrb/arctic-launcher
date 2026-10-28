@@ -21,6 +21,7 @@
 		"EntityMixin",
 		"ClientPlayerInteractionManagerMixin",
 		"WorldMixin",
+		"SoundVolumeMixin",
 		"LightWorkMixin",
 		"PlayerListHudMixin",
 		"PlayerTierMixin",

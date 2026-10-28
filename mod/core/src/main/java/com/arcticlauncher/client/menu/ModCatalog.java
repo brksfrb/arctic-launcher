@@ -539,6 +539,10 @@ final class ModCatalog {
 						f.swatches("Hit color", HIT_COLORS, () -> 0xFF000000 | c.hitColor, v -> c.hitColor = v & 0xFFFFFF);
 					}));
 		}
+		out.add(new Mod("soundchanger", "Sound Changer", "Make single sounds quieter, or silent: footsteps, hurt, rain", "combatfx", Category.GAMEPLAY,
+				"sound volume mute footstep hurt quiet noise audio")
+				.toggle(() -> c.soundChanger, on -> c.soundChanger = on)
+				.settings(SoundForms::build));
 		out.add(new Mod("damagetint", "Damage Tint", "The screen flushes with a color for a moment when you take a hit", "hitcolor", Category.VISUAL,
 				"hurt red vignette flash damage screen")
 				.toggle(() -> c.damageTint, on -> c.damageTint = on)
