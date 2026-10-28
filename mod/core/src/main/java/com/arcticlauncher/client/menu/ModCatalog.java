@@ -62,7 +62,7 @@ final class ModCatalog {
 				"entities");
 		widgets("PvP", "cps", "keystrokes", "armor", "effects", "arrows", "items", "held", "pearl", "blocking", "falldamage", "target");
 		widgets("World", "coords", "direction", "speed", "biome", "light", "chunk", "day", "worldtime", "clock", "date", "compass",
-				"minimap", "death", "stopwatch", "aimed");
+				"minimap", "death", "stopwatch", "aimed", "horse");
 		for (String id : new String[] {"combatfx", "slotlocks", "invsearch", "shulkerpeek", "particles", "helditem", "palette",
 				"portalscreens", "tnttimer", "ownnametag", "ofcapes", "nohurtcam", "tabping", "badgetags", "hud.cpu", "hud.syscpu", "hud.sysram", "hud.alloc",
 				"hud.gpu", "hud.vram", "hud.frametime", "hud.lows", "hud.blocking", "hud.falldamage", "hud.pearl"}) {

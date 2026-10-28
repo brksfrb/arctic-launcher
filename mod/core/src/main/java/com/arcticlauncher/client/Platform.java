@@ -366,6 +366,16 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	}
 
 	/** Chunk Borders can show the chunk edges: the game has its own F3+G drawing on this version. */
+	/** The horse you ride or aim at: {speed in blocks per second, jump height in blocks, health, max health}, or null. */
+	default float[] horseStats() {
+		return null;
+	}
+
+	/** Horse Stats works on this version. */
+	default boolean horseStatsWorks() {
+		return false;
+	}
+
 	default boolean chunkBordersWorks() {
 		return false;
 	}

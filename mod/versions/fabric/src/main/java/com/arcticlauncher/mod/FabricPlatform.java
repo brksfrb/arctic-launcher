@@ -1312,6 +1312,16 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean horseStatsWorks() {
+		return HorseInfo.works();
+	}
+
+	@Override
+	public float[] horseStats() {
+		return HorseInfo.stats();
+	}
+
+	@Override
 	public boolean chunkBordersWorks() {
 		//#if MC >= 1.14
 		return true;

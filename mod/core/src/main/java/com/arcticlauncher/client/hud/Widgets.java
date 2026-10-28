@@ -239,6 +239,18 @@ final class Widgets {
 				return out.length() == 0 ? (preview ? "Totems 2  Pearls 16" : "--") : out.toString();
 			}
 		});
+		if (platform().horseStatsWorks()) {
+			all.add(new TextWidget("horse", "Horse stats", "Speed and jump height of the horse you ride or aim at", false) {
+				@Override
+				protected String value(boolean preview) {
+					float[] h = platform().horseStats();
+					if (h == null) {
+						return preview ? "9.8 b/s | 3.9 jump" : "--";
+					}
+					return String.format(Locale.ROOT, "%.1f b/s | %.1f jump", h[0], h[1]);
+				}
+			});
+		}
 		all.add(new TextWidget("aimed", "Looking at", "The block or creature under your crosshair", false) {
 			@Override
 			protected String value(boolean preview) {

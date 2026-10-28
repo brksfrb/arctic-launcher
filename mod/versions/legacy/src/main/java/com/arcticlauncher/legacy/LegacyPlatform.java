@@ -445,6 +445,44 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean horseStatsWorks() {
+		//#if MC < 1.11
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	@Override
+	public float[] horseStats() {
+		//#if MC < 1.11
+		ClientPlayerEntity p = mc().player;
+		if (p == null) {
+			return null;
+		}
+		//#if MC >= 1.9
+		Entity e = p.getVehicle();
+		//#else
+		Entity e = p.vehicle;
+		//#endif
+		if (!(e instanceof net.minecraft.entity.passive.HorseBaseEntity)) {
+			e = aimedEntity();
+		}
+		if (!(e instanceof net.minecraft.entity.passive.HorseBaseEntity)) {
+			return null;
+		}
+		net.minecraft.entity.passive.HorseBaseEntity horse = (net.minecraft.entity.passive.HorseBaseEntity) e;
+		double speed = horse.initializeAttribute(net.minecraft.entity.attribute.EntityAttributes.GENERIC_MOVEMENT_SPEED).getValue();
+		double strength = horse.getJumpStrength();
+		double jump = -0.1817584952 * strength * strength * strength + 3.689713992 * strength * strength + 2.128599134 * strength
+				- 0.343930367;
+		return new float[] {(float) (speed * 43.17), (float) jump, horse.getHealth(), horse.getMaxHealth()};
+		//#else
+		return null;
+		//#endif
+	}
+
+	@Override
 	public boolean chunkBordersWorks() {
 		//#if MC >= 1.10
 		return true;
