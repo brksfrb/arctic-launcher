@@ -905,6 +905,18 @@ fn recover_offline_locked(
         return Err(Error::Other(server_error(&mut resp, status)));
     }
     let session: Session = resp.body_mut().with_config().limit(MAX_BYTES).read_json()?;
+    store_recovered(dirs, base, account, key, session)
+}
+
+/// A new key for the offline account `account`, which the server has just moved to it: keep the key and
+/// the session.
+fn store_recovered(
+    dirs: &DataDirs,
+    base: &str,
+    account: &Account,
+    key: String,
+    session: Session,
+) -> Result<()> {
     // The name now belongs to this key: it goes in the ledgers before anything else can fail.
     crate::offline_keys::remember(dirs, &account.uuid, &account.username, &key)?;
     let path = credentials_path(dirs);
@@ -921,6 +933,43 @@ fn recover_offline_locked(
 struct Session {
     token: String,
     expires: u64,
+}
+
+/// An offline account's move to this PC through a Discord login, in progress.
+#[derive(Debug, Clone)]
+pub struct DiscordRestore {
+    pub login: crate::friends::DiscordLogin,
+    key: String,
+}
+
+/// Start bringing an offline account to this PC with the Discord account linked to its profile.
+pub fn discord_restore_start(base: &str, account: &Account) -> Result<DiscordRestore> {
+    if account.is_microsoft() {
+        return Err(Error::Other(
+            "Microsoft accounts don't need recovering".into(),
+        ));
+    }
+    let key =
+        uuid::Uuid::new_v4().simple().to_string() + &uuid::Uuid::new_v4().simple().to_string();
+    let login = crate::friends::discord_restore_start(base, &account.username, &key)?;
+    Ok(DiscordRestore { login, key })
+}
+
+/// Whether the Discord login finished (the account is here now); false while the browser is still at it.
+pub fn discord_restore_poll(
+    dirs: &DataDirs,
+    base: &str,
+    account: &Account,
+    restore: &DiscordRestore,
+) -> Result<bool> {
+    let Some(answer) = crate::friends::discord_result(base, &restore.login.id)? else {
+        return Ok(false);
+    };
+    let session: Session = serde_json::from_value(answer)?;
+    let _held = held();
+    store_recovered(dirs, base, account, restore.key.clone(), session)?;
+    forget_failure(&format!("{base}|{}", account.uuid));
+    Ok(true)
 }
 
 fn sign_in_microsoft(base: &str, access_token: &str, uuid: &str, name: &str) -> Result<Session> {

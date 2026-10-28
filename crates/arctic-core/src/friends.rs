@@ -40,6 +40,9 @@ pub struct Profile {
     pub verified: bool,
     #[serde(default)]
     pub has_recovery: bool,
+    /// The Discord account linked to this profile (its name).
+    #[serde(default)]
+    pub discord: Option<String>,
     pub accounts: Vec<LinkedAccount>,
     pub settings: Settings,
 }
@@ -231,6 +234,57 @@ pub fn new_recovery(base: &str, token: &str) -> Result<String> {
         .as_str()
         .map(str::to_owned)
         .ok_or_else(|| Error::Other("the Arctic server sent no code".into()))
+}
+
+/// A Discord login the player finishes in the browser: open `url`, then ask for `id`'s result.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct DiscordLogin {
+    pub id: String,
+    pub url: String,
+}
+
+/// Start linking this profile to a Discord account.
+pub fn discord_link_start(base: &str, token: &str) -> Result<DiscordLogin> {
+    json_of(call("POST", &format!("{base}/v1/discord/link"), token, None)?)
+}
+
+/// Take the Discord account off this profile.
+pub fn discord_unlink(base: &str, token: &str) -> Result<()> {
+    call("DELETE", &format!("{base}/v1/discord/link"), token, None)?;
+    Ok(())
+}
+
+/// Start a Discord login that brings an offline account to a new key (`key`, made on this PC).
+pub fn discord_restore_start(base: &str, name: &str, key: &str) -> Result<DiscordLogin> {
+    let mut resp = agent()
+        .post(&format!("{base}/v1/discord/restore"))
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .send_json(json!({ "name": name, "key": key }))?;
+    let status = resp.status().as_u16();
+    if !(200..300).contains(&status) {
+        return Err(Error::Other(server_error(&mut resp, status)));
+    }
+    json_of(resp)
+}
+
+/// How a Discord login ended: `None` while the browser is still at it.
+pub fn discord_result(base: &str, id: &str) -> Result<Option<Value>> {
+    let mut resp = agent()
+        .get(&format!("{base}/v1/discord/result/{id}"))
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .call()?;
+    let status = resp.status().as_u16();
+    if status == 202 {
+        return Ok(None);
+    }
+    if !(200..300).contains(&status) {
+        return Err(Error::Other(server_error(&mut resp, status)));
+    }
+    json_of(resp).map(Some)
 }
 
 /// Ask someone, by friend code or a Microsoft account's name. `true` when that made

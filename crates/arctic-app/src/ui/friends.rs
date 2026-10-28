@@ -273,6 +273,33 @@ impl ArcticApp {
                     self.friend_act(FriendAction::Update(None, s));
                 }
                 ui.add_space(8.0);
+                ui.label(RichText::new("DISCORD").small().color(p.muted));
+                match &profile.discord {
+                    Some(name) => {
+                        crate::widgets::row(ui, |ui| {
+                            ui.label(RichText::new(format!("Linked to {name}")).color(p.text));
+                            if widgets::button(ui, p, None, "Unlink", false)
+                                .on_hover_text("This profile can no longer be restored with that Discord account")
+                                .clicked()
+                            {
+                                self.friend_act(FriendAction::DiscordUnlink);
+                            }
+                        });
+                    }
+                    None => {
+                        ui.label(
+                            RichText::new(
+                                "Link your Discord to get this profile back, with its friends, on another PC.",
+                            )
+                            .small()
+                            .color(p.muted),
+                        );
+                        if widgets::button(ui, p, Some(Icon::Plus), "Link Discord", false).clicked() {
+                            self.friend_act(FriendAction::DiscordLink);
+                        }
+                    }
+                }
+                ui.add_space(8.0);
                 ui.label(
                     RichText::new("ACCOUNTS ON THIS PROFILE")
                         .small()
@@ -404,6 +431,17 @@ impl ArcticApp {
                 self.friend_act(FriendAction::Recover(code));
             }
         });
+        ui.add_space(4.0);
+        ui.label(RichText::new("Or, if you linked your Discord:").color(p.muted));
+        if ui
+            .add_enabled_ui(!self.friends.busy, |ui| {
+                widgets::button(ui, p, None, "Restore with Discord", false)
+            })
+            .inner
+            .clicked()
+        {
+            self.friend_act(FriendAction::DiscordRecover);
+        }
     }
 
     /// A new account was added: offer to link it to the current profile.

@@ -25,7 +25,16 @@ pub enum FriendAction {
     NewRecovery,
     /// Bring an offline profile to this PC with its recovery code.
     Recover(String),
+    /// Link the profile to a Discord account (a login in the browser).
+    DiscordLink,
+    DiscordUnlink,
+    /// Bring an offline profile to this PC with the Discord account linked to it.
+    DiscordRecover,
 }
+
+/// How long a Discord login may take in the browser, and how often it is asked about.
+const DISCORD_WAIT: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+const DISCORD_POLL: std::time::Duration = std::time::Duration::from_secs(2);
 
 impl Tasks {
     fn arctic_token(&self, account: Account) -> Result<(String, String)> {
@@ -71,6 +80,20 @@ impl Tasks {
                         .map_err(|e| e.to_string());
                     t.send(Event::FriendDone(result));
                 }
+                FriendAction::DiscordRecover => {
+                    t.send(Event::FriendDone(Ok(
+                        "Finish the Discord login in your browser".to_owned(),
+                    )));
+                    let result = t.discord_recover(&account).map_err(|e| e.to_string());
+                    t.send(Event::FriendDone(result));
+                }
+                FriendAction::DiscordLink => {
+                    t.send(Event::FriendDone(Ok(
+                        "Finish the Discord login in your browser".to_owned(),
+                    )));
+                    let result = t.discord_link(account.clone()).map_err(|e| e.to_string());
+                    t.send(Event::FriendDone(result));
+                }
                 _ => {
                     let result = t
                         .friend_action_blocking(account.clone(), &action)
@@ -82,13 +105,54 @@ impl Tasks {
         });
     }
 
+    /// Link the profile to a Discord account: open the login, then wait for the browser to finish it.
+    fn discord_link(&self, account: Account) -> Result<String> {
+        let (base, token) = self.arctic_token(account)?;
+        let login = friends::discord_link_start(&base, &token)?;
+        let _ = open::that_detached(&login.url);
+        let started = std::time::Instant::now();
+        while started.elapsed() < DISCORD_WAIT {
+            std::thread::sleep(DISCORD_POLL);
+            if let Some(answer) = friends::discord_result(&base, &login.id)? {
+                let name = answer["discord"].as_str().unwrap_or("your Discord account");
+                return Ok(format!("Discord linked: {name}"));
+            }
+        }
+        Err(arctic_core::Error::Other(
+            "The Discord login took too long. Try again.".into(),
+        ))
+    }
+
+    /// An offline account on a new PC: the Discord login linked to its profile brings it here.
+    fn discord_recover(&self, account: &Account) -> Result<String> {
+        let base = cosmetics::base_url();
+        let restore = cosmetics::discord_restore_start(&base, account)?;
+        let _ = open::that_detached(&restore.login.url);
+        let started = std::time::Instant::now();
+        while started.elapsed() < DISCORD_WAIT {
+            std::thread::sleep(DISCORD_POLL);
+            if cosmetics::discord_restore_poll(self.dirs(), &base, account, &restore)? {
+                return Ok("Your profile and friends are here now".to_owned());
+            }
+        }
+        Err(arctic_core::Error::Other(
+            "The Discord login took too long. Try again.".into(),
+        ))
+    }
+
     /// What happened, in words for a toast (empty = nothing to say).
     fn friend_action_blocking(&self, account: Account, action: &FriendAction) -> Result<String> {
         let (base, token) = self.arctic_token(account)?;
         Ok(match action {
             #[cfg(feature = "offline-accounts")]
             FriendAction::NewRecovery => String::new(),
-            FriendAction::Recover(_) => String::new(),
+            FriendAction::Recover(_) | FriendAction::DiscordRecover | FriendAction::DiscordLink => {
+                String::new()
+            }
+            FriendAction::DiscordUnlink => {
+                friends::discord_unlink(&base, &token)?;
+                "Discord unlinked".to_owned()
+            }
             FriendAction::Request(who) => {
                 let r = friends::request(&base, &token, who)?;
                 if r.friends {
