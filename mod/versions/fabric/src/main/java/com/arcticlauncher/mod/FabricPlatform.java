@@ -383,6 +383,11 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean keyHeld(GameKey key) {
+		return mapping(mc().options, key).isDown();
+	}
+
+	@Override
 	public int hurtTime() {
 		return GameInfo.hurtTime();
 	}

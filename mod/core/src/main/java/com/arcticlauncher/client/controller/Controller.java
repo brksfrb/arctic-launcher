@@ -26,6 +26,12 @@ public final class Controller {
 	static final double CURSOR_PER_STEP = 0.25;
 	/** Scroll clicks a second at full tilt. */
 	static final double SCROLL_RATE = 12;
+	/** A stick that hasn't moved by more than this between two frames is standing still. */
+	static final float STILL_DELTA = 0.004f;
+	/** How long a stick must stand still, off to one side, before that is taken as its middle. */
+	static final double STILL_SECONDS = 0.5;
+	/** The most a stick can rest off-center and still count as drift (a held tilt this small is not an input). */
+	static final float MAX_DRIFT = 0.3f;
 
 	/** Self-tests: this pad instead of a real one (null: the real one). */
 	public static volatile Gamepad scripted;
@@ -35,6 +41,10 @@ public final class Controller {
 	/** Controls this controller holds down (and so lets go of). */
 	private final Set<GameKey> held = EnumSet.noneOf(GameKey.class);
 	private boolean connected;
+	/** Where each stick rests (a worn one settles a little off zero), found while it stands still. */
+	private final float[] center = new float[4];
+	private final float[] lastRaw = new float[4];
+	private final double[] still = new double[4];
 	private boolean sprinting;
 	private double scrolled;
 
@@ -63,11 +73,17 @@ public final class Controller {
 			return;
 		}
 		if (!connected) {
+			// A new controller rests where it rests: found again.
+			java.util.Arrays.fill(center, 0f);
+			java.util.Arrays.fill(still, 0.0);
+			System.arraycopy(pad.axes, 0, lastRaw, 0, 4);
 			// What was already held when it connected isn't a press.
+			recenter(0.0);
 			last.copyFrom(pad);
 			connected = true;
 		}
 		seconds = Math.min(seconds, 0.1);
+		recenter(seconds);
 		if (screenOpen) {
 			letGo(game);
 			screen(game, s, seconds);
@@ -75,6 +91,23 @@ public final class Controller {
 			world(game, s, seconds);
 		}
 		last.copyFrom(pad);
+	}
+
+	/**
+	 * A stick that doesn't spring back to exactly zero (a worn one, or after a small push) would turn the view or move
+	 * the pointer for ever. One that stands still a little off the middle is taken to be resting there: its reading
+	 * from then on is measured from that spot.
+	 */
+	private void recenter(double seconds) {
+		for (int i = 0; i < 4; i++) {
+			float raw = pad.axes[i];
+			still[i] = Math.abs(raw - lastRaw[i]) <= STILL_DELTA ? still[i] + seconds : 0.0;
+			lastRaw[i] = raw;
+			if (still[i] >= STILL_SECONDS && Math.abs(raw) <= MAX_DRIFT) {
+				center[i] = raw;
+			}
+			pad.axes[i] = Math.max(-1f, Math.min(1f, raw - center[i]));
+		}
 	}
 
 	private boolean copy(Gamepad from) {
@@ -89,6 +122,7 @@ public final class Controller {
 		hold(game, GameKey.BACK, ly > WALK);
 		hold(game, GameKey.LEFT, lx < -WALK);
 		hold(game, GameKey.RIGHT, lx > WALK);
+		releaseStragglers(game);
 		if (pressed(Gamepad.LEFT_STICK)) {
 			sprinting = true;
 		}
@@ -179,6 +213,21 @@ public final class Controller {
 		} else if (held.remove(key)) {
 			// The keyboard may still be holding it.
 			game.setKeyDown(key, game.physicalKeyDown(key));
+		}
+	}
+
+	/** The controls the sticks walk with: a leftover hold on one of them keeps the player walking. */
+	private static final GameKey[] WALKING = {GameKey.FORWARD, GameKey.BACK, GameKey.LEFT, GameKey.RIGHT};
+
+	/**
+	 * A walking control the game holds while neither the controller nor the keyboard does was left behind (a release
+	 * that went missing, say when the window lost focus): the player would walk on for ever. It is let go.
+	 */
+	private void releaseStragglers(GamepadHost game) {
+		for (GameKey key : WALKING) {
+			if (!held.contains(key) && game.keyHeld(key) && !game.physicalKeyDown(key)) {
+				game.setKeyDown(key, false);
+			}
 		}
 	}
 

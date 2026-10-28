@@ -49,6 +49,8 @@ final class Gamepads {
 		if (open == 0 && !openFirst()) {
 			return false;
 		}
+		// SDL keeps the last state it processed: bring it up to date before reading, or a stick can seem to stay where it was.
+		org.lwjgl.sdl.SDLGamepad.SDL_UpdateGamepads();
 		for (int i = 0; i < Gamepad.AXES; i++) {
 			pad.axes[i] = org.lwjgl.sdl.SDLGamepad.SDL_GetGamepadAxis(open, i) / 32767f;
 		}

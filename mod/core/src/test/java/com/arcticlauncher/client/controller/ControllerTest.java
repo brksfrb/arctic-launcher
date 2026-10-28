@@ -41,6 +41,11 @@ class ControllerTest {
 		}
 
 		@Override
+		public boolean keyHeld(GameKey key) {
+			return down.contains(key);
+		}
+
+		@Override
 		public void setKeyDown(GameKey key, boolean on) {
 			if (on) {
 				down.add(key);
@@ -106,6 +111,68 @@ class ControllerTest {
 		game.state.axes[Gamepad.LY] = 0.1f;
 		c.frame(game, settings, 0.016, false, true);
 		assertTrue(game.down.isEmpty());
+	}
+
+	@Test
+	void aStickThatRestsOffCenterStopsTurningTheView() {
+		Game game = new Game();
+		Controller c = new Controller();
+		c.frame(game, settings, 0.016, false, true);
+
+		// Pushed a little and let go, it settles at 0.3 on the right stick.
+		game.state.axes[Gamepad.RX] = 0.3f;
+		for (int i = 0; i < 20; i++) {
+			c.frame(game, settings, 0.016, false, true);
+		}
+		// Standing still for half a second: that is its middle now.
+		double before = game.yaw;
+		for (int i = 0; i < 100; i++) {
+			c.frame(game, settings, 0.016, false, true);
+		}
+		double drifted = game.yaw - before;
+		double after = game.yaw;
+		for (int i = 0; i < 100; i++) {
+			c.frame(game, settings, 0.016, false, true);
+		}
+		assertEquals(after, game.yaw, 1e-9, "no more turning");
+		assertTrue(drifted < 5, "it only turned during the first half second: " + drifted);
+
+		// A real push from there still turns it, and walking works from the left stick's own middle.
+		game.state.axes[Gamepad.RX] = 1f;
+		c.frame(game, settings, 0.1, false, true);
+		assertTrue(game.yaw > after + 5);
+	}
+
+	@Test
+	void aWalkingControlLeftHeldByAMissedReleaseIsLetGo() {
+		Game game = new Game();
+		Controller c = new Controller();
+		c.frame(game, settings, 0.016, false, true);
+
+		// The game holds "forward" though neither the stick nor the keyboard does.
+		game.down.add(GameKey.FORWARD);
+		c.frame(game, settings, 0.016, false, true);
+		assertFalse(game.down.contains(GameKey.FORWARD));
+
+		// The keyboard holding it is respected.
+		game.down.add(GameKey.FORWARD);
+		game.keyboard.add(GameKey.FORWARD);
+		c.frame(game, settings, 0.016, false, true);
+		assertTrue(game.down.contains(GameKey.FORWARD));
+	}
+
+	@Test
+	void aSmallPushAndLetGoWalksNoFurther() {
+		Game game = new Game();
+		Controller c = new Controller();
+		c.frame(game, settings, 0.016, false, true);
+		game.state.axes[Gamepad.LY] = -0.2f;
+		c.frame(game, settings, 0.016, false, true);
+		game.state.axes[Gamepad.LY] = 0.12f;
+		for (int i = 0; i < 60; i++) {
+			c.frame(game, settings, 0.016, false, true);
+		}
+		assertTrue(game.down.isEmpty(), game.down.toString());
 	}
 
 	@Test

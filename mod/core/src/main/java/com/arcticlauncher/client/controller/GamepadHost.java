@@ -17,6 +17,11 @@ public interface GamepadHost {
 
 	boolean physicalKeyDown(GameKey key);
 
+	/** Whether the game itself counts this control as held (from the keyboard, the controller or anything else). */
+	default boolean keyHeld(GameKey key) {
+		return false;
+	}
+
 	void setKeyDown(GameKey key, boolean down);
 
 	/** One press of a control (an attack, opening the inventory...). */

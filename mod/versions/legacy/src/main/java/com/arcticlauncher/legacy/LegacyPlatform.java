@@ -279,6 +279,12 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean keyHeld(GameKey key) {
+		KeyBinding k = binding(key);
+		return k != null && k.isPressed();
+	}
+
+	@Override
 	public String biome() {
 		MinecraftClient mc = mc();
 		if (mc.world == null || mc.player == null) {
