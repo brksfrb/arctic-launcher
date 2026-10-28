@@ -366,12 +366,6 @@ final class ModCatalog {
 					f.stepper("Right / left", () -> c.heldX, v -> c.heldX = (int) v, -50, 50, 5, "%.0f");
 					f.stepper("Up / down", () -> c.heldY, v -> c.heldY = (int) v, -50, 50, 5, "%.0f");
 					f.stepper("Away / closer", () -> c.heldZ, v -> c.heldZ = (int) v, -50, 50, 5, "%.0f");
-					f.section("Kinds (off = never shown)");
-					for (int k = 0; k < com.arcticlauncher.client.feature.ParticleKinds.LABELS.length; k++) {
-						final int bit = 1 << k;
-						f.toggle(com.arcticlauncher.client.feature.ParticleKinds.LABELS[k], "",
-								() -> (c.particleOff & bit) == 0, on -> c.particleOff = on ? c.particleOff & ~bit : c.particleOff | bit);
-					}
 					f.section("Size");
 					f.stepper("Size", () -> c.heldScale, v -> c.heldScale = (int) v, 30, 150, 10, "%.0f%%");
 					f.note("Look at your hand in the game to see each change. 0 and 100% are the game's own.");
@@ -607,12 +601,6 @@ final class ModCatalog {
 				.page(EmojiTab::new));
 		out.add(new Mod("messages", "Quick Messages", "Keys that send a line or a command", "messages", Category.CHAT, "macro bind")
 				.settings(ChatForms::quickMessages));
-		out.add(new Mod("autogg", "Auto GG", "Say gg when a minigame ends", "autogg", Category.CHAT, "good game hypixel")
-				.toggle(() -> c.autoGg, on -> c.autoGg = on)
-				.settings(ChatForms::autoGg));
-		out.add(new Mod("streamer", "Streamer Mode", "Hide your name, skin and the server on screen", "streamer", Category.CHAT,
-				"privacy snipe hide name")
-				.toggle(() -> c.streamerMode, on -> c.streamerMode = on)
 		out.add(new Mod("quickplay", "Quickplay", "Join a minigame with a click: Bed Wars, SkyWars, Duels and more", "messages", Category.CHAT,
 				"minigame play lobby bedwars skywars duels hypixel queue")
 				.settings(QuickplayForm::build));
@@ -620,9 +608,12 @@ final class ModCatalog {
 				"auto reply answer trigger macro respond")
 				.toggle(() -> c.autoReply, on -> c.autoReply = on)
 				.settings(ChatForms::autoText));
-		out.add(new Mod("quickplay", "Quickplay", "Join a minigame with a click: Bed Wars, SkyWars, Duels and more", "messages", Category.CHAT,
-				"minigame play lobby bedwars skywars duels hypixel queue")
-				.settings(QuickplayForm::build));
+		out.add(new Mod("autogg", "Auto GG", "Say gg when a minigame ends", "autogg", Category.CHAT, "good game hypixel")
+				.toggle(() -> c.autoGg, on -> c.autoGg = on)
+				.settings(ChatForms::autoGg));
+		out.add(new Mod("streamer", "Streamer Mode", "Hide your name, skin and the server on screen", "streamer", Category.CHAT,
+				"privacy snipe hide name")
+				.toggle(() -> c.streamerMode, on -> c.streamerMode = on)
 				.settings(ChatForms::streamer));
 	}
 

@@ -18,7 +18,9 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** Chat timestamps, repeated lines stacked as "(x3)", mentions of you marked, and a longer history. */
 @Mixin(ChatComponent.class)
@@ -67,8 +69,6 @@ abstract class ChatComponentMixin {
 	public void rescaleChat() {}
 	//#endif
 
-	@ModifyVariable(
-			//#if MC >= 26.1
 	/** Keep chat when leaving: the game clears the chat on disconnect; this lets it stay. */
 	@Inject(method = "clearMessages", at = @At("HEAD"), cancellable = true)
 	private void arctic$keep(CallbackInfo ci) {
@@ -104,6 +104,8 @@ abstract class ChatComponentMixin {
 		}
 	}
 
+	@ModifyVariable(
+			//#if MC >= 26.1
 			method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/multiplayer/chat/GuiMessageSource;Lnet/minecraft/client/multiplayer/chat/GuiMessageTag;)V",
 			//#elif MC >= 1.19
 			// Before 26.1 there's no separate GuiMessageSource: one 3-arg entry point.

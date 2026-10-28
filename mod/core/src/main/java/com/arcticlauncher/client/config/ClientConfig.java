@@ -283,8 +283,6 @@ public final class ClientConfig {
 	public int particleAmount = 50;
 	/** Ctrl+K opens the command palette (mods, servers, friends). */
 	public boolean commandPalette = true;
-	/** Particle kinds switched off (bit per {@code ParticleKinds.LABELS} entry). */
-	public int particleOff;
 	/** Saturation (the hidden part of hunger) drawn on the hunger bar. */
 	public boolean saturationBar;
 	/** Every entity's hitbox box drawn (like F3+B), from one switch. */
@@ -394,6 +392,8 @@ public final class ClientConfig {
 		if (autoReplies == null) {
 			autoReplies = new java.util.ArrayList<AutoReply>();
 		}
+		if (quickMessages == null) {
+			quickMessages = new java.util.ArrayList<QuickMessage>();
 		}
 		if (fullbrightKey == null) {
 			fullbrightKey = "key.keyboard.unknown";

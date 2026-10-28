@@ -7,7 +7,9 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** Chat timestamps, repeated lines stacked, mentions of you marked, and Auto GG. */
 @Mixin(ChatHud.class)
@@ -19,8 +21,6 @@ abstract class ChatHudMixin {
 		return c == null ? vanilla : c.chatHistory;
 	}
 
-	@ModifyVariable(method = "addMessage(Lnet/minecraft/text/Text;I)V", at = @At("HEAD"), argsOnly = true)
-	private Text arctic$chat(Text message) {
 	/** Keep chat when leaving: the game clears the chat on disconnect; this lets it stay. */
 	@Inject(method = {"clear()V", "clear(Z)V"}, at = @At("HEAD"), cancellable = true, require = 1)
 	private void arctic$keep(CallbackInfo ci) {
@@ -38,6 +38,8 @@ abstract class ChatHudMixin {
 		}
 	}
 
+	@ModifyVariable(method = "addMessage(Lnet/minecraft/text/Text;I)V", at = @At("HEAD"), argsOnly = true)
+	private Text arctic$chat(Text message) {
 		return LegacyHooks.chat(message);
 	}
 }
