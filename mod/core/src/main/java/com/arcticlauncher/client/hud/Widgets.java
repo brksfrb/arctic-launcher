@@ -21,6 +21,25 @@ final class Widgets {
 
 	private Widgets() {}
 
+	/** The Items widget's list from the settings: {id part, label}. */
+	private static String[][] counted() {
+		String raw = ArcticClient.config() == null ? null : ArcticClient.config().countedItems;
+		if (raw == null || raw.trim().isEmpty()) {
+			return COUNTED;
+		}
+		List<String[]> out = new ArrayList<String[]>();
+		for (String part : raw.split(",")) {
+			String[] kv = part.trim().split(":", 2);
+			String id = kv[0].trim().toLowerCase(Locale.ROOT).replace("minecraft:", "");
+			if (id.isEmpty()) {
+				continue;
+			}
+			String label = kv.length > 1 && !kv[1].trim().isEmpty() ? kv[1].trim() : id.replace('_', ' ');
+			out.add(new String[] {id, label});
+		}
+		return out.isEmpty() ? COUNTED : out.toArray(new String[0][]);
+	}
+
 	private static Platform platform() {
 		return ArcticClient.platform();
 	}
@@ -211,7 +230,7 @@ final class Widgets {
 			@Override
 			protected String value(boolean preview) {
 				StringBuilder out = new StringBuilder();
-				for (String[] kind : COUNTED) {
+				for (String[] kind : counted()) {
 					int n = platform().countItems(kind[0]);
 					if (n > 0 || (preview && n < 0)) {
 						out.append(out.length() == 0 ? "" : "  ").append(kind[1]).append(' ').append(n > 0 ? n : 2);

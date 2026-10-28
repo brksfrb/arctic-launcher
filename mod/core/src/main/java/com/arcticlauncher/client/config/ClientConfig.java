@@ -202,6 +202,8 @@ public final class ClientConfig {
 	public String quickplayLast = "";
 	/** Auto Text: answers sent when a chat line contains a trigger. */
 	public boolean autoReply;
+	/** The Items widget's list: item id (or part of it), optionally ":Label", separated by commas. */
+	public String countedItems = "totem_of_undying:Totems, ender_pearl:Pearls, golden_apple:Gapples";
 	public java.util.List<AutoReply> autoReplies = new java.util.ArrayList<AutoReply>();
 	/** {x} {y} {z}... also work in chat you type. */
 	public boolean chatPlaceholders = true;
@@ -357,8 +359,9 @@ public final class ClientConfig {
 		if (autoGgMessage == null) {
 			autoGgMessage = "gg";
 		}
-		if (quickMessages == null) {
-			quickMessages = new java.util.ArrayList<QuickMessage>();
+		if (countedItems == null) {
+			countedItems = "totem_of_undying:Totems, ender_pearl:Pearls, golden_apple:Gapples";
+		}
 		if (autoReplies == null) {
 			autoReplies = new java.util.ArrayList<AutoReply>();
 		}

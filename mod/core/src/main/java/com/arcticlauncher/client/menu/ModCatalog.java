@@ -137,6 +137,15 @@ final class ModCatalog {
 							f.section("Numbers");
 							f.stepper("Decimals", () -> c.coordDecimals, v -> c.coordDecimals = (int) v, 0, 2, 1, "%.0f");
 						}
+						if ("items".equals(w.id)) {
+							f.section("Counted items");
+							f.note("Item ids with an optional label, separated by commas: totem_of_undying:Totems, arrow, golden_apple:Gapples");
+							int top = f.row(Form.ROW);
+							final com.arcticlauncher.client.ui.TextField list = new com.arcticlauncher.client.ui.TextField(
+									"ender_pearl:Pearls, arrow", 160, com.arcticlauncher.client.ui.TextField.ANY).text(c.countedItems);
+							list.onChange(() -> c.countedItems = list.text());
+							f.put(list, f.x, top, f.w, Form.ROW - 4);
+						}
 						if ("stopwatch".equals(w.id)) {
 							f.section("Key");
 							f.key("Stopwatch key", "Starts, stops and clears it", Form.key(() -> c.stopwatchKey, k -> c.stopwatchKey = k));
