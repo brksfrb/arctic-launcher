@@ -307,6 +307,9 @@ public final class ClientConfig {
 	public boolean mobSize;
 	/** Fog: stretch (1 to 10 times) or remove the fog. */
 	public boolean fog;
+	/** Glint Colorizer: the enchant shimmer color (0 = the game's purple). */
+	public int glintColor;
+	public int glintColorOff;
 	public boolean fogOff;
 	public double fogScale = 3.0;
 	public double mobSizeFactor = 1.5;

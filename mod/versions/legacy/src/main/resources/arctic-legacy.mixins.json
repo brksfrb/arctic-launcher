@@ -24,6 +24,7 @@
 		"SoundVolumeMixin",
 		"MobSizeLegacyMixin",
 		"FogLegacyMixin",
+		"GlintColorLegacyMixin",
 		"LightWorkMixin",
 		"PlayerListHudMixin",
 		"PlayerTierMixin",

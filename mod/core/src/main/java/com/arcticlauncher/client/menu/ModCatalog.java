@@ -545,6 +545,22 @@ final class ModCatalog {
 					"chunk border grid f3 g slime lines")
 					.toggle(() -> c.chunkBorders, on -> c.chunkBorders = on));
 		}
+		if (p.glintWorks()) {
+			out.add(new Mod("glint", "Glint Colorizer", "The shimmer on enchanted items in your hand and in menus in a color of your choice (armor keeps the game's)", "hitcolor",
+					Category.VISUAL, "enchant enchantment glint shimmer color purple")
+					.toggle(() -> c.glintColor != 0, on -> {
+						if (on) {
+							c.glintColor = c.glintColorOff != 0 ? c.glintColorOff : DAMAGE_COLORS[3] & 0xFFFFFF;
+						} else {
+							c.glintColorOff = c.glintColor;
+							c.glintColor = 0;
+						}
+					})
+					.settings((host, f) -> {
+						f.section("Color");
+						f.swatches("Glint color", DAMAGE_COLORS, () -> 0xFF000000 | c.glintColor, v -> c.glintColor = v & 0xFFFFFF);
+					}));
+		}
 		if (p.fogWorks()) {
 			out.add(new Mod("fog", "Fog", "Push the fog away, or remove it", "weather", Category.VISUAL, "fog mist distance clear view")
 					.toggle(() -> c.fog, on -> c.fog = on)

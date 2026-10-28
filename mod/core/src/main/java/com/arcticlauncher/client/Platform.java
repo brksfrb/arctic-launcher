@@ -376,6 +376,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
+	/** The Glint Colorizer works on this version. */
+	default boolean glintWorks() {
+		return false;
+	}
+
 	/** The Fog settings work on this version. */
 	default boolean fogWorks() {
 		return false;
