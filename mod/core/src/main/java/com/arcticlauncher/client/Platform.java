@@ -185,6 +185,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return null;
 	}
 
+	/** The name of the block or creature under the crosshair (within reach), or null. */
+	default String aimedName() {
+		return null;
+	}
+
 	/** The creature you're aiming at or just hit: {name, health, max health}, or null. */
 	Object[] target();
 

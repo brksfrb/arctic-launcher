@@ -658,6 +658,21 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public String aimedName() {
+		BlockHitResult hit = mc().result;
+		if (hit == null || mc().world == null) {
+			return null;
+		}
+		if (hit.type == BlockHitResult.Type.ENTITY && hit.entity != null) {
+			return hit.entity.getName().asUnformattedString();
+		}
+		if (hit.type == BlockHitResult.Type.BLOCK) {
+			return mc().world.getBlockState(hit.getBlockPos()).getBlock().getTranslatedName();
+		}
+		return null;
+	}
+
+	@Override
 	public int aimKind() {
 		Entity e = aimedEntity();
 		if (e instanceof PlayerEntity) {

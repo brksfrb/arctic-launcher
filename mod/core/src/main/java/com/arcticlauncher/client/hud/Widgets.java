@@ -239,6 +239,13 @@ final class Widgets {
 				return out.length() == 0 ? (preview ? "Totems 2  Pearls 16" : "--") : out.toString();
 			}
 		});
+		all.add(new TextWidget("aimed", "Looking at", "The block or creature under your crosshair", false) {
+			@Override
+			protected String value(boolean preview) {
+				String name = platform().aimedName();
+				return name == null ? (preview ? "Oak Planks" : "--") : name;
+			}
+		});
 		all.add(new TextWidget("death", "Last death", "Where you last died", false) {
 			@Override
 			protected String value(boolean preview) {

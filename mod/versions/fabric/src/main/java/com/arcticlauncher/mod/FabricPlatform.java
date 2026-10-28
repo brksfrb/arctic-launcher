@@ -749,6 +749,32 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public String aimedName() {
+		Minecraft mc = mc();
+		if (mc.level == null || mc.hitResult == null) {
+			return null;
+		}
+		//#if MC >= 1.14
+		if (mc.hitResult instanceof net.minecraft.world.phys.BlockHitResult) {
+			net.minecraft.core.BlockPos pos = ((net.minecraft.world.phys.BlockHitResult) mc.hitResult).getBlockPos();
+			return mc.level.getBlockState(pos).getBlock().getName().getString();
+		}
+		if (mc.hitResult instanceof net.minecraft.world.phys.EntityHitResult) {
+			return ((net.minecraft.world.phys.EntityHitResult) mc.hitResult).getEntity().getName().getString();
+		}
+		//#else
+		String kind = String.valueOf(mc.hitResult.type);
+		if ("BLOCK".equals(kind)) {
+			return mc.level.getBlockState(mc.hitResult.getBlockPos()).getBlock().getName().getString();
+		}
+		if ("ENTITY".equals(kind)) {
+			return mc.hitResult.entity.getName().getString();
+		}
+		//#endif
+		return null;
+	}
+
+	@Override
 	public int aimKind() {
 		Minecraft mc = mc();
 		//#if MC >= 1.14
