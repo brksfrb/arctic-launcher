@@ -17,6 +17,32 @@ import java.util.List;
  * "Filtered chat" HUD widget). The game's own chat keeps as many lines as the history setting.
  */
 final class ChatTab implements MenuTab {
+	/** A history line: click it to copy its text. */
+	private static final class CopyLine extends Label {
+		private final String copy;
+
+		CopyLine(String shown, String copy) {
+			super(shown, Label.Kind.TEXT);
+			this.copy = copy;
+			enabled = true;
+		}
+
+		@Override
+		protected void draw(com.arcticlauncher.client.gfx.Gfx g, com.arcticlauncher.client.style.Style s, int mx, int my, float dt) {
+			if (contains(mx, my)) {
+				g.fill(x - 2, y, x + w, y + h, s.border);
+			}
+			super.draw(g, s, mx, my, dt);
+		}
+
+		@Override
+		public boolean click(double mx, double my, int button) {
+			ArcticClient.platform().setClipboard(copy);
+			com.arcticlauncher.client.notice.Notices.post("Copied", "The line is on your clipboard");
+			return true;
+		}
+	}
+
 	private static final int FIELD_H = 18;
 	private static final int LINE_H = 11;
 	private static final int GAP = 4;
@@ -78,13 +104,13 @@ final class ChatTab implements MenuTab {
 		}
 		final String words = view == 0 ? "" : c.chatFilters.get(view - 1).words;
 		final List<ChatLog.Line> lines = log.search(words, search.text(), SHOWN);
-		f.section("Lines (" + log.size() + " kept, newest first)");
+		f.section("Lines (" + log.size() + " kept, newest first; click one to copy it)");
 		if (lines.isEmpty()) {
 			f.note(log.size() == 0 ? "Nothing has been said yet." : "Nothing matches.");
 		}
 		for (ChatLog.Line line : lines) {
 			String shown = "§8" + time.format(new Date(line.time)) + " §r" + line.text;
-			f.put(new Label(shown, Label.Kind.TEXT), f.x + 4, f.row(LINE_H), f.w - 4, LINE_H);
+			f.put(new CopyLine(shown, line.text), f.x + 4, f.row(LINE_H), f.w - 4, LINE_H);
 		}
 		f.gap(4);
 		int actions = f.row(FIELD_H + GAP);
