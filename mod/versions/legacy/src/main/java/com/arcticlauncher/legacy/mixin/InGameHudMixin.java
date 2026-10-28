@@ -11,6 +11,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /** Arctic's HUD widgets (and its crosshair, instead of the game's when on). */
 @Mixin(InGameHud.class)
 abstract class InGameHudMixin {
+	/** Hide titles: the big title and subtitle never show. */
+	@Inject(method = "setTitles", at = @At("HEAD"), cancellable = true)
+	private void arctic$noTitle(CallbackInfo ci) {
+		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
+		if (c != null && c.hideTitles) {
+			ci.cancel();
+		}
+	}
+
 	@Inject(method = "render", at = @At("TAIL"))
 	private void arctic$hud(float tickDelta, CallbackInfo ci) {
 		LegacyHooks.renderHud();

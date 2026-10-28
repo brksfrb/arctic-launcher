@@ -86,6 +86,7 @@
 <% } %>		<% if (fireOverlay) { %>"ScreenEffectRendererMixin",<% } else { %>"FireOldMixin",<% } %>
 		"LevelWeatherMixin",
 		"SoundVolumeMixin",
+		"TitleHideMixin",
 		"OfflineLanMixin",
 		"TimeLockMixin",
 		"MultiPlayerGameModeMixin"<% } %><% if (oldCamera) { %>,

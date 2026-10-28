@@ -539,6 +539,9 @@ final class ModCatalog {
 						f.swatches("Hit color", HIT_COLORS, () -> 0xFF000000 | c.hitColor, v -> c.hitColor = v & 0xFFFFFF);
 					}));
 		}
+		out.add(new Mod("titles", "Hide Titles", "The big title and subtitle in the middle of the screen never show", "fire", Category.VISUAL,
+				"title subtitle screen text announcement hide")
+				.toggle(() -> c.hideTitles, on -> c.hideTitles = on));
 		out.add(new Mod("soundchanger", "Sound Changer", "Make single sounds quieter, or silent: footsteps, hurt, rain", "combatfx", Category.GAMEPLAY,
 				"sound volume mute footstep hurt quiet noise audio")
 				.toggle(() -> c.soundChanger, on -> c.soundChanger = on)

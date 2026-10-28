@@ -218,6 +218,8 @@ public final class ClientConfig {
 	public boolean chatKeep;
 	/** Hide the chat lines on screen (messages still arrive, the history keeps them). */
 	public boolean chatOff;
+	/** Hide titles: the big title and subtitle never show. */
+	public boolean hideTitles;
 	/** Sound Changer: single sounds quieter or louder. */
 	public boolean soundChanger;
 	public java.util.List<SoundRule> soundRules = new java.util.ArrayList<SoundRule>();
