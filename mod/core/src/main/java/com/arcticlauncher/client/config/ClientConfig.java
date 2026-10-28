@@ -198,6 +198,8 @@ public final class ClientConfig {
 	/** Say this when a minigame ends (Auto GG). */
 	public boolean autoGg;
 	public String autoGgMessage = "gg";
+	/** The last Quickplay command, for Play again. */
+	public String quickplayLast = "";
 	/** {x} {y} {z}... also work in chat you type. */
 	public boolean chatPlaceholders = true;
 	/** Scoreboard: its red numbers, its dark background, or none of it. */

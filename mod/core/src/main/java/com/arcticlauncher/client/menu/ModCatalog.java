@@ -55,7 +55,7 @@ final class ModCatalog {
 		group(Category.COMBAT, "combatfx", "tnttimer", "hitboxes", "durability", "hitcolor");
 		group(Category.INVENTORY, "slotlocks", "invsearch", "shulkerpeek");
 		group(Category.MOVEMENT, "zoom", "freelook", "sprint", "sneak", "portalscreens", "controller");
-		group(Category.TOOLS, "waypoints", "screenshots", "replays", "death", "leave", "reconnect");
+		group(Category.TOOLS, "quickplay", "waypoints", "screenshots", "replays", "death", "leave", "reconnect");
 		group(Category.PLAYERS, "pingtags", "badgetags", "ownnametag", "ofcapes", "tabping", "tabglow", "tiers");
 		widgets("Performance", "fps", "ping", "tps", "frametime", "lows", "cpu", "syscpu", "sysram", "alloc", "gpu", "vram", "memory",
 				"entities");
@@ -558,6 +558,9 @@ final class ModCatalog {
 		out.add(new Mod("streamer", "Streamer Mode", "Hide your name, skin and the server on screen", "streamer", Category.CHAT,
 				"privacy snipe hide name")
 				.toggle(() -> c.streamerMode, on -> c.streamerMode = on)
+		out.add(new Mod("quickplay", "Quickplay", "Join a minigame with a click: Bed Wars, SkyWars, Duels and more", "messages", Category.CHAT,
+				"minigame play lobby bedwars skywars duels hypixel queue")
+				.settings(QuickplayForm::build));
 				.settings(ChatForms::streamer));
 	}
 
