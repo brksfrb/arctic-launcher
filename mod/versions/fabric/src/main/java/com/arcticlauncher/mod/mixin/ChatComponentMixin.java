@@ -70,7 +70,13 @@ abstract class ChatComponentMixin {
 	//#endif
 
 	/** Hide the chat: none of its lines are drawn. */
-	@Inject(method = "render", at = @At("HEAD"), cancellable = true)
+	@Inject(
+			//#if MC >= 26.1
+			method = "extractRenderState",
+			//#else
+			method = "render",
+			//#endif
+			at = @At("HEAD"), cancellable = true)
 	private void arctic$hide(CallbackInfo ci) {
 		ClientConfig c = ArcticClient.config();
 		if (c != null && c.chatOff) {
