@@ -307,6 +307,8 @@ public final class ClientConfig {
 	public boolean mobSize;
 	/** Fog: stretch (1 to 10 times) or remove the fog. */
 	public boolean fog;
+	/** Scrollable Tooltips: a tooltip taller than the screen moves with the mouse wheel. */
+	public boolean tooltipScroll;
 	/** Glint Colorizer: the enchant shimmer color (0 = the game's purple). */
 	public int glintColor;
 	public int glintColorOff;

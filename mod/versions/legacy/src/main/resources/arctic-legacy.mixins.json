@@ -25,6 +25,7 @@
 		"MobSizeLegacyMixin",
 		"FogLegacyMixin",
 		"GlintColorLegacyMixin",
+		"TooltipScrollLegacyMixin",
 		"LightWorkMixin",
 		"PlayerListHudMixin",
 		"PlayerTierMixin",

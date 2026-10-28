@@ -376,6 +376,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
+	/** The Scrollable Tooltips work on this version. */
+	default boolean tooltipScrollWorks() {
+		return false;
+	}
+
 	/** The Glint Colorizer works on this version. */
 	default boolean glintWorks() {
 		return false;

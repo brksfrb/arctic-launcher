@@ -445,6 +445,11 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean tooltipScrollWorks() {
+		return true;
+	}
+
+	@Override
 	public boolean glintWorks() {
 		return true;
 	}

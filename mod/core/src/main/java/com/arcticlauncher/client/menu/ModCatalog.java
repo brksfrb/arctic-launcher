@@ -545,6 +545,11 @@ final class ModCatalog {
 					"chunk border grid f3 g slime lines")
 					.toggle(() -> c.chunkBorders, on -> c.chunkBorders = on));
 		}
+		if (p.tooltipScrollWorks()) {
+			out.add(new Mod("tooltipscroll", "Scrollable Tooltips", "A tooltip too tall for the screen (long item lore) moves with the mouse wheel", "scoreboard",
+					Category.GAMEPLAY, "tooltip lore scroll long item wheel skyblock")
+					.toggle(() -> c.tooltipScroll, on -> c.tooltipScroll = on));
+		}
 		if (p.glintWorks()) {
 			out.add(new Mod("glint", "Glint Colorizer", "The shimmer on enchanted items in your hand and in menus in a color of your choice (armor keeps the game's)", "hitcolor",
 					Category.VISUAL, "enchant enchantment glint shimmer color purple")
