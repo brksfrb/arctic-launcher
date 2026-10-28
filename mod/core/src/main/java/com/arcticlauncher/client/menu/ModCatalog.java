@@ -550,8 +550,16 @@ final class ModCatalog {
 
 	private static void controllerSettings(Form f, final ClientConfig c) {
 		f.section("Controller");
-		f.note(ArcticClient.controller().connected() ? "A controller is connected."
-				: "No controller found. Plug one in (on 1.8.9-1.12.2, before starting the game).");
+		// Checked every frame: a rescan (or a newly plugged-in pad) shows up without reopening the tab.
+		f.put(new com.arcticlauncher.client.ui.Label("", com.arcticlauncher.client.ui.Label.Kind.MUTED) {
+			@Override
+			protected void draw(com.arcticlauncher.client.gfx.Gfx g, com.arcticlauncher.client.style.Style st, int mx, int my, float dt) {
+				text(ArcticClient.controller().connected() ? "A controller is connected."
+						: "No controller found. Plug one in; on 1.8.9-1.12.2 then press Rescan.");
+				super.draw(g, st, mx, my, dt);
+			}
+		}, f.x + 4, f.row(11), f.w - 4, 11);
+		f.action("Controllers", "Rescan", () -> ArcticClient.platform().rescanGamepads());
 		f.cycle("Look speed", labels(SPEEDS, ""), () -> c.controller.lookSpeed - 1, i -> c.controller.lookSpeed = i + 1);
 		f.cycle("Pointer speed", labels(SPEEDS, ""), () -> c.controller.cursorSpeed - 1, i -> c.controller.cursorSpeed = i + 1);
 		f.toggle("Invert looking", "Push up to look down", () -> c.controller.invertY, on -> c.controller.invertY = on);

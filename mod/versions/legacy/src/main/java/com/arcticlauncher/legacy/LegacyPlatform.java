@@ -186,6 +186,11 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public void rescanGamepads() {
+		LegacyGamepads.rescan();
+	}
+
+	@Override
 	public void turnPlayer(double yaw, double pitch) {
 		if (mc().player != null) {
 			// Takes mouse movement: 0.15 degrees each.

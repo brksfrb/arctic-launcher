@@ -127,19 +127,78 @@ final class Form {
 		put(new Label(text, Label.Kind.TEXT), x + 4, top, LABEL_W - 4, ROW);
 	}
 
-	/** "Label   ■ ■ ■ ■": pick one color; the chosen one gets a ring. */
-	void swatches(String label, int[] colors, final java.util.function.IntSupplier get, final java.util.function.IntConsumer set) {
+	/** The swatch row whose free color picker is open (one at a time), and the color it holds. */
+	private static String openPicker;
+	private static final float[] PICKER_HSV = new float[3];
+	private static final int HEX_W = 64;
+	private static final com.arcticlauncher.client.ui.TextField.Filter HEX = new com.arcticlauncher.client.ui.TextField.Filter() {
+		@Override
+		public boolean accepts(int c) {
+			return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+		}
+	};
+
+	/** "Label   ■ ■ ■ ■ ◐": pick one color, or open the picker for any other; the chosen one gets a ring. */
+	void swatches(final String label, int[] colors, final java.util.function.IntSupplier get, final java.util.function.IntConsumer set) {
 		int top = row(ROW);
 		rowLabel(top, label);
 		int sx = x + LABEL_W;
+		boolean preset = false;
 		for (final int color : colors) {
+			preset |= get.getAsInt() == color;
 			put(new Swatch(color, get.getAsInt() == color, () -> {
 				set.accept(color);
+				openPicker = null;
 				ArcticClient.saveConfig();
 				host.rebuild();
 			}), sx, top + (ROW - SWATCH) / 2, SWATCH, SWATCH);
 			sx += SWATCH + SWATCH_GAP;
 		}
+		final boolean open = label.equals(openPicker);
+		final boolean custom = !preset;
+		put(new CustomSwatch(get::getAsInt, () -> custom, open, () -> {
+			openPicker = open ? null : label;
+			ColorPicker.toHsv(get.getAsInt(), PICKER_HSV);
+			host.rebuild();
+		}), sx, top + (ROW - SWATCH) / 2, SWATCH, SWATCH);
+		if (open) {
+			picker(get, set);
+		}
+	}
+
+	/** The free color picker under a swatch row: the square and strip, and the color as hex. */
+	private void picker(final java.util.function.IntSupplier get, final java.util.function.IntConsumer set) {
+		// A stale hue (another color was chosen since): start from the color the row holds now.
+		if ((ColorPicker.rgb(PICKER_HSV[0], PICKER_HSV[1], PICKER_HSV[2]) & 0xFFFFFF) != (get.getAsInt() & 0xFFFFFF)) {
+			ColorPicker.toHsv(get.getAsInt(), PICKER_HSV);
+		}
+		int pickerTop = row(ColorPicker.HEIGHT + 6);
+		final int left = x + LABEL_W;
+		final int hexTop = row(ROW);
+		put(new Label("Hex", Label.Kind.TEXT), x + 4, hexTop, LABEL_W - 4, ROW);
+		final com.arcticlauncher.client.ui.TextField hex = new com.arcticlauncher.client.ui.TextField("RRGGBB", 6, HEX)
+				.text(hexOf(get.getAsInt()));
+		put(new ColorPicker(PICKER_HSV, () -> {
+			set.accept(ColorPicker.rgb(PICKER_HSV[0], PICKER_HSV[1], PICKER_HSV[2]));
+			hex.text(hexOf(get.getAsInt()));
+		}, () -> {
+			ArcticClient.saveConfig();
+			host.rebuild();
+		}), left, pickerTop + 2, Math.min(w - LABEL_W, 180), ColorPicker.HEIGHT);
+		hex.onChange(() -> {
+			String typed = hex.text();
+			if (typed.length() == 6) {
+				int rgb = 0xFF000000 | Integer.parseInt(typed, 16);
+				ColorPicker.toHsv(rgb, PICKER_HSV);
+				set.accept(rgb);
+				ArcticClient.saveConfig();
+			}
+		});
+		put(hex, left, hexTop + 4, HEX_W, ROW - 8);
+	}
+
+	private static String hexOf(int argb) {
+		return String.format(java.util.Locale.ROOT, "%06X", argb & 0xFFFFFF);
 	}
 
 	/** "Label   [One] [Two] [Three]": pick one option. */
@@ -176,6 +235,13 @@ final class Form {
 			value.text(String.format(java.util.Locale.ROOT, format, get.getAsDouble()));
 			ArcticClient.saveConfig();
 		}), right - STEP_BTN, by, STEP_BTN, STEP_BTN);
+	}
+
+	/** "Label   [Button]": runs {@code run} when pressed. */
+	void action(String label, String text, Runnable run) {
+		int top = row(ROW);
+		rowLabel(top, label);
+		put(new com.arcticlauncher.client.ui.Button(text, run), x + LABEL_W, top + (ROW - CHOICE_H) / 2, 64, CHOICE_H);
 	}
 
 	/** "Label     <  Sword  >": one of many options, stepped through (too many for {@link #choice}). */

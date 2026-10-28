@@ -9,6 +9,9 @@ public interface GamepadHost {
 		return false;
 	}
 
+	/** Look for controllers again (for versions that only find them when started); no-op where plugging one in is noticed. */
+	default void rescanGamepads() {}
+
 	/** Turn the player by these degrees, like moving the mouse does. */
 	default void turnPlayer(double yaw, double pitch) {}
 

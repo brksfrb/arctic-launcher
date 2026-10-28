@@ -9,7 +9,7 @@ import org.lwjgl.input.Controllers;
  * The first game controller on 1.8.9-1.12.2, through LWJGL 2 (JInput). Controllers there
  * come without a standard layout, so it's read from the axis and button names: Xbox and
  * PlayStation pads on Windows (DirectInput), and Linux/macOS pads (evdev names).
- * JInput only finds controllers plugged in before the game started.
+ * JInput only finds controllers plugged in before it started; {@link #rescan} starts it again.
  */
 final class LegacyGamepads {
 	/** Xbox pads through DirectInput: buttons by number, in Gamepad's order (-1: none). */
@@ -29,7 +29,9 @@ final class LegacyGamepads {
 	private static boolean started;
 	/** JInput has started (and {@link #pad} is chosen). */
 	private static volatile boolean ready;
-	private static boolean failed;
+	private static volatile boolean failed;
+	/** JInput is being (re)started on its thread. */
+	private static volatile boolean scanning;
 	private static Controller pad;
 	private static boolean playstation;
 	private static int[] buttons;
@@ -98,7 +100,30 @@ final class LegacyGamepads {
 		} catch (Throwable e) {
 			failed = true;
 			ArcticLegacy.LOG.info("no game controllers: {}", e.toString());
+		} finally {
+			scanning = false;
 		}
+	}
+
+	/** Look at every input device again (the Rescan button), for a pad plugged in since the game started. */
+	static void rescan() {
+		if (!started || scanning) {
+			return;
+		}
+		scanning = true;
+		ready = false;
+		failed = false;
+		Thread t = new Thread(() -> {
+			try {
+				Controllers.destroy();
+			} catch (Throwable ignored) {
+				// Never created: start() makes it.
+			}
+			pad = null;
+			start();
+		}, "arctic-controllers");
+		t.setDaemon(true);
+		t.start();
 	}
 
 	private static float axis(int i) {
