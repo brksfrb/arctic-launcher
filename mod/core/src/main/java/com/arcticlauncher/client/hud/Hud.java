@@ -386,11 +386,28 @@ public final class Hud {
 		}
 		// The widgets that step aside while the player list is held (never in the editor's preview).
 		boolean tab = !preview && ArcticClient.platform() != null && ArcticClient.platform().isKeyDown("key.keyboard.tab");
+		if (!preview) {
+			damageTint(g);
+		}
 		for (Map.Entry<HudWidget, int[]> e : lastSorted) {
 			if (tab && slot(e.getKey()).hideOnTab) {
 				continue;
 			}
 			draw(g, s, e.getKey(), e.getValue(), preview);
+		}
+	}
+
+	/** Damage Tint: the screen takes a color that fades over the ten ticks after a hit. */
+	private static void damageTint(Gfx g) {
+		com.arcticlauncher.client.config.ClientConfig c = ArcticClient.config();
+		com.arcticlauncher.client.Platform p = ArcticClient.platform();
+		if (c == null || !c.damageTint || p == null || !p.inWorld()) {
+			return;
+		}
+		int hurt = Math.min(10, p.hurtTime());
+		int alpha = (int) Math.round(255 * Math.max(0.05, Math.min(1.0, c.damageTintStrength)) * hurt / 10.0 * 0.6);
+		if (alpha > 0) {
+			g.fill(0, 0, g.width(), g.height(), (alpha << 24) | (c.damageTintColor & 0xFFFFFF));
 		}
 	}
 

@@ -19,6 +19,7 @@ final class ModCatalog {
 	private static final int[] OUTLINE_COLORS = {0xFFFFFFFF, 0xFF7DD3FC, 0xFF86EFAC, 0xFFFDE047, 0xFFF87171, 0xFFE879F9, 0xFF000000};
 	/** Unset, the pointer takes the menu's accent color. */
 	private static final int[] POINTER_COLORS = {0xFF7DD3FC, 0xFFFFFFFF, 0xFF86EFAC, 0xFFFDE047, 0xFFF87171, 0xFFE879F9};
+	private static final int[] DAMAGE_COLORS = {0xFFE11D48, 0xFFF97316, 0xFFFDE047, 0xFF7DD3FC, 0xFFA78BFA, 0xFFFFFFFF};
 	private static final int[] HIT_COLORS = {0xFFFFFFFF, 0xFF7DD3FC, 0xFF86EFAC, 0xFFFDE047, 0xFFF97316, 0xFFE879F9};
 	private static final String[] TIMES = {"Day", "Noon", "Sunset", "Night", "Midnight"};
 	private static final int[] TIME_TICKS = {1000, 6000, 12500, 13500, 18000};
@@ -538,6 +539,14 @@ final class ModCatalog {
 						f.swatches("Hit color", HIT_COLORS, () -> 0xFF000000 | c.hitColor, v -> c.hitColor = v & 0xFFFFFF);
 					}));
 		}
+		out.add(new Mod("damagetint", "Damage Tint", "The screen flushes with a color for a moment when you take a hit", "hitcolor", Category.VISUAL,
+				"hurt red vignette flash damage screen")
+				.toggle(() -> c.damageTint, on -> c.damageTint = on)
+				.settings((host, f) -> {
+					f.section("Look");
+					f.swatches("Color", DAMAGE_COLORS, () -> 0xFF000000 | c.damageTintColor, v -> c.damageTintColor = v & 0xFFFFFF);
+					f.slider("Strength", () -> c.damageTintStrength, v -> c.damageTintStrength = v, 0.1, 1.0, 0.05, "%.2f");
+				}));
 		if (p.scoreboardTweaks()) {
 			out.add(new Mod("scoreboard", "Scoreboard", "The sidebar: numbers, background, or hide it", "scoreboard", Category.VISUAL,
 					"sidebar")

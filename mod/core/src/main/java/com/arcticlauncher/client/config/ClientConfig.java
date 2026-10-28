@@ -219,6 +219,11 @@ public final class ClientConfig {
 	public float outlineWidth = 1f;
 	/** The tint on hurt mobs and players (RGB, 0 = the game's red). */
 	public int hitColor;
+	/** Damage Tint: the screen takes this color for a moment when you're hurt. */
+	public boolean damageTint;
+	public int damageTintColor = 0xE11D48;
+	/** 0.05 to 1: how strong the tint is right after the hit. */
+	public double damageTintStrength = 0.4;
 	/** Time of day on your screen (ticks, 6000 = noon), or -1 for the server's. */
 	public int timeLock = -1;
 	/**
