@@ -67,6 +67,37 @@ final class ChatForms {
 		}
 	}
 
+	static void autoText(final Host host, Form f) {
+		final java.util.List<com.arcticlauncher.client.config.AutoReply> list = ArcticClient.config().autoReplies;
+		f.section("Answers");
+		f.note("When a chat line contains the left text, the right text is sent (start with / for a command).");
+		f.note("Each answer is sent at most every 5 seconds. Fills in: " + QuickMessages.PLACEHOLDERS);
+		f.gap(4);
+		for (final com.arcticlauncher.client.config.AutoReply r : list) {
+			int top = f.row(FIELD_H + GAP);
+			int half = (f.w - REMOVE_W - GAP * 2) / 2;
+			final TextField when = new TextField("When a line says", MAX_TEXT, TextField.ANY).text(r.when);
+			when.onChange(() -> r.when = when.text());
+			f.put(when, f.x, top, half, FIELD_H);
+			final TextField say = new TextField("Send", MAX_TEXT, TextField.ANY).text(r.say);
+			say.onChange(() -> r.say = say.text());
+			f.put(say, f.x + half + GAP, top, f.w - half - REMOVE_W - GAP * 2, FIELD_H);
+			f.put(new Button("×", () -> {
+				list.remove(r);
+				ArcticClient.saveConfig();
+				host.rebuild();
+			}), f.x + f.w - REMOVE_W, top, REMOVE_W, FIELD_H);
+		}
+		if (list.size() < com.arcticlauncher.client.feature.AutoReplies.MAX) {
+			int top = f.row(FIELD_H + GAP);
+			f.put(new Button("Add an answer", () -> {
+				list.add(new com.arcticlauncher.client.config.AutoReply());
+				ArcticClient.saveConfig();
+				host.rebuild();
+			}).primary(), f.x, top, ADD_W, FIELD_H);
+		}
+	}
+
 	static void autoGg(Host host, Form f) {
 		final ClientConfig c = ArcticClient.config();
 		f.section("Message");

@@ -264,10 +264,12 @@ public final class ArcticClient {
 	private static final com.arcticlauncher.client.feature.PlaytimeLog PLAYTIME = new com.arcticlauncher.client.feature.PlaytimeLog();
 	private static final com.arcticlauncher.client.feature.DurabilityWatch DURABILITY = new com.arcticlauncher.client.feature.DurabilityWatch();
 	private static final com.arcticlauncher.client.feature.AutoGg AUTO_GG = new com.arcticlauncher.client.feature.AutoGg();
+	private static final com.arcticlauncher.client.feature.AutoReplies AUTO_REPLIES = new com.arcticlauncher.client.feature.AutoReplies();
 
 	/** A chat line arrived (for Auto GG). */
 	public static void chatLine(String text) {
 		AUTO_GG.onChat(text, config.autoGg, config.autoGgMessage);
+		AUTO_REPLIES.onChat(text, config.autoReply, config.autoReplies);
 		String server = platform == null ? null : platform.server();
 		CHAT_LOG.add(text, server == null || "Singleplayer".equals(server) ? "" : server);
 	}
@@ -380,6 +382,7 @@ public final class ArcticClient {
 				DURABILITY.tick(platform);
 			}
 			AUTO_GG.tick(platform);
+			AUTO_REPLIES.tick(platform);
 			com.arcticlauncher.client.servers.QuickJoin.tick(platform);
 			STOPWATCH.tick(!screenOpen && platform.isKeyDown(config.stopwatchKey));
 		}

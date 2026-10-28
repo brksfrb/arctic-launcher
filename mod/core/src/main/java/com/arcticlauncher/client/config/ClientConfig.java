@@ -200,6 +200,9 @@ public final class ClientConfig {
 	public String autoGgMessage = "gg";
 	/** The last Quickplay command, for Play again. */
 	public String quickplayLast = "";
+	/** Auto Text: answers sent when a chat line contains a trigger. */
+	public boolean autoReply;
+	public java.util.List<AutoReply> autoReplies = new java.util.ArrayList<AutoReply>();
 	/** {x} {y} {z}... also work in chat you type. */
 	public boolean chatPlaceholders = true;
 	/** Scoreboard: its red numbers, its dark background, or none of it. */
@@ -354,6 +357,9 @@ public final class ClientConfig {
 		}
 		if (quickMessages == null) {
 			quickMessages = new java.util.ArrayList<QuickMessage>();
+		if (autoReplies == null) {
+			autoReplies = new java.util.ArrayList<AutoReply>();
+		}
 		}
 		if (fullbrightKey == null) {
 			fullbrightKey = "key.keyboard.unknown";

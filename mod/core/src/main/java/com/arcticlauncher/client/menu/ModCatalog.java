@@ -561,6 +561,13 @@ final class ModCatalog {
 		out.add(new Mod("quickplay", "Quickplay", "Join a minigame with a click: Bed Wars, SkyWars, Duels and more", "messages", Category.CHAT,
 				"minigame play lobby bedwars skywars duels hypixel queue")
 				.settings(QuickplayForm::build));
+		out.add(new Mod("autotext", "Auto Text", "Answer a chat line by itself: when it says X, send Y", "messages", Category.CHAT,
+				"auto reply answer trigger macro respond")
+				.toggle(() -> c.autoReply, on -> c.autoReply = on)
+				.settings(ChatForms::autoText));
+		out.add(new Mod("quickplay", "Quickplay", "Join a minigame with a click: Bed Wars, SkyWars, Duels and more", "messages", Category.CHAT,
+				"minigame play lobby bedwars skywars duels hypixel queue")
+				.settings(QuickplayForm::build));
 				.settings(ChatForms::streamer));
 	}
 
