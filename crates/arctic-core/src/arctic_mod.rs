@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::io::{Cursor, Write};
+use std::io::{Cursor, Read, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -245,8 +245,37 @@ fn sync_build(mods_dir: &Path, build: Option<&'static str>, enabled: bool) -> Re
         return Ok(());
     };
     fs::create_dir_all(mods_dir).at(mods_dir)?;
-    fs::write(&path, jar.as_slice()).at(&path)?;
+    // Written next to it and moved into place, so a game that starts while this runs (two Play
+    // clicks, a second launcher) never opens a half-written jar.
+    let partial = mods_dir.join(format!("{FILE_NAME}.part"));
+    fs::write(&partial, jar.as_slice()).at(&partial)?;
+    if let Err(e) = fs::rename(&partial, &path) {
+        let _ = fs::remove_file(&partial);
+        return Err(e).at(&path);
+    }
     fs::write(&stamp_path, stamp(jar.len() as u64)).at(&stamp_path)
+}
+
+/// True if the jar at `path` opens as a zip and its manifest names the Java agent class: what the
+/// JVM needs of a `-javaagent` file (it refuses to start otherwise).
+pub fn jar_usable(path: &Path) -> bool {
+    let Ok(file) = fs::File::open(path) else {
+        return false;
+    };
+    let Ok(mut zip) = zip::ZipArchive::new(file) else {
+        return false;
+    };
+    let Ok(mut manifest) = zip.by_name("META-INF/MANIFEST.MF") else {
+        return false;
+    };
+    let mut text = String::new();
+    manifest.read_to_string(&mut text).is_ok() && text.contains("Premain-Class")
+}
+
+/// Put the mod's jar in again whatever the stamp says (it was found damaged).
+pub fn rewrite(mods_dir: &Path, game_version: &str) -> Result<()> {
+    let _ = fs::remove_file(mods_dir.join(STAMP_NAME));
+    sync(mods_dir, game_version, true)
 }
 
 /// The oldest Fabric Loader the mod for `game` runs on (its
@@ -338,6 +367,22 @@ mod tests {
     use std::io::Read;
 
     use super::*;
+
+    #[test]
+    fn a_damaged_jar_is_noticed_and_written_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let mods = dir.path().join("mods");
+        sync(&mods, "26.3", true).unwrap();
+        let path = mods.join(FILE_NAME);
+        assert!(jar_usable(&path));
+        // Cut off, as a start in the middle of a write or a scanner leaves it; same size as stamped.
+        let whole = fs::read(&path).unwrap();
+        fs::write(&path, &whole[..whole.len() / 2]).unwrap();
+        assert!(!jar_usable(&path));
+        rewrite(&mods, "26.3").unwrap();
+        assert!(jar_usable(&path));
+        assert!(!mods.join(format!("{FILE_NAME}.part")).exists());
+    }
 
     #[test]
     fn installs_updates_and_removes() {
