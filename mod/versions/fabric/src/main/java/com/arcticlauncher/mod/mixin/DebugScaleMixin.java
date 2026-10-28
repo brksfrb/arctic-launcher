@@ -41,7 +41,7 @@ abstract class DebugScaleMixin {
 
 	//#if MC >= 1.21.9
 	@Inject(method = "extractLines", at = @At("HEAD"), require = 0)
-	//#if MC >= 26.1
+	//#if MC >= 26.3
 	private void arctic$start(GuiGraphicsExtractor g, List<String> lines, boolean left, int top, CallbackInfo ci) {
 	//#else
 	private void arctic$start(GuiGraphicsExtractor g, List<String> lines, boolean left, CallbackInfo ci) {
@@ -50,7 +50,7 @@ abstract class DebugScaleMixin {
 	}
 
 	@Inject(method = "extractLines", at = @At("RETURN"), require = 0)
-	//#if MC >= 26.1
+	//#if MC >= 26.3
 	private void arctic$end(GuiGraphicsExtractor g, List<String> lines, boolean left, int top, CallbackInfo ci) {
 	//#else
 	private void arctic$end(GuiGraphicsExtractor g, List<String> lines, boolean left, CallbackInfo ci) {
