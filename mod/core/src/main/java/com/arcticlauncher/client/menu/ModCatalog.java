@@ -577,6 +577,14 @@ final class ModCatalog {
 					f.toggle("Placeholders", "Type {x} {y} {z} and it sends your position", () -> c.chatPlaceholders,
 							on -> c.chatPlaceholders = on);
 					f.note("Also: " + QuickMessages.PLACEHOLDERS);
+					f.section("Stacking");
+					f.toggle("Only within a time frame", "Same line again after a pause starts a new line", () -> c.chatStackTimed,
+							on -> c.chatStackTimed = on);
+					f.stepper("Time frame (seconds)", () -> c.chatStackSeconds, v -> c.chatStackSeconds = (int) v, 1, 60, 1, "%.0f");
+					f.toggle("Ignore blank lines", "Empty lines are never stacked", () -> c.chatStackIgnoreBlank,
+							on -> c.chatStackIgnoreBlank = on);
+					f.toggle("Ignore dividers", "Lines like ------- are never stacked", () -> c.chatStackIgnoreBreak,
+							on -> c.chatStackIgnoreBreak = on);
 					f.section("Timestamp");
 					f.toggle("12-hour clock", "3:07 instead of 15:07", () -> c.chatStamp12h, on -> c.chatStamp12h = on);
 					f.toggle("AM / PM", "Add AM or PM after the time", () -> c.chatStampAmPm, on -> c.chatStampAmPm = on);

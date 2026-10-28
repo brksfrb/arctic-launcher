@@ -216,6 +216,11 @@ public final class ClientConfig {
 	public boolean chatStampItalic;
 	/** Keep the chat lines when you disconnect or change server. */
 	public boolean chatKeep;
+	/** Stacking: only lines within this many seconds of each other, and not blank lines or dividers. */
+	public boolean chatStackTimed;
+	public int chatStackSeconds = 10;
+	public boolean chatStackIgnoreBlank;
+	public boolean chatStackIgnoreBreak;
 	public String chatHiddenWords = "";
 	/** The Items widget's list: item id (or part of it), optionally ":Label", separated by commas. */
 	public String countedItems = "totem_of_undying:Totems, ender_pearl:Pearls, golden_apple:Gapples";

@@ -35,7 +35,7 @@ abstract class ChatComponentMixin {
 	private List<GuiMessage> allMessages;
 
 	@Unique
-	private String arctic$lastText;
+	private final com.arcticlauncher.client.feature.ChatStacker arctic$stacker = new com.arcticlauncher.client.feature.ChatStacker();
 
 	@Unique
 	private int arctic$repeats;
@@ -122,9 +122,13 @@ abstract class ChatComponentMixin {
 		String text = message.getString();
 		ArcticClient.chatLine(text);
 		Component out = message;
-		if (c.chatStack && text.equals(arctic$lastText) && !allMessages.isEmpty()) {
+		int arctic$count = c.chatStack ? arctic$stacker.next(text, c) : 1;
+		if (!c.chatStack) {
+			arctic$stacker.reset();
+		}
+		if (arctic$count > 1 && !allMessages.isEmpty()) {
 			// The newest message is first: replace it with a counted copy.
-			arctic$repeats++;
+			arctic$repeats = arctic$count;
 			//#if MC >= 1.20.5
 			allMessages.removeFirst();
 			//#else

@@ -14,6 +14,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** Chat timestamps, repeated lines stacked, mentions of you marked, and Auto GG. */
 @Mixin(ChatHud.class)
 abstract class ChatHudMixin {
+	@Shadow
+	@Final
+	private java.util.List<net.minecraft.client.gui.hud.ChatHudLine> messages;
+
+	@Shadow
+	public void reset() {}
+
+	@Unique
+	private final com.arcticlauncher.client.feature.ChatStacker arctic$stacker = new com.arcticlauncher.client.feature.ChatStacker();
+
 	/** How many messages the chat keeps: the game's 100 become the player's setting. */
 	@ModifyConstant(method = "addMessage(Lnet/minecraft/text/Text;IIZ)V", constant = @Constant(intValue = 100))
 	private int arctic$history(int vanilla) {
@@ -40,6 +50,19 @@ abstract class ChatHudMixin {
 
 	@ModifyVariable(method = "addMessage(Lnet/minecraft/text/Text;I)V", at = @At("HEAD"), argsOnly = true)
 	private Text arctic$chat(Text message) {
-		return LegacyHooks.chat(message);
+		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
+		Text base = message;
+		if (c != null && c.chatStack) {
+			int count = arctic$stacker.next(message.asUnformattedString(), c);
+			if (count > 1 && !messages.isEmpty()) {
+				// The newest message is first: replace it with a counted copy.
+				messages.remove(0);
+				reset();
+				base = message.copy().append(new net.minecraft.text.LiteralText("§7 (x" + count + ")"));
+			}
+		} else {
+			arctic$stacker.reset();
+		}
+		return LegacyHooks.chat(base);
 	}
 }
