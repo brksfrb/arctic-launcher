@@ -33,10 +33,18 @@ final class LegacyReplayTest {
 	private LegacyReplayTest() {}
 
 	static boolean requested() {
-		return "replay".equals(System.getProperty("arctic.selftest"));
+		String mode = System.getProperty("arctic.selftest");
+		return "replay".equals(mode) || "replayfile".equals(mode);
 	}
 
 	static void start() {
+		if ("replayfile".equals(System.getProperty("arctic.selftest"))) {
+			// -Darctic.replayfile=<a .mcpr>: just open that recording and say whether the world comes up.
+			final File file = new File(System.getProperty("arctic.replayfile", ""));
+			log("scheduled, opening " + file.getName());
+			TIMER.schedule(() -> run(() -> openFile(file)), 10, TimeUnit.SECONDS);
+			return;
+		}
 		log("scheduled");
 		TIMER.schedule(() -> run(() -> LegacyWorldTest.createTestWorld(LegacyReplayTest::record)), 10, TimeUnit.SECONDS);
 	}
@@ -161,6 +169,31 @@ final class LegacyReplayTest {
 				});
 			});
 		});
+	}
+
+	private static void openFile(File file) {
+		Replays.watch(file);
+		final long begun = System.currentTimeMillis();
+		when("opened", () -> Replays.viewer() != null && (Replays.viewer().ready() || Replays.viewer().status() != null), () -> {
+			ReplayViewer v = Replays.viewer();
+			log("result ready=" + v.ready() + " status=" + v.status() + " after " + (System.currentTimeMillis() - begun) + " ms"
+					+ " screen=" + screenName());
+			after(5, () -> {
+				ReplayViewer w = Replays.viewer();
+				log("5 s later ready=" + (w != null && w.ready()) + " screen=" + screenName() + " time=" + (w == null ? -1 : w.time()));
+				if (w == null || !w.ready() || MinecraftClient.getInstance().currentScreen instanceof net.minecraft.client.gui.screen.DownloadingTerrainScreen) {
+					fail("the replay never left the loading screen");
+					return;
+				}
+				log("PASSED");
+				MinecraftClient.getInstance().scheduleStop();
+			});
+		});
+	}
+
+	private static String screenName() {
+		net.minecraft.client.gui.screen.Screen s = MinecraftClient.getInstance().currentScreen;
+		return s == null ? "none" : s.getClass().getSimpleName();
 	}
 
 	private static void watch(File file) {
