@@ -19,12 +19,12 @@ public final class SaturationBar {
 	private static final int RIGHT = 91;
 	private static final int ABOVE_BOTTOM = 39;
 	/** Gold without its see-through part; each use adds its own. */
-	private static final int GOLD = 0xFFD24A;
+	private static final int GOLD = 0xFFDD00;
 	/** The colour of the game's drumstick meat, for the hunger a food in your hand would give. */
 	private static final int MEAT = 0xC4723F;
 	/** How see-through the glow is (0 to 255). */
-	private static final int HALO = 0x40;
-	private static final int TINT = 0x80;
+	private static final int HALO = 0x38;
+	private static final int TINT = 0x66;
 
 	/** The meat of a whole drumstick (the game's food_full), row by row; X is drawn. */
 	static final String[] WHOLE = {

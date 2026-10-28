@@ -333,6 +333,11 @@ pub fn brand_flag(loader: &crate::instances::Loader) -> Option<String> {
         .then(|| "-Darctic.brand=vanilla".to_owned())
 }
 
+/// JVM flag telling the mod which launcher started it, for the version it shows in menus.
+pub fn version_flag() -> String {
+    format!("-Darctic.launcher={}", crate::APP_VERSION)
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Read;

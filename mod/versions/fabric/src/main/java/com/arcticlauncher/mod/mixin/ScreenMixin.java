@@ -30,6 +30,28 @@ abstract class ScreenMixin {
 		com.arcticlauncher.mod.ArcticButton.layout((Screen) (Object) this);
 	}
 
+	/** The pause menu names Arctic in its corner. */
+	@Inject(method = "extractRenderState", at = @At("TAIL"))
+	//#if MC >= 1.20
+	private void arctic$badge(GuiGraphicsExtractor g, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+		if ((Object) this instanceof net.minecraft.client.gui.screens.PauseScreen) {
+			com.arcticlauncher.client.menu.Badge.drawCorner(new GfxImpl(g), ((Screen) (Object) this).width, ((Screen) (Object) this).height);
+		}
+	}
+	//#elif MC >= 1.16
+	private void arctic$badge(com.mojang.blaze3d.vertex.PoseStack pose, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+		if ((Object) this instanceof net.minecraft.client.gui.screens.PauseScreen) {
+			com.arcticlauncher.client.menu.Badge.drawCorner(GfxImpl.of(pose), ((Screen) (Object) this).width, ((Screen) (Object) this).height);
+		}
+	}
+	//#else
+	private void arctic$badge(int mouseX, int mouseY, float delta, CallbackInfo ci) {
+		if ((Object) this instanceof net.minecraft.client.gui.screens.PauseScreen) {
+			com.arcticlauncher.client.menu.Badge.drawCorner(GfxImpl.of(new com.mojang.blaze3d.vertex.PoseStack()), ((Screen) (Object) this).width, ((Screen) (Object) this).height);
+		}
+	}
+	//#endif
+
 	//#if MC >= 1.20.6
 	@Inject(method = "extractPanorama", at = @At("HEAD"), cancellable = true)
 	private void arctic$backdrop(GuiGraphicsExtractor g, float delta, CallbackInfo ci) {

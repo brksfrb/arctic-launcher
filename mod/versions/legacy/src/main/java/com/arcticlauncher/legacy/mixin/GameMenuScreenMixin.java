@@ -27,6 +27,11 @@ abstract class GameMenuScreenMixin extends Screen {
 		buttons.add(new ButtonWidget(ARCTIC_ID, MARGIN, MARGIN, ARCTIC_W, ARCTIC_H, ArcticClient.hubLabel()));
 	}
 
+	@Inject(method = "render", at = @At("TAIL"))
+	private void arctic$badge(int mouseX, int mouseY, float delta, CallbackInfo ci) {
+		com.arcticlauncher.client.menu.Badge.drawCorner(LegacyHooks.gfx(), width, height);
+	}
+
 	@Inject(method = "buttonClicked", at = @At("HEAD"), cancellable = true)
 	private void arctic$click(ButtonWidget button, CallbackInfo ci) {
 		if (button.id == ARCTIC_ID) {

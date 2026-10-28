@@ -772,6 +772,7 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
             .map(str::to_owned)
             .chain(arctic_mod::jvm_flag())
             .chain(arctic_mod::brand_flag(&req.instance.loader))
+            .chain(Some(arctic_mod::version_flag()))
             .chain(gc_flags(
                 settings
                     .extra_jvm_args

@@ -161,7 +161,20 @@ public final class LegacyHooks {
 		}
 	}
 
+	private static boolean titled;
+
+	/** The window's title names Arctic, once (LWJGL 2 sets it before any mod runs). */
+	private static void titleWindow() {
+		titled = true;
+		if (System.getProperty("arctic.launcher") != null) {
+			org.lwjgl.opengl.Display.setTitle("Minecraft " + ArcticClient.platform().minecraftVersion() + " - Arctic");
+		}
+	}
+
 	public static void tick(boolean screenOpen) {
+		if (!titled) {
+			titleWindow();
+		}
 		if (screenOpen) {
 			cursorGuard();
 		}

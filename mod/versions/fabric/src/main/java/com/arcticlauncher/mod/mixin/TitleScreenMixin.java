@@ -54,6 +54,7 @@ abstract class TitleScreenMixin extends Screen {
 		GfxImpl gfx = GfxImpl.of(new com.mojang.blaze3d.vertex.PoseStack());
 	//#endif
 		if (ArcticClient.restyles()) TitleBranding.draw(gfx, width, height);
+		else com.arcticlauncher.client.menu.Badge.drawCentered(gfx, width, height);
 		//#if MC >= 1.19.4
 		if ("title-compat".equals(System.getProperty("arctic.selftest"))) com.arcticlauncher.mod.TitleCompatTest.rendered((TitleScreen) (Object) this);
 		//#endif

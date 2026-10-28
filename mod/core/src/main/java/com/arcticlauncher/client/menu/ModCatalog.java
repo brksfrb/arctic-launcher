@@ -282,7 +282,7 @@ final class ModCatalog {
 					}
 					f.note("Press F3 to see it. A line this does not know stays visible.");
 				}));
-		out.add(new Mod("saturation", "Saturation Bar", "Your hidden saturation as a gold line on the hunger bar", "food",
+		out.add(new Mod("saturation", "Saturation Bar", "Your hidden saturation as a golden glow on the hunger icons", "food",
 				Category.HUD, "hunger food appleskin saturation")
 				.toggle(() -> c.saturationBar, on -> c.saturationBar = on));
 		out.add(new Mod("durability", "Low Durability", "A pop-up when armor or your tool is about to break", "durability",
