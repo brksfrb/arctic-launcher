@@ -45,11 +45,25 @@ impl ArcticApp {
         let face = egui::Rect::from_min_size(rect.left_top() + vec2(18.0, 20.0), vec2(56.0, 56.0));
         let frame = if active { p.accent } else { p.card_stroke };
         paint_face(painter, face, &self.face(&account), frame);
+        // A long name stops before the card's edge (and the active check mark), with an ellipsis.
+        let font = FontId::proportional(17.0);
+        let max_width = rect.width() - 126.0;
+        let width = |s: &str| {
+            painter
+                .layout_no_wrap(s.to_owned(), font.clone(), p.text)
+                .size()
+                .x
+        };
+        let mut name = account.username.clone();
+        if width(&name) > max_width {
+            while name.pop().is_some() && width(&format!("{name}…")) > max_width {}
+            name.push('…');
+        }
         painter.text(
             rect.left_top() + vec2(90.0, 30.0),
             Align2::LEFT_CENTER,
-            &account.username,
-            FontId::proportional(17.0),
+            &name,
+            font.clone(),
             p.text,
         );
         let (badge, color) = if account.is_microsoft() {
