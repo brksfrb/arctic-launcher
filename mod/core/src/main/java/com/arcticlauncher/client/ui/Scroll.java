@@ -16,11 +16,16 @@ public final class Scroll {
 	private static final int STEP = 20;
 	private static final int BAR_W = 3;
 	private static final int MIN_THUMB = 12;
+	/** How long the glide takes to cover about two thirds of the way to where the wheel pointed (seconds). */
+	private static final float GLIDE = 0.06f;
 
 	private final List<Widget> items = new ArrayList<Widget>();
 	private final List<Integer> homes = new ArrayList<Integer>();
 	private final int[] box;
 	private int offset;
+	/** Where the wheel has sent the list; {@link #offset} glides there. */
+	private int target;
+	private long lastEase;
 	private int contentBottom;
 	private final Widget bar = new Widget() {
 		private double grab;
@@ -51,6 +56,7 @@ public final class Scroll {
 	public Scroll(int x0, int y0, int x1, int y1, int offset) {
 		box = new int[] {x0, y0, x1, y1};
 		this.offset = Math.max(0, offset);
+		this.target = this.offset;
 		contentBottom = y0;
 		// A wider hit target around the thin visual bar, outside the list's cards.
 		bar.bounds(x1, y0, BAR_W + 6, Math.max(0, y1 - y0));
@@ -105,12 +111,33 @@ public final class Scroll {
 		if (!contains(mx, my) || maxOffset() == 0) {
 			return false;
 		}
-		int before = offset;
-		scrollTo(offset - (int) Math.round(amount * STEP));
-		return offset != before;
+		int before = target;
+		target = Math.max(0, Math.min(maxOffset(), target - (int) Math.round(amount * STEP)));
+		return target != before;
 	}
 
+	/** Jump to {@code value} at once (dragging the bar, a rebuilt page); the wheel's glide stops there. */
 	public void scrollTo(int value) {
+		move(value);
+		target = offset;
+	}
+
+	/** One frame of the glide towards where the wheel pointed (time based, so it looks the same at any frame rate). */
+	private void ease() {
+		target = Math.max(0, Math.min(maxOffset(), target));
+		if (target == offset) {
+			lastEase = 0;
+			return;
+		}
+		long now = System.nanoTime();
+		float dt = lastEase == 0 ? 0.016f : Math.min(0.05f, (now - lastEase) / 1e9f);
+		lastEase = now;
+		int diff = target - offset;
+		int step = Math.round(diff * (1f - (float) Math.exp(-dt / GLIDE)));
+		move(offset + (step != 0 ? step : Integer.signum(diff)));
+	}
+
+	private void move(int value) {
 		int next = Math.max(0, Math.min(maxOffset(), value));
 		int delta = next - offset;
 		offset = next;
@@ -128,6 +155,7 @@ public final class Scroll {
 
 	/** The bar on the right edge, when there's more than fits. */
 	public void drawBar(Gfx g, Style s) {
+		ease();
 		int max = maxOffset();
 		if (max == 0) {
 			return;
