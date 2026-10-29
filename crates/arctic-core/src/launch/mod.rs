@@ -371,7 +371,11 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
     priority::set_gentle(req.settings.gentle_launch);
     // A proxy that is on but unusable must stop the launch: starting
     // without it would quietly connect directly.
-    let proxy = ProxySettings::load(req.dirs);
+    let proxy = ProxySettings::try_load(req.dirs).map_err(|e| {
+        crate::Error::Other(format!(
+            "The proxy settings can't be read ({e}), so the game was not started without it. Set the proxy again in Settings > Network."
+        ))
+    })?;
     if proxy.enabled
         && let Err(why) = proxy.validate()
     {
@@ -471,7 +475,9 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 // Vanilla instances (on Fabric underneath) and Fabric/Quilt
                 // instances alike; in those, mods the player already has stay theirs.
                 progress(ProgressInfo::stage("Checking performance mods"));
-                crate::mods::performance::sync(
+                // Best effort, like the Forge branch: no Sodium is better than no game (an
+                // unreachable Modrinth CDN, a locked or truncated index).
+                if let Err(e) = crate::mods::performance::sync(
                     &game_dir,
                     &vanilla.id,
                     req.instance.performance,
@@ -479,12 +485,16 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                     &req.instance.extras,
                     req.instance.loader.kind().is_some(),
                     progress,
-                )?;
-                crate::mods::polarium::sync(
+                ) {
+                    log::warn!("performance mods: {e}");
+                }
+                if let Err(e) = crate::mods::polarium::sync(
                     &game_dir.join("mods"),
                     &vanilla.id,
                     req.instance.performance,
-                )?;
+                ) {
+                    log::warn!("polarium: {e}");
+                }
                 // Vanilla instances (nothing in the folder but the launcher's own mods): load only
                 // the Fabric API modules those use, which starts the game noticeably faster.
                 if req.instance.performance

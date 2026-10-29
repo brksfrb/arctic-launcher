@@ -66,15 +66,40 @@ impl Default for ProxySettings {
 }
 
 impl ProxySettings {
-    pub fn load(dirs: &DataDirs) -> Self {
+    /// The saved proxy. A missing file means no proxy; a file that is there but can't be read is an error
+    /// (a read blocked for a moment by antivirus is retried), never "proxy off": the game must not connect
+    /// directly when a proxy was set.
+    pub fn try_load(dirs: &DataDirs) -> Result<Self> {
         let path = dirs.proxy_file();
-        let settings = load_json::<Self>(&path).ok().flatten().unwrap_or_default();
+        let mut attempt = 0;
+        let loaded = loop {
+            match load_json::<Self>(&path) {
+                Err(crate::Error::Io { .. }) if attempt < 3 => {
+                    attempt += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+                }
+                other => break other?,
+            }
+        };
+        let settings = loaded.unwrap_or_default();
         // Files from before encryption: save them encrypted right away.
         if std::fs::read_to_string(&path).is_ok_and(|t| crate::secret::has_plain(&t, &["password"]))
         {
             let _ = settings.save(dirs);
         }
-        settings
+        Ok(settings)
+    }
+
+    /// Like [`Self::try_load`] for callers that cannot fail: an unreadable file loads as "on, no address", which
+    /// [`Self::active`] and the network layer treat as an unusable proxy (traffic is blocked, not sent direct).
+    pub fn load(dirs: &DataDirs) -> Self {
+        Self::try_load(dirs).unwrap_or_else(|e| {
+            log::error!("proxy.json can't be read: {e}");
+            Self {
+                enabled: true,
+                ..Self::default()
+            }
+        })
     }
 
     pub fn save(&self, dirs: &DataDirs) -> Result<()> {
