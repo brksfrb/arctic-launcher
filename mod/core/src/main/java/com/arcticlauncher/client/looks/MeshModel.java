@@ -486,7 +486,7 @@ public final class MeshModel {
 				throw new IllegalArgumentException("a bufferView has no length");
 			}
 			long len = view.get("byteLength").getAsLong();
-			if (off < 0 || len < 0 || off + len > binLen) {
+			if (off < 0 || len < 0 || off > binLen || len > binLen - off) {
 				throw new IllegalArgumentException("a bufferView runs past the binary chunk");
 			}
 			return new int[] {(int) off, (int) len};
@@ -843,7 +843,7 @@ public final class MeshModel {
 			}
 			long off = a.has("byteOffset") ? a.get("byteOffset").getAsLong() : 0;
 			long end = off + stride * (count - 1) + elem;
-			if (off < 0 || end > range[1]) {
+			if (off < 0 || off > range[1] || end > range[1]) {
 				throw new IllegalArgumentException("an accessor runs past its bufferView");
 			}
 			boolean normalized = a.has("normalized") && a.get("normalized").getAsBoolean();

@@ -893,10 +893,11 @@ impl Reader<'_> {
             return Err("bad byteStride".into());
         }
         let off = a.get("byteOffset").and_then(Value::as_u64).unwrap_or(0) as usize;
-        let end = off + stride * (count - 1) + elem;
-        if end > bytes.len() {
-            return Err("an accessor runs past its bufferView".into());
-        }
+        // `byteOffset` comes from the file: a value near u64::MAX must not wrap the end around.
+        let end = off
+            .checked_add(stride * (count - 1) + elem)
+            .filter(|end| *end <= bytes.len())
+            .ok_or("an accessor runs past its bufferView")?;
         let normalized = a
             .get("normalized")
             .and_then(Value::as_bool)

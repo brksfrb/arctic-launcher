@@ -173,6 +173,9 @@ fn refuses_nonsense_geometry() {
     // An accessor that runs past its data.
     let short = rewrite(|d| d["accessors"][0]["count"] = json!(30));
     assert!(parse(&short).unwrap_err().contains("past"));
+    // A byteOffset near u64::MAX must not wrap the end below the start.
+    let wrapped = rewrite(|d| d["accessors"][0]["byteOffset"] = json!(u64::MAX - 1));
+    assert!(parse(&wrapped).unwrap_err().contains("past"));
     // A huge count is refused without reading anything.
     let huge = rewrite(|d| d["accessors"][0]["count"] = json!(100_000_000));
     assert!(parse(&huge).unwrap_err().contains("elements"));
