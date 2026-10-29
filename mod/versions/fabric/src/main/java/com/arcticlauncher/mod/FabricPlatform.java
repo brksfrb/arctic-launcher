@@ -346,6 +346,16 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean freelookWorks() {
+		// 1.13 sets the view up in GameRenderer/Camera code without the hooks Freelook needs.
+		//#if MC >= 1.14
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	@Override
 	public boolean smoothFont() {
 		//#if MC >= 26.1
 		return ArcticPacks.smoothFontOn();

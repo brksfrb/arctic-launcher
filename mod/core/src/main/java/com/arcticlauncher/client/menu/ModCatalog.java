@@ -105,7 +105,7 @@ final class ModCatalog {
 		List<Mod> out = new ArrayList<Mod>();
 		boolean game = p.hasFeatures();
 		if (game) {
-			gameplay(out, c);
+			gameplay(out, c, p);
 			visuals(out, c, p);
 			chat(out, c);
 		}
@@ -186,7 +186,7 @@ final class ModCatalog {
 		return out;
 	}
 
-	private static void gameplay(List<Mod> out, final ClientConfig c) {
+	private static void gameplay(List<Mod> out, final ClientConfig c, Platform p) {
 		out.add(new Mod("zoom", "Zoom", "Hold a key to zoom in; scroll to zoom further", "zoom", Category.GAMEPLAY, "optifine spyglass")
 				.toggle(() -> c.zoomEnabled, on -> c.zoomEnabled = on)
 				.settings((host, f) -> {
@@ -210,20 +210,22 @@ final class ModCatalog {
 							Form.key(() -> c.emoteKey, k -> c.emoteKey = k));
 					f.note("Pick your look and emotes in Arctic Launcher → Cosmetics.");
 				}));
-		out.add(new Mod("freelook", "Freelook", "Hold a key to look around without turning", "freelook", Category.GAMEPLAY, "perspective 360")
-				.toggle(() -> c.freelookEnabled, on -> c.freelookEnabled = on)
-				.settings((host, f) -> {
-					f.section("Key");
-					f.key("Freelook key", "Hold it to look around", Form.key(() -> c.freelookKey, k -> c.freelookKey = k));
-					f.note("Some servers (like Hypixel) don't allow it; it stays off there.");
-				}));
-		out.add(new Mod("snaplook", "Snaplook", "Hold a key to see yourself from the front, then let go", "freelook", Category.GAMEPLAY,
-				"front view third person behind look back mirror")
-				.toggle(() -> c.snaplookEnabled, on -> c.snaplookEnabled = on)
-				.settings((host, f) -> {
-					f.section("Key");
-					f.key("Snaplook key", "Hold it to see yourself from the front", Form.key(() -> c.snaplookKey, k -> c.snaplookKey = k));
-				}));
+		if (p.freelookWorks()) {
+			out.add(new Mod("freelook", "Freelook", "Hold a key to look around without turning", "freelook", Category.GAMEPLAY, "perspective 360")
+					.toggle(() -> c.freelookEnabled, on -> c.freelookEnabled = on)
+					.settings((host, f) -> {
+						f.section("Key");
+						f.key("Freelook key", "Hold it to look around", Form.key(() -> c.freelookKey, k -> c.freelookKey = k));
+						f.note("Some servers (like Hypixel) don't allow it; it stays off there.");
+					}));
+			out.add(new Mod("snaplook", "Snaplook", "Hold a key to see yourself from the front, then let go", "freelook", Category.GAMEPLAY,
+					"front view third person behind look back mirror")
+					.toggle(() -> c.snaplookEnabled, on -> c.snaplookEnabled = on)
+					.settings((host, f) -> {
+						f.section("Key");
+						f.key("Snaplook key", "Hold it to see yourself from the front", Form.key(() -> c.snaplookKey, k -> c.snaplookKey = k));
+					}));
+		}
 		out.add(new Mod("portalscreens", "Portal Screens", "Keep the inventory, chat and menus open while you stand in a nether portal", "portalscreens",
 				Category.GAMEPLAY, "nether portal gui inventory chat menu close screen")
 				.toggle(() -> c.portalScreens, on -> c.portalScreens = on));

@@ -84,6 +84,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	/** Zoom, Freelook, Fullbright and the other game features work on this version. */
 	boolean hasFeatures();
 
+	/** Freelook and Snaplook can turn the camera on this version (they need a hook into how the view is set up). */
+	default boolean freelookWorks() {
+		return true;
+	}
+
 	/** The smooth font pack is on. */
 	boolean smoothFont();
 

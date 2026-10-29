@@ -1,9 +1,11 @@
-//#if MC >= 1.14
+//#if MC >= 1.13
 package com.arcticlauncher.mod.mixin;
 
 //#if MC < 26.1
 import com.arcticlauncher.client.ArcticClient;
+//#if MC >= 1.14
 import net.minecraft.client.Camera;
+//#endif
 import net.minecraft.client.renderer.GameRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -13,6 +15,18 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /** Zoom, before 26.1: FOV is computed on GameRenderer, not Camera. */
 @Mixin(GameRenderer.class)
 abstract class GameRendererFovMixin {
+	//#if MC < 1.14
+	// 1.13: getFov has no name in the mapping; (float partial, boolean useFov) -> double, and there is no Camera class.
+	@Inject(method = "method_19062", at = @At("RETURN"), cancellable = true)
+	private void arctic$zoom(float partial, boolean useFov, CallbackInfoReturnable<Double> cir) {
+		float replay = com.arcticlauncher.mod.replay.ReplayView.fov;
+		double fov = replay > 0 && useFov ? replay : cir.getReturnValue();
+		cir.setReturnValue(fov * ArcticClient.features().fovMultiplier());
+		if (useFov) {
+			com.arcticlauncher.mod.Compat.worldFov = cir.getReturnValue();
+		}
+	}
+	//#else
 	@Inject(method = "getFov", at = @At("RETURN"), cancellable = true)
 	//#if MC >= 1.21.2
 	private void arctic$zoom(Camera camera, float partial, boolean useFov, CallbackInfoReturnable<Float> cir) {
@@ -33,6 +47,7 @@ abstract class GameRendererFovMixin {
 			com.arcticlauncher.mod.Compat.worldFov = cir.getReturnValue();
 		}
 	}
+	//#endif
 	//#endif
 }
 //#endif

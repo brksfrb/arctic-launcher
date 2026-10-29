@@ -81,7 +81,7 @@ public final class Features {
 		if (zooming != wasZooming) {
 			smoothCameraWhileZoomed(zooming);
 		}
-		boolean wantLook = inGame && config.freelookEnabled && (simulatedLook || down(config.freelookKey));
+		boolean wantLook = inGame && platform.freelookWorks() && config.freelookEnabled && (simulatedLook || down(config.freelookKey));
 		if (wantLook && !ServerRules.allowed(ServerRules.FREELOOK, platform.server())) {
 			wantLook = false;
 			String server = platform.server();
@@ -93,7 +93,7 @@ public final class Features {
 		if (wantLook != freelook) {
 			setFreelook(wantLook);
 		}
-		boolean wantSnap = inGame && !freelook && config.snaplookEnabled && down(config.snaplookKey);
+		boolean wantSnap = inGame && platform.freelookWorks() && !freelook && config.snaplookEnabled && down(config.snaplookKey);
 		if (wantSnap != snap) {
 			snap = wantSnap;
 			platform.setThirdPerson(snap);
