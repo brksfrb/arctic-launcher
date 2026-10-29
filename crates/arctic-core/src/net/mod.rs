@@ -39,6 +39,12 @@ pub fn agent() -> ureq::Agent {
     slot.get_or_insert_with(|| build_agent(None)).clone()
 }
 
+/// Keep the addresses hosts had when they were last found in `file`, so a launcher whose DNS
+/// stops working (and whose DNS-over-HTTPS lookups are blocked too) still reaches them.
+pub fn set_dns_memory(file: std::path::PathBuf) {
+    resolver::set_memory_file(file);
+}
+
 /// Route all launcher traffic through `proxy` (or directly with `None`).
 /// Invalid proxy settings are refused rather than silently ignored, so
 /// traffic never goes direct when a proxy was asked for.

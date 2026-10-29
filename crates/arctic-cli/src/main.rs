@@ -50,6 +50,7 @@ fn run(cli: &Cli, out: Out) -> Result<i32, (Out, arctic_core::Error)> {
         Ok(scoped) => scoped,
         Err(e) => return Err((out, e)),
     };
+    arctic_core::net::set_dns_memory(dirs.root().join("dns-last-known.json"));
     // The profile's proxy covers everything the CLI fetches, too.
     let proxy = arctic_core::proxy::ProxySettings::load(&scoped);
     if let Err(e) = arctic_core::net::set_proxy(proxy.enabled.then_some(&proxy)) {

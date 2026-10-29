@@ -34,6 +34,7 @@ impl ProfileData {
         if let Err(e) = dirs.ensure() {
             note("Could not create data folders", e);
         }
+        arctic_core::net::set_dns_memory(dirs.root().join("dns-last-known.json"));
         // Before anything goes online: the proxy applies to all of it.
         let proxy = ProxySettings::load(dirs);
         if let Err(e) = arctic_core::net::set_proxy(proxy.enabled.then_some(&proxy)) {

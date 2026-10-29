@@ -135,7 +135,7 @@ fn unreachable_meta(kind: LoaderKind, e: &Error) -> Error {
     let text = e.to_string();
     // Windows 11001 / "no such host": this PC's DNS cannot find the site (often a provider block).
     let dns_hint = if text.contains("11001") || text.to_lowercase().contains("no such host") {
-        " Your DNS cannot find the site: try the DNS servers 1.1.1.1 / 8.8.8.8 (Windows network settings) or a VPN."
+        " Your DNS cannot find the site, and the launcher's own lookups over HTTPS (Cloudflare, Google, Quad9) were blocked or did not answer: try the DNS servers 1.1.1.1 / 8.8.8.8 (Windows network settings), a VPN, or check that a firewall or security suite lets Arctic Launcher reach the internet."
     } else {
         ""
     };
