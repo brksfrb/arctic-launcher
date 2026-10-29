@@ -1049,34 +1049,62 @@ pub fn write_mod_session(game_dir: &Path, session: &ModSession) -> Result<()> {
         replay,
     } = session;
     let path = game_dir.join("config").join("arctic-session.json");
-    save_json(
-        &path,
-        &serde_json::json!({
-            "url": base,
-            "token": token,
-            "style": style.id(),
-            "fancy": fancy,
-            "style_set": style_set,
-            // Server connections through the proxy (the Arctic Client does
-            // that part; Minecraft only proxies its own web services).
-            "proxy": {
-                "enabled": proxy.active().is_some(),
-                "type": match proxy.kind {
-                    crate::proxy::ProxyKind::Socks5 => "socks5",
-                    crate::proxy::ProxyKind::Http => "http",
-                },
-                "host": proxy.bare_host(),
-                "port": proxy.port,
-                "username": proxy.username,
-                "password": proxy.password,
-                "set": proxy.set,
+    let contents = serde_json::json!({
+        "url": base,
+        "token": token,
+        "style": style.id(),
+        "fancy": fancy,
+        "style_set": style_set,
+        // Server connections through the proxy (the Arctic Client does
+        // that part; Minecraft only proxies its own web services).
+        "proxy": {
+            "enabled": proxy.active().is_some(),
+            "type": match proxy.kind {
+                crate::proxy::ProxyKind::Socks5 => "socks5",
+                crate::proxy::ProxyKind::Http => "http",
             },
-            "bridge": bridge,
-            "share_server": share_server,
-            "duel": duel,
-            "replay": replay,
-        }),
-    )
+            "host": proxy.bare_host(),
+            "port": proxy.port,
+            "username": proxy.username,
+            "password": proxy.password,
+            "set": proxy.set,
+        },
+        "bridge": bridge,
+        "share_server": share_server,
+        "duel": duel,
+        "replay": replay,
+    });
+    write_private(&path, &serde_json::to_vec_pretty(&contents)?)
+}
+
+/// Write `bytes` to `path` for this user only (the session file holds the Arctic token, the proxy password
+/// and the bridge secret): through a temporary file, with no `.bak` of the previous contents, and without
+/// group or other access on Unix. The Arctic Client deletes the file once it has read it.
+fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
+    use std::io::Write;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
+    }
+    let mut tmp_name = path.as_os_str().to_os_string();
+    tmp_name.push(".tmp");
+    let tmp = PathBuf::from(tmp_name);
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(&tmp).map_err(|e| Error::io(&tmp, e))?;
+    file.write_all(bytes).map_err(|e| Error::io(&tmp, e))?;
+    file.sync_all().map_err(|e| Error::io(&tmp, e))?;
+    drop(file);
+    std::fs::rename(&tmp, path).map_err(|e| Error::io(path, e))?;
+    // Earlier launcher versions kept the previous contents (and so the previous token) next to it.
+    let mut old = path.as_os_str().to_os_string();
+    old.push(".bak");
+    let _ = std::fs::remove_file(old);
+    Ok(())
 }
 
 fn get<T: serde::de::DeserializeOwned>(url: &str, token: Option<&str>) -> Result<T> {

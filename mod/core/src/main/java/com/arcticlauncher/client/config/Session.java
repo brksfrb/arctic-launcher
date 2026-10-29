@@ -46,10 +46,18 @@ public final class Session {
 		this.styleSet = styleSet;
 	}
 
+	/**
+	 * Read the session file and delete it: it holds the Arctic token, the proxy password and the bridge secret,
+	 * which must not sit in the game folder (backups, sync tools, zipped instances) after this. The launcher
+	 * writes it again for the next launch, and once more if its sign-in finished late.
+	 */
 	public static Session read(File configDir) {
 		File file = new File(configDir, "arctic-session.json");
 		try {
 			String json = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+			if (!file.delete()) {
+				file.deleteOnExit();
+			}
 			JsonObject o = new Gson().fromJson(json, JsonObject.class);
 			if (o == null) {
 				return empty();
