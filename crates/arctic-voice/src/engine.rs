@@ -287,6 +287,30 @@ fn pick(host: &cpal::Host, name: Option<&str>, input: bool) -> Result<cpal::Devi
 /// Longest audio kept waiting either way (avoids growing delay).
 const MAX_QUEUED: usize = SAMPLE_RATE as usize / 2;
 
+/// How often a repeating stream error is logged.
+const LOG_EVERY: Duration = Duration::from_secs(10);
+
+/// A stream error callback that logs the first error at once and then at most one line every ten seconds
+/// (with how many were left out): a buffer underrun can repeat thousands of times in a few minutes and
+/// would push everything else out of the launcher's log.
+fn error_logger(what: &'static str) -> impl FnMut(cpal::StreamError) + Send + 'static {
+    let mut last: Option<Instant> = None;
+    let mut skipped = 0u32;
+    move |e| {
+        if last.is_some_and(|t| t.elapsed() < LOG_EVERY) {
+            skipped += 1;
+            return;
+        }
+        last = Some(Instant::now());
+        if skipped > 0 {
+            log::warn!("{what}: {e} ({skipped} more since the last line)");
+            skipped = 0;
+        } else {
+            log::warn!("{what}: {e}");
+        }
+    }
+}
+
 fn open_input(device: &cpal::Device, shared: Arc<Shared>) -> Result<cpal::Stream, String> {
     let config = device.default_input_config().map_err(|e| e.to_string())?;
     let channels = config.channels() as usize;
@@ -307,7 +331,7 @@ fn open_input(device: &cpal::Device, shared: Arc<Shared>) -> Result<cpal::Stream
                     q.pop_front();
                 }
             },
-            |e| log::warn!("microphone: {e}"),
+            error_logger("microphone"),
             None,
         )
         .map_err(|e| format!("couldn't open the microphone: {e}"))?;
@@ -353,7 +377,7 @@ fn open_output(device: &cpal::Device, shared: Arc<Shared>) -> Result<cpal::Strea
                     }
                 }
             },
-            |e| log::warn!("speakers: {e}"),
+            error_logger("speakers"),
             None,
         )
         .map_err(|e| format!("couldn't open the speakers: {e}"))?;
