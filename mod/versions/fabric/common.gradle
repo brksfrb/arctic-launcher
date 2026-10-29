@@ -278,6 +278,7 @@ processResources {
 			// Fog: stretching the fog distance has a simple hook from 1.14 up to 1.21.4 (1.21.5 sends the fog to the GPU as a buffer).
 			fogHook: atLeast('1.13') && !atLeast('1.21.5'),
 			fogBuffer: atLeast('1.21.5'),
+			chunkOwn13: atLeast('1.13') && !atLeast('1.14'),
 			teamViewClient: atLeast('1.17'),
 			teamViewEntity: !atLeast('1.17') && atLeast('1.13'),
 			tooltipPositioner: atLeast('1.19.3'),
