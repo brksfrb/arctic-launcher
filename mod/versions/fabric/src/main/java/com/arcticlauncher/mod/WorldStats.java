@@ -92,7 +92,6 @@ final class WorldStats {
 
 	/** What is left of the cooldown of a carried item (0 to 1), or -1 when you don't carry it. */
 	static float cooldown(String idPart) {
-		//#if MC >= 1.14
 		LocalPlayer p = Minecraft.getInstance().player;
 		if (p == null) {
 			return -1f;
@@ -108,16 +107,6 @@ final class WorldStats {
 				//#endif
 			}
 		}
-		//#else
-		// 1.13: the registry class is another one; the three items with cooldowns are named here.
-		net.minecraft.world.entity.player.Player player = Minecraft.getInstance().player;
-		net.minecraft.world.item.Item item = "ender_pearl".equals(idPart) ? net.minecraft.world.item.Items.ENDER_PEARL
-				: "chorus_fruit".equals(idPart) ? net.minecraft.world.item.Items.CHORUS_FRUIT
-				: "shield".equals(idPart) ? net.minecraft.world.item.Items.SHIELD : null;
-		if (player != null && item != null) {
-			return player.getCooldowns().getCooldownPercent(item, 0f);
-		}
-		//#endif
 		return -1f;
 	}
 
