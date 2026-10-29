@@ -177,7 +177,8 @@ for f in sorted(glob.glob("*.java")):
         checked_invokes.append(f"{f}:{method}->{name}")
         if not b:
             bad(f"{f}: no body for {method}")
-        elif not re.search(r"[./]" + re.escape(name) + r":" + re.escape(desc), b) and not re.search(r"Method " + re.escape(name) + r":" + re.escape(desc), b):
+        # javap quotes constructor names: Owner."<init>":(...)V
+        elif not re.search(r'[./]"?' + re.escape(name) + r'"?:' + re.escape(desc), b) and not re.search(r'Method "?' + re.escape(name) + r'"?:' + re.escape(desc), b):
             bad(f"{f}: {method} never calls {name}{desc}")
 print("invoke check done", ver, len(checked_invokes), "invokes")
 sys.exit(1 if problems else 0)
