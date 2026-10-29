@@ -293,7 +293,7 @@ const LOG_EVERY: Duration = Duration::from_secs(10);
 /// A stream error callback that logs the first error at once and then at most one line every ten seconds
 /// (with how many were left out): a buffer underrun can repeat thousands of times in a few minutes and
 /// would push everything else out of the launcher's log.
-fn error_logger(what: &'static str) -> impl FnMut(cpal::StreamError) + Send + 'static {
+fn error_logger(what: &'static str) -> impl FnMut(cpal::Error) + Send + 'static {
     let mut last: Option<Instant> = None;
     let mut skipped = 0u32;
     move |e| {
