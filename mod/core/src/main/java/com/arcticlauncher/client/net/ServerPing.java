@@ -71,7 +71,11 @@ public final class ServerPing {
 			if (readVarInt(r) != 0) {
 				throw new IOException("not a status reply");
 			}
-			byte[] json = new byte[readVarInt(r)];
+			int jsonLength = readVarInt(r);
+			if (jsonLength < 0 || jsonLength > reply.length) {
+				throw new IOException("bad status length " + jsonLength);
+			}
+			byte[] json = new byte[jsonLength];
 			r.readFully(json);
 			Status status = parse(new String(json, StandardCharsets.UTF_8));
 			// Ping: the server echoes a number back.
