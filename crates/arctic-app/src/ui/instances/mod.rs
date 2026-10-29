@@ -146,6 +146,10 @@ pub struct InstancesUi {
     pub trash: trash::TrashUi,
     /// Project being installed ("" for an imported file).
     pub pack_installing: Option<String>,
+    /// The modpack whose version list is open in the browser.
+    pub pack_choosing: Option<String>,
+    /// Versions of the modpacks looked at, by project id.
+    pub pack_versions: HashMap<String, Load<Vec<arctic_core::mods::modpack::PackVersion>>>,
     /// Resource packs and shaders page.
     pub packs: packs::PacksUi,
     /// Moving the open instance to another Minecraft version.
@@ -436,6 +440,13 @@ impl ArcticApp {
                 };
                 self.inst.loader_games.insert(kind, state);
                 self.create_form_defaults();
+            }
+            Event::PackVersions(project, result) => {
+                let state = match result {
+                    Ok(list) => Load::Ready(list),
+                    Err(e) => Load::Failed(e),
+                };
+                self.inst.pack_versions.insert(project, state);
             }
             Event::LoaderVersions(kind, game, result) => {
                 let state = match result {
