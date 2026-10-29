@@ -62,7 +62,7 @@ abstract class ItemPhysicsOldMixin {
 	private void arctic$start(ItemEntity item, double x, double y, double z, float tickDelta, BakedModel model,
 			CallbackInfoReturnable<Integer> cir) {
 		ClientConfig config = ArcticClient.config();
-		boolean on = config != null && config.itemPhysics && !item.isInWater();
+		boolean on = config != null && config.itemPhysics && !config.items2d && !item.isInWater();
 		// Held in the air by a server (a display): drawn as the game draws it.
 		arctic$item = on && !com.arcticlauncher.client.items.HeldItem.held((ItemPhysicsState.Motion) item,
 				item.onGround, item.isNoGravity(), item.y, System.nanoTime()) ? item : null;
@@ -133,6 +133,13 @@ abstract class ItemPhysicsOldMixin {
 	private void arctic$angle(float angle, float axisX, float axisY, float axisZ) {
 		ItemEntity item = arctic$item;
 		if (item == null) {
+			ClientConfig c = ArcticClient.config();
+			if (c != null && c.items2d) {
+				// 2D Items: a flat sprite that faces you.
+				GlStateManager.rotatef((float) Math.toDegrees(com.arcticlauncher.mod.Compat.faceCamera()), 0F, 1F, 0F);
+				GlStateManager.scalef(1F, 1F, 0.01F);
+				return;
+			}
 			GlStateManager.rotatef(angle, axisX, axisY, axisZ);
 			return;
 		}

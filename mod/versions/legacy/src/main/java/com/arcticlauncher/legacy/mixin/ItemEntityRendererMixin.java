@@ -59,7 +59,7 @@ abstract class ItemEntityRendererMixin {
 	private void arctic$start(ItemEntity item, double x, double y, double z, float tickDelta, BakedModel model,
 			CallbackInfoReturnable<Integer> cir) {
 		ClientConfig config = ArcticClient.config();
-		boolean on = config != null && config.itemPhysics && !item.isTouchingWater();
+		boolean on = config != null && config.itemPhysics && !config.items2d && !item.isTouchingWater();
 		// Held in the air by a server (a display): drawn as the game draws it.
 		arctic$item = on && !com.arcticlauncher.client.items.HeldItem.held((com.arcticlauncher.legacy.ItemPhysicsMotion) item,
 				item.onGround, arctic$noGravity(item), item.y, System.nanoTime()) ? item : null;
@@ -140,6 +140,14 @@ abstract class ItemEntityRendererMixin {
 	private void arctic$angle(float angle, float axisX, float axisY, float axisZ) {
 		ItemEntity item = arctic$item;
 		if (item == null) {
+			ClientConfig c = ArcticClient.config();
+			net.minecraft.entity.Entity eye = net.minecraft.client.MinecraftClient.getInstance().getCameraEntity();
+			if (c != null && c.items2d && eye != null) {
+				// 2D Items: a flat sprite that faces you.
+				GlStateManager.rotate(180f - eye.yaw, 0F, 1F, 0F);
+				GlStateManager.scale(1F, 1F, 0.01F);
+				return;
+			}
 			GlStateManager.rotate(angle, axisX, axisY, axisZ);
 			return;
 		}

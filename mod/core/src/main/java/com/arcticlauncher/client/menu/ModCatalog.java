@@ -580,6 +580,9 @@ final class ModCatalog {
 		out.add(new Mod("shinypots", "Shiny Pots", "Every potion bottle, water bottles and thrown potions too, shimmers like an enchanted item", "effects", Category.VISUAL,
 				"potion pots shiny glint shimmer enchant bottle")
 				.toggle(() -> c.shinyPots, on -> c.shinyPots = on));
+		out.add(new Mod("items2d", "2D Items", "Dropped items are flat sprites that always face you", "items", Category.VISUAL,
+				"items 2d flat sprite drops dropped")
+				.toggle(() -> c.items2d, on -> c.items2d = on));
 		out.add(new Mod("teamview", "Team View", "Players on your scoreboard team are outlined through walls (a box on 1.8.9)", "players", Category.SOCIAL,
 				"team teammates outline glow esp bedwars through walls")
 				.toggle(() -> c.teamView, on -> c.teamView = on));

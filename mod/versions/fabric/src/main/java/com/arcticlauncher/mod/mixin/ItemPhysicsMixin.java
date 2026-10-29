@@ -139,10 +139,17 @@ abstract class ItemPhysicsMixin {
 	@Unique
 	private static final float BLOCK_HALF_DEPTH = 0.125F;
 
+	/** 2D Items: dropped items are flat sprites that face you (and so lie neither flat nor spin). */
+	@Unique
+	private static boolean arctic$flat2d() {
+		ClientConfig config = ArcticClient.config();
+		return config != null && config.items2d;
+	}
+
 	@Unique
 	private static boolean arctic$on() {
 		ClientConfig config = ArcticClient.config();
-		return config != null && config.itemPhysics;
+		return config != null && config.itemPhysics && !config.items2d;
 	}
 
 	/** Whether a server holds the item in the air (a display): it's drawn as the game draws it. */
@@ -350,7 +357,7 @@ abstract class ItemPhysicsMixin {
 	/** No spin: each item keeps the random angle it was dropped with. */
 	@Redirect(method = DRAW, at = @At(value = "INVOKE", target = SPIN))
 	private float arctic$fixedAngle(float age, float bobOffset) {
-		return arctic$drawing ? bobOffset : ItemEntity.getSpin(age, bobOffset);
+		return arctic$drawing ? bobOffset : arctic$flat2d() ? com.arcticlauncher.mod.Compat.faceCamera() : ItemEntity.getSpin(age, bobOffset);
 	}
 
 	//#if MC >= 1.21.9
@@ -362,6 +369,9 @@ abstract class ItemPhysicsMixin {
 	private void arctic$pose(ItemEntityRenderState state, PoseStack pose, MultiBufferSource buffers, int light, CallbackInfo ci) {
 	//#endif
 		if (!arctic$drawing) {
+			if (arctic$flat2d()) {
+				pose.scale(1F, 1F, 0.01F);
+			}
 			return;
 		}
 		float tilt = ((ItemPhysicsState) state).arctic$tilt();
@@ -407,13 +417,16 @@ abstract class ItemPhysicsMixin {
 	/** No spin: each item keeps the random angle it was dropped with. */
 	@ModifyArg(method = DRAW, at = @At(value = "INVOKE", target = SPIN, ordinal = 0), index = 0)
 	private float arctic$fixedAngle(float spin) {
-		return arctic$drawing ? arctic$angle : spin;
+		return arctic$drawing ? arctic$angle : arctic$flat2d() ? com.arcticlauncher.mod.Compat.faceCamera() : spin;
 	}
 
 	// Right after the turn about the up axis (the only one), which is just before the copies are drawn.
 	@Inject(method = DRAW, at = @At(value = "INVOKE", target = TURN, ordinal = 0, shift = At.Shift.AFTER))
 	private void arctic$pose(ItemEntity entity, float yaw, float partialTicks, PoseStack pose, MultiBufferSource buffers, int light, CallbackInfo ci) {
 		if (!arctic$drawing) {
+			if (arctic$flat2d()) {
+				pose.scale(1F, 1F, 0.01F);
+			}
 			return;
 		}
 		boolean grounded = arctic$grounded(entity);

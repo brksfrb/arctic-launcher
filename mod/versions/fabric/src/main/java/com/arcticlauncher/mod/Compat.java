@@ -397,6 +397,26 @@ public final class Compat {
 	}
 	//#endif
 
+	/** The angle about the up axis (radians) that turns a flat item to face the camera. */
+	public static float faceCamera() {
+		net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+		//#if MC >= 1.14
+		//#if MC >= 26.2
+		net.minecraft.client.Camera cam = mc.gameRenderer.mainCamera();
+		//#else
+		net.minecraft.client.Camera cam = mc.gameRenderer.getMainCamera();
+		//#endif
+		//#if MC >= 1.21.11
+		float yaw = cam.yRot();
+		//#else
+		float yaw = cam.getYRot();
+		//#endif
+		//#else
+		float yaw = mc.getCameraEntity() == null ? 0F : mc.getCameraEntity().yRot;
+		//#endif
+		return (float) Math.PI - yaw * ((float) Math.PI / 180F);
+	}
+
 	/** A GPU texture for an image (named for debugging where supported). */
 	public static DynamicTexture texture(String name, NativeImage image) {
 		//#if MC >= 1.21.5
