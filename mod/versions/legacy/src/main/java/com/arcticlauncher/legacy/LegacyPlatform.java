@@ -489,16 +489,11 @@ public final class LegacyPlatform implements Platform {
 
 	@Override
 	public boolean horseStatsWorks() {
-		//#if MC < 1.11
 		return true;
-		//#else
-		return false;
-		//#endif
 	}
 
 	@Override
 	public float[] horseStats() {
-		//#if MC < 1.11
 		ClientPlayerEntity p = mc().player;
 		if (p == null) {
 			return null;
@@ -508,6 +503,17 @@ public final class LegacyPlatform implements Platform {
 		//#else
 		Entity e = p.vehicle;
 		//#endif
+		//#if MC >= 1.11
+		// 1.11 split the horses: the common class is AbstractHorseEntity, its jump strength still unnamed.
+		if (!(e instanceof net.minecraft.entity.AbstractHorseEntity)) {
+			e = aimedEntity();
+		}
+		if (!(e instanceof net.minecraft.entity.AbstractHorseEntity)) {
+			return null;
+		}
+		net.minecraft.entity.AbstractHorseEntity horse = (net.minecraft.entity.AbstractHorseEntity) e;
+		double strength = horse.method_13999();
+		//#else
 		if (!(e instanceof net.minecraft.entity.passive.HorseBaseEntity)) {
 			e = aimedEntity();
 		}
@@ -515,14 +521,12 @@ public final class LegacyPlatform implements Platform {
 			return null;
 		}
 		net.minecraft.entity.passive.HorseBaseEntity horse = (net.minecraft.entity.passive.HorseBaseEntity) e;
-		double speed = horse.initializeAttribute(net.minecraft.entity.attribute.EntityAttributes.GENERIC_MOVEMENT_SPEED).getValue();
 		double strength = horse.getJumpStrength();
+		//#endif
+		double speed = horse.initializeAttribute(net.minecraft.entity.attribute.EntityAttributes.GENERIC_MOVEMENT_SPEED).getValue();
 		double jump = -0.1817584952 * strength * strength * strength + 3.689713992 * strength * strength + 2.128599134 * strength
 				- 0.343930367;
 		return new float[] {(float) (speed * 43.17), (float) jump, horse.getHealth(), horse.getMaxHealth()};
-		//#else
-		return null;
-		//#endif
 	}
 
 	@Override
