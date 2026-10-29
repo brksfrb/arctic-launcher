@@ -21,12 +21,24 @@ import net.minecraft.client.renderer.texture.TextureManager;
  * A resource reload brings the game's own back; it's put in again within a second.
  */
 public final class GlintTint {
-	private static final net.minecraft.resources.Identifier GLINT = Compat.id("minecraft", "textures/misc/enchanted_item_glint.png");
+	/**
+	 * Every name the glint picture has had: one texture up to 1.19.3, item + entity from 1.19.4, item + armor from
+	 * 1.21.5. Whichever of them the running game (or the resource pack) has gets the color.
+	 */
+	private static final String[] NAMES = {"enchanted_item_glint", "enchanted_glint_item", "enchanted_glint_entity", "enchanted_glint_armor"};
+	private static final net.minecraft.resources.Identifier[] IDS = new net.minecraft.resources.Identifier[NAMES.length];
+	static {
+		for (int i = 0; i < NAMES.length; i++) {
+			IDS[i] = Compat.id("minecraft", "textures/misc/" + NAMES[i] + ".png");
+		}
+	}
 	private static final long CHECK_MS = 1000;
 	/** The color in the game's copy now (0: the pack's own). */
 	private static int applied;
-	/** What was put in, to notice a reload replacing it. */
-	private static Object ours;
+	/** What was put in for each name, to notice a reload replacing it. */
+	private static final Object[] ours = new Object[NAMES.length];
+	/** This game has none of the textures: nothing to color, said once. */
+	private static boolean unsupported;
 	private static long checkedAt;
 
 	private GlintTint() {}
@@ -35,7 +47,7 @@ public final class GlintTint {
 	public static void tick() {
 		ClientConfig c = ArcticClient.config();
 		long now = System.currentTimeMillis();
-		if (c == null || now - checkedAt < CHECK_MS) {
+		if (c == null || unsupported || now - checkedAt < CHECK_MS) {
 			return;
 		}
 		checkedAt = now;
@@ -44,34 +56,54 @@ public final class GlintTint {
 			return;
 		}
 		int want = c.glintColor & 0xFFFFFF;
-		boolean stillOurs = ours != null && textures.getTexture(GLINT) == ours;
+		boolean any = false;
+		boolean stillOurs = true;
+		for (int i = 0; i < IDS.length; i++) {
+			if (ours[i] != null) {
+				any = true;
+				stillOurs &= textures.getTexture(IDS[i]) == ours[i];
+			}
+		}
+		stillOurs &= any;
 		if (want == 0 && !stillOurs) {
 			applied = 0;
-			ours = null;
+			java.util.Arrays.fill(ours, null);
 			return;
 		}
 		if (want != 0 && want == applied && stillOurs) {
 			return;
 		}
-		try {
-			byte[] png = original();
-			NativeImage image = NativeImage.read(new ByteArrayInputStream(want == 0 ? png : tinted(png, want)));
-			DynamicTexture texture = Compat.texture("Arctic glint", image);
-			textures.register(GLINT, texture);
-			ours = want == 0 ? null : texture;
-			applied = want;
-		} catch (Exception e) {
-			ArcticMod.LOG.warn("Arctic glint: {}", e.toString());
-			applied = want;
+		boolean found = false;
+		for (int i = 0; i < IDS.length; i++) {
+			try {
+				byte[] png = original(IDS[i]);
+				if (png == null) {
+					ours[i] = null;
+					continue;
+				}
+				found = true;
+				NativeImage image = NativeImage.read(new ByteArrayInputStream(want == 0 ? png : tinted(png, want)));
+				DynamicTexture texture = Compat.texture("Arctic glint", image);
+				textures.register(IDS[i], texture);
+				ours[i] = want == 0 ? null : texture;
+			} catch (Exception e) {
+				ArcticMod.LOG.warn("Arctic glint ({}): {}", NAMES[i], e.toString());
+				ours[i] = null;
+			}
 		}
+		if (!found) {
+			unsupported = true;
+			ArcticMod.LOG.warn("Arctic glint: this version has no glint texture to color");
+		}
+		applied = want;
 	}
 
-	/** The pack's glint picture, as PNG bytes. */
-	private static byte[] original() throws java.io.IOException {
+	/** The pack's picture with this name as PNG bytes, or null when this version has none. */
+	private static byte[] original(net.minecraft.resources.Identifier id) throws java.io.IOException {
 		//#if MC >= 1.19
-		try (InputStream in = Minecraft.getInstance().getResourceManager().open(GLINT)) {
+		try (InputStream in = Minecraft.getInstance().getResourceManager().open(id)) {
 		//#else
-		try (InputStream in = Minecraft.getInstance().getResourceManager().getResource(GLINT).getInputStream()) {
+		try (InputStream in = Minecraft.getInstance().getResourceManager().getResource(id).getInputStream()) {
 		//#endif
 			ByteArrayOutputStream out = new ByteArrayOutputStream();
 			byte[] buffer = new byte[8192];
@@ -79,6 +111,8 @@ public final class GlintTint {
 				out.write(buffer, 0, n);
 			}
 			return out.toByteArray();
+		} catch (java.io.FileNotFoundException e) {
+			return null;
 		}
 	}
 
