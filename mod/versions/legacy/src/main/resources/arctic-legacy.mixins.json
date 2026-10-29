@@ -15,6 +15,7 @@
 		"InGameHudMixin",
 		"ChatHudMixin",
 		"ClientPlayerEntityMixin",
+		"PlayerArmorSlotMixin",
 		"ClientPlayNetworkHandlerMixin",
 		"ClientCustomPayloadMixin",
 		"GameRendererMixin",
