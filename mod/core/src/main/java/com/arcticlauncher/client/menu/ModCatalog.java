@@ -562,7 +562,7 @@ final class ModCatalog {
 					.toggle(() -> c.tooltipScroll, on -> c.tooltipScroll = on));
 		}
 		if (p.glintWorks()) {
-			out.add(new Mod("glint", "Glint Colorizer", "The shimmer on enchanted items in your hand and in menus in a color of your choice (armor keeps the game's)", "hitcolor",
+			out.add(new Mod("glint", "Glint Colorizer", "The shimmer on enchanted items and armor in a color of your choice", "hitcolor",
 					Category.VISUAL, "enchant enchantment glint shimmer color purple")
 					.toggle(() -> c.glintColor != 0, on -> {
 						if (on) {
