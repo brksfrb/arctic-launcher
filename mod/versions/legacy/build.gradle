@@ -181,6 +181,8 @@ processResources {
 			achievements: !atLeast('1.12'),
 			// 1.8-only fixes (sign update chat spam, key presses reaching new screens).
 			mc18: !atLeast('1.9'),
+			// 1.8.9 and 1.9.4 have no chunk border view of their own: Arctic draws it.
+			chunkOwn: !atLeast('1.10'),
 			// The Forge flavour leaves out the client brand mixin.
 			forge: forge,
 	]

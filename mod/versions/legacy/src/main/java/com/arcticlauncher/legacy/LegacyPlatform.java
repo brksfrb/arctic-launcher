@@ -504,11 +504,7 @@ public final class LegacyPlatform implements Platform {
 
 	@Override
 	public boolean chunkBordersWorks() {
-		//#if MC >= 1.10
 		return true;
-		//#else
-		return false;
-		//#endif
 	}
 
 	@Override
