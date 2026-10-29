@@ -10,6 +10,7 @@
 		"EditBoxMixin",<% } %>
 <% if (widgets13) { %>		"ScreenButtonsAccess",
 <% } %>		"AbstractClientPlayerMixin",
+		"FontMaskMixin",
 		"ClientBrandMixin",
 		"ConnectionProxyMixin",
 <% if (playerInfoRace) { %>		"PlayerInfoLookupMixin",
@@ -107,7 +108,6 @@
 		"TrueTypeDefinitionMixin",
 		"TrueTypeGlyphMixin",
 		"OptionsPacksMixin",
-		"FontMaskMixin",
 		"TitleFontMixin"<% } %><% if (cosmeticsSubmit) { %>,
 		"AvatarRendererMixin",
 		"AvatarRenderStateMixin"<% } %><% if (cosmeticsBuffers) { %>,
