@@ -80,6 +80,11 @@ class IconFilesTest {
 				collect(text, "new Mod(", 3, file, names);
 				collect(text, "new Tile(", 0, file, names);
 				collect(text, ".icon(", 0, file, names);
+				// The Mods menu draws icons/<widget id>.png on each widget's tile.
+				if (file.toString().replace(BACKSLASH, '/').contains("/hud/")) {
+					collect(text, "new TextWidget(", 0, file, names);
+					collect(text, "super(", 0, file, names);
+				}
 				Matcher m = DIRECT.matcher(text);
 				while (m.find()) {
 					names.add(m.group(1) + "|" + file.getFileName());
