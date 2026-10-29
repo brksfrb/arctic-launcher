@@ -160,6 +160,11 @@ public final class ClientConfig {
 	/** Dynamic FOV: drawing a bow no longer narrows the view. */
 	public boolean fovNoBow;
 	/** The Arctic watermark: corner (0 bottom left, 1 bottom right, 2 top left, 3 top right), size (index into Watermark.SIZES), opacity (0 faint to 2 strong), and the version after it. */
+	public boolean shinyPots;
+	/** Team View: players on your scoreboard team are outlined through walls. */
+	public boolean teamView;
+	/** 2D Items: dropped items are flat sprites that face you. */
+	public boolean items2d;
 	public int watermarkCorner;
 	public int watermarkSize = 1;
 	public int watermarkOpacity;

@@ -577,6 +577,12 @@ final class ModCatalog {
 						f.swatches("Glint color", DAMAGE_COLORS, () -> 0xFF000000 | c.glintColor, v -> c.glintColor = v & 0xFFFFFF);
 					}));
 		}
+		out.add(new Mod("shinypots", "Shiny Pots", "Every potion bottle, water bottles and thrown potions too, shimmers like an enchanted item", "effects", Category.VISUAL,
+				"potion pots shiny glint shimmer enchant bottle")
+				.toggle(() -> c.shinyPots, on -> c.shinyPots = on));
+		out.add(new Mod("teamview", "Team View", "Players on your scoreboard team are outlined through walls (a box on 1.8.9)", "players", Category.SOCIAL,
+				"team teammates outline glow esp bedwars through walls")
+				.toggle(() -> c.teamView, on -> c.teamView = on));
 		if (p.dynamicFovWorks()) {
 			out.add(new Mod("dynfov", "Dynamic FOV", "Keep the view from changing with sprinting, speed effects and drawing a bow", "zoom", Category.VISUAL,
 					"fov dynamic field of view sprint speed potion bow optifine")

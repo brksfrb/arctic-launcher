@@ -81,7 +81,10 @@
 <% if (fogHook) { %>		"FogMixin",
 <% } %><% if (fogBuffer) { %>		"FogBufferMixin",
 <% } %>		"TooltipWheelMixin",
-<% if (tooltipPositioner) { %>		"TooltipPositionMixin",
+		"ShinyPotsMixin",
+<% if (teamViewClient) { %>		"TeamViewClientMixin",
+<% } %><% if (teamViewEntity) { %>		"TeamViewEntityMixin",
+<% } %><% if (tooltipPositioner) { %>		"TooltipPositionMixin",
 <% } %><% if (tooltipScreen) { %>		"TooltipScreenMixin",
 <% } %><% if (cameraClass) { %>		"CameraMixin",
 <% } %>

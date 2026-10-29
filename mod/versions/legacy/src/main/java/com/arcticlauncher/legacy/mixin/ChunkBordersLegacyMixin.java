@@ -13,6 +13,9 @@ abstract class ChunkBordersLegacyMixin {
 	@Inject(method = "renderWorld(IFJ)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/GameRenderer;renderWeather(F)V"), require = 0)
 	private void arctic$chunkBorders(int pass, float tickDelta, long nanoTime, CallbackInfo ci) {
 		com.arcticlauncher.legacy.LegacyChunkBorders.draw(tickDelta);
+		//#if MC < 1.9
+		com.arcticlauncher.legacy.LegacyTeamBoxes.draw(tickDelta);
+		//#endif
 	}
 }
 //#endif
