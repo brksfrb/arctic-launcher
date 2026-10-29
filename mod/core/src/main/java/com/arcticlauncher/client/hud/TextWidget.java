@@ -233,7 +233,7 @@ public abstract class TextWidget extends HudWidget {
 					g.itemIcon(stack, x, 0);
 				}
 			} else {
-				g.texture("asset:icons/" + iconNameOrDefault() + ".png", x, (HEIGHT - ICON) / 2, ICON, ICON, 0, 0, 64, 64, 64, 64);
+				g.texture("asset:icons/" + iconNameOrDefault(), x, (HEIGHT - ICON) / 2, ICON, ICON, 0, 0, 64, 64, 64, 64);
 			}
 			x += iconRoom();
 		}

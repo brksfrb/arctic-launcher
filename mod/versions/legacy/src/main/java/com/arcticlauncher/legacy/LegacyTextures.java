@@ -58,13 +58,15 @@ final class LegacyTextures {
 	}
 
 	private static Identifier asset(String name) {
-		Identifier id = ASSETS.get(name);
-		if (id == null) {
-			id = new Identifier(NAMESPACE, "asset/" + name);
-			ASSETS.put(name, id);
-			upload(id, "/assets/arctic/" + name + ".png");
+		if (ASSETS.containsKey(name)) {
+			return ASSETS.get(name);
 		}
-		return id;
+		Identifier id = new Identifier(NAMESPACE, "asset/" + name);
+		upload(id, "/assets/arctic/" + name + ".png");
+		// A file that failed to load draws nothing, not Minecraft's purple missing texture.
+		Identifier result = LOADED.contains(id) ? id : null;
+		ASSETS.put(name, result);
+		return result;
 	}
 
 	private static void upload(Identifier id, String resource) {

@@ -130,7 +130,7 @@ final class ArcticHub extends Page {
 			}
 			int main = hero ? s.onAccent : s.text;
 			int quiet = hero ? Draw.alpha(s.onAccent, 0.8f) : s.muted;
-			String path = "asset:icons/" + icon + ".png";
+			String path = "asset:icons/" + icon;
 			if (line == null) {
 				// Small tile: the icon above its name.
 				g.texture(path, x + (w - ICON) / 2, y + 6, ICON, ICON, 0, 0, 64, 64, 64, 64);
