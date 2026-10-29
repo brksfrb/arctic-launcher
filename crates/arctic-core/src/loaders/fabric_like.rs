@@ -132,8 +132,15 @@ pub fn install(
 }
 
 fn unreachable_meta(kind: LoaderKind, e: &Error) -> Error {
+    let text = e.to_string();
+    // Windows 11001 / "no such host": this PC's DNS cannot find the site (often a provider block).
+    let dns_hint = if text.contains("11001") || text.to_lowercase().contains("no such host") {
+        " Your DNS cannot find the site: try the DNS servers 1.1.1.1 / 8.8.8.8 (Windows network settings) or a VPN."
+    } else {
+        ""
+    };
     Error::Other(format!(
-        "could not load the {} version list: {e}",
+        "could not load the {} version list: {e}.{dns_hint}",
         kind.label()
     ))
 }
