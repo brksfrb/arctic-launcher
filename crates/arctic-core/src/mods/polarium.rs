@@ -33,6 +33,11 @@ const JARS: &[(&str, &[u8])] = &[
         "26.1.2",
         include_bytes!("../../../../mod/dist/polarium/polarium-26.1.2.jar"),
     ),
+    // Legacy Fabric (Fabric Loader on 1.8.9).
+    (
+        "1.8.9",
+        include_bytes!("../../../../mod/dist/polarium/polarium-1.8.9.jar"),
+    ),
 ];
 
 fn jar_for(game_version: &str) -> Option<&'static [u8]> {
