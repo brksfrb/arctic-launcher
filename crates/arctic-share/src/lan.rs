@@ -64,6 +64,12 @@ pub async fn announcer() -> std::io::Result<UdpSocket> {
     Ok(socket)
 }
 
+/// True if `ip` is an address of this machine: the loopback, or one it can bind (only an address assigned to
+/// one of its interfaces can be). An announcement from any other address is another device on the network.
+pub fn is_this_machine(ip: std::net::IpAddr) -> bool {
+    ip.is_loopback() || std::net::UdpSocket::bind((ip, 0)).is_ok()
+}
+
 /// True if something on this machine accepts connections on `port`, i.e.
 /// the announcement came from our own game and not another PC.
 pub async fn is_local(port: u16) -> bool {
@@ -95,6 +101,13 @@ mod tests {
     fn brackets_in_names_do_not_break_parsing() {
         let text = format("[cool] world", 1);
         assert_eq!(parse(&text).map(|w| w.motd), Some("(cool) world".into()));
+    }
+
+    #[test]
+    fn only_addresses_of_this_machine_count() {
+        assert!(is_this_machine(Ipv4Addr::LOCALHOST.into()));
+        // TEST-NET-1: never assigned to an interface.
+        assert!(!is_this_machine(Ipv4Addr::new(192, 0, 2, 1).into()));
     }
 
     #[test]

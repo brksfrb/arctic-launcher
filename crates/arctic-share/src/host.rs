@@ -80,7 +80,10 @@ async fn detect(world: watch::Sender<Option<LanWorld>>, sink: Sink) {
     loop {
         let received =
             tokio::time::timeout(Duration::from_secs(2), socket.recv_from(&mut buf)).await;
-        if let Ok(Ok((n, _))) = received
+        // Only this machine's own game: anyone on the network can send the packet, and it names a port
+        // the host would then open to the friend (any service listening on this PC).
+        if let Ok(Ok((n, from))) = received
+            && lan::is_this_machine(from.ip())
             && let Some(found) = lan::parse(&String::from_utf8_lossy(&buf[..n]))
             && !found.motd.ends_with(GUEST_SUFFIX)
         {
