@@ -138,6 +138,7 @@ impl ArcticApp {
         self.gallery_name_dialog(&ctx);
         self.send_logs_dialog(&ctx);
         self.client_off_dialog(&ctx);
+        self.game_switch_dialog(&ctx);
         self.profile_dialogs(&ctx);
         self.create_instance_dialog(&ctx);
         self.suggest_dialog(&ctx);

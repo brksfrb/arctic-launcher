@@ -300,6 +300,42 @@ impl ArcticApp {
         }
     }
 
+    /// "Let the game switch to <account>?": the game asked for an account it was not launched with.
+    pub(crate) fn game_switch_dialog(&mut self, ctx: &egui::Context) {
+        let Some(name) = self.bridge.switch_question() else {
+            return;
+        };
+        let p = self.palette();
+        let modal = Modal::new(Id::new("game_switch"))
+            .frame(dialog_frame(p))
+            .show(ctx, |ui| {
+                ui.set_width(380.0);
+                ui.label(
+                    RichText::new(format!("Let the game play as {name}?"))
+                        .size(20.0)
+                        .strong(),
+                );
+                ui.label(
+                    RichText::new(
+                        "The running game asked for this account's login. Only say yes if you just picked it in the game's account menu.",
+                    )
+                    .color(p.muted),
+                );
+                ui.add_space(12.0);
+                crate::widgets::row(ui, |ui| {
+                    if crate::widgets::button(ui, p, None, "No", false).clicked() {
+                        self.bridge.answer_switch(false);
+                    }
+                    if widgets::button(ui, p, None, "Yes, switch", true).clicked() {
+                        self.bridge.answer_switch(true);
+                    }
+                });
+            });
+        if modal.should_close() {
+            self.bridge.answer_switch(false);
+        }
+    }
+
     /// "Turn off the Arctic Client?": asked before it goes off in an instance.
     pub(crate) fn client_off_dialog(&mut self, ctx: &egui::Context) {
         let Some(id) = self.client_off_confirm.clone() else {

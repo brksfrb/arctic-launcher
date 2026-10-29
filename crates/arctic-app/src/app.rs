@@ -757,6 +757,7 @@ impl ArcticApp {
         );
         self.log_source = LogSource::Game(id);
         let start = crate::tasks::StartAt { copy, quick_play };
+        self.bridge.allow(&account.id);
         self.tasks
             .launch(id, version, instance, account, self.settings.clone(), start);
     }

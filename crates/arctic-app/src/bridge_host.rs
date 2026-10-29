@@ -3,6 +3,7 @@
 //! accounts, refreshing logins through the same task path as launches so
 //! the app's account list stays the one source of truth.
 
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use arctic_core::auth::{Account, AccountKind, AccountStore};
@@ -24,7 +25,24 @@ struct Shared {
     login_status: String,
     /// FFmpeg being fetched for replay videos.
     ffmpeg: FfmpegJob,
+    /// Accounts the game may get a session for: the ones games were launched with, and the ones
+    /// the player approved in the launcher. Anything else needs a yes first.
+    allowed: HashSet<String>,
+    /// A switch to an account that is not allowed yet, waiting for the player's answer.
+    switch_ask: Option<SwitchAsk>,
 }
+
+/// The game asked to switch to `name`; the launcher asks the player.
+struct SwitchAsk {
+    id: String,
+    name: String,
+    answer: Option<bool>,
+}
+
+/// How long a session request waits for the player before telling the game to ask again. Kept
+/// under the game's own 10 s read timeout.
+const SWITCH_WAIT: std::time::Duration = std::time::Duration::from_secs(8);
+const SWITCH_POLL: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// A download of FFmpeg the game asked for.
 #[derive(Default)]
@@ -57,6 +75,53 @@ pub struct BridgeHost {
 
 struct AppAccounts(Arc<Mutex<Shared>>);
 
+impl AppAccounts {
+    /// Lets a session for `account` through when a game was launched with it or the player said
+    /// yes; otherwise puts the question to the player and waits a moment for the answer. A game
+    /// (or any mod in it) can therefore not collect the tokens of the other accounts.
+    fn require_approval(&self, account: &Account) -> arctic_core::Result<()> {
+        let deadline = std::time::Instant::now() + SWITCH_WAIT;
+        loop {
+            {
+                let mut shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+                if shared.allowed.contains(&account.id) {
+                    return Ok(());
+                }
+                match shared.switch_ask.as_ref() {
+                    // Still waiting for the player.
+                    Some(ask) if ask.id == account.id && ask.answer.is_none() => {}
+                    Some(ask) if ask.id == account.id => {
+                        shared.switch_ask = None;
+                        return Err(arctic_core::Error::Other(
+                            "the switch was declined in the launcher".into(),
+                        ));
+                    }
+                    Some(ask) if ask.answer.is_none() => {
+                        return Err(arctic_core::Error::Other(
+                            "the launcher is asking about another switch".into(),
+                        ));
+                    }
+                    // Nothing asked, or an old answer about another account.
+                    _ => {
+                        log::info!("the game asks to switch to {}", account.username);
+                        shared.switch_ask = Some(SwitchAsk {
+                            id: account.id.clone(),
+                            name: account.username.clone(),
+                            answer: None,
+                        });
+                    }
+                }
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(arctic_core::Error::Other(
+                    "confirm the switch in the Arctic Launcher window, then try again".into(),
+                ));
+            }
+            std::thread::sleep(SWITCH_POLL);
+        }
+    }
+}
+
 impl bridge::Accounts for AppAccounts {
     fn list(&self) -> Vec<AccountEntry> {
         let shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
@@ -84,6 +149,7 @@ impl bridge::Accounts for AppAccounts {
                 .ok_or_else(|| arctic_core::Error::Other("no such account".into()))?;
             (account, shared.tasks.clone())
         };
+        self.require_approval(&account)?;
         let fresh = tasks.fresh_account(account)?;
         let arctic_token = cosmetics::token_for(tasks.dirs(), &cosmetics::base_url(), &fresh)
             .inspect_err(|e| log::info!("Arctic session for the switch: {e}"))
@@ -319,6 +385,8 @@ impl BridgeHost {
             together_status: r#"{"state":"idle"}"#.into(),
             login_status: r#"{"state":"idle"}"#.into(),
             ffmpeg: FfmpegJob::default(),
+            allowed: HashSet::new(),
+            switch_ask: None,
         }));
         let info = bridge::start(AppAccounts(Arc::clone(&shared)))
             .inspect_err(|e| log::warn!("account switcher bridge: {e}"))
@@ -333,6 +401,39 @@ impl BridgeHost {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .voice = Some(hub);
+    }
+
+    /// A game is being launched with `account_id`: it may get that account's session.
+    pub fn allow(&self, account_id: &str) {
+        self.shared
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .allowed
+            .insert(account_id.to_owned());
+    }
+
+    /// The name of the account a game wants to switch to and the player has not answered about.
+    pub fn switch_question(&self) -> Option<String> {
+        let shared = self.shared.lock().unwrap_or_else(PoisonError::into_inner);
+        shared
+            .switch_ask
+            .as_ref()
+            .filter(|ask| ask.answer.is_none())
+            .map(|ask| ask.name.clone())
+    }
+
+    /// The player's answer to [`Self::switch_question`].
+    pub fn answer_switch(&self, allow: bool) {
+        let mut shared = self.shared.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some(ask) = shared.switch_ask.as_mut() else {
+            return;
+        };
+        ask.answer = Some(allow);
+        if allow {
+            let id = ask.id.clone();
+            shared.switch_ask = None;
+            shared.allowed.insert(id);
+        }
     }
 
     /// A play-together request from the game, once.
