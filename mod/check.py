@@ -3,8 +3,8 @@
 Usage (from anywhere, JDK 25 on JAVA_HOME):  python mod/check.py [version ...] [--offline]
 
 For each target: compile it (with its preprocessed sources and expanded
-mixin config) and, on the Fabric adapter, check every mixin hook against that
-version's game jar (versions/fabric/mixcheck.py). A shared change that breaks
+mixin config) and check every mixin hook against that version's game jar
+(versions/fabric/mixcheck.py; versions/legacy/mixcheck.py for 1.8.9-1.12.2). A shared change that breaks
 an old version fails here, long before anyone launches it. Exit code 1 if any
 target fails.
 """
@@ -19,6 +19,7 @@ MOD = Path(__file__).resolve().parent
 OFFLINE = os.environ.get("ARCTIC_GRADLE_FLAGS", "").split()
 GRADLEW = MOD / ("gradlew.bat" if sys.platform == "win32" else "gradlew")
 MIXCHECK = MOD / "versions" / "fabric" / "mixcheck.py"
+LEGACY_MIXCHECK = MOD / "versions" / "legacy" / "mixcheck.py"
 
 
 def check(target):
@@ -34,6 +35,8 @@ def check(target):
     if compiled.returncode != 0:
         return f"{version}: does not compile"
     if project in ("fabric", "fabric13") and subprocess.run([sys.executable, str(MIXCHECK), version]).returncode != 0:
+        return f"{version}: mixin problems"
+    if project == "legacy" and subprocess.run([sys.executable, str(LEGACY_MIXCHECK), version]).returncode != 0:
         return f"{version}: mixin problems"
     return None
 

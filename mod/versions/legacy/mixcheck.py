@@ -3,9 +3,10 @@
 Usage: python mod/versions/legacy/mixcheck.py 1.12.2
 (build that version once first, so Loom has its named jar cached; JDK on
 JAVA_HOME). Prints hooked methods, accessor fields and INVOKE targets that
-don't exist in that version: each would crash the game at startup. Methods
-inherited from a superclass (drawTexture, fill) and LWJGL calls show up as
-false alarms.
+don't exist in that version: each would crash the game at startup. Exit code 1
+when anything is printed as a problem (mod/check.py runs it for the legacy
+targets). Members are looked up in the class and its superclasses; targets
+outside net.minecraft / com.mojang (LWJGL, the JDK) are not checked.
 """
 import glob
 import os
@@ -13,9 +14,19 @@ import re
 import subprocess
 import sys
 
+problems = []
+
+
+def bad(message):
+    print(message)
+    problems.append(message)
+
+
 ver = sys.argv[1]
 mine = tuple(int(x) for x in ver.split("."))
-J = os.path.join(os.environ.get("JAVA_HOME", ""), "bin", "javap")
+if not os.environ.get("JAVA_HOME"):
+    sys.exit("JAVA_HOME is not set (javap is needed)")
+J = os.path.join(os.environ["JAVA_HOME"], "bin", "javap")
 home = os.path.expanduser("~")
 JAR = glob.glob(home + f"/.gradle/caches/fabric-loom/minecraftMaven/net/minecraft/minecraft-merged-legacy-intermediary-1-v2/{ver}-*/*.jar")[0]
 cache = {}
@@ -26,6 +37,19 @@ def members(cls):
     if cls not in cache:
         cache[cls] = subprocess.run([J, "-cp", JAR, "-p", "-s", cls], capture_output=True, text=True).stdout
     return cache[cls]
+
+
+def declares(cls, name, depth=0):
+    """Whether cls, or a superclass/interface the jar knows, has a member called name."""
+    mem = members(cls)
+    if re.search(r"[ .]" + re.escape(name) + r"[(;]", mem):
+        return True
+    head = mem.split("{", 1)[0]
+    for group in re.findall(r"\b(?:extends|implements)\s+([\w.$, ]+)", head):
+        for parent in (p.strip() for p in group.split(",")):
+            if depth < 6 and parent.startswith(("net.minecraft", "com.mojang")) and declares(parent, name, depth + 1):
+                return True
+    return False
 
 
 def vt(s):
@@ -68,7 +92,7 @@ for f in sorted(glob.glob("*.java")):
     cls = imports.get(m.group(1), m.group(1))
     mem = members(cls)
     if not mem:
-        print(f"{f}: CLASS MISSING {cls}")
+        bad(f"{f}: CLASS MISSING {cls}")
         continue
     consts = dict(re.findall(r'String (\w+) = "([^"]+)"', src))
     targets = re.findall(r'method\s*=\s*"([^"]+)"', src)
@@ -77,18 +101,20 @@ for f in sorted(glob.glob("*.java")):
     targets += [consts[c] for c in re.findall(r"method\s*=\s*(\w+)\s*[,)]", src) if c in consts]
     for t in targets:
         n = t.split("(")[0]
-        if not re.search(r"[ .]" + re.escape(n) + r"\(", mem):
-            print(f"{f}: method {t} missing in {cls}")
+        if not declares(cls, n):
+            bad(f"{f}: method {t} missing in {cls}")
     for acc in re.findall(r'@Accessor\("(\w+)"\)', src):
-        if not re.search(r"\b" + acc + r";", mem):
-            print(f"{f}: field {acc} missing in {cls}")
+        if not declares(cls, acc):
+            bad(f"{f}: field {acc} missing in {cls}")
     # INVOKE targets: Lowner;name(desc)
     for owner, name in re.findall(r'target\s*=\s*"L([\w/$]+);([\w<>$]+)\(', src):
-        om = members(owner.replace("/", "."))
-        if not om:
-            print(f"{f}: target class missing {owner}")
-        elif not re.search(r"[ .]" + re.escape(name) + r"\(", om):
-            print(f"{f}: target {owner}.{name} missing")
+        if not owner.startswith(("net/minecraft", "com/mojang")):
+            continue
+        owner_cls = owner.replace("/", ".")
+        if not members(owner_cls):
+            bad(f"{f}: target class missing {owner}")
+        elif not declares(owner_cls, name):
+            bad(f"{f}: target {owner}.{name} missing")
 print("checked", ver)
 
 # Pass 2: every INVOKE target must be called inside the hooked method.
@@ -103,9 +129,13 @@ def code(cls):
 
 
 def body(cls, method):
-    text = code(cls)
     name = method.split("(")[0]
-    bodies = re.findall(r"\n  [^\n]*[ .]" + re.escape(name) + r"\([^\n]*\n(.*?)\n\n", text, re.S)
+    # One chunk per member (they start two spaces in): a body can contain blank lines (switch tables).
+    bodies = []
+    for chunk in re.split(r"\n(?=  \S)", code(cls)):
+        head = chunk.split("\n", 1)[0]
+        if re.search(r"[ .]" + re.escape(name) + r"\(", head) and "\n" in chunk:
+            bodies.append(chunk.split("\n", 1)[1])
     return "\n".join(bodies)
 
 
@@ -132,7 +162,8 @@ for f in sorted(glob.glob("*.java")):
         b = body(cls, method)
         checked_invokes.append(f"{f}:{method}->{name}")
         if not b:
-            print(f"{f}: no body for {method}")
+            bad(f"{f}: no body for {method}")
         elif not re.search(r"[./]" + re.escape(name) + r":" + re.escape(desc), b) and not re.search(r"Method " + re.escape(name) + r":" + re.escape(desc), b):
-            print(f"{f}: {method} never calls {name}{desc}")
+            bad(f"{f}: {method} never calls {name}{desc}")
 print("invoke check done", ver, len(checked_invokes), "invokes")
+sys.exit(1 if problems else 0)
