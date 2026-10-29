@@ -79,6 +79,7 @@
 		"MinecraftMaximizeMixin",
 		"EntityTurnMixin"<% if (features) { %>,
 <% if (fogHook) { %>		"FogMixin",
+<% } %><% if (fogBuffer) { %>		"FogBufferMixin",
 <% } %><% if (cameraClass) { %>		"CameraMixin",
 <% } %>
 		"LightmapMixin",

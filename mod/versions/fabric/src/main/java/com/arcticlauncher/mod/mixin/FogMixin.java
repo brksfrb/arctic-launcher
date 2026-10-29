@@ -1,6 +1,6 @@
 package com.arcticlauncher.mod.mixin;
 
-//#if MC >= 1.14 && MC < 1.21.5
+//#if MC >= 1.13 && MC < 1.21.5
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
 //#if MC >= 1.15
@@ -17,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
 /**
  * Fog: the distance where the fog starts and ends is stretched by the player's factor (or pushed out of sight).
- * 1.21.5 and newer upload the fog to the GPU as a buffer: no safe hook there, so they are left alone.
+ * 1.21.5 and newer upload the fog to the GPU as a buffer: see FogBufferMixin.
  */
 //#if MC >= 1.15
 @Mixin(RenderSystem.class)

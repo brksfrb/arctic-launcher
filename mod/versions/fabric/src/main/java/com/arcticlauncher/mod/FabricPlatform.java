@@ -1313,11 +1313,7 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public boolean fogWorks() {
-		//#if MC >= 1.14 && MC < 1.21.5
 		return true;
-		//#else
-		return false;
-		//#endif
 	}
 
 	@Override
