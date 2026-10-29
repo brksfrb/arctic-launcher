@@ -171,7 +171,9 @@ public final class GfxImpl implements Gfx {
 	 */
 	private void softShadowText(String text, int x, int y, int color) {
 		int alpha = (color >>> 24) == 0 ? 255 : color >>> 24;
-		int shadowColor = (Math.round(alpha * 0.5f) << 24) | ((color & 0xFCFCFC) >> 2);
+		// Never below 4: the game's font draws a colour with alpha 0 to 3 fully opaque (a fading chat line's shadow
+		// came out solid black for one frame).
+		int shadowColor = (Math.max(4, Math.round(alpha * 0.5f)) << 24) | ((color & 0xFCFCFC) >> 2);
 		float offset = SmoothFont.shadowOffset();
 		translate(offset, offset);
 		g.drawString(font, text, x, y, shadowColor, false);

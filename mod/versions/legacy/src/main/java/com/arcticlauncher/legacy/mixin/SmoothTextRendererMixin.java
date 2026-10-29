@@ -162,6 +162,8 @@ abstract class SmoothTextRendererMixin {
 		// A solid shadow behind thin anti-aliased letters shows through their edges as gray: half the opacity.
 		int shadowColor = args.get(3);
 		int alpha = (shadowColor >>> 24) == 0 ? 255 : shadowColor >>> 24;
-		args.set(3, (Math.round(alpha * 0.5f) << 24) | (shadowColor & 0xFFFFFF));
+		// Never below 4: the game's font draws a colour with alpha 0 to 3 fully opaque, so the shadow of a fading
+		// chat line (alpha 4 to 7, halved) came out solid black for one frame.
+		args.set(3, (Math.max(4, Math.round(alpha * 0.5f)) << 24) | (shadowColor & 0xFFFFFF));
 	}
 }
