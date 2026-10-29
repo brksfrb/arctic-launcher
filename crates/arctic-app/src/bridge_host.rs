@@ -37,11 +37,15 @@ struct SwitchAsk {
     id: String,
     name: String,
     answer: Option<bool>,
+    asked: std::time::Instant,
 }
 
 /// How long a session request waits for the player before telling the game to ask again. Kept
 /// under the game's own 10 s read timeout.
 const SWITCH_WAIT: std::time::Duration = std::time::Duration::from_secs(8);
+/// A question nobody answered this long is dropped, so a game that stopped asking cannot keep
+/// the launcher's dialog (or the next request) stuck.
+const SWITCH_STALE: std::time::Duration = std::time::Duration::from_secs(60);
 const SWITCH_POLL: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// A download of FFmpeg the game asked for.
@@ -87,6 +91,13 @@ impl AppAccounts {
                 if shared.allowed.contains(&account.id) {
                     return Ok(());
                 }
+                if shared
+                    .switch_ask
+                    .as_ref()
+                    .is_some_and(|ask| ask.asked.elapsed() > SWITCH_STALE)
+                {
+                    shared.switch_ask = None;
+                }
                 match shared.switch_ask.as_ref() {
                     // Still waiting for the player.
                     Some(ask) if ask.id == account.id && ask.answer.is_none() => {}
@@ -108,6 +119,7 @@ impl AppAccounts {
                             id: account.id.clone(),
                             name: account.username.clone(),
                             answer: None,
+                            asked: std::time::Instant::now(),
                         });
                     }
                 }
