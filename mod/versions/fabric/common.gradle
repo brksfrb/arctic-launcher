@@ -350,8 +350,8 @@ processResources {
 			// The F3 screen's two text lists (Debug Screen mod); from 1.21.9 it is a list of entries.
 			debugText: atLeast('1.14'),
 			slotLocks: atLeast('1.14'),
-			// No Hurt Shake hooks GameRenderer.bobHurt (1.14 up to 26.1).
-			hurtCam: atLeast('1.14') && !atLeast('26.1'),
+			// No Hurt Shake hooks GameRenderer.bobHurt (every version; 26.1 changed its arguments).
+			hurtCam: atLeast('1.13'),
 			// Dynamic FPS: the frame rate limit lives in Minecraft before 1.21.2, in the limit tracker after.
 			framerateLimit: atLeast('1.14') && !atLeast('1.21.2'),
 			framerateTracker: atLeast('1.21.2'),

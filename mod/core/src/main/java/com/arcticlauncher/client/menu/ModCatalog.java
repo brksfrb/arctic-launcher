@@ -282,7 +282,7 @@ final class ModCatalog {
 					f.stepper("In a menu", () -> c.dynFpsMenu, v -> c.dynFpsMenu = (int) v, 0, 240, 10, "%.0f FPS");
 					f.note("Idle means nothing moved: not you, not the mouse. The game's own limit still applies; this only lowers it.");
 				}));
-		out.add(new Mod("nohurtcam", "No Hurt Shake", "The view stops tilting and shaking when you take damage (1.14 to 1.21.11)", "particles", Category.VISUAL,
+		out.add(new Mod("nohurtcam", "No Hurt Shake", "The view stops tilting and shaking when you take damage", "particles", Category.VISUAL,
 				"hurt cam camera shake shaking tilt damage bob")
 				.toggle(() -> c.noHurtCam, on -> c.noHurtCam = on));
 		out.add(new Mod("tabping", "Tab Ping", "The ping in milliseconds in the player list, where the ping bars were", "tabping", Category.SOCIAL,
