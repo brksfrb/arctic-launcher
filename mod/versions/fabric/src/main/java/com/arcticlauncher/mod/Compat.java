@@ -397,6 +397,15 @@ public final class Compat {
 	}
 	//#endif
 
+	/** The player's walking speed from the abilities (the view's speed change is measured against it). */
+	public static double walkingSpeed(net.minecraft.world.entity.player.Player player) {
+		//#if MC >= 1.17
+		return player.getAbilities().getWalkingSpeed();
+		//#else
+		return player.abilities.getWalkingSpeed();
+		//#endif
+	}
+
 	/** The angle about the up axis (radians) that turns a flat item to face the camera. */
 	public static float faceCamera() {
 		net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();

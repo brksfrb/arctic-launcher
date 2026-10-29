@@ -82,6 +82,7 @@
 <% } %><% if (fogBuffer) { %>		"FogBufferMixin",
 <% } %>		"TooltipWheelMixin",
 		"ShinyPotsMixin",
+		"DynamicFovMixin",
 <% if (teamViewClient) { %>		"TeamViewClientMixin",
 <% } %><% if (teamViewEntity) { %>		"TeamViewEntityMixin",
 <% } %><% if (tooltipPositioner) { %>		"TooltipPositionMixin",

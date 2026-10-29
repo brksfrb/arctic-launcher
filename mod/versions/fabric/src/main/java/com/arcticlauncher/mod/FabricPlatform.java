@@ -1322,6 +1322,11 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean dynamicFovWorks() {
+		return true;
+	}
+
+	@Override
 	public boolean fogWorks() {
 		return true;
 	}
