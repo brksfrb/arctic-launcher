@@ -290,8 +290,7 @@ fn keep_backup(path: &Path) -> Result<()> {
             let _ = std::fs::rename(slot(n), slot(n + 1));
         }
     }
-    std::fs::write(slot(1), &current)
-        .map_err(|e| Error::io(slot(1), e))
+    std::fs::write(slot(1), &current).map_err(|e| Error::io(slot(1), e))
 }
 
 fn write(path: &Path, bytes: &[u8]) -> Result<()> {
