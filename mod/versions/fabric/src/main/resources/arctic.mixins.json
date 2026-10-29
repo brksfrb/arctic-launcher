@@ -80,6 +80,9 @@
 		"EntityTurnMixin"<% if (features) { %>,
 <% if (fogHook) { %>		"FogMixin",
 <% } %><% if (fogBuffer) { %>		"FogBufferMixin",
+<% } %>		"TooltipWheelMixin",
+<% if (tooltipPositioner) { %>		"TooltipPositionMixin",
+<% } %><% if (tooltipScreen) { %>		"TooltipScreenMixin",
 <% } %><% if (cameraClass) { %>		"CameraMixin",
 <% } %>
 		"LightmapMixin",

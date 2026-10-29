@@ -1317,6 +1317,11 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean tooltipScrollWorks() {
+		return true;
+	}
+
+	@Override
 	public boolean fogWorks() {
 		return true;
 	}

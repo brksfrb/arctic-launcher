@@ -278,6 +278,8 @@ processResources {
 			// Fog: stretching the fog distance has a simple hook from 1.14 up to 1.21.4 (1.21.5 sends the fog to the GPU as a buffer).
 			fogHook: atLeast('1.13') && !atLeast('1.21.5'),
 			fogBuffer: atLeast('1.21.5'),
+			tooltipPositioner: atLeast('1.19.3'),
+			tooltipScreen: !atLeast('1.19.3') && atLeast('1.13'),
 			// 1.13 draws the crosshair inline in Gui.render and its buttons have no alpha.
 			crosshairHook: atLeast('1.14'),
 			widgetAlpha: atLeast('1.14'),
