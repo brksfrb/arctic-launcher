@@ -1,6 +1,6 @@
 package com.arcticlauncher.mod;
 
-//#if MC >= 1.16
+//#if MC >= 1.13
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.mojang.blaze3d.platform.NativeImage;
@@ -10,12 +10,14 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import javax.imageio.ImageIO;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.AbstractTexture;
+import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.TextureManager;
 
 /**
- * Glint Colorizer (1.16 and newer): the shimmer on enchanted items and armor is one texture, already purple, so
- * the game's copy is replaced by one in the player's color (the same pattern, its average the chosen color).
+ * Glint Colorizer (1.13 and newer): the shimmer on enchanted items and armor is one texture. From 1.15 it is
+ * already purple, so the game's copy is replaced by one in the player's color (the same pattern, its average the
+ * chosen color). In 1.13 and 1.14 it is grey and the game multiplies it by its purple (x0.5, x0.25, x0.8 on items,
+ * 76% of that on armor): the copy is made so that product comes out as the chosen color.
  * A resource reload brings the game's own back; it's put in again within a second.
  */
 public final class GlintTint {
@@ -24,7 +26,7 @@ public final class GlintTint {
 	/** The color in the game's copy now (0: the pack's own). */
 	private static int applied;
 	/** What was put in, to notice a reload replacing it. */
-	private static AbstractTexture ours;
+	private static Object ours;
 	private static long checkedAt;
 
 	private GlintTint() {}
@@ -54,7 +56,7 @@ public final class GlintTint {
 		try {
 			byte[] png = original();
 			NativeImage image = NativeImage.read(new ByteArrayInputStream(want == 0 ? png : tinted(png, want)));
-			AbstractTexture texture = Compat.texture("Arctic glint", image);
+			DynamicTexture texture = Compat.texture("Arctic glint", image);
 			textures.register(GLINT, texture);
 			ours = want == 0 ? null : texture;
 			applied = want;
@@ -95,12 +97,26 @@ public final class GlintTint {
 		int tr = target >> 16 & 0xFF;
 		int tg = target >> 8 & 0xFF;
 		int tb = target & 0xFF;
+		//#if MC < 1.15
+		// The game multiplies by its purple: divide it out (brightness kept at about 60% of the pick, as the game's purple is).
+		double[] factor = {
+				Math.min(1, tr / 255.0 / 0.5 * 0.6),
+				Math.min(1, tg / 255.0 / 0.25 * 0.6),
+				Math.min(1, tb / 255.0 / 0.8 * 0.6)};
+		tr = 255;
+		tg = 255;
+		tb = 255;
+		//#endif
 		BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
 		for (int y = 0; y < h; y++) {
 			for (int x = 0; x < w; x++) {
 				int argb = image.getRGB(x, y);
 				double t = luma(argb) / mean;
+				//#if MC < 1.15
+				out.setRGB(x, y, (argb & 0xFF000000) | clamp(tr * t * factor[0]) << 16 | clamp(tg * t * factor[1]) << 8 | clamp(tb * t * factor[2]));
+				//#else
 				out.setRGB(x, y, (argb & 0xFF000000) | clamp(tr * t) << 16 | clamp(tg * t) << 8 | clamp(tb * t));
+				//#endif
 			}
 		}
 		ByteArrayOutputStream bytes = new ByteArrayOutputStream();

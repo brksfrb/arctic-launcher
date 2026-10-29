@@ -21,7 +21,7 @@ abstract class MinecraftTickMixin {
 		com.arcticlauncher.mod.CursorGuard.tick();
 		//#endif
 		com.arcticlauncher.mod.DisconnectConfirm.tick();
-		//#if MC >= 1.16
+		//#if MC >= 1.13
 		com.arcticlauncher.mod.GlintTint.tick();
 		//#endif
 		//#if MC >= 1.13
