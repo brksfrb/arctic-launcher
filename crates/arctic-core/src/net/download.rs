@@ -55,6 +55,9 @@ const RETRY_BACKOFF: Duration = Duration::from_millis(400);
 /// failed 1 MB libraries on ordinary home connections: "timeout: receive body").
 const BODY_TIMEOUT_BASE: Duration = Duration::from_secs(30);
 const MIN_SPEED_BYTES_PER_SEC: u64 = 8 * 1024;
+/// Files whose size isn't known up front (installers, Maven libraries without a size): the whole
+/// body may take this long. A flat 30 s failed on slow lines, five times from byte 0.
+const BODY_TIMEOUT_UNKNOWN_SIZE: Duration = Duration::from_secs(300);
 /// Minimum interval between progress callbacks.
 const REPORT_EVERY_MS: u64 = 50;
 /// Files at least this big are fetched in parallel byte ranges, so one slow
@@ -287,7 +290,10 @@ fn download_with_retry(job: &DownloadJob, reporter: &Reporter) -> Result<()> {
 }
 
 pub(crate) fn body_timeout(size: Option<u64>) -> Duration {
-    BODY_TIMEOUT_BASE + Duration::from_secs(size.unwrap_or(0) / MIN_SPEED_BYTES_PER_SEC)
+    match size {
+        Some(size) => BODY_TIMEOUT_BASE + Duration::from_secs(size / MIN_SPEED_BYTES_PER_SEC),
+        None => BODY_TIMEOUT_UNKNOWN_SIZE,
+    }
 }
 
 /// Stream into `<dest>.part` (decompressing if needed), hashing both the
@@ -925,7 +931,7 @@ mod tests {
 
     #[test]
     fn body_timeout_scales_with_size() {
-        assert_eq!(body_timeout(None), BODY_TIMEOUT_BASE);
+        assert_eq!(body_timeout(None), BODY_TIMEOUT_UNKNOWN_SIZE);
         let big = body_timeout(Some(100 * 1024 * 1024));
         assert_eq!(big, BODY_TIMEOUT_BASE + Duration::from_secs(100 * 128));
     }
