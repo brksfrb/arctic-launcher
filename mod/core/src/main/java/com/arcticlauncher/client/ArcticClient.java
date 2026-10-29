@@ -350,6 +350,7 @@ public final class ArcticClient {
 
 	/** Each frame, before it's drawn (the game thread). */
 	public static void frame(boolean screenOpen) {
+		com.arcticlauncher.client.gfx.RenderWork.drain();
 		long now = System.nanoTime();
 		double seconds = lastFrame == 0 ? 0 : (now - lastFrame) / 1e9;
 		lastFrame = now;

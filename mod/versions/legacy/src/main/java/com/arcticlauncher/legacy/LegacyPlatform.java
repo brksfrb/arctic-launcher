@@ -1489,7 +1489,7 @@ public final class LegacyPlatform implements Platform {
 			return;
 		}
 		int frames = cape ? Looks.capeFrames(image.getWidth(), image.getHeight()) : 1;
-		mc().submit(() -> {
+		com.arcticlauncher.client.gfx.RenderWork.post(() -> {
 			if (frames < 2) {
 				if (LegacyTextures.register(LegacyTextures.look(hash), image)) {
 					ArcticClient.looks().textureReady(hash, 1);

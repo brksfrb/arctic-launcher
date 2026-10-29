@@ -86,7 +86,7 @@ final class LegacyCosmetics {
 		if (image == null) {
 			return;
 		}
-		MinecraftClient.getInstance().submit(new Runnable() {
+		com.arcticlauncher.client.gfx.RenderWork.post(new Runnable() {
 			@Override
 			public void run() {
 				try {
@@ -120,7 +120,7 @@ final class LegacyCosmetics {
 				return;
 			}
 		}
-		MinecraftClient.getInstance().submit(new Runnable() {
+		com.arcticlauncher.client.gfx.RenderWork.post(new Runnable() {
 			@Override
 			public void run() {
 				try {

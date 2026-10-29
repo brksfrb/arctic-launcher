@@ -422,7 +422,7 @@ final class FabricPlatform implements Platform {
 		}
 		com.arcticlauncher.client.looks.Cosmetics.Item item = ArcticClient.looks().cosmetics().item(id);
 		NativeImage glowFinal = glowImage;
-		mc().execute(() -> {
+		com.arcticlauncher.client.gfx.RenderWork.post(() -> {
 			try {
 				net.minecraft.resources.Identifier texture = GfxImpl.look("cosmetic/" + id);
 				mc().getTextureManager().register(texture, Compat.texture("Arctic cosmetic " + id, image));
@@ -456,7 +456,7 @@ final class FabricPlatform implements Platform {
 			ArcticMod.LOG.warn("cosmetic {} (mesh): {}", id, e.toString());
 			return;
 		}
-		mc().execute(() -> {
+		com.arcticlauncher.client.gfx.RenderWork.post(() -> {
 			try {
 				net.minecraft.resources.Identifier[] textures = new net.minecraft.resources.Identifier[images.size()];
 				for (int i = 0; i < textures.length; i++) {
@@ -689,7 +689,7 @@ final class FabricPlatform implements Platform {
 		}
 		int frames = cape ? Looks.capeFrames(image.getWidth(), image.getHeight()) : 1;
 		if (frames < 2) {
-			mc().execute(() -> {
+			com.arcticlauncher.client.gfx.RenderWork.post(() -> {
 				if (register(hash, image)) {
 					ArcticClient.looks().textureReady(hash, 1);
 				}
@@ -698,7 +698,7 @@ final class FabricPlatform implements Platform {
 		}
 		List<NativeImage> parts = splitFrames(image, frames);
 		image.close();
-		mc().execute(() -> {
+		com.arcticlauncher.client.gfx.RenderWork.post(() -> {
 			boolean ok = true;
 			for (int i = 0; i < parts.size(); i++) {
 				ok &= register(hash + "/" + i, parts.get(i));
