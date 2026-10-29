@@ -302,7 +302,7 @@ impl ArcticApp {
 
     /// "Let the game switch to <account>?": the game asked for an account it was not launched with.
     pub(crate) fn game_switch_dialog(&mut self, ctx: &egui::Context) {
-        let Some(name) = self.bridge.switch_question() else {
+        let Some((serial, name)) = self.bridge.switch_question() else {
             return;
         };
         let p = self.palette();
@@ -324,15 +324,15 @@ impl ArcticApp {
                 ui.add_space(12.0);
                 crate::widgets::row(ui, |ui| {
                     if crate::widgets::button(ui, p, None, "No", false).clicked() {
-                        self.bridge.answer_switch(false);
+                        self.bridge.answer_switch(serial, false);
                     }
                     if widgets::button(ui, p, None, "Yes, switch", true).clicked() {
-                        self.bridge.answer_switch(true);
+                        self.bridge.answer_switch(serial, true);
                     }
                 });
             });
         if modal.should_close() {
-            self.bridge.answer_switch(false);
+            self.bridge.answer_switch(serial, false);
         }
     }
 

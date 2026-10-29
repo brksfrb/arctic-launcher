@@ -30,6 +30,7 @@ struct Shared {
     allowed: HashSet<String>,
     /// A switch to an account that is not allowed yet, waiting for the player's answer.
     switch_ask: Option<SwitchAsk>,
+    asks_made: u64,
 }
 
 /// The game asked to switch to `name`; the launcher asks the player.
@@ -38,6 +39,8 @@ struct SwitchAsk {
     name: String,
     answer: Option<bool>,
     asked: std::time::Instant,
+    /// Which question this is, so an answer only counts for the one the player saw.
+    serial: u64,
 }
 
 /// How long a session request waits for the player before telling the game to ask again. Kept
@@ -115,7 +118,10 @@ impl AppAccounts {
                     // Nothing asked, or an old answer about another account.
                     _ => {
                         log::info!("the game asks to switch to {}", account.username);
+                        shared.asks_made += 1;
+                        let serial = shared.asks_made;
                         shared.switch_ask = Some(SwitchAsk {
+                            serial,
                             id: account.id.clone(),
                             name: account.username.clone(),
                             answer: None,
@@ -399,6 +405,7 @@ impl BridgeHost {
             ffmpeg: FfmpegJob::default(),
             allowed: HashSet::new(),
             switch_ask: None,
+            asks_made: 0,
         }));
         let info = bridge::start(AppAccounts(Arc::clone(&shared)))
             .inspect_err(|e| log::warn!("account switcher bridge: {e}"))
@@ -425,19 +432,19 @@ impl BridgeHost {
     }
 
     /// The name of the account a game wants to switch to and the player has not answered about.
-    pub fn switch_question(&self) -> Option<String> {
+    pub fn switch_question(&self) -> Option<(u64, String)> {
         let shared = self.shared.lock().unwrap_or_else(PoisonError::into_inner);
         shared
             .switch_ask
             .as_ref()
             .filter(|ask| ask.answer.is_none())
-            .map(|ask| ask.name.clone())
+            .map(|ask| (ask.serial, ask.name.clone()))
     }
 
     /// The player's answer to [`Self::switch_question`].
-    pub fn answer_switch(&self, allow: bool) {
+    pub fn answer_switch(&self, serial: u64, allow: bool) {
         let mut shared = self.shared.lock().unwrap_or_else(PoisonError::into_inner);
-        let Some(ask) = shared.switch_ask.as_mut() else {
+        let Some(ask) = shared.switch_ask.as_mut().filter(|ask| ask.serial == serial) else {
             return;
         };
         ask.answer = Some(allow);
