@@ -16,6 +16,7 @@
 		"ChatHudMixin",
 		"ClientPlayerEntityMixin",
 		"PlayerArmorSlotMixin",
+		"DynamicFovLegacyMixin",
 		"ClientPlayNetworkHandlerMixin",
 		"ClientCustomPayloadMixin",
 		"GameRendererMixin",

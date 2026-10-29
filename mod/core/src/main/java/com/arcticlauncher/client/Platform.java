@@ -386,6 +386,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
+	/** The Dynamic FOV switches work on this version. */
+	default boolean dynamicFovWorks() {
+		return false;
+	}
+
 	/** The Fog settings work on this version. */
 	default boolean fogWorks() {
 		return false;

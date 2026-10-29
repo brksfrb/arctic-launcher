@@ -155,6 +155,10 @@ public final class ClientConfig {
 	public int badgeWhere;
 	/** The badge only on other players, not on you. */
 	public boolean badgeOthersOnly;
+	/** Dynamic FOV: the view no longer widens with speed (sprinting, speed potions, flying). */
+	public boolean fovNoSpeed;
+	/** Dynamic FOV: drawing a bow no longer narrows the view. */
+	public boolean fovNoBow;
 	/** 1.8.9 - 1.12.2: vertex buffers were switched on once (they're off in Minecraft's defaults). */
 	public boolean legacyVboOn;
 	/** The pause menu's leave button needs a second click. */

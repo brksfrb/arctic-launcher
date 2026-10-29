@@ -570,6 +570,14 @@ final class ModCatalog {
 						f.swatches("Glint color", DAMAGE_COLORS, () -> 0xFF000000 | c.glintColor, v -> c.glintColor = v & 0xFFFFFF);
 					}));
 		}
+		if (p.dynamicFovWorks()) {
+			out.add(new Mod("dynfov", "Dynamic FOV", "Keep the view from changing with sprinting, speed effects and drawing a bow", "zoom", Category.VISUAL,
+					"fov dynamic field of view sprint speed potion bow optifine")
+					.settings((host, f) -> {
+						f.toggle("No speed zoom", "Sprinting, speed potions and flying leave the view alone", () -> c.fovNoSpeed, on -> c.fovNoSpeed = on);
+						f.toggle("No bow zoom", "Drawing a bow leaves the view alone", () -> c.fovNoBow, on -> c.fovNoBow = on);
+					}));
+		}
 		if (p.fogWorks()) {
 			out.add(new Mod("fog", "Fog", "Push the fog away, or remove it", "weather", Category.VISUAL, "fog mist distance clear view")
 					.toggle(() -> c.fog, on -> c.fog = on)

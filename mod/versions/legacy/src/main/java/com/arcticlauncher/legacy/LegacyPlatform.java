@@ -455,6 +455,11 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean dynamicFovWorks() {
+		return true;
+	}
+
+	@Override
 	public boolean fogWorks() {
 		return true;
 	}
