@@ -62,6 +62,7 @@ public final class Looks {
 	private static final int MAX_PRESETS = 200;
 	/** Check in this often while in a world; the server counts one for 150 s. */
 	private static final long CHECK_IN_MS = TimeUnit.MINUTES.toMillis(1);
+	private static final long SESSION_REREAD_MS = TimeUnit.SECONDS.toMillis(5);
 	private static final long CHECK_IN_POLL_MS = TimeUnit.SECONDS.toMillis(10);
 	/** How long quitting may wait to sign off. */
 	private static final long SIGN_OFF_WAIT_MS = 1500;
@@ -93,6 +94,12 @@ public final class Looks {
 
 	private final Cosmetics cosmetics;
 	private volatile String token;
+	/**
+	 * The launcher was still signing in to Arctic when the game started (a slow server): the token comes into
+	 * the session file later and is read from there. Off after an account switch, which sets the token itself.
+	 */
+	private volatile boolean waitingForLauncher;
+	private volatile long lastSessionRead;
 	private volatile long lastCheckIn;
 	/** The in-world UUID last reported (compact), or null when not in a world. */
 	private volatile String playingAs;
@@ -109,6 +116,7 @@ public final class Looks {
 		this.config = config;
 		this.baseUrl = baseUrl;
 		this.token = token;
+		this.waitingForLauncher = token == null;
 		this.cosmetics = new Cosmetics(platform, baseUrl, worker);
 	}
 
@@ -169,6 +177,9 @@ public final class Looks {
 	 * and say so right away when leaving it.
 	 */
 	private void checkIn() {
+		if (token == null) {
+			adoptLauncherToken();
+		}
 		if (token == null) {
 			checkInResult = "not signed in: the game was started without the launcher's Arctic session";
 			return;
@@ -437,12 +448,30 @@ public final class Looks {
 	 * null means none, so looks can't be changed until relaunching.
 	 */
 	public void useSession(String newToken) {
+		waitingForLauncher = false;
 		token = Looks.isToken(newToken) ? newToken : null;
 		playingAs = null;
 		lastCheckIn = 0;
 		players.clear();
 		pending.add(platform.playerId());
 		version.incrementAndGet();
+	}
+
+	/** A token the launcher wrote into the session file after the game started (at most every few seconds). */
+	private void adoptLauncherToken() {
+		long now = System.currentTimeMillis();
+		if (!waitingForLauncher || now - lastSessionRead < SESSION_REREAD_MS) {
+			return;
+		}
+		lastSessionRead = now;
+		String late = com.arcticlauncher.client.config.Session.read(platform.configDir()).token;
+		if (Looks.isToken(late) && token == null && waitingForLauncher) {
+			token = late;
+			waitingForLauncher = false;
+			lastCheckIn = 0;
+			pending.add(platform.playerId());
+			version.incrementAndGet();
+		}
 	}
 
 	/** A session token as the server issues them (printable, short). */

@@ -530,16 +530,13 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         }
         _ => vanilla,
     };
-    let installation = std::thread::scope(|scope| {
-        let session =
-            share_session.then(|| scope.spawn(|| share_cosmetics_session(req, &game_dir)));
-        let installed =
-            install_with_repair(dirs, version, &game_dir, java_override, progress, &repair);
-        if let Some(handle) = session {
-            let _ = handle.join();
-        }
-        installed
-    })?;
+    // The Arctic sign-in (a network round trip) runs while the game files are checked.
+    let session = share_session.then(|| start_cosmetics_session(req, &game_dir));
+    let installation =
+        install_with_repair(dirs, version, &game_dir, java_override, progress, &repair)?;
+    if let Some(finished) = session {
+        let _ = finished.recv_timeout(SESSION_WAIT);
+    }
     timer.step("game files + arctic session");
     timer.done();
     if proxy.active().is_some() {
@@ -691,29 +688,72 @@ fn gc_flags<'a>(
     G1_FLAGS.iter().map(|f| (*f).to_owned()).collect()
 }
 
+/// How long Play waits for the Arctic sign-in after the game files are ready. A slow or unreachable Arctic
+/// server must not hold the game back; the sign-in goes on in the background and the game picks the token
+/// up from the session file when it lands.
+const SESSION_WAIT: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Start telling the Arctic mod its menu style and letting it publish looks as this player, on a thread of
+/// its own. The receiver gets a message when the session file is final.
+fn start_cosmetics_session(req: &LaunchRequest, game_dir: &Path) -> std::sync::mpsc::Receiver<()> {
+    let (done, finished) = std::sync::mpsc::channel();
+    let dirs = req.dirs.clone();
+    let account = req.account.clone();
+    let settings = req.settings.clone();
+    let bridge = req.bridge.cloned();
+    let quick_play = req.quick_play.clone();
+    let game_dir = game_dir.to_path_buf();
+    std::thread::spawn(move || {
+        share_cosmetics_session(
+            &dirs,
+            &account,
+            &settings,
+            bridge.as_ref(),
+            quick_play.as_ref(),
+            &game_dir,
+        );
+        let _ = done.send(());
+    });
+    finished
+}
+
 /// Tell the Arctic mod its menu style and let it publish looks as this
 /// player. Best effort: without the cosmetics server the game still starts.
-fn share_cosmetics_session(req: &LaunchRequest, game_dir: &Path) {
+/// The session file is written first without a token, so the game always finds a current one, and again
+/// when the sign-in has given a token.
+fn share_cosmetics_session(
+    dirs: &DataDirs,
+    account: &Account,
+    settings: &Settings,
+    bridge: Option<&crate::bridge::BridgeInfo>,
+    quick_play: Option<&QuickPlay>,
+    game_dir: &Path,
+) {
     let base = crate::cosmetics::base_url();
-    let token = crate::cosmetics::token_for(req.dirs, &base, req.account)
+    let proxy = ProxySettings::load(dirs);
+    let write = |token: Option<&str>| {
+        let session = crate::cosmetics::ModSession {
+            base: &base,
+            token,
+            style: settings.client_style,
+            fancy: settings.client_fancy,
+            style_set: settings.client_style_set,
+            share_server: settings.share_server_with_friends,
+            proxy: &proxy,
+            bridge,
+            duel: quick_play.and_then(QuickPlay::duel_json),
+            replay: quick_play.and_then(QuickPlay::replay_json),
+        };
+        if let Err(e) = crate::cosmetics::write_mod_session(game_dir, &session) {
+            log::warn!("arctic session file: {e}");
+        }
+    };
+    write(None);
+    let token = crate::cosmetics::token_for(dirs, &base, account)
         .inspect_err(|e| log::info!("Arctic cosmetics unavailable: {e}"))
         .ok();
-    let settings = req.settings;
-    let proxy = ProxySettings::load(req.dirs);
-    let session = crate::cosmetics::ModSession {
-        base: &base,
-        token: token.as_deref(),
-        style: settings.client_style,
-        fancy: settings.client_fancy,
-        style_set: settings.client_style_set,
-        share_server: settings.share_server_with_friends,
-        proxy: &proxy,
-        bridge: req.bridge,
-        duel: req.quick_play.as_ref().and_then(QuickPlay::duel_json),
-        replay: req.quick_play.as_ref().and_then(QuickPlay::replay_json),
-    };
-    if let Err(e) = crate::cosmetics::write_mod_session(game_dir, &session) {
-        log::warn!("arctic session file: {e}");
+    if token.is_some() {
+        write(token.as_deref());
     }
 }
 
