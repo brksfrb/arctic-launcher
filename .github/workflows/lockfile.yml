@@ -1,0 +1,27 @@
+name: Lockfile
+
+# By hand: bring Cargo.lock in line with the manifests (adds and removes what the manifests say, upgrades nothing)
+# and commit it to the branch it ran on.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo metadata --format-version 1 > /dev/null
+      - run: |
+          if git diff --quiet Cargo.lock; then
+            echo "Cargo.lock already matches the manifests"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add Cargo.lock
+            git commit -m "chore: Cargo.lock in line with the manifests"
+            git push
+          fi
