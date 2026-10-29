@@ -117,7 +117,7 @@ final class FabricPlatform implements Platform {
 		//#if MC >= 1.14
 		return mc().isWindowActive();
 		//#else
-		return true;
+		return org.lwjgl.glfw.GLFW.glfwGetWindowAttrib(Compat.windowHandle(), org.lwjgl.glfw.GLFW.GLFW_FOCUSED) == org.lwjgl.glfw.GLFW.GLFW_TRUE;
 		//#endif
 	}
 

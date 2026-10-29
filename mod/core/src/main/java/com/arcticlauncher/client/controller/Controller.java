@@ -63,8 +63,9 @@ public final class Controller {
 	/** Each frame, with the seconds since the last. */
 	public void frame(GamepadHost game, Settings s, double seconds, boolean screenOpen, boolean inWorld) {
 		Gamepad fake = scripted;
-		// Turned off: the controller isn't even looked at.
-		if (!s.enabled || !(fake != null ? copy(fake) : game.readGamepad(pad))) {
+		// Turned off, or the game's window is not the one in use (the player is in another game with the
+		// same controller): it isn't even looked at, and everything it held is let go.
+		if (!s.enabled || !game.windowFocused() || !(fake != null ? copy(fake) : game.readGamepad(pad))) {
 			if (connected) {
 				letGo(game);
 				last.clear();

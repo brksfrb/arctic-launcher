@@ -9,6 +9,14 @@ public interface GamepadHost {
 		return false;
 	}
 
+	/**
+	 * Whether the game's window is the one in use. A controller keeps reporting to a window that is not
+	 * focused (GLFW) or freezes at its last state (SDL): either way it must not drive the game then.
+	 */
+	default boolean windowFocused() {
+		return true;
+	}
+
 	/** Look for controllers again (for versions that only find them when started); no-op where plugging one in is noticed. */
 	default void rescanGamepads() {}
 
