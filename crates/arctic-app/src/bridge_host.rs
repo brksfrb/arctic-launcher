@@ -444,7 +444,11 @@ impl BridgeHost {
     /// The player's answer to [`Self::switch_question`].
     pub fn answer_switch(&self, serial: u64, allow: bool) {
         let mut shared = self.shared.lock().unwrap_or_else(PoisonError::into_inner);
-        let Some(ask) = shared.switch_ask.as_mut().filter(|ask| ask.serial == serial) else {
+        let Some(ask) = shared
+            .switch_ask
+            .as_mut()
+            .filter(|ask| ask.serial == serial)
+        else {
             return;
         };
         ask.answer = Some(allow);
