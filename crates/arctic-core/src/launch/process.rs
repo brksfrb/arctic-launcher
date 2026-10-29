@@ -65,8 +65,9 @@ pub fn spawn(
 ) -> Result<GameHandle> {
     log::info!("launching: {}", plan.redacted_command());
     let log = Arc::new(Mutex::new(File::create(&plan.log_file).at(&plan.log_file)?));
+    let (args, argfile) = command_args(plan)?;
     let mut cmd = Command::new(game_exe(plan));
-    cmd.args(&plan.args)
+    cmd.args(&args)
         .envs(crate::gpu_preference::env(plan.high_performance_gpu))
         .current_dir(&plan.game_dir)
         .stdin(Stdio::null())
@@ -124,6 +125,10 @@ pub fn spawn(
         if code.is_some_and(|c| c != 0) {
             super::startup_cache::drop_pack(&game_dir);
         }
+        if let Some(file) = argfile {
+            // It holds the access token: gone with the game.
+            let _ = std::fs::remove_file(file);
+        }
         on_event(GameEvent::Exited { code });
     });
     Ok(handle)
@@ -160,8 +165,9 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
     log::info!("launching (detached): {}", plan.redacted_command());
     let log = File::create(&plan.log_file).at(&plan.log_file)?;
     let log_err = log.try_clone().at(&plan.log_file)?;
+    let (args, _argfile) = command_args(plan)?;
     let child = Command::new(game_exe(plan))
-        .args(&plan.args)
+        .args(&args)
         .envs(crate::gpu_preference::env(plan.high_performance_gpu))
         .current_dir(&plan.game_dir)
         .stdin(Stdio::null())
@@ -216,6 +222,82 @@ const CLIENT_PROCESS: &str = if cfg!(windows) {
 /// shows "Arctic Client" in Task Manager. Falls back to `java` on any error
 /// (a read-only Java folder, say).
 /// The executable the game runs as, set to the graphics card the player wants.
+/// CreateProcess refuses a command line over 32 767 characters; stay below it with room for the program.
+const MAX_COMMAND_CHARS: usize = 30_000;
+
+/// The arguments to start Java with, and the `@argfile` that holds them when the command line would be too
+/// long for Windows (a Forge or NeoForge classpath of 100+ libraries under a long data folder). Java 9+ reads
+/// `@file`; Java 8 can't, and gets a message about moving the data folder instead of an obscure spawn error.
+fn command_args(plan: &LaunchPlan) -> Result<(Vec<String>, Option<PathBuf>)> {
+    let length = plan
+        .args
+        .iter()
+        .map(|a| a.chars().count() + 3)
+        .sum::<usize>()
+        + plan.java.as_os_str().len();
+    if !cfg!(windows) || length <= MAX_COMMAND_CHARS {
+        return Ok((plan.args.clone(), None));
+    }
+    if !java_reads_argfiles(&plan.java) {
+        return Err(crate::Error::Other(format!(
+            "The game's command line is {length} characters, more than Windows allows (32 767), and \
+             this Java can't read it from a file. Move the data folder to a shorter path, like \
+             C:\\ArcticData (Settings > Storage)."
+        )));
+    }
+    let file = plan.log_file.with_extension("args");
+    std::fs::write(&file, argfile_text(&plan.args)).at(&file)?;
+    log::info!(
+        "command line of {length} characters: arguments passed in {}",
+        file.display()
+    );
+    Ok((vec![format!("@{}", file.display())], Some(file)))
+}
+
+/// One quoted argument per line; inside quotes a backslash starts an escape, so paths need theirs doubled.
+fn argfile_text(args: &[String]) -> String {
+    let mut text = String::new();
+    for arg in args {
+        text.push('"');
+        for c in arg.chars() {
+            match c {
+                '\\' => text.push_str("\\\\"),
+                '"' => text.push_str("\\\""),
+                '\n' => text.push_str("\\n"),
+                '\r' => text.push_str("\\r"),
+                c => text.push(c),
+            }
+        }
+        text.push_str("\"\n");
+    }
+    text
+}
+
+/// Whether the Java at `java` (`<runtime>/bin/java`) is version 9 or newer, from the runtime's `release` file.
+fn java_reads_argfiles(java: &Path) -> bool {
+    java.parent()
+        .and_then(Path::parent)
+        .and_then(|runtime| std::fs::read_to_string(runtime.join("release")).ok())
+        .and_then(|release| java_major(&release))
+        .is_some_and(|major| major >= 9)
+}
+
+/// The major version in a runtime's `release` file (`JAVA_VERSION="1.8.0_402"` is 8, `"17.0.9"` is 17).
+fn java_major(release: &str) -> Option<u32> {
+    let version = release
+        .lines()
+        .find_map(|l| l.strip_prefix("JAVA_VERSION="))?
+        .trim()
+        .trim_matches('"');
+    let mut parts = version.split(['.', '-', '+', '_']);
+    let first: u32 = parts.next()?.parse().ok()?;
+    if first == 1 {
+        parts.next()?.parse().ok()
+    } else {
+        Some(first)
+    }
+}
+
 fn game_exe(plan: &LaunchPlan) -> PathBuf {
     let exe = branded_java(&plan.java);
     crate::gpu_preference::apply(&exe, plan.high_performance_gpu);
@@ -385,6 +467,26 @@ fn is_window_marker(line: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn argument_files_quote_and_escape() {
+        let args = vec![r"-Dpath=C:\natives".to_owned(), "say \"hi\"".to_owned()];
+        assert_eq!(
+            argfile_text(&args),
+            "\"-Dpath=C:\\\\natives\"\n\"say \\\"hi\\\"\"\n"
+        );
+    }
+
+    #[test]
+    fn java_versions_come_from_the_release_file() {
+        assert_eq!(java_major("JAVA_VERSION=\"1.8.0_402\"\n"), Some(8));
+        assert_eq!(
+            java_major("IMPLEMENTOR=\"x\"\nJAVA_VERSION=\"17.0.9\"\n"),
+            Some(17)
+        );
+        assert_eq!(java_major("JAVA_VERSION=\"21\"\n"), Some(21));
+        assert_eq!(java_major("nothing here"), None);
+    }
+
     #[test]
     fn named_runtime_copy_links_every_file_and_updates_changed_ones() {
         let dir = tempfile::tempdir().unwrap();
