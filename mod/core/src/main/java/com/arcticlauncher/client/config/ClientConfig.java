@@ -171,6 +171,8 @@ public final class ClientConfig {
 	public boolean watermarkVersion;
 	/** 1.8.9 - 1.12.2: vertex buffers were switched on once (they're off in Minecraft's defaults). */
 	public boolean legacyVboOn;
+	/** 1.8.9 - 1.12.2: the brightness slider value from before Fullbright raised it (negative: not recorded). */
+	public float legacyGammaBefore = -1f;
 	/** The pause menu's leave button needs a second click. */
 	public boolean confirmLeave = true;
 	/** Minimap sizes (GUI pixels) and how many blocks across it can show. */
@@ -367,23 +369,53 @@ public final class ClientConfig {
 
 	public static ClientConfig load(File configDir) {
 		File file = new File(configDir, "arctic.json");
-		ClientConfig config = null;
-		if (file.isFile()) {
-			try {
-				String json = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
-				config = GSON.fromJson(json, ClientConfig.class);
-			} catch (IOException e) {
-				config = null;
-			} catch (RuntimeException e) {
-				config = null;
-			}
+		ClientConfig config = file.isFile() ? read(file) : null;
+		if (config == null && file.isFile()) {
+			// Keep the damaged file for recovery; the next save must not overwrite it.
+			quarantine(file);
+		}
+		if (config == null) {
+			File bak = new File(configDir, "arctic.json.bak");
+			config = bak.isFile() ? read(bak) : null;
 		}
 		if (config == null) {
 			config = new ClientConfig();
 		}
 		config.file = file;
+		int hudFrom = config.hudVersion;
 		config.fillDefaults();
+		if (hudFrom < HUD_VERSION && file.isFile()) {
+			// The layout was just reset for the new HUD version: keep the old file once.
+			try {
+				File keep = new File(configDir, "arctic.json.hud-v" + hudFrom + ".bak");
+				if (!keep.exists()) {
+					Files.copy(file.toPath(), keep.toPath());
+				}
+			} catch (IOException e) {
+				// best effort
+			}
+		}
 		return config;
+	}
+
+	/** The parsed file, or null when it cannot be read, is blank or is not valid JSON for this class. */
+	private static ClientConfig read(File file) {
+		try {
+			String json = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+			return GSON.fromJson(json, ClientConfig.class);
+		} catch (IOException e) {
+			return null;
+		} catch (RuntimeException e) {
+			return null;
+		}
+	}
+
+	private static void quarantine(File file) {
+		try {
+			Files.move(file.toPath(), new File(file.getParentFile(), "arctic.json.corrupt-" + System.currentTimeMillis()).toPath());
+		} catch (IOException e) {
+			// best effort
+		}
 	}
 
 	private void fillDefaults() {
@@ -481,16 +513,35 @@ public final class ClientConfig {
 		proxy.fillDefaults();
 	}
 
-	/** Save; returns an error message, or null. */
-	public String save() {
+	/**
+	 * Save; returns an error message, or null. Written to a temporary file and moved over the old one, which
+	 * stays as {@code arctic.json.bak}, so a crash or power loss mid-save never leaves a half-written file.
+	 */
+	public synchronized String save() {
 		try {
 			File dir = file.getParentFile();
 			if (dir != null && !dir.isDirectory() && !dir.mkdirs()) {
 				return "could not create " + dir;
 			}
-			Files.write(file.toPath(), GSON.toJson(this).getBytes(StandardCharsets.UTF_8));
+			byte[] bytes = GSON.toJson(this).getBytes(StandardCharsets.UTF_8);
+			File tmp = new File(dir, file.getName() + ".tmp");
+			try (java.io.FileOutputStream out = new java.io.FileOutputStream(tmp)) {
+				out.write(bytes);
+				out.getFD().sync();
+			}
+			if (file.isFile()) {
+				Files.copy(file.toPath(), new File(dir, file.getName() + ".bak").toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+			}
+			try {
+				Files.move(tmp.toPath(), file.toPath(), java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+			} catch (java.nio.file.AtomicMoveNotSupportedException e) {
+				Files.move(tmp.toPath(), file.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+			}
 			return null;
 		} catch (IOException e) {
+			return e.toString();
+		} catch (RuntimeException e) {
+			// Gson walking a list another thread is changing: the caller saves again on the next change.
 			return e.toString();
 		}
 	}

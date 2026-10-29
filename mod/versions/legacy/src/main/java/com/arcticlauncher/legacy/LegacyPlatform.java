@@ -558,20 +558,36 @@ public final class LegacyPlatform implements Platform {
 		LegacySmoothFont.rebuild();
 	}
 
-	/** Each tick: Fullbright raises gamma while on, and gives it back after. */
+	/**
+	 * Each tick: Fullbright raises gamma while on, and gives it back after. The value from before is kept in
+	 * arctic.json, because anything that saves options.txt meanwhile writes the raised gamma to disk; a
+	 * leaked value is put back here (also after a crash or a restart with Fullbright already on).
+	 */
 	void tick() {
 		GameOptions options = mc().options;
 		vboOnce(options);
 		boolean bright = ArcticClient.features() != null && ArcticClient.features().fullbright();
 		if (bright) {
 			if (Float.isNaN(gammaBefore)) {
-				gammaBefore = options.gamma;
+				gammaBefore = options.gamma > 1f ? savedGamma() : options.gamma;
+				ArcticClient.config().legacyGammaBefore = gammaBefore;
+				ArcticClient.saveConfig();
 			}
 			options.gamma = FULLBRIGHT_GAMMA;
 		} else if (!Float.isNaN(gammaBefore)) {
-			options.gamma = gammaBefore;
+			options.gamma = Math.max(0f, Math.min(1f, gammaBefore));
 			gammaBefore = Float.NaN;
+			options.save();
+		} else if (options.gamma > 1f) {
+			options.gamma = savedGamma();
+			options.save();
 		}
+	}
+
+	/** The brightness the player had before Fullbright, or the vanilla default when none was recorded. */
+	private static float savedGamma() {
+		float saved = ArcticClient.config().legacyGammaBefore;
+		return saved >= 0f && saved <= 1f ? saved : 0f;
 	}
 
 	/**
