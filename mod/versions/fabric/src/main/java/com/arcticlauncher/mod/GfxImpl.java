@@ -152,6 +152,11 @@ public final class GfxImpl implements Gfx {
 
 	@Override
 	public void text(String text, int x, int y, int color, boolean shadow) {
+		// The game's font draws a colour with alpha 1-3 fully opaque (before 1.21.6 alpha 0 too): the last frame of
+		// every fade would flash. Nothing visible is lost by skipping it.
+		if ((color >>> 24) < 4) {
+			return;
+		}
 		//#if MC >= 26.1
 		g.text(font, text, x, y, color, shadow);
 		//#else

@@ -135,7 +135,7 @@ public final class Draw {
 
 	/** Color with its alpha multiplied by {@code a} (0..1). */
 	public static int alpha(int color, float a) {
-		int alpha = (int) (((color >>> 24) & 0xFF) * Math.max(0f, Math.min(1f, a)));
+		int alpha = Math.round(((color >>> 24) & 0xFF) * Math.max(0f, Math.min(1f, a)));
 		return (alpha << 24) | (color & 0xFFFFFF);
 	}
 

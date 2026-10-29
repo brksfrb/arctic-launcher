@@ -107,7 +107,8 @@ final class LegacyGfx implements Gfx {
 
 	@Override
 	public void text(String text, int x, int y, int color, boolean shadow) {
-		if ((color >>> 24) == 0) {
+		// The game's font draws a colour with alpha 1-3 fully opaque: skip what could not be seen anyway.
+		if ((color >>> 24) < 4) {
 			return;
 		}
 		mc.textRenderer.draw(text, (float) x, (float) y, color, shadow);
