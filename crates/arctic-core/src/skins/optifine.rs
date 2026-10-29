@@ -16,9 +16,7 @@ const MAX_NAME: usize = 16;
 fn valid_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= MAX_NAME
-        && name
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
 /// The OptiFine cape of the player `name` as a Minecraft-layout PNG, or `None` when there is none.
@@ -37,7 +35,9 @@ pub fn fetch(name: &str) -> Result<Option<Vec<u8>>> {
         return Ok(None);
     }
     if status != 200 {
-        return Err(Error::Other(format!("OptiFine's cape server answered {status}")));
+        return Err(Error::Other(format!(
+            "OptiFine's cape server answered {status}"
+        )));
     }
     let bytes = resp
         .body_mut()
@@ -97,12 +97,18 @@ mod tests {
         encoder.set_color(png::ColorType::Rgba);
         encoder.set_depth(png::BitDepth::Eight);
         let data: Vec<u8> = (0..w * h).flat_map(|_| fill).collect();
-        encoder.write_header().unwrap().write_image_data(&data).unwrap();
+        encoder
+            .write_header()
+            .unwrap()
+            .write_image_data(&data)
+            .unwrap();
         out
     }
 
     fn size(png: &[u8]) -> (u32, u32) {
-        let r = png::Decoder::new(std::io::Cursor::new(png)).read_info().unwrap();
+        let r = png::Decoder::new(std::io::Cursor::new(png))
+            .read_info()
+            .unwrap();
         (r.info().width, r.info().height)
     }
 
