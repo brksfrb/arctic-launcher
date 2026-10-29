@@ -12,6 +12,7 @@ tiny-remapper, mixin annotations included, then packed with:
   - a manifest that makes Forge load the jar as a mod and Mixin read arctic-legacy.mixins.json.
 Everything downloaded is kept under mod/build/forge-cache.
 """
+import hashlib
 import subprocess
 import sys
 import urllib.request
@@ -27,12 +28,28 @@ FORGE = "1.8.9-11.15.1.2318-1.8.9"
 GRADLE_CACHE = Path.home() / ".gradle" / "caches"
 YARN_BUILD = "1.8.9+build.604-v2"
 
+# name: (url, SHA-256). Checked on download and on every use of the cached file, because the Mixin classes
+# and services below end up inside the jar players run. The published SHA-1 of each file (the Maven
+# repositories') matched when these were pinned. The Mixin file is a timestamped snapshot build, which
+# cannot change under its name; the pin makes sure of it.
 DOWNLOADS = {
-    "forge-universal.jar": f"https://maven.minecraftforge.net/net/minecraftforge/forge/{FORGE}/forge-{FORGE}-universal.jar",
-    "mcp-srg.zip": "https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp/1.8.9/mcp-1.8.9-srg.zip",
-    "tiny-remapper.jar": "https://maven.fabricmc.net/net/fabricmc/tiny-remapper/0.10.4/tiny-remapper-0.10.4-fat.jar",
-    "mixin.jar": "https://repo.spongepowered.org/repository/maven-public/org/spongepowered/mixin/0.7.11-SNAPSHOT/"
-                 "mixin-0.7.11-20180703.121122-1.jar",
+    "forge-universal.jar": (
+        f"https://maven.minecraftforge.net/net/minecraftforge/forge/{FORGE}/forge-{FORGE}-universal.jar",
+        "596512ad5f12f95d8a3170321543d4455d23b8fe649c68580c5f828fe74f6668",
+    ),
+    "mcp-srg.zip": (
+        "https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp/1.8.9/mcp-1.8.9-srg.zip",
+        "ea6fdd37e68569a378fd149b0ab7cfede1de7fa3e794f4ed81f9018366fbdc51",
+    ),
+    "tiny-remapper.jar": (
+        "https://maven.fabricmc.net/net/fabricmc/tiny-remapper/0.10.4/tiny-remapper-0.10.4-fat.jar",
+        "aff82c3e052d031be8cba33f97a5e4d1b0098f6a9e942f4457706f751b4032b2",
+    ),
+    "mixin.jar": (
+        "https://repo.spongepowered.org/repository/maven-public/org/spongepowered/mixin/0.7.11-SNAPSHOT/"
+        "mixin-0.7.11-20180703.121122-1.jar",
+        "da3d6e47b9c12b5a312d89b67bc27e2429d823c09cde8a90299e9fdcc4eefc20",
+    ),
 }
 MIXIN_SERVICES = {
     "META-INF/services/org.spongepowered.asm.service.IMixinService",
@@ -55,14 +72,23 @@ MCMOD_INFO = (
 )
 
 
+def sha256(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def fetch(name):
+    url, expected = DOWNLOADS[name]
     CACHE.mkdir(parents=True, exist_ok=True)
     path = CACHE / name
     if not path.exists():
         print(f"downloading {name}", flush=True)
-        request = urllib.request.Request(DOWNLOADS[name], headers={"User-Agent": "arctic-launcher-build"})
+        request = urllib.request.Request(url, headers={"User-Agent": "arctic-launcher-build"})
         with urllib.request.urlopen(request) as response:
             path.write_bytes(response.read())
+    if sha256(path) != expected:
+        path.unlink()
+        sys.exit(f"{name} does not match its pinned SHA-256 (removed from the cache; run again to download it fresh). "
+                 f"If the file really changed, check it and update DOWNLOADS in build_forge.py.")
     return path
 
 
