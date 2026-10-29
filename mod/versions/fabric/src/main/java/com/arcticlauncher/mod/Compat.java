@@ -362,11 +362,17 @@ public final class Compat {
 
 	/** F3 is on (the debug overlay is showing). */
 	public static boolean debugScreenShowing() {
+		//#if MC >= 1.21.11
+		// showDebugScreen() is also true while any debug entry is on (F3+B hitboxes, or Arctic's own switch for
+		// them), which would hide the HUD widgets: only the overlay itself counts.
+		return mc().debugEntries.isOverlayVisible();
+		//#else
 		//#if MC >= 1.20.2
 		return mc().getDebugOverlay().showDebugScreen();
 		//#else
 		// Before 1.20.2 there's no queryable overlay object, just the option flag.
 		return mc().options.renderDebug;
+		//#endif
 		//#endif
 	}
 
