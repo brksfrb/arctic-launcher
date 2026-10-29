@@ -151,6 +151,10 @@ public final class ClientConfig {
 	public boolean portalScreens = true;
 	/** The Arctic badge in front of Arctic players' name tags too (it is always in the player list). */
 	public boolean badgeNametags = true;
+	/** Where the badge shows: 0 the player list and name tags, 1 the player list only, 2 name tags only. */
+	public int badgeWhere;
+	/** The badge only on other players, not on you. */
+	public boolean badgeOthersOnly;
 	/** 1.8.9 - 1.12.2: vertex buffers were switched on once (they're off in Minecraft's defaults). */
 	public boolean legacyVboOn;
 	/** The pause menu's leave button needs a second click. */

@@ -78,7 +78,7 @@ abstract class PlayerTabOverlayMixin {
 		}
 		//#endif
 		// Before 1.16 text had no fonts, so there's no badge glyph to show.
-		if (Compat.BADGES && ArcticClient.looks() != null && ArcticClient.looks().isArctic(Compat.profileId(info.getProfile()))) {
+		if (Compat.BADGES && com.arcticlauncher.client.feature.Badge.show(true, Compat.profileId(info.getProfile()))) {
 			Component badge = Compat.arcticBadge();
 			// A 1px space from the badge font: a normal space leaves too wide a gap.
 			//#if MC >= 1.16

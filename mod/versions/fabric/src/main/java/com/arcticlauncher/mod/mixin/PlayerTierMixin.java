@@ -39,8 +39,7 @@ abstract class PlayerTierMixin {
 			changed = true;
 		}
 		// The snowflake of other Arctic players, as in the player list (1.16 and newer: older text has no fonts).
-		if (Compat.BADGES && ArcticClient.config().badgeNametags
-				&& ArcticClient.looks() != null && ArcticClient.looks().isArctic(player.getUUID())) {
+		if (Compat.BADGES && com.arcticlauncher.client.feature.Badge.show(false, player.getUUID())) {
 			Component badge = Compat.arcticBadge();
 			//#if MC >= 1.16
 			Component gap = Compat.literal(" ").withStyle(badge.getStyle());

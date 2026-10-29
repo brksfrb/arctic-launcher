@@ -27,7 +27,7 @@ abstract class PlayerListHudMixin {
 			cir.setReturnValue(com.arcticlauncher.client.feature.TabGlow.before() + cir.getReturnValue()
 					+ com.arcticlauncher.client.feature.TabGlow.after());
 		}
-		if (ArcticClient.looks() != null && ArcticClient.looks().isArctic(entry.getProfile().getId())) {
+		if (com.arcticlauncher.client.feature.Badge.show(true, entry.getProfile().getId())) {
 			cir.setReturnValue(BADGE + cir.getReturnValue());
 		}
 	}

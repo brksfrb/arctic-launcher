@@ -39,7 +39,7 @@ abstract class PlayerTierMixin {
 			changed = true;
 		}
 		// The snowflake of Arctic players, as in the player list.
-		if (ArcticClient.config().badgeNametags && ArcticClient.looks() != null && ArcticClient.looks().isArctic(player.getUuid())) {
+		if (com.arcticlauncher.client.feature.Badge.show(false, player.getUuid())) {
 			name = new LiteralText("\u00a7b\u2744\u00a7r ").append(name);
 			changed = true;
 		}
