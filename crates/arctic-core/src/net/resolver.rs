@@ -4,6 +4,10 @@
 //! suite in the way, a provider that poisons names), the name is looked up over HTTPS at
 //! Cloudflare instead, the way browsers do. The connection is still made to the real host with
 //! its own certificate check, so nothing about the security of the download changes.
+//!
+//! The fallback never runs when a proxy is set (it would reach Cloudflare around the proxy), and
+//! `ARCTIC_NO_DOH=1` turns it off for people who want their DNS policy (a filtering resolver, say)
+//! to be final.
 
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
@@ -21,6 +25,8 @@ const DOH_URL: &str = "https://1.1.1.1/dns-query";
 const DOH_TIMEOUT: Duration = Duration::from_secs(5);
 /// How long an answer from the fallback is reused.
 const CACHE_FOR: Duration = Duration::from_secs(300);
+/// Set (to anything) to keep the system resolver's answer final.
+const OPT_OUT_ENV: &str = "ARCTIC_NO_DOH";
 /// DNS record type A (an IPv4 address).
 const TYPE_A: u32 = 1;
 
@@ -100,6 +106,10 @@ impl Resolver for FallbackResolver {
             Ok(addrs) => return Ok(addrs),
             Err(e) => e,
         };
+        // A proxy was asked for: a direct request to Cloudflare would go around it. Or the user opted out.
+        if config.proxy().is_some() || std::env::var_os(OPT_OUT_ENV).is_some() {
+            return Err(system_error);
+        }
         let (Some(scheme), Some(authority)) = (uri.scheme(), uri.authority()) else {
             return Err(system_error);
         };
