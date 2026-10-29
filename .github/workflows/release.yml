@@ -55,13 +55,13 @@ jobs:
           # Arctic's own Azure client ID (see docs/microsoft-auth.md). Minecraft
           # sign-in works once Mojang has approved it; no rebuild needed then.
           ARCTIC_MSA_CLIENT_ID: ${{ secrets.ARCTIC_MSA_CLIENT_ID }}
-        run: cargo build --release -p arctic-app -p arctic-cli
+        run: cargo build --release --locked -p arctic-app -p arctic-cli
 
       - name: Build (Windows)
         env:
           ARCTIC_MSA_CLIENT_ID: ${{ secrets.ARCTIC_MSA_CLIENT_ID }}
         run: |
-          cargo xwin build --release --target x86_64-pc-windows-msvc -p arctic-app -p arctic-cli 2>&1 | tee xwin.log
+          cargo xwin build --release --locked --target x86_64-pc-windows-msvc -p arctic-app -p arctic-cli 2>&1 | tee xwin.log
           # build.rs only warns when the icon can't go in; a release must have it.
           if grep -q "could not embed exe icon" xwin.log; then echo "the Windows exe has no icon"; exit 1; fi
 
@@ -99,14 +99,14 @@ jobs:
           [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME != v$version"; exit 1; }
 
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
 
       - name: Build
         env:
           ARCTIC_MSA_CLIENT_ID: ${{ secrets.ARCTIC_MSA_CLIENT_ID }}
         run: |
-          cargo build --release -p arctic-app -p arctic-cli --target aarch64-apple-darwin
-          cargo build --release -p arctic-app -p arctic-cli --target x86_64-apple-darwin
+          cargo build --release --locked -p arctic-app -p arctic-cli --target aarch64-apple-darwin
+          cargo build --release --locked -p arctic-app -p arctic-cli --target x86_64-apple-darwin
 
       # Signs with the Developer ID and notarizes when the Apple secrets are set; without them the app is
       # ad-hoc signed as before.
