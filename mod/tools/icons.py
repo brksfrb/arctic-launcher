@@ -24,6 +24,10 @@ SIZE = 64
 # Icon name (what the mod asks for) -> Lucide icon.
 FROM_LUCIDE = {
     "alloc": "trending-up",
+    "aimed": "eye",
+    "cooldowns": "hourglass",
+    "horse": "gauge",
+    "watermark": "snowflake",
     "blocking": "shield-half",
     "cpu": "cpu",
     "falldamage": "arrow-down-to-line",

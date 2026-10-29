@@ -60,18 +60,19 @@ public final class GfxImpl implements Gfx {
 
 	/** A PNG from the jar's {@code assets/arctic/}, registered on first use. */
 	private static Identifier asset(String name) {
-		Identifier id = ASSETS.get(name);
-		if (id != null) {
-			return id;
+		if (ASSETS.containsKey(name)) {
+			return ASSETS.get(name);
 		}
-		id = Compat.id(ArcticMod.ID, "asset/" + name);
-		ASSETS.put(name, id);
+		Identifier id = Compat.id(ArcticMod.ID, "asset/" + name);
 		try (InputStream in = GfxImpl.class.getResourceAsStream("/assets/arctic/" + name + ".png")) {
 			NativeImage image = NativeImage.read(in);
 			Minecraft.getInstance().getTextureManager().register(id, Compat.texture("Arctic " + name, image));
 		} catch (Exception e) {
 			ArcticMod.LOG.warn("Arctic asset {}: {}", name, e.toString());
+			// A file that failed to load draws nothing, not the purple missing texture.
+			id = null;
 		}
+		ASSETS.put(name, id);
 		return id;
 	}
 
@@ -215,6 +216,9 @@ public final class GfxImpl implements Gfx {
 		Identifier id = key.startsWith("look:") ? look(key.substring(5))
 				: key.startsWith("asset:") ? asset(key.substring(6))
 				: key.startsWith("dyn:") ? Compat.id(ArcticMod.ID, "dyn/" + key.substring(4)) : icon();
+		if (id == null) {
+			return;
+		}
 		//#if MC >= 1.21.6
 		g.blit(RenderPipelines.GUI_TEXTURED, id, x, y, u, v, w, h, regionW, regionH, texW, texH);
 		//#elif MC >= 1.21.2
