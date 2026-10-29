@@ -6,8 +6,8 @@ import java.lang.reflect.Method;
 /**
  * The computer's numbers for the resource widgets: the game's and the whole machine's CPU load,
  * the machine's memory, and how fast the game allocates memory. The load numbers come from the
- * JVM's operating-system bean (read by name: its class is not part of Java 8's public API) and
- * are sampled twice a second, not every frame.
+ * JVM's operating-system bean (read through the exported {@code com.sun.management} interface, by
+ * name, so a JVM without it just shows nothing) and are sampled twice a second, not every frame.
  */
 final class Resources {
 	private static final long REFRESH_NS = 500_000_000L;
@@ -30,9 +30,8 @@ final class Resources {
 
 	private static Method method(String name) {
 		try {
-			Method m = OS.getClass().getMethod(name);
-			m.setAccessible(true);
-			return m;
+			// The interface is exported; the bean's own class is not (Java 16+ refuses to open it).
+			return Class.forName("com.sun.management.OperatingSystemMXBean").getMethod(name);
 		} catch (Throwable t) {
 			return null;
 		}
