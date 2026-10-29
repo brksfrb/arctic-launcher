@@ -141,6 +141,9 @@ pub struct SkinsUi {
     pub view: SkinsView,
     /// Capes you uploaded yourself (hashes, newest first): see arctic_core::skins::capes.
     pub own_capes: Vec<String>,
+    /// OptiFine capes by account name (`None` = that name has none), and the names already asked.
+    pub optifine: HashMap<String, Result<Option<Vec<u8>>, String>>,
+    pub optifine_asked: HashSet<String>,
     pub gallery: gallery::GalleryUi,
     /// Filters the list shown (skins, capes or cosmetics by name).
     pub search: String,
@@ -172,6 +175,20 @@ impl ArcticApp {
                 .toasts
                 .push(Kind::Error, "Could not read that cape", e.to_string()),
         }
+    }
+
+    /// Wear a cape image (kept with your other capes, to wear again later in one click).
+    pub(super) fn wear_cape_image(&mut self, bytes: Vec<u8>) {
+        match arctic_core::skins::capes::save(&self.own_capes_dir(), &bytes) {
+            Ok(hash) => {
+                self.skins.own_capes.retain(|h| h != &hash);
+                self.skins.own_capes.insert(0, hash);
+            }
+            Err(e) => log::warn!("keeping the cape: {e}"),
+        }
+        // Shown by its hash once saved; until then the old cape stays.
+        self.set_arctic_cape(Some(CapeChoice::Custom(Texture::Png(bytes))), None);
+        self.skins.trying.cape = None;
     }
 
     /// Take one of your own capes off the list (if it's worn, it stays worn).
@@ -585,6 +602,14 @@ impl ArcticApp {
         if let Some(hash) = key.strip_prefix("gal:") {
             return self.skins.gallery.pngs.get(hash).cloned();
         }
+        if let Some(name) = key.strip_prefix("ofcape:") {
+            return self
+                .skins
+                .optifine
+                .get(name)
+                .and_then(|r| r.as_ref().ok())
+                .and_then(|png| png.clone());
+        }
         if let Some(hash) = key
             .strip_prefix("askin:")
             .or_else(|| key.strip_prefix("acape:"))
@@ -781,22 +806,16 @@ impl ArcticApp {
                 self.on_gallery_event(e)
             }
             Event::CapeFile(result) => match result {
-                Ok(Some(bytes)) => {
-                    // Kept with your other capes, to wear again later in one click.
-                    match arctic_core::skins::capes::save(&self.own_capes_dir(), &bytes) {
-                        Ok(hash) => {
-                            self.skins.own_capes.retain(|h| h != &hash);
-                            self.skins.own_capes.insert(0, hash);
-                        }
-                        Err(e) => log::warn!("keeping the cape: {e}"),
-                    }
-                    // Shown by its hash once saved; until then the old cape stays.
-                    self.set_arctic_cape(Some(CapeChoice::Custom(Texture::Png(bytes))), None);
-                    self.skins.trying.cape = None;
-                }
+                Ok(Some(bytes)) => self.wear_cape_image(bytes),
                 Ok(None) => {}
                 Err(e) => self.toasts.push(Kind::Error, "Could not read file", e),
             },
+            Event::OptifineCape(name, result) => {
+                if let Err(e) = &result {
+                    log::info!("OptiFine cape of {name}: {e}");
+                }
+                self.skins.optifine.insert(name, result);
+            }
             _ => {}
         }
     }
@@ -997,7 +1016,7 @@ const CAPE_WIDTH: u32 = 512;
 const UNUSED_CAPE: std::time::Duration = std::time::Duration::from_secs(20);
 
 fn is_cape(key: &str) -> bool {
-    key.starts_with("mccape:") || key.starts_with("acape:")
+    key.starts_with("mccape:") || key.starts_with("acape:") || key.starts_with("ofcape:")
 }
 
 /// The key without the still-frame suffix.

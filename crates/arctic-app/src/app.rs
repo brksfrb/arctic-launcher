@@ -1134,6 +1134,7 @@ impl ArcticApp {
             | Event::ArcticLook(..)
             | Event::ArcticCatalog(..)
             | Event::CapeFile(..)
+            | Event::OptifineCape(..)
             | Event::Gallery(..)
             | Event::GalleryTaken(..)
             | Event::GalleryDone(..)) => self.on_skins_event(e),

@@ -282,6 +282,14 @@ impl Tasks {
         });
     }
 
+    /// Look up the OptiFine cape of a player name.
+    pub fn optifine_cape(&self, name: String) {
+        self.run(move |t| {
+            let result = arctic_core::skins::optifine::fetch(&name).map_err(|e| e.to_string());
+            t.send(Event::OptifineCape(name, result));
+        });
+    }
+
     /// Ask for a cape image; `None` when the dialog was cancelled.
     pub fn pick_cape_file(&self) {
         self.run(|t| {

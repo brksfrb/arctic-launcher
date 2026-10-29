@@ -133,6 +133,8 @@ pub enum Event {
     ArcticCatalog(Outcome<crate::skin_tasks::ArcticState>),
     /// A picked cape image, or `None` if cancelled.
     CapeFile(Outcome<Option<Vec<u8>>>),
+    /// The OptiFine cape of a player name (a Minecraft-layout PNG), `None` when there is none.
+    OptifineCape(String, Outcome<Option<Vec<u8>>>),
     /// A picked skin file (name, bytes), or `None` if cancelled.
     SkinFile(Outcome<Option<(String, Vec<u8>)>>),
     /// A world import, backup or other world job finished (instance id, message).

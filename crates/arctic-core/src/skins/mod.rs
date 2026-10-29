@@ -3,6 +3,7 @@
 
 pub mod api;
 pub mod capes;
+pub mod optifine;
 
 use std::fs;
 use std::path::{Path, PathBuf};

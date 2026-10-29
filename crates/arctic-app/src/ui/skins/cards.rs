@@ -335,6 +335,64 @@ impl ArcticApp {
     pub(super) fn capes_body(&mut self, ui: &mut egui::Ui) {
         self.arctic_capes(ui);
         self.minecraft_capes(ui);
+        self.optifine_capes(ui);
+    }
+
+    /// OptiFine capes of the accounts in this launcher: one click wears it as an Arctic cape, so
+    /// Arctic players see it, OptiFine or not.
+    fn optifine_capes(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
+        let names: Vec<String> = self
+            .accounts
+            .accounts
+            .iter()
+            .map(|a| a.username.clone())
+            .collect();
+        for name in &names {
+            if self.skins.optifine_asked.insert(name.clone()) {
+                self.tasks.optifine_cape(name.clone());
+            }
+        }
+        section_label(ui, p, "OptiFine capes · from your accounts");
+        let found: Vec<(String, Vec<u8>)> = names
+            .iter()
+            .filter_map(|n| match self.skins.optifine.get(n) {
+                Some(Ok(Some(png))) => Some((n.clone(), png.clone())),
+                _ => None,
+            })
+            .collect();
+        if found.is_empty() {
+            ui.label(
+                RichText::new(
+                    "No OptiFine cape found for your accounts. Arctic shows other players' OptiFine capes in game, and an account that has one can wear it here.",
+                )
+                .color(p.muted),
+            );
+            ui.add_space(12.0);
+            return;
+        }
+        let worn_cape = self.catalog_state().and_then(|s| s.look.cape.clone());
+        let can_wear = self.arctic_state().is_some();
+        let ctx = ui.ctx().clone();
+        let now = ui.input(|i| i.time);
+        let mut pick: Option<Vec<u8>> = None;
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = vec2(GAP, GAP);
+            for (name, png) in &found {
+                let key = format!("ofcape:{name}");
+                let tex = self.cape_card_texture(&ctx, &key, None, now);
+                let hash = arctic_core::cosmetics::texture_hash(png);
+                let active = worn_cape.as_deref() == Some(hash.as_str());
+                let r = cape_card(ui, p, tex, Icon::Close, name, None, active);
+                if r.clicked() && !active && can_wear {
+                    pick = Some(png.clone());
+                }
+            }
+        });
+        ui.add_space(12.0);
+        if let Some(png) = pick {
+            self.wear_cape_image(png);
+        }
     }
 
     /// Arctic capes, your own image, or none. Capes that can animate carry a small
