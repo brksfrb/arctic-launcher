@@ -42,13 +42,19 @@ def members(cls):
 def declares(cls, name, depth=0):
     """Whether cls, or a superclass/interface the jar knows, has a member called name."""
     mem = members(cls)
+    if name == "<clinit>":
+        return "static {};" in mem
+    if name == "<init>":
+        # javap lists constructors by the class's own name.
+        return re.search(r"[ .$]" + re.escape(cls.split(".")[-1].split("$")[-1]) + r"\(", mem) is not None
     if re.search(r"[ .]" + re.escape(name) + r"[(;]", mem):
         return True
     head = mem.split("{", 1)[0]
-    for group in re.findall(r"\b(?:extends|implements)\s+([\w.$, ]+)", head):
-        for parent in (p.strip() for p in group.split(",")):
-            if depth < 6 and parent.startswith(("net.minecraft", "com.mojang")) and declares(parent, name, depth + 1):
-                return True
+    # "public class A<T> extends B implements C, D": what follows the class name, split at the keywords.
+    tail = re.sub(r"^.*?\b(?:class|interface|enum)\s+[\w.$]+(?:<[^>]*>)?\s*", "", head, flags=re.S)
+    for parent in (p.strip() for p in re.split(r"\bextends\b|\bimplements\b|,", tail)):
+        if depth < 6 and parent.startswith(("net.minecraft", "com.mojang")) and declares(parent, name, depth + 1):
+            return True
     return False
 
 
@@ -88,7 +94,7 @@ for f in sorted(glob.glob("*.java")):
     if not m:
         print(f"({f}: not in {ver})")
         continue
-    imports = dict((i.group(2), i.group(1) + "." + i.group(2)) for i in re.finditer(r"import (net\.minecraft[\w.]*)\.(\w+);", src))
+    imports = dict((i.group(2), i.group(1) + "." + i.group(2)) for i in re.finditer(r"import ((?:net\.minecraft|com\.mojang)[\w.]*)\.(\w+);", src))
     cls = imports.get(m.group(1), m.group(1))
     mem = members(cls)
     if not mem:
@@ -112,7 +118,9 @@ for f in sorted(glob.glob("*.java")):
             continue
         owner_cls = owner.replace("/", ".")
         if not members(owner_cls):
-            bad(f"{f}: target class missing {owner}")
+            # Libraries the game bundles (authlib...) are not in the game jar: nothing to check against.
+            if owner.startswith("net/minecraft"):
+                bad(f"{f}: target class missing {owner}")
         elif not declares(owner_cls, name):
             bad(f"{f}: target {owner}.{name} missing")
 print("checked", ver)
@@ -134,7 +142,13 @@ def body(cls, method):
     bodies = []
     for chunk in re.split(r"\n(?=  \S)", code(cls)):
         head = chunk.split("\n", 1)[0]
-        if re.search(r"[ .]" + re.escape(name) + r"\(", head) and "\n" in chunk:
+        if name == "<clinit>":
+            matches = head.strip() == "static {};"
+        elif name == "<init>":
+            matches = re.search(r"[ .$]" + re.escape(cls.split(".")[-1].split("$")[-1]) + r"\(", head) is not None
+        else:
+            matches = re.search(r"[ .]" + re.escape(name) + r"\(", head) is not None
+        if matches and "\n" in chunk:
             bodies.append(chunk.split("\n", 1)[1])
     return "\n".join(bodies)
 
@@ -144,7 +158,7 @@ for f in sorted(glob.glob("*.java")):
     m = re.search(r"@Mixin\(([\w.]+)\.class\)", src)
     if not m:
         continue
-    imports = dict((i.group(2), i.group(1) + "." + i.group(2)) for i in re.finditer(r"import (net\.minecraft[\w.]*)\.(\w+);", src))
+    imports = dict((i.group(2), i.group(1) + "." + i.group(2)) for i in re.finditer(r"import ((?:net\.minecraft|com\.mojang)[\w.]*)\.(\w+);", src))
     cls = imports.get(m.group(1), m.group(1))
     consts = dict(re.findall(r'String (\w+) = "([^"]+)"', src))
     for ann in re.finditer(r"@(?:Inject|Redirect|ModifyArg|ModifyArgs|ModifyVariable|ModifyConstant)\((.*?)\)\n\s*(?:private|public|protected)", src, re.S):
