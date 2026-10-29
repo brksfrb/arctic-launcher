@@ -193,6 +193,15 @@ def check(version):
                 problems.append(f"{f}: target class missing {owner}")
             elif not jar.has_member(owner_cls, name):
                 problems.append(f"{f}: target {owner}.{name} missing")
+        # at = FIELD targets look like "Lowner;name:Ldesc;" (no parenthesis), see fabric F-C1.
+        for owner, name in re.findall(r'target\s*=\s*"L([\w/$]+);(\w+):', src):
+            if not owner.startswith(("net/minecraft", "com/mojang")):
+                continue
+            owner_cls = owner.replace("/", ".")
+            if not jar.members(owner_cls):
+                problems.append(f"{f}: target class missing {owner}")
+            elif not jar.has_member(owner_cls, name):
+                problems.append(f"{f}: field target {owner}.{name} missing")
         for ann in re.finditer(r"@(?:Inject|Redirect|ModifyArg|ModifyArgs|ModifyVariable|WrapOperation|WrapWithCondition|ModifyExpressionValue)\((.*?)\)\n\s*(?://[^\n]*\n\s*)*(?:private|public|protected)([^{;]*)", src, re.S):
             a = ann.group(1)
             mm = re.search(r'method\s*=\s*(?:"([^"]+)"|(\w+))', a)

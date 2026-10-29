@@ -36,11 +36,14 @@ abstract class TitleScreenMixin extends Screen {
 
 	// Native titles fade text for two seconds. Our opaque button backgrounds made that look
 	// like missing labels. Leave the normal fade alone when the player chooses Vanilla style.
+	// 1.13.2's TitleScreen has no fading field (added in 1.14), so there is nothing to hook there.
+	//#if MC >= 1.14
 	@ModifyExpressionValue(method = "extractRenderState", at = @At(value = "FIELD",
 			target = "Lnet/minecraft/client/gui/screens/TitleScreen;fading:Z", opcode = 180))
 	private boolean arctic$readableImmediately(boolean fading) {
 		return !ArcticClient.restyles() && fading;
 	}
+	//#endif
 
 	@Inject(method = "extractRenderState", at = @At("TAIL"))
 	//#if MC >= 1.20
