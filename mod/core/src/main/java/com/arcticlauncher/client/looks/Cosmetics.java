@@ -12,7 +12,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 3D cosmetics and emotes: the catalog, each item's files (downloaded and
@@ -49,6 +51,8 @@ public final class Cosmetics {
 		/** The adapter has baked it; it can be drawn. */
 		public volatile boolean ready;
 		volatile boolean requested;
+		/** Failed loads so far (it is asked for again after a wait, a few times). */
+		volatile int attempts;
 
 		Item(String id, String name, String slot, String model, String texture, String glow, String animation, String mesh) {
 			this.id = id;
@@ -68,6 +72,7 @@ public final class Cosmetics {
 		final String file;
 		public volatile Animation animation;
 		volatile boolean requested;
+		volatile int attempts;
 
 		Emote(String id, String name, String file) {
 			this.id = id;
@@ -103,7 +108,11 @@ public final class Cosmetics {
 
 	private final Platform platform;
 	private final String baseUrl;
-	private final ScheduledExecutorService worker;
+	/**
+	 * The catalog, cosmetic files and emotes load here, not on the looks thread: a slow download must not hold up
+	 * every player's skin and cape lookups (and two at a time keep one hung request from stopping the rest).
+	 */
+	private final ScheduledThreadPoolExecutor downloads = newDownloads();
 	private volatile List<Item> items = Collections.emptyList();
 	private volatile List<Emote> emotes = Collections.emptyList();
 	private volatile boolean catalogAsked;
@@ -114,10 +123,50 @@ public final class Cosmetics {
 	/** How stale a player's "on screen" time may get before it's refreshed. */
 	private static final long WATCH_REFRESH_MS = 1000;
 
-	Cosmetics(Platform platform, String baseUrl, ScheduledExecutorService worker) {
+	Cosmetics(Platform platform, String baseUrl) {
 		this.platform = platform;
 		this.baseUrl = baseUrl;
-		this.worker = worker;
+	}
+
+	private static ScheduledThreadPoolExecutor newDownloads() {
+		ScheduledThreadPoolExecutor pool = new ScheduledThreadPoolExecutor(2, new ThreadFactory() {
+			@Override
+			public Thread newThread(Runnable r) {
+				Thread t = new Thread(r, "arctic-cosmetics");
+				t.setDaemon(true);
+				return t;
+			}
+		});
+		pool.setRemoveOnCancelPolicy(true);
+		return pool;
+	}
+
+	/** A load that failed is tried again after this long (times the failures so far), up to {@link #MAX_ATTEMPTS} times. */
+	private static final long LOAD_RETRY_MS = TimeUnit.SECONDS.toMillis(30);
+	private static final int MAX_ATTEMPTS = 5;
+
+	private void retryItem(final Item item) {
+		if (++item.attempts >= MAX_ATTEMPTS) {
+			return;
+		}
+		downloads.schedule(new Runnable() {
+			@Override
+			public void run() {
+				item.requested = false;
+			}
+		}, LOAD_RETRY_MS * item.attempts, TimeUnit.MILLISECONDS);
+	}
+
+	private void retryEmote(final Emote emote) {
+		if (++emote.attempts >= MAX_ATTEMPTS) {
+			return;
+		}
+		downloads.schedule(new Runnable() {
+			@Override
+			public void run() {
+				emote.requested = false;
+			}
+		}, LOAD_RETRY_MS * emote.attempts, TimeUnit.MILLISECONDS);
 	}
 
 	public List<Item> items() {
@@ -158,10 +207,12 @@ public final class Cosmetics {
 		}
 		if (!item.requested) {
 			item.requested = true;
-			worker.execute(new Runnable() {
+			downloads.execute(new Runnable() {
 				@Override
 				public void run() {
-					load(item);
+					if (!load(item)) {
+						retryItem(item);
+					}
 				}
 			});
 		}
@@ -230,13 +281,14 @@ public final class Cosmetics {
 	public Animation animation(final Emote emote) {
 		if (emote.animation == null && !emote.requested) {
 			emote.requested = true;
-			worker.execute(new Runnable() {
+			downloads.execute(new Runnable() {
 				@Override
 				public void run() {
 					try {
 						emote.animation = Animation.parse(json(emote.file));
 					} catch (Exception | StackOverflowError e) {
 						platform.log(false, "emote " + emote.id + ": " + e);
+						retryEmote(emote);
 					}
 				}
 			});
@@ -319,7 +371,7 @@ public final class Cosmetics {
 		}
 		lastAttempt = now;
 		catalogAsked = true;
-		worker.execute(new Runnable() {
+		downloads.execute(new Runnable() {
 			@Override
 			public void run() {
 				try {
@@ -419,22 +471,23 @@ public final class Cosmetics {
 		return out;
 	}
 
-	private void load(Item item) {
+	/** Load an item's files; false when that failed and should be tried again later. */
+	private boolean load(Item item) {
 		if (item.mesh != null) {
 			try {
 				item.meshModel = MeshModel.parse(Http.get(baseUrl + "/v1/assets/" + item.mesh, null));
 				platform.registerMesh(item.id, item.meshModel);
-				return;
+				return true;
 			} catch (Exception | StackOverflowError e) {
 				platform.log(false, "cosmetic " + item.id + " (mesh): " + e);
 				if (item.model == null) {
-					return;
+					return false;
 				}
 				// A cuboid version stands in for a mesh this client can't use.
 			}
 		}
 		if (item.model == null) {
-			return;
+			return true;
 		}
 		try {
 			item.geometry = Geometry.parse(json(item.model));
@@ -444,8 +497,10 @@ public final class Cosmetics {
 			byte[] png = texture(item.texture);
 			byte[] glow = item.glow == null ? null : texture(item.glow);
 			platform.registerCosmetic(item.id, item.geometry, png, glow);
+			return true;
 		} catch (Exception | StackOverflowError e) {
 			platform.log(false, "cosmetic " + item.id + ": " + e);
+			return false;
 		}
 	}
 

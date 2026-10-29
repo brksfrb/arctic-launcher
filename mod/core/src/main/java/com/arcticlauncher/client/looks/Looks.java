@@ -117,7 +117,7 @@ public final class Looks {
 		this.baseUrl = baseUrl;
 		this.token = token;
 		this.waitingForLauncher = token == null;
-		this.cosmetics = new Cosmetics(platform, baseUrl, worker);
+		this.cosmetics = new Cosmetics(platform, baseUrl);
 	}
 
 	public Cosmetics cosmetics() {
