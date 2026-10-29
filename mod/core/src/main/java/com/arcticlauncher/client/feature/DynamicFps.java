@@ -12,6 +12,8 @@ import com.arcticlauncher.client.config.ClientConfig;
 public final class DynamicFps {
 	/** Never limit below this (a slower game looks frozen and takes long to wake up). */
 	private static final int FLOOR = 5;
+	/** Input this recently means the game is being used. */
+	private static final long IN_USE_MS = 3000;
 	private static long lastActive = System.currentTimeMillis();
 	private static double[] lastSeen;
 	private static boolean inMenu;
@@ -57,7 +59,11 @@ public final class DynamicFps {
 		if (config == null || platform == null || !config.dynamicFps) {
 			return current;
 		}
-		return apply(current, platform.windowFocused(), inMenu, System.currentTimeMillis() - lastActive, config);
+		long idleMs = System.currentTimeMillis() - lastActive;
+		// The mouse or the player moved a moment ago: the game is in use, whatever the window system says
+		// (LWJGL 2's Display.isActive() stays false on some Forge/OptiFine setups and pinned the game to 15 FPS).
+		boolean focused = platform.windowFocused() || idleMs < IN_USE_MS;
+		return apply(current, focused, inMenu, idleMs, config);
 	}
 
 	/** The rules, apart from the game: the lowest of the limits that apply, never above {@code current}. */
