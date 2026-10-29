@@ -55,12 +55,7 @@ final class Widgets {
 				return String.valueOf(platform().fps());
 			}
 		});
-		all.add(new TextWidget("watermark", "Arctic watermark", "Arctic and the launcher's version, for screenshots and streams", false) {
-			@Override
-			protected String value(boolean preview) {
-				return com.arcticlauncher.client.menu.Badge.label();
-			}
-		}.ownLabels());
+		all.add(new Watermark());
 		all.add(new TextWidget("cps", "CPS", "Clicks per second (left | right)", true) {
 			@Override
 			protected String value(boolean preview) {

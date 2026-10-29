@@ -159,6 +159,11 @@ public final class ClientConfig {
 	public boolean fovNoSpeed;
 	/** Dynamic FOV: drawing a bow no longer narrows the view. */
 	public boolean fovNoBow;
+	/** The Arctic watermark: corner (0 bottom left, 1 bottom right, 2 top left, 3 top right), size (index into Watermark.SIZES), opacity (0 faint to 2 strong), and the version after it. */
+	public int watermarkCorner;
+	public int watermarkSize = 1;
+	public int watermarkOpacity;
+	public boolean watermarkVersion;
 	/** 1.8.9 - 1.12.2: vertex buffers were switched on once (they're off in Minecraft's defaults). */
 	public boolean legacyVboOn;
 	/** The pause menu's leave button needs a second click. */

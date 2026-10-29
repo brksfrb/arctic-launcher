@@ -121,6 +121,13 @@ final class ModCatalog {
 							f.section("Pointer");
 							f.swatches("Color", POINTER_COLORS, () -> c.compassPointer, v -> c.compassPointer = v);
 						}
+						if ("watermark".equals(w.id)) {
+							f.section("Watermark");
+							f.choice("Corner", com.arcticlauncher.client.hud.Watermark.CORNERS, () -> c.watermarkCorner, i -> c.watermarkCorner = i);
+							f.choice("Size", new String[] {"12", "16", "20", "24", "32"}, () -> c.watermarkSize, i -> c.watermarkSize = i);
+							f.choice("Opacity", com.arcticlauncher.client.hud.Watermark.OPACITIES, () -> c.watermarkOpacity, i -> c.watermarkOpacity = i);
+							f.toggle("Version", "The launcher's version after the snowflake", () -> c.watermarkVersion, on -> c.watermarkVersion = on);
+						}
 						if ("minimap".equals(w.id)) {
 							f.section("Map");
 							f.choice("Shape", new String[] {"Square", "Round"}, () -> c.minimapRound ? 1 : 0, i -> c.minimapRound = i == 1);
