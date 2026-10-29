@@ -5,6 +5,7 @@ use arctic_core::instances::Instance;
 use arctic_core::mods::{ProjectHit, SearchQuery, SortBy};
 use eframe::egui::{self, RichText};
 
+use super::Load;
 use super::mods_page::mod_icon;
 use crate::app::ArcticApp;
 use crate::art::icons::Icon;
@@ -208,11 +209,88 @@ impl ArcticApp {
                     if install.clicked() {
                         self.inst.pack_installing = Some(hit.project_id.clone());
                         self.inst.install_progress = None;
-                        self.tasks.install_modpack(hit.project_id.clone());
+                        self.tasks.install_modpack(hit.project_id.clone(), None);
+                    }
+                }
+                let open = self.inst.pack_choosing.as_deref() == Some(hit.project_id.as_str());
+                let label = if open { "Hide versions" } else { "Versions" };
+                if widgets::button(ui, p, None, label, false).clicked() {
+                    if open {
+                        self.inst.pack_choosing = None;
+                    } else {
+                        self.inst.pack_choosing = Some(hit.project_id.clone());
+                        if !self.inst.pack_versions.contains_key(&hit.project_id) {
+                            self.inst
+                                .pack_versions
+                                .insert(hit.project_id.clone(), Load::Loading);
+                            self.tasks.pack_versions(hit.project_id.clone());
+                        }
                     }
                 }
             });
         });
+        if self.inst.pack_choosing.as_deref() == Some(hit.project_id.as_str()) {
+            self.pack_version_list(ui, &hit.project_id);
+        }
+    }
+
+    /// The versions of one modpack, each with its Minecraft version and loader and an Install button.
+    fn pack_version_list(&mut self, ui: &mut egui::Ui, project_id: &str) {
+        let p = self.palette();
+        let versions = match self.inst.pack_versions.get(project_id) {
+            None | Some(Load::Loading) => {
+                ui.spinner();
+                return;
+            }
+            Some(Load::Failed(e)) => {
+                ui.label(RichText::new(format!("Could not load the versions: {e}")).color(p.error));
+                return;
+            }
+            Some(Load::Ready(list)) => list.clone(),
+        };
+        if versions.is_empty() {
+            ui.label(RichText::new("This modpack has no installable versions.").color(p.muted));
+            return;
+        }
+        let busy = self.inst.pack_installing.is_some();
+        let mut chosen = None;
+        egui::ScrollArea::vertical()
+            .id_salt("pack_versions")
+            .max_height(240.0)
+            .show(ui, |ui| {
+                for v in &versions {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(&v.label).strong().color(p.text));
+                        ui.label(
+                            RichText::new(format!(
+                                "{} · {} · {}",
+                                v.game_versions.join(", "),
+                                v.loaders.join(", "),
+                                v.version_type
+                            ))
+                            .small()
+                            .color(p.muted),
+                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let install = ui
+                                .add_enabled_ui(!busy, |ui| {
+                                    widgets::button(ui, p, Some(Icon::Plus), "Install", false)
+                                })
+                                .inner;
+                            if install.clicked() {
+                                chosen = Some(v.id.clone());
+                            }
+                        });
+                    });
+                }
+            });
+        if let Some(version_id) = chosen {
+            self.inst.pack_installing = Some(project_id.to_owned());
+            self.inst.install_progress = None;
+            self.inst.pack_choosing = None;
+            self.tasks
+                .install_modpack(project_id.to_owned(), Some(version_id));
+        }
     }
 
     /// A modpack install (or import) finished.

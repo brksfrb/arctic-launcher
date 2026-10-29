@@ -87,6 +87,8 @@ pub enum Event {
     ReleaseNotes(Outcome<update::ReleaseNotes>),
     /// Minecraft versions a loader supports.
     LoaderGames(LoaderKind, Outcome<Vec<String>>),
+    /// The versions of a modpack project (project id, result).
+    PackVersions(String, Outcome<Vec<mods::modpack::PackVersion>>),
     /// Loader versions for (loader, Minecraft version).
     LoaderVersions(LoaderKind, String, Outcome<Vec<LoaderVersion>>),
     /// Mod search results for request id.
@@ -409,14 +411,27 @@ impl Tasks {
         });
     }
 
-    /// Install a Modrinth modpack as a new instance.
-    pub fn install_modpack(&self, project_id: String) {
+    /// Install a Modrinth modpack as a new instance: the version given, or the newest release.
+    pub fn install_modpack(&self, project_id: String, version_id: Option<String>) {
         self.run(move |t| {
             let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
-            let result = mods::modpack::install_from_modrinth(&t.dirs, &project_id, &progress)
-                .map(Some)
-                .map_err(|e| e.to_string());
+            let result = mods::modpack::install_version(
+                &t.dirs,
+                &project_id,
+                version_id.as_deref(),
+                &progress,
+            )
+            .map(Some)
+            .map_err(|e| e.to_string());
             t.send(Event::ModpackInstalled(result));
+        });
+    }
+
+    /// List the versions of a modpack project for the picker.
+    pub fn pack_versions(&self, project_id: String) {
+        self.run(move |t| {
+            let result = mods::modpack::pack_versions(&project_id).map_err(|e| e.to_string());
+            t.send(Event::PackVersions(project_id, result));
         });
     }
 

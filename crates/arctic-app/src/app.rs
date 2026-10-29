@@ -997,6 +997,7 @@ impl ArcticApp {
                 self.faces.insert(uuid, face);
             }
             e @ (Event::LoaderGames(..)
+            | Event::PackVersions(..)
             | Event::LoaderVersions(..)
             | Event::ModSearch(..)
             | Event::ModsScanned(..)

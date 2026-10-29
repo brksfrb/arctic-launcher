@@ -67,27 +67,76 @@ impl PackIndex {
     }
 }
 
-/// Newest release of a modpack project on Modrinth: (url, file name, sha1, size).
-pub fn latest_file(project_id: &str) -> Result<(String, String, Option<String>, Option<u64>)> {
-    let versions: Vec<Version> = modrinth::get_api(
+/// One downloadable version of a modpack project, for the picker.
+#[derive(Debug, Clone)]
+pub struct PackVersion {
+    pub id: String,
+    /// Version number, or the version's name when it has none.
+    pub label: String,
+    /// "release", "beta" or "alpha".
+    pub version_type: String,
+    pub game_versions: Vec<String>,
+    pub loaders: Vec<String>,
+}
+
+fn pack_versions_raw(project_id: &str) -> Result<Vec<Version>> {
+    modrinth::get_api(
         &format!(
             "https://api.modrinth.com/v2/project/{}/version",
             modrinth::encode(project_id)
         ),
         &format!("modpack {project_id}"),
-    )?;
-    let best = versions
-        .iter()
-        .filter(|v| {
-            v.primary_file()
-                .is_some_and(|f| f.filename.ends_with(".mrpack"))
+    )
+}
+
+fn is_pack_version(v: &Version) -> bool {
+    v.primary_file()
+        .is_some_and(|f| f.filename.ends_with(".mrpack"))
+}
+
+/// Every installable version of a modpack project, newest first.
+pub fn pack_versions(project_id: &str) -> Result<Vec<PackVersion>> {
+    let mut versions: Vec<Version> = pack_versions_raw(project_id)?
+        .into_iter()
+        .filter(is_pack_version)
+        .collect();
+    versions.sort_by(|a, b| b.date_published.cmp(&a.date_published));
+    Ok(versions
+        .into_iter()
+        .map(|v| PackVersion {
+            label: if v.version_number.is_empty() {
+                v.id.clone()
+            } else {
+                v.version_number.clone()
+            },
+            id: v.id,
+            version_type: v.version_type,
+            game_versions: v.game_versions,
+            loaders: v.loaders,
         })
-        .min_by(|a, b| {
-            rank(&a.version_type)
-                .cmp(&rank(&b.version_type))
-                .then_with(|| b.date_published.cmp(&a.date_published))
-        })
-        .ok_or_else(|| Error::Other("this modpack has no downloadable version".into()))?;
+        .collect())
+}
+
+/// The file of one modpack version (`version_id`), or of the newest release when `None`:
+/// (url, file name, sha1, size).
+fn pack_file(
+    project_id: &str,
+    version_id: Option<&str>,
+) -> Result<(String, String, Option<String>, Option<u64>)> {
+    let versions = pack_versions_raw(project_id)?;
+    let mut candidates = versions.iter().filter(|v| is_pack_version(v));
+    let best = match version_id {
+        Some(id) => candidates
+            .find(|v| v.id == id)
+            .ok_or_else(|| Error::Other("that modpack version is not available".into()))?,
+        None => candidates
+            .min_by(|a, b| {
+                rank(&a.version_type)
+                    .cmp(&rank(&b.version_type))
+                    .then_with(|| b.date_published.cmp(&a.date_published))
+            })
+            .ok_or_else(|| Error::Other("this modpack has no downloadable version".into()))?,
+    };
     let file = best
         .primary_file()
         .ok_or_else(|| Error::Other("this modpack has no file".into()))?;
@@ -97,6 +146,11 @@ pub fn latest_file(project_id: &str) -> Result<(String, String, Option<String>, 
         file.hashes.sha1.clone(),
         file.size,
     ))
+}
+
+/// Newest release of a modpack project on Modrinth: (url, file name, sha1, size).
+pub fn latest_file(project_id: &str) -> Result<(String, String, Option<String>, Option<u64>)> {
+    pack_file(project_id, None)
 }
 
 fn rank(version_type: &str) -> u8 {
@@ -113,8 +167,18 @@ pub fn install_from_modrinth(
     project_id: &str,
     progress: Progress,
 ) -> Result<Instance> {
+    install_version(dirs, project_id, None, progress)
+}
+
+/// Download one version of a Modrinth modpack (`None` = the newest release) and install it as a new instance.
+pub fn install_version(
+    dirs: &DataDirs,
+    project_id: &str,
+    version_id: Option<&str>,
+    progress: Progress,
+) -> Result<Instance> {
     progress(ProgressInfo::stage("Finding the modpack"));
-    let (url, file_name, sha1, size) = latest_file(project_id)?;
+    let (url, file_name, sha1, size) = pack_file(project_id, version_id)?;
     check_url(&url)?;
     let pack = dirs.cache().join("modpacks").join(sanitize(&file_name));
     download_all(
