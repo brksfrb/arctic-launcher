@@ -371,7 +371,7 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return -1f;
 	}
 
-	/** Item cooldowns exist and can be read on this version (Fabric 1.14 and newer). */
+	/** Item cooldowns exist and can be read on this version (the game has them from 1.9). */
 	default boolean cooldownsWork() {
 		return false;
 	}

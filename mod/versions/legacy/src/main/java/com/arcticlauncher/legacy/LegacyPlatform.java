@@ -460,6 +460,29 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean cooldownsWork() {
+		//#if MC >= 1.9
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	@Override
+	public float cooldown(String idPart) {
+		//#if MC >= 1.9
+		net.minecraft.entity.player.ClientPlayerEntity player = mc().player;
+		net.minecraft.item.Item item = "ender_pearl".equals(idPart) ? net.minecraft.item.Items.ENDER_PEARL
+				: "chorus_fruit".equals(idPart) ? net.minecraft.item.Items.CHORUS_FRUIT
+				: "shield".equals(idPart) ? net.minecraft.item.Items.SHIELD : null;
+		if (player != null && item != null) {
+			return player.getItemCooldownManager().getCooldownProgress(item, 0f);
+		}
+		//#endif
+		return -1f;
+	}
+
+	@Override
 	public boolean fogWorks() {
 		return true;
 	}
