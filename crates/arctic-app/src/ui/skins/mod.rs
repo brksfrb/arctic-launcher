@@ -144,6 +144,10 @@ pub struct SkinsUi {
     /// OptiFine capes by account name (`None` = that name has none), and the names already asked.
     pub optifine: HashMap<String, Result<Option<Vec<u8>>, String>>,
     pub optifine_asked: HashSet<String>,
+    /// Names looked up by hand (an OptiFine cape can sit under a name this launcher has no account for).
+    pub optifine_manual: Vec<String>,
+    /// The name being typed in the OptiFine lookup box.
+    pub optifine_name: String,
     pub gallery: gallery::GalleryUi,
     /// Filters the list shown (skins, capes or cosmetics by name).
     pub search: String,
@@ -813,6 +817,21 @@ impl ArcticApp {
             Event::OptifineCape(name, result) => {
                 if let Err(e) = &result {
                     log::info!("OptiFine cape of {name}: {e}");
+                }
+                if self.skins.optifine_manual.contains(&name) {
+                    match &result {
+                        Ok(None) => self.toasts.push(
+                            Kind::Info,
+                            "No OptiFine cape",
+                            format!("OptiFine has no cape for {name}."),
+                        ),
+                        Err(e) => self.toasts.push(
+                            Kind::Error,
+                            "Could not reach OptiFine's cape server",
+                            e.clone(),
+                        ),
+                        Ok(Some(_)) => {}
+                    }
                 }
                 self.skins.optifine.insert(name, result);
             }

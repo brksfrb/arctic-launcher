@@ -342,18 +342,49 @@ impl ArcticApp {
     /// Arctic players see it, OptiFine or not.
     fn optifine_capes(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        let names: Vec<String> = self
+        let mut names: Vec<String> = self
             .accounts
             .accounts
             .iter()
             .map(|a| a.username.clone())
             .collect();
+        for name in &self.skins.optifine_manual {
+            if !names.contains(name) {
+                names.push(name.clone());
+            }
+        }
         for name in &names {
             if self.skins.optifine_asked.insert(name.clone()) {
                 self.tasks.optifine_cape(name.clone());
             }
         }
         section_label(ui, p, "OptiFine capes · from your accounts");
+        let mut look_up = false;
+        ui.horizontal(|ui| {
+            let edit = ui.add(
+                egui::TextEdit::singleline(&mut self.skins.optifine_name)
+                    .hint_text("Look up another name…")
+                    .char_limit(16)
+                    .desired_width(180.0),
+            );
+            let enter = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if widgets::button(ui, p, None, "Look up", false).clicked() || enter {
+                look_up = true;
+            }
+        });
+        if look_up {
+            let name = self.skins.optifine_name.trim().to_owned();
+            if !name.is_empty() {
+                self.skins.optifine_name.clear();
+                if !self.skins.optifine_manual.contains(&name) {
+                    self.skins.optifine_manual.push(name.clone());
+                }
+                // Asked again, so a miss shows its note even for a name asked before.
+                self.skins.optifine_asked.insert(name.clone());
+                self.tasks.optifine_cape(name);
+            }
+        }
+        ui.add_space(6.0);
         let found: Vec<(String, Vec<u8>)> = names
             .iter()
             .filter_map(|n| match self.skins.optifine.get(n) {
@@ -364,7 +395,7 @@ impl ArcticApp {
         if found.is_empty() {
             ui.label(
                 RichText::new(
-                    "No OptiFine cape found for your accounts. Arctic shows other players' OptiFine capes in game, and an account that has one can wear it here.",
+                    "No OptiFine cape found for your accounts. OptiFine keeps capes by player name: if yours is under another name, look it up above. Arctic also shows other players' OptiFine capes in game.",
                 )
                 .color(p.muted),
             );
