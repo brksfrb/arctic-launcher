@@ -136,8 +136,8 @@ fn newest_first(folders: &[GameFolder], rel: &str) -> Vec<PathBuf> {
 /// Newest copy wins: it becomes the shared one, then goes to every idle
 /// instance that has something else.
 fn sync_file(folders: &[GameFolder], shared: &Path, rel: &str) -> Result<()> {
-    let mut best = std::fs::read(shared).ok();
-    let mut best_time = modified(shared);
+    let mut best = std::fs::read(shared).ok().filter(|b| usable(rel, b));
+    let mut best_time = best.as_ref().and_then(|_| modified(shared));
     for folder in folders {
         let path = folder.dir.join(rel);
         let Some(time) = modified(&path) else {
@@ -149,6 +149,10 @@ fn sync_file(folders: &[GameFolder], shared: &Path, rel: &str) -> Result<()> {
         let Ok(bytes) = std::fs::read(&path) else {
             continue;
         };
+        // A file the game left empty or cut off (killed while saving) must not become the shared copy.
+        if !usable(rel, &bytes) {
+            continue;
+        }
         if best.as_ref() != Some(&bytes) {
             best = Some(bytes);
             best_time = Some(time);
@@ -158,6 +162,9 @@ fn sync_file(folders: &[GameFolder], shared: &Path, rel: &str) -> Result<()> {
         return Ok(());
     };
     if std::fs::read(shared).ok().as_ref() != Some(&best) {
+        if shared.exists() {
+            keep_backup(shared)?;
+        }
         write(shared, &best)?;
     }
     for folder in folders.iter().filter(|f| !f.busy) {
@@ -241,15 +248,50 @@ fn keep_acknowledged(known: &Defaults, mut captured: Defaults) -> Defaults {
     captured
 }
 
-/// The instance's own copy, the first time sharing replaces it.
+/// Whether `bytes` can be a good copy of `rel`: not empty, and for the JSON files valid JSON.
+fn usable(rel: &str, bytes: &[u8]) -> bool {
+    if bytes.is_empty() {
+        return false;
+    }
+    !rel.ends_with(".json") || serde_json::from_slice::<serde::de::IgnoredAny>(bytes).is_ok()
+}
+
+/// How many replaced copies are kept besides the first one.
+const BACKUP_HISTORY: u32 = 3;
+
+/// The instance's own copy: the first one sharing replaces stays as `*.before-sharing`, and the last
+/// few copies it replaced after that as `*.before-sharing.1` (newest) to `.3`.
 fn keep_backup(path: &Path) -> Result<()> {
     let mut name = path.file_name().unwrap_or_default().to_os_string();
     name.push(BACKUP);
     let backup = path.with_file_name(name);
-    if !backup.exists() && path.exists() {
-        std::fs::copy(path, &backup).map_err(|e| Error::io(&backup, e))?;
+    if !path.exists() {
+        return Ok(());
     }
-    Ok(())
+    if !backup.exists() {
+        return std::fs::copy(path, &backup)
+            .map(|_| ())
+            .map_err(|e| Error::io(&backup, e));
+    }
+    let slot = |n: u32| {
+        let mut name = backup.as_os_str().to_os_string();
+        name.push(format!(".{n}"));
+        PathBuf::from(name)
+    };
+    // The same copy twice in a row (a sync that replaces it again) is not a new history entry.
+    let current = std::fs::read(path).map_err(|e| Error::io(path, e))?;
+    if std::fs::read(slot(1)).ok().as_ref() == Some(&current)
+        || std::fs::read(&backup).ok().as_ref() == Some(&current)
+    {
+        return Ok(());
+    }
+    for n in (1..BACKUP_HISTORY).rev() {
+        if slot(n).exists() {
+            let _ = std::fs::rename(slot(n), slot(n + 1));
+        }
+    }
+    std::fs::write(slot(1), &current)
+        .map_err(|e| Error::io(slot(1), e))
 }
 
 fn write(path: &Path, bytes: &[u8]) -> Result<()> {
@@ -400,5 +442,24 @@ mod tests {
         let text = std::fs::read_to_string(&modern).unwrap();
         assert!(text.contains("entityDistanceScaling:2.0"), "{text}");
         assert!(text.contains("fov:0.25"), "{text}");
+    }
+
+    #[test]
+    fn a_cut_off_settings_file_does_not_spread() {
+        let (_tmp, dirs, a, b) = setup();
+        let file = |i: &Instance| i.game_dir(&dirs).join("config/arctic.json");
+        std::fs::write(file(&a), "{\"good\":1}").unwrap();
+        sync(&dirs, SharedSettings::default(), None).unwrap();
+        later();
+        // The game was killed while saving: the newest file is cut off, or empty.
+        std::fs::write(file(&b), "{\"hud\":{\"fps\":").unwrap();
+        sync(&dirs, SharedSettings::default(), None).unwrap();
+        assert_eq!(std::fs::read_to_string(file(&a)).unwrap(), "{\"good\":1}");
+        assert_eq!(std::fs::read_to_string(file(&b)).unwrap(), "{\"good\":1}");
+        later();
+        std::fs::write(file(&b), "").unwrap();
+        sync(&dirs, SharedSettings::default(), None).unwrap();
+        assert_eq!(std::fs::read_to_string(file(&a)).unwrap(), "{\"good\":1}");
+        assert_eq!(std::fs::read_to_string(file(&b)).unwrap(), "{\"good\":1}");
     }
 }
