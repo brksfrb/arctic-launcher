@@ -102,7 +102,10 @@ impl FallbackResolver {
         let Some(file) = MEMORY_FILE.get() else {
             return;
         };
-        let mut guard = self.remembered.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut guard = self
+            .remembered
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         let map = guard.get_or_insert_with(|| read_memory(file));
         if map.get(host).is_some_and(|known| known == found) {
             return;
@@ -119,7 +122,10 @@ impl FallbackResolver {
     /// The addresses `host` had when it was last found, from an earlier run or this one.
     fn last_known(&self, host: &str) -> Option<Vec<IpAddr>> {
         let file = MEMORY_FILE.get()?;
-        let mut guard = self.remembered.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut guard = self
+            .remembered
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         let map = guard.get_or_insert_with(|| read_memory(file));
         map.get(host).filter(|ips| !ips.is_empty()).cloned()
     }
