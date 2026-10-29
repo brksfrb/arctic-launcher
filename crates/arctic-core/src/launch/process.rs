@@ -74,7 +74,16 @@ pub fn spawn(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     priority::boost(&mut cmd);
-    let mut child = cmd.spawn().at(&plan.java)?;
+    let mut child = match cmd.spawn() {
+        Ok(child) => child,
+        Err(e) => {
+            // The argument file holds the access token: not left behind when the game did not start.
+            if let Some(file) = &argfile {
+                let _ = std::fs::remove_file(file);
+            }
+            return Err(crate::Error::io(&plan.java, e));
+        }
+    };
     if plan.maximize_window {
         super::game_window::maximize_when_open(child.id());
     }
@@ -165,16 +174,24 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
     log::info!("launching (detached): {}", plan.redacted_command());
     let log = File::create(&plan.log_file).at(&plan.log_file)?;
     let log_err = log.try_clone().at(&plan.log_file)?;
-    let (args, _argfile) = command_args(plan)?;
-    let child = Command::new(game_exe(plan))
+    let (args, argfile) = command_args(plan)?;
+    let spawned = Command::new(game_exe(plan))
         .args(&args)
         .envs(crate::gpu_preference::env(plan.high_performance_gpu))
         .current_dir(&plan.game_dir)
         .stdin(Stdio::null())
         .stdout(log)
         .stderr(log_err)
-        .spawn()
-        .at(&plan.java)?;
+        .spawn();
+    if let Some(file) = &argfile {
+        // Java reads it while it starts. It holds the access token, so it does not stay (the caller may
+        // exit before the game does, so nothing waits for the game itself).
+        if spawned.is_ok() {
+            std::thread::sleep(ARGFILE_READ_TIME);
+        }
+        let _ = std::fs::remove_file(file);
+    }
+    let child = spawned.at(&plan.java)?;
     if plan.maximize_window {
         super::game_window::maximize_when_open(child.id());
     }
@@ -224,6 +241,8 @@ const CLIENT_PROCESS: &str = if cfg!(windows) {
 /// The executable the game runs as, set to the graphics card the player wants.
 /// CreateProcess refuses a command line over 32 767 characters; stay below it with room for the program.
 const MAX_COMMAND_CHARS: usize = 30_000;
+/// How long a detached start gives Java to read its argument file before it is deleted.
+const ARGFILE_READ_TIME: Duration = Duration::from_secs(5);
 
 /// The arguments to start Java with, and the `@argfile` that holds them when the command line would be too
 /// long for Windows (a Forge or NeoForge classpath of 100+ libraries under a long data folder). Java 9+ reads
