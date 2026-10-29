@@ -1,6 +1,7 @@
 //! HTTP helpers and the parallel, checksum-verified downloader.
 
 mod download;
+mod resolver;
 
 pub(crate) use download::body_timeout;
 pub use download::{Compressed, DownloadJob, download_all, set_gentle, sha1_file};
@@ -80,7 +81,7 @@ fn build_agent(proxy: Option<ureq::Proxy>) -> ureq::Agent {
         .build();
     // ureq keeps only 3 idle connections per host by default, which made
     // most parallel downloads redo a TLS handshake. Keep one per worker.
-    ureq::Agent::config_builder()
+    let config = ureq::Agent::config_builder()
         .tls_config(tls)
         // Without an Arctic proxy, keep honoring ALL_PROXY / HTTPS_PROXY.
         .proxy(proxy.or_else(ureq::Proxy::try_from_env))
@@ -90,8 +91,13 @@ fn build_agent(proxy: Option<ureq::Proxy>) -> ureq::Agent {
         .timeout_recv_response(Some(RESPONSE_TIMEOUT))
         .timeout_recv_body(Some(BODY_TIMEOUT))
         .user_agent(format!("{}/{}", crate::LAUNCHER_BRAND, crate::APP_VERSION))
-        .build()
-        .into()
+        .build();
+    // Names the system cannot find are looked up over HTTPS instead (see `resolver`).
+    ureq::Agent::with_parts(
+        config,
+        ureq::unversioned::transport::DefaultConnector::default(),
+        resolver::FallbackResolver::default(),
+    )
 }
 
 /// GET a URL and deserialize its JSON body.
