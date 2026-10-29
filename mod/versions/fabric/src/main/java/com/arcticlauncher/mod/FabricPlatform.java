@@ -1312,6 +1312,15 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean glintWorks() {
+		//#if MC >= 1.16
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	@Override
 	public boolean fogWorks() {
 		return true;
 	}
