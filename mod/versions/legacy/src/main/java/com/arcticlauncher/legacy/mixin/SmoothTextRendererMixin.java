@@ -1,6 +1,7 @@
 package com.arcticlauncher.legacy.mixin;
 
 import com.arcticlauncher.legacy.LegacySmoothFont;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -70,7 +71,10 @@ abstract class SmoothTextRendererMixin {
 	}
 
 	private boolean arctic$smooth() {
-		return LegacySmoothFont.on() && !isUnicode();
+		// Only the game's own renderer: Forge's loading screen has its own, before the game's fonts and
+		// textures exist, and drew black blobs from ours.
+		MinecraftClient mc = MinecraftClient.getInstance();
+		return mc != null && mc.textRenderer == (Object) this && LegacySmoothFont.on() && !isUnicode();
 	}
 
 	/** One character at the pen. */
