@@ -387,7 +387,7 @@ final class ModCatalog {
 					f.stepper("Up / down", () -> c.heldY, v -> c.heldY = (int) v, -50, 50, 5, "%.0f");
 					f.stepper("Away / closer", () -> c.heldZ, v -> c.heldZ = (int) v, -50, 50, 5, "%.0f");
 					f.section("Size");
-					f.stepper("Size", () -> c.heldScale, v -> c.heldScale = (int) v, 30, 150, 10, "%.0f%%");
+					f.stepper("Size", () -> c.heldScale, v -> c.heldScale = (int) v, 30, 500, 10, "%.0f%%");
 					f.note("Look at your hand in the game to see each change. 0 and 100% are the game's own.");
 				}));
 		// Shulker boxes exist from 1.11.
