@@ -89,6 +89,11 @@ public final class Scroll {
 		contentBottom = Math.max(contentBottom, bottom);
 	}
 
+	/** Let the glide reach where the wheel pointed at once. */
+	void finishGlide() {
+		move(target);
+	}
+
 	/** Call after adding everything: keeps the offset in range. */
 	public void settle() {
 		scrollTo(offset);
