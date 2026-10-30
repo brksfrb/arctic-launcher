@@ -161,7 +161,8 @@ public class TextField extends Widget {
 		g.text(visible, x + 4, ty, s.text, false);
 		if (focused && !hasSelection() && (System.currentTimeMillis() / BLINK_MS) % 2 == 0) {
 			int at = Math.max(0, Math.min(cursor - scrollStart, visible.length()));
-			int cx = x + 4 + edges[at];
+			// A glyph's advance leaves a little room after the last letter: the cursor sits closer.
+			int cx = x + 4 + edges[at] - (at > 0 ? 1 : 0);
 			g.fill(cx, ty - 1, cx + 1, ty + 9, s.text);
 		}
 	}

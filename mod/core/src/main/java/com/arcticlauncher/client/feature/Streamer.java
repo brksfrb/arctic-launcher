@@ -56,6 +56,25 @@ public final class Streamer {
 		return pairs;
 	}
 
+	/**
+	 * Where a match of {@code what} at {@code from} ends, or -1. Colour codes between its letters are
+	 * skipped: servers split a long scoreboard line into a prefix and a suffix with codes in between
+	 * (a name can reach the screen as {@code brksf§1§arb3}).
+	 */
+	static int matchEnd(String lower, int from, String what) {
+		int at = from;
+		for (int k = 0; k < what.length(); k++) {
+			while (k > 0 && at + 1 < lower.length() && lower.charAt(at) == '§') {
+				at += 2;
+			}
+			if (at >= lower.length() || lower.charAt(at) != what.charAt(k)) {
+				return -1;
+			}
+			at++;
+		}
+		return at;
+	}
+
 	/** Plain text with your name and the server hidden (when on). */
 	public static String mask(String text) {
 		if (text == null || !on()) {
@@ -71,8 +90,10 @@ public final class Streamer {
 		int copied = 0;
 		while (i < text.length()) {
 			String[] hit = null;
+			int end = -1;
 			for (String[] pair : hide) {
-				if (lower.startsWith(pair[0], i)) {
+				end = matchEnd(lower, i, pair[0]);
+				if (end >= 0) {
 					hit = pair;
 					break;
 				}
@@ -85,7 +106,7 @@ public final class Streamer {
 				out = new StringBuilder(text.length());
 			}
 			out.append(text, copied, i).append(hit[1]);
-			i += hit[0].length();
+			i = end;
 			copied = i;
 		}
 		return out == null ? text : out.append(text, copied, text.length()).toString();
