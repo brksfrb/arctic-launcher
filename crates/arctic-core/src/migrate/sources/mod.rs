@@ -4,6 +4,7 @@ mod clients;
 mod managers;
 mod minecraft;
 mod modrinth;
+mod sklauncher;
 
 use std::path::{Path, PathBuf};
 
@@ -16,6 +17,7 @@ pub fn scan() -> Scan {
     let mut scan = Scan::default();
     minecraft::official(&mut scan);
     minecraft::tlauncher(&mut scan);
+    sklauncher::v4(&mut scan);
     managers::prism_family(&mut scan);
     modrinth::app(&mut scan);
     managers::curseforge(&mut scan);
@@ -51,7 +53,13 @@ fn tidy(scan: &mut Scan) {
         // with nothing of their own are noise, and TLauncher also writes the
         // official launcher's profiles; a client's instances are things the
         // player made, so they always show.
-        if !matches!(f.launcher, Launcher::Official | Launcher::TLauncher) {
+        if f.launcher == Launcher::SkLauncher && !f.shared {
+            return true;
+        }
+        if !matches!(
+            f.launcher,
+            Launcher::Official | Launcher::TLauncher | Launcher::SkLauncher
+        ) {
             return true;
         }
         if f.shared && f.extra_jars.is_empty() && !super::copy::has_mods(f) {
@@ -180,4 +188,14 @@ pub(super) fn subdirs(dir: &Path) -> Vec<PathBuf> {
 /// Memory settings outside a sane range are ignored.
 pub(super) fn memory(mb: Option<u64>) -> Option<u32> {
     mb.filter(|m| (512..=65536).contains(m)).map(|m| m as u32)
+}
+
+#[cfg(test)]
+pub(super) fn minecraft_profiles(scan: &mut Scan, root: &Path) {
+    minecraft::official_in(scan, root);
+}
+
+#[cfg(test)]
+pub(super) fn sklauncher_4(scan: &mut Scan, base: &Path) {
+    sklauncher::v4_in(scan, base);
 }
