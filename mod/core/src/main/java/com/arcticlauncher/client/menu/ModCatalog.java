@@ -202,7 +202,7 @@ final class ModCatalog {
 							() -> c.zoomSmoothCamera, on -> c.zoomSmoothCamera = on);
 					f.stepper("Zoom sensitivity", () -> c.zoomSensitivity, v -> c.zoomSensitivity = (int) v, 10, 200, 5, "%.0f%%");
 				}));
-		out.add(new Mod("emotes", "Emotes", "Hold a key, point at an emote, let go: others see it", "looks", Category.SOCIAL,
+		out.add(new Mod("emotes", "Emotes", "Hold a key, point at an emote, let go: others see it", "emotes", Category.SOCIAL,
 				"emote wheel dance wave key rebind")
 				.settings((host, f) -> {
 					f.section("Key");
@@ -218,7 +218,7 @@ final class ModCatalog {
 						f.key("Freelook key", "Hold it to look around", Form.key(() -> c.freelookKey, k -> c.freelookKey = k));
 						f.note("Some servers (like Hypixel) don't allow it; it stays off there.");
 					}));
-			out.add(new Mod("snaplook", "Snaplook", "Hold a key to see yourself from the front, then let go", "freelook", Category.GAMEPLAY,
+			out.add(new Mod("snaplook", "Snaplook", "Hold a key to see yourself from the front, then let go", "snaplook", Category.GAMEPLAY,
 					"front view third person behind look back mirror")
 					.toggle(() -> c.snaplookEnabled, on -> c.snaplookEnabled = on)
 					.settings((host, f) -> {
@@ -257,7 +257,7 @@ final class ModCatalog {
 		}
 		out.add(new Mod("death", "Death Position", "A pop-up with where you died, and a Death waypoint", "death", Category.GAMEPLAY, "coords")
 				.toggle(() -> c.deathNotice, on -> c.deathNotice = on));
-		out.add(new Mod("pingtags", "Ping Tags", "Other players' ping in front of their name tag: 48ms | Steve", "tiers", Category.SOCIAL,
+		out.add(new Mod("pingtags", "Ping Tags", "Other players' ping in front of their name tag: 48ms | Steve", "pingtags", Category.SOCIAL,
 				"ping latency nametag lag ms")
 				.toggle(() -> c.pingNametags, on -> c.pingNametags = on));
 		out.add(new Mod("badgetags", "Arctic Badge", "The snowflake in front of other Arctic players' name tags and in the player list", "badgetags", Category.SOCIAL,
@@ -270,10 +270,10 @@ final class ModCatalog {
 		out.add(new Mod("ownnametag", "Own Name Tag", "See your own name tag above your head in third person: badge, tier and name", "ownnametag", Category.SOCIAL,
 				"nametag tag above head self own name third person")
 				.toggle(() -> c.ownNametag, on -> c.ownNametag = on));
-		out.add(new Mod("ofcapes", "OptiFine Capes", "Show other players' OptiFine capes, without OptiFine (asks OptiFine's cape server for each player's name, as OptiFine does)", "looks", Category.SOCIAL,
+		out.add(new Mod("ofcapes", "OptiFine Capes", "Show other players' OptiFine capes, without OptiFine (asks OptiFine's cape server for each player's name, as OptiFine does)", "capes", Category.SOCIAL,
 				"optifine cape capes cloak")
 				.toggle(() -> c.optifineCapes, on -> c.optifineCapes = on));
-		out.add(new Mod("dynamicfps", "Dynamic FPS", "A lower frame rate limit while the game is in another window, idle or in a menu (1.14 to 1.21.11 and 1.8.9 to 1.12.2)", "particles", Category.VISUAL,
+		out.add(new Mod("dynamicfps", "Dynamic FPS", "A lower frame rate limit while the game is in another window, idle or in a menu (1.14 to 1.21.11 and 1.8.9 to 1.12.2)", "dynamicfps", Category.VISUAL,
 				"fps limit background unfocused idle afk battery save power performance")
 				.toggle(() -> c.dynamicFps, on -> c.dynamicFps = on)
 				.settings((host, f) -> {
@@ -284,16 +284,16 @@ final class ModCatalog {
 					f.stepper("In a menu", () -> c.dynFpsMenu, v -> c.dynFpsMenu = (int) v, 0, 240, 10, "%.0f FPS");
 					f.note("Idle means nothing moved: not you, not the mouse. The game's own limit still applies; this only lowers it.");
 				}));
-		out.add(new Mod("nohurtcam", "No Hurt Shake", "The view stops tilting and shaking when you take damage", "particles", Category.VISUAL,
+		out.add(new Mod("nohurtcam", "No Hurt Shake", "The view stops tilting and shaking when you take damage", "nohurt", Category.VISUAL,
 				"hurt cam camera shake shaking tilt damage bob")
 				.toggle(() -> c.noHurtCam, on -> c.noHurtCam = on));
 		out.add(new Mod("tabping", "Tab Ping", "The ping in milliseconds in the player list, where the ping bars were", "tabping", Category.SOCIAL,
 				"tab list ping latency ms players")
 				.toggle(() -> c.tabPing, on -> c.tabPing = on));
-		out.add(new Mod("tabglow", "Find Me in Tab", "Your own name in the player list pulses: » Steve «", "tiers", Category.SOCIAL,
+		out.add(new Mod("tabglow", "Find Me in Tab", "Your own name in the player list pulses: » Steve «", "findme", Category.SOCIAL,
 				"tab list find myself name highlight glow")
 				.toggle(() -> c.tabGlowSelf, on -> c.tabGlowSelf = on));
-		out.add(new Mod("hitboxes", "Hitboxes", "Every player's and mob's hitbox as a box, like F3+B in one click", "target",
+		out.add(new Mod("hitboxes", "Hitboxes", "Every player's and mob's hitbox as a box, like F3+B in one click", "hitboxes",
 				Category.GAMEPLAY, "hitbox combat box f3 reach")
 				.toggle(() -> c.hitboxes, on -> c.hitboxes = on));
 		out.add(new Mod("debugscreen", "Debug Screen", "A colorful F3 screen: labels and values in colors", "debugscreen",
@@ -474,7 +474,7 @@ final class ModCatalog {
 		out.add(new Mod("fire", "Low Fire", "A shorter fire overlay when you're burning", "fire", Category.VISUAL, "burning overlay")
 				.toggle(() -> c.lowFire, on -> c.lowFire = on));
 		if (p.oldAnimationsWork()) {
-			out.add(new Mod("oldanimations", "1.7 Animations", "The old PvP animations", "fire", Category.VISUAL, "blockhit block sword swing 1.7 old")
+			out.add(new Mod("oldanimations", "1.7 Animations", "The old PvP animations", "oldanim", Category.VISUAL, "blockhit block sword swing 1.7 old")
 					.toggle(() -> c.oldBlockHit || c.oldUseSwing || c.oldBow || c.oldSneak || c.oldItemPosition || c.oldThirdPerson, on -> {
 						c.oldBlockHit = on;
 						c.oldUseSwing = on;
@@ -559,12 +559,12 @@ final class ModCatalog {
 					.toggle(() -> c.chunkBorders, on -> c.chunkBorders = on));
 		}
 		if (p.tooltipScrollWorks()) {
-			out.add(new Mod("tooltipscroll", "Scrollable Tooltips", "A tooltip too tall for the screen (long item lore) moves with the mouse wheel", "scoreboard",
+			out.add(new Mod("tooltipscroll", "Scrollable Tooltips", "A tooltip too tall for the screen (long item lore) moves with the mouse wheel", "tooltips",
 					Category.GAMEPLAY, "tooltip lore scroll long item wheel skyblock")
 					.toggle(() -> c.tooltipScroll, on -> c.tooltipScroll = on));
 		}
 		if (p.glintWorks()) {
-			out.add(new Mod("glint", "Glint Colorizer", "The shimmer on enchanted items and armor in a color of your choice", "hitcolor",
+			out.add(new Mod("glint", "Glint Colorizer", "The shimmer on enchanted items and armor in a color of your choice", "glint",
 					Category.VISUAL, "enchant enchantment glint shimmer color purple")
 					.toggle(() -> c.glintColor != 0, on -> {
 						if (on) {
@@ -589,7 +589,7 @@ final class ModCatalog {
 				"team teammates outline glow esp bedwars through walls")
 				.toggle(() -> c.teamView, on -> c.teamView = on));
 		if (p.dynamicFovWorks()) {
-			out.add(new Mod("dynfov", "Dynamic FOV", "Keep the view from changing with sprinting, speed effects and drawing a bow", "zoom", Category.VISUAL,
+			out.add(new Mod("dynfov", "Dynamic FOV", "Keep the view from changing with sprinting, speed effects and drawing a bow", "dynfov", Category.VISUAL,
 					"fov dynamic field of view sprint speed potion bow optifine")
 					.settings((host, f) -> {
 						f.toggle("No speed zoom", "Sprinting, speed potions and flying leave the view alone", () -> c.fovNoSpeed, on -> c.fovNoSpeed = on);
@@ -597,7 +597,7 @@ final class ModCatalog {
 					}));
 		}
 		if (p.fogWorks()) {
-			out.add(new Mod("fog", "Fog", "Push the fog away, or remove it", "weather", Category.VISUAL, "fog mist distance clear view")
+			out.add(new Mod("fog", "Fog", "Push the fog away, or remove it", "fog", Category.VISUAL, "fog mist distance clear view")
 					.toggle(() -> c.fog, on -> c.fog = on)
 					.settings((host, f) -> {
 						f.section("Fog");
@@ -605,21 +605,21 @@ final class ModCatalog {
 						f.slider("Distance", () -> c.fogScale, v -> c.fogScale = v, 1.0, 10.0, 0.5, "%.1fx");
 					}));
 		}
-		out.add(new Mod("mobsize", "Mob Size", "Draw every creature but the players bigger or smaller (hitboxes stay as they are)", "target", Category.VISUAL,
+		out.add(new Mod("mobsize", "Mob Size", "Draw every creature but the players bigger or smaller (hitboxes stay as they are)", "mobsize", Category.VISUAL,
 				"mob size scale big small tiny giant creatures animals")
 				.toggle(() -> c.mobSize, on -> c.mobSize = on)
 				.settings((host, f) -> {
 					f.section("Size");
 					f.slider("Scale", () -> c.mobSizeFactor, v -> c.mobSizeFactor = v, 0.25, 3.0, 0.05, "%.2fx");
 				}));
-		out.add(new Mod("titles", "Hide Titles", "The big title and subtitle in the middle of the screen never show", "fire", Category.VISUAL,
+		out.add(new Mod("titles", "Hide Titles", "The big title and subtitle in the middle of the screen never show", "titles", Category.VISUAL,
 				"title subtitle screen text announcement hide")
 				.toggle(() -> c.hideTitles, on -> c.hideTitles = on));
-		out.add(new Mod("soundchanger", "Sound Changer", "Make single sounds quieter, or silent: footsteps, hurt, rain", "combatfx", Category.GAMEPLAY,
+		out.add(new Mod("soundchanger", "Sound Changer", "Make single sounds quieter, or silent: footsteps, hurt, rain", "sounds", Category.GAMEPLAY,
 				"sound volume mute footstep hurt quiet noise audio")
 				.toggle(() -> c.soundChanger, on -> c.soundChanger = on)
 				.settings(SoundForms::build));
-		out.add(new Mod("damagetint", "Damage Tint", "The screen flushes with a color for a moment when you take a hit", "hitcolor", Category.VISUAL,
+		out.add(new Mod("damagetint", "Damage Tint", "The screen flushes with a color for a moment when you take a hit", "damagetint", Category.VISUAL,
 				"hurt red vignette flash damage screen")
 				.toggle(() -> c.damageTint, on -> c.damageTint = on)
 				.settings((host, f) -> {
@@ -692,16 +692,16 @@ final class ModCatalog {
 		out.add(new Mod("chathistory", "Chat History", "Search every line, filters, a second chat and a longer scrollback", "search",
 				Category.CHAT, "search find filter log scrollback unlimited keyword second chat")
 				.page(ChatTab::new));
-		out.add(new Mod("emoji", "Emoji and Symbols", "Hearts, stars and arrows: pick one, or type :heart:", "chat", Category.CHAT,
+		out.add(new Mod("emoji", "Emoji and Symbols", "Hearts, stars and arrows: pick one, or type :heart:", "emoji", Category.CHAT,
 				"unicode emoji symbols heart star shortcode")
 				.toggle(() -> c.chatEmoji, on -> c.chatEmoji = on)
 				.page(EmojiTab::new));
 		out.add(new Mod("messages", "Quick Messages", "Keys that send a line or a command", "messages", Category.CHAT, "macro bind")
 				.settings(ChatForms::quickMessages));
-		out.add(new Mod("quickplay", "Quickplay", "Join a minigame with a click: Bed Wars, SkyWars, Duels and more", "messages", Category.CHAT,
+		out.add(new Mod("quickplay", "Quickplay", "Join a minigame with a click: Bed Wars, SkyWars, Duels and more", "quickplay", Category.CHAT,
 				"minigame play lobby bedwars skywars duels hypixel queue")
 				.settings(QuickplayForm::build));
-		out.add(new Mod("autotext", "Auto Text", "Answer a chat line by itself: when it says X, send Y", "messages", Category.CHAT,
+		out.add(new Mod("autotext", "Auto Text", "Answer a chat line by itself: when it says X, send Y", "autotext", Category.CHAT,
 				"auto reply answer trigger macro respond")
 				.toggle(() -> c.autoReply, on -> c.autoReply = on)
 				.settings(ChatForms::autoText));
