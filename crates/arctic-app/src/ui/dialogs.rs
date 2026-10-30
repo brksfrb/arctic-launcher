@@ -334,6 +334,10 @@ impl ArcticApp {
         if modal.should_close() {
             self.bridge.answer_switch(serial, false);
         }
+        // Answered while a game runs: the launcher goes back out of the way.
+        if self.bridge.switch_question().is_none() && self.minimized_for_game {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+        }
     }
 
     /// "Turn off the Arctic Client?": asked before it goes off in an instance.

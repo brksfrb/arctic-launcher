@@ -83,10 +83,14 @@ pub struct BridgeHost {
 struct AppAccounts(Arc<Mutex<Shared>>);
 
 impl AppAccounts {
-    /// Lets a session for `account` through when a game was launched with it or the player said
-    /// yes; otherwise puts the question to the player and waits a moment for the answer. A game
+    /// Lets a session for `account` through when it is offline, a game was launched with it or the
+    /// player said yes; otherwise puts the question to the player and waits a moment for the answer. A game
     /// (or any mod in it) can therefore not collect the tokens of the other accounts.
-    fn require_approval(&self, account: &Account) -> arctic_core::Result<()> {
+    fn require_approval(&self, account: &Account, tasks: &Tasks) -> arctic_core::Result<()> {
+        // An offline account's login is a placeholder: there is nothing in it to steal.
+        if !matches!(account.kind, AccountKind::Microsoft(_)) {
+            return Ok(());
+        }
         let deadline = std::time::Instant::now() + SWITCH_WAIT;
         loop {
             {
@@ -118,6 +122,9 @@ impl AppAccounts {
                     // Nothing asked, or an old answer about another account.
                     _ => {
                         log::info!("the game asks to switch to {}", account.username);
+                        // The launcher is usually behind the game, where the question would go unseen.
+                        crate::window::show();
+                        tasks.wake();
                         shared.asks_made += 1;
                         let serial = shared.asks_made;
                         shared.switch_ask = Some(SwitchAsk {
@@ -167,7 +174,7 @@ impl bridge::Accounts for AppAccounts {
                 .ok_or_else(|| arctic_core::Error::Other("no such account".into()))?;
             (account, shared.tasks.clone())
         };
-        self.require_approval(&account)?;
+        self.require_approval(&account, &tasks)?;
         let fresh = tasks.fresh_account(account)?;
         let arctic_token = cosmetics::token_for(tasks.dirs(), &cosmetics::base_url(), &fresh)
             .inspect_err(|e| log::info!("Arctic session for the switch: {e}"))

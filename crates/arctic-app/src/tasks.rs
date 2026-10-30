@@ -325,6 +325,11 @@ impl Tasks {
         }
     }
 
+    /// Make the window draw a frame now (something outside the UI needs it to look).
+    pub(crate) fn wake(&self) {
+        self.ctx.request_repaint();
+    }
+
     pub(crate) fn send(&self, event: Event) {
         // The receiver only disappears when the app is closing.
         let _ = self.tx.send(event);
