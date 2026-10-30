@@ -592,10 +592,14 @@ public final class LegacyPlatform implements Platform {
 
 	/**
 	 * Vertex buffers: off in Minecraft's defaults, many more frames per second on. Switched on once
-	 * (before a world is open, so nothing has to be rebuilt); the player can turn them off again.
+	 * (before a world is open, so nothing has to be rebuilt); the player can turn them off again. Not with Polarium.
 	 */
 	private void vboOnce(GameOptions options) {
 		if (ArcticClient.config().legacyVboOn || mc().world != null) {
+			return;
+		}
+		if (FabricLoader.getInstance().isModLoaded("polarium")) {
+			// Polarium draws a region of terrain per call from display lists, which vertex buffers would turn off
 			return;
 		}
 		ArcticClient.config().legacyVboOn = true;

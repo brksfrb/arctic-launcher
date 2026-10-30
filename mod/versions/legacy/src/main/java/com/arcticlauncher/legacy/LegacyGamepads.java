@@ -96,6 +96,10 @@ final class LegacyGamepads {
 			pad = choose();
 			ArcticLegacy.LOG.info("controllers ready in {} ms{}", (System.nanoTime() - t0) / 1_000_000,
 					pad == null ? "" : ": " + pad.getName());
+			if (pad == null) {
+				// LWJGL polls every device it knows on every frame (Display.update); with no pad to read that is wasted. Rescan starts it again.
+				Controllers.destroy();
+			}
 			ready = true;
 		} catch (Throwable e) {
 			failed = true;
