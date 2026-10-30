@@ -33,6 +33,7 @@ pub use sources::{scan, scan_folder};
 pub enum Launcher {
     Official,
     TLauncher,
+    SkLauncher,
     Prism,
     PolyMc,
     MultiMc,
@@ -54,6 +55,7 @@ impl Launcher {
         match self {
             Launcher::Official => "Minecraft Launcher",
             Launcher::TLauncher => "TLauncher",
+            Launcher::SkLauncher => "SKlauncher",
             Launcher::Prism => "Prism Launcher",
             Launcher::PolyMc => "PolyMC",
             Launcher::MultiMc => "MultiMC",
@@ -74,6 +76,7 @@ impl Launcher {
         match self {
             Launcher::Official => "official",
             Launcher::TLauncher => "tlauncher",
+            Launcher::SkLauncher => "sklauncher",
             Launcher::Prism => "prism",
             Launcher::PolyMc => "polymc",
             Launcher::MultiMc => "multimc",

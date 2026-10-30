@@ -587,3 +587,73 @@ fn the_launchers_own_jars_left_from_another_version_are_not_reported() {
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(found[0].problem.starts_with("Other"), "{found:?}");
 }
+
+#[test]
+fn reads_sklauncher_3_profiles_and_4_instances() {
+    let root = tempfile::tempdir().unwrap();
+    let r = root.path();
+    // 3.x: the shared .minecraft, told apart by its own folder; the Fabric
+    // version isn't downloaded yet (SKlauncher fetches it on the first Play).
+    let mc = r.join(".minecraft");
+    write(&mc.join("sklauncher/sklauncher.json"), "{}");
+    write(
+        &mc.join("launcher_profiles.json"),
+        &json!({"profiles": {
+            "a1": {"name": "Fabric 26.3", "type": "custom", "lastVersionId": "fabric-loader-0.20.1-26.3",
+                   "gameDir": mc.join("instances/Fabric_26.3"), "memoryMax": 3072,
+                   "javaArgs": "-Xmx1G -XX:+UseG1GC"},
+            "b2": {"name": "", "type": "latest-release"},
+        }, "version": 6})
+        .to_string(),
+    );
+    std::fs::create_dir_all(mc.join("instances/Fabric_26.3")).unwrap();
+    let mut scan = Scan::default();
+    sources::minecraft_profiles(&mut scan, &mc);
+    let fabric = scan
+        .instances
+        .iter()
+        .find(|f| f.name == "Fabric 26.3")
+        .expect("fabric profile");
+    assert_eq!(fabric.launcher, Launcher::SkLauncher);
+    assert_eq!(fabric.game_version, "26.3");
+    assert_eq!(fabric.loader.as_ref().unwrap().kind, LoaderKind::Fabric);
+    assert_eq!(fabric.loader.as_ref().unwrap().version.as_deref(), Some("0.20.1"));
+    assert_eq!(fabric.memory_mb, Some(3072));
+    assert!(!fabric.shared);
+    assert!(scan.instances.iter().any(|f| f.into_vanilla));
+
+    // 4.x: its own folder, with the instance folders moved by location.json.
+    let base = r.join("sk4");
+    let data = r.join("moved");
+    write(
+        &base.join("location.json"),
+        &json!({"dataDir": data}).to_string(),
+    );
+    write(
+        &base.join("instances.json"),
+        &json!({"instances": [
+            {"id": "latest-snapshot", "name": "Latest Snapshot", "type": "latest-snapshot"},
+            {"id": "pvp", "name": "PvP", "type": "custom", "gameType": "neoforge",
+             "minecraftVersion": "1.21.1", "loaderVersion": "21.1.172", "memoryMax": 4096},
+            {"id": "old", "name": "Old", "type": "custom", "gameType": "liteloader",
+             "minecraftVersion": "1.12.2"},
+            {"id": "gone", "name": "Gone", "type": "custom", "gameType": "vanilla",
+             "minecraftVersion": "1.20.1"},
+        ]})
+        .to_string(),
+    );
+    std::fs::create_dir_all(data.join("instances/pvp")).unwrap();
+    std::fs::create_dir_all(data.join("instances/old")).unwrap();
+    let mut scan = Scan::default();
+    sources::sklauncher_4(&mut scan, &base);
+    let names: Vec<_> = scan.instances.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(names, ["PvP", "Old"]);
+    let pvp = &scan.instances[0];
+    assert_eq!(pvp.loader.as_ref().unwrap().kind, LoaderKind::NeoForge);
+    assert_eq!(pvp.memory_mb, Some(4096));
+    assert_eq!(pvp.game_dir, data.join("instances/pvp"));
+    // A loader Arctic doesn't have comes in as plain vanilla, said plainly.
+    assert!(scan.instances[1].loader.is_none());
+    assert!(scan.instances[1].notes.iter().any(|n| n.contains("liteloader")));
+    assert!(scan.seen.iter().any(|(_, why)| why.contains("Gone")));
+}

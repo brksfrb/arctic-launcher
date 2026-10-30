@@ -5,7 +5,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use super::{app_data, dot_minecraft, found, read_json, subdirs};
+use super::{app_data, dot_minecraft, found, read_json, sklauncher, subdirs};
 use crate::loaders::LoaderKind;
 use crate::migrate::detect::{VersionInfo, vanilla_by_client, version_info, xmx_mb};
 use crate::migrate::{Found, Launcher, Scan};
@@ -14,14 +14,23 @@ use crate::migrate::{Found, Launcher, Scan};
 const OWN_GAME_DIR: [&str; 5] = ["mods", "saves", "config", "options.txt", "resourcepacks"];
 
 pub fn official(scan: &mut Scan) {
-    let Some(root) = dot_minecraft().filter(|r| r.is_dir()) else {
-        return;
+    if let Some(root) = dot_minecraft().filter(|r| r.is_dir()) {
+        official_in(scan, &root);
+    }
+}
+
+/// The profiles in a `.minecraft`; SKlauncher 3 writes the same file, so
+/// when its own files are there they're named after it.
+pub(super) fn official_in(scan: &mut Scan, root: &Path) {
+    let launcher = if sklauncher::is_v3(root) {
+        Launcher::SkLauncher
+    } else {
+        Launcher::Official
     };
+    let root = root.to_path_buf();
     let Some(json) = read_json(&root.join("launcher_profiles.json")) else {
-        scan.seen.push((
-            Launcher::Official,
-            "No launcher profiles in .minecraft".into(),
-        ));
+        scan.seen
+            .push((launcher, "No launcher profiles in .minecraft".into()));
         return;
     };
     let versions = root.join("versions");
@@ -49,28 +58,41 @@ pub fn official(scan: &mut Scan) {
             (n, _) => n.to_owned(),
         };
         let mut entry = if latest {
-            let mut f = found(Launcher::Official, &name, "latest", None, game_dir.clone());
+            let mut f = found(launcher, &name, "latest", None, game_dir.clone());
             f.into_vanilla = true;
             f
+        } else if let Some(info) = version_info(&versions, version, &vanilla) {
+            from_version(launcher, &name, info, game_dir.clone())
+        } else if let Some((game, loader)) = sklauncher_only(launcher, version) {
+            // SKlauncher downloads a version on the first Play, so a new
+            // profile has only its id; Arctic installs the rest.
+            found(launcher, &name, &game, loader, game_dir.clone())
         } else {
-            let Some(info) = version_info(&versions, version, &vanilla) else {
-                scan.seen.push((
-                    Launcher::Official,
-                    format!(
-                        "\"{name}\": its version {version} isn't installed, so it can't be read"
-                    ),
-                ));
-                continue;
-            };
-            from_version(Launcher::Official, &name, info, game_dir.clone())
+            scan.seen.push((
+                launcher,
+                format!("\"{name}\": its version {version} isn't installed, so it can't be read"),
+            ));
+            continue;
         };
         entry.shared = same_dir(&game_dir, &root);
-        entry.memory_mb = xmx_mb(text("javaArgs"));
+        entry.memory_mb = (launcher == Launcher::SkLauncher)
+            .then(|| sklauncher::memory_max(profile))
+            .flatten()
+            .or_else(|| xmx_mb(text("javaArgs")));
         scan.instances.push(entry);
     }
     if scan.instances.len() == before {
-        scan.seen.push((Launcher::Official, "No profiles".into()));
+        scan.seen.push((launcher, "No profiles".into()));
     }
+}
+
+fn sklauncher_only(
+    launcher: Launcher,
+    version: &str,
+) -> Option<(String, Option<crate::migrate::FoundLoader>)> {
+    (launcher == Launcher::SkLauncher)
+        .then(|| sklauncher::from_version_id(version))
+        .flatten()
 }
 
 pub fn tlauncher(scan: &mut Scan) {
