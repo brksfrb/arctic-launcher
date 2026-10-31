@@ -168,6 +168,8 @@ public final class LegacyHooks {
 
 	private static int cursorLogged;
 
+	private static boolean lastFullscreen;
+
 	/**
 	 * A screen is open but the pointer is hidden: it is given back (seen in fullscreen after the loading
 	 * screen). The game still has the mouse grabbed, or something left an empty cursor on the window.
@@ -176,14 +178,19 @@ public final class LegacyHooks {
 	private static void cursorGuard() {
 		boolean grabbed = org.lwjgl.input.Mouse.isGrabbed();
 		boolean custom = org.lwjgl.input.Mouse.getNativeCursor() != null;
-		if (!grabbed && !custom) {
+		// Switching to or from fullscreen recreates the window, and LWJGL 2 can leave it with no
+		// pointer while it still reports none grabbed and no custom cursor: set it again once.
+		boolean fullscreen = org.lwjgl.opengl.Display.isFullscreen();
+		boolean switched = fullscreen != lastFullscreen;
+		lastFullscreen = fullscreen;
+		if (!grabbed && !custom && !switched) {
 			return;
 		}
 		try {
-			if (grabbed) {
+			if (grabbed || switched) {
 				org.lwjgl.input.Mouse.setGrabbed(false);
 			}
-			if (custom) {
+			if (custom || switched) {
 				org.lwjgl.input.Mouse.setNativeCursor(null);
 			}
 		} catch (org.lwjgl.LWJGLException | RuntimeException e) {
