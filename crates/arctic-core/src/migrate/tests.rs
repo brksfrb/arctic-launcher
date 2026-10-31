@@ -617,7 +617,10 @@ fn reads_sklauncher_3_profiles_and_4_instances() {
     assert_eq!(fabric.launcher, Launcher::SkLauncher);
     assert_eq!(fabric.game_version, "26.3");
     assert_eq!(fabric.loader.as_ref().unwrap().kind, LoaderKind::Fabric);
-    assert_eq!(fabric.loader.as_ref().unwrap().version.as_deref(), Some("0.20.1"));
+    assert_eq!(
+        fabric.loader.as_ref().unwrap().version.as_deref(),
+        Some("0.20.1")
+    );
     assert_eq!(fabric.memory_mb, Some(3072));
     assert!(!fabric.shared);
     assert!(scan.instances.iter().any(|f| f.into_vanilla));
@@ -654,6 +657,11 @@ fn reads_sklauncher_3_profiles_and_4_instances() {
     assert_eq!(pvp.game_dir, data.join("instances/pvp"));
     // A loader Arctic doesn't have comes in as plain vanilla, said plainly.
     assert!(scan.instances[1].loader.is_none());
-    assert!(scan.instances[1].notes.iter().any(|n| n.contains("liteloader")));
+    assert!(
+        scan.instances[1]
+            .notes
+            .iter()
+            .any(|n| n.contains("liteloader"))
+    );
     assert!(scan.seen.iter().any(|(_, why)| why.contains("Gone")));
 }

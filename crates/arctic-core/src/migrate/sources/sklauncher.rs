@@ -102,8 +102,10 @@ pub fn v4(scan: &mut Scan) {
 
 pub(super) fn v4_in(scan: &mut Scan, base: &Path) {
     let Some(json) = read_json(&base.join("instances.json")) else {
-        scan.seen
-            .push((Launcher::SkLauncher, "Its instance list can't be read".into()));
+        scan.seen.push((
+            Launcher::SkLauncher,
+            "Its instance list can't be read".into(),
+        ));
         return;
     };
     // `location.json` can move the instance folders somewhere else.
@@ -179,7 +181,9 @@ fn v4_instance(scan: &mut Scan, instance: &Value, data: &Path) -> Option<Found> 
 /// A stored path, with a leading `~` meaning the home folder.
 fn expand(path: &str) -> PathBuf {
     match path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\")) {
-        Some(rest) => dirs::home_dir().map(|h| h.join(rest)).unwrap_or_else(|| path.into()),
+        Some(rest) => dirs::home_dir()
+            .map(|h| h.join(rest))
+            .unwrap_or_else(|| path.into()),
         None => path.into(),
     }
 }
@@ -198,23 +202,38 @@ mod tests {
     fn reads_loader_ids_before_the_version_is_downloaded() {
         assert_eq!(
             known("fabric-loader-0.20.1-26.3"),
-            ("26.3".into(), Some((LoaderKind::Fabric, Some("0.20.1".into()))))
+            (
+                "26.3".into(),
+                Some((LoaderKind::Fabric, Some("0.20.1".into())))
+            )
         );
         assert_eq!(
             known("quilt-loader-0.30.0-beta.1-1.21.1"),
-            ("1.21.1".into(), Some((LoaderKind::Quilt, Some("0.30.0-beta.1".into()))))
+            (
+                "1.21.1".into(),
+                Some((LoaderKind::Quilt, Some("0.30.0-beta.1".into())))
+            )
         );
         assert_eq!(
             known("1.20.1-forge-47.4.28"),
-            ("1.20.1".into(), Some((LoaderKind::Forge, Some("47.4.28".into()))))
+            (
+                "1.20.1".into(),
+                Some((LoaderKind::Forge, Some("47.4.28".into())))
+            )
         );
         assert_eq!(
             known("neoforge-21.1.172"),
-            ("1.21.1".into(), Some((LoaderKind::NeoForge, Some("21.1.172".into()))))
+            (
+                "1.21.1".into(),
+                Some((LoaderKind::NeoForge, Some("21.1.172".into())))
+            )
         );
         assert_eq!(
             known("neoforge-26.3.0.99"),
-            ("26.3".into(), Some((LoaderKind::NeoForge, Some("26.3.0.99".into()))))
+            (
+                "26.3".into(),
+                Some((LoaderKind::NeoForge, Some("26.3.0.99".into())))
+            )
         );
         assert_eq!(known("1.21.1"), ("1.21.1".into(), None));
         assert_eq!(known("24w14a"), ("24w14a".into(), None));
