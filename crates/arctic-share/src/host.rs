@@ -101,7 +101,7 @@ async fn detect(world: watch::Sender<Option<LanWorld>>, sink: Sink) {
         // No announcement for a while: the game's log may still say where the world is.
         if last_seen.is_none_or(|t| t.elapsed() > LOG_AFTER)
             && let Some(found) = lan::world_from_logs()
-            && lan::is_local(found.port).await
+            && lan::is_minecraft_server(found.port).await
         {
             last_seen = Some(Instant::now());
             if world.borrow().as_ref().map(|w| w.port) != Some(found.port) {

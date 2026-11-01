@@ -93,7 +93,7 @@ fn newest_game_log(root: &Path) -> Option<PathBuf> {
 /// "Started serving on 54321" (the server's own).
 pub fn port_from_log(text: &str) -> Option<u16> {
     text.lines().rev().find_map(|line| {
-        ["hosted on port ", "Started serving on ", "Started on "]
+        ["hosted on port ", "Started serving on "]
             .iter()
             .find_map(|marker| {
                 let rest = &line[line.find(marker)? + marker.len()..];
@@ -162,6 +162,56 @@ pub async fn announcer() -> std::io::Result<UdpSocket> {
 /// one of its interfaces can be). An announcement from any other address is another device on the network.
 pub fn is_this_machine(ip: std::net::IpAddr) -> bool {
     ip.is_loopback() || std::net::UdpSocket::bind((ip, 0)).is_ok()
+}
+
+fn varint(mut value: u32, out: &mut Vec<u8>) {
+    loop {
+        let byte = (value & 0x7F) as u8;
+        value >>= 7;
+        if value == 0 {
+            out.push(byte);
+            return;
+        }
+        out.push(byte | 0x80);
+    }
+}
+
+/// A packet: its length, then its id and body.
+fn packet(id: u8, body: &[u8]) -> Vec<u8> {
+    let mut inner = vec![id];
+    inner.extend_from_slice(body);
+    let mut out = Vec::new();
+    varint(inner.len() as u32, &mut out);
+    out.extend(inner);
+    out
+}
+
+/// True if a Minecraft server answers a status request on `port` of this machine. A port read from a
+/// game's log is only trusted after this: chat from a server can put any line in that log.
+pub async fn is_minecraft_server(port: u16) -> bool {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let ask = async {
+        let mut stream = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).await.ok()?;
+        // Handshake (any protocol number is answered), then the status request.
+        let mut body = Vec::new();
+        varint(765, &mut body);
+        varint(9, &mut body);
+        body.extend_from_slice(b"localhost");
+        body.extend_from_slice(&port.to_be_bytes());
+        varint(1, &mut body);
+        let mut request = packet(0x00, &body);
+        request.extend(packet(0x00, &[]));
+        stream.write_all(&request).await.ok()?;
+        let mut reply = [0u8; 512];
+        let n = stream.read(&mut reply).await.ok()?;
+        // The status answer is a JSON text naming the version.
+        let text = String::from_utf8_lossy(&reply[..n]);
+        Some(text.contains("\"version\"") || text.contains("\"description\""))
+    };
+    matches!(
+        tokio::time::timeout(Duration::from_millis(1500), ask).await,
+        Ok(Some(true))
+    )
 }
 
 /// True if something on this machine accepts connections on `port`, i.e.
