@@ -115,6 +115,36 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	/** The held item and how many of it you carry: {stack, total}, or null. */
 	Object[] heldItem();
 
+	// ---- Client Sort: clicking the slots of the open chest or inventory ------------------
+
+	/** The slots (numbers in the open container) of the section under the mouse that Sort works on, or null. */
+	default int[] sortSlots() {
+		return null;
+	}
+
+	/** What is in container slot {@code slot}: {key, name, count (Integer), max stack (Integer)}, or null when empty. */
+	default Object[] slotInfo(int slot) {
+		return null;
+	}
+
+	/** A plain left click on container slot {@code slot}, as the player would. */
+	default void slotClick(int slot) {}
+
+	/** A chest or inventory screen is open. */
+	default boolean sortScreenOpen() {
+		return false;
+	}
+
+	/** The mouse is holding an item. */
+	default boolean cursorHolds() {
+		return false;
+	}
+
+	/** Everything you carry, one row per kind: {key (String), a copy of one stack, name (String), count (Integer)}. */
+	default java.util.List<Object[]> carried() {
+		return java.util.Collections.emptyList();
+	}
+
 	/**
 	 * Bake a cosmetic (its model, PNG texture and, if it has one, the PNG of
 	 * the parts that glow) for drawing, on the render thread; then call

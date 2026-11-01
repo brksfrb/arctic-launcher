@@ -231,7 +231,7 @@ public final class LegacyHooks {
 	public static void renderHud() {
 		LegacyGfx g = new LegacyGfx();
 		ArcticClient.renderHud(g);
-		if (ownCrosshair() && MinecraftClient.getInstance().options.perspective == 0) {
+		if ((ownCrosshair() || ArcticClient.config().rangeIndicator) && MinecraftClient.getInstance().options.perspective == 0) {
 			ArcticClient.renderCrosshair(g);
 		}
 	}
@@ -265,6 +265,19 @@ public final class LegacyHooks {
 			com.arcticlauncher.client.feature.InventorySearch.slot(new LegacyGfx(), slot.x, slot.y,
 					slot.hasStack() ? slot.getStack().getCustomName() : null);
 		}
+	}
+
+	private static net.minecraft.inventory.slot.Slot sortFocus;
+
+	/** Client Sort: the slot under the mouse when a key goes down in a chest or inventory screen. */
+	public static void sortKey(net.minecraft.inventory.slot.Slot focused) {
+		sortFocus = focused;
+		ArcticClient.containerSort();
+	}
+
+	/** The slot the mouse was over at the last key press (what Client Sort sorts). */
+	public static net.minecraft.inventory.slot.Slot sortFocus() {
+		return sortFocus;
 	}
 
 	/** Inventory Search: a key (LWJGL 2 code) and its character in a chest or inventory screen; true when it was used. */

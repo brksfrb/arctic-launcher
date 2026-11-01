@@ -241,6 +241,14 @@ public final class ClientConfig {
 	public boolean chatKeep;
 	/** While you host a world in Arctic Launcher's play together, the world you're in opens to LAN by itself. */
 	public boolean lanAuto = true;
+	/** Brackets around the crosshair while a creature is within hit reach. */
+	public boolean rangeIndicator;
+	/** Items you pick up are listed on the HUD for a moment. */
+	public boolean pickupFeed;
+	/** A key in an inventory sorts the container under the mouse. */
+	public boolean inventorySort;
+	/** The game key name that sorts ("key.keyboard.r"). */
+	public String inventorySortKey = "key.keyboard.r";
 	/** Hide the chat lines on screen (messages still arrive, the history keeps them). */
 	public boolean chatOff;
 	/** Hide titles: the big title and subtitle never show. */

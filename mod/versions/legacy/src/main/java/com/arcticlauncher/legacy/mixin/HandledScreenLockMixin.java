@@ -34,6 +34,8 @@ abstract class HandledScreenLockMixin {
 	private void arctic$searchKey(char typed, int key, CallbackInfo ci) {
 		if (LegacyHooks.containerKey(typed, key)) {
 			ci.cancel();
+		} else {
+			LegacyHooks.sortKey(focusedSlot);
 		}
 	}
 

@@ -418,6 +418,36 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public List<Object[]> carried() {
+		return GameInfo.carried();
+	}
+
+	@Override
+	public int[] sortSlots() {
+		return ContainerSort.slots();
+	}
+
+	@Override
+	public Object[] slotInfo(int slot) {
+		return ContainerSort.info(slot);
+	}
+
+	@Override
+	public void slotClick(int slot) {
+		ContainerSort.click(slot);
+	}
+
+	@Override
+	public boolean sortScreenOpen() {
+		return ContainerSort.screenOpen();
+	}
+
+	@Override
+	public boolean cursorHolds() {
+		return ContainerSort.cursorHolds();
+	}
+
+	@Override
 	public void registerCosmetic(String id, com.arcticlauncher.client.looks.Geometry geometry, byte[] png, byte[] glowPng) {
 		NativeImage image;
 		NativeImage glowImage = null;

@@ -39,6 +39,7 @@ abstract class ContainerSearchMixin {
 
 	private void arctic$line(GfxImpl g, int mouseX, int mouseY) {
 		InventorySearch.seen();
+		com.arcticlauncher.mod.ContainerSort.hovered = hoveredSlot;
 		if (ArcticClient.config() == null) {
 			return;
 		}

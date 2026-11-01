@@ -221,6 +221,7 @@ public final class ArcticClient {
 		if (platform.inWorld()) {
 			if (!platform.hudHidden()) {
 				drawVoice(g);
+				PICKUPS.render(g, style());
 			}
 			com.arcticlauncher.client.notice.Notices.render(g, style());
 		}
@@ -253,6 +254,9 @@ public final class ArcticClient {
 			// Watching from a camera: no aim to show.
 			return true;
 		}
+		if (config.rangeIndicator && platform.hasFeatures()) {
+			com.arcticlauncher.client.hud.Crosshair.range(g, g.width() / 2, g.height() / 2);
+		}
 		if (!config.crosshair.enabled || !platform.hasFeatures()) {
 			return false;
 		}
@@ -266,6 +270,7 @@ public final class ArcticClient {
 	/** Where the time goes (servers, worlds, menus), for the launcher's Stats page. */
 	private static final com.arcticlauncher.client.feature.PlaytimeLog PLAYTIME = new com.arcticlauncher.client.feature.PlaytimeLog();
 	private static final com.arcticlauncher.client.feature.DurabilityWatch DURABILITY = new com.arcticlauncher.client.feature.DurabilityWatch();
+	private static final com.arcticlauncher.client.feature.PickupFeed PICKUPS = new com.arcticlauncher.client.feature.PickupFeed();
 	private static final com.arcticlauncher.client.feature.AutoGg AUTO_GG = new com.arcticlauncher.client.feature.AutoGg();
 	private static final com.arcticlauncher.client.feature.AutoReplies AUTO_REPLIES = new com.arcticlauncher.client.feature.AutoReplies();
 
@@ -397,6 +402,8 @@ public final class ArcticClient {
 			if (config.durabilityWarning) {
 				DURABILITY.tick(platform);
 			}
+			PICKUPS.tick(platform, screenOpen);
+			com.arcticlauncher.client.feature.InventorySort.tick(platform);
 			AUTO_GG.tick(platform);
 			AUTO_REPLIES.tick(platform);
 			com.arcticlauncher.client.servers.QuickJoin.tick(platform);
@@ -463,6 +470,13 @@ public final class ArcticClient {
 	/** The same, with the Ctrl state given by the adapter. */
 	public static boolean containerKey(int key, int action, boolean ctrl) {
 		return config != null && com.arcticlauncher.client.feature.InventorySearch.key(config, key, action, ctrl);
+	}
+
+	/** A key went down in a chest or inventory screen: Client Sort starts if it is its key. */
+	public static void containerSort() {
+		if (config != null && platform != null) {
+			com.arcticlauncher.client.feature.InventorySort.pressed(config, platform);
+		}
 	}
 
 	/** A typed character in a chest or inventory screen; true if Inventory Search took it. */

@@ -3,6 +3,7 @@ package com.arcticlauncher.mod;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import net.minecraft.client.Minecraft;
@@ -158,6 +159,31 @@ public final class GameInfo {
 			}
 		}
 		return new Object[] {held, total};
+	}
+
+	/** Everything carried, one row per kind: {key, a copy of one stack, name, count}. */
+	public static List<Object[]> carried() {
+		LocalPlayer p = player();
+		if (p == null) {
+			return new ArrayList<>();
+		}
+		Inventory inventory = Compat.inventory(p);
+		Map<String, Object[]> kinds = new LinkedHashMap<>();
+		for (int i = 0; i < inventory.getContainerSize(); i++) {
+			ItemStack it = inventory.getItem(i);
+			if (it.isEmpty()) {
+				continue;
+			}
+			String name = it.getHoverName().getString();
+			String key = System.identityHashCode(it.getItem()) + ":" + name;
+			Object[] row = kinds.get(key);
+			if (row == null) {
+				kinds.put(key, new Object[] {key, it.copy(), name, it.getCount()});
+			} else {
+				row[3] = (Integer) row[3] + it.getCount();
+			}
+		}
+		return new ArrayList<>(kinds.values());
 	}
 
 	/** Null outside a world: item data isn't bound to the registries yet. */

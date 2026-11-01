@@ -74,7 +74,15 @@ abstract class KeyboardHandlerMixin {
 
 	/** Inventory Search's keys in a chest or inventory screen. */
 	private static boolean container(int key, int action) {
-		return Compat.screen() instanceof AbstractContainerScreen && ArcticClient.containerKey(Input.key(key), action);
+		if (!(Compat.screen() instanceof AbstractContainerScreen)) {
+			return false;
+		}
+		boolean used = ArcticClient.containerKey(Input.key(key), action);
+		if (!used && action == com.arcticlauncher.mod.compat.KeyCodes.PRESS) {
+			// Client Sort's key.
+			ArcticClient.containerSort();
+		}
+		return used;
 	}
 
 	private static boolean handled(int key, int action) {

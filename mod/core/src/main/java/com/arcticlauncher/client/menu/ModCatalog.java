@@ -54,8 +54,8 @@ final class ModCatalog {
 	}
 
 	static {
-		group(Category.COMBAT, "combatfx", "tnttimer", "hitboxes", "durability", "hitcolor");
-		group(Category.INVENTORY, "slotlocks", "invsearch", "shulkerpeek");
+		group(Category.COMBAT, "combatfx", "tnttimer", "hitboxes", "rangeindicator", "durability", "hitcolor");
+		group(Category.INVENTORY, "slotlocks", "invsearch", "invsort", "pickupfeed", "shulkerpeek");
 		group(Category.MOVEMENT, "zoom", "freelook", "snaplook", "sprint", "sneak", "portalscreens", "controller");
 		group(Category.TOOLS, "quickplay", "waypoints", "screenshots", "replays", "death", "leave", "reconnect");
 		group(Category.PLAYERS, "pingtags", "badgetags", "ownnametag", "ofcapes", "tabping", "tabglow", "tiers");
@@ -65,7 +65,7 @@ final class ModCatalog {
 		widgets("World", "coords", "direction", "speed", "biome", "light", "chunk", "day", "worldtime", "clock", "date", "compass",
 				"minimap", "death", "stopwatch", "aimed", "horse");
 		widgets("PvP", "cooldowns");
-		for (String id : new String[] {"combatfx", "slotlocks", "invsearch", "shulkerpeek", "particles", "helditem", "palette",
+		for (String id : new String[] {"combatfx", "slotlocks", "invsearch", "invsort", "pickupfeed", "rangeindicator", "shulkerpeek", "particles", "helditem", "palette",
 				"portalscreens", "tnttimer", "ownnametag", "ofcapes", "nohurtcam", "tabping", "badgetags", "hud.cpu", "hud.syscpu", "hud.sysram", "hud.alloc",
 				"hud.gpu", "hud.vram", "hud.frametime", "hud.lows", "hud.blocking", "hud.falldamage", "hud.pearl"}) {
 			NEW_IDS.add(id);
@@ -182,7 +182,7 @@ final class ModCatalog {
 		}
 		if (!p.hasScreenHooks()) {
 			// This version has no hooks for them: better not offered than switched on and silent.
-			List<String> missing = java.util.Arrays.asList("slotlocks", "invsearch", "particles", "helditem", "shulkerpeek");
+			List<String> missing = java.util.Arrays.asList("slotlocks", "invsearch", "invsort", "particles", "helditem", "shulkerpeek");
 			for (int i = out.size() - 1; i >= 0; i--) {
 				if (missing.contains(out.get(i).id)) {
 					out.remove(i);
@@ -304,6 +304,12 @@ final class ModCatalog {
 					"lan open world friends together host share p2p")
 					.toggle(() -> c.lanAuto, on -> c.lanAuto = on));
 		}
+		out.add(new Mod("rangeindicator", "Attack Range Indicator", "Brackets around the crosshair while a player or mob is close enough to hit", "reach",
+				Category.GAMEPLAY, "reach range crosshair hit attack distance pvp")
+				.toggle(() -> c.rangeIndicator, on -> c.rangeIndicator = on));
+		out.add(new Mod("pickupfeed", "Pickup Display", "Items you pick up are listed at the right of the screen for a moment: +64 Diamond", "items",
+				Category.GAMEPLAY, "pickup picked up item loot feed hud collect")
+				.toggle(() -> c.pickupFeed, on -> c.pickupFeed = on));
 		out.add(new Mod("hitboxes", "Hitboxes", "Every player's and mob's hitbox as a box, like F3+B in one click", "hitboxes",
 				Category.GAMEPLAY, "hitbox combat box f3 reach")
 				.toggle(() -> c.hitboxes, on -> c.hitboxes = on));
@@ -366,6 +372,17 @@ final class ModCatalog {
 					f.note("Press Ctrl+F in any chest, barrel or your inventory and type.");
 					f.note("Matching items get a frame, the others are dimmed.");
 					f.note("Enter keeps the search, Escape clears it.");
+				}));
+		out.add(new Mod("invsort", "Client Sort", "A key in a chest or your inventory sorts what is under the mouse", "invsearch",
+				Category.GAMEPLAY, "sort chest inventory organize stack merge shulker")
+				.toggle(() -> c.inventorySort, on -> c.inventorySort = on)
+				.settings((host, f) -> {
+					f.section("Key");
+					f.key("Sort key", "Hover the chest or your inventory and press it",
+							Form.key(() -> c.inventorySortKey, k -> c.inventorySortKey = k));
+					f.note("Like items are merged, then ordered by name, empty slots last.");
+					f.note("In your inventory only the 27 slots above the hotbar are sorted.");
+					f.note("It clicks one slot per tick, like you would, and stops if you close the screen.");
 				}));
 		out.add(new Mod("palette", "Command Palette", "Ctrl+K: search mods, servers and friends and open them", "palette",
 				Category.CLIENT, "search command ctrl k quick find launcher")

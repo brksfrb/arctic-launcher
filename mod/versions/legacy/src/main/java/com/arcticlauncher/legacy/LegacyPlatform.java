@@ -721,6 +721,117 @@ public final class LegacyPlatform implements Platform {
 		return new Object[] {held, total};
 	}
 
+	// ---- Client Sort -------------------------------------------------------------------
+
+	/** The open chest or inventory screen's slots (not the creative inventory, whose slots aren't the game's), or null. */
+	private static List<?> sortContainer() {
+		MinecraftClient mc = mc();
+		if (mc.player == null || mc.player.openScreenHandler == null
+				|| !(mc.currentScreen instanceof net.minecraft.client.gui.screen.ingame.HandledScreen)
+				|| mc.currentScreen instanceof net.minecraft.client.gui.screen.ingame.CreativeInventoryScreen) {
+			return null;
+		}
+		return mc.player.openScreenHandler.slots;
+	}
+
+	@Override
+	public boolean sortScreenOpen() {
+		return sortContainer() != null;
+	}
+
+	@Override
+	public int[] sortSlots() {
+		List<?> all = sortContainer();
+		net.minecraft.inventory.slot.Slot focus = LegacyHooks.sortFocus();
+		if (all == null || focus == null) {
+			return null;
+		}
+		boolean own = focus.inventory instanceof net.minecraft.entity.player.PlayerInventory;
+		if (own) {
+			int at = ((com.arcticlauncher.legacy.mixin.SlotInvAccess) focus).arctic$invSlot();
+			if (at < 9 || at > 35) {
+				// The hotbar and armor keep their places.
+				return null;
+			}
+		}
+		List<Integer> picked = new ArrayList<Integer>();
+		for (int i = 0; i < all.size(); i++) {
+			net.minecraft.inventory.slot.Slot s = (net.minecraft.inventory.slot.Slot) all.get(i);
+			if (own) {
+				if (s.inventory instanceof net.minecraft.entity.player.PlayerInventory) {
+					int at = ((com.arcticlauncher.legacy.mixin.SlotInvAccess) s).arctic$invSlot();
+					if (at >= 9 && at <= 35) {
+						picked.add(i);
+					}
+				}
+			} else if (s.inventory == focus.inventory) {
+				picked.add(i);
+			}
+		}
+		int[] out = new int[picked.size()];
+		for (int i = 0; i < out.length; i++) {
+			out[i] = picked.get(i);
+		}
+		return out;
+	}
+
+	@Override
+	public Object[] slotInfo(int slot) {
+		List<?> all = sortContainer();
+		if (all == null || slot < 0 || slot >= all.size()) {
+			return null;
+		}
+		ItemStack st = ((net.minecraft.inventory.slot.Slot) all.get(slot)).getStack();
+		if (!present(st)) {
+			return null;
+		}
+		String name = st.getCustomName();
+		String key = System.identityHashCode(st.getItem()) + ":" + st.getDamage() + ":" + name;
+		return new Object[] {key, name, count(st), st.getMaxCount()};
+	}
+
+	@Override
+	public void slotClick(int slot) {
+		MinecraftClient mc = mc();
+		if (sortContainer() == null || mc.interactionManager == null) {
+			return;
+		}
+		//#if MC >= 1.9
+		mc.interactionManager.method_1224(mc.player.openScreenHandler.syncId, slot, 0, net.minecraft.util.ItemAction.PICKUP, mc.player);
+		//#else
+		mc.interactionManager.clickSlot(mc.player.openScreenHandler.syncId, slot, 0, 0, mc.player);
+		//#endif
+	}
+
+	@Override
+	public boolean cursorHolds() {
+		ClientPlayerEntity p = mc().player;
+		return p != null && present(p.inventory.getCursorStack());
+	}
+
+	@Override
+	public List<Object[]> carried() {
+		ClientPlayerEntity p = mc().player;
+		if (p == null) {
+			return Collections.emptyList();
+		}
+		java.util.Map<String, Object[]> kinds = new java.util.LinkedHashMap<String, Object[]>();
+		for (ItemStack it : mainSlots(p)) {
+			if (!present(it)) {
+				continue;
+			}
+			String name = it.getCustomName();
+			String key = System.identityHashCode(it.getItem()) + ":" + it.getDamage() + ":" + name;
+			Object[] row = kinds.get(key);
+			if (row == null) {
+				kinds.put(key, new Object[] {key, it.copy(), name, count(it)});
+			} else {
+				row[3] = (Integer) row[3] + count(it);
+			}
+		}
+		return new ArrayList<Object[]>(kinds.values());
+	}
+
 	@Override
 	public Object sampleItem(String id) {
 		String path = id.contains(":") ? id.substring(id.indexOf(':') + 1) : id;

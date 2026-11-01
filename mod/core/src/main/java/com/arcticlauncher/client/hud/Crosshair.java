@@ -40,6 +40,47 @@ public final class Crosshair {
 		draw(g, c, style, cx, cy, 0, color);
 	}
 
+	/** Corner brackets this far from the middle (GUI pixels), and this long. */
+	private static final int RANGE_DISTANCE = 8;
+	private static final int RANGE_ARM = 4;
+
+	/**
+	 * Brackets around the middle while a creature is within hit reach (the game only aims at one
+	 * that close), red for players, orange for hostile mobs, green for the rest.
+	 */
+	public static void range(Gfx g, int cx, int cy) {
+		CrosshairConfig c = ArcticClient.config().crosshair;
+		int color;
+		switch (ArcticClient.platform().aimKind()) {
+			case 1:
+				color = c.playerColor;
+				break;
+			case 2:
+				color = c.hostileColor;
+				break;
+			case 3:
+				color = c.passiveColor;
+				break;
+			default:
+				return;
+		}
+		int d = RANGE_DISTANCE;
+		for (int pass = 0; pass < 2; pass++) {
+			int grow = 1 - pass;
+			int paint = pass == 0 ? OUTLINE : color;
+			for (int sx = -1; sx <= 1; sx += 2) {
+				for (int sy = -1; sy <= 1; sy += 2) {
+					int x = cx + sx * d;
+					int y = cy + sy * d;
+					// Horizontal arm, then vertical arm, both pointing inward from the corner.
+					rect(g, Math.min(x, x - sx * RANGE_ARM) - grow, y - grow,
+							Math.max(x, x - sx * RANGE_ARM) + 1 + grow, y + 1 + grow, paint);
+					rect(g, x - grow, Math.min(y, y - sy * RANGE_ARM) - grow, x + 1 + grow, Math.max(y, y - sy * RANGE_ARM) + 1 + grow, paint);
+				}
+			}
+		}
+	}
+
 	/** The colour for what you're aiming at (or the usual one). */
 	private static int color(CrosshairConfig c) {
 		if (!c.targetColors || ArcticClient.platform() == null) {
