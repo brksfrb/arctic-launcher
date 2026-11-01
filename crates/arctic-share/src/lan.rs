@@ -43,14 +43,26 @@ fn between<'a>(text: &'a str, open: &str, close: &str) -> Option<&'a str> {
 }
 
 /// Socket that hears LAN announcements alongside a running game (which
-/// binds the same port), so address reuse is required.
+/// binds the same port), so address reuse is required. The group is joined on every network
+/// adapter: the game announces on the one its system picks (a VPN, Hamachi, WSL or a virtual
+/// adapter is often first), and a socket that joined only the default one never hears it.
 pub fn listener() -> std::io::Result<UdpSocket> {
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
     socket.set_reuse_address(true)?;
     #[cfg(unix)]
     socket.set_reuse_port(true)?;
     socket.bind(&SocketAddr::from(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, PORT)).into())?;
-    socket.join_multicast_v4(&GROUP, &Ipv4Addr::UNSPECIFIED)?;
+    let mut joined = false;
+    if let Ok(adapters) = if_addrs::get_if_addrs() {
+        for adapter in adapters {
+            if let std::net::IpAddr::V4(ip) = adapter.ip() {
+                joined |= socket.join_multicast_v4(&GROUP, &ip).is_ok();
+            }
+        }
+    }
+    if !joined {
+        socket.join_multicast_v4(&GROUP, &Ipv4Addr::UNSPECIFIED)?;
+    }
     socket.set_nonblocking(true)?;
     UdpSocket::from_std(socket.into())
 }
