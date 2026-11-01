@@ -2,8 +2,11 @@
 //! `[MOTD]name[/MOTD][AD]port[/AD]` to 224.0.2.60:4445 every 1.5 s, and
 //! the Multiplayer screen lists every announcement it hears.
 
+use std::io::{Read, Seek, SeekFrom};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::time::Duration;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
+use std::time::{Duration, SystemTime};
 
 use socket2::{Domain, Protocol, Socket, Type};
 use tokio::net::{TcpStream, UdpSocket};
@@ -40,6 +43,82 @@ fn between<'a>(text: &'a str, open: &str, close: &str) -> Option<&'a str> {
     let start = text.find(open)? + open.len();
     let end = start + text[start..].find(close)?;
     Some(&text[start..end])
+}
+
+/// Where the launcher keeps its instances: the games' logs under it are read for the port of a world
+/// opened to LAN, as a second way to find it when no announcement arrives (a VPN or virtual
+/// adapter, a firewall, a network that drops multicast).
+static LOG_ROOT: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+pub fn watch_logs_under(root: PathBuf) {
+    *LOG_ROOT.lock().unwrap_or_else(PoisonError::into_inner) = Some(root);
+}
+
+/// A game that wrote to its log this recently may be the one running now.
+const LOG_FRESH: Duration = Duration::from_secs(12 * 60 * 60);
+/// The end of a log is enough: the line comes when the world opens.
+const LOG_TAIL: u64 = 128 * 1024;
+
+/// The newest game log under the launcher's folders (`instances/*/minecraft/logs/latest.log`, also one
+/// level down in `profiles/*`), if one was written to recently.
+fn newest_game_log(root: &Path) -> Option<PathBuf> {
+    let mut best: Option<(SystemTime, PathBuf)> = None;
+    let mut bases = vec![root.to_path_buf()];
+    if let Ok(profiles) = std::fs::read_dir(root.join("profiles")) {
+        bases.extend(profiles.flatten().map(|e| e.path()));
+    }
+    for base in bases {
+        let Ok(instances) = std::fs::read_dir(base.join("instances")) else {
+            continue;
+        };
+        for instance in instances.flatten() {
+            let log = instance
+                .path()
+                .join("minecraft")
+                .join("logs")
+                .join("latest.log");
+            let Ok(modified) = std::fs::metadata(&log).and_then(|m| m.modified()) else {
+                continue;
+            };
+            let fresh = modified.elapsed().is_ok_and(|age| age < LOG_FRESH);
+            if fresh && best.as_ref().is_none_or(|(t, _)| modified > *t) {
+                best = Some((modified, log));
+            }
+        }
+    }
+    best.map(|(_, log)| log)
+}
+
+/// The last port a game says it opened to LAN: "Local game hosted on port 54321" (the chat line) or
+/// "Started serving on 54321" (the server's own).
+pub fn port_from_log(text: &str) -> Option<u16> {
+    text.lines().rev().find_map(|line| {
+        ["hosted on port ", "Started serving on ", "Started on "]
+            .iter()
+            .find_map(|marker| {
+                let rest = &line[line.find(marker)? + marker.len()..];
+                let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+                digits.parse::<u16>().ok().filter(|p| *p > 0)
+            })
+    })
+}
+
+/// The world the running game opened to LAN, read from its log (the caller checks that something
+/// listens on the port).
+pub fn world_from_logs() -> Option<LanWorld> {
+    let root = LOG_ROOT.lock().unwrap_or_else(PoisonError::into_inner).clone()?;
+    let log = newest_game_log(&root)?;
+    let mut file = std::fs::File::open(log).ok()?;
+    let len = file.metadata().ok()?.len();
+    file.seek(SeekFrom::Start(len.saturating_sub(LOG_TAIL)))
+        .ok()?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).ok()?;
+    let port = port_from_log(&String::from_utf8_lossy(&bytes))?;
+    Some(LanWorld {
+        motd: format!("Port {port}"),
+        port,
+    })
 }
 
 /// Socket that hears LAN announcements alongside a running game (which
@@ -120,6 +199,20 @@ mod tests {
         assert!(is_this_machine(Ipv4Addr::LOCALHOST.into()));
         // TEST-NET-1: never assigned to an interface.
         assert!(!is_this_machine(Ipv4Addr::new(192, 0, 2, 1).into()));
+    }
+
+    #[test]
+    fn finds_the_port_in_a_game_log() {
+        let log = "[12:00:01] [Server thread/INFO]: Started serving on 40001
+                   [12:00:01] [Render thread/INFO]: [System] [CHAT] Local game hosted on port 40001
+                   [12:05:00] [Render thread/INFO]: [CHAT] hello";
+        assert_eq!(port_from_log(log), Some(40001));
+        assert_eq!(
+            port_from_log("Local game hosted on port 1234 and more"),
+            Some(1234)
+        );
+        assert_eq!(port_from_log("nothing here"), None);
+        assert_eq!(port_from_log("hosted on port abc"), None);
     }
 
     #[test]

@@ -330,6 +330,7 @@ impl ArcticApp {
             }
         };
         self.together.error = None;
+        arctic_share::lan::watch_logs_under(self.dirs.profile_root().to_path_buf());
         if let Some(service) = self.share_service() {
             self.together.current = service.host(key, port);
             self.together.session = Session::Starting;
