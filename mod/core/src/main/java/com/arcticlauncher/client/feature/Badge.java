@@ -13,6 +13,12 @@ public final class Badge {
 	public static final int TAGS_ONLY = 2;
 	public static final String[] WHERE = {"Player list and name tags", "Player list only", "Name tags only"};
 
+	/**
+	 * The blank text a version without badge text fonts puts in front of a name: the badge picture is
+	 * drawn over it (three spaces wide).
+	 */
+	public static final String MARK = "§r   ";
+
 	private Badge() {}
 
 	/** Whether {@code player} gets the badge in the player list ({@code tab}) or on their name tag. */

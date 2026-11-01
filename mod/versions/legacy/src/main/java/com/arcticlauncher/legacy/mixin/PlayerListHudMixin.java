@@ -9,10 +9,10 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/** A snowflake before the names of players who are on Arctic too, and their PvP tier. */
+/** The Arctic badge (drawn over a blank mark, see TextRendererMixin) before the names of players who are on Arctic too, and their PvP tier. */
 @Mixin(PlayerListHud.class)
 abstract class PlayerListHudMixin {
-	private static final String BADGE = "§b❄§r ";
+	private static final String BADGE = com.arcticlauncher.client.feature.Badge.MARK;
 
 	@Inject(method = "getPlayerName", at = @At("RETURN"), cancellable = true)
 	private void arctic$badge(PlayerListEntry entry, CallbackInfoReturnable<String> cir) {
