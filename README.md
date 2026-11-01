@@ -49,13 +49,14 @@
   would stop the game: the same mod twice, a mod that breaks another, a missing or too old
   requirement, a mod made for another version. Fix each in one click, or play anyway.
 - **Bring your stuff over.** Arctic finds what you have in the Minecraft Launcher, Prism,
-  MultiMC, the Modrinth App, CurseForge, ATLauncher, GDLauncher, TLauncher, Lunar, Badlion,
+  MultiMC, the Modrinth App, CurseForge, ATLauncher, GDLauncher, TLauncher, SKlauncher, Lunar, Badlion,
   Feather and LabyMod and copies your instances, worlds, servers and settings (the
   originals stay as they are). Import single worlds from a folder or a .zip, and back them
   up with one click.
 - **Play together.** Invite friends into your world with a code. No server, no port
-  forwarding: open your world to LAN and Arctic connects you directly (or through an
-  encrypted relay when a direct link isn't possible).
+  forwarding: Arctic opens your world to LAN for you while you host (or open it yourself),
+  and connects your friends directly (or through an encrypted relay when a direct link
+  isn't possible).
 - **Wear any skin, any cape, free.** Pick a skin from your library (or copy a player's by
   name), choose a cape or use your own image (animated ones too), and every Arctic player
   sees it, on any account. Preview everything on a 3D model. Microsoft accounts can also change their real
