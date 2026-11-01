@@ -1230,17 +1230,32 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public boolean openToLan() {
+		return openToLan(true);
+	}
+
+	@Override
+	public boolean openToLanPlain() {
+		return openToLan(false);
+	}
+
+	@Override
+	public boolean openToLanDone() {
+		net.minecraft.client.server.IntegratedServer server = mc().getSingleplayerServer();
+		return server != null && server.isPublished();
+	}
+
+	private boolean openToLan(boolean cheats) {
 		net.minecraft.client.server.IntegratedServer server = mc().getSingleplayerServer();
 		if (server == null) {
 			return false;
 		}
 		int port = net.minecraft.util.HttpUtil.getAvailablePort();
 		//#if MC >= 26.3
-		return server.isPublished() || server.publishServer(net.minecraft.server.MinecraftServer.MultiplayerScope.LAN, true, port);
+		return server.isPublished() || server.publishServer(net.minecraft.server.MinecraftServer.MultiplayerScope.LAN, cheats, port);
 		//#elif MC >= 26.2
 		return server.isPublished() || server.publishServer(net.minecraft.server.MinecraftServer.MultiplayerScope.LAN, port);
 		//#else
-		return server.isPublished() || server.publishServer(net.minecraft.world.level.GameType.SURVIVAL, true, port);
+		return server.isPublished() || server.publishServer(net.minecraft.world.level.GameType.SURVIVAL, cheats, port);
 		//#endif
 	}
 

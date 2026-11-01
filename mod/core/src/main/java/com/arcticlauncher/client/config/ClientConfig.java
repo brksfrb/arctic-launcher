@@ -236,6 +236,8 @@ public final class ClientConfig {
 	public boolean chatStampItalic;
 	/** Keep the chat lines when you disconnect or change server. */
 	public boolean chatKeep;
+	/** While you host a world in Arctic Launcher's play together, the world you're in opens to LAN by itself. */
+	public boolean lanAuto = true;
 	/** Hide the chat lines on screen (messages still arrive, the history keeps them). */
 	public boolean chatOff;
 	/** Hide titles: the big title and subtitle never show. */

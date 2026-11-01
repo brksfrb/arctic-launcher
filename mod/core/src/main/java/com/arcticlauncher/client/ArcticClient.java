@@ -29,6 +29,7 @@ public final class ArcticClient {
 	private static com.arcticlauncher.client.voice.VoiceLink voice;
 	private static com.arcticlauncher.client.waypoints.Waypoints waypoints;
 	private static com.arcticlauncher.client.together.Duel duel;
+	private static com.arcticlauncher.client.together.LanAuto lanAuto;
 	private static com.arcticlauncher.client.packs.PackIcons packIcons;
 	private static com.arcticlauncher.client.feature.ScreenshotCopy screenshotCopy;
 	private static com.arcticlauncher.client.packs.PackBrowser packs;
@@ -73,8 +74,10 @@ public final class ArcticClient {
 		screenshotCopy = new com.arcticlauncher.client.feature.ScreenshotCopy(session.bridgePort, session.bridgeSecret);
 		com.arcticlauncher.client.replay.Replays.init(p, session.bridgePort, session.bridgeSecret);
 		com.arcticlauncher.client.net.ProxySelfTest.maybeStart(p);
-		duel = new com.arcticlauncher.client.together.Duel(p,
-				new com.arcticlauncher.client.together.TogetherLink(session.bridgePort, session.bridgeSecret), social);
+		com.arcticlauncher.client.together.TogetherLink together =
+				new com.arcticlauncher.client.together.TogetherLink(session.bridgePort, session.bridgeSecret);
+		duel = new com.arcticlauncher.client.together.Duel(p, together, social);
+		lanAuto = new com.arcticlauncher.client.together.LanAuto(p, together);
 		// Asked for in the launcher just now (not on a later restart).
 		long age = System.currentTimeMillis() / 1000 - session.duelAt;
 		if (session.duelKit != null && age >= 0 && age < DUEL_REQUEST_SECONDS) {
@@ -370,6 +373,9 @@ public final class ArcticClient {
 		}
 		if (duel != null) {
 			duel.tick();
+		}
+		if (lanAuto != null && config.lanAuto && !duel.hosting()) {
+			lanAuto.tick();
 		}
 		if (config.hitColor != appliedHitColor && platform.hitColorWorks()) {
 			appliedHitColor = config.hitColor;

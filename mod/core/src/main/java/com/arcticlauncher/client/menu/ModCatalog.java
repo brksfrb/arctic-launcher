@@ -293,6 +293,11 @@ final class ModCatalog {
 		out.add(new Mod("tabglow", "Find Me in Tab", "Your own name in the player list pulses: » Steve «", "findme", Category.SOCIAL,
 				"tab list find myself name highlight glow")
 				.toggle(() -> c.tabGlowSelf, on -> c.tabGlowSelf = on));
+		if (p.canDuel()) {
+			out.add(new Mod("lanauto", "Auto LAN", "While you host in Arctic Launcher's Play together, your singleplayer world opens to LAN by itself (survival, no cheats)", "lanauto", Category.SOCIAL,
+					"lan open world friends together host share p2p")
+					.toggle(() -> c.lanAuto, on -> c.lanAuto = on));
+		}
 		out.add(new Mod("hitboxes", "Hitboxes", "Every player's and mob's hitbox as a box, like F3+B in one click", "hitboxes",
 				Category.GAMEPLAY, "hitbox combat box f3 reach")
 				.toggle(() -> c.hitboxes, on -> c.hitboxes = on));

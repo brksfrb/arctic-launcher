@@ -1406,6 +1406,21 @@ public final class LegacyPlatform implements Platform {
 
 	@Override
 	public boolean openToLan() {
+		return openToLan(true);
+	}
+
+	@Override
+	public boolean openToLanPlain() {
+		return openToLan(false);
+	}
+
+	@Override
+	public boolean openToLanDone() {
+		net.minecraft.server.integrated.IntegratedServer server = mc().getServer();
+		return server != null && server.isPublished();
+	}
+
+	private boolean openToLan(boolean cheats) {
 		net.minecraft.server.integrated.IntegratedServer server = mc().getServer();
 		if (server == null) {
 			return false;
@@ -1414,9 +1429,9 @@ public final class LegacyPlatform implements Platform {
 			return true;
 		}
 		//#if MC >= 1.10
-		return server.openToLAN(net.minecraft.world.GameMode.SURVIVAL, true) != null;
+		return server.openToLAN(net.minecraft.world.GameMode.SURVIVAL, cheats) != null;
 		//#else
-		return server.getPort(net.minecraft.world.level.LevelInfo.GameMode.SURVIVAL, true) != null;
+		return server.getPort(net.minecraft.world.level.LevelInfo.GameMode.SURVIVAL, cheats) != null;
 		//#endif
 	}
 

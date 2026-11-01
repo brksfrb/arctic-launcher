@@ -352,6 +352,16 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
+	/** Open the world you're in to LAN the way the game's own button does (survival, no cheats); true when it's open. */
+	default boolean openToLanPlain() {
+		return false;
+	}
+
+	/** The world you're in is already open to LAN. */
+	default boolean openToLanDone() {
+		return false;
+	}
+
 	/** Tint hurt mobs with this color (RGB; 0 = the game's red). */
 	default void setHitColor(int rgb) {}
 
