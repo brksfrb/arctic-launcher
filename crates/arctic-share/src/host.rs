@@ -17,6 +17,8 @@ use crate::{ALPN, GUEST_SUFFIX, KIND_GAME, KIND_INFO, ShareEvent, Sink, code_for
 
 /// A LAN world counts as closed after this long without announcements.
 const WORLD_TIMEOUT: Duration = Duration::from_secs(6);
+/// Without an announcement for this long, the games' logs are read for the world.
+const LOG_AFTER: Duration = Duration::from_secs(3);
 
 pub async fn run(key: SecretKey, port: Option<u16>, sink: Sink, mut stop: oneshot::Receiver<()>) {
     let endpoint = match crate::endpoint_builder()
@@ -94,6 +96,17 @@ async fn detect(world: watch::Sender<Option<LanWorld>>, sink: Sink) {
                     world.send_replace(Some(found.clone()));
                     sink(ShareEvent::HostWorld(Some(found)));
                 }
+            }
+        }
+        // No announcement for a while: the game's log may still say where the world is.
+        if last_seen.is_none_or(|t| t.elapsed() > LOG_AFTER)
+            && let Some(found) = lan::world_from_logs()
+            && lan::is_local(found.port).await
+        {
+            last_seen = Some(Instant::now());
+            if world.borrow().as_ref().map(|w| w.port) != Some(found.port) {
+                world.send_replace(Some(found.clone()));
+                sink(ShareEvent::HostWorld(Some(found)));
             }
         }
         if last_seen.is_some_and(|t| t.elapsed() > WORLD_TIMEOUT) {
