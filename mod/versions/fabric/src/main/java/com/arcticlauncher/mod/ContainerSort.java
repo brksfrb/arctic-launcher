@@ -86,7 +86,11 @@ public final class ContainerSort {
 		Minecraft mc = Minecraft.getInstance();
 		AbstractContainerMenu menu = menu();
 		if (menu != null && mc.gameMode != null && mc.player != null) {
+			//#if MC >= 26.1
 			mc.gameMode.handleContainerInput(menu.containerId, slot, 0, ContainerInput.PICKUP, mc.player);
+			//#else
+			mc.gameMode.handleInventoryMouseClick(menu.containerId, slot, 0, ContainerInput.PICKUP, mc.player);
+			//#endif
 		}
 	}
 
