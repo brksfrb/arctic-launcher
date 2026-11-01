@@ -33,6 +33,11 @@ abstract class TextRendererMixin {
 		TextRenderer self = (TextRenderer) (Object) this;
 		int width = self.getStringWidth(com.arcticlauncher.client.feature.Badge.MARK);
 		com.arcticlauncher.legacy.LegacyHooks.drawBadge(x, y, width, color);
-		cir.setReturnValue(self.draw(text.substring(com.arcticlauncher.client.feature.Badge.MARK.length()), x + width, y, color, shadow));
+		// Every leading mark goes (text from a server can repeat it), so the redraw below never meets one again.
+		String rest = text;
+		while (rest.startsWith(com.arcticlauncher.client.feature.Badge.MARK)) {
+			rest = rest.substring(com.arcticlauncher.client.feature.Badge.MARK.length());
+		}
+		cir.setReturnValue(self.draw(rest, x + width, y, color, shadow));
 	}
 }
