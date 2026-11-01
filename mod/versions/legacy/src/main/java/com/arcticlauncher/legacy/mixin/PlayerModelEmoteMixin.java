@@ -103,6 +103,9 @@ abstract class PlayerModelEmoteMixin {
 			arctic$undo = rig(animation, t, parts());
 			hideBentLimbs(animation, model);
 		} else {
+			// pose() moves pivots by the emote's offsets, and the game never resets some of them
+			// (the legs' sideways pivot), so put them back next frame or they'd drift off.
+			arctic$undo = snapshot(parts());
 			pose(animation, "head", model.head, t);
 			pose(animation, "body", model.body, t);
 			pose(animation, "rightArm", model.rightArm, t);
@@ -118,14 +121,23 @@ abstract class PlayerModelEmoteMixin {
 		EntityModel.copyModelPart(model.leftLeg, model.leftPants);
 	}
 
+	/** Pivot and rotation of each part, to put back with apply(). */
+	private static float[][] snapshot(ModelPart[] parts) {
+		float[][] values = new float[parts.length][];
+		for (int i = 0; i < parts.length; i++) {
+			ModelPart p = parts[i];
+			values[i] = new float[] {p.pivotX, p.pivotY, p.pivotZ, p.posX, p.posY, p.posZ};
+		}
+		return values;
+	}
+
 	/** The expressive rig: the parts (in Rig's order) move together (see Rig); returns what they were. */
 	private static float[][] rig(Animation animation, float t, ModelPart[] parts) {
-		float[][] before = new float[Rig.PARTS][];
+		float[][] before = snapshot(parts);
 		float[][] pivots = new float[Rig.PARTS][];
 		float[][] rotations = new float[Rig.PARTS][];
 		for (int i = 0; i < Rig.PARTS; i++) {
 			ModelPart p = parts[i];
-			before[i] = new float[] {p.pivotX, p.pivotY, p.pivotZ, p.posX, p.posY, p.posZ};
 			pivots[i] = new float[] {p.pivotX, p.pivotY, p.pivotZ};
 			rotations[i] = new float[] {p.posX, p.posY, p.posZ};
 		}
