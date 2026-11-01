@@ -56,8 +56,8 @@ fn looks_like_game(text: &str) -> bool {
     }
     let rest = &text[digits..];
     // "1.21.1", "26.3", or a snapshot ("24w14a").
-    if rest.starts_with('.') {
-        digits = rest[1..].chars().take_while(char::is_ascii_digit).count();
+    if let Some(minor) = rest.strip_prefix('.') {
+        digits = minor.chars().take_while(char::is_ascii_digit).count();
         return digits > 0;
     }
     rest.starts_with('w')

@@ -300,7 +300,7 @@ final class ModCatalog {
 				"tab list find myself name highlight glow")
 				.toggle(() -> c.tabGlowSelf, on -> c.tabGlowSelf = on));
 		if (p.canDuel()) {
-			out.add(new Mod("lanauto", "Auto LAN", "While you host in Arctic Launcher's Play together, your singleplayer world opens to LAN by itself (survival, no cheats)", "lanauto", Category.SOCIAL,
+			out.add(new Mod("lanauto", "Auto LAN", "While you host in Arctic Launcher's Play together, your singleplayer world opens to LAN by itself (survival, no cheats)", "friends", Category.SOCIAL,
 					"lan open world friends together host share p2p")
 					.toggle(() -> c.lanAuto, on -> c.lanAuto = on));
 		}
