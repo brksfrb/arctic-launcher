@@ -106,7 +106,10 @@ pub fn port_from_log(text: &str) -> Option<u16> {
 /// The world the running game opened to LAN, read from its log (the caller checks that something
 /// listens on the port).
 pub fn world_from_logs() -> Option<LanWorld> {
-    let root = LOG_ROOT.lock().unwrap_or_else(PoisonError::into_inner).clone()?;
+    let root = LOG_ROOT
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()?;
     let log = newest_game_log(&root)?;
     let mut file = std::fs::File::open(log).ok()?;
     let len = file.metadata().ok()?.len();
