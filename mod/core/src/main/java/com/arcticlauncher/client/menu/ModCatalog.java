@@ -18,6 +18,7 @@ import com.arcticlauncher.client.tiers.Tiers;
 final class ModCatalog {
 	private static final int[] OUTLINE_COLORS = {0xFFFFFFFF, 0xFF7DD3FC, 0xFF86EFAC, 0xFFFDE047, 0xFFF87171, 0xFFE879F9, 0xFF000000};
 	/** Unset, the pointer takes the menu's accent color. */
+	private static final int[] WATERMARK_COLORS = {0xFFFFFFFF, 0xFF7DD3FC, 0xFF86EFAC, 0xFFFDE047, 0xFFFB923C, 0xFFF87171, 0xFFE879F9, 0xFFC4B5FD};
 	private static final int[] POINTER_COLORS = {0xFF7DD3FC, 0xFFFFFFFF, 0xFF86EFAC, 0xFFFDE047, 0xFFF87171, 0xFFE879F9};
 	private static final int[] DAMAGE_COLORS = {0xFFE11D48, 0xFFF97316, 0xFFFDE047, 0xFF7DD3FC, 0xFFA78BFA, 0xFFFFFFFF};
 	private static final int[] HIT_COLORS = {0xFFFFFFFF, 0xFF7DD3FC, 0xFF86EFAC, 0xFFFDE047, 0xFFF97316, 0xFFE879F9};
@@ -126,7 +127,9 @@ final class ModCatalog {
 							f.choice("Corner", com.arcticlauncher.client.hud.Watermark.CORNERS, () -> c.watermarkCorner, i -> c.watermarkCorner = i);
 							f.choice("Size", new String[] {"12", "16", "20", "24", "32"}, () -> c.watermarkSize, i -> c.watermarkSize = i);
 							f.choice("Opacity", com.arcticlauncher.client.hud.Watermark.OPACITIES, () -> c.watermarkOpacity, i -> c.watermarkOpacity = i);
+							f.toggle("Name", "ARCTIC beside the snowflake", () -> c.watermarkName, on -> c.watermarkName = on);
 							f.toggle("Version", "The launcher's version after the snowflake", () -> c.watermarkVersion, on -> c.watermarkVersion = on);
+							f.swatches("Text color", WATERMARK_COLORS, () -> c.watermarkColor, v -> c.watermarkColor = v);
 						}
 						if ("minimap".equals(w.id)) {
 							f.section("Map");
@@ -159,7 +162,10 @@ final class ModCatalog {
 							f.section("Key");
 							f.key("Stopwatch key", "Starts, stops and clears it", Form.key(() -> c.stopwatchKey, k -> c.stopwatchKey = k));
 						}
-						HudLookForm.build(host, f, w);
+						// The watermark has its own text color and no box, shadow or chroma: those would do nothing.
+						if (!"watermark".equals(w.id)) {
+							HudLookForm.build(host, f, w);
+						}
 					});
 			m.widget = w;
 			out.add(m);

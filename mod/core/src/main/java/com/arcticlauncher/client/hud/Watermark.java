@@ -27,20 +27,32 @@ public final class Watermark extends HudWidget {
 		return SIZES[i];
 	}
 
-	private static boolean withVersion() {
+	/** The text after the snowflake: ARCTIC and/or the launcher's version; empty when neither is on. */
+	private static String label() {
 		ClientConfig c = config();
-		return c != null && c.watermarkVersion;
+		if (c == null) {
+			return "";
+		}
+		String name = c.watermarkName ? "ARCTIC" : "";
+		String version = c.watermarkVersion ? version() : "";
+		return name.isEmpty() || version.isEmpty() ? name + version : name + " " + version;
+	}
+
+	/** The text grows with the snowflake (the default size, 16, draws it at the game's own size). */
+	private static float textScale() {
+		return size() / 16f;
 	}
 
 	@Override
 	public Object content(boolean preview) {
 		ClientConfig c = config();
-		return c == null ? null : c.watermarkCorner + "/" + c.watermarkSize + "/" + c.watermarkOpacity + "/" + c.watermarkVersion;
+		return c == null ? null : c.watermarkCorner + "/" + c.watermarkSize + "/" + c.watermarkOpacity + "/" + label() + "/" + c.watermarkColor;
 	}
 
 	@Override
 	public int width(Gfx g) {
-		return size() + (withVersion() ? GAP + g.textWidth(version()) : 0);
+		String label = label();
+		return size() + (label.isEmpty() ? 0 : GAP + Math.round(g.textWidth(label) * textScale()));
 	}
 
 	@Override
@@ -71,8 +83,15 @@ public final class Watermark extends HudWidget {
 		int level = c == null ? 1 : Math.max(0, Math.min(2, c.watermarkOpacity));
 		int size = size();
 		g.texture("asset:watermark-" + (level + 1), 0, 0, size, size, 0, 0, 64, 64, 64, 64);
-		if (withVersion()) {
-			g.text(version(), size + GAP, (size - 8) / 2, com.arcticlauncher.client.gfx.Draw.alpha(0xFFFFFFFF, 0.35f + 0.25f * level), false);
+		String label = label();
+		if (!label.isEmpty()) {
+			float scale = textScale();
+			int color = com.arcticlauncher.client.gfx.Draw.alpha(c.watermarkColor | 0xFF000000, 0.35f + 0.25f * level);
+			g.push();
+			g.translate(size + GAP, (size - 8 * scale) / 2f);
+			g.scale(scale);
+			g.text(label, 0, 0, color, false);
+			g.pop();
 		}
 	}
 }

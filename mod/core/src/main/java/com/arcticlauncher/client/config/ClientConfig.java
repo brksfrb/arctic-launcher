@@ -169,6 +169,9 @@ public final class ClientConfig {
 	public int watermarkSize = 1;
 	public int watermarkOpacity;
 	public boolean watermarkVersion;
+	/** "ARCTIC" beside the snowflake, and the color of that text (ARGB; the opacity setting applies on top). */
+	public boolean watermarkName;
+	public int watermarkColor = 0xFFFFFFFF;
 	/** 1.8.9 - 1.12.2: vertex buffers were switched on once (they're off in Minecraft's defaults). */
 	public boolean legacyVboOn;
 	/** 1.8.9 - 1.12.2: the brightness slider value from before Fullbright raised it (negative: not recorded). */
