@@ -516,8 +516,8 @@ public final class Compat {
 	/** The Arctic snowflake as a text glyph (font {@code arctic:badge}). */
 	public static net.minecraft.network.chat.MutableComponent arcticBadge() {
 		//#if MC < 1.16
-		// No custom fonts in text before 1.16: no badge.
-		return literal("");
+		// No custom fonts in text before 1.16: the snowflake character (smaller than the picture, but there).
+		return literal("§b❄§r ");
 		//#else
 		net.minecraft.resources.Identifier font = id(ArcticMod.ID, "badge");
 		net.minecraft.network.chat.MutableComponent badge = literal("");

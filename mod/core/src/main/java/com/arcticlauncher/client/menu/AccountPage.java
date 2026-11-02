@@ -25,7 +25,7 @@ final class AccountPage implements MenuTab {
 	public void build(Host host, int x, int top, int w, int bottom) {
 		this.x = x;
 		this.w = w;
-		account.build(host, x, top, w);
+		account.build(host, x, top, w, bottom);
 	}
 
 	@Override
