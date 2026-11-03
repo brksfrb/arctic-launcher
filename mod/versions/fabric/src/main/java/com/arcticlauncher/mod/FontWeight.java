@@ -32,7 +32,23 @@ public final class FontWeight {
 
 	private FontWeight() {}
 
-	public static int loadGlyph(FT_Face face, int glyph, int flags, GlyphLoader original) {
+	/**
+	 * What a face was loaded with, fixed at its first glyph. Glyphs are measured when the font is
+	 * built and drawn later (and a reload builds a new font while the old one is still drawn), so
+	 * a setting that changed in between (smooth edges, the GUI scale, the pack) must not change a
+	 * glyph's size: the game refuses a bitmap whose size differs from the one it measured.
+	 */
+	private record Mode(boolean on, int scale, boolean sharp, long ppem) {}
+
+	private static final int MAX_MODES = 64;
+	private static final java.util.Map<Long, Mode> MODES = new java.util.concurrent.ConcurrentHashMap<>();
+
+	private static Mode modeOf(FT_Face face) {
+		long ppem = face.size() == null ? 0 : face.size().metrics().x_ppem();
+		Mode known = MODES.get(face.address());
+		if (known != null && known.ppem() == ppem) {
+			return known;
+		}
 		//#if MC >= 26.1
 		boolean on = ArcticPacks.smoothFontOn();
 		int scale = ArcticPacks.loadedOversample();
@@ -40,10 +56,22 @@ public final class FontWeight {
 		boolean on = SmoothFont.on();
 		int scale = SmoothFont.loadedScale();
 		//#endif
-		if (!on) {
+		boolean sharp = !com.arcticlauncher.client.ArcticClient.config().fontAntialias;
+		Mode now = new Mode(on, scale, sharp, ppem);
+		if (MODES.size() >= MAX_MODES) {
+			MODES.clear();
+		}
+		MODES.put(face.address(), now);
+		return now;
+	}
+
+	public static int loadGlyph(FT_Face face, int glyph, int flags, GlyphLoader original) {
+		Mode mode = modeOf(face);
+		if (!mode.on()) {
 			return original.load(face, glyph, flags);
 		}
-		boolean sharp = !com.arcticlauncher.client.ArcticClient.config().fontAntialias;
+		int scale = mode.scale();
+		boolean sharp = mode.sharp();
 		int load = (flags & ~FT_LOAD_RENDER & ~FT_LOAD_BITMAP_METRICS_ONLY) | FT_LOAD_NO_BITMAP;
 		// Pixel-sharp text is fitted to the pixel grid (the 1-bit hinting target, with FreeType's own autohinter): stems
 		// come out whole pixels wide and spacing even. Thresholding an unfitted, anti-aliased glyph looks uneven.
