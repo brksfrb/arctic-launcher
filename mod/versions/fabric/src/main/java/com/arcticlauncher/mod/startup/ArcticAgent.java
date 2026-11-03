@@ -43,6 +43,7 @@ public final class ArcticAgent {
 	private ArcticAgent() {}
 
 	public static void premain(String args, Instrumentation instrumentation) {
+		ExitTrace.install();
 		MixinCache.init();
 		instrumentation.addTransformer(new ClassFileTransformer() {
 			@Override
