@@ -515,7 +515,9 @@ fn is_window_marker(line: &[u8]) -> bool {
 mod tests {
     #[test]
     fn portal_folders_are_recognized() {
-        assert!(is_portal_path(Path::new("/run/user/1000/doc/AbC/Minecraft/Arctic Launcher")));
+        assert!(is_portal_path(Path::new(
+            "/run/user/1000/doc/AbC/Minecraft/Arctic Launcher"
+        )));
         assert!(!is_portal_path(Path::new("/run/user/1000/gvfs/x")));
         assert!(!is_portal_path(Path::new("/home/u/.var/app/doc/x")));
     }
