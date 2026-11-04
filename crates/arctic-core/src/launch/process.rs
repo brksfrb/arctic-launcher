@@ -69,7 +69,7 @@ pub fn spawn(
     let mut cmd = Command::new(game_exe(plan));
     cmd.args(&args)
         .envs(crate::gpu_preference::env(plan.high_performance_gpu))
-        .current_dir(&plan.game_dir)
+        .current_dir(game_cwd(&plan.game_dir))
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -178,7 +178,7 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
     let spawned = Command::new(game_exe(plan))
         .args(&args)
         .envs(crate::gpu_preference::env(plan.high_performance_gpu))
-        .current_dir(&plan.game_dir)
+        .current_dir(game_cwd(&plan.game_dir))
         .stdin(Stdio::null())
         .stdout(log)
         .stderr(log_err)
@@ -315,6 +315,33 @@ fn java_major(release: &str) -> Option<u32> {
     } else {
         Some(first)
     }
+}
+
+/// The folder the game process starts in. Minecraft gets its folders as absolute arguments, but Java
+/// itself fails at startup ("Could not determine current working directory") when it starts inside a
+/// Flatpak document-portal mount (`/run/user/<uid>/doc/...`, where a data folder picked in the file
+/// chooser lives), because the mount can't answer `getcwd`. There it starts in the home folder instead.
+fn game_cwd(game_dir: &Path) -> PathBuf {
+    if cfg!(target_os = "linux") && is_portal_path(game_dir) {
+        let home = std::env::var_os("HOME").map(PathBuf::from);
+        if let Some(home) = home.filter(|h| h.is_dir()) {
+            log::warn!(
+                "{} is a document-portal folder; starting the game in {} so Java can read its working directory",
+                game_dir.display(),
+                home.display()
+            );
+            return home;
+        }
+    }
+    game_dir.to_path_buf()
+}
+
+fn is_portal_path(path: &Path) -> bool {
+    let mut parts = path.components().skip(1).map(|c| c.as_os_str());
+    parts.next().is_some_and(|p| p == "run")
+        && parts.next().is_some_and(|p| p == "user")
+        && parts.next().is_some()
+        && parts.next().is_some_and(|p| p == "doc")
 }
 
 fn game_exe(plan: &LaunchPlan) -> PathBuf {
@@ -486,6 +513,13 @@ fn is_window_marker(line: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn portal_folders_are_recognized() {
+        assert!(is_portal_path(Path::new("/run/user/1000/doc/AbC/Minecraft/Arctic Launcher")));
+        assert!(!is_portal_path(Path::new("/run/user/1000/gvfs/x")));
+        assert!(!is_portal_path(Path::new("/home/u/.var/app/doc/x")));
+    }
+
     #[test]
     fn argument_files_quote_and_escape() {
         let args = vec![r"-Dpath=C:\natives".to_owned(), "say \"hi\"".to_owned()];
