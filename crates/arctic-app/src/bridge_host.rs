@@ -138,9 +138,8 @@ impl AppAccounts {
                 }
             }
             if std::time::Instant::now() >= deadline {
-                return Err(arctic_core::Error::Other(
-                    "confirm the switch in the Arctic Launcher window, then try again".into(),
-                ));
+                // The game asks again by itself; the question stays up in the launcher.
+                return Err(arctic_core::Error::Other(bridge::WAITING.into()));
             }
             std::thread::sleep(SWITCH_POLL);
         }
@@ -448,22 +447,22 @@ impl BridgeHost {
             .map(|ask| (ask.serial, ask.name.clone()))
     }
 
-    /// The player's answer to [`Self::switch_question`].
-    pub fn answer_switch(&self, serial: u64, allow: bool) {
+    /// The player's answer to [`Self::switch_question`]. Returns the account's local id when the
+    /// answer is a yes the app should remember for good.
+    pub fn answer_switch(&self, serial: u64, allow: bool, always: bool) -> Option<String> {
         let mut shared = self.shared.lock().unwrap_or_else(PoisonError::into_inner);
-        let Some(ask) = shared
+        let ask = shared
             .switch_ask
             .as_mut()
-            .filter(|ask| ask.serial == serial)
-        else {
-            return;
-        };
+            .filter(|ask| ask.serial == serial)?;
         ask.answer = Some(allow);
-        if allow {
-            let id = ask.id.clone();
-            shared.switch_ask = None;
-            shared.allowed.insert(id);
+        if !allow {
+            return None;
         }
+        let id = ask.id.clone();
+        shared.switch_ask = None;
+        shared.allowed.insert(id.clone());
+        always.then_some(id)
     }
 
     /// A play-together request from the game, once.
@@ -495,6 +494,7 @@ impl BridgeHost {
     /// The accounts (and tasks, after a profile switch) to answer with.
     pub fn update(&self, store: &AccountStore, tasks: &Tasks) {
         let mut shared = self.shared.lock().unwrap_or_else(PoisonError::into_inner);
+        shared.allowed.extend(store.game_switch_ok.iter().cloned());
         shared.accounts = store.accounts.clone();
         shared.active = store.active.clone();
         shared.tasks = tasks.clone();

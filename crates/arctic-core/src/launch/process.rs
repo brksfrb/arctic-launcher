@@ -57,6 +57,23 @@ impl GameHandle {
     }
 }
 
+/// Game logs kept per instance and copy: the last run's and the runs before it.
+const KEPT_GAME_LOGS: usize = 5;
+
+/// `game-vanilla.log` becomes `game-vanilla.1.log`, that one `game-vanilla.2.log`, and so on; the
+/// oldest goes. A new run starts a fresh file without losing the run before it.
+fn rotate_game_log(file: &Path) {
+    let Some(stem) = file.file_stem().and_then(|s| s.to_str()) else {
+        return;
+    };
+    let numbered = |n: usize| file.with_file_name(format!("{stem}.{n}.log"));
+    let _ = std::fs::remove_file(numbered(KEPT_GAME_LOGS - 1));
+    for n in (1..KEPT_GAME_LOGS - 1).rev() {
+        let _ = std::fs::rename(numbered(n), numbered(n + 1));
+    }
+    let _ = std::fs::rename(file, numbered(1));
+}
+
 /// Start the game. Output is written to `plan.log_file`; `on_event` is
 /// called from background threads.
 pub fn spawn(
@@ -64,6 +81,7 @@ pub fn spawn(
     on_event: impl Fn(GameEvent) + Send + Sync + 'static,
 ) -> Result<GameHandle> {
     log::info!("launching: {}", plan.redacted_command());
+    rotate_game_log(&plan.log_file);
     let log = Arc::new(Mutex::new(File::create(&plan.log_file).at(&plan.log_file)?));
     let (args, argfile) = command_args(plan)?;
     let mut cmd = Command::new(game_exe(plan));
@@ -172,6 +190,7 @@ fn exit_code(status: &std::process::ExitStatus) -> Option<i32> {
 /// after a short-lived caller (e.g. the CLI) exits. Returns the pid.
 pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
     log::info!("launching (detached): {}", plan.redacted_command());
+    rotate_game_log(&plan.log_file);
     let log = File::create(&plan.log_file).at(&plan.log_file)?;
     let log_err = log.try_clone().at(&plan.log_file)?;
     let (args, argfile) = command_args(plan)?;
@@ -568,6 +587,21 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn game_logs_keep_the_runs_before() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("game-vanilla.log");
+        let read = |name: &str| std::fs::read_to_string(dir.path().join(name)).ok();
+        for run in 1..=7 {
+            rotate_game_log(&log);
+            std::fs::write(&log, format!("run {run}")).unwrap();
+        }
+        assert_eq!(read("game-vanilla.log").as_deref(), Some("run 7"));
+        assert_eq!(read("game-vanilla.1.log").as_deref(), Some("run 6"));
+        assert_eq!(read("game-vanilla.4.log").as_deref(), Some("run 3"));
+        assert_eq!(read("game-vanilla.5.log"), None);
+    }
 
     #[test]
     #[cfg(any(windows, target_os = "macos"))]

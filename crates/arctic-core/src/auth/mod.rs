@@ -115,6 +115,8 @@ pub struct AccountStore {
     #[serde(deserialize_with = "readable_accounts")]
     pub accounts: Vec<Account>,
     pub active: Option<String>,
+    /// Accounts the player let a running game switch to for good ("Yes, always"), by local id.
+    pub game_switch_ok: Vec<String>,
 }
 
 fn readable_accounts<'de, D: serde::Deserializer<'de>>(
@@ -166,8 +168,17 @@ impl AccountStore {
         }
     }
 
+    /// Let a running game switch to this account without asking again.
+    pub fn allow_game_switch(&mut self, id: &str) {
+        if self.accounts.iter().any(|a| a.id == id) && !self.game_switch_ok.iter().any(|i| i == id)
+        {
+            self.game_switch_ok.push(id.to_owned());
+        }
+    }
+
     pub fn remove(&mut self, id: &str) {
         self.accounts.retain(|a| a.id != id);
+        self.game_switch_ok.retain(|i| i != id);
         if self.active.as_deref() == Some(id) {
             self.active = self.accounts.first().map(|a| a.id.clone());
         }
@@ -247,6 +258,20 @@ mod tests {
         assert_eq!(store.accounts.len(), 1);
         assert_eq!(store.active.as_deref(), Some(first_id.as_str()));
         assert!(matches!(&store.accounts[0].kind, AccountKind::Microsoft(s) if s.expires_at == 20));
+    }
+
+    #[test]
+    fn game_switch_approval_is_kept_per_account_and_dropped_with_it() {
+        let mut store = AccountStore::default();
+        let account = ms("u1", 10);
+        let id = account.id.clone();
+        store.upsert(account);
+        store.allow_game_switch(&id);
+        store.allow_game_switch(&id);
+        store.allow_game_switch("nobody");
+        assert_eq!(store.game_switch_ok, vec![id.clone()]);
+        store.remove(&id);
+        assert!(store.game_switch_ok.is_empty());
     }
 
     #[test]

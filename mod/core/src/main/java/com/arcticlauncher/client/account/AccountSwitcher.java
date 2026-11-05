@@ -53,6 +53,8 @@ public final class AccountSwitcher {
 	private static final long POLL_MS = 1500;
 	/** How long a session renewal may hold up joining a server. */
 	private static final long RENEW_MS = 15_000;
+	/** How long a switch waits for the player to answer the launcher's question. */
+	private static final long CONFIRM_MS = 60_000;
 
 	public AccountSwitcher(Platform platform, int port, String secret) {
 		this.platform = platform;
@@ -212,8 +214,21 @@ public final class AccountSwitcher {
 			@Override
 			public void run() {
 				try {
-					String reply = Http.send("POST", bridgeUrl + "/v1/accounts/" + entry.id + "/session", secret, "{}");
-					apply(GSON.fromJson(reply, JsonElement.class), rejoin ? server : null);
+					long until = System.currentTimeMillis() + CONFIRM_MS;
+					JsonElement reply;
+					while (true) {
+						reply = GSON.fromJson(Http.send("POST", bridgeUrl + "/v1/accounts/" + entry.id + "/session", secret, "{}"),
+								JsonElement.class);
+						if (!pending(reply)) {
+							break;
+						}
+						if (System.currentTimeMillis() > until) {
+							status = "Not confirmed in Arctic Launcher. Pick " + entry.name + " again to retry.";
+							return;
+						}
+						status = "Confirm the switch to " + entry.name + " in Arctic Launcher...";
+					}
+					apply(reply, rejoin ? server : null);
 				} catch (Exception e) {
 					status = "Couldn't switch: " + e.getMessage();
 				} finally {
@@ -310,6 +325,15 @@ public final class AccountSwitcher {
 				}
 			}
 		});
+	}
+
+	/** The launcher is waiting for the player to answer its question about this switch. */
+	private static boolean pending(JsonElement reply) {
+		if (reply == null || !reply.isJsonObject()) {
+			return false;
+		}
+		JsonElement p = reply.getAsJsonObject().get("pending");
+		return p != null && p.isJsonPrimitive() && p.getAsJsonPrimitive().isBoolean() && p.getAsBoolean();
 	}
 
 	private static List<Entry> parse(JsonElement reply) {

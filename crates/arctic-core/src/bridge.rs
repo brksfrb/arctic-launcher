@@ -121,6 +121,10 @@ pub trait Accounts: Send + Sync + 'static {
     }
 }
 
+/// What a session request fails with while the player has not answered the launcher's question
+/// yet. The bridge replies `202 {"pending":true}` and the game asks again.
+pub const WAITING: &str = "waiting for the player's answer in the launcher";
+
 const READ_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_HEADER_LINES: usize = 64;
 const MAX_LINE: usize = 8 * 1024;
@@ -330,6 +334,9 @@ fn respond(request: &Request, accounts: &dyn Accounts) -> (&'static str, String)
                     })
                     .to_string(),
                 ),
+                Err(e) if e.to_string() == WAITING => {
+                    ("202 Accepted", r#"{"pending":true}"#.to_owned())
+                }
                 Err(e) => error("502 Bad Gateway", &e.to_string()),
             }
         }
@@ -358,6 +365,9 @@ mod tests {
         }
 
         fn session(&self, id: &str) -> Result<SessionGrant> {
+            if id == "wait" {
+                return Err(Error::Other(WAITING.into()));
+            }
             if id != "a1" {
                 return Err(Error::Other("no such account".into()));
             }
@@ -399,6 +409,8 @@ mod tests {
             call(&info, "POST", "/v1/accounts/zz/session", &info.secret)
                 .starts_with("HTTP/1.1 502")
         );
+        let waiting = call(&info, "POST", "/v1/accounts/wait/session", &info.secret);
+        assert!(waiting.starts_with("HTTP/1.1 202") && waiting.contains("\"pending\":true"));
         assert!(call(&info, "GET", "/v1/other", &info.secret).starts_with("HTTP/1.1 404"));
         let encoder = call(&info, "GET", "/v1/ffmpeg/capture", &info.secret);
         assert!(encoder.starts_with("HTTP/1.1 200") && encoder.contains("\"builtin\":false"));

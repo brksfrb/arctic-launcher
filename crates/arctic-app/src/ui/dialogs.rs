@@ -306,6 +306,7 @@ impl ArcticApp {
             return;
         };
         let p = self.palette();
+        let mut remember = None;
         let modal = Modal::new(Id::new("game_switch"))
             .frame(dialog_frame(p))
             .show(ctx, |ui| {
@@ -317,22 +318,29 @@ impl ArcticApp {
                 );
                 ui.label(
                     RichText::new(
-                        "The running game asked for this account's login. Only say yes if you just picked it in the game's account menu.",
+                        "The running game asked for this account's login. Only say yes if you just picked it in the game's account menu. \"Always\" skips this question for this account from now on.",
                     )
                     .color(p.muted),
                 );
                 ui.add_space(12.0);
                 crate::widgets::row(ui, |ui| {
                     if crate::widgets::button(ui, p, None, "No", false).clicked() {
-                        self.bridge.answer_switch(serial, false);
+                        self.bridge.answer_switch(serial, false, false);
                     }
-                    if widgets::button(ui, p, None, "Yes, switch", true).clicked() {
-                        self.bridge.answer_switch(serial, true);
+                    if crate::widgets::button(ui, p, None, "Yes, always", false).clicked() {
+                        remember = self.bridge.answer_switch(serial, true, true);
+                    }
+                    if widgets::button(ui, p, None, "Yes, this time", true).clicked() {
+                        self.bridge.answer_switch(serial, true, false);
                     }
                 });
             });
+        if let Some(id) = remember {
+            self.accounts.allow_game_switch(&id);
+            self.save_accounts();
+        }
         if modal.should_close() {
-            self.bridge.answer_switch(serial, false);
+            self.bridge.answer_switch(serial, false, false);
         }
         // Answered while a game runs: the launcher goes back out of the way.
         if self.bridge.switch_question().is_none() && self.minimized_for_game {
