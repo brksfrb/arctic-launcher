@@ -3,6 +3,7 @@
 //! compacted, and the system is told it may move the rest out of RAM until the window is used
 //! again. Nothing the window needs is lost; it's read back when it's drawn.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -19,11 +20,29 @@ fn now_secs() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-/// The window was hidden or minimized: give memory back now.
+/// Keys last used more than `limit` before `now`.
+pub fn stale_keys(used: &HashMap<String, Instant>, now: Instant, limit: Duration) -> Vec<String> {
+    used.iter()
+        .filter(|(_, at)| now.saturating_duration_since(**at) > limit)
+        .map(|(key, _)| key.clone())
+        .collect()
+}
+
+/// Was something last used (or never) more than `limit` before `now`?
+pub fn is_idle(seen: Option<Instant>, now: Instant, limit: Duration) -> bool {
+    seen.is_none_or(|at| now.saturating_duration_since(at) > limit)
+}
+
+/// The window was hidden or minimized: give memory back now. The app has already let go of its own
+/// textures (`ArcticApp::trim_now`); this empties egui's image caches, the GPU copies included
+/// (they are uploaded again from the file bytes when drawn), and the system's side.
 pub fn now(ctx: &egui::Context) {
     LAST.store(now_secs(), Ordering::Relaxed);
     let started = Instant::now();
     forget_decoded(ctx);
+    for loader in ctx.loaders().texture.lock().iter() {
+        loader.forget_all();
+    }
     system_trim();
     log::debug!("memory trimmed in {:?}", started.elapsed());
 }
@@ -42,27 +61,53 @@ static LAST_TAB: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize
 /// The window was minimized last frame (a minimize by hand trims once).
 static MINIMIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Each frame: trim once when the window is minimized, and now and then behind a running game
-/// (the window may stay open there).
-pub fn tick(ctx: &egui::Context, game_running: bool, tab: usize) {
+/// Each frame: is it time to trim (the window was just minimized, or it has been a minute behind a
+/// running game, where the window may stay open)? The caller trims.
+pub fn tick(ctx: &egui::Context, game_running: bool, tab: usize) -> bool {
     // A new tab: the last one's decoded images aren't needed (their GPU copies draw them).
     if LAST_TAB.swap(tab, Ordering::Relaxed) != tab {
         forget_decoded(ctx);
     }
     let minimized = ctx.input(|i| i.viewport().minimized == Some(true));
     if minimized && !MINIMIZED.swap(true, Ordering::Relaxed) {
-        now(ctx);
-        return;
+        return true;
     }
     if !minimized {
         MINIMIZED.store(false, Ordering::Relaxed);
     }
     if !game_running || ctx.input(|i| i.focused) {
-        return;
+        return false;
     }
     let last = LAST.load(Ordering::Relaxed);
-    if now_secs().saturating_sub(last) >= BEHIND_GAME_EVERY.as_secs() {
-        now(ctx);
+    now_secs().saturating_sub(last) >= BEHIND_GAME_EVERY.as_secs()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stale_keys_are_those_unused_past_the_limit() {
+        let start = Instant::now();
+        let later = start + Duration::from_secs(30);
+        let used = HashMap::from([
+            ("old".to_owned(), start),
+            ("fresh".to_owned(), later - Duration::from_secs(5)),
+        ]);
+        assert_eq!(
+            stale_keys(&used, later, Duration::from_secs(20)),
+            vec!["old".to_owned()]
+        );
+        assert!(stale_keys(&used, start, Duration::from_secs(20)).is_empty());
+    }
+
+    #[test]
+    fn idle_when_never_seen_or_past_the_limit() {
+        let start = Instant::now();
+        let limit = Duration::from_secs(10);
+        assert!(is_idle(None, start, limit));
+        assert!(!is_idle(Some(start), start + Duration::from_secs(5), limit));
+        assert!(is_idle(Some(start), start + Duration::from_secs(11), limit));
     }
 }
 

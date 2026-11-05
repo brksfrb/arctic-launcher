@@ -97,10 +97,28 @@ pub struct ChatUi {
     account: Option<String>,
     /// Screenshots in the conversation, by attachment id.
     pictures: std::collections::HashMap<String, Picture>,
+    /// When a conversation last drew its screenshots (they go from the GPU a while after).
+    pictures_seen: Option<std::time::Instant>,
     /// The screenshot picker is open.
     picking: bool,
     /// A screenshot shown large (image URI).
     viewing: Option<String>,
+}
+
+impl ChatUi {
+    /// Let go of the screenshots' textures once the conversation hasn't drawn them for `limit`.
+    pub fn release_pictures(&mut self, now: std::time::Instant, limit: std::time::Duration) {
+        if self.viewing.is_none() && crate::trim::is_idle(self.pictures_seen, now, limit) {
+            self.release_pictures_now();
+        }
+    }
+
+    /// Let go of every screenshot's texture (they are fetched again when drawn).
+    pub fn release_pictures_now(&mut self) {
+        self.pictures
+            .retain(|_, p| !matches!(p, Picture::Ready(..)));
+        self.viewing = None;
+    }
 }
 
 impl ArcticApp {
@@ -220,6 +238,9 @@ impl ArcticApp {
                         ui.add_space(4.0);
                     }
                 });
+            if !want.is_empty() {
+                self.chat.pictures_seen = Some(std::time::Instant::now());
+            }
             self.load_pictures(want);
             if view.is_some() {
                 self.chat.viewing = view;

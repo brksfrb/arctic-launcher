@@ -811,10 +811,12 @@ impl ArcticApp {
                 self.settings.tray_asked = true;
                 self.persist_settings();
                 crate::window::hide();
-                crate::trim::now(ctx);
+                self.trim_now(ctx);
             }
         }
-        crate::trim::tick(ctx, self.runs.any_game(), self.tab as usize);
+        if crate::trim::tick(ctx, self.runs.any_game(), self.tab as usize) {
+            self.trim_now(ctx);
+        }
         #[cfg(windows)]
         self.hand_tray_over(ctx, tray_on);
         let now = ctx.input(|i| i.time);
@@ -894,7 +896,7 @@ impl ArcticApp {
             self.settings.tray_asked = true;
             self.persist_settings();
             crate::window::hide();
-            crate::trim::now(ctx);
+            self.trim_now(ctx);
         } else if quit {
             self.close_prompt = false;
             self.settings.tray = false;
@@ -1299,7 +1301,7 @@ impl eframe::App for ArcticApp {
             .update(&self.dirs, &self.settings.voice, self.accounts.active());
         self.voice.tick();
         self.together_bridge();
-        self.forget_unused_capes();
+        self.forget_idle_images();
         if std::env::var("ARCTIC_DEVSHOT_PAGE").as_deref() == Ok("modpacks")
             && crate::devshot::enabled()
             && !self.inst.modpacks_open

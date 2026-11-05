@@ -108,8 +108,10 @@ pub struct SkinsUi {
     decoder: decode::Decoder,
     /// The cape card under the pointer: the only one animating.
     animating: Option<String>,
-    /// When each cape texture was last drawn (unused ones are let go, see `forget_unused_capes`).
+    /// When each texture was last asked for (unused ones are let go, see `forget_idle_images`).
     used: HashMap<String, std::time::Instant>,
+    /// When a texture was last asked for by any card (the gallery's downloads go after a while).
+    shown_at: Option<std::time::Instant>,
     pub section: Section,
     pub trying: Trying,
     /// The newest look asked for (sent or queued): later clicks build on it.
@@ -502,10 +504,14 @@ impl ArcticApp {
     /// Texture for a key (see `SkinsUi`), uploading on first use. A cape key ending in
     /// [`STILL`] is its first frame only.
     pub(crate) fn skin_texture(&mut self, ctx: &egui::Context, key: &str) -> Option<&SkinTexture> {
-        if is_cape(key) {
-            self.skins
-                .used
-                .insert(key.to_owned(), std::time::Instant::now());
+        self.skins.shown_at = Some(std::time::Instant::now());
+        match self.skins.used.get_mut(key) {
+            Some(at) => *at = std::time::Instant::now(),
+            None => {
+                self.skins
+                    .used
+                    .insert(key.to_owned(), std::time::Instant::now());
+            }
         }
         if key == MANNEQUIN && !self.skins.textures.contains_key(key) {
             self.skins.textures.insert(key.to_owned(), mannequin(ctx));
@@ -562,21 +568,31 @@ impl ArcticApp {
         }
     }
 
-    /// Let go of cape textures not drawn for a while: the Cosmetics tab's capes after leaving
-    /// it, or ones scrolled away. They're decoded again when they come back.
-    pub(crate) fn forget_unused_capes(&mut self) {
+    /// Let go of textures not drawn for a while: the Cosmetics tab's skins and capes after leaving
+    /// it, or ones scrolled away; the gallery's downloads once the tab has been left. They are
+    /// decoded (or fetched) again when they come back.
+    pub(crate) fn forget_idle_images(&mut self) {
         let now = std::time::Instant::now();
-        let stale: Vec<String> = self
-            .skins
-            .used
-            .iter()
-            .filter(|(_, at)| now.duration_since(**at) > UNUSED_CAPE)
-            .map(|(k, _)| k.clone())
-            .collect();
-        for key in stale {
+        for key in crate::trim::stale_keys(&self.skins.used, now, UNUSED_TEXTURE) {
             self.skins.used.remove(&key);
             self.skins.textures.remove(&key);
         }
+        if self.tab != crate::app::Tab::Skins
+            && !self.skins.gallery.pngs.is_empty()
+            && crate::trim::is_idle(self.skins.shown_at, now, UNUSED_GALLERY)
+        {
+            self.skins.gallery.release();
+        }
+        self.chat.release_pictures(now, UNUSED_TEXTURE);
+    }
+
+    /// The window is going out of sight: every texture and download that can be rebuilt goes.
+    pub(crate) fn trim_now(&mut self, ctx: &egui::Context) {
+        self.skins.textures.clear();
+        self.skins.used.clear();
+        self.skins.gallery.release();
+        self.chat.release_pictures_now();
+        crate::trim::now(ctx);
     }
 
     /// The playback speed a preset cape asks for (`acape:` keys; others play at the default).
@@ -1032,7 +1048,9 @@ pub(super) const STILL: &str = "@still";
 /// 1024-wide one's 2 MB.
 const CAPE_WIDTH: u32 = 512;
 /// A cape texture not drawn for this long is let go.
-const UNUSED_CAPE: std::time::Duration = std::time::Duration::from_secs(20);
+const UNUSED_TEXTURE: std::time::Duration = std::time::Duration::from_secs(20);
+/// The gallery's downloaded skins are let go this long after the last card showed one.
+const UNUSED_GALLERY: std::time::Duration = std::time::Duration::from_secs(60);
 
 fn is_cape(key: &str) -> bool {
     key.starts_with("mccape:") || key.starts_with("acape:") || key.starts_with("ofcape:")

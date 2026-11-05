@@ -44,6 +44,18 @@ pub struct GalleryUi {
     naming: Option<(arctic_core::skins::SkinEntry, String)>,
 }
 
+impl GalleryUi {
+    /// Let go of the downloaded skins: the next visit lists them again.
+    pub fn release(&mut self) {
+        self.pngs = HashMap::new();
+        self.page = None;
+        self.total = 0;
+        self.loading = false;
+        // An answer still on its way is for the old request.
+        self.request += 1;
+    }
+}
+
 impl ArcticApp {
     /// The search box and sort, which stay put while the skins scroll.
     pub(super) fn gallery_header(&mut self, ui: &mut egui::Ui) {

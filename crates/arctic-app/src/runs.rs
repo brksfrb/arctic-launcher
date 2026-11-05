@@ -410,7 +410,7 @@ impl ArcticApp {
                 {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
                     self.minimized_for_game = true;
-                    crate::trim::now(ctx);
+                    self.trim_now(ctx);
                 }
             }
             GameEvent::Output(lines) => {
