@@ -1,0 +1,71 @@
+name: Personal build (Windows x64)
+
+# PERSONAL BRANCH ONLY (personal/burak-2026-11-08): never merge into main.
+# Builds the Windows launcher with the Arctic Client pack committed on this branch
+# (mod/dist/arctic-client.pack, built from the merged mod changes) and uploads it as a
+# short-lived workflow artifact. No release, tag, publish, update channel or deployment.
+# It runs on pushes to this branch only (a workflow that exists only on a branch can't be
+# dispatched by hand).
+
+on:
+  push:
+    branches: ["personal/burak-2026-11-08"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: personal-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows:
+    # Same runner and toolchain as release.yml's build job.
+    runs-on: [self-hosted, linux, x64, ryzen]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Toolchain and build folder
+        run: |
+          rustup update stable --no-self-update
+          rustup target add x86_64-pc-windows-msvc
+          echo "CARGO_TARGET_DIR=$HOME/arctic-target" >> "$GITHUB_ENV"
+
+      - name: Pack sanity
+        run: |
+          ls -l mod/dist/arctic-client.pack
+          sha256sum mod/dist/arctic-client.pack
+          # The personal pack must differ from main's public one.
+          git fetch --no-tags --depth=1 origin main
+          if git diff --quiet FETCH_HEAD HEAD -- mod/dist/arctic-client.pack; then
+            echo "mod/dist/arctic-client.pack is the same as main's: not a personal pack"; exit 1
+          fi
+
+      - name: Build (Windows)
+        env:
+          # Same public Azure client ID the release build bakes in (Microsoft sign-in).
+          ARCTIC_MSA_CLIENT_ID: ${{ secrets.ARCTIC_MSA_CLIENT_ID }}
+        run: |
+          set -o pipefail
+          cargo xwin build --release --locked --target x86_64-pc-windows-msvc -p arctic-app 2>&1 | tee xwin.log
+          if grep -q "could not embed exe icon" xwin.log; then echo "the Windows exe has no icon"; exit 1; fi
+
+      - name: Stage
+        run: |
+          mkdir -p out
+          cp "$CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/arctic-launcher.exe" out/arctic-launcher-windows-x64-personal.exe
+          cp mod/dist/arctic-client.pack out/arctic-client.pack
+          git rev-parse HEAD > out/COMMIT.txt
+          (cd out && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt && ls -l)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: personal-windows-x64
+          path: out/*
+          retention-days: 7
