@@ -10,6 +10,7 @@ mod game_window;
 pub mod logparse;
 mod priority;
 pub mod process;
+pub mod progress;
 #[cfg(test)]
 mod repair_tests;
 pub mod startup;

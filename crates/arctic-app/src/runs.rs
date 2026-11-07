@@ -385,6 +385,9 @@ impl ArcticApp {
                 if let Some(run) = self.runs.get_mut(id) {
                     run.state = RunState::Ended;
                 }
+                // The same text as the toast, including every cause. This used to
+                // reach the screen and never `logs/launcher.log`.
+                log::error!("Launch failed: {e}");
                 self.toasts.push(Kind::Error, "Launch failed", e);
             }
         }

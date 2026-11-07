@@ -4,6 +4,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::Sender;
 
@@ -11,6 +12,7 @@ use arctic_core::auth::avatar::{self, Face};
 use arctic_core::auth::microsoft::{self, DeviceCode, MsaConfig};
 use arctic_core::auth::{Account, now_secs};
 use arctic_core::instances::Instance;
+use arctic_core::launch::progress::{LaunchProgress, LaunchSteps};
 use arctic_core::launch::{self, GameEvent, GameHandle, LaunchRequest};
 use arctic_core::loaders::{self, LoaderKind, LoaderVersion};
 use arctic_core::mods::{self, InstalledMod, SearchPage, SearchQuery};
@@ -29,6 +31,9 @@ pub struct ProgressSnapshot {
     pub total: u64,
     pub bytes_done: u64,
     pub bytes_total: u64,
+    /// Overall launch percent, 0..=100. `None` for jobs that are a single stage.
+    /// 100 only after every stage has finished.
+    pub percent: Option<u8>,
 }
 
 impl From<ProgressInfo<'_>> for ProgressSnapshot {
@@ -39,6 +44,7 @@ impl From<ProgressInfo<'_>> for ProgressSnapshot {
             total: p.total,
             bytes_done: p.bytes_done,
             bytes_total: p.bytes_total,
+            percent: None,
         }
     }
 }
@@ -367,7 +373,8 @@ impl Tasks {
         self.run(move |t| {
             let result = t.launch_blocking(id, &version, &instance, account, &settings, start);
             let result = result.map(|(game, log, java)| (game, log, version.id.clone(), java));
-            t.send(Event::Launched(id, result.map_err(|e| e.to_string())));
+            // The toast shows this string; it has to be the whole cause chain, not just Display.
+            t.send(Event::Launched(id, result.map_err(|e| e.chain())));
         });
     }
 
@@ -380,8 +387,16 @@ impl Tasks {
         settings: &Settings,
         start: StartAt,
     ) -> Result<(GameHandle, PathBuf, String)> {
-        let progress =
-            |p: ProgressInfo| self.send(Event::LaunchProgress(id, ProgressSnapshot::from(p)));
+        let tracker = Mutex::new(LaunchProgress::new(LaunchSteps::from_instance(instance)));
+        let progress = |p: ProgressInfo| {
+            let percent = tracker
+                .lock()
+                .unwrap_or_else(|err| err.into_inner())
+                .observe(p.stage, p.done, p.total, p.bytes_done, p.bytes_total);
+            let mut snapshot = ProgressSnapshot::from(p);
+            snapshot.percent = Some(percent);
+            self.send(Event::LaunchProgress(id, snapshot));
+        };
         let account = if account.needs_refresh(now_secs()) {
             progress(ProgressInfo::stage("Refreshing Microsoft login"));
             let cfg = MsaConfig::load(&self.dirs)?;
@@ -407,6 +422,19 @@ impl Tasks {
             let _ = tx.send(Event::Game(id, event));
             ctx.request_repaint();
         })?;
+        // Every stage finished and the process started. A failure above never sends 100%.
+        let percent = tracker
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
+            .finish();
+        self.send(Event::LaunchProgress(
+            id,
+            ProgressSnapshot {
+                stage: "Starting".into(),
+                percent: Some(percent),
+                ..ProgressSnapshot::default()
+            },
+        ));
         Ok((game, plan.log_file.clone(), plan.java_summary()))
     }
 
