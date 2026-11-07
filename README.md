@@ -7,12 +7,11 @@
 <p align="center">
   A Minecraft launcher with the Arctic Client built in.<br>
   The launcher runs every release, with mod loaders, mods, modpacks, accounts, servers and friends.<br>
-  The client adds 76 built-in mods, 53 HUD widgets, Polarium, replays, cosmetics and voice.
+  The client adds 128 built-in mods, including 53 HUD widgets, plus Polarium, replays, cosmetics and voice.
 </p>
 
 <p align="center">
-  Arctic Client is a legitimate PvP and performance client with no cheats, and it is safe on servers with anti-cheat.
-  A different project, also named Arctic, is a cheat client.
+  Arctic Client has no cheats and isn't related to other projects named Arctic.
 </p>
 
 <p align="center">
@@ -59,7 +58,7 @@ Press Right Shift in game for the client menu. The client is on by default for V
 
 ### Client mods
 
-`ModCatalog` declares **76 built-in mods**. A version with no hook for a mod leaves that mod off the list, so one version can show fewer. The names below are the mods in the catalog, in the category the Mods screen uses.
+The Mods screen on current versions lists **128 built-in mods, including 53 HUD widgets**: every tile `ModCatalog` shows there. 1.8.9 also has 1.7 Animations, which is not in that 128. A version with no hook for a mod leaves that tile off, so an older version can show fewer. The names below are those tiles, in the category the screen uses.
 
 **Combat (6).** Combat Feedback (hit marker, hit and kill sounds, low-health warning), Attack Range Indicator, Hitboxes, Hit Color, TNT Timer, Low Durability.
 
@@ -67,7 +66,7 @@ Press Right Shift in game for the client menu. The client is on by default for V
 
 **Inventory (5).** Lock Slots, Inventory Search (Ctrl+F), Client Sort, Pickup Display, Shulker Peek (shulker boxes and other containers that carry their contents).
 
-**Visual (24).** Fullbright, Crosshair (shape, size, color, or your own picture), Time Changer, Clear Weather, Low Fire, 1.7 Animations, Motion Blur, Item Physics, Block Outline, Glint Colorizer, Shiny Pots, 2D Items, Dynamic FOV, Fog, Mob Size, Hide Titles, Damage Tint, Scoreboard, Dynamic FPS, No Hurt Shake, Debug Screen (colored F3), Particle Control, Held Item, Packs & Shaders (resource packs and shaders from Modrinth, including from the in-game menu).
+**Visual (23).** Fullbright, Crosshair (shape, size, color, or your own picture), Time Changer, Clear Weather, Low Fire, Motion Blur, Item Physics, Block Outline, Glint Colorizer, Shiny Pots, 2D Items, Dynamic FOV, Fog, Mob Size, Hide Titles, Damage Tint, Scoreboard, Dynamic FPS, No Hurt Shake, Debug Screen (colored F3), Particle Control, Held Item, Packs & Shaders (resource packs and shaders from Modrinth, including from the in-game menu).
 
 **Chat (7).** Chat (timestamps, stacked lines, mentions, `{x}` `{y}` `{z}` placeholders, mute), Chat History (search, filters, a second chat, longer scrollback), Emoji and Symbols, Quick Messages, Auto Text, Auto GG, Streamer Mode.
 
@@ -79,13 +78,15 @@ Press Right Shift in game for the client menu. The client is on by default for V
 
 **Client (4).** Menu Style (Arctic, Aurora, Classic or Vanilla, plus the smooth font), Account (switch accounts, or the proxy), Command Palette (Ctrl+K: mods, servers, friends), Cosmetics Check.
 
-**HUD (2 of the 76, plus the widgets below).** Saturation Bar, HUD Style.
+**HUD (2, plus the 53 widgets).** Saturation Bar, HUD Style.
 
 **No category chip (3).** Chunk Borders, Scrollable Tooltips, Sound Changer. They are on the Mods screen; the old Gameplay chip is gone.
 
+Those groups are 75 tiles. With the 53 HUD widgets, that is 128.
+
 ### HUD widgets
 
-**53 HUD widgets** where the version supports the full set. Minimap, Cooldowns, Horse stats, Scoreboard and Boss bar are the ones a version can omit. Four looks, named Arctic, Clean, Minimal and Rainbow, apply to every widget at once. Widgets line up on their own and snap when you move them. The server scoreboard and boss bar move, resize and hide the same way.
+These **53 HUD widgets** are part of the 128. Minimap, Cooldowns, Horse stats, Scoreboard and Boss bar are the ones a version can omit. Four looks, named Arctic, Clean, Minimal and Rainbow, apply to every widget at once. Widgets line up on their own and snap when you move them. The server scoreboard and boss bar move, resize and hide the same way.
 
 **Performance (13).** FPS, Ping, TPS, Frame time, 1% low, CPU, PC CPU, PC RAM, Alloc, GPU, VRAM, Memory, Entities.
 
