@@ -289,6 +289,9 @@ processResources {
 			lightEngine: atLeast('1.14'),
 			// Needs the FreeType font code of 26.1+ (older versions use STB).
 			smoothFont: atLeast('26.1'),
+			// Scaled-up smooth-font text drawn from letters rasterized near their size on screen (ScaledInter):
+			// needs 1.21.9+'s glyph API (baked glyphs that carry their metrics) and GUI text render states.
+			scaledFont: atLeast('1.21.9'),
 			// 1.21.11's chat draws and collects clicks together, with a hardcoded line of 9.
 			chatLine111: atLeast('1.21.11') && !atLeast('26.1'),
 			// Motion blur as a post effect (and its pack) before 26.1, for VulkanMod.
