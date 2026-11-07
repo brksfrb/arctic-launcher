@@ -115,6 +115,11 @@ impl ArcticApp {
                 "Close Minecraft when Arctic quits",
             )
             .on_hover_text("Off: games keep running after the launcher closes.");
+            ui.checkbox(
+                &mut s.confirm_join_launch,
+                "Ask before launching Minecraft to join a server",
+            )
+            .on_hover_text("Join on a server asks first when no game is running.");
             ui.checkbox(&mut s.show_sponsor, "Show supporter mentions")
                 .on_hover_text(
                     "\"Supported by Flash Hosting\" in the sidebar, About and Play together.",

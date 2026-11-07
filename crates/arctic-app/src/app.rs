@@ -230,6 +230,10 @@ pub struct ArcticApp {
     open_flushed: std::time::Instant,
     /// The first-close question about the tray is showing.
     pub(crate) close_prompt: bool,
+    /// "Launch Minecraft to join this server?" is up for this address.
+    pub(crate) join_confirm: Option<String>,
+    /// That dialog's "Don't show again" box.
+    pub(crate) join_confirm_never: bool,
     /// The graphics driver draws in software (no GPU): animations and the glass blur stay off.
     pub(crate) software_gl: bool,
     gl_checked: bool,
@@ -310,6 +314,8 @@ impl ArcticApp {
             playtime: arctic_core::playtime::Stats::load(&dirs),
             open_flushed: std::time::Instant::now(),
             close_prompt: false,
+            join_confirm: None,
+            join_confirm_never: false,
             software_gl: false,
             gl_checked: false,
             maximize_pending: data.settings.start_maximized,
@@ -629,6 +635,105 @@ impl ArcticApp {
         self.launch_selected_as(false, None);
     }
 
+    /// The Join button of a server. A running game is brought to the front and told to connect (the
+    /// Arctic Client listens for that); without a running game, the player is asked (once, if they
+    /// like) before Minecraft starts. Returns false while that question is up.
+    pub(crate) fn join_server(&mut self, address: &str) -> bool {
+        use crate::toasts::Kind;
+        let running = self
+            .runs
+            .active()
+            .map(|r| (r.id, r.game().map(|g| g.pid())))
+            .next();
+        match running {
+            Some((_, None)) => {
+                self.toasts.push(
+                    Kind::Info,
+                    "Minecraft is still starting",
+                    "Try Join again when its window is up.",
+                );
+            }
+            Some((run, Some(pid))) => {
+                crate::focus::game_window(pid);
+                if self.bridge.send_join(run, address) {
+                    self.friends.my_server = Some(address.to_owned());
+                    self.toasts.push(
+                        Kind::Info,
+                        "Joining in the running game",
+                        address.to_owned(),
+                    );
+                } else {
+                    // No Arctic Client in that game: nothing can tell it to switch servers.
+                    let copied = arboard::Clipboard::new()
+                        .and_then(|mut c| c.set_text(address.to_owned()))
+                        .is_ok();
+                    self.toasts.push(
+                        Kind::Info,
+                        "Can't switch servers in this game",
+                        if copied {
+                            format!("It has no Arctic Client. {address} is copied: add it in the game's server list.")
+                        } else {
+                            format!("It has no Arctic Client. Add {address} in the game's server list.")
+                        },
+                    );
+                }
+            }
+            None if self.settings.confirm_join_launch => {
+                self.join_confirm = Some(address.to_owned());
+                self.join_confirm_never = false;
+                return false;
+            }
+            None => self.launch_into(arctic_core::launch::QuickPlay::Server(address.to_owned())),
+        }
+        true
+    }
+
+    /// "Do you want to launch Minecraft to join this server?"
+    pub(crate) fn join_confirm_dialog(&mut self, ctx: &egui::Context) {
+        let Some(address) = self.join_confirm.clone() else {
+            return;
+        };
+        let p = self.palette();
+        let (mut yes, mut cancel) = (false, false);
+        let modal = egui::Modal::new(egui::Id::new("join_confirm"))
+            .frame(crate::ui::dialog_frame(p))
+            .show(ctx, |ui| {
+                ui.set_width(380.0);
+                crate::widgets::lift_controls(ui, p);
+                ui.label(
+                    egui::RichText::new("Do you want to launch Minecraft to join this server?")
+                        .size(18.0)
+                        .strong()
+                        .color(p.text),
+                );
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new(&address).color(p.muted));
+                ui.add_space(8.0);
+                ui.checkbox(&mut self.join_confirm_never, "Don't show again")
+                    .on_hover_text("You can turn this question back on in Settings.");
+                ui.add_space(10.0);
+                crate::widgets::row(ui, |ui| {
+                    if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
+                        cancel = true;
+                    }
+                    if crate::widgets::button(ui, p, None, "Yes", true).clicked() {
+                        yes = true;
+                    }
+                });
+            });
+        if yes {
+            self.join_confirm = None;
+            self.discover.open = false;
+            if self.join_confirm_never {
+                self.settings.confirm_join_launch = false;
+                self.persist_settings();
+            }
+            self.launch_into(arctic_core::launch::QuickPlay::Server(address));
+        } else if cancel || modal.should_close() {
+            self.join_confirm = None;
+        }
+    }
+
     /// Start the selected instance straight into a server or world.
     pub(crate) fn launch_into(&mut self, target: arctic_core::launch::QuickPlay) {
         if let arctic_core::launch::QuickPlay::Server(address) = &target {
@@ -756,7 +861,12 @@ impl ArcticApp {
             ),
         );
         self.log_source = LogSource::Game(id);
-        let start = crate::tasks::StartAt { copy, quick_play };
+        let bridge = self.bridge.register_launch(id);
+        let start = crate::tasks::StartAt {
+            copy,
+            quick_play,
+            bridge,
+        };
         self.bridge.allow(&account.id);
         self.tasks
             .launch(id, version, instance, account, self.settings.clone(), start);

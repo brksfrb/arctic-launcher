@@ -421,6 +421,7 @@ impl ArcticApp {
             }
             GameEvent::Exited { code } => {
                 run.state = RunState::Ended;
+                self.bridge.forget_launch(id);
                 // What the game changed goes to the profile's other instances.
                 let (dirs, shared) = (self.dirs.clone(), self.settings.shared);
                 std::thread::spawn(move || {

@@ -230,6 +230,8 @@ pub struct Tasks {
 pub struct StartAt {
     pub copy: u32,
     pub quick_play: Option<arctic_core::launch::QuickPlay>,
+    /// This game's own bridge info (with its join token), instead of the launcher-wide one.
+    pub bridge: Option<arctic_core::bridge::BridgeInfo>,
 }
 
 impl Tasks {
@@ -395,7 +397,7 @@ impl Tasks {
             instance,
             account: &account,
             settings,
-            bridge: self.bridge.as_deref(),
+            bridge: start.bridge.as_ref().or(self.bridge.as_deref()),
             copy: start.copy,
             quick_play: start.quick_play,
         };
