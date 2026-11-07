@@ -201,6 +201,21 @@ processResources {
 	}
 }
 
+if (findProperty('chathit') == 'true') {
+	loom {
+		runs {
+			client {
+				vmArg '-Darctic.selftest=chathit'
+				vmArg '-Dorg.lwjgl.opengl.Display.allowSoftwareOpenGL=true'
+				programArg '--width'
+				programArg '1920'
+				programArg '--height'
+				programArg '1080'
+			}
+		}
+	}
+}
+
 tasks.withType(JavaCompile).configureEach {
 	it.options.release = 8
 	it.options.encoding = 'UTF-8'
