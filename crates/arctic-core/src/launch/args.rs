@@ -86,6 +86,46 @@ fn expand(list: &[Argument], env: &RuleEnv, vars: &Placeholders) -> Vec<String> 
         .collect()
 }
 
+/// Split a player's JVM arguments on whitespace, keeping a quoted value that
+/// contains a space as one argument (`-Dx="1.8.9 Forge"`,
+/// `-javaagent:"C:\x\1.8.9 Forge\a.jar"`). Single and double quotes are
+/// removed. A backslash is a Windows path separator, not an escape: a shell
+/// splitter would turn `C:\Users` into `C:Users`. An unclosed quote is not
+/// guessed at and falls back to splitting on whitespace.
+pub(crate) fn split_jvm_args(args: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut quote: Option<char> = None;
+    let mut started = false;
+    for c in args.chars() {
+        match quote {
+            Some(q) if c == q => quote = None,
+            Some(_) => cur.push(c),
+            None if c == '"' || c == '\'' => {
+                quote = Some(c);
+                started = true;
+            }
+            None if c.is_whitespace() => {
+                if started {
+                    out.push(std::mem::take(&mut cur));
+                    started = false;
+                }
+            }
+            None => {
+                cur.push(c);
+                started = true;
+            }
+        }
+    }
+    if quote.is_some() {
+        return args.split_whitespace().map(str::to_owned).collect();
+    }
+    if started {
+        out.push(cur);
+    }
+    out
+}
+
 /// Replace every `${key}` with its value; unknown keys are left untouched.
 pub fn substitute(template: &str, vars: &Placeholders) -> String {
     let mut out = String::with_capacity(template.len());
@@ -215,5 +255,43 @@ mod tests {
         assert!(full.contains(&"-Dlog".to_string()));
         assert_eq!(full.last().unwrap(), "--fullscreen");
         assert!(!full.contains(&"--width".to_string()));
+    }
+
+    #[test]
+    fn jvm_arguments_keep_quoted_spaces_and_windows_paths() {
+        assert_eq!(
+            split_jvm_args(r#"-Dx="1.8.9 Forge" -Dbar='a b' -Xmx2G"#),
+            ["-Dx=1.8.9 Forge", "-Dbar=a b", "-Xmx2G"]
+        );
+        assert_eq!(
+            split_jvm_args(
+                r#"-javaagent:"C:\x\1.8.9 Forge\a.jar" -Djava.library.path=C:\Users\me\natives"#
+            ),
+            [
+                r"-javaagent:C:\x\1.8.9 Forge\a.jar",
+                r"-Djava.library.path=C:\Users\me\natives",
+            ]
+        );
+        // An unclosed quote is not guessed at: split on whitespace, as before.
+        assert_eq!(
+            split_jvm_args(r#"-Dfoo="1.8.9 Forge"#),
+            [r#"-Dfoo="1.8.9"#, "Forge"]
+        );
+    }
+
+    #[test]
+    fn a_quoted_forge_token_does_not_become_the_main_class() {
+        let version: VersionJson = serde_json::from_str(
+            r#"{"id":"1.8.9","mainClass":"net.minecraft.launchwrapper.Launch","minecraftArguments":"--tweakClass net.minecraftforge.fml.common.launcher.FMLTweaker"}"#,
+        )
+        .unwrap();
+        let mut options = opts();
+        options.extra = split_jvm_args(r#"-Dx="1.8.9 Forge""#);
+        let args = build(&version, &windows_env(), &vars(), &options);
+        let cp = args.iter().position(|a| a == "-cp").unwrap();
+        // Classpath value, then the main class. Nothing may land in front of it.
+        assert_eq!(args[cp + 2], "net.minecraft.launchwrapper.Launch");
+        assert!(args.iter().any(|a| a == "-Dx=1.8.9 Forge"));
+        assert!(!args.iter().any(|a| a == "Forge"));
     }
 }

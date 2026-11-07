@@ -550,6 +550,49 @@ mod tests {
         );
     }
 
+    /// A path with spaces and backslashes, written the way a Windows launch does and read back
+    /// with OpenJDK's `@argfile` rules. Inside quotes `\` escapes the next character, so each
+    /// path separator is doubled, and a newline ends a token even inside quotes. Unquoted, the
+    /// space in `Forge 1.8.9` would split that path.
+    #[test]
+    fn argument_file_round_trips_a_windows_path_with_spaces() {
+        let natives = r"C:\Users\me\AppData\Local\ArcticLauncher\profiles\default\instances\Forge 1.8.9\natives";
+        let classpath = format!(
+            r"C:\Users\me\AppData\Local\ArcticLauncher\shared\libraries\net\minecraft\launchwrapper\1.12\launchwrapper-1.12.jar;{natives}\client.jar"
+        );
+        let args = vec![
+            format!("-Djava.library.path={natives}"),
+            r"-javaagent:C:\Program Files\Arctic Launcher\agent.jar".to_owned(),
+            "-cp".into(),
+            classpath,
+            "net.minecraft.launchwrapper.Launch".into(),
+        ];
+        let parsed = java_argfile_tokens(&argfile_text(&args));
+        assert_eq!(parsed, args);
+        assert!(!parsed.iter().any(|a| a == "Forge"));
+        let cp = parsed.iter().position(|a| a == "-cp").unwrap();
+        assert_eq!(parsed[cp + 2], "net.minecraft.launchwrapper.Launch");
+    }
+
+    /// `args.c` `nextToken` cases: doubled backslashes inside quotes, and `#` comments.
+    #[test]
+    fn java_argfile_parser_matches_openjdk() {
+        assert_eq!(
+            java_argfile_tokens("-version -cp \"c:\\\\java libs\\\\one.jar\" \n"),
+            ["-version", "-cp", "c:\\java libs\\one.jar"]
+        );
+        assert_eq!(
+            java_argfile_tokens(
+                "line one #comment\n'line #2' #rest are comment\r\n#comment on line 3\nline 4 #comment to eof"
+            ),
+            ["line", "one", "line #2", "line", "4"]
+        );
+        assert_eq!(
+            java_argfile_tokens("escaped chars testing \"\\a\\b\\c\\f\\n\\r\\t\\v\\9\""),
+            ["escaped", "chars", "testing", "abc\u{000c}\n\r\tv9"]
+        );
+    }
+
     #[test]
     fn java_versions_come_from_the_release_file() {
         assert_eq!(java_major("JAVA_VERSION=\"1.8.0_402\"\n"), Some(8));
@@ -735,5 +778,147 @@ ok SECRET SECRET
                 .iter()
                 .all(|l| !l.contains("SECRET"))
         );
+    }
+
+    /// OpenJDK's `@argfile` tokenizer (`src/java.base/share/native/libjli/args.c`, `nextToken`).
+    /// Inside quotes `\` escapes the next character (`n`, `r`, `t`, `f` become those controls;
+    /// anything else, including `\`, is kept as itself). A newline ends a token even inside a
+    /// quote. Outside quotes `\` is just a character, and `#` starts a comment.
+    fn java_argfile_tokens(text: &str) -> Vec<String> {
+        let chars: Vec<char> = text.chars().collect();
+        let mut parser = ArgParser {
+            chars: &chars,
+            i: 0,
+            state: ArgState::FindNext,
+            quote: '"',
+            parts: Vec::new(),
+        };
+        let mut tokens = Vec::new();
+        while let Some(token) = parser.next_token() {
+            tokens.push(token);
+        }
+        if matches!(parser.state, ArgState::InToken | ArgState::InQuote) && !parser.parts.is_empty()
+        {
+            tokens.push(parser.parts.concat());
+        }
+        tokens
+    }
+
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum ArgState {
+        FindNext,
+        InComment,
+        InQuote,
+        InEscape,
+        SkipLeadWs,
+        InToken,
+    }
+
+    struct ArgParser<'a> {
+        chars: &'a [char],
+        i: usize,
+        state: ArgState,
+        quote: char,
+        parts: Vec<String>,
+    }
+
+    impl ArgParser<'_> {
+        fn next_token(&mut self) -> Option<String> {
+            let n = self.chars.len();
+            let mut anchor = self.i;
+            while self.i < n {
+                let ch = self.chars[self.i];
+                if self.state == ArgState::FindNext || self.state == ArgState::SkipLeadWs {
+                    if matches!(ch, ' ' | '\n' | '\r' | '\t' | '\u{000c}') {
+                        self.i += 1;
+                        continue;
+                    }
+                    self.state = if self.state == ArgState::FindNext {
+                        ArgState::InToken
+                    } else {
+                        ArgState::InQuote
+                    };
+                    anchor = self.i;
+                } else if self.state == ArgState::InEscape {
+                    if ch == '\n' || ch == '\r' {
+                        self.state = ArgState::SkipLeadWs;
+                    } else {
+                        let escaped = match ch {
+                            'n' => '\n',
+                            'r' => '\r',
+                            't' => '\t',
+                            'f' => '\u{000c}',
+                            other => other,
+                        };
+                        self.parts.push(escaped.to_string());
+                        self.state = ArgState::InQuote;
+                    }
+                    anchor = self.i + 1;
+                    self.i += 1;
+                    continue;
+                } else if self.state == ArgState::InComment {
+                    if ch != '\n' && ch != '\r' {
+                        self.i += 1;
+                        continue;
+                    }
+                    anchor = self.i + 1;
+                    self.state = ArgState::FindNext;
+                    self.i += 1;
+                    continue;
+                }
+
+                match ch {
+                    ' ' | '\t' | '\u{000c}' if self.state == ArgState::InQuote => self.i += 1,
+                    ' ' | '\t' | '\u{000c}' | '\n' | '\r' => {
+                        let token = self.finish(anchor, self.i);
+                        self.i += 1;
+                        self.state = ArgState::FindNext;
+                        return Some(token);
+                    }
+                    '#' if self.state != ArgState::InQuote => {
+                        self.state = ArgState::InComment;
+                        anchor = self.i + 1;
+                        self.i += 1;
+                    }
+                    '\\' if self.state != ArgState::InQuote => self.i += 1,
+                    '\\' => {
+                        self.push_span(anchor, self.i);
+                        self.state = ArgState::InEscape;
+                        anchor = self.i + 1;
+                        self.i += 1;
+                    }
+                    '\'' | '"' if self.state == ArgState::InQuote && self.quote != ch => {
+                        self.i += 1;
+                    }
+                    '\'' | '"' => {
+                        self.push_span(anchor, self.i);
+                        anchor = self.i + 1;
+                        if self.state == ArgState::InToken {
+                            self.quote = ch;
+                            self.state = ArgState::InQuote;
+                        } else {
+                            self.state = ArgState::InToken;
+                        }
+                        self.i += 1;
+                    }
+                    _ => self.i += 1,
+                }
+            }
+            if matches!(self.state, ArgState::InToken | ArgState::InQuote) {
+                self.push_span(anchor, n);
+            }
+            None
+        }
+
+        fn push_span(&mut self, from: usize, to: usize) {
+            if from < to {
+                self.parts.push(self.chars[from..to].iter().collect());
+            }
+        }
+
+        fn finish(&mut self, anchor: usize, end: usize) -> String {
+            self.push_span(anchor, end);
+            std::mem::take(&mut self.parts).concat()
+        }
     }
 }
