@@ -4,7 +4,6 @@
 
 use std::collections::HashMap;
 
-use arctic_core::launch::QuickPlay;
 use arctic_core::servers::{Server, Status};
 use eframe::egui::{self, Color32, CornerRadius, RichText, emath::TSTransform, pos2, vec2};
 
@@ -384,7 +383,7 @@ impl ArcticApp {
             }
         }
         if join {
-            self.launch_into(QuickPlay::Server(typed));
+            self.join_server(&typed);
         }
     }
 
@@ -511,7 +510,7 @@ impl ArcticApp {
             });
         });
         if join {
-            self.launch_into(QuickPlay::Server(server.address.clone()));
+            self.join_server(&server.address);
         }
         let rect = row.response.rect;
         if let Some(index) = index {

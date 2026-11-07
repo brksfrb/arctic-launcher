@@ -25,6 +25,8 @@ public final class Session {
 	/** Friends may see which server we're on. */
 	public boolean shareServer;
 	public String bridgeSecret;
+	/** This launch's own token for the launcher's join queue (null = none). */
+	public String launchToken;
 	/** When the style was picked in the launcher (seconds), 0 if unknown. */
 	public final long styleSet;
 	/** A duel the launcher asked for: kit, friend (may be null), and when (seconds). */
@@ -88,6 +90,7 @@ public final class Session {
 				long port = number(b.getAsJsonObject(), "port");
 				session.bridgePort = port > 0 && port < 65536 ? (int) port : 0;
 				session.bridgeSecret = string(b.getAsJsonObject(), "secret");
+				session.launchToken = string(b.getAsJsonObject(), "launch");
 			}
 			JsonElement r = o.get("replay");
 			if (r != null && r.isJsonObject()) {

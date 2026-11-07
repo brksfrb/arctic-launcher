@@ -2,7 +2,6 @@
 //! time (nothing paid or pinned), filtered by premium / cracked, with a
 //! "Surprise me" pick; plus the form owners use to list their own server.
 
-use arctic_core::launch::QuickPlay;
 use arctic_core::servers::public::{self, Access, PublicServer, Submitted};
 use eframe::egui::{self, Id, Modal, RichText, Stroke, vec2};
 
@@ -20,7 +19,7 @@ const ABUSE: &str = "See a misleading listing, or own this server and want it ch
 
 #[derive(Default)]
 pub struct DiscoverUi {
-    open: bool,
+    pub(crate) open: bool,
     list: Option<Outcome<Vec<PublicServer>>>,
     access: Access,
     search: String,
@@ -371,9 +370,8 @@ impl ArcticApp {
                     .push(Kind::Error, "Couldn't add it", e.to_string()),
             }
         }
-        if join {
+        if join && self.join_server(&s.address) {
             self.discover.open = false;
-            self.launch_into(QuickPlay::Server(s.address.clone()));
         }
     }
 

@@ -9,6 +9,7 @@ mod bridge_host;
 mod desktop_shortcut;
 mod devshot;
 mod discord;
+mod focus;
 mod fonts;
 mod friend_tasks;
 mod gallery_tasks;

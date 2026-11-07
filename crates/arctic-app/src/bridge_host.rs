@@ -3,7 +3,7 @@
 //! accounts, refreshing logins through the same task path as launches so
 //! the app's account list stays the one source of truth.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use arctic_core::auth::{Account, AccountKind, AccountStore};
@@ -31,7 +31,22 @@ struct Shared {
     /// A switch to an account that is not allowed yet, waiting for the player's answer.
     switch_ask: Option<SwitchAsk>,
     asks_made: u64,
+    /// Running games by their launch token: what to tell each to join.
+    games: HashMap<String, GameLink>,
 }
+
+/// How one launched game reaches the launcher for joins.
+struct GameLink {
+    run: u64,
+    /// A server address waiting for the game to pick it up.
+    join: Option<String>,
+    /// The last time the game asked (a game without the Arctic Client never does).
+    polled: Option<std::time::Instant>,
+}
+
+/// The Arctic Client asks about once a second; a game that has not asked for this long has no client
+/// (or has not finished starting).
+const GAME_ALIVE: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// The game asked to switch to `name`; the launcher asks the player.
 struct SwitchAsk {
@@ -377,6 +392,13 @@ impl bridge::Accounts for AppAccounts {
             .ok_or_else(|| arctic_core::Error::Other("voice chat isn't ready".into()))
     }
 
+    fn join(&self, launch: &str) -> Option<String> {
+        let mut shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let game = shared.games.get_mut(launch)?;
+        game.polled = Some(std::time::Instant::now());
+        game.join.take()
+    }
+
     fn together(&self, request: &[u8]) -> arctic_core::Result<String> {
         let body: TogetherBody = serde_json::from_slice(request)
             .map_err(|_| arctic_core::Error::Other("bad request".into()))?;
@@ -412,6 +434,7 @@ impl BridgeHost {
             allowed: HashSet::new(),
             switch_ask: None,
             asks_made: 0,
+            games: HashMap::new(),
         }));
         let info = bridge::start(AppAccounts(Arc::clone(&shared)))
             .inspect_err(|e| log::warn!("account switcher bridge: {e}"))
@@ -435,6 +458,48 @@ impl BridgeHost {
             .unwrap_or_else(PoisonError::into_inner)
             .allowed
             .insert(account_id.to_owned());
+    }
+
+    /// A game run is being launched: its own bridge info, with a token only that game knows.
+    pub fn register_launch(&self, run: u64) -> Option<BridgeInfo> {
+        let (info, token) = self.info.as_ref()?.for_launch();
+        self.shared
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .games
+            .insert(
+                token,
+                GameLink {
+                    run,
+                    join: None,
+                    polled: None,
+                },
+            );
+        Some(info)
+    }
+
+    /// A run has ended: its token is no good any more.
+    pub fn forget_launch(&self, run: u64) {
+        self.shared
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .games
+            .retain(|_, g| g.run != run);
+    }
+
+    /// Queue `address` for the game of `run`, if that game has the Arctic Client listening. False
+    /// when it doesn't (never asked lately), so the caller can fall back.
+    pub fn send_join(&self, run: u64, address: &str) -> bool {
+        let mut shared = self.shared.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some(game) = shared
+            .games
+            .values_mut()
+            .find(|g| g.run == run && g.polled.is_some_and(|t| t.elapsed() < GAME_ALIVE))
+        else {
+            return false;
+        };
+        game.join = Some(address.to_owned());
+        true
     }
 
     /// The name of the account a game wants to switch to and the player has not answered about.
