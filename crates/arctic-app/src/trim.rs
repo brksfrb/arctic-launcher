@@ -82,6 +82,30 @@ pub fn tick(ctx: &egui::Context, game_running: bool, tab: usize) -> bool {
     now_secs().saturating_sub(last) >= BEHIND_GAME_EVERY.as_secs()
 }
 
+#[cfg(windows)]
+fn system_trim() {
+    use windows_sys::Win32::System::Memory::{GetProcessHeap, HeapCompact};
+    use windows_sys::Win32::System::ProcessStatus::K32EmptyWorkingSet;
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+    // SAFETY: the process's own heap and pseudo-handle; both calls only ask Windows to release
+    // free heap blocks and to page out what isn't in use (pages come back when touched).
+    unsafe {
+        HeapCompact(GetProcessHeap(), 0);
+        K32EmptyWorkingSet(GetCurrentProcess());
+    }
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn system_trim() {
+    // SAFETY: glibc's own call to hand free heap memory back to the system.
+    unsafe {
+        libc::malloc_trim(0);
+    }
+}
+
+#[cfg(not(any(windows, all(target_os = "linux", target_env = "gnu"))))]
+fn system_trim() {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -110,27 +134,3 @@ mod tests {
         assert!(is_idle(Some(start), start + Duration::from_secs(11), limit));
     }
 }
-
-#[cfg(windows)]
-fn system_trim() {
-    use windows_sys::Win32::System::Memory::{GetProcessHeap, HeapCompact};
-    use windows_sys::Win32::System::ProcessStatus::K32EmptyWorkingSet;
-    use windows_sys::Win32::System::Threading::GetCurrentProcess;
-    // SAFETY: the process's own heap and pseudo-handle; both calls only ask Windows to release
-    // free heap blocks and to page out what isn't in use (pages come back when touched).
-    unsafe {
-        HeapCompact(GetProcessHeap(), 0);
-        K32EmptyWorkingSet(GetCurrentProcess());
-    }
-}
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-fn system_trim() {
-    // SAFETY: glibc's own call to hand free heap memory back to the system.
-    unsafe {
-        libc::malloc_trim(0);
-    }
-}
-
-#[cfg(not(any(windows, all(target_os = "linux", target_env = "gnu"))))]
-fn system_trim() {}
