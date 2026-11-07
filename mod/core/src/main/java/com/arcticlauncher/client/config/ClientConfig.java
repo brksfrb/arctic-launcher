@@ -94,6 +94,8 @@ public final class ClientConfig {
 	/** Press sprint/sneak once to keep sprinting/sneaking. */
 	public boolean toggleSprint;
 	public boolean toggleSneak;
+	/** Hotbar scroll stops on slot 1 and slot 9 instead of wrapping (the game's own wrap when off). */
+	public boolean hotbarScrollStop;
 	/** View: chat timestamps, stacked repeats, lower fire, no rain. */
 	public boolean chatTimestamps;
 	public boolean chatStack = true;
