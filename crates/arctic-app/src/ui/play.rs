@@ -19,6 +19,16 @@ use crate::widgets::{self, PlayState};
 const PLAY_SIZE: [f32; 2] = [300.0, 62.0];
 const PICKER_WIDTH: f32 = 340.0;
 
+/// Floored percent of one byte ratio. Never 100: a single stage's bytes being
+/// finished (or 99.6% and rounded) is not the whole launch.
+fn bytes_percent(done: u64, total: u64) -> Option<u8> {
+    if total == 0 {
+        return None;
+    }
+    let pct = u128::from(done.min(total)) * 100 / u128::from(total);
+    Some(pct.min(99) as u8)
+}
+
 /// Which versions the picker lists.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum VersionView {
@@ -532,15 +542,25 @@ impl ArcticApp {
         let label;
         let state = match self.selected_run().map(|r| &r.state) {
             Some(RunState::Preparing { progress, .. }) => {
-                let fraction = (progress.bytes_total > 0)
-                    .then(|| progress.bytes_done as f32 / progress.bytes_total as f32);
-                label = match fraction {
-                    Some(f) => format!("{:.0}%", f * 100.0),
-                    None => format!("{}…", progress.stage),
-                };
-                PlayState::Progress {
-                    fraction,
-                    label: &label,
+                // Overall launch percent (game files, loader, mods), floored, 100 only at the end.
+                let percent = progress
+                    .percent
+                    .or_else(|| bytes_percent(progress.bytes_done, progress.bytes_total));
+                match percent {
+                    Some(p) if p > 0 || progress.bytes_total > 0 => {
+                        label = format!("{p}%");
+                        PlayState::Progress {
+                            fraction: Some(p as f32 / 100.0),
+                            label: &label,
+                        }
+                    }
+                    _ => {
+                        label = format!("{}…", progress.stage);
+                        PlayState::Progress {
+                            fraction: None,
+                            label: &label,
+                        }
+                    }
                 }
             }
             Some(RunState::Starting { .. }) => {
