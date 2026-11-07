@@ -212,7 +212,7 @@ impl ArcticApp {
                         .color(p.muted),
                 );
                 ui.add_space(8.0);
-                egui::ComboBox::from_id_salt("import_source")
+                widgets::modal_combo("import_source")
                     .width(ui.available_width())
                     .selected_text(dialog.sources[dialog.source].label.clone())
                     .show_ui(ui, |ui| {
