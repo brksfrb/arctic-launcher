@@ -54,6 +54,7 @@ final class CombatTest {
 		ClientConfig c = ArcticClient.config();
 		Runnable[] steps = {
 				() -> {
+					c.combatFeedback = true;
 					c.hitMarker = true;
 					c.hitSound = 1;
 					c.killSound = 3;
@@ -91,6 +92,7 @@ final class CombatTest {
 					}), LOW_SHOT_MS, TimeUnit.MILLISECONDS);
 				},
 				() -> {
+					c.combatFeedback = false;
 					c.hitMarker = false;
 					c.hitSound = 0;
 					c.killSound = 0;

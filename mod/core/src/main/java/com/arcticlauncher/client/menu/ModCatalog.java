@@ -338,7 +338,7 @@ final class ModCatalog {
 				.toggle(() -> c.durabilityWarning, on -> c.durabilityWarning = on));
 		out.add(new Mod("combatfx", "Combat Feedback", "A hit marker, hit and kill sounds, and a low-health warning", "combatfx",
 				Category.GAMEPLAY, "hitmarker kill sound ding low health warning pvp")
-				.toggle(() -> c.hitMarker, on -> c.hitMarker = on)
+				.toggle(() -> Boolean.TRUE.equals(c.combatFeedback), on -> c.combatFeedback = on)
 				.settings((host, f) -> {
 					f.section("Hit marker");
 					f.toggle("Hit marker", "A small X at your crosshair when you hit; red on a kill", () -> c.hitMarker,
