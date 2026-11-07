@@ -48,6 +48,46 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --no-fail-fast --locked
 
+  # Mojang's Java runtimes ship ucrtbase.dll and api-ms-win-*.dll, which the named copy no longer
+  # writes (security tools flag that). Prove Java still starts from the named copy without them.
+  named-runtime:
+    if: ${{ inputs.only == '' }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [java-runtime-delta, java-runtime-gamma]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Mojang runtime (cached)
+        id: runtime
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/mojang/${{ matrix.runtime }}
+          key: mojang-${{ matrix.runtime }}-windows-x64-${{ hashFiles('.github/scripts/fetch-java-runtime.ps1') }}
+      - name: Download the runtime
+        if: steps.runtime.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: .github/scripts/fetch-java-runtime.ps1 -Name ${{ matrix.runtime }} -Out "$env:RUNNER_TEMP/mojang"
+      - name: Trivial class
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/hello"
+          echo 'public class Hello { public static void main(String[] a) { System.out.println("hello from java"); } }' > "$RUNNER_TEMP/hello/Hello.java"
+          javac --release 17 -d "$RUNNER_TEMP/hello" "$RUNNER_TEMP/hello/Hello.java"
+      - name: Start Java from the named copy
+        shell: bash
+        env:
+          ARCTIC_RUNTIME_DIR: ${{ runner.temp }}/mojang/${{ matrix.runtime }}
+          ARCTIC_HELLO_DIR: ${{ runner.temp }}/hello
+        run: cargo test -p arctic-core --locked named_runtime_without_system_dlls_starts_java -- --ignored --nocapture
+
   # The in-game client: its shared core's tests, then every Minecraft target compiled and
   # its mixin hooks checked against that version's game jar (no game is started).
   mod-core:
