@@ -30,6 +30,7 @@ public final class ArcticClient {
 	private static com.arcticlauncher.client.waypoints.Waypoints waypoints;
 	private static com.arcticlauncher.client.together.Duel duel;
 	private static com.arcticlauncher.client.together.LanAuto lanAuto;
+	private static com.arcticlauncher.client.servers.LauncherJoin launcherJoin;
 	private static com.arcticlauncher.client.packs.PackIcons packIcons;
 	private static com.arcticlauncher.client.feature.ScreenshotCopy screenshotCopy;
 	private static com.arcticlauncher.client.packs.PackBrowser packs;
@@ -76,6 +77,8 @@ public final class ArcticClient {
 		com.arcticlauncher.client.net.ProxySelfTest.maybeStart(p);
 		com.arcticlauncher.client.together.TogetherLink together =
 				new com.arcticlauncher.client.together.TogetherLink(session.bridgePort, session.bridgeSecret);
+		launcherJoin = new com.arcticlauncher.client.servers.LauncherJoin(session.bridgePort, session.bridgeSecret, session.launchToken);
+		launcherJoin.start();
 		duel = new com.arcticlauncher.client.together.Duel(p, together, social);
 		lanAuto = new com.arcticlauncher.client.together.LanAuto(p, together);
 		// Asked for in the launcher just now (not on a later restart).
@@ -373,6 +376,9 @@ public final class ArcticClient {
 		com.arcticlauncher.client.replay.Replays.tick(screenOpen);
 		com.arcticlauncher.client.servers.DisconnectedPage.tick(platform);
 		PLAYTIME.tick(platform);
+		if (launcherJoin != null) {
+			launcherJoin.tick(platform);
+		}
 		if (com.arcticlauncher.client.replay.Replays.watching()) {
 			return;
 		}
