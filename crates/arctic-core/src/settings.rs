@@ -103,6 +103,8 @@ pub struct Settings {
     /// Friends may see which server you're on (last known from the Arctic
     /// server; until then, the game doesn't say).
     pub share_server_with_friends: bool,
+    /// Ask before starting Minecraft just to join a server (the dialog's "Don't show again" turns it off).
+    pub confirm_join_launch: bool,
     /// Quitting the launcher also closes games it started (off: they keep running).
     pub exit_games_with_launcher: bool,
     /// Mentions of Arctic's supporter (About, playing together).
@@ -295,6 +297,7 @@ impl Default for Settings {
             client_style_set: 0,
             client_fancy: false,
             share_server_with_friends: false,
+            confirm_join_launch: true,
             exit_games_with_launcher: false,
             show_sponsor: true,
             quick_tips: true,

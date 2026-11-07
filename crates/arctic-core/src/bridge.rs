@@ -21,6 +21,22 @@ use crate::{Error, Result};
 pub struct BridgeInfo {
     pub port: u16,
     pub secret: String,
+    /// This launch's own token (see [`Accounts::join`]); `None` for the launcher-wide info.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub launch: Option<String>,
+}
+
+impl BridgeInfo {
+    /// The same bridge for one game launch, with a fresh random token only that game knows.
+    pub fn for_launch(&self) -> (Self, String) {
+        let token =
+            uuid::Uuid::new_v4().simple().to_string() + &uuid::Uuid::new_v4().simple().to_string();
+        let info = Self {
+            launch: Some(token.clone()),
+            ..self.clone()
+        };
+        (info, token)
+    }
 }
 
 /// An account the game may switch to (no secrets).
@@ -112,6 +128,12 @@ pub trait Accounts: Send + Sync + 'static {
         Err(crate::Error::Other("skins live in Arctic Launcher".into()))
     }
 
+    /// The game polls for a server to join (`launch` is the token from its session file). Returns
+    /// the address the launcher queued for it, once; `None` when there is nothing.
+    fn join(&self, _launch: &str) -> Option<String> {
+        None
+    }
+
     /// Play together from the game: `{"action": "host" | "join" | "stop" |
     /// "status", "code": …}`; the answer is the current state.
     fn together(&self, _request: &[u8]) -> Result<String> {
@@ -157,7 +179,11 @@ pub fn start(accounts: impl Accounts) -> Result<BridgeInfo> {
             }
         })
         .map_err(|e| Error::Other(format!("bridge: {e}")))?;
-    Ok(BridgeInfo { port, secret })
+    Ok(BridgeInfo {
+        port,
+        secret,
+        launch: None,
+    })
 }
 
 struct Request {
@@ -310,6 +336,14 @@ fn respond(request: &Request, accounts: &dyn Accounts) -> (&'static str, String)
                 Err(e) => error("400 Bad Request", &e.to_string()),
             }
         }
+        ("GET", path) if path.starts_with("/v1/join/") => {
+            let launch = path.trim_start_matches("/v1/join/");
+            let body = match accounts.join(launch) {
+                Some(address) => serde_json::json!({ "address": address }),
+                None => serde_json::json!({}),
+            };
+            ("200 OK", body.to_string())
+        }
         ("POST", "/v1/together") => match accounts.together(&request.body) {
             Ok(reply) => ("200 OK", reply),
             Err(e) => error("501 Not Implemented", &e.to_string()),
@@ -394,6 +428,42 @@ mod tests {
         let mut out = String::new();
         s.read_to_string(&mut out).unwrap();
         out
+    }
+
+    #[test]
+    fn join_hands_out_an_address_only_to_its_launch_token() {
+        struct Queue(std::sync::Mutex<Option<String>>);
+        impl Accounts for Queue {
+            fn list(&self) -> Vec<AccountEntry> {
+                Vec::new()
+            }
+            fn session(&self, _id: &str) -> Result<SessionGrant> {
+                Err(Error::Other("no".into()))
+            }
+            fn join(&self, launch: &str) -> Option<String> {
+                if launch == "mine" {
+                    self.0.lock().unwrap().take()
+                } else {
+                    None
+                }
+            }
+        }
+        let info = start(Queue(std::sync::Mutex::new(Some(
+            "play.example.net".into(),
+        ))))
+        .unwrap();
+        let other = call(&info, "GET", "/v1/join/theirs", &info.secret);
+        assert!(other.ends_with("{}"), "{other}");
+        assert!(call(&info, "GET", "/v1/join/mine", "wrong").starts_with("HTTP/1.1 401"));
+        let mine = call(&info, "GET", "/v1/join/mine", &info.secret);
+        assert!(mine.contains(r#"{"address":"play.example.net"}"#), "{mine}");
+        assert!(
+            call(&info, "GET", "/v1/join/mine", &info.secret).ends_with("{}"),
+            "handed out once"
+        );
+        let (launch, token) = info.for_launch();
+        assert_eq!(launch.launch.as_deref(), Some(token.as_str()));
+        assert_eq!(token.len(), 64);
     }
 
     #[test]
