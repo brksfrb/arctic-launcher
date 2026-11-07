@@ -59,7 +59,7 @@ abstract class MouseHandlerMixin {
 	@Redirect(method = "onScroll", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/ScrollWheelHandler;getNextScrollWheelSelection(DII)I"))
 	private int arctic$hotbarWrap(double wheel, int current, int limit) {
 		com.arcticlauncher.client.config.ClientConfig config = ArcticClient.config();
-		if (config == null || config.hotbarScrollWrap || limit != com.arcticlauncher.client.feature.HotbarScroll.SLOTS) {
+		if (config == null || !config.hotbarScrollStop || limit != com.arcticlauncher.client.feature.HotbarScroll.SLOTS) {
 			return net.minecraft.client.ScrollWheelHandler.getNextScrollWheelSelection(wheel, current, limit);
 		}
 		return com.arcticlauncher.client.feature.HotbarScroll.wheel(current, wheel, false);

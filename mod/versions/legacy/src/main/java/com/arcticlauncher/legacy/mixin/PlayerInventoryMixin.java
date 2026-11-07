@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Scrolling while zoomed zooms (instead of changing the hotbar slot). Otherwise this is the
- * hotbar's own scroll ({@code InventoryPlayer.changeCurrentItem}): with wrap-around off it
+ * hotbar's own scroll ({@code InventoryPlayer.changeCurrentItem}): with scroll stop on it
  * stops on slot 1 and slot 9. Spectator, creative and chat never call it.
  */
 @Mixin(PlayerInventory.class)
@@ -31,7 +31,7 @@ abstract class PlayerInventoryMixin {
 			return;
 		}
 		ClientConfig config = ArcticClient.config();
-		if (config == null || config.hotbarScrollWrap) {
+		if (config == null || !config.hotbarScrollStop) {
 			return;
 		}
 		this.selectedSlot = HotbarScroll.wheel(this.selectedSlot, amount, false);

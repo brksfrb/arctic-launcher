@@ -24,7 +24,7 @@ abstract class InventoryHotbarScrollMixin {
 	@Inject(method = "swapPaint", at = @At("HEAD"), cancellable = true)
 	private void arctic$clamp(double direction, CallbackInfo ci) {
 		ClientConfig config = ArcticClient.config();
-		if (config == null || config.hotbarScrollWrap) {
+		if (config == null || !config.hotbarScrollStop) {
 			return;
 		}
 		this.selected = HotbarScroll.wheel(this.selected, direction, false);

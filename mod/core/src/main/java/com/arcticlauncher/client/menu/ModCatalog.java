@@ -238,9 +238,9 @@ final class ModCatalog {
 		out.add(new Mod("tnttimer", "TNT Timer", "The seconds left on a lit TNT, floating above it", "tnt", Category.GAMEPLAY,
 				"tnt explosion fuse countdown timer bomb")
 				.toggle(() -> c.tntTimer, on -> c.tntTimer = on));
-		out.add(new Mod("hotbarscroll", "Hotbar scroll wrap-around", "Off: stop at slot 1 and 9", "items", Category.GAMEPLAY,
+		out.add(new Mod("hotbarscroll", "Hotbar Scroll Stop", "Scrolling stops at slot 1 and 9 instead of wrapping", "items", Category.GAMEPLAY,
 				"hotbar scroll wheel slot wrap around inventory")
-				.toggle(() -> c.hotbarScrollWrap, on -> c.hotbarScrollWrap = on));
+				.toggle(() -> c.hotbarScrollStop, on -> c.hotbarScrollStop = on));
 		out.add(new Mod("sprint", "Toggle Sprint", "Press sprint once to keep sprinting", "sprint", Category.GAMEPLAY, "run")
 				.toggle(() -> c.toggleSprint, on -> c.toggleSprint = on));
 		out.add(new Mod("sneak", "Toggle Sneak", "Press sneak once to keep sneaking", "sneak", Category.GAMEPLAY, "crouch shift")

@@ -54,17 +54,17 @@ class HotbarScrollTest {
 	}
 
 	@Test
-	void freshConfigWrapsAndAnOlderFileStillWraps(@TempDir java.nio.file.Path dir) throws Exception {
-		assertTrue(new ClientConfig().hotbarScrollWrap);
+	void freshConfigDoesNotClampAndAnOlderFileDoesNotEither(@TempDir java.nio.file.Path dir) throws Exception {
+		assertFalse(new ClientConfig().hotbarScrollStop);
 		Files.write(dir.resolve("arctic.json"), "{}".getBytes(StandardCharsets.UTF_8));
-		assertTrue(ClientConfig.load(dir.toFile()).hotbarScrollWrap);
+		assertFalse(ClientConfig.load(dir.toFile()).hotbarScrollStop);
 	}
 
 	@Test
-	void anExplicitOffStaysOff(@TempDir java.nio.file.Path dir) throws Exception {
-		Files.write(dir.resolve("arctic.json"), "{\"hotbarScrollWrap\":false}".getBytes(StandardCharsets.UTF_8));
-		assertFalse(ClientConfig.load(dir.toFile()).hotbarScrollWrap);
-		Files.write(dir.resolve("arctic.json"), "{\"hotbarScrollWrap\":true}".getBytes(StandardCharsets.UTF_8));
-		assertTrue(ClientConfig.load(dir.toFile()).hotbarScrollWrap);
+	void anExplicitChoiceIsKept(@TempDir java.nio.file.Path dir) throws Exception {
+		Files.write(dir.resolve("arctic.json"), "{\"hotbarScrollStop\":true}".getBytes(StandardCharsets.UTF_8));
+		assertTrue(ClientConfig.load(dir.toFile()).hotbarScrollStop);
+		Files.write(dir.resolve("arctic.json"), "{\"hotbarScrollStop\":false}".getBytes(StandardCharsets.UTF_8));
+		assertFalse(ClientConfig.load(dir.toFile()).hotbarScrollStop);
 	}
 }

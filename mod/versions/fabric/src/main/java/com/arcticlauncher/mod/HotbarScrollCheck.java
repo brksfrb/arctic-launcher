@@ -8,8 +8,8 @@ import java.util.concurrent.TimeUnit;
 import net.minecraft.client.Minecraft;
 
 /**
- * {@code -Darctic.selftest=hotbarscroll}: a world, then the game's own scroll. With wrap-around
- * off, slot 1 and slot 9 stay put; with it on, they wrap. The log is the result.
+ * {@code -Darctic.selftest=hotbarscroll}: a world, then the game's own scroll. With scroll stop
+ * on, slot 1 and slot 9 stay put; with it off, they wrap. The log is the result.
  */
 final class HotbarScrollCheck {
 	private static final ScheduledExecutorService TIMER = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -38,9 +38,9 @@ final class HotbarScrollCheck {
 
 	private static void run() {
 		ClientConfig config = ArcticClient.config();
-		config.hotbarScrollWrap = false;
+		config.hotbarScrollStop = true;
 		boolean clamped = step("clamp", 0, 1, 0) && step("clamp", 8, -1, 8) && step("clamp", 3, 1, 2);
-		config.hotbarScrollWrap = true;
+		config.hotbarScrollStop = false;
 		boolean wrapped = step("wrap", 0, 1, 8) && step("wrap", 8, -1, 0) && step("wrap", 3, 1, 2);
 		WorldTest.shot("hotbar-scroll");
 		if (clamped && wrapped) {

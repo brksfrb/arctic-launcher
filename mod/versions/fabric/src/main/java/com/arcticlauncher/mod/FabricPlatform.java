@@ -208,7 +208,7 @@ final class FabricPlatform implements Platform {
 		LocalPlayer p = mc().player;
 		if (p != null) {
 			com.arcticlauncher.client.config.ClientConfig c = ArcticClient.config();
-			boolean wrap = c == null || c.hotbarScrollWrap;
+			boolean wrap = c == null || !c.hotbarScrollStop;
 			Compat.selectSlot(p, com.arcticlauncher.client.feature.HotbarScroll.move(Compat.selectedSlot(p), step, wrap));
 		}
 	}

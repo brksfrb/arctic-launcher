@@ -9,8 +9,8 @@ import net.minecraft.client.MinecraftClient;
 
 /**
  * {@code -Darctic.selftest=hotbarscroll} on 1.8.9–1.12.2: the game's own
- * {@code scrollInHotbar} ({@code InventoryPlayer.changeCurrentItem}). Off stops on slot 1 and 9;
- * on wraps. The log is the result.
+ * {@code scrollInHotbar} ({@code InventoryPlayer.changeCurrentItem}). On stops on slot 1 and 9;
+ * off wraps. The log is the result.
  */
 final class LegacyHotbarScrollCheck {
 	private static final ScheduledExecutorService TIMER = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -40,9 +40,9 @@ final class LegacyHotbarScrollCheck {
 
 	private static void run() {
 		ClientConfig config = ArcticClient.config();
-		config.hotbarScrollWrap = false;
+		config.hotbarScrollStop = true;
 		boolean clamped = step("clamp", 0, 1, 0) && step("clamp", 8, -1, 8) && step("clamp", 3, 1, 2);
-		config.hotbarScrollWrap = true;
+		config.hotbarScrollStop = false;
 		boolean wrapped = step("wrap", 0, 1, 8) && step("wrap", 8, -1, 0) && step("wrap", 3, 1, 2);
 		LegacyWorldTest.shot("hotbar-scroll");
 		if (clamped && wrapped) {
