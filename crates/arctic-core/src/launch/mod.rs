@@ -34,7 +34,7 @@ use crate::{
     APP_VERSION, Error, LAUNCHER_BRAND, Progress, ProgressInfo, Result, arctic_mod, java, loaders,
 };
 
-use self::args::{JvmOptions, Placeholders, substitute};
+use self::args::{JvmOptions, Placeholders, split_jvm_args, substitute};
 
 /// Everything needed to launch one version for one account.
 pub struct LaunchRequest<'a> {
@@ -160,12 +160,18 @@ impl LaunchPlan {
             );
         let mut flags = Vec::new();
         let mut classpath = Vec::new();
-        let mut args = self.args.iter();
-        while let Some(arg) = args.next() {
+        // A stray word before `-cp` (a JVM argument split on a space) is not the main class.
+        // Stopping there used to hide the classpath in crash reports.
+        let cp_at = self
+            .args
+            .iter()
+            .position(|a| a == "-cp" || a == "-classpath");
+        let mut args = self.args.iter().enumerate();
+        while let Some((i, arg)) = args.next() {
             if arg == "-cp" || arg == "-classpath" {
                 classpath = args
                     .next()
-                    .map(|cp| {
+                    .map(|(_, cp)| {
                         std::env::split_paths(cp)
                             .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
                             .collect()
@@ -174,6 +180,9 @@ impl LaunchPlan {
                 continue;
             }
             if !arg.starts_with('-') {
+                if cp_at.is_some_and(|at| i < at) {
+                    continue;
+                }
                 // The main class: what follows is the game's.
                 break;
             }
@@ -631,11 +640,21 @@ pub(crate) fn fast_start_flags(instance: &Instance) -> Vec<String> {
 const LWJGL_STACK_KIB: u32 = 1024;
 
 fn lwjgl_stack_flag(launcher_args: &str, instance_args: &str) -> Option<String> {
-    let own = launcher_args
-        .split_whitespace()
-        .chain(instance_args.split_whitespace())
+    let own = split_jvm_args(launcher_args)
+        .into_iter()
+        .chain(split_jvm_args(instance_args))
         .any(|a| a.starts_with("-Dorg.lwjgl.system.stackSize="));
     (!own).then(|| format!("-Dorg.lwjgl.system.stackSize={LWJGL_STACK_KIB}"))
+}
+
+/// A player JVM argument Java can be given. Anything else is a word Java takes as the main class
+/// (`Could not find or load main class Forge`), so it is dropped. `@file` is Java's argument file.
+fn user_jvm_arg_allowed(arg: &str) -> bool {
+    if arg.starts_with('-') || arg.starts_with('@') {
+        return true;
+    }
+    log::warn!("ignoring JVM argument {arg:?}: Java would treat it as the main class");
+    false
 }
 
 /// The garbage collector Mojang's own launcher sets up: G1 with short pauses and room for the
@@ -812,22 +831,24 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
             "memory setting {asked} MB is more than this computer can spare: using {max_memory_mb} MB"
         );
     }
+    // Quoted values stay one argument (`-Dx="1.8.9 Forge"`). A leftover word is not passed on:
+    // Java would take it as the main class.
+    let user_args = split_jvm_args(&settings.extra_jvm_args)
+        .into_iter()
+        .chain(split_jvm_args(&req.instance.jvm_args))
+        .collect::<Vec<_>>();
     let opts = JvmOptions {
         min_memory_mb: settings.min_memory_mb.min(max_memory_mb),
         max_memory_mb,
-        extra: settings
-            .extra_jvm_args
-            .split_whitespace()
-            .chain(req.instance.jvm_args.split_whitespace())
-            .map(str::to_owned)
+        extra: user_args
+            .iter()
+            .filter(|arg| user_jvm_arg_allowed(arg))
+            .cloned()
             .chain(arctic_mod::jvm_flag())
             .chain(arctic_mod::brand_flag(&req.instance.loader))
             .chain(Some(arctic_mod::version_flag()))
             .chain(gc_flags(
-                settings
-                    .extra_jvm_args
-                    .split_whitespace()
-                    .chain(req.instance.jvm_args.split_whitespace()),
+                user_args.iter().map(String::as_str),
                 // The player's own Java may be any version: only the launcher's runtimes get ZGC.
                 (req.instance.java_path.is_none() && settings.java_override.is_none())
                     .then(|| inst.version.java_version.as_ref().map(|j| j.major_version))
@@ -1098,6 +1119,46 @@ mod tests {
                 && !s.contains("KnotClient"),
             "{s}"
         );
+    }
+
+    #[test]
+    fn java_summary_finds_the_classpath_after_a_stray_token() {
+        let plan = LaunchPlan {
+            java: PathBuf::from("runtimes/jre-legacy/bin/javaw.exe"),
+            args: vec![
+                "-Xms512M".into(),
+                "-Xmx3955M".into(),
+                // What crash #212 left in front of every real flag.
+                "Forge".into(),
+                "-XX:+UseG1GC".into(),
+                "-cp".into(),
+                std::env::join_paths(["/libraries/launchwrapper-1.12.jar", "/versions/1.8.9.jar"])
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+                "net.minecraft.launchwrapper.Launch".into(),
+                "--username".into(),
+                "Steve".into(),
+            ],
+            game_dir: PathBuf::new(),
+            log_file: PathBuf::new(),
+            high_performance_gpu: false,
+            maximize_window: false,
+            secrets: Vec::new(),
+        };
+        let s = plan.java_summary();
+        assert!(s.contains("-XX:+UseG1GC"), "{s}");
+        assert!(s.contains("launchwrapper-1.12.jar, 1.8.9.jar"), "{s}");
+        assert!(!s.contains("Launch") && !s.contains("Steve"), "{s}");
+    }
+
+    #[test]
+    fn a_bare_word_in_jvm_arguments_cannot_become_the_main_class() {
+        let kept: Vec<_> = split_jvm_args(r#"-Dx="1.8.9 Forge" Forge 1.8.9 -Xmx4G @C:\args.txt"#)
+            .into_iter()
+            .filter(|arg| user_jvm_arg_allowed(arg))
+            .collect();
+        assert_eq!(kept, ["-Dx=1.8.9 Forge", "-Xmx4G", r"@C:\args.txt"]);
     }
 
     #[test]
