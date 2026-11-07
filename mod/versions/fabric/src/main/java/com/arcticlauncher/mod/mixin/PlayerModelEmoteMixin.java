@@ -3,6 +3,7 @@ package com.arcticlauncher.mod.mixin;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.looks.Animation;
 import com.arcticlauncher.client.looks.Cosmetics;
+import com.arcticlauncher.client.looks.EmotePose;
 import com.arcticlauncher.client.looks.Rig;
 import com.arcticlauncher.client.looks.SkinLimbs;
 import java.util.UUID;
@@ -37,8 +38,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(PlayerModel.class)
 abstract class PlayerModelEmoteMixin {
-	private static final float DEG = (float) (Math.PI / 180);
-
 	//#if MC >= 1.21.9
 	@Inject(method = "setupAnim(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;)V", at = @At("TAIL"))
 	private void arctic$emote(AvatarRenderState state, CallbackInfo ci) {
@@ -197,6 +196,11 @@ abstract class PlayerModelEmoteMixin {
 			arctic$hideBentLimbs(animation);
 			return true;
 		}
+		//#if MC < 1.21.2
+		// pose() moves pivots by the emote's offsets, and the game never resets some of them (the
+		// legs' sideways pivot), so put them back before the next pose or they'd drift off.
+		arctic$undo = arctic$read(arctic$parts());
+		//#endif
 		pose(animation, "head", model.head, t);
 		pose(animation, "body", model.body, t);
 		pose(animation, "rightArm", model.rightArm, t);
@@ -298,17 +302,13 @@ abstract class PlayerModelEmoteMixin {
 	}
 
 	private static void pose(Animation animation, String bone, ModelPart part, float t) {
-		float[] r = animation.rotation(bone, t);
-		if (r != null) {
-			part.xRot = r[0] * DEG;
-			part.yRot = r[1] * DEG;
-			part.zRot = r[2] * DEG;
-		}
-		float[] p = animation.position(bone, t);
-		if (p != null) {
-			part.x += p[0];
-			part.y -= p[1];
-			part.z += p[2];
-		}
+		float[] v = {part.x, part.y, part.z, part.xRot, part.yRot, part.zRot};
+		EmotePose.pose(animation, bone, v, t);
+		part.x = v[0];
+		part.y = v[1];
+		part.z = v[2];
+		part.xRot = v[3];
+		part.yRot = v[4];
+		part.zRot = v[5];
 	}
 }
