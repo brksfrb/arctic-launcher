@@ -301,6 +301,11 @@ public final class Replays {
 			// release the free camera. Read the actual screen every rendered frame.
 			viewer.screenOpen(screenOpen);
 			viewer.frame();
+			String failure = viewer.failure();
+			if (failure != null) {
+				Notices.post("Can't open this replay", failure);
+				stopWatching();
+			}
 		} finally {
 			inFrame = false;
 		}

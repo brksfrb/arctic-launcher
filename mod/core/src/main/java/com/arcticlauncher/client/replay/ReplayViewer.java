@@ -67,6 +67,8 @@ public final class ReplayViewer {
 	private VideoExport export;
 	private long exportFrameAt;
 	private String problem;
+	/** Why playback can't continue (set once), or null. */
+	private String failure;
 	/** When the world first showed (ms): the timeline starts here, not at the login. */
 	private int start;
 	/** Last time the player touched the controls (nanoTime), for hiding the bar. */
@@ -197,7 +199,7 @@ public final class ReplayViewer {
 	/** Log in and configure as fast as the game takes it; the clock starts once in the world. */
 	private void join() {
 		int n = 0;
-		while (!backend.ready() && cursor < data.count() && n++ < JOIN_BATCH) {
+		while (failure == null && !backend.ready() && cursor < data.count() && n++ < JOIN_BATCH) {
 			apply(cursor++, false);
 		}
 		if (backend.ready()) {
@@ -205,21 +207,28 @@ public final class ReplayViewer {
 			status = null;
 			time = cursor > 0 ? data.time(cursor - 1) : 0;
 			start = (int) time;
-		} else if (cursor >= data.count()) {
+		} else if (failure == null && cursor >= data.count()) {
 			problem = "This replay never reaches the world.";
 			joined = true;
 		}
 	}
 
 	private void feed(double until, boolean jumping) {
-		while (cursor < data.count() && data.time(cursor) <= until) {
+		while (failure == null && cursor < data.count() && data.time(cursor) <= until) {
 			apply(cursor++, jumping);
 		}
 	}
 
 	private void apply(int i, boolean jumping) {
+		if (failure != null) {
+			return;
+		}
 		try {
 			backend.apply(data.packet(i), jumping);
+		} catch (ReplayBackend.Unusable e) {
+			// One line, then stop: the packets after it would all fail the same way.
+			failure = e.getMessage();
+			platform.log(true, "replay: packet " + i + " left playback unusable, stopping: " + e.getMessage());
 		} catch (RuntimeException e) {
 			if (problem == null) {
 				// Where it failed too: a bare NullPointerException says nothing on its own.
@@ -623,6 +632,11 @@ public final class ReplayViewer {
 	/** What's happening ("Joining…", "Jumping…"), or null. */
 	public String status() {
 		return status;
+	}
+
+	/** Why playback can't go on (the replay should be closed), or null. */
+	public String failure() {
+		return failure;
 	}
 
 	/** Something went wrong the player should know about (then cleared), or null. */
