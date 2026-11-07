@@ -174,7 +174,7 @@ impl ArcticApp {
         });
         // Their own row: next to the filters and search there wasn't room, and the button hid them.
         crate::widgets::row(ui, |ui| {
-            egui::ComboBox::from_id_salt("discover-sort")
+            widgets::modal_combo("discover-sort")
                 .selected_text(format!("Sort: {}", self.discover.sort.label()))
                 .show_ui(ui, |ui| {
                     for (sort, label) in Sort::ALL {

@@ -544,7 +544,7 @@ impl ArcticApp {
         // As tall as the buttons beside it, or it sits a few pixels off their line.
         ui.scope(|ui| {
             ui.spacing_mut().interact_size.y = widgets::BUTTON_HEIGHT;
-            egui::ComboBox::from_id_salt("send_shot")
+            widgets::modal_combo("send_shot")
                 .selected_text("Send to…")
                 .show_ui(ui, |ui| {
                     for (id, name) in &friends {

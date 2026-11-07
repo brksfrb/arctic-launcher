@@ -210,7 +210,7 @@ impl ArcticApp {
                 ui.label(RichText::new("No versions available for this loader.").color(p.warn));
             }
             Some(games) => {
-                egui::ComboBox::from_id_salt("create_game")
+                widgets::modal_combo("create_game")
                     .width(260.0)
                     .height(320.0)
                     .selected_text(form.game.clone().unwrap_or_default())
@@ -232,7 +232,7 @@ impl ArcticApp {
         );
         match self.inst.loader_versions.get(&(kind, game)) {
             Some(Load::Ready(list)) if !list.is_empty() => {
-                egui::ComboBox::from_id_salt("create_loader")
+                widgets::modal_combo("create_loader")
                     .width(260.0)
                     .height(320.0)
                     .selected_text(form.loader_version.clone().unwrap_or_default())

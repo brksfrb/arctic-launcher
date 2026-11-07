@@ -511,6 +511,163 @@ pub fn lift_controls(ui: &mut Ui, p: &Palette) {
     widgets.inactive.bg_stroke = egui::Stroke::new(1.0, p.card_stroke);
 }
 
+/// Drop-down for use inside an [`egui::Modal`].
+///
+/// A [`egui::ComboBox`] menu is an [`egui::Order::Foreground`] area, the same
+/// order as the modal. Opening it raises the dialog, so the menu is painted
+/// and hit-tested behind the backdrop and cannot be clicked. This menu is an
+/// [`egui::Order::Tooltip`] area: above the modal, and still clickable.
+#[must_use = "Call .show_ui()"]
+pub struct ModalCombo {
+    id_salt: egui::IdSalt,
+    selected_text: egui::WidgetText,
+    width: Option<f32>,
+    height: Option<f32>,
+}
+
+/// `id_salt` is hashed immediately, same as [`egui::ComboBox::from_id_salt`].
+pub fn modal_combo(id_salt: impl egui::AsIdSalt) -> ModalCombo {
+    ModalCombo::new(id_salt)
+}
+
+impl ModalCombo {
+    pub fn new(id_salt: impl egui::AsIdSalt) -> Self {
+        Self {
+            id_salt: egui::IdSalt::new(id_salt),
+            selected_text: egui::WidgetText::default(),
+            width: None,
+            height: None,
+        }
+    }
+
+    /// Text shown on the closed control.
+    pub fn selected_text(mut self, selected_text: impl Into<egui::WidgetText>) -> Self {
+        self.selected_text = selected_text.into();
+        self
+    }
+
+    /// Outer width of the button and the menu. Default is egui's combo width.
+    pub fn width(mut self, width: f32) -> Self {
+        self.width = Some(width);
+        self
+    }
+
+    /// Maximum height of the open menu. Default is egui's combo height.
+    pub fn height(mut self, height: f32) -> Self {
+        self.height = Some(height);
+        self
+    }
+
+    pub fn show_ui<R>(
+        self,
+        ui: &mut Ui,
+        menu_contents: impl FnOnce(&mut Ui) -> R,
+    ) -> egui::InnerResponse<Option<R>> {
+        let Self {
+            id_salt,
+            selected_text,
+            width,
+            height,
+        } = self;
+
+        let button_id = ui.make_persistent_id(id_salt);
+        let popup_id = button_id.with("popup");
+        let open = egui::Popup::is_id_open(ui.ctx(), popup_id);
+        let current_text = selected_text.text().to_owned();
+
+        let margin = ui.spacing().button_padding;
+        let icon_spacing = ui.spacing().icon_spacing;
+        let icon_size = egui::Vec2::splat(ui.spacing().icon_width);
+        let min_outer = width.unwrap_or_else(|| ui.spacing().combo_width);
+        let min_content = (min_outer - 2.0 * margin.x).max(0.0);
+        let wrap_width = (ui.available_width() - icon_spacing - icon_size.x).max(0.0);
+        let galley = selected_text.into_galley(
+            ui,
+            Some(ui.wrap_mode()),
+            wrap_width,
+            egui::TextStyle::Button,
+        );
+        let content = vec2(
+            (galley.size().x + icon_spacing + icon_size.x).max(min_content),
+            galley.size().y.max(icon_size.y),
+        );
+        let outer = vec2(
+            content.x + 2.0 * margin.x,
+            (content.y + 2.0 * margin.y).max(ui.spacing().interact_size.y),
+        );
+        let rect = Rect::from_min_size(ui.cursor().min, outer);
+        let response = ui.interact(rect, button_id, Sense::click());
+        ui.advance_cursor_after_rect(rect);
+        response.widget_info(|| {
+            let mut info = egui::WidgetInfo::new(egui::WidgetType::ComboBox);
+            info.enabled = ui.is_enabled();
+            info.current_text_value = Some(current_text.clone());
+            info
+        });
+
+        if ui.is_rect_visible(rect) {
+            let visuals = if open {
+                ui.visuals().widgets.open
+            } else {
+                *ui.style().interact(&response)
+            };
+            ui.painter().rect(
+                rect.expand(visuals.expansion),
+                visuals.corner_radius,
+                visuals.weak_bg_fill,
+                visuals.bg_stroke,
+                StrokeKind::Inside,
+            );
+            let inner = rect.shrink2(margin);
+            let icon_rect = Align2::RIGHT_CENTER.align_size_within_rect(icon_size, inner);
+            paint_combo_icon(
+                ui.painter(),
+                icon_rect.expand(visuals.expansion),
+                visuals.fg_stroke.color,
+            );
+            let text_rect = Align2::LEFT_CENTER.align_size_within_rect(galley.size(), inner);
+            ui.painter()
+                .galley(text_rect.min, galley, visuals.text_color());
+        }
+
+        let max_height = height.unwrap_or_else(|| ui.spacing().combo_height);
+        // `Popup::menu` is Foreground, like the modal. Tooltip is the next order
+        // up, so the list stays above the dialog even when the dialog is raised.
+        // Default style (not the compact menu style) matches `ComboBox`.
+        let inner = egui::Popup::menu(&response)
+            .id(popup_id)
+            .width(response.rect.width())
+            .kind(egui::PopupKind::Tooltip)
+            .style(egui::style::StyleModifier::default())
+            .show(|ui| {
+                ui.ctx().move_to_top(ui.layer_id());
+                ui.set_min_width(ui.available_width());
+                egui::ScrollArea::vertical()
+                    .max_height(max_height)
+                    .show(ui, |ui| {
+                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                        menu_contents(ui)
+                    })
+                    .inner
+            })
+            .map(|r| r.inner);
+
+        egui::InnerResponse::new(inner, response)
+    }
+}
+
+fn paint_combo_icon(painter: &egui::Painter, rect: Rect, color: Color32) {
+    let rect = Rect::from_center_size(
+        rect.center(),
+        vec2(rect.width() * 0.7, rect.height() * 0.45),
+    );
+    painter.add(egui::Shape::convex_polygon(
+        vec![rect.left_top(), rect.right_top(), rect.center_bottom()],
+        color,
+        Stroke::NONE,
+    ));
+}
+
 /// Minecraft's 16 text colors, for `§0`..`§f`.
 const MC_COLORS: [u32; 16] = [
     0x000000, 0x0000aa, 0x00aa00, 0x00aaaa, 0xaa0000, 0xaa00aa, 0xffaa00, 0xaaaaaa, 0x555555,
@@ -578,5 +735,113 @@ mod file_uri_tests {
     fn windows_paths_get_three_slashes() {
         let uri = super::file_uri(std::path::Path::new(r"C:\Users\a b\shot.png"));
         assert_eq!(uri, "file:///C:/Users/a b/shot.png");
+    }
+}
+
+#[cfg(test)]
+mod modal_combo_tests {
+    use eframe::egui::{self, Event, Id, Modifiers, PointerButton, Pos2, Rect, vec2};
+
+    use super::modal_combo;
+
+    fn input() -> egui::RawInput {
+        egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(900.0, 700.0))),
+            ..Default::default()
+        }
+    }
+
+    fn click_at(pos: Pos2) -> egui::RawInput {
+        let mut raw = input();
+        raw.events = vec![
+            Event::PointerMoved(pos),
+            Event::PointerButton {
+                pos,
+                button: PointerButton::Primary,
+                pressed: true,
+                modifiers: Modifiers::NONE,
+            },
+            Event::PointerButton {
+                pos,
+                button: PointerButton::Primary,
+                pressed: false,
+                modifiers: Modifiers::NONE,
+            },
+        ];
+        raw
+    }
+
+    /// Lay out the new-instance dialog and its version menu. Returns the closed
+    /// control's rect, and the "1.8.9" row when the menu is open.
+    fn show(ctx: &egui::Context, selected: &mut String) -> (Rect, Option<Rect>) {
+        let mut button = Rect::ZERO;
+        let mut row = None;
+        egui::Modal::new(Id::new("create_instance")).show(ctx, |ui| {
+            ui.set_width(460.0);
+            let shown = modal_combo("create_game")
+                .width(260.0)
+                .height(320.0)
+                .selected_text(selected.clone())
+                .show_ui(ui, |ui| {
+                    let layer = ui.layer_id();
+                    assert_eq!(
+                        layer.order,
+                        egui::Order::Tooltip,
+                        "version menu must paint above the modal"
+                    );
+                    assert!(
+                        ui.ctx().memory(|mem| mem.allows_interaction(layer)),
+                        "version menu must take clicks while the modal is open"
+                    );
+                    for version in ["1.21.1", "1.8.9", "1.7.10"] {
+                        let response = ui.selectable_value(selected, version.to_owned(), version);
+                        if version == "1.8.9" && response.rect.is_positive() {
+                            row = Some(response.rect);
+                        }
+                    }
+                });
+            button = shown.response.rect;
+        });
+        (button, row)
+    }
+
+    fn run_frame(ctx: &egui::Context, raw: egui::RawInput, mut f: impl FnMut(&egui::Context)) {
+        let mut output = ctx.run_ui(raw, |ui| f(ui.ctx()));
+        // Nothing paints the font atlas in this test.
+        output.textures_delta.clear();
+    }
+
+    #[test]
+    fn version_row_is_clickable_inside_the_new_instance_modal() {
+        let ctx = egui::Context::default();
+        let mut selected = "1.21.1".to_owned();
+        let plain = input();
+
+        let mut button = Rect::ZERO;
+        for _ in 0..2 {
+            run_frame(&ctx, plain.clone(), |ctx| {
+                button = show(ctx, &mut selected).0;
+            });
+        }
+        assert!(button.is_positive(), "version control was not laid out");
+
+        run_frame(&ctx, click_at(button.center()), |ctx| {
+            show(ctx, &mut selected);
+        });
+
+        let mut row = None;
+        for _ in 0..3 {
+            run_frame(&ctx, plain.clone(), |ctx| {
+                row = show(ctx, &mut selected).1;
+            });
+        }
+        let Some(row) = row else {
+            panic!("version menu did not open above the modal");
+        };
+
+        run_frame(&ctx, click_at(row.center()), |ctx| {
+            show(ctx, &mut selected);
+        });
+        assert_eq!(selected, "1.8.9");
     }
 }

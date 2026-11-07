@@ -598,7 +598,7 @@ impl ArcticApp {
                     .map_or_else(|| "Vanilla".to_owned(), |i| i.name.clone());
                 ui.horizontal(|ui| {
                     ui.label("Apply to");
-                    egui::ComboBox::from_id_salt("share_target")
+                    widgets::modal_combo("share_target")
                         .selected_text(current)
                         .show_ui(ui, |ui| {
                             for i in &all {

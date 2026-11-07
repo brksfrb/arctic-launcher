@@ -435,7 +435,7 @@ fn hud_row(
             .map_or("Vanilla", |(_, n)| n.as_str());
         ui.horizontal(|ui| {
             ui.label("Apply to");
-            egui::ComboBox::from_id_salt(("hud_target", &key))
+            widgets::modal_combo(("hud_target", &key))
                 .selected_text(current)
                 .show_ui(ui, |ui| {
                     for (id, name) in targets {
