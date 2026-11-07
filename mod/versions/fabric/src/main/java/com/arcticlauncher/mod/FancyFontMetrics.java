@@ -1,6 +1,5 @@
 package com.arcticlauncher.mod;
 
-//#if MC >= 26.1
 import java.awt.Font;
 import java.awt.font.FontRenderContext;
 import java.awt.font.LineMetrics;
@@ -39,4 +38,3 @@ public final class FancyFontMetrics {
 		}
 	}
 }
-//#endif
