@@ -188,6 +188,34 @@ public final class LegacySmoothFont {
 		return g == null ? -1 : g.advance;
 	}
 
+	/**
+	 * Whole GUI pixels the pen moves for this character. Drawing, wrapping and hit-testing all use
+	 * this. The 1.8 renderer keeps only the whole pixels of whatever a glyph returns, so a raw
+	 * 2.5 would be drawn as 2 while a width sum still counted 2.5.
+	 */
+	public static int step(char c) {
+		float advance = advance(c);
+		return advance < 0 ? -1 : com.arcticlauncher.client.feature.TextHit.step(advance);
+	}
+
+	/**
+	 * Fancy font metrics are the ones on screen. Set {@code -Darctic.chatHitOld=1} to draw and hit
+	 * the old way (the screenshot that shows the miss). Off, or with Fancy off, this is false.
+	 */
+	public static boolean aligned() {
+		return on() && !"1".equals(System.getProperty("arctic.chatHitOld"));
+	}
+
+	/** Chat and book line box, from Inter's ascent, descent and leading. At least the vanilla 9. */
+	private static int linePixels = 9;
+
+	public static int lineHeight() {
+		if (on()) {
+			ready();
+		}
+		return Math.max(9, linePixels);
+	}
+
 	/** How far a bold character's second copy sits (GUI pixels): thicker, not doubled. */
 	public static final float BOLD_THICKEN = 0.35f;
 
@@ -303,6 +331,8 @@ public final class LegacySmoothFont {
 			font = Font.createFont(Font.TRUETYPE_FONT, in).deriveFont(SIZE * s);
 		}
 		FontRenderContext frc = new FontRenderContext(null, true, true);
+		java.awt.font.LineMetrics metrics = font.getLineMetrics("Agjpq[]|", frc);
+		linePixels = Math.max(9, Math.round(metrics.getHeight() / s));
 		List<Character> chars = new ArrayList<Character>();
 		List<Rectangle> boxes = new ArrayList<Rectangle>();
 		List<Float> advances = new ArrayList<Float>();

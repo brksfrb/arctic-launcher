@@ -103,6 +103,7 @@
 		"TimeLockMixin",
 		"MultiPlayerGameModeMixin"<% } %><% if (oldCamera) { %>,
 		"GameRendererFovMixin"<% } %><% if (smoothFont) { %>,
+		"ChatLineMixin",
 		"PackRepositoryMixin",
 		"FontTextureMixin",
 		"TrueTypeDefinitionMixin",
