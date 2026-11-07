@@ -18,4 +18,4 @@ $files | Where-Object { $_.Value.type -eq 'file' } | ForEach-Object -ThrottleLim
     Invoke-WebRequest $raw.url -OutFile $dest
     if ((Get-FileHash $dest -Algorithm SHA1).Hash -ne $raw.sha1) { throw "bad hash: $($_.Name)" }
 }
-Write-Host "$Name: $(($files | Where-Object { $_.Value.type -eq 'file' }).Count) files in $root"
+Write-Host "${Name}: $(($files | Where-Object { $_.Value.type -eq 'file' }).Count) files in $root"
