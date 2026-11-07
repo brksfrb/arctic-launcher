@@ -365,6 +365,8 @@ processResources {
 			toastSlots: atLeast('1.19'),
 			// HUD widgets hand in last frame's GUI pieces again (26.1's GUI states).
 			guiReplay: atLeast('26.1'),
+			// Before 1.21.2 the hotbar wraps inside Inventory.swapPaint. After that, MouseHandler.onScroll does.
+			inventoryHotbarScroll: !atLeast('1.21.2'),
 	]
 	inputs.properties props
 	filesMatching(['fabric.mod.json', 'arctic.mixins.json']) {

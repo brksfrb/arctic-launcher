@@ -2,6 +2,8 @@ package com.arcticlauncher.client.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -94,6 +96,11 @@ public final class ClientConfig {
 	/** Press sprint/sneak once to keep sprinting/sneaking. */
 	public boolean toggleSprint;
 	public boolean toggleSneak;
+	/**
+	 * Hotbar scroll wraps from slot 9 back to slot 1 (and the other way), as the game does.
+	 * Off: scrolling stops on slot 1 and slot 9. Missing from an older file means on (see {@link #read}).
+	 */
+	public boolean hotbarScrollWrap = true;
 	/** View: chat timestamps, stacked repeats, lower fire, no rain. */
 	public boolean chatTimestamps;
 	public boolean chatStack = true;
@@ -415,7 +422,20 @@ public final class ClientConfig {
 	private static ClientConfig read(File file) {
 		try {
 			String json = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
-			return GSON.fromJson(json, ClientConfig.class);
+			if (json.trim().isEmpty()) {
+				return null;
+			}
+			// Gson 2.2 builds the object without field initializers, so a boolean that defaults to true
+			// would come back false when an older file simply doesn't have the key.
+			JsonElement parsed = new JsonParser().parse(json);
+			if (parsed == null || !parsed.isJsonObject()) {
+				return null;
+			}
+			ClientConfig config = GSON.fromJson(parsed, ClientConfig.class);
+			if (config != null && !parsed.getAsJsonObject().has("hotbarScrollWrap")) {
+				config.hotbarScrollWrap = true;
+			}
+			return config;
 		} catch (IOException e) {
 			return null;
 		} catch (RuntimeException e) {

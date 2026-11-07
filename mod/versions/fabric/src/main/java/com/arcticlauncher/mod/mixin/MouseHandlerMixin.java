@@ -11,6 +11,9 @@ import net.minecraft.client.input.MouseButtonInfo;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+//#if MC >= 1.21.2
+import org.spongepowered.asm.mixin.injection.Redirect;
+//#endif
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** Counts clicks for the CPS widgets and keeps held buttons; the wheel zooms while zooming. */
@@ -47,6 +50,21 @@ abstract class MouseHandlerMixin {
 			ci.cancel();
 		}
 	}
+
+	/**
+	 * Hotbar slot only (1.21.2+ picks the next slot here, after the spectator and screen branches).
+	 * Bundle scrolling and every open screen call {@code getNextScrollWheelSelection} on their own.
+	 */
+	//#if MC >= 1.21.2
+	@Redirect(method = "onScroll", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/ScrollWheelHandler;getNextScrollWheelSelection(DII)I"))
+	private int arctic$hotbarWrap(double wheel, int current, int limit) {
+		com.arcticlauncher.client.config.ClientConfig config = ArcticClient.config();
+		if (config == null || config.hotbarScrollWrap || limit != com.arcticlauncher.client.feature.HotbarScroll.SLOTS) {
+			return net.minecraft.client.ScrollWheelHandler.getNextScrollWheelSelection(wheel, current, limit);
+		}
+		return com.arcticlauncher.client.feature.HotbarScroll.wheel(current, wheel, false);
+	}
+	//#endif
 
 	/** A click on a pop-up's button (Copy on a screenshot) while a screen frees the mouse. */
 	private static boolean noticeClicked(int action) {
