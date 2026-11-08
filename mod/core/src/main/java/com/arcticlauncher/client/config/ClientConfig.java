@@ -293,7 +293,14 @@ public final class ClientConfig {
 	public int timeLockOff = -1;
 	/** A pop-up when armor or the held tool is about to break. */
 	public boolean durabilityWarning = true;
-	/** Combat feedback: a marker where you aim when you hit, sounds for hits and kills, and a low-health warning. */
+	/**
+	 * Combat Feedback as a whole (the Mods tile): the marker, the sounds and the low-health warning.
+	 * Null in a file saved before the tile had its own switch. {@link #fillDefaults()} then turns it on
+	 * when the marker, a hit or kill sound, or the low-health warning was already in use, so that
+	 * behaviour stays. After that it is whatever the tile was last set to.
+	 */
+	public Boolean combatFeedback;
+	/** A marker where you aim when you hit. A sub-option of {@link #combatFeedback}. */
 	public boolean hitMarker;
 	public int hitMarkerColor = 0xFFFFFFFF;
 	/** Sound for a hit / a kill: 0 off, 1 ding, 2 orb, 3 level-up. */
@@ -524,6 +531,9 @@ public final class ClientConfig {
 			proxy = new ProxyConfig();
 		}
 		proxy.fillDefaults();
+		if (combatFeedback == null) {
+			combatFeedback = hitMarker || hitSound > 0 || killSound > 0 || lowHealthWarning;
+		}
 	}
 
 	/**
