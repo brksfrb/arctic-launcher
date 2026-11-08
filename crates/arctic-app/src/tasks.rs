@@ -107,6 +107,8 @@ pub enum Event {
     /// Sent from the game's watcher threads; may overtake `Launched`.
     Game(LaunchId, GameEvent),
     DeviceCode(LoginAttempt, DeviceCode),
+    /// The browser sign-in page was opened at this URL (to open again or copy).
+    LoginUrl(LoginAttempt, String),
     LoginFinished(LoginAttempt, Outcome<Account>),
     Face(String, Face),
     UpdateChecked(Outcome<Option<UpdateInfo>>),
@@ -481,8 +483,11 @@ impl Tasks {
 
     pub fn login_browser(&self, attempt: LoginAttempt, cancel: Arc<AtomicBool>) {
         self.run(move |t| {
-            let result = MsaConfig::load(&t.dirs)
-                .and_then(|cfg| microsoft::login_with_browser(&cfg, &cancel));
+            let result = MsaConfig::load(&t.dirs).and_then(|cfg| {
+                microsoft::login_with_browser(&cfg, &cancel, &|url| {
+                    t.send(Event::LoginUrl(attempt, url.to_owned()));
+                })
+            });
             t.send(Event::LoginFinished(
                 attempt,
                 result.map_err(|e| e.to_string()),

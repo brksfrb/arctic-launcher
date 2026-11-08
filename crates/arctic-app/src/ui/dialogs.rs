@@ -201,14 +201,68 @@ impl ArcticApp {
         let AddAccount::Microsoft {
             device_code,
             browser,
+            login_url,
+            started,
             ..
         } = &self.add_account
         else {
             return;
         };
         let (code, browser) = (device_code.clone(), *browser);
+        let (login_url, waited) = (login_url.clone(), started.elapsed());
         match (browser, code) {
-            (true, _) => waiting(ui, p, "Finish signing in in your browser…"),
+            (true, _) => {
+                waiting(ui, p, "Finish signing in in your browser…");
+                if waited > SLOW_SIGN_IN {
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new(
+                            "Taking a while? The sign-in page may have opened behind this window, \
+                             in another browser, or not at all.",
+                        )
+                        .small()
+                        .color(p.muted),
+                    );
+                    ui.ctx()
+                        .request_repaint_after(std::time::Duration::from_secs(1));
+                } else {
+                    ui.ctx().request_repaint_after(SLOW_SIGN_IN - waited);
+                }
+                ui.add_space(6.0);
+                widgets::row(ui, |ui| {
+                    let has_url = login_url.is_some();
+                    let open = ui
+                        .add_enabled_ui(has_url, |ui| {
+                            widgets::button(
+                                ui,
+                                p,
+                                Some(Icon::External),
+                                "Open the sign-in page again",
+                                false,
+                            )
+                        })
+                        .inner;
+                    if open.clicked()
+                        && let Some(url) = &login_url
+                    {
+                        ui.ctx().open_url(egui::OpenUrl::new_tab(url));
+                    }
+                    let copy = ui
+                        .add_enabled_ui(has_url, |ui| {
+                            widgets::icon_button(ui, p, Icon::Copy, "Copy link")
+                        })
+                        .inner;
+                    if copy.clicked()
+                        && let Some(url) = &login_url
+                    {
+                        ui.ctx().copy_text(url.clone());
+                        self.toasts.push(Kind::Info, "Link copied", "");
+                    }
+                    if widgets::button(ui, p, None, "Use a code instead", false).clicked() {
+                        self.start_login(false);
+                    }
+                });
+            }
             (false, None) => waiting(ui, p, "Getting a sign-in code…"),
             (false, Some(code)) => {
                 ui.label(
@@ -480,6 +534,9 @@ pub(super) fn option_tile(
             .on_hover_cursor(egui::CursorIcon::PointingHand)
             .clicked()
 }
+
+/// After this long in the browser flow the dialog says what might have gone wrong.
+const SLOW_SIGN_IN: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// What a failed sign-in should say and offer.
 #[derive(Debug, PartialEq, Eq)]

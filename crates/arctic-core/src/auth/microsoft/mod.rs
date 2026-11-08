@@ -40,15 +40,22 @@ pub fn finish_device_code(
 /// Browser flow: opens the system browser and waits for the loopback redirect.
 /// Live-style client IDs can't redirect back to us, so they open the code
 /// page with the code already filled in and wait the same way.
-pub fn login_with_browser(cfg: &MsaConfig, cancel: &AtomicBool) -> Result<Account> {
+/// Sign in in the browser. `opened` gets the page's URL once the browser was told to open
+/// it, so a launcher can offer "open again" and "copy link" if the browser didn't show.
+pub fn login_with_browser(
+    cfg: &MsaConfig,
+    cancel: &AtomicBool,
+    opened: &dyn Fn(&str),
+) -> Result<Account> {
     if cfg.is_live() {
         let code = start_device_code(cfg)?;
         let url = format!("{}?otc={}", code.verification_uri, code.user_code);
         open::that_detached(&url)
             .map_err(|e| Error::Other(format!("could not open the browser: {e}")))?;
+        opened(&url);
         return finish_device_code(cfg, &code, cancel);
     }
-    let tokens = browser::authorize(cfg, cancel)?;
+    let tokens = browser::authorize(cfg, cancel, opened)?;
     complete_login(tokens, false)
 }
 

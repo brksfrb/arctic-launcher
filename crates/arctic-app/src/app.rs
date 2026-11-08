@@ -101,6 +101,9 @@ pub enum AddAccount {
         cancel: Arc<AtomicBool>,
         device_code: Option<DeviceCode>,
         browser: bool,
+        /// The browser sign-in page, once opened (for "open again" and "copy link").
+        login_url: Option<String>,
+        started: std::time::Instant,
     },
     Failed(String),
 }
@@ -630,6 +633,8 @@ impl ArcticApp {
             cancel,
             device_code: None,
             browser,
+            login_url: None,
+            started: std::time::Instant::now(),
         };
     }
 
@@ -1138,6 +1143,17 @@ impl ArcticApp {
                 self.on_launched(id, result, ctx);
             }
             Event::Game(id, event) => self.on_game_event(id, event, ctx),
+            Event::LoginUrl(attempt, url) => {
+                if let AddAccount::Microsoft {
+                    attempt: current,
+                    login_url,
+                    ..
+                } = &mut self.add_account
+                    && *current == attempt
+                {
+                    *login_url = Some(url);
+                }
+            }
             Event::DeviceCode(attempt, code) => {
                 if let AddAccount::Microsoft {
                     attempt: current,
