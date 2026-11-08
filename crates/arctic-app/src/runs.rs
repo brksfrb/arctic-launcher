@@ -62,6 +62,8 @@ pub struct Run {
     crash_report: Option<crash::Report>,
     /// How Java was started (flags, classpath files), for the crash report.
     pub java: Option<String>,
+    /// The player pressed Force close: the exit that follows is not a crash.
+    killed: bool,
 }
 
 impl Run {
@@ -80,6 +82,25 @@ impl Run {
     pub fn clear_log(&mut self) {
         self.log.clear();
         self.log_rev += 1;
+    }
+
+    /// Force close: end the game and remember that the player asked for it, so the
+    /// exit code the kill produces (1 on Windows, 137 on Unix) is not read as a crash.
+    pub fn force_close(&mut self) {
+        if let Some(game) = self.game() {
+            game.kill();
+            self.killed = true;
+            self.push_log([LogLine {
+                level: Level::Info,
+                text: "──── Arctic: force closed by the player ────".into(),
+            }]);
+        }
+    }
+
+    /// The exit code to report: none at all after a Force close, which reads as
+    /// "was stopped" rather than "closed unexpectedly".
+    fn reported_exit_code(&self, code: Option<i32>) -> Option<i32> {
+        if self.killed { None } else { code }
     }
 
     pub fn push_log(&mut self, lines: impl IntoIterator<Item = LogLine>) {
@@ -284,6 +305,7 @@ impl Runs {
             early: Vec::new(),
             crash_report: None,
             java: None,
+            killed: false,
         });
         self.next_id
     }
@@ -449,6 +471,7 @@ impl ArcticApp {
                 let Some(run) = self.runs.get_mut(id) else {
                     return;
                 };
+                let code = run.reported_exit_code(code);
                 let watchdog = run.shutdown_watchdog_fired();
                 let title = run.title.clone();
                 let instance_id = run.instance_id.clone();
@@ -746,6 +769,20 @@ mod tests {
             a,
             "an older copy still running counts"
         );
+    }
+
+    #[test]
+    fn a_force_close_is_not_a_crash() {
+        let mut runs = Runs::default();
+        let id = runs.start("x", "1.0", "X".into(), PathBuf::new());
+        let run = runs.get_mut(id).unwrap();
+        assert_eq!(run.reported_exit_code(Some(1)), Some(1));
+        run.force_close();
+        assert!(!run.killed, "nothing to kill while still preparing");
+        run.killed = true;
+        assert_eq!(run.reported_exit_code(Some(1)), None, "Windows kill");
+        assert_eq!(run.reported_exit_code(Some(137)), None, "Unix SIGKILL");
+        assert_eq!(run.reported_exit_code(Some(0)), None);
     }
 
     #[test]

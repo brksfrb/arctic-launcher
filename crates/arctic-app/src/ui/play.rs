@@ -151,9 +151,9 @@ impl ArcticApp {
                 }
                 if started
                     && widgets::icon_button(ui, p, Icon::Stop, "Force close this game").clicked()
-                    && let Some(game) = self.runs.get(id).and_then(Run::game)
+                    && let Some(run) = self.runs.get_mut(id)
                 {
-                    game.kill();
+                    run.force_close();
                 }
             });
         }
@@ -628,11 +628,15 @@ impl ArcticApp {
         {
             let _ = open::that_detached(&log);
         }
-        if let Some(game) = self.selected_run().and_then(Run::game)
+        if let Some(id) = self
+            .selected_run()
+            .filter(|r| r.game().is_some())
+            .map(|r| r.id)
             && widgets::tile_button(ui, p, Icon::Stop, "Force close Minecraft", PLAY_SIZE[1])
                 .clicked()
+            && let Some(run) = self.runs.get_mut(id)
         {
-            game.kill();
+            run.force_close();
         }
     }
 
