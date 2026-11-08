@@ -298,6 +298,8 @@ public final class Replays {
 		if (v != null) {
 			ReplayClock.stop();
 			backend.cleanView(false);
+			// Release the unpacked file (Windows can't delete or replace it while open).
+			try { v.data.close(); } catch (IOException ignored) { /* cleared on the next open */ }
 		}
 	}
 
