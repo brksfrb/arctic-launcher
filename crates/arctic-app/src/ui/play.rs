@@ -17,6 +17,8 @@ use crate::runs::{Run, RunState};
 use crate::widgets::{self, PlayState};
 
 const PLAY_SIZE: [f32; 2] = [300.0, 62.0];
+const VERSIONS_FAILED: &str = "Couldn't load the version list. Check your connection.";
+
 const PICKER_WIDTH: f32 = 340.0;
 
 /// Floored percent of one byte ratio. Never 100: a single stage's bytes being
@@ -343,11 +345,9 @@ impl ArcticApp {
         let ManifestState::Ready(manifest) = &self.manifest else {
             match &self.manifest {
                 ManifestState::Failed(e) => {
-                    ui.label(RichText::new(format!("Could not load versions: {e}")).color(p.error));
-                    if crate::widgets::button(ui, p, None, "Retry", false).clicked() {
-                        self.manifest = ManifestState::Loading;
-                        self.tasks.load_manifest();
-                    }
+                    ui.label(RichText::new(VERSIONS_FAILED).color(p.error))
+                        .on_hover_text(e);
+                    self.retry_versions_button(ui);
                 }
                 _ => widgets::skeleton(ui, p, vec2(PICKER_WIDTH, 44.0), 1),
             }
@@ -645,10 +645,17 @@ impl ArcticApp {
             Some("A required launcher update must be installed first.")
         } else if self.accounts.active().is_none() {
             Some("Add an account to play.")
-        } else if !matches!(self.manifest, ManifestState::Ready(_)) {
-            Some("Loading versions…")
         } else {
-            None
+            manifest_reason(&self.manifest)
+        }
+    }
+
+    /// Load the version list again; drawn wherever its failure is reported.
+    fn retry_versions_button(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
+        if crate::widgets::button(ui, p, None, "Retry", false).clicked() {
+            self.manifest = ManifestState::Loading;
+            self.tasks.load_manifest();
         }
     }
 
@@ -685,7 +692,17 @@ impl ArcticApp {
                 None => "This version will be downloaded when you press Play.".into(),
             },
         };
-        ui.label(RichText::new(text).color(p.muted));
+        let failed =
+            self.selected_run().is_none() && matches!(self.manifest, ManifestState::Failed(_));
+        ui.horizontal(|ui| {
+            let label = ui.label(RichText::new(text).color(if failed { p.error } else { p.muted }));
+            if failed {
+                if let ManifestState::Failed(e) = &self.manifest {
+                    label.on_hover_text(e);
+                }
+                self.retry_versions_button(ui);
+            }
+        });
         self.last_crash_row(ui);
     }
 
@@ -733,5 +750,34 @@ impl ArcticApp {
             .last_version
             .as_ref()
             .is_some_and(|v| self.installed.contains(v))
+    }
+}
+
+/// Why Play is blocked by the version list, if it is. A failed load is told apart from one still
+/// going, so a custom instance (which has no version picker) is not left on "Loading versions…".
+fn manifest_reason(manifest: &ManifestState) -> Option<&'static str> {
+    match manifest {
+        ManifestState::Ready(_) => None,
+        ManifestState::Loading => Some("Loading versions…"),
+        ManifestState::Failed(_) => Some(VERSIONS_FAILED),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_failed_version_list_is_not_reported_as_loading() {
+        assert_eq!(
+            manifest_reason(&ManifestState::Loading),
+            Some("Loading versions…")
+        );
+        let failed = ManifestState::Failed("network error: timed out".into());
+        assert_eq!(manifest_reason(&failed), Some(VERSIONS_FAILED));
+        assert!(
+            !manifest_reason(&failed).unwrap().contains("network error"),
+            "the raw error stays in the tooltip"
+        );
     }
 }
