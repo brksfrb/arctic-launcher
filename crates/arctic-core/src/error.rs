@@ -25,6 +25,10 @@ pub enum Error {
     #[error("{0}")]
     NotConfigured(String),
 
+    /// The player cancelled (a launch while it downloaded).
+    #[error("cancelled")]
+    Cancelled,
+
     #[error("{0}")]
     Other(String),
 }
@@ -45,6 +49,10 @@ impl Error {
     /// A Microsoft sign-in that is no longer good (expired, revoked, or refused).
     pub fn is_auth(&self) -> bool {
         matches!(self, Self::Auth(_))
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        matches!(self, Self::Cancelled)
     }
 
     /// The error in plain words, with what to do about it, for a toast; the raw chain
@@ -71,6 +79,7 @@ impl Error {
                 "A downloaded file was unreadable. Press Play to download it again.".into()
             }
             Self::Auth(_) => "Your Microsoft sign-in has expired. Sign in again to play.".into(),
+            Self::Cancelled => "Cancelled.".into(),
             Self::NotConfigured(text) | Self::Other(text) => text.clone(),
         }
     }

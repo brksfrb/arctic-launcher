@@ -638,6 +638,17 @@ impl ArcticApp {
         {
             run.force_close();
         }
+        // While the game files download there is no process to close yet, but the launch
+        // can be given up.
+        if let Some(id) = self
+            .selected_run()
+            .filter(|r| matches!(r.state, RunState::Preparing { .. }))
+            .map(|r| r.id)
+            && widgets::tile_button(ui, p, Icon::Close, "Cancel launch", PLAY_SIZE[1]).clicked()
+            && let Some(run) = self.runs.get_mut(id)
+        {
+            run.cancel_launch();
+        }
     }
 
     fn blocked_reason(&self) -> Option<&'static str> {
@@ -662,7 +673,9 @@ impl ArcticApp {
     fn launch_status(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         let text = match self.selected_run().map(|r| &r.state) {
-            Some(RunState::Preparing { progress, meter }) if progress.bytes_total > 0 => {
+            Some(RunState::Preparing {
+                progress, meter, ..
+            }) if progress.bytes_total > 0 => {
                 let remaining = progress.bytes_total.saturating_sub(progress.bytes_done);
                 let mut parts = vec![
                     progress.stage.clone(),

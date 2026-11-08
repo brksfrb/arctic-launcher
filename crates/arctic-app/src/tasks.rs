@@ -64,6 +64,8 @@ pub struct LaunchFailure {
     pub detail: String,
     /// (account id, name) whose Microsoft session was refused.
     pub signed_out: Option<(String, String)>,
+    /// The player pressed Cancel: not a failure to report.
+    pub cancelled: bool,
 }
 
 impl LaunchFailure {
@@ -72,6 +74,7 @@ impl LaunchFailure {
             plain: e.plain(),
             detail: e.chain(),
             signed_out: e.is_auth().then_some(account),
+            cancelled: e.is_cancelled(),
         }
     }
 }
@@ -263,6 +266,8 @@ pub struct StartAt {
     pub quick_play: Option<arctic_core::launch::QuickPlay>,
     /// This game's own bridge info (with its join token), instead of the launcher-wide one.
     pub bridge: Option<arctic_core::bridge::BridgeInfo>,
+    /// Set by "Cancel launch": every download stops and the game is not started.
+    pub cancel: Arc<AtomicBool>,
 }
 
 impl Tasks {
@@ -397,7 +402,10 @@ impl Tasks {
     ) {
         self.run(move |t| {
             let who = (account.id.clone(), account.username.clone());
-            let result = t.launch_blocking(id, &version, &instance, account, &settings, start);
+            // Every download below stops with Error::Cancelled once the flag is set.
+            let result = arctic_core::net::cancellable(start.cancel.clone(), || {
+                t.launch_blocking(id, &version, &instance, account, &settings, start)
+            });
             let result = result.map(|(game, log, java)| (game, log, version.id.clone(), java));
             t.send(Event::Launched(
                 id,
@@ -445,6 +453,8 @@ impl Tasks {
             quick_play: start.quick_play,
         };
         let plan = launch::prepare(&req, &progress)?;
+        // Cancelled during the last stage: don't start the game after all.
+        arctic_core::net::check_cancelled()?;
         let (tx, ctx) = (self.tx.clone(), self.ctx.clone());
         let game = launch::spawn(&plan, move |event| {
             let _ = tx.send(Event::Game(id, event));

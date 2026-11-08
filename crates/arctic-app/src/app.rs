@@ -887,6 +887,11 @@ impl ArcticApp {
             copy,
             quick_play,
             bridge,
+            cancel: self
+                .runs
+                .get(id)
+                .and_then(crate::runs::Run::cancel_flag)
+                .unwrap_or_default(),
         };
         self.bridge.allow(&account.id);
         self.tasks

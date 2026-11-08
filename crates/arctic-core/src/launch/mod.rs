@@ -423,6 +423,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         .java_path
         .clone()
         .or_else(|| req.settings.java_override.clone());
+    crate::net::check_cancelled()?;
     progress(ProgressInfo::stage("Reading version"));
     let vanilla = load_version(dirs, req.version, &|_| {})?;
     // Going up to a newer game version upgrades worlds for good: back the recent ones up first.

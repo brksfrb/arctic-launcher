@@ -5,6 +5,8 @@
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Instant, SystemTime};
 
 use arctic_core::crash::{self, Diagnosis};
@@ -28,6 +30,8 @@ pub enum RunState {
     Preparing {
         progress: ProgressSnapshot,
         meter: RateMeter,
+        /// Set by "Cancel launch": the downloads stop and the game is not started.
+        cancel: Arc<AtomicBool>,
     },
     /// Process started, waiting for the game window.
     Starting {
@@ -95,6 +99,25 @@ impl Run {
             self.push_log([LogLine {
                 level: Level::Info,
                 text: "──── Arctic: force closed by the player ────".into(),
+            }]);
+        }
+    }
+
+    /// The flag that stops this launch's downloads, while it is being prepared.
+    pub fn cancel_flag(&self) -> Option<Arc<AtomicBool>> {
+        match &self.state {
+            RunState::Preparing { cancel, .. } => Some(cancel.clone()),
+            _ => None,
+        }
+    }
+
+    /// "Cancel launch" while the game files download: the launch task notices and gives up.
+    pub fn cancel_launch(&mut self) {
+        if let RunState::Preparing { cancel, .. } = &self.state {
+            cancel.store(true, Ordering::Relaxed);
+            self.push_log([LogLine {
+                level: Level::Info,
+                text: "──── Arctic: launch cancelled by the player ────".into(),
             }]);
         }
     }
@@ -299,6 +322,7 @@ impl Runs {
                     ..ProgressSnapshot::default()
                 },
                 meter: RateMeter::default(),
+                cancel: Arc::default(),
             },
             log: VecDeque::new(),
             log_rev: 0,
@@ -372,7 +396,9 @@ impl ArcticApp {
         now: f64,
     ) {
         if let Some(Run {
-            state: RunState::Preparing { progress, meter },
+            state: RunState::Preparing {
+                progress, meter, ..
+            },
             ..
         }) = self.runs.get_mut(id)
         {
@@ -404,6 +430,14 @@ impl ArcticApp {
                 // Replay events from a game that was faster than our bookkeeping.
                 for event in early {
                     self.on_game_event(id, event, ctx);
+                }
+            }
+            Err(failure) if failure.cancelled => {
+                if let Some(run) = self.runs.get_mut(id) {
+                    run.state = RunState::Ended;
+                    let title = run.title.clone();
+                    self.toasts
+                        .push(Kind::Info, format!("{title}: launch cancelled"), "");
                 }
             }
             Err(failure) => {
@@ -793,6 +827,21 @@ mod tests {
             a,
             "an older copy still running counts"
         );
+    }
+
+    #[test]
+    fn cancel_launch_sets_the_flag_only_while_preparing() {
+        let mut runs = Runs::default();
+        let id = runs.start("x", "1.0", "X".into(), PathBuf::new());
+        let run = runs.get_mut(id).unwrap();
+        let flag = run.cancel_flag().expect("preparing");
+        assert!(!flag.load(Ordering::Relaxed));
+        run.cancel_launch();
+        assert!(flag.load(Ordering::Relaxed), "the launch task sees it");
+        assert!(run.log.iter().any(|l| l.text.contains("cancelled")));
+        run.state = RunState::Ended;
+        assert!(run.cancel_flag().is_none());
+        run.cancel_launch();
     }
 
     #[test]
