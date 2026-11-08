@@ -106,7 +106,7 @@ impl ArcticApp {
                 .on_hover_text("Animated capes and sculpted cosmetics stand still here. Only your own view changes; what you and others wear stays as chosen.");
             ui.checkbox(&mut s.intro, "Intro animation on start");
             ui.checkbox(&mut s.start_maximized, "Start the launcher maximized");
-            if cfg!(windows) {
+            if cfg!(any(windows, target_os = "linux")) {
                 ui.checkbox(&mut s.tray, "Keep Arctic in the system tray when closed")
                     .on_hover_text("Reopens instantly. Quit from the tray icon.");
             }
