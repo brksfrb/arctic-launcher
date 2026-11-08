@@ -137,8 +137,26 @@ final class LegacyWorldTest {
 				() -> {
 					ArcticClient.features().simulate(false, true);
 					later(() -> {
-						shot("freelook");
-						ArcticClient.features().simulate(false, false);
+						// Turn the camera away from where the player looks, give a frame to draw, then compare billboards.
+						ArcticClient.features().turn(600, 0);
+						// A named pig and particles 3 blocks in front of the camera (not the player), for the screenshot.
+						double yaw = Math.toRadians(ArcticClient.features().lookYaw());
+						// Ahead of the player along the camera's view and to its right, so the player's own model doesn't hide it.
+						double px = mc.player.x - Math.sin(yaw) * 2 - Math.cos(yaw) * 1.5;
+						double pz = mc.player.z + Math.cos(yaw) * 2 - Math.sin(yaw) * 1.5;
+						mc.options.hudHidden = true;
+						String at = String.format(java.util.Locale.ROOT, "%.2f %.2f %.2f", px, mc.player.y, pz);
+						String above = String.format(java.util.Locale.ROOT, "%.2f %.2f %.2f", px, mc.player.y + 1.5, pz);
+						command("summon " + PIG + " " + at + " {NoAI:1b,CustomName:\"Freelook\",CustomNameVisible:1b}");
+						for (int i = 0; i < 3; i++) {
+							TIMER.schedule(() -> run(() -> command("particle flame " + above + " 0.4 0.4 0.4 0 40")), 100 + i * 200, TimeUnit.MILLISECONDS);
+						}
+						TIMER.schedule(() -> run(() -> {
+							checkBillboards();
+							shot("freelook");
+							mc.options.hudHidden = false;
+							ArcticClient.features().simulate(false, false);
+						}), 700, TimeUnit.MILLISECONDS);
 					});
 				},
 				() -> {
@@ -278,6 +296,41 @@ final class LegacyWorldTest {
 
 	private static void later(Runnable r) {
 		TIMER.schedule(() -> run(r), 3, TimeUnit.SECONDS);
+	}
+
+	/**
+	 * While Freelook is on, everything that faces the camera (particles through
+	 * Camera.getRotation*, name tags through the dispatcher's yaw/pitch) must
+	 * face Freelook's angles, not the player's.
+	 */
+	private static void checkBillboards() {
+		MinecraftClient mc = MinecraftClient.getInstance();
+		com.arcticlauncher.client.feature.Features f = ArcticClient.features();
+		float yaw = f.lookYaw();
+		float pitch = f.lookPitch();
+		float turned = Math.abs(net.minecraft.util.math.MathHelper.wrapDegrees(yaw - mc.player.yaw));
+		double rad = Math.PI / 180;
+		float cx = (float) Math.cos(yaw * rad);
+		float cz = (float) Math.sin(yaw * rad);
+		float sp = (float) Math.sin(pitch * rad);
+		float[] want = {cx, (float) Math.cos(pitch * rad), cz, -cz * sp, cx * sp};
+		float[] got = {net.minecraft.client.render.Camera.getRotationX(), net.minecraft.client.render.Camera.getRotationXZ(),
+				net.minecraft.client.render.Camera.getRotationZ(), net.minecraft.client.render.Camera.getRotationYZ(),
+				net.minecraft.client.render.Camera.getRotationXY()};
+		boolean ok = turned > 45;
+		for (int i = 0; i < want.length; i++) {
+			ok &= Math.abs(want[i] - got[i]) < 0.02f;
+		}
+		float dy = Math.abs(net.minecraft.util.math.MathHelper.wrapDegrees(mc.getEntityRenderManager().yaw - yaw));
+		ok &= dy < 0.5f && Math.abs(mc.getEntityRenderManager().pitch - pitch) < 0.5f;
+		if (ok) {
+			ArcticLegacy.LOG.info("worldtest: freelook billboards OK (camera turned {} deg from the player)", turned);
+			System.out.println("worldtest: freelook billboards OK (camera turned " + turned + " deg from the player)");
+		} else {
+			ArcticLegacy.LOG.error("worldtest: FAILED freelook billboards: turned {} want {} got {} dispatcher {}/{} want {}/{}", turned,
+					java.util.Arrays.toString(want), java.util.Arrays.toString(got), mc.getEntityRenderManager().yaw,
+					mc.getEntityRenderManager().pitch, yaw, pitch);
+		}
 	}
 
 	static void shot(String name) {
