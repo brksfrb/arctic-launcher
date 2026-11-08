@@ -339,6 +339,7 @@ impl ArcticApp {
         });
 
         section(ui, p, "Storage", |ui| self.storage_section(ui, p));
+        section(ui, p, "Video export", |ui| self.video_export_section(ui, p));
 
         section(ui, p, "Share & back up", |ui| {
             ui.label(

@@ -112,6 +112,8 @@ pub enum Event {
     DeviceCode(LoginAttempt, DeviceCode),
     /// The browser sign-in page was opened at this URL (to open again or copy).
     LoginUrl(LoginAttempt, String),
+    /// An FFmpeg binary was picked in Settings and checked.
+    FfmpegPicked(Outcome<PathBuf>),
     LoginFinished(LoginAttempt, Outcome<Account>),
     Face(String, Face),
     UpdateChecked(Outcome<Option<UpdateInfo>>),
@@ -359,6 +361,22 @@ impl Tasks {
 
     /// After a file dialog returned nothing: tell the player when that is because the system has no
     /// file picker (Linux without a desktop portal, zenity or kdialog), not because they cancelled.
+    /// Settings → Video export → "Choose ffmpeg…": pick a file and make sure it is FFmpeg.
+    pub fn ffmpeg_pick(&self) {
+        self.run(|t| {
+            let picked = rfd::FileDialog::new()
+                .set_title("Where is ffmpeg?")
+                .pick_file();
+            t.note_if_picker_missing(&picked);
+            if let Some(path) = picked {
+                let result = arctic_core::ffmpeg::check(&path)
+                    .map(|()| path)
+                    .map_err(|e| e.to_string());
+                t.send(Event::FfmpegPicked(result));
+            }
+        });
+    }
+
     pub(crate) fn note_if_picker_missing<T>(&self, picked: &Option<T>) {
         if picked.is_none() && !file_picker_available() {
             self.send(Event::PickerMissing);
