@@ -65,6 +65,12 @@ final class LegacyTextures {
 		upload(id, "/assets/arctic/" + name + ".png");
 		// A file that failed to load draws nothing, not Minecraft's purple missing texture.
 		Identifier result = LOADED.contains(id) ? id : null;
+		if (result != null && name.startsWith("icon-")) {
+			// The spinning snowflake is drawn turned: filter it linearly (the default is nearest).
+			MinecraftClient.getInstance().getTextureManager().bindTexture(id);
+			org.lwjgl.opengl.GL11.glTexParameteri(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_MIN_FILTER, org.lwjgl.opengl.GL11.GL_LINEAR);
+			org.lwjgl.opengl.GL11.glTexParameteri(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_MAG_FILTER, org.lwjgl.opengl.GL11.GL_LINEAR);
+		}
 		ASSETS.put(name, result);
 		return result;
 	}
