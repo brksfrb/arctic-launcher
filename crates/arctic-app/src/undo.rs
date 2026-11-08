@@ -4,6 +4,7 @@
 
 use std::path::PathBuf;
 
+use arctic_core::mods::packs::{self, PackKind, TrashedPack};
 use arctic_core::mods::{self, TrashedMod};
 
 use crate::app::ArcticApp;
@@ -16,6 +17,12 @@ pub enum Undo {
         instance_id: String,
         index: PathBuf,
         trashed: TrashedMod,
+    },
+    Pack {
+        instance_id: String,
+        kind: PackKind,
+        game_dir: PathBuf,
+        trashed: TrashedPack,
     },
 }
 
@@ -36,6 +43,23 @@ impl ArcticApp {
                     }
                 }
                 self.refresh_mods(&instance_id);
+            }
+            Undo::Pack {
+                instance_id,
+                kind,
+                game_dir,
+                trashed,
+            } => {
+                match packs::restore(kind, &game_dir, &trashed) {
+                    Ok(()) => self.toasts.push(Kind::Success, "Pack put back", ""),
+                    Err(e) => {
+                        self.toasts
+                            .push(Kind::Error, "Couldn't put the pack back", e.to_string())
+                    }
+                }
+                if let Some(instance) = self.instance_by_id(&instance_id).cloned() {
+                    self.refresh_packs(&instance);
+                }
             }
         }
     }
