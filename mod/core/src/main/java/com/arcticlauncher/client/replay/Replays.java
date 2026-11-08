@@ -228,6 +228,7 @@ public final class Replays {
 		Notices.post("Opening replay", file.getName().replace(".mcpr", ""));
 		Thread t = new Thread(() -> {
 			try {
+				long began = System.nanoTime();
 				final ReplayData data = ReplayData.open(file, new File(gameDir, ".arctic/replay-cache"));
 				if (data.meta.protocol != 0 && backend.protocol() != 0 && data.meta.protocol != backend.protocol()) {
 					data.close();
@@ -235,9 +236,20 @@ public final class Replays {
 							+ ". Open it from an instance of that version."));
 					return;
 				}
+				long unpacked = System.nanoTime();
+				// Sorted before joining, so the opening world can be applied like a jump (see ReplayViewer).
+				ReplayBackend.Classifier classifier = backend.classifier(data);
+				if (classifier != null) data.classify(classifier);
+				platform.log(false, "replay: opened " + file.getName() + ": " + data.count() + " packets, unpacked in "
+						+ (unpacked - began) / 1_000_000 + " ms, sorted in " + (System.nanoTime() - unpacked) / 1_000_000 + " ms");
 				platform.runOnGameThread(() -> start(data, then));
 			} catch (IOException | RuntimeException e) {
 				platform.runOnGameThread(() -> openFailed(String.valueOf(e.getMessage())));
+			} catch (OutOfMemoryError e) {
+				// Never leave "Opening replay" up forever: the next Watch must still work.
+				platform.runOnGameThread(() -> openFailed("Not enough memory to open it. Give the game more memory and try again."));
+			} catch (Throwable e) {
+				platform.runOnGameThread(() -> openFailed(String.valueOf(e)));
 			}
 		}, "arctic-replay-open");
 		t.setDaemon(true);
@@ -261,6 +273,7 @@ public final class Replays {
 		String error = v.begin();
 		if (error != null) {
 			viewer = null;
+			try { data.close(); } catch (IOException ignored) { /* the cache is cleared next time */ }
 			Notices.post("Can't open this replay", error);
 			return;
 		}

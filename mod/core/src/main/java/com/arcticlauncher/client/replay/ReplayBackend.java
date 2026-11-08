@@ -18,6 +18,8 @@ public interface ReplayBackend {
 		byte classify(ByteBuffer packet, long[] key);
 		/** Ids removed by an ENTITY_REMOVE packet; null if its format is unknown. */
 		default int[] removedEntities(ByteBuffer packet) { return null; }
+		/** Chunk keys ({@link Category#chunk}) a CHUNK_BULK packet loads; null if its format is unknown. */
+		default long[] bulkChunks(ByteBuffer packet) { return null; }
 	}
 
 	/** The network protocol this game speaks (a replay must match it); 0 if unknown. */

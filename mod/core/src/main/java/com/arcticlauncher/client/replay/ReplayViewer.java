@@ -97,7 +97,7 @@ public final class ReplayViewer {
 			ReplayClock.stop();
 			return error;
 		}
-		final ReplayBackend.Classifier classifier = backend.classifier(data);
+		final ReplayBackend.Classifier classifier = data.classified() ? null : backend.classifier(data);
 		if (classifier != null) {
 			Thread t = new Thread(() -> {
 				long start = System.nanoTime();
@@ -207,10 +207,37 @@ public final class ReplayViewer {
 			status = null;
 			time = cursor > 0 ? data.time(cursor - 1) : 0;
 			start = (int) time;
+			skipBootstrap();
 		} else if (failure == null && cursor >= data.count()) {
 			problem = "This replay never reaches the world.";
 			joined = true;
 		}
+	}
+
+	/**
+	 * The world as it was when the recording started arrives all at once (time 0). Older clips
+	 * carry far more of it than they need (on 1.8, every chunk the server sent since joining):
+	 * apply only what's still there at the start, like a jump.
+	 */
+	private void skipBootstrap() {
+		int to = data.indexAfter(time);
+		byte[] cats = data.category;
+		if (cats == null || to - cursor < 2) {
+			return;
+		}
+		long began = System.nanoTime();
+		// Planned from the very start (an empty world), applying what's left after the login.
+		int[] plan = SeekPlan.plan(cats, data.key, 0, to, data.removals, data.bulks);
+		int applied = 0;
+		for (int i : plan) {
+			if (i >= cursor) {
+				apply(i, true);
+				applied++;
+			}
+		}
+		platform.log(false, "replay: started with " + applied + " of " + (to - cursor) + " opening packets in "
+				+ (System.nanoTime() - began) / 1_000_000 + " ms");
+		cursor = to;
 	}
 
 	private void feed(double until, boolean jumping) {
@@ -385,7 +412,7 @@ public final class ReplayViewer {
 			}
 		}
 		if (cats != null) {
-			int[] plan = SeekPlan.plan(cats, keys, cursor, to, data.removals);
+			int[] plan = SeekPlan.plan(cats, keys, cursor, to, data.removals, data.bulks);
 			for (int i : plan) {
 				apply(i, true);
 			}

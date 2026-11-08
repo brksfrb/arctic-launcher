@@ -519,7 +519,7 @@ public final class Recorder {
 		// Only the older bootstrap needs a seek plan. The recent interval is copied in full.
 		Index index = Index.before(source, classifier == null ? (p, k) -> Category.ALWAYS : classifier, from);
 		int cut = index.count;
-		int[] earlier = SeekPlan.plan(index.category, index.key, 0, cut, index.removals);
+		int[] earlier = SeekPlan.plan(index.category, index.key, 0, cut, index.removals, index.bulks);
 		try (DataInputStream in = source.packets()) {
 			byte[] buf = new byte[1 << 16];
 			int e = 0;
@@ -610,6 +610,7 @@ public final class Recorder {
 		byte[] category = new byte[1 << 12];
 		long[] key = new long[1 << 12];
 		final java.util.Map<Integer, int[]> removals = new java.util.HashMap<Integer, int[]>();
+		final java.util.Map<Integer, long[]> bulks = new java.util.HashMap<Integer, long[]>();
 
 		static Index before(Snapshot source, ReplayBackend.Classifier classifier, int before) throws IOException {
 			Index index = new Index();
@@ -635,6 +636,9 @@ public final class Recorder {
 					if (category == Category.ENTITY_REMOVE) {
 						int[] ids = classifier.removedEntities(packet);
 						if (ids != null) index.removals.put(index.count, ids);
+					} else if (category == Category.CHUNK_BULK) {
+						long[] chunks = classifier.bulkChunks(packet);
+						if (chunks != null) index.bulks.put(index.count, chunks);
 					}
 					index.add(category, out[0]);
 				}
