@@ -229,7 +229,9 @@ pub fn install_file(dirs: &DataDirs, pack: &Path, progress: Progress) -> Result<
         Some((kind, version)) => Loader::new(Some(kind), version),
         None => Loader::Vanilla,
     };
-    let mut instance = instances::create(dirs, &index.name, &game, loader)?;
+    // The pack's name as the player never typed it: trimmed to fit, and "(2)" if taken.
+    let name = instances::free_name(dirs, &index.name)?;
+    let mut instance = instances::create(dirs, &name, &game, loader)?;
     // The pack's own settings; sharing would write the others' over them.
     instance.own_settings = true;
     instance.save(dirs)?;

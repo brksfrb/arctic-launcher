@@ -263,7 +263,10 @@ pub fn create(dirs: &DataDirs, name: &str, game_version: &str, loader: Loader) -
 
 /// `name` (trimmed to fit), or `name (2)`… if an instance already uses it.
 pub fn free_name(dirs: &DataDirs, name: &str) -> Result<String> {
+    // Trim again after cutting: a cut that lands on a space would otherwise never match
+    // the trimmed name `create` stores, and the next pack of the same name would repeat it.
     let name: String = name.trim().chars().take(MAX_NAME_LEN).collect();
+    let name = name.trim().to_owned();
     let name = if name.is_empty() {
         "Imported".to_owned()
     } else {
@@ -527,6 +530,20 @@ pub fn list_custom(dirs: &DataDirs) -> Result<Vec<Instance>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn free_name_fits_a_modpacks_long_name_and_numbers_a_repeat() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path().join("data"));
+        let long = "All The Mods 10 - ATM10 - Official Modpack With A Very Long Name Indeed";
+        let name = free_name(&dirs, long).unwrap();
+        assert!(name.chars().count() <= MAX_NAME_LEN && !name.ends_with(' '));
+        create(&dirs, &name, "1.21.1", Loader::Vanilla).unwrap();
+        let again = free_name(&dirs, long).unwrap();
+        assert!(again.ends_with(" (2)"), "{again}");
+        assert!(again.chars().count() <= MAX_NAME_LEN);
+        assert_eq!(free_name(&dirs, "  Vanilla ").unwrap(), "Vanilla (2)");
+    }
 
     #[test]
     fn removed_instances_are_listed_restored_and_deleted() {
