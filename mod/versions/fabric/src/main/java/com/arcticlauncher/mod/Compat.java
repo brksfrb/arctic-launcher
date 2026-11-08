@@ -119,12 +119,6 @@ public final class Compat {
 		//#endif
 	}
 
-	/** Whether text can show Arctic's badge glyph (it needs fonts in text, 1.16+). */
-	//#if MC >= 1.16
-	public static final boolean BADGES = true;
-	//#else
-	public static final boolean BADGES = false;
-	//#endif
 
 	public static int widgetY(net.minecraft.client.gui.components.AbstractWidget w) {
 		//#if MC >= 1.19.3
@@ -513,19 +507,43 @@ public final class Compat {
 		//#endif
 	}
 
-	/** The Arctic snowflake as a text glyph (font {@code arctic:badge}). */
+	/**
+	 * The badge picture of the chosen style, then the gap before the name: 8x8 from the top of the line, 10 wide
+	 * (Badge.SIZE, Badge.ADVANCE). 1.16 and newer: a text font per picture ({@code arctic:badge}, badge1, ...);
+	 * 1.13-1.15, where text has no fonts: a character of the same picture in the default font
+	 * (assets/minecraft/font/default.json). Empty with "Force Unicode Font" on in 1.13-1.15, where that font drops it.
+	 */
+	public static net.minecraft.network.chat.MutableComponent arcticBadgeWithGap() {
+		int style = com.arcticlauncher.client.feature.Badge.style();
+		//#if MC < 1.16
+		if (net.minecraft.client.Minecraft.getInstance().options.forceUnicodeFont) {
+			return literal("");
+		}
+		return literal("\u00a7r" + (char) (com.arcticlauncher.client.feature.Badge.GLYPH_BASE + style) + com.arcticlauncher.client.feature.Badge.GLYPH_GAP + "\u00a7r");
+		//#else
+		net.minecraft.network.chat.MutableComponent badge = literal("\uE000 ").withStyle(badgeStyle(style));
+		return badge;
+		//#endif
+	}
+
+	//#if MC >= 1.16
+	/** The text style that puts a text in the font of badge picture {@code style}. */
+	public static net.minecraft.network.chat.Style badgeStyle(int style) {
+		net.minecraft.resources.Identifier font = id(ArcticMod.ID, com.arcticlauncher.client.feature.Badge.name(style));
+		//#if MC >= 1.21.9
+		return net.minecraft.network.chat.Style.EMPTY.withFont(new net.minecraft.network.chat.FontDescription.Resource(font));
+		//#else
+		return net.minecraft.network.chat.Style.EMPTY.withFont(font);
+		//#endif
+	}
+	//#endif
+
+	/** The Arctic snowflake (the speaker's picture, in font {@code arctic:badge}). */
 	public static net.minecraft.network.chat.MutableComponent arcticBadge() {
 		//#if MC < 1.16
-		// No custom fonts in text before 1.16: the snowflake character (smaller than the picture, but there).
-		return literal("§b❄§r ");
+		return literal("\u00a7b\u2744\u00a7r ");
 		//#else
-		net.minecraft.resources.Identifier font = id(ArcticMod.ID, "badge");
-		net.minecraft.network.chat.MutableComponent badge = literal("");
-		//#if MC >= 1.21.9
-		return badge.withStyle(style -> style.withFont(new net.minecraft.network.chat.FontDescription.Resource(font)));
-		//#else
-		return badge.withStyle(style -> style.withFont(font));
-		//#endif
+		return literal("").withStyle(badgeStyle(0));
 		//#endif
 	}
 

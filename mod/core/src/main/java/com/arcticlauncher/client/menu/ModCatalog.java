@@ -266,10 +266,11 @@ final class ModCatalog {
 		out.add(new Mod("pingtags", "Ping Tags", "Other players' ping in front of their name tag: 48ms | Steve", "pingtags", Category.SOCIAL,
 				"ping latency nametag lag ms")
 				.toggle(() -> c.pingNametags, on -> c.pingNametags = on));
-		out.add(new Mod("badgetags", "Arctic Badge", "The snowflake in front of other Arctic players' name tags and in the player list", "badgetags", Category.SOCIAL,
+		out.add(new Mod("badgetags", "Arctic Badge", "A badge in front of other Arctic players' name tags and in the player list; pick the picture you see", "badgetags", Category.SOCIAL,
 				"badge snowflake arctic nametag tag above head")
 				.toggle(() -> c.badgeNametags, on -> c.badgeNametags = on)
 				.settings((host, f) -> {
+					f.choice("Style", com.arcticlauncher.client.feature.Badge.STYLES, () -> c.badgeStyle, i -> c.badgeStyle = i);
 					f.choice("Show in", com.arcticlauncher.client.feature.Badge.WHERE, () -> c.badgeWhere, i -> c.badgeWhere = i);
 					f.toggle("Only on others", "No badge on your own name", () -> c.badgeOthersOnly, on -> c.badgeOthersOnly = on);
 				}));
