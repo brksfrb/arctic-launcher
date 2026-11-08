@@ -64,6 +64,8 @@ pub struct Run {
     pub java: Option<String>,
     /// The player pressed Force close: the exit that follows is not a crash.
     killed: bool,
+    /// What the last exit was diagnosed as, shown on the Play tab after the toast is gone.
+    pub diagnosis: Option<Diagnosis>,
 }
 
 impl Run {
@@ -306,6 +308,7 @@ impl Runs {
             crash_report: None,
             java: None,
             killed: false,
+            diagnosis: None,
         });
         self.next_id
     }
@@ -501,6 +504,7 @@ impl ArcticApp {
                         .or_else(|| crash::silent_exit(&run.crash_text(), c)),
                     _ => None,
                 };
+                run.diagnosis = diagnosis.clone();
                 if let Some(d) = &diagnosis {
                     run.push_log([LogLine {
                         level: Level::Error,

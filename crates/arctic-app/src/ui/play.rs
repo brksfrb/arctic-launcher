@@ -686,6 +686,46 @@ impl ArcticApp {
             },
         };
         ui.label(RichText::new(text).color(p.muted));
+        self.last_crash_row(ui);
+    }
+
+    /// What the last run of this instance crashed with, and its one-click fix or log:
+    /// the toast said so once, but it has gone by the time the player looks here.
+    fn last_crash_row(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
+        let instance_id = self.selected_instance().id.clone();
+        let Some((id, title, detail, fix)) = self
+            .runs
+            .for_instance(&instance_id)
+            .filter(|r| !r.is_active())
+            .and_then(|r| {
+                let d = r.diagnosis.as_ref()?;
+                Some((r.id, d.title.clone(), d.detail.clone(), d.fix.clone()))
+            })
+        else {
+            return;
+        };
+        ui.add_space(6.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new(format!("Last time: {title}.")).color(p.error));
+            ui.label(RichText::new(detail).small().color(p.muted));
+            match fix {
+                Some(fix) => {
+                    if ui.button("Fix it").clicked() {
+                        self.apply_crash_fix(&instance_id, &fix);
+                        if let Some(run) = self.runs.get_mut(id) {
+                            run.diagnosis = None;
+                        }
+                    }
+                }
+                None => {
+                    if ui.button("View logs").clicked() {
+                        let now = ui.input(|i| i.time);
+                        self.show_run_log(id, now);
+                    }
+                }
+            }
+        });
     }
 
     fn selected_installed(&self) -> bool {
