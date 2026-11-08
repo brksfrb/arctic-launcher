@@ -333,6 +333,11 @@ final class LegacyWorldTest {
 		}
 	}
 
+	/** Hold the player list key (or let go). */
+	static void setTab(boolean down) {
+		net.minecraft.client.option.KeyBinding.setKeyPressed(MinecraftClient.getInstance().options.playerListKey.getCode(), down);
+	}
+
 	static void shot(String name) {
 		MinecraftClient mc = MinecraftClient.getInstance();
 		ScreenshotUtils.saveScreenshot(mc.runDirectory, mc.width, mc.height, mc.getFramebuffer());

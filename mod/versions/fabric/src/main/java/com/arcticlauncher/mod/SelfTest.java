@@ -94,6 +94,10 @@ final class SelfTest {
 			//#endif
 			return;
 		}
+		if (BadgeTest.requested()) {
+			BadgeTest.start();
+			return;
+		}
 		if (WorldTest.requested()) {
 			WorldTest.start();
 			return;

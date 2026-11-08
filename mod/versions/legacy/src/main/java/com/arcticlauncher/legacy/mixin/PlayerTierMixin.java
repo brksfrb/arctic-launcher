@@ -40,7 +40,7 @@ abstract class PlayerTierMixin {
 		}
 		// The badge of Arctic players, as in the player list.
 		if (com.arcticlauncher.client.feature.Badge.show(false, player.getUuid())) {
-			name = new LiteralText("\u00a7b\u2744\u00a7r ").append(name);
+			name = new LiteralText(com.arcticlauncher.client.feature.Badge.MARK).append(name);
 			changed = true;
 		}
 		if (changed) {
