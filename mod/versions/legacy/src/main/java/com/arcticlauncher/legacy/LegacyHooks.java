@@ -305,21 +305,30 @@ public final class LegacyHooks {
 		com.arcticlauncher.client.feature.ContainerPeek.hover(new LegacyGfx(), mouseX, mouseY, slot.getStack());
 	}
 
-	/** The Arctic badge in the {@code size}-wide blank at ({@code x}, {@code y}), with the text's own transparency. */
-	public static void drawBadge(float x, float y, int size, int argb) {
-		net.minecraft.util.Identifier texture = LegacyTextures.resolve("asset:badge");
+	/**
+	 * The Arctic badge of the chosen style at ({@code x}, {@code y}), the top left of a text line: always
+	 * {@code Badge.SIZE} square from the line's top (the font's glyphs are 8 high from there), as the
+	 * newer versions' font picture, with the text's own transparency and, with a shadow, its shadow.
+	 */
+	public static void drawBadge(float x, float y, int argb, boolean shadow) {
+		net.minecraft.util.Identifier texture = LegacyTextures.resolve("asset:" + com.arcticlauncher.client.feature.Badge.name(com.arcticlauncher.client.feature.Badge.style()));
 		if (texture == null) {
 			return;
 		}
-		int side = Math.max(6, Math.min(9, size - 2));
+		int side = com.arcticlauncher.client.feature.Badge.SIZE;
 		int alpha = argb >>> 24;
+		// Text with no alpha is opaque, as the game draws it.
+		float a = alpha == 0 ? 1f : alpha / 255f;
 		MinecraftClient.getInstance().getTextureManager().bindTexture(texture);
 		com.mojang.blaze3d.platform.GlStateManager.enableBlend();
 		com.mojang.blaze3d.platform.GlStateManager.blendFuncSeparate(org.lwjgl.opengl.GL11.GL_SRC_ALPHA,
 				org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA, org.lwjgl.opengl.GL11.GL_ONE, org.lwjgl.opengl.GL11.GL_ZERO);
-		// Text with no alpha is opaque, as the game draws it.
-		com.mojang.blaze3d.platform.GlStateManager.color(1f, 1f, 1f, alpha == 0 ? 1f : alpha / 255f);
-		net.minecraft.client.gui.DrawableHelper.drawTexture(Math.round(x), Math.round(y) - 1, 0f, 0f, 64, 64, side, side, 64, 64);
+		if (shadow) {
+			com.mojang.blaze3d.platform.GlStateManager.color(0.25f, 0.25f, 0.25f, a);
+			net.minecraft.client.gui.DrawableHelper.drawTexture(Math.round(x) + 1, Math.round(y) + 1, 0f, 0f, 64, 64, side, side, 64, 64);
+		}
+		com.mojang.blaze3d.platform.GlStateManager.color(1f, 1f, 1f, a);
+		net.minecraft.client.gui.DrawableHelper.drawTexture(Math.round(x), Math.round(y), 0f, 0f, 64, 64, side, side, 64, 64);
 	}
 
 	/** The ping number in the player list, in the place of the ping bars; false when the latency is unknown. */
