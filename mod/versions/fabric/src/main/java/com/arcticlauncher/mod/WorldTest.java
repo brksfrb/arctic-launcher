@@ -221,7 +221,22 @@ final class WorldTest {
 				},
 				() -> {
 					ArcticClient.features().simulate(false, true);
-					ArcticClient.features().turn(600, 0);
+					// Freelook only turns once its (simulated) key has registered, on the next tick.
+					TIMER.schedule(() -> run(() -> ArcticClient.features().turn(600, 0)), 500, TimeUnit.MILLISECONDS);
+					//#if MC >= 1.14
+					// A named pig and flames beside the player; the shot shows them facing the freelook camera.
+					TIMER.schedule(() -> run(() -> {
+						//#if MC >= 1.21.5
+						command("summon pig ~1.5 ~ ~1.5 {NoAI:1b,CustomName:\"Freelook\",CustomNameVisible:1b}");
+						//#else
+						command("summon pig ~1.5 ~ ~1.5 {NoAI:1b,CustomName:'\"Freelook\"',CustomNameVisible:1b}");
+						//#endif
+					}), 800, TimeUnit.MILLISECONDS);
+					for (int i = 0; i < 3; i++) {
+						TIMER.schedule(() -> run(() -> command("particle flame ~1.5 ~1.5 ~1.5 0.4 0.4 0.4 0 40")), STEP * 1000 - 1200 + i * 300, TimeUnit.MILLISECONDS);
+					}
+					TIMER.schedule(() -> run(WorldTest::checkBillboards), STEP * 1000 - 300, TimeUnit.MILLISECONDS);
+					//#endif
 					later(() -> shot("world-freelook"));
 				},
 				() -> {
@@ -968,6 +983,40 @@ final class WorldTest {
 			capeStep(ids, index + 1, 0);
 		}), 2300 + extra, TimeUnit.MILLISECONDS);
 	}
+
+	//#if MC >= 1.14
+	/**
+	 * While Freelook is on, the camera that particles, name tags and text
+	 * displays take their facing from must have Freelook's angles, not the
+	 * player's (same as in F5).
+	 */
+	private static void checkBillboards() {
+		Minecraft mc = Minecraft.getInstance();
+		//#if MC >= 26.2
+		net.minecraft.client.Camera cam = mc.gameRenderer.mainCamera();
+		//#else
+		net.minecraft.client.Camera cam = mc.gameRenderer.getMainCamera();
+		//#endif
+		//#if MC >= 1.21.11
+		float camYaw = cam.yRot();
+		float camPitch = cam.xRot();
+		//#else
+		float camYaw = cam.getYRot();
+		float camPitch = cam.getXRot();
+		//#endif
+		float yaw = ArcticClient.features().lookYaw();
+		float pitch = ArcticClient.features().lookPitch();
+		float turned = Math.abs(net.minecraft.util.Mth.wrapDegrees(yaw - Compat.yRot(mc.player)));
+		boolean ok = turned > 45 && Math.abs(net.minecraft.util.Mth.wrapDegrees(camYaw - yaw)) < 0.5f
+				&& Math.abs(camPitch - pitch) < 0.5f;
+		if (ok) {
+			ArcticMod.LOG.info("worldtest: freelook billboards OK (camera turned {} deg from the player)", turned);
+			System.out.println("worldtest: freelook billboards OK (camera turned " + turned + " deg from the player)");
+		} else {
+			ArcticMod.LOG.error("worldtest: FAILED freelook billboards: camera {}/{} want {}/{}, player turned {}", camYaw, camPitch, yaw, pitch, turned);
+		}
+	}
+	//#endif
 
 	private static void command(String command) {
 		Compat.sendChat("/" + command);
