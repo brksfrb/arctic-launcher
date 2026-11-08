@@ -69,6 +69,8 @@ pub enum ToastAction {
     ChatRetry { friend: String, text: String },
     /// Open Settings → Storage (the chosen data folder is missing).
     OpenStorage,
+    /// Sign in to Microsoft again (a session was refused).
+    SignIn,
 }
 
 impl ToastAction {
@@ -83,6 +85,7 @@ impl ToastAction {
             ToastAction::Undo(_) => "Undo",
             ToastAction::ChatRetry { .. } => "Retry",
             ToastAction::OpenStorage => "Open Storage settings",
+            ToastAction::SignIn => "Sign in",
         }
     }
 }

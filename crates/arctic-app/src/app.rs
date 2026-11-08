@@ -151,6 +151,8 @@ pub struct ArcticApp {
     pub(crate) bridge: crate::bridge_host::BridgeHost,
     /// The running sign-in was started from the game (it's told how it went).
     pub(crate) login_from_game: bool,
+    /// Accounts whose Microsoft session was refused at launch: they need a fresh sign-in.
+    pub(crate) signed_out: std::collections::HashSet<String>,
     pub(crate) voice: crate::voice::VoiceHub,
     pub(crate) voice_ui: crate::ui::VoiceSettingsUi,
     pub(crate) accounts: AccountStore,
@@ -329,6 +331,7 @@ impl ArcticApp {
             network: Default::default(),
             bridge,
             login_from_game: false,
+            signed_out: std::collections::HashSet::new(),
             voice,
             voice_ui: crate::ui::VoiceSettingsUi::default(),
             root,
@@ -576,7 +579,17 @@ impl ArcticApp {
         );
         self.offer_profile_link(&account);
         self.accounts.upsert(account);
+        // A fresh sign-in for an account that was signed out: the same id comes back.
+        if let Some(active) = &self.accounts.active {
+            self.signed_out.remove(active);
+        }
         self.save_accounts();
+    }
+
+    /// "Sign in" on the signed-out toast or account card: the browser flow, on the Accounts tab.
+    pub(crate) fn sign_in_again(&mut self, now: f64) {
+        self.set_tab(Tab::Accounts, now);
+        self.start_login(true);
     }
 
     /// A required update blocks Play from the moment it is found until the
@@ -1098,6 +1111,7 @@ impl ArcticApp {
                 }
             }
             Event::AccountRefreshed(account) => {
+                self.signed_out.remove(&account.id);
                 self.accounts.upsert(account);
                 self.save_accounts();
             }

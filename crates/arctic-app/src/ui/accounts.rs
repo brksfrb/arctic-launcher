@@ -66,15 +66,16 @@ impl ArcticApp {
             font.clone(),
             p.text,
         );
-        let (badge, color) = if account.is_microsoft() {
-            ("Microsoft", p.accent)
+        let signed_out = self.signed_out.contains(id);
+        let (badge, color, badge_width) = if signed_out {
+            ("Signed out", p.error, 82.0)
+        } else if account.is_microsoft() {
+            ("Microsoft", p.accent, 74.0)
         } else {
-            ("Offline", p.muted)
+            ("Offline", p.muted, 56.0)
         };
-        let badge_rect = egui::Rect::from_min_size(
-            rect.left_top() + vec2(90.0, 48.0),
-            vec2(if account.is_microsoft() { 74.0 } else { 56.0 }, 20.0),
-        );
+        let badge_rect =
+            egui::Rect::from_min_size(rect.left_top() + vec2(90.0, 48.0), vec2(badge_width, 20.0));
         painter.rect_filled(
             badge_rect,
             CornerRadius::same(255),
@@ -121,7 +122,32 @@ impl ArcticApp {
                 color.gamma_multiply(hover),
             );
         }
-        if trash_response.on_hover_text("Remove account").clicked() {
+        // A refused Microsoft session: the cure is a fresh sign-in, offered on the card.
+        let mut sign_in = false;
+        if signed_out {
+            let link =
+                egui::Rect::from_min_size(rect.left_top() + vec2(90.0, 70.0), vec2(96.0, 20.0));
+            let link_response = ui.interact(link, response.id.with("sign-in"), Sense::click());
+            let color = if link_response.hovered() {
+                p.text
+            } else {
+                p.accent
+            };
+            ui.painter().text(
+                link.left_center(),
+                Align2::LEFT_CENTER,
+                "Sign in again",
+                FontId::proportional(12.5),
+                color,
+            );
+            sign_in = link_response
+                .on_hover_cursor(egui::CursorIcon::PointingHand)
+                .clicked();
+        }
+        if sign_in {
+            let now = ui.input(|i| i.time);
+            self.sign_in_again(now);
+        } else if trash_response.on_hover_text("Remove account").clicked() {
             self.remove_confirm = Some(account.id.clone());
         } else if response.clicked() && !active {
             self.accounts.set_active(&account.id);

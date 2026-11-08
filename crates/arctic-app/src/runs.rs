@@ -417,12 +417,23 @@ impl ArcticApp {
                         text: format!("──── Arctic: launch failed — {} ────", failure.detail),
                     }]);
                 }
-                self.toasts.push_with_action(
-                    Kind::Error,
-                    "Launch failed",
-                    failure.plain,
-                    Some(ToastAction::ShowLogs(id)),
-                );
+                match failure.signed_out {
+                    Some((account_id, name)) => {
+                        self.signed_out.insert(account_id);
+                        self.toasts.push_with_action(
+                            Kind::Error,
+                            format!("Sign in to {name} again"),
+                            "Microsoft no longer accepts this sign-in. Signing in again fixes it.",
+                            Some(ToastAction::SignIn),
+                        );
+                    }
+                    None => self.toasts.push_with_action(
+                        Kind::Error,
+                        "Launch failed",
+                        failure.plain,
+                        Some(ToastAction::ShowLogs(id)),
+                    ),
+                }
             }
         }
     }

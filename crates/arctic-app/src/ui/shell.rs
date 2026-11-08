@@ -170,6 +170,7 @@ impl ArcticApp {
                     self.set_tab(Tab::Settings, now);
                     crate::ui::settings::show_section("Storage");
                 }
+                ToastAction::SignIn => self.sign_in_again(now),
             }
         }
     }
