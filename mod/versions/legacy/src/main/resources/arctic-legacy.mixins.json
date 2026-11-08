@@ -26,6 +26,8 @@
 		"ClientPlayNetworkHandlerMixin",
 		"ClientCustomPayloadMixin",
 		"GameRendererMixin",
+		"FreelookBillboardCameraMixin",
+		"FreelookBillboardDispatcherMixin",
 		"EntityMixin",
 		"ClientPlayerInteractionManagerMixin",
 		"WorldMixin",
