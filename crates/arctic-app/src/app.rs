@@ -234,6 +234,8 @@ pub struct ArcticApp {
     pub(crate) join_confirm: Option<String>,
     /// That dialog's "Don't show again" box.
     pub(crate) join_confirm_never: bool,
+    /// "Play this world?" is up (a world never starts from one click).
+    pub(crate) world_confirm: Option<crate::ui::play_worlds::WorldConfirm>,
     /// The graphics driver draws in software (no GPU): animations and the glass blur stay off.
     pub(crate) software_gl: bool,
     gl_checked: bool,
@@ -316,6 +318,7 @@ impl ArcticApp {
             close_prompt: false,
             join_confirm: None,
             join_confirm_never: false,
+            world_confirm: None,
             software_gl: false,
             gl_checked: false,
             maximize_pending: data.settings.start_maximized,
