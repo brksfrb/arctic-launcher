@@ -1,9 +1,7 @@
 //#if MC >= 1.14
 package com.arcticlauncher.mod.mixin;
 
-import com.arcticlauncher.client.ArcticClient;
-import com.arcticlauncher.client.feature.ContainerPeek;
-import com.arcticlauncher.client.feature.InventorySearch;
+import com.arcticlauncher.mod.ContainerOverlay;
 import com.arcticlauncher.mod.GfxImpl;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 //#if MC >= 1.20
@@ -38,15 +36,8 @@ abstract class ContainerSearchMixin {
 	//#endif
 
 	private void arctic$line(GfxImpl g, int mouseX, int mouseY) {
-		InventorySearch.seen();
-		com.arcticlauncher.mod.ContainerSort.hovered = hoveredSlot;
-		if (ArcticClient.config() == null) {
-			return;
-		}
-		InventorySearch.render(g, ArcticClient.config());
-		if (ArcticClient.config().shulkerPeek && hoveredSlot != null && hoveredSlot.hasItem()) {
-			ContainerPeek.hover(g, mouseX, mouseY, hoveredSlot.getItem());
-		}
+		ContainerOverlay.draw(g, hoveredSlot, mouseX, mouseY);
 	}
+
 }
 //#endif
