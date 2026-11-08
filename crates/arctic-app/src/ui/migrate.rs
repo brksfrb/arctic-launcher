@@ -166,7 +166,22 @@ impl ArcticApp {
                     }
                     false
                 }
-                Stage::Done => migrate_done(ui, p, &ui_state),
+                Stage::Done => {
+                    let (close, retry) = migrate_done(ui, p, &ui_state);
+                    if let Some(i) = retry
+                        && i < ui_state.outcomes.len()
+                        && let Some(job) = ui_state.outcomes[i].retry.take()
+                    {
+                        ui_state.outcomes.remove(i);
+                        ui_state.total = ui_state.outcomes.len() + 1;
+                        ui_state.current = None;
+                        ui_state.stage = Stage::Running;
+                        ui_state.cancel = Default::default();
+                        self.tasks
+                            .migrate_run(vec![job], Vec::new(), ui_state.cancel.clone());
+                    }
+                    close
+                }
             };
         });
         // The scan can be walked away from (its result is dropped); the copy has Cancel.
@@ -562,14 +577,26 @@ fn migrate_progress(ui: &mut egui::Ui, p: &crate::theme::Palette, state: &Migrat
     cancel
 }
 
-/// Returns true to close.
-fn migrate_done(ui: &mut egui::Ui, p: &crate::theme::Palette, state: &MigrateUi) -> bool {
+/// Returns (close, the failed outcome to try again).
+fn migrate_done(
+    ui: &mut egui::Ui,
+    p: &crate::theme::Palette,
+    state: &MigrateUi,
+) -> (bool, Option<usize>) {
+    let mut retry = None;
     egui::ScrollArea::vertical()
         .max_height(LIST_HEIGHT)
         .show(ui, |ui| {
-            for o in &state.outcomes {
+            for (i, o) in state.outcomes.iter().enumerate() {
                 let color = if o.ok { p.text } else { p.error };
-                ui.label(RichText::new(&o.title).strong().color(color));
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(&o.title).strong().color(color));
+                    if o.retry.is_some()
+                        && widgets::button(ui, p, None, "Try again", false).clicked()
+                    {
+                        retry = Some(i);
+                    }
+                });
                 for l in &o.lines {
                     ui.label(RichText::new(l).small().color(p.muted));
                 }
@@ -583,7 +610,7 @@ fn migrate_done(ui: &mut egui::Ui, p: &crate::theme::Palette, state: &MigrateUi)
             close = true;
         }
     });
-    close
+    (close, retry)
 }
 
 #[cfg(test)]

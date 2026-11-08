@@ -426,6 +426,39 @@ pub struct Imported {
     /// Required mods the pack was missing, downloaded from Modrinth.
     pub added: Vec<String>,
     pub notes: Vec<String>,
+    /// Files that couldn't be read (locked by the other launcher, gone since the scan).
+    pub skipped: Vec<String>,
+}
+
+/// "3 files couldn't be read (is the other launcher running?): a.jar, b.jar, c.jar".
+pub fn skipped_note(skipped: &[String]) -> Option<String> {
+    if skipped.is_empty() {
+        return None;
+    }
+    let shown: Vec<&str> = skipped.iter().take(3).map(String::as_str).collect();
+    let more = if skipped.len() > shown.len() {
+        format!(" and {} more", skipped.len() - shown.len())
+    } else {
+        String::new()
+    };
+    Some(format!(
+        "{} file{} couldn't be read (is the other launcher running?): {}{more}",
+        skipped.len(),
+        if skipped.len() == 1 { "" } else { "s" },
+        shown.join(", "),
+    ))
+}
+
+/// Copy one file. `Ok(false)` when the source can't be opened (the other launcher's game
+/// holds it, or it went away since the scan): the import goes on without it. A destination
+/// that can't be written is an error.
+fn copy_or_skip(src: &Path, to: &Path) -> Result<bool> {
+    if let Err(e) = std::fs::File::open(src) {
+        log::warn!("skipping {}: {e}", src.display());
+        return Ok(false);
+    }
+    std::fs::copy(src, to).map_err(|e| Error::io(to, e))?;
+    Ok(true)
 }
 
 /// Copy `found` into Arctic, taking only `categories`.
@@ -575,6 +608,7 @@ fn fill(
     let renames = world_renames(&items, &game_dir);
     let total: u64 = items.iter().map(|i| i.size).sum();
     let (mut done_bytes, mut files, mut kept, mut mods) = (0u64, 0usize, 0usize, 0usize);
+    let mut skipped = Vec::new();
     for (
         i,
         Item {
@@ -595,10 +629,16 @@ fn fill(
             if let Some(parent) = to.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
             }
-            std::fs::copy(src, &to).map_err(|e| Error::io(src, e))?;
-            files += 1;
-            if *cat == Category::Mods {
-                mods += 1;
+            if copy_or_skip(src, &to)? {
+                files += 1;
+                if *cat == Category::Mods {
+                    mods += 1;
+                }
+            } else {
+                skipped.push(src.file_name().map_or_else(
+                    || src.display().to_string(),
+                    |n| n.to_string_lossy().into_owned(),
+                ));
             }
         }
         done_bytes += *size;
@@ -659,6 +699,7 @@ fn fill(
         turned_off: mod_notes.turned_off,
         added,
         notes,
+        skipped,
     })
 }
 
@@ -700,6 +741,42 @@ fn rename_world(dest: &Path, renames: &HashMap<String, String>) -> PathBuf {
         parts[1] = new.clone();
     }
     parts.iter().collect()
+}
+
+#[cfg(test)]
+mod skip_tests {
+    use super::*;
+
+    #[test]
+    fn an_unreadable_source_is_skipped_and_an_unwritable_target_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let to = dir.path().join("out/a.jar");
+        std::fs::create_dir_all(to.parent().unwrap()).unwrap();
+        assert!(!copy_or_skip(&dir.path().join("gone.jar"), &to).unwrap());
+        assert!(!to.exists());
+        let src = dir.path().join("a.jar");
+        std::fs::write(&src, b"jar").unwrap();
+        assert!(copy_or_skip(&src, &to).unwrap());
+        assert_eq!(std::fs::read(&to).unwrap(), b"jar");
+        // The destination's folder is a file: writing there fails, and that is fatal.
+        let blocked = dir.path().join("file");
+        std::fs::write(&blocked, b"").unwrap();
+        assert!(copy_or_skip(&src, &blocked.join("x.jar")).is_err());
+    }
+
+    #[test]
+    fn the_skipped_note_names_a_few_files() {
+        assert_eq!(skipped_note(&[]), None);
+        let one = skipped_note(&["a.jar".into()]).unwrap();
+        assert!(one.starts_with("1 file couldn't be read"), "{one}");
+        let many: Vec<String> = (0..5).map(|i| format!("m{i}.jar")).collect();
+        let note = skipped_note(&many).unwrap();
+        assert!(
+            note.contains("5 files") && note.contains("and 2 more"),
+            "{note}"
+        );
+        assert!(note.contains("other launcher running"));
+    }
 }
 
 #[cfg(test)]

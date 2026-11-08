@@ -42,6 +42,8 @@ pub struct Outcome {
     pub title: String,
     pub ok: bool,
     pub lines: Vec<String>,
+    /// The job to run again, when it failed.
+    pub retry: Option<InstanceJob>,
 }
 
 impl Tasks {
@@ -134,12 +136,24 @@ impl Tasks {
                             title: format!("{label} → {}", done.instance.name),
                             ok: true,
                             lines: summary(&done),
+                            retry: None,
                         },
-                        Err(e) => Outcome {
+                        Err(e) if e.is_cancelled() => Outcome {
                             title: label.clone(),
                             ok: false,
-                            lines: vec![e.to_string()],
+                            lines: vec!["Cancelled; nothing of it was kept.".into()],
+                            retry: Some(job.clone()),
                         },
+                        Err(e) => {
+                            // Paths and OS error codes go to the log; the row says it plainly.
+                            log::warn!("import of {label}: {}", e.chain());
+                            Outcome {
+                                title: label.clone(),
+                                ok: false,
+                                lines: vec![e.plain()],
+                                retry: Some(job.clone()),
+                            }
+                        }
                     };
                 t.send(Event::MigrateItemDone(outcome));
             }
@@ -161,8 +175,9 @@ impl Tasks {
                     ok: result.is_ok(),
                     lines: match result {
                         Ok(()) => job.client.notes.clone(),
-                        Err(e) => vec![e.to_string()],
+                        Err(e) => vec![e.plain()],
                     },
+                    retry: None,
                 }));
             }
             t.send(Event::MigrateFinished);
@@ -192,5 +207,6 @@ fn summary(done: &migrate::Imported) -> Vec<String> {
             .map(|m| format!("{m} doesn't run on this version: switched off")),
     );
     lines.extend(done.notes.iter().cloned());
+    lines.extend(migrate::skipped_note(&done.skipped));
     lines
 }
