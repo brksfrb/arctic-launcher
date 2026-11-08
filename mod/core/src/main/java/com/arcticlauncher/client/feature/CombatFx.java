@@ -29,8 +29,16 @@ public final class CombatFx {
 	private boolean killCounted = true;
 	private long beepAt;
 
+	/** The Mods tile. The marker, sounds and low-health warning all wait on it. */
+	private static boolean enabled(ClientConfig c) {
+		return c.combatFeedback != null && c.combatFeedback;
+	}
+
 	/** You hit something (the game's attack, whatever the server then decides). */
 	public void hit(ClientConfig c, Platform platform) {
+		if (!enabled(c)) {
+			return;
+		}
 		hitAt = System.currentTimeMillis();
 		killCounted = false;
 		if (c.hitSound > 0) {
@@ -40,6 +48,9 @@ public final class CombatFx {
 
 	/** Each game tick in a world: a target of yours dying, and the low-health beep. */
 	public void tick(ClientConfig c, Platform platform) {
+		if (!enabled(c)) {
+			return;
+		}
 		long now = System.currentTimeMillis();
 		if (!killCounted && now - hitAt <= KILL_WINDOW_MS && platform.lastTargetDead()) {
 			killCounted = true;
@@ -61,6 +72,9 @@ public final class CombatFx {
 
 	/** The marker and the edge pulse (the in-world HUD, before the widgets). */
 	public void render(Gfx g, ClientConfig c, Platform platform) {
+		if (!enabled(c)) {
+			return;
+		}
 		long now = System.currentTimeMillis();
 		if (c.hitMarker) {
 			marker(g, c, now);

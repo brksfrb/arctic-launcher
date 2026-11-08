@@ -105,8 +105,8 @@ def applyRenames = { String text ->
 	}
 }
 
-/** The mixins the Forge flavour replaces (they use MixinExtras). */
-def forgeReplaced = ['ClientConnectionProxyMixin.java', 'LoginSessionMixin.java', 'TitleScreenMixin.java']
+/** The mixins the Forge flavour replaces (MixinExtras, or vanilla calls Forge's RenderItem no longer has). */
+def forgeReplaced = ['ClientConnectionProxyMixin.java', 'LoginSessionMixin.java', 'TitleScreenMixin.java', 'OldItemPositionMixin.java']
 /** Left out of the Forge flavour: Forge loads ClientBrandRetriever before Mixin can patch it (and says "forge" itself); Mixin 0.7 builds invalid bytecode for ServerAddressMixin's array return (VerifyError). */
 def forgeSkipped = ['ClientBrandMixin.java', 'ServerAddressMixin.java']
 

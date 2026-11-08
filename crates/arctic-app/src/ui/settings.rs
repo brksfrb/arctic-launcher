@@ -234,6 +234,16 @@ impl ArcticApp {
                 &mut s.discord_presence,
                 "Show what you're playing on Discord",
             );
+            let presence_on = s.discord_presence;
+            ui.add_enabled_ui(presence_on, |ui| {
+                ui.indent("discord_show_server", |ui| {
+                    ui.checkbox(&mut s.discord_show_server, "Show server in Discord status")
+                        .on_hover_text(crate::discord::SHOW_SERVER_TIP)
+                        .on_disabled_hover_text(
+                            "Turn on \"Show what you're playing on Discord\" first.",
+                        );
+                });
+            });
             widgets::field_row(ui, |ui| {
                 ui.label("Crash reports")
                     .on_hover_text("When the game crashes, Arctic can send its log so the crash can be fixed. Your name, folders and sign-in details are taken out first.");

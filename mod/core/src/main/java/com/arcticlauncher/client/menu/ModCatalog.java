@@ -55,7 +55,7 @@ final class ModCatalog {
 
 	static {
 		group(Category.COMBAT, "combatfx", "tnttimer", "hitboxes", "rangeindicator", "durability", "hitcolor");
-		group(Category.INVENTORY, "slotlocks", "invsearch", "invsort", "pickupfeed", "shulkerpeek");
+		group(Category.INVENTORY, "slotlocks", "invsearch", "invsort", "pickupfeed", "shulkerpeek", "hotbarscroll");
 		group(Category.MOVEMENT, "zoom", "freelook", "snaplook", "sprint", "sneak", "portalscreens", "controller");
 		group(Category.TOOLS, "quickplay", "waypoints", "screenshots", "replays", "death", "leave", "reconnect");
 		group(Category.PLAYERS, "pingtags", "badgetags", "ownnametag", "ofcapes", "tabping", "tabglow", "tiers");
@@ -238,6 +238,9 @@ final class ModCatalog {
 		out.add(new Mod("tnttimer", "TNT Timer", "The seconds left on a lit TNT, floating above it", "tnt", Category.GAMEPLAY,
 				"tnt explosion fuse countdown timer bomb")
 				.toggle(() -> c.tntTimer, on -> c.tntTimer = on));
+		out.add(new Mod("hotbarscroll", "Hotbar Scroll Stop", "Scrolling stops at slot 1 and 9 instead of wrapping", "items", Category.GAMEPLAY,
+				"hotbar scroll wheel slot wrap around inventory")
+				.toggle(() -> c.hotbarScrollStop, on -> c.hotbarScrollStop = on));
 		out.add(new Mod("sprint", "Toggle Sprint", "Press sprint once to keep sprinting", "sprint", Category.GAMEPLAY, "run")
 				.toggle(() -> c.toggleSprint, on -> c.toggleSprint = on));
 		out.add(new Mod("sneak", "Toggle Sneak", "Press sneak once to keep sneaking", "sneak", Category.GAMEPLAY, "crouch shift")
@@ -338,7 +341,7 @@ final class ModCatalog {
 				.toggle(() -> c.durabilityWarning, on -> c.durabilityWarning = on));
 		out.add(new Mod("combatfx", "Combat Feedback", "A hit marker, hit and kill sounds, and a low-health warning", "combatfx",
 				Category.GAMEPLAY, "hitmarker kill sound ding low health warning pvp")
-				.toggle(() -> c.hitMarker, on -> c.hitMarker = on)
+				.toggle(() -> Boolean.TRUE.equals(c.combatFeedback), on -> c.combatFeedback = on)
 				.settings((host, f) -> {
 					f.section("Hit marker");
 					f.toggle("Hit marker", "A small X at your crosshair when you hit; red on a kill", () -> c.hitMarker,

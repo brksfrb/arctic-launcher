@@ -600,6 +600,17 @@ impl ArcticApp {
             &mut self.settings.discord_presence,
             "Show what you're playing on Discord",
         );
+        let presence_on = self.settings.discord_presence;
+        ui.add_enabled_ui(presence_on, |ui| {
+            ui.indent("discord_show_server_setup", |ui| {
+                ui.checkbox(
+                    &mut self.settings.discord_show_server,
+                    "Show server in Discord status",
+                )
+                .on_hover_text(crate::discord::SHOW_SERVER_TIP)
+                .on_disabled_hover_text("Turn on Discord status first.");
+            });
+        });
         ui.add_space(10.0);
         ui.horizontal_wrapped(|ui| {
             ui.label(

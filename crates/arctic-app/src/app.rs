@@ -843,6 +843,8 @@ impl ArcticApp {
             return;
         }
         self.warn_if_proxy_misses_servers(&instance, &version.id);
+        // A new launch isn't on the previous game's server yet.
+        self.voice.forget_place();
         self.discord.game_started(
             format!("Minecraft {}", version.id),
             instance.loader.label().to_owned(),
@@ -1395,9 +1397,23 @@ impl eframe::App for ArcticApp {
             self.runs.any_active(),
         );
         let playing = self.runs.any_active();
+        if !playing {
+            self.voice.forget_place();
+        }
         let together = self.together_status();
-        self.discord
-            .sync(self.settings.discord_presence, playing, together);
+        self.discord.sync(
+            self.settings.discord_presence,
+            playing,
+            together,
+            self.settings.discord_show_server,
+            self.voice.reported_server(),
+        );
+        // Server changes arrive on the bridge while this window is in the
+        // background. A slow tick is enough to notice them; Discord is only
+        // told when the text changes.
+        if playing && self.settings.discord_presence && self.settings.discord_show_server {
+            ctx.request_repaint_after(Duration::from_secs(1));
+        }
         self.go_back(&ctx);
         self.shell(ui);
         self.splash.show(&ctx, self.palette());
