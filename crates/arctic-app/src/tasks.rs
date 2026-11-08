@@ -56,6 +56,26 @@ pub type LaunchId = u64;
 
 pub(crate) type Outcome<T> = std::result::Result<T, String>;
 
+/// Why a launch did not get to a running game: plain words for the toast, the whole
+/// cause chain for the run's log, and which account must sign in again if that's it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LaunchFailure {
+    pub plain: String,
+    pub detail: String,
+    /// (account id, name) whose Microsoft session was refused.
+    pub signed_out: Option<(String, String)>,
+}
+
+impl LaunchFailure {
+    pub fn new(e: &arctic_core::Error, account: (String, String)) -> Self {
+        Self {
+            plain: e.plain(),
+            detail: e.chain(),
+            signed_out: e.is_auth().then_some(account),
+        }
+    }
+}
+
 /// The most of a log that is sent to the staff (its end).
 const SENT_LOG_BYTES: usize = 300 * 1024;
 
@@ -80,7 +100,10 @@ pub enum Event {
     /// Game process started (window not necessarily up yet). Carries the
     /// version id that was actually launched.
     /// The game, its log file, its version and how Java was started.
-    Launched(LaunchId, Outcome<(GameHandle, PathBuf, String, String)>),
+    Launched(
+        LaunchId,
+        std::result::Result<(GameHandle, PathBuf, String, String), LaunchFailure>,
+    ),
     /// Sent from the game's watcher threads; may overtake `Launched`.
     Game(LaunchId, GameEvent),
     DeviceCode(LoginAttempt, DeviceCode),
@@ -371,10 +394,13 @@ impl Tasks {
         start: StartAt,
     ) {
         self.run(move |t| {
+            let who = (account.id.clone(), account.username.clone());
             let result = t.launch_blocking(id, &version, &instance, account, &settings, start);
             let result = result.map(|(game, log, java)| (game, log, version.id.clone(), java));
-            // The toast shows this string; it has to be the whole cause chain, not just Display.
-            t.send(Event::Launched(id, result.map_err(|e| e.chain())));
+            t.send(Event::Launched(
+                id,
+                result.map_err(|e| LaunchFailure::new(&e, who)),
+            ));
         });
     }
 

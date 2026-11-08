@@ -16,7 +16,7 @@ use eframe::egui;
 
 use crate::app::{ArcticApp, LogSource};
 use crate::motion::RateMeter;
-use crate::tasks::{Event, LaunchId, ProgressSnapshot, Tasks};
+use crate::tasks::{Event, LaunchFailure, LaunchId, ProgressSnapshot, Tasks};
 use crate::toasts::{Kind, ToastAction};
 
 /// Game log lines kept in memory per run (older ones are dropped).
@@ -384,7 +384,7 @@ impl ArcticApp {
     pub(crate) fn on_launched(
         &mut self,
         id: LaunchId,
-        result: Result<GameHandle, String>,
+        result: Result<GameHandle, LaunchFailure>,
         ctx: &egui::Context,
     ) {
         if self.runs.get(id).is_none() {
@@ -406,14 +406,23 @@ impl ArcticApp {
                     self.on_game_event(id, event, ctx);
                 }
             }
-            Err(e) => {
+            Err(failure) => {
+                // The whole cause chain goes to the launcher log and to the run's log, which
+                // the Logs tab is already showing; the toast says it in plain words.
+                log::error!("Launch failed: {}", failure.detail);
                 if let Some(run) = self.runs.get_mut(id) {
                     run.state = RunState::Ended;
+                    run.push_log([LogLine {
+                        level: Level::Error,
+                        text: format!("──── Arctic: launch failed — {} ────", failure.detail),
+                    }]);
                 }
-                // The same text as the toast, including every cause. This used to
-                // reach the screen and never `logs/launcher.log`.
-                log::error!("Launch failed: {e}");
-                self.toasts.push(Kind::Error, "Launch failed", e);
+                self.toasts.push_with_action(
+                    Kind::Error,
+                    "Launch failed",
+                    failure.plain,
+                    Some(ToastAction::ShowLogs(id)),
+                );
             }
         }
     }
