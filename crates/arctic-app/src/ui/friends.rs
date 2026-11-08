@@ -512,7 +512,9 @@ impl ArcticApp {
                                 self.together.code_input = invite.target.clone();
                                 self.start_joining();
                             }
-                            _ => self.launch_into(QuickPlay::Server(invite.target.clone())),
+                            _ => {
+                                self.join_server(&invite.target);
+                            }
                         }
                     }
                 });
@@ -631,10 +633,10 @@ impl ArcticApp {
                 }
                 if let Some(server) = &f.server
                     && widgets::button(ui, p, Some(Icon::Play), "Join", true)
-                        .on_hover_text(format!("Start and join {server}"))
+                        .on_hover_text(format!("Join {server}"))
                         .clicked()
                 {
-                    self.launch_into(QuickPlay::Server(server.clone()));
+                    self.join_server(server);
                 }
             });
         });
