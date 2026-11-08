@@ -237,6 +237,47 @@ fn record_replaces_old_file_of_same_project() {
 }
 
 #[test]
+fn trash_and_restore_keep_file_forms_and_the_index_entry() {
+    let dir = tempfile::tempdir().unwrap();
+    let mods_dir = dir.path().join("mods");
+    let index = index_path(dir.path());
+    fs::create_dir(&mods_dir).unwrap();
+    fs::write(mods_dir.join("a.jar"), b"a").unwrap();
+    fs::write(mods_dir.join("b.jar.disabled"), b"b").unwrap();
+    ModIndex::default()
+        .with(tracked("zz", "a.jar"))
+        .save(&index)
+        .unwrap();
+
+    let a = trash(&mods_dir, &index, "a.jar").unwrap();
+    let b = trash(&mods_dir, &index, "b.jar").unwrap();
+    assert!(!mods_dir.join("a.jar").exists() && !mods_dir.join("b.jar.disabled").exists());
+    let trash_dir = dir.path().join(".trash").join("mods");
+    assert!(trash_dir.join("a.jar").is_file(), "outside the mods folder");
+    assert!(trash_dir.join("b.jar.disabled").is_file());
+    assert!(ModIndex::load(&index).unwrap().by_file("a.jar").is_none());
+    assert!(list(&mods_dir, &index).unwrap().is_empty());
+
+    restore(&index, &a).unwrap();
+    restore(&index, &b).unwrap();
+    assert_eq!(fs::read(mods_dir.join("a.jar")).unwrap(), b"a");
+    assert!(mods_dir.join("b.jar.disabled").is_file(), "still disabled");
+    assert_eq!(
+        ModIndex::load(&index)
+            .unwrap()
+            .by_file("a.jar")
+            .unwrap()
+            .project_id,
+        "zz"
+    );
+    // Trashing the same name twice does not fail on the leftover.
+    trash(&mods_dir, &index, "a.jar").unwrap();
+    fs::write(mods_dir.join("a.jar"), b"a2").unwrap();
+    trash(&mods_dir, &index, "a.jar").unwrap();
+    assert_eq!(fs::read(trash_dir.join("a.jar")).unwrap(), b"a2");
+}
+
+#[test]
 fn public_list_enable_remove_roundtrip() {
     let dir = tempfile::tempdir().unwrap();
     let mods_dir = dir.path().join("mods");

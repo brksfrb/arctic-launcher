@@ -30,11 +30,19 @@ impl Kind {
     }
 }
 
+/// How long an Undo offer stands. It is the one action toast that must not stay: what
+/// it holds (a trashed file, a skin's bytes) is meant to be let go of.
+const UNDO_LIFETIME: f64 = 8.0;
+
 /// Toasts that must be acted on, or that report a failure, stay until the player
 /// dismisses them: a "Fix it" or "Send report" button that vanishes after a few
 /// seconds (while the player is still reading the game's own crash screen) is lost.
-fn sticky(kind: Kind, has_action: bool) -> bool {
-    has_action || kind == Kind::Error
+fn sticky(kind: Kind, action: Option<&ToastAction>) -> bool {
+    match action {
+        Some(ToastAction::Undo(_)) => false,
+        Some(_) => true,
+        None => kind == Kind::Error,
+    }
 }
 
 /// Optional button on a toast; returned to the app when clicked.
@@ -55,6 +63,8 @@ pub enum ToastAction {
         instance: String,
         fix: arctic_core::crash::Fix,
     },
+    /// Put back what was just removed.
+    Undo(crate::undo::Undo),
 }
 
 impl ToastAction {
@@ -66,6 +76,7 @@ impl ToastAction {
             ToastAction::SendCrash(_) => "Send report",
             ToastAction::WhatsNew(_) => "What's new",
             ToastAction::Fix { .. } => "Fix it",
+            ToastAction::Undo(_) => "Undo",
         }
     }
 }
@@ -81,7 +92,14 @@ struct Toast {
 
 impl Toast {
     fn sticky(&self) -> bool {
-        sticky(self.kind, self.action.is_some())
+        sticky(self.kind, self.action.as_ref())
+    }
+
+    fn lifetime(&self) -> f64 {
+        match self.action {
+            Some(ToastAction::Undo(_)) => UNDO_LIFETIME,
+            _ => self.kind.lifetime(),
+        }
     }
 }
 
@@ -114,11 +132,16 @@ impl Toasts {
         });
     }
 
+    /// "Removed X" with an Undo button: the shared pattern for destructive clicks.
+    pub fn push_undo(&mut self, title: impl Into<String>, undo: crate::undo::Undo) {
+        self.push_with_action(Kind::Success, title, "", Some(ToastAction::Undo(undo)));
+    }
+
     /// Draw all toasts; returns the action the user clicked, if any.
     pub fn show(&mut self, ctx: &egui::Context, p: &Palette) -> Option<ToastAction> {
         let (now, dt) = ctx.input(|i| (i.time, i.stable_dt));
         self.items
-            .retain(|t| t.sticky() || t.created.is_none_or(|c| now - c < t.kind.lifetime()));
+            .retain(|t| t.sticky() || t.created.is_none_or(|c| now - c < t.lifetime()));
         let mut y = MARGIN;
         let mut dismissed = None;
         let mut clicked = None;
@@ -129,7 +152,7 @@ impl Toasts {
             let alpha = if toast.sticky() {
                 enter
             } else {
-                let remaining = toast.kind.lifetime() as f32 - age;
+                let remaining = toast.lifetime() as f32 - age;
                 enter.min((remaining / FADE).clamp(0.0, 1.0))
             };
             let offset = vec2(-MARGIN + (1.0 - enter) * 60.0, y);
@@ -142,7 +165,7 @@ impl Toasts {
                     match toast_body(ui, p, toast) {
                         Outcome::Dismissed => dismissed = Some(toast.id),
                         Outcome::Action(a) => {
-                            clicked = Some(a);
+                            clicked = Some(*a);
                             dismissed = Some(toast.id);
                         }
                         Outcome::None => {}
@@ -166,7 +189,7 @@ impl Toasts {
 enum Outcome {
     None,
     Dismissed,
-    Action(ToastAction),
+    Action(Box<ToastAction>),
 }
 
 fn toast_body(ui: &mut egui::Ui, p: &Palette, toast: &Toast) -> Outcome {
@@ -203,7 +226,7 @@ fn toast_body(ui: &mut egui::Ui, p: &Palette, toast: &Toast) -> Outcome {
                     if let Some(action) = &toast.action
                         && ui.link(action.label()).clicked()
                     {
-                        outcome = Outcome::Action(action.clone());
+                        outcome = Outcome::Action(Box::new(action.clone()));
                     }
                 });
                 if widgets::icon_button(ui, p, Icon::Close, "Dismiss").clicked() {
@@ -220,13 +243,20 @@ mod tests {
 
     #[test]
     fn errors_and_toasts_with_a_button_wait_to_be_dismissed() {
-        assert!(sticky(Kind::Error, false));
+        let send = ToastAction::SendCrash(1);
+        assert!(sticky(Kind::Error, None));
+        assert!(sticky(Kind::Info, Some(&send)), "Help fix this crash?");
+        assert!(sticky(Kind::Success, Some(&ToastAction::OpenFriends)));
+        assert!(!sticky(Kind::Info, None));
+        assert!(!sticky(Kind::Success, None));
+        let undo = ToastAction::Undo(crate::undo::Undo::Mod {
+            instance_id: "x".into(),
+            index: std::path::PathBuf::new(),
+            trashed: arctic_core::mods::TrashedMod::default(),
+        });
         assert!(
-            sticky(Kind::Info, true),
-            "Help fix this crash? / Send report"
+            !sticky(Kind::Success, Some(&undo)),
+            "an Undo offer runs out"
         );
-        assert!(sticky(Kind::Success, true));
-        assert!(!sticky(Kind::Info, false));
-        assert!(!sticky(Kind::Success, false));
     }
 }

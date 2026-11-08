@@ -164,6 +164,7 @@ impl ArcticApp {
                 ToastAction::SendCrash(id) => self.send_crash_report(id),
                 ToastAction::WhatsNew(url) => ctx.open_url(egui::OpenUrl::new_tab(url)),
                 ToastAction::Fix { instance, fix } => self.apply_crash_fix(&instance, &fix),
+                ToastAction::Undo(undo) => self.undo(undo),
             }
         }
     }

@@ -377,6 +377,37 @@ pub fn remove(mods_dir: &Path, index: &Path, file_name: &str) -> Result<()> {
     Ok(())
 }
 
+/// A mod moved to the trash, with what it takes to put it back.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TrashedMod {
+    /// (where it was, where it is now) for each form that existed.
+    moved: Vec<(PathBuf, PathBuf)>,
+    /// Its `mods.json` entry, if Arctic installed it.
+    entry: Option<InstalledMod>,
+}
+
+/// Move a mod out of the mods folder (into the game folder's `.trash/mods`) and
+/// forget it in the index, so [`restore`] can undo it.
+pub fn trash(mods_dir: &Path, index: &Path, file_name: &str) -> Result<TrashedMod> {
+    let moved = files::trash(mods_dir, file_name)?;
+    let base = files::base_name(file_name);
+    let current = ModIndex::load(index)?;
+    let entry = current.by_file(base).cloned();
+    if entry.is_some() {
+        current.without_file(base).save(index)?;
+    }
+    Ok(TrashedMod { moved, entry })
+}
+
+/// Undo [`trash`]: the files go back and the index entry with them.
+pub fn restore(index: &Path, trashed: &TrashedMod) -> Result<()> {
+    files::untrash(&trashed.moved)?;
+    if let Some(entry) = &trashed.entry {
+        ModIndex::load(index)?.with(entry.clone()).save(index)?;
+    }
+    Ok(())
+}
+
 /// Icon bytes for a project (cached under `cache_dir`).
 ///
 /// Cached by the SHA-1 of the URL, so repeated calls never hit the network.
