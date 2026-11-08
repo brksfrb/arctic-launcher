@@ -220,32 +220,22 @@ impl ArcticApp {
                         .color(p.text),
                 );
                 ui.add_space(4.0);
-                steps(
-                    ui,
-                    p,
-                    &[
-                        "Start Minecraft (same version as your friend).",
-                        "Open Multiplayer. The world is listed under the LAN section.",
-                    ],
+                ui.label(
+                    RichText::new("Join the world: it uses the same version as your friend.")
+                        .color(p.muted),
                 );
                 let address = format!("localhost:{port}");
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new("Or Direct Connect to").color(p.muted));
-                    ui.label(RichText::new(&address).monospace().color(p.accent));
-                    if widgets::icon_button(ui, p, Icon::Copy, "Copy address").clicked() {
-                        ui.ctx().copy_text(address.clone());
-                    }
-                });
                 ui.add_space(8.0);
                 crate::widgets::row(ui, |ui| {
-                    let idle = !self.runs.instance_active(&self.selected_instance().id);
-                    let play = ui
-                        .add_enabled_ui(idle, |ui| {
-                            widgets::button(ui, p, Some(Icon::Play), "Launch Minecraft", true)
-                        })
-                        .inner;
-                    if play.clicked() {
-                        self.launch_selected();
+                    // Joins in the running game, or launches straight into the world.
+                    if widgets::button(ui, p, Some(Icon::Play), "Join the world", true)
+                        .on_hover_text(format!("Connect to {address}"))
+                        .clicked()
+                    {
+                        self.join_server(&address);
+                    }
+                    if widgets::icon_button(ui, p, Icon::Copy, "Copy address").clicked() {
+                        ui.ctx().copy_text(address.clone());
                     }
                     if widgets::button(ui, p, Some(Icon::Close), "Leave", false).clicked() {
                         self.stop_together();
