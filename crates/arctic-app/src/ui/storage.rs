@@ -31,7 +31,14 @@ pub struct StorageUi {
 
 enum Dialog {
     Check(Checked),
-    Moving { to: PathBuf, done: u64, total: u64 },
+    Moving {
+        to: PathBuf,
+        done: u64,
+        total: u64,
+        cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    },
+    /// Everything is in the new folder; Arctic uses it after a restart.
+    Moved(PathBuf),
     Failed(String),
 }
 
@@ -195,7 +202,7 @@ impl ArcticApp {
         }
     }
 
-    pub(crate) fn on_storage_event(&mut self, event: StorageEvent, ctx: &egui::Context) {
+    pub(crate) fn on_storage_event(&mut self, event: StorageEvent) {
         match event {
             StorageEvent::Checked(checked) => self.storage.dialog = Some(Dialog::Check(checked)),
             StorageEvent::Progress(done, total) => {
@@ -207,10 +214,24 @@ impl ArcticApp {
                 }
             }
             StorageEvent::Moved(Ok(())) => {
-                self.storage.dialog = None;
-                self.restart_after_update(ctx);
+                let to = match self.storage.dialog.take() {
+                    Some(Dialog::Moving { to, .. }) => to,
+                    _ => PathBuf::new(),
+                };
+                self.storage.dialog = Some(Dialog::Moved(to));
             }
             StorageEvent::Moved(Err(e)) => self.storage.dialog = Some(Dialog::Failed(e)),
+            StorageEvent::MoveCancelled => {
+                self.storage.dialog = None;
+                self.toasts.push(
+                    Kind::Info,
+                    "Move cancelled",
+                    format!(
+                        "Nothing changed: Arctic still uses {}.",
+                        self.dirs.root().display()
+                    ),
+                );
+            }
             StorageEvent::InstancePicked(id, folder, empty) => {
                 self.storage.folder = Some(FolderDialog {
                     id,
@@ -251,7 +272,12 @@ impl ArcticApp {
                 ui.set_width(DIALOG_WIDTH);
                 match &dialog {
                     Dialog::Check(c) => next = self.check_view(ui, p, c, &from, game_running),
-                    Dialog::Moving { to, done, total } => {
+                    Dialog::Moving {
+                        to,
+                        done,
+                        total,
+                        cancel,
+                    } => {
                         title(ui, p, "Moving Arctic's files…");
                         ui.label(path_text(p, to));
                         ui.add_space(8.0);
@@ -265,7 +291,37 @@ impl ArcticApp {
                             format_bytes(*done),
                             format_bytes(*total)
                         )));
-                        note(ui, p, "Arctic restarts when it's done.");
+                        note(ui, p, "When it's done, Arctic asks to restart.");
+                        ui.add_space(8.0);
+                        let cancelling = cancel.load(std::sync::atomic::Ordering::Relaxed);
+                        if cancelling {
+                            note(ui, p, "Stopping after this file…");
+                        } else if widgets::button(ui, p, None, "Cancel", false)
+                            .on_hover_text("What was copied so far is removed; nothing changes.")
+                            .clicked()
+                            || ui.input(|i| i.key_pressed(egui::Key::Escape))
+                        {
+                            cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                        }
+                    }
+                    Dialog::Moved(to) => {
+                        title(ui, p, "Moved");
+                        ui.label(path_text(p, to));
+                        note(
+                            ui,
+                            p,
+                            "Arctic uses the new folder from its next start, then removes the old copy. Until then it keeps using the old one.",
+                        );
+                        ui.add_space(8.0);
+                        widgets::row(ui, |ui| {
+                            if widgets::button(ui, p, None, "Restart now", true).clicked() {
+                                next = Some(None);
+                                self.restart_after_update(ui.ctx());
+                            }
+                            if widgets::button(ui, p, None, "Later", false).clicked() {
+                                next = Some(None);
+                            }
+                        });
                     }
                     Dialog::Failed(e) => {
                         title(ui, p, "The files couldn't be moved");
@@ -356,12 +412,18 @@ impl ArcticApp {
                     if go.inner.clicked()
                         && let Some(default) = default.clone()
                     {
-                        self.tasks
-                            .storage_move(default, from.to_path_buf(), c.to.clone());
+                        let cancel = std::sync::Arc::default();
+                        self.tasks.storage_move(
+                            default,
+                            from.to_path_buf(),
+                            c.to.clone(),
+                            std::sync::Arc::clone(&cancel),
+                        );
                         next = Some(Some(Dialog::Moving {
                             to: c.to.clone(),
                             done: 0,
                             total: c.size,
+                            cancel,
                         }));
                     }
                 }

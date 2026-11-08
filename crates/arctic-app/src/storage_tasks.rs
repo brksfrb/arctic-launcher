@@ -19,6 +19,8 @@ pub enum StorageEvent {
     Progress(u64, u64),
     /// The launcher's files were moved (restart to use them) or not.
     Moved(Result<(), String>),
+    /// The player cancelled the move; nothing changed.
+    MoveCancelled,
     /// A folder was picked for an instance's game.
     InstancePicked(String, PathBuf, bool),
     /// An instance now uses its new game folder, or couldn't.
@@ -62,8 +64,15 @@ impl Tasks {
         });
     }
 
-    /// Copy the launcher's files to `to` and make it the data folder.
-    pub fn storage_move(&self, default: PathBuf, from: PathBuf, to: PathBuf) {
+    /// Copy the launcher's files to `to` and make it the data folder. `cancel` stops the copy
+    /// between files; what was copied so far is removed again.
+    pub fn storage_move(
+        &self,
+        default: PathBuf,
+        from: PathBuf,
+        to: PathBuf,
+        cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    ) {
         self.run(move |t| {
             let last = std::sync::Mutex::new(None::<Instant>);
             let progress = |done: u64, total: u64| {
@@ -73,9 +82,14 @@ impl Tasks {
                     t.send(Event::Storage(StorageEvent::Progress(done, total)));
                 }
             };
-            let result =
-                location::move_data(&default, &from, &to, &progress).map_err(|e| e.to_string());
-            t.send(Event::Storage(StorageEvent::Moved(result)));
+            let result = arctic_core::net::cancellable(cancel, || {
+                location::move_data(&default, &from, &to, &progress)
+            });
+            let event = match result {
+                Err(e) if e.is_cancelled() => StorageEvent::MoveCancelled,
+                other => StorageEvent::Moved(other.map_err(|e| e.plain())),
+            };
+            t.send(Event::Storage(event));
         });
     }
 

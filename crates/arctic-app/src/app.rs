@@ -1224,7 +1224,7 @@ impl ArcticApp {
             Event::MigrateProgress(label, p) => self.on_migrate_progress(label, p),
             Event::MigrateItemDone(outcome) => self.on_migrate_item(outcome),
             Event::MigrateFinished => self.on_migrate_finished(),
-            Event::Storage(e) => self.on_storage_event(e, ctx),
+            Event::Storage(e) => self.on_storage_event(e),
             Event::PackSearch(request, result) => self.on_pack_search(request, result),
             Event::PackInstalled(instance, project, result) => {
                 self.on_pack_installed(instance, project, result)

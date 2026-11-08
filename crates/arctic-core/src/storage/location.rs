@@ -248,6 +248,8 @@ fn copy_tree(
     total: u64,
     progress: &dyn Fn(u64, u64),
 ) -> Result<()> {
+    // Cancel in the launcher: stop between files; `move_data` removes what it made.
+    crate::net::check_cancelled()?;
     let meta = fs::symlink_metadata(from).at(from)?;
     if meta.is_dir() {
         fs::create_dir_all(to).at(to)?;
@@ -383,6 +385,31 @@ mod tests {
         assert!(!default.join("shared").exists());
         assert!(default.join(LOCATION_FILE).is_file(), "the pointer stays");
         assert!(finish_move(&to).is_none(), "once");
+    }
+
+    #[test]
+    fn a_cancelled_move_leaves_nothing_behind_and_changes_nothing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let default = tmp.path().join("default");
+        data(&default);
+        let to = tmp.path().join("D/Arctic");
+        let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let result = crate::net::cancellable(flag.clone(), || {
+            move_data(&default, &default, &to, &|_, _| {
+                // The first file lands, then the player presses Cancel.
+                flag.store(true, std::sync::atomic::Ordering::Relaxed);
+            })
+        });
+        assert!(matches!(result, Err(Error::Cancelled)), "{result:?}");
+        assert!(!to.exists(), "the folder this move made is gone");
+        assert_eq!(
+            from_choice(default.clone()),
+            RootSource::Default(default.clone())
+        );
+        assert!(
+            default.join("shared/libraries/a/lib.jar").is_file(),
+            "the source is untouched"
+        );
     }
 
     #[test]
