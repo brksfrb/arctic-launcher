@@ -31,6 +31,11 @@ thread_local! {
     static GROUP: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
+/// Switch the Settings tab to the group holding `title` (for a toast's "Open … settings").
+pub(crate) fn show_section(title: &str) {
+    GROUP.with(|g| g.set(group_of(title)));
+}
+
 /// Which group a section belongs to.
 fn group_of(title: &str) -> usize {
     match title {

@@ -166,6 +166,10 @@ impl ArcticApp {
                 ToastAction::Fix { instance, fix } => self.apply_crash_fix(&instance, &fix),
                 ToastAction::Undo(undo) => self.undo(undo),
                 ToastAction::ChatRetry { friend, text } => self.chat_retry(friend, text),
+                ToastAction::OpenStorage => {
+                    self.set_tab(Tab::Settings, now);
+                    crate::ui::settings::show_section("Storage");
+                }
             }
         }
     }

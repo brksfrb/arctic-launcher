@@ -67,6 +67,8 @@ pub enum ToastAction {
     Undo(crate::undo::Undo),
     /// Send a chat message that failed to send again.
     ChatRetry { friend: String, text: String },
+    /// Open Settings → Storage (the chosen data folder is missing).
+    OpenStorage,
 }
 
 impl ToastAction {
@@ -80,6 +82,7 @@ impl ToastAction {
             ToastAction::Fix { .. } => "Fix it",
             ToastAction::Undo(_) => "Undo",
             ToastAction::ChatRetry { .. } => "Retry",
+            ToastAction::OpenStorage => "Open Storage settings",
         }
     }
 }

@@ -54,7 +54,28 @@ fn note(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) {
     ui.label(RichText::new(text.into()).small().color(p.muted));
 }
 
+/// "<folder> isn't available…": the Storage section's note and the startup toast.
+fn missing_storage_text(chosen: &Path) -> String {
+    format!(
+        "{} isn't available (an unplugged drive?). Arctic uses its usual folder until it's back, so the instances and worlds kept there are not shown.",
+        chosen.display()
+    )
+}
+
 impl ArcticApp {
+    /// At startup: the chosen data folder is missing, so instances and worlds seem gone.
+    /// Say so where the player is, with the way to Settings → Storage.
+    pub(crate) fn warn_missing_storage(&mut self) {
+        if let RootSource::ChosenMissing { chosen, .. } = self.root_source() {
+            self.toasts.push_with_action(
+                Kind::Error,
+                "Your storage folder isn't available",
+                missing_storage_text(&chosen),
+                Some(crate::toasts::ToastAction::OpenStorage),
+            );
+        }
+    }
+
     fn root_source(&mut self) -> RootSource {
         let dirs_root = self.dirs.root().to_path_buf();
         // Screenshots run on a throwaway folder (ARCTIC_DATA_DIR): show it as the usual one,
@@ -112,15 +133,40 @@ impl ArcticApp {
                 p,
                 "Portable mode: portable.txt is next to the launcher, so everything stays in the data folder beside it.",
             ),
-            RootSource::ChosenMissing { chosen, .. } => {
+            RootSource::ChosenMissing { chosen, using } => {
                 ui.label(
-                    RichText::new(format!(
-                        "{} isn't available (an unplugged drive?). Arctic uses its usual folder until it's back.",
-                        chosen.display()
-                    ))
-                    .small()
-                    .color(p.error),
+                    RichText::new(missing_storage_text(chosen))
+                        .small()
+                        .color(p.error),
                 );
+                widgets::row(ui, |ui| {
+                    if widgets::button(ui, p, None, "Pick another folder…", false)
+                        .on_hover_text("Move Arctic's files somewhere else")
+                        .clicked()
+                    {
+                        self.tasks.storage_pick(self.dirs.root().to_path_buf());
+                    }
+                    if widgets::button(ui, p, None, "Forget that folder", false)
+                        .on_hover_text("Stop looking for it and keep using the usual folder")
+                        .clicked()
+                    {
+                        match location::set_chosen(using, using) {
+                            Ok(()) => {
+                                self.storage.source = None;
+                                self.toasts.push(
+                                    Kind::Success,
+                                    "Arctic now uses its usual folder",
+                                    "Nothing was deleted; the files on that drive stay where they are.",
+                                );
+                            }
+                            Err(e) => self.toasts.push(
+                                Kind::Error,
+                                "Couldn't forget that folder",
+                                e.to_string(),
+                            ),
+                        }
+                    }
+                });
             }
             RootSource::Chosen(_) | RootSource::Default(_) => note(
                 ui,
@@ -472,4 +518,16 @@ impl ArcticApp {
 fn title(ui: &mut egui::Ui, p: &Palette, text: &str) {
     ui.label(RichText::new(text).size(20.0).strong().color(p.text));
     ui.add_space(6.0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_missing_folder_explains_the_vanished_instances() {
+        let text = missing_storage_text(Path::new("/media/usb/Arctic"));
+        assert!(text.starts_with("/media/usb/Arctic isn't available"));
+        assert!(text.contains("instances and worlds kept there are not shown"));
+    }
 }

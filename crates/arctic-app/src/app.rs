@@ -371,6 +371,7 @@ impl ArcticApp {
         };
         app.apply_profile_data(data);
         app.maybe_start_onboarding(startup.launch.is_some());
+        app.warn_missing_storage();
         if let Some(query) = &startup.account {
             match app.accounts.find(query).map(|a| a.id.clone()) {
                 Some(id) => {
