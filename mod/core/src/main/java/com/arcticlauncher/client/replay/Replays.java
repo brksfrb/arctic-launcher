@@ -408,8 +408,22 @@ public final class Replays {
 		}
 	}
 
-	/** Saved replays, newest first. */
-	public static List<Info> list() {
+	/** The last scan: menus ask every tick, and on Windows each file's details cost a system call or two. */
+	private static List<Info> listed;
+	private static long listedAt;
+	private static final long LIST_REFRESH_NANOS = 1_000_000_000L;
+
+	/** Saved replays, newest first (rescanned at most once a second). */
+	public static synchronized List<Info> list() {
+		long now = System.nanoTime();
+		if (listed == null || now - listedAt >= LIST_REFRESH_NANOS) {
+			listed = Collections.unmodifiableList(scan());
+			listedAt = now;
+		}
+		return listed;
+	}
+
+	private static List<Info> scan() {
 		File[] files = folder().listFiles((dir, name) -> name.endsWith(".mcpr"));
 		List<Info> out = new ArrayList<Info>();
 		if (files == null) {
@@ -471,7 +485,11 @@ public final class Replays {
 	public static boolean delete(Info info) {
 		removeExport(info.file);
 		new File(gameDir, ".arctic/replay-paths/" + info.file.getName() + ".json").delete();
-		return info.file.delete();
+		boolean deleted = info.file.delete();
+		synchronized (Replays.class) {
+			listed = null;
+		}
+		return deleted;
 	}
 
 	// ---- Camera paths (kept beside the replay, per file) ---------------------------------
