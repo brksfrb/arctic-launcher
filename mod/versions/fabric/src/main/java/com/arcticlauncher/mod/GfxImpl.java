@@ -66,7 +66,10 @@ public final class GfxImpl implements Gfx {
 		Identifier id = Compat.id(ArcticMod.ID, "asset/" + name);
 		try (InputStream in = GfxImpl.class.getResourceAsStream("/assets/arctic/" + name + ".png")) {
 			NativeImage image = NativeImage.read(in);
-			Minecraft.getInstance().getTextureManager().register(id, Compat.texture("Arctic " + name, image));
+			// The spinning snowflake's pictures are drawn turned, so they must filter linearly.
+			DynamicTexture texture = name.startsWith("icon-") ? Compat.smoothTexture("Arctic " + name, image)
+					: Compat.texture("Arctic " + name, image);
+			Minecraft.getInstance().getTextureManager().register(id, texture);
 		} catch (Exception e) {
 			ArcticMod.LOG.warn("Arctic asset {}: {}", name, e.toString());
 			// A file that failed to load draws nothing, not the purple missing texture.
@@ -345,6 +348,11 @@ public final class GfxImpl implements Gfx {
 		//#else
 		g.pose().scale(s, s, 1);
 		//#endif
+	}
+
+	@Override
+	public void rotate(float degrees) {
+		Compat.turnZ(g.pose(), (float) Math.toRadians(degrees));
 	}
 
 	@Override

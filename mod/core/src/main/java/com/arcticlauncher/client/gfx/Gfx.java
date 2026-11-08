@@ -53,6 +53,9 @@ public interface Gfx {
 
 	void scale(float s);
 
+	/** Turn everything drawn from now on (until {@link #pop}) clockwise about the origin, by this many degrees. */
+	void rotate(float degrees);
+
 	void scissor(int x0, int y0, int x1, int y1);
 
 	void endScissor();

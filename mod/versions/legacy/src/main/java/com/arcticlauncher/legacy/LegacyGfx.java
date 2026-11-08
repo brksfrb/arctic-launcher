@@ -191,6 +191,11 @@ final class LegacyGfx implements Gfx {
 	}
 
 	@Override
+	public void rotate(float degrees) {
+		GlStateManager.rotate(degrees, 0f, 0f, 1f);
+	}
+
+	@Override
 	public void scissor(int x0, int y0, int x1, int y1) {
 		int f = window.getScaleFactor();
 		GL11.glEnable(GL11.GL_SCISSOR_TEST);

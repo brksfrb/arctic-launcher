@@ -214,6 +214,41 @@ public final class Compat {
 		//#endif
 	}
 
+	/** Like {@link #texture}, but filtered linearly: for a picture that is drawn turned. */
+	public static DynamicTexture smoothTexture(String name, NativeImage image) {
+		//#if MC >= 1.21.11
+		return new SmoothTexture(name, image);
+		//#else
+		DynamicTexture texture = texture(name, image);
+		texture.setFilter(true, false);
+		return texture;
+		//#endif
+	}
+
+	//#if MC >= 1.19.3
+	/** Reused, so turning allocates nothing per frame (render thread only). */
+	private static final org.joml.Quaternionf TURN = new org.joml.Quaternionf();
+	//#endif
+
+	/** Turn the pose clockwise about Z by radians (GUI pose: Matrix3x2fStack from 1.21.6, PoseStack before). */
+	public static void turnZ(
+			//#if MC >= 1.21.6
+			org.joml.Matrix3x2fStack pose,
+			//#else
+			com.mojang.blaze3d.vertex.PoseStack pose,
+			//#endif
+			float radians) {
+		//#if MC >= 1.21.6
+		pose.rotate(radians);
+		//#elif MC >= 1.19.3
+		pose.mulPose(TURN.rotationZ(radians));
+		//#elif MC >= 1.15
+		pose.mulPose(com.mojang.math.Vector3f.ZP.rotation(radians));
+		//#else
+		pose.rotate(radians, 0f, 0f, 1f);
+		//#endif
+	}
+
 	/** Turn the pose Z, then Y, then X (radians), the order a model part turns in. */
 	public static void turnZYX(com.mojang.blaze3d.vertex.PoseStack pose, float x, float y, float z) {
 		//#if MC >= 26.3
