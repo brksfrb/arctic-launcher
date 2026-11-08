@@ -49,6 +49,10 @@ final class LegacySelfTest {
 			LegacyVisualsTest.start();
 			return;
 		}
+		if (LegacyHotbarScrollCheck.requested()) {
+			LegacyHotbarScrollCheck.start();
+			return;
+		}
 		if (LegacyChatHitTest.requested()) {
 			LegacyChatHitTest.start();
 			return;

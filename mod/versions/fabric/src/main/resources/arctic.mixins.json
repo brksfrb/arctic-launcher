@@ -47,6 +47,8 @@
 		"KeyboardHandlerMixin",
 		"MouseHandlerMixin",
 		"MouseHandlerInvoker",
+<% if (inventoryHotbarScroll) { %>		"InventoryHotbarScrollMixin",
+<% } %>
 		"PauseScreenMixin"<% if (panoramaHook) { %>,
 		"ScreenMixin"<% } %>,
 		"TitleScreenMixin",
