@@ -159,6 +159,38 @@ pub fn move_before(game_dir: &Path, address: &str, before: Option<&str>) -> Resu
     Ok(true)
 }
 
+/// Take the server with this address off the game's multiplayer list, keeping every
+/// other entry as it was (hidden ones too). `Ok(false)`: it isn't on the list.
+pub fn remove(game_dir: &Path, address: &str) -> Result<bool> {
+    let path = game_dir.join(SERVERS_FILE);
+    let damaged = || Error::Other("servers.dat couldn't be read (damaged?)".into());
+    let data = match std::fs::read(&path) {
+        Ok(data) => data,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(e) => return Err(Error::io(&path, e)),
+    };
+    let mut root = nbt::read_root(&data).ok_or_else(damaged)?;
+    let nbt::Tag::Compound(entries) = &mut root else {
+        return Err(damaged());
+    };
+    let Some((_, nbt::Tag::List(servers))) = entries.iter_mut().find(|(k, _)| k == "servers")
+    else {
+        return Err(damaged());
+    };
+    let Some(at) = servers.iter().position(|e| {
+        e.get("ip")
+            .and_then(nbt::Tag::as_str)
+            .is_some_and(|ip| ip.trim().eq_ignore_ascii_case(address.trim()))
+    }) else {
+        return Ok(false);
+    };
+    servers.remove(at);
+    let tmp = path.with_extension("dat.arctic-tmp");
+    std::fs::write(&tmp, nbt::write_root(&root)).map_err(|e| Error::io(&tmp, e))?;
+    std::fs::rename(&tmp, &path).map_err(|e| Error::io(&path, e))?;
+    Ok(true)
+}
+
 /// Add a server to the end of the game's multiplayer list (as the game
 /// does). Everything already in the file is kept as it was. `Ok(false)`
 /// when that address is on the list already.
@@ -297,6 +329,43 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join(SERVERS_FILE), [10, 0, 0, 9, 0]).unwrap();
         assert!(list(dir.path()).is_err());
+    }
+
+    #[test]
+    fn removes_one_server_and_keeps_the_rest() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!remove(dir.path(), "none").unwrap(), "no file yet");
+        std::fs::write(
+            dir.path().join(SERVERS_FILE),
+            nbt::fake_servers_dat(&[
+                ("Hypixel", "mc.hypixel.net", false),
+                ("Hidden", "10.0.0.2", true),
+                ("Cube", "play.cubecraft.net", false),
+            ]),
+        )
+        .unwrap();
+        assert!(remove(dir.path(), "MC.hypixel.net ").unwrap());
+        assert!(
+            !remove(dir.path(), "mc.hypixel.net").unwrap(),
+            "already gone"
+        );
+        let names: Vec<String> = list(dir.path())
+            .unwrap()
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
+        assert_eq!(names, ["Cube"]);
+        let data = std::fs::read(dir.path().join(SERVERS_FILE)).unwrap();
+        assert!(String::from_utf8_lossy(&data).contains("10.0.0.2"));
+        // Undo: add it back and move it to where it was.
+        assert!(add(dir.path(), "Hypixel", "mc.hypixel.net").unwrap());
+        assert!(move_before(dir.path(), "mc.hypixel.net", Some("play.cubecraft.net")).unwrap());
+        let names: Vec<String> = list(dir.path())
+            .unwrap()
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
+        assert_eq!(names, ["Hypixel", "Cube"]);
     }
 
     #[test]

@@ -36,6 +36,14 @@ pub enum Undo {
         saves: PathBuf,
         trashed: TrashedWorld,
     },
+    /// A server taken off the game's multiplayer list: name, address and the address of
+    /// the one that followed it (to put it back in the same place).
+    Server {
+        game_dir: PathBuf,
+        name: String,
+        address: String,
+        before: Option<String>,
+    },
 }
 
 impl ArcticApp {
@@ -88,6 +96,26 @@ impl ArcticApp {
                 saves,
                 trashed,
             } => self.restore_world(&instance_id, &saves, &trashed),
+            Undo::Server {
+                game_dir,
+                name,
+                address,
+                before,
+            } => {
+                let result = arctic_core::servers::add(&game_dir, &name, &address).and_then(|_| {
+                    arctic_core::servers::move_before(&game_dir, &address, before.as_deref())
+                });
+                match result {
+                    Ok(_) => self
+                        .toasts
+                        .push(Kind::Success, format!("{name} is back"), ""),
+                    Err(e) => {
+                        self.toasts
+                            .push(Kind::Error, "Couldn't put the server back", e.to_string())
+                    }
+                }
+                self.servers_changed();
+            }
         }
     }
 }
