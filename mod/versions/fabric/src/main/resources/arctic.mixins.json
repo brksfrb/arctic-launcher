@@ -64,7 +64,10 @@
 		"FontBitmapHintingMixin",<% } %><% if (smoothFontManager) { %>
 		"SmoothFontManagerMixin",
 		"SmoothFontGlyphInfoMixin",<% } %><% if (glowText) { %>
-		"GlowTextMixin",<% } %><% if (textShader) { %>
+		"GlowTextMixin",<% } %><% if (scaledFont) { %>
+		"FontTextureMixin",
+		"ScaledTextStateMixin",
+		"ScaledGlyphMixin",<% } %><% if (textShader) { %>
 		"TextShaderMixin",<% } %><% if (textShaderOld) { %>
 		"TextShaderOldMixin",<% } %><% if (startup) { %>
 		"MainStartMixin",
@@ -107,7 +110,6 @@
 		"GameRendererFovMixin"<% } %><% if (smoothFont) { %>,
 		"ChatLineMixin",
 		"PackRepositoryMixin",
-		"FontTextureMixin",
 		"TrueTypeDefinitionMixin",
 		"TrueTypeGlyphMixin",
 		"OptionsPacksMixin",
