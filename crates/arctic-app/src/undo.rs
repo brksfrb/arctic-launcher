@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use arctic_core::mods::packs::{self, PackKind, TrashedPack};
 use arctic_core::mods::{self, TrashedMod};
+use arctic_core::skins::Variant;
 
 use crate::app::ArcticApp;
 use crate::toasts::Kind;
@@ -23,6 +24,11 @@ pub enum Undo {
         kind: PackKind,
         game_dir: PathBuf,
         trashed: TrashedPack,
+    },
+    Skin {
+        name: String,
+        variant: Variant,
+        png: Vec<u8>,
     },
 }
 
@@ -59,6 +65,16 @@ impl ArcticApp {
                 }
                 if let Some(instance) = self.instance_by_id(&instance_id).cloned() {
                     self.refresh_packs(&instance);
+                }
+            }
+            Undo::Skin { name, variant, png } => {
+                let dir = self.skins_dir();
+                match self.skins.library.add(&dir, &name, &png, Some(variant)) {
+                    Ok(_) => self.toasts.push(Kind::Success, "Skin put back", ""),
+                    Err(e) => {
+                        self.toasts
+                            .push(Kind::Error, "Couldn't put the skin back", e.to_string())
+                    }
                 }
             }
         }
