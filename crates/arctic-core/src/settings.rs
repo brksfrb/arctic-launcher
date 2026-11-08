@@ -82,6 +82,10 @@ pub struct Settings {
     pub crash_contact: String,
     /// Show what you're playing on Discord.
     pub discord_presence: bool,
+    /// Also show the server address on Discord. Off unless chosen: an IP,
+    /// localhost, or a private network is still written as "Private server".
+    /// Ignored while [`Settings::discord_presence`] is off.
+    pub discord_show_server: bool,
     /// First-run setup finished (or skipped) for this profile.
     pub onboarded: bool,
     /// Keep running in the system tray when the window is closed.
@@ -288,6 +292,7 @@ impl Default for Settings {
             crash_reports: CrashReports::Ask,
             crash_contact: String::new(),
             discord_presence: true,
+            discord_show_server: false,
             onboarded: false,
             tray: true,
             tray_asked: false,
@@ -377,6 +382,10 @@ mod tests {
         let s: Settings = serde_json::from_str(r#"{"max_memory_mb": 6144}"#).unwrap();
         assert_eq!(s.max_memory_mb, 6144);
         assert_eq!(s.window_width, DEFAULT_WIDTH);
+        assert!(
+            !s.discord_show_server,
+            "showing the server on Discord stays off until chosen"
+        );
     }
 
     #[test]

@@ -101,6 +101,10 @@ final class SelfTest {
 			PadTest.start();
 			return;
 		}
+		if (HotbarScrollCheck.requested()) {
+			HotbarScrollCheck.start();
+			return;
+		}
 		if ("duel".equals(System.getProperty("arctic.selftest"))) {
 			// A duel through the launcher: world, kit, LAN, a play-together code.
 			TIMER.schedule(() -> Minecraft.getInstance().execute(() -> {

@@ -207,7 +207,9 @@ final class FabricPlatform implements Platform {
 	public void scrollHotbar(int step) {
 		LocalPlayer p = mc().player;
 		if (p != null) {
-			Compat.selectSlot(p, Math.floorMod(Compat.selectedSlot(p) + step, 9));
+			com.arcticlauncher.client.config.ClientConfig c = ArcticClient.config();
+			boolean wrap = c == null || !c.hotbarScrollStop;
+			Compat.selectSlot(p, com.arcticlauncher.client.feature.HotbarScroll.move(Compat.selectedSlot(p), step, wrap));
 		}
 	}
 

@@ -5,8 +5,13 @@
 <h1 align="center">Arctic Launcher</h1>
 
 <p align="center">
-  A fast, lightweight Minecraft launcher.<br>
-  Every release, mod loaders, mods, skins and playing with friends, in one small app.
+  A Minecraft launcher with the Arctic Client built in.<br>
+  The launcher runs every release, with mod loaders, mods, modpacks, accounts, servers and friends.<br>
+  The client adds 128 built-in mods, including 53 HUD widgets, plus Polarium, replays, cosmetics and voice.
+</p>
+
+<p align="center">
+  Arctic Client has no cheats and isn't related to other projects named Arctic.
 </p>
 
 <p align="center">
@@ -33,101 +38,89 @@
 
 ## Why Arctic
 
-- **Plays every Minecraft release.** Pick a version and press Play. Arctic downloads the
-  game and the exact Java it needs, so you don't install Java yourself.
-- **Fast.** Downloads run in parallel over dozens of connections: a complete fresh install
-  takes about 20 seconds on a fast connection, and relaunching an installed version is
-  instant.
-- **Light.** One small native app, no Electron and no browser engine. It uses almost no
-  CPU while you play.
-- **Mods in a click.** Create Fabric, Quilt, NeoForge or Forge instances, then search
-  Modrinth and install mods with their dependencies, or install a whole modpack in one
-  click. Each instance keeps its own version, mods, worlds and Java settings. Move an
-  instance to another Minecraft version and its mods come along (updated where Modrinth
-  has a version, switched off where it doesn't).
-- **Mods that clash, caught before you play.** Press Play and Arctic first looks for what
-  would stop the game: the same mod twice, a mod that breaks another, a missing or too old
-  requirement, a mod made for another version. Fix each in one click, or play anyway.
-- **Bring your stuff over.** Arctic finds what you have in the Minecraft Launcher, Prism,
-  MultiMC, the Modrinth App, CurseForge, ATLauncher, GDLauncher, TLauncher, SKlauncher, Lunar, Badlion,
-  Feather and LabyMod and copies your instances, worlds, servers and settings (the
-  originals stay as they are). Import single worlds from a folder or a .zip, and back them
-  up with one click.
-- **Play together.** Invite friends into your world with a code. No server, no port
-  forwarding: Arctic opens your world to LAN for you while you host (or open it yourself),
-  and connects your friends directly (or through an encrypted relay when a direct link
-  isn't possible).
-- **Wear any skin, any cape, free.** Pick a skin from your library (or copy a player's by
-  name), choose a cape or use your own image (animated ones too), and every Arctic player
-  sees it, on any account. Preview everything on a 3D model. Microsoft accounts can also change their real
-  Minecraft skin from here.
-- **Cosmetics and emotes, free.** Hats, headphones, back items, shoulder pets and more, plus
-  emotes from a wheel in game. Every Arctic player sees them.
-- **Skin gallery.** Browse skins other players shared, search by name or creator, and wear
-  one in a click. Share your own from your library.
-- **Arctic Client.** Vanilla gets a fresh look: restyled menus (pick Arctic, Aurora,
-  Classic or Vanilla), over thirty HUD widgets (FPS, CPS, ping, TPS, keystrokes, coordinates, speed,
-  armor, effects, target health, reach, combo, a compass, a stopwatch, item counts and more)
-  in four HUD styles (Arctic, Clean, Minimal, Rainbow) that line up on their own and snap
-  into place when you move them; the game's scoreboard and boss bar move, resize and hide
-  the same way. A smooth minimap, square or round, north-up or turning with you, with
-  players and waypoints on it,
-  Zoom, Freelook, Fullbright, Toggle Sprint and Sneak, a crosshair editor (your own picture
-  too, colored by what you aim at), a smooth font, chat timestamps and mentions, quick
-  chat keys with {x} {y} {z}, waypoints, your own time of day, block outline and hit
-  color, scoreboard tweaks, a streamer mode, and everyone's Arctic looks in game. Press Right Shift in game for the Arctic menu. It's on
-  by default for Vanilla from 1.8.9 up to the newest release (1.8.9, 1.9.4, 1.10.2,
-  1.11.2, 1.12.2, 1.13.2, 1.14.4 and 1.15.2 onward), comes to Fabric and Quilt instances too, and you can turn
-  it off per instance, or choose pure vanilla during setup.
-- **Tier Tags.** See players' PvP tiers by their names, in name tags and the tab list
-  ("HT3 Sword | Steve"), from PvPTiers or SubTiers: their best tier or one game mode.
-- **Play with a controller.** Xbox, PlayStation and other gamepads work in game on every
-  version: walk, look, fight, use the hotbar and inventory, and move a pointer through menus.
-- **Replays.** The Arctic Client keeps the last minutes of your game; save them when
-  something happens, then watch from any angle in 3D, seek around, or export a video.
-  Recordings are compressed as they're written, so long sessions don't fill your drive.
-- **A better server list.** Arctic's own multiplayer screen on every version: drag servers
-  to reorder them, see icons, MOTDs, players and ping, find LAN worlds, and discover public
-  servers. Lost connection? Reconnect in one click, or let Auto Reconnect do it.
-- **Friends, chat and voice.** Add friends with a code, see who's online and where, invite
-  them to your server, chat and send screenshots from the launcher or in game, and talk
-  with proximity voice chat (it also works with Simple Voice Chat servers).
-- **Duels in two clicks.** Start a duel from the in-game Friends tab: Arctic makes a flat
-  arena with a kit and shares it through Play together; your friend joins from the invite.
-- **Resource packs without a restart.** Search Modrinth from the in-game menu and a pack
-  is on a second later.
-- **Bedrock Edition too.** Play Minecraft for Windows (and Preview) from the Bedrock tab,
-  switch it to any version since 1.21.120 in a click, import and export worlds (.mcworld),
-  packs and add-ons (.mcpack, .mcaddon), back worlds up, and keep a server list with live
-  player counts and ping.
-- **Performance, built in.** One switch adds Sodium, Lithium, FerriteCore, ImmediatelyFast,
-  EntityCulling and ModernFix to Vanilla for much higher FPS, fetched from Modrinth for your version.
-  It's on by default and works on any version Fabric supports.
-- **Your accounts, side by side, with or without Microsoft.** Sign in with Microsoft in the
-  browser or with a short code, or add an **offline account** (any name, no Microsoft account
-  needed) for singleplayer, LAN and offline-mode servers. Offline accounts get Arctic skins,
-  capes, cosmetics, emotes and friends too. Keep several accounts and switch in one click.
-  Servers that check accounts still need a Microsoft account that owns Minecraft: Java Edition.
-  Sign-ins stay on your PC, encrypted for your user account, and never leave it except to
-  Microsoft and Mojang.
-- **Profiles.** Keep completely separate setups on one PC, each with its own accounts,
-  settings, instances and worlds. Switch from the top of the sidebar.
-- **Screenshots in one place.** Every instance's screenshots, newest first: open, copy,
-  or send one to a friend.
-- **Crash reports, only if you say so.** When the game crashes, Arctic explains it in plain
-  language and can send the log so it gets fixed (ask each time, always or never in Settings).
-  Your name, folders, sign-in details, e-mails and IP addresses are removed first.
-- **Live logs.** Minecraft's output appears inside the launcher, readable, searchable and
-  filterable by warnings or errors.
-- **Proxy.** Send the launcher and the game through a SOCKS5 proxy. Server connections go through it with the Arctic Client (Vanilla and Fabric instances); other games only proxy Minecraft's login.
-- **Made to look at.** An animated arctic night with aurora, snowfall and shooting stars.
-  Aurora, Dark and Light themes.
-- **Discord status.** Friends see what you're playing. Turn it off in Settings.
-- **Command line included.** Launch versions and instances, install mods and manage
-  profiles from a terminal, with scriptable JSON output.
-- **Stays up to date.** Updates install themselves in seconds, verified before they're
-  applied, and a short "What's new" shows after each one (you can turn it off).
-- **Open source** under the GPL-3.0.
+Arctic is the launcher and the Arctic Client together. Parallel downloads, and low CPU use while you play, are one part of it.
+
+Press Right Shift in game for the client menu. The client is on by default for Vanilla, and for Fabric and Quilt instances, from 1.8.9 through the current release (the builds are 1.8.9, 1.9.4, 1.10.2, 1.11.2, 1.12.2, 1.13.2, 1.14.4 and 1.15.2 onward). Forge has it on 1.8.9. Turn it off per instance, or pick pure vanilla during setup.
+
+### Launcher
+
+- **Every release.** Pick a version and press Play. Arctic downloads the game and the Java that version needs.
+- **Mod loaders, mods and modpacks.** Fabric, Quilt, NeoForge and Forge instances. Search Modrinth and install mods with their dependencies, or install a modpack. Each instance keeps its own version, mods, worlds and Java settings. Move an instance to another Minecraft version and its mods come along (updated where Modrinth has a build, switched off where it does not).
+- **Clashes before you play.** The same mod twice, a mod that breaks another, a missing or too-old requirement, a mod made for another version. Fix each in one click, or play anyway.
+- **Import.** Arctic finds the Minecraft Launcher, Prism, PolyMC, MultiMC, the Modrinth App, CurseForge, ATLauncher, GDLauncher (current and old), TLauncher, SKlauncher, Lunar, Badlion, Feather, LabyMod, Fast Client and Silent Client, and copies instances, worlds, servers and settings. The originals stay. Import one world from a folder or a .zip, and back worlds up.
+- **Servers.** The multiplayer screen on every version: drag to reorder, icons, MOTD, players and ping, LAN worlds, and Discover servers (a public list). Reconnect in one click, or turn on Auto Reconnect.
+- **Bedrock Edition** on Windows, Release and Preview. Switch version (GDK builds from 1.21.120 on, and older UWP builds), import and export worlds (`.mcworld`), packs and add-ons (`.mcpack`, `.mcaddon`), back worlds up, and keep a server list with player counts and ping.
+- **Accounts.** Microsoft sign-in in the browser or with a short code, or an offline account (any name) for singleplayer, LAN and offline-mode servers. Several accounts, switched in one click. Sign-ins stay on the PC, encrypted for that user, and go only to Microsoft and Mojang. Servers that check accounts still need a Microsoft account that owns Minecraft: Java Edition.
+- **Profiles.** Separate accounts, settings, instances and worlds on one PC. Switch from the top of the sidebar.
+- **Screenshots, logs and crashes.** Every instance's screenshots in one list. The game log inside the launcher, searchable, filterable by warnings or errors. A crash is explained in plain language and sent only if you allow it (ask each time, always, or never). Name, folders, sign-in details, e-mails and IP addresses are removed first.
+- **SOCKS5 proxy** for the launcher and the game. With the Arctic Client, server connections go through it on Vanilla and Fabric instances. Otherwise only Minecraft's login does.
+- **The app itself.** A native app, so it uses little CPU while you play. Downloads run in parallel, and a version that is already installed starts without downloading again. Themes are Aurora (an animated night with snowfall and shooting stars; it pauses while you play), Dark and Light. Discord status is optional. Updates install themselves after they are checked, and a short "What's new" follows (you can turn that off). The `arctic` command line launches versions and instances, installs mods and manages profiles, with JSON output for scripts. GPL-3.0.
+
+### Client mods
+
+The Mods screen on current versions lists **128 built-in mods, including 53 HUD widgets**: every tile `ModCatalog` shows there. 1.8.9 also has 1.7 Animations, which is not in that 128. A version with no hook for a mod leaves that tile off, so an older version can show fewer. The names below are those tiles, in the category the screen uses.
+
+**Combat (6).** Combat Feedback (hit marker, hit and kill sounds, low-health warning), Attack Range Indicator, Hitboxes, Hit Color, TNT Timer, Low Durability.
+
+**Movement (7).** Zoom, Freelook, Snaplook, Toggle Sprint, Toggle Sneak, Portal Screens, Controller (Xbox, PlayStation and other gamepads: walk, look, fight, hotbar, inventory, and a pointer on menus). Freelook stays off on servers that do not allow it.
+
+**Inventory (5).** Lock Slots, Inventory Search (Ctrl+F), Client Sort, Pickup Display, Shulker Peek (shulker boxes and other containers that carry their contents).
+
+**Visual (23).** Fullbright, Crosshair (shape, size, color, or your own picture), Time Changer, Clear Weather, Low Fire, Motion Blur, Item Physics, Block Outline, Glint Colorizer, Shiny Pots, 2D Items, Dynamic FOV, Fog, Mob Size, Hide Titles, Damage Tint, Scoreboard, Dynamic FPS, No Hurt Shake, Debug Screen (colored F3), Particle Control, Held Item, Packs & Shaders (resource packs and shaders from Modrinth, including from the in-game menu).
+
+**Chat (7).** Chat (timestamps, stacked lines, mentions, `{x}` `{y}` `{z}` placeholders, mute), Chat History (search, filters, a second chat, longer scrollback), Emoji and Symbols, Quick Messages, Auto Text, Auto GG, Streamer Mode.
+
+**Tools (7).** Waypoints, Screenshots (copy to the clipboard), Replays, Death Position, Confirm Leaving, Auto Reconnect, Quickplay (Hypixel `/play` groups: Bed Wars, SkyWars, Duels, Murder Mystery, TNT Games, Build Battle, Blitz SG, Mega Walls, Arcade, SkyBlock; other servers ignore commands they do not know).
+
+**Players (7).** Tier Tags (PvPTiers or SubTiers, best tier or one mode, on the name tag and in the tab list, such as `HT3 Sword | Steve`), Ping Tags, Tab Ping, Find Me in Tab, Arctic Badge, Own Name Tag, OptiFine Capes (without OptiFine).
+
+**Social (4).** Friends, Emotes, Auto LAN (opens your singleplayer world to LAN while you host in Play together: survival, no cheats), Team View (scoreboard teammates outlined through walls; a box on 1.8.9).
+
+**Client (4).** Menu Style (Arctic, Aurora, Classic or Vanilla, plus the smooth font), Account (switch accounts, or the proxy), Command Palette (Ctrl+K: mods, servers, friends), Cosmetics Check.
+
+**HUD (2, plus the 53 widgets).** Saturation Bar, HUD Style.
+
+**No category chip (3).** Chunk Borders, Scrollable Tooltips, Sound Changer. They are on the Mods screen; the old Gameplay chip is gone.
+
+Those groups are 75 tiles. With the 53 HUD widgets, that is 128.
+
+### HUD widgets
+
+These **53 HUD widgets** are part of the 128. Minimap, Cooldowns, Horse stats, Scoreboard and Boss bar are the ones a version can omit. Four looks, named Arctic, Clean, Minimal and Rainbow, apply to every widget at once. Widgets line up on their own and snap when you move them. The server scoreboard and boss bar move, resize and hide the same way.
+
+**Performance (13).** FPS, Ping, TPS, Frame time, 1% low, CPU, PC CPU, PC RAM, Alloc, GPU, VRAM, Memory, Entities.
+
+**PvP (12).** CPS, Keystrokes, Armor, Effects, Arrows, Items, Held item, Pearl, Block, Fall, Target, Cooldowns.
+
+**World (16).** XYZ, Facing, Speed, Biome, Light, Chunk, Day, World time, Time, Date, Compass (waypoints on it), Minimap (square or round, north-up or turning with you, players and waypoints), Last death, Stopwatch, Looking at, Horse stats.
+
+**Info (12).** Arctic watermark, Filtered chat, Server, Players, Session, Food, Pack, Move, Reach, Combo, Scoreboard, Boss bar.
+
+### Performance
+
+One switch, on by default, adds optimization mods from Modrinth for that Minecraft version: ModernFix, Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, Particle Core and BadOptimizations. It applies to Vanilla (which runs on Fabric underneath) and to Fabric and Quilt instances, and it skips a mod you already have, or one that does the same job. A mod with no build for that version is skipped.
+
+The same switch installs **Polarium** where the launcher has a build: 1.8.9 on Fabric, and 26.1.2, 26.2 and 26.3. Polarium draws entities on the GPU and spreads their work across CPU cores, for servers with a lot of players. Forge 1.8.9 uses Patcher and EntityCulling instead. Wavey Capes is a separate optional mod, not part of this set.
+
+### Social
+
+Add friends with a code. See who is online and which server they are on, invite them, and chat or send screenshots from the launcher or in game. Voice is proximity voice with other Arctic players on the same server (open mic or push to talk). It also speaks Simple Voice Chat's protocol, so you can talk on servers that run that plugin.
+
+Play together opens your world to friends with a code. No server of your own and no port forwarding: the world is opened to LAN while you host, and friends connect directly, or through an encrypted relay when a direct link is not possible. Both of you need Arctic, the same Minecraft version and the same mods.
+
+Duels start from the in-game Friends tab: a flat arena and a kit, shared through Play together. Your friend joins from the invite.
+
+### Replays
+
+The client keeps a rolling window of the game (30 seconds by default, up to 120). Save that clip, or start and stop a longer recording. Watch it in 3D from any angle, seek, or export a video. Recordings are compressed as they are written. The launcher lists them, and `arctic launch --replay` opens one. The replay mod is on the list only on versions that can record and play them back.
+
+### Cosmetics
+
+Skins from your library, or a copy of a player's skin by name. Capes from the shared list or your own image, including animated capes (those can be pinned to one frame). A 3D preview. Microsoft accounts can also change the skin Minecraft itself shows.
+
+3D cosmetics, one per slot: Head, Face, Back, Shoulders, Arms, Body. You can nudge a face cosmetic and mirror a shoulder one. Emotes play from a wheel in game. Other Arctic players see the skin, cape, cosmetics and emote. Offline accounts get them too.
+
+The skin gallery is skins other players shared. Search by name or creator, wear one, or share one from your library.
 
 ## Install
 

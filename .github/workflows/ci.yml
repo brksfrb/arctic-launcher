@@ -137,3 +137,25 @@ jobs:
         env:
           PROBE: ${{ inputs.probe }}
         run: python3 mod/tools/probe.py ${{ matrix.version }} $PROBE
+
+  # Forge 1.8.9 is the same sources remapped to Forge's names, with its own bytecode: a mixin that fits
+  # Legacy Fabric's vanilla classes can fail there at startup. Build the jar and check its hooks here.
+  forge:
+    if: ${{ inputs.only == '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x mod/gradlew
+      # The 1.8.9 build primes Gradle's cache (game jar, Yarn) that the Forge build remaps against.
+      - run: python3 mod/build.py 1.8.9 forge-1.8.9 --jobs 1
+      - run: python3 mod/check.py forge-1.8.9
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arctic-forge-1.8.9
+          path: mod/dist/arctic-forge-1.8.9.jar
+          if-no-files-found: error

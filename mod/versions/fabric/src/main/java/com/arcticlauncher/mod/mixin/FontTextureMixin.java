@@ -1,7 +1,10 @@
 package com.arcticlauncher.mod.mixin;
 
+//#if MC >= 1.21.9
 //#if MC >= 26.1
 import com.arcticlauncher.mod.ArcticPacks;
+//#endif
+import com.arcticlauncher.mod.ScaledInter;
 //#if MC >= 26.3
 import com.mojang.renderpearl.api.textures.FilterMode;
 //#else
@@ -13,9 +16,11 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 /**
- * With the smooth font on, glyph textures scale smoothly (linear) instead
+ * With the smooth font on (26.1+), glyph textures scale smoothly (linear) instead
  * of pixel-sharp (nearest), so the oversampled TrueType glyphs look clean
- * at any GUI scale. Font textures are rebuilt when resources reload.
+ * at any GUI scale. Font textures are rebuilt when resources reload. The
+ * smooth font's size buckets (see {@link ScaledInter}), which are always
+ * drawn shrunk, filter linearly on every version from 1.21.9.
  */
 @Mixin(FontTexture.class)
 abstract class FontTextureMixin {
@@ -27,7 +32,11 @@ abstract class FontTextureMixin {
 
 	@Redirect(method = "<init>", at = @At(value = "FIELD", target = NEAREST))
 	private FilterMode arctic$filter() {
-		return ArcticPacks.smoothFontOn() ? FilterMode.LINEAR : FilterMode.NEAREST;
+		//#if MC >= 26.1
+		return ScaledInter.baking() || ArcticPacks.smoothFontOn() ? FilterMode.LINEAR : FilterMode.NEAREST;
+		//#else
+		return ScaledInter.baking() ? FilterMode.LINEAR : FilterMode.NEAREST;
+		//#endif
 	}
 }
 //#endif
