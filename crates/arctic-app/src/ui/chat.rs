@@ -88,6 +88,8 @@ pub struct ChatUi {
     loading: bool,
     draft: String,
     sending: bool,
+    /// (friend, text) of the message on its way, kept until the server takes it.
+    in_flight: Option<(String, String)>,
     /// Newest message id seen; `None` until the first poll (which only
     /// sets it, so old messages don't pop up as new).
     last_id: Option<i64>,
@@ -271,6 +273,7 @@ impl ArcticApp {
                     if let Some(account) = self.accounts.active().cloned() {
                         let text = std::mem::take(&mut self.chat.draft).trim().to_owned();
                         self.chat.sending = true;
+                        self.chat.in_flight = Some((friend.clone(), text.clone()));
                         self.tasks.chat_send(account, friend.clone(), text);
                     }
                     field.request_focus();
@@ -393,14 +396,42 @@ impl ArcticApp {
 
     pub(crate) fn on_chat_sent(&mut self, result: Outcome<Message>) {
         self.chat.sending = false;
+        let in_flight = self.chat.in_flight.take();
         match result {
             Ok(m) => {
                 if self.chat.open.as_ref().is_some_and(|(id, _)| *id == m.to) {
                     self.chat.messages.push(m);
                 }
             }
-            Err(e) => self.toasts.push(Kind::Error, "Message not sent", e),
+            Err(e) => {
+                // The text is not lost: it goes back into the box (unless the player has
+                // typed something new) and the toast can send it again.
+                let action = in_flight.map(|(friend, text)| {
+                    if self.chat.draft.trim().is_empty() {
+                        self.chat.draft = text.clone();
+                    }
+                    ToastAction::ChatRetry { friend, text }
+                });
+                self.toasts
+                    .push_with_action(Kind::Error, "Message not sent", e, action);
+            }
         }
+    }
+
+    /// "Retry" on a "Message not sent" toast.
+    pub(crate) fn chat_retry(&mut self, friend: String, text: String) {
+        let Some(account) = self.accounts.active().cloned() else {
+            return;
+        };
+        if self.chat.sending {
+            return;
+        }
+        if self.chat.draft.trim() == text {
+            self.chat.draft.clear();
+        }
+        self.chat.sending = true;
+        self.chat.in_flight = Some((friend.clone(), text.clone()));
+        self.tasks.chat_send(account, friend, text);
     }
 
     pub(crate) fn on_chat_new(&mut self, after: i64, result: Outcome<Vec<Message>>) {

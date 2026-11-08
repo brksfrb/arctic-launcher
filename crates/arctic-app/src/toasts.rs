@@ -65,6 +65,8 @@ pub enum ToastAction {
     },
     /// Put back what was just removed.
     Undo(crate::undo::Undo),
+    /// Send a chat message that failed to send again.
+    ChatRetry { friend: String, text: String },
 }
 
 impl ToastAction {
@@ -77,6 +79,7 @@ impl ToastAction {
             ToastAction::WhatsNew(_) => "What's new",
             ToastAction::Fix { .. } => "Fix it",
             ToastAction::Undo(_) => "Undo",
+            ToastAction::ChatRetry { .. } => "Retry",
         }
     }
 }
