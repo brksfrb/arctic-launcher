@@ -88,43 +88,76 @@ abstract class SmoothTextRendererMixin {
 		boolean second = bold && arctic$boldSecond;
 		arctic$boldSecond = bold && !arctic$boldSecond;
 		if (c == ' ') {
-			cir.setReturnValue(LegacySmoothFont.advance(c));
+			cir.setReturnValue(arctic$returned(c));
 			return;
 		}
 		LegacySmoothFont.Glyph glyph = LegacySmoothFont.glyph(c);
 		if (glyph != null) {
 			if (second) {
-				cir.setReturnValue(LegacySmoothFont.advance(c));
+				cir.setReturnValue(arctic$returned(c));
 				return;
 			}
-			float moved = LegacySmoothFont.draw(glyph, x, y, italic);
+			LegacySmoothFont.draw(glyph, x, y, italic);
 			if (bold) {
 				LegacySmoothFont.draw(glyph, x + LegacySmoothFont.BOLD_THICKEN, y, italic);
-				// The game adds a whole pixel after a bold character: keep only the thickening.
-				moved -= 1f - LegacySmoothFont.BOLD_THICKEN;
 			}
-			// The stand-in is as wide in whole pixels, not exactly: moving by its exact width would
-			// shift the rest of the line every frame.
-			cir.setReturnValue(obfuscated ? (float) Math.round(moved) : moved);
+			cir.setReturnValue(arctic$returned(c));
 		}
 	}
 
-	/** Whole GUI pixels, for wrapping and trimming (drawing keeps Inter's exact spacing). */
+	/**
+	 * What this glyph tells the renderer to add. The renderer keeps {@code (int) (returned + (bold ? 1 : 0))}.
+	 * Aligned, that whole-pixel step is the same number wrapping and hit-testing sum.
+	 */
+	private float arctic$returned(char c) {
+		if (!LegacySmoothFont.aligned()) {
+			float moved = LegacySmoothFont.advance(c);
+			if (bold) {
+				moved -= 1f - LegacySmoothFont.BOLD_THICKEN;
+			}
+			return obfuscated ? (float) Math.round(moved) : moved;
+		}
+		int step = LegacySmoothFont.step(c);
+		if (step < 0) {
+			return LegacySmoothFont.advance(c);
+		}
+		return com.arcticlauncher.client.feature.TextHit.glyphReturn(step, bold, LegacySmoothFont.BOLD_THICKEN);
+	}
+
+	/** Whole GUI pixels, the same step drawing moves the pen by. */
 	@Inject(method = "getCharWidth", at = @At("HEAD"), cancellable = true)
 	private void arctic$charWidth(char c, CallbackInfoReturnable<Integer> cir) {
 		if (c == '§' || !arctic$smooth()) {
 			return;
 		}
-		float advance = LegacySmoothFont.advance(c);
-		if (advance >= 0) {
-			cir.setReturnValue(Math.round(advance));
+		int step = LegacySmoothFont.step(c);
+		if (step >= 0) {
+			cir.setReturnValue(step);
 		}
 	}
 
-	/** The width the text is drawn at: Inter's exact spacing added up, formatting codes skipped. */
+	/**
+	 * The width the pen moves. With the metrics aligned, that is the sum of {@link LegacySmoothFont#step}
+	 * (bold's sub-pixel thicken does not survive the renderer's cast to int). The old path sums the raw
+	 * advances and rounds up, which is what clicks used to follow.
+	 */
 	@Inject(method = "getStringWidth", at = @At("HEAD"), cancellable = true)
 	private void arctic$stringWidth(String text, CallbackInfoReturnable<Integer> cir) {
 		if (text == null || !arctic$smooth()) {
+			return;
+		}
+		if (LegacySmoothFont.aligned()) {
+			int width = 0;
+			for (int i = 0; i < text.length(); i++) {
+				char c = text.charAt(i);
+				if (c == '§' && i + 1 < text.length()) {
+					i++;
+					continue;
+				}
+				int step = LegacySmoothFont.step(c);
+				width += step >= 0 ? step : Math.max(0, getCharWidth(c));
+			}
+			cir.setReturnValue(width);
 			return;
 		}
 		float width = 0;

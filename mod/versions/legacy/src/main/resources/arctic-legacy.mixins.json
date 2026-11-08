@@ -14,6 +14,8 @@
 		"KeyBindingMixin",
 		"InGameHudMixin",
 		"ChatHudMixin",
+		"ChatHitMixin",
+		"BookHitMixin",
 		"ClientPlayerEntityMixin",
 		"PlayerArmorSlotMixin",
 <% if (chunkOwn) { %>		"ChunkBordersLegacyMixin",
