@@ -38,6 +38,9 @@ enum Motion {
     Closing,
 }
 
+/// The open picture's file and what its header says: its size, or why it can't be shown.
+type OpenCheck = (PathBuf, Result<(u32, u32), String>);
+
 /// Whether the open screenshot can be drawn yet.
 enum Load {
     Ready,
@@ -51,6 +54,10 @@ const MOTION_SECS: f64 = 0.22;
 /// How long to wait for a picture that is still loading before showing the dialog (with a
 /// spinner) instead of the grow-out animation.
 const LOAD_PATIENCE_SECS: f64 = 1.5;
+
+/// A picture that still hasn't loaded after this long is given up on (an error instead of waiting
+/// for ever).
+const LOAD_GIVE_UP_SECS: f64 = 20.0;
 
 /// The dialog frame's inner margin (see `dialog_frame`).
 const DIALOG_PADDING: f32 = 22.0;
@@ -78,7 +85,7 @@ pub struct ScreenshotsUi {
     filter: Option<String>,
     open: Option<Shot>,
     /// Whether the open picture can be drawn at all, worked out once per opening.
-    open_check: Option<(PathBuf, Result<(), String>)>,
+    open_check: Option<OpenCheck>,
     loading: bool,
     /// When the list was last asked for (egui time), to look again now and then.
     asked: f64,
@@ -264,7 +271,7 @@ impl ArcticApp {
                 Ok((w, h)) if w > limit || h > limit => Err(format!(
                     "It is {w}×{h}, bigger than this graphics card can show ({limit} pixels a side)."
                 )),
-                Ok(_) => Ok(()),
+                Ok(size) => Ok(size),
                 Err(e) => Err(format!("The file can't be read as a picture ({e}).")),
             };
             self.shots.open_check = Some((path.to_path_buf(), verdict));
@@ -290,6 +297,40 @@ impl ArcticApp {
         screen.center() - vec2(0.0, extra / 2.0)
     }
 
+    /// How big the picture is drawn in `room`: its own shape (from the file's header, so it is the
+    /// same before and after the picture has loaded), as large as fits. The dialog is sized from
+    /// this, never from `room` itself: an unloaded picture must not leave a window-sized empty frame.
+    fn picture_size(&self, room: egui::Vec2, cell: Option<egui::Rect>) -> egui::Vec2 {
+        let aspect = match &self.shots.open_check {
+            Some((_, Ok((w, h)))) if *w > 0 && *h > 0 => *w as f32 / *h as f32,
+            _ => cell.map_or(16.0 / 9.0, |c| c.width() / c.height().max(1.0)),
+        };
+        fit_aspect(room, aspect)
+    }
+
+    /// "Opening the picture…" while it loads; Esc gives up on it.
+    fn loading_note(&mut self, ctx: &egui::Context) {
+        let p = self.palette();
+        egui::Area::new(Id::new("shot_loading"))
+            .order(egui::Order::Foreground)
+            .anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0))
+            .interactable(false)
+            .show(ctx, |ui| {
+                super::instances::dialog_frame(p).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(RichText::new("Opening the picture…").color(p.muted));
+                    });
+                });
+            });
+        ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+            self.shots.motion = Motion::Settled;
+            self.shots.open = None;
+            self.shots.cell = None;
+        }
+    }
+
     fn screenshot_preview(&mut self, ctx: &egui::Context) {
         let Some(shot) = self.shots.open.clone() else {
             return;
@@ -298,7 +339,12 @@ impl ArcticApp {
         let mut close = false;
         let uri = crate::widgets::file_uri(&shot.path);
         let room = ctx.content_rect().size() * vec2(0.9, 0.82) - vec2(0.0, 60.0);
-        let load = self.preview_load(ctx, &shot.path, &uri, room);
+        let mut load = self.preview_load(ctx, &shot.path, &uri, room);
+        let picture = self.picture_size(room, self.shots.cell);
+        let waited = ctx.input(|i| i.time) - self.shots.opened_at;
+        if matches!(load, Load::Pending) && waited > LOAD_GIVE_UP_SECS {
+            load = Load::Failed("It is taking too long to load.".to_owned());
+        }
         // The picture grows out of its cell only once it can really be drawn. A dim backdrop with
         // nothing on it (still loading, or unreadable) is what looked like a dark, dead screen.
         match (&load, self.shots.motion) {
@@ -318,6 +364,12 @@ impl ArcticApp {
                 return;
             }
             _ => self.shots.motion = Motion::Settled,
+        }
+        if matches!(load, Load::Pending) {
+            // No dialog (and no dim) for a picture that isn't here yet: a frame sized for it, with
+            // nothing in it, is what a dead screen looks like. A small note says it is coming.
+            self.loading_note(ctx);
+            return;
         }
         if matches!(self.shots.motion, Motion::Opening | Motion::Closing)
             && self.animate_preview(ctx, &uri)
@@ -357,11 +409,14 @@ impl ArcticApp {
                     let view_id = Id::new(("shot_view", &shot.path));
                     let (mut zoom, mut center): (f32, egui::Vec2) = ui
                         .data(|d| d.get_temp(view_id))
+                        .filter(|(z, c): &(f32, egui::Vec2)| {
+                            z.is_finite() && *z >= 1.0 && c.x.is_finite() && c.y.is_finite()
+                        })
                         .unwrap_or((1.0, vec2(0.5, 0.5)));
                     let half = 0.5 / zoom;
                     let image = ui.add(
                         egui::Image::new(uri.clone())
-                            .fit_to_exact_size(room)
+                            .fit_to_exact_size(picture)
                             .uv(egui::Rect::from_min_max(
                                 (center - vec2(half, half)).to_pos2(),
                                 (center + vec2(half, half)).to_pos2(),
@@ -472,12 +527,7 @@ impl ArcticApp {
         // Where the dialog's picture ends up: as large as the window allows, in its middle.
         let screen = ctx.content_rect();
         let room = screen.size() * vec2(0.9, 0.82) - vec2(0.0, 60.0);
-        let aspect = cell.width() / cell.height().max(1.0);
-        let fitted = if room.x / room.y > aspect {
-            vec2(room.y * aspect, room.y)
-        } else {
-            vec2(room.x, room.x / aspect)
-        };
+        let fitted = self.picture_size(room, Some(cell));
         let target = egui::Rect::from_center_size(self.dialog_picture_center(screen), fitted);
         let eased = 1.0 - (1.0 - t as f32).powi(3);
         let progress = if closing { 1.0 - eased } else { eased };
@@ -517,12 +567,7 @@ impl ArcticApp {
         }
         let screen = ctx.content_rect();
         let room = screen.size() * vec2(0.9, 0.82) - vec2(0.0, 60.0);
-        let aspect = cell.width() / cell.height().max(1.0);
-        let fitted = if room.x / room.y > aspect {
-            vec2(room.y * aspect, room.y)
-        } else {
-            vec2(room.x, room.x / aspect)
-        };
+        let fitted = self.picture_size(room, Some(cell));
         let rect = egui::Rect::from_center_size(self.dialog_picture_center(screen), fitted);
         let left = 1.0 - h as f32;
         egui::Area::new(Id::new("shot_handoff"))
@@ -585,6 +630,21 @@ impl ArcticApp {
     }
 }
 
+/// The biggest rectangle of shape `aspect` (width over height) that fits in `room`.
+fn fit_aspect(room: egui::Vec2, aspect: f32) -> egui::Vec2 {
+    let room = vec2(room.x.max(1.0), room.y.max(1.0));
+    let aspect = if aspect.is_finite() && aspect > 0.0 {
+        aspect
+    } else {
+        16.0 / 9.0
+    };
+    if room.x / room.y > aspect {
+        vec2(room.y * aspect, room.y)
+    } else {
+        vec2(room.x, room.x / aspect)
+    }
+}
+
 /// Most the picture can be magnified.
 const MAX_ZOOM: f32 = 12.0;
 
@@ -592,6 +652,11 @@ const MAX_ZOOM: f32 = 12.0;
 /// move around, double-click to see all of it again. `center` is the middle
 /// of what's shown, as a fraction of the whole picture.
 fn zoom_and_pan(ui: &egui::Ui, image: &egui::Response, zoom: &mut f32, center: &mut egui::Vec2) {
+    // A picture with no size yet (a zero-sized window) has nothing to zoom or drag: dividing by
+    // it would leave NaN in the view, and the picture would never draw again.
+    if image.rect.width() < 1.0 || image.rect.height() < 1.0 {
+        return;
+    }
     if image.double_clicked() {
         *zoom = 1.0;
         *center = vec2(0.5, 0.5);
@@ -666,5 +731,21 @@ impl ArcticApp {
             self.toasts
                 .push(Kind::Info, format!("Sending to {name}…"), "");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_picture_is_fitted_to_its_own_shape() {
+        let room = vec2(1000.0, 500.0);
+        assert_eq!(fit_aspect(room, 2.0), vec2(1000.0, 500.0));
+        assert_eq!(fit_aspect(room, 1.0), vec2(500.0, 500.0));
+        assert_eq!(fit_aspect(room, 4.0), vec2(1000.0, 250.0));
+        // Nonsense shapes and rooms never give a zero or NaN size.
+        let odd = fit_aspect(vec2(-5.0, 0.0), f32::NAN);
+        assert!(odd.x.is_finite() && odd.y.is_finite() && odd.x > 0.0 && odd.y > 0.0);
     }
 }

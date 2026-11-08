@@ -595,9 +595,10 @@ impl ModalCombo {
             content.x + 2.0 * margin.x,
             (content.y + 2.0 * margin.y).max(ui.spacing().interact_size.y),
         );
-        let rect = Rect::from_min_size(ui.cursor().min, outer);
+        // Placed by the layout, not at `cursor().min`: in a right-to-left row that is x = -infinity,
+        // and the control (and any dialog around it) would stretch off the window.
+        let (_, rect) = ui.allocate_space(outer);
         let response = ui.interact(rect, button_id, Sense::click());
-        ui.advance_cursor_after_rect(rect);
         response.widget_info(|| {
             let mut info = egui::WidgetInfo::new(egui::WidgetType::ComboBox);
             info.enabled = ui.is_enabled();
@@ -843,5 +844,42 @@ mod modal_combo_tests {
             show(ctx, &mut selected);
         });
         assert_eq!(selected, "1.8.9");
+    }
+    /// The screenshot preview puts "Send to…" in a right-to-left row of buttons. There the layout's
+    /// cursor starts at x = -infinity, so a control placed at the cursor stretched the dialog off
+    /// both sides of the window and pushed everything in it out of sight.
+    #[test]
+    fn a_menu_in_a_right_to_left_row_keeps_the_dialog_on_screen() {
+        let ctx = egui::Context::default();
+        let mut dialog = Rect::ZERO;
+        let mut button = Rect::ZERO;
+        for _ in 0..3 {
+            run_frame(&ctx, input(), |ctx| {
+                let modal = egui::Modal::new(Id::new("shot_preview")).show(ctx, |ui| {
+                    ui.allocate_exact_size(vec2(400.0, 200.0), egui::Sense::hover());
+                    ui.set_max_width(400.0);
+                    ui.horizontal(|ui| {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let _ = ui.button("Close");
+                            button = modal_combo("send_shot")
+                                .selected_text("Send to…")
+                                .show_ui(ui, |ui| ui.label("A friend"))
+                                .response
+                                .rect;
+                        });
+                    });
+                });
+                dialog = modal.response.rect;
+            });
+        }
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(900.0, 700.0));
+        assert!(
+            button.is_finite() && button.is_positive() && screen.contains_rect(button),
+            "menu control is off the dialog: {button:?}"
+        );
+        assert!(
+            dialog.is_finite() && screen.contains_rect(dialog),
+            "dialog is bigger than the window: {dialog:?}"
+        );
     }
 }
