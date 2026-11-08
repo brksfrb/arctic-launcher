@@ -1161,6 +1161,9 @@ impl ArcticApp {
                 self.bridge.update(&self.accounts, &self.tasks);
             }
             Event::LoginFinished(_, Err(e)) => {
+                // The raw text (HTTP codes, Azure app-id notes) is for the log; the dialog
+                // turns it into plain words and a next step.
+                log::warn!("sign-in failed: {e}");
                 if std::mem::take(&mut self.login_from_game) {
                     self.bridge
                         .set_login_status("failed", None, Some(e.as_str()));
