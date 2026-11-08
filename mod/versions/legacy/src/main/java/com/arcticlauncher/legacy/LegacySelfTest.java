@@ -53,6 +53,10 @@ final class LegacySelfTest {
 			LegacyHotbarScrollCheck.start();
 			return;
 		}
+		if (LegacyChatHitTest.requested()) {
+			LegacyChatHitTest.start();
+			return;
+		}
 		ArcticLegacy.LOG.info("selftest: scheduled ({})", mode);
 		int step = 3;
 		// Loads the player class (its mixins apply now) and looks up a tested player's tiers.

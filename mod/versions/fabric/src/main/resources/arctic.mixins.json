@@ -95,6 +95,8 @@
 <% } %>
 		"LightmapMixin",
 		"ChatComponentMixin",
+<% if (chatLine111) { %>		"ChatLine111Mixin",
+<% } %>
 <% if (crosshairHook) { %>		"HudCrosshairMixin",
 <% } %>		<% if (fireOverlay) { %>"ScreenEffectRendererMixin",<% } else { %>"FireOldMixin",<% } %>
 		"LevelWeatherMixin",
@@ -105,6 +107,7 @@
 		"TimeLockMixin",
 		"MultiPlayerGameModeMixin"<% } %><% if (oldCamera) { %>,
 		"GameRendererFovMixin"<% } %><% if (smoothFont) { %>,
+		"ChatLineMixin",
 		"PackRepositoryMixin",
 		"FontTextureMixin",
 		"TrueTypeDefinitionMixin",
