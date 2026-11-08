@@ -190,6 +190,8 @@ pub enum Event {
     LogSent(Outcome<String>),
     /// Other launchers looked through (the folder, if one was picked).
     MigrateScanned(Option<PathBuf>, crate::migrate_tasks::ScanResult),
+    /// The found instances' sizes, measured after the list was shown.
+    MigrateSized(std::collections::HashMap<String, arctic_core::migrate::Sizes>),
     MigrateProgress(String, ProgressSnapshot),
     MigrateItemDone(crate::migrate_tasks::Outcome),
     MigrateFinished,

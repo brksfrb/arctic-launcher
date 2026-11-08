@@ -1220,6 +1220,7 @@ impl ArcticApp {
             Event::MigrateScanned(folder, result) => {
                 self.on_migrate_scanned(folder.is_some(), result)
             }
+            Event::MigrateSized(sizes) => self.on_migrate_sized(sizes),
             Event::MigrateProgress(label, p) => self.on_migrate_progress(label, p),
             Event::MigrateItemDone(outcome) => self.on_migrate_item(outcome),
             Event::MigrateFinished => self.on_migrate_finished(),

@@ -585,6 +585,8 @@ fn fill(
         },
     ) in items.iter().enumerate()
     {
+        // "Cancel" in the launcher: stop between files; the half-made instance is removed.
+        crate::net::check_cancelled()?;
         let dest = rename_world(dest, &renames);
         let to = game_dir.join(&dest);
         if to.exists() {
