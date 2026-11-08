@@ -37,6 +37,8 @@ pub struct FriendsUi {
     name_edit: String,
     /// Where the player's own game went (for "Invite to my server").
     pub(crate) my_server: Option<String>,
+    /// The remove/decline icon waiting for its second click (row key, since).
+    confirm: Option<(String, f64)>,
     /// A recovery code just made (shown until the page is left).
     #[cfg(feature = "offline-accounts")]
     recovery_code: Option<String>,
@@ -526,8 +528,16 @@ impl ArcticApp {
                     RichText::new(format!("{} wants to be friends", person.name)).color(p.text),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if widgets::icon_button(ui, p, Icon::Close, "Decline").clicked() {
-                        act = Some(FriendAction::Remove(person.id.clone()));
+                    if widgets::confirm_icon_button(
+                        ui,
+                        p,
+                        Icon::Close,
+                        "Decline",
+                        "Decline?",
+                        &mut self.friends.confirm,
+                        &format!("decline:{}", person.id),
+                    ) {
+                        act = Some(FriendAction::Remove(person.id.clone(), "Request declined"));
                     }
                     if widgets::button(ui, p, Some(Icon::Check), "Accept", true).clicked() {
                         act = Some(FriendAction::Accept(person.id.clone()));
@@ -542,8 +552,16 @@ impl ArcticApp {
                         .small()
                         .color(p.muted),
                 );
-                if widgets::icon_button(ui, p, Icon::Close, "Cancel request").clicked() {
-                    act = Some(FriendAction::Remove(person.id.clone()));
+                if widgets::confirm_icon_button(
+                    ui,
+                    p,
+                    Icon::Close,
+                    "Cancel request",
+                    "Cancel?",
+                    &mut self.friends.confirm,
+                    &format!("cancel:{}", person.id),
+                ) {
+                    act = Some(FriendAction::Remove(person.id.clone(), "Request cancelled"));
                 }
             });
         }
@@ -592,8 +610,16 @@ impl ArcticApp {
                 );
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, p, Icon::Trash, "Remove friend").clicked() {
-                    act = Some(FriendAction::Remove(f.id.clone()));
+                if widgets::confirm_icon_button(
+                    ui,
+                    p,
+                    Icon::Trash,
+                    "Remove friend",
+                    &format!("Remove {}?", f.name),
+                    &mut self.friends.confirm,
+                    &format!("remove:{}", f.id),
+                ) {
+                    act = Some(FriendAction::Remove(f.id.clone(), "Friend removed"));
                 }
                 let chat = if f.unread > 0 {
                     format!("Chat ({})", f.unread)

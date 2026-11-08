@@ -12,8 +12,8 @@ use crate::tasks::{Event, Tasks};
 pub enum FriendAction {
     Request(String),
     Accept(String),
-    /// Decline, cancel or unfriend.
-    Remove(String),
+    /// Decline, cancel or unfriend; the text is the toast shown once it's done.
+    Remove(String, &'static str),
     Invite(String, InviteTo),
     Dismiss(String),
     Update(Option<String>, Settings),
@@ -165,9 +165,9 @@ impl Tasks {
                 friends::accept(&base, &token, id)?;
                 "Friend added".into()
             }
-            FriendAction::Remove(id) => {
+            FriendAction::Remove(id, done) => {
                 friends::remove(&base, &token, id)?;
-                String::new()
+                (*done).to_owned()
             }
             FriendAction::Invite(id, to) => {
                 friends::invite(&base, &token, id, to)?;
