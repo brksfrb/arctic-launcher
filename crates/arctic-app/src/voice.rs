@@ -54,7 +54,9 @@ impl Spot {
 /// What the game sends.
 #[derive(Deserialize)]
 struct GameState {
-    /// Server address; missing in singleplayer and menus.
+    /// Server address. Missing in the menus. `"Singleplayer"` in a
+    /// singleplayer world (no position comes with that). A multiplayer
+    /// report also carries `me`.
     server: Option<String>,
     me: Option<Spot>,
     #[serde(default)]
@@ -86,6 +88,9 @@ struct State {
     account: Option<Account>,
     session: Option<Session>,
     heard_game: Option<Instant>,
+    /// Where the game last said it was (`None` in the menus). Kept even
+    /// when voice chat itself is off: Discord status reads it.
+    place: Option<String>,
     status: String,
     /// The game changed who's muted; the launcher saves it.
     muted_changed: bool,
@@ -151,6 +156,7 @@ impl VoiceHub {
                 account: None,
                 session: None,
                 heard_game: None,
+                place: None,
                 status: String::new(),
                 muted_changed: false,
                 retry_at: None,
@@ -198,11 +204,36 @@ impl VoiceHub {
     }
 
     /// Stop if the game hasn't reported in a while (call now and then).
+    /// A quiet game also drops the server it last reported, so a crash
+    /// doesn't leave that address on Discord.
     pub fn tick(&self) {
         let mut st = lock(&self.state);
-        if st.session.is_some() && st.heard_game.is_none_or(|t| t.elapsed() > GAME_QUIET) {
+        let quiet = st.heard_game.is_none_or(|t| t.elapsed() > GAME_QUIET);
+        if !quiet {
+            return;
+        }
+        st.place = None;
+        if st.session.is_some() {
             self.stop(&mut st);
         }
+    }
+
+    /// Where the game last reported it was, over the local bridge.
+    /// `None` in the menus, before the first report, or after the game goes
+    /// quiet. `"Singleplayer"` or the address the player connected with.
+    pub fn reported_server(&self) -> Option<String> {
+        let st = lock(&self.state);
+        if st.heard_game.is_none_or(|t| t.elapsed() > GAME_QUIET) {
+            return None;
+        }
+        st.place.clone()
+    }
+
+    /// Forget the reported server (the game closed, or a new one is starting).
+    pub fn forget_place(&self) {
+        let mut st = lock(&self.state);
+        st.place = None;
+        st.heard_game = None;
     }
 
     /// What the voice section shows ("Connected to 3 players" …).
@@ -242,6 +273,13 @@ impl VoiceHub {
         };
         let mut st = lock(&self.state);
         st.heard_game = Some(Instant::now());
+        // Recorded whether or not voice chat is on. The menus send no server.
+        st.place = game
+            .server
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned);
         if let Some(uuid) = game.mute.as_deref() {
             toggle_mute(&mut st.settings.muted, uuid);
             st.muted_changed = true;
@@ -485,6 +523,34 @@ mod tests {
         let mut muted = Vec::new();
         toggle_mute(&mut muted, "not-a-uuid");
         assert!(muted.is_empty());
+    }
+
+    #[test]
+    fn game_report_remembers_the_server_without_voice_on() {
+        let dir = std::env::temp_dir().join(format!(
+            "arctic-voice-place-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos())
+        ));
+        let dirs = DataDirs::new(&dir);
+        let hub = VoiceHub::new(dirs, VoiceSettings::default());
+        assert!(hub.reported_server().is_none());
+        hub.game_state(br#"{"server":"Premium.BlocksMC.com","me":{"uuid":"a","x":0,"y":0,"z":0}}"#);
+        assert_eq!(
+            hub.reported_server().as_deref(),
+            Some("Premium.BlocksMC.com")
+        );
+        // Voice stays off: the default settings never open a room, but the
+        // address is still there for Discord.
+        assert!(lock(&hub.state).session.is_none());
+        hub.game_state(br"{}");
+        assert!(hub.reported_server().is_none());
+        hub.game_state(br#"{"server":"Singleplayer"}"#);
+        assert_eq!(hub.reported_server().as_deref(), Some("Singleplayer"));
+        hub.forget_place();
+        assert!(hub.reported_server().is_none());
     }
 
     #[test]
