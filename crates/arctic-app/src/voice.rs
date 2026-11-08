@@ -80,6 +80,8 @@ struct Session {
     members: Arc<Mutex<HashMap<String, (PeerId, Member)>>>,
     joined: Option<Instant>,
     joining: Arc<Mutex<bool>>,
+    /// Why the last room check-in failed (token refused, server down), until one works.
+    room_error: Arc<Mutex<Option<String>>>,
     svc: SvcSide,
 }
 
@@ -244,6 +246,10 @@ impl VoiceHub {
                 "Listening only: Arctic can't use your microphone. Check Windows Settings →                  Privacy → Microphone (\"Let desktop apps access your microphone\"), or pick                  another microphone below."
                     .into()
             }
+            Some(s) if lock(&s.room_error).is_some() => {
+                let e = lock(&s.room_error).clone().unwrap_or_default();
+                format!("Couldn't join the voice room: {e}")
+            }
             Some(s) => {
                 let n = lock(&s.members).len();
                 if n == 0 {
@@ -255,6 +261,21 @@ impl VoiceHub {
             None if !st.status.is_empty() => st.status.clone(),
             None if st.settings.enabled => "On: starts when you join a server".into(),
             None => "Off".into(),
+        }
+    }
+
+    /// The voice room could not be joined (and a Retry makes sense).
+    pub fn room_failed(&self) -> bool {
+        lock(&self.state)
+            .session
+            .as_ref()
+            .is_some_and(|s| lock(&s.room_error).is_some())
+    }
+
+    /// Check in to the room again now rather than at the next 20 s mark.
+    pub fn retry_room(&self) {
+        if let Some(s) = lock(&self.state).session.as_mut() {
+            s.joined = None;
         }
     }
 
@@ -426,6 +447,7 @@ impl VoiceHub {
             members,
             joined: None,
             joining: Arc::default(),
+            room_error: Arc::default(),
             svc,
         })
     }
@@ -446,11 +468,12 @@ impl VoiceHub {
             session.room.clone(),
             session.net.node().to_owned(),
         );
-        let (members, net, joining, engine) = (
+        let (members, net, joining, engine, room_error) = (
             session.members.clone(),
             session.net.clone(),
             session.joining.clone(),
             session.engine.clone(),
+            session.room_error.clone(),
         );
         let friends_only = settings.friends_only;
         std::thread::spawn(move || {
@@ -478,8 +501,12 @@ impl VoiceHub {
                         known.insert(m.node.clone(), (peer_id(&m.node), m));
                     }
                     net.set_peers(known.keys().cloned().collect::<Vec<_>>());
+                    *lock(&room_error) = None;
                 }
-                Err(e) => log::info!("voice room: {e}"),
+                Err(e) => {
+                    log::warn!("voice room: {e}");
+                    *lock(&room_error) = Some(e.to_string());
+                }
             }
             *lock(&joining) = false;
         });
