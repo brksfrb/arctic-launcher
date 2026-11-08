@@ -136,6 +136,8 @@ pub struct InstancesUi {
     pub loader_versions: HashMap<(LoaderKind, String), Load<Vec<LoaderVersion>>>,
     /// Worlds of the open instance.
     pub worlds: Option<(String, Vec<arctic_core::worlds::World>)>,
+    /// Trashed worlds of the instance `worlds` is for.
+    pub worlds_trash: Vec<arctic_core::worlds::TrashedWorld>,
     pub worlds_busy: bool,
     /// Replays of the open instance.
     pub replays: Option<(String, Vec<arctic_core::replays::Replay>)>,

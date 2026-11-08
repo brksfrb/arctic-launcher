@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use arctic_core::mods::packs::{self, PackKind, TrashedPack};
 use arctic_core::mods::{self, TrashedMod};
 use arctic_core::skins::Variant;
+use arctic_core::worlds::TrashedWorld;
 
 use crate::app::ArcticApp;
 use crate::toasts::Kind;
@@ -29,6 +30,11 @@ pub enum Undo {
         name: String,
         variant: Variant,
         png: Vec<u8>,
+    },
+    World {
+        instance_id: String,
+        saves: PathBuf,
+        trashed: TrashedWorld,
     },
 }
 
@@ -77,6 +83,11 @@ impl ArcticApp {
                     }
                 }
             }
+            Undo::World {
+                instance_id,
+                saves,
+                trashed,
+            } => self.restore_world(&instance_id, &saves, &trashed),
         }
     }
 }

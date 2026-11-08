@@ -98,6 +98,28 @@ fn trash_keeps_the_world() {
 }
 
 #[test]
+fn trashed_worlds_are_listed_and_come_back() {
+    let saves = tempfile::tempdir().unwrap();
+    make_world(saves.path(), "My-World", "My World");
+    let world = list(saves.path()).remove(0);
+    let gone = trash(&world, saves.path()).unwrap();
+    assert_eq!(gone.folder, "My-World");
+    let listed = trashed(saves.path());
+    assert_eq!(
+        listed,
+        vec![gone.clone()],
+        "the dash in the name survives parsing"
+    );
+    assert_eq!(listed[0].name, "My World");
+    // Another world took the folder meanwhile: the restored one gets " (2)".
+    make_world(saves.path(), "My-World", "Newer");
+    assert_eq!(restore(&gone, saves.path()).unwrap(), "My-World (2)");
+    assert!(trashed(saves.path()).is_empty());
+    let names: Vec<String> = list(saves.path()).into_iter().map(|w| w.name).collect();
+    assert!(names.contains(&"My World".to_owned()) && names.contains(&"Newer".to_owned()));
+}
+
+#[test]
 fn folder_names_are_safe() {
     let dir = tempfile::tempdir().unwrap();
     assert_eq!(free_name(dir.path(), "a/b:c"), "a_b_c");

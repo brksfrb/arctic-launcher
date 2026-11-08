@@ -7,7 +7,7 @@ use std::time::SystemTime;
 
 use arctic_core::instances::Instance;
 use arctic_core::launch::QuickPlay;
-use arctic_core::worlds::{self, Source, World};
+use arctic_core::worlds::{self, Source, TrashedWorld, World};
 use eframe::egui::{self, CornerRadius, Id, Modal, RichText, Sense, vec2};
 
 use crate::app::{ArcticApp, Tab};
@@ -78,6 +78,7 @@ impl ArcticApp {
                     ui.add_space(10.0);
                 });
             });
+            self.worlds_trash(ui, instance, &saves);
             return;
         }
         theme::card(p).show(ui, |ui| {
@@ -87,6 +88,7 @@ impl ArcticApp {
                 ui.add_space(4.0);
             }
         });
+        self.worlds_trash(ui, instance, &saves);
     }
 
     fn world_row(&mut self, ui: &mut egui::Ui, instance: &Instance, world: &World) {
@@ -122,13 +124,16 @@ impl ArcticApp {
                 ui.label(RichText::new(detail).small().color(p.muted));
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, p, Icon::Trash, "Move to trash").clicked() {
+                if widgets::icon_button(ui, p, Icon::Trash, "Move to trash (with Undo)").clicked() {
                     let saves = instance.game_dir(&self.dirs).join("saves");
                     match worlds::trash(world, &saves) {
-                        Ok(()) => self.toasts.push(
-                            Kind::Info,
+                        Ok(trashed) => self.toasts.push_undo(
                             format!("Moved {} to trash", world.name),
-                            "saves/.trash",
+                            crate::undo::Undo::World {
+                                instance_id: instance.id.clone(),
+                                saves,
+                                trashed,
+                            },
                         ),
                         Err(e) => {
                             self.toasts
@@ -163,6 +168,74 @@ impl ArcticApp {
     pub(super) fn refresh_worlds(&mut self, instance: &Instance) {
         let saves = instance.game_dir(&self.dirs).join("saves");
         self.inst.worlds = Some((instance.id.clone(), worlds::list(&saves)));
+        self.inst.worlds_trash = worlds::trashed(&saves);
+    }
+
+    /// Trashed worlds of this instance, each with a Restore button.
+    fn worlds_trash(&mut self, ui: &mut egui::Ui, instance: &Instance, saves: &std::path::Path) {
+        let trashed = self.inst.worlds_trash.clone();
+        if trashed.is_empty() {
+            return;
+        }
+        let p = self.palette();
+        ui.add_space(10.0);
+        egui::CollapsingHeader::new(
+            RichText::new(format!("Trash ({})", trashed.len())).color(p.muted),
+        )
+        .id_salt(("worlds_trash", &instance.id))
+        .show(ui, |ui| {
+            ui.label(
+                RichText::new("Worlds moved to the trash stay here until you delete them from the saves/.trash folder yourself.")
+                    .small()
+                    .color(p.muted),
+            );
+            for t in &trashed {
+                crate::widgets::row(ui, |ui| {
+                    ui.label(RichText::new(&t.name).color(p.text));
+                    let when = t
+                        .trashed_at
+                        .map(|s| SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(s));
+                    if when.is_some() {
+                        ui.label(
+                            RichText::new(format!("trashed {}", ago(when)))
+                                .small()
+                                .color(p.muted),
+                        );
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if widgets::button(ui, p, None, "Restore", false).clicked() {
+                            self.restore_world(&instance.id, saves, t);
+                        }
+                    });
+                });
+            }
+        });
+    }
+
+    /// Bring a trashed world back (Undo on the toast, or Restore in the Trash list).
+    pub(crate) fn restore_world(
+        &mut self,
+        instance_id: &str,
+        saves: &std::path::Path,
+        trashed: &TrashedWorld,
+    ) {
+        match worlds::restore(trashed, saves) {
+            Ok(folder) if folder == trashed.folder => {
+                self.toasts
+                    .push(Kind::Success, format!("{} is back", trashed.name), "")
+            }
+            Ok(folder) => self.toasts.push(
+                Kind::Success,
+                format!("{} is back", trashed.name),
+                format!("Another world had its folder, so it's now in {folder}."),
+            ),
+            Err(e) => self
+                .toasts
+                .push(Kind::Error, "Couldn't restore the world", e.to_string()),
+        }
+        if let Some(instance) = self.instance_by_id(instance_id).cloned() {
+            self.refresh_worlds(&instance);
+        }
     }
 
     fn open_import(&mut self, instance: &Instance) {
