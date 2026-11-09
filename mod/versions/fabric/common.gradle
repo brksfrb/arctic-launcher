@@ -384,6 +384,17 @@ processResources {
 	filesMatching(['fabric.mod.json', 'arctic.mixins.json']) {
 		expand props
 	}
+	// Fabric Loader alone does not expose a mod's assets to Minecraft. The client
+	// pack is always enabled on these versions, even without Fabric Resource Loader
+	// (e.g. performance mods off). Publish the badge fonts and their pictures there
+	// too, from the same sources, so name tags never fall back to missing glyphs.
+	if (atLeast('1.21.6')) {
+		from('../../core/src/main/resources') {
+			include 'assets/arctic/font/*.json'
+			include 'assets/arctic/textures/font/*.png'
+			into 'resourcepacks/client'
+		}
+	}
 	// The resource packs are 26.1+ (the effects pack 1.21.6+); older builds keep only the smooth font's
 	// Inter (and its licence).
 	if (!atLeast('1.21.6')) {
