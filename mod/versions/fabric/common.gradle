@@ -230,7 +230,15 @@ dependencies {
 				zip.close()
 			}
 		}
-		mappings files(mappingsJar)
+		// File dependencies all get the same "null.unspecified" Loom identity, even when the
+		// filename changes. Put the content hash in the dependency coordinates as well.
+		repositories.exclusiveContent {
+			forRepository {
+				repositories.flatDir { dirs mappingsJar.parentFile }
+			}
+			filter { includeGroup 'com.arcticlauncher.mappings' }
+		}
+		mappings "com.arcticlauncher.mappings:mappings-${mc}-${tinyHash}:1.0"
 	} else if (!atLeast('26.1')) {
 		mappings loom.officialMojangMappings()
 	}

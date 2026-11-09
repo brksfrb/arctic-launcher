@@ -21,7 +21,8 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 JAVAP = os.path.join(os.environ.get("JAVA_HOME", ""), "bin", "javap")
-LOOM = os.path.expanduser("~/.gradle/caches/fabric-loom/minecraftMaven/net/minecraft")
+LOOM = os.path.join(os.environ.get("GRADLE_USER_HOME", os.path.expanduser("~/.gradle")),
+                    "caches/fabric-loom/minecraftMaven/net/minecraft")
 # Methods a mixin target inherits from classes it doesn't declare; javap -p on
 # the target alone can't see them, so only these are looked up the hierarchy.
 MAX_SUPERS = 6
@@ -33,7 +34,7 @@ def jar_for(version):
     found += [j for j in glob.glob(f"{LOOM}/minecraft-merged-legacy*/{version}-*/*.jar")
               if not os.path.basename(os.path.dirname(os.path.dirname(j))).endswith("-intermediary")]
     found = [j for j in found if not j.endswith("-sources.jar")]
-    return found[0] if found else None
+    return max(found, key=os.path.getmtime) if found else None
 
 
 class Jar:

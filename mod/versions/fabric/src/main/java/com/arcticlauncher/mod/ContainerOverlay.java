@@ -1,4 +1,4 @@
-//#if MC >= 1.14
+//#if MC >= 1.13
 package com.arcticlauncher.mod;
 
 import com.arcticlauncher.client.ArcticClient;
@@ -13,7 +13,9 @@ public final class ContainerOverlay {
 	/** The search line and Shulker Peek over a container screen ({@code hovered}: the slot under the cursor, or null). */
 	public static void draw(GfxImpl g, Slot hovered, int mouseX, int mouseY) {
 		InventorySearch.seen();
+		//#if MC >= 1.14
 		com.arcticlauncher.mod.ContainerSort.hovered = hovered;
+		//#endif
 		if (ArcticClient.config() == null) {
 			return;
 		}

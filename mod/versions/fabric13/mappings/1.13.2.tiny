@@ -1231,7 +1231,7 @@ c	net/minecraft/class_1150	net/minecraft/world/level/Level
 	f	I	field_9212	seaLevel
 	f	Ljava/util/List;	field_9213	tickableBlockEntities
 	f	Lnet/minecraft/class_833;	field_9214	idToEntity
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	(Lnet/minecraft/class_2552;)Z	method_11475	isOutsideBuildHeight
 	m	(Lnet/minecraft/class_2552;)Lnet/minecraft/class_226;	method_11476	getPendingBlockEntityAt
 	m	(Lnet/minecraft/class_2552;)Z	method_11479	isInWorldBounds
@@ -1686,7 +1686,7 @@ c	net/minecraft/class_119	net/minecraft/block/ClayBlock
 c	net/minecraft/class_1190	net/minecraft/world/biome/EndBiome
 c	net/minecraft/class_1192	net/minecraft/world/gen/feature/LilyPadFeature
 c	net/minecraft/class_1193	net/minecraft/world/chunk/ChunkProvider
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	()Ljava/lang/String;	method_3872	getChunkProviderName
 c	net/minecraft/class_1194	net/minecraft/world/level/chunk/DataLayer
 	f	[B	field_4721	data
@@ -1856,7 +1856,7 @@ c	net/minecraft/class_1202	net/minecraft/world/level/chunk/storage/RegionFile
 c	net/minecraft/class_1202$class_1203	net/minecraft/world/chunk/RegionFileFormat$OutputStream
 	f	I	field_4776	chunkX
 	f	I	field_4777	chunkZ
-	m	()V	close	shutdown
+	m	()V	close	close
 c	net/minecraft/class_1204	net/minecraft/world/chunk/RegionIo
 	f	Ljava/util/Map;	field_4778	FORMATS
 	m	()V	method_3967	clearRegionFormats
@@ -3975,7 +3975,7 @@ c	net/minecraft/class_1635	net/minecraft/client/renderer/entity/LivingEntityRend
 c	net/minecraft/class_1635$1	net/minecraft/client/render/entity/LivingEntityRenderer$1
 c	net/minecraft/class_1636	net/minecraft/client/renderer/texture/DynamicTexture
 	f	Lnet/minecraft/class_4277;	field_20979	pixels
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	(Lnet/minecraft/class_4277;)V	method_19448	setPixels
 	m	()Lnet/minecraft/class_4277;	method_19449	getPixels
 	m	()V	method_5817	upload
@@ -4068,7 +4068,7 @@ c	net/minecraft/class_1645	net/minecraft/client/resources/LegacyResourcePackAdap
 	f	Ljava/util/Map;	field_21041	V3
 	f	Lnet/minecraft/class_4454;	field_21042	source
 	f	Ljava/util/Map;	field_21043	patches
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	(Lnet/minecraft/class_1653;)Lnet/minecraft/class_1653;	method_19551	toMetaLocation
 	m	()Lcom/google/common/collect/ImmutableMap;	method_19552	lambda$static$0
 	m	(Lnet/minecraft/class_1653;)Lnet/minecraft/class_1653;	method_19553	map
@@ -4085,17 +4085,17 @@ c	net/minecraft/class_1646$class_2527	net/minecraft/server/packs/resources/Fallb
 	f	Ljava/io/InputStream;	field_11259	wrapped
 	f	Ljava/lang/String;	field_11260	message
 	f	Z	field_11261	closed
-	m	()V	close	shutdown
+	m	()V	close	close
 c	net/minecraft/class_1647	net/minecraft/server/packs/FileResourcePack
 	f	Lcom/google/common/base/Splitter;	field_6611	SPLITTER
 	f	Ljava/util/zip/ZipFile;	field_6612	zipFile
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	()Ljava/util/zip/ZipFile;	method_5884	getOrCreateZipFile
 c	net/minecraft/class_1648	net/minecraft/server/packs/FolderResourcePack
 	f	Z	field_15320	ON_WINDOWS
 	f	Lcom/google/common/base/CharMatcher;	field_15321	BACKSLASH_MATCHER
 	f	Lorg/apache/logging/log4j/Logger;	field_21885	LOGGER
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	(Ljava/io/File;Ljava/lang/String;)Z	method_13885	validatePath
 	m	(Ljava/lang/String;)Ljava/io/File;	method_13886	getFile
 	m	(Ljava/io/File;ILjava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/util/function/Predicate;)V	method_21326	listResources
@@ -6050,7 +6050,7 @@ c	net/minecraft/class_1871	net/minecraft/client/renderer/EffectInstance
 	f	Ljava/util/List;	field_8035	attributeNames
 	f	Lnet/minecraft/class_1874;	field_8036	vertexProgram
 	f	Lnet/minecraft/class_1874;	field_8037	fragmentProgram
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	(Lcom/google/gson/JsonElement;)V	method_6932	parseSamplerNode
 	m	(Ljava/lang/String;)Lnet/minecraft/class_1877;	method_6933	getUniform
 	m	(Ljava/lang/String;Ljava/lang/Object;)V	method_6934	setSampler
@@ -6075,7 +6075,7 @@ c	net/minecraft/class_1872	net/minecraft/client/renderer/PostChain
 	f	I	field_8046	screenHeight
 	f	F	field_8047	time
 	f	F	field_8048	lastStamp
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	(Ljava/lang/String;)Lnet/minecraft/class_1862;	method_10309	getTempTarget
 	m	(F)V	method_6945	process
 	m	(II)V	method_6946	resize
@@ -6097,7 +6097,7 @@ c	net/minecraft/class_1873	net/minecraft/client/renderer/PostPass
 	f	Ljava/util/List;	field_8053	auxNames
 	f	Ljava/util/List;	field_8054	auxWidths
 	f	Ljava/util/List;	field_8055	auxHeights
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	(Lnet/minecraft/class_2546;)V	method_19443	setOrthoMatrix
 	m	(F)V	method_6956	process
 	m	(Ljava/lang/String;Ljava/lang/Object;II)V	method_6957	addAuxAsset
@@ -6143,7 +6143,7 @@ c	net/minecraft/class_1877	com/mojang/blaze3d/shaders/Uniform
 	f	Ljava/lang/String;	field_8076	name
 	f	Z	field_8077	dirty
 	f	Lnet/minecraft/class_1871;	field_8078	parent
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	()Ljava/lang/String;	method_6975	getName
 	m	(Ljava/lang/String;)I	method_6982	getTypeFromString
 	m	()V	method_6985	upload
@@ -10831,7 +10831,7 @@ c	net/minecraft/class_2552$class_2553	net/minecraft/core/BlockPos$MutableBlockPo
 c	net/minecraft/class_2552$class_2909	net/minecraft/core/BlockPos$PooledMutableBlockPos
 	f	Z	field_13716	free
 	f	Ljava/util/List;	field_13717	POOL
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	(Lnet/minecraft/class_864;)Lnet/minecraft/class_2552$class_2909;	method_12566	set
 	m	(DDD)Lnet/minecraft/class_2552$class_2909;	method_12567	acquire
 	m	(Lnet/minecraft/class_1354;)Lnet/minecraft/class_2552$class_2909;	method_12568	move
@@ -12363,7 +12363,7 @@ c	net/minecraft/class_2847	net/minecraft/client/gui/screens/worldselection/World
 	f	Ljava/io/File;	field_13368	iconFile
 	f	Lnet/minecraft/class_1636;	field_13369	icon
 	f	J	field_13370	lastClickTime
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	()V	method_12202	joinWorld
 	m	()V	method_12204	deleteWorld
 	m	()V	method_12206	editWorld
@@ -12538,7 +12538,7 @@ c	net/minecraft/class_2901	com/mojang/blaze3d/platform/PngInfo
 c	net/minecraft/class_2901$1	net/minecraft/client/class_2901$1
 c	net/minecraft/class_2901$class_4281	com/mojang/blaze3d/platform/PngInfo$StbReader
 	f	Z	field_21020	closed
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	(I)V	method_19502	skip
 	m	(J)I	method_19503	eof
 	m	(JI)V	method_19504	skip
@@ -18560,7 +18560,7 @@ c	net/minecraft/class_370	net/minecraft/client/gui/Font
 	f	Z	field_1152	bidirectional
 	f	Lnet/minecraft/class_4131;	field_20052	fonts
 	f	Lnet/minecraft/class_1532;	field_6286	textureManager
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	(C)F	method_18352	charWidth
 	m	(Lnet/minecraft/class_4136;ZZFFFLnet/minecraft/class_520;FFFF)V	method_18353	renderChar
 	m	(Ljava/util/List;)V	method_18354	reload
@@ -19326,7 +19326,7 @@ c	net/minecraft/class_382	net/minecraft/client/gui/MapRenderer
 	f	Lnet/minecraft/class_1653;	field_6296	MAP_ICONS_LOCATION
 	f	Lnet/minecraft/class_1532;	field_7707	textureManager
 	f	Ljava/util/Map;	field_7708	maps
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	(Lnet/minecraft/class_382$class_1800;)Lnet/minecraft/class_89;	method_13834	getData
 	m	(Ljava/lang/String;)Lnet/minecraft/class_382$class_1800;	method_13835	getMapInstanceIfExists
 	m	()V	method_6676	resetData
@@ -19341,7 +19341,7 @@ c	net/minecraft/class_382$class_1800	net/minecraft/client/gui/MapRenderer$MapIns
 	f	Lnet/minecraft/class_89;	field_7710	data
 	f	Lnet/minecraft/class_1636;	field_7711	texture
 	f	Lnet/minecraft/class_1653;	field_7712	location
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	(Lnet/minecraft/class_382$class_1800;)Lnet/minecraft/class_89;	method_13836	access$300
 	m	()V	method_6682	updateTexture
 	m	(Lnet/minecraft/class_382$class_1800;)V	method_6683	access$000
@@ -20981,7 +20981,7 @@ c	net/minecraft/class_4115	com/mojang/blaze3d/platform/VideoMode
 	m	()I	method_18286	getRefreshRate
 	m	()Ljava/lang/String;	method_18287	write
 c	net/minecraft/class_4116	com/mojang/blaze3d/platform/ScreenManager
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	(Lnet/minecraft/class_4117;)Lnet/minecraft/class_4111;	method_18290	findBestMonitor
 c	net/minecraft/class_4117	com/mojang/blaze3d/platform/Window
 	f	Lorg/apache/logging/log4j/Logger;	field_20026	LOGGER
@@ -21008,7 +21008,7 @@ c	net/minecraft/class_4117	com/mojang/blaze3d/platform/Window
 	f	Ljava/lang/String;	field_20048	errorSection
 	f	Z	field_20049	vsync
 	f	D	field_20050	lastDrawTime
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	(IJ)V	method_18295	defaultErrorCallback
 	m	(JII)V	method_18296	onMove
 	m	(JZ)V	method_18297	onFocus
@@ -21086,7 +21086,7 @@ c	net/minecraft/class_4131	net/minecraft/client/gui/font/FontSet
 	f	Lit/unimi/dsi/fastutil/chars/Char2ObjectMap;	field_20111	glyphInfos
 	f	Lit/unimi/dsi/fastutil/ints/Int2ObjectMap;	field_20112	glyphsByWidth
 	f	Ljava/util/List;	field_20113	textures
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	()V	method_18458	closeTextures
 	m	(C)Lnet/minecraft/class_4134;	method_18459	getGlyphInfo
 	m	(I)Lnet/minecraft/class_4136;	method_18460	lambda$getGlyph$3
@@ -21102,7 +21102,7 @@ c	net/minecraft/class_4132	net/minecraft/client/gui/font/FontTexture
 	f	Lnet/minecraft/class_1653;	field_20114	name
 	f	Z	field_20115	colored
 	f	Lnet/minecraft/class_4132$class_4133;	field_20116	root
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	()Lnet/minecraft/class_1653;	method_18469	getName
 	m	(Lnet/minecraft/class_4135;)Lnet/minecraft/class_4136;	method_18470	add
 c	net/minecraft/class_4132$class_4133	net/minecraft/client/gui/font/FontTexture$Node
@@ -21170,7 +21170,7 @@ c	net/minecraft/class_414	net/minecraft/client/gui/screens/inventory/CraftingScr
 	f	Lnet/minecraft/class_1653;	field_6308	CRAFTING_TABLE_LOCATION
 c	net/minecraft/class_414$1	net/minecraft/client/gui/screen/ingame/CraftingTableScreen$1
 c	net/minecraft/class_4142	com/mojang/blaze3d/font/GlyphProvider
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	(C)Lnet/minecraft/class_4135;	method_18486	getGlyph
 c	net/minecraft/class_4143	net/minecraft/client/gui/font/providers/GlyphProviderBuilder
 	m	(Lnet/minecraft/class_1654;)Lnet/minecraft/class_4142;	method_18487	create
@@ -21681,7 +21681,7 @@ c	net/minecraft/class_4218	net/minecraft/client/renderer/GameRenderer
 	f	I	field_20699	rainSoundTime
 	f	[F	field_20700	rainSizeZ
 	f	[F	field_20701	rainSizeX
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	()Z	method_19058	postEffectActive
 	m	(F)V	method_19059	pick
 	m	(FJ)V	method_19060	renderLevel
@@ -21810,7 +21810,7 @@ c	net/minecraft/class_4226	net/minecraft/client/renderer/LightTexture
 	f	F	field_20761	blockLightRedTotal
 	f	Lnet/minecraft/class_4218;	field_20762	renderer
 	f	Lnet/minecraft/class_1600;	field_20763	minecraft
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	()V	method_19170	tick
 	m	(F)V	method_19171	updateLightTexture
 	m	()V	method_19172	turnOffLightLayer
@@ -22182,7 +22182,7 @@ c	net/minecraft/class_4277	com/mojang/blaze3d/platform/NativeImage
 	f	Z	field_20990	useStbFree
 	f	J	field_20991	pixels
 	f	I	field_20992	size
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	()I	method_19458	getWidth
 	m	(II)I	method_19459	getPixelRGBA
 	m	(III)V	method_19460	setPixelRGBA
@@ -22374,7 +22374,7 @@ c	net/minecraft/class_430	net/minecraft/client/gui/screens/WinScreen
 	m	(IIF)V	method_1166	renderBg
 	m	()V	method_1167	respawn
 c	net/minecraft/class_4300	net/minecraft/class_4300
-	m	()V	close	shutdown
+	m	()V	close	close
 c	net/minecraft/class_4301	net/minecraft/class_4301
 c	net/minecraft/class_4301$class_4302	net/minecraft/class_4301$class_4302
 c	net/minecraft/class_4303	net/minecraft/class_4303
@@ -23953,7 +23953,7 @@ c	net/minecraft/class_4456	net/minecraft/server/packs/VanillaPack
 	f	Ljava/lang/Class;	field_21891	clientObject
 	f	Ljava/util/Set;	field_21892	namespaces
 	f	Lorg/apache/logging/log4j/Logger;	field_21893	LOGGER
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	(ILjava/lang/String;Ljava/nio/file/Path;Ljava/lang/String;Ljava/util/function/Predicate;)Ljava/util/Collection;	method_21332	getResources
 	m	(Ljava/lang/String;)Ljava/io/InputStream;	method_21333	getResourceAsStream
 	m	(Lnet/minecraft/class_4455;Lnet/minecraft/class_1653;)Ljava/io/InputStream;	method_21334	getResourceAsStream
@@ -24052,7 +24052,7 @@ c	net/minecraft/class_4469	net/minecraft/server/packs/resources/SimpleResource
 	f	Ljava/io/InputStream;	field_21933	metadataStream
 	f	Z	field_21934	triedMetadata
 	f	Lcom/google/gson/JsonObject;	field_21935	metadata
-	m	()V	close	shutdown
+	m	()V	close	close
 c	net/minecraft/class_447	net/minecraft/client/model/Polygon
 	f	[Lnet/minecraft/class_459;	field_1505	vertices
 	f	I	field_1506	vertexCount
@@ -25275,7 +25275,7 @@ c	net/minecraft/class_530	net/minecraft/client/renderer/LevelRenderer
 	f	D	field_7971	xTransparentOld
 	f	D	field_7972	yTransparentOld
 	f	Lorg/apache/logging/log4j/Logger;	field_7976	LOGGER
-	m	()V	close	shutdown
+	m	()V	close	close
 	m	()I	method_12338	countRenderedChunks
 	m	()Z	method_12339	hasRenderedAllChunks
 	m	(DDDDDDFFFF)V	method_13429	renderLineBox

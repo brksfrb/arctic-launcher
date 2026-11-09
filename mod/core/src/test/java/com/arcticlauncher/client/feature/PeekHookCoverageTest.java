@@ -40,4 +40,24 @@ class PeekHookCoverageTest {
 		assertTrue(json.contains("\"ContainerHoverAccess\""));
 		assertTrue(read("common.gradle").contains("recipeBookPeek: atLeast('1.21.6')"));
 	}
+	@Test
+	void oldestModernAdapterKeepsTheContainerOverlay() throws Exception {
+		assertTrue(read("src/main/java/com/arcticlauncher/mod/mixin/ContainerSearchMixin.java")
+				.startsWith("//#if MC >= 1.13"), "1.13 has shulker boxes too");
+		assertTrue(read("src/main/java/com/arcticlauncher/mod/ContainerOverlay.java")
+				.startsWith("//#if MC >= 1.13"));
+		String json = read("src/main/resources/arctic.mixins.json");
+		assertTrue(json.contains("<% } %>\t\t\"ContainerSearchMixin\""),
+				"the overlay must be registered outside the 1.14+ slot-lock hooks");
+	}
+
+	@Test
+	void legacyMappingsPreserveTheJdkCloseContract() throws Exception {
+		for (String line : read("../fabric13/mappings/1.13.2.tiny").split("\n")) {
+			if (line.startsWith("\tm\t()V\tclose\t")) {
+				assertTrue(line.endsWith("\tclose"), "AutoCloseable.close cannot be renamed: " + line);
+			}
+		}
+	}
+
 }
