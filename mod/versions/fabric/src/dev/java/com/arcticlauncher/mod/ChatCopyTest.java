@@ -2,6 +2,7 @@ package com.arcticlauncher.mod;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.feature.ChatCopyProof;
+import com.arcticlauncher.client.feature.ChatCopy;
 import com.arcticlauncher.client.menu.Menus;
 import java.io.PrintWriter;
 import java.util.concurrent.Executors;
@@ -50,6 +51,24 @@ final class ChatCopyTest {
 	private static void phase(int phase) {
 		try { if (log == null) log = ChatCopyProof.log(VERSION); }
 		catch (Exception error) { throw new RuntimeException(error); }
+		//#if MC >= 1.16
+		ChatCopy.Data owner = new ChatCopy.Data("style transformation regression", false);
+		Style original = Style.EMPTY.withInsertion("owned");
+		((ChatCopy.Tagged) (Object) original).arctic$copyData(owner);
+		for (Style changed : new Style[] {
+				original.withColor(net.minecraft.ChatFormatting.GREEN),
+				original.withBold(true).withItalic(true).withUnderlined(true),
+				original.withClickEvent(null).withHoverEvent(null).withFont(null),
+				original.withInsertion(null),
+				original.applyFormat(net.minecraft.ChatFormatting.BOLD),
+				original.applyLegacyFormat(net.minecraft.ChatFormatting.GREEN),
+				original.applyLegacyFormat(net.minecraft.ChatFormatting.RESET),
+				original.applyFormats(net.minecraft.ChatFormatting.GREEN, net.minecraft.ChatFormatting.RESET),
+				original.applyTo(Style.EMPTY)}) {
+			if (!owner.equals(ChatCopy.data(changed))) throw new AssertionError("style lost ownership");
+		}
+		if (ChatCopy.data(Style.EMPTY) != null) throw new AssertionError("global EMPTY was tagged");
+		//#endif
 		ArcticClient.config().chatCopy = true;
 		ArcticClient.config().chatTimestamps = phase % 2 == 0;
 		ArcticClient.config().chatStack = true;
@@ -102,6 +121,13 @@ final class ChatCopyTest {
 				public int height() { return mc.getWindow().getGuiScaledHeight(); }
 				public Object hit(int x, int y) { return ChatCopyInput.hit(x, y); }
 				public boolean click(int button, int x, int y, boolean shift) { return ChatCopyInput.click(button, x, y, shift); }
+				public boolean colored(int x, int y, Object style) {
+					//#if MC >= 1.16
+					return style != null && ((Style) style).getColor() != null && ((Style) style).getColor().getValue() == 0x55ff55;
+					//#else
+					return style != null && ((Style) style).getColor() == net.minecraft.ChatFormatting.GREEN;
+					//#endif
+				}
 				public String action(Object style) {
 					if (style == null || ((Style) style).getClickEvent() == null) return "";
 					//#if MC >= 1.21.5

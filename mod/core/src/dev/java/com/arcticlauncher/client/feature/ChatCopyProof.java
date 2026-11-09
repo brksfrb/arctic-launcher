@@ -27,6 +27,7 @@ public final class ChatCopyProof {
 		Object hit(int x, int y);
 		boolean click(int button, int x, int y, boolean shift);
 		String action(Object style);
+		boolean colored(int x, int y, Object style);
 	}
 
 	private ChatCopyProof() {}
@@ -34,12 +35,14 @@ public final class ChatCopyProof {
 	public static void check(Game game, PrintWriter log, String phase) {
 		Map<String, int[]> targets = new LinkedHashMap<>();
 		Map<String, int[]> bodies = new LinkedHashMap<>();
+		int[] colored = null;
 		Map<Integer, int[]> wrapped = new LinkedHashMap<>();
 		for (int y = Math.max(0, game.height() - 210); y < game.height() - 25; y += 3) {
 			for (int x = 3; x < Math.min(320, game.width()); x += 7) {
 				Object style = game.hit(x, y);
 				ChatCopy.Data data = ChatCopy.data(style);
 				if (data == null) continue;
+				if (!data.target && SHORT_PLAIN.equals(data.text) && game.colored(x, y, style)) colored = new int[] {x, y};
 				if (data.target) targets.put(data.text, new int[] {x, y});
 				else {
 					bodies.put(data.text, new int[] {x, y});
@@ -47,6 +50,9 @@ public final class ChatCopyProof {
 				}
 			}
 		}
+		require(colored != null, "visible green inline formatted text");
+		copy(game, colored, SHORT_PLAIN, true);
+		log.println("PASS " + phase + ": colored word at " + colored[0] + "," + colored[1] + " copied whole message via Shift+right-click");
 		for (String text : EXPECTED) {
 			int[] target = targets.get(text);
 			int[] body = bodies.get(text);
@@ -79,7 +85,7 @@ public final class ChatCopyProof {
 		config.chatCopy = true;
 		ArcticClient.saveConfig();
 		copy(game, targets.get(WRAP), WRAP, false);
-		log.println("PASS " + phase + ": six timestamp/copy targets, Shift+right-click, " + wrapped.size()
+		log.println("PASS " + phase + ": six timestamp/copy targets, green inline text Shift+right-click, " + wrapped.size()
 				+ " wrapped samples, formatting removed, literal suffix retained, stacked suffix excluded, URL/run_command/suggest_command preserved, toggle off/on; clipboard read back");
 		log.flush();
 	}

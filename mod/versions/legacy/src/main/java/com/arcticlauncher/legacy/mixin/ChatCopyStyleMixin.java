@@ -9,6 +9,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+/** Legacy setters (including color changes) mutate this style.
+ * Only copy/deepCopy allocate a replacement, so both must snapshot ownership.
+ */
 @Mixin(Style.class)
 abstract class ChatCopyStyleMixin implements ChatCopy.Tagged {
 	@Shadow private Style parent;

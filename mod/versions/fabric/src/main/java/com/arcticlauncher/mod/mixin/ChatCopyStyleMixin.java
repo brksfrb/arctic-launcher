@@ -25,13 +25,45 @@ abstract class ChatCopyStyleMixin implements ChatCopy.Tagged {
 	public void arctic$copyData(ChatCopy.Data data) { arctic$copyData = data; }
 
 	//#if MC >= 1.16
-	@Inject(method = "applyTo", at = @At("RETURN"))
+	@Inject(method = "applyTo", at = @At("RETURN"), cancellable = true)
 	private void arctic$inherit(Style parent, CallbackInfoReturnable<Style> cir) {
 		ChatCopy.Data data = arctic$copyData != null ? arctic$copyData : ChatCopy.data(parent);
-		if (data != null && cir.getReturnValue() != Style.EMPTY) {
-			((ChatCopy.Tagged) (Object) cir.getReturnValue()).arctic$copyData(data);
-		}
+		arctic$tag(cir, data);
 	}
+	@Inject(method = {"withColor", "withBold", "withItalic", "withUnderlined",
+			"withClickEvent", "withHoverEvent", "withInsertion", "withFont",
+			"applyFormat", "applyLegacyFormat", "applyFormats"
+			//#if MC >= 1.17
+			, "withStrikethrough", "withObfuscated"
+			//#endif
+			//#if MC >= 1.21.4
+			, "withShadowColor"
+			//#endif
+			//#if MC >= 1.21.11
+			, "withoutShadow"
+			//#endif
+	}, at = @At("RETURN"), cancellable = true)
+	private void arctic$transform(CallbackInfoReturnable<Style> cir) {
+		arctic$tag(cir, arctic$copyData);
+	}
+
+	@Unique
+	private void arctic$tag(CallbackInfoReturnable<Style> cir, ChatCopy.Data data) {
+		if (data == null) return;
+		Style result = cir.getReturnValue();
+		// RESET and removal of the last attribute can return the shared singleton.
+		// Give ownership its own empty style; never tag vanilla's global EMPTY.
+		if (result == Style.EMPTY) {
+			result = ChatCopyStyleAccess.arctic$empty(null,
+					//#if MC >= 1.21.4
+					null,
+					//#endif
+					null, null, null, null, null, null, null, null, null);
+			cir.setReturnValue(result);
+		}
+		((ChatCopy.Tagged) (Object) result).arctic$copyData(data);
+	}
+
 	//#else
 	@Inject(method = {"copy", "flatCopy"}, at = @At("RETURN"))
 	private void arctic$inherit(CallbackInfoReturnable<Style> cir) {

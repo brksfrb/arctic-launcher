@@ -99,6 +99,7 @@
 		"LightmapMixin",
 		"ChatComponentMixin",
 		"ChatCopyStyleMixin",
+		${chatCopyStyleAccess}
 <% if (chatLine111) { %>		"ChatLine111Mixin",
 <% } %>
 <% if (crosshairHook) { %>		"HudCrosshairMixin",

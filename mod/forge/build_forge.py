@@ -140,7 +140,7 @@ def build():
     # 1. The Forge flavour of the legacy build, in Yarn names.
     gradlew = MOD / ("gradlew.bat" if sys.platform == "win32" else "gradlew")
     run([str(gradlew), "-p", "versions/legacy", "build", "-q", f"-Pminecraft_version={MC}", f"-Pcovers={MC}",
-         "-Pforge=true", f"-Pforge_jar={forge_jar.as_posix()}", *sys.argv[1:]], cwd=MOD)
+         "-Pforge=true", f"-Pforge_jar={forge_jar.as_posix()}", *sys.argv[1:], "-PchatcopyDev=false"], cwd=MOD)
     dev_jar = MOD / f"versions/legacy/build/devlibs/arctic-forge-{MC}-1.0.0-dev.jar"
 
     # 2. Remap Yarn -> SRG.

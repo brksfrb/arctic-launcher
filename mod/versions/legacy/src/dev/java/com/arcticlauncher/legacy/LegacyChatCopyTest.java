@@ -82,6 +82,18 @@ final class LegacyChatCopyTest {
 				}
 				private int rawX(int x) { return x * window.getScaleFactor(); }
 				private int rawY(int y) { return (height() - y) * window.getScaleFactor(); }
+				public boolean colored(int x, int y, Object style) {
+					// Legacy hit-testing returns the literal's style; inline codes are
+					// interpreted by the renderer. Locate the green word by its advance.
+					int left = x;
+					while (left > 0) {
+						com.arcticlauncher.client.feature.ChatCopy.Data data = com.arcticlauncher.client.feature.ChatCopy.data(hit(left - 1, y));
+						if (data == null || data.target || !ChatCopyProof.SHORT_PLAIN.equals(data.text)) break;
+						left--;
+					}
+					int start = left + mc.textRenderer.getStringWidth("Plain chat: café ");
+					return x >= start + 2 && x < start + mc.textRenderer.getStringWidth("colored") - 2;
+				}
 				public String action(Object style) {
 					return style == null || ((Style) style).getClickEvent() == null ? "" : ((Style) style).getClickEvent().getAction().name();
 				}
