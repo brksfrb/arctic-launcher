@@ -136,7 +136,7 @@ abstract class ChatComponentMixin {
 		ClientConfig c = ArcticClient.config();
 		String text = message.getString();
 		ArcticClient.chatLine(text);
-		Component out = message;
+		Component out = com.arcticlauncher.mod.ChatCopyComponents.tag(message, text, false);
 		int arctic$count = c.chatStack ? arctic$stacker.next(text, c) : 1;
 		if (!c.chatStack) {
 			arctic$stacker.reset();
@@ -162,13 +162,15 @@ abstract class ChatComponentMixin {
 				rescaleChat();
 				//#endif
 			}
-			out = message.copy().append(com.arcticlauncher.mod.Compat.literal(" (x" + arctic$repeats + ")").withStyle(ChatFormatting.GRAY));
+			out = com.arcticlauncher.mod.ChatCopyComponents.tag(message, text, false).append(com.arcticlauncher.mod.ChatCopyComponents.tag(
+					com.arcticlauncher.mod.Compat.literal(" (x" + arctic$repeats + ")").withStyle(ChatFormatting.GRAY), text, false));
 		}
 		if (c.chatMentions && com.arcticlauncher.client.feature.Mentions.mentions(text, ArcticClient.platform().playerName())) {
 			// Side by side under a plain parent: as the parent, the marker's color
 			// would spread to every part of the message without its own.
 			out = com.arcticlauncher.mod.Compat.empty()
-					.append(com.arcticlauncher.mod.Compat.literal("» ").withStyle(ChatFormatting.YELLOW)).append(out);
+					.append(com.arcticlauncher.mod.ChatCopyComponents.tag(
+							com.arcticlauncher.mod.Compat.literal("» ").withStyle(ChatFormatting.YELLOW), text, false)).append(out);
 			ArcticClient.platform().mentionSound();
 		}
 		if (c.chatTimestamps) {
@@ -180,7 +182,12 @@ abstract class ChatComponentMixin {
 			if (c.chatStampItalic) {
 				stamp = stamp.withStyle(ChatFormatting.ITALIC);
 			}
-			out = com.arcticlauncher.mod.Compat.empty().append(stamp).append(out);
+			out = com.arcticlauncher.mod.Compat.empty()
+					.append(com.arcticlauncher.mod.ChatCopyComponents.tag(stamp, text, true)).append(out);
+		} else if (c.chatCopy) {
+			out = com.arcticlauncher.mod.Compat.empty()
+					.append(com.arcticlauncher.mod.ChatCopyComponents.tag(
+							com.arcticlauncher.mod.Compat.literal("[Copy] ").withStyle(ChatFormatting.DARK_GRAY), text, true)).append(out);
 		}
 		return out;
 	}

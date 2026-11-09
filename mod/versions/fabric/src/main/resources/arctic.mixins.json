@@ -98,6 +98,7 @@
 <% } %>
 		"LightmapMixin",
 		"ChatComponentMixin",
+		"ChatCopyStyleMixin",
 <% if (chatLine111) { %>		"ChatLine111Mixin",
 <% } %>
 <% if (crosshairHook) { %>		"HudCrosshairMixin",
@@ -111,6 +112,7 @@
 		"MultiPlayerGameModeMixin"<% } %><% if (oldCamera) { %>,
 		"GameRendererFovMixin"<% } %><% if (smoothFont) { %>,
 		"ChatLineMixin",
+		"ChatCopyScreenAccess",
 		"PackRepositoryMixin",
 		"TrueTypeDefinitionMixin",
 		"TrueTypeGlyphMixin",

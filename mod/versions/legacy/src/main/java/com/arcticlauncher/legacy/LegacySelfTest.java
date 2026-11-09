@@ -26,6 +26,10 @@ final class LegacySelfTest {
 
 	static void maybeStart() {
 		String mode = System.getProperty("arctic.selftest");
+		if ("chatcopy".equals(mode)) {
+			LegacyChatCopyTest.start();
+			return;
+		}
 		if (mode == null) {
 			return;
 		}

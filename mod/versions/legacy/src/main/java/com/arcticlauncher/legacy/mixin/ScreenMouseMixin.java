@@ -22,7 +22,16 @@ abstract class ScreenMouseMixin {
 
 	@Inject(method = "handleMouse", at = @At("HEAD"), cancellable = true)
 	private void arctic$noticeClick(CallbackInfo ci) {
-		if (!Mouse.getEventButtonState() || Mouse.getEventButton() != 0 || client == null) {
+		if (!Mouse.getEventButtonState() || client == null) {
+			return;
+		}
+		if (com.arcticlauncher.legacy.LegacyChatCopy.click(Mouse.getEventButton(), Mouse.getEventX(), Mouse.getEventY(),
+				org.lwjgl.input.Keyboard.isKeyDown(org.lwjgl.input.Keyboard.KEY_LSHIFT)
+						|| org.lwjgl.input.Keyboard.isKeyDown(org.lwjgl.input.Keyboard.KEY_RSHIFT))) {
+			ci.cancel();
+			return;
+		}
+		if (Mouse.getEventButton() != 0) {
 			return;
 		}
 		double x = Mouse.getEventX() * width / (double) Math.max(1, client.width);
