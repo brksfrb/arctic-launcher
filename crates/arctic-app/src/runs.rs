@@ -487,9 +487,10 @@ impl ArcticApp {
                     }
                     self.playtime = arctic_core::playtime::Stats::load(&self.dirs);
                 }
-                let froze = (fresh_hang_dump(&run.game_dir, run.started).is_some()
-                    || crash::freeze_evidence(&run.crash_text()))
-                    && newest_crash_report(&run.game_dir, run.started).is_none()
+                let froze = crash::freeze_evidence(
+                    &fresh_hang_dump(&run.game_dir, run.started)
+                        .unwrap_or_else(|| run.crash_text()),
+                ) && newest_crash_report(&run.game_dir, run.started).is_none()
                     && newest_hs_err(&run.game_dir, run.started).is_none();
                 let diagnosis = match code {
                     Some(c) if c != 0 && !watchdog && froze => Some(Diagnosis {

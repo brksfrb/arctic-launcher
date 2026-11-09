@@ -49,7 +49,6 @@ public final class ArcticClient {
 
 	public static void init(Platform p) {
 		CrashDiagnostics.start();
-		CrashDiagnostics.testHook(p);
 		com.arcticlauncher.client.looks.OsTrust.installDefault();
 		platform = p;
 		com.arcticlauncher.client.config.RunningLock.hold(p.configDir());
