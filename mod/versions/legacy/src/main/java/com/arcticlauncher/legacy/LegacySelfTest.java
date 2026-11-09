@@ -44,7 +44,12 @@ final class LegacySelfTest {
 			LegacyKeysTest.start();
 			return;
 		}
-		if ("ctm".equals(System.getProperty("arctic.selftest"))) { GlassCtmTest.start(); return; }
+		if ("ctm".equals(System.getProperty("arctic.selftest"))) {
+			//#if DEV_SCENES
+			GlassCtmTest.start();
+			//#endif
+			return;
+		}
 		if (LegacyWorldTest.requested()) {
 			LegacyWorldTest.start();
 			return;
