@@ -25,6 +25,10 @@ final class LegacySelfTest {
 	private LegacySelfTest() {}
 
 	static void maybeStart() {
+		if ("nametagproof".equals(System.getProperty("arctic.selftest"))) {
+			LegacyNametagProof.start();
+			return;
+		}
 		String mode = System.getProperty("arctic.selftest");
 		if (mode == null) {
 			return;

@@ -49,6 +49,10 @@ final class SelfTest {
 	private SelfTest() {}
 
 	static void maybeStart() {
+		if ("nametagproof".equals(System.getProperty("arctic.selftest"))) {
+			NametagProof.start();
+			return;
+		}
 		//#if MC >= 1.19.4
 		if ("title-compat".equals(System.getProperty("arctic.selftest"))) {
 			TitleCompatTest.start();
