@@ -5,7 +5,11 @@ import com.arcticlauncher.client.replay.Replays;
 import java.util.HashSet;
 import java.util.Set;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
+//#if MC < 1.15
+import net.minecraft.client.renderer.culling.Culler;
+//#else
 import net.minecraft.client.renderer.culling.Frustum;
+//#endif
 import net.minecraft.world.entity.Entity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -20,7 +24,13 @@ abstract class ReplayEntityRendererMixin {
 	private final Set<Class<?>> arctic$missingReplayRenderers = new HashSet<Class<?>>();
 
 	@Inject(method = "shouldRender", at = @At("HEAD"), cancellable = true)
-	private void arctic$skipMissingReplayRenderer(Entity entity, Frustum frustum, double x, double y, double z,
+	private void arctic$skipMissingReplayRenderer(Entity entity,
+			//#if MC < 1.15
+			Culler frustum,
+			//#else
+			Frustum frustum,
+			//#endif
+			double x, double y, double z,
 			//#if MC >= 26.3
 			float partialTick,
 			//#endif
