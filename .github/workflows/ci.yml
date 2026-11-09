@@ -135,7 +135,22 @@ jobs:
         env:
           # v2: abandon a cache poisoned by a flaky run (missing gson/kotlin-metadata jars)
           GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: gradle-v2
-      - run: chmod +x mod/gradlew && python3 mod/check.py ${{ matrix.version }}
+      - name: Compile and check mod hooks
+        shell: bash
+        run: |
+          chmod +x mod/gradlew
+          status=0
+          python3 mod/check.py ${{ matrix.version }} 2>&1 | tee "$RUNNER_TEMP/mod-check.log" || status=$?
+          if [ "$status" != 0 ]; then
+            python3 - <<'PYTHON'
+          import os
+          from pathlib import Path
+          tail = Path(os.environ["RUNNER_TEMP"]).joinpath("mod-check.log").read_text(errors="replace")[-7000:]
+          tail = tail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print("::error title=Mod check failure::" + tail)
+          PYTHON
+          fi
+          exit "$status"
         env:
           ARCTIC_GRADLE_FLAGS: ${{ inputs.gradle }}
       - name: Probe a game class
