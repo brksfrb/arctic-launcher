@@ -740,6 +740,14 @@ impl Tasks {
         });
     }
 
+    pub fn mod_gallery_image(&self, url: String) {
+        self.run(move |t| {
+            let result = mods::gallery_image(&url, &t.dirs.cache().join("gallery"))
+                .map_err(|e| e.to_string());
+            t.send(Event::ModIcon(url, result));
+        });
+    }
+
     pub fn mod_icon(&self, url: String) {
         self.run(move |t| {
             let result = mods::icon(&url, &t.dirs.cache().join("icons")).map_err(|e| e.to_string());
