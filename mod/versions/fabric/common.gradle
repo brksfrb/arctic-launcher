@@ -269,6 +269,13 @@ processResources {
 	def props = [
 			chatCopyStyleAccess: atLeast('1.16') ? '"ChatCopyStyleAccess",' : '',
 			version: project.version,
+			ctmContents: atLeast('1.19.3'),
+			ctmSodium: atLeast('1.21'),
+			ctmSodiumContext: atLeast('1.17') && !atLeast('1.21.5'),
+			ctmSodiumOld: atLeast('1.16') && !atLeast('1.21'),
+			ctmQuadAccess: !atLeast('1.21.5'),
+			ctmInfo: atLeast('1.15'),
+			ctmSpriteAccess: atLeast('1.14') && !atLeast('1.15'),
 			minecraft_range: minecraftRange,
 			java: javaVersion,
 			loader_min: loaderMin,
