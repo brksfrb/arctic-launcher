@@ -95,7 +95,8 @@ pub fn spawn(
         priority::boost(&mut cmd);
         cmd.spawn()
     };
-    let exe = game_exe(plan);
+    let mut exe = game_exe(plan);
+    let started = std::time::Instant::now();
     let mut child = match start(&exe) {
         Ok(child) => child,
         // The branded copy would not start: run the runtime's own Java.
@@ -105,6 +106,8 @@ pub fn spawn(
                 exe.display(),
                 plan.java.display()
             );
+            exe = plan.java.clone();
+            crate::gpu_preference::apply(&exe, plan.high_performance_gpu);
             match start(&plan.java) {
                 Ok(child) => child,
                 Err(e) => {
@@ -123,6 +126,27 @@ pub fn spawn(
             return Err(crate::Error::io(&plan.java, e));
         }
     };
+    let launch_context = format!(
+        "[Arctic diagnostics] runtime: agent={}; executable={}; high_performance_gpu={}",
+        plan.args
+            .iter()
+            .any(|a| a.starts_with("-javaagent:") && a.contains("arctic")),
+        if exe == plan.java {
+            "runtime java"
+        } else {
+            "branded Arctic Client"
+        },
+        plan.high_performance_gpu
+    );
+    let launch_context = format!(
+        "{launch_context}; {}",
+        crate::gpu_preference::diagnostics(&exe)
+    );
+    writeln!(log.lock().unwrap(), "{launch_context}").ok();
+    on_event(GameEvent::Output(vec![LogLine {
+        level: super::logparse::Level::Info,
+        text: launch_context,
+    }]));
     if plan.maximize_window {
         super::game_window::maximize_when_open(child.id());
     }
@@ -141,14 +165,10 @@ pub fn spawn(
                 ready: &ready,
             };
             tee_output(stream, &log, seen, &secrets, &*on_event)
-        });
+        })
     };
-    if let Some(out) = child.stdout.take() {
-        tee(Box::new(out));
-    }
-    if let Some(err) = child.stderr.take() {
-        tee(Box::new(err));
-    }
+    let out_reader = child.stdout.take().map(|out| tee(Box::new(out)));
+    let err_reader = child.stderr.take().map(|err| tee(Box::new(err)));
 
     let kill = Arc::new(AtomicBool::new(false));
     let handle = GameHandle {
@@ -156,9 +176,16 @@ pub fn spawn(
         kill: kill.clone(),
     };
     let game_dir = plan.game_dir.clone();
+    let log_path = plan.log_file.clone();
     std::thread::spawn(move || {
         let code = loop {
             if kill.swap(false, Ordering::Relaxed) {
+                let message = "[Arctic diagnostics] launcher force-close requested";
+                writeln!(log.lock().unwrap(), "{message}").ok();
+                on_event(GameEvent::Output(vec![LogLine {
+                    level: super::logparse::Level::Info,
+                    text: message.into(),
+                }]));
                 let _ = child.kill();
             }
             match child.try_wait() {
@@ -170,6 +197,29 @@ pub fn spawn(
                 }
             }
         };
+        for reader in [out_reader, err_reader].into_iter().flatten() {
+            let _ = reader.join();
+        }
+        if let Some(c) = code {
+            let summary = format!(
+                "[Arctic diagnostics] process ended after {} ms; exit code {}",
+                started.elapsed().as_millis(),
+                crate::crash::exit_description(c)
+            );
+            writeln!(log.lock().unwrap(), "{summary}").ok();
+            on_event(GameEvent::Output(vec![LogLine {
+                level: super::logparse::Level::Info,
+                text: summary,
+            }]));
+        }
+        if code.is_some_and(|c| c != 0) && started.elapsed() < Duration::from_secs(5) {
+            let probe = runtime_probe(&exe);
+            writeln!(log.lock().unwrap(), "{probe}").ok();
+            on_event(GameEvent::Output(vec![LogLine {
+                level: super::logparse::Level::Info,
+                text: probe,
+            }]));
+        }
         if code.is_some_and(|c| c != 0) {
             super::startup_cache::drop_pack(&game_dir);
         }
@@ -177,9 +227,78 @@ pub fn spawn(
             // It holds the access token: gone with the game.
             let _ = std::fs::remove_file(file);
         }
+        // Keep startup output and diagnostic markers even after the UI's ring buffer rolls over.
+        if let Ok(file) = File::open(&log_path) {
+            let mut evidence = String::new();
+            let mut initial = 0;
+            for line in BufReader::new(file)
+                .lines()
+                .map_while(std::result::Result::ok)
+            {
+                let keep = line.contains("[Arctic diagnostics]")
+                    || line.contains("pack metadata")
+                    || line.contains("Missing metadata in pack")
+                    || line.contains("MalformedJsonException") && line.contains("$.pack");
+                if initial < 2048 || keep {
+                    initial += line.len();
+                    if evidence.len() < 64 * 1024 {
+                        evidence.push_str(&line);
+                        evidence.push('\n');
+                    }
+                }
+            }
+            let _ = std::fs::write(game_dir.join("arctic-launch-diagnostics.txt"), &evidence);
+            on_event(GameEvent::Output(vec![LogLine {
+                level: super::logparse::Level::Info,
+                text: evidence,
+            }]));
+        }
         on_event(GameEvent::Exited { code });
     });
     Ok(handle)
+}
+
+/// Bounded and invisible: same executable, no game or account arguments.
+fn runtime_probe(exe: &Path) -> String {
+    let mut cmd = Command::new(exe);
+    cmd.arg("-version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    let result = (|| -> std::io::Result<String> {
+        let mut probe = cmd.spawn()?;
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        loop {
+            if probe.try_wait()?.is_some() {
+                let out = probe.wait_with_output()?;
+                let output = format!(
+                    "{}{}",
+                    String::from_utf8_lossy(&out.stdout),
+                    String::from_utf8_lossy(&out.stderr)
+                );
+                return Ok(format!(
+                    "status={}; {}",
+                    out.status,
+                    crate::crash::scrubbed_tail(&output, 2048).replace('\n', " | ")
+                ));
+            }
+            if std::time::Instant::now() >= deadline {
+                let _ = probe.kill();
+                let _ = probe.wait();
+                return Ok("timed out after 3 s".into());
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    })();
+    format!(
+        "[Arctic diagnostics] same-runtime java -version: {}",
+        result.unwrap_or_else(|e| format!("failed: {e}"))
+    )
 }
 
 /// The game's exit code; a game the system stopped with a signal (Linux, macOS) counts as 128 plus the

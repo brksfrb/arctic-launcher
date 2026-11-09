@@ -41,6 +41,19 @@ pub fn apply(exe: &Path, prefer: bool) {
     }
 }
 
+/// Read the preference for the executable actually spawned, rather than inferring it from settings.
+pub fn diagnostics(exe: &Path) -> String {
+    #[cfg(windows)]
+    {
+        windows::diagnostics(exe)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = exe;
+        "GPU registry preference: not applicable".into()
+    }
+}
+
 /// PCI vendor id of NVIDIA graphics cards.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 const NVIDIA: u16 = 0x10de;
@@ -167,9 +180,22 @@ mod windows {
         }
         let key = Key(handle);
         let current = read(&key, &name)?;
+        log::info!(
+            "GPU preference for {}: before={:?}; requested high performance={prefer}",
+            exe.display(),
+            current
+        );
+
         match (prefer, current.as_deref()) {
             // Not chosen yet: the high-performance card.
-            (true, None) => write(&key, &name),
+            (true, None) => {
+                let result = write(&key, &name);
+                log::info!(
+                    "GPU preference for {}: write GpuPreference=2 result={result:?}",
+                    exe.display()
+                );
+                result
+            }
             // Taken back only if it's what we'd have set (not another choice the player made).
             (false, Some(HIGH_PERFORMANCE)) => {
                 let status = unsafe { RegDeleteValueW(key.0, name.as_ptr()) };
@@ -181,6 +207,52 @@ mod windows {
             }
             _ => Ok(()),
         }
+    }
+
+    pub(super) fn diagnostics(exe: &Path) -> String {
+        use windows_sys::Win32::Graphics::Gdi::{
+            DISPLAY_DEVICE_MIRRORING_DRIVER, DISPLAY_DEVICEW, EnumDisplayDevicesW,
+        };
+        use windows_sys::Win32::System::Registry::RegOpenKeyExW;
+        let mut handle: HKEY = null_mut();
+        let status = unsafe {
+            RegOpenKeyExW(
+                HKEY_CURRENT_USER,
+                wide(std::ffi::OsStr::new(KEY)).as_ptr(),
+                0,
+                KEY_QUERY_VALUE,
+                &mut handle,
+            )
+        };
+        let preference = if status == ERROR_SUCCESS {
+            format!("{:?}", read(&Key(handle), &wide(exe.as_os_str())))
+        } else {
+            format!("registry unavailable ({status})")
+        };
+        let mut adapters = Vec::new();
+        for index in 0..64 {
+            let mut device = DISPLAY_DEVICEW {
+                cb: std::mem::size_of::<DISPLAY_DEVICEW>() as u32,
+                ..Default::default()
+            };
+            if unsafe { EnumDisplayDevicesW(null(), index, &mut device, 0) } == 0 {
+                break;
+            }
+            if device.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER != 0 {
+                continue;
+            }
+            let end = device
+                .DeviceString
+                .iter()
+                .position(|c| *c == 0)
+                .unwrap_or(device.DeviceString.len());
+            adapters.push(String::from_utf16_lossy(&device.DeviceString[..end]));
+        }
+        format!(
+            "GPU registry preference for spawned exe: {preference}; display adapters={} [{}] (display devices, not a physical GPU inventory)",
+            adapters.len(),
+            adapters.join(", ")
+        )
     }
 
     fn read(key: &Key, name: &[u16]) -> Result<Option<String>, u32> {
