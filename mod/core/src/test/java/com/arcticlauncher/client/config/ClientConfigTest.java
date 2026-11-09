@@ -20,6 +20,16 @@ class ClientConfigTest {
 	}
 
 	@Test
+	void chatCopyDefaultsOnForOldConfigsAndPersistsOff() throws Exception {
+		assertTrue(ClientConfig.load(dir.toFile()).chatCopy);
+		ClientConfig c = load("{}");
+		assertTrue(c.chatCopy);
+		c.chatCopy = false;
+		assertEquals(null, c.save());
+		assertFalse(ClientConfig.load(dir.toFile()).chatCopy);
+	}
+
+	@Test
 	void aNewConfigStartsWithTheTileOff() {
 		ClientConfig c = ClientConfig.load(dir.toFile());
 		assertFalse(c.combatFeedback);

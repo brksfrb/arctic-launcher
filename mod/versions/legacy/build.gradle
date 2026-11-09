@@ -33,6 +33,7 @@ def atLeast = { String v -> compareVersions(mc, v) >= 0 }
 /** "MC >= 26.1 && MC < 26.3": comparisons joined by && or ||. */
 def evalCondition
 evalCondition = { String expr ->
+	if (expr == 'DEV') return project.findProperty('chatcopyDev') == 'true'
 	if (expr.contains('||')) {
 		return expr.split(/\|\|/).any { evalCondition(it.trim()) }
 	}
@@ -121,15 +122,20 @@ tasks.register('preprocessJava') {
 	doLast {
 		def outDir = preprocessedJava.get().asFile
 		project.delete(outDir)
-		def root = file('src/main/java')
-		root.eachFileRecurse(groovy.io.FileType.FILES) { f ->
-			def rel = root.toPath().relativize(f.toPath()).toString()
-			def target = new File(outDir, rel)
-			if (forge && (forgeReplaced.contains(f.name) || forgeSkipped.contains(f.name))) {
-				return
+		// Proof harnesses are opt-in; mod/build.py always forces this off for releases.
+		def roots = ['src/main/java']
+		if (project.findProperty('chatcopyDev') == 'true') roots += ['src/dev/java', '../../core/src/dev/java']
+		roots.each { source ->
+			def root = file(source)
+			root.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+				def rel = root.toPath().relativize(f.toPath()).toString()
+				def target = new File(outDir, rel)
+				if (forge && (forgeReplaced.contains(f.name) || forgeSkipped.contains(f.name))) {
+					return
+				}
+				target.parentFile.mkdirs()
+				target.text = applyRenames(preprocessSource(f.getText('UTF-8'), rel))
 			}
-			target.parentFile.mkdirs()
-			target.text = applyRenames(preprocessSource(f.getText('UTF-8'), rel))
 		}
 		if (forge) {
 			def forgeRoot = file('src/forge/java')

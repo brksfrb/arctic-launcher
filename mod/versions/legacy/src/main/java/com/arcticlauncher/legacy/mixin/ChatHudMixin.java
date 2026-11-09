@@ -63,6 +63,7 @@ abstract class ChatHudMixin {
 	@ModifyVariable(method = "addMessage(Lnet/minecraft/text/Text;I)V", at = @At("HEAD"), argsOnly = true)
 	private Text arctic$chat(Text message) {
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
+		String source = message.asUnformattedString();
 		Text base = message;
 		if (c != null && c.chatStack) {
 			int count = arctic$stacker.next(message.asUnformattedString(), c);
@@ -75,6 +76,6 @@ abstract class ChatHudMixin {
 		} else {
 			arctic$stacker.reset();
 		}
-		return LegacyHooks.chat(base);
+		return LegacyHooks.chat(base, source);
 	}
 }

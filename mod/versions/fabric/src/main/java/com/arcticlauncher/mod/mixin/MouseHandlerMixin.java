@@ -22,7 +22,7 @@ abstract class MouseHandlerMixin {
 	//#if MC >= 1.21.9
 	@Inject(method = "onButton", at = @At("HEAD"), cancellable = true)
 	private void arctic$click(long window, MouseButtonInfo info, int action, CallbackInfo ci) {
-		if (noticeClicked(action)) {
+		if (copyClicked(info.button(), action) || noticeClicked(action)) {
 			ci.cancel();
 			return;
 		}
@@ -31,7 +31,7 @@ abstract class MouseHandlerMixin {
 	//#else
 	@Inject(method = "onPress", at = @At("HEAD"), cancellable = true)
 	private void arctic$click(long window, int button, int action, int modifiers, CallbackInfo ci) {
-		if (noticeClicked(action)) {
+		if (copyClicked(button, action) || noticeClicked(action)) {
 			ci.cancel();
 			return;
 		}
@@ -66,7 +66,16 @@ abstract class MouseHandlerMixin {
 	}
 	//#endif
 
-	/** A click on a pop-up's button (Copy on a screenshot) while a screen frees the mouse. */
+	/** Dedicated chat target, or Shift + right-click on a message. */
+	private static boolean copyClicked(int button, int action) {
+		if (action != com.arcticlauncher.mod.compat.KeyCodes.PRESS) {
+			return false;
+		}
+		double[] at = Compat.guiMouse();
+		return com.arcticlauncher.mod.ChatCopyInput.click(button, at[0], at[1],
+				Compat.keyDown("key.keyboard.left.shift") || Compat.keyDown("key.keyboard.right.shift"));
+	}
+
 	private static boolean noticeClicked(int action) {
 		if (action != com.arcticlauncher.mod.compat.KeyCodes.PRESS || Compat.screen() == null) {
 			return false;

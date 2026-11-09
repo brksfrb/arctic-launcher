@@ -375,21 +375,23 @@ public final class LegacyHooks {
 	}
 
 	/** A chat line arrives: timestamps, mentions, Auto GG. */
-	public static Text chat(Text message) {
+	public static Text chat(Text message, String source) {
 		ClientConfig c = ArcticClient.config();
 		if (c == null) {
 			return message;
 		}
 		String text = message.asUnformattedString();
 		ArcticClient.chatLine(text);
-		Text out = message;
+		Text out = LegacyChatCopy.tag(message, source, false);
 		if (c.chatMentions && Mentions.mentions(text, ArcticClient.platform().playerName())) {
-			out = new LiteralText("§e» §r").append(out);
+			out = LegacyChatCopy.tag(new LiteralText("§e» §r"), source, false).append(out);
 			ArcticClient.platform().mentionSound();
 		}
 		if (c.chatTimestamps) {
-			out = new LiteralText("§8" + (c.chatStampBold ? "§l" : "") + (c.chatStampItalic ? "§o" : "")
-					+ com.arcticlauncher.client.feature.ChatStamp.text(c) + "§r").append(out);
+			out = LegacyChatCopy.tag(new LiteralText("§8" + (c.chatStampBold ? "§l" : "") + (c.chatStampItalic ? "§o" : "")
+					+ com.arcticlauncher.client.feature.ChatStamp.text(c) + "§r"), source, true).append(out);
+		} else if (c.chatCopy) {
+			out = LegacyChatCopy.tag(new LiteralText("§8[Copy] §r"), source, true).append(out);
 		}
 		return out;
 	}
