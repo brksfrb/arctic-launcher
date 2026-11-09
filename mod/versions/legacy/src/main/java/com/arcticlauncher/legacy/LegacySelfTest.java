@@ -31,6 +31,10 @@ final class LegacySelfTest {
 			return;
 		}
 
+		if ("nametagproof".equals(System.getProperty("arctic.selftest"))) {
+			LegacyNametagProof.start();
+			return;
+		}
 		String mode = System.getProperty("arctic.selftest");
 		//#if DEV
 		if ("persistent-chat".equals(System.getProperty("arctic.selftest"))) {
