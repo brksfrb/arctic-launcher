@@ -77,16 +77,8 @@ abstract class PlayerTabOverlayMixin {
 			}
 		}
 		//#endif
-		// Before 1.16 text had no fonts, so there's no badge glyph to show.
-		if (Compat.BADGES && com.arcticlauncher.client.feature.Badge.show(true, Compat.profileId(info.getProfile()))) {
-			Component badge = Compat.arcticBadge();
-			// A 1px space from the badge font: a normal space leaves too wide a gap.
-			//#if MC >= 1.16
-			Component gap = com.arcticlauncher.mod.Compat.literal(" ").withStyle(badge.getStyle());
-			//#else
-			Component gap = com.arcticlauncher.mod.Compat.literal(" ");
-			//#endif
-			cir.setReturnValue(com.arcticlauncher.mod.Compat.empty().append(badge).append(gap).append(cir.getReturnValue()));
+		if (com.arcticlauncher.client.feature.Badge.show(true, Compat.profileId(info.getProfile()))) {
+			cir.setReturnValue(Compat.empty().append(Compat.arcticBadgeWithGap()).append(cir.getReturnValue()));
 		}
 	}
 }

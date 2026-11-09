@@ -45,6 +45,10 @@ final class LegacySelfTest {
 			LegacyFitTest.start();
 			return;
 		}
+		if (LegacyBadgeTest.requested()) {
+			LegacyBadgeTest.start();
+			return;
+		}
 		if (LegacyVisualsTest.requested()) {
 			LegacyVisualsTest.start();
 			return;
