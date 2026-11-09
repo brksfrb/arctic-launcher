@@ -56,6 +56,20 @@
 <% } %>		"ServerTimeMixin",
 		"ChatPlaceholderMixin",
 		"MinecraftTickMixin",
+		"GlassModelMixin",
+		"GlassBakedQuadMixin",<% if (ctmQuadAccess) { %>
+		"GlassQuadAccess",<% } %>
+		"GlassRenderMixin",<% if (ctmSodium) { %>
+		"GlassSodiumMixin",<% } %><% if (ctmSodiumContext) { %>
+		"GlassSodiumContextMixin",<% } %><% if (ctmSodiumOld) { %>
+		"GlassSodiumOldMixin",<% } %>
+		"GlassAtlasMixin",<% if (ctmContents) { %>
+		"GlassContentsMixin",
+		"GlassStitchMixin",<% } else { %>
+		"GlassOldAtlasMixin",
+		"GlassOldImageMixin",<% if (ctmInfo) { %>
+		"GlassInfoAccess",<% } %><% if (ctmSpriteAccess) { %>
+		"GlassOldSpriteAccess",<% } %><% } %>
 		"ServerMenuScreenMixin",<% if (postBlur) { %>
 		"MotionBlurPostMixin",
 		"EffectsPackMixin",<% } %><% if (oldMotionBlur) { %>
