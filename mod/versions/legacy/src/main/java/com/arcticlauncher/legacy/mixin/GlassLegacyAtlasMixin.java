@@ -19,10 +19,8 @@ abstract class GlassLegacyAtlasMixin {
 	@Shadow @Final private Map<String, Sprite> sprites;
 	@Inject(method = "method_7005", at = @At("HEAD"))
 	private void arctic$tiles(net.minecraft.resource.ResourceManager manager, CallbackInfo ci) {
-		java.util.List<java.io.File> files = new java.util.ArrayList<>();
-		for (String name : net.minecraft.client.MinecraftClient.getInstance().options.resourcePacks) files.add(0, new java.io.File(new java.io.File(net.minecraft.client.MinecraftClient.getInstance().runDirectory, "resourcepacks"), name));
-		com.arcticlauncher.legacy.LegacyGlassCtm.packs = com.arcticlauncher.client.ctm.GlassPacks.files(files);
 		if (!LegacyGlassCtm.available()) return;
+		LegacyGlassCtm.packs = com.arcticlauncher.legacy.LegacyGlassResources.load(manager);
 		for (String name : new ArrayList<>(spritesToLoad.keySet())) {
 			if (!GlassTiles.glass(name)) continue;
 			for (int i = 0; i < GlassTiles.COUNT; i++) {

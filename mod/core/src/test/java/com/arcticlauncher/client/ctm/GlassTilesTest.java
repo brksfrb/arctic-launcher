@@ -15,6 +15,13 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GlassTilesTest {
+	@Test void tileRangesAreBoundedAndCannotOverflow() {
+		for (String range : Arrays.asList("2147483647-2147483647", "0-2147483647", "4097-4097", "5-4"))
+			assertThrows(IllegalArgumentException.class, () -> GlassPacks.expand(range));
+		assertEquals(Arrays.asList("4095", "4096"), GlassPacks.expand("4095-4096"));
+		assertEquals(4097, GlassPacks.expand("0-4096").size());
+	}
+
 	@Test void all256NeighbourPatternsReduceTo47DistinctTiles() {
 		Set<Integer> distinct = new HashSet<>();
 		for (int mask = 0; mask < 256; mask++) {

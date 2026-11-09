@@ -84,7 +84,12 @@ public final class GlassPacks {
 
 	/** Legacy pack enumeration; files are ordered from highest to lowest priority. */
 	public static GlassPacks files(final List<java.io.File> files) {
-		return load(new Resources() {
+		return load(fileResources(files));
+	}
+
+	/** Enumerate file-backed active packs; callers may resolve streams through the resource manager. */
+	public static Resources fileResources(final List<java.io.File> files) {
+		return new Resources() {
 			@Override public Collection<String> properties() throws IOException {
 				java.util.Set<String> result = new java.util.LinkedHashSet<>();
 				for (java.io.File file : files) {
@@ -125,7 +130,7 @@ public final class GlassPacks {
 				}
 				throw new java.io.FileNotFoundException(name);
 			}
-		});
+		};
 	}
 
 	/** Return ARGB pixels for a preferred tile, or null when synthesis should be used. */
@@ -179,8 +184,8 @@ public final class GlassPacks {
 			if (token.matches("[0-9]+-[0-9]+")) {
 				String[] ends = token.split("-");
 				int start = Integer.parseInt(ends[0]), end = Integer.parseInt(ends[1]);
-				if (end - start > 4096) throw new IllegalArgumentException("tile range");
-				for (int i = start; i <= end; i++) out.add(Integer.toString(i));
+				if (start > 4096 || end > 4096 || end < start || (long) end - start > 4096) throw new IllegalArgumentException("tile range");
+				for (long i = start; i <= end; i++) out.add(Long.toString(i));
 			} else if (!token.isEmpty()) out.add(token);
 		}
 		return out;

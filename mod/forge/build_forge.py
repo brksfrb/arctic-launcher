@@ -150,6 +150,8 @@ def build():
                      f"{MC}-net.legacyfabric.yarn.1_8_9.{YARN_BUILD}/*.jar")
     sep = ";" if sys.platform == "win32" else ":"
     remapped = CACHE / "arctic-srg.jar"
+    # Tiny Remapper updates an existing zip, retaining removed development classes.
+    remapped.unlink(missing_ok=True)
     run(["java", "-cp", sep.join([str(remapper_jar), str(tool_classes)]), "Remap", str(dev_jar), str(remapped),
          str(tiny), "named", "srg", str(named_mc), *map(str, libraries())])
 
