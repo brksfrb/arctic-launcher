@@ -78,6 +78,7 @@
 		"MinecraftClientReplayMixin",
 		"LoadingScreenReplayMixin",
 		"ReplaySoundMixin",
+		"ReplayEntityRendererMixin",
 		"ClientConnectionProxyMixin",
 		"ServerLookupMixin",
 		"ServerListPingerProxyMixin",

@@ -123,6 +123,14 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public boolean atTitleScreen() {
+		// The title exists underneath the initial asynchronous resource reload. Opening a
+		// launcher replay there can render a world before entity renderers are installed.
+		//#if MC >= 26.2
+		if (mc().gui.overlay() != null) return false;
+		//#elif MC >= 1.14
+		if (mc().getOverlay() != null) return false;
+		//#endif
+		// Older versions load their initial resources synchronously.
 		Screen screen = Compat.screen();
 		return !inWorld() && (screen instanceof net.minecraft.client.gui.screens.TitleScreen || (screen instanceof PageScreen
 				&& ((PageScreen) screen).page() instanceof com.arcticlauncher.client.menu.TitleMenu));
