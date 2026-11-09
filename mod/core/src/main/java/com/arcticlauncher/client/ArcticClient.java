@@ -48,6 +48,8 @@ public final class ArcticClient {
 	private static com.arcticlauncher.client.looks.LauncherSkins launcherSkins;
 
 	public static void init(Platform p) {
+		CrashDiagnostics.start();
+		CrashDiagnostics.testHook(p);
 		com.arcticlauncher.client.looks.OsTrust.installDefault();
 		platform = p;
 		com.arcticlauncher.client.config.RunningLock.hold(p.configDir());
@@ -361,6 +363,7 @@ public final class ArcticClient {
 
 	/** Each frame, before it's drawn (the game thread). */
 	public static void frame(boolean screenOpen) {
+		CrashDiagnostics.frame();
 		com.arcticlauncher.client.gfx.RenderWork.drain();
 		long now = System.nanoTime();
 		double seconds = lastFrame == 0 ? 0 : (now - lastFrame) / 1e9;

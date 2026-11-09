@@ -102,6 +102,10 @@ impl Run {
     /// The crash as a report, from the game log's end and the crash report it wrote.
     fn crash_report(&self, title: &str, code: Option<i32>) -> crash::Report {
         let mut lines: Vec<&str> = self.log.iter().map(|l| l.text.as_str()).collect();
+        let hang = fresh_hang_dump(&self.game_dir, self.started);
+        if let Some(dump) = &hang {
+            lines.push(dump);
+        }
         // The game's own log file often says more than what it printed (a mod that quits quietly writes
         // only there), and Java writes a file of its own when it dies.
         let own_log = latest_log_tail(&self.game_dir, self.started);
@@ -120,7 +124,8 @@ impl Run {
         // How it ended: a game that wrote nothing at all is otherwise a report with nothing in it.
         let java = self.java.as_deref().map(|j| match code {
             Some(c) => format!(
-                "{j}\n(exit code {c})\n{}",
+                "{j}\n(exit code {})\n{}",
+                crash::exit_description(c),
                 self.run_summary(written.is_some())
             ),
             None => format!("{j}\n{}", self.run_summary(written.is_some())),
@@ -191,6 +196,16 @@ impl Run {
         }
         text
     }
+}
+
+/// The sidecar survives long sessions and resource reloads that push the dump out of the UI log.
+fn fresh_hang_dump(game_dir: &std::path::Path, since: SystemTime) -> Option<String> {
+    let path = game_dir.join("arctic-hang.txt");
+    let meta = std::fs::metadata(&path).ok()?;
+    if meta.modified().ok()? < since || meta.len() > 4 * 1024 * 1024 {
+        return None;
+    }
+    std::fs::read_to_string(path).ok()
 }
 
 /// Lines of `logs/latest.log` that are looked at.
@@ -472,7 +487,18 @@ impl ArcticApp {
                     }
                     self.playtime = arctic_core::playtime::Stats::load(&self.dirs);
                 }
+                let froze = (fresh_hang_dump(&run.game_dir, run.started).is_some()
+                    || crash::freeze_evidence(&run.crash_text()))
+                    && newest_crash_report(&run.game_dir, run.started).is_none()
+                    && newest_hs_err(&run.game_dir, run.started).is_none();
                 let diagnosis = match code {
+                    Some(c) if c != 0 && !watchdog && froze => Some(Diagnosis {
+                        title: "The game froze and was closed".into(),
+                        detail: "The run contains evidence of a freeze. Any captured thread dump is included in the report.".into(),
+                        mods: Vec::new(),
+                        repair: false,
+                        fix: None,
+                    }),
                     Some(c) if c != 0 && !watchdog => run
                         .diagnose()
                         .or_else(|| crash::silent_exit(&run.crash_text(), c)),
