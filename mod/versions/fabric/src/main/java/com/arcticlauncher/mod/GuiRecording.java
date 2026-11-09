@@ -17,6 +17,17 @@ import net.minecraft.client.renderer.state.gui.pip.PictureInPictureRenderState;
  */
 public final class GuiRecording {
 	private static List<Object> recording;
+	private static int fontGeneration;
+
+	private static final class Recording extends ArrayList<Object> {
+		final int fonts = fontGeneration;
+	}
+
+	/** A resource reload closed the recorded glyph textures. Refuse them before submitting any pieces. */
+	public static void fontsReloaded() {
+		fontGeneration++;
+		GfxImpl.clearTextWidths();
+	}
 
 	private GuiRecording() {}
 
@@ -31,7 +42,7 @@ public final class GuiRecording {
 		if (recording != null) {
 			return false;
 		}
-		recording = new ArrayList<Object>();
+		recording = new Recording();
 		return true;
 	}
 
@@ -41,7 +52,10 @@ public final class GuiRecording {
 		return pieces;
 	}
 
-	static void replay(GuiRenderState state, List<?> pieces) {
+	static boolean replay(GuiRenderState state, List<?> pieces) {
+		if (!(pieces instanceof Recording) || ((Recording) pieces).fonts != fontGeneration) {
+			return false;
+		}
 		for (Object piece : pieces) {
 			if (piece instanceof GuiItemRenderState item) {
 				state.addItem(item);
@@ -53,6 +67,7 @@ public final class GuiRecording {
 				state.addGuiElement(element);
 			}
 		}
+		return true;
 	}
 }
 //#endif

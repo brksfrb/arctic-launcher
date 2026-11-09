@@ -77,6 +77,13 @@ abstract class SmoothTextRendererMixin {
 		return mc != null && mc.textRenderer == (Object) this && LegacySmoothFont.on() && !isUnicode();
 	}
 
+	@Inject(method = "drawLayer(Ljava/lang/String;FFIZ)I", at = @At("HEAD"))
+	private void arctic$pixelSize(String text, float x, float y, int color, boolean shadow, CallbackInfoReturnable<Integer> cir) {
+		if (arctic$smooth()) {
+			LegacySmoothFont.preparing(x, y);
+		}
+	}
+
 	/** One character at the pen. */
 	@Inject(method = "drawLayer(CZ)F", at = @At("HEAD"), cancellable = true)
 	private void arctic$draw(char c, boolean italic, CallbackInfoReturnable<Float> cir) {

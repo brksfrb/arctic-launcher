@@ -145,7 +145,16 @@ public final class SmoothFont {
 			return null;
 		}
 		try {
+			//#if MC < 1.21.9
+			ScaledFont.clear();
+			//#else
+			ScaledInter.clear();
+			//#endif
 			GlyphProvider made = open(font, scale);
+			//#if MC < 1.15
+			if (heldFont != null) MemoryUtil.memFree(heldFont);
+			heldFont = font;
+			//#endif
 			loadedScale = scale;
 			//#if MC >= 1.20.5
 			if (last != null) {
@@ -162,7 +171,7 @@ public final class SmoothFont {
 	}
 
 	//#if MC >= 1.20.5
-	private static GlyphProvider open(ByteBuffer font, int scale) throws IOException {
+	static GlyphProvider open(ByteBuffer font, int scale) throws IOException {
 		FT_Face face;
 		synchronized (FreeTypeUtil.LIBRARY_LOCK) {
 			try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -178,7 +187,7 @@ public final class SmoothFont {
 		return new TrueTypeGlyphProvider(font, face, SIZE, scale, 0f, 0f, "");
 	}
 	//#else
-	private static GlyphProvider open(ByteBuffer font, int scale) throws IOException {
+	static GlyphProvider open(ByteBuffer font, int scale) throws IOException {
 		STBTTFontinfo info = STBTTFontinfo.malloc();
 		if (!STBTruetype.stbtt_InitFont(info, font)) {
 			info.free();
@@ -190,11 +199,7 @@ public final class SmoothFont {
 		//#if MC >= 1.15
 		return new TrueTypeGlyphProvider(font, info, size, scale, 0f, STB_SHIFT_Y, "");
 		//#else
-		// 1.14's provider doesn't own the font's memory: it is kept here until the next load replaces it.
-		if (heldFont != null) {
-			MemoryUtil.memFree(heldFont);
-		}
-		heldFont = font;
+		// Before 1.15 the caller, rather than the provider, owns the font bytes.
 		//#if MC >= 1.14
 		return new TrueTypeGlyphProvider(info, size, scale, 0f, STB_SHIFT_Y, "");
 		//#else
@@ -218,7 +223,7 @@ public final class SmoothFont {
 	//#endif
 
 	/** Inter from the mod jar, in native memory (the provider frees it when closed). */
-	private static ByteBuffer read() {
+	static ByteBuffer read() {
 		try (InputStream in = SmoothFont.class.getResourceAsStream(FILE)) {
 			if (in == null) {
 				ArcticMod.LOG.warn("smooth font: {} is missing from the mod", FILE);

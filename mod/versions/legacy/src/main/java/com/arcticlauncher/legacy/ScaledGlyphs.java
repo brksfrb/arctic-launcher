@@ -9,6 +9,7 @@ import java.awt.font.FontRenderContext;
 import java.awt.font.GlyphVector;
 import java.awt.image.BufferedImage;
 import java.nio.ByteBuffer;
+import net.minecraft.client.texture.NativeImageBackedTexture;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 
@@ -24,8 +25,6 @@ final class ScaledGlyphs {
 	/** Largest pixel scale a bucket is rasterized at: em 8.5 x 16 = 136 px. Bigger text is magnified from this. */
 	static final int MAX_PIXEL_SCALE = 16;
 	private static final int PAD = 1;
-	/** After the page fills up, it is cleared and refilled at most this often (else: GUI-size letters). */
-	private static final long REFILL_MS = 10_000;
 
 	/** One letter in the page; positions in GUI pixels, relative to the pen and the baseline. */
 	static final class Glyph {
@@ -54,14 +53,14 @@ final class ScaledGlyphs {
 	private final int pixels;
 	private final int page;
 	private final FontRenderContext frc = new FontRenderContext(null, true, true);
-	private Glyph[] glyphs = new Glyph[0x2200];
+	private final Glyph[] glyphs = new Glyph[0x2200];
 	/** Characters that have no shape (or don't fit): looked up once, then drawn from the GUI-size atlas. */
-	private boolean[] skipped = new boolean[0x2200];
+	private final boolean[] skipped = new boolean[0x2200];
 	private int texture;
+	private NativeImageBackedTexture ownedTexture;
 	private int shelfX;
 	private int shelfY;
 	private int shelfHeight;
-	private long filledAt;
 
 	/** The pixel scale for a multiple of the GUI scale, capped so a page holds a useful number of letters. */
 	static int pixelScale(int guiScale, int multiple) {
@@ -93,17 +92,14 @@ final class ScaledGlyphs {
 		} catch (RuntimeException | LinkageError e) {
 			g = null;
 		}
-		if (g == null && !pageFull) {
+		if (g == null) {
 			skipped[c] = true;
 		}
 		glyphs[c] = g;
 		return g;
 	}
 
-	private boolean pageFull;
-
 	private Glyph rasterize(char c) {
-		pageFull = false;
 		if (!font.canDisplay(c)) {
 			return null;
 		}
@@ -112,14 +108,12 @@ final class ScaledGlyphs {
 		if (box.width <= 0 || box.height <= 0) {
 			return null;
 		}
-		// Even widths: two bytes a texel, so every row starts on a 4-byte boundary (GL's default unpack alignment).
-		int w = (box.width + PAD * 2 + 1) & ~1;
+		int w = box.width + PAD * 2;
 		int h = box.height + PAD * 2;
 		if (w > page || h > page) {
 			return null;
 		}
 		if (!place(w, h)) {
-			pageFull = true;
 			return null;
 		}
 		int x = shelfX;
@@ -135,26 +129,25 @@ final class ScaledGlyphs {
 		g.setColor(java.awt.Color.WHITE);
 		g.drawString(String.valueOf(c), PAD - box.x, PAD - box.y);
 		g.dispose();
-		// White, with the coverage as alpha: luminance-alpha texels (half of RGBA's memory). Shader packs that
-		// sample the colour still get white.
-		ByteBuffer texels = BufferUtils.createByteBuffer(w * h * 2);
+		// RGBA as in the base atlas, including on the world's fixed-function/lightmap rendering path.
+		ByteBuffer texels = BufferUtils.createByteBuffer(w * h * 4);
 		int[] argb = image.getRGB(0, 0, w, h, null, 0, w);
 		for (int pixel : argb) {
-			texels.put((byte) 0xFF).put((byte) (pixel >>> 24));
+			texels.put((byte) 0xFF).put((byte) 0xFF).put((byte) 0xFF).put((byte) (pixel >>> 24));
 		}
 		texels.flip();
 		GlStateManager.bindTexture(texture);
 		GL11.glPixelStorei(GL11.GL_UNPACK_ROW_LENGTH, 0);
 		GL11.glPixelStorei(GL11.GL_UNPACK_SKIP_PIXELS, 0);
 		GL11.glPixelStorei(GL11.GL_UNPACK_SKIP_ROWS, 0);
-		GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, x, y, w, h, GL11.GL_LUMINANCE_ALPHA, GL11.GL_UNSIGNED_BYTE, texels);
+		GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, x, y, w, h, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, texels);
 
 		float s = pixels;
 		return new Glyph((box.x - PAD) / s, (-box.y + PAD) / s, w / s, h / s,
 				x / (float) page, y / (float) page, (x + w) / (float) page, (y + h) / (float) page);
 	}
 
-	/** Finds room for a w x h letter (shelf packing), making the page first or clearing a full one. */
+	/** Finds room for a w x h letter (shelf packing), making the page on first use. */
 	private boolean place(int w, int h) {
 		if (texture == 0) {
 			create();
@@ -165,40 +158,30 @@ final class ScaledGlyphs {
 			shelfHeight = 0;
 		}
 		if (shelfY + h > page) {
-			long now = System.currentTimeMillis();
-			if (now - filledAt < REFILL_MS) {
-				return false;
-			}
-			// Full: start over with what is on screen now (letters come back as they are drawn again).
-			filledAt = now;
-			glyphs = new Glyph[glyphs.length];
-			skipped = new boolean[skipped.length];
-			shelfX = 0;
-			shelfY = 0;
-			shelfHeight = 0;
+			return false;
 		}
 		shelfHeight = Math.max(shelfHeight, h);
 		return true;
 	}
 
 	private void create() {
-		texture = GL11.glGenTextures();
+		// Use the same initialization and ownership as the base font, including texture level limits.
+		ownedTexture = new NativeImageBackedTexture(
+				new BufferedImage(page, page, BufferedImage.TYPE_INT_ARGB));
+		texture = ownedTexture.getGlId();
 		GlStateManager.bindTexture(texture);
 		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
 		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
 		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL11.GL_CLAMP);
 		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL11.GL_CLAMP);
-		// Cleared to transparent, so linear filtering at a letter's edge only ever reads empty texels.
-		ByteBuffer clear = BufferUtils.createByteBuffer(page * page * 2);
-		GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_LUMINANCE8_ALPHA8, page, page, 0, GL11.GL_LUMINANCE_ALPHA,
-				GL11.GL_UNSIGNED_BYTE, clear);
-		filledAt = System.currentTimeMillis();
+
 		ArcticLegacy.LOG.info("smooth font: letters at pixel scale {} ({}x{})", pixels, page, page);
 	}
 
 	void close() {
 		if (texture != 0) {
-			GlStateManager.deleteTexture(texture);
+			ownedTexture.clearGlId();
+			ownedTexture = null;
 			texture = 0;
 		}
 	}

@@ -116,8 +116,7 @@ public final class GfxImpl implements Gfx {
 
 	@Override
 	public boolean replay(Object recorded) {
-		GuiRecording.replay(((com.arcticlauncher.mod.mixin.GuiGraphicsStateAccess) g).arctic$guiRenderState(), (java.util.List<?>) recorded);
-		return true;
+		return GuiRecording.replay(((com.arcticlauncher.mod.mixin.GuiGraphicsStateAccess) g).arctic$guiRenderState(), (java.util.List<?>) recorded);
 	}
 	//#endif
 
@@ -215,6 +214,14 @@ public final class GfxImpl implements Gfx {
 	private static final long WIDTHS_NANOS = 5_000_000_000L;
 	private static Object widthsFont;
 	private static long widthsSince;
+
+	//#if MC >= 26.1
+	static void clearTextWidths() {
+		WIDTHS.clear();
+		widthsFont = null;
+		widthsSince = 0;
+	}
+	//#endif
 
 	@Override
 	public void texture(String key, int x, int y, int w, int h, float u, float v, int regionW, int regionH, int texW, int texH) {

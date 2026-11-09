@@ -21,7 +21,6 @@ import net.minecraft.resources.Identifier;
 //#else
 import net.minecraft.resources.ResourceLocation;
 //#endif
-import org.joml.Matrix3x2fc;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
@@ -30,8 +29,8 @@ import org.lwjgl.util.freetype.FreeType;
 
 /**
  * The smooth font drawn scaled up (titles at 4x, a scaled scoreboard or HUD) stays sharp: Inter is rasterized at
- * the GUI scale, so magnified text used to show its texels. While GUI text is prepared with a pose bigger than
- * {@link #UPSCALE_AT}, each Inter letter is drawn from a size bucket rasterized near its on-screen size (x2, x4 or x8
+ * the GUI scale, so magnified text used to show its texels. The projected footprint of each GUI or world
+ * text draw (see {@link TextDrawScale}) selects the bucket. Each Inter letter is drawn from a size bucket rasterized near its on-screen size (x2, x4 or x8
  * the GUI scale, capped) and shrunk with a linear filter.
  *
  * <p>Only the texture changes. A swapped letter keeps the GUI-size glyph's {@link GlyphInfo}, so its advance, bold
@@ -53,8 +52,7 @@ public final class ScaledInter {
 
 	private static final Bucket[] buckets = new Bucket[MULTIPLES.length];
 	private static int bucketsFor;
-	/** How many times bigger than the GUI scale the text being prepared is drawn (0: not GUI text). */
-	private static float drawScale;
+	private static final boolean[] failed = new boolean[MULTIPLES.length];
 	/** A bucket's font texture is being made: it filters linearly (see FontTextureMixin). */
 	private static boolean baking;
 
@@ -64,33 +62,33 @@ public final class ScaledInter {
 		return baking;
 	}
 
-	/** GUI text is about to be laid out with this pose (on the render thread). */
-	public static void preparing(Matrix3x2fc pose) {
-		drawScale = pose == null ? 0f : (float) Math.sqrt(Math.abs(pose.determinant()));
-	}
-
-	public static void prepared() {
-		drawScale = 0f;
-	}
-
 	/** The glyph to draw for {@code codepoint}: {@code base} itself, or the same letter from a size bucket. */
 	public static BakedGlyph glyph(int codepoint, Style style, BakedGlyph base) {
-		float times = drawScale;
-		if (!(times > UPSCALE_AT) || base == null || codepoint == ' ' || style.isObfuscated()
-				|| !FontDescription.DEFAULT.equals(style.getFont())) {
-			return base;
-		}
 		int gui = baseScale();
 		if (gui <= 0) {
-			drop();
+			if (bucketsFor != 0) clear();
+			return base;
+		}
+		float times = TextDrawScale.current();
+		if (!(times > UPSCALE_AT) || base == null || codepoint == ' ' || style.isObfuscated() || !usesInter(style)) {
 			return base;
 		}
 		if (gui != bucketsFor) {
-			drop();
+			clear();
 			bucketsFor = gui;
 		}
 		Bucket bucket = bucket(times, gui);
 		return bucket == null ? base : bucket.glyph(codepoint, base);
+	}
+
+	private static boolean usesInter(Style style) {
+		if (FontDescription.DEFAULT.equals(style.getFont())) return true;
+		//#if MC >= 26.1
+		if (style.getFont() instanceof FontDescription.Resource resource) {
+			return ArcticPacks.TITLE_FONT.equals(resource.id()) || ArcticPacks.SUBTITLE_FONT.equals(resource.id());
+		}
+		//#endif
+		return false;
 	}
 
 	/** The GUI scale the smooth font is rasterized at now, or 0 when it is off. */
@@ -112,13 +110,14 @@ public final class ScaledInter {
 			}
 		}
 		int pixels = Math.min(MAX_PIXEL_SCALE, gui * MULTIPLES[slot]);
-		if (pixels <= gui) {
+		if (pixels <= gui || failed[slot]) {
 			return null;
 		}
 		Bucket bucket = buckets[slot];
 		if (bucket == null) {
 			bucket = Bucket.open(pixels, MULTIPLES[slot]);
 			if (bucket == null) {
+				failed[slot] = true;
 				return null;
 			}
 			buckets[slot] = bucket;
@@ -126,8 +125,9 @@ public final class ScaledInter {
 		return bucket;
 	}
 
-	private static void drop() {
+	public static void clear() {
 		for (int i = 0; i < buckets.length; i++) {
+			failed[i] = false;
 			if (buckets[i] != null) {
 				buckets[i].close();
 				buckets[i] = null;
@@ -157,6 +157,7 @@ public final class ScaledInter {
 				return null;
 			}
 			FT_Face face = null;
+			TrueTypeGlyphProvider provider = null;
 			try {
 				synchronized (FreeTypeUtil.LIBRARY_LOCK) {
 					try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -169,7 +170,7 @@ public final class ScaledInter {
 					}
 				}
 				// The provider owns the face and the font's memory from here.
-				TrueTypeGlyphProvider provider = new TrueTypeGlyphProvider(font, face, SIZE, pixels, 0f, 0f, "");
+				provider = new TrueTypeGlyphProvider(font, face, SIZE, pixels, 0f, 0f, "");
 				face = null;
 				font = null;
 				//#if MC >= 1.21.11
@@ -181,6 +182,7 @@ public final class ScaledInter {
 				ArcticMod.LOG.info("smooth font: x{} letters at pixel scale {}", multiple, pixels);
 				return bucket;
 			} catch (Exception | LinkageError e) {
+				if (provider != null) provider.close();
 				if (face != null) {
 					synchronized (FreeTypeUtil.LIBRARY_LOCK) {
 						FreeType.FT_Done_Face(face);

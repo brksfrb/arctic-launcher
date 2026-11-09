@@ -80,34 +80,22 @@ public final class LegacySmoothFont {
 	/** Bucket multiples of the GUI scale: x2, x4, x8 (each made the first time text that big is drawn). */
 	private static final int[] BUCKET_MULTIPLES = {2, 4, 8};
 	private static final ScaledGlyphs[] buckets = new ScaledGlyphs[BUCKET_MULTIPLES.length];
-	/** The model view's uniform scale as the game has set it up (tracked from GlStateManager.scale/push/pop). */
-	private static float modelScale = 1f;
-	private static final float[] SCALE_STACK = new float[64];
-	private static int scaleDepth;
+	private static final java.nio.FloatBuffer MODEL = org.lwjgl.BufferUtils.createFloatBuffer(16);
+	private static final java.nio.FloatBuffer PROJECTION = org.lwjgl.BufferUtils.createFloatBuffer(16);
+	private static final java.nio.IntBuffer VIEWPORT = org.lwjgl.BufferUtils.createIntBuffer(16);
+	private static final float[] CLIP = new float[16];
+	private static float drawScale;
+	/** Set only by the explicit nametagfont self-test for a matching old-atlas screenshot. */
+	static boolean proofBaseline;
 
-	public static void matrixPush() {
-		if (scaleDepth < SCALE_STACK.length) {
-			SCALE_STACK[scaleDepth] = modelScale;
-		}
-		scaleDepth++;
-	}
-
-	public static void matrixPop() {
-		if (scaleDepth > 0) {
-			scaleDepth--;
-			if (scaleDepth < SCALE_STACK.length) {
-				modelScale = SCALE_STACK[scaleDepth];
-			}
-		}
-	}
-
-	public static void matrixScale(float factor) {
-		modelScale *= factor;
-	}
-
-	public static void matrixIdentity() {
-		modelScale = 1f;
-		scaleDepth = 0;
+	/** Read the actual GL transform once per string, including direct GL calls made by other mods. */
+	public static void preparing(float x, float y) {
+		GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, MODEL);
+		GL11.glGetFloat(GL11.GL_PROJECTION_MATRIX, PROJECTION);
+		GL11.glGetInteger(GL11.GL_VIEWPORT, VIEWPORT);
+		com.arcticlauncher.client.feature.TextPixelScale.multiply(PROJECTION, MODEL, CLIP);
+		drawScale = com.arcticlauncher.client.feature.TextPixelScale.projected(CLIP, x, y,
+				VIEWPORT.get(2), VIEWPORT.get(3)) / Math.max(1, scale);
 	}
 
 	/**
@@ -277,7 +265,7 @@ public final class LegacySmoothFont {
 	 * the driver for its state stalls it, and the HUD draws hundreds of letters a frame.
 	 */
 	public static float draw(Glyph g, float penX, float penY, boolean italic) {
-		ScaledGlyphs bucket = bucketFor(Math.abs(modelScale));
+		ScaledGlyphs bucket = bucketFor(proofBaseline && Math.abs(PROJECTION.get(15)) < 1e-6f ? 0 : drawScale);
 		ScaledGlyphs.Glyph b = bucket == null ? null : bucket.glyph(g.ch);
 		if (b != null) {
 			// Drawn from letters rasterized at (or just above) their size on screen, shrunk by the linear filter.
