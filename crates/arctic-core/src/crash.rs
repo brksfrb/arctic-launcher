@@ -771,8 +771,10 @@ fn compact_launch(line: &str) -> String {
 
 /// A delayed server tick alone is not proof of a client hang: require the relevant exit too.
 pub fn freeze_evidence(text: &str) -> bool {
-    if text.contains("[Arctic diagnostics] hang begin") {
-        return true;
+    if let Some(hang) = text.rfind("[Arctic diagnostics] hang begin") {
+        return text
+            .rfind("[Arctic diagnostics] hang recovered")
+            .is_none_or(|recovered| recovered < hang);
     }
     static DELAY: OnceLock<Regex> = OnceLock::new();
     let delayed = DELAY
@@ -791,7 +793,7 @@ pub fn orderly_shutdown(text: &str) -> bool {
         && text.contains("[Arctic diagnostics] minecraft stop complete")
         && text.contains("[Arctic diagnostics] exit caller vanilla")
         && !text.contains("[Arctic diagnostics] exit caller other")
-        && !text.contains("[Arctic diagnostics] hang begin")
+        && !freeze_evidence(text)
 }
 
 /// Preserve the latest dump and exit trace even when they are outside the log tail.
@@ -810,6 +812,13 @@ fn diagnostic_evidence(text: &str, budget: usize) -> String {
             );
         }
         out.push('\n');
+        if let Some(recovered) = dump
+            .lines()
+            .find(|line| line.contains("[Arctic diagnostics] hang recovered"))
+        {
+            out.push_str(recovered);
+            out.push('\n');
+        }
     }
     for line in text.lines().filter(|l| {
         l.contains("[Arctic diagnostics]") && !l.contains("hang ") && !l.contains("thread ")
@@ -1045,6 +1054,24 @@ mod tests {
 
     #[test]
     fn freeze_classification_needs_evidence_and_silent_titles_split_by_caller() {
+        let hang = "[Arctic diagnostics] hang begin\n[Arctic diagnostics] hang end";
+        let recovered = format!(
+            "{hang}\n[Arctic diagnostics] hang recovered; render progress resumed\nexit code 77"
+        );
+        assert!(freeze_evidence(hang));
+        assert!(!freeze_evidence(&recovered));
+        let report = Report::build(
+            "1.20.1",
+            "",
+            "",
+            &[&recovered],
+            &[],
+            None,
+            Some("exit code 77"),
+        );
+        assert_ne!(report.title, "The game froze and was closed");
+        assert!(report.log.contains("hang recovered"));
+        assert!(freeze_evidence(&format!("{recovered}\n{hang}")));
         assert!(!freeze_evidence("exit code -805306369 (0xCFFFFFFF)"));
         assert!(!freeze_evidence("Can't keep up! 160523ms behind"));
         assert!(freeze_evidence(

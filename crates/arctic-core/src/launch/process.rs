@@ -197,9 +197,7 @@ pub fn spawn(
                 }
             }
         };
-        for reader in [out_reader, err_reader].into_iter().flatten() {
-            let _ = reader.join();
-        }
+        drain_readers([out_reader, err_reader].into_iter().flatten().collect());
         if let Some(c) = code {
             let summary = format!(
                 "[Arctic diagnostics] process ended after {} ms; exit code {}",
@@ -256,6 +254,21 @@ pub fn spawn(
         on_event(GameEvent::Exited { code });
     });
     Ok(handle)
+}
+
+/// Descendants may inherit pipes: EOF is not guaranteed when the game exits.
+fn drain_readers(readers: Vec<std::thread::JoinHandle<()>>) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while readers.iter().any(|reader| !reader.is_finished()) && std::time::Instant::now() < deadline
+    {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    for reader in readers {
+        if reader.is_finished() {
+            let _ = reader.join();
+        }
+        // Dropping an unfinished handle detaches it; exit reporting must proceed.
+    }
 }
 
 /// Bounded and invisible: same executable, no game or account arguments.
@@ -750,6 +763,25 @@ fn is_window_marker(line: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    #[test]
+    fn inherited_pipe_does_not_block_exit_drain() {
+        let mut child = Command::new("sh")
+            .args(["-c", "sleep 8 & exit 0"])
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut out = child.stdout.take().unwrap();
+        let reader = std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            out.read_to_end(&mut bytes).unwrap();
+        });
+        child.wait().unwrap();
+        let started = std::time::Instant::now();
+        drain_readers(vec![reader]);
+        assert!(started.elapsed() < Duration::from_secs(5));
+    }
+
     #[test]
     fn portal_folders_are_recognized() {
         assert!(is_portal_path(Path::new(
