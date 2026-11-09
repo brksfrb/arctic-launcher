@@ -11,6 +11,7 @@ public final class CrashDiagnostics {
     private static final String PREFIX = "[Arctic diagnostics] ";
     private static volatile long progress;
     private static volatile boolean stopped;
+    private static volatile boolean hung;
     private static Logger logger;
     private CrashDiagnostics() {}
 
@@ -72,35 +73,41 @@ public final class CrashDiagnostics {
         Thread watcher = new Thread(new Runnable() {
             public void run() {
                 long dumped = 0;
+                long dumpedProgress = 0;
                 boolean hasDump = false;
                 while (!stopped) {
                     try { Thread.sleep(1000); } catch (InterruptedException e) { return; }
                     long last = progress;
                     long now = System.nanoTime();
-                    if (last != 0 && now - last >= 30_000_000_000L && (!hasDump || now - dumped >= 300_000_000_000L)) {
-                        dumped = now;
-                        hasDump = true;
-                        java.io.StringWriter buffer = new java.io.StringWriter();
-                        java.io.PrintWriter dump = new java.io.PrintWriter(buffer);
-                        dump.println(PREFIX + "hang begin; no render progress for " + ((now - last) / 1_000_000) + " ms");
-                        dump.println(PREFIX + "thread \"" + clientThread.getName() + "\" " + clientThread.getState());
-                        for (StackTraceElement frame : clientThread.getStackTrace()) dump.println("    at " + frame);
-                        for (Map.Entry<Thread, StackTraceElement[]> entry : Thread.getAllStackTraces().entrySet()) {
-                            if (entry.getKey() == clientThread) continue;
-                            dump.println(PREFIX + "thread \"" + entry.getKey().getName() + "\" " + entry.getKey().getState());
-                            for (StackTraceElement frame : entry.getValue()) dump.println("    at " + frame);
-                        }
-                        dump.println(PREFIX + "hang end");
-                        dump.flush();
-                        OUT.print(buffer.toString());
-                        OUT.flush();
-                        try {
-                            java.nio.file.Path target = java.nio.file.Paths.get("arctic-hang.txt");
-                            java.nio.file.Path temporary = java.nio.file.Paths.get("arctic-hang.txt.tmp");
-                            java.nio.file.Files.write(temporary, buffer.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                            java.nio.file.Files.move(temporary, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                        } catch (java.io.IOException ignored) { }
+                    if (hasDump && last != dumpedProgress) hasDump = false;
+                    synchronized (CrashDiagnostics.class) {
+                        if (last == progress && last != 0 && now - last >= 30_000_000_000L && (!hasDump || now - dumped >= 300_000_000_000L)) {
+                            hung = true;
+                            dumped = now;
+                            dumpedProgress = last;
+                            hasDump = true;
+                            java.io.StringWriter buffer = new java.io.StringWriter();
+                            java.io.PrintWriter dump = new java.io.PrintWriter(buffer);
+                            dump.println(PREFIX + "hang begin; no render progress for " + ((now - last) / 1_000_000) + " ms");
+                            dump.println(PREFIX + "thread \"" + clientThread.getName() + "\" " + clientThread.getState());
+                            for (StackTraceElement frame : clientThread.getStackTrace()) dump.println("    at " + frame);
+                            for (Map.Entry<Thread, StackTraceElement[]> entry : Thread.getAllStackTraces().entrySet()) {
+                                if (entry.getKey() == clientThread) continue;
+                                dump.println(PREFIX + "thread \"" + entry.getKey().getName() + "\" " + entry.getKey().getState());
+                                for (StackTraceElement frame : entry.getValue()) dump.println("    at " + frame);
+                            }
+                            dump.println(PREFIX + "hang end");
+                            dump.flush();
+                            OUT.print(buffer.toString());
+                            OUT.flush();
+                            try {
+                                java.nio.file.Path target = java.nio.file.Paths.get("arctic-hang.txt");
+                                java.nio.file.Path temporary = java.nio.file.Paths.get("arctic-hang.txt.tmp");
+                                java.nio.file.Files.write(temporary, buffer.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                                java.nio.file.Files.move(temporary, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                            } catch (java.io.IOException ignored) { }
 
+                        }
                     }
                 }
             }
@@ -109,32 +116,25 @@ public final class CrashDiagnostics {
         watcher.start();
     }
 
-    /** Explicit opt-in proof hook; queued after startup so the stack is the game's render thread. */
-    public static void testHook(final Platform platform) {
-        final String mode = System.getProperty("arctic.diagnostics.test", "");
-        if (!mode.equals("exit77") && !mode.equals("sleep40")) return;
-        Thread test = new Thread(new Runnable() {
-            public void run() {
-                try { Thread.sleep(15000); } catch (InterruptedException e) { return; }
-                platform.runOnGameThread(new Runnable() {
-                    public void run() {
-                        if (mode.equals("sleep40")) {
-                            frame();
-                            try { Thread.sleep(40000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-                        }
-                        diagnosticsExit77();
-                    }
-                });
-            }
-        }, "Arctic diagnostics proof");
-        test.setDaemon(true);
-        test.start();
-    }
-
-    private static void diagnosticsExit77() { System.exit(77); }
-
     /** One timestamp write per frame, including paused menus. */
-    public static void frame() { progress = System.nanoTime(); }
+    public static void frame() {
+        progress = System.nanoTime();
+        if (hung) {
+            synchronized (CrashDiagnostics.class) {
+                if (hung) {
+                    hung = false;
+                    String recovered = PREFIX + "hang recovered; render progress resumed\n";
+                    OUT.print(recovered);
+                    try {
+                        java.nio.file.Files.write(java.nio.file.Paths.get("arctic-hang.txt"),
+                                recovered.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                                java.nio.file.StandardOpenOption.APPEND);
+                    } catch (java.io.IOException ignored) { }
+                    OUT.flush();
+                }
+            }
+        }
+    }
 
     public static void stopStarted() {
         System.setProperty("arctic.diagnostics.stopping", "true");
