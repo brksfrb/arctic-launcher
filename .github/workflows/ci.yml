@@ -152,7 +152,9 @@ jobs:
           fi
           exit "$status"
         env:
-          ARCTIC_GRADLE_FLAGS: ${{ inputs.gradle }}
+          # This target's restored cache contains false "missing artifact" entries for
+          # published Maven Central jars. Refresh metadata instead of trusting those misses.
+          ARCTIC_GRADLE_FLAGS: ${{ matrix.version == '1.8.9' && '--refresh-dependencies' || '' }} ${{ inputs.gradle }}
       - name: Probe a game class
         if: ${{ always() && inputs.probe != '' }}
         env:
