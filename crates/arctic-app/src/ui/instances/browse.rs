@@ -201,18 +201,43 @@ impl ArcticApp {
     ) {
         let p = self.palette();
         crate::widgets::row(ui, |ui| {
-            mod_icon(ui, self, hit.icon_url.as_deref());
+            if ui
+                .scope(|ui| mod_icon(ui, self, hit.icon_url.as_deref()))
+                .response
+                .interact(egui::Sense::click())
+                .on_hover_text("Preview project")
+                .clicked()
+            {
+                self.open_project_preview(ui.ctx(), hit.clone(), None);
+            }
             ui.vertical(|ui| {
                 ui.set_max_width(ui.available_width() - 130.0);
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(&hit.title).strong().color(p.text));
+                    if ui
+                        .add(
+                            egui::Label::new(RichText::new(&hit.title).strong().color(p.text))
+                                .sense(egui::Sense::click()),
+                        )
+                        .on_hover_text("Preview project")
+                        .clicked()
+                    {
+                        self.open_project_preview(ui.ctx(), hit.clone(), None);
+                    }
                     ui.label(
                         RichText::new(format!("by {}", hit.author))
                             .small()
                             .color(p.muted),
                     );
                 });
-                ui.label(RichText::new(&hit.description).color(p.muted));
+                if ui
+                    .add(
+                        egui::Label::new(RichText::new(&hit.description).color(p.muted))
+                            .sense(egui::Sense::click()),
+                    )
+                    .clicked()
+                {
+                    self.open_project_preview(ui.ctx(), hit.clone(), None);
+                }
                 ui.label(
                     RichText::new(format!("{} downloads", compact(hit.downloads)))
                         .small()
