@@ -35,13 +35,19 @@ fn fetch(id: String, ctx: egui::Context) -> Receiver<DetailResult> {
 /// open HTTP(S). Inline images are represented by placeholders: gallery
 /// images use our bounded, lazy, cached loader instead of arbitrary file URIs.
 fn prepare_description(body: &str, cache: &mut CommonMarkCache) -> String {
-    let mut images = Vec::new();
+    let mut images: Vec<std::ops::Range<usize>> = Vec::new();
     for (event, range) in Parser::new(body).into_offset_iter() {
         match event {
             Event::Start(Tag::Link { dest_url, .. }) if !safe_url(&dest_url) => {
                 cache.add_link_hook(dest_url.to_string());
             }
-            Event::Start(Tag::Image { .. }) => images.push(range),
+            // Start events visit outer images first. Keep only disjoint ranges
+            // so replacing a nested image cannot invalidate its parent's range.
+            Event::Start(Tag::Image { .. })
+                if images.last().is_none_or(|outer| range.start >= outer.end) =>
+            {
+                images.push(range);
+            }
             _ => {}
         }
     }
@@ -315,6 +321,23 @@ impl ArcticApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nested_images_replace_only_disjoint_outermost_ranges() {
+        let mut cache = CommonMarkCache::default();
+        let placeholder = " [Image — see project gallery] ";
+        for image in [
+            "![![x](https://example.com/verylongimagepath)](b)",
+            "![![![x](https://example.com/verylongimagepath)](b)](c)",
+            "![before ![x](https://example.com/verylongimagepath) after](b)",
+        ] {
+            let body = format!("é {image}![next](https://example.com/next) end");
+            assert_eq!(
+                prepare_description(&body, &mut cache),
+                format!("é {placeholder}{placeholder} end"),
+            );
+        }
+    }
 
     #[test]
     fn untrusted_descriptions_cannot_open_files_or_run_scripts() {
