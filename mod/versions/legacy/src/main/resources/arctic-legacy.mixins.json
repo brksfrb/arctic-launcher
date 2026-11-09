@@ -5,6 +5,11 @@
 	"minVersion": "0.7.11",<% } %>
 	"client": [
 		"MinecraftClientMixin",
+		"GlassLegacyAtlasMixin",
+		"GlassLegacyImageMixin",
+		"GlassLegacyModelMixin",
+		"GlassLegacyBakedQuadMixin",
+		"GlassLegacyRenderMixin",
 		"NativeMenuMixin",
 		"TitleScreenMixin",
 		"TitleKeyMixin",
