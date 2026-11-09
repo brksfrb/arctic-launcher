@@ -1,5 +1,5 @@
 //! "Worlds" on the Play tab: the instance's most recent singleplayer
-//! worlds with their own icons; a click starts the game straight into one.
+//! worlds with their own icons; a click asks first, then starts the game straight into one.
 
 use std::time::SystemTime;
 
@@ -16,6 +16,20 @@ const TILE_W: f32 = 150.0;
 const ICON: f32 = 48.0;
 /// Re-read the saves folder at most this often (seconds).
 const REFRESH: f64 = 20.0;
+
+/// A world waiting for "Play" (from the Play tab or an instance's Worlds page).
+#[derive(Clone)]
+pub struct WorldConfirm {
+    /// Folder name inside `saves`.
+    pub folder: String,
+    /// Name shown in game.
+    pub name: String,
+    /// Select this instance first (`Some(None)` = the default one); `None` = the selected one stays.
+    pub select: Option<Option<String>>,
+    /// Drawn at least once: Enter only counts from the next frame, so the Enter that activated a
+    /// focused tile can't also answer the question.
+    pub shown: bool,
+}
 
 #[derive(Default)]
 pub struct RecentWorlds {
@@ -42,7 +56,7 @@ impl ArcticApp {
         ui.add_space(18.0);
         ui.label(RichText::new("WORLDS").small().color(p.muted));
         ui.add_space(4.0);
-        let mut open = None;
+        let mut open: Option<(String, String)> = None;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(10.0, 10.0);
             for world in &self.recent_worlds.list {
@@ -92,12 +106,65 @@ impl ArcticApp {
                     .on_hover_cursor(egui::CursorIcon::PointingHand)
                     .clicked()
                 {
-                    open = Some(world.folder.clone());
+                    open = Some((world.folder.clone(), world.name.clone()));
                 }
             }
         });
-        if let Some(folder) = open {
-            self.launch_into(QuickPlay::World(folder));
+        if let Some((folder, name)) = open {
+            self.world_confirm = Some(WorldConfirm {
+                folder,
+                name,
+                select: None,
+                shown: false,
+            });
+        }
+    }
+
+    /// "Play <world>?" with Play and Cancel (Enter plays, Esc cancels). Only Play starts the game,
+    /// the way a server needs its Join.
+    pub(crate) fn world_confirm_dialog(&mut self, ctx: &egui::Context) {
+        let Some(world) = self.world_confirm.clone() else {
+            return;
+        };
+        let p = self.palette();
+        let (mut yes, mut cancel) = (false, false);
+        let modal = egui::Modal::new(egui::Id::new("world_confirm"))
+            .frame(crate::ui::dialog_frame(p))
+            .show(ctx, |ui| {
+                ui.set_width(380.0);
+                crate::widgets::lift_controls(ui, p);
+                ui.label(
+                    RichText::new("Do you want to launch Minecraft to play this world?")
+                        .size(18.0)
+                        .strong()
+                        .color(p.text),
+                );
+                ui.add_space(4.0);
+                ui.add(egui::Label::new(RichText::new(&world.name).color(p.muted)).truncate());
+                ui.add_space(14.0);
+                crate::widgets::row(ui, |ui| {
+                    if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
+                        cancel = true;
+                    }
+                    if crate::widgets::button(ui, p, None, "Play", true).clicked() {
+                        yes = true;
+                    }
+                });
+            });
+        yes |= world.shown && ctx.input(|i| i.key_pressed(egui::Key::Enter));
+        if let Some(open) = &mut self.world_confirm {
+            open.shown = true;
+        }
+        if yes {
+            self.world_confirm = None;
+            if let Some(instance) = world.select {
+                self.settings.last_instance = instance;
+                let now = ctx.input(|i| i.time);
+                self.set_tab(crate::app::Tab::Play, now);
+            }
+            self.launch_into(QuickPlay::World(world.folder));
+        } else if cancel || modal.should_close() {
+            self.world_confirm = None;
         }
     }
 }
