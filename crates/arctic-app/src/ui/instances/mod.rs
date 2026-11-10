@@ -160,6 +160,20 @@ pub struct InstancesUi {
     pub loader_switch: Option<loader_switch::LoaderUi>,
 }
 
+impl InstancesUi {
+    /// Dismiss the innermost open view before leaving the Instances tab.
+    pub(crate) fn go_back(&mut self) -> bool {
+        if self.preview.take().is_some() {
+            return true;
+        }
+        if self.modpacks_open {
+            self.modpacks_open = false;
+            return true;
+        }
+        self.open.take().is_some()
+    }
+}
+
 impl ArcticApp {
     pub(crate) fn instance_by_id(&self, id: &str) -> Option<&Instance> {
         if id == self.instance.id {
@@ -553,6 +567,11 @@ impl ArcticApp {
                 }
                 if self.inst.open.as_deref() == Some(instance_id.as_str()) {
                     self.refresh_mods(&instance_id);
+                }
+            }
+            Event::ModGalleryImage(url, result) => {
+                if let Some(preview) = &mut self.inst.preview {
+                    preview.gallery_result(url, result);
                 }
             }
             Event::ModIcon(url, result) => {
