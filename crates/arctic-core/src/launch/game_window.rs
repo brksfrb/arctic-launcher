@@ -3,6 +3,7 @@
 //! maximize the game's window, which covers games without the Arctic Client and LWJGL 2
 //! (1.8.9-1.12.2), which can't do it itself: on Windows directly, on Linux through the X11
 //! window manager (Xorg, and XWayland under Wayland). On macOS the client does it alone.
+//! On Windows the same watcher also brings the game forward, whether maximized or not.
 
 use std::time::Duration;
 
@@ -15,12 +16,33 @@ const POLL: Duration = Duration::from_millis(150);
 /// The JVM flag that tells the Arctic Client to maximize its window.
 pub const CLIENT_FLAG: &str = "-Darctic.maximized=true";
 
-/// Maximize the window game `pid` opens, once (a player who restores it keeps it that way).
-pub fn maximize_when_open(pid: u32) {
-    #[cfg(any(windows, target_os = "linux"))]
-    std::thread::spawn(move || imp::watch(pid));
+/// Hand the foreground to the game at spawn, then focus/maximize its window once it opens.
+pub fn on_spawn(pid: u32, maximize: bool) {
+    #[cfg(windows)]
+    {
+        // Do this immediately, while the launcher still owns the foreground. Best effort (a
+        // detached CLI might not own it). KeepOpen still leaves the launcher running behind it.
+        // SAFETY: grants permission to a process id just returned by a successful spawn.
+        unsafe {
+            windows_sys::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow(pid);
+        }
+        std::thread::spawn(move || imp::watch(pid, maximize));
+    }
+    #[cfg(target_os = "linux")]
+    if maximize {
+        std::thread::spawn(move || imp::watch(pid));
+    }
     #[cfg(not(any(windows, target_os = "linux")))]
-    let _ = pid;
+    let _ = (pid, maximize);
+}
+
+/// Both actions use the same window discovery, including when maximizing is disabled.
+#[cfg(any(windows, test))]
+fn apply_windows_actions(maximize: bool, maximize_window: impl FnOnce(), focus: impl FnOnce()) {
+    if maximize {
+        maximize_window();
+    }
+    focus();
 }
 
 #[cfg(windows)]
@@ -30,7 +52,7 @@ mod imp {
     use windows_sys::Win32::Foundation::{HWND, LPARAM};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         EnumWindows, GetClassNameW, GetWindowThreadProcessId, IsWindowVisible, SW_MAXIMIZE,
-        ShowWindow,
+        SetForegroundWindow, ShowWindow,
     };
 
     use super::{POLL, WATCH_FOR};
@@ -43,15 +65,25 @@ mod imp {
         found: Option<HWND>,
     }
 
-    pub fn watch(pid: u32) {
+    pub fn watch(pid: u32, maximize: bool) {
         let start = Instant::now();
         while start.elapsed() < WATCH_FOR {
             if let Some(hwnd) = find(pid) {
                 // SAFETY: a live top-level window of the game, found just now.
                 unsafe {
-                    ShowWindow(hwnd, SW_MAXIMIZE);
+                    super::apply_windows_actions(
+                        maximize,
+                        || {
+                            ShowWindow(hwnd, SW_MAXIMIZE);
+                            log::info!("maximized the game window");
+                        },
+                        || {
+                            if SetForegroundWindow(hwnd) != 0 {
+                                log::info!("focused the game window");
+                            }
+                        },
+                    );
                 }
-                log::info!("maximized the game window");
                 return;
             }
             std::thread::sleep(POLL);
@@ -192,5 +224,33 @@ mod imp {
             .ok()
             .and_then(|c| c.reply().ok())
             .is_some_and(|a| a.map_state == MapState::VIEWABLE)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apply_windows_actions;
+    use std::cell::RefCell;
+
+    #[test]
+    fn windows_focuses_without_maximize() {
+        let actions = RefCell::new(Vec::new());
+        apply_windows_actions(
+            false,
+            || actions.borrow_mut().push("maximize"),
+            || actions.borrow_mut().push("focus"),
+        );
+        assert_eq!(actions.into_inner(), ["focus"]);
+    }
+
+    #[test]
+    fn windows_maximizes_then_focuses_the_same_window() {
+        let actions = RefCell::new(Vec::new());
+        apply_windows_actions(
+            true,
+            || actions.borrow_mut().push("maximize"),
+            || actions.borrow_mut().push("focus"),
+        );
+        assert_eq!(actions.into_inner(), ["maximize", "focus"]);
     }
 }

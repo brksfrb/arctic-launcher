@@ -84,8 +84,15 @@
 		"SmoothFontGlyphInfoMixin",<% } %><% if (glowText) { %>
 		"GlowTextMixin",<% } %><% if (scaledFont) { %>
 		"FontTextureMixin",
+		"ScaledGlyphMixin",<% } %><% if (!worldTextScale) { %>
+		"FontDrawScaleMixin",<% } %><% if (textProjection) { %>
 		"ScaledTextStateMixin",
-		"ScaledGlyphMixin",<% } %><% if (textShader) { %>
+		"TextProjectionMixin",
+		"TextProjectionBufferMixin",<% } %><% if (worldTextScale) { %>
+		"WorldTextScaleMixin",<% } %><% if (oldScaledFont) { %>
+		"ScaledFontSetMixin",<% } %><% if (oldScaledTexture) { %>
+		"ScaledFontTextureMixin",<% } %><% if (gpuFontTexture && !scaledFont) { %>
+		"FontTextureMixin",<% } %><% if (textShader) { %>
 		"TextShaderMixin",<% } %><% if (textShaderOld) { %>
 		"TextShaderOldMixin",<% } %><% if (startup) { %>
 		"MainStartMixin",
@@ -134,7 +141,7 @@
 		"TrueTypeDefinitionMixin",
 		"TrueTypeGlyphMixin",
 		"OptionsPacksMixin",
-		"TitleFontMixin"<% } %><% if (cosmeticsSubmit) { %>,
+		"FontReloadMixin"<% } %><% if (cosmeticsSubmit) { %>,
 		"AvatarRendererMixin",
 		"AvatarRenderStateMixin"<% } %><% if (cosmeticsBuffers) { %>,
 		"OldPlayerRendererMixin"<% } %><% if (cosmeticsState) { %>,

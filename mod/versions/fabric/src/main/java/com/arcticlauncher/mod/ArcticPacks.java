@@ -8,7 +8,6 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackLocationInfo;
 import net.minecraft.server.packs.PackSelectionConfig;
@@ -66,23 +65,6 @@ public final class ArcticPacks implements RepositorySource {
 	/** Copies of the smooth font rasterized larger, for text drawn scaled up. */
 	public static final Identifier TITLE_FONT = Identifier.fromNamespaceAndPath("arctic", "title");
 	public static final Identifier SUBTITLE_FONT = Identifier.fromNamespaceAndPath("arctic", "subtitle");
-
-	/**
-	 * Titles and subtitles are drawn 4× and 2× larger than chat text, so the
-	 * GUI-scale glyphs came out blocky. With the smooth font on, their text
-	 * uses a copy of the font rasterized at that size (text that picks its
-	 * own font keeps it).
-	 */
-	public static Component sharpScaled(Component text, Identifier font) {
-		if (text == null || !smoothFontCached()
-				|| !(text.getStyle().getFont() instanceof net.minecraft.network.chat.FontDescription.Resource r)
-				|| !r.id().equals(Identifier.withDefaultNamespace("default"))) {
-			return text;
-		}
-		return Component.empty()
-				.withStyle(style -> style.withFont(new net.minecraft.network.chat.FontDescription.Resource(font)))
-				.append(text);
-	}
 
 	/**
 	 * Oversample for loading the font now: the GUI scale, so each glyph
@@ -144,6 +126,7 @@ public final class ArcticPacks implements RepositorySource {
 
 	/** The smooth font's look changed: resources reload so its letters are built again. */
 	public static void reloadFonts() {
+		ScaledInter.clear();
 		if (smoothFontOn() && (reloading == null || reloading.isDone())) {
 			reloading = Minecraft.getInstance().reloadResourcePacks();
 		}
@@ -162,7 +145,10 @@ public final class ArcticPacks implements RepositorySource {
 		} else {
 			selected.remove(SMOOTH_FONT);
 		}
+		ScaledInter.clear();
 		repo.setSelected(selected);
+		smoothCached = on;
+		smoothCheckedAt = System.nanoTime();
 		mc.options.updateResourcePacks(repo);
 	}
 }

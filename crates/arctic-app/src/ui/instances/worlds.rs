@@ -6,11 +6,10 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 
 use arctic_core::instances::Instance;
-use arctic_core::launch::QuickPlay;
 use arctic_core::worlds::{self, Source, World};
 use eframe::egui::{self, CornerRadius, Id, Modal, RichText, Sense, vec2};
 
-use crate::app::{ArcticApp, Tab};
+use crate::app::ArcticApp;
 use crate::art::icons::{self, Icon};
 use crate::motion::format_bytes;
 use crate::theme;
@@ -150,11 +149,13 @@ impl ArcticApp {
                     let _ = open::that_detached(&world.path);
                 }
                 if widgets::icon_button(ui, p, Icon::Play, "Play this world (1.20+)").clicked() {
-                    self.settings.last_instance =
-                        (!instance.is_default()).then(|| instance.id.clone());
-                    let now = ui.input(|i| i.time);
-                    self.set_tab(Tab::Play, now);
-                    self.launch_into(QuickPlay::World(world.folder.clone()));
+                    // Asks first; Play then selects this instance and starts the game.
+                    self.world_confirm = Some(super::super::play_worlds::WorldConfirm {
+                        folder: world.folder.clone(),
+                        name: world.name.clone(),
+                        select: Some((!instance.is_default()).then(|| instance.id.clone())),
+                        shown: false,
+                    });
                 }
             });
         });

@@ -440,7 +440,7 @@ final class ModCatalog {
 		}
 		out.add(new Mod("controller", "Controller", "Play with a gamepad: Xbox, PlayStation and others", "controller",
 				Category.GAMEPLAY, "gamepad joystick xbox playstation console")
-				.toggle(() -> c.controller.enabled, on -> c.controller.enabled = on)
+				.toggle(() -> c.controller.enabled, on -> c.controller.setEnabled(on))
 				.settings((host, f) -> controllerSettings(f, c)));
 		out.add(new Mod("tiers", "Tier Tags", "Players' PvP tiers by their names: HT3 Sword | Steve", "tiers", Category.SOCIAL,
 				"tier list mctiers pvptiers subtiers rank test")

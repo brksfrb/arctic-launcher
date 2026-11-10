@@ -22,6 +22,8 @@ public final class ChatCopyProof {
 	public static final String[] EXPECTED = {SHORT_PLAIN, URL, WRAP, REPEAT, RUN, SUGGEST};
 
 	public interface Game {
+		String hoverText(Object style);
+		void hoverAt(int x, int y);
 		int width();
 		int height();
 		Object hit(int x, int y);
@@ -43,8 +45,12 @@ public final class ChatCopyProof {
 				ChatCopy.Data data = ChatCopy.data(style);
 				if (data == null) continue;
 				if (!data.target && SHORT_PLAIN.equals(data.text) && game.colored(x, y, style)) colored = new int[] {x, y};
-				if (data.target) targets.put(data.text, new int[] {x, y});
+				if (data.target) {
+					require("Click to copy".equals(game.hoverText(style)), "copy target hover text");
+					targets.put(data.text, new int[] {x, y});
+				}
 				else {
+					require(game.hoverText(style).isEmpty(), "plain body has no copy hover");
 					bodies.put(data.text, new int[] {x, y});
 					if (WRAP.equals(data.text)) wrapped.put(y, new int[] {x, y});
 				}
@@ -87,6 +93,9 @@ public final class ChatCopyProof {
 		copy(game, targets.get(WRAP), WRAP, false);
 		log.println("PASS " + phase + ": six timestamp/copy targets, green inline text Shift+right-click, " + wrapped.size()
 				+ " wrapped samples, formatting removed, literal suffix retained, stacked suffix excluded, URL/run_command/suggest_command preserved, toggle off/on; clipboard read back");
+		int[] hover = targets.get(SHORT_PLAIN);
+		game.hoverAt(hover[0], hover[1]);
+		log.println("PASS target SHOW_TEXT Click to copy; body events preserved; cursor on timestamp/copy target " + hover[0] + "," + hover[1]);
 		log.flush();
 	}
 

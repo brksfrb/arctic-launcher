@@ -48,6 +48,74 @@ final class ChatCopyTest {
 		//#endif
 	}
 
+	private static String hover(Object style) {
+		net.minecraft.network.chat.HoverEvent hover = ((Style) style).getHoverEvent();
+		if (hover == null) return "";
+		//#if MC >= 1.21.5
+		return hover instanceof net.minecraft.network.chat.HoverEvent.ShowText ? ((net.minecraft.network.chat.HoverEvent.ShowText) hover).value().getString() : "";
+		//#elif MC >= 1.16
+		return hover.getValue(net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT).getString();
+		//#else
+		return hover.getValue().getString();
+		//#endif
+	}
+
+	private static void checkHoverStyles() {
+		net.minecraft.network.chat.HoverEvent event = null;
+		//#if MC >= 1.21.5
+		event = new net.minecraft.network.chat.HoverEvent.ShowText(Compat.literal("server hover"));
+		//#else
+		event = new net.minecraft.network.chat.HoverEvent(net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT, Compat.literal("server hover"));
+		//#endif
+		Style server = null;
+		//#if MC >= 1.16
+		server = Style.EMPTY.withInsertion("server insertion").withHoverEvent(event);
+		//#else
+		server = new Style().setInsertion("server insertion").setHoverEvent(event);
+		//#endif
+		net.minecraft.network.chat.MutableComponent body = Compat.literal("probe");
+		body.setStyle(server);
+		net.minecraft.network.chat.ClickEvent click = null;
+		//#if MC >= 1.21.5
+		click = new net.minecraft.network.chat.ClickEvent.RunCommand("/help");
+		//#else
+		click = new net.minecraft.network.chat.ClickEvent(net.minecraft.network.chat.ClickEvent.Action.RUN_COMMAND, "/help");
+		//#endif
+		//#if MC >= 1.16
+		body.setStyle(body.getStyle().withClickEvent(click));
+		//#else
+		body.getStyle().setClickEvent(click);
+		//#endif
+		Style tagged = ChatCopyComponents.tag(body, "probe", false).getStyle();
+		if (tagged.getClickEvent() != click || tagged.getHoverEvent() != event || !"server insertion".equals(tagged.getInsertion()))
+			throw new AssertionError("body server click/hover/insertion changed");
+		if (!hover(ChatCopyComponents.tag(Compat.literal("probe"), "probe", false).getStyle()).isEmpty())
+			throw new AssertionError("plain body gained hover");
+
+		Style existing = ChatCopyComponents.tag(Compat.literal("probe"), "probe", true).getStyle();
+		if (!"Click to copy".equals(hover(existing)))
+			throw new AssertionError("copy target missing hover");
+		ArcticClient.config().chatCopy = false;
+		if (!hover(existing).isEmpty())
+			throw new AssertionError("existing enabled target retained hover after disabling");
+		Style receivedDisabled = ChatCopyComponents.tag(Compat.literal("probe"), "probe", true).getStyle();
+		if (!hover(receivedDisabled).isEmpty())
+			throw new AssertionError("disabled target gained hover");
+		if (tagged.getHoverEvent() != event)
+			throw new AssertionError("disabled body lost server hover");
+		ArcticClient.config().chatCopy = true;
+		if (!"Click to copy".equals(hover(existing)) || !"Click to copy".equals(hover(receivedDisabled)))
+			throw new AssertionError("existing targets missing hover after enabling");
+		ArcticClient.config().chatOff = true;
+		if (!hover(existing).isEmpty() || !hover(receivedDisabled).isEmpty())
+			throw new AssertionError("hidden chat target retained hover");
+		ArcticClient.config().chatOff = false;
+		if (!"Click to copy".equals(hover(existing)) || !"Click to copy".equals(hover(receivedDisabled)))
+			throw new AssertionError("existing targets missing hover after showing chat");
+		if (tagged.getHoverEvent() != event)
+			throw new AssertionError("body server hover changed after toggles");
+	}
+
 	private static void phase(int phase) {
 		try { if (log == null) log = ChatCopyProof.log(VERSION); }
 		catch (Exception error) { throw new RuntimeException(error); }
@@ -74,6 +142,7 @@ final class ChatCopyTest {
 		ArcticClient.config().chatStack = true;
 		ArcticClient.config().chatKeep = false;
 		ArcticClient.config().chatOff = false;
+		checkHoverStyles();
 		ArcticClient.config().fancy = phase < 2;
 		com.arcticlauncher.client.gfx.Draw.fancy = phase < 2;
 		//#if MC >= 26.1
@@ -117,6 +186,12 @@ final class ChatCopyTest {
 		later(2, () -> {
 			Minecraft mc = Minecraft.getInstance();
 			ChatCopyProof.check(new ChatCopyProof.Game() {
+				public String hoverText(Object style) { return hover(style); }
+				public void hoverAt(int x, int y) {
+					// Use the controller's native cursor adapter, which also reports GLFW warps to Minecraft.
+					ArcticClient.platform().setCursor(x * mc.getWindow().getGuiScale(), y * mc.getWindow().getGuiScale());
+					ArcticClient.platform().setCursor(x * mc.getWindow().getGuiScale(), y * mc.getWindow().getGuiScale());
+				}
 				public int width() { return mc.getWindow().getGuiScaledWidth(); }
 				public int height() { return mc.getWindow().getGuiScaledHeight(); }
 				public Object hit(int x, int y) { return ChatCopyInput.hit(x, y); }
@@ -139,6 +214,7 @@ final class ChatCopyTest {
 			}, log, "phase=" + phase + " fancy=" + (phase < 2) + " timestamps=" + (phase % 2 == 0));
 			later(1, () -> {
 				shot("chat-" + phase);
+				if (phase == 0) shot("hover");
 				if (phase < Integer.getInteger("arctic.chatcopy.endPhase", 3)) phase(phase + 1);
 				else {
 					Menus.select("chat");
