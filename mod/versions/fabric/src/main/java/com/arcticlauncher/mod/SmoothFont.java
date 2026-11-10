@@ -10,6 +10,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.Minecraft;
+import net.minecraft.resources.Identifier;
 import org.lwjgl.system.MemoryUtil;
 //#if MC >= 1.20.5
 import net.minecraft.client.gui.font.FontOption;
@@ -33,7 +34,6 @@ public final class SmoothFont {
 	private static final String FILE = "/resourcepacks/smooth_font/assets/arctic/font/inter.ttf";
 	/** Size in GUI pixels, as in the 26.1+ pack's font files. */
 	private static final float SIZE = 8.5f;
-	private static final String DEFAULT_FONT = "minecraft:default";
 	/** Inter's space is narrow for Minecraft text; the 26.1+ pack uses this too. */
 	public static final float SPACE = 2.5f;
 	//#if MC < 1.20.5
@@ -109,8 +109,9 @@ public final class SmoothFont {
 		return Math.max(1, (int) Math.round(Minecraft.getInstance().getWindow().getGuiScale()));
 	}
 
-	public static boolean isDefault(Object fontName) {
-		return fontName != null && DEFAULT_FONT.equals(fontName.toString());
+	public static boolean isDefault(Identifier fontName) {
+		return fontName != null && "minecraft".equals(fontName.getNamespace())
+				&& "default".equals(fontName.getPath());
 	}
 
 	/** The default font's providers, with Inter first when Fancy is on. */
