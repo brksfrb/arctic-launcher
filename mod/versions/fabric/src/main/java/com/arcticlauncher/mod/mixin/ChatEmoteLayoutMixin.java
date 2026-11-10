@@ -13,14 +13,14 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
 /** Replace only the wrapping argument: GuiMessage.content remains the readable original. */
 //#if MC >= 26.1
 @Mixin(net.minecraft.client.multiplayer.chat.GuiMessage.class)
-//#elif MC >= 1.21.9
+//#elif MC >= 1.21.11
 @Mixin(net.minecraft.client.GuiMessage.class)
 //#else
 @Mixin(net.minecraft.client.gui.components.ChatComponent.class)
 //#endif
 abstract class ChatEmoteLayoutMixin {
 	@ModifyArg(
-			//#if MC >= 1.21.9
+			//#if MC >= 1.21.11
 			method = "splitLines",
 			//#elif MC >= 1.20.6
 			method = "addMessageToDisplayQueue",
