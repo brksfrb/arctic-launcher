@@ -2,8 +2,8 @@ package com.arcticlauncher.mod.mixin;
 
 //#if MC < 26.2
 import com.arcticlauncher.mod.TextDrawScale;
-import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.At;
 import net.minecraft.client.gui.Font;
 //#if MC >= 1.15
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -18,201 +18,246 @@ import net.minecraft.util.FormattedCharSequence;
 //#endif
 import org.spongepowered.asm.mixin.Mixin;
 
-/** The final draw path, after its full transform is known. Measuring text never enters this scope. */
+/**
+ * The final draw path, after its full transform is known. Measuring text never enters this scope.
+ * The x argument is an unchanged primitive carrier for entry/return hooks: unlike an Operation
+ * wrapper, these hooks need neither a varargs array nor boxed draw arguments or return values.
+ */
 @Mixin(Font.class)
 abstract class FontDrawScaleMixin {
 //#if MC >= 26.1
-	@WrapMethod(method = "drawInBatch(Ljava/lang/String;FFIZLorg/joml/Matrix4fc;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V")
-	private void arctic$string(String text, float x, float y, int color, boolean shadow, org.joml.Matrix4fc pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light, Operation<Void> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			original.call(text, x, y, color, shadow, pose, buffers, mode, background, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+	@ModifyVariable(method = "drawInBatch(Ljava/lang/String;FFIZLorg/joml/Matrix4fc;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$string$enter(float value, String text, float x, float y, int color, boolean shadow, org.joml.Matrix4fc pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
 	}
-	@WrapMethod(method = "drawInBatch(Lnet/minecraft/util/FormattedCharSequence;FFIZLorg/joml/Matrix4fc;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V")
-	private void arctic$sequence(FormattedCharSequence text, float x, float y, int color, boolean shadow, org.joml.Matrix4fc pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light, Operation<Void> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			original.call(text, x, y, color, shadow, pose, buffers, mode, background, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+	@ModifyVariable(method = "drawInBatch(Ljava/lang/String;FFIZLorg/joml/Matrix4fc;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$string$leave(float value) {
+		TextDrawScale.pop();
+		return value;
 	}
-	@WrapMethod(method = "drawInBatch(Lnet/minecraft/network/chat/Component;FFIZLorg/joml/Matrix4fc;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V")
-	private void arctic$component(net.minecraft.network.chat.Component text, float x, float y, int color, boolean shadow, org.joml.Matrix4fc pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light, Operation<Void> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			original.call(text, x, y, color, shadow, pose, buffers, mode, background, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+	@ModifyVariable(method = "drawInBatch(Lnet/minecraft/util/FormattedCharSequence;FFIZLorg/joml/Matrix4fc;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$sequence$enter(float value, FormattedCharSequence text, float x, float y, int color, boolean shadow, org.joml.Matrix4fc pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "drawInBatch(Lnet/minecraft/util/FormattedCharSequence;FFIZLorg/joml/Matrix4fc;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$sequence$leave(float value) {
+		TextDrawScale.pop();
+		return value;
+	}
+	@ModifyVariable(method = "drawInBatch(Lnet/minecraft/network/chat/Component;FFIZLorg/joml/Matrix4fc;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$component$enter(float value, net.minecraft.network.chat.Component text, float x, float y, int color, boolean shadow, org.joml.Matrix4fc pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "drawInBatch(Lnet/minecraft/network/chat/Component;FFIZLorg/joml/Matrix4fc;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$component$leave(float value) {
+		TextDrawScale.pop();
+		return value;
 	}
 //#elif MC >= 1.21.6
-	@WrapMethod(method = "drawInBatch(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V")
-	private void arctic$string(String text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light, Operation<Void> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			original.call(text, x, y, color, shadow, pose, buffers, mode, background, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+	@ModifyVariable(method = "drawInBatch(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$string$enter(float value, String text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
 	}
-	@WrapMethod(method = "drawInBatch(Lnet/minecraft/util/FormattedCharSequence;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V")
-	private void arctic$sequence(FormattedCharSequence text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light, Operation<Void> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			original.call(text, x, y, color, shadow, pose, buffers, mode, background, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+	@ModifyVariable(method = "drawInBatch(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$string$leave(float value) {
+		TextDrawScale.pop();
+		return value;
 	}
-	@WrapMethod(method = "drawInBatch(Lnet/minecraft/network/chat/Component;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V")
-	private void arctic$component(net.minecraft.network.chat.Component text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light, Operation<Void> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			original.call(text, x, y, color, shadow, pose, buffers, mode, background, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+	@ModifyVariable(method = "drawInBatch(Lnet/minecraft/util/FormattedCharSequence;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$sequence$enter(float value, FormattedCharSequence text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "drawInBatch(Lnet/minecraft/util/FormattedCharSequence;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$sequence$leave(float value) {
+		TextDrawScale.pop();
+		return value;
+	}
+	@ModifyVariable(method = "drawInBatch(Lnet/minecraft/network/chat/Component;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$component$enter(float value, net.minecraft.network.chat.Component text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "drawInBatch(Lnet/minecraft/network/chat/Component;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)V", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$component$leave(float value) {
+		TextDrawScale.pop();
+		return value;
 	}
 //#elif MC >= 1.15
-//#if MC >= 1.19.4
-	@WrapMethod(method = "renderText(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)F")
-	private float arctic$string(String text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light, Operation<Float> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			return original.call(text, x, y, color, shadow, pose, buffers, mode, background, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+//#if MC >= 1.21.2
+	@ModifyVariable(method = "renderText(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;IIZ)F", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$string$enter(float value, String text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light, boolean inverseDepth) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "renderText(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;IIZ)F", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$string$leave(float value) {
+		TextDrawScale.pop();
+		return value;
+	}
+//#elif MC >= 1.19.4
+	@ModifyVariable(method = "renderText(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)F", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$string$enter(float value, String text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "renderText(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)F", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$string$leave(float value) {
+		TextDrawScale.pop();
+		return value;
 	}
 //#elif MC >= 1.19.3
-	@WrapMethod(method = "renderText(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F")
-	private float arctic$string(String text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, boolean mode, int background, int light, Operation<Float> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			return original.call(text, x, y, color, shadow, pose, buffers, mode, background, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+	@ModifyVariable(method = "renderText(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$string$enter(float value, String text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, boolean mode, int background, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "renderText(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$string$leave(float value) {
+		TextDrawScale.pop();
+		return value;
 	}
 //#elif MC >= 1.16
-	@WrapMethod(method = "renderText(Ljava/lang/String;FFIZLcom/mojang/math/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F")
-	private float arctic$string(String text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, boolean mode, int background, int light, Operation<Float> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			return original.call(text, x, y, color, shadow, pose, buffers, mode, background, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+	@ModifyVariable(method = "renderText(Ljava/lang/String;FFIZLcom/mojang/math/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$string$enter(float value, String text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, boolean mode, int background, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "renderText(Ljava/lang/String;FFIZLcom/mojang/math/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$string$leave(float value) {
+		TextDrawScale.pop();
+		return value;
 	}
 //#else
-	@WrapMethod(method = "renderText(Ljava/lang/String;FFIZLcom/mojang/math/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F")
-	private float arctic$string(String text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, boolean mode, int background, int light, Operation<Float> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			return original.call(text, x, y, color, shadow, pose, buffers, mode, background, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+	@ModifyVariable(method = "renderText(Ljava/lang/String;FFIZLcom/mojang/math/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$string$enter(float value, String text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, boolean mode, int background, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "renderText(Ljava/lang/String;FFIZLcom/mojang/math/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$string$leave(float value) {
+		TextDrawScale.pop();
+		return value;
 	}
 //#endif
 //#if MC >= 1.16
-//#if MC >= 1.19.4
-	@WrapMethod(method = "renderText(Lnet/minecraft/util/FormattedCharSequence;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)F")
-	private float arctic$sequence(FormattedCharSequence text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light, Operation<Float> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			return original.call(text, x, y, color, shadow, pose, buffers, mode, background, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+//#if MC >= 1.21.2
+	@ModifyVariable(method = "renderText(Lnet/minecraft/util/FormattedCharSequence;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;IIZ)F", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$sequence$enter(float value, FormattedCharSequence text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light, boolean inverseDepth) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "renderText(Lnet/minecraft/util/FormattedCharSequence;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;IIZ)F", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$sequence$leave(float value) {
+		TextDrawScale.pop();
+		return value;
+	}
+//#elif MC >= 1.19.4
+	@ModifyVariable(method = "renderText(Lnet/minecraft/util/FormattedCharSequence;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)F", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$sequence$enter(float value, FormattedCharSequence text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, Font.DisplayMode mode, int background, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "renderText(Lnet/minecraft/util/FormattedCharSequence;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)F", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$sequence$leave(float value) {
+		TextDrawScale.pop();
+		return value;
 	}
 //#elif MC >= 1.19.3
-	@WrapMethod(method = "renderText(Lnet/minecraft/util/FormattedCharSequence;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F")
-	private float arctic$sequence(FormattedCharSequence text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, boolean mode, int background, int light, Operation<Float> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			return original.call(text, x, y, color, shadow, pose, buffers, mode, background, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+	@ModifyVariable(method = "renderText(Lnet/minecraft/util/FormattedCharSequence;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$sequence$enter(float value, FormattedCharSequence text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, boolean mode, int background, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "renderText(Lnet/minecraft/util/FormattedCharSequence;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$sequence$leave(float value) {
+		TextDrawScale.pop();
+		return value;
 	}
 //#elif MC >= 1.16
-	@WrapMethod(method = "renderText(Lnet/minecraft/util/FormattedCharSequence;FFIZLcom/mojang/math/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F")
-	private float arctic$sequence(FormattedCharSequence text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, boolean mode, int background, int light, Operation<Float> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			return original.call(text, x, y, color, shadow, pose, buffers, mode, background, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+	@ModifyVariable(method = "renderText(Lnet/minecraft/util/FormattedCharSequence;FFIZLcom/mojang/math/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$sequence$enter(float value, FormattedCharSequence text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, boolean mode, int background, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "renderText(Lnet/minecraft/util/FormattedCharSequence;FFIZLcom/mojang/math/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$sequence$leave(float value) {
+		TextDrawScale.pop();
+		return value;
 	}
 //#else
-	@WrapMethod(method = "renderText(Lnet/minecraft/util/FormattedCharSequence;FFIZLcom/mojang/math/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F")
-	private float arctic$sequence(FormattedCharSequence text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, boolean mode, int background, int light, Operation<Float> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			return original.call(text, x, y, color, shadow, pose, buffers, mode, background, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+	@ModifyVariable(method = "renderText(Lnet/minecraft/util/FormattedCharSequence;FFIZLcom/mojang/math/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$sequence$enter(float value, FormattedCharSequence text, float x, float y, int color, boolean shadow, Matrix4f pose, MultiBufferSource buffers, boolean mode, int background, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "renderText(Lnet/minecraft/util/FormattedCharSequence;FFIZLcom/mojang/math/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)F", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$sequence$leave(float value) {
+		TextDrawScale.pop();
+		return value;
 	}
 //#endif
 //#endif
 //#else
-	@WrapMethod(method = "drawInternal(Ljava/lang/String;FFIZ)I")
-	private int arctic$string(String text, float x, float y, int color, boolean shadow, Operation<Integer> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(x, y));
-		try {
-			return original.call(text, x, y, color, shadow);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+	@ModifyVariable(method = "drawInternal(Ljava/lang/String;FFIZ)I", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$string$enter(float value, String text, float x, float y, int color, boolean shadow) {
+		TextDrawScale.push(TextDrawScale.pixels(x, y));
+		return value;
+	}
+	@ModifyVariable(method = "drawInternal(Ljava/lang/String;FFIZ)I", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$string$leave(float value) {
+		TextDrawScale.pop();
+		return value;
 	}
 //#endif
 //#if MC >= 1.17
 //#if MC >= 26.1
-	@WrapMethod(method = "drawInBatch8xOutline(Lnet/minecraft/util/FormattedCharSequence;FFIILorg/joml/Matrix4fc;Lnet/minecraft/client/renderer/MultiBufferSource;I)V")
-	private void arctic$outline(FormattedCharSequence text, float x, float y, int color, int outline, org.joml.Matrix4fc pose, MultiBufferSource buffers, int light, Operation<Void> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			original.call(text, x, y, color, outline, pose, buffers, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+	@ModifyVariable(method = "drawInBatch8xOutline(Lnet/minecraft/util/FormattedCharSequence;FFIILorg/joml/Matrix4fc;Lnet/minecraft/client/renderer/MultiBufferSource;I)V", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$outline$enter(float value, FormattedCharSequence text, float x, float y, int color, int outline, org.joml.Matrix4fc pose, MultiBufferSource buffers, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "drawInBatch8xOutline(Lnet/minecraft/util/FormattedCharSequence;FFIILorg/joml/Matrix4fc;Lnet/minecraft/client/renderer/MultiBufferSource;I)V", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$outline$leave(float value) {
+		TextDrawScale.pop();
+		return value;
 	}
 //#elif MC >= 1.21.6
-	@WrapMethod(method = "drawInBatch8xOutline(Lnet/minecraft/util/FormattedCharSequence;FFIILorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;I)V")
-	private void arctic$outline(FormattedCharSequence text, float x, float y, int color, int outline, Matrix4f pose, MultiBufferSource buffers, int light, Operation<Void> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			original.call(text, x, y, color, outline, pose, buffers, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+	@ModifyVariable(method = "drawInBatch8xOutline(Lnet/minecraft/util/FormattedCharSequence;FFIILorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;I)V", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$outline$enter(float value, FormattedCharSequence text, float x, float y, int color, int outline, Matrix4f pose, MultiBufferSource buffers, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "drawInBatch8xOutline(Lnet/minecraft/util/FormattedCharSequence;FFIILorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;I)V", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$outline$leave(float value) {
+		TextDrawScale.pop();
+		return value;
 	}
 //#elif MC >= 1.19.3
-	@WrapMethod(method = "drawInBatch8xOutline(Lnet/minecraft/util/FormattedCharSequence;FFIILorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;I)V")
-	private void arctic$outline(FormattedCharSequence text, float x, float y, int color, int outline, Matrix4f pose, MultiBufferSource buffers, int light, Operation<Void> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			original.call(text, x, y, color, outline, pose, buffers, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+	@ModifyVariable(method = "drawInBatch8xOutline(Lnet/minecraft/util/FormattedCharSequence;FFIILorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;I)V", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$outline$enter(float value, FormattedCharSequence text, float x, float y, int color, int outline, Matrix4f pose, MultiBufferSource buffers, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "drawInBatch8xOutline(Lnet/minecraft/util/FormattedCharSequence;FFIILorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;I)V", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$outline$leave(float value) {
+		TextDrawScale.pop();
+		return value;
 	}
 //#else
-	@WrapMethod(method = "drawInBatch8xOutline(Lnet/minecraft/util/FormattedCharSequence;FFIILcom/mojang/math/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;I)V")
-	private void arctic$outline(FormattedCharSequence text, float x, float y, int color, int outline, Matrix4f pose, MultiBufferSource buffers, int light, Operation<Void> original) {
-		float previous = TextDrawScale.set(TextDrawScale.pixels(pose, x, y));
-		try {
-			original.call(text, x, y, color, outline, pose, buffers, light);
-		} finally {
-			TextDrawScale.restore(previous);
-		}
+	@ModifyVariable(method = "drawInBatch8xOutline(Lnet/minecraft/util/FormattedCharSequence;FFIILcom/mojang/math/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;I)V", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private float arctic$outline$enter(float value, FormattedCharSequence text, float x, float y, int color, int outline, Matrix4f pose, MultiBufferSource buffers, int light) {
+		TextDrawScale.push(TextDrawScale.pixels(pose, x, y));
+		return value;
+	}
+	@ModifyVariable(method = "drawInBatch8xOutline(Lnet/minecraft/util/FormattedCharSequence;FFIILcom/mojang/math/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;I)V", at = @At("RETURN"), argsOnly = true, ordinal = 0)
+	private float arctic$outline$leave(float value) {
+		TextDrawScale.pop();
+		return value;
 	}
 //#endif
 //#endif
