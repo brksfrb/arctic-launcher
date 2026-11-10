@@ -71,6 +71,29 @@ abstract class ChatComponentMixin {
 	@Unique
 	private long arctic$stackRefreshAt;
 
+	@Unique private boolean arctic$emojiWasOn = true;
+
+	@Inject(
+			//#if MC >= 26.1
+			method = "extractRenderState",
+			//#else
+			method = "render",
+			//#endif
+			at = @At("HEAD"))
+	private void arctic$emojiSetting(CallbackInfo ci) {
+		ClientConfig c = ArcticClient.config();
+		boolean on = c != null && c.chatEmoji;
+		if (on == arctic$emojiWasOn) return;
+		arctic$emojiWasOn = on;
+		//#if MC >= 1.20.6
+		refreshTrimmedMessages();
+		//#elif MC >= 1.19
+		refreshTrimmedMessage();
+		//#else
+		rescaleChat();
+		//#endif
+	}
+
 	/** How many messages the chat keeps: the game's 100 become the player's setting. */
 	@ModifyConstant(
 			//#if MC >= 1.20.6

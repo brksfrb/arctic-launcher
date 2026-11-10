@@ -49,6 +49,22 @@ abstract class ChatHudMixin {
 	@Unique
 	private final com.arcticlauncher.client.feature.ChatStacker arctic$stacker = new com.arcticlauncher.client.feature.ChatStacker();
 
+	@Unique private boolean arctic$emojiWasOn = true;
+
+	/** Only the argument passed to wrapping changes; the stored message is untouched. */
+	@org.spongepowered.asm.mixin.injection.ModifyArg(method = "addMessage(Lnet/minecraft/text/Text;IIZ)V",
+			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/Texts;wrapLines(Lnet/minecraft/text/Text;ILnet/minecraft/client/font/TextRenderer;ZZ)Ljava/util/List;"), index = 0)
+	private Text arctic$emotes(Text message) {
+		return com.arcticlauncher.legacy.LegacyEmotes.layout(message);
+	}
+
+	@Inject(method = "render", at = @At("HEAD"))
+	private void arctic$emojiSetting(CallbackInfo ci) {
+		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
+		boolean on = c != null && c.chatEmoji;
+		if (on != arctic$emojiWasOn) { arctic$emojiWasOn = on; reset(); }
+	}
+
 	/** How many messages the chat keeps: the game's 100 become the player's setting. */
 	@ModifyConstant(method = "addMessage(Lnet/minecraft/text/Text;IIZ)V", constant = @Constant(intValue = 100))
 	private int arctic$history(int vanilla) {

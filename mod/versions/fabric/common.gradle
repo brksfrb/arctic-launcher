@@ -328,6 +328,8 @@ processResources {
 			oldScaledTexture: !atLeast('1.21.5'),
 			gpuFontTexture: atLeast('1.21.5'),
 			// 1.21.11's chat draws and collects clicks together, with a hardcoded line of 9.
+			emoteOldGlyph: !atLeast('1.19'),
+			emoteLayout: true,
 			chatLine111: atLeast('1.21.11') && !atLeast('26.1'),
 			// Motion blur as a post effect (and its pack) before 26.1, for VulkanMod.
 			postBlur: atLeast('1.21.6') && !atLeast('26.1'),
@@ -335,6 +337,7 @@ processResources {
 			// the font itself, or from 1.21.9 (where a font no longer knows its name) the font manager.
 			smoothFontSet: !atLeast('1.21.9'),
 			smoothFontManager: atLeast('1.21.9') && !atLeast('26.1'),
+			emoteFontManager: atLeast('26.1'),
 			// Glow-ink text (outlined): the text is lifted off its outline so the smooth font's soft edges don't z-fight.
 			glowText: atLeast('1.21.9') && !atLeast('26.1'),
 			// The smooth font's slightly heavier outline needs FreeType (1.20.5+).

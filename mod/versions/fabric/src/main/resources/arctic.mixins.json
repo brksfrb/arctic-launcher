@@ -12,6 +12,8 @@
 <% if (widgets13) { %>		"ScreenButtonsAccess",
 <% } %>		"AbstractClientPlayerMixin",
 		"FontMaskMixin",
+<% if (emoteOldGlyph) { %>		"EmoteGlyphMixin",
+<% } %>
 		"ClientBrandMixin",
 		"ConnectionProxyMixin",
 <% if (playerInfoRace) { %>		"PlayerInfoLookupMixin",
@@ -84,7 +86,8 @@
 		"FontHintingMixin",
 		"FontBitmapHintingMixin",<% } %><% if (smoothFontManager) { %>
 		"SmoothFontManagerMixin",
-		"SmoothFontGlyphInfoMixin",<% } %><% if (glowText) { %>
+		"SmoothFontGlyphInfoMixin",<% } %><% if (emoteFontManager) { %>
+		"SmoothFontManagerMixin",<% } %><% if (glowText) { %>
 		"GlowTextMixin",<% } %><% if (scaledFont) { %>
 		"FontTextureMixin",
 		"ScaledGlyphMixin",<% } %><% if (!worldTextScale) { %>
@@ -125,6 +128,8 @@
 <% } %>
 		"LightmapMixin",
 		"ChatComponentMixin",
+<% if (emoteLayout) { %>		"ChatEmoteLayoutMixin",
+<% } %>
 		"ChatCopyStyleMixin",
 		${chatCopyStyleAccess}
 <% if (chatLine111) { %>		"ChatLine111Mixin",
