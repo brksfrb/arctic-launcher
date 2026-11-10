@@ -26,6 +26,33 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(ChatComponent.class)
 abstract class ChatComponentMixin {
 	@Unique
+	private void arctic$restore() {
+		com.arcticlauncher.client.feature.PersistentChat history = ArcticClient.persistentChat();
+		if (history == null || history.restoring()) return;
+		final ChatComponent chat = (ChatComponent) (Object) this;
+		history.restore(new com.arcticlauncher.client.feature.PersistentChat.View() {
+			public void message(String text) {
+				//#if MC >= 26.1
+				chat.addClientSystemMessage(com.arcticlauncher.mod.ChatHistoryText.decode(text));
+				//#else
+				chat.addMessage(com.arcticlauncher.mod.ChatHistoryText.decode(text));
+				//#endif
+			}
+			public void sent(String text) {
+				// Populate up-arrow history directly: newer games also write command history
+				// from addRecentChat, which must not run while restoring.
+				chat.getRecentChat().add(text);
+			}
+		});
+	}
+
+	@Inject(method = "addRecentChat", at = @At("HEAD"))
+	private void arctic$sent(String text, CallbackInfo ci) {
+		arctic$restore();
+		if (ArcticClient.persistentChat() != null) ArcticClient.persistentChat().sent(text);
+	}
+
+	@Unique
 	private static final int STACK_REFRESH_ALWAYS = 500;
 	@Unique
 	private static final long STACK_REFRESH_MS = 250;
@@ -78,6 +105,7 @@ abstract class ChatComponentMixin {
 			//#endif
 			at = @At("HEAD"), cancellable = true)
 	private void arctic$hide(CallbackInfo ci) {
+		arctic$restore();
 		ClientConfig c = ArcticClient.config();
 		if (c != null && c.chatOff) {
 			ci.cancel();
@@ -114,6 +142,7 @@ abstract class ChatComponentMixin {
 	//#else
 	private void arctic$mute(Component message, int id, CallbackInfo ci) {
 	//#endif
+		if (ArcticClient.persistentChat() != null && ArcticClient.persistentChat().restoring()) return;
 		if (ArcticClient.chatHidden(message.getString())) {
 			ci.cancel();
 		}
@@ -133,6 +162,13 @@ abstract class ChatComponentMixin {
 			at = @At("HEAD"),
 			argsOnly = true)
 	private Component arctic$chat(Component message) {
+		arctic$restore();
+		if (ArcticClient.persistentChat() != null) {
+			if (ArcticClient.persistentChat().restoring()) return message;
+			if (!ArcticClient.chatHidden(message.getString())) {
+				ArcticClient.persistentChat().message(com.arcticlauncher.mod.ChatHistoryText.encode(message));
+			}
+		}
 		ClientConfig c = ArcticClient.config();
 		String text = message.getString();
 		ArcticClient.chatLine(text);

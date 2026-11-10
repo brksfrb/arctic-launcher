@@ -1,6 +1,7 @@
 package com.arcticlauncher.legacy.mixin;
 
 import com.arcticlauncher.legacy.LegacyHooks;
+import com.arcticlauncher.client.ArcticClient;
 import net.minecraft.client.gui.hud.ChatHud;
 import net.minecraft.text.Text;
 import org.spongepowered.asm.mixin.Final;
@@ -17,6 +18,27 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** Chat timestamps, repeated lines stacked, mentions of you marked, and Auto GG. */
 @Mixin(ChatHud.class)
 abstract class ChatHudMixin {
+	@Unique
+	private void arctic$restore() {
+		com.arcticlauncher.client.feature.PersistentChat history = ArcticClient.persistentChat();
+		if (history == null || history.restoring()) return;
+		final ChatHud chat = (ChatHud) (Object) this;
+		history.restore(new com.arcticlauncher.client.feature.PersistentChat.View() {
+			public void message(String text) {
+				chat.addMessage(new net.minecraft.text.LiteralText(text));
+			}
+			public void sent(String text) {
+				chat.getMessageHistory().add(text);
+			}
+		});
+	}
+
+	@Inject(method = "addToMessageHistory", at = @At("HEAD"))
+	private void arctic$sent(String text, CallbackInfo ci) {
+		arctic$restore();
+		if (ArcticClient.persistentChat() != null) ArcticClient.persistentChat().sent(text);
+	}
+
 	@Shadow
 	@Final
 	private java.util.List<net.minecraft.client.gui.hud.ChatHudLine> messages;
@@ -37,6 +59,7 @@ abstract class ChatHudMixin {
 	/** Hide the chat: none of its lines are drawn. */
 	@Inject(method = "render", at = @At("HEAD"), cancellable = true)
 	private void arctic$hide(CallbackInfo ci) {
+		arctic$restore();
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
 		if (c != null && c.chatOff) {
 			ci.cancel();
@@ -55,6 +78,7 @@ abstract class ChatHudMixin {
 	/** Muted players and hidden words: the line never reaches the chat. */
 	@Inject(method = "addMessage(Lnet/minecraft/text/Text;I)V", at = @At("HEAD"), cancellable = true)
 	private void arctic$mute(Text message, int id, CallbackInfo ci) {
+		if (ArcticClient.persistentChat() != null && ArcticClient.persistentChat().restoring()) return;
 		if (com.arcticlauncher.client.ArcticClient.chatHidden(message.asUnformattedString())) {
 			ci.cancel();
 		}
@@ -62,6 +86,13 @@ abstract class ChatHudMixin {
 
 	@ModifyVariable(method = "addMessage(Lnet/minecraft/text/Text;I)V", at = @At("HEAD"), argsOnly = true)
 	private Text arctic$chat(Text message) {
+		arctic$restore();
+		if (ArcticClient.persistentChat() != null) {
+			if (ArcticClient.persistentChat().restoring()) return message;
+			if (!ArcticClient.chatHidden(message.asUnformattedString())) {
+				ArcticClient.persistentChat().message(message.asFormattedString());
+			}
+		}
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
 		String source = message.asUnformattedString();
 		Text base = message;
