@@ -7,6 +7,7 @@
 pub mod args;
 pub mod files;
 mod game_window;
+mod language;
 pub mod logparse;
 mod priority;
 pub mod process;
@@ -319,6 +320,7 @@ fn install_with_repair(
     let natives_dir = dirs.version_dir(&version.id).join("natives");
     files::extract_natives(&libs.natives, &natives_dir)?;
     assets.finish()?;
+    language::prepare(&client_jar, game_dir)?;
     mark_installed(dirs, &version.id)?;
     log::info!("install: done at {} ms", clock.elapsed().as_millis());
 
