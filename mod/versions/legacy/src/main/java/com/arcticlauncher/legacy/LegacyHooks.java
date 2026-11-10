@@ -157,48 +157,53 @@ public final class LegacyHooks {
 	 * bigger while the game was still loading (the launcher maximizes it as it opens) can use that
 	 * up: the game then keeps drawing a small picture in the corner of a big black window.
 	 */
-	private static void syncWindowSize() {
+	private static boolean syncWindowSize() {
 		MinecraftClient mc = MinecraftClient.getInstance();
 		int w = org.lwjgl.opengl.Display.getWidth();
 		int h = org.lwjgl.opengl.Display.getHeight();
 		if (w > 0 && h > 0 && !org.lwjgl.opengl.Display.isFullscreen() && (w != mc.width || h != mc.height)) {
 			((com.arcticlauncher.legacy.mixin.MinecraftClientResizeInvoker) mc).arctic$resize(w, h);
+			return true;
 		}
+		return false;
 	}
 
 	private static int cursorLogged;
 
-	private static boolean lastFullscreen;
+	private static final LegacyCursorGuard CURSOR_GUARD = new LegacyCursorGuard();
+	private static final LegacyCursorGuard.Mouse CURSOR_MOUSE = new LegacyCursorGuard.Mouse() {
+		@Override
+		public boolean isGrabbed() {
+			return org.lwjgl.input.Mouse.isGrabbed();
+		}
+
+		@Override
+		public void setGrabbed(boolean grabbed) {
+			org.lwjgl.input.Mouse.setGrabbed(grabbed);
+		}
+
+		@Override
+		public void clearNativeCursor() throws org.lwjgl.LWJGLException {
+			org.lwjgl.input.Mouse.setNativeCursor(null);
+		}
+	};
 
 	/**
-	 * A screen is open but the pointer is hidden: it is given back (seen in fullscreen after the loading
-	 * screen). The game still has the mouse grabbed, or something left an empty cursor on the window.
-	 * A screen always wants the pointer, so this can only help.
+	 * Always request the default, ungrabbed pointer for screens. A real unclip also runs on
+	 * window creation, resize, fullscreen switches and screen entry, even when LWJGL reports
+	 * no grab. Keeping the force event-driven avoids toggling/flickering on every menu tick.
 	 */
-	private static void cursorGuard() {
-		boolean grabbed = org.lwjgl.input.Mouse.isGrabbed();
-		boolean custom = org.lwjgl.input.Mouse.getNativeCursor() != null;
-		// Switching to or from fullscreen recreates the window, and LWJGL 2 can leave it with no
-		// pointer while it still reports none grabbed and no custom cursor: set it again once.
-		boolean fullscreen = org.lwjgl.opengl.Display.isFullscreen();
-		boolean switched = fullscreen != lastFullscreen;
-		lastFullscreen = fullscreen;
-		if (!grabbed && !custom && !switched) {
-			return;
-		}
+	private static void cursorGuard(boolean screenOpen, boolean resized) {
 		try {
-			if (grabbed || switched) {
-				org.lwjgl.input.Mouse.setGrabbed(false);
+			boolean forced = CURSOR_GUARD.update(CURSOR_MOUSE,
+					org.lwjgl.opengl.Display.isCreated() && org.lwjgl.input.Mouse.isCreated(),
+					screenOpen, org.lwjgl.opengl.Display.isFullscreen(), resized);
+			if (forced && cursorLogged < 5) {
+				cursorLogged++;
+				ArcticLegacy.LOG.info("Arctic: reset the LWJGL 2 mouse clip (screen open: {}, window resized: {})", screenOpen, resized);
 			}
-			if (custom || switched) {
-				org.lwjgl.input.Mouse.setNativeCursor(null);
-			}
-		} catch (org.lwjgl.LWJGLException | RuntimeException e) {
-			return;
-		}
-		if (cursorLogged < 5) {
-			cursorLogged++;
-			ArcticLegacy.LOG.info("Arctic: gave the mouse pointer back to an open screen (game grabbed: {}, own cursor on the window: {})", grabbed, custom);
+		} catch (Exception e) {
+			// Window/mouse recreation can briefly reject these requests; retry on the next tick.
 		}
 	}
 
@@ -216,11 +221,8 @@ public final class LegacyHooks {
 		if (!titled) {
 			titleWindow();
 		}
-		if (screenOpen) {
-			cursorGuard();
-		}
+		cursorGuard(screenOpen, syncWindowSize());
 		ArcticLegacy.PLATFORM.tick();
-		syncWindowSize();
 		syncHitboxes();
 		syncChunkBorders();
 		com.arcticlauncher.legacy.replay.LegacyReplayRecording.tick();
