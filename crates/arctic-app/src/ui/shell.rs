@@ -169,16 +169,7 @@ impl ArcticApp {
     }
 
     fn banner_visible(&self) -> bool {
-        // A required update has its own overlay.
-        if self.update_required() {
-            return false;
-        }
-        match &self.update {
-            UpdateState::Available { dismissed, .. } => !dismissed,
-            UpdateState::Installing { .. } | UpdateState::Installed { .. } => true,
-            UpdateState::Failed { retry, .. } => retry.is_some(),
-            _ => false,
-        }
+        update_banner_visible(&self.update, self.settings.auto_install_updates)
     }
 
     fn update_banner(&mut self, ui: &mut egui::Ui) {
@@ -256,5 +247,98 @@ impl ArcticApp {
         }
         crate::tray::set_quitting();
         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+    }
+}
+
+// Required updates retain their dedicated overlay; normal automatic updates stay quiet.
+fn update_banner_visible(state: &UpdateState, auto_install: bool) -> bool {
+    match state {
+        UpdateState::Available { info, dismissed } => !info.required && !dismissed,
+        UpdateState::Installing { info, .. } => !info.required && !auto_install,
+        UpdateState::Installed { required } => !required && !auto_install,
+        UpdateState::Failed {
+            retry: Some(info), ..
+        } => !info.required && !auto_install,
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arctic_core::update::UpdateInfo;
+
+    fn info(required: bool) -> UpdateInfo {
+        UpdateInfo {
+            version: "1.2.3".parse().unwrap(),
+            required,
+            notes: String::new(),
+            page_url: String::new(),
+            asset_url: String::new(),
+            asset_size: 0,
+            sha256: String::new(),
+        }
+    }
+
+    #[test]
+    fn normal_install_banners_follow_auto_install_setting() {
+        for state in [
+            UpdateState::Installing {
+                info: info(false),
+                done: 0,
+                total: 1,
+            },
+            UpdateState::Installed { required: false },
+            UpdateState::Failed {
+                error: "failed".into(),
+                retry: Some(info(false)),
+            },
+        ] {
+            assert!(!update_banner_visible(&state, true));
+            assert!(update_banner_visible(&state, false));
+        }
+    }
+
+    #[test]
+    fn required_updates_use_overlay_and_available_updates_can_be_dismissed() {
+        for auto in [false, true] {
+            for state in [
+                UpdateState::Available {
+                    info: info(true),
+                    dismissed: false,
+                },
+                UpdateState::Installing {
+                    info: info(true),
+                    done: 0,
+                    total: 1,
+                },
+                UpdateState::Installed { required: true },
+                UpdateState::Failed {
+                    error: "failed".into(),
+                    retry: Some(info(true)),
+                },
+                UpdateState::Failed {
+                    error: "check failed".into(),
+                    retry: None,
+                },
+                UpdateState::Idle,
+                UpdateState::Checking,
+                UpdateState::UpToDate,
+            ] {
+                assert!(!update_banner_visible(&state, auto));
+            }
+            for dismissed in [false, true] {
+                assert_eq!(
+                    update_banner_visible(
+                        &UpdateState::Available {
+                            info: info(false),
+                            dismissed
+                        },
+                        auto
+                    ),
+                    !dismissed
+                );
+            }
+        }
     }
 }

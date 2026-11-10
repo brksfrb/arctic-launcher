@@ -1276,7 +1276,7 @@ impl ArcticApp {
         if let Ok(Some(info)) = &result
             && (self.settings.auto_install_updates || info.required)
         {
-            // Installs by itself; the banner (or a required update's overlay) shows it going.
+            // Installs quietly unless a required update needs its overlay.
             self.start_update(info.clone());
             return;
         }
@@ -1309,10 +1309,13 @@ impl ArcticApp {
             Ok(()) => UpdateState::Installed {
                 required: info.required,
             },
-            Err(error) => UpdateState::Failed {
-                error,
-                retry: Some(info.clone()),
-            },
+            Err(error) => {
+                log::warn!("update install failed: {error}");
+                UpdateState::Failed {
+                    error,
+                    retry: Some(info.clone()),
+                }
+            }
         };
     }
 

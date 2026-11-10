@@ -30,9 +30,12 @@ pub struct Settings {
     /// Prepare and start the game without using everything the PC has: a few downloads at a
     /// time and the game starting at low priority, for computers that freeze under load.
     pub gentle_launch: bool,
-    /// A launcher waiting in the tray restarts into an installed update by itself (off: the new
-    /// version is used the next time it's opened, or from the banner's "Restart now").
+    /// On by default: a launcher waiting in the tray restarts into an installed update by itself.
+    /// Off: use the update on the next launch, or with "Restart now" in Settings.
     pub restart_hidden_for_updates: bool,
+    /// Whether the one-time quiet-update default migration has been applied.
+    #[serde(default)]
+    pub quiet_updates_migrated: bool,
     /// Extra JVM flags, whitespace separated.
     pub extra_jvm_args: String,
     /// Use this `java(w).exe` instead of a managed runtime.
@@ -267,7 +270,8 @@ impl Default for Settings {
             fullscreen: false,
             game_maximized: false,
             gentle_launch: false,
-            restart_hidden_for_updates: false,
+            restart_hidden_for_updates: true,
+            quiet_updates_migrated: true,
             extra_jvm_args: String::new(),
             java_override: None,
             last_version: None,
@@ -317,13 +321,30 @@ impl Default for Settings {
 
 impl Settings {
     pub fn load(dirs: &DataDirs) -> Result<Self> {
-        Ok(load_json::<Self>(&dirs.settings_file())?
+        Self::load_with_save(dirs, |settings| settings.save(dirs))
+    }
+
+    fn load_with_save(dirs: &DataDirs, save: impl FnOnce(&Self) -> Result<()>) -> Result<Self> {
+        let mut settings = load_json::<Self>(&dirs.settings_file())?
             .unwrap_or_default()
-            .sanitized())
+            .sanitized();
+        if !settings.quiet_updates_migrated {
+            settings.restart_hidden_for_updates = true;
+            settings.quiet_updates_migrated = true;
+            if let Err(error) = save(&settings) {
+                // Keep the loaded preferences usable, and retry migration on the next load/save.
+                settings.quiet_updates_migrated = false;
+                log::warn!("couldn't persist quiet-update settings migration: {error}");
+            }
+        }
+        Ok(settings)
     }
 
     pub fn save(&self, dirs: &DataDirs) -> Result<()> {
-        save_json(&dirs.settings_file(), &self.clone().sanitized())
+        let mut settings = self.clone().sanitized();
+        // A successful save commits the migration while preserving any later user choice.
+        settings.quiet_updates_migrated = true;
+        save_json(&dirs.settings_file(), &settings)
     }
 
     /// Clamp values into ranges the JVM / game will accept.
@@ -342,6 +363,105 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quiet_updates_migrate_once_and_preserve_later_choices() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        save_json(
+            &dirs.settings_file(),
+            &serde_json::json!({"restart_hidden_for_updates": false}),
+        )
+        .unwrap();
+        let mut settings = Settings::load(&dirs).unwrap();
+        assert!(settings.restart_hidden_for_updates);
+        assert!(settings.quiet_updates_migrated);
+        // The migration is persisted even before any UI settings changes.
+        let persisted: Settings = load_json(&dirs.settings_file()).unwrap().unwrap();
+        assert!(persisted.quiet_updates_migrated);
+        settings.restart_hidden_for_updates = false;
+        settings.save(&dirs).unwrap();
+        assert!(!Settings::load(&dirs).unwrap().restart_hidden_for_updates);
+    }
+
+    #[test]
+    fn migration_save_failure_preserves_settings_and_retries() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        let original = serde_json::json!({
+            "restart_hidden_for_updates": false,
+            "max_memory_mb": 8192,
+            "theme": "light",
+            "favorite_versions": ["1.21.1"],
+            "auto_install_updates": false
+        });
+        save_json(&dirs.settings_file(), &original).unwrap();
+        let expected: Settings = serde_json::from_value(original.clone()).unwrap();
+        let settings = Settings::load_with_save(&dirs, |migrated| {
+            assert!(migrated.quiet_updates_migrated);
+            Err(crate::Error::io(
+                dirs.settings_file(),
+                std::io::Error::from(std::io::ErrorKind::StorageFull),
+            ))
+        })
+        .unwrap();
+        assert_eq!(
+            settings,
+            Settings {
+                restart_hidden_for_updates: true,
+                ..expected
+            }
+        );
+        let persisted: serde_json::Value = load_json(&dirs.settings_file()).unwrap().unwrap();
+        assert_eq!(persisted, original);
+
+        let retried = Settings::load(&dirs).unwrap();
+        assert!(retried.quiet_updates_migrated);
+        assert_eq!(retried.max_memory_mb, settings.max_memory_mb);
+        let persisted: Settings = load_json(&dirs.settings_file()).unwrap().unwrap();
+        assert_eq!(persisted, retried);
+    }
+
+    #[test]
+    fn successful_save_after_migration_failure_preserves_opt_out() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        save_json(
+            &dirs.settings_file(),
+            &serde_json::json!({"restart_hidden_for_updates": false}),
+        )
+        .unwrap();
+        let mut settings = Settings::load_with_save(&dirs, |_| {
+            Err(crate::Error::io(
+                dirs.settings_file(),
+                std::io::Error::from(std::io::ErrorKind::StorageFull),
+            ))
+        })
+        .unwrap();
+        assert!(settings.restart_hidden_for_updates);
+        assert!(!settings.quiet_updates_migrated);
+
+        settings.restart_hidden_for_updates = false;
+        settings.save(&dirs).unwrap();
+
+        let persisted: Settings = load_json(&dirs.settings_file()).unwrap().unwrap();
+        assert!(persisted.quiet_updates_migrated);
+        assert!(!persisted.restart_hidden_for_updates);
+        let reloaded = Settings::load(&dirs).unwrap();
+        assert!(reloaded.quiet_updates_migrated);
+        assert!(!reloaded.restart_hidden_for_updates);
+    }
+
+    #[test]
+    fn new_settings_restart_hidden_by_default() {
+        assert!(Settings::default().restart_hidden_for_updates);
+        let dir = tempfile::tempdir().unwrap();
+        assert!(
+            Settings::load(&DataDirs::new(dir.path()))
+                .unwrap()
+                .restart_hidden_for_updates
+        );
+    }
 
     #[test]
     fn playing_with_the_client_is_on_unless_turned_off() {
