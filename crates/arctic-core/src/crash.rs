@@ -755,7 +755,10 @@ impl Report {
                     && freeze_evidence(&all)
                 {
                     "The game froze and was closed"
-                } else if orderly_shutdown(&all) && crash_report.is_none() {
+                } else if orderly_shutdown(&all)
+                    && crash_report.is_none()
+                    && diagnose(&all).is_none()
+                {
                     "Non-crash: Minecraft stopped normally"
                 } else {
                     &title
@@ -1173,6 +1176,15 @@ mod tests {
         assert!(exit_description(-805306369).contains("0xCFFFFFFF"));
         let report = Report::build("1.20.1", "", "unknown", &[text], &[], None, None);
         assert!(report.title.starts_with("Non-crash:"));
+    }
+
+    #[test]
+    fn normal_shutdown_preserves_specific_crash_diagnosis() {
+        let text = "java.lang.OutOfMemoryError: Java heap space\nStopping!\nAll dimensions are saved\n[Arctic diagnostics] minecraft stop complete\n[Arctic diagnostics] exit caller vanilla net.minecraft.client.Minecraft.destroy\nexit code 1 (0x00000001)";
+        assert!(orderly_shutdown(text));
+        let diagnosis = diagnose(text).expect("specific memory diagnosis");
+        let report = Report::build("1.20.1", "", &diagnosis.title, &[text], &[], None, None);
+        assert_eq!(report.title, "Minecraft ran out of memory");
     }
 
     #[test]
