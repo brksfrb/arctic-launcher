@@ -9,6 +9,7 @@ public final class CrashDiagnostics {
     // Keep the original OS stderr so shutdown stacks cannot disappear with the logger.
     private static final java.io.PrintStream OUT = new java.io.PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.err), true);
     private static final String PREFIX = "[Arctic diagnostics] ";
+    private static final java.nio.file.Path HANG_FILE = java.nio.file.Paths.get(System.getProperty("arctic.diagnostics.hangFile", "arctic-hang.txt")).toAbsolutePath();
     private static volatile long progress;
     private static volatile boolean stopped;
     private static volatile boolean hung;
@@ -101,8 +102,8 @@ public final class CrashDiagnostics {
                             OUT.print(buffer.toString());
                             OUT.flush();
                             try {
-                                java.nio.file.Path target = java.nio.file.Paths.get("arctic-hang.txt");
-                                java.nio.file.Path temporary = java.nio.file.Paths.get("arctic-hang.txt.tmp");
+                                java.nio.file.Path target = HANG_FILE;
+                                java.nio.file.Path temporary = target.resolveSibling(target.getFileName().toString() + ".tmp");
                                 java.nio.file.Files.write(temporary, buffer.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
                                 java.nio.file.Files.move(temporary, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                             } catch (java.io.IOException ignored) { }
@@ -126,7 +127,7 @@ public final class CrashDiagnostics {
                     String recovered = PREFIX + "hang recovered; render progress resumed\n";
                     OUT.print(recovered);
                     try {
-                        java.nio.file.Files.write(java.nio.file.Paths.get("arctic-hang.txt"),
+                        java.nio.file.Files.write(HANG_FILE,
                                 recovered.getBytes(java.nio.charset.StandardCharsets.UTF_8),
                                 java.nio.file.StandardOpenOption.APPEND);
                     } catch (java.io.IOException ignored) { }

@@ -492,16 +492,16 @@ impl ArcticApp {
                         .unwrap_or_else(|| run.crash_text()),
                 ) && newest_crash_report(&run.game_dir, run.started).is_none()
                     && newest_hs_err(&run.game_dir, run.started).is_none();
+                let specific = run.diagnose();
                 let diagnosis = match code {
-                    Some(c) if c != 0 && !watchdog && froze => Some(Diagnosis {
+                    Some(c) if c != 0 && !watchdog && specific.is_none() && froze => Some(Diagnosis {
                         title: "The game froze and was closed".into(),
                         detail: "The run contains evidence of a freeze. Any captured thread dump is included in the report.".into(),
                         mods: Vec::new(),
                         repair: false,
                         fix: None,
                     }),
-                    Some(c) if c != 0 && !watchdog => run
-                        .diagnose()
+                    Some(c) if c != 0 && !watchdog => specific
                         .or_else(|| crash::silent_exit(&run.crash_text(), c)),
                     _ => None,
                 };
