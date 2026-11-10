@@ -10,17 +10,20 @@ import net.minecraft.resources.Identifier;
 public final class GlassResources {
 	public static volatile GlassPacks packs = GlassPacks.EMPTY;
 	private GlassResources() {}
+	public interface ActivePacks { List<String> arctic$packNames(); }
 	public static void reload(ResourceManager manager) {
 		if (!GlassCtm.available()) return;
 		packs = GlassPacks.load(new GlassPacks.Resources() {
-			@Override public Collection<String> properties() {
-				//#if MC >= 1.19
+			@Override public Collection<String> properties() throws IOException {
 				List<String> order = new ArrayList<>();
-				//#if MC >= 1.19.3
-				manager.listPacks().forEach(pack -> order.add(pack.packId()));
-				//#else
+				//#if MC < 1.16
+				order.addAll(((ActivePacks) manager).arctic$packNames());
+				//#elif MC < 1.19.3
 				manager.listPacks().forEach(pack -> order.add(pack.getName()));
+				//#else
+				manager.listPacks().forEach(pack -> order.add(pack.packId()));
 				//#endif
+				//#if MC >= 1.19
 				java.util.Map<Identifier, net.minecraft.server.packs.resources.Resource> found = new java.util.HashMap<>();
 				found.putAll(manager.listResources("optifine/ctm", id -> id.getPath().endsWith(".properties")));
 				found.putAll(manager.listResources("mcpatcher/ctm", id -> id.getPath().endsWith(".properties")));
@@ -32,7 +35,14 @@ public final class GlassResources {
 				List<Identifier> ids = new ArrayList<>();
 				ids.addAll(manager.listResources("optifine/ctm", name -> name.endsWith(".properties")));
 				ids.addAll(manager.listResources("mcpatcher/ctm", name -> name.endsWith(".properties")));
-				ids.sort(java.util.Comparator.comparing(Identifier::toString));
+				// Resolve ownership once and close the streams opened by the old API.
+				java.util.Map<Identifier, Integer> priorities = new java.util.HashMap<>();
+				for (Identifier id : ids) {
+					try (net.minecraft.server.packs.resources.Resource resource = manager.getResource(id)) {
+						priorities.put(id, -order.indexOf(resource.getSourceName()));
+					}
+				}
+				ids.sort(java.util.Comparator.comparingInt((Identifier id) -> priorities.get(id)).thenComparing(Identifier::toString));
 				List<String> names = new ArrayList<>();
 				for (Identifier id : ids) names.add(id.toString());
 				//#endif
