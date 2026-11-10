@@ -1495,7 +1495,7 @@ public final class LegacyPlatform implements Platform {
 		LegacyHooks.onNextFrame(() -> {
 			MinecraftClient mc = mc();
 			leave(mc);
-			LegacyWorldTest.deleteWorlds(new File(mc.runDirectory, "saves"), DUEL_PREFIX);
+			WorldCleanup.deleteWorlds(new File(mc.runDirectory, "saves"), DUEL_PREFIX);
 			String name = DUEL_PREFIX + com.arcticlauncher.client.LocalClock.formatter("MM-dd HH.mm").format(new java.util.Date());
 			//#if MC >= 1.10
 			net.minecraft.world.level.LevelInfo info = new net.minecraft.world.level.LevelInfo(System.currentTimeMillis(),

@@ -82,7 +82,6 @@ public final class ArcticClient {
 		packIcons = new com.arcticlauncher.client.packs.PackIcons(p, session.bridgePort, session.bridgeSecret);
 		screenshotCopy = new com.arcticlauncher.client.feature.ScreenshotCopy(session.bridgePort, session.bridgeSecret);
 		com.arcticlauncher.client.replay.Replays.init(p, session.bridgePort, session.bridgeSecret);
-		com.arcticlauncher.client.net.ProxySelfTest.maybeStart(p);
 		com.arcticlauncher.client.together.TogetherLink together =
 				new com.arcticlauncher.client.together.TogetherLink(session.bridgePort, session.bridgeSecret);
 		launcherJoin = new com.arcticlauncher.client.servers.LauncherJoin(session.bridgePort, session.bridgeSecret, session.launchToken);

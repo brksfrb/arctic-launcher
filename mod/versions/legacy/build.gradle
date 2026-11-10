@@ -133,7 +133,7 @@ tasks.register('preprocessJava') {
 			def root = file(source)
 			root.eachFileRecurse(groovy.io.FileType.FILES) { f ->
 				def rel = root.toPath().relativize(f.toPath()).toString()
-				if (!developmentScenes && f.name == 'GlassCtmTest.java') return
+				if (!developmentScenes && (f.name.endsWith('Test.java') || f.name.endsWith('Proof.java') || f.name in ['HotbarScrollCheck.java', 'LegacyHotbarScrollCheck.java'])) return
 				def target = new File(outDir, rel)
 				if (forge && (forgeReplaced.contains(f.name) || forgeSkipped.contains(f.name))) {
 					return

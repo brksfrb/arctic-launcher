@@ -65,7 +65,7 @@ def mirror(src, dst):
 def has_chatcopy_proof(jar):
     """Reject proof helpers and their anonymous/nested classes from releases."""
     forbidden = {"ChatCopyTest", "LegacyChatCopyTest", "ChatCopyProof", "PersistentChatProof", "LegacyPersistentChatProof", "PersistentChatTest"}
-    return any(Path(name).stem.split("$", 1)[0] in forbidden for name in jar.namelist())
+    return any((Path(name).stem.split("$", 1)[0] in forbidden or Path(name).stem.split("$", 1)[0].endswith(("Test", "Proof", "HotbarScrollCheck"))) for name in jar.namelist())
 
 
 def build_one(root, target):
