@@ -321,13 +321,21 @@ impl Default for Settings {
 
 impl Settings {
     pub fn load(dirs: &DataDirs) -> Result<Self> {
+        Self::load_with_save(dirs, |settings| settings.save(dirs))
+    }
+
+    fn load_with_save(dirs: &DataDirs, save: impl FnOnce(&Self) -> Result<()>) -> Result<Self> {
         let mut settings = load_json::<Self>(&dirs.settings_file())?
             .unwrap_or_default()
             .sanitized();
         if !settings.quiet_updates_migrated {
             settings.restart_hidden_for_updates = true;
             settings.quiet_updates_migrated = true;
-            settings.save(dirs)?;
+            if let Err(error) = save(&settings) {
+                // Keep the loaded preferences usable, and retry migration on the next load/save.
+                settings.quiet_updates_migrated = false;
+                log::warn!("couldn't persist quiet-update settings migration: {error}");
+            }
         }
         Ok(settings)
     }
@@ -371,6 +379,44 @@ mod tests {
         settings.restart_hidden_for_updates = false;
         settings.save(&dirs).unwrap();
         assert!(!Settings::load(&dirs).unwrap().restart_hidden_for_updates);
+    }
+
+    #[test]
+    fn migration_save_failure_preserves_settings_and_retries() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        let original = serde_json::json!({
+            "restart_hidden_for_updates": false,
+            "max_memory_mb": 8192,
+            "theme": "light",
+            "favorite_versions": ["1.21.1"],
+            "auto_install_updates": false
+        });
+        save_json(&dirs.settings_file(), &original).unwrap();
+        let expected: Settings = serde_json::from_value(original.clone()).unwrap();
+        let settings = Settings::load_with_save(&dirs, |migrated| {
+            assert!(migrated.quiet_updates_migrated);
+            Err(crate::Error::io(
+                dirs.settings_file(),
+                std::io::Error::from(std::io::ErrorKind::StorageFull),
+            ))
+        })
+        .unwrap();
+        assert_eq!(
+            settings,
+            Settings {
+                restart_hidden_for_updates: true,
+                ..expected
+            }
+        );
+        let persisted: serde_json::Value = load_json(&dirs.settings_file()).unwrap().unwrap();
+        assert_eq!(persisted, original);
+
+        let retried = Settings::load(&dirs).unwrap();
+        assert!(retried.quiet_updates_migrated);
+        assert_eq!(retried.max_memory_mb, settings.max_memory_mb);
+        let persisted: Settings = load_json(&dirs.settings_file()).unwrap().unwrap();
+        assert_eq!(persisted, retried);
     }
 
     #[test]
