@@ -88,12 +88,22 @@ public final class LegacySmoothFont {
 	/** Set only by the explicit nametagfont self-test for a matching old-atlas screenshot. */
 	static boolean proofBaseline;
 
-	/** Read the actual GL transform once per string, including direct GL calls made by other mods. */
-	public static void preparing(float x, float y) {
+	/**
+	 * Read the actual transform once per draw, shared by its shadow and foreground layers. Text rendering
+	 * changes colour, blending and textures, but never these matrices or the viewport. Keep the reads here
+	 * (rather than a cross-draw cache) so direct GL transforms from other mods are still observed.
+	 */
+	public static void beginDraw() {
+		// The GUI-size atlas establishes the divisor, including the first draw after a GUI-scale change.
+		ready();
 		GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, MODEL);
 		GL11.glGetFloat(GL11.GL_PROJECTION_MATRIX, PROJECTION);
 		GL11.glGetInteger(GL11.GL_VIEWPORT, VIEWPORT);
 		com.arcticlauncher.client.feature.TextPixelScale.multiply(PROJECTION, MODEL, CLIP);
+	}
+
+	/** Each layer keeps its own anchor for the perspective divide, without another driver read. */
+	public static void preparing(float x, float y) {
 		drawScale = com.arcticlauncher.client.feature.TextPixelScale.projected(CLIP, x, y,
 				VIEWPORT.get(2), VIEWPORT.get(3)) / Math.max(1, scale);
 	}
