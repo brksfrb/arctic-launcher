@@ -14,12 +14,19 @@ use crate::{app::ArcticApp, art::icons::Icon, widgets};
 type DetailResult = Result<ProjectDetail, String>;
 
 pub struct Preview {
+    instance_id: String,
     hit: ProjectHit,
     kind: Option<PackKind>,
     receiver: Receiver<DetailResult>,
     detail: Option<DetailResult>,
     markdown: CommonMarkCache,
     enlarged: Option<String>,
+}
+
+impl Preview {
+    fn for_instance(self, instance_id: &str) -> Option<Self> {
+        (self.instance_id == instance_id).then_some(self)
+    }
 }
 
 fn fetch(id: String, ctx: egui::Context) -> Receiver<DetailResult> {
@@ -79,7 +86,11 @@ impl ArcticApp {
         hit: ProjectHit,
         kind: Option<PackKind>,
     ) {
+        let Some(instance_id) = self.inst.open.clone() else {
+            return;
+        };
         self.inst.preview = Some(Preview {
+            instance_id,
             receiver: fetch(hit.project_id.clone(), ctx.clone()),
             hit,
             kind,
@@ -117,7 +128,14 @@ impl ArcticApp {
                 );
             }
         }
-        let Some(mut preview) = self.inst.preview.take() else {
+        // A preview belongs to the instance that opened it, even when navigation
+        // leaves it in global UI state. Discard it before rendering install actions.
+        let Some(mut preview) = self
+            .inst
+            .preview
+            .take()
+            .and_then(|preview| preview.for_instance(&instance.id))
+        else {
             return;
         };
         if preview.detail.is_none() {
@@ -325,6 +343,31 @@ impl ArcticApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preview_cannot_move_to_another_instance_after_navigation() {
+        let (_, receiver) = mpsc::channel();
+        let preview = Preview {
+            instance_id: "instance-a".into(),
+            hit: ProjectHit {
+                project_id: "project".into(),
+                slug: "project".into(),
+                title: "Project".into(),
+                description: String::new(),
+                author: String::new(),
+                downloads: 0,
+                icon_url: None,
+                categories: vec![],
+            },
+            kind: None,
+            receiver,
+            detail: None,
+            markdown: CommonMarkCache::default(),
+            enlarged: None,
+        };
+        let preview = preview.for_instance("instance-a").unwrap();
+        assert!(preview.for_instance("instance-b").is_none());
+    }
 
     #[test]
     fn nested_images_replace_only_disjoint_outermost_ranges() {
