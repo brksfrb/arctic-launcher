@@ -35,6 +35,10 @@ final class LegacySelfTest {
 
 		String mode = System.getProperty("arctic.selftest");
 		//#if DEV
+		if ("persistent-chat".equals(System.getProperty("arctic.selftest"))) {
+			LegacyPersistentChatProof.start();
+			return;
+		}
 		if ("chatcopy".equals(mode)) {
 			LegacyChatCopyTest.start();
 			return;

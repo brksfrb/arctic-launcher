@@ -243,6 +243,7 @@ public final class ClientConfig {
 	public boolean chatStampItalic;
 	/** Keep the chat lines when you disconnect or change server. */
 	public boolean chatKeep;
+	public boolean chatPersistent = true;
 	/** While you host a world in Arctic Launcher's play together, the world you're in opens to LAN by itself. */
 	public boolean lanAuto = true;
 	/** Brackets around the crosshair while a creature is within hit reach. */

@@ -20,6 +20,12 @@ public final class ArcticClient {
 	/** Overrides the Arctic server (for development). */
 	public static final String SERVER_PROPERTY = "arctic.cosmetics.url";
 
+	private static com.arcticlauncher.client.feature.PersistentChat persistentChat;
+
+	public static com.arcticlauncher.client.feature.PersistentChat persistentChat() {
+		return persistentChat;
+	}
+
 	private static Platform platform;
 	private static ClientConfig config;
 	private static Hud hud;
@@ -52,6 +58,7 @@ public final class ArcticClient {
 		platform = p;
 		com.arcticlauncher.client.config.RunningLock.hold(p.configDir());
 		config = ClientConfig.load(p.configDir());
+		persistentChat = new com.arcticlauncher.client.feature.PersistentChat(p.configDir());
 		Session session = Session.read(p.configDir());
 		applyLauncherStyle(session);
 		applyLauncherProxy(session);
