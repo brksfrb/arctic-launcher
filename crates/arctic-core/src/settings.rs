@@ -341,7 +341,10 @@ impl Settings {
     }
 
     pub fn save(&self, dirs: &DataDirs) -> Result<()> {
-        save_json(&dirs.settings_file(), &self.clone().sanitized())
+        let mut settings = self.clone().sanitized();
+        // A successful save commits the migration while preserving any later user choice.
+        settings.quiet_updates_migrated = true;
+        save_json(&dirs.settings_file(), &settings)
     }
 
     /// Clamp values into ranges the JVM / game will accept.
@@ -417,6 +420,36 @@ mod tests {
         assert_eq!(retried.max_memory_mb, settings.max_memory_mb);
         let persisted: Settings = load_json(&dirs.settings_file()).unwrap().unwrap();
         assert_eq!(persisted, retried);
+    }
+
+    #[test]
+    fn successful_save_after_migration_failure_preserves_opt_out() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        save_json(
+            &dirs.settings_file(),
+            &serde_json::json!({"restart_hidden_for_updates": false}),
+        )
+        .unwrap();
+        let mut settings = Settings::load_with_save(&dirs, |_| {
+            Err(crate::Error::io(
+                dirs.settings_file(),
+                std::io::Error::from(std::io::ErrorKind::StorageFull),
+            ))
+        })
+        .unwrap();
+        assert!(settings.restart_hidden_for_updates);
+        assert!(!settings.quiet_updates_migrated);
+
+        settings.restart_hidden_for_updates = false;
+        settings.save(&dirs).unwrap();
+
+        let persisted: Settings = load_json(&dirs.settings_file()).unwrap().unwrap();
+        assert!(persisted.quiet_updates_migrated);
+        assert!(!persisted.restart_hidden_for_updates);
+        let reloaded = Settings::load(&dirs).unwrap();
+        assert!(reloaded.quiet_updates_migrated);
+        assert!(!reloaded.restart_hidden_for_updates);
     }
 
     #[test]
