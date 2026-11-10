@@ -1,5 +1,7 @@
 package com.arcticlauncher.client.hud;
 
+import com.arcticlauncher.client.LocalClock;
+
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.Keys;
 import com.arcticlauncher.client.Platform;
@@ -190,7 +192,7 @@ final class Widgets {
 			}
 		});
 		all.add(new TextWidget("date", "Date", "Today's date", false) {
-			private final SimpleDateFormat format = new SimpleDateFormat("EEE d MMM", Locale.ENGLISH);
+			private final SimpleDateFormat format = LocalClock.formatter("EEE d MMM", Locale.ENGLISH);
 
 			@Override
 			protected String value(boolean preview) {
@@ -321,7 +323,7 @@ final class Widgets {
 
 	private static HudWidget clock() {
 		return new TextWidget("clock", "Time", "Your local time", false) {
-			private final SimpleDateFormat format = new SimpleDateFormat("HH:mm");
+			private final SimpleDateFormat format = LocalClock.formatter("HH:mm");
 
 			@Override
 			protected String value(boolean preview) {

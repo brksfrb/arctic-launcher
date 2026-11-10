@@ -1,11 +1,12 @@
 package com.arcticlauncher.client.replay;
 
+import com.arcticlauncher.client.LocalClock;
+
 import com.google.gson.Gson;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -355,7 +356,7 @@ public final class Recorder {
 			if (stream == null || stream.packetBytes == 0) return null;
 			String where = server.replaceAll("[^A-Za-z0-9 ._-]", "_").trim();
 			if (where.length() > 40) where = where.substring(0, 40).trim();
-			String when = new SimpleDateFormat("yyyy-MM-dd HH-mm-ss-SSS").format(new Date());
+			String when = LocalClock.formatter("yyyy-MM-dd HH-mm-ss-SSS").format(new Date());
 			File out = new File(savedDir, (where.isEmpty() ? "Replay" : where) + " " + when + " " + kind + " " + UUID.randomUUID().toString().substring(0, 8) + ".mcpr");
 			File part = new File(out.getPath() + ".part");
 			try {

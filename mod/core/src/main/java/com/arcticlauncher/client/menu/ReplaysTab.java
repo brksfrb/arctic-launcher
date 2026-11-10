@@ -1,12 +1,13 @@
 package com.arcticlauncher.client.menu;
 
+import com.arcticlauncher.client.LocalClock;
+
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.replay.ReplayMenu;
 import com.arcticlauncher.client.replay.Replays;
 import com.arcticlauncher.client.ui.Button;
 import com.arcticlauncher.client.ui.Label;
-import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -110,7 +111,7 @@ final class ReplaysTab implements MenuTab {
 	}
 
 	private static String details(Replays.Info info) {
-		String when = new SimpleDateFormat("MMM d, HH:mm", Locale.ENGLISH).format(new Date(info.meta.date));
+		String when = LocalClock.formatter("MMM d, HH:mm", Locale.ENGLISH).format(new Date(info.meta.date));
 		int clips = info.extras.moments.size();
 		String size = String.format(Locale.ROOT, "%.0f MB", info.file.length() / (1024.0 * 1024.0));
 		return when + " · " + Replays.clock(info.meta.duration) + " · " + (clips == 1 ? "1 clip" : clips + " clips")
