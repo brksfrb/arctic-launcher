@@ -59,7 +59,7 @@ public final class GlassCtm {
 			TextureAtlasSprite[] variants = new TextureAtlasSprite[GlassTiles.VARIANTS];
 			boolean complete = true;
 			for (int i = 0; i < variants.length; i++) {
-				variants[i] = names.get(GlassTiles.variant(e.getKey(), i));
+				variants[i] = names.get(GlassTiles.variant(e.getKey(), com.arcticlauncher.mod.GlassResources.packs.variantTile(e.getKey(), i)));
 				complete &= variants[i] != null;
 			}
 			if (complete) found.put(e.getValue(), variants);
@@ -91,13 +91,13 @@ public final class GlassCtm {
 	}
 
 	private static String blockId(BlockState block) {
-			//#if MC >= 1.19.3
-			return net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(block.getBlock()).toString();
-			//#elif MC >= 1.14
-			return net.minecraft.core.Registry.BLOCK.getKey(block.getBlock()).toString();
-			//#else
-			return net.minecraft.core.Registry.BLOCK.getKey(block.getBlock()).toString();
-			//#endif
+		//#if MC >= 1.19.3
+		return net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(block.getBlock()).toString();
+		//#elif MC >= 1.14
+		return net.minecraft.core.Registry.BLOCK.getKey(block.getBlock()).toString();
+		//#else
+		return net.minecraft.core.Registry.BLOCK.getKey(block.getBlock()).toString();
+		//#endif
 	}
 
 	public static void end() { Context c = LOCAL.get(); c.active = false; c.world = null; }

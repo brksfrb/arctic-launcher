@@ -48,7 +48,7 @@ public final class LegacyGlassCtm {
 			Sprite[] variants = new Sprite[GlassTiles.VARIANTS];
 			boolean complete = true;
 			for (int i = 0; i < variants.length; i++) {
-				variants[i] = names.get(GlassTiles.variant(e.getKey(), i));
+				variants[i] = names.get(GlassTiles.variant(e.getKey(), com.arcticlauncher.legacy.LegacyGlassCtm.packs.variantTile(e.getKey(), i)));
 				complete &= variants[i] != null;
 			}
 			if (complete) found.put(e.getValue(), variants);

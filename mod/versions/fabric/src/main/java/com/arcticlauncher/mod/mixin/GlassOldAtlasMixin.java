@@ -43,7 +43,7 @@ abstract class GlassOldAtlasMixin {
 		Collection<TextureAtlasSprite.Info> expanded = new ArrayList<>(cir.getReturnValue());
 		for (TextureAtlasSprite.Info info : cir.getReturnValue()) {
 			if (!com.arcticlauncher.mod.GlassResources.packs.acceptsSprite(info.name().toString())) continue;
-			for (int i = 0; i < GlassTiles.VARIANTS; i++) expanded.add(new TextureAtlasSprite.Info(GlassImages.id(GlassTiles.variant(info.name().toString(), i)), info.width(), info.height(), ((GlassInfoAccess) (Object) info).arctic$metadata()));
+			for (int i = 0; i < GlassTiles.VARIANTS; i++) if (com.arcticlauncher.mod.GlassResources.packs.variantTile(info.name().toString(), i) == i) expanded.add(new TextureAtlasSprite.Info(GlassImages.id(GlassTiles.variant(info.name().toString(), i)), info.width(), info.height(), ((GlassInfoAccess) (Object) info).arctic$metadata()));
 		}
 		cir.setReturnValue(expanded);
 	}
@@ -54,7 +54,7 @@ abstract class GlassOldAtlasMixin {
 		Collection<TextureAtlasSprite> expanded = new ArrayList<>(cir.getReturnValue());
 		for (TextureAtlasSprite sprite : cir.getReturnValue()) {
 			if (!com.arcticlauncher.mod.GlassResources.packs.acceptsSprite(sprite.getName().toString())) continue;
-			for (int i = 0; i < GlassTiles.VARIANTS; i++) expanded.add(GlassOldSpriteAccess.arctic$new(GlassImages.id(GlassTiles.variant(sprite.getName().toString(), i)), sprite.getWidth(), sprite.getHeight()));
+			for (int i = 0; i < GlassTiles.VARIANTS; i++) if (com.arcticlauncher.mod.GlassResources.packs.variantTile(sprite.getName().toString(), i) == i) expanded.add(GlassOldSpriteAccess.arctic$new(GlassImages.id(GlassTiles.variant(sprite.getName().toString(), i)), sprite.getWidth(), sprite.getHeight()));
 		}
 		cir.setReturnValue(expanded);
 	}
@@ -66,7 +66,7 @@ abstract class GlassOldAtlasMixin {
 		if (!GlassCtm.available()) return;
 		for (Identifier name : new ArrayList<>(sprites)) {
 			if (!com.arcticlauncher.mod.GlassResources.packs.acceptsSprite(name.toString())) continue;
-			for (int i = 0; i < GlassTiles.VARIANTS; i++) sprites.add(GlassImages.id(GlassTiles.variant(name.toString(), i)));
+			for (int i = 0; i < GlassTiles.VARIANTS; i++) if (com.arcticlauncher.mod.GlassResources.packs.variantTile(name.toString(), i) == i) sprites.add(GlassImages.id(GlassTiles.variant(name.toString(), i)));
 		}
 	}
 	//#endif

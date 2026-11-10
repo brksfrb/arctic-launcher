@@ -33,6 +33,7 @@ abstract class GlassStitchMixin {
 			if (!com.arcticlauncher.mod.GlassResources.packs.acceptsSprite(name)) continue;
 			GlassSpriteSource source = (GlassSpriteSource) sprite;
 			for (int tile = 0; tile < GlassTiles.VARIANTS; tile++) {
+				if (com.arcticlauncher.mod.GlassResources.packs.variantTile(name, tile) != tile) continue;
 				expanded.add(source.arctic$variant(GlassImages.id(GlassTiles.variant(name, tile)), GlassImages.generate(source.arctic$image(), sprite.width(), sprite.height(), tile, name)));
 			}
 		}

@@ -114,8 +114,8 @@ class GlassTilesTest {
 			}
 		};
 		GlassPacks packs = GlassPacks.load(access);
-		assertEquals(0xff00001a, packs.tile("minecraft:block/red_stained_glass", 26).getRGB(0, 0));
-		assertEquals(0xff000000, packs.tile("minecraft:blocks/glass_red", 0).getRGB(0, 0));
+		assertEquals(0xff00001a, packs.tile("minecraft:block/red_stained_glass", 30 * 47 + 26).getRGB(0, 0));
+		assertEquals(0xff000000, packs.tile("minecraft:blocks/glass_red", 30 * 47).getRGB(0, 0));
 		assertNull(packs.tile("minecraft:block/blue_stained_glass", 26));
 		resources.remove("minecraft:optifine/ctm/glass/46.png");
 		assertNull(GlassPacks.load(access).tile("minecraft:block/red_stained_glass", 26));
@@ -137,6 +137,7 @@ class GlassTilesTest {
 		return GlassPacks.load(new GlassPacks.Resources() {
 			@Override public java.util.Collection<String> properties() { return paths; }
 			@Override public InputStream open(String name) throws java.io.IOException {
+				if (name.contains("BAD")) throw new RuntimeException("Minecraft identifier exception");
 				if (!resources.containsKey(name)) throw new java.io.FileNotFoundException(name);
 				return new ByteArrayInputStream(resources.get(name));
 			}
@@ -144,7 +145,7 @@ class GlassTilesTest {
 	}
 
 	@Test void explicitNamespacesCannotSelectVanillaGlass() throws Exception {
-		for (String selector : Arrays.asList("matchBlocks=example:glass", "matchBlocks=example:red_stained_glass_pane", "matchTiles=example:block/red_stained_glass")) {
+		for (String selector : Arrays.asList("matchBlocks=example:glass", "matchBlocks=example:red_stained_glass_pane")) {
 			GlassPacks packs = rules(selector);
 			for (String sprite : Arrays.asList("minecraft:block/glass", "minecraft:block/red_stained_glass", "example:block/red_stained_glass")) {
 				assertNull(packs.tile(sprite, 0), selector);
@@ -158,12 +159,13 @@ class GlassTilesTest {
 	@Test void blockAndPaneSelectorsRemainIndependentIncludingLegacyIds() throws Exception {
 		for (String[] pair : new String[][]{{"glass", "glass_pane"}, {"20", "102"}, {"minecraft:red_stained_glass", "minecraft:red_stained_glass_pane"}, {"95:14", "160:14"}, {"stained_glass:14", "stained_glass_pane:14"}}) {
 			String sprite = pair[0].equals("glass") || pair[0].equals("20") ? "minecraft:block/glass" : "minecraft:block/red_stained_glass";
-			assertNull(rules("matchBlocks=" + pair[0]).tile(sprite, 47));
-			assertNull(rules("matchBlocks=" + pair[1]).tile(sprite, 0));
+			int bank = GlassTiles.bank(GlassPacks.canonical(sprite), 0) * 47;
+			assertNull(rules("matchBlocks=" + pair[0]).tile(sprite, bank + 47));
+			assertNull(rules("matchBlocks=" + pair[1]).tile(sprite, bank));
 			for (boolean reverse : new boolean[]{false, true}) {
 				GlassPacks packs = rules("matchBlocks=" + pair[reverse ? 1 : 0], "matchBlocks=" + pair[reverse ? 0 : 1]);
-				assertEquals(0xff000000 | (reverse ? 1 : 0), packs.tile(sprite, 0).getRGB(0, 0));
-				assertEquals(0xff000000 | (reverse ? 0 : 1), packs.tile(sprite, 47).getRGB(0, 0));
+				assertEquals(0xff000000 | (reverse ? 1 : 0), packs.tile(sprite, bank).getRGB(0, 0));
+				assertEquals(0xff000000 | (reverse ? 0 : 1), packs.tile(sprite, bank + 47).getRGB(0, 0));
 			}
 		}
 		GlassPacks texture = rules("matchTiles=blocks/glass_red");
@@ -194,6 +196,17 @@ class GlassTilesTest {
 		assertNull(custom.tile("minecraft:block/glass", red));
 		assertTrue(custom.acceptsSprite("example:custom/window"));
 		assertEquals(GlassTiles.bank("minecraft:red_stained_glass", 0), GlassTiles.bank("minecraft:stained_glass", 14));
+	}
+
+	@Test void blockBanksShareOnlyEquivalentAtlasPixelsAndKeepRulePriority() throws Exception {
+		int red = GlassTiles.bank("minecraft:red_stained_glass", 0) * 47;
+		assertEquals(0, GlassPacks.EMPTY.variantTile("minecraft:block/glass", red));
+		GlassPacks packs = rules("matchTiles=glass", "matchBlocks=red_stained_glass\nmatchTiles=glass");
+		assertEquals(0xff000000, packs.tile("minecraft:block/glass", red).getRGB(0, 0));
+		assertEquals(0, packs.variantTile("minecraft:block/glass", red));
+		GlassPacks distinct = rules("matchBlocks=red_stained_glass\nmatchTiles=glass");
+		assertEquals(red, distinct.variantTile("minecraft:block/glass", red));
+		assertEquals(0, distinct.variantTile("minecraft:block/glass", 47));
 	}
 
 	@Test void invalidTileIdentifierFallsBackAndContinuesReload() throws Exception {

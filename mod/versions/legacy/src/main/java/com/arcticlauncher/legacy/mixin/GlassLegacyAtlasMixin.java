@@ -24,6 +24,7 @@ abstract class GlassLegacyAtlasMixin {
 		for (String name : new ArrayList<>(spritesToLoad.keySet())) {
 			if (!com.arcticlauncher.legacy.LegacyGlassCtm.packs.acceptsSprite(name)) continue;
 			for (int i = 0; i < GlassTiles.VARIANTS; i++) {
+				if (com.arcticlauncher.legacy.LegacyGlassCtm.packs.variantTile(name, i) != i) continue;
 				String variant = GlassTiles.variant(name, i);
 				spritesToLoad.put(variant, new com.arcticlauncher.legacy.LegacyGlassSprite(variant));
 			}

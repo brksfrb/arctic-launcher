@@ -143,6 +143,14 @@ public final class GlassPacks {
 		return null;
 	}
 
+	/** Share atlas pixels whenever block predicates select the same rule (or synthesis). */
+	public int variantTile(String sprite, int tile) {
+		int bank = tile / GlassTiles.COUNT;
+		BufferedImage selected = tile(sprite, bank * GlassTiles.COUNT);
+		for (int i = 0; i < bank; i++) if (tile(sprite, i * GlassTiles.COUNT) == selected) return i * GlassTiles.COUNT + tile % GlassTiles.COUNT;
+		return tile;
+	}
+
 	public boolean acceptsSprite(String sprite) {
 		if (GlassTiles.glass(sprite)) return true;
 		String suffix = "|" + canonical(sprite);
