@@ -25,6 +25,12 @@ final class LegacySelfTest {
 	private LegacySelfTest() {}
 
 	static void maybeStart() {
+
+		if ("nametagfont".equals(System.getProperty("arctic.selftest"))) {
+			LegacyNametagFontTest.start();
+			return;
+		}
+
 		String mode = System.getProperty("arctic.selftest");
 		//#if DEV
 		if ("persistent-chat".equals(System.getProperty("arctic.selftest"))) {

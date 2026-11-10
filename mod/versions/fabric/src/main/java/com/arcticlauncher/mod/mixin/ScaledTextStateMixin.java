@@ -1,7 +1,10 @@
 package com.arcticlauncher.mod.mixin;
 
-//#if MC >= 1.21.9
-import com.arcticlauncher.mod.ScaledInter;
+//#if MC >= 1.21.6
+import com.arcticlauncher.mod.TextDrawScale;
+import com.arcticlauncher.client.feature.TextPixelScale;
+import net.minecraft.client.Minecraft;
+import org.joml.Matrix3x2fc;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import net.minecraft.client.gui.Font;
@@ -14,17 +17,20 @@ import org.spongepowered.asm.mixin.Mixin;
 
 /**
  * GUI text is laid out once its pose is known: the pose's scale picks the smooth font's size bucket for the
- * letters (see {@link ScaledInter}). Only while this text is prepared.
+ * letters (see {@link TextDrawScale}). Only while this text is prepared.
  */
 @Mixin(GuiTextRenderState.class)
 abstract class ScaledTextStateMixin {
 	@WrapMethod(method = "ensurePrepared")
 	private Font.PreparedText arctic$scaled(Operation<Font.PreparedText> original) {
-		ScaledInter.preparing(((GuiTextRenderState) (Object) this).pose);
+		Matrix3x2fc pose = ((GuiTextRenderState) (Object) this).pose;
+		float pixels = TextPixelScale.stretch(pose.m00(), pose.m01(), pose.m10(), pose.m11())
+				* (float) Minecraft.getInstance().getWindow().getGuiScale();
+		float previous = TextDrawScale.set(pixels);
 		try {
 			return original.call();
 		} finally {
-			ScaledInter.prepared();
+			TextDrawScale.restore(previous);
 		}
 	}
 }
