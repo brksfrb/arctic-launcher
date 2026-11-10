@@ -30,6 +30,10 @@ pub mod notes;
 pub use notes::ReleaseNotes;
 
 pub const GITHUB_REPO: &str = "brksfrb/arctic-launcher";
+/// PERSONAL BUILD ONLY (branch personal/burak-v3-integration, never merged): this exe carries an
+/// unreleased Arctic Client pack, so it never offers or installs a public release over itself.
+/// Every update path (start-up check, background auto-install, manual check) goes through [`check`].
+const PERSONAL_BUILD: bool = true;
 /// Flatpak owns the installed executable and updates it through its signed repository.
 pub fn managed_by_flatpak() -> bool {
     cfg!(target_os = "linux") && std::path::Path::new("/.flatpak-info").is_file()
@@ -89,7 +93,7 @@ struct Asset {
 
 /// Ask GitHub for the newest applicable release. `Ok(None)` = up to date.
 pub fn check(channel: UpdateChannel) -> Result<Option<UpdateInfo>> {
-    if managed_by_flatpak() {
+    if managed_by_flatpak() || PERSONAL_BUILD {
         return Ok(None);
     }
     let url =
