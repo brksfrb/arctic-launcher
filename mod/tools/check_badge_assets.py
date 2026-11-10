@@ -16,6 +16,8 @@ def check(path):
         for retired in ['badge1', 'badge2', 'badge3', 'badge_shield', 'badge_shield_tab', 'badge_shield_tag']:
             assert not any(Path(n).stem == retired for n in names), (path, retired)
         assert not any(Path(n).stem.split('$')[0] in {'BadgeTest', 'LegacyBadgeTest'} for n in names), path
+        fallback = 'assets/minecraft/font/default.json'
+        assert jar.read(fallback) == (ASSETS / fallback).read_bytes(), (path, fallback)
         for picture in sorted((ASSETS / 'assets/arctic').glob('badge*.png')):
             asset = f'assets/arctic/{picture.name}'
             assert jar.read(asset) == picture.read_bytes(), (path, asset)

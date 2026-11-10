@@ -399,10 +399,10 @@ public final class LegacyHooks {
 			ArcticClient.platform().mentionSound();
 		}
 		if (c.chatTimestamps) {
-			out = LegacyChatCopy.tag(new LiteralText("§8" + (c.chatStampBold ? "§l" : "") + (c.chatStampItalic ? "§o" : "")
-					+ com.arcticlauncher.client.feature.ChatStamp.text(c) + "§r"), source, true).append(out);
+			out = new LiteralText("").append(LegacyChatCopy.tag(new LiteralText("§8" + (c.chatStampBold ? "§l" : "") + (c.chatStampItalic ? "§o" : "")
+					+ com.arcticlauncher.client.feature.ChatStamp.text(c) + "§r"), source, true)).append(out);
 		} else if (c.chatCopy) {
-			out = LegacyChatCopy.tag(new LiteralText("§8[Copy] §r"), source, true).append(out);
+			out = new LiteralText("").append(LegacyChatCopy.tag(new LiteralText("§8[Copy] §r"), source, true)).append(out);
 		}
 		return out;
 	}
