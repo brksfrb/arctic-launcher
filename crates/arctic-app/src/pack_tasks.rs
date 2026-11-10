@@ -83,9 +83,16 @@ impl Tasks {
                 }
             }
         }
-        let file = packs::install(kind, project, game, &game_dir, &progress)?;
+        let installed = packs::install(kind, project, game, &game_dir, &progress)?;
+        let file = installed.file_name;
         if let Err(e) = packs::set_active(kind, &game_dir, &file, true) {
             note = format!("Installed but not switched on: {e}");
+        }
+        if installed.used_fallback {
+            if !note.is_empty() {
+                note.push(' ');
+            }
+            note.push_str("Installed the newest file tagged for another Minecraft version.");
         }
         Ok(PackDone {
             file,

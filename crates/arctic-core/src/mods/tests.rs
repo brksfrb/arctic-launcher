@@ -14,12 +14,13 @@ const SEARCH_SAMPLE: &str = r#"{
      "author": "jellysquid3", "title": "Sodium",
      "description": "The fastest rendering optimization mod",
      "categories": ["fabric", "neoforge", "optimization"],
+     "versions": ["1.21.4", "1.21.5"],
      "downloads": 70000000, "follows": 30000,
      "icon_url": "https://cdn.modrinth.com/data/AANobbMI/icon.png",
      "date_created": "2021-01-03T00:53:34Z", "latest_version": "mc1.21.4-0.6.5",
      "license": "LicenseRef-Polyform-Shield-1.0.0", "gallery": []},
     {"project_id": "xyz", "slug": "plain", "title": "Plain", "description": "",
-     "author": "someone", "downloads": 5, "icon_url": "", "categories": []},
+     "author": "someone", "downloads": 5, "icon_url": "", "categories": [], "versions": []},
     {"project_id": "nulls", "icon_url": null}
   ],
   "offset": 0, "limit": 20, "total_hits": 123
@@ -39,9 +40,59 @@ fn search_response_maps_to_page() {
     assert_eq!(sodium.author, "jellysquid3");
     assert_eq!(sodium.downloads, 70_000_000);
     assert_eq!(sodium.categories, ["fabric", "neoforge", "optimization"]);
+    assert_eq!(sodium.game_versions, ["1.21.4", "1.21.5"]);
     assert!(sodium.icon_url.as_deref().unwrap().ends_with("icon.png"));
     assert_eq!(page.hits[1].icon_url, None, "empty icon URL is no icon");
     assert_eq!(page.hits[2].title, "");
+    assert!(page.hits[2].game_versions.is_empty());
+}
+
+#[test]
+fn search_hits_only_mark_known_version_mismatches_incompatible() {
+    let page = serde_json::from_str::<SearchResponse>(SEARCH_SAMPLE)
+        .unwrap()
+        .into_page();
+    let hit = &page.hits[0];
+    assert!(!hit.is_incompatible("1.21.4"));
+    assert!(!hit.is_incompatible(""));
+    assert!(!hit.is_incompatible("  "));
+    for game in ["1.21.11", "26.2", "26.3"] {
+        assert!(hit.is_incompatible(game));
+        assert!(!page.hits[1].is_incompatible(game));
+        assert!(!page.hits[2].is_incompatible(game));
+    }
+}
+
+#[test]
+fn pack_search_omits_game_version_facets_and_keeps_sort_and_offset() {
+    for kind in [ProjectType::Shader, ProjectType::ResourcePack] {
+        for game in ["1.21.11", "26.3"] {
+            let query = SearchQuery {
+                game_version: game.into(),
+                project_type: kind,
+                sort: SortBy::Updated,
+                offset: 40,
+                ..SearchQuery::default()
+            };
+            assert_eq!(
+                modrinth::search_url(&query),
+                format!(
+                    "https://api.modrinth.com/v2/search?query=&facets={}&index=updated&offset=40&limit=20",
+                    encode(&format!(r#"[["project_type:{}"]]"#, kind.id()))
+                )
+            );
+        }
+    }
+}
+
+#[test]
+fn modpack_search_still_requires_the_game_version() {
+    let url = modrinth::search_url(&SearchQuery {
+        game_version: "26.3".into(),
+        project_type: ProjectType::Modpack,
+        ..SearchQuery::default()
+    });
+    assert!(url.contains(&encode(r#"[["project_type:modpack"],["versions:26.3"]]"#)));
 }
 
 #[test]
@@ -82,6 +133,10 @@ fn encoder_keeps_unreserved_and_escapes_utf8() {
         modrinth::project_versions_url("P1", &["fabric"], "1.21.4"),
         "https://api.modrinth.com/v2/project/P1/version?loaders=%5B%22fabric%22%5D\
          &game_versions=%5B%221.21.4%22%5D"
+    );
+    assert_eq!(
+        modrinth::project_versions_any_game_url("P/1", &["iris", "optifine"]),
+        "https://api.modrinth.com/v2/project/P%2F1/version?loaders=%5B%22iris%22%2C%22optifine%22%5D"
     );
 }
 
@@ -163,6 +218,9 @@ fn falls_back_to_beta_then_alpha_and_filters_incompatible() {
         "alpha"
     );
     assert!(pick_version(&all, &["quilt"], "1.21.4").is_none());
+    for game in ["1.21.11", "26.2", "26.3"] {
+        assert!(pick_version(&all, &["fabric"], game).is_none());
+    }
     assert_eq!(
         pick_version(&all, &["quilt", "fabric"], "1.21.4")
             .unwrap()

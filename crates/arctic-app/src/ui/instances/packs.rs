@@ -317,6 +317,7 @@ impl ArcticApp {
 
     fn rp_results(&mut self, ui: &mut egui::Ui, instance: &Instance) {
         let p = self.palette();
+        let game = self.pack_game(instance);
         let hits: Vec<ProjectHit> = match &self.inst.packs.results {
             None => {
                 ui.horizontal(|ui| {
@@ -389,6 +390,12 @@ impl ArcticApp {
                                 hit.clone(),
                                 Some(self.inst.packs.kind),
                             );
+                        }
+                        if hit.is_incompatible(&game) {
+                            ui.label(RichText::new("Incompatible").small().color(p.error))
+                                .on_hover_text(format!(
+                                    "No file is tagged for Minecraft {game}. You can still install it."
+                                ));
                         }
                         ui.label(
                             RichText::new(format!("{} downloads", compact(hit.downloads)))
