@@ -270,3 +270,16 @@ fn public_list_enable_remove_roundtrip() {
     remove(&mods_dir, &index, "Hand.jar").unwrap();
     assert!(list(&mods_dir, &index).unwrap().is_empty());
 }
+
+#[test]
+fn project_preview_accepts_projects_without_gallery_and_optional_captions() {
+    let project: super::ProjectDetail =
+        serde_json::from_str(r#"{"id":"test","title":"No gallery"}"#).unwrap();
+    assert!(project.gallery.is_empty());
+    assert!(project.body.is_empty());
+    let project: super::ProjectDetail = serde_json::from_str(r##"{"id":"test","body":"# About","game_versions":["1.21.1"],"loaders":["iris"],"gallery":[{"url":"https://example.com/image.webp","featured":true}]}"##).unwrap();
+    assert!(project.gallery[0].featured);
+    assert!(project.gallery[0].title.is_none());
+    assert_eq!(project.loaders, ["iris"]);
+    assert_eq!(project.game_versions, ["1.21.1"]);
+}

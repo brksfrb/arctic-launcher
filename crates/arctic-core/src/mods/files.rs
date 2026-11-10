@@ -148,6 +148,10 @@ fn icon_cache_path(url: &str, cache_dir: &Path) -> PathBuf {
 
 /// Icon bytes, from `cache_dir` when fetched before.
 pub(super) fn icon(url: &str, cache_dir: &Path) -> Result<Vec<u8>> {
+    cached_image(url, cache_dir, MAX_ICON_BYTES)
+}
+
+pub(super) fn cached_image(url: &str, cache_dir: &Path, limit: u64) -> Result<Vec<u8>> {
     if !(url.starts_with("https://") || url.starts_with("http://")) {
         return Err(Error::Other(format!("invalid icon URL: {url}")));
     }
@@ -158,12 +162,12 @@ pub(super) fn icon(url: &str, cache_dir: &Path) -> Result<Vec<u8>> {
         Err(e) if e.kind() == ErrorKind::NotFound => {}
         Err(e) => return Err(Error::io(path, e)),
     }
-    let bytes = fetch_icon(url)?;
+    let bytes = fetch_image(url, limit)?;
     store(&path, &bytes)?;
     Ok(bytes)
 }
 
-fn fetch_icon(url: &str) -> Result<Vec<u8>> {
+fn fetch_image(url: &str, limit: u64) -> Result<Vec<u8>> {
     let mut resp = agent()
         .get(url)
         .header("User-Agent", user_agent())
@@ -174,11 +178,7 @@ fn fetch_icon(url: &str) -> Result<Vec<u8>> {
     if let Some(e) = status_error(resp.status().as_u16(), "icon") {
         return Err(e);
     }
-    let bytes = resp
-        .body_mut()
-        .with_config()
-        .limit(MAX_ICON_BYTES)
-        .read_to_vec()?;
+    let bytes = resp.body_mut().with_config().limit(limit).read_to_vec()?;
     if bytes.is_empty() {
         return Err(Error::Other(format!("empty icon at {url}")));
     }
@@ -289,5 +289,10 @@ mod tests {
         store(&icon_cache_path(url, dir.path()), b"png").unwrap();
         assert_eq!(icon(url, dir.path()).unwrap(), b"png");
         assert!(icon("file:///etc/passwd", dir.path()).is_err());
+        assert_eq!(
+            cached_image(url, dir.path(), 20 * 1024 * 1024).unwrap(),
+            b"png"
+        );
+        assert!(cached_image("data:image/png;base64,AAAA", dir.path(), 20 * 1024 * 1024).is_err());
     }
 }

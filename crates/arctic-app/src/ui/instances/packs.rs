@@ -36,7 +36,7 @@ pub struct PacksUi {
     groups: PackGroups,
     /// The name being typed for a new group.
     new_group: String,
-    installing: HashSet<String>,
+    pub(super) installing: HashSet<String>,
     typed_at: Option<f64>,
 }
 
@@ -61,7 +61,7 @@ impl Default for PacksUi {
 
 impl ArcticApp {
     /// The instance's Minecraft version (Vanilla follows the Play tab).
-    fn pack_game(&self, instance: &Instance) -> String {
+    pub(super) fn pack_game(&self, instance: &Instance) -> String {
         instance
             .version
             .clone()
@@ -339,18 +339,57 @@ impl ArcticApp {
             ui.set_width(ui.available_width());
             for hit in &hits {
                 crate::widgets::row(ui, |ui| {
-                    mod_icon(ui, self, hit.icon_url.as_deref());
+                    if ui
+                        .scope(|ui| mod_icon(ui, self, hit.icon_url.as_deref()))
+                        .response
+                        .interact(egui::Sense::click())
+                        .on_hover_text("Preview project")
+                        .clicked()
+                    {
+                        self.open_project_preview(
+                            ui.ctx(),
+                            hit.clone(),
+                            Some(self.inst.packs.kind),
+                        );
+                    }
                     ui.vertical(|ui| {
                         ui.set_max_width(ui.available_width() - 130.0);
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new(&hit.title).strong().color(p.text));
+                            if ui
+                                .add(
+                                    egui::Label::new(
+                                        RichText::new(&hit.title).strong().color(p.text),
+                                    )
+                                    .sense(egui::Sense::click()),
+                                )
+                                .on_hover_text("Preview project")
+                                .clicked()
+                            {
+                                self.open_project_preview(
+                                    ui.ctx(),
+                                    hit.clone(),
+                                    Some(self.inst.packs.kind),
+                                );
+                            }
                             ui.label(
                                 RichText::new(format!("by {}", hit.author))
                                     .small()
                                     .color(p.muted),
                             );
                         });
-                        ui.label(RichText::new(&hit.description).color(p.muted));
+                        if ui
+                            .add(
+                                egui::Label::new(RichText::new(&hit.description).color(p.muted))
+                                    .sense(egui::Sense::click()),
+                            )
+                            .clicked()
+                        {
+                            self.open_project_preview(
+                                ui.ctx(),
+                                hit.clone(),
+                                Some(self.inst.packs.kind),
+                            );
+                        }
                         ui.label(
                             RichText::new(format!("{} downloads", compact(hit.downloads)))
                                 .small()

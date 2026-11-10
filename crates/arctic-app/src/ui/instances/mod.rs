@@ -10,6 +10,7 @@ mod loader_switch;
 mod modpacks;
 mod mods_page;
 mod packs;
+mod preview;
 mod replays;
 pub mod retarget;
 mod trash;
@@ -111,6 +112,7 @@ fn icon_texture_uri(url: &str) -> String {
 /// All Instances-tab UI state.
 #[derive(Default)]
 pub struct InstancesUi {
+    pub preview: Option<preview::Preview>,
     /// Instance whose page is open (`None` = the grid).
     pub open: Option<String>,
     pub page: InstancePage,
