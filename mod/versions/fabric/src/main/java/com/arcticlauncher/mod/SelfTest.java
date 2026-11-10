@@ -78,6 +78,12 @@ final class SelfTest {
 			return;
 		}
 		//#endif
+		if ("ctm".equals(System.getProperty("arctic.selftest"))) {
+			//#if DEV_SCENES
+			GlassCtmTest.start();
+			//#endif
+			return;
+		}
 		if (WorldTest.requested()) {
 			WorldTest.start();
 			return;
