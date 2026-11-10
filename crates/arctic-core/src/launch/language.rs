@@ -10,12 +10,15 @@ use crate::{Error, Result};
 
 pub(super) fn prepare(client: &Path, game_dir: &Path) -> Result<()> {
     let options = game_dir.join("options.txt");
-    let text = match fs::read_to_string(&options) {
-        Ok(text) => text,
+    let bytes = match fs::read(&options) {
+        Ok(bytes) => bytes,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(e) => return Err(Error::io(&options, e)),
     };
-    if !text.lines().any(|line| line.starts_with("lang:")) {
+    if !bytes
+        .split(|&byte| byte == b'\n')
+        .any(|line| line.starts_with(b"lang:"))
+    {
         return Ok(());
     }
     let mut jar = zip::ZipArchive::new(fs::File::open(client).at(client)?)
@@ -31,23 +34,34 @@ pub(super) fn prepare(client: &Path, game_dir: &Path) -> Result<()> {
         .map(str::to_owned)
         .collect();
     let mut changed = false;
-    let mut lines = Vec::new();
-    for line in text.lines() {
-        if let Some(selected) = line.strip_prefix("lang:") {
+    let mut repaired = Vec::with_capacity(bytes.len());
+    // Options use the game's platform encoding. Only replace ASCII language
+    // values; preserve all unrelated bytes, including original line endings.
+    for line in bytes.split_inclusive(|&byte| byte == b'\n') {
+        let (body, ending) = if let Some(body) = line.strip_suffix(b"\r\n") {
+            (body, b"\r\n".as_slice())
+        } else if let Some(body) = line.strip_suffix(b"\n") {
+            (body, b"\n".as_slice())
+        } else {
+            (line, b"".as_slice())
+        };
+        if let Some(selected) = body.strip_prefix(b"lang:") {
             let available = languages
                 .iter()
-                .find(|code| code.eq_ignore_ascii_case(selected.trim()))
+                .find(|code| code.as_bytes().eq_ignore_ascii_case(selected.trim_ascii()))
                 .map(String::as_str)
                 .unwrap_or("en_US");
-            changed |= selected != available;
-            lines.push(format!("lang:{available}"));
+            changed |= selected != available.as_bytes();
+            repaired.extend_from_slice(b"lang:");
+            repaired.extend_from_slice(available.as_bytes());
+            repaired.extend_from_slice(ending);
         } else {
-            lines.push(line.to_owned());
+            repaired.extend_from_slice(line);
         }
     }
     if changed {
         log::info!("adjusted language to the installed legacy client's language files");
-        fs::write(&options, format!("{}\n", lines.join("\n"))).at(&options)?;
+        fs::write(&options, repaired).at(&options)?;
     }
     Ok(())
 }
@@ -103,9 +117,33 @@ mod tests {
         .unwrap();
         jar.finish().unwrap();
         let options = dir.path().join("options.txt");
-        let text = "lang:custom_pack_language\r\nfov:0.5\r\n";
+        prepare(&client, dir.path()).unwrap();
+        let text = b"lang:custom_pack_language\r\nresourcePacks:[\"\xe9t\xe9.zip\"]\r\nfov:0.5\r\n";
         fs::write(&options, text).unwrap();
         prepare(&client, dir.path()).unwrap();
-        assert_eq!(fs::read_to_string(options).unwrap(), text);
+        assert_eq!(fs::read(options).unwrap(), text);
+    }
+
+    #[test]
+    fn legacy_repairs_preserve_non_utf8_bytes_and_line_endings() {
+        let dir = tempfile::tempdir().unwrap();
+        let client = dir.path().join("client.jar");
+        let mut jar = zip::ZipWriter::new(fs::File::create(&client).unwrap());
+        jar.start_file("lang/en_US.lang", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        jar.finish().unwrap();
+        let options = dir.path().join("options.txt");
+        prepare(&client, dir.path()).unwrap();
+        assert!(!options.exists());
+        for ending in [b"\n".as_slice(), b"\r\n".as_slice(), b"".as_slice()] {
+            let prefix = b"texturePack:\xe9t\xe9.zip\r\n";
+            let original = [prefix.as_slice(), b"lang:en_us", ending].concat();
+            let expected = [prefix.as_slice(), b"lang:en_US", ending].concat();
+            fs::write(&options, original).unwrap();
+            prepare(&client, dir.path()).unwrap();
+            assert_eq!(fs::read(&options).unwrap(), expected);
+            prepare(&client, dir.path()).unwrap();
+            assert_eq!(fs::read(&options).unwrap(), expected);
+        }
     }
 }
