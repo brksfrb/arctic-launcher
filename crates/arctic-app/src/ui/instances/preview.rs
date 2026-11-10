@@ -5,6 +5,7 @@ use arctic_core::instances::Instance;
 use arctic_core::mods::{self, ProjectDetail, ProjectHit, packs::PackKind};
 use eframe::egui::{self, RichText};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
+use egui_commonmark_backend::pulldown::parser_options;
 use pulldown_cmark::{Event, Parser, Tag};
 
 use super::{IconState, browse::compact, mods_page::mod_icon};
@@ -36,7 +37,10 @@ fn fetch(id: String, ctx: egui::Context) -> Receiver<DetailResult> {
 /// images use our bounded, lazy, cached loader instead of arbitrary file URIs.
 fn prepare_description(body: &str, cache: &mut CommonMarkCache) -> String {
     let mut images: Vec<std::ops::Range<usize>> = Vec::new();
-    for (event, range) in Parser::new(body).into_offset_iter() {
+    // Share the viewer's extension options so footnotes and definition lists
+    // cannot hide active images or links from sanitization. The viewer below
+    // leaves its optional math and heading-attribute parsing disabled.
+    for (event, range) in Parser::new_ext(body, parser_options()).into_offset_iter() {
         match event {
             Event::Start(Tag::Link { dest_url, .. }) if !safe_url(&dest_url) => {
                 cache.add_link_hook(dest_url.to_string());
@@ -336,6 +340,31 @@ mod tests {
                 prepare_description(&body, &mut cache),
                 format!("é {placeholder}{placeholder} end"),
             );
+        }
+    }
+
+    #[test]
+    fn extension_content_cannot_bypass_image_and_link_restrictions() {
+        for body in [
+            "Reference[^note]\n\n[^note]: footnote\n\n    ![secret](file:///secret) [open](customprotocol:payload)",
+            "Term\n: ![secret](file:///secret) [open](customprotocol:payload)",
+            "| Content |\n| --- |\n| ![secret](file:///secret) [open](customprotocol:payload) |",
+            "- [ ] ~~![secret](file:///secret) [open](customprotocol:payload)~~",
+        ] {
+            let mut cache = CommonMarkCache::default();
+            let prepared = prepare_description(body, &mut cache);
+            assert!(prepared.contains("[Image — see project gallery]"));
+            assert!(!prepared.contains("file:///secret"));
+            assert!(cache.get_link_hook("customprotocol:payload").is_some());
+            for event in Parser::new_ext(&prepared, parser_options()) {
+                match event {
+                    Event::Start(Tag::Image { .. }) => panic!("image survived: {prepared}"),
+                    Event::Start(Tag::Link { dest_url, .. }) if !safe_url(&dest_url) => {
+                        assert!(cache.get_link_hook(&dest_url).is_some());
+                    }
+                    _ => {}
+                }
+            }
         }
     }
 
