@@ -25,6 +25,7 @@ final class PersistentChatProof {
 		later(8, () -> WorldTest.createTestWorld(() -> later(3, PersistentChatProof::ready)));
 	}
 	private static void ready() {
+		PersistentChatTest.main(new String[0]);
 		if (!RESTORE) {
 			open(SENT);
 			later(2, () -> {
