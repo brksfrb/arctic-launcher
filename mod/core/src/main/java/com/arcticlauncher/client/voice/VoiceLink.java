@@ -104,9 +104,20 @@ public final class VoiceLink {
 			return;
 		}
 		String server = platform.inWorld() ? platform.server() : null;
+		// Menus: one empty report. Singleplayer is named, without a position,
+		// so the launcher can tell it from the menus (Discord status) and
+		// voice still only starts from a multiplayer report that has one.
+		if (server == null) {
+			snapshot = "{}";
+			return;
+		}
+		if ("Singleplayer".equals(server)) {
+			snapshot = "{\"server\":\"Singleplayer\"}";
+			return;
+		}
 		double[] me = platform.position();
 		UUID myId = platform.worldPlayerId();
-		if (server == null || "Singleplayer".equals(server) || me == null || myId == null) {
+		if (me == null || myId == null) {
 			snapshot = "{}";
 			return;
 		}

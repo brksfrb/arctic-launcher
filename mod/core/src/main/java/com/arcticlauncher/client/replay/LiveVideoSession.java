@@ -1,5 +1,7 @@
 package com.arcticlauncher.client.replay;
 
+import com.arcticlauncher.client.LocalClock;
+
 import com.google.gson.Gson;
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -97,7 +99,7 @@ final class LiveVideoSession {
 		Job done = manual; manual = null; done.to = seconds(); save(done);
 	}
 	private String output(String kind) {
-		return kind + " " + new java.text.SimpleDateFormat("yyyy-MM-dd HH-mm-ss").format(new Date()) + " " + UUID.randomUUID().toString().substring(0, 6) + ".mp4";
+		return kind + " " + LocalClock.formatter("yyyy-MM-dd HH-mm-ss").format(new Date()) + " " + UUID.randomUUID().toString().substring(0, 6) + ".mp4";
 	}
 	private void save(Job job) {
 		synchronized (this) { jobs.add(job); }

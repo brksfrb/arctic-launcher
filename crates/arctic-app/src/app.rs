@@ -527,7 +527,7 @@ impl ArcticApp {
         }
     }
 
-    /// The mouse's back button (or Alt+Left): close the open modpack or instance page, else the previous tab.
+    /// Mouse Back or Alt+Left: close the preview, modpack or instance page, else the previous tab.
     fn go_back(&mut self, ctx: &egui::Context) {
         let (back, now) = ctx.input(|i| {
             (
@@ -539,11 +539,10 @@ impl ArcticApp {
         if !back {
             return;
         }
-        if self.tab == Tab::Instances && self.inst.modpacks_open {
-            self.inst.modpacks_open = false;
-        } else if self.tab == Tab::Instances && self.inst.open.is_some() {
-            self.inst.open = None;
-        } else if let Some(tab) = self.tab_history.pop() {
+        if self.tab == Tab::Instances && self.inst.go_back() {
+            return;
+        }
+        if let Some(tab) = self.tab_history.pop() {
             self.tab = tab;
             self.tab_changed_at = now;
         }
@@ -843,6 +842,8 @@ impl ArcticApp {
             return;
         }
         self.warn_if_proxy_misses_servers(&instance, &version.id);
+        // A new launch isn't on the previous game's server yet.
+        self.voice.forget_place();
         self.discord.game_started(
             format!("Minecraft {}", version.id),
             instance.loader.label().to_owned(),
@@ -1166,7 +1167,8 @@ impl ArcticApp {
             | Event::Retargeted(..)
             | Event::LoaderChecked(..)
             | Event::LoaderSwitched(..)
-            | Event::ModIcon(..)) => self.on_instances_event(e, ctx),
+            | Event::ModIcon(..)
+            | Event::ModGalleryImage(..)) => self.on_instances_event(e, ctx),
             Event::Share(id, event) => self.on_share_event(id, event),
             Event::WorldsDone(id, result) => self.on_worlds_done(id, result),
             Event::PickerMissing => self.toasts.push(
@@ -1274,7 +1276,7 @@ impl ArcticApp {
         if let Ok(Some(info)) = &result
             && (self.settings.auto_install_updates || info.required)
         {
-            // Installs by itself; the banner (or a required update's overlay) shows it going.
+            // Installs quietly unless a required update needs its overlay.
             self.start_update(info.clone());
             return;
         }
@@ -1307,10 +1309,13 @@ impl ArcticApp {
             Ok(()) => UpdateState::Installed {
                 required: info.required,
             },
-            Err(error) => UpdateState::Failed {
-                error,
-                retry: Some(info.clone()),
-            },
+            Err(error) => {
+                log::warn!("update install failed: {error}");
+                UpdateState::Failed {
+                    error,
+                    retry: Some(info.clone()),
+                }
+            }
         };
     }
 
@@ -1395,9 +1400,23 @@ impl eframe::App for ArcticApp {
             self.runs.any_active(),
         );
         let playing = self.runs.any_active();
+        if !playing {
+            self.voice.forget_place();
+        }
         let together = self.together_status();
-        self.discord
-            .sync(self.settings.discord_presence, playing, together);
+        self.discord.sync(
+            self.settings.discord_presence,
+            playing,
+            together,
+            self.settings.discord_show_server,
+            self.voice.reported_server(),
+        );
+        // Server changes arrive on the bridge while this window is in the
+        // background. A slow tick is enough to notice them; Discord is only
+        // told when the text changes.
+        if playing && self.settings.discord_presence && self.settings.discord_show_server {
+            ctx.request_repaint_after(Duration::from_secs(1));
+        }
         self.go_back(&ctx);
         self.shell(ui);
         self.splash.show(&ctx, self.palette());

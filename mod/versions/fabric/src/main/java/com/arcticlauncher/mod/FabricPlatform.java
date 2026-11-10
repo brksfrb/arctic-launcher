@@ -123,6 +123,14 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public boolean atTitleScreen() {
+		// The title exists underneath the initial asynchronous resource reload. Opening a
+		// launcher replay there can render a world before entity renderers are installed.
+		//#if MC >= 26.2
+		if (mc().gui.overlay() != null) return false;
+		//#elif MC >= 1.14
+		if (mc().getOverlay() != null) return false;
+		//#endif
+		// Older versions load their initial resources synchronously.
 		Screen screen = Compat.screen();
 		return !inWorld() && (screen instanceof net.minecraft.client.gui.screens.TitleScreen || (screen instanceof PageScreen
 				&& ((PageScreen) screen).page() instanceof com.arcticlauncher.client.menu.TitleMenu));
@@ -207,7 +215,9 @@ final class FabricPlatform implements Platform {
 	public void scrollHotbar(int step) {
 		LocalPlayer p = mc().player;
 		if (p != null) {
-			Compat.selectSlot(p, Math.floorMod(Compat.selectedSlot(p) + step, 9));
+			com.arcticlauncher.client.config.ClientConfig c = ArcticClient.config();
+			boolean wrap = c == null || !c.hotbarScrollStop;
+			Compat.selectSlot(p, com.arcticlauncher.client.feature.HotbarScroll.move(Compat.selectedSlot(p), step, wrap));
 		}
 	}
 
@@ -1159,7 +1169,7 @@ final class FabricPlatform implements Platform {
 			leaveWorld(mc);
 			// One duel world at a time: earlier ones are thrown away (they're only arenas).
 			WorldStats.deleteWorlds(new java.io.File(mc.gameDirectory, "saves"), "Arctic Duel ");
-			String name = "Arctic Duel " + new java.text.SimpleDateFormat("MM-dd HH.mm").format(new java.util.Date());
+			String name = "Arctic Duel " + com.arcticlauncher.client.LocalClock.formatter("MM-dd HH.mm").format(new java.util.Date());
 			//#if MC >= 26.1
 			net.minecraft.world.level.LevelSettings settings = new net.minecraft.world.level.LevelSettings(name,
 					net.minecraft.world.level.GameType.SURVIVAL,
@@ -1242,7 +1252,7 @@ final class FabricPlatform implements Platform {
 			return;
 		}
 		com.arcticlauncher.mod.mixin.CreateWorldScreenAccess screen = (com.arcticlauncher.mod.mixin.CreateWorldScreenAccess) Compat.screen();
-		screen.arctic$nameEdit().setValue("Arctic Duel " + new java.text.SimpleDateFormat("MM-dd HH.mm").format(new java.util.Date()));
+		screen.arctic$nameEdit().setValue("Arctic Duel " + com.arcticlauncher.client.LocalClock.formatter("MM-dd HH.mm").format(new java.util.Date()));
 		screen.arctic$setCommands(true);
 		screen.arctic$setCommandsChanged(true);
 		screen.arctic$create();

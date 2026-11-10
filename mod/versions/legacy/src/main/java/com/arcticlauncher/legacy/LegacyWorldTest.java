@@ -70,13 +70,20 @@ final class LegacyWorldTest {
 
 	private static void waitForWorld(int attempt, Runnable then) {
 		MinecraftClient mc = MinecraftClient.getInstance();
+		// A headless window never has focus, so the pause screen would sit on top of the world forever.
+		mc.options.pauseOnLostFocus = false;
+		if (mc.currentScreen instanceof net.minecraft.client.gui.screen.GameMenuScreen) {
+			mc.setScreen(null);
+		}
 		if (mc.world != null && mc.player != null && mc.currentScreen == null) {
 			ArcticLegacy.LOG.info("worldtest: in the world after {}s", attempt);
 			TIMER.schedule(() -> run(then), 6, TimeUnit.SECONDS);
 		} else if (attempt < 120) {
 			TIMER.schedule(() -> waitForWorld(attempt + 1, then), 1, TimeUnit.SECONDS);
 		} else {
-			ArcticLegacy.LOG.error("worldtest: FAILED world never loaded");
+			ArcticLegacy.LOG.error("worldtest: FAILED world never loaded (world={} player={} screen={})",
+					mc.world != null, mc.player != null,
+					mc.currentScreen == null ? "none" : mc.currentScreen.getClass().getSimpleName());
 		}
 	}
 

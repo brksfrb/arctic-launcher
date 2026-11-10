@@ -31,6 +31,7 @@ if (project.hasProperty('legacy_fabric')) {
 /** "MC >= 26.1 && MC < 26.3": comparisons joined by && or ||. */
 def evalCondition
 evalCondition = { String expr ->
+	if (expr == 'DEV') return project.findProperty('chatcopyDev') == 'true'
 	if (expr.contains('||')) {
 		return expr.split(/\|\|/).any { evalCondition(it.trim()) }
 	}
@@ -178,12 +179,17 @@ tasks.register('preprocessJava') {
 	doLast {
 		def outDir = preprocessedJava.get().asFile
 		project.delete(outDir)
-		def root = new File(adapterRoot, 'src/main/java')
-		root.eachFileRecurse(groovy.io.FileType.FILES) { f ->
-			def rel = root.toPath().relativize(f.toPath()).toString()
-			def target = new File(outDir, rel)
-			target.parentFile.mkdirs()
-			target.text = applyRenames(preprocessSource(f.getText('UTF-8'), rel))
+		// Proof harnesses are opt-in; mod/build.py always forces this off for releases.
+		def roots = ['src/main/java']
+		if (project.findProperty('chatcopyDev') == 'true') roots += ['src/dev/java', '../../core/src/dev/java']
+		roots.each { source ->
+			def root = new File(adapterRoot, source)
+			root.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+				def rel = root.toPath().relativize(f.toPath()).toString()
+				def target = new File(outDir, rel)
+				target.parentFile.mkdirs()
+				target.text = applyRenames(preprocessSource(f.getText('UTF-8'), rel))
+			}
 		}
 	}
 }
@@ -261,6 +267,7 @@ def loaderMin = atLeast('1.21.6') ? project.loader_version : '0.16.9'
 
 processResources {
 	def props = [
+			chatCopyStyleAccess: atLeast('1.16') ? '"ChatCopyStyleAccess",' : '',
 			version: project.version,
 			minecraft_range: minecraftRange,
 			java: javaVersion,
@@ -289,6 +296,11 @@ processResources {
 			lightEngine: atLeast('1.14'),
 			// Needs the FreeType font code of 26.1+ (older versions use STB).
 			smoothFont: atLeast('26.1'),
+			// Scaled-up smooth-font text drawn from letters rasterized near their size on screen (ScaledInter):
+			// needs 1.21.9+'s glyph API (baked glyphs that carry their metrics) and GUI text render states.
+			scaledFont: atLeast('1.21.9'),
+			// 1.21.11's chat draws and collects clicks together, with a hardcoded line of 9.
+			chatLine111: atLeast('1.21.11') && !atLeast('26.1'),
 			// Motion blur as a post effect (and its pack) before 26.1, for VulkanMod.
 			postBlur: atLeast('1.21.6') && !atLeast('26.1'),
 			// Before 26.1 the smooth font is put into the default font by code (SmoothFont): through
@@ -365,6 +377,8 @@ processResources {
 			toastSlots: atLeast('1.19'),
 			// HUD widgets hand in last frame's GUI pieces again (26.1's GUI states).
 			guiReplay: atLeast('26.1'),
+			// Before 1.21.2 the hotbar wraps inside Inventory.swapPaint. After that, MouseHandler.onScroll does.
+			inventoryHotbarScroll: !atLeast('1.21.2'),
 	]
 	inputs.properties props
 	filesMatching(['fabric.mod.json', 'arctic.mixins.json']) {

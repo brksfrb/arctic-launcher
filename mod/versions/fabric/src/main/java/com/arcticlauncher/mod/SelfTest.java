@@ -49,6 +49,13 @@ final class SelfTest {
 	private SelfTest() {}
 
 	static void maybeStart() {
+		//#if DEV
+		if ("chatcopy".equals(System.getProperty("arctic.selftest"))) {
+			ChatCopyTest.start();
+			return;
+		}
+
+		//#endif
 		//#if MC >= 1.19.4
 		if ("title-compat".equals(System.getProperty("arctic.selftest"))) {
 			TitleCompatTest.start();
@@ -103,6 +110,10 @@ final class SelfTest {
 		}
 		if (PadTest.requested()) {
 			PadTest.start();
+			return;
+		}
+		if (HotbarScrollCheck.requested()) {
+			HotbarScrollCheck.start();
 			return;
 		}
 		if ("duel".equals(System.getProperty("arctic.selftest"))) {

@@ -57,6 +57,8 @@ impl ArcticApp {
         ui.add_space(8.0);
         let mut performance = self.instance.performance;
         let mut choose_picture = false;
+        let mut restart_update = false;
+        let update_installed = matches!(self.update, crate::app::UpdateState::Installed { .. });
         let software_gl = self.software_gl;
         let s = &mut self.settings;
 
@@ -234,6 +236,16 @@ impl ArcticApp {
                 &mut s.discord_presence,
                 "Show what you're playing on Discord",
             );
+            let presence_on = s.discord_presence;
+            ui.add_enabled_ui(presence_on, |ui| {
+                ui.indent("discord_show_server", |ui| {
+                    ui.checkbox(&mut s.discord_show_server, "Show server in Discord status")
+                        .on_hover_text(crate::discord::SHOW_SERVER_TIP)
+                        .on_disabled_hover_text(
+                            "Turn on \"Show what you're playing on Discord\" first.",
+                        );
+                });
+            });
             widgets::field_row(ui, |ui| {
                 ui.label("Crash reports")
                     .on_hover_text("When the game crashes, Arctic can send its log so the crash can be fixed. Your name, folders and sign-in details are taken out first.");
@@ -288,11 +300,19 @@ impl ArcticApp {
                 "Restart by itself when waiting in the tray",
             )
             .on_hover_text(
-                "Off: an installed update is used the next time you open the launcher (or from                  the banner's Restart now); the launcher never restarts on its own.",
+                "On by default: restart into an installed update while hidden in the tray with no game running. Off: use the update next time you open the launcher, or choose Restart now here.",
             );
             ui.checkbox(&mut s.show_release_notes, "Show what's new after updating")
                 .on_hover_text("After an update, a popup lists what's new and what's fixed");
+            if update_installed {
+                restart_update =
+                    widgets::button(ui, p, None, "Update installed - Restart now", false).clicked();
+            }
         });
+
+        if restart_update {
+            self.restart_after_update(ui.ctx());
+        }
 
         section(ui, p, "Network", |ui| self.network_section(ui, p));
 

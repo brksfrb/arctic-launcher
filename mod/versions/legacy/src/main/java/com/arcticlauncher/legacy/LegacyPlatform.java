@@ -1496,7 +1496,7 @@ public final class LegacyPlatform implements Platform {
 			MinecraftClient mc = mc();
 			leave(mc);
 			LegacyWorldTest.deleteWorlds(new File(mc.runDirectory, "saves"), DUEL_PREFIX);
-			String name = DUEL_PREFIX + new java.text.SimpleDateFormat("MM-dd HH.mm").format(new java.util.Date());
+			String name = DUEL_PREFIX + com.arcticlauncher.client.LocalClock.formatter("MM-dd HH.mm").format(new java.util.Date());
 			//#if MC >= 1.10
 			net.minecraft.world.level.LevelInfo info = new net.minecraft.world.level.LevelInfo(System.currentTimeMillis(),
 					net.minecraft.world.GameMode.SURVIVAL, false, false, net.minecraft.world.level.LevelGeneratorType.FLAT)

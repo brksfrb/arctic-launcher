@@ -47,6 +47,8 @@
 		"KeyboardHandlerMixin",
 		"MouseHandlerMixin",
 		"MouseHandlerInvoker",
+<% if (inventoryHotbarScroll) { %>		"InventoryHotbarScrollMixin",
+<% } %>
 		"PauseScreenMixin"<% if (panoramaHook) { %>,
 		"ScreenMixin"<% } %>,
 		"TitleScreenMixin",
@@ -64,7 +66,10 @@
 		"FontBitmapHintingMixin",<% } %><% if (smoothFontManager) { %>
 		"SmoothFontManagerMixin",
 		"SmoothFontGlyphInfoMixin",<% } %><% if (glowText) { %>
-		"GlowTextMixin",<% } %><% if (textShader) { %>
+		"GlowTextMixin",<% } %><% if (scaledFont) { %>
+		"FontTextureMixin",
+		"ScaledTextStateMixin",
+		"ScaledGlyphMixin",<% } %><% if (textShader) { %>
 		"TextShaderMixin",<% } %><% if (textShaderOld) { %>
 		"TextShaderOldMixin",<% } %><% if (startup) { %>
 		"MainStartMixin",
@@ -93,6 +98,10 @@
 <% } %>
 		"LightmapMixin",
 		"ChatComponentMixin",
+		"ChatCopyStyleMixin",
+		${chatCopyStyleAccess}
+<% if (chatLine111) { %>		"ChatLine111Mixin",
+<% } %>
 <% if (crosshairHook) { %>		"HudCrosshairMixin",
 <% } %>		<% if (fireOverlay) { %>"ScreenEffectRendererMixin",<% } else { %>"FireOldMixin",<% } %>
 		"LevelWeatherMixin",
@@ -103,8 +112,9 @@
 		"TimeLockMixin",
 		"MultiPlayerGameModeMixin"<% } %><% if (oldCamera) { %>,
 		"GameRendererFovMixin"<% } %><% if (smoothFont) { %>,
+		"ChatLineMixin",
+		"ChatCopyScreenAccess",
 		"PackRepositoryMixin",
-		"FontTextureMixin",
 		"TrueTypeDefinitionMixin",
 		"TrueTypeGlyphMixin",
 		"OptionsPacksMixin",
@@ -136,6 +146,8 @@
 		"ConnectionReplayMixin",
 		"ReplayTimerMixin",
 		"ReplaySoundMixin",
+		"ReplayEntityRendererMixin",
+		"ReplayLeashRendererMixin",
 		"ReplayFrameMixin",
 		"ReplayScreenMixin",
 		"LivingEntitySwingMixin"<% } %><% if (replayWindow) { %>,

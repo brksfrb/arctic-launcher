@@ -26,6 +26,13 @@ final class LegacySelfTest {
 
 	static void maybeStart() {
 		String mode = System.getProperty("arctic.selftest");
+		//#if DEV
+		if ("chatcopy".equals(mode)) {
+			LegacyChatCopyTest.start();
+			return;
+		}
+
+		//#endif
 		if (mode == null) {
 			return;
 		}
@@ -51,6 +58,14 @@ final class LegacySelfTest {
 		}
 		if (LegacyVisualsTest.requested()) {
 			LegacyVisualsTest.start();
+			return;
+		}
+		if (LegacyHotbarScrollCheck.requested()) {
+			LegacyHotbarScrollCheck.start();
+			return;
+		}
+		if (LegacyChatHitTest.requested()) {
+			LegacyChatHitTest.start();
 			return;
 		}
 		ArcticLegacy.LOG.info("selftest: scheduled ({})", mode);

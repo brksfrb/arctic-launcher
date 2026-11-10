@@ -21,7 +21,9 @@ import org.lwjgl.opengl.GL11;
  * The smooth font (Inter) on 1.8.9 - 1.12.2, which have no TrueType fonts: with Fancy on, Inter's
  * glyphs are drawn into one texture at the GUI scale (so each texel lands on one screen pixel),
  * and the text renderer draws and measures characters from it (see SmoothTextRendererMixin).
- * Characters Inter lacks keep Minecraft's own font.
+ * Characters Inter lacks keep Minecraft's own font. Text the game draws scaled up (titles, a scaled
+ * scoreboard) takes its letters from {@link ScaledGlyphs} size buckets instead, rasterized near their size
+ * on screen; metrics (advances, line height) always come from the GUI-size atlas.
  */
 public final class LegacySmoothFont {
 	private static final String FILE = "/smooth_font/assets/arctic/font/inter.ttf";
@@ -46,7 +48,7 @@ public final class LegacySmoothFont {
 		final float top;
 		final float width;
 		final float height;
-		/** The character (to find the same letter in the big atlas). */
+		/** The character (to find the same letter in a size bucket, see ScaledGlyphs). */
 		char ch;
 		float u0;
 		float v0;
@@ -68,11 +70,16 @@ public final class LegacySmoothFont {
 	private static int checkedScale;
 	private static long checkedAt;
 	private static boolean broken;
-	/** Smooth letters at several times the size, for titles and other big text in pixel-sharp mode (made when first needed). */
-	private static Atlas bigAtlas;
-	private static int bigFor;
-	/** Text bigger than this many times the GUI's size is drawn from the big atlas. */
-	private static final float BIG_AT = 2.5f;
+	/** Inter as loaded from the jar (sized per use with deriveFont; reading the file once is enough). */
+	private static Font interFont;
+	/**
+	 * Text drawn larger than this many times the GUI's size takes its letters from a size bucket, rasterized near
+	 * the size they land on screen, instead of magnifying the GUI-size atlas. Up to this, magnifying is not visible.
+	 */
+	private static final float UPSCALE_AT = 1.25f;
+	/** Bucket multiples of the GUI scale: x2, x4, x8 (each made the first time text that big is drawn). */
+	private static final int[] BUCKET_MULTIPLES = {2, 4, 8};
+	private static final ScaledGlyphs[] buckets = new ScaledGlyphs[BUCKET_MULTIPLES.length];
 	/** The model view's uniform scale as the game has set it up (tracked from GlStateManager.scale/push/pop). */
 	private static float modelScale = 1f;
 	private static final float[] SCALE_STACK = new float[64];
@@ -103,19 +110,58 @@ public final class LegacySmoothFont {
 		scaleDepth = 0;
 	}
 
-	/** The big atlas, made when the first big text needs it. */
-	private static Atlas big() {
-		if (bigAtlas == null || bigFor != scale) {
-			try {
-				bigAtlas = make(Math.min(8, Math.max(1, scale) * 4), true);
-				bigFor = scale;
-			} catch (Exception e) {
-				bigAtlas = null;
-				bigFor = scale;
-				ArcticLegacy.LOG.warn("smooth font (big letters): {}", e.toString());
+	/**
+	 * The size bucket for text drawn {@code times} larger than the GUI scale (null when the GUI-size atlas is
+	 * already right): the smallest bucket at least that large, so its letters are only ever shrunk on screen.
+	 */
+	private static ScaledGlyphs bucketFor(float times) {
+		if (!(times > UPSCALE_AT)) {
+			return null;
+		}
+		int slot = BUCKET_MULTIPLES.length - 1;
+		for (int i = 0; i < BUCKET_MULTIPLES.length; i++) {
+			if (BUCKET_MULTIPLES[i] >= times) {
+				slot = i;
+				break;
 			}
 		}
-		return bigAtlas;
+		int pixels = ScaledGlyphs.pixelScale(scale, BUCKET_MULTIPLES[slot]);
+		if (pixels <= scale) {
+			return null;
+		}
+		ScaledGlyphs bucket = buckets[slot];
+		if (bucket == null) {
+			try {
+				bucket = new ScaledGlyphs(font(), SIZE, pixels);
+			} catch (Exception e) {
+				ArcticLegacy.LOG.warn("smooth font (x{} letters): {}", BUCKET_MULTIPLES[slot], e.toString());
+				return null;
+			}
+			buckets[slot] = bucket;
+		}
+		return bucket;
+	}
+
+	private static void dropBuckets() {
+		for (int i = 0; i < buckets.length; i++) {
+			if (buckets[i] != null) {
+				buckets[i].close();
+				buckets[i] = null;
+			}
+		}
+	}
+
+	/** Inter at 1 pt, read from the jar the first time. */
+	private static Font font() throws Exception {
+		if (interFont == null) {
+			try (InputStream in = LegacySmoothFont.class.getResourceAsStream(FILE)) {
+				if (in == null) {
+					throw new IllegalStateException(FILE + " is missing from the mod");
+				}
+				interFont = Font.createFont(Font.TRUETYPE_FONT, in);
+			}
+		}
+		return interFont;
 	}
 
 	private LegacySmoothFont() {}
@@ -188,6 +234,34 @@ public final class LegacySmoothFont {
 		return g == null ? -1 : g.advance;
 	}
 
+	/**
+	 * Whole GUI pixels the pen moves for this character. Drawing, wrapping and hit-testing all use
+	 * this. The 1.8 renderer keeps only the whole pixels of whatever a glyph returns, so a raw
+	 * 2.5 would be drawn as 2 while a width sum still counted 2.5.
+	 */
+	public static int step(char c) {
+		float advance = advance(c);
+		return advance < 0 ? -1 : com.arcticlauncher.client.feature.TextHit.step(advance);
+	}
+
+	/**
+	 * Fancy font metrics are the ones on screen. Set {@code -Darctic.chatHitOld=1} to draw and hit
+	 * the old way (the screenshot that shows the miss). Off, or with Fancy off, this is false.
+	 */
+	public static boolean aligned() {
+		return on() && !"1".equals(System.getProperty("arctic.chatHitOld"));
+	}
+
+	/** Chat and book line box, from Inter's ascent, descent and leading. At least the vanilla 9. */
+	private static int linePixels = 9;
+
+	public static int lineHeight() {
+		if (on()) {
+			ready();
+		}
+		return Math.max(9, linePixels);
+	}
+
 	/** How far a bold character's second copy sits (GUI pixels): thicker, not doubled. */
 	public static final float BOLD_THICKEN = 0.35f;
 
@@ -203,27 +277,27 @@ public final class LegacySmoothFont {
 	 * the driver for its state stalls it, and the HUD draws hundreds of letters a frame.
 	 */
 	public static float draw(Glyph g, float penX, float penY, boolean italic) {
-		if (modelScale >= BIG_AT && !antialias()) {
-			Atlas atlas = big();
-			Glyph b = atlas != null && g.ch < atlas.glyphs.length ? atlas.glyphs[g.ch] : null;
-			if (b != null) {
-				float bx0 = penX + b.left;
-				float by0 = penY + BASELINE - b.top;
-				float bslant = italic ? 1f : 0f;
-				GlStateManager.bindTexture(atlas.texture.getGlId());
-				GL11.glBegin(GL11.GL_QUADS);
-				GL11.glTexCoord2f(b.u0, b.v0);
-				GL11.glVertex3f(bx0 + bslant, by0, 0f);
-				GL11.glTexCoord2f(b.u0, b.v1);
-				GL11.glVertex3f(bx0 - bslant, by0 + b.height, 0f);
-				GL11.glTexCoord2f(b.u1, b.v1);
-				GL11.glVertex3f(bx0 + b.width - bslant, by0 + b.height, 0f);
-				GL11.glTexCoord2f(b.u1, b.v0);
-				GL11.glVertex3f(bx0 + b.width + bslant, by0, 0f);
-				GL11.glEnd();
-				// The pen moves as the sharp letters do, so the layout the game measured holds.
-				return g.advance;
-			}
+		ScaledGlyphs bucket = bucketFor(Math.abs(modelScale));
+		ScaledGlyphs.Glyph b = bucket == null ? null : bucket.glyph(g.ch);
+		if (b != null) {
+			// Drawn from letters rasterized at (or just above) their size on screen, shrunk by the linear filter.
+			// The quad comes from the big letter's own box; the pen moves by the GUI-size advance, so the layout the
+			// game measured (wrapping, centring, click hit-testing) holds.
+			float bx0 = penX + b.left;
+			float by0 = penY + BASELINE - b.top;
+			float bslant = italic ? 1f : 0f;
+			GlStateManager.bindTexture(bucket.textureId());
+			GL11.glBegin(GL11.GL_QUADS);
+			GL11.glTexCoord2f(b.u0, b.v0);
+			GL11.glVertex3f(bx0 + bslant, by0, 0f);
+			GL11.glTexCoord2f(b.u0, b.v1);
+			GL11.glVertex3f(bx0 - bslant, by0 + b.height, 0f);
+			GL11.glTexCoord2f(b.u1, b.v1);
+			GL11.glVertex3f(bx0 + b.width - bslant, by0 + b.height, 0f);
+			GL11.glTexCoord2f(b.u1, b.v0);
+			GL11.glVertex3f(bx0 + b.width + bslant, by0, 0f);
+			GL11.glEnd();
+			return g.advance;
 		}
 		float s = scale;
 		// Whole screen pixels, so texels and pixels line up.
@@ -288,21 +362,14 @@ public final class LegacySmoothFont {
 		texture = atlas.texture;
 		glyphs = atlas.glyphs;
 		scale = s;
-		if (bigAtlas != null) {
-			bigAtlas.texture.clearGlId();
-			bigAtlas = null;
-		}
+		dropBuckets();
 	}
 
 	private static Atlas make(int s, boolean aa) throws Exception {
-		Font font;
-		try (InputStream in = LegacySmoothFont.class.getResourceAsStream(FILE)) {
-			if (in == null) {
-				throw new IllegalStateException(FILE + " is missing from the mod");
-			}
-			font = Font.createFont(Font.TRUETYPE_FONT, in).deriveFont(SIZE * s);
-		}
+		Font font = font().deriveFont(SIZE * s);
 		FontRenderContext frc = new FontRenderContext(null, true, true);
+		java.awt.font.LineMetrics metrics = font.getLineMetrics("Agjpq[]|", frc);
+		linePixels = Math.max(9, Math.round(metrics.getHeight() / s));
 		List<Character> chars = new ArrayList<Character>();
 		List<Rectangle> boxes = new ArrayList<Rectangle>();
 		List<Float> advances = new ArrayList<Float>();
@@ -376,7 +443,7 @@ public final class LegacySmoothFont {
 		}
 		g.dispose();
 		NativeImageBackedTexture made2 = new NativeImageBackedTexture(image);
-		// Smooth letters are drawn with a smooth filter (titles are 4x); pixel-sharp ones with the
+		// Smooth letters are drawn with a smooth filter; pixel-sharp ones with the
 		// nearest-pixel filter, so a letter on whole pixels stays whole.
 		GlStateManager.bindTexture(made2.getGlId());
 		int filter = aa ? GL11.GL_LINEAR : GL11.GL_NEAREST;

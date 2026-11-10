@@ -129,6 +129,7 @@ pub enum Event {
     LoaderSwitched(String, LoaderKind, Outcome<Retargeted>),
     /// Icon bytes for a URL.
     ModIcon(String, Outcome<Vec<u8>>),
+    ModGalleryImage(String, Outcome<Vec<u8>>),
     /// Skin and capes of an account (account id, result).
     SkinAccount(String, Outcome<crate::skin_tasks::AccountSkin>),
     /// Another player's skin by name.
@@ -737,6 +738,14 @@ impl Tasks {
                 None => Err("Vanilla instances can't load mods".to_owned()),
             };
             t.send(Event::ModInstalled(instance.id, project_id, result));
+        });
+    }
+
+    pub fn mod_gallery_image(&self, url: String) {
+        self.run(move |t| {
+            let result = mods::gallery_image(&url, &t.dirs.cache().join("gallery"))
+                .map_err(|e| e.to_string());
+            t.send(Event::ModGalleryImage(url, result));
         });
     }
 

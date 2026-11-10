@@ -62,6 +62,12 @@ def mirror(src, dst):
             shutil.copy2(s, d)
 
 
+def has_chatcopy_proof(jar):
+    """Reject proof helpers and their anonymous/nested classes from releases."""
+    forbidden = {"ChatCopyTest", "LegacyChatCopyTest", "ChatCopyProof"}
+    return any(Path(name).stem.split("$", 1)[0] in forbidden for name in jar.namelist())
+
+
 def build_one(root, target):
     version = target["build"]
     covers = ",".join(target["covers"])
@@ -70,12 +76,16 @@ def build_one(root, target):
     started = time.time()
     result = subprocess.run(
         [gradlew(root), *OFFLINE, "-p", f"versions/{project}", "build", *([] if "--info" in OFFLINE else ["-q"]),
-         f"-Pminecraft_version={version}", f"-Pcovers={covers}"],
+         f"-Pminecraft_version={version}", f"-Pcovers={covers}", "-PchatcopyDev=false"],
         cwd=root, capture_output=True, text=True,
     )
     if result.returncode != 0:
         return f"{version} failed:\n{result.stdout[-3000:]}{result.stderr[-3000:]}"
     built = root / f"versions/{project}/build/libs" / f"arctic-mod-{version}-1.0.0.jar"
+    # Release builds must never ship the opt-in world/clipboard proof harness.
+    with zipfile.ZipFile(built) as jar:
+        if has_chatcopy_proof(jar):
+            return f"{version}: development chat-copy proof leaked into release jar"
     shutil.copyfile(built, DIST / f"arctic-mod-{version}.jar")
     print(f"== {version} (covers {covers}) in {time.time() - started:.0f}s", flush=True)
     return None
@@ -116,6 +126,8 @@ def pack(targets):
             continue
         entries = []
         with zipfile.ZipFile(path) as z:
+            if has_chatcopy_proof(z):
+                sys.exit(f"{version}: development chat-copy proof cannot be packed for release")
             for info in z.infolist():
                 if info.is_dir():
                     entries.append([info.filename, -1])

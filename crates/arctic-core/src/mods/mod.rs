@@ -104,6 +104,59 @@ pub struct SearchPage {
     pub total: usize,
 }
 
+/// Project details returned by Modrinth's project endpoint.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ProjectDetail {
+    pub id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub body: String,
+    #[serde(default)]
+    pub downloads: u64,
+    #[serde(default)]
+    pub icon_url: Option<String>,
+    #[serde(default)]
+    pub game_versions: Vec<String>,
+    #[serde(default)]
+    pub loaders: Vec<String>,
+    #[serde(default)]
+    pub gallery: Vec<GalleryImage>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GalleryImage {
+    pub url: String,
+    /// Original resolution; `url` can be a small API thumbnail.
+    #[serde(default)]
+    pub raw_url: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub featured: bool,
+    #[serde(default)]
+    pub ordering: i64,
+}
+
+/// Fetch a full project, including its gallery, away from the UI thread.
+pub fn project_detail(id: &str) -> Result<ProjectDetail> {
+    let mut project: ProjectDetail = modrinth::get_api(
+        &format!("{}/project/{}", modrinth::API, modrinth::encode(id)),
+        &format!("project {id}"),
+    )?;
+    project
+        .gallery
+        .sort_by_key(|image| (!image.featured, image.ordering));
+    Ok(project)
+}
+
+/// Gallery images share the URL-keyed disk cache, with a larger download limit.
+pub fn gallery_image(url: &str, cache_dir: &Path) -> Result<Vec<u8>> {
+    files::cached_image(url, cache_dir, 20 * 1024 * 1024)
+}
+
 /// A Modrinth mod installed into an instance (from `mods.json`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InstalledMod {

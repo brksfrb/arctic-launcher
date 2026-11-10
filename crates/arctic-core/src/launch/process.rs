@@ -84,16 +84,37 @@ pub fn spawn(
     rotate_game_log(&plan.log_file);
     let log = Arc::new(Mutex::new(File::create(&plan.log_file).at(&plan.log_file)?));
     let (args, argfile) = command_args(plan)?;
-    let mut cmd = Command::new(game_exe(plan));
-    cmd.args(&args)
-        .envs(crate::gpu_preference::env(plan.high_performance_gpu))
-        .current_dir(game_cwd(&plan.game_dir))
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    priority::boost(&mut cmd);
-    let mut child = match cmd.spawn() {
+    let start = |exe: &Path| {
+        let mut cmd = Command::new(exe);
+        cmd.args(&args)
+            .envs(crate::gpu_preference::env(plan.high_performance_gpu))
+            .current_dir(game_cwd(&plan.game_dir))
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        priority::boost(&mut cmd);
+        cmd.spawn()
+    };
+    let exe = game_exe(plan);
+    let mut child = match start(&exe) {
         Ok(child) => child,
+        // The branded copy would not start: run the runtime's own Java.
+        Err(e) if exe != plan.java => {
+            log::warn!(
+                "{} did not start ({e}); using {}",
+                exe.display(),
+                plan.java.display()
+            );
+            match start(&plan.java) {
+                Ok(child) => child,
+                Err(e) => {
+                    if let Some(file) = &argfile {
+                        let _ = std::fs::remove_file(file);
+                    }
+                    return Err(crate::Error::io(&plan.java, e));
+                }
+            }
+        }
         Err(e) => {
             // The argument file holds the access token: not left behind when the game did not start.
             if let Some(file) = &argfile {
@@ -194,14 +215,29 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
     let log = File::create(&plan.log_file).at(&plan.log_file)?;
     let log_err = log.try_clone().at(&plan.log_file)?;
     let (args, argfile) = command_args(plan)?;
-    let spawned = Command::new(game_exe(plan))
-        .args(&args)
-        .envs(crate::gpu_preference::env(plan.high_performance_gpu))
-        .current_dir(game_cwd(&plan.game_dir))
-        .stdin(Stdio::null())
-        .stdout(log)
-        .stderr(log_err)
-        .spawn();
+    let start = |exe: &Path| {
+        Command::new(exe)
+            .args(&args)
+            .envs(crate::gpu_preference::env(plan.high_performance_gpu))
+            .current_dir(game_cwd(&plan.game_dir))
+            .stdin(Stdio::null())
+            .stdout(log.try_clone()?)
+            .stderr(log_err.try_clone()?)
+            .spawn()
+    };
+    let exe = game_exe(plan);
+    let spawned = start(&exe).or_else(|e| {
+        if exe == plan.java {
+            return Err(e);
+        }
+        // The branded copy would not start: run the runtime's own Java.
+        log::warn!(
+            "{} did not start ({e}); using {}",
+            exe.display(),
+            plan.java.display()
+        );
+        start(&plan.java)
+    });
     if let Some(file) = &argfile {
         // Java reads it while it starts. It holds the access token, so it does not stay (the caller may
         // exit before the game does, so nothing waits for the game itself).
@@ -417,12 +453,72 @@ fn in_named_folder(exe: &Path) -> PathBuf {
                 .inspect_err(|e| log::info!("old junction for the game's name: {e}"))
                 .ok()?;
         }
+        remove_system_dlls(&named);
         mirror_tree(runtime, &named)
             .inspect_err(|e| log::info!("named copy of the Java runtime: {e}"))
             .ok()?;
         Some(named.join("bin").join(exe.file_name()?))
     })();
     named.unwrap_or_else(|| exe.to_path_buf())
+}
+
+/// Files with the names of Windows' own C runtime (`ucrtbase.dll`, `api-ms-win-*.dll`). Mojang's
+/// runtimes bundle them in `bin`; the named copy leaves them out (Windows 10/11 have them in
+/// System32), so the launcher never writes a file under a system DLL's name.
+#[cfg(any(windows, test))]
+fn is_system_dll(name: &std::ffi::OsStr) -> bool {
+    let name = name.to_string_lossy().to_ascii_lowercase();
+    name == "ucrtbase.dll" || (name.starts_with("api-ms-win-") && name.ends_with(".dll"))
+}
+
+#[cfg(any(windows, test))]
+fn is_link(path: &Path) -> bool {
+    let Ok(meta) = std::fs::symlink_metadata(path) else {
+        return false;
+    };
+    if meta.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    if junction::exists(path).unwrap_or(false) {
+        return true;
+    }
+    false
+}
+
+/// Delete the system-named DLLs an older version left in the named copy's `bin` (hard links or
+/// copies; removing a link only removes that name, never the runtime's file). Only inside a
+/// `.named` folder, and never through a symlink or junction. Failures (a file in use) are logged.
+#[cfg(any(windows, test))]
+fn remove_system_dlls(named: &Path) {
+    let under_named = named
+        .ancestors()
+        .skip(1)
+        .any(|a| a.file_name().is_some_and(|n| n == ".named"));
+    let bin = named.join("bin");
+    if !under_named || is_link(named) || is_link(&bin) || !bin.is_dir() {
+        return;
+    }
+    // Every ancestor up to `.named` must be a real folder too.
+    for a in named.ancestors().skip(1) {
+        if a.file_name().is_some_and(|n| n == ".named") {
+            break;
+        }
+        if is_link(a) {
+            return;
+        }
+    }
+    let Ok(entries) = std::fs::read_dir(&bin) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let is_file = entry.file_type().is_ok_and(|t| t.is_file());
+        if is_file && is_system_dll(&entry.file_name()) {
+            let _ = std::fs::remove_file(&path)
+                .inspect_err(|e| log::info!("old {} in the named copy: {e}", path.display()));
+        }
+    }
 }
 
 /// Make `dst` hold every file of `src` as a hard link (a plain copy where a link can't be
@@ -440,6 +536,9 @@ fn mirror_tree(src: &Path, dst: &Path) -> std::io::Result<()> {
             continue;
         }
         if !kind.is_file() || same_file(&from, &to) {
+            continue;
+        }
+        if dst.file_name().is_some_and(|n| n == "bin") && is_system_dll(&entry.file_name()) {
             continue;
         }
         let _ = std::fs::remove_file(&to);
@@ -630,6 +729,126 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn system_dlls_are_not_mirrored_and_old_ones_are_removed() {
+        let dir = tempfile::tempdir().unwrap();
+        let runtime = dir.path().join("java-runtime-delta");
+        std::fs::create_dir_all(runtime.join("bin")).unwrap();
+        for f in [
+            "javaw.exe",
+            "UCRTBASE.dll",
+            "api-ms-win-core-file-l1-1-0.dll",
+            "jli.dll",
+        ] {
+            std::fs::write(runtime.join("bin").join(f), b"x").unwrap();
+        }
+        std::fs::create_dir_all(runtime.join("lib")).unwrap();
+        std::fs::write(runtime.join("lib/api-ms-win-x.dll"), b"x").unwrap();
+        let named = dir.path().join(".named/java-runtime-delta/Arctic Client");
+        // An older version had linked everything.
+        mirror_tree(&runtime, &named).unwrap();
+        std::fs::write(named.join("bin/ucrtbase.dll"), b"old").unwrap();
+        std::fs::write(named.join("bin/API-MS-WIN-core-x.DLL"), b"old").unwrap();
+        remove_system_dlls(&named);
+        mirror_tree(&runtime, &named).unwrap();
+        let has = |f: &str| named.join(f).exists();
+        assert!(has("bin/javaw.exe") && has("bin/jli.dll"));
+        assert!(!has("bin/ucrtbase.dll") && !has("bin/UCRTBASE.dll"));
+        assert!(!has("bin/api-ms-win-core-file-l1-1-0.dll") && !has("bin/API-MS-WIN-core-x.DLL"));
+        // Only bin is filtered.
+        assert!(has("lib/api-ms-win-x.dll"));
+        // The runtime itself is untouched.
+        assert!(runtime.join("bin/UCRTBASE.dll").exists());
+        assert!(runtime.join("bin/api-ms-win-core-file-l1-1-0.dll").exists());
+    }
+
+    #[test]
+    fn cleanup_stays_inside_the_named_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        // Not under .named: nothing is deleted.
+        let plain = dir.path().join("Arctic Client");
+        std::fs::create_dir_all(plain.join("bin")).unwrap();
+        std::fs::write(plain.join("bin/ucrtbase.dll"), b"x").unwrap();
+        remove_system_dlls(&plain);
+        assert!(plain.join("bin/ucrtbase.dll").exists());
+        // A hard link is removed by name only.
+        let runtime = dir.path().join("rt");
+        std::fs::create_dir_all(runtime.join("bin")).unwrap();
+        std::fs::write(runtime.join("bin/ucrtbase.dll"), b"x").unwrap();
+        let named = dir.path().join(".named/rt/Arctic Client");
+        std::fs::create_dir_all(named.join("bin")).unwrap();
+        std::fs::hard_link(
+            runtime.join("bin/ucrtbase.dll"),
+            named.join("bin/ucrtbase.dll"),
+        )
+        .unwrap();
+        remove_system_dlls(&named);
+        assert!(!named.join("bin/ucrtbase.dll").exists());
+        assert!(runtime.join("bin/ucrtbase.dll").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_does_not_follow_links() {
+        let dir = tempfile::tempdir().unwrap();
+        let runtime = dir.path().join("rt");
+        std::fs::create_dir_all(runtime.join("bin")).unwrap();
+        std::fs::write(runtime.join("bin/ucrtbase.dll"), b"x").unwrap();
+        // The named folder is a link to the real runtime (like the old junction).
+        let named = dir.path().join(".named/rt/Arctic Client");
+        std::fs::create_dir_all(named.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&runtime, &named).unwrap();
+        remove_system_dlls(&named);
+        assert!(runtime.join("bin/ucrtbase.dll").exists());
+        // Same for a linked bin.
+        let named2 = dir.path().join(".named/rt2/Arctic Client");
+        std::fs::create_dir_all(&named2).unwrap();
+        std::os::unix::fs::symlink(runtime.join("bin"), named2.join("bin")).unwrap();
+        remove_system_dlls(&named2);
+        assert!(runtime.join("bin/ucrtbase.dll").exists());
+    }
+
+    /// Run by the Windows CI job against a real Mojang runtime (`ARCTIC_RUNTIME_DIR`, with
+    /// `ARCTIC_HELLO_DIR` holding a compiled `Hello` class): the named copy has no bundled
+    /// `ucrtbase.dll`/`api-ms-win-*.dll` and still starts Java.
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "needs a downloaded Mojang runtime"]
+    fn named_runtime_without_system_dlls_starts_java() {
+        let runtime = PathBuf::from(std::env::var_os("ARCTIC_RUNTIME_DIR").unwrap());
+        let hello = PathBuf::from(std::env::var_os("ARCTIC_HELLO_DIR").unwrap());
+        let bundled = |dir: &Path| {
+            std::fs::read_dir(dir.join("bin"))
+                .unwrap()
+                .flatten()
+                .filter(|e| is_system_dll(&e.file_name()))
+                .count()
+        };
+        assert!(bundled(&runtime) > 0, "the runtime should ship the DLLs");
+        let java = runtime.join("bin").join("java.exe");
+        // Run twice: the second pass is the "already mirrored" launch.
+        for _ in 0..2 {
+            let named = in_named_folder(&java);
+            assert_ne!(named, java, "the named copy was not made");
+            assert!(named.starts_with(runtime.parent().unwrap().join(".named")));
+            assert_eq!(bundled(named.parent().unwrap().parent().unwrap()), 0);
+            let version = Command::new(&named).arg("-version").output().unwrap();
+            assert!(version.status.success(), "{version:?}");
+            println!("{}", String::from_utf8_lossy(&version.stderr));
+            let run = Command::new(&named)
+                .arg("-cp")
+                .arg(&hello)
+                .arg("Hello")
+                .output()
+                .unwrap();
+            assert!(run.status.success(), "{run:?}");
+            assert_eq!(
+                String::from_utf8_lossy(&run.stdout).trim(),
+                "hello from java"
+            );
+        }
+    }
 
     #[test]
     fn game_logs_keep_the_runs_before() {
