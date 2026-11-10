@@ -3,16 +3,110 @@ package com.arcticlauncher.legacy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import net.minecraft.client.option.KeyBinding;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class LegacyCursorGuardTest {
-	private final LegacyCursorGuard guard = new LegacyCursorGuard();
+	private int keyReleases;
+	private final LegacyCursorGuard guard = new LegacyCursorGuard(() -> {
+		keyReleases++;
+		KeyBinding.releaseAllKeys();
+	});
 	private final FakeMouse mouse = new FakeMouse();
+	private final KeyBinding[] keys = {
+		new KeyBinding("key.forward", 17, "key.categories.movement"),
+		new KeyBinding("key.back", 31, "key.categories.movement"),
+		new KeyBinding("key.left", 30, "key.categories.movement"),
+		new KeyBinding("key.right", 32, "key.categories.movement"),
+		new KeyBinding("key.jump", 57, "key.categories.movement"),
+		new KeyBinding("key.sprint", 29, "key.categories.movement"),
+		new KeyBinding("key.sneak", 42, "key.categories.movement"),
+		new KeyBinding("key.attack", -100, "key.categories.gameplay"),
+		new KeyBinding("key.use", -99, "key.categories.gameplay")
+	};
 
 	private boolean tick(boolean screen, boolean fullscreen, boolean resized) throws Exception {
 		return guard.update(mouse, true, screen, fullscreen, resized);
+	}
+
+	private void holdKeys() {
+		for (KeyBinding key : keys) {
+			KeyBinding.setKeyPressed(key.getCode(), true);
+			KeyBinding.onKeyPressed(key.getCode());
+			assertTrue(key.isPressed(), key.getTranslationKey());
+		}
+	}
+
+	private void assertKeysReleased() {
+		for (KeyBinding key : keys) {
+			assertFalse(key.isPressed(), key.getTranslationKey());
+			assertFalse(key.wasPressed(), "queued press: " + key.getTranslationKey());
+		}
+	}
+
+	@Test
+	void forcedUnclipWithoutScreenReleasesKeysOnceThenLeavesRealInputAlone() throws Exception {
+		mouse.grabbed = true;
+		holdKeys();
+		assertTrue(tick(false, true, false));
+		assertEquals(1, keyReleases);
+		assertKeysReleased();
+		holdKeys();
+		mouse.calls.clear();
+		for (int i = 0; i < 100; i++) {
+			assertFalse(tick(false, true, false));
+		}
+		assertEquals(1, keyReleases);
+		assertTrue(mouse.calls.isEmpty());
+		for (KeyBinding key : keys) {
+			assertTrue(key.isPressed(), key.getTranslationKey());
+			assertTrue(key.wasPressed(), key.getTranslationKey());
+		}
+	}
+
+	@Test
+	void fullscreenAndMaximizeWithoutScreenReleaseKeysAgain() throws Exception {
+		tick(false, false, false);
+		holdKeys();
+		assertTrue(tick(false, true, false));
+		assertKeysReleased();
+		assertEquals(2, keyReleases);
+		holdKeys();
+		assertTrue(tick(false, true, true));
+		assertKeysReleased();
+		assertEquals(3, keyReleases);
+		assertFalse(tick(false, true, false));
+		assertEquals(3, keyReleases);
+	}
+
+	@Test
+	void openScreenReleasesKeysEveryTickIncludingDuringWindowRecreation() throws Exception {
+		holdKeys();
+		assertTrue(tick(true, false, false));
+		assertKeysReleased();
+		holdKeys();
+		assertFalse(tick(true, false, false));
+		assertKeysReleased();
+		holdKeys();
+		assertFalse(guard.update(mouse, false, true, false, false));
+		assertKeysReleased();
+		assertEquals(3, keyReleases);
+	}
+
+	@Test
+	void failedUnclipWithoutScreenStillReleasesKeysAndRetries() throws Exception {
+		holdKeys();
+		mouse.failClear = true;
+		assertThrows(Exception.class, () -> tick(false, true, false));
+		assertKeysReleased();
+		assertEquals(1, keyReleases);
+		mouse.failClear = false;
+		assertTrue(tick(false, true, false));
+		assertEquals(2, keyReleases);
+		assertFalse(tick(false, true, false));
+		assertEquals(2, keyReleases);
 	}
 
 	@Test

@@ -170,7 +170,10 @@ public final class LegacyHooks {
 
 	private static int cursorLogged;
 
-	private static final LegacyCursorGuard CURSOR_GUARD = new LegacyCursorGuard();
+	// Yarn calls unpressAll "releaseAllKeys" on every legacy target (1.8.9 through 1.12.2).
+	// It clears held states and queued presses for all bindings, including movement/attack/use.
+	private static final LegacyCursorGuard CURSOR_GUARD = new LegacyCursorGuard(
+			net.minecraft.client.option.KeyBinding::releaseAllKeys);
 	private static final LegacyCursorGuard.Mouse CURSOR_MOUSE = new LegacyCursorGuard.Mouse() {
 		@Override
 		public boolean isGrabbed() {
@@ -191,7 +194,8 @@ public final class LegacyHooks {
 	/**
 	 * Always request the default, ungrabbed pointer for screens. A real unclip also runs on
 	 * window creation, resize, fullscreen switches and screen entry, even when LWJGL reports
-	 * no grab. Keeping the force event-driven avoids toggling/flickering on every menu tick.
+	 * no grab. Both paths release stuck keys. Keeping the force event-driven leaves ordinary
+	 * gameplay keys alone and avoids toggling/flickering on every menu tick.
 	 */
 	private static void cursorGuard(boolean screenOpen, boolean resized) {
 		try {
@@ -221,12 +225,15 @@ public final class LegacyHooks {
 		if (!titled) {
 			titleWindow();
 		}
-		cursorGuard(screenOpen, syncWindowSize());
+		boolean resized = syncWindowSize();
 		ArcticLegacy.PLATFORM.tick();
 		syncHitboxes();
 		syncChunkBorders();
 		com.arcticlauncher.legacy.replay.LegacyReplayRecording.tick();
 		ArcticClient.tick(screenOpen);
+		// Features can reassert bindings (e.g. toggled sneak); release after those updates.
+		// Keep ticking in-world as well, so window events recover keys even without chat.
+		cursorGuard(screenOpen || MinecraftClient.getInstance().currentScreen != null, resized);
 	}
 
 	/** Over the game, after Minecraft's own HUD. */
