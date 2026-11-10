@@ -191,7 +191,11 @@ impl ArcticApp {
             }
         });
         self.java_card(ui, instance);
-        self.game_folder_card(ui, instance);
+        let response = ui.scope(|ui| self.game_folder_card(ui, instance));
+        if self.quick_tips.instance_section == Some("Game folder") {
+            ui.scroll_to_rect(response.response.rect, Some(egui::Align::Min));
+            self.quick_tips.instance_section = None;
+        }
         self.arctic_mod_card(ui, instance);
         self.performance_card(ui, instance);
         self.extras_card(ui, instance);

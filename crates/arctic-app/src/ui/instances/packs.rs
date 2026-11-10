@@ -40,6 +40,12 @@ pub struct PacksUi {
     typed_at: Option<f64>,
 }
 
+impl PacksUi {
+    pub(crate) fn show_shaders(&mut self) {
+        self.kind = PackKind::Shader;
+    }
+}
+
 impl Default for PacksUi {
     fn default() -> Self {
         Self {

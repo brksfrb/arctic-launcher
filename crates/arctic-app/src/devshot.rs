@@ -2,6 +2,7 @@
 //! `ARCTIC_DEVSHOT=out.png` saves a screenshot of the window after
 //! `ARCTIC_DEVSHOT_DELAY` seconds (default 4) and closes the app. Lets UI
 //! changes be checked without a visible desktop.
+//! `ARCTIC_DEVSHOT_TIP=<index>` pins a sidebar tip for pointer-click navigation proofs.
 
 use std::path::PathBuf;
 
