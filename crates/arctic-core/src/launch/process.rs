@@ -435,14 +435,17 @@ const ARGFILE_READ_TIME: Duration = Duration::from_secs(5);
 /// long for Windows (a Forge or NeoForge classpath of 100+ libraries under a long data folder). Java 9+ reads
 /// `@file`; Java 8 can't, and gets a message about moving the data folder instead of an obscure spawn error.
 fn command_args(plan: &LaunchPlan) -> Result<(Vec<String>, Option<PathBuf>)> {
-    let length = plan
-        .args
-        .iter()
-        .map(|a| a.chars().count() + 3)
-        .sum::<usize>()
-        + plan.java.as_os_str().len();
+    let mut args = plan.args.clone();
+    // Portal instances run with home as cwd; keep diagnostics in the instance.
+    let hang_file = std::path::absolute(plan.game_dir.join("arctic-hang.txt")).at(&plan.game_dir)?;
+    args.insert(
+        0,
+        format!("-Darctic.diagnostics.hangFile={}", hang_file.display()),
+    );
+    let length =
+        args.iter().map(|a| a.chars().count() + 3).sum::<usize>() + plan.java.as_os_str().len();
     if !cfg!(windows) || length <= MAX_COMMAND_CHARS {
-        return Ok((plan.args.clone(), None));
+        return Ok((args, None));
     }
     if !java_reads_argfiles(&plan.java) {
         return Err(crate::Error::Other(format!(
@@ -452,7 +455,7 @@ fn command_args(plan: &LaunchPlan) -> Result<(Vec<String>, Option<PathBuf>)> {
         )));
     }
     let file = plan.log_file.with_extension("args");
-    std::fs::write(&file, argfile_text(&plan.args)).at(&file)?;
+    std::fs::write(&file, argfile_text(&args)).at(&file)?;
     log::info!(
         "command line of {length} characters: arguments passed in {}",
         file.display()
@@ -780,6 +783,30 @@ mod tests {
         let started = std::time::Instant::now();
         drain_readers(vec![reader]);
         assert!(started.elapsed() < Duration::from_secs(5));
+    }
+
+    #[test]
+    fn hang_sidecar_argument_stays_in_the_instance() {
+        let game_dir = std::env::temp_dir().join("portal instance");
+        let plan = LaunchPlan {
+            java: PathBuf::from("java"),
+            args: vec!["net.minecraft.client.Main".into()],
+            game_dir: game_dir.clone(),
+            log_file: game_dir.join("game.log"),
+            high_performance_gpu: false,
+            maximize_window: false,
+            secrets: Vec::new(),
+        };
+        let (args, file) = command_args(&plan).unwrap();
+        assert!(file.is_none());
+        assert_eq!(
+            args[0],
+            format!(
+                "-Darctic.diagnostics.hangFile={}",
+                game_dir.join("arctic-hang.txt").display()
+            )
+        );
+        assert_eq!(args[1], "net.minecraft.client.Main");
     }
 
     #[test]

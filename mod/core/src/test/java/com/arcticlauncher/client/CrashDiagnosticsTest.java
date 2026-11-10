@@ -16,13 +16,16 @@ class CrashDiagnosticsTest {
         String classpath = new File(CrashDiagnostics.class.getProtectionDomain().getCodeSource().getLocation().toURI())
                 + File.pathSeparator
                 + new File(Probe.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+        Path instance = Files.createDirectory(directory.resolve("portal instance"));
+        Path sidecar = instance.resolve("arctic-hang.txt");
         Process child = new ProcessBuilder(new File(System.getProperty("java.home"), "bin/java").toString(),
-                "-cp", classpath, Probe.class.getName()).directory(directory.toFile())
+                "-Darctic.diagnostics.hangFile=" + sidecar, "-cp", classpath, Probe.class.getName()).directory(directory.toFile())
                 .redirectErrorStream(true).redirectOutput(directory.resolve("output.log").toFile()).start();
         try {
             assertTrue(child.waitFor(10, TimeUnit.SECONDS), "diagnostic probe did not finish");
             assertEquals(0, child.exitValue(), new String(Files.readAllBytes(directory.resolve("output.log")), StandardCharsets.UTF_8));
-            String dump = new String(Files.readAllBytes(directory.resolve("arctic-hang.txt")), StandardCharsets.UTF_8);
+            String dump = new String(Files.readAllBytes(sidecar), StandardCharsets.UTF_8);
+            assertFalse(Files.exists(directory.resolve("arctic-hang.txt")));
             assertTrue(dump.indexOf("hang recovered") > dump.indexOf("hang end"));
         } finally {
             child.destroyForcibly();
@@ -36,7 +39,7 @@ class CrashDiagnosticsTest {
             Field progress = CrashDiagnostics.class.getDeclaredField("progress");
             progress.setAccessible(true);
             progress.setLong(null, System.nanoTime() - TimeUnit.SECONDS.toNanos(31));
-            Path dump = new File("arctic-hang.txt").toPath();
+            Path dump = new File(System.getProperty("arctic.diagnostics.hangFile")).toPath();
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
             while (!Files.exists(dump) && System.nanoTime() < deadline) Thread.sleep(20);
             if (!Files.exists(dump)) throw new AssertionError("hang was not captured");
