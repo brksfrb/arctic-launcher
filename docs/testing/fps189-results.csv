@@ -1,0 +1,37 @@
+run,variant,java,jfr,phase,frames,mean_ms,median_ms,p95_ms,p99_ms
+final-v5-1,v5 baseline 1,21.0.13,True,open-chat,592,25.3044,24.6634,34.6256,44.8743
+final-v5-1,v5 baseline 1,21.0.13,True,closed-chat,600,24.8077,23.9863,36.7423,44.4101
+final-v4-1,v4 baseline 1,21.0.13,True,open-chat,594,25.2234,23.9198,37.7704,47.4453
+final-v4-1,v4 baseline 1,21.0.13,True,closed-chat,618,24.2095,22.9331,37.1450,45.0954
+final-revert-font-1,v5 with complete legacy-font reversion,21.0.13,False,open-chat,521,28.7566,28.0921,41.4030,47.7999
+final-revert-font-1,v5 with complete legacy-font reversion,21.0.13,False,closed-chat,553,26.9472,25.9368,40.8006,45.1051
+final-nodiag-1,v5 heartbeat no-op,21.0.13,False,open-chat,820,18.2868,17.2349,27.6811,36.1094
+final-nodiag-1,v5 heartbeat no-op,21.0.13,False,closed-chat,1142,13.0929,12.5064,18.4585,22.3997
+final-noctm-1,v5 CTM off,21.0.13,False,open-chat,515,29.0969,28.5092,42.0901,55.3050
+final-noctm-1,v5 CTM off,21.0.13,False,closed-chat,367,40.5753,41.0298,56.0717,67.8207
+final-nopersist-1,v5 persistence off,21.0.13,False,open-chat,346,43.3695,42.2227,60.1276,71.3813
+final-nopersist-1,v5 persistence off,21.0.13,False,closed-chat,313,47.7168,45.9231,64.4186,76.1702
+final-nocopy-1,v5 chat copy off,21.0.13,False,open-chat,226,66.0866,61.0420,105.5908,134.1483
+final-nocopy-1,v5 chat copy off,21.0.13,False,closed-chat,295,50.0466,47.9553,79.9698,93.5282
+final-notimestamps-1,v5 timestamps off,21.0.13,False,open-chat,349,42.9659,43.0330,57.3773,63.4135
+final-notimestamps-1,v5 timestamps off,21.0.13,False,closed-chat,296,49.9405,47.0212,75.8660,86.8665
+final-v5-2,v5 baseline 2,21.0.13,False,open-chat,252,59.3732,51.8513,99.9440,194.7022
+final-v5-2,v5 baseline 2,21.0.13,False,closed-chat,292,50.0316,45.5817,81.8481,124.7889
+final-v4-2,v4 baseline 2,21.0.13,False,open-chat,119,124.4848,109.2166,213.3161,304.7246
+final-v4-2,v4 baseline 2,21.0.13,False,closed-chat,171,86.4047,74.4644,153.1430,232.2390
+after-v5-1,v5 baseline 3,21.0.13,False,open-chat,209,71.6752,67.9713,103.9806,121.2751
+after-v5-1,v5 baseline 3,21.0.13,False,closed-chat,241,61.1191,56.4442,101.9395,112.0978
+after-fixed-1,v5 mitigation 1,21.0.13,True,open-chat,228,65.7452,61.9594,102.0069,124.3150
+after-fixed-1,v5 mitigation 1,21.0.13,True,closed-chat,226,65.0646,62.4091,100.3960,120.0316
+after-v3-1,Nov 8 exact 8e9cc6fb,21.0.13,False,open-chat,134,111.0619,107.3168,166.5315,181.7135
+after-v3-1,Nov 8 exact 8e9cc6fb,21.0.13,False,closed-chat,117,127.6028,121.2945,203.7688,240.2704
+after-fixed-2,v5 mitigation 2,21.0.13,False,open-chat,165,90.6457,89.6907,121.3530,146.5663
+after-fixed-2,v5 mitigation 2,21.0.13,False,closed-chat,138,107.0792,103.2765,147.5894,158.6081
+after-v5-2,v5 baseline 4,21.0.13,False,open-chat,94,159.3596,150.8436,240.2832,275.3461
+after-v5-2,v5 baseline 4,21.0.13,False,closed-chat,130,111.1466,106.0353,172.4550,198.1649
+java8-v4,v4 Java 8,8u202,False,open-chat,107,140.3116,137.6760,213.8461,259.6617
+java8-v4,v4 Java 8,8u202,False,closed-chat,156,95.1116,88.1920,146.9035,195.5208
+java8-v5,v5 Java 8,8u202,False,open-chat,207,72.1090,69.8949,107.6196,127.5880
+java8-v5,v5 Java 8,8u202,False,closed-chat,234,62.5989,57.6101,99.8946,132.2261
+java8-fixed,v5 mitigation Java 8,8u202,False,open-chat,192,78.0367,73.6483,111.5265,139.0613
+java8-fixed,v5 mitigation Java 8,8u202,False,closed-chat,204,72.5117,70.6662,96.4217,129.8757
