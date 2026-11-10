@@ -1,0 +1,246 @@
+{
+  "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558",
+  "status": "queued",
+  "conclusion": null,
+  "head": "169df7a5442439ccf7dfdb7c5faef0373ad62f84",
+  "pr22": {
+    "url": "https://github.com/brksfrb/arctic-launcher/pull/22",
+    "state": "open"
+  },
+  "jobs": [
+    {
+      "name": "check (macos-latest)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777890989"
+    },
+    {
+      "name": "named-runtime (java-runtime-delta)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777891190"
+    },
+    {
+      "name": "mod-core",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777891289"
+    },
+    {
+      "name": "check (ubuntu-latest)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777891319"
+    },
+    {
+      "name": "named-runtime (java-runtime-gamma)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777891379"
+    },
+    {
+      "name": "check (windows-latest)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777891397"
+    },
+    {
+      "name": "mod-targets",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777891491"
+    },
+    {
+      "name": "forge",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777891507"
+    },
+    {
+      "name": "mod (1.21.9)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964724"
+    },
+    {
+      "name": "mod (26.1.2)",
+      "status": "queued",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964767"
+    },
+    {
+      "name": "mod (1.18.2)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964769"
+    },
+    {
+      "name": "mod (1.20.6)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964774"
+    },
+    {
+      "name": "mod (1.21.10)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964780"
+    },
+    {
+      "name": "mod (1.21.5)",
+      "status": "queued",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964815"
+    },
+    {
+      "name": "mod (1.21.3)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964826"
+    },
+    {
+      "name": "mod (1.12.2)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964856"
+    },
+    {
+      "name": "mod (26.3)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964867"
+    },
+    {
+      "name": "mod (1.13.2)",
+      "status": "queued",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964875"
+    },
+    {
+      "name": "mod (1.20.2)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964891"
+    },
+    {
+      "name": "mod (1.20.1)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964910"
+    },
+    {
+      "name": "mod (26.2)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964923"
+    },
+    {
+      "name": "mod (1.21.6)",
+      "status": "queued",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964938"
+    },
+    {
+      "name": "mod (1.21.11)",
+      "status": "queued",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964952"
+    },
+    {
+      "name": "mod (1.19.2)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964953"
+    },
+    {
+      "name": "mod (1.21.4)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964957"
+    },
+    {
+      "name": "mod (1.20.4)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964975"
+    },
+    {
+      "name": "mod (1.19.4)",
+      "status": "queued",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777964980"
+    },
+    {
+      "name": "mod (1.21.1)",
+      "status": "queued",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777965048"
+    },
+    {
+      "name": "mod (1.21.8)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777965073"
+    },
+    {
+      "name": "mod (1.11.2)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777965080"
+    },
+    {
+      "name": "mod (1.16.5)",
+      "status": "queued",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777965086"
+    },
+    {
+      "name": "mod (1.19.3)",
+      "status": "queued",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777965100"
+    },
+    {
+      "name": "mod (1.21.7)",
+      "status": "queued",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777965103"
+    },
+    {
+      "name": "mod (1.15.2)",
+      "status": "queued",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777965134"
+    },
+    {
+      "name": "mod (1.9.4)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777965136"
+    },
+    {
+      "name": "mod (1.17.1)",
+      "status": "queued",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777965155"
+    },
+    {
+      "name": "mod (1.14.4)",
+      "status": "queued",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777965224"
+    },
+    {
+      "name": "mod (1.8.9)",
+      "status": "queued",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777965265"
+    },
+    {
+      "name": "mod (1.10.2)",
+      "status": "queued",
+      "conclusion": null,
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558/job/129777965286"
+    }
+  ]
+}
