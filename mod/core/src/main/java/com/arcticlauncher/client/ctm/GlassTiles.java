@@ -3,6 +3,7 @@ package com.arcticlauncher.client.ctm;
 /** Resource-pack independent CTM topology and image synthesis. Pixel alpha occupies the high byte. */
 public final class GlassTiles {
 	public static final int COUNT = 47;
+	public static final int VARIANTS = COUNT * 2; // Block bank, then pane bank for shared vanilla sprites.
 	// OptiFine's standard 47-tile ordering. Bits, clockwise: W, SW, S, SE, E, NE, N, NW.
 	// Format reference: https://github.com/sp614x/optifine/blob/master/OptiFineDoc/doc/ctm.properties
 	private static final int[] MASKS = {0, 16, 17, 1, 20, 5, 84, 21, 117, 93, 215, 245, 4, 28, 31, 7, 80, 65, 81, 69, 213, 87, 95, 125, 68, 124, 255, 199, 92, 23, 116, 29, 247, 253, 119, 221, 64, 112, 241, 193, 113, 197, 209, 71, 223, 127, 85};
@@ -66,7 +67,7 @@ public final class GlassTiles {
 	/** Generate one tile, retaining every animation frame and the pack's interior artwork. */
 	public static int[] generate(int[] source, int imageWidth, int imageHeight, int frameWidth, int frameHeight, int tile) {
 		int[] out = source.clone();
-		int mask = MASKS[tile];
+		int mask = MASKS[tile % COUNT];
 		if (mask == 0 || frameWidth < 4 || frameHeight < 4) return out;
 		for (int oy = 0; oy + frameHeight <= imageHeight; oy += frameHeight) {
 			for (int ox = 0; ox + frameWidth <= imageWidth; ox += frameWidth) {

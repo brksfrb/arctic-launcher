@@ -32,7 +32,7 @@ abstract class GlassStitchMixin {
 			String name = sprite.name().toString();
 			if (!GlassTiles.glass(name)) continue;
 			GlassSpriteSource source = (GlassSpriteSource) sprite;
-			for (int tile = 0; tile < GlassTiles.COUNT; tile++) {
+			for (int tile = 0; tile < GlassTiles.VARIANTS; tile++) {
 				expanded.add(source.arctic$variant(GlassImages.id(GlassTiles.variant(name, tile)), GlassImages.generate(source.arctic$image(), sprite.width(), sprite.height(), tile, name)));
 			}
 		}

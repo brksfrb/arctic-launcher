@@ -35,6 +35,13 @@ class GlassTilesTest {
 		assertEquals(26, GlassTiles.index(255));
 	}
 
+	@Test void paneVariantBankUsesTheSameTopologiesForSynthesis() {
+		int[] source = framed(16, 1);
+		for (int tile = 0; tile < GlassTiles.COUNT; tile++)
+			assertArrayEquals(GlassTiles.generate(source, 16, 16, 16, 16, tile),
+					GlassTiles.generate(source, 16, 16, 16, 16, tile + GlassTiles.COUNT));
+	}
+
 	@Test void diagonalOnlyConnectionsCannotRemoveAnyBorder() {
 		assertEquals(0, GlassTiles.index(0xaa));
 		assertEquals(GlassTiles.index(1), GlassTiles.index(1 | 0xaa));
@@ -79,7 +86,7 @@ class GlassTilesTest {
 	}
 
 	@Test void variantNamesRoundTripAcrossTextureLayouts() {
-		for (String name : new String[]{"minecraft:blocks/glass_red", "minecraft:block/red_stained_glass", "minecraft:block/tinted_glass"}) for (int i = 0; i < 47; i++) {
+		for (String name : new String[]{"minecraft:blocks/glass_red", "minecraft:block/red_stained_glass", "minecraft:block/tinted_glass"}) for (int i = 0; i < GlassTiles.VARIANTS; i++) {
 			String variant = GlassTiles.variant(name, i);
 			assertEquals(name, GlassTiles.original(variant));
 			assertEquals(i, GlassTiles.tile(variant));
@@ -113,6 +120,55 @@ class GlassTilesTest {
 		resources.remove("minecraft:optifine/ctm/glass/46.png");
 		assertNull(GlassPacks.load(access).tile("minecraft:block/red_stained_glass", 26));
 		assertEquals("minecraft:light_gray_stained_glass", GlassPacks.canonical("blocks/glass_silver"));
+	}
+
+	private static GlassPacks rules(String... selectors) throws Exception {
+		Map<String, byte[]> resources = new java.util.LinkedHashMap<>();
+		java.util.List<String> paths = new java.util.ArrayList<>();
+		for (int i = 0; i < selectors.length; i++) {
+			String base = "minecraft:optifine/ctm/r" + i + "/";
+			paths.add(base + "rule.properties");
+			resources.put(base + "rule.properties", (selectors[i] + "\ntiles=0-46\n").getBytes(StandardCharsets.ISO_8859_1));
+			BufferedImage image = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+			image.setRGB(0, 0, 0xff000000 | i);
+			ByteArrayOutputStream png = new ByteArrayOutputStream(); ImageIO.write(image, "png", png);
+			for (int tile = 0; tile < 47; tile++) resources.put(base + tile + ".png", png.toByteArray());
+		}
+		return GlassPacks.load(new GlassPacks.Resources() {
+			@Override public java.util.Collection<String> properties() { return paths; }
+			@Override public InputStream open(String name) throws java.io.IOException {
+				if (!resources.containsKey(name)) throw new java.io.FileNotFoundException(name);
+				return new ByteArrayInputStream(resources.get(name));
+			}
+		});
+	}
+
+	@Test void explicitNamespacesCannotSelectVanillaGlass() throws Exception {
+		for (String selector : Arrays.asList("matchBlocks=example:glass", "matchBlocks=example:red_stained_glass_pane", "matchTiles=example:block/red_stained_glass")) {
+			GlassPacks packs = rules(selector);
+			for (String sprite : Arrays.asList("minecraft:block/glass", "minecraft:block/red_stained_glass", "example:block/red_stained_glass")) {
+				assertNull(packs.tile(sprite, 0), selector);
+				assertNull(packs.tile(sprite, 47), selector);
+			}
+		}
+		assertEquals("example:red_stained_glass", GlassPacks.canonical("example:block/red_stained_glass"));
+		assertNotNull(rules("matchTiles=minecraft:block/red_stained_glass").tile("minecraft:block/red_stained_glass", 0));
+	}
+
+	@Test void blockAndPaneSelectorsRemainIndependentIncludingLegacyIds() throws Exception {
+		for (String[] pair : new String[][]{{"glass", "glass_pane"}, {"20", "102"}, {"minecraft:red_stained_glass", "minecraft:red_stained_glass_pane"}, {"95:14", "160:14"}, {"stained_glass:14", "stained_glass_pane:14"}}) {
+			String sprite = pair[0].equals("glass") || pair[0].equals("20") ? "minecraft:block/glass" : "minecraft:block/red_stained_glass";
+			assertNull(rules("matchBlocks=" + pair[0]).tile(sprite, 47));
+			assertNull(rules("matchBlocks=" + pair[1]).tile(sprite, 0));
+			for (boolean reverse : new boolean[]{false, true}) {
+				GlassPacks packs = rules("matchBlocks=" + pair[reverse ? 1 : 0], "matchBlocks=" + pair[reverse ? 0 : 1]);
+				assertEquals(0xff000000 | (reverse ? 1 : 0), packs.tile(sprite, 0).getRGB(0, 0));
+				assertEquals(0xff000000 | (reverse ? 0 : 1), packs.tile(sprite, 47).getRGB(0, 0));
+			}
+		}
+		GlassPacks texture = rules("matchTiles=blocks/glass_red");
+		assertNotNull(texture.tile("minecraft:block/red_stained_glass", 0));
+		assertNotNull(texture.tile("minecraft:block/red_stained_glass", 47));
 	}
 
 	@Test void uvRotationsAndMirrorsPreserveAll47Topologies() {

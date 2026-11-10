@@ -56,7 +56,7 @@ public final class GlassCtm {
 		for (Map.Entry<String, TextureAtlasSprite> e : names.entrySet()) {
 			if (GlassTiles.paneEdge(e.getKey())) { found.put(e.getValue(), new TextureAtlasSprite[]{e.getValue()}); continue; }
 			if (!GlassTiles.glass(e.getKey())) continue;
-			TextureAtlasSprite[] variants = new TextureAtlasSprite[GlassTiles.COUNT];
+			TextureAtlasSprite[] variants = new TextureAtlasSprite[GlassTiles.VARIANTS];
 			boolean complete = true;
 			for (int i = 0; i < variants.length; i++) {
 				variants[i] = names.get(GlassTiles.variant(e.getKey(), i));
@@ -182,7 +182,7 @@ public final class GlassCtm {
 			Variants variants = ((GlassQuad) (Object) quad).arctic$ctm();
 			if (variants == null || variants.edge) return quad;
 			int tile = GlassTiles.index(GlassTiles.orient(context.mask(variants.direction), variants.orientation));
-			return variants.quads[tile];
+			return variants.quads[tile + (context.pane ? GlassTiles.COUNT : 0)];
 		}
 	}
 
@@ -217,7 +217,7 @@ public final class GlassCtm {
 			boundary = Math.abs(plane) < 0.00001f || Math.abs(plane - 1) < 0.00001f;
 			orientation = orientation(quad, direction);
 			if (edge) { quads = new BakedQuad[]{quad}; return; }
-			quads = new BakedQuad[GlassTiles.COUNT];
+			quads = new BakedQuad[GlassTiles.VARIANTS];
 			for (int i = 0; i < quads.length; i++) quads[i] = remap(quad, sprite, tiles[i]);
 		}
 	}

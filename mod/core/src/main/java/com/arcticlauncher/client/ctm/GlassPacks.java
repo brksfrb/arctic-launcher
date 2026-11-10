@@ -133,20 +133,21 @@ public final class GlassPacks {
 		};
 	}
 
-	/** Return ARGB pixels for a preferred tile, or null when synthesis should be used. */
+	/** Return preferred ARGB pixels; indices COUNT..VARIANTS select panes, null selects synthesis. */
 	public BufferedImage tile(String sprite, int tile) {
-		BufferedImage[] images = tiles.get(canonical(sprite));
-		return images == null ? null : images[tile];
+		BufferedImage[] images = tiles.get((tile >= GlassTiles.COUNT ? "pane:" : "block:") + canonical(sprite));
+		return images == null ? null : images[tile % GlassTiles.COUNT];
 	}
 
 	public static String canonical(String sprite) {
+		String namespace = sprite.contains(":") ? sprite.substring(0, sprite.indexOf(':')) : "minecraft";
 		String name = sprite.substring(sprite.indexOf(':') + 1);
 		name = name.substring(name.lastIndexOf('/') + 1).replace(".png", "");
 		if (name.equals("glass_pane")) name = "glass";
 		if (name.endsWith("_pane")) name = name.substring(0, name.length() - 5);
 		if (name.startsWith("glass_")) name = name.substring(6) + "_stained_glass";
 		name = name.replace("silver_stained_glass", "light_gray_stained_glass");
-		return "minecraft:" + name;
+		return namespace + ":" + name;
 	}
 
 	private static List<String> matches(Properties p, String path) {
@@ -155,25 +156,26 @@ public final class GlassPacks {
 		String meta = p.getProperty("metadata", "0-15");
 		for (String name : blocks.trim().split("\\s+")) {
 			if (name.isEmpty()) continue;
-			String bare = name.replace("minecraft:", "");
-			if (bare.equals("20") || bare.equals("102")) result.add("minecraft:glass");
+			String bare = name.startsWith("minecraft:") ? name.substring(10) : name;
+			String kind = bare.equals("102") || bare.startsWith("160") || bare.contains("glass_pane") ? "pane:" : "block:";
+			if (bare.equals("20") || bare.equals("102")) result.add(kind + "minecraft:glass");
 			else if (bare.matches("(?:95|160|stained_glass|stained_glass_pane)(?::[0-9-]+)?")) {
 				String data = bare.contains(":") ? bare.substring(bare.indexOf(':') + 1) : meta;
 				for (String n : expand(data)) {
 					int i = Integer.parseInt(n);
-					if (i >= 0 && i < COLORS.length) result.add("minecraft:" + COLORS[i] + "_stained_glass");
+					if (i >= 0 && i < COLORS.length) result.add(kind + "minecraft:" + COLORS[i] + "_stained_glass");
 				}
 			} else {
 				String canonical = canonical(name);
-				if (GlassTiles.glass(canonical)) result.add(canonical);
+				if (GlassTiles.glass(canonical)) result.add(kind + canonical);
 			}
 		}
 		for (String name : p.getProperty("matchTiles", "").trim().split("\\s+")) {
-			if (!name.isEmpty() && GlassTiles.glass(canonical(name))) result.add(canonical(name));
+			if (!name.isEmpty() && GlassTiles.glass(canonical(name))) { result.add("block:" + canonical(name)); result.add("pane:" + canonical(name)); }
 		}
 		if (blocks.isEmpty() && !p.containsKey("matchTiles")) {
 			String name = canonical(path.substring(0, path.length() - ".properties".length()));
-			if (GlassTiles.glass(name)) result.add(name);
+			if (GlassTiles.glass(name)) { result.add("block:" + name); result.add("pane:" + name); }
 		}
 		return result;
 	}
