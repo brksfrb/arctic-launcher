@@ -1,0 +1,391 @@
+{
+  "title": "Arctic chat emotes \u2014 proposal 2, approved by Burak 2026-11-10",
+  "total": 64,
+  "license": "Common glyphs are Twemoji (Twitter, CC-BY 4.0); attribution required in the repo. :arctic: is the official Arctic mark. :ice: is a custom crystal.",
+  "groups": [
+    {
+      "id": "faces",
+      "name": "Faces",
+      "emotes": [
+        {
+          "code": "slight_smile",
+          "aliases": [
+            "slight"
+          ],
+          "file": "svg/1f642.svg"
+        },
+        {
+          "code": "smile",
+          "aliases": [
+            "grinning"
+          ],
+          "file": "svg/1f604.svg"
+        },
+        {
+          "code": "joy",
+          "aliases": [
+            "laugh"
+          ],
+          "file": "svg/1f602.svg"
+        },
+        {
+          "code": "wink",
+          "aliases": [],
+          "file": "svg/1f609.svg"
+        },
+        {
+          "code": "blush",
+          "aliases": [],
+          "file": "svg/1f60a.svg"
+        },
+        {
+          "code": "sob",
+          "aliases": [],
+          "file": "svg/1f62d.svg"
+        },
+        {
+          "code": "cry",
+          "aliases": [],
+          "file": "svg/1f622.svg"
+        },
+        {
+          "code": "sad",
+          "aliases": [
+            "disappointed"
+          ],
+          "file": "svg/1f61e.svg"
+        },
+        {
+          "code": "wow",
+          "aliases": [
+            "open_mouth"
+          ],
+          "file": "svg/1f62e.svg"
+        },
+        {
+          "code": "thinking",
+          "aliases": [
+            "think"
+          ],
+          "file": "svg/1f914.svg"
+        },
+        {
+          "code": "cool",
+          "aliases": [
+            "sunglasses"
+          ],
+          "file": "svg/1f60e.svg"
+        },
+        {
+          "code": "angry",
+          "aliases": [],
+          "file": "svg/1f620.svg"
+        },
+        {
+          "code": "sweat_smile",
+          "aliases": [],
+          "file": "svg/1f605.svg"
+        },
+        {
+          "code": "rofl",
+          "aliases": [],
+          "file": "svg/1f923.svg"
+        },
+        {
+          "code": "heart_eyes",
+          "aliases": [],
+          "file": "svg/1f60d.svg"
+        },
+        {
+          "code": "kissing_heart",
+          "aliases": [
+            "kiss"
+          ],
+          "file": "svg/1f618.svg"
+        },
+        {
+          "code": "smirk",
+          "aliases": [],
+          "file": "svg/1f60f.svg"
+        },
+        {
+          "code": "tongue",
+          "aliases": [
+            "stuck_out_tongue_winking"
+          ],
+          "file": "svg/1f61c.svg"
+        },
+        {
+          "code": "flushed",
+          "aliases": [],
+          "file": "svg/1f633.svg"
+        },
+        {
+          "code": "scream",
+          "aliases": [],
+          "file": "svg/1f631.svg"
+        },
+        {
+          "code": "pleading",
+          "aliases": [],
+          "file": "svg/1f97a.svg"
+        },
+        {
+          "code": "rolling_eyes",
+          "aliases": [],
+          "file": "svg/1f644.svg"
+        },
+        {
+          "code": "sleeping",
+          "aliases": [],
+          "file": "svg/1f634.svg"
+        },
+        {
+          "code": "partying",
+          "aliases": [
+            "party"
+          ],
+          "file": "svg/1f973.svg"
+        },
+        {
+          "code": "clown",
+          "aliases": [],
+          "file": "svg/1f921.svg"
+        },
+        {
+          "code": "exploding_head",
+          "aliases": [],
+          "file": "svg/1f92f.svg"
+        },
+        {
+          "code": "smiling_imp",
+          "aliases": [
+            "devil"
+          ],
+          "file": "svg/1f608.svg"
+        },
+        {
+          "code": "hug",
+          "aliases": [
+            "hugging"
+          ],
+          "file": "svg/1f917.svg"
+        }
+      ]
+    },
+    {
+      "id": "reactions",
+      "name": "Reactions and symbols",
+      "emotes": [
+        {
+          "code": "skull",
+          "aliases": [],
+          "file": "svg/1f480.svg"
+        },
+        {
+          "code": "heart",
+          "aliases": [],
+          "file": "svg/2764.svg"
+        },
+        {
+          "code": "blue_heart",
+          "aliases": [],
+          "file": "svg/1f499.svg"
+        },
+        {
+          "code": "fire",
+          "aliases": [],
+          "file": "svg/1f525.svg"
+        },
+        {
+          "code": "thumbsup",
+          "aliases": [
+            "+1"
+          ],
+          "file": "svg/1f44d.svg"
+        },
+        {
+          "code": "thumbsdown",
+          "aliases": [
+            "-1"
+          ],
+          "file": "svg/1f44e.svg"
+        },
+        {
+          "code": "clap",
+          "aliases": [],
+          "file": "svg/1f44f.svg"
+        },
+        {
+          "code": "wave",
+          "aliases": [],
+          "file": "svg/1f44b.svg"
+        },
+        {
+          "code": "eyes",
+          "aliases": [],
+          "file": "svg/1f440.svg"
+        },
+        {
+          "code": "pray",
+          "aliases": [],
+          "file": "svg/1f64f.svg"
+        },
+        {
+          "code": "check",
+          "aliases": [
+            "white_check_mark"
+          ],
+          "file": "svg/2705.svg"
+        },
+        {
+          "code": "x",
+          "aliases": [
+            "cross"
+          ],
+          "file": "svg/274c.svg"
+        },
+        {
+          "code": "star",
+          "aliases": [],
+          "file": "svg/2b50.svg"
+        },
+        {
+          "code": "sparkles",
+          "aliases": [],
+          "file": "svg/2728.svg"
+        },
+        {
+          "code": "zzz",
+          "aliases": [],
+          "file": "svg/1f4a4.svg"
+        },
+        {
+          "code": "crown",
+          "aliases": [],
+          "file": "svg/1f451.svg"
+        },
+        {
+          "code": "ok_hand",
+          "aliases": [],
+          "file": "svg/1f44c.svg"
+        },
+        {
+          "code": "muscle",
+          "aliases": [],
+          "file": "svg/1f4aa.svg"
+        },
+        {
+          "code": "raised_hands",
+          "aliases": [],
+          "file": "svg/1f64c.svg"
+        },
+        {
+          "code": "broken_heart",
+          "aliases": [],
+          "file": "svg/1f494.svg"
+        },
+        {
+          "code": "100",
+          "aliases": [],
+          "file": "svg/1f4af.svg"
+        },
+        {
+          "code": "tada",
+          "aliases": [],
+          "file": "svg/1f389.svg"
+        },
+        {
+          "code": "trophy",
+          "aliases": [],
+          "file": "svg/1f3c6.svg"
+        },
+        {
+          "code": "crossed_swords",
+          "aliases": [
+            "swords"
+          ],
+          "file": "svg/2694.svg"
+        },
+        {
+          "code": "gem",
+          "aliases": [],
+          "file": "svg/1f48e.svg"
+        },
+        {
+          "code": "boom",
+          "aliases": [],
+          "file": "svg/1f4a5.svg"
+        },
+        {
+          "code": "ghost",
+          "aliases": [],
+          "file": "svg/1f47b.svg"
+        },
+        {
+          "code": "pick",
+          "aliases": [
+            "pickaxe"
+          ],
+          "file": "svg/26cf.svg"
+        }
+      ]
+    },
+    {
+      "id": "arctic",
+      "name": "Arctic",
+      "emotes": [
+        {
+          "code": "arctic",
+          "aliases": [],
+          "file": "arctic/arctic.svg",
+          "note": "official Arctic snowflake, brand blue #2EB1EC"
+        },
+        {
+          "code": "snowflake",
+          "aliases": [
+            "snow"
+          ],
+          "file": "svg/2744.svg"
+        },
+        {
+          "code": "ice",
+          "aliases": [],
+          "file": "arctic/ice.svg",
+          "note": "custom crystal, not Twemoji"
+        },
+        {
+          "code": "cold",
+          "aliases": [
+            "cold_face"
+          ],
+          "file": "svg/1f976.svg"
+        },
+        {
+          "code": "penguin",
+          "aliases": [],
+          "file": "svg/1f427.svg"
+        },
+        {
+          "code": "snowman",
+          "aliases": [],
+          "file": "svg/26c4.svg"
+        },
+        {
+          "code": "ice_cube",
+          "aliases": [
+            "iceberg"
+          ],
+          "file": "svg/1f9ca.svg",
+          "note": "alias :iceberg: must not clash with :ice:"
+        },
+        {
+          "code": "bear",
+          "aliases": [],
+          "file": "svg/1f43b-200d-2744-fe0f.svg",
+          "note": "Twemoji polar-bear ZWJ; regular bear is also at svg/1f43b.svg if needed"
+        }
+      ]
+    }
+  ]
+}
