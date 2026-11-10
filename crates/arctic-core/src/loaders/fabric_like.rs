@@ -230,4 +230,43 @@ mod tests {
         assert_eq!(meta(LoaderKind::Fabric, "1.8.9").0, LEGACY_FABRIC_META);
         assert_eq!(meta(LoaderKind::Fabric, "1.21.4").0, FABRIC_META);
     }
+
+    #[test]
+    fn cached_legacy_profiles_keep_each_games_assets_and_intermediary() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        for game in ["1.7.3", "1.5.2", "1.4.7", "1.6.4"] {
+            save_profile(
+                &dirs,
+                &serde_json::json!({
+                    "id": format!("fabric-loader-0.20.1-{game}"),
+                    "inheritsFrom": game,
+                    "mainClass": "net.fabricmc.loader.impl.launch.knot.KnotClient",
+                    "libraries": [{"name": format!("net.legacyfabric:intermediary:{game}")}]
+                }),
+            )
+            .unwrap();
+        }
+        for (game, assets) in [
+            ("1.7.3", "1.7.3"),
+            ("1.5.2", "pre-1.6"),
+            ("1.4.7", "pre-1.6"),
+            ("1.6.4", "legacy"),
+        ] {
+            let vanilla: VersionJson = serde_json::from_value(serde_json::json!({
+                "id": game, "mainClass": "net.minecraft.client.Minecraft",
+                "assets": assets,
+                "assetIndex": {"id": assets, "url": "https://example.invalid/index.json", "sha1": "hash", "size": 1}
+            }))
+            .unwrap();
+            let merged = install(&dirs, LoaderKind::Fabric, "0.20.1", &vanilla).unwrap();
+            assert_eq!(merged.id, format!("fabric-loader-0.20.1-{game}"));
+            assert_eq!(merged.assets.as_deref(), Some(assets));
+            assert_eq!(merged.asset_index.unwrap().id, assets);
+            assert_eq!(
+                merged.libraries[0].name,
+                format!("net.legacyfabric:intermediary:{game}")
+            );
+        }
+    }
 }

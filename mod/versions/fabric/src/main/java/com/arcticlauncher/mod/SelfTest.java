@@ -49,6 +49,13 @@ final class SelfTest {
 	private SelfTest() {}
 
 	static void maybeStart() {
+		//#if DEV
+		if ("chatcopy".equals(System.getProperty("arctic.selftest"))) {
+			ChatCopyTest.start();
+			return;
+		}
+
+		//#endif
 		//#if MC >= 1.19.4
 		if ("title-compat".equals(System.getProperty("arctic.selftest"))) {
 			TitleCompatTest.start();

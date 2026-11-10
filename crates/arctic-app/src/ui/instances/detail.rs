@@ -114,6 +114,7 @@ impl ArcticApp {
             (InstancePage::Packs, _) => self.packs_page(ui, &instance),
             _ => self.instance_settings(ui, &instance),
         }
+        self.project_preview(ui.ctx(), &instance);
     }
 
     fn instance_settings(&mut self, ui: &mut egui::Ui, instance: &Instance) {

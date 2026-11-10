@@ -1,5 +1,7 @@
 package com.arcticlauncher.client.menu;
 
+import com.arcticlauncher.client.LocalClock;
+
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ChatFilter;
 import com.arcticlauncher.client.config.ClientConfig;
@@ -55,7 +57,7 @@ final class ChatTab implements MenuTab {
 	private final TextField search = new TextField("Search the chat…", MAX_TEXT, TextField.ANY);
 	/** 0 = everything, n = the n-th saved filter. */
 	private int view;
-	private final SimpleDateFormat time = new SimpleDateFormat("HH:mm:ss");
+	private final SimpleDateFormat time = LocalClock.formatter("HH:mm:ss");
 
 	@Override
 	public String title() {

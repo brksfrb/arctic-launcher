@@ -530,7 +530,7 @@ impl ArcticApp {
         }
     }
 
-    /// The mouse's back button (or Alt+Left): close the open modpack or instance page, else the previous tab.
+    /// Mouse Back or Alt+Left: close the preview, modpack or instance page, else the previous tab.
     fn go_back(&mut self, ctx: &egui::Context) {
         let (back, now) = ctx.input(|i| {
             (
@@ -542,11 +542,10 @@ impl ArcticApp {
         if !back {
             return;
         }
-        if self.tab == Tab::Instances && self.inst.modpacks_open {
-            self.inst.modpacks_open = false;
-        } else if self.tab == Tab::Instances && self.inst.open.is_some() {
-            self.inst.open = None;
-        } else if let Some(tab) = self.tab_history.pop() {
+        if self.tab == Tab::Instances && self.inst.go_back() {
+            return;
+        }
+        if let Some(tab) = self.tab_history.pop() {
             self.tab = tab;
             self.tab_changed_at = now;
         }
@@ -1171,7 +1170,8 @@ impl ArcticApp {
             | Event::Retargeted(..)
             | Event::LoaderChecked(..)
             | Event::LoaderSwitched(..)
-            | Event::ModIcon(..)) => self.on_instances_event(e, ctx),
+            | Event::ModIcon(..)
+            | Event::ModGalleryImage(..)) => self.on_instances_event(e, ctx),
             Event::Share(id, event) => self.on_share_event(id, event),
             Event::WorldsDone(id, result) => self.on_worlds_done(id, result),
             Event::PickerMissing => self.toasts.push(
@@ -1279,7 +1279,7 @@ impl ArcticApp {
         if let Ok(Some(info)) = &result
             && (self.settings.auto_install_updates || info.required)
         {
-            // Installs by itself; the banner (or a required update's overlay) shows it going.
+            // Installs quietly unless a required update needs its overlay.
             self.start_update(info.clone());
             return;
         }
@@ -1312,10 +1312,13 @@ impl ArcticApp {
             Ok(()) => UpdateState::Installed {
                 required: info.required,
             },
-            Err(error) => UpdateState::Failed {
-                error,
-                retry: Some(info.clone()),
-            },
+            Err(error) => {
+                log::warn!("update install failed: {error}");
+                UpdateState::Failed {
+                    error,
+                    retry: Some(info.clone()),
+                }
+            }
         };
     }
 

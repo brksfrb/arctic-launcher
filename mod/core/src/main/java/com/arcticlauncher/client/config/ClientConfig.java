@@ -98,6 +98,8 @@ public final class ClientConfig {
 	public boolean hotbarScrollStop;
 	/** View: chat timestamps, stacked repeats, lower fire, no rain. */
 	public boolean chatTimestamps;
+	/** Copy real in-game chat using the timestamp/copy target or Shift + right-click. */
+	public boolean chatCopy = true;
 	public boolean chatStack = true;
 	/** Chat lines that say your name are marked, with a soft ping. */
 	public boolean chatMentions = true;

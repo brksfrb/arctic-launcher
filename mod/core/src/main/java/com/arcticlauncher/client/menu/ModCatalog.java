@@ -684,9 +684,10 @@ final class ModCatalog {
 
 	private static void chat(List<Mod> out, final ClientConfig c) {
 		out.add(new Mod("chat", "Chat", "Timestamps, stacked lines, mentions, placeholders", "chat", Category.CHAT,
-				"timestamp stack mention ping")
+				"timestamp stack mention ping copy clipboard")
 				.settings((host, f) -> {
 					f.section("Chat");
+					f.toggle("Copy chat messages", "Click the timestamp or [Copy]; Shift + right-click any message", () -> c.chatCopy, on -> c.chatCopy = on);
 					f.toggle("Timestamps", "The time in front of every line", () -> c.chatTimestamps, on -> c.chatTimestamps = on);
 					f.toggle("Stack repeated lines", "Show (x3) instead of the same line again", () -> c.chatStack, on -> c.chatStack = on);
 					f.toggle("Mentions", "Highlight lines that say your name, with a soft ping", () -> c.chatMentions,

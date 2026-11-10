@@ -98,6 +98,8 @@
 <% } %>
 		"LightmapMixin",
 		"ChatComponentMixin",
+		"ChatCopyStyleMixin",
+		${chatCopyStyleAccess}
 <% if (chatLine111) { %>		"ChatLine111Mixin",
 <% } %>
 <% if (crosshairHook) { %>		"HudCrosshairMixin",
@@ -111,6 +113,7 @@
 		"MultiPlayerGameModeMixin"<% } %><% if (oldCamera) { %>,
 		"GameRendererFovMixin"<% } %><% if (smoothFont) { %>,
 		"ChatLineMixin",
+		"ChatCopyScreenAccess",
 		"PackRepositoryMixin",
 		"TrueTypeDefinitionMixin",
 		"TrueTypeGlyphMixin",
@@ -143,6 +146,8 @@
 		"ConnectionReplayMixin",
 		"ReplayTimerMixin",
 		"ReplaySoundMixin",
+		"ReplayEntityRendererMixin",
+		"ReplayLeashRendererMixin",
 		"ReplayFrameMixin",
 		"ReplayScreenMixin",
 		"LivingEntitySwingMixin"<% } %><% if (replayWindow) { %>,
