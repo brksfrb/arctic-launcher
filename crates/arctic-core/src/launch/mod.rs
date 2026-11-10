@@ -850,6 +850,11 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
             .chain(arctic_mod::jvm_flag())
             .chain(arctic_mod::brand_flag(&req.instance.loader))
             .chain(Some(arctic_mod::version_flag()))
+            // Capture anew for every launch, including after a DST/OS zone change.
+            .chain(Some(format!(
+                "-Darctic.localUtcOffsetSeconds={}",
+                chrono::Local::now().offset().local_minus_utc()
+            )))
             .chain(gc_flags(
                 user_args.iter().map(String::as_str),
                 // The player's own Java may be any version: only the launcher's runtimes get ZGC.

@@ -1169,7 +1169,7 @@ final class FabricPlatform implements Platform {
 			leaveWorld(mc);
 			// One duel world at a time: earlier ones are thrown away (they're only arenas).
 			WorldStats.deleteWorlds(new java.io.File(mc.gameDirectory, "saves"), "Arctic Duel ");
-			String name = "Arctic Duel " + new java.text.SimpleDateFormat("MM-dd HH.mm").format(new java.util.Date());
+			String name = "Arctic Duel " + com.arcticlauncher.client.LocalClock.formatter("MM-dd HH.mm").format(new java.util.Date());
 			//#if MC >= 26.1
 			net.minecraft.world.level.LevelSettings settings = new net.minecraft.world.level.LevelSettings(name,
 					net.minecraft.world.level.GameType.SURVIVAL,
@@ -1252,7 +1252,7 @@ final class FabricPlatform implements Platform {
 			return;
 		}
 		com.arcticlauncher.mod.mixin.CreateWorldScreenAccess screen = (com.arcticlauncher.mod.mixin.CreateWorldScreenAccess) Compat.screen();
-		screen.arctic$nameEdit().setValue("Arctic Duel " + new java.text.SimpleDateFormat("MM-dd HH.mm").format(new java.util.Date()));
+		screen.arctic$nameEdit().setValue("Arctic Duel " + com.arcticlauncher.client.LocalClock.formatter("MM-dd HH.mm").format(new java.util.Date()));
 		screen.arctic$setCommands(true);
 		screen.arctic$setCommandsChanged(true);
 		screen.arctic$create();
