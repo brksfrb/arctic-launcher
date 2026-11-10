@@ -38,6 +38,35 @@ final class LegacyChatCopyTest {
 		}), seconds, TimeUnit.SECONDS);
 	}
 
+	private static String hover(Object style) {
+		net.minecraft.text.HoverEvent hover = ((Style) style).getHoverEvent();
+		return hover == null ? "" : hover.getValue().asUnformattedString();
+	}
+
+	private static void checkHoverStyles() {
+		net.minecraft.text.HoverEvent event = new net.minecraft.text.HoverEvent(net.minecraft.text.HoverEvent.Action.SHOW_TEXT, new LiteralText("server hover"));
+		Style server = new Style().setInsertion("server insertion").setHoverEvent(event);
+		Text body = new LiteralText("probe");
+		body.setStyle(server);
+		ClickEvent click = new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/help");
+		body.getStyle().setClickEvent(click);
+		Style tagged = LegacyChatCopy.tag(body, "probe", false).getStyle();
+		if (tagged.getClickEvent() != click || tagged.getHoverEvent() != event || !"server insertion".equals(tagged.getInsertion()))
+			throw new AssertionError("body server click/hover/insertion changed");
+		if (!hover(LegacyChatCopy.tag(new LiteralText("probe"), "probe", false).getStyle()).isEmpty())
+			throw new AssertionError("plain body gained hover");
+		if (!"Click to copy".equals(hover(LegacyChatCopy.tag(new LiteralText("probe"), "probe", true).getStyle())))
+			throw new AssertionError("copy target missing hover");
+		ArcticClient.config().chatCopy = false;
+		if (!hover(LegacyChatCopy.tag(new LiteralText("probe"), "probe", true).getStyle()).isEmpty())
+			throw new AssertionError("disabled target gained hover");
+		ArcticClient.config().chatCopy = true;
+		ArcticClient.config().chatOff = true;
+		if (!hover(LegacyChatCopy.tag(new LiteralText("probe"), "probe", true).getStyle()).isEmpty())
+			throw new AssertionError("hidden chat target gained hover");
+		ArcticClient.config().chatOff = false;
+	}
+
 	private static void phase(int phase) {
 		try { if (log == null) log = ChatCopyProof.log("1.8.9"); }
 		catch (Exception error) { throw new RuntimeException(error); }
@@ -47,6 +76,7 @@ final class LegacyChatCopyTest {
 		ArcticClient.config().chatStack = true;
 		ArcticClient.config().chatKeep = false;
 		ArcticClient.config().chatOff = false;
+		checkHoverStyles();
 		ArcticClient.config().fancy = phase < 2;
 		com.arcticlauncher.client.gfx.Draw.fancy = phase < 2;
 		//#if MC >= 1.11
@@ -71,6 +101,10 @@ final class LegacyChatCopyTest {
 		later(2, () -> {
 			Window window = new Window(mc);
 			ChatCopyProof.check(new ChatCopyProof.Game() {
+				public String hoverText(Object style) { return hover(style); }
+				public void hoverAt(int x, int y) {
+					org.lwjgl.input.Mouse.setCursorPosition(x * window.getScaleFactor(), (height() - y) * window.getScaleFactor());
+				}
 				public int width() { return (int) window.getScaledWidth(); }
 				public int height() { return (int) window.getScaledHeight(); }
 				public Object hit(int x, int y) {
@@ -100,6 +134,7 @@ final class LegacyChatCopyTest {
 			}, log, "phase=" + phase + " fancy=" + (phase < 2) + " timestamps=" + (phase % 2 == 0));
 			later(1, () -> {
 				shot("chat-" + phase);
+				if (phase == 0) shot("hover");
 				if (phase < 3) phase(phase + 1);
 				else {
 					Menus.select("chat");
