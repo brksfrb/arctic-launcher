@@ -15,7 +15,7 @@ final class GlassCtmTest {
 	private static void run(Runnable r) { Minecraft.getInstance().execute(r); }
 	private static void command(String s) { Compat.sendChat("/" + s); }
 	private static void scene() {
-		command("tp @s 0.5 220 -7 0 0");
+		command("tp @s -3.5 220 -4.0 0 0");
 		TIMER.schedule(() -> run(GlassCtmTest::buildScene), 7, TimeUnit.SECONDS);
 	}
 	private static void buildScene() {
@@ -27,16 +27,68 @@ final class GlassCtmTest {
 		command("fill -5 220 0 -3 222 0 minecraft:glass");
 		command("fill -1 220 0 1 222 0 minecraft:red_stained_glass");
 		command("fill 3 221 0 5 221 0 minecraft:glass_pane");
-		command("time set 6000"); command("weather clear"); command("tp @s 0.5 220 -7 0 0");
+		command("time set 6000"); command("weather clear"); command("tp @s -3.5 220 -4.0 0 0");
 		//#if MC >= 26.2
 		if (!Minecraft.getInstance().gui.hud.isHidden()) Minecraft.getInstance().gui.hud.toggle();
 		//#else
 		Minecraft.getInstance().options.hideGui = true;
 		//#endif
+		//#if MC < 1.15
+		Minecraft.getInstance().mouseHandler.grabMouse();
+		//#endif
 		ArcticClient.config().connectedGlass = true;
-		TIMER.schedule(() -> run(() -> WorldTest.shot("ctm-on")), 8, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> {
+			//#if MC < 1.15
+			regression();
+			//#endif
+			WorldTest.shot("ctm-connected");
+		}), 8, TimeUnit.SECONDS);
+		//#if MC < 1.15
+		// Capture five ticks into a real held attack, before the glass block breaks.
+		TIMER.schedule(() -> run(() -> command("gamemode survival")), 9, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> attack(true)), 10, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> WorldTest.shot("ctm-crack")), 10250, TimeUnit.MILLISECONDS);
+		TIMER.schedule(() -> run(() -> attack(false)), 11, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> Minecraft.getInstance().stop()), 15, TimeUnit.SECONDS);
+		//#else
 		TIMER.schedule(() -> run(() -> ArcticClient.config().connectedGlass = false), 12, TimeUnit.SECONDS);
 		TIMER.schedule(() -> run(() -> WorldTest.shot("ctm-off")), 20, TimeUnit.SECONDS);
 		TIMER.schedule(() -> run(() -> Minecraft.getInstance().stop()), 25, TimeUnit.SECONDS);
+		//#endif
 	}
+	//#if MC < 1.15
+	private static void attack(boolean down) {
+		Minecraft mc = Minecraft.getInstance();
+		if (down) mc.mouseHandler.grabMouse();
+		// Use the vanilla left mouse binding; 1.13's keyAttack field is misnamed in its mappings.
+		net.minecraft.client.KeyMapping.set(com.mojang.blaze3d.platform.InputConstants.Type.MOUSE.getOrCreate(0), down);
+		ArcticMod.LOG.info("ctm-break attack={}, focused={}, grabbed={}", down, mc.isWindowActive(), mc.mouseHandler.isMouseGrabbed());
+	}
+	private static void regression() {
+		Minecraft mc = Minecraft.getInstance();
+		net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos(-4, 221, 0);
+		net.minecraft.world.level.block.state.BlockState state = mc.level.getBlockState(pos);
+		net.minecraft.client.resources.model.BakedModel model = mc.getBlockRenderer().getBlockModel(state);
+		java.util.List<net.minecraft.client.renderer.block.model.BakedQuad> original = model.getQuads(state, net.minecraft.core.Direction.NORTH, new java.util.Random(0));
+		net.minecraft.client.renderer.block.model.BakedQuad glass = original.get(0);
+		check(((GlassQuad) (Object) glass).arctic$ctm() != null, "glass has variants");
+		net.minecraft.client.renderer.block.model.BakedQuad damage = new net.minecraft.client.renderer.block.model.BreakingQuad(glass, model.getParticleIcon());
+		check(((GlassQuad) (Object) damage).arctic$ctm() == null, "damage constructor has no variants");
+		check(GlassCtm.prepare(damage) == null, "explicit damage prepare has no variants");
+		GlassCtm.beginDamage();
+		try {
+			GlassCtm.begin(mc.level, state, pos);
+			check(GlassCtm.quads(original) == original, "damage begin stays inactive");
+		} finally { GlassCtm.endDamage(); }
+		GlassCtm.begin(mc.level, state, pos);
+		java.util.List<net.minecraft.client.renderer.block.model.BakedQuad> connected = GlassCtm.quads(original);
+		check(connected != original && connected.get(0) != glass, "terrain selects connected tile");
+		GlassCtm.end();
+		ArcticMod.LOG.info("ctm-break regression PASS: BreakingQuad constructor, damage suppression, terrain substitution");
+	}
+	private static void check(boolean condition, String label) {
+		if (!condition) throw new AssertionError("ctm-break: " + label);
+	}
+	//#endif
+
 }
