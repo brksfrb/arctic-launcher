@@ -59,7 +59,7 @@ public final class LegacyGlassCtm {
 	public static void begin(BlockView world, BlockState block, BlockPos pos) {
 		Context c = LOCAL.get();
 		c.active = false;
-		if (!enabled()) return;
+		if (c.damageDepth != 0 || !enabled()) return;
 		Integer type = c.blocks.get(block.getBlock());
 		if (type == null) {
 			String id = Block.REGISTRY.getIdentifier(block.getBlock()).toString();
@@ -74,6 +74,10 @@ public final class LegacyGlassCtm {
 		c.x = pos.getX(); c.y = pos.getY(); c.z = pos.getZ();
 		c.checked = 0; c.connected = 0; c.faces = 0; c.viewIndex = 0; c.active = true;
 	}
+
+	/** Damage rendering shares the terrain renderer, but must retain vanilla crack textures. */
+	public static void beginDamage() { LOCAL.get().damageDepth++; end(); }
+	public static void endDamage() { LOCAL.get().damageDepth--; end(); }
 
 	public static void end() { Context c = LOCAL.get(); c.active = false; c.world = null; }
 
@@ -95,6 +99,7 @@ public final class LegacyGlassCtm {
 
 	private static final class Context {
 		boolean active, pane;
+		int damageDepth;
 		int bank;
 		int data, x, y, z, checked, connected, faces, viewIndex;
 		Block block;
@@ -184,6 +189,8 @@ public final class LegacyGlassCtm {
 
 	/** Called while models bake, after their atlas is stitched. Selection never allocates. */
 	public static Variants prepare(BakedQuad quad) {
+		// The base constructor runs before these subclasses replace the glass UVs.
+		if (quad instanceof net.minecraft.client.render.model.TexturedBakedQuad) return null;
 		if (!available() || sprites.isEmpty()) return null;
 		Sprite sprite = spriteOf(quad);
 		Sprite[] tiles = sprites.get(sprite);
