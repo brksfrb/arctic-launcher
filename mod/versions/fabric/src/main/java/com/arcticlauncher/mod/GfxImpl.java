@@ -59,7 +59,7 @@ public final class GfxImpl implements Gfx {
 	private static final java.util.Map<String, Identifier> ASSETS = new java.util.HashMap<String, Identifier>();
 
 	/** A PNG from the jar's {@code assets/arctic/}, registered on first use. */
-	private static Identifier asset(String name) {
+	public static Identifier asset(String name) {
 		if (ASSETS.containsKey(name)) {
 			return ASSETS.get(name);
 		}

@@ -333,6 +333,19 @@ public final class LegacyHooks {
 		net.minecraft.client.gui.DrawableHelper.drawTexture(Math.round(x), Math.round(y) - 1, 0f, 0f, 64, 64, side, side, 64, 64);
 	}
 
+	/** RGBA chat glyph, using the same one-texture path as the badge. */
+	public static void drawEmote(com.arcticlauncher.client.feature.EmoteAtlas.Emote emote, float x, float y, float alpha, boolean shadow) {
+		net.minecraft.util.Identifier texture = LegacyTextures.resolve("asset:emotes");
+		if (texture == null) return;
+		MinecraftClient.getInstance().getTextureManager().bindTexture(texture);
+		com.mojang.blaze3d.platform.GlStateManager.enableBlend();
+		com.mojang.blaze3d.platform.GlStateManager.blendFuncSeparate(org.lwjgl.opengl.GL11.GL_SRC_ALPHA,
+				org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA, org.lwjgl.opengl.GL11.GL_ONE, org.lwjgl.opengl.GL11.GL_ZERO);
+		float tint = shadow ? 0.25f : 1f;
+		com.mojang.blaze3d.platform.GlStateManager.color(tint, tint, tint, alpha);
+		net.minecraft.client.gui.DrawableHelper.drawTexture(Math.round(x), Math.round(y) - 1, emote.u(), emote.v(), 144, 144, 10, 10, 1152, 1152);
+	}
+
 	/** The ping number in the player list, in the place of the ping bars; false when the latency is unknown. */
 	public static boolean drawTabPing(int width, int x, int y, int ms) {
 		if (ms < 0) {

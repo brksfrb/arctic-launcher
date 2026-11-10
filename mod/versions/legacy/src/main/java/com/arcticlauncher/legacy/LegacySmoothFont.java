@@ -215,6 +215,7 @@ public final class LegacySmoothFont {
 	}
 
 	public static float advance(char c) {
+		if (com.arcticlauncher.client.feature.EmoteAtlas.glyph(c) != null) return com.arcticlauncher.client.feature.EmoteAtlas.ADVANCE;
 		if (c == ' ') {
 			return SPACE;
 		}
