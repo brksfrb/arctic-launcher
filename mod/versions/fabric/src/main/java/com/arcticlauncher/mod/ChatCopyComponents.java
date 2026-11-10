@@ -4,7 +4,6 @@ import com.arcticlauncher.client.feature.ChatCopy;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
-import net.minecraft.network.chat.HoverEvent;
 
 /** Attach source text before wrapping, without replacing any server click/hover/insertion events. */
 public final class ChatCopyComponents {
@@ -29,15 +28,6 @@ public final class ChatCopyComponents {
 		//#else
 		Style style = message.getStyle().copy().inheritFrom(parent);
 		//#endif
-		if (data.target && ChatCopy.enabled()) {
-			//#if MC >= 1.21.5
-			style = style.withHoverEvent(new HoverEvent.ShowText(Compat.literal("Click to copy")));
-			//#elif MC >= 1.16
-			style = style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Compat.literal("Click to copy")));
-			//#else
-			style.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Compat.literal("Click to copy")));
-			//#endif
-		}
 		((ChatCopy.Tagged) (Object) style).arctic$copyData(data);
 		copy.setStyle(style);
 		for (Component child : message.getSiblings()) {

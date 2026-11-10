@@ -91,16 +91,29 @@ final class ChatCopyTest {
 			throw new AssertionError("body server click/hover/insertion changed");
 		if (!hover(ChatCopyComponents.tag(Compat.literal("probe"), "probe", false).getStyle()).isEmpty())
 			throw new AssertionError("plain body gained hover");
-		if (!"Click to copy".equals(hover(ChatCopyComponents.tag(Compat.literal("probe"), "probe", true).getStyle())))
+
+		Style existing = ChatCopyComponents.tag(Compat.literal("probe"), "probe", true).getStyle();
+		if (!"Click to copy".equals(hover(existing)))
 			throw new AssertionError("copy target missing hover");
 		ArcticClient.config().chatCopy = false;
-		if (!hover(ChatCopyComponents.tag(Compat.literal("probe"), "probe", true).getStyle()).isEmpty())
+		if (!hover(existing).isEmpty())
+			throw new AssertionError("existing enabled target retained hover after disabling");
+		Style receivedDisabled = ChatCopyComponents.tag(Compat.literal("probe"), "probe", true).getStyle();
+		if (!hover(receivedDisabled).isEmpty())
 			throw new AssertionError("disabled target gained hover");
+		if (tagged.getHoverEvent() != event)
+			throw new AssertionError("disabled body lost server hover");
 		ArcticClient.config().chatCopy = true;
+		if (!"Click to copy".equals(hover(existing)) || !"Click to copy".equals(hover(receivedDisabled)))
+			throw new AssertionError("existing targets missing hover after enabling");
 		ArcticClient.config().chatOff = true;
-		if (!hover(ChatCopyComponents.tag(Compat.literal("probe"), "probe", true).getStyle()).isEmpty())
-			throw new AssertionError("hidden chat target gained hover");
+		if (!hover(existing).isEmpty() || !hover(receivedDisabled).isEmpty())
+			throw new AssertionError("hidden chat target retained hover");
 		ArcticClient.config().chatOff = false;
+		if (!"Click to copy".equals(hover(existing)) || !"Click to copy".equals(hover(receivedDisabled)))
+			throw new AssertionError("existing targets missing hover after showing chat");
+		if (tagged.getHoverEvent() != event)
+			throw new AssertionError("body server hover changed after toggles");
 	}
 
 	private static void phase(int phase) {

@@ -20,10 +20,6 @@ public final class LegacyChatCopy {
 		Text copy = message.copy();
 		copy.getSiblings().clear();
 		Style style = message.getStyle().deepCopy();
-		if (target && ChatCopy.enabled()) {
-			style.setHoverEvent(new net.minecraft.text.HoverEvent(net.minecraft.text.HoverEvent.Action.SHOW_TEXT,
-					new net.minecraft.text.LiteralText("Click to copy")));
-		}
 		((ChatCopy.Tagged) style).arctic$copyData(new ChatCopy.Data(text, target));
 		copy.setStyle(style);
 		for (Object child : message.getSiblings()) {
