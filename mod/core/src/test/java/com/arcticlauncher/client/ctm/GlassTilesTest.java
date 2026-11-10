@@ -116,9 +116,9 @@ class GlassTilesTest {
 		GlassPacks packs = GlassPacks.load(access);
 		assertEquals(0xff00001a, packs.tile("minecraft:block/red_stained_glass", 30 * 47 + 26).getRGB(0, 0));
 		assertEquals(0xff000000, packs.tile("minecraft:blocks/glass_red", 30 * 47).getRGB(0, 0));
-		assertNull(packs.tile("minecraft:block/blue_stained_glass", 26));
+		assertNull(packs.tile("minecraft:block/blue_stained_glass", GlassTiles.bank("minecraft:blue_stained_glass", 0) * 47 + 26));
 		resources.remove("minecraft:optifine/ctm/glass/46.png");
-		assertNull(GlassPacks.load(access).tile("minecraft:block/red_stained_glass", 26));
+		assertNull(GlassPacks.load(access).tile("minecraft:block/red_stained_glass", 30 * 47 + 26));
 		assertEquals("minecraft:light_gray_stained_glass", GlassPacks.canonical("blocks/glass_silver"));
 	}
 
