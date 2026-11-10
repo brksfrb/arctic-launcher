@@ -10,6 +10,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.Minecraft;
+import net.minecraft.resources.Identifier;
 import org.lwjgl.system.MemoryUtil;
 //#if MC >= 1.20.5
 import net.minecraft.client.gui.font.FontOption;
@@ -33,7 +34,6 @@ public final class SmoothFont {
 	private static final String FILE = "/resourcepacks/smooth_font/assets/arctic/font/inter.ttf";
 	/** Size in GUI pixels, as in the 26.1+ pack's font files. */
 	private static final float SIZE = 8.5f;
-	private static final String DEFAULT_FONT = "minecraft:default";
 	/** Inter's space is narrow for Minecraft text; the 26.1+ pack uses this too. */
 	public static final float SPACE = 2.5f;
 	//#if MC < 1.20.5
@@ -109,8 +109,9 @@ public final class SmoothFont {
 		return Math.max(1, (int) Math.round(Minecraft.getInstance().getWindow().getGuiScale()));
 	}
 
-	public static boolean isDefault(Object fontName) {
-		return fontName != null && DEFAULT_FONT.equals(fontName.toString());
+	public static boolean isDefault(Identifier fontName) {
+		return fontName != null && "minecraft".equals(fontName.getNamespace())
+				&& "default".equals(fontName.getPath());
 	}
 
 	/** The default font's providers, with Inter first when Fancy is on. */
@@ -145,7 +146,16 @@ public final class SmoothFont {
 			return null;
 		}
 		try {
+			//#if MC < 1.21.9
+			ScaledFont.clear();
+			//#else
+			ScaledInter.clear();
+			//#endif
 			GlyphProvider made = open(font, scale);
+			//#if MC < 1.15
+			if (heldFont != null) MemoryUtil.memFree(heldFont);
+			heldFont = font;
+			//#endif
 			loadedScale = scale;
 			//#if MC >= 1.20.5
 			if (last != null) {
@@ -162,7 +172,7 @@ public final class SmoothFont {
 	}
 
 	//#if MC >= 1.20.5
-	private static GlyphProvider open(ByteBuffer font, int scale) throws IOException {
+	static GlyphProvider open(ByteBuffer font, int scale) throws IOException {
 		FT_Face face;
 		synchronized (FreeTypeUtil.LIBRARY_LOCK) {
 			try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -178,7 +188,7 @@ public final class SmoothFont {
 		return new TrueTypeGlyphProvider(font, face, SIZE, scale, 0f, 0f, "");
 	}
 	//#else
-	private static GlyphProvider open(ByteBuffer font, int scale) throws IOException {
+	static GlyphProvider open(ByteBuffer font, int scale) throws IOException {
 		STBTTFontinfo info = STBTTFontinfo.malloc();
 		if (!STBTruetype.stbtt_InitFont(info, font)) {
 			info.free();
@@ -190,11 +200,7 @@ public final class SmoothFont {
 		//#if MC >= 1.15
 		return new TrueTypeGlyphProvider(font, info, size, scale, 0f, STB_SHIFT_Y, "");
 		//#else
-		// 1.14's provider doesn't own the font's memory: it is kept here until the next load replaces it.
-		if (heldFont != null) {
-			MemoryUtil.memFree(heldFont);
-		}
-		heldFont = font;
+		// Before 1.15 the caller, rather than the provider, owns the font bytes.
 		//#if MC >= 1.14
 		return new TrueTypeGlyphProvider(info, size, scale, 0f, STB_SHIFT_Y, "");
 		//#else
@@ -218,7 +224,7 @@ public final class SmoothFont {
 	//#endif
 
 	/** Inter from the mod jar, in native memory (the provider frees it when closed). */
-	private static ByteBuffer read() {
+	static ByteBuffer read() {
 		try (InputStream in = SmoothFont.class.getResourceAsStream(FILE)) {
 			if (in == null) {
 				ArcticMod.LOG.warn("smooth font: {} is missing from the mod", FILE);

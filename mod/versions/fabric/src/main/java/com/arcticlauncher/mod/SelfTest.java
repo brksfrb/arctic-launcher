@@ -56,6 +56,14 @@ final class SelfTest {
 		}
 
 		//#endif
+		//#if MC >= 1.21.11
+		//#if DEV
+		if ("nametagfont".equals(System.getProperty("arctic.selftest"))) {
+			NametagFontTest.start();
+			return;
+		}
+		//#endif
+		//#endif
 		//#if MC >= 1.19.4
 		if ("title-compat".equals(System.getProperty("arctic.selftest"))) {
 			TitleCompatTest.start();
