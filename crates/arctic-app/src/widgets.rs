@@ -595,9 +595,11 @@ impl ModalCombo {
             content.x + 2.0 * margin.x,
             (content.y + 2.0 * margin.y).max(ui.spacing().interact_size.y),
         );
-        let rect = Rect::from_min_size(ui.cursor().min, outer);
+        // The cursor's minimum is -infinity in right-to-left layouts (e.g. the
+        // screenshot viewer's action row). Let the layout place this control,
+        // otherwise its enclosing dialog becomes infinitely wide.
+        let (_, rect) = ui.allocate_space(outer);
         let response = ui.interact(rect, button_id, Sense::click());
-        ui.advance_cursor_after_rect(rect);
         response.widget_info(|| {
             let mut info = egui::WidgetInfo::new(egui::WidgetType::ComboBox);
             info.enabled = ui.is_enabled();

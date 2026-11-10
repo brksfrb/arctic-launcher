@@ -563,3 +563,224 @@ impl ArcticApp {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::Tab;
+    use arctic_core::{profiles::ProfileStore, settings::Settings, storage::DataDirs};
+    use egui::{Event, Modifiers, PointerButton, Pos2, Rect};
+
+    fn app(ctx: &egui::Context, root: &std::path::Path) -> ArcticApp {
+        let dirs = DataDirs::new(root.to_owned());
+        let profiles = ProfileStore::load_or_init(&dirs).unwrap();
+        let scoped = profiles.scoped(&dirs);
+        let settings = Settings {
+            onboarded: true,
+            intro: false,
+            check_updates_on_start: false,
+            auto_install_updates: false,
+            ..Default::default()
+        };
+        settings.save(&scoped).unwrap();
+        let (_, rx) = std::sync::mpsc::channel();
+        let mut app = ArcticApp::new(
+            &eframe::CreationContext::_new_kittest(ctx.clone()),
+            dirs,
+            profiles,
+            crate::startup::StartupOptions::default(),
+            rx,
+        );
+        app.tab = Tab::Screenshots;
+        app.software_gl = true;
+        let file = root.join("test screenshot.png");
+        image::RgbaImage::from_pixel(960, 540, image::Rgba([80, 180, 240, 255]))
+            .save(&file)
+            .unwrap();
+        let shots: Vec<_> = (0..36)
+            .map(|i| Shot {
+                path: if i == 0 {
+                    file.clone()
+                } else {
+                    root.join(format!("{i}.png"))
+                },
+                instance_id: "vanilla".into(),
+                instance_name: "Vanilla".into(),
+                taken: std::time::SystemTime::UNIX_EPOCH,
+                size: 100,
+            })
+            .collect();
+        app.shots.thumbs = shots
+            .iter()
+            .map(|s| (s.path.clone(), Thumb::Failed))
+            .collect();
+        app.shots.shots = Some(shots);
+        app.shots.loading = true;
+        app.on_friends(Ok((
+            arctic_core::friends::Profile {
+                id: "proof".into(),
+                name: "ShotsProof".into(),
+                code: String::new(),
+                verified: false,
+                has_recovery: false,
+                discord: None,
+                accounts: vec![],
+                settings: Default::default(),
+            },
+            arctic_core::friends::Overview {
+                friends: vec![arctic_core::friends::Friend {
+                    id: "fixture-friend".into(),
+                    name: "Fixture friend".into(),
+                    accounts: vec![],
+                    online: false,
+                    in_game: false,
+                    server: None,
+                    takes_invites: false,
+                    verified: false,
+                    unread: 0,
+                }],
+                ..Default::default()
+            },
+        )));
+        app
+    }
+
+    fn frame(
+        ctx: &egui::Context,
+        app: &mut ArcticApp,
+        scale: f32,
+        time: f64,
+        events: Vec<Event>,
+    ) -> egui::FullOutput {
+        let mut raw = egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(
+                Pos2::ZERO,
+                vec2(1920.0, 1080.0) / scale,
+            )),
+            time: Some(time),
+            events,
+            ..Default::default()
+        };
+        raw.viewports
+            .get_mut(&egui::ViewportId::ROOT)
+            .unwrap()
+            .native_pixels_per_point = Some(scale);
+        let mut output = ctx.run_ui(raw, |ui| app.shell(ui));
+        output.textures_delta.clear();
+        output
+    }
+
+    fn click(pos: Pos2) -> Vec<Event> {
+        vec![
+            Event::PointerMoved(pos),
+            Event::PointerButton {
+                pos,
+                button: PointerButton::Primary,
+                pressed: true,
+                modifiers: Modifiers::NONE,
+            },
+            Event::PointerButton {
+                pos,
+                button: PointerButton::Primary,
+                pressed: false,
+                modifiers: Modifiers::NONE,
+            },
+        ]
+    }
+
+    #[test]
+    fn screenshots_stay_interactive_until_a_thumbnail_is_opened() {
+        for scale in [1.0, 1.25, 1.5] {
+            let ctx = egui::Context::default();
+            let root = tempfile::tempdir().unwrap();
+            let mut app = app(&ctx, root.path());
+            let mut output = frame(&ctx, &mut app, scale, 1.0, vec![]);
+            for n in 1..5 {
+                output = frame(&ctx, &mut app, scale, 1.0 + n as f64 / 60.0, vec![]);
+            }
+            assert!(app.shots.open.is_none());
+            assert!(ctx.memory(|m| m.top_modal_layer().is_none()));
+            assert!(ctx.memory(|m| m.allows_interaction(egui::LayerId::background())));
+            for id in ["shot_preview", "shot_motion", "shot_handoff"] {
+                let order = if id == "shot_handoff" {
+                    egui::Order::Tooltip
+                } else {
+                    egui::Order::Foreground
+                };
+                assert!(!ctx.memory(|m| {
+                    m.areas()
+                        .is_visible(&egui::LayerId::new(order, Id::new(id)))
+                }));
+            }
+            let thumb = output
+                .shapes
+                .iter()
+                .find_map(|s| match &s.shape {
+                    egui::Shape::Rect(r) if r.rect.size() == vec2(THUMB_W, THUMB_H) => Some(r.rect),
+                    _ => None,
+                })
+                .expect("the grid must contain clickable thumbnails");
+            frame(&ctx, &mut app, scale, 2.0, click(thumb.center()));
+            assert!(
+                app.shots.open.is_some(),
+                "thumbnail did not take the click at {scale}x"
+            );
+            for n in 1..30 {
+                output = frame(&ctx, &mut app, scale, 2.0 + n as f64 / 30.0, vec![]);
+            }
+            let dialog = ctx
+                .memory(|m| m.area_rect(Id::new("shot_preview")))
+                .expect("viewer must open");
+            assert!(
+                ctx.content_rect().contains_rect(dialog),
+                "viewer off screen at {scale}x: {dialog:?}"
+            );
+            let close = output
+                .shapes
+                .iter()
+                .find_map(|s| match &s.shape {
+                    egui::Shape::Text(t) if t.galley.text() == "Close" => {
+                        Some(t.pos + t.galley.size() / 2.0)
+                    }
+                    _ => None,
+                })
+                .expect("the viewer must have a visible Close button");
+            frame(&ctx, &mut app, scale, 3.1, click(close));
+            for n in 1..15 {
+                frame(&ctx, &mut app, scale, 3.1 + n as f64 / 30.0, vec![]);
+            }
+            assert!(app.shots.open.is_none(), "Close must dismiss the viewer");
+            assert!(ctx.memory(|m| m.top_modal_layer().is_none()));
+            assert!(ctx.memory(|m| m.allows_interaction(egui::LayerId::background())));
+            frame(&ctx, &mut app, scale, 4.0, click(thumb.center()));
+            assert!(
+                app.shots.open.is_some(),
+                "grid must accept clicks after closing"
+            );
+            for n in 1..20 {
+                frame(&ctx, &mut app, scale, 4.0 + n as f64 / 30.0, vec![]);
+            }
+            frame(
+                &ctx,
+                &mut app,
+                scale,
+                5.0,
+                vec![Event::Key {
+                    key: egui::Key::Escape,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: Modifiers::NONE,
+                }],
+            );
+            for n in 1..15 {
+                frame(&ctx, &mut app, scale, 5.0 + n as f64 / 30.0, vec![]);
+            }
+            assert!(
+                app.shots.open.is_none(),
+                "Escape must also close the viewer"
+            );
+            assert!(ctx.memory(|m| m.top_modal_layer().is_none()));
+        }
+    }
+}
