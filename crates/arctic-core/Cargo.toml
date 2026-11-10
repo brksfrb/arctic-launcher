@@ -12,6 +12,8 @@ authors.workspace = true
 arctic-mesh = { path = "../arctic-mesh" }
 arctic-ping = { path = "../arctic-ping" }
 base64 = "0.23.1"
+# Read the OS local offset, independently of the bundled game JRE's tzdb.
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 dirs = "7.0.0"
 flate2 = "1.1.10"
 hex = "0.4.3"
