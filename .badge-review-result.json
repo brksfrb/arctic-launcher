@@ -1,0 +1,12 @@
+{
+  "run": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800904040",
+  "error": "GitHub Actions is not permitted to create or approve pull requests.",
+  "ci": "dispatched",
+  "ciRuns": [
+    {
+      "url": "https://github.com/brksfrb/arctic-launcher/actions/runs/42800919558",
+      "status": "queued",
+      "conclusion": null
+    }
+  ]
+}
