@@ -2,11 +2,11 @@
   "providers": [
     {
       "type": "bitmap",
-      "file": "arctic:font/badge2.png",
+      "file": "arctic:font/badge_ice_tile.png",
       "height": 8,
       "ascent": 7,
       "chars": [
-        ""
+        "\ue000"
       ]
     },
     {

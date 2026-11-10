@@ -78,7 +78,7 @@ abstract class PlayerTabOverlayMixin {
 		}
 		//#endif
 		if (com.arcticlauncher.client.feature.Badge.show(true, Compat.profileId(info.getProfile()))) {
-			cir.setReturnValue(Compat.empty().append(Compat.arcticBadgeWithGap()).append(cir.getReturnValue()));
+			cir.setReturnValue(Compat.empty().append(Compat.arcticBadgeWithGap(Compat.profileId(info.getProfile()), true)).append(cir.getReturnValue()));
 		}
 	}
 }

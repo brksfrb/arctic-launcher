@@ -13,38 +13,87 @@ public final class Badge {
 	public static final int TAGS_ONLY = 2;
 	public static final String[] WHERE = {"Player list and name tags", "Player list only", "Name tags only"};
 
-	/** {@link ClientConfig#badgeStyle}: the pictures (assets/arctic/badge*.png, font/badge*.json), local display only. */
-	public static final String[] STYLES = {"Snowflake", "Snowflake tile", "Round", "Letter A"};
-	/** The picture's side in GUI pixels, drawn from the top of the text line (the font's ascent is 7, its glyphs 8 high). */
+	/** A shipped style. IDs are the stable looks API values, never list positions. */
+	public static final class Style {
+		public final int id;
+		public final String label;
+		public final String texture;
+		public final String font;
+		public final boolean roleRecolor;
+
+		private Style(int id, String label, String texture, String font, boolean roleRecolor) {
+			this.id = id;
+			this.label = label;
+			this.texture = texture;
+			this.font = font;
+			this.roleRecolor = roleRecolor;
+		}
+	}
+
+	public static final java.util.List<Style> STYLES = java.util.Collections.unmodifiableList(java.util.Arrays.asList(
+			new Style(0, "Arctic logo", "badge", "badge", true),
+			new Style(1, "Ice tile", "badge_ice_tile", "badge_ice_tile", true),
+			new Style(2, "Line tile", "badge_line_tile", "badge_line_tile", true)));
 	public static final int SIZE = 8;
-	/** From the badge's left edge to the name: the picture, 1px of its own, and a 1px gap. Same on every version. */
-	public static final int ADVANCE = 10;
-	/** First private-use character of the badge pictures in the default font (1.13-1.15, where text styles have no font). */
+	public static final int TAB_SIZE = 9;
+	public static final int TEXTURE_SIZE = 256;
+	/** Bitmap fallback characters for versions before text styles could select fonts. */
 	public static final char GLYPH_BASE = '\uE0A0';
-	/** A 1px space in that font. */
 	public static final char GLYPH_GAP = '\uE0AF';
+	private static final int TAB_OFFSET = 0x100;
+	private static final char MARK_BASE = '\uE100';
 
-	/**
-	 * The blank text 1.8.9-1.12.2 (no fonts in text) put in front of a name: the text renderer draws the
-	 * picture over it and measures it as {@link #ADVANCE} wide whatever the font (three spaces if a
-	 * draw path is not hooked).
-	 */
-	public static final String MARK = "§r   ";
-
-	/** The chosen style, in range. */
-	public static int style() {
-		ClientConfig config = ArcticClient.config();
-		int style = config == null ? 0 : config.badgeStyle;
-		return style < 0 || style >= STYLES.length ? 0 : style;
+	public static Style definition(int id) {
+		for (Style style : STYLES) {
+			if (style.id == id) return style;
+		}
+		return STYLES.get(0);
 	}
 
-	/** The picture's file name without the folder: badge, badge1, ... */
+	public static int normalize(int id) {
+		return definition(id).id;
+	}
+
+	/** The wearer's published style, independent of this viewer's settings or cosmetic previews. */
+	public static int style(UUID wearer) {
+		return ArcticClient.looks() == null ? 0 : ArcticClient.looks().badgeStyle(wearer);
+	}
+
 	public static String name(int style) {
-		return style <= 0 ? "badge" : "badge" + style;
+		return definition(style).texture;
 	}
 
-	/** {@code -Darctic.selftest=badge}: every player has the badge, so a test world can show it. */
-	private static final boolean TEST = "badge".equals(System.getProperty("arctic.selftest"));
+	public static int size(boolean tab) {
+		return tab ? TAB_SIZE : SIZE;
+	}
+
+	public static int advance(boolean tab) {
+		return size(tab) + 2;
+	}
+
+	/** Carry wearer and placement through old String text APIs; never consult a local style while drawing. */
+	public static String mark(boolean tab, UUID wearer) {
+		return "\u00a7r" + (char) (MARK_BASE + style(wearer) + (tab ? TAB_OFFSET : 0)) + "\u00a7r";
+	}
+
+	public static boolean marked(String text) {
+		if (text == null || text.length() < 5 || !text.startsWith("\u00a7r") || !text.substring(3, 5).equals("\u00a7r")) return false;
+		int code = text.charAt(2) - MARK_BASE;
+		return code >= 0 && code < 128 || code >= TAB_OFFSET && code < TAB_OFFSET + 128;
+	}
+
+	public static boolean markedTab(String text) {
+		return text.charAt(2) - MARK_BASE >= TAB_OFFSET;
+	}
+
+	public static int markedStyle(String text) {
+		return normalize((text.charAt(2) - MARK_BASE) % TAB_OFFSET);
+	}
+
+	public static String unmark(String text) {
+		while (marked(text)) text = text.substring(5);
+		return text;
+	}
 
 	private Badge() {}
 
@@ -56,9 +105,6 @@ public final class Badge {
 		}
 		if (tab ? config.badgeWhere == TAGS_ONLY : !config.badgeNametags || config.badgeWhere == TAB_ONLY) {
 			return false;
-		}
-		if (TEST) {
-			return true;
 		}
 		if (config.badgeOthersOnly) {
 			Platform platform = ArcticClient.platform();

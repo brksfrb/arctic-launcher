@@ -5,6 +5,8 @@ public final class Look {
 	public final String skin;
 	public final boolean slim;
 	public final String cape;
+	/** The wearer's published badge, 0 when absent or unknown. */
+	public final int badgeStyle;
 	/** Worn 3D cosmetics (catalog ids). */
 	public final java.util.List<String> cosmetics;
 	/** Playing with Arctic right now (checked in recently). */
@@ -19,6 +21,12 @@ public final class Look {
 
 	Look(String skin, boolean slim, String cape, java.util.List<String> cosmetics, boolean arctic, long fetched,
 			java.util.Map<String, Fit> fits) {
+		this(skin, slim, cape, cosmetics, arctic, fetched, fits, 0);
+	}
+
+	Look(String skin, boolean slim, String cape, java.util.List<String> cosmetics, boolean arctic, long fetched,
+			java.util.Map<String, Fit> fits, int badgeStyle) {
+		this.badgeStyle = com.arcticlauncher.client.feature.Badge.normalize(badgeStyle);
 		this.skin = skin;
 		this.slim = slim;
 		this.cape = cape;

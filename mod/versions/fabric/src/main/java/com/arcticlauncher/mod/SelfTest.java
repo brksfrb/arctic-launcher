@@ -86,10 +86,12 @@ final class SelfTest {
 			return;
 		}
 		//#endif
+		//#if DEV
 		if (BadgeTest.requested()) {
 			BadgeTest.start();
 			return;
 		}
+		//#endif
 		if (WorldTest.requested()) {
 			WorldTest.start();
 			return;

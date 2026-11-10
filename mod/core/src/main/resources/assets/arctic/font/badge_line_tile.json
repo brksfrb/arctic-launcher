@@ -2,11 +2,11 @@
   "providers": [
     {
       "type": "bitmap",
-      "file": "arctic:font/badge3.png",
+      "file": "arctic:font/badge_line_tile.png",
       "height": 8,
       "ascent": 7,
       "chars": [
-        ""
+        "\ue000"
       ]
     },
     {

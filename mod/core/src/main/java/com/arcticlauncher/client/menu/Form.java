@@ -201,6 +201,31 @@ final class Form {
 		return String.format(java.util.Locale.ROOT, "%06X", argb & 0xFFFFFF);
 	}
 
+	/** Images and labels come from the style registry; adding a style needs no picker changes. */
+	void badgeStyles() {
+		section("Your badge");
+		final com.arcticlauncher.client.looks.Looks looks = ArcticClient.looks();
+		if (looks != null) looks.refreshOwn();
+		int columns = Math.max(1, w / 100);
+		int index = 0;
+		int top = y;
+		for (com.arcticlauncher.client.feature.Badge.Style style : com.arcticlauncher.client.feature.Badge.STYLES) {
+			if (index % columns == 0) top = row(58);
+			put(new com.arcticlauncher.client.ui.BadgeStyleButton(style,
+					() -> looks == null || looks.myLook() == null ? 0 : looks.myLook().badgeStyle,
+					() -> looks != null && looks.signedIn() && !looks.busy(),
+					() -> looks.wearBadgeStyle(style.id)), x + index % columns * 100, top, 94, 52);
+			index++;
+		}
+		put(new Label("", Label.Kind.MUTED) {
+			@Override protected void draw(com.arcticlauncher.client.gfx.Gfx g, com.arcticlauncher.client.style.Style s, int mx, int my, float dt) {
+				text(looks == null || !looks.signedIn() ? "Launch with your Arctic account to choose a badge."
+						: looks.status().isEmpty() ? "Everyone sees the badge you choose." : looks.status());
+				super.draw(g, s, mx, my, dt);
+			}
+		}, x + 4, row(16), w - 4, 16);
+	}
+
 	/** "Label   [One] [Two] [Three]": pick one option. */
 	void choice(String label, String[] options, final java.util.function.IntSupplier get, final java.util.function.IntConsumer set) {
 		int top = row(ROW);
