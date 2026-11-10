@@ -1,5 +1,11 @@
 //! Shared Modrinth preview. A modal leaves the browser and its scroll state mounted.
-use std::sync::mpsc::{self, Receiver};
+use std::{
+    collections::HashMap,
+    sync::{
+        Arc,
+        mpsc::{self, Receiver},
+    },
+};
 
 use arctic_core::instances::Instance;
 use arctic_core::mods::{self, ProjectDetail, ProjectHit, packs::PackKind};
@@ -21,9 +27,38 @@ pub struct Preview {
     detail: Option<DetailResult>,
     markdown: CommonMarkCache,
     enlarged: Option<String>,
+    context: egui::Context,
+    gallery: HashMap<String, IconState>,
+    body: String,
+    html: Arc<HashMap<String, String>>,
+}
+
+impl Drop for Preview {
+    fn drop(&mut self) {
+        for state in self.gallery.values() {
+            if let IconState::Ready(uri) = state {
+                self.context.forget_image(uri);
+            }
+        }
+    }
 }
 
 impl Preview {
+    pub(super) fn gallery_result(&mut self, url: String, result: Result<Vec<u8>, String>) {
+        if !matches!(self.gallery.get(&url), Some(IconState::Loading)) {
+            return;
+        }
+        let state = match result {
+            Ok(bytes) => {
+                let uri = super::icon_texture_uri(&url).replacen("modicon/", "gallery/", 1);
+                self.context.include_bytes(uri.clone(), bytes);
+                IconState::Ready(uri)
+            }
+            Err(_) => IconState::Failed,
+        };
+        self.gallery.insert(url, state);
+    }
+
     fn for_instance(self, instance_id: &str) -> Option<Self> {
         (self.instance_id == instance_id).then_some(self)
     }
@@ -79,6 +114,24 @@ fn html_text(html: &str) -> String {
         .unwrap_or_default()
 }
 
+// Match the viewer's HTML-block aggregation, including blocks split into
+// multiple parser events. Inline HTML is rendered as text by the viewer.
+fn prepare_html(body: &str) -> HashMap<String, String> {
+    let mut prepared = HashMap::new();
+    let mut block = String::new();
+    for event in Parser::new_ext(body, parser_options()) {
+        match event {
+            Event::Html(html) => block.push_str(&html),
+            Event::End(pulldown_cmark::TagEnd::HtmlBlock) => {
+                prepared.insert(block.clone(), html_text(&block));
+                block.clear();
+            }
+            _ => {}
+        }
+    }
+    prepared
+}
+
 impl ArcticApp {
     pub(super) fn open_project_preview(
         &mut self,
@@ -97,6 +150,10 @@ impl ArcticApp {
             detail: None,
             markdown: CommonMarkCache::default(),
             enlarged: None,
+            context: ctx.clone(),
+            gallery: HashMap::new(),
+            body: String::new(),
+            html: Arc::default(),
         });
     }
 
@@ -140,7 +197,13 @@ impl ArcticApp {
         };
         if preview.detail.is_none() {
             match preview.receiver.try_recv() {
-                Ok(result) => preview.detail = Some(result),
+                Ok(result) => {
+                    if let Ok(detail) = &result {
+                        preview.body = prepare_description(&detail.body, &mut preview.markdown);
+                        preview.html = Arc::new(prepare_html(&preview.body));
+                    }
+                    preview.detail = Some(result);
+                }
                 Err(mpsc::TryRecvError::Disconnected) => {
                     preview.detail = Some(Err("Project request stopped. Please retry.".into()))
                 }
@@ -260,7 +323,10 @@ impl ArcticApp {
                             }
                             for image in &detail.gallery {
                                 let url = image.raw_url.as_deref().unwrap_or(&image.url);
-                                if self.preview_image(ui, url, 360.0).clicked() {
+                                if self
+                                    .preview_image(ui, &mut preview.gallery, url, 360.0)
+                                    .clicked()
+                                {
                                     preview.enlarged = Some(url.to_owned());
                                 }
                                 if let Some(title) = &image.title {
@@ -278,13 +344,18 @@ impl ArcticApp {
                             ui.label(detail.loaders.join(", "));
                             ui.separator();
                             ui.heading("About this project");
-                            let body = prepare_description(&detail.body, &mut preview.markdown);
-                            let render_html = |ui: &mut egui::Ui, html: &str| {
-                                ui.label(html_text(html));
+                            let prepared_html = Arc::clone(&preview.html);
+                            let render_html = move |ui: &mut egui::Ui, html: &str| {
+                                ui.label(
+                                    prepared_html
+                                        .get(html)
+                                        .map(String::as_str)
+                                        .unwrap_or_default(),
+                                );
                             };
                             CommonMarkViewer::new()
                                 .render_html_fn(Some(&render_html))
-                                .show(ui, &mut preview.markdown, &body);
+                                .show(ui, &mut preview.markdown, &preview.body);
                         }
                     });
             });
@@ -296,7 +367,12 @@ impl ArcticApp {
                     if ui.button("Back to preview · Esc").clicked() {
                         preview.enlarged = None;
                     }
-                    self.preview_image(ui, &url, (ctx.content_rect().height() - 150.0).max(200.0));
+                    self.preview_image(
+                        ui,
+                        &mut preview.gallery,
+                        &url,
+                        (ctx.content_rect().height() - 150.0).max(200.0),
+                    );
                 });
         }
         if !close {
@@ -304,7 +380,13 @@ impl ArcticApp {
         }
     }
 
-    fn preview_image(&mut self, ui: &mut egui::Ui, url: &str, height: f32) -> egui::Response {
+    fn preview_image(
+        &mut self,
+        ui: &mut egui::Ui,
+        gallery: &mut HashMap<String, IconState>,
+        url: &str,
+        height: f32,
+    ) -> egui::Response {
         let size = egui::vec2(ui.available_width(), height);
         let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
         if !ui.is_rect_visible(rect) {
@@ -314,7 +396,7 @@ impl ArcticApp {
             ui.put(rect, egui::Label::new("Image URL unavailable"));
             return response;
         }
-        match self.inst.icons.get(url).cloned() {
+        match gallery.get(url).cloned() {
             Some(IconState::Ready(uri)) => ui
                 .put(
                     rect,
@@ -330,7 +412,7 @@ impl ArcticApp {
             }
             state => {
                 if state.is_none() {
-                    self.inst.icons.insert(url.to_owned(), IconState::Loading);
+                    gallery.insert(url.to_owned(), IconState::Loading);
                     self.tasks.mod_gallery_image(url.to_owned());
                 }
                 ui.put(rect, egui::Spinner::new());
@@ -344,10 +426,9 @@ impl ArcticApp {
 mod tests {
     use super::*;
 
-    #[test]
-    fn preview_cannot_move_to_another_instance_after_navigation() {
+    fn preview_fixture() -> Preview {
         let (_, receiver) = mpsc::channel();
-        let preview = Preview {
+        Preview {
             instance_id: "instance-a".into(),
             hit: ProjectHit {
                 project_id: "project".into(),
@@ -364,9 +445,49 @@ mod tests {
             detail: None,
             markdown: CommonMarkCache::default(),
             enlarged: None,
+            context: egui::Context::default(),
+            gallery: HashMap::new(),
+            body: String::new(),
+            html: Arc::default(),
+        }
+    }
+
+    #[test]
+    fn gallery_cache_is_released_on_drop_and_reopening_can_reload() {
+        let mut preview = preview_fixture();
+        let ctx = preview.context.clone();
+        let url = "https://example.com/screenshot.png".to_owned();
+        preview.gallery.insert(url.clone(), IconState::Loading);
+        preview.gallery_result(url.clone(), Ok(vec![1, 2, 3]));
+        let IconState::Ready(uri) = preview.gallery.get(&url).unwrap() else {
+            panic!("image not ready")
         };
-        let preview = preview.for_instance("instance-a").unwrap();
+        let uri = uri.clone();
+        assert!(ctx.try_load_bytes(&uri).is_ok());
+        drop(preview);
+        assert!(ctx.try_load_bytes(&uri).is_err());
+        let mut reopened = preview_fixture();
+        reopened.gallery_result(url.clone(), Ok(vec![4, 5, 6]));
+        assert!(!reopened.gallery.contains_key(&url));
+        assert!(ctx.try_load_bytes(&uri).is_err());
+        reopened.gallery.insert(url.clone(), IconState::Loading);
+        reopened.gallery_result(url, Ok(vec![4, 5, 6]));
+        assert!(reopened.context.try_load_bytes(&uri).is_ok());
+    }
+
+    #[test]
+    fn preview_cannot_move_to_another_instance_after_navigation() {
+        let preview = preview_fixture().for_instance("instance-a").unwrap();
         assert!(preview.for_instance("instance-b").is_none());
+    }
+
+    #[test]
+    fn html_blocks_are_prepared_as_the_viewer_aggregates_them() {
+        let html = "<div>\n<p>Hello</p>\n<p>World</p>\n</div>\n";
+        let prepared = prepare_html(html);
+        let text = prepared.get(html).unwrap();
+        assert!(text.contains("Hello"));
+        assert!(text.contains("World"));
     }
 
     #[test]

@@ -555,6 +555,11 @@ impl ArcticApp {
                     self.refresh_mods(&instance_id);
                 }
             }
+            Event::ModGalleryImage(url, result) => {
+                if let Some(preview) = &mut self.inst.preview {
+                    preview.gallery_result(url, result);
+                }
+            }
             Event::ModIcon(url, result) => {
                 let state = match result {
                     Ok(bytes) => {
