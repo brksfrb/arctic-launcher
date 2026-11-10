@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArgs;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.mojang.blaze3d.platform.GlStateManager;
 import org.lwjgl.opengl.GL11;
@@ -84,32 +85,37 @@ abstract class SmoothTextRendererMixin {
 		}
 	}
 
-	/** One character at the pen. */
-	@Inject(method = "drawLayer(CZ)F", at = @At("HEAD"), cancellable = true)
-	private void arctic$draw(char c, boolean italic, CallbackInfoReturnable<Float> cir) {
+	@Shadow
+	private float drawLayer(char c, boolean italic) {
+		throw new AssertionError();
+	}
+
+	/** One character at the pen; a direct fallback avoids a cancellable callback per vanilla glyph. */
+	@Redirect(method = "draw(Ljava/lang/String;Z)V", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/client/font/TextRenderer;drawLayer(CZ)F"))
+	private float arctic$draw(TextRenderer renderer, char c, boolean italic) {
 		if (!arctic$smooth()) {
-			return;
+			return drawLayer(c, italic);
 		}
 		// Bold: the game's way thickens a bitmap font with a second copy a whole pixel over, which on a
 		// thin font (and a big title) reads as two letters. One pass, thickened a little, instead.
 		boolean second = bold && arctic$boldSecond;
 		arctic$boldSecond = bold && !arctic$boldSecond;
 		if (c == ' ') {
-			cir.setReturnValue(arctic$returned(c));
-			return;
+			return arctic$returned(c);
 		}
 		LegacySmoothFont.Glyph glyph = LegacySmoothFont.glyph(c);
 		if (glyph != null) {
 			if (second) {
-				cir.setReturnValue(arctic$returned(c));
-				return;
+				return arctic$returned(c);
 			}
 			LegacySmoothFont.draw(glyph, x, y, italic);
 			if (bold) {
 				LegacySmoothFont.draw(glyph, x + LegacySmoothFont.BOLD_THICKEN, y, italic);
 			}
-			cir.setReturnValue(arctic$returned(c));
+			return arctic$returned(c);
 		}
+		return drawLayer(c, italic);
 	}
 
 	/**

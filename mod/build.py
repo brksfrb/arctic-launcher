@@ -64,7 +64,7 @@ def mirror(src, dst):
 
 def has_chatcopy_proof(jar):
     """Reject proof helpers and their anonymous/nested classes from releases."""
-    forbidden = {"ChatCopyTest", "LegacyChatCopyTest", "ChatCopyProof"}
+    forbidden = {"ChatCopyTest", "LegacyChatCopyTest", "ChatCopyProof", "NametagFontTest", "LegacyNametagFontTest"}
     return any(Path(name).stem.split("$", 1)[0] in forbidden for name in jar.namelist())
 
 
