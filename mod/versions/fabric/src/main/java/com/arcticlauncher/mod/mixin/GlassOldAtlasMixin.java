@@ -43,7 +43,7 @@ abstract class GlassOldAtlasMixin {
 		Collection<TextureAtlasSprite.Info> expanded = new ArrayList<>(cir.getReturnValue());
 		for (TextureAtlasSprite.Info info : cir.getReturnValue()) {
 			if (!GlassTiles.glass(info.name().toString())) continue;
-			for (int i = 0; i < GlassTiles.COUNT; i++) expanded.add(new TextureAtlasSprite.Info(GlassImages.id(GlassTiles.variant(info.name().toString(), i)), info.width(), info.height(), ((GlassInfoAccess) (Object) info).arctic$metadata()));
+			for (int i = 0; i < GlassTiles.VARIANTS; i++) expanded.add(new TextureAtlasSprite.Info(GlassImages.id(GlassTiles.variant(info.name().toString(), i)), info.width(), info.height(), ((GlassInfoAccess) (Object) info).arctic$metadata()));
 		}
 		cir.setReturnValue(expanded);
 	}
@@ -54,7 +54,7 @@ abstract class GlassOldAtlasMixin {
 		Collection<TextureAtlasSprite> expanded = new ArrayList<>(cir.getReturnValue());
 		for (TextureAtlasSprite sprite : cir.getReturnValue()) {
 			if (!GlassTiles.glass(sprite.getName().toString())) continue;
-			for (int i = 0; i < GlassTiles.COUNT; i++) expanded.add(GlassOldSpriteAccess.arctic$new(GlassImages.id(GlassTiles.variant(sprite.getName().toString(), i)), sprite.getWidth(), sprite.getHeight()));
+			for (int i = 0; i < GlassTiles.VARIANTS; i++) expanded.add(GlassOldSpriteAccess.arctic$new(GlassImages.id(GlassTiles.variant(sprite.getName().toString(), i)), sprite.getWidth(), sprite.getHeight()));
 		}
 		cir.setReturnValue(expanded);
 	}
@@ -66,7 +66,7 @@ abstract class GlassOldAtlasMixin {
 		if (!GlassCtm.available()) return;
 		for (Identifier name : new ArrayList<>(sprites)) {
 			if (!GlassTiles.glass(name.toString())) continue;
-			for (int i = 0; i < GlassTiles.COUNT; i++) sprites.add(GlassImages.id(GlassTiles.variant(name.toString(), i)));
+			for (int i = 0; i < GlassTiles.VARIANTS; i++) sprites.add(GlassImages.id(GlassTiles.variant(name.toString(), i)));
 		}
 	}
 	//#endif
