@@ -16,6 +16,7 @@ class ControllerTest {
 	private static final class Game implements GamepadHost {
 		final Gamepad state = new Gamepad();
 		boolean plugged = true;
+		int reads;
 		final Set<GameKey> down = EnumSet.noneOf(GameKey.class);
 		final Set<GameKey> keyboard = EnumSet.noneOf(GameKey.class);
 		final List<String> did = new ArrayList<String>();
@@ -25,6 +26,7 @@ class ControllerTest {
 
 		@Override
 		public boolean readGamepad(Gamepad pad) {
+			reads++;
 			pad.copyFrom(state);
 			return plugged;
 		}
@@ -92,6 +94,34 @@ class ControllerTest {
 	}
 
 	private final Controller.Settings settings = new Controller.Settings();
+
+	@org.junit.jupiter.api.BeforeEach
+	void enableControllerForInputTests() {
+		settings.setEnabled(true);
+	}
+
+	@Test
+	void aConnectedPadDoesNotEnableOrReadWhileDisabled() {
+		Game game = new Game();
+		Controller c = new Controller();
+		Controller.Settings defaults = new Controller.Settings();
+		game.state.axes[Gamepad.LY] = -1f;
+		c.frame(game, defaults, 0.016, false, true);
+		assertFalse(defaults.enabled);
+		assertEquals(0, game.reads);
+		assertTrue(game.down.isEmpty());
+		assertFalse(c.connected());
+
+		defaults.setEnabled(true);
+		c.frame(game, defaults, 0.016, false, true);
+		assertTrue(c.connected());
+		assertTrue(game.down.contains(GameKey.FORWARD));
+		defaults.setEnabled(false);
+		c.frame(game, defaults, 0.016, false, true);
+		assertFalse(defaults.enabled);
+		assertEquals(1, game.reads);
+		assertTrue(game.down.isEmpty());
+	}
 
 	@Test
 	void sticksWalkAndLook() {
