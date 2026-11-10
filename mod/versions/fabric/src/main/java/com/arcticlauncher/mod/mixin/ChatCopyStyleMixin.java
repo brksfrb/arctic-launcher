@@ -70,6 +70,23 @@ abstract class ChatCopyStyleMixin implements ChatCopy.Tagged {
 		((ChatCopy.Tagged) (Object) cir.getReturnValue()).arctic$copyData(arctic$copyData());
 	}
 	//#endif
+	// Resolve at hover time so already received messages follow the current settings.
+	@Inject(method = "getHoverEvent", at = @At("HEAD"), cancellable = true)
+	private void arctic$hover(CallbackInfoReturnable<net.minecraft.network.chat.HoverEvent> cir) {
+		ChatCopy.Data data = arctic$copyData();
+		if (data == null || !data.target) return;
+		if (!ChatCopy.enabled()) {
+			cir.setReturnValue(null);
+			return;
+		}
+		//#if MC >= 1.21.5
+		cir.setReturnValue(new net.minecraft.network.chat.HoverEvent.ShowText(com.arcticlauncher.mod.Compat.literal("Click to copy")));
+		//#else
+		cir.setReturnValue(new net.minecraft.network.chat.HoverEvent(net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT,
+				com.arcticlauncher.mod.Compat.literal("Click to copy")));
+		//#endif
+	}
+
 	@Inject(method = "equals", at = @At("RETURN"), cancellable = true)
 	private void arctic$equal(Object other, CallbackInfoReturnable<Boolean> cir) {
 		if (cir.getReturnValue() && !java.util.Objects.equals(arctic$copyData(), ChatCopy.data(other))) {
