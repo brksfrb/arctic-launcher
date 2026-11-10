@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Bounded, instance-local chat archive. Restoring never runs outgoing chat handlers. */
-public final class PersistentChat {
+public final class PersistentChat implements AutoCloseable {
 	public static final int MAX = 300;
 	private static final int MAX_TEXT = 32768;
 	private static final int MAX_FILE_BYTES = 16 * 1024 * 1024;
@@ -19,6 +19,10 @@ public final class PersistentChat {
 	private final Data data = new Data();
 	private boolean restored;
 	private boolean restoring;
+	private boolean dirty;
+	private boolean closed;
+	private Thread writer;
+	private final Thread shutdownHook;
 
 	private static final class Data {
 		List<String> messages = new ArrayList<String>();
@@ -32,6 +36,10 @@ public final class PersistentChat {
 
 	public PersistentChat(File instanceConfig) {
 		file = new File(instanceConfig, "arctic-chat-history.json");
+		shutdownHook = new Thread(new Runnable() {
+			public void run() { close(); }
+		}, "Arctic chat shutdown");
+		Runtime.getRuntime().addShutdownHook(shutdownHook);
 	}
 
 	private boolean enabled() {
@@ -101,7 +109,7 @@ public final class PersistentChat {
 	}
 
 	private void add(List<String> lines, String text, boolean deduplicate) {
-		if (!enabled() || restoring || !restored || text == null || text.length() > MAX_TEXT) {
+		if (closed || !enabled() || restoring || !restored || text == null || text.length() > MAX_TEXT) {
 			return;
 		}
 		if (deduplicate && !lines.isEmpty() && text.equals(lines.get(lines.size() - 1))) {
@@ -111,15 +119,79 @@ public final class PersistentChat {
 		if (lines.size() > MAX) {
 			lines.remove(0);
 		}
+		dirty = true;
+		if (writer == null) {
+			writer = new Thread(new Runnable() {
+				public void run() { writeLoop(); }
+			}, "Arctic chat writer");
+			writer.setDaemon(true);
+			writer.start();
+		}
+		notifyAll();
+	}
+
+	private void writeLoop() {
+		while (true) {
+			Data snapshot;
+			synchronized (this) {
+				try {
+					while (!dirty && !closed) {
+						wait();
+					}
+					// Coalesce a burst for up to one second. Continuous chat still saves
+					// periodically; shutdown skips the delay and drains the latest state.
+					long deadline = System.nanoTime() + 1000000000L;
+					while (dirty && !closed) {
+						long remaining = deadline - System.nanoTime();
+						if (remaining <= 0) { break; }
+						java.util.concurrent.TimeUnit.NANOSECONDS.timedWait(this, remaining);
+					}
+				} catch (InterruptedException e) {
+					// Only this writer performs I/O, including the final flush.
+				}
+				if (!dirty && closed) { return; }
+				snapshot = new Data();
+				snapshot.messages = new ArrayList<String>(data.messages);
+				snapshot.sent = new ArrayList<String>(data.sent);
+				dirty = false;
+			}
+			write(snapshot);
+		}
+	}
+
+	/** Stop accepting entries and wait for the writer's final flush. */
+	@Override
+	public void close() {
+		Thread pending;
+		synchronized (this) {
+			closed = true;
+			notifyAll();
+			pending = writer;
+		}
+		boolean interrupted = false;
+		if (pending != null) {
+			while (pending.isAlive()) {
+				try { pending.join(); }
+				catch (InterruptedException e) { interrupted = true; }
+			}
+		}
+		if (Thread.currentThread() != shutdownHook) {
+			try { Runtime.getRuntime().removeShutdownHook(shutdownHook); }
+			catch (IllegalStateException e) { /* JVM shutdown already started. */ }
+		}
+		if (interrupted) { Thread.currentThread().interrupt(); }
+	}
+
+	private void write(Data snapshot) {
 		try {
 			Files.createDirectories(file.toPath().getParent());
 			File temporary = new File(file.getParentFile(), file.getName() + ".tmp");
-			byte[] encoded = GSON.toJson(data).getBytes(StandardCharsets.UTF_8);
+			byte[] encoded = GSON.toJson(snapshot).getBytes(StandardCharsets.UTF_8);
 			// Very long server lines must not produce a file larger than we can restore.
 			while (encoded.length > MAX_FILE_BYTES) {
-				List<String> longest = data.messages.size() >= data.sent.size() ? data.messages : data.sent;
+				List<String> longest = snapshot.messages.size() >= snapshot.sent.size() ? snapshot.messages : snapshot.sent;
 				longest.remove(0);
-				encoded = GSON.toJson(data).getBytes(StandardCharsets.UTF_8);
+				encoded = GSON.toJson(snapshot).getBytes(StandardCharsets.UTF_8);
 			}
 			Files.write(temporary.toPath(), encoded);
 			try {
