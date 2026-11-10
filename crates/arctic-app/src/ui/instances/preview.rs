@@ -476,6 +476,34 @@ mod tests {
     }
 
     #[test]
+    fn back_drops_preview_and_gallery_before_leaving_instance() {
+        let mut preview = preview_fixture();
+        let ctx = preview.context.clone();
+        let url = "https://example.com/screenshot.png".to_owned();
+        preview.gallery.insert(url.clone(), IconState::Loading);
+        preview.gallery_result(url.clone(), Ok(vec![1, 2, 3]));
+        let IconState::Ready(uri) = preview.gallery.get(&url).unwrap() else {
+            panic!("image not ready")
+        };
+        let uri = uri.clone();
+        let mut inst = super::super::InstancesUi {
+            open: Some("instance-a".into()),
+            preview: Some(preview),
+            ..Default::default()
+        };
+
+        assert!(ctx.try_load_bytes(&uri).is_ok());
+        assert!(inst.go_back());
+        assert!(inst.preview.is_none());
+        assert!(ctx.try_load_bytes(&uri).is_err());
+        assert_eq!(inst.open.as_deref(), Some("instance-a"));
+        assert!(inst.go_back());
+        assert!(inst.open.is_none());
+        inst.open = Some("instance-a".into());
+        assert!(inst.preview.is_none());
+    }
+
+    #[test]
     fn preview_cannot_move_to_another_instance_after_navigation() {
         let preview = preview_fixture().for_instance("instance-a").unwrap();
         assert!(preview.for_instance("instance-b").is_none());
