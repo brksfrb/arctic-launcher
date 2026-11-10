@@ -47,6 +47,51 @@ class LegacyCursorGuardTest {
 	}
 
 	@Test
+	void vanillaSynchronizedResizeForcesOnceWithScreenOpen() throws Exception {
+		assertVanillaSynchronizedResize(true);
+	}
+
+	@Test
+	void vanillaSynchronizedResizeReleasesKeysOnceDuringGameplay() throws Exception {
+		mouse.grabbed = true;
+		assertVanillaSynchronizedResize(false);
+		assertTrue(mouse.grabbed, "resize must restore mouse look");
+	}
+
+	private void assertVanillaSynchronizedResize(boolean screenOpen) throws Exception {
+		LegacyWindowSize size = new LegacyWindowSize();
+		LegacyWindowSize.Resize noRepair = (w, h) -> fail("vanilla already synchronized the dimensions");
+		boolean resized = size.sync(true, 854, 480, false, 854, 480, noRepair);
+		assertFalse(resized, "first observation relies on window creation");
+		assertTrue(tick(screenOpen, false, resized));
+		mouse.calls.clear();
+		holdKeys();
+		// updateDisplay/updateWindow has already updated Minecraft's width and height.
+		resized = size.sync(true, 1920, 1080, false, 1920, 1080, noRepair);
+		assertTrue(resized);
+		assertTrue(tick(screenOpen, false, resized));
+		assertKeysReleased();
+		assertEquals(2, keyReleases);
+		assertEquals(screenOpen ? Arrays.asList("grab", "release", "default")
+				: Arrays.asList("release", "grab"), mouse.calls);
+		mouse.calls.clear();
+		holdKeys();
+		resized = size.sync(true, 1920, 1080, false, 1920, 1080, noRepair);
+		assertFalse(resized);
+		assertFalse(tick(screenOpen, false, resized));
+		assertEquals(screenOpen ? Arrays.asList("release", "default") : Arrays.asList(), mouse.calls);
+		assertEquals(screenOpen ? 3 : 2, keyReleases);
+		if (screenOpen) {
+			assertKeysReleased();
+		} else {
+			for (KeyBinding key : keys) {
+				assertTrue(key.isPressed(), key.getTranslationKey());
+				assertTrue(key.wasPressed(), key.getTranslationKey());
+			}
+		}
+	}
+
+	@Test
 	void forcedUnclipWithoutScreenReleasesKeysOnceThenLeavesRealInputAlone() throws Exception {
 		mouse.grabbed = true;
 		holdKeys();

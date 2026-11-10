@@ -152,20 +152,22 @@ public final class LegacyHooks {
 		}
 	}
 
+	private static final LegacyWindowSize WINDOW_SIZE = new LegacyWindowSize();
+
 	/**
 	 * The game's size follows its window. LWJGL 2 tells the game once ("resized"), and a window made
 	 * bigger while the game was still loading (the launcher maximizes it as it opens) can use that
 	 * up: the game then keeps drawing a small picture in the corner of a big black window.
+	 * Also report changes vanilla already synchronized, so cursor/key recovery still runs.
 	 */
 	private static boolean syncWindowSize() {
 		MinecraftClient mc = MinecraftClient.getInstance();
-		int w = org.lwjgl.opengl.Display.getWidth();
-		int h = org.lwjgl.opengl.Display.getHeight();
-		if (w > 0 && h > 0 && !org.lwjgl.opengl.Display.isFullscreen() && (w != mc.width || h != mc.height)) {
-			((com.arcticlauncher.legacy.mixin.MinecraftClientResizeInvoker) mc).arctic$resize(w, h);
-			return true;
-		}
-		return false;
+		boolean created = org.lwjgl.opengl.Display.isCreated();
+		return WINDOW_SIZE.sync(created,
+				created ? org.lwjgl.opengl.Display.getWidth() : 0,
+				created ? org.lwjgl.opengl.Display.getHeight() : 0,
+				created && org.lwjgl.opengl.Display.isFullscreen(), mc.width, mc.height,
+				(w, h) -> ((com.arcticlauncher.legacy.mixin.MinecraftClientResizeInvoker) mc).arctic$resize(w, h));
 	}
 
 	private static int cursorLogged;
