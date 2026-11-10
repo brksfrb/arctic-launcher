@@ -142,7 +142,13 @@ public final class GlassPacks {
 	public static String canonical(String sprite) {
 		String namespace = sprite.contains(":") ? sprite.substring(0, sprite.indexOf(':')) : "minecraft";
 		String name = sprite.substring(sprite.indexOf(':') + 1);
-		name = name.substring(name.lastIndexOf('/') + 1).replace(".png", "");
+		if (name.endsWith(".png")) name = name.substring(0, name.length() - 4);
+		// Only vanilla texture layouts share the historical glass aliases. Custom paths
+		// retain their identity even when their final component happens to be glass.
+		if (name.startsWith("textures/block/") || name.startsWith("textures/blocks/")) name = name.substring(9);
+		if (name.startsWith("block/")) name = name.substring(6);
+		else if (name.startsWith("blocks/")) name = name.substring(7);
+		if (!namespace.equals("minecraft") || name.contains("/")) return namespace + ":" + name;
 		if (name.equals("glass_pane")) name = "glass";
 		if (name.endsWith("_pane")) name = name.substring(0, name.length() - 5);
 		if (name.startsWith("glass_")) name = name.substring(6) + "_stained_glass";
@@ -170,11 +176,16 @@ public final class GlassPacks {
 				if (GlassTiles.glass(canonical)) result.add(kind + canonical);
 			}
 		}
+		List<String> textureMatches = new ArrayList<>();
 		for (String name : p.getProperty("matchTiles", "").trim().split("\\s+")) {
-			if (!name.isEmpty() && GlassTiles.glass(canonical(name))) { result.add("block:" + canonical(name)); result.add("pane:" + canonical(name)); }
+			if (!name.isEmpty() && GlassTiles.glass(canonical(name))) { textureMatches.add("block:" + canonical(name)); textureMatches.add("pane:" + canonical(name)); }
 		}
-		if (blocks.isEmpty() && !p.containsKey("matchTiles")) {
-			String name = canonical(path.substring(0, path.length() - ".properties".length()));
+		if (p.containsKey("matchTiles")) {
+			if (p.containsKey("matchBlocks")) result.retainAll(textureMatches);
+			else result.addAll(textureMatches);
+		}
+		if (!p.containsKey("matchBlocks") && !p.containsKey("matchTiles")) {
+			String name = canonical(path.substring(0, path.indexOf(':') + 1) + path.substring(path.lastIndexOf('/') + 1, path.length() - ".properties".length()));
 			if (GlassTiles.glass(name)) { result.add("block:" + name); result.add("pane:" + name); }
 		}
 		return result;
