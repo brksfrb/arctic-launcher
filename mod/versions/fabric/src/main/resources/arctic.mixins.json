@@ -146,6 +146,8 @@
 		"ConnectionReplayMixin",
 		"ReplayTimerMixin",
 		"ReplaySoundMixin",
+		"ReplayEntityRendererMixin",
+		"ReplayLeashRendererMixin",
 		"ReplayFrameMixin",
 		"ReplayScreenMixin",
 		"LivingEntitySwingMixin"<% } %><% if (replayWindow) { %>,
