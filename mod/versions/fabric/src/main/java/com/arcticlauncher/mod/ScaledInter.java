@@ -126,6 +126,10 @@ public final class ScaledInter {
 	}
 
 	public static void clear() {
+		//#if MC >= 26.1
+		// Cached GUI text must stop replaying before any of its textures are closed.
+		GuiRecording.fontsReloaded();
+		//#endif
 		for (int i = 0; i < buckets.length; i++) {
 			failed[i] = false;
 			if (buckets[i] != null) {

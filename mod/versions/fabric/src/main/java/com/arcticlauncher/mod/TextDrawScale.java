@@ -29,6 +29,8 @@ public final class TextDrawScale {
 	private static final float[] VIEW_MODEL = new float[16];
 	//#endif
 	private static float current;
+	private static float[] scopes = new float[16];
+	private static int depth;
 	/** Only the explicit nametagfont self-test changes this to capture the old atlas at the identical camera. */
 	static boolean proofBaseline;
 
@@ -59,6 +61,18 @@ public final class TextDrawScale {
 		float previous = current;
 		current = on() ? pixels / Math.max(1, baseScale()) : 0;
 		return previous;
+	}
+
+	/** Primitive scope storage for the font entry/return hooks, including nested outlines. */
+	public static void push(float pixels) {
+		if (depth == scopes.length) {
+			scopes = java.util.Arrays.copyOf(scopes, depth * 2);
+		}
+		scopes[depth++] = set(pixels);
+	}
+
+	public static void pop() {
+		current = scopes[--depth];
 	}
 
 	public static void restore(float previous) {
