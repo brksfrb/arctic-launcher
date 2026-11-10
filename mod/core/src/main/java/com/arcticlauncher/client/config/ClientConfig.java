@@ -41,6 +41,7 @@ public final class ClientConfig {
 	public int hudVersion = HUD_VERSION;
 	/** Features: Fullbright (on/off), and the keys (Minecraft key names). */
 	public boolean fullbright;
+	public volatile boolean connectedGlass = true;
 	/** With Fullbright: the client's light engine does no work (faster). Takes effect when you rejoin a world. */
 	public boolean fullbrightSkipLight;
 	public boolean zoomEnabled = true;
