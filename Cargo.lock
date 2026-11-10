@@ -325,6 +325,7 @@ dependencies = [
  "discord-rich-presence",
  "eframe",
  "egui_commonmark",
+ "egui_commonmark_backend",
  "egui_extras",
  "html2text",
  "image",
