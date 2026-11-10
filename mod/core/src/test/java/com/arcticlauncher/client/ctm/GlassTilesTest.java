@@ -171,6 +171,33 @@ class GlassTilesTest {
 		assertNotNull(texture.tile("minecraft:block/red_stained_glass", 47));
 	}
 
+	@Test void combinedSelectorsRequireBothRestrictions() throws Exception {
+		for (String block : Arrays.asList("example:glass", "glass_pane", "glass", "102", "20")) {
+			GlassPacks packs = rules("matchBlocks=" + block + "\nmatchTiles=glass");
+			boolean pane = block.equals("glass_pane") || block.equals("102");
+			assertEquals(block.equals("glass") || block.equals("20"), packs.tile("minecraft:block/glass", 0) != null, block);
+			assertEquals(pane, packs.tile("minecraft:block/glass", 47) != null, block);
+		}
+		GlassPacks mismatch = rules("matchBlocks=red_stained_glass\nmatchTiles=glass");
+		assertNull(mismatch.tile("minecraft:block/glass", 0));
+		assertNull(mismatch.tile("minecraft:block/red_stained_glass", 0));
+	}
+
+	@Test void explicitTexturePathsCannotAliasVanillaGlass() throws Exception {
+		for (String texture : Arrays.asList("minecraft:optifine/ctm/custom/glass", "mcpatcher/ctm/glass", "custom/glass", "textures/custom/glass.png")) {
+			GlassPacks packs = rules("matchTiles=" + texture);
+			assertNull(packs.tile("minecraft:block/glass", 0), texture);
+			assertNull(packs.tile("minecraft:block/glass", 47), texture);
+			assertNotEquals("minecraft:glass", GlassPacks.canonical(texture));
+		}
+		for (String texture : Arrays.asList("glass", "minecraft:block/glass", "blocks/glass", "textures/blocks/glass.png")) {
+			GlassPacks packs = rules("matchTiles=" + texture);
+			assertNotNull(packs.tile("minecraft:block/glass", 0), texture);
+			assertNotNull(packs.tile("minecraft:block/glass", 47), texture);
+			assertNull(packs.tile("minecraft:optifine/ctm/custom/glass", 0), texture);
+		}
+	}
+
 	@Test void uvRotationsAndMirrorsPreserveAll47Topologies() {
 		for (int u = 0; u < 4; u++) for (int v = 0; v < 4; v++) if ((u & 1) != (v & 1)) {
 			Set<Integer> tiles = new HashSet<>();
