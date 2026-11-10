@@ -88,6 +88,11 @@ public final class GlassCtm {
 		c.bank = GlassTiles.bank(blockId(block), 0);
 		c.x = pos.getX(); c.y = pos.getY(); c.z = pos.getZ();
 		c.checked = 0; c.connected = 0; c.faces = 0; c.viewIndex = 0; c.active = true;
+		//#if DEV_SCENES
+		//#if MC >= 1.21.11
+		if (GlassChunkTest.watching(pos)) GlassChunkTest.observe(pos, world, c.mask(pos.getZ() == 15 ? Direction.UP : Direction.NORTH));
+		//#endif
+		//#endif
 	}
 
 	private static String blockId(BlockState block) {

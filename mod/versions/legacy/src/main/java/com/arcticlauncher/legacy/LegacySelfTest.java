@@ -52,6 +52,14 @@ final class LegacySelfTest {
 			LegacyKeysTest.start();
 			return;
 		}
+		//#if DEV_SCENES
+		//#if MC < 1.9
+		if ("ctmchunks".equals(System.getProperty("arctic.selftest"))) {
+			GlassChunkTest.start();
+			return;
+		}
+		//#endif
+		//#endif
 		if ("ctm".equals(System.getProperty("arctic.selftest"))) {
 			//#if DEV_SCENES
 			GlassCtmTest.start();

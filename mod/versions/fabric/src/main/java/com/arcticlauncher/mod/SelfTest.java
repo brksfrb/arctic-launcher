@@ -86,6 +86,14 @@ final class SelfTest {
 			return;
 		}
 		//#endif
+		//#if DEV_SCENES
+		//#if MC >= 1.21.11
+		if ("ctmchunks".equals(System.getProperty("arctic.selftest"))) {
+			GlassChunkTest.start();
+			return;
+		}
+		//#endif
+		//#endif
 		if ("ctm".equals(System.getProperty("arctic.selftest"))) {
 			//#if DEV_SCENES
 			GlassCtmTest.start();

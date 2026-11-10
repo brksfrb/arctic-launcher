@@ -73,6 +73,11 @@ public final class LegacyGlassCtm {
 		c.bank = GlassTiles.bank(Block.REGISTRY.getIdentifier(c.block).toString(), c.data);
 		c.x = pos.getX(); c.y = pos.getY(); c.z = pos.getZ();
 		c.checked = 0; c.connected = 0; c.faces = 0; c.viewIndex = 0; c.active = true;
+		//#if DEV_SCENES
+		//#if MC < 1.9
+		if (GlassChunkTest.watching(pos)) GlassChunkTest.observe(pos, world, c.mask(pos.getZ() == 15 ? Direction.UP : Direction.NORTH));
+		//#endif
+		//#endif
 	}
 
 	/** Damage rendering shares the terrain renderer, but must retain vanilla crack textures. */
