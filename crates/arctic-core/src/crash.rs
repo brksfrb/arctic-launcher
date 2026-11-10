@@ -741,7 +741,15 @@ impl Report {
             loader: loader.to_owned(),
             os: std::env::consts::OS.to_owned(),
             title: scrub(
-                if crash_report.is_none() && freeze_evidence(&all) {
+                if crash_report.is_none()
+                    && diagnose(&all).is_none()
+                    && (title.is_empty()
+                        || title.starts_with("Game exited with code")
+                        || title.starts_with("The game stopped before")
+                        || title == "unknown"
+                        || title == "The game froze and was closed")
+                    && freeze_evidence(&all)
+                {
                     "The game froze and was closed"
                 } else if orderly_shutdown(&all) && crash_report.is_none() {
                     "Non-crash: Minecraft stopped normally"
@@ -769,19 +777,13 @@ fn compact_launch(line: &str) -> String {
     .into_owned()
 }
 
-/// A delayed server tick alone is not proof of a client hang: require the relevant exit too.
+/// Only an unrecovered client watchdog stall is evidence of a hang.
 pub fn freeze_evidence(text: &str) -> bool {
-    if let Some(hang) = text.rfind("[Arctic diagnostics] hang begin") {
-        return text
-            .rfind("[Arctic diagnostics] hang recovered")
-            .is_none_or(|recovered| recovered < hang);
-    }
-    static DELAY: OnceLock<Regex> = OnceLock::new();
-    let delayed = DELAY
-        .get_or_init(|| Regex::new(r"(\d+)ms behind").unwrap())
-        .captures_iter(text)
-        .any(|c| c[1].parse::<u64>().is_ok_and(|n| n >= 30_000));
-    delayed && (text.contains("exit code 1 (0x00000001") || text.contains("0xCFFFFFFF"))
+    text.rfind("[Arctic diagnostics] hang begin")
+        .is_some_and(|hang| {
+            text.rfind("[Arctic diagnostics] hang recovered")
+                .is_none_or(|recovered| recovered < hang)
+        })
 }
 
 /// Require explicit shutdown evidence; a Stopping! line alone does not explain exit(1).
@@ -1074,9 +1076,17 @@ mod tests {
         assert!(freeze_evidence(&format!("{recovered}\n{hang}")));
         assert!(!freeze_evidence("exit code -805306369 (0xCFFFFFFF)"));
         assert!(!freeze_evidence("Can't keep up! 160523ms behind"));
-        assert!(freeze_evidence(
+        assert!(!freeze_evidence(
             "Can't keep up! 160523ms behind\nexit code 1 (0x00000001)"
         ));
+        for prefix in ["Can't keep up! 60000ms behind", hang, &recovered] {
+            let text = format!(
+                "{prefix}\njava.lang.OutOfMemoryError: Java heap space\nexit code 1 (0x00000001)"
+            );
+            let diagnosis = diagnose(&text).expect("specific memory diagnosis");
+            let report = Report::build("1.20.1", "", &diagnosis.title, &[&text], &[], None, None);
+            assert_eq!(report.title, diagnosis.title);
+        }
         let report = Report::build(
             "1.20.1",
             "",
