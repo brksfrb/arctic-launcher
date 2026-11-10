@@ -128,7 +128,7 @@ class GlassTilesTest {
 		for (int i = 0; i < selectors.length; i++) {
 			String base = "minecraft:optifine/ctm/r" + i + "/";
 			paths.add(base + "rule.properties");
-			resources.put(base + "rule.properties", (selectors[i] + "\ntiles=0-46\n").getBytes(StandardCharsets.ISO_8859_1));
+			resources.put(base + "rule.properties", ("tiles=0-46\n" + selectors[i] + "\n").getBytes(StandardCharsets.ISO_8859_1));
 			BufferedImage image = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
 			image.setRGB(0, 0, 0xff000000 | i);
 			ByteArrayOutputStream png = new ByteArrayOutputStream(); ImageIO.write(image, "png", png);
@@ -181,6 +181,25 @@ class GlassTilesTest {
 		GlassPacks mismatch = rules("matchBlocks=red_stained_glass\nmatchTiles=glass");
 		assertNull(mismatch.tile("minecraft:block/glass", 0));
 		assertNull(mismatch.tile("minecraft:block/red_stained_glass", 0));
+	}
+
+	@Test void combinedSelectorsRetainRenderedBlockIdentity() throws Exception {
+		GlassPacks packs = rules("matchBlocks=glass\nmatchTiles=glass");
+		int red = GlassTiles.bank("minecraft:red_stained_glass", 0) * GlassTiles.COUNT;
+		assertNull(packs.tile("minecraft:block/glass", red));
+		assertNotNull(packs.tile("minecraft:block/glass", 0));
+		GlassPacks custom = rules("matchBlocks=red_stained_glass\nmatchTiles=example:custom/window");
+		assertNotNull(custom.tile("example:custom/window", red));
+		assertNull(custom.tile("example:custom/window", 0));
+		assertNull(custom.tile("minecraft:block/glass", red));
+		assertTrue(custom.acceptsSprite("example:custom/window"));
+		assertEquals(GlassTiles.bank("minecraft:red_stained_glass", 0), GlassTiles.bank("minecraft:stained_glass", 14));
+	}
+
+	@Test void invalidTileIdentifierFallsBackAndContinuesReload() throws Exception {
+		assertThrows(IllegalArgumentException.class, () -> GlassPacks.resolve("minecraft:optifine/ctm/rule.properties", "BAD"));
+		GlassPacks packs = rules("matchBlocks=glass\ntiles=BAD 1-46", "matchBlocks=glass");
+		assertEquals(0xff000001, packs.tile("minecraft:block/glass", 0).getRGB(0, 0));
 	}
 
 	@Test void explicitTexturePathsCannotAliasVanillaGlass() throws Exception {

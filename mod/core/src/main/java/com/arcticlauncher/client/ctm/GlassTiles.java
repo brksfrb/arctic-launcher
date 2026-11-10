@@ -3,7 +3,7 @@ package com.arcticlauncher.client.ctm;
 /** Resource-pack independent CTM topology and image synthesis. Pixel alpha occupies the high byte. */
 public final class GlassTiles {
 	public static final int COUNT = 47;
-	public static final int VARIANTS = COUNT * 2; // Block bank, then pane bank for shared vanilla sprites.
+	public static final int VARIANTS = COUNT * 36; // Separate banks for every vanilla glass block and pane identity.
 	// OptiFine's standard 47-tile ordering. Bits, clockwise: W, SW, S, SE, E, NE, N, NW.
 	// Format reference: https://github.com/sp614x/optifine/blob/master/OptiFineDoc/doc/ctm.properties
 	private static final int[] MASKS = {0, 16, 17, 1, 20, 5, 84, 21, 117, 93, 215, 245, 4, 28, 31, 7, 80, 65, 81, 69, 213, 87, 95, 125, 68, 124, 255, 199, 92, 23, 116, 29, 247, 253, 119, 221, 64, 112, 241, 193, 113, 197, 209, 71, 223, 127, 85};
@@ -25,6 +25,18 @@ public final class GlassTiles {
 	}
 
 	private GlassTiles() {}
+
+	public static String bankName(int bank) {
+		return (bank % 2 == 1 ? "pane:" : "block:") + "minecraft:" + (bank < 2 ? "glass" : bank < 34 ? GlassPacks.COLORS[bank / 2 - 1] + "_stained_glass" : "tinted_glass");
+	}
+
+	public static int bank(String block, int metadata) {
+		boolean pane = block.endsWith("pane");
+		if (block.equals("minecraft:stained_glass") || block.equals("minecraft:stained_glass_pane")) return (metadata + 1) * 2 + (pane ? 1 : 0);
+		String key = (pane ? "pane:" : "block:") + GlassPacks.canonical(block);
+		for (int i = 0; i < 36; i++) if (bankName(i).equals(key)) return i;
+		return pane ? 1 : 0;
+	}
 
 	public static int normalize(int mask) {
 		for (int i = 0; i < 4; i++) {

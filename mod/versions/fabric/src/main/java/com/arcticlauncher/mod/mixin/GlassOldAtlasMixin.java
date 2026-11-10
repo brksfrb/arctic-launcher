@@ -26,7 +26,7 @@ abstract class GlassOldAtlasMixin {
 	private void arctic$bind(CallbackInfoReturnable<java.util.List<TextureAtlasSprite>> cir) {
 		java.util.Map<Identifier, TextureAtlasSprite> sprites = new java.util.HashMap<>();
 		boolean glass = false;
-		for (TextureAtlasSprite sprite : cir.getReturnValue()) { sprites.put(sprite.getName(), sprite); glass |= GlassTiles.glass(sprite.getName().toString()); }
+		for (TextureAtlasSprite sprite : cir.getReturnValue()) { sprites.put(sprite.getName(), sprite); glass |= com.arcticlauncher.mod.GlassResources.packs.acceptsSprite(sprite.getName().toString()); }
 		if (glass) GlassCtm.bind(sprites);
 	}
 	//#endif
@@ -42,7 +42,7 @@ abstract class GlassOldAtlasMixin {
 		if (!GlassCtm.available()) return;
 		Collection<TextureAtlasSprite.Info> expanded = new ArrayList<>(cir.getReturnValue());
 		for (TextureAtlasSprite.Info info : cir.getReturnValue()) {
-			if (!GlassTiles.glass(info.name().toString())) continue;
+			if (!com.arcticlauncher.mod.GlassResources.packs.acceptsSprite(info.name().toString())) continue;
 			for (int i = 0; i < GlassTiles.VARIANTS; i++) expanded.add(new TextureAtlasSprite.Info(GlassImages.id(GlassTiles.variant(info.name().toString(), i)), info.width(), info.height(), ((GlassInfoAccess) (Object) info).arctic$metadata()));
 		}
 		cir.setReturnValue(expanded);
@@ -53,7 +53,7 @@ abstract class GlassOldAtlasMixin {
 		if (!GlassCtm.available()) return;
 		Collection<TextureAtlasSprite> expanded = new ArrayList<>(cir.getReturnValue());
 		for (TextureAtlasSprite sprite : cir.getReturnValue()) {
-			if (!GlassTiles.glass(sprite.getName().toString())) continue;
+			if (!com.arcticlauncher.mod.GlassResources.packs.acceptsSprite(sprite.getName().toString())) continue;
 			for (int i = 0; i < GlassTiles.VARIANTS; i++) expanded.add(GlassOldSpriteAccess.arctic$new(GlassImages.id(GlassTiles.variant(sprite.getName().toString(), i)), sprite.getWidth(), sprite.getHeight()));
 		}
 		cir.setReturnValue(expanded);
@@ -65,7 +65,7 @@ abstract class GlassOldAtlasMixin {
 		com.arcticlauncher.mod.GlassResources.reload(manager);
 		if (!GlassCtm.available()) return;
 		for (Identifier name : new ArrayList<>(sprites)) {
-			if (!GlassTiles.glass(name.toString())) continue;
+			if (!com.arcticlauncher.mod.GlassResources.packs.acceptsSprite(name.toString())) continue;
 			for (int i = 0; i < GlassTiles.VARIANTS; i++) sprites.add(GlassImages.id(GlassTiles.variant(name.toString(), i)));
 		}
 	}

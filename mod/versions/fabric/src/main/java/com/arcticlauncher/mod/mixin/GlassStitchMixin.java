@@ -30,7 +30,7 @@ abstract class GlassStitchMixin {
 		List<SpriteContents> expanded = new ArrayList<>(original);
 		for (SpriteContents sprite : original) {
 			String name = sprite.name().toString();
-			if (!GlassTiles.glass(name)) continue;
+			if (!com.arcticlauncher.mod.GlassResources.packs.acceptsSprite(name)) continue;
 			GlassSpriteSource source = (GlassSpriteSource) sprite;
 			for (int tile = 0; tile < GlassTiles.VARIANTS; tile++) {
 				expanded.add(source.arctic$variant(GlassImages.id(GlassTiles.variant(name, tile)), GlassImages.generate(source.arctic$image(), sprite.width(), sprite.height(), tile, name)));

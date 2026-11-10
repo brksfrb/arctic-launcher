@@ -55,7 +55,7 @@ public final class GlassCtm {
 		Map<TextureAtlasSprite, TextureAtlasSprite[]> found = new IdentityHashMap<>();
 		for (Map.Entry<String, TextureAtlasSprite> e : names.entrySet()) {
 			if (GlassTiles.paneEdge(e.getKey())) { found.put(e.getValue(), new TextureAtlasSprite[]{e.getValue()}); continue; }
-			if (!GlassTiles.glass(e.getKey())) continue;
+			if (!GlassResources.packs.acceptsSprite(e.getKey())) continue;
 			TextureAtlasSprite[] variants = new TextureAtlasSprite[GlassTiles.VARIANTS];
 			boolean complete = true;
 			for (int i = 0; i < variants.length; i++) {
@@ -77,13 +77,7 @@ public final class GlassCtm {
 		if (!enabled()) return;
 		Integer type = c.blocks.get(block.getBlock());
 		if (type == null) {
-			//#if MC >= 1.19.3
-			String id = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(block.getBlock()).toString();
-			//#elif MC >= 1.14
-			String id = net.minecraft.core.Registry.BLOCK.getKey(block.getBlock()).toString();
-			//#else
-			String id = net.minecraft.core.Registry.BLOCK.getKey(block.getBlock()).toString();
-			//#endif
+			String id = blockId(block);
 			boolean glass = id.equals("minecraft:glass_pane") || id.endsWith("_stained_glass_pane") || GlassTiles.glass(id);
 			type = glass ? (id.endsWith("pane") ? 2 : 1) : 0;
 			c.blocks.put(block.getBlock(), type);
@@ -91,8 +85,19 @@ public final class GlassCtm {
 		if (type == 0) return;
 		c.pane = type == 2;
 		c.world = world; c.block = block.getBlock();
+		c.bank = GlassTiles.bank(blockId(block), 0);
 		c.x = pos.getX(); c.y = pos.getY(); c.z = pos.getZ();
 		c.checked = 0; c.connected = 0; c.faces = 0; c.viewIndex = 0; c.active = true;
+	}
+
+	private static String blockId(BlockState block) {
+			//#if MC >= 1.19.3
+			return net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(block.getBlock()).toString();
+			//#elif MC >= 1.14
+			return net.minecraft.core.Registry.BLOCK.getKey(block.getBlock()).toString();
+			//#else
+			return net.minecraft.core.Registry.BLOCK.getKey(block.getBlock()).toString();
+			//#endif
 	}
 
 	public static void end() { Context c = LOCAL.get(); c.active = false; c.world = null; }
@@ -115,6 +120,7 @@ public final class GlassCtm {
 
 	private static final class Context {
 		boolean active, pane;
+		int bank;
 		int x, y, z, checked, connected, faces, viewIndex;
 		Block block;
 		//#if MC >= 1.15
@@ -182,7 +188,7 @@ public final class GlassCtm {
 			Variants variants = ((GlassQuad) (Object) quad).arctic$ctm();
 			if (variants == null || variants.edge) return quad;
 			int tile = GlassTiles.index(GlassTiles.orient(context.mask(variants.direction), variants.orientation));
-			return variants.quads[tile + (context.pane ? GlassTiles.COUNT : 0)];
+			return variants.quads[tile + context.bank * GlassTiles.COUNT];
 		}
 	}
 

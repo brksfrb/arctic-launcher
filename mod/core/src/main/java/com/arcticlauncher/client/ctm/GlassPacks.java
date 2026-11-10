@@ -6,7 +6,6 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -18,13 +17,13 @@ public final class GlassPacks {
 		Collection<String> properties() throws IOException;
 		InputStream open(String name) throws IOException;
 	}
-	private static final String[] COLORS = {"white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"};
+	static final String[] COLORS = {"white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"};
 	private final Map<String, BufferedImage[]> tiles;
 	public static final GlassPacks EMPTY = new GlassPacks(Collections.emptyMap());
 	private GlassPacks(Map<String, BufferedImage[]> tiles) { this.tiles = tiles; }
 
 	public static GlassPacks load(Resources resources) {
-		Map<String, BufferedImage[]> tiles = new HashMap<>();
+		Map<String, BufferedImage[]> tiles = new java.util.LinkedHashMap<>();
 		try {
 			List<String> paths = new ArrayList<>(resources.properties());
 			for (String path : paths) {
@@ -133,10 +132,22 @@ public final class GlassPacks {
 		};
 	}
 
-	/** Return preferred ARGB pixels; indices COUNT..VARIANTS select panes, null selects synthesis. */
+	/** Each bank retains the rendered block identity independently of its source sprite. */
 	public BufferedImage tile(String sprite, int tile) {
-		BufferedImage[] images = tiles.get((tile >= GlassTiles.COUNT ? "pane:" : "block:") + canonical(sprite));
-		return images == null ? null : images[tile % GlassTiles.COUNT];
+		String block = GlassTiles.bankName(tile / GlassTiles.COUNT);
+		String texture = canonical(sprite);
+		for (Map.Entry<String, BufferedImage[]> rule : tiles.entrySet()) {
+			String[] selectors = rule.getKey().split("\\|", 2);
+			if ((selectors[0].equals("*") || selectors[0].equals(block)) && (selectors[1].equals("*") || selectors[1].equals(texture))) return rule.getValue()[tile % GlassTiles.COUNT];
+		}
+		return null;
+	}
+
+	public boolean acceptsSprite(String sprite) {
+		if (GlassTiles.glass(sprite)) return true;
+		String suffix = "|" + canonical(sprite);
+		for (String key : tiles.keySet()) if (key.endsWith(suffix)) return true;
+		return false;
 	}
 
 	public static String canonical(String sprite) {
@@ -178,16 +189,17 @@ public final class GlassPacks {
 		}
 		List<String> textureMatches = new ArrayList<>();
 		for (String name : p.getProperty("matchTiles", "").trim().split("\\s+")) {
-			if (!name.isEmpty() && GlassTiles.glass(canonical(name))) { textureMatches.add("block:" + canonical(name)); textureMatches.add("pane:" + canonical(name)); }
-		}
-		if (p.containsKey("matchTiles")) {
-			if (p.containsKey("matchBlocks")) result.retainAll(textureMatches);
-			else result.addAll(textureMatches);
+			if (!name.isEmpty()) textureMatches.add(canonical(name));
 		}
 		if (!p.containsKey("matchBlocks") && !p.containsKey("matchTiles")) {
 			String name = canonical(path.substring(0, path.indexOf(':') + 1) + path.substring(path.lastIndexOf('/') + 1, path.length() - ".properties".length()));
-			if (GlassTiles.glass(name)) { result.add("block:" + name); result.add("pane:" + name); }
+			if (GlassTiles.glass(name)) textureMatches.add(name);
 		}
+		if (!p.containsKey("matchBlocks")) result.add("*");
+		if (!p.containsKey("matchTiles") && p.containsKey("matchBlocks")) textureMatches.add("*");
+		List<String> combined = new ArrayList<>();
+		for (String block : result) for (String texture : textureMatches) combined.add(block + "|" + texture);
+		result = combined;
 		return result;
 	}
 
@@ -213,6 +225,7 @@ public final class GlassPacks {
 		else if (tile.startsWith("textures/") || tile.startsWith("optifine/") || tile.startsWith("mcpatcher/")) path = tile;
 		else path = directory + (tile.startsWith("./") ? tile.substring(2) : tile);
 		if (tile.contains(":")) { namespace = tile.substring(0, tile.indexOf(':')); path = tile.substring(tile.indexOf(':') + 1); }
+		if (!namespace.matches("[a-z0-9_.-]+") || !path.matches("[a-z0-9/._-]+")) throw new IllegalArgumentException("invalid tile identifier");
 		return namespace + ":" + path + (path.endsWith(".png") ? "" : ".png");
 	}
 }

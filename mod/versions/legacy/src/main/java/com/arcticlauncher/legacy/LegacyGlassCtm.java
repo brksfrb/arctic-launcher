@@ -44,7 +44,7 @@ public final class LegacyGlassCtm {
 		Map<Sprite, Sprite[]> found = new IdentityHashMap<>();
 		for (Map.Entry<String, Sprite> e : names.entrySet()) {
 			if (GlassTiles.paneEdge(e.getKey())) { found.put(e.getValue(), new Sprite[]{e.getValue()}); continue; }
-			if (!GlassTiles.glass(e.getKey())) continue;
+			if (!packs.acceptsSprite(e.getKey())) continue;
 			Sprite[] variants = new Sprite[GlassTiles.VARIANTS];
 			boolean complete = true;
 			for (int i = 0; i < variants.length; i++) {
@@ -70,6 +70,7 @@ public final class LegacyGlassCtm {
 		if (type == 0) return;
 		c.pane = type == 2;
 		c.world = world; c.block = block.getBlock(); c.data = c.block.getData(block);
+		c.bank = GlassTiles.bank(Block.REGISTRY.getIdentifier(c.block).toString(), c.data);
 		c.x = pos.getX(); c.y = pos.getY(); c.z = pos.getZ();
 		c.checked = 0; c.connected = 0; c.faces = 0; c.viewIndex = 0; c.active = true;
 	}
@@ -94,6 +95,7 @@ public final class LegacyGlassCtm {
 
 	private static final class Context {
 		boolean active, pane;
+		int bank;
 		int data, x, y, z, checked, connected, faces, viewIndex;
 		Block block;
 		BlockView world;
@@ -158,7 +160,7 @@ public final class LegacyGlassCtm {
 			Variants variants = ((GlassQuad) (Object) quad).arctic$ctm();
 			if (variants == null || variants.edge) return quad;
 			int tile = GlassTiles.index(GlassTiles.orient(context.mask(variants.direction), variants.orientation));
-			return variants.quads[tile + (context.pane ? GlassTiles.COUNT : 0)];
+			return variants.quads[tile + context.bank * GlassTiles.COUNT];
 		}
 	}
 
