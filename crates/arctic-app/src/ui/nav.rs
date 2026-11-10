@@ -10,6 +10,8 @@ use crate::art::avatar::paint_face;
 use crate::art::icons::{self, Icon};
 use crate::art::{self, lerp_color};
 
+const ACCOUNT_HEIGHT: f32 = 52.0;
+const ACCOUNT_BOTTOM_GAP: f32 = 4.0;
 const ITEM_HEIGHT: f32 = 40.0;
 const ITEM_GAP: f32 = 4.0;
 /// The sidebar's rows start a new section here (an index into `Tab::ALL`), with a bigger gap before them.
@@ -43,6 +45,39 @@ impl ArcticApp {
         self.profile_chip(ui);
         ui.add_space(12.0);
 
+        // Reserve the account card before measuring the menu. Optional footer cards
+        // still use only the spare room, just as they do in a tall window.
+        let menu_height = (ui.available_height()
+            - ACCOUNT_HEIGHT
+            - ACCOUNT_BOTTOM_GAP
+            - ui.spacing().item_spacing.y)
+            .max(0.0);
+        ui.scope(|ui| {
+            ui.spacing_mut().scroll = egui::style::ScrollStyle {
+                bar_width: 4.0,
+                floating: true,
+                ..ui.spacing().scroll
+            };
+            egui::ScrollArea::vertical()
+                .id_salt("sidebar_nav_scroll")
+                .max_height(menu_height)
+                .min_scrolled_height(0.0)
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
+                .show(ui, |ui| self.nav_items(ui));
+        });
+
+        ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+            ui.add_space(ACCOUNT_BOTTOM_GAP);
+            self.account_switcher(ui);
+            ui.add_space(6.0);
+            self.sponsor_sidebar(ui);
+            ui.add_space(6.0);
+            self.quick_tip(ui);
+        });
+    }
+
+    fn nav_items(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
         let now = ui.input(|i| i.time);
         let width = ui.available_width();
         let count = Tab::ALL.len() as f32;
@@ -75,6 +110,13 @@ impl ArcticApp {
             )
         };
         let selected_index = Tab::ALL.iter().position(|t| *t == self.tab).unwrap_or(0) as f32;
+        // Only follow selection changes; ordinary wheel scrolling must stay put.
+        let selection_id = ui.id().with("visible_selection");
+        let previous = ui.data(|d| d.get_temp::<usize>(selection_id));
+        if previous != Some(selected_index as usize) {
+            ui.scroll_to_rect(row_rect(selected_index), None);
+            ui.data_mut(|d| d.insert_temp(selection_id, selected_index as usize));
+        }
         let anim = eased_slide(ui.ctx(), selected_index, now);
         let pill = row_rect(anim);
         ui.painter().rect_filled(
@@ -121,21 +163,12 @@ impl ArcticApp {
                 self.set_tab(tab, now);
             }
         }
-
-        ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-            ui.add_space(4.0);
-            self.account_switcher(ui);
-            ui.add_space(6.0);
-            self.sponsor_sidebar(ui);
-            ui.add_space(6.0);
-            self.quick_tip(ui);
-        });
     }
 
     fn account_switcher(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         let width = ui.available_width();
-        let (rect, response) = ui.allocate_exact_size(vec2(width, 52.0), Sense::click());
+        let (rect, response) = ui.allocate_exact_size(vec2(width, ACCOUNT_HEIGHT), Sense::click());
         let hover = ui
             .ctx()
             .animate_bool(response.id.with("h"), response.hovered());
