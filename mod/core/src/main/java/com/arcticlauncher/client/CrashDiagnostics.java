@@ -11,6 +11,7 @@ public final class CrashDiagnostics {
     private static final String PREFIX = "[Arctic diagnostics] ";
     private static final java.nio.file.Path HANG_FILE = java.nio.file.Paths.get(System.getProperty("arctic.diagnostics.hangFile", "arctic-hang.txt")).toAbsolutePath();
     private static volatile long progress;
+    private static long startProgress;
     private static volatile boolean stopped;
     private static volatile boolean hung;
     private static Logger logger;
@@ -70,6 +71,7 @@ public final class CrashDiagnostics {
     public static void start() {
         install();
         progress = System.nanoTime();
+        startProgress = progress;
         final Thread clientThread = Thread.currentThread();
         Thread watcher = new Thread(new Runnable() {
             public void run() {
@@ -115,11 +117,21 @@ public final class CrashDiagnostics {
         }, "Arctic hang watchdog");
         watcher.setDaemon(true);
         watcher.start();
+        java.nio.file.Path parent = HANG_FILE.getParent();
+        FreezeWatchdog.start(clientThread, new java.io.File((parent == null ? HANG_FILE.toAbsolutePath().getParent() : parent).toFile(), "logs" + java.io.File.separator + "arctic-freezes"));
+    }
+
+    /** The client thread's last frame timestamp (System.nanoTime), 0 before the first frame. */
+    static long progressNanos() {
+        // Before the first frame (game still loading) there is no client heartbeat to judge.
+        long p = progress;
+        return p == startProgress ? 0 : p;
     }
 
     /** One timestamp write per frame, including paused menus. */
     public static void frame() {
         progress = System.nanoTime();
+        FreezeWatchdog.devFrame();
         if (hung) {
             synchronized (CrashDiagnostics.class) {
                 if (hung) {

@@ -163,6 +163,12 @@ abstract class ChatComponentMixin {
 			argsOnly = true)
 	private Component arctic$chat(Component message) {
 		arctic$restore();
+		com.arcticlauncher.client.FreezeWatchdog.note("chat line, chars", message.getString().length());
+		// Blank lines (a server clearing the chat) stay plain: no stack, timestamp, mention or archive entry.
+		if (com.arcticlauncher.client.feature.ChatStacker.isBlank(message.getString())) {
+			arctic$stacker.reset();
+			return message;
+		}
 		if (ArcticClient.persistentChat() != null) {
 			if (ArcticClient.persistentChat().restoring()) return message;
 			if (!ArcticClient.chatHidden(message.getString())) {

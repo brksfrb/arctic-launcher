@@ -19,6 +19,10 @@ public final class PersistentChat {
 	private final Data data = new Data();
 	private boolean restored;
 	private boolean restoring;
+	private boolean dirty;
+	private Thread writer;
+	private final Object writeLock = new Object();
+	private static final long WRITE_DELAY_MS = 750;
 
 	private static final class Data {
 		List<String> messages = new ArrayList<String>();
@@ -111,24 +115,80 @@ public final class PersistentChat {
 		if (lines.size() > MAX) {
 			lines.remove(0);
 		}
-		try {
-			Files.createDirectories(file.toPath().getParent());
-			File temporary = new File(file.getParentFile(), file.getName() + ".tmp");
-			byte[] encoded = GSON.toJson(data).getBytes(StandardCharsets.UTF_8);
-			// Very long server lines must not produce a file larger than we can restore.
-			while (encoded.length > MAX_FILE_BYTES) {
-				List<String> longest = data.messages.size() >= data.sent.size() ? data.messages : data.sent;
-				longest.remove(0);
-				encoded = GSON.toJson(data).getBytes(StandardCharsets.UTF_8);
+		// The client thread only marks the archive changed; a background writer saves it.
+		// A flood of lines is coalesced into one write per WRITE_DELAY_MS.
+		dirty = true;
+		if (writer == null) {
+			writer = new Thread(new Runnable() {
+				public void run() {
+					writeLoop();
+				}
+			}, "Arctic chat archive writer");
+			writer.setDaemon(true);
+			writer.start();
+			Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+				public void run() {
+					flush();
+				}
+			}, "Arctic chat archive flush"));
+		}
+		notifyAll();
+	}
+
+	private void writeLoop() {
+		while (true) {
+			synchronized (this) {
+				while (!dirty) {
+					try {
+						wait();
+					} catch (InterruptedException e) {
+						return;
+					}
+				}
 			}
-			Files.write(temporary.toPath(), encoded);
 			try {
-				Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-			} catch (java.nio.file.AtomicMoveNotSupportedException e) {
-				Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+				Thread.sleep(WRITE_DELAY_MS);
+			} catch (InterruptedException e) {
+				return;
 			}
-		} catch (Exception e) {
-			ArcticClient.platform().log(true, "Could not save chat history: " + e.getMessage());
+			flush();
+		}
+	}
+
+	/** Writes the archive now if it changed (the writer thread, shutdown and tests; never the game thread). */
+	public void flush() {
+		synchronized (writeLock) {
+			Data copy;
+			synchronized (this) {
+				if (!dirty) {
+					return;
+				}
+				dirty = false;
+				copy = new Data();
+				copy.messages = new ArrayList<String>(data.messages);
+				copy.sent = new ArrayList<String>(data.sent);
+			}
+			try {
+				Files.createDirectories(file.toPath().getParent());
+				File temporary = new File(file.getParentFile(), file.getName() + ".tmp");
+				byte[] encoded = GSON.toJson(copy).getBytes(StandardCharsets.UTF_8);
+				// Very long server lines must not produce a file larger than we can restore.
+				while (encoded.length > MAX_FILE_BYTES) {
+					List<String> longest = copy.messages.size() >= copy.sent.size() ? copy.messages : copy.sent;
+					longest.remove(0);
+					encoded = GSON.toJson(copy).getBytes(StandardCharsets.UTF_8);
+				}
+				long began = System.nanoTime();
+				Files.write(temporary.toPath(), encoded);
+				try {
+					Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+				} catch (java.nio.file.AtomicMoveNotSupportedException e) {
+					Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+				}
+				com.arcticlauncher.client.FreezeWatchdog.note("chat archive saved (background), ms", (System.nanoTime() - began) / 1_000_000L);
+			} catch (Exception e) {
+				ArcticClient.platform().log(true, "Could not save chat history: " + e.getMessage());
+			}
 		}
 	}
 }

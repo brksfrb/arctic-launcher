@@ -57,6 +57,11 @@ public final class ArcticClient {
 		CrashDiagnostics.start();
 		com.arcticlauncher.client.looks.OsTrust.installDefault();
 		platform = p;
+		FreezeWatchdog.logTo(new java.util.function.Consumer<String>() {
+			public void accept(String line) {
+				p.log(true, line);
+			}
+		});
 		com.arcticlauncher.client.config.RunningLock.hold(p.configDir());
 		config = ClientConfig.load(p.configDir());
 		persistentChat = new com.arcticlauncher.client.feature.PersistentChat(p.configDir());
@@ -380,6 +385,7 @@ public final class ArcticClient {
 	}
 
 	public static void tick(boolean screenOpen) {
+		FreezeWatchdog.state(platform == null || platform.windowFocused(), platform != null && platform.inWorld());
 		com.arcticlauncher.client.feature.DynamicFps.tick(platform, screenOpen);
 		com.arcticlauncher.client.replay.Replays.tick(screenOpen);
 		// Gameplay ticks are skipped outside a world and while watching a replay.

@@ -55,6 +55,7 @@ class PersistentChatTest {
 		first.message("§aHello café 世界");
 		first.sent("/say hello");
 		first.sent("/say hello");
+		first.flush();
 		byte[] before = Files.readAllBytes(dir.resolve("arctic-chat-history.json"));
 		PersistentChat second = new PersistentChat(dir.toFile());
 		View view = new View();
@@ -77,10 +78,12 @@ class PersistentChatTest {
 		PersistentChat history = new PersistentChat(dir.toFile());
 		history.restore(new View());
 		history.message("saved");
+		history.flush();
 		byte[] before = Files.readAllBytes(dir.resolve("arctic-chat-history.json"));
 		config.chatPersistent = false;
 		history.message("not saved");
 		history.sent("not saved");
+		history.flush();
 		PersistentChat restart = new PersistentChat(dir.toFile());
 		View view = new View();
 		restart.restore(view);
@@ -98,6 +101,7 @@ class PersistentChatTest {
 			history.message("line " + i);
 			history.sent("sent " + i);
 		}
+		history.flush();
 		View view = new View();
 		new PersistentChat(dir.toFile()).restore(view);
 		assertEquals(PersistentChat.MAX + 1, view.messages.size());
@@ -109,8 +113,26 @@ class PersistentChatTest {
 		damaged.restore(empty);
 		assertTrue(empty.messages.isEmpty());
 		damaged.message("new session");
+		damaged.flush();
 		View recovered = new View();
 		new PersistentChat(dir.toFile()).restore(recovered);
 		assertEquals("new session", recovered.messages.get(0));
+	}
+
+	@Test void messagesAreWrittenInTheBackgroundAndCoalesced() throws Exception {
+		PersistentChat history = new PersistentChat(dir.toFile());
+		history.restore(new View());
+		long began = System.nanoTime();
+		for (int i = 0; i < 2000; i++) {
+			history.message("§aflood line " + i);
+		}
+		long ms = (System.nanoTime() - began) / 1_000_000;
+		assertTrue(ms < 500, "2000 messages took " + ms + " ms on the calling thread");
+		// The writer thread (not the caller) saves it shortly after, without any explicit flush.
+		java.nio.file.Path file = dir.resolve("arctic-chat-history.json");
+		for (int i = 0; i < 50 && !(Files.exists(file) && new String(Files.readAllBytes(file), java.nio.charset.StandardCharsets.UTF_8).contains("flood line 1999")); i++) {
+			Thread.sleep(100);
+		}
+		assertTrue(new String(Files.readAllBytes(file), java.nio.charset.StandardCharsets.UTF_8).contains("flood line 1999"));
 	}
 }
