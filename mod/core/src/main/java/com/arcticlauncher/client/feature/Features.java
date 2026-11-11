@@ -35,6 +35,7 @@ public final class Features {
 	private static final float SCROLL_EASE = 14f;
 	/** The smooth camera setting from before zooming, restored after. */
 	private boolean smoothCameraBefore;
+	private boolean zoomSmoothApplied;
 	private long lastFrame;
 
 	private boolean freelook;
@@ -76,10 +77,15 @@ public final class Features {
 			combatFx.tick(config, platform);
 		}
 		boolean inGame = !screenOpen && platform.hasFeatures();
-		boolean wasZooming = zooming;
 		zooming = inGame && config.zoomEnabled && (simulatedZoom || down(config.zoomKey));
-		if (zooming != wasZooming) {
-			smoothCameraWhileZoomed(zooming);
+		if (!zooming || !config.zoomSmoothCamera) {
+			restoreZoomSmoothCamera();
+		} else if (!zoomSmoothApplied) {
+			smoothCameraBefore = platform.smoothCamera();
+			zoomSmoothApplied = true;
+			if (!smoothCameraBefore) {
+				platform.smoothCamera(true);
+			}
 		}
 		boolean wantLook = inGame && platform.freelookWorks() && config.freelookEnabled && (simulatedLook || down(config.freelookKey));
 		if (wantLook && !ServerRules.allowed(ServerRules.FREELOOK, platform.server())) {
@@ -289,21 +295,17 @@ public final class Features {
 		}
 	}
 
-	/** While zoomed, the smooth (cinematic) camera like OptiFine's zoom; the player's own setting comes back after. */
-	private void smoothCameraWhileZoomed(boolean on) {
-		if (!config.zoomSmoothCamera) {
-			return;
-		}
-		if (on) {
-			boolean already = platform.smoothCamera();
-			// Already smooth as the zoom starts: another zoom (OptiFine's, on the same key) switched it on
-			// for itself. Putting "on" back afterwards left the camera smooth for good: go back to off.
-			smoothCameraBefore = false;
-			if (!already) {
-				platform.smoothCamera(true);
-			}
-		} else {
+	/** End zoom when the client cannot tick gameplay (world transitions or replay watching). */
+	public void stopZoom() {
+		zooming = false;
+		restoreZoomSmoothCamera();
+	}
+
+	/** Restore only a setting we captured, regardless of the current Smooth option. */
+	private void restoreZoomSmoothCamera() {
+		if (zoomSmoothApplied) {
 			platform.smoothCamera(smoothCameraBefore);
+			zoomSmoothApplied = false;
 		}
 	}
 

@@ -535,6 +535,10 @@ public final class ClientConfig {
 			proxy = new ProxyConfig();
 		}
 		proxy.fillDefaults();
+		if (controller == null) {
+			controller = new com.arcticlauncher.client.controller.Controller.Settings();
+		}
+		controller.migrateDefaults();
 		if (combatFeedback == null) {
 			combatFeedback = hitMarker || hitSound > 0 || killSound > 0 || lowHealthWarning;
 		}

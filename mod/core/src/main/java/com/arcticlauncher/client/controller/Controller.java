@@ -50,10 +50,28 @@ public final class Controller {
 
 	/** Settings, read each frame. */
 	public static final class Settings {
-		public boolean enabled = true;
+		public boolean enabled;
+		/** The enabled choice was recorded by the menu or resolved by the old-default migration. */
+		public boolean enabledConfigured;
 		public int lookSpeed = 5;
 		public int cursorSpeed = 5;
 		public boolean invertY;
+
+		/** Record an explicit menu choice, even when speeds still have their factory values. */
+		public void setEnabled(boolean on) {
+			enabled = on;
+			enabledConfigured = true;
+		}
+
+		/** Old files saved the auto-enabled default without recording whether it was chosen. */
+		public void migrateDefaults() {
+			if (!enabledConfigured) {
+				if (enabled && lookSpeed == 5 && cursorSpeed == 5 && !invertY) {
+					enabled = false;
+				}
+				enabledConfigured = true;
+			}
+		}
 	}
 
 	public boolean connected() {
