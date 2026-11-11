@@ -1,0 +1,60 @@
+---- crash report ----
+---- Minecraft Crash Report ----
+// Surprise! Haha. Well, this is awkward.
+
+Time: 2026-11-11 17:02:19
+Description: Bootstrap
+
+java.lang.RuntimeException: Mixin transformation of net.minecraft.class_3754 failed
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.getPostMixinClassByteArray$arctic(KnotClassDelegate.java:441)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.getPostMixinClassByteArray(KnotClassDelegate.java)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.tryLoadClass(KnotClassDelegate.java:337)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.loadClass$arctic(KnotClassDelegate.java:232)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.loadClass(KnotClassDelegate.java)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassLoader.loadClass(KnotClassLoader.java:119)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:526)
+	at knot//net.minecraft.class_7511.method_44219(class_7511.java:11)
+	at knot//net.minecraft.class_7923.method_47485(class_7923.java:240)
+	at knot//net.minecraft.class_7923.method_47482(class_7923.java:255)
+	at java.base/java.util.LinkedHashMap.forEach(LinkedHashMap.java:986)
+	at knot//net.minecraft.class_7923.method_47487(class_7923.java:253)
+	at knot//net.minecraft.class_2966.redirect$cen000$fabric-registry-sync-v0$initialize(class_2966.java:1065)
+	at knot//net.minecraft.class_2966.method_12851(class_2966.java:65)
+	at knot//net.minecraft.client.main.Main.main(Main.java:130)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:517)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+Caused by: org.spongepowered.asm.mixin.transformer.throwables.MixinTransformerError: An unexpected critical error was encountered
+	at org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:380)
+	at org.spongepowered.asm.mixin.transformer.MixinTransformer.transformClass(MixinTransformer.java:237)
+	at org.spongepowered.asm.mixin.transformer.MixinTransformer.transformClassBytes(MixinTransformer.java:202)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.getPostMixinClassByteArray$arctic(KnotClassDelegate.java:436)
+	... 17 more
+Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Critical injection failure: Redirector noisium$populateNoiseWrapSetBlockStateOperation(Lnet/minecraft/class_2826;IIILnet/minecraft/class_2680;Z)Lnet/minecraft/class_2680; in noisiumed-common.mixins.json:compat.lithium.LithiumNoiseChunkGeneratorMixin from mod noisiumed failed injection check, (0/1) succeeded. Scanned 0 target(s). Using refmap noisiumed-common.refmap.json
+	at org.spongepowered.asm.mixin.injection.struct.InjectionInfo.postInject(InjectionInfo.java:526)
+	at org.spongepowered.asm.mixin.transformer.MixinTargetContext.applyInjections(MixinTargetContext.java:1482)
+	at org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.applyInjections(MixinApplicatorStandard.java:832)
+	at org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.lambda$runApplicatorPass$7(MixinApplicatorStandard.java:362)
+	at org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.processMixins(MixinApplicatorStandard.java:381)
+	at org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.runApplicatorPass(MixinApplicatorStandard.java:360)
+	at org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.apply(MixinApplicatorStandard.java:240)
+	at org.spongepowered.asm.mixin.transformer.TargetClassContext.apply(TargetClassContext.java:437)
+	at org.spongepowered.asm.mixin.transformer.TargetClassContext.applyMixins(TargetClassContext.java:418)
+	at org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:351)
+
+-- System Details --
+Details:
+	Minecraft Version: 1.21.1
+	Fabric Mods: 
+		fabricloader: Fabric Loader 0.20.1
+			mixinextras: MixinExtras 0.5.5
+		ferritecore: FerriteCore 7.0.3
+		modmenu: Mod Menu 11.0.5
+		moonlight: Moonlight Lib 1.21.1-3.8.3
+		moreculling: More Culling 1.0.11
+			conditional-mixin: conditional mixin 0.6.3
+			mixinsquared: MixinSquared 0.2.0
+		noisium: Noisium 2.7.0+mc1.21-1.21.1
+		noisiumed: Noisiumed 3.0.6-fabric-1.21.1
+		playeranimator: Player Animator 2.0.4+1.21.1
+		resourcefullib: Resourceful Lib 3.0.12

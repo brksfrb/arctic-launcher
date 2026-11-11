@@ -170,7 +170,7 @@ impl Run {
 
     /// Why the game crashed, from its log and the crash report it wrote.
     fn diagnose(&self) -> Option<Diagnosis> {
-        crash::diagnose(&self.crash_text())
+        arctic_core::crash_conflicts::diagnose_in(&self.crash_text(), &self.game_dir.join("mods"))
     }
 
     /// The end of the game's log and the crash report it wrote, as one text.

@@ -11,6 +11,7 @@ pub mod bridge;
 pub mod cosmetic_models;
 pub mod cosmetics;
 pub mod crash;
+pub mod crash_conflicts;
 pub mod crash_fix;
 pub mod error;
 pub mod ffmpeg;

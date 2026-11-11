@@ -29,9 +29,9 @@ pub fn apply(dirs: &DataDirs, instance: &mut Instance, fix: &Fix) -> Result<Stri
     }
 }
 
-/// Rename the enabled mods whose name or id is one of `names` to `.jar.disabled`; returns the
+/// Rename the enabled mods whose name, id or file name is one of `names` to `.jar.disabled`; returns the
 /// names of those switched off.
-fn disable_named(mods_dir: &Path, names: &[String]) -> Result<Vec<String>> {
+pub(crate) fn disable_named(mods_dir: &Path, names: &[String]) -> Result<Vec<String>> {
     let wanted: Vec<String> = names.iter().map(|n| n.trim().to_lowercase()).collect();
     let mut off = Vec::new();
     let Ok(entries) = std::fs::read_dir(mods_dir) else {
@@ -46,32 +46,18 @@ fn disable_named(mods_dir: &Path, names: &[String]) -> Result<Vec<String>> {
         {
             continue;
         }
-        let Some((id, name)) = identity(&entry.path()) else {
+        let Some(found) = crate::crash_conflicts::read_jar(&entry.path()) else {
             continue;
         };
-        if wanted.contains(&id.to_lowercase()) || wanted.contains(&name.to_lowercase()) {
+        if wanted.contains(&file.to_lowercase())
+            || wanted.contains(&found.id.to_lowercase())
+            || wanted.contains(&found.name.to_lowercase())
+        {
             crate::mods::set_enabled(mods_dir, &file, false)?;
-            off.push(name);
+            off.push(found.name);
         }
     }
     Ok(off)
-}
-
-/// A Fabric mod's id and display name, from its `fabric.mod.json`.
-fn identity(jar: &Path) -> Option<(String, String)> {
-    let mut zip = zip::ZipArchive::new(std::fs::File::open(jar).ok()?).ok()?;
-    let mut text = String::new();
-    std::io::Read::read_to_string(&mut zip.by_name("fabric.mod.json").ok()?, &mut text).ok()?;
-    // Some mods put raw newlines inside strings; lenient enough for id and name.
-    let json: serde_json::Value =
-        serde_json::from_str(&text.replace(['\n', '\r', '\t'], " ")).ok()?;
-    let id = json.get("id")?.as_str()?.to_owned();
-    let name = json
-        .get("name")
-        .and_then(|n| n.as_str())
-        .unwrap_or(&id)
-        .to_owned();
-    Some((id, name))
 }
 
 fn update_loader(dirs: &DataDirs, instance: &mut Instance) -> Result<String> {
