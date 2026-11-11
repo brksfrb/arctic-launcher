@@ -149,6 +149,7 @@ impl ArcticApp {
         };
         let mut wear: Option<SkinEntry> = None;
         let mut stop = false;
+        let mut blocked = false;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(GAP, GAP);
             // Your Minecraft skin: wearing it means no Arctic skin.
@@ -164,9 +165,12 @@ impl ArcticApp {
                     .on_hover_text("Your own Minecraft skin, for Arctic players too")
                     .clicked()
                     && current.arctic_skin
-                    && can_wear
                 {
-                    stop = true;
+                    if can_wear {
+                        stop = true;
+                    } else {
+                        blocked = true;
+                    }
                 }
             }
             // Adding one sits with the skins, where you look for it.
@@ -181,8 +185,12 @@ impl ArcticApp {
                     || (worn_hash.is_some() && self.library_hash(&e.id) == worn_hash);
                 let tile =
                     self.skin_tile(ui, &format!("lib:{}", e.id), &e.name, Some(e.variant), worn);
-                if tile.clicked() && !worn && can_wear {
-                    wear = Some(e.clone());
+                if tile.clicked() && !worn {
+                    if can_wear {
+                        wear = Some(e.clone());
+                    } else {
+                        blocked = true;
+                    }
                 }
                 tile.context_menu(|ui| self.skin_menu(ui, e));
             }
@@ -192,6 +200,9 @@ impl ArcticApp {
         }
         if let Some(entry) = wear {
             self.wear_skin(&entry);
+        }
+        if blocked {
+            self.explain_wear_blocked();
         }
         ui.add_space(8.0);
         let hint = if self.skins.library.skins.is_empty() {
@@ -407,6 +418,7 @@ impl ArcticApp {
         let ctx = ui.ctx().clone();
         let now = ui.input(|i| i.time);
         let mut pick: Option<Vec<u8>> = None;
+        let mut blocked = false;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(GAP, GAP);
             for (name, png) in &found {
@@ -415,14 +427,21 @@ impl ArcticApp {
                 let hash = arctic_core::cosmetics::texture_hash(png);
                 let active = worn_cape.as_deref() == Some(hash.as_str());
                 let r = cape_card(ui, p, tex, Icon::Close, name, None, active);
-                if r.clicked() && !active && can_wear {
-                    pick = Some(png.clone());
+                if r.clicked() && !active {
+                    if can_wear {
+                        pick = Some(png.clone());
+                    } else {
+                        blocked = true;
+                    }
                 }
             }
         });
         ui.add_space(12.0);
         if let Some(png) = pick {
             self.wear_cape_image(png);
+        }
+        if blocked {
+            self.explain_wear_blocked();
         }
     }
 
@@ -451,14 +470,19 @@ impl ArcticApp {
             .collect();
         let mut pick: Option<(Option<CapeChoice>, Option<String>)> = None;
         let mut upload = false;
+        let mut blocked = false;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(GAP, GAP);
             let r = cape_card(ui, p, None, Icon::Close, "No cape", None, worn.is_none());
             if r.hovered() {
                 self.skins.hover = Some(Hover::Cape(None));
             }
-            if r.clicked() && worn.is_some() && can_wear {
-                pick = Some((None, None));
+            if r.clicked() && worn.is_some() {
+                if can_wear {
+                    pick = Some((None, None));
+                } else {
+                    blocked = true;
+                }
             }
             let mut hovered_card = None;
             // Your own, up front: add one, then the ones you've added (newest first).
@@ -483,8 +507,12 @@ impl ArcticApp {
                     self.skins.hover = Some(Hover::Cape(Some(key.clone())));
                     hovered_card = Some(key.clone());
                 }
-                if r.clicked() && !active && can_wear {
-                    wear_own = Some(hash.clone());
+                if r.clicked() && !active {
+                    if can_wear {
+                        wear_own = Some(hash.clone());
+                    } else {
+                        blocked = true;
+                    }
                 }
                 r.context_menu(|ui| {
                     if ui.button("Remove from my capes").clicked() {
@@ -527,8 +555,12 @@ impl ArcticApp {
                     self.skins.hover = Some(Hover::Cape(Some(key.clone())));
                     hovered_card = Some(key.clone());
                 }
-                if r.clicked() && !active && can_wear {
-                    pick = Some((Some(preset.choice(animate_on)), Some(key)));
+                if r.clicked() && !active {
+                    if can_wear {
+                        pick = Some((Some(preset.choice(animate_on)), Some(key)));
+                    } else {
+                        blocked = true;
+                    }
                 }
             }
             self.skins.animating = hovered_card;
@@ -539,6 +571,9 @@ impl ArcticApp {
         }
         if let Some((choice, key)) = pick {
             self.set_arctic_cape(choice, key);
+        }
+        if blocked {
+            self.explain_wear_blocked();
         }
     }
 
@@ -653,10 +688,15 @@ impl ArcticApp {
     /// One slot's cosmetics: pointing at one tries it on, clicking wears it
     /// (replacing what's in that slot) or takes it off.
     pub(super) fn cosmetics_header(&mut self, ui: &mut egui::Ui, slot: &'static str) {
-        let hint = if self.arctic_state().is_some() {
-            "One per slot. Point at one to try it on; click to wear it, again to take it off."
-        } else {
-            "Point at one to try it on. Add an account to wear it."
+        let hint = match self.wear_blocked() {
+            None => {
+                "One per slot. Point at one to try it on; click to wear it, again to take it off."
+            }
+            // An account is there, the look isn't: say so instead of asking for an account again.
+            Some(_) if self.accounts.active().is_some() => {
+                "Point at one to try it on. Wearing needs your Arctic look, which isn't here yet."
+            }
+            Some(_) => "Point at one to try it on. Add an account to wear it.",
         };
         self.list_header(ui, slot_name(slot), hint, true);
     }
@@ -701,6 +741,7 @@ impl ArcticApp {
             next
         };
         let mut pick: Option<Vec<String>> = None;
+        let mut blocked = false;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(GAP, GAP);
             for entry in items {
@@ -725,13 +766,20 @@ impl ArcticApp {
                     self.skins.hover = Some(Hover::Cosmetics(after(&entry.id, worn)));
                     ctx.request_repaint();
                 }
-                if r.clicked() && can_wear {
-                    pick = Some(after(&entry.id, worn));
+                if r.clicked() {
+                    if can_wear {
+                        pick = Some(after(&entry.id, worn));
+                    } else {
+                        blocked = true;
+                    }
                 }
             }
         });
         if let Some(ids) = pick {
             self.set_cosmetics(ids);
+        }
+        if blocked {
+            self.explain_wear_blocked();
         }
     }
 }

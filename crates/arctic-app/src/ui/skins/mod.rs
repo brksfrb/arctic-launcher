@@ -132,6 +132,9 @@ pub struct SkinsUi {
     /// Account id → Arctic look.
     pub arctic: HashMap<String, Result<ArcticState, String>>,
     pub arctic_busy: bool,
+    /// When the look was last asked for: a failed load is asked for again after a while, so one
+    /// blip at startup doesn't leave the tab unable to wear anything for the rest of the session.
+    arctic_asked_at: Option<std::time::Instant>,
     /// Public catalog shown before sign-in (or when account look loading fails).
     pub public_catalog: Option<Result<ArcticState, String>>,
     pub public_catalog_busy: bool,
@@ -296,8 +299,19 @@ impl ArcticApp {
             }
             return;
         };
-        if (force || !self.skins.arctic.contains_key(&account.id)) && !self.skins.arctic_busy {
+        // A look that failed to load is asked for again after a while: without that, one refused
+        // or timed-out sign-in means nothing can be worn until the launcher is restarted. The
+        // sign-in itself keeps its own back-off (see `cosmetics::token_for`), so this costs little.
+        let stale = matches!(self.skins.arctic.get(&account.id), Some(Err(_)))
+            && self
+                .skins
+                .arctic_asked_at
+                .is_none_or(|at| at.elapsed() >= RETRY_LOOK_AFTER);
+        if (force || stale || !self.skins.arctic.contains_key(&account.id))
+            && !self.skins.arctic_busy
+        {
             self.skins.arctic_busy = true;
+            self.skins.arctic_asked_at = Some(std::time::Instant::now());
             self.tasks.arctic_look(account.clone(), None, None);
         }
         if matches!(self.skins.arctic.get(&account.id), Some(Err(_)))
@@ -327,6 +341,50 @@ impl ArcticApp {
     pub(crate) fn arctic_state(&self) -> Option<&ArcticState> {
         let account = self.accounts.active()?;
         self.skins.arctic.get(&account.id)?.as_ref().ok()
+    }
+
+    /// Why nothing can be worn right now, as (title, detail, worth another try); `None` when it
+    /// can. The tab shows the whole collection without a look of your own — pointing at a card
+    /// tries it on — so a click that can't do anything has to say why instead of being dropped.
+    pub(super) fn wear_blocked(&self) -> Option<(&'static str, String, bool)> {
+        if self.arctic_state().is_some() {
+            return None;
+        }
+        let Some(account) = self.accounts.active() else {
+            return Some((
+                "Add an account to wear this",
+                "Skins, capes and cosmetics are worn by an account. Add one on the Accounts tab."
+                    .to_owned(),
+                false,
+            ));
+        };
+        match self.skins.arctic.get(&account.id) {
+            Some(Err(e)) if e.starts_with("network error") => Some((
+                "Can't reach the Arctic looks server",
+                "Nothing can be worn until it answers. Check your connection; the launcher keeps trying."
+                    .to_owned(),
+                true,
+            )),
+            Some(Err(e)) => Some(("Arctic looks are unavailable", e.clone(), true)),
+            // Asked for but not here yet (the sign-in and the catalog take a moment).
+            _ => Some((
+                "Still signing in to Arctic",
+                "One moment — your look is loading.".to_owned(),
+                false,
+            )),
+        }
+    }
+
+    /// A click that couldn't wear anything: say why, and ask the server again if that may help.
+    pub(super) fn explain_wear_blocked(&mut self) {
+        let Some((title, detail, retry)) = self.wear_blocked() else {
+            return;
+        };
+        let kind = if retry { Kind::Error } else { Kind::Info };
+        self.toasts.push(kind, title, detail);
+        if retry {
+            self.request_skin_state(true);
+        }
     }
 
     /// Read-only assets for the cards and preview; wearing still needs `arctic_state`.
@@ -1051,6 +1109,8 @@ const CAPE_WIDTH: u32 = 512;
 const UNUSED_TEXTURE: std::time::Duration = std::time::Duration::from_secs(20);
 /// The gallery's downloaded skins are let go this long after the last card showed one.
 const UNUSED_GALLERY: std::time::Duration = std::time::Duration::from_secs(60);
+/// A look that failed to load is asked for again this long after the last try.
+const RETRY_LOOK_AFTER: std::time::Duration = std::time::Duration::from_secs(30);
 
 fn is_cape(key: &str) -> bool {
     key.starts_with("mccape:") || key.starts_with("acape:") || key.starts_with("ofcape:")
