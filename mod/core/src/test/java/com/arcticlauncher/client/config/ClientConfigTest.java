@@ -10,7 +10,7 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** Combat Feedback's tile is new; older arctic.json files only had the sub-options. */
+/** Shared config defaults, migrations and persistence. */
 class ClientConfigTest {
 	@TempDir Path dir;
 
@@ -65,4 +65,59 @@ class ClientConfigTest {
 		assertFalse(again.combatFeedback);
 		assertEquals(1, again.hitSound);
 	}
+	@Test
+	void controllerDefaultsOffWithoutAFile() {
+		assertFalse(new ClientConfig().controller.enabled);
+		assertFalse(ClientConfig.load(dir.toFile()).controller.enabled);
+	}
+
+	@Test
+	void oldControllerDefaultMigratesOnceAndMenuChoicesPersist() throws Exception {
+		ClientConfig c = load("{\"controller\":{\"enabled\":true,\"lookSpeed\":5,\"cursorSpeed\":5,\"invertY\":false}}");
+		assertFalse(c.controller.enabled);
+		assertTrue(c.controller.enabledConfigured);
+		c.controller.migrateDefaults();
+		assertFalse(c.controller.enabled);
+		assertEquals(null, c.save());
+		c = ClientConfig.load(dir.toFile());
+		assertFalse(c.controller.enabled);
+		c.controller.setEnabled(true);
+		assertEquals(null, c.save());
+		c = ClientConfig.load(dir.toFile());
+		assertTrue(c.controller.enabled);
+		c.controller.migrateDefaults();
+		assertTrue(c.controller.enabled);
+		c.controller.setEnabled(false);
+		assertEquals(null, c.save());
+		assertFalse(ClientConfig.load(dir.toFile()).controller.enabled);
+	}
+
+	@Test
+	void oldDisabledControllerStaysOffEvenWithCustomSpeeds() throws Exception {
+		for (String extra : new String[] {"", ",\"lookSpeed\":8"}) {
+			ClientConfig c = load("{\"controller\":{\"enabled\":false" + extra + "}}");
+			assertFalse(c.controller.enabled);
+			assertEquals(null, c.save());
+			assertFalse(ClientConfig.load(dir.toFile()).controller.enabled);
+		}
+	}
+
+	@Test
+	void eachOldControllerCustomizationPreservesEnabledAcrossRestarts() throws Exception {
+		for (String custom : new String[] {"\"lookSpeed\":6", "\"cursorSpeed\":4", "\"invertY\":true"}) {
+			ClientConfig c = load("{\"controller\":{\"enabled\":true," + custom + "}}");
+			assertTrue(c.controller.enabled);
+			assertTrue(c.controller.enabledConfigured);
+			assertEquals(null, c.save());
+			c = ClientConfig.load(dir.toFile());
+			assertTrue(c.controller.enabled);
+			// A migrated user may later restore factory speeds without losing their choice.
+			c.controller.lookSpeed = 5;
+			c.controller.cursorSpeed = 5;
+			c.controller.invertY = false;
+			assertEquals(null, c.save());
+			assertTrue(ClientConfig.load(dir.toFile()).controller.enabled);
+		}
+	}
+
 }

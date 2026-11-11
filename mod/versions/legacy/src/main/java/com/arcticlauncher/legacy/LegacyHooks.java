@@ -152,53 +152,64 @@ public final class LegacyHooks {
 		}
 	}
 
+	private static final LegacyWindowSize WINDOW_SIZE = new LegacyWindowSize();
+
 	/**
 	 * The game's size follows its window. LWJGL 2 tells the game once ("resized"), and a window made
 	 * bigger while the game was still loading (the launcher maximizes it as it opens) can use that
 	 * up: the game then keeps drawing a small picture in the corner of a big black window.
+	 * Also report changes vanilla already synchronized, so cursor/key recovery still runs.
 	 */
-	private static void syncWindowSize() {
+	private static boolean syncWindowSize() {
 		MinecraftClient mc = MinecraftClient.getInstance();
-		int w = org.lwjgl.opengl.Display.getWidth();
-		int h = org.lwjgl.opengl.Display.getHeight();
-		if (w > 0 && h > 0 && !org.lwjgl.opengl.Display.isFullscreen() && (w != mc.width || h != mc.height)) {
-			((com.arcticlauncher.legacy.mixin.MinecraftClientResizeInvoker) mc).arctic$resize(w, h);
-		}
+		boolean created = org.lwjgl.opengl.Display.isCreated();
+		return WINDOW_SIZE.sync(created,
+				created ? org.lwjgl.opengl.Display.getWidth() : 0,
+				created ? org.lwjgl.opengl.Display.getHeight() : 0,
+				created && org.lwjgl.opengl.Display.isFullscreen(), mc.width, mc.height,
+				(w, h) -> ((com.arcticlauncher.legacy.mixin.MinecraftClientResizeInvoker) mc).arctic$resize(w, h));
 	}
 
 	private static int cursorLogged;
 
-	private static boolean lastFullscreen;
+	// Yarn calls unpressAll "releaseAllKeys" on every legacy target (1.8.9 through 1.12.2).
+	// It clears held states and queued presses for all bindings, including movement/attack/use.
+	private static final LegacyCursorGuard CURSOR_GUARD = new LegacyCursorGuard(
+			net.minecraft.client.option.KeyBinding::releaseAllKeys);
+	private static final LegacyCursorGuard.Mouse CURSOR_MOUSE = new LegacyCursorGuard.Mouse() {
+		@Override
+		public boolean isGrabbed() {
+			return org.lwjgl.input.Mouse.isGrabbed();
+		}
+
+		@Override
+		public void setGrabbed(boolean grabbed) {
+			org.lwjgl.input.Mouse.setGrabbed(grabbed);
+		}
+
+		@Override
+		public void clearNativeCursor() throws org.lwjgl.LWJGLException {
+			org.lwjgl.input.Mouse.setNativeCursor(null);
+		}
+	};
 
 	/**
-	 * A screen is open but the pointer is hidden: it is given back (seen in fullscreen after the loading
-	 * screen). The game still has the mouse grabbed, or something left an empty cursor on the window.
-	 * A screen always wants the pointer, so this can only help.
+	 * Always request the default, ungrabbed pointer for screens. A real unclip also runs on
+	 * window creation, resize, fullscreen switches and screen entry, even when LWJGL reports
+	 * no grab. Both paths release stuck keys. Keeping the force event-driven leaves ordinary
+	 * gameplay keys alone and avoids toggling/flickering on every menu tick.
 	 */
-	private static void cursorGuard() {
-		boolean grabbed = org.lwjgl.input.Mouse.isGrabbed();
-		boolean custom = org.lwjgl.input.Mouse.getNativeCursor() != null;
-		// Switching to or from fullscreen recreates the window, and LWJGL 2 can leave it with no
-		// pointer while it still reports none grabbed and no custom cursor: set it again once.
-		boolean fullscreen = org.lwjgl.opengl.Display.isFullscreen();
-		boolean switched = fullscreen != lastFullscreen;
-		lastFullscreen = fullscreen;
-		if (!grabbed && !custom && !switched) {
-			return;
-		}
+	private static void cursorGuard(boolean screenOpen, boolean resized) {
 		try {
-			if (grabbed || switched) {
-				org.lwjgl.input.Mouse.setGrabbed(false);
+			boolean forced = CURSOR_GUARD.update(CURSOR_MOUSE,
+					org.lwjgl.opengl.Display.isCreated() && org.lwjgl.input.Mouse.isCreated(),
+					screenOpen, org.lwjgl.opengl.Display.isFullscreen(), resized);
+			if (forced && cursorLogged < 5) {
+				cursorLogged++;
+				ArcticLegacy.LOG.info("Arctic: reset the LWJGL 2 mouse clip (screen open: {}, window resized: {})", screenOpen, resized);
 			}
-			if (custom || switched) {
-				org.lwjgl.input.Mouse.setNativeCursor(null);
-			}
-		} catch (org.lwjgl.LWJGLException | RuntimeException e) {
-			return;
-		}
-		if (cursorLogged < 5) {
-			cursorLogged++;
-			ArcticLegacy.LOG.info("Arctic: gave the mouse pointer back to an open screen (game grabbed: {}, own cursor on the window: {})", grabbed, custom);
+		} catch (Exception e) {
+			// Window/mouse recreation can briefly reject these requests; retry on the next tick.
 		}
 	}
 
@@ -216,15 +227,15 @@ public final class LegacyHooks {
 		if (!titled) {
 			titleWindow();
 		}
-		if (screenOpen) {
-			cursorGuard();
-		}
+		boolean resized = syncWindowSize();
 		ArcticLegacy.PLATFORM.tick();
-		syncWindowSize();
 		syncHitboxes();
 		syncChunkBorders();
 		com.arcticlauncher.legacy.replay.LegacyReplayRecording.tick();
 		ArcticClient.tick(screenOpen);
+		// Features can reassert bindings (e.g. toggled sneak); release after those updates.
+		// Keep ticking in-world as well, so window events recover keys even without chat.
+		cursorGuard(screenOpen || MinecraftClient.getInstance().currentScreen != null, resized);
 	}
 
 	/** Over the game, after Minecraft's own HUD. */
@@ -397,10 +408,10 @@ public final class LegacyHooks {
 			ArcticClient.platform().mentionSound();
 		}
 		if (c.chatTimestamps) {
-			out = LegacyChatCopy.tag(new LiteralText("§8" + (c.chatStampBold ? "§l" : "") + (c.chatStampItalic ? "§o" : "")
-					+ com.arcticlauncher.client.feature.ChatStamp.text(c) + "§r"), source, true).append(out);
+			out = new LiteralText("").append(LegacyChatCopy.tag(new LiteralText("§8" + (c.chatStampBold ? "§l" : "") + (c.chatStampItalic ? "§o" : "")
+					+ com.arcticlauncher.client.feature.ChatStamp.text(c) + "§r"), source, true)).append(out);
 		} else if (c.chatCopy) {
-			out = LegacyChatCopy.tag(new LiteralText("§8[Copy] §r"), source, true).append(out);
+			out = new LiteralText("").append(LegacyChatCopy.tag(new LiteralText("§8[Copy] §r"), source, true)).append(out);
 		}
 		return out;
 	}

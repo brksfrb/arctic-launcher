@@ -11,6 +11,7 @@ target fails.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -25,15 +26,24 @@ LEGACY_MIXCHECK = MOD / "versions" / "legacy" / "mixcheck.py"
 FORGE = "forge-1.8.9"
 
 
+def gradle(cmd):
+    """Run Gradle, echoing its output; retry once with --refresh-dependencies if artifacts could not be resolved."""
+    for attempt in (0, 1):
+        run = subprocess.run(cmd + (["--refresh-dependencies"] if attempt else []), cwd=MOD, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
+        print(run.stdout, end="", flush=True)
+        if run.returncode == 0 or attempt or not re.search(r"Could not find .*\.jar|Could not resolve all (artifacts|files)", run.stdout):
+            return run
+        print("== dependency resolution failed; retrying with --refresh-dependencies", flush=True)
+
+
 def check(target):
     version = target["build"]
     project = target.get("project", "fabric")
     covers = ",".join(target["covers"])
     print(f"== {version} ({project})", flush=True)
-    compiled = subprocess.run(
+    compiled = gradle(
         [str(GRADLEW), *OFFLINE, "-p", f"versions/{project}", "compileJava", "processResources", *(["remapJar"] if project == "fabric13" else []), *(["-q"] if "--info" not in OFFLINE else []),
          f"-Pminecraft_version={version}", f"-Pcovers={covers}"],
-        cwd=MOD,
     )
     if compiled.returncode != 0:
         return f"{version}: does not compile"

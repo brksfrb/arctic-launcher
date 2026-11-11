@@ -174,10 +174,16 @@ dependencies {
 	minecraft "com.mojang:minecraft:${mc}"
 	mappings(legacy.yarn(mc, project.yarn_build))
 	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	if (forge) {
 		// Only the Forge entry class (FML's @Mod and events) compiles against this.
 		compileOnly files(project.findProperty('forge_jar') ?: 'forge-universal.jar')
 	}
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
 }
 
 // The Minecraft versions this jar loads on (-Pcovers from targets.json).

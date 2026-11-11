@@ -147,9 +147,7 @@ pub fn spawn(
         level: super::logparse::Level::Info,
         text: launch_context,
     }]));
-    if plan.maximize_window {
-        super::game_window::maximize_when_open(child.id());
-    }
+    super::game_window::on_spawn(child.id(), plan.maximize_window);
 
     let on_event = Arc::new(on_event);
     let window_seen = Arc::new(AtomicBool::new(false));
@@ -370,6 +368,10 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
         );
         start(&plan.java)
     });
+    if let Ok(child) = &spawned {
+        // Grant foreground permission before waiting for Java to read its argument file.
+        super::game_window::on_spawn(child.id(), plan.maximize_window);
+    }
     if let Some(file) = &argfile {
         // Java reads it while it starts. It holds the access token, so it does not stay (the caller may
         // exit before the game does, so nothing waits for the game itself).
@@ -379,9 +381,6 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
         let _ = std::fs::remove_file(file);
     }
     let child = spawned.at(&plan.java)?;
-    if plan.maximize_window {
-        super::game_window::maximize_when_open(child.id());
-    }
     Ok(child.id())
 }
 

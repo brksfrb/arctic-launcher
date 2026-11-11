@@ -26,10 +26,12 @@ final class LegacySelfTest {
 
 	static void maybeStart() {
 
+		//#if DEV
 		if ("nametagfont".equals(System.getProperty("arctic.selftest"))) {
 			LegacyNametagFontTest.start();
 			return;
 		}
+		//#endif
 
 		if ("nametagproof".equals(System.getProperty("arctic.selftest"))) {
 			LegacyNametagProof.start();
