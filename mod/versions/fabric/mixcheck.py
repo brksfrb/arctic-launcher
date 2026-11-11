@@ -21,7 +21,8 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 JAVAP = os.path.join(os.environ.get("JAVA_HOME", ""), "bin", "javap")
-LOOM = os.path.expanduser("~/.gradle/caches/fabric-loom/minecraftMaven/net/minecraft")
+GRADLE_HOME = os.environ.get("GRADLE_USER_HOME", os.path.expanduser("~/.gradle"))
+LOOM = os.path.join(GRADLE_HOME, "caches/fabric-loom/minecraftMaven/net/minecraft")
 # Methods a mixin target inherits from classes it doesn't declare; javap -p on
 # the target alone can't see them, so only these are looked up the hierarchy.
 MAX_SUPERS = 6

@@ -228,6 +228,7 @@ public final class Replays {
 		Notices.post("Opening replay", file.getName().replace(".mcpr", ""));
 		Thread t = new Thread(() -> {
 			try {
+				long began = System.nanoTime();
 				final ReplayData data = ReplayData.open(file, new File(gameDir, ".arctic/replay-cache"));
 				if (data.meta.protocol != 0 && backend.protocol() != 0 && data.meta.protocol != backend.protocol()) {
 					data.close();
@@ -235,9 +236,20 @@ public final class Replays {
 							+ ". Open it from an instance of that version."));
 					return;
 				}
+				long unpacked = System.nanoTime();
+				// Sorted before joining, so the opening world can be applied like a jump (see ReplayViewer).
+				ReplayBackend.Classifier classifier = backend.classifier(data);
+				if (classifier != null) data.classify(classifier);
+				platform.log(false, "replay: opened " + file.getName() + ": " + data.count() + " packets, unpacked in "
+						+ (unpacked - began) / 1_000_000 + " ms, sorted in " + (System.nanoTime() - unpacked) / 1_000_000 + " ms");
 				platform.runOnGameThread(() -> start(data, then));
 			} catch (IOException | RuntimeException e) {
 				platform.runOnGameThread(() -> openFailed(String.valueOf(e.getMessage())));
+			} catch (OutOfMemoryError e) {
+				// Never leave "Opening replay" up forever: the next Watch must still work.
+				platform.runOnGameThread(() -> openFailed("Not enough memory to open it. Give the game more memory and try again."));
+			} catch (Throwable e) {
+				platform.runOnGameThread(() -> openFailed(String.valueOf(e)));
 			}
 		}, "arctic-replay-open");
 		t.setDaemon(true);
@@ -261,6 +273,7 @@ public final class Replays {
 		String error = v.begin();
 		if (error != null) {
 			viewer = null;
+			try { data.close(); } catch (IOException ignored) { /* the cache is cleared next time */ }
 			Notices.post("Can't open this replay", error);
 			return;
 		}
@@ -285,6 +298,8 @@ public final class Replays {
 		if (v != null) {
 			ReplayClock.stop();
 			backend.cleanView(false);
+			// Release the unpacked file (Windows can't delete or replace it while open).
+			try { v.data.close(); } catch (IOException ignored) { /* cleared on the next open */ }
 		}
 	}
 
@@ -301,6 +316,11 @@ public final class Replays {
 			// release the free camera. Read the actual screen every rendered frame.
 			viewer.screenOpen(screenOpen);
 			viewer.frame();
+			String failure = viewer.failure();
+			if (failure != null) {
+				Notices.post("Can't open this replay", failure);
+				stopWatching();
+			}
 		} finally {
 			inFrame = false;
 		}
@@ -390,8 +410,22 @@ public final class Replays {
 		}
 	}
 
-	/** Saved replays, newest first. */
-	public static List<Info> list() {
+	/** The last scan: menus ask every tick, and on Windows each file's details cost a system call or two. */
+	private static List<Info> listed;
+	private static long listedAt;
+	private static final long LIST_REFRESH_NANOS = 1_000_000_000L;
+
+	/** Saved replays, newest first (rescanned at most once a second). */
+	public static synchronized List<Info> list() {
+		long now = System.nanoTime();
+		if (listed == null || now - listedAt >= LIST_REFRESH_NANOS) {
+			listed = Collections.unmodifiableList(scan());
+			listedAt = now;
+		}
+		return listed;
+	}
+
+	private static List<Info> scan() {
 		File[] files = folder().listFiles((dir, name) -> name.endsWith(".mcpr"));
 		List<Info> out = new ArrayList<Info>();
 		if (files == null) {
@@ -453,7 +487,11 @@ public final class Replays {
 	public static boolean delete(Info info) {
 		removeExport(info.file);
 		new File(gameDir, ".arctic/replay-paths/" + info.file.getName() + ".json").delete();
-		return info.file.delete();
+		boolean deleted = info.file.delete();
+		synchronized (Replays.class) {
+			listed = null;
+		}
+		return deleted;
 	}
 
 	// ---- Camera paths (kept beside the replay, per file) ---------------------------------

@@ -13,6 +13,7 @@ tiny-remapper, mixin annotations included, then packed with:
 Everything downloaded is kept under mod/build/forge-cache.
 """
 import hashlib
+import os
 import subprocess
 import sys
 import urllib.request
@@ -25,7 +26,7 @@ CACHE = MOD / "build" / "forge-cache"
 DIST = MOD / "dist"
 MC = "1.8.9"
 FORGE = "1.8.9-11.15.1.2318-1.8.9"
-GRADLE_CACHE = Path.home() / ".gradle" / "caches"
+GRADLE_CACHE = Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle")) / "caches"
 YARN_BUILD = "1.8.9+build.604-v2"
 
 # name: (url, SHA-256). Checked on download and on every use of the cached file, because the Mixin classes

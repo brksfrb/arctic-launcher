@@ -34,7 +34,7 @@ public final class ReplayTest {
 		t.setDaemon(true);
 		return t;
 	});
-	private static final int WAIT_LIMIT_S = 120;
+	private static final int WAIT_LIMIT_S = Integer.getInteger("arctic.waitlimit", 120);
 	private static final AtomicReference<File> manual = new AtomicReference<File>();
 	private static long videoSince;
 
@@ -42,11 +42,20 @@ public final class ReplayTest {
 
 	static boolean requested() {
 		String mode = System.getProperty("arctic.selftest");
-		return "replay".equals(mode) || "replayopen".equals(mode);
+		return "replay".equals(mode) || "replayopen".equals(mode) || "replayperf".equals(mode) || "replayperfopen".equals(mode);
 	}
 
 	static void start() {
 		log("scheduled");
+		if ("replayperf".equals(System.getProperty("arctic.selftest"))) {
+			TIMER.schedule(() -> run(() -> WorldTest.createTestWorld(ReplayTest::perfSession)), 10, TimeUnit.SECONDS);
+			return;
+		}
+		if ("replayperfopen".equals(System.getProperty("arctic.selftest"))) {
+			File file = new File(System.getProperty("arctic.replayfile", ""));
+			TIMER.schedule(() -> run(() -> perfOpen(file)), 10, TimeUnit.SECONDS);
+			return;
+		}
 		if ("replayopen".equals(System.getProperty("arctic.selftest"))) {
 			// Launched with a replay to open (arctic launch --replay): just check it opens.
 			when("opened from the launcher", () -> Replays.viewer() != null && Replays.viewer().status() == null
@@ -406,6 +415,99 @@ public final class ReplayTest {
 		int found = 0;
 		if (files != null) for (File file : files) if (file.lastModified() >= videoSince && file.length() > 512) found++;
 		return found >= 2;
+	}
+
+	// ---- Load-time check (-Darctic.selftest=replayperf / replayperfopen) ------------------------------
+
+	/** Longest gap between two game-thread frames while measuring (ms): how long the game froze. */
+	private static volatile long stallMs;
+	private static volatile long lastBeat;
+	private static volatile boolean beating;
+
+	private static void beat() {
+		long now = System.nanoTime();
+		if (lastBeat != 0) stallMs = Math.max(stallMs, (now - lastBeat) / 1_000_000);
+		lastBeat = now;
+		if (beating) TIMER.schedule(() -> run(ReplayTest::beat), 1, TimeUnit.MILLISECONDS);
+	}
+
+	private static void startStallWatch() {
+		stallMs = 0;
+		lastBeat = 0;
+		if (!beating) {
+			beating = true;
+			beat();
+		}
+	}
+
+	/** A long play session: teleport between far areas so the server streams chunks over and over. */
+	private static void perfSession() {
+		int rounds = Integer.getInteger("arctic.perfrounds", 40);
+		Minecraft.getInstance().options.pauseOnLostFocus = false;
+		com.arcticlauncher.client.ArcticClient.config().clipSeconds = 10;
+		com.arcticlauncher.client.ArcticClient.config().replayAutoExport = false;
+		log("perf: session of " + rounds + " teleports");
+		command("gamerule doDaylightCycle false");
+		command("summon villager ~2 ~ ~2");
+		for (int i = 0; i < rounds; i++) {
+			int round = i;
+			after(2 + i * 3, () -> command("tp @p " + (round % 2 == 0 ? 3000 : 0) + " 120 " + (round % 4 < 2 ? 0 : 3000)));
+		}
+		after(2 + rounds * 3 + 5, () -> {
+			long since = System.currentTimeMillis() - 1000;
+			AtomicReference<File> saved = new AtomicReference<File>();
+			Replays.saveMoment();
+			when("perf: clip kept", () -> {
+				File[] files = Replays.folder().listFiles((d, n) -> n.endsWith(".mcpr"));
+				if (files != null) for (File f : files) if (f.lastModified() >= since) saved.set(f);
+				return saved.get() != null && Replays.pendingSaves() == 0;
+			}, () -> {
+				log("perf: clip " + saved.get().getAbsolutePath() + " " + saved.get().length() / 1024 + " KB");
+				com.arcticlauncher.client.ArcticClient.platform().leaveWorld();
+				when("left the world", () -> Minecraft.getInstance().level == null, () -> after(3, () -> perfOpen(saved.get())));
+			});
+		});
+	}
+
+	private static void perfOpen(File file) {
+		log("perf: opening " + file.getName() + " (" + file.length() / 1024 + " KB)");
+		startStallWatch();
+		long begun = System.currentTimeMillis();
+		Replays.watch(file);
+		when("perf: world showing", () -> Replays.viewer() != null && Replays.viewer().ready() && Replays.viewer().status() == null
+				&& Minecraft.getInstance().level != null, () -> {
+			long openMs = System.currentTimeMillis() - begun;
+			long openStall = stallMs;
+			after(3, () -> {
+				shot("perf replay open");
+				ReplayViewer v = Replays.viewer();
+				log("perf: RESULT open_ms=" + openMs + " open_max_frame_ms=" + openStall + " duration_ms=" + v.duration()
+						+ " fast_jumps=" + v.fastJumps());
+				stallMs = 0;
+				long f0 = System.currentTimeMillis();
+				v.seek(v.duration() * 0.9);
+				when("perf: jumped forward", () -> v.status() == null && v.ready(), () -> {
+					long fwd = System.currentTimeMillis() - f0;
+					long fwdStall = stallMs;
+					after(2, () -> {
+						stallMs = 0;
+						long b0 = System.currentTimeMillis();
+						v.seek(v.start());
+						when("perf: jumped back", () -> v.status() == null && v.ready() && Minecraft.getInstance().level != null, () -> {
+							log("perf: RESULT seek_forward_ms=" + fwd + " seek_forward_max_frame_ms=" + fwdStall
+									+ " seek_back_ms=" + (System.currentTimeMillis() - b0) + " seek_back_max_frame_ms=" + stallMs);
+							after(2, () -> {
+								shot("perf replay after seeks");
+								beating = false;
+								Replays.stopWatching();
+								log("PASSED");
+								after(2, () -> Minecraft.getInstance().stop());
+							});
+						});
+					});
+				});
+			});
+		});
 	}
 }
 //#endif

@@ -36,6 +36,8 @@ public final class PacketSorter implements ReplayBackend.Classifier {
 		}
 		CATEGORY.put("level_chunk_with_light", Category.CHUNK);
 		CATEGORY.put("level_chunk", Category.CHUNK);
+		// 1.8: how a server sends nearly every chunk. Untracked, a long session's clips start with all of them.
+		CATEGORY.put("map_chunk_bulk", Category.CHUNK_BULK);
 		CATEGORY.put("forget_level_chunk", Category.UNLOAD);
 		for (String n : new String[] {"block_update", "section_blocks_update", "chunk_blocks_update", "block_entity_data", "light_update"}) {
 			CATEGORY.put(n, Category.BLOCK);
@@ -78,6 +80,8 @@ public final class PacketSorter implements ReplayBackend.Classifier {
 	private final boolean longChunkPos;
 	private final boolean oldBlockPos;
 	private int phase = LOGIN;
+	/** 1.8 layout: chunks come in bulk, and a level_chunk with no sections unloads one. */
+	private final boolean bulkChunks;
 
 	/**
 	 * {@code names[phase][id]} is the packet's name ({@link #LOGIN},
@@ -95,6 +99,7 @@ public final class PacketSorter implements ReplayBackend.Classifier {
 		this.hasConfiguration = hasConfiguration;
 		this.longChunkPos = longChunkPos;
 		this.oldBlockPos = oldBlockPos;
+		this.bulkChunks = names.length > PLAY && java.util.Arrays.asList(names[PLAY]).contains("map_chunk_bulk");
 	}
 
 	/** Should the replay leave this packet out? */
@@ -182,6 +187,10 @@ public final class PacketSorter implements ReplayBackend.Classifier {
 		byte c = category(name);
 		try {
 			key[0] = key(c, name, b);
+			if (c == Category.CHUNK && bulkChunks && b.remaining() >= 3 && b.get() != 0 && b.getShort() == 0) {
+				// Full chunk, no sections: 1.8's way of unloading it.
+				c = Category.UNLOAD;
+			}
 		} catch (RuntimeException e) {
 			// A body shorter than expected: no key, treated like anything else.
 			return Category.ALWAYS;
@@ -214,6 +223,32 @@ public final class PacketSorter implements ReplayBackend.Classifier {
 			}
 			return b.hasRemaining() ? null : ids;
 		} catch (RuntimeException e) { return null; }
+	}
+
+	/**
+	 * 1.8's map_chunk_bulk: skylight flag, chunk count, then each chunk's x, z (ints) and section
+	 * mask (short) ahead of the data. Null if it doesn't read that way.
+	 */
+	@Override
+	public long[] bulkChunks(ByteBuffer packet) {
+		if (!"map_chunk_bulk".equals(nameAt(packet))) return null;
+		try {
+			ByteBuffer b = packet.duplicate();
+			readVarInt(b);
+			b.get();
+			int count = readVarInt(b);
+			if (count < 0 || count * 10L > b.remaining()) return null;
+			long[] chunks = new long[count];
+			for (int i = 0; i < count; i++) {
+				int x = b.getInt();
+				int z = b.getInt();
+				b.getShort();
+				chunks[i] = Category.chunk(x, z);
+			}
+			return chunks;
+		} catch (RuntimeException e) {
+			return null;
+		}
 	}
 
 	/** Follow the phase switch a packet makes. */
