@@ -1199,6 +1199,9 @@ impl ArcticApp {
             }
             Event::Friends(result) => self.on_friends(result),
             Event::FriendDone(result) => self.on_friend_done(result),
+            Event::DiscordLinkCode { account, code } => {
+                self.friends.set_discord_code(&account, code)
+            }
             #[cfg(feature = "offline-accounts")]
             Event::RecoveryCode(result) => self.on_recovery_code(result),
             Event::ChatHistory(friend, result) => self.on_chat_history(friend, result),

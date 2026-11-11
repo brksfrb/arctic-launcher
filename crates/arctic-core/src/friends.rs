@@ -243,6 +243,8 @@ pub struct DiscordLogin {
     /// The secret this PC collects the result with (the browser never sees it).
     pub poll: String,
     pub url: String,
+    #[serde(default)]
+    pub code: Option<String>,
 }
 
 /// Start linking this profile to a Discord account.
@@ -479,5 +481,20 @@ mod tests {
             "settings": {"share_online": true, "share_server": true, "allow_invites": true, "show_accounts": false}}))
         .unwrap();
         assert!(!p.settings.show_accounts);
+    }
+}
+
+#[cfg(test)]
+mod badge_link_tests {
+    use super::*;
+    #[test]
+    fn discord_link_accepts_existing_servers_and_new_six_digit_codes() {
+        let old: DiscordLogin = serde_json::from_value(
+            serde_json::json!({"id":"flow", "poll":"secret", "url":"https://discord.com"}),
+        )
+        .unwrap();
+        assert!(old.code.is_none());
+        let new: DiscordLogin = serde_json::from_value(serde_json::json!({"id":"flow", "poll":"secret", "url":"https://discord.com", "code":"001234", "expires_in":300})).unwrap();
+        assert_eq!(new.code.as_deref(), Some("001234"));
     }
 }

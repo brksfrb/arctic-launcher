@@ -14,9 +14,11 @@ public final class BadgeStyleButton extends Widget {
 	private final IntSupplier selected;
 	private final BooleanSupplier canChange;
 	private final Runnable choose;
+	private final java.util.function.Supplier<String> role;
 
-	public BadgeStyleButton(Badge.Style badge, IntSupplier selected, BooleanSupplier canChange, Runnable choose) {
+	public BadgeStyleButton(Badge.Style badge, IntSupplier selected, BooleanSupplier canChange, Runnable choose, java.util.function.Supplier<String> role) {
 		this.badge = badge;
+		this.role = role;
 		this.selected = selected;
 		this.canChange = canChange;
 		this.choose = choose;
@@ -27,7 +29,7 @@ public final class BadgeStyleButton extends Widget {
 		boolean picked = selected.getAsInt() == badge.id;
 		g.fill(x, y, x + w, y + h, picked ? s.panel : s.button);
 		Draw.outline(g, x, y, x + w, y + h, picked ? 2 : 1, picked ? s.accent : s.border);
-		g.texture("asset:" + badge.texture, x + (w - 26) / 2, y + 5, 26, 26,
+		g.texture("asset:" + Badge.asset(badge.id, role.get()), x + (w - 26) / 2, y + 5, 26, 26,
 				0, 0, Badge.TEXTURE_SIZE, Badge.TEXTURE_SIZE, Badge.TEXTURE_SIZE, Badge.TEXTURE_SIZE);
 		Draw.centered(g, badge.label, x + w / 2, y + h - 15, picked ? s.accent : s.text, false);
 	}

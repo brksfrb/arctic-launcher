@@ -56,7 +56,7 @@ class BadgeLooksTest {
 		java.util.concurrent.atomic.AtomicBoolean acceptsBadge = new java.util.concurrent.atomic.AtomicBoolean(true);
 		String hash = new String(new char[40]).replace('\0', 'a');
 		server.createContext("/v1/players", ex -> {
-			String reply = "{\"" + Looks.compact(A) + "\":{\"badge_style\":1,\"arctic\":true},\""
+			String reply = "{\"" + Looks.compact(A) + "\":{\"badge_style\":1,\"badge_role\":\"dev\",\"arctic\":true},\""
 					+ Looks.compact(B) + "\":{\"badge_style\":2,\"arctic\":true}}";
 			byte[] bytes = reply.getBytes(StandardCharsets.UTF_8);
 			ex.sendResponseHeaders(200, bytes.length); ex.getResponseBody().write(bytes); ex.close();
@@ -80,6 +80,8 @@ class BadgeLooksTest {
 			looks.badgeStyle(A); looks.badgeStyle(B);
 			java.lang.reflect.Method flush = Looks.class.getDeclaredMethod("flushLookups");
 			flush.setAccessible(true); flush.invoke(looks);
+			assertEquals("dev", looks.badgeRole(A));
+			assertNull(looks.badgeRole(B));
 			assertEquals(1, looks.badgeStyle(A));
 			assertEquals(2, looks.badgeStyle(B));
 			assertTrue(looks.isArctic(A)); assertTrue(looks.isArctic(B));
@@ -118,4 +120,46 @@ class BadgeLooksTest {
 		assertTrue(Badge.marked(unknown)); assertEquals(0, Badge.markedStyle(unknown));
 		assertEquals("Name", Badge.unmark(unknown));
 	}
+	@Test
+	void onlyApprovedWireRolesSelectRecoloredArtAndMarkersPreserveWearerRole() throws Exception {
+		Looks looks = new Looks(platform(), new ClientConfig(), "", null);
+		try {
+			assertEquals(0x2EB1EC, Badge.COLORS[0]);
+			assertArrayEquals(new int[]{0x2EB1EC, 0xFFC93C, 0x3CE0FF, 0xFF5A5A, 0x5AE07A, 0xB07CFF}, Badge.COLORS);
+			java.util.Set<Character> glyphs = new java.util.HashSet<>();
+			for (int role = 0; role < Badge.ROLES.length; role++) {
+				String name = Badge.ROLES[role];
+				for (int style = 0; style < 3; style++) {
+					java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(getClass().getClassLoader().getResource("assets/arctic/" + Badge.asset(style, name) + ".png"));
+					java.awt.image.BufferedImage original = javax.imageio.ImageIO.read(getClass().getClassLoader().getResource("assets/arctic/" + Badge.asset(style, null) + ".png"));
+					boolean exact = false, halo = false;
+					for (int y = 0; y < image.getHeight(); y++) for (int x = 0; x < image.getWidth(); x++) {
+						int pixel = image.getRGB(x, y), alpha = pixel >>> 24;
+						if (alpha > 200 && (pixel & 0xFFFFFF) == Badge.COLORS[role]) exact = true;
+						if ((original.getRGB(x, y) >>> 24) == 0 && alpha > 0 && alpha < 40) halo = true;
+					}
+					assertTrue(exact, "approved RGB missing: " + style + "/" + name);
+					if (role != 0) assertTrue(halo, "soft glow missing outside original art: " + style + "/" + name);
+				}
+				Look look = looks.parseLook(new JsonParser().parse("{\"badge_style\":2,\"badge_role\":\"" + name + "\"}"), 0);
+				assertEquals(role == 0 ? null : name, look.badgeRole);
+				for (int style = 0; style < 3; style++) for (boolean tab : new boolean[]{false, true}) {
+					String mark = Badge.mark(tab, style, name) + "Name";
+					assertTrue(Badge.marked(mark)); assertEquals(tab, Badge.markedTab(mark));
+					assertEquals(style, Badge.markedStyle(mark)); assertEquals(name, Badge.markedRole(mark));
+					assertEquals("Name", Badge.unmark(mark));
+					assertTrue(glyphs.add(Badge.glyph(style, name, tab)), "glyph collisions");
+					String asset = "assets/arctic/" + Badge.asset(style, name);
+					assertNotNull(getClass().getClassLoader().getResource(asset + ".png"));
+					assertNotNull(getClass().getClassLoader().getResource(asset + (tab ? "_tab" : "_tag") + ".png"));
+					assertNotNull(getClass().getClassLoader().getResource(asset.replace("assets/arctic/", "assets/arctic/font/") + (tab ? "_tab" : "") + ".json"));
+				}
+			}
+			for (String value : new String[]{"null", "3", "true", "[]", "{}", "\"owner\"", "\"../founder\"", "\"FOUNDER\""}) {
+				assertNull(looks.parseLook(new JsonParser().parse("{\"badge_role\":" + value + "}"), 0).badgeRole);
+			}
+			assertEquals("badge", Badge.asset(99, "../founder"));
+		} finally { close(looks); }
+	}
+
 }

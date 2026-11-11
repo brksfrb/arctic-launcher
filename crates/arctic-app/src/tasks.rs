@@ -182,6 +182,10 @@ pub enum Event {
     Friends(Outcome<crate::friend_tasks::FriendsView>),
     /// A friends action finished (what to say, or empty).
     FriendDone(Outcome<String>),
+    DiscordLinkCode {
+        account: String,
+        code: Option<String>,
+    },
     /// (friend profile, conversation)
     ChatHistory(String, Outcome<Vec<arctic_core::friends::Message>>),
     ChatSent(Outcome<arctic_core::friends::Message>),

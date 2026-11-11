@@ -34,6 +34,25 @@ public final class Badge {
 			new Style(0, "Arctic logo", "badge", "badge", true),
 			new Style(1, "Ice tile", "badge_ice_tile", "badge_ice_tile", true),
 			new Style(2, "Line tile", "badge_line_tile", "badge_line_tile", true)));
+	/** Wire roles are allowlisted; never use server text directly as an asset path. */
+	public static final String[] ROLES = {"", "founder", "dev", "admin", "mod", "beta"};
+	public static final int[] COLORS = {0x2EB1EC, 0xFFC93C, 0x3CE0FF, 0xFF5A5A, 0x5AE07A, 0xB07CFF};
+	public static int roleIndex(String role) {
+		for (int i = 1; i < ROLES.length; i++) if (ROLES[i].equals(role)) return i;
+		return 0;
+	}
+	public static String role(UUID wearer) {
+		return ArcticClient.looks() == null ? null : ArcticClient.looks().badgeRole(wearer);
+	}
+	public static String asset(int style, String role) {
+		int index = roleIndex(role);
+		return name(style) + (index == 0 ? "" : "_" + ROLES[index]);
+	}
+	public static char glyph(int style, String role, boolean tab) {
+		int index = roleIndex(role);
+		return (char) (index == 0 ? GLYPH_BASE + normalize(style) + (tab ? 0x10 : 0)
+				: 0xE300 + (index - 1) * 6 + normalize(style) + (tab ? 3 : 0));
+	}
 	public static final int SIZE = 8;
 	public static final int TAB_SIZE = 9;
 	public static final int TEXTURE_SIZE = 256;
@@ -73,7 +92,11 @@ public final class Badge {
 
 	/** Carry wearer and placement through old String text APIs; never consult a local style while drawing. */
 	public static String mark(boolean tab, UUID wearer) {
-		return "\u00a7r" + (char) (MARK_BASE + style(wearer) + (tab ? TAB_OFFSET : 0)) + "\u00a7r";
+		return mark(tab, style(wearer), role(wearer));
+	}
+
+	public static String mark(boolean tab, int style, String role) {
+		return "\u00a7r" + (char) (MARK_BASE + normalize(style) + roleIndex(role) * 8 + (tab ? TAB_OFFSET : 0)) + "\u00a7r";
 	}
 
 	public static boolean marked(String text) {
@@ -87,7 +110,13 @@ public final class Badge {
 	}
 
 	public static int markedStyle(String text) {
-		return normalize((text.charAt(2) - MARK_BASE) % TAB_OFFSET);
+		int code = (text.charAt(2) - MARK_BASE) % TAB_OFFSET;
+		return code / 8 < ROLES.length ? normalize(code % 8) : 0;
+	}
+
+	public static String markedRole(String text) {
+		int role = (text.charAt(2) - MARK_BASE) % TAB_OFFSET / 8;
+		return role < ROLES.length ? ROLES[role] : "";
 	}
 
 	public static String unmark(String text) {

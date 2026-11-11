@@ -321,8 +321,8 @@ public final class LegacyHooks {
 	 * {@code Badge.SIZE} square from the line's top (the font's glyphs are 8 high from there), as the
 	 * newer versions' font picture, with the text's own transparency and, with a shadow, its shadow.
 	 */
-	public static void drawBadge(float x, float y, int argb, boolean shadow, int style, boolean tab) {
-		net.minecraft.util.Identifier texture = LegacyTextures.resolve("asset:" + com.arcticlauncher.client.feature.Badge.name(style) + (tab ? "_tab" : "_tag"));
+	public static void drawBadge(float x, float y, int argb, boolean shadow, int style, String role, boolean tab) {
+		net.minecraft.util.Identifier texture = LegacyTextures.resolve("asset:" + com.arcticlauncher.client.feature.Badge.asset(style, role) + (tab ? "_tab" : "_tag"));
 		if (texture == null) {
 			return;
 		}

@@ -92,6 +92,10 @@ impl Tasks {
                         "Finish the Discord login in your browser".to_owned(),
                     )));
                     let result = t.discord_link(account.clone()).map_err(|e| e.to_string());
+                    t.send(Event::DiscordLinkCode {
+                        account: account.id.clone(),
+                        code: None,
+                    });
                     t.send(Event::FriendDone(result));
                 }
                 _ => {
@@ -107,11 +111,18 @@ impl Tasks {
 
     /// Link the profile to a Discord account: open the login, then wait for the browser to finish it.
     fn discord_link(&self, account: Account) -> Result<String> {
+        let account_id = account.id.clone();
         let (base, token) = self.arctic_token(account)?;
         let login = friends::discord_link_start(&base, &token)?;
+        if let Some(code) = &login.code {
+            self.send(Event::DiscordLinkCode {
+                account: account_id,
+                code: Some(code.clone()),
+            });
+        }
         let _ = open::that_detached(&login.url);
         let started = std::time::Instant::now();
-        while started.elapsed() < DISCORD_WAIT {
+        while started.elapsed() < std::time::Duration::from_secs(300) {
             std::thread::sleep(DISCORD_POLL);
             if let Some(answer) = friends::discord_result(&base, &login)? {
                 let name = answer["discord"].as_str().unwrap_or("your Discord account");

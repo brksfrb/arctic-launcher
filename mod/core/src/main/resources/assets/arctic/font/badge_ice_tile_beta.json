@@ -1,0 +1,19 @@
+{
+  "providers": [
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_ice_tile_beta.png",
+      "height": 8,
+      "ascent": 7,
+      "chars": [
+        "\ue000"
+      ]
+    },
+    {
+      "type": "space",
+      "advances": {
+        " ": 1
+      }
+    }
+  ]
+}

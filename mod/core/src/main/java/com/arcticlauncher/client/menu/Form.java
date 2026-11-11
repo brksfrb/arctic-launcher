@@ -214,7 +214,8 @@ final class Form {
 			put(new com.arcticlauncher.client.ui.BadgeStyleButton(style,
 					() -> looks == null || looks.myLook() == null ? 0 : looks.myLook().badgeStyle,
 					() -> looks != null && looks.signedIn() && !looks.busy(),
-					() -> looks.wearBadgeStyle(style.id)), x + index % columns * 100, top, 94, 52);
+					() -> looks.wearBadgeStyle(style.id),
+					() -> looks == null || looks.myLook() == null ? null : looks.myLook().badgeRole), x + index % columns * 100, top, 94, 52);
 			index++;
 		}
 		put(new Label("", Label.Kind.MUTED) {

@@ -41,6 +41,15 @@ pub struct FriendsUi {
     #[cfg(feature = "offline-accounts")]
     recovery_code: Option<String>,
     restore_code: String,
+    discord_code: Option<(String, std::time::Instant)>,
+}
+
+impl FriendsUi {
+    pub(crate) fn set_discord_code(&mut self, account: &str, code: Option<String>) {
+        if self.account.as_deref() == Some(account) {
+            self.discord_code = code.map(|code| (code, std::time::Instant::now()));
+        }
+    }
 }
 
 impl ArcticApp {
@@ -53,6 +62,7 @@ impl ArcticApp {
         if f.account.as_ref() != Some(&account.id) {
             f.account = Some(account.id.clone());
             f.view = None;
+            f.discord_code = None;
             f.refreshed_at = None;
             f.seen_invites.clear();
         }
@@ -274,6 +284,15 @@ impl ArcticApp {
                 }
                 ui.add_space(8.0);
                 ui.label(RichText::new("DISCORD").small().color(p.muted));
+                if let Some((code, started)) = &self.friends.discord_code {
+                    let left = 300u64.saturating_sub(started.elapsed().as_secs());
+                    if left > 0 {
+                        ui.label(RichText::new(format!("Discord code: {code}  ({left}s left)")).color(p.text));
+                        ui.label(RichText::new("Enter this code in the Discord linking browser tab.").small().color(p.muted));
+                    } else {
+                        ui.label(RichText::new("Discord code expired. Link again.").color(p.muted));
+                    }
+                }
                 match &profile.discord {
                     Some(name) => {
                         crate::widgets::row(ui, |ui| {

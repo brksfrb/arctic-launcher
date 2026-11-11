@@ -20,6 +20,96 @@
     },
     {
       "type": "bitmap",
+      "file": "arctic:font/badge_founder.png",
+      "height": 8,
+      "ascent": 7,
+      "chars": [
+        "\ue300"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_founder_tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": [
+        "\ue303"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_dev.png",
+      "height": 8,
+      "ascent": 7,
+      "chars": [
+        "\ue306"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_dev_tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": [
+        "\ue309"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_admin.png",
+      "height": 8,
+      "ascent": 7,
+      "chars": [
+        "\ue30c"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_admin_tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": [
+        "\ue30f"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_mod.png",
+      "height": 8,
+      "ascent": 7,
+      "chars": [
+        "\ue312"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_mod_tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": [
+        "\ue315"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_beta.png",
+      "height": 8,
+      "ascent": 7,
+      "chars": [
+        "\ue318"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_beta_tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": [
+        "\ue31b"
+      ]
+    },
+    {
+      "type": "bitmap",
       "file": "arctic:font/badge_ice_tile.png",
       "height": 8,
       "ascent": 7,
@@ -38,6 +128,96 @@
     },
     {
       "type": "bitmap",
+      "file": "arctic:font/badge_ice_tile_founder.png",
+      "height": 8,
+      "ascent": 7,
+      "chars": [
+        "\ue301"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_ice_tile_founder_tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": [
+        "\ue304"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_ice_tile_dev.png",
+      "height": 8,
+      "ascent": 7,
+      "chars": [
+        "\ue307"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_ice_tile_dev_tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": [
+        "\ue30a"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_ice_tile_admin.png",
+      "height": 8,
+      "ascent": 7,
+      "chars": [
+        "\ue30d"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_ice_tile_admin_tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": [
+        "\ue310"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_ice_tile_mod.png",
+      "height": 8,
+      "ascent": 7,
+      "chars": [
+        "\ue313"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_ice_tile_mod_tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": [
+        "\ue316"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_ice_tile_beta.png",
+      "height": 8,
+      "ascent": 7,
+      "chars": [
+        "\ue319"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_ice_tile_beta_tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": [
+        "\ue31c"
+      ]
+    },
+    {
+      "type": "bitmap",
       "file": "arctic:font/badge_line_tile.png",
       "height": 8,
       "ascent": 7,
@@ -52,6 +232,96 @@
       "ascent": 8,
       "chars": [
         "\ue0b2"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_line_tile_founder.png",
+      "height": 8,
+      "ascent": 7,
+      "chars": [
+        "\ue302"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_line_tile_founder_tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": [
+        "\ue305"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_line_tile_dev.png",
+      "height": 8,
+      "ascent": 7,
+      "chars": [
+        "\ue308"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_line_tile_dev_tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": [
+        "\ue30b"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_line_tile_admin.png",
+      "height": 8,
+      "ascent": 7,
+      "chars": [
+        "\ue30e"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_line_tile_admin_tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": [
+        "\ue311"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_line_tile_mod.png",
+      "height": 8,
+      "ascent": 7,
+      "chars": [
+        "\ue314"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_line_tile_mod_tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": [
+        "\ue317"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_line_tile_beta.png",
+      "height": 8,
+      "ascent": 7,
+      "chars": [
+        "\ue31a"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_line_tile_beta_tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": [
+        "\ue31d"
       ]
     },
     {
