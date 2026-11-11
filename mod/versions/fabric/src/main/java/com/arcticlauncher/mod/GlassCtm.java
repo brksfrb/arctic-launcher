@@ -37,6 +37,16 @@ public final class GlassCtm {
 	public static boolean enabled() { return available() && (ArcticClient.config() == null || ArcticClient.config().connectedGlass); }
 
 	public static void tick() {
+		// The line level is part of the tiles: stitching the atlas again also rebuilds every chunk.
+		if (available() && com.arcticlauncher.client.ctm.GlassLines.due()) {
+			lastEnabled = enabled();
+			//#if MC >= 1.14
+			Minecraft.getInstance().reloadResourcePacks();
+			//#else
+			Minecraft.getInstance().reloadResources();
+			//#endif
+			return;
+		}
 		boolean on = enabled();
 		if (lastEnabled != on) {
 			lastEnabled = on;
@@ -93,11 +103,29 @@ public final class GlassCtm {
 		c.world = world; c.block = block.getBlock();
 		c.x = pos.getX(); c.y = pos.getY(); c.z = pos.getZ();
 		c.checked = 0; c.connected = 0; c.faces = 0; c.viewIndex = 0; c.active = true;
+		//#if DEV_SCENES
+		//#if MC >= 1.21.11 && MC < 26.1
+		GlassFramesTest.meshing(c.x, c.y, c.z);
+		//#endif
+		//#endif
 	}
 
 	/** Damage rendering shares the terrain renderer, but must retain vanilla crack textures. */
 	public static void beginDamage() { LOCAL.get().damageDepth++; end(); }
 	public static void endDamage() { LOCAL.get().damageDepth--; end(); }
+
+	//#if DEV_SCENES
+	//#if MC >= 1.21.11 && MC < 26.1
+	/** The mask one face of a block gets from a view; -1 when Connected Glass leaves the block alone. */
+	static int mask(BlockAndTintGetter world, BlockState block, BlockPos pos, Direction face) {
+		begin(world, block, pos);
+		Context c = LOCAL.get();
+		int mask = c.active ? c.mask(face) : -1;
+		end();
+		return mask;
+	}
+	//#endif
+	//#endif
 
 	public static void end() { Context c = LOCAL.get(); c.active = false; c.world = null; }
 
@@ -171,6 +199,11 @@ public final class GlassCtm {
 			if ((mask & 80) == 80 && same(rx, -by, rz - bz)) mask |= 32;
 			if ((mask & 65) == 65 && same(-rx, -by, -rz - bz)) mask |= 128;
 			faces |= 1 << index;
+			//#if DEV_SCENES
+			//#if MC >= 1.21.11 && MC < 26.1
+			GlassFramesTest.observe(x, y, z, index, mask);
+			//#endif
+			//#endif
 			return masks[index] = mask;
 		}
 	}

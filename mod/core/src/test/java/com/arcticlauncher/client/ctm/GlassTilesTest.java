@@ -154,4 +154,85 @@ class GlassTilesTest {
 		for (int y = 0; y < size; y++) for (int x = 0; x < size; x++) if (x < border || y < border || x >= size - border || y >= size - border) pixels[y * size + x] = 0xffffffff;
 		return pixels;
 	}
+
+	private static int[] framed() {
+		int[] tile = new int[256];
+		for (int i = 0; i < 16; i++) tile[i] = tile[240 + i] = tile[i * 16] = tile[i * 16 + 15] = 0xFFFFFFFF;
+		return tile;
+	}
+
+	@Test
+	void lineLevelZeroIsTheJoinedTileAndFullKeepsEveryBorder() {
+		int[] source = framed();
+		for (int tile = 0; tile < GlassTiles.COUNT; tile++) {
+			assertArrayEquals(GlassTiles.generate(source, 16, 16, 16, 16, tile), GlassTiles.generate(source, 16, 16, 16, 16, tile, 0));
+			assertArrayEquals(source, GlassTiles.generate(source, 16, 16, 16, 16, tile, 100));
+		}
+	}
+
+	@Test
+	void lineLevelKeepsThatShareOfASharedBorderGrowingFromTheCorners() {
+		int[] source = framed();
+		int previous = -1;
+		for (int level = 0; level <= 100; level += 5) {
+			int[] inner = GlassTiles.generate(source, 16, 16, 16, 16, GlassTiles.index(255), level);
+			int left = 0;
+			for (int y = 0; y < 16; y++) if (inner[y * 16] != 0) left++;
+			assertTrue(left >= previous, "more level never removes border");
+			if (level == 0) assertEquals(0, left);
+			if (level == 25) { assertEquals(4, left); assertTrue(inner[0] != 0 && inner[16] != 0 && inner[2 * 16] == 0 && inner[15 * 16] != 0); }
+			if (level == 50) assertEquals(8, left);
+			if (level == 100) assertEquals(16, left);
+			for (int i = 0; i < 256; i++) if (inner[i] != 0) assertEquals(source[i], inner[i]);
+			previous = left;
+		}
+	}
+
+	@Test
+	void lineLevelLeavesTheOuterFrameOfAClusterAlone() {
+		int[] source = framed();
+		// Joined to the right only: the left, top and bottom borders are the cluster's frame at every level.
+		for (int level = 0; level <= 100; level += 25) {
+			int[] tile = GlassTiles.generate(source, 16, 16, 16, 16, GlassTiles.index(16), level);
+			for (int i = 0; i < 16; i++) { assertEquals(0xFFFFFFFF, tile[i * 16]); if (i < 15) { assertEquals(0xFFFFFFFF, tile[i]); assertEquals(0xFFFFFFFF, tile[240 + i]); } }
+		}
+	}
+
+	@Test
+	void onlyPlainGlassIsClear() {
+		assertTrue(GlassTiles.clear("minecraft:blocks/glass"));
+		assertTrue(GlassTiles.clear("minecraft:block/glass"));
+		assertFalse(GlassTiles.clear("minecraft:blocks/glass_blue"));
+		assertFalse(GlassTiles.clear("minecraft:block/blue_stained_glass"));
+		assertFalse(GlassTiles.clear("minecraft:block/tinted_glass"));
+		assertFalse(GlassTiles.clear("minecraft:blocks/glass_pane_top"));
+	}
+
+	@Test
+	void previewIsAFramedWallWhoseInsideFollowsTheLevel() {
+		int[] none = GlassTiles.preview(3, 0), all = GlassTiles.preview(3, 100);
+		for (int i = 0; i < 48; i++) { assertTrue(none[i] != 0 && none[i * 48] != 0 && none[47 * 48 + i] != 0 && none[i * 48 + 47] != 0); }
+		for (int y = 1; y < 47; y++) { assertEquals(0, none[y * 48 + 15]); assertEquals(0, none[y * 48 + 16]); assertTrue(all[y * 48 + 15] != 0 && all[y * 48 + 16] != 0); }
+		int quarter = 0;
+		int[] light = GlassTiles.preview(3, 25);
+		for (int y = 1; y < 47; y++) if (light[y * 48 + 15] != 0) quarter++;
+		assertEquals(10, quarter);
+	}
+
+	@Test
+	void aChangedLineLevelIsAppliedOnceAfterItRests() {
+		GlassLines.reset();
+		assertFalse(GlassLines.due(25));
+		for (int i = 0; i < 100; i++) assertFalse(GlassLines.due(25));
+		// Dragging: every new value starts the wait again.
+		for (int level = 30; level <= 60; level += 5) assertFalse(GlassLines.due(level));
+		for (int i = 0; i < GlassLines.REST - 1; i++) assertFalse(GlassLines.due(60));
+		assertTrue(GlassLines.due(60));
+		assertEquals(60, GlassLines.stitched());
+		for (int i = 0; i < 100; i++) assertFalse(GlassLines.due(60));
+		// Back to where it was before it rested: nothing to do.
+		assertFalse(GlassLines.due(40));
+		for (int i = 0; i < 100; i++) assertFalse(GlassLines.due(60));
+		GlassLines.reset();
+	}
 }
