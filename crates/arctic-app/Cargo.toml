@@ -17,7 +17,9 @@ memmap2 = "0.9"
 eframe = { version = "0.36.2", default-features = false, features = ["accesskit", "default_fonts", "glow", "links", "wayland", "x11"] }
 egui_extras = { version = "0.36", default-features = false, features = ["file", "image"] }
 discord-rich-presence = "1.1.0"
-arboard = { version = "3.6.1", default-features = false, features = ["image-data"] }
+# `wayland-data-control`: without it arboard only ever speaks X11, so copying a screenshot or
+# an address does nothing on a Wayland session (and only reaches X clients under XWayland).
+arboard = { version = "3.6.1", default-features = false, features = ["image-data", "wayland-data-control"] }
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 log = "0.4.34"
 open = "5.4.4"
