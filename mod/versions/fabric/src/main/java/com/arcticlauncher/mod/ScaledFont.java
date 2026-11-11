@@ -144,11 +144,8 @@ public final class ScaledFont {
 		}
 
 		private static void closeFont(FontSet font) {
-			//#if MC < 1.14
-			font.shutdown();
-			//#else
+			// One name on every version: the 1.13.2 mapping keeps AutoCloseable's close (#19).
 			font.close();
-			//#endif
 		}
 
 		void close() {
