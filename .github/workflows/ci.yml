@@ -42,7 +42,7 @@ jobs:
           components: clippy, rustfmt
       - name: Linux libraries (voice chat's ALSA)
         if: runner.os == 'Linux'
-        run: .github/scripts/apt-install.sh libasound2-dev
+        run: bash .github/scripts/apt-install.sh libasound2-dev
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -104,7 +104,7 @@ jobs:
           # v2: abandon a cache poisoned by a flaky run (missing gson/kotlin-metadata jars)
           GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: gradle-v2
       - name: Live video integration tools
-        run: .github/scripts/apt-install.sh --no-recommends ffmpeg
+        run: bash .github/scripts/apt-install.sh --no-recommends ffmpeg
       - run: chmod +x mod/gradlew && mod/gradlew -p mod/core test
 
   mod-targets:
