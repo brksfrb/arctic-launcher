@@ -108,6 +108,12 @@ final class SelfTest {
 			//#endif
 			return;
 		}
+		if ("lightoverlay".equals(System.getProperty("arctic.selftest"))) {
+			//#if DEV_SCENES
+			LightOverlayTest.start();
+			//#endif
+			return;
+		}
 		//#if DEV
 		if (BadgeTest.requested()) {
 			BadgeTest.start();

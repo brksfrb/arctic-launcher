@@ -351,6 +351,16 @@ public final class ClientConfig {
 	public boolean hitboxes;
 	/** Chunk Borders: the chunk edges as lines, like F3+G in one click. */
 	public boolean chunkBorders;
+	/** Light Overlay: markers on the ground where hostile mobs can spawn (red now, yellow at night, green safe). */
+	public boolean lightOverlay;
+	/** How far around you it marks, in blocks (4 to 32). */
+	public int lightRange = 16;
+	/** 0 colored squares, 1 crosses, 2 the block light as a number. */
+	public int lightStyle;
+	/** Also mark the safe (green) blocks. */
+	public boolean lightShowSafe = true;
+	/** Key that switches the overlay on and off. */
+	public String lightKey = "key.keyboard.unknown";
 	/** Mob Size: creatures other than players drawn at this scale (0.25 to 3). */
 	public boolean mobSize;
 	/** Fog: stretch (1 to 10 times) or remove the fog. */
@@ -483,6 +493,11 @@ public final class ClientConfig {
 		if (waypointKey == null) {
 			waypointKey = "key.keyboard.unknown";
 		}
+		if (lightKey == null) {
+			lightKey = "key.keyboard.unknown";
+		}
+		lightRange = Math.max(4, Math.min(32, lightRange));
+		lightStyle = Math.max(0, Math.min(2, lightStyle));
 		if (stopwatchKey == null) {
 			stopwatchKey = "key.keyboard.unknown";
 		}

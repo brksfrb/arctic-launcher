@@ -307,6 +307,8 @@ processResources {
 			fogBuffer: atLeast('1.21.5'),
 			recipeBookPeek: atLeast('1.21.6'),
 			chunkOwn13: atLeast('1.13') && !atLeast('1.14'),
+			// Light Overlay draws through 1.21.11's debug-quad pipeline (the render API changes from 26.1).
+			lightOverlay: atLeast('1.21.11') && !atLeast('26.1'),
 			teamViewClient: atLeast('1.17'),
 			teamViewEntity: !atLeast('1.17') && atLeast('1.13'),
 			tooltipPositioner: atLeast('1.19.3'),

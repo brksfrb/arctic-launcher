@@ -310,6 +310,13 @@ public final class ArcticClient {
 
 	private static final com.arcticlauncher.client.feature.Stopwatch STOPWATCH = new com.arcticlauncher.client.feature.Stopwatch();
 
+	private static final com.arcticlauncher.client.feature.LightOverlay LIGHT_OVERLAY = new com.arcticlauncher.client.feature.LightOverlay();
+
+	/** The Light Overlay's scan and mesh. */
+	public static com.arcticlauncher.client.feature.LightOverlay lightOverlay() {
+		return LIGHT_OVERLAY;
+	}
+
 	public static com.arcticlauncher.client.feature.Stopwatch stopwatch() {
 		return STOPWATCH;
 	}
@@ -426,6 +433,7 @@ public final class ArcticClient {
 			AUTO_REPLIES.tick(platform);
 			com.arcticlauncher.client.servers.QuickJoin.tick(platform);
 			STOPWATCH.tick(!screenOpen && platform.isKeyDown(config.stopwatchKey));
+			LIGHT_OVERLAY.tick(platform, config, screenOpen);
 		}
 	}
 
