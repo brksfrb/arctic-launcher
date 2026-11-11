@@ -93,11 +93,28 @@ public final class GlassCtm {
 		c.world = world; c.block = block.getBlock();
 		c.x = pos.getX(); c.y = pos.getY(); c.z = pos.getZ();
 		c.checked = 0; c.connected = 0; c.faces = 0; c.viewIndex = 0; c.active = true;
+		//#if DEV_SCENES
+		//#if MC >= 1.21.11 && MC < 26.1
+		if (GlassBordersTest.watching(pos)) GlassBordersTest.observe(pos, c.mask(Direction.DOWN) << 8 | c.mask(Direction.SOUTH));
+		//#endif
+		//#endif
 	}
 
 	/** Damage rendering shares the terrain renderer, but must retain vanilla crack textures. */
 	public static void beginDamage() { LOCAL.get().damageDepth++; end(); }
 	public static void endDamage() { LOCAL.get().damageDepth--; end(); }
+	//#if DEV_SCENES
+	//#if MC >= 1.21.11 && MC < 26.1
+	/** The masks a block gets from a view: down << 8 | south. */
+	static int masks(BlockAndTintGetter world, BlockState block, BlockPos pos) {
+		begin(world, block, pos);
+		Context c = LOCAL.get();
+		int masks = c.active ? c.mask(Direction.DOWN) << 8 | c.mask(Direction.SOUTH) : -1;
+		end();
+		return masks;
+	}
+	//#endif
+	//#endif
 
 	public static void end() { Context c = LOCAL.get(); c.active = false; c.world = null; }
 

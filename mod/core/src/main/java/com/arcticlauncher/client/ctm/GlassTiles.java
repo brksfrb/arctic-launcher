@@ -37,6 +37,15 @@ public final class GlassTiles {
 	public static int orient(int mask, int orientation) { return ORIENTED[orientation][mask & 255]; }
 	public static int mask(int tile) { return MASKS[tile]; }
 
+	/**
+	 * Whether the neighbour at an offset of -1, 0 or 1 lies in another chunk column. What is there is only known
+	 * once that chunk has arrived; until then a face joins across the border rather than drawing a frame that
+	 * the neighbour's arrival removes again.
+	 */
+	public static boolean crossesChunk(int x, int z, int dx, int dz) {
+		return (x + dx) >> 4 != x >> 4 || (z + dz) >> 4 != z >> 4;
+	}
+
 	public static boolean glass(String id) {
 		if (!id.startsWith("minecraft:")) return false;
 		String s = id.substring(10);

@@ -15,6 +15,7 @@
 		"GlassLegacyBakedQuadMixin",
 		"GlassLegacyRenderMixin",
 		"GlassLegacyDamageMixin",
+		"GlassLegacyChunkCacheMixin",
 		"NativeMenuMixin",
 		"TitleScreenMixin",
 		"TitleKeyMixin",
