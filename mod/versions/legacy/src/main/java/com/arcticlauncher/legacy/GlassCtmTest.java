@@ -15,7 +15,7 @@ final class GlassCtmTest {
 	private static void run(Runnable r) { LegacyHooks.onNextFrame(r); }
 	private static void command(String s) { LegacyWorldTest.command(s); }
 	private static void scene() {
-		command("tp @p -3.5 220 -4.0 0 0");
+		command("tp @p -4.5 220 -4.0 0 0");
 		TIMER.schedule(() -> run(GlassCtmTest::buildScene), 7, TimeUnit.SECONDS);
 	}
 	private static void buildScene() {
@@ -27,7 +27,7 @@ final class GlassCtmTest {
 		command("fill -5 220 0 -3 222 0 minecraft:glass");
 		command("fill -1 220 0 1 222 0 minecraft:stained_glass 14");
 		command("fill 3 221 0 5 221 0 minecraft:glass_pane");
-		command("time set 6000"); command("weather clear"); command("tp @p -3.5 220 -4.0 0 0");
+		command("time set 6000"); command("weather clear"); command("tp @p -4.5 220 -4.0 0 0");
 		MinecraftClient.getInstance().options.hudHidden = true;
 		MinecraftClient.getInstance().focused = true;
 		ArcticClient.config().connectedGlass = true;
@@ -42,7 +42,14 @@ final class GlassCtmTest {
 		TIMER.schedule(() -> run(() -> LegacyWorldTest.shot("ctm-crack")), 10250, TimeUnit.MILLISECONDS);
 		TIMER.schedule(() -> run(() -> net.minecraft.client.option.KeyBinding.setKeyPressed(
 				MinecraftClient.getInstance().options.attackKey.getCode(), false)), 11, TimeUnit.SECONDS);
-		TIMER.schedule(() -> run(() -> MinecraftClient.getInstance().scheduleStop()), 15, TimeUnit.SECONDS);
+		// Then the glass pane.
+		TIMER.schedule(() -> run(() -> command("tp @p 4.5 220 -4.0 0 0")), 12, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> net.minecraft.client.option.KeyBinding.setKeyPressed(
+				MinecraftClient.getInstance().options.attackKey.getCode(), true)), 13, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> LegacyWorldTest.shot("ctm-crack-pane")), 13150, TimeUnit.MILLISECONDS);
+		TIMER.schedule(() -> run(() -> net.minecraft.client.option.KeyBinding.setKeyPressed(
+				MinecraftClient.getInstance().options.attackKey.getCode(), false)), 14, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> MinecraftClient.getInstance().scheduleStop()), 17, TimeUnit.SECONDS);
 	}
 
 	/** Runs with the real vanilla quad subclasses and stitched native atlas, never in releases. */

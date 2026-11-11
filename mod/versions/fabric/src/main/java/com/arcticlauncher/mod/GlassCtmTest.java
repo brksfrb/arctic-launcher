@@ -15,7 +15,7 @@ final class GlassCtmTest {
 	private static void run(Runnable r) { Minecraft.getInstance().execute(r); }
 	private static void command(String s) { Compat.sendChat("/" + s); }
 	private static void scene() {
-		command("tp @s -3.5 220 -4.0 0 0");
+		command("tp @s -4.5 220 -4.0 0 0");
 		TIMER.schedule(() -> run(GlassCtmTest::buildScene), 7, TimeUnit.SECONDS);
 	}
 	private static void buildScene() {
@@ -27,7 +27,7 @@ final class GlassCtmTest {
 		command("fill -5 220 0 -3 222 0 minecraft:glass");
 		command("fill -1 220 0 1 222 0 minecraft:red_stained_glass");
 		command("fill 3 221 0 5 221 0 minecraft:glass_pane");
-		command("time set 6000"); command("weather clear"); command("tp @s -3.5 220 -4.0 0 0");
+		command("time set 6000"); command("weather clear"); command("tp @s -4.5 220 -4.0 0 0");
 		//#if MC >= 26.2
 		if (!Minecraft.getInstance().gui.hud.isHidden()) Minecraft.getInstance().gui.hud.toggle();
 		//#else
@@ -49,21 +49,36 @@ final class GlassCtmTest {
 		TIMER.schedule(() -> run(() -> attack(true)), 10, TimeUnit.SECONDS);
 		TIMER.schedule(() -> run(() -> WorldTest.shot("ctm-crack")), 10250, TimeUnit.MILLISECONDS);
 		TIMER.schedule(() -> run(() -> attack(false)), 11, TimeUnit.SECONDS);
-		TIMER.schedule(() -> run(() -> Minecraft.getInstance().stop()), 15, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> command("tp @s 4.5 220 -4.0 0 0")), 12, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> attack(true)), 13, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> WorldTest.shot("ctm-crack-pane")), 13150, TimeUnit.MILLISECONDS);
+		TIMER.schedule(() -> run(() -> attack(false)), 14, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> Minecraft.getInstance().stop()), 17, TimeUnit.SECONDS);
 		//#else
-		TIMER.schedule(() -> run(() -> ArcticClient.config().connectedGlass = false), 12, TimeUnit.SECONDS);
-		TIMER.schedule(() -> run(() -> WorldTest.shot("ctm-off")), 20, TimeUnit.SECONDS);
-		TIMER.schedule(() -> run(() -> Minecraft.getInstance().stop()), 25, TimeUnit.SECONDS);
+		// Real held attack on the block, then on the pane; capture mid-break.
+		TIMER.schedule(() -> run(() -> command("gamemode survival")), 9, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> attack(true)), 10, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> WorldTest.shot("ctm-crack")), 10250, TimeUnit.MILLISECONDS);
+		TIMER.schedule(() -> run(() -> attack(false)), 11, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> command("tp @s 4.5 220 -4.0 0 0")), 12, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> attack(true)), 13, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> WorldTest.shot("ctm-crack-pane")), 13150, TimeUnit.MILLISECONDS);
+		TIMER.schedule(() -> run(() -> attack(false)), 14, TimeUnit.SECONDS);
+		TIMER.schedule(() -> run(() -> Minecraft.getInstance().stop()), 17, TimeUnit.SECONDS);
 		//#endif
 	}
-	//#if MC < 1.15
 	private static void attack(boolean down) {
 		Minecraft mc = Minecraft.getInstance();
+		//#if MC >= 1.15
+		mc.options.keyAttack.setDown(down);
+		//#else
 		if (down) mc.mouseHandler.grabMouse();
 		// Use the vanilla left mouse binding; 1.13's keyAttack field is misnamed in its mappings.
 		net.minecraft.client.KeyMapping.set(com.mojang.blaze3d.platform.InputConstants.Type.MOUSE.getOrCreate(0), down);
 		ArcticMod.LOG.info("ctm-break attack={}, focused={}, grabbed={}", down, mc.isWindowActive(), mc.mouseHandler.isMouseGrabbed());
+		//#endif
 	}
+	//#if MC < 1.15
 	private static void regression() {
 		Minecraft mc = Minecraft.getInstance();
 		net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos(-4, 221, 0);
