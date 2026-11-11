@@ -113,6 +113,17 @@ public final class GlassCtm {
 		return list;
 	}
 
+	/** Development scenes: whether the block at pos drops a quad of this kind facing {@code face}. */
+	//#if MC >= 1.15
+	static boolean hides(BlockAndTintGetter world, BlockPos pos, Direction face, boolean edge, boolean boundary) {
+	//#else
+	static boolean hides(BlockAndBiomeGetter world, BlockPos pos, Direction face, boolean edge, boolean boundary) {
+	//#endif
+		begin(world, world.getBlockState(pos), pos);
+		Context c = LOCAL.get();
+		try { return c.active && c.hide(edge, boundary, face); } finally { end(); }
+	}
+
 	private static final class Context {
 		boolean active, pane;
 		int x, y, z, checked, connected, faces, viewIndex;
@@ -136,9 +147,10 @@ public final class GlassCtm {
 			}
 			return (connected & bit) != 0;
 		}
-		boolean hide(Variants variants) {
-			if (!pane || variants == null || !variants.edge || !variants.boundary) return false;
-			Direction face = variants.direction;
+		boolean hide(Variants variants) { return variants != null && hide(variants.edge, variants.boundary, variants.direction); }
+		/** Flush quads against the same glass: pane edge strips, and the inner faces of adjoining glass blocks. */
+		boolean hide(boolean edge, boolean boundary, Direction face) {
+			if (!GlassTiles.hides(pane, edge, boundary)) return false;
 			return same(face == Direction.EAST ? 1 : face == Direction.WEST ? -1 : 0,
 					face == Direction.UP ? 1 : face == Direction.DOWN ? -1 : 0,
 					face == Direction.SOUTH ? 1 : face == Direction.NORTH ? -1 : 0);

@@ -46,6 +46,13 @@ public final class GlassTiles {
 				|| s.startsWith("glass_") && !s.contains("pane");
 	}
 
+	/**
+	 * Whether a quad may be dropped when the neighbour in its face direction is the same glass. Only quads
+	 * flush with the cube boundary qualify: a pane's edge strip, or any face of a full glass block (its
+	 * inner faces would otherwise show through a connected sheet). Pane glass faces are never dropped.
+	 */
+	public static boolean hides(boolean pane, boolean edge, boolean boundary) { return boundary && (!pane || edge); }
+
 	public static boolean paneEdge(String id) { return id.startsWith("minecraft:") && (id.contains("glass_pane_top") || id.endsWith("_stained_glass_pane_top")); }
 
 	public static String variant(String original, int tile) {

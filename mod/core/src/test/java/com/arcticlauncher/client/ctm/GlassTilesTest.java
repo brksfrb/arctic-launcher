@@ -154,4 +154,79 @@ class GlassTilesTest {
 		for (int y = 0; y < size; y++) for (int x = 0; x < size; x++) if (x < border || y < border || x >= size - border || y >= size - border) pixels[y * size + x] = 0xffffffff;
 		return pixels;
 	}
+
+	// The adapters' hide(): a quad goes when GlassTiles.hides allows its kind and the neighbour that way is the same glass.
+	private static final int[][] FACES = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
+	private static final int DOWN = 0, UP = 1, NORTH = 2, SOUTH = 3, WEST = 4, EAST = 5;
+	private static String key(int x, int y, int z) { return x + "," + y + "," + z; }
+	private static boolean hidden(Map<String, String> world, int x, int y, int z, int face, boolean edge, boolean boundary) {
+		String self = world.get(key(x, y, z));
+		if (!GlassTiles.hides(self.endsWith("pane"), edge, boundary)) return false;
+		return self.equals(world.get(key(x + FACES[face][0], y + FACES[face][1], z + FACES[face][2])));
+	}
+	private static Map<String, String> floor(String block) {
+		Map<String, String> world = new HashMap<>();
+		for (int x = 0; x < 3; x++) for (int z = 0; z < 3; z++) world.put(key(x, 0, z), block);
+		return world;
+	}
+
+	@Test void glassBlockFloorDropsOnlyItsInnerFaces() {
+		for (String block : Arrays.asList("lime_stained_glass", "glass")) {
+			Map<String, String> world = floor(block);
+			// Centre: every side meets the same glass; top and bottom face air.
+			for (int face : new int[]{NORTH, SOUTH, WEST, EAST}) assertTrue(hidden(world, 1, 0, 1, face, false, true), block);
+			assertFalse(hidden(world, 1, 0, 1, DOWN, false, true), block + " underside, toward a player below");
+			assertFalse(hidden(world, 1, 0, 1, UP, false, true), block);
+			// Corner and edge blocks keep the rim and drop the faces that point into the sheet.
+			assertFalse(hidden(world, 0, 0, 0, WEST, false, true));
+			assertFalse(hidden(world, 0, 0, 0, NORTH, false, true));
+			assertTrue(hidden(world, 0, 0, 0, EAST, false, true));
+			assertTrue(hidden(world, 0, 0, 0, SOUTH, false, true));
+			assertFalse(hidden(world, 2, 0, 1, EAST, false, true));
+			assertTrue(hidden(world, 2, 0, 1, WEST, false, true));
+			for (int x = 0; x < 3; x++) for (int z = 0; z < 3; z++) assertFalse(hidden(world, x, 0, z, DOWN, false, true));
+			// A quad that is not flush with the cube face is never dropped.
+			for (int face = 0; face < 6; face++) assertFalse(hidden(world, 1, 0, 1, face, false, false));
+		}
+	}
+
+	@Test void twoLayerGlassDropsTheFacesBetweenTheLayers() {
+		Map<String, String> world = floor("lime_stained_glass");
+		for (int x = 0; x < 3; x++) for (int z = 0; z < 3; z++) world.put(key(x, 1, z), "lime_stained_glass");
+		assertTrue(hidden(world, 1, 0, 1, UP, false, true));
+		assertTrue(hidden(world, 1, 1, 1, DOWN, false, true));
+		assertFalse(hidden(world, 1, 0, 1, DOWN, false, true));
+		assertFalse(hidden(world, 1, 1, 1, UP, false, true));
+	}
+
+	@Test void differentGlassNeverHidesAFace() {
+		Map<String, String> world = floor("lime_stained_glass");
+		world.put(key(3, 0, 1), "green_stained_glass");
+		world.put(key(1, 0, 3), "glass");
+		world.put(key(-1, 0, 1), "lime_stained_glass_pane");
+		assertFalse(hidden(world, 2, 0, 1, EAST, false, true));
+		assertFalse(hidden(world, 3, 0, 1, WEST, false, true));
+		assertFalse(hidden(world, 1, 0, 2, SOUTH, false, true));
+		assertFalse(hidden(world, 1, 0, 3, NORTH, false, true));
+		// A pane beside a block: neither side drops anything.
+		assertFalse(hidden(world, 0, 0, 1, WEST, false, true));
+		assertFalse(hidden(world, -1, 0, 1, EAST, true, true));
+	}
+
+	@Test void panesStillHideOnlyTheirEdgeStrips() {
+		Map<String, String> world = new HashMap<>();
+		for (int x = 0; x < 3; x++) world.put(key(x, 0, 0), "glass_pane");
+		assertTrue(hidden(world, 1, 0, 0, WEST, true, true));
+		assertTrue(hidden(world, 1, 0, 0, EAST, true, true));
+		assertFalse(hidden(world, 0, 0, 0, WEST, true, true));
+		assertFalse(hidden(world, 1, 0, 0, UP, true, true));
+		// Pane glass faces, flush or not, and edge strips inside the cube stay.
+		assertFalse(hidden(world, 1, 0, 0, EAST, false, true));
+		assertFalse(hidden(world, 1, 0, 0, EAST, false, false));
+		assertFalse(hidden(world, 1, 0, 0, EAST, true, false));
+		assertTrue(GlassTiles.hides(true, true, true));
+		assertTrue(GlassTiles.hides(false, false, true));
+		assertTrue(GlassTiles.hides(false, true, true));
+		assertFalse(GlassTiles.hides(false, false, false));
+	}
 }
