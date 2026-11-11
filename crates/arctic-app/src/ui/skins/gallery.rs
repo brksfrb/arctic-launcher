@@ -138,6 +138,7 @@ impl ArcticApp {
             _ => None,
         };
         let mut wear: Option<GalleryItem> = None;
+        let mut blocked = false;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(10.0, 10.0);
             for item in &items {
@@ -149,8 +150,12 @@ impl ArcticApp {
                         "by {} · used {} times",
                         item.author, item.downloads
                     ));
-                if tile.clicked() && can_wear && !worn {
-                    wear = Some(item.clone());
+                if tile.clicked() && !worn {
+                    if can_wear {
+                        wear = Some(item.clone());
+                    } else if !self.skins.gallery.busy {
+                        blocked = true;
+                    }
                 }
                 tile.context_menu(|ui| self.gallery_menu(ui, item));
             }
@@ -179,6 +184,9 @@ impl ArcticApp {
             self.skins.trying.skin = Some(Some((key, item.variant())));
             self.skins.gallery.busy = true;
             self.tasks.gallery_take(item, true);
+        }
+        if blocked {
+            self.explain_wear_blocked();
         }
     }
 

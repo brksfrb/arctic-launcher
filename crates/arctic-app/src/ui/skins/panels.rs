@@ -144,6 +144,17 @@ impl ArcticApp {
                 }
             });
             ui.add_space(6.0);
+        } else if self.arctic_state().is_none() {
+            // The collection is already there (the public catalog), but nothing can be worn until
+            // this account's own look is: say so, or a click looks like it did nothing.
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(
+                    RichText::new("Signing in to Arctic — you can look around while it loads.")
+                        .color(p.muted),
+                );
+            });
+            ui.add_space(6.0);
         }
     }
 
