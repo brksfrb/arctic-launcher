@@ -94,6 +94,14 @@ final class SelfTest {
 			return;
 		}
 		//#endif
+		if ("fog".equals(System.getProperty("arctic.selftest"))) {
+			//#if DEV_SCENES
+			//#if MC >= 1.21.6
+			FogTest.start();
+			//#endif
+			//#endif
+			return;
+		}
 		if ("ctm".equals(System.getProperty("arctic.selftest"))) {
 			//#if DEV_SCENES
 			GlassCtmTest.start();

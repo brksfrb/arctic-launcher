@@ -1,8 +1,7 @@
 package com.arcticlauncher.mod.mixin;
 
 //#if MC >= 1.21.5
-import com.arcticlauncher.client.ArcticClient;
-import com.arcticlauncher.client.config.ClientConfig;
+import com.arcticlauncher.client.Fog;
 //#if MC >= 1.21.6
 import net.minecraft.client.renderer.fog.FogRenderer;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
@@ -27,37 +26,32 @@ abstract class FogBufferMixin {
 
 	@ModifyVariable(method = WRITE, at = @At("HEAD"), argsOnly = true, ordinal = 0)
 	private float arctic$environmentStart(float value) {
-		return value * factor();
+		return Fog.stretch(value);
 	}
 
 	@ModifyVariable(method = WRITE, at = @At("HEAD"), argsOnly = true, ordinal = 1)
 	private float arctic$environmentEnd(float value) {
-		return value * factor();
+		return Fog.stretch(value);
 	}
 
 	@ModifyVariable(method = WRITE, at = @At("HEAD"), argsOnly = true, ordinal = 2)
 	private float arctic$renderStart(float value) {
-		return value * factor();
+		return Fog.stretch(value);
 	}
 
 	@ModifyVariable(method = WRITE, at = @At("HEAD"), argsOnly = true, ordinal = 3)
 	private float arctic$renderEnd(float value) {
-		return value * factor();
+		return Fog.stretch(value);
 	}
 	//#else
 	@Inject(method = "setupFog", at = @At("RETURN"), cancellable = true)
 	private static void arctic$fog(CallbackInfoReturnable<FogParameters> cir) {
 		FogParameters fog = cir.getReturnValue();
-		float f = factor();
+		float f = Fog.factor();
 		if (f != 1f && fog != null) {
-			cir.setReturnValue(new FogParameters(fog.start() * f, fog.end() * f, fog.shape(), fog.red(), fog.green(), fog.blue(), fog.alpha()));
+			cir.setReturnValue(new FogParameters(Fog.stretch(fog.start(), f), Fog.stretch(fog.end(), f), fog.shape(), fog.red(), fog.green(), fog.blue(), fog.alpha()));
 		}
 	}
 	//#endif
-
-	private static float factor() {
-		ClientConfig c = ArcticClient.config();
-		return c == null || !c.fog ? 1f : c.fogOff ? 1000f : (float) Math.max(1.0, Math.min(10.0, c.fogScale));
-	}
 }
 //#endif
