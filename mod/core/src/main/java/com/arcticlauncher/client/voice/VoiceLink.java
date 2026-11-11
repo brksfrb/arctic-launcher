@@ -17,6 +17,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import com.arcticlauncher.client.Lang;
 /**
  * The game's half of proximity voice chat. Voice itself runs in Arctic
  * Launcher; the game tells it (through the launcher's local bridge, ten
@@ -282,7 +283,7 @@ public final class VoiceLink {
 		java.util.Map<String, String> known = names;
 		for (String uuid : speaking) {
 			String name = known.get(uuid);
-			out.add(name != null ? name : "Someone");
+			out.add(name != null ? name : Lang.t("social.someone"));
 		}
 		Collections.sort(out);
 		return out;

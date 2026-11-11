@@ -1,0 +1,149 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.60.5",
+  "textSha256": "7ca5d1baef049979e9785d5bbafe7100a829e1107a3d374975962cc64ecc76fe",
+  "method": "Static RIP-relative LEA references to exact NUL-terminated strings from legacy functions; .pdata-contained candidates only",
+  "abiProven": false,
+  "layoutProven": false,
+  "runtimeExecuted": false,
+  "supportedProfile": false,
+  "functions": {
+    "renderWorld": {
+      "oldRva": "0x47f8570",
+      "oldBytes": 5015,
+      "distinctStrings": 9,
+      "candidates": [],
+      "candidateCount": 0
+    },
+    "renderActor": {
+      "oldRva": "0x1d51250",
+      "oldBytes": 1270,
+      "distinctStrings": 1,
+      "candidates": [
+        {
+          "rva": "0x594be00",
+          "bytes": 1274,
+          "distinctStringMatches": 1,
+          "strings": [
+            "No renderer found - have you set the entity's description:identifier correctly?"
+          ]
+        }
+      ],
+      "candidateCount": 1
+    },
+    "levelTick": {
+      "oldRva": "0x12f4b70",
+      "oldBytes": 1272,
+      "distinctStrings": 0,
+      "candidates": [],
+      "candidateCount": 0
+    },
+    "parseShader": {
+      "oldRva": "0x4b0b640",
+      "oldBytes": 210,
+      "distinctStrings": 3,
+      "candidates": [
+        {
+          "rva": "0x4df5f50",
+          "bytes": 213,
+          "distinctStringMatches": 3,
+          "strings": [
+            "fragmentShader",
+            "geometryShader",
+            "vertexShader"
+          ]
+        },
+        {
+          "rva": "0x5a4f600",
+          "bytes": 203,
+          "distinctStringMatches": 3,
+          "strings": [
+            "fragmentShader",
+            "geometryShader",
+            "vertexShader"
+          ]
+        },
+        {
+          "rva": "0x53f3d90",
+          "bytes": 20254,
+          "distinctStringMatches": 1,
+          "strings": [
+            "vertexShader"
+          ]
+        }
+      ],
+      "candidateCount": 3
+    },
+    "skinnedConstruct": {
+      "oldRva": "0x5e9e4e0",
+      "oldBytes": 1614,
+      "distinctStrings": 0,
+      "candidates": [],
+      "candidateCount": 0
+    },
+    "dataDrivenDraw": {
+      "oldRva": "0x1c35ff0",
+      "oldBytes": 7195,
+      "distinctStrings": 1,
+      "candidates": [
+        {
+          "rva": "0x58b7ac0",
+          "bytes": 7006,
+          "distinctStringMatches": 1,
+          "strings": [
+            "variable.gliding_speed_value"
+          ]
+        },
+        {
+          "rva": "0x58b5250",
+          "bytes": 6665,
+          "distinctStringMatches": 1,
+          "strings": [
+            "variable.gliding_speed_value"
+          ]
+        },
+        {
+          "rva": "0x5985040",
+          "bytes": 5981,
+          "distinctStringMatches": 1,
+          "strings": [
+            "variable.gliding_speed_value"
+          ]
+        },
+        {
+          "rva": "0x2f2f280",
+          "bytes": 9767,
+          "distinctStringMatches": 1,
+          "strings": [
+            "variable.gliding_speed_value"
+          ]
+        },
+        {
+          "rva": "0x575d730",
+          "bytes": 1040,
+          "distinctStringMatches": 1,
+          "strings": [
+            "variable.gliding_speed_value"
+          ]
+        },
+        {
+          "rva": "0x2b5670",
+          "bytes": 13920,
+          "distinctStringMatches": 1,
+          "strings": [
+            "variable.gliding_speed_value"
+          ]
+        },
+        {
+          "rva": "0x6eba910",
+          "bytes": 65802,
+          "distinctStringMatches": 1,
+          "strings": [
+            "variable.gliding_speed_value"
+          ]
+        }
+      ],
+      "candidateCount": 7
+    }
+  }
+}

@@ -11,7 +11,7 @@ use crate::app::ArcticApp;
 use crate::art::icons::Icon;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 const THUMB_W: f32 = 240.0;
 const THUMB_H: f32 = 135.0;
 /// Thumbnails asked for at once (the rest wait their turn).
@@ -73,10 +73,15 @@ impl ArcticApp {
             .request_repaint_after(std::time::Duration::from_secs_f64(RESCAN_EVERY));
         crate::widgets::row(ui, |ui| {
             ui.vertical(|ui| {
-                widgets::page_header(ui, p, "Screenshots", "From every instance, newest first.");
+                widgets::page_header(
+                    ui,
+                    p,
+                    t!("settings.screenshots"),
+                    t!("settings.from_every_instance_newest_first"),
+                );
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                if widgets::button(ui, p, None, "Refresh", false).clicked() {
+                if widgets::button(ui, p, None, t!("settings.refresh"), false).clicked() {
                     self.shots.loading = true;
                     self.shots.asked = now;
                     self.tasks.screenshot_list();
@@ -87,7 +92,7 @@ impl ArcticApp {
         let Some(shots) = self.shots.shots.clone() else {
             ui.horizontal(|ui| {
                 ui.spinner();
-                ui.label(RichText::new("Looking for screenshots…").color(p.muted));
+                ui.label(RichText::new(t!("settings.looking_for_screenshots")).color(p.muted));
             });
             return;
         };
@@ -102,7 +107,8 @@ impl ArcticApp {
             .collect();
         if shown.is_empty() {
             ui.label(
-                RichText::new("No screenshots yet. Press F2 in game to take one.").color(p.muted),
+                RichText::new(t!("settings.no_screenshots_yet_press_f2_in_game_to_take"))
+                    .color(p.muted),
             );
             return;
         }
@@ -128,11 +134,11 @@ impl ArcticApp {
             .filter
             .as_ref()
             .and_then(|id| names.iter().find(|(i, _)| i == id))
-            .map_or("All instances".to_owned(), |(_, n)| n.clone());
+            .map_or(t!("settings.all_instances").to_owned(), |(_, n)| n.clone());
         egui::ComboBox::from_id_salt("shot_filter")
             .selected_text(current)
             .show_ui(ui, |ui| {
-                ui.selectable_value(&mut self.shots.filter, None, "All instances");
+                ui.selectable_value(&mut self.shots.filter, None, t!("settings.all_instances"));
                 for (id, name) in names {
                     ui.selectable_value(&mut self.shots.filter, Some(id), name);
                 }
@@ -262,11 +268,16 @@ impl ArcticApp {
                 ui.add_space(6.0);
                 crate::widgets::row(ui, |ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if widgets::button(ui, p, None, "Close", false).clicked() {
+                        if widgets::button(ui, p, None, t!("settings.close"), false).clicked() {
                             close = true;
                         }
-                        if widgets::icon_button(ui, p, Icon::Trash, "Delete (moves it to .trash)")
-                            .clicked()
+                        if widgets::icon_button(
+                            ui,
+                            p,
+                            Icon::Trash,
+                            t!("settings.delete_moves_it_to_trash"),
+                        )
+                        .clicked()
                         {
                             match screenshots::trash(&shot) {
                                 Ok(()) => {
@@ -277,20 +288,31 @@ impl ArcticApp {
                                 }
                                 Err(e) => self.toasts.push(
                                     Kind::Error,
-                                    "Couldn't delete it",
+                                    t!("settings.couldnt_delete_it"),
                                     e.to_string(),
                                 ),
                             }
                         }
-                        if widgets::icon_button(ui, p, Icon::Folder, "Show in folder").clicked()
+                        if widgets::icon_button(ui, p, Icon::Folder, t!("settings.show_in_folder"))
+                            .clicked()
                             && let Some(dir) = shot.path.parent()
                         {
                             let _ = open::that_detached(dir);
                         }
-                        if widgets::button(ui, p, Some(Icon::Copy), "Copy image", false).clicked() {
+                        if widgets::button(
+                            ui,
+                            p,
+                            Some(Icon::Copy),
+                            t!("settings.copy_image"),
+                            false,
+                        )
+                        .clicked()
+                        {
                             self.tasks.screenshot_copy(shot.path.clone());
                         }
-                        if widgets::button(ui, p, Some(Icon::External), "Open", true).clicked() {
+                        if widgets::button(ui, p, Some(Icon::External), t!("settings.open"), true)
+                            .clicked()
+                        {
                             let _ = open::that_detached(&shot.path);
                         }
                         self.send_shot_menu(ui, &shot.path);
@@ -393,8 +415,12 @@ impl ArcticApp {
 
     pub(crate) fn on_screenshot_copied(&mut self, result: Result<(), String>) {
         match result {
-            Ok(()) => self.toasts.push(Kind::Success, "Copied the screenshot", ""),
-            Err(e) => self.toasts.push(Kind::Error, "Couldn't copy it", e),
+            Ok(()) => self
+                .toasts
+                .push(Kind::Success, t!("settings.copied_the_screenshot"), ""),
+            Err(e) => self
+                .toasts
+                .push(Kind::Error, t!("settings.couldnt_copy_it"), e),
         }
     }
 }
@@ -436,11 +462,11 @@ fn zoom_and_pan(ui: &egui::Ui, image: &egui::Response, zoom: &mut f32, center: &
 fn when(t: std::time::SystemTime) -> String {
     let secs = t.elapsed().map_or(0, |d| d.as_secs());
     match secs {
-        0..60 => "just now".into(),
-        60..3600 => format!("{} min ago", secs / 60),
-        3600..86_400 => format!("{} h ago", secs / 3600),
-        86_400..172_800 => "yesterday".into(),
-        _ => format!("{} days ago", secs / 86_400),
+        0..60 => t!("settings.just_now").into(),
+        60..3600 => tf!("settings.min_ago", value = secs / 60),
+        3600..86_400 => tf!("common.h_ago", n = secs / 3600),
+        86_400..172_800 => t!("common.yesterday").into(),
+        _ => tf!("settings.days_ago", _400 = secs / 86_400),
     }
 }
 
@@ -461,7 +487,7 @@ impl ArcticApp {
         }
         let mut picked = None;
         egui::ComboBox::from_id_salt("send_shot")
-            .selected_text("Send to…")
+            .selected_text(t!("settings.send_to"))
             .show_ui(ui, |ui| {
                 for (id, name) in &friends {
                     if ui.selectable_label(false, name).clicked() {
@@ -474,7 +500,7 @@ impl ArcticApp {
         {
             self.tasks.chat_send_image(account, id, path.to_path_buf());
             self.toasts
-                .push(Kind::Info, format!("Sending to {name}…"), "");
+                .push(Kind::Info, tf!("settings.sending_to", name = name), "");
         }
     }
 }

@@ -1,6 +1,7 @@
 //! Command implementations. Each returns the process exit code.
 
 pub mod accounts;
+pub mod bedrock;
 pub mod defaults;
 pub mod friends;
 pub mod instances;

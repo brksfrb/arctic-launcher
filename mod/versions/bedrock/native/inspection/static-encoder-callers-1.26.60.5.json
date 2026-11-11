@@ -1,0 +1,204 @@
+{
+  "schema": 1,
+  "oldProductVersion": "1.26.5203.0",
+  "newProductVersion": "1.26.60.5",
+  "requestedRoots": [
+    "0x5319ff0",
+    "0x532feb0",
+    "0x5330250",
+    "0xb78a440",
+    "0xb78a620",
+    "0xb78a8e0",
+    "0xb78aa20",
+    "0xb78abd0",
+    "0xb78b730",
+    "0xbcbd890",
+    "0xbce11d0"
+  ],
+  "calleesOf": [],
+  "rootsOnly": true,
+  "oldTextSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "newTextSha256": "7ca5d1baef049979e9785d5bbafe7100a829e1107a3d374975962cc64ecc76fe",
+  "sourceReferencedFunctions": 11,
+  "probed": 11,
+  "truncated": false,
+  "counts": {
+    "changed_or_missing": 11
+  },
+  "method": "Full function instruction bytes with only external relative address operands masked; internal branches/member offsets/immediates retained",
+  "limitations": [
+    "Candidate identity is not semantic equivalence",
+    "External callees and referenced constants need independent joins",
+    "No ABI/layout/ownership/runtime or supported-profile promotion"
+  ],
+  "gameStartedByInspection": false,
+  "gameModuleLoadedByInspection": false,
+  "gameCodeExecuted": false,
+  "functions": [
+    {
+      "oldRva": "0x5319ff0",
+      "oldBytes": 253,
+      "references": [
+        {
+          "root": "0x5319ff0"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 0,
+      "oldRawSha256": "0a7da594e74148c3e72a15c6b4f2946832fca1f3b88008bf0a0652f167ce3f21",
+      "normalizedSha256": "4c85a754c24f2cad6eb0bfd0183e5f48c51f5cb08a4ca37a16614c1b05a6e484",
+      "maskedBytes": 16,
+      "state": "changed_or_missing"
+    },
+    {
+      "oldRva": "0x532feb0",
+      "oldBytes": 283,
+      "references": [
+        {
+          "root": "0x532feb0"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 0,
+      "oldRawSha256": "a53e82f79037d5573d6e5d53940e41c3efd2be645a34ff42d8eaa0960edd7491",
+      "normalizedSha256": "f68daa3221ff120d6ba17d2dfea802d785a42aa6d46f2b9dc1db66e1dc6ae0c1",
+      "maskedBytes": 16,
+      "state": "changed_or_missing"
+    },
+    {
+      "oldRva": "0x5330250",
+      "oldBytes": 533,
+      "references": [
+        {
+          "root": "0x5330250"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 0,
+      "oldRawSha256": "f3d81426ee40235498ca79addaeb635abedb0a672969bc3b03e5d6fed740a04e",
+      "normalizedSha256": "4663481fdfddcfb123990b13e2f21e0f79f0bfdec210cedf28342fedc591582a",
+      "maskedBytes": 40,
+      "state": "changed_or_missing"
+    },
+    {
+      "oldRva": "0xb78a440",
+      "oldBytes": 465,
+      "references": [
+        {
+          "root": "0xb78a440"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 1,
+      "oldRawSha256": "9d0c1a0f35373df4cc1989ff5f4d9dd85392dd508f956a46d322e6acf0371444",
+      "normalizedSha256": "12f785a0a15f071cbf562fea5394848e7438fdd56f2b1f1d5c5d1cc5e5b61c4d",
+      "maskedBytes": 32,
+      "state": "changed_or_missing"
+    },
+    {
+      "oldRva": "0xb78a620",
+      "oldBytes": 414,
+      "references": [
+        {
+          "root": "0xb78a620"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 1,
+      "oldRawSha256": "d22557380521d460b72f4455780d4c6d12662c7f40e610e13511175629f48744",
+      "normalizedSha256": "a51b28374efa7eaff7cafbb4b625ecd53b402db75394c5f0f9325102d11900e6",
+      "maskedBytes": 64,
+      "state": "changed_or_missing"
+    },
+    {
+      "oldRva": "0xb78a8e0",
+      "oldBytes": 319,
+      "references": [
+        {
+          "root": "0xb78a8e0"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 0,
+      "oldRawSha256": "2b4db5884d5a5b23a4a8f645cbfd54f0806d988ad9d20ae0297e79ba5303c717",
+      "normalizedSha256": "aea35b76aca6ed4837465f5ec3e0c4236dd2dcb1f32b2d5de21f1582fad12dd3",
+      "maskedBytes": 28,
+      "state": "changed_or_missing"
+    },
+    {
+      "oldRva": "0xb78aa20",
+      "oldBytes": 418,
+      "references": [
+        {
+          "root": "0xb78aa20"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 1,
+      "oldRawSha256": "15e8c8d3bfb377e09b093219c653d293f8366740b9a31af5dd70f4cd4bd0e19b",
+      "normalizedSha256": "e567cf00c93a003e35b0c0bdebd0dae35d091f2380129ada9737ec57b5ca88a7",
+      "maskedBytes": 40,
+      "state": "changed_or_missing"
+    },
+    {
+      "oldRva": "0xb78abd0",
+      "oldBytes": 1834,
+      "references": [
+        {
+          "root": "0xb78abd0"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 0,
+      "oldRawSha256": "0c26cdc3092f5cc7dedea703a9dd6c19b3e9a4be31926101e980a11af6a319f1",
+      "normalizedSha256": "1a208e817d1b76bfba5ac5b740c7977b56c2598a59c4380a4d6ce0b2c9f738ab",
+      "maskedBytes": 152,
+      "state": "changed_or_missing"
+    },
+    {
+      "oldRva": "0xb78b730",
+      "oldBytes": 6285,
+      "references": [
+        {
+          "root": "0xb78b730"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 0,
+      "oldRawSha256": "46c2dc784dcf8a0fd75069cac7e2e090d531fec6b7d94f225d16be63b89e00a8",
+      "normalizedSha256": "685db46ea8a3bb271c07558285393d24de39d124350c2af8d0d443cd62ed7be5",
+      "maskedBytes": 360,
+      "state": "changed_or_missing"
+    },
+    {
+      "oldRva": "0xbcbd890",
+      "oldBytes": 294,
+      "references": [
+        {
+          "root": "0xbcbd890"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 1,
+      "oldRawSha256": "ac6df78bcaebac3804b1ac87019fdeadd7ec510846404dd120960430614470ea",
+      "normalizedSha256": "73c5e09faee2674007ceb3971d7e8eab5d016fb5160a0250c6c5c1690f981d55",
+      "maskedBytes": 60,
+      "state": "changed_or_missing"
+    },
+    {
+      "oldRva": "0xbce11d0",
+      "oldBytes": 1038,
+      "references": [
+        {
+          "root": "0xbce11d0"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 1,
+      "oldRawSha256": "08964779d081066e1a76ee8ba4b4514718580e0b5435c7f952c9b8fd6d3bae16",
+      "normalizedSha256": "5c2a06f8cc66afcd447978436f5c1126a894ed9c790eac9444613b452c7dae3b",
+      "maskedBytes": 72,
+      "state": "changed_or_missing"
+    }
+  ]
+}

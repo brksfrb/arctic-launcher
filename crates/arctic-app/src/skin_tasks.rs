@@ -15,7 +15,7 @@ use arctic_core::skins::Variant;
 use arctic_core::skins::api::{self, Profile};
 
 use crate::tasks::{Event, Tasks};
-
+use crate::{t, tf};
 /// The player's Arctic look and the preset capes, textures included.
 #[derive(Debug, Clone)]
 pub struct ArcticState {
@@ -131,7 +131,7 @@ impl Tasks {
             AccountKind::Microsoft(session) => Ok(session.access_token.reveal().to_string()),
             #[cfg(feature = "offline-accounts")]
             AccountKind::Offline => Err(Error::Other(
-                "Minecraft skins can only be changed on Microsoft accounts.".into(),
+                t!("tasks.minecraft_skins_can_only_be_changed_on").into(),
             )),
         }
     }
@@ -277,7 +277,7 @@ impl Tasks {
     /// Ask for a skin file; `None` when the dialog was cancelled.
     pub fn pick_skin_file(&self) {
         self.run(|t| {
-            let result = pick_png("Choose a skin", "Minecraft skin");
+            let result = pick_png(t!("tasks.choose_a_skin"), t!("tasks.minecraft_skin"));
             t.send(Event::SkinFile(result));
         });
     }
@@ -286,8 +286,8 @@ impl Tasks {
     pub fn pick_cape_file(&self) {
         self.run(|t| {
             let result = pick_png(
-                "Choose a cape image (64×32 up to 1024×512, or up to 32 frames stacked for an animated cape)",
-                "Cape",
+                t!("tasks.choose_a_cape_image_64_32_up_to_1024_512_or"),
+                t!("tasks.cape"),
             )
             .map(|f| f.map(|(_, b)| b));
             t.send(Event::CapeFile(result));
@@ -306,14 +306,14 @@ fn pick_png(title: &str, filter: &str) -> Picked {
         None => Ok(None),
         Some(path) => std::fs::read(&path)
             .map(|bytes| Some((file_stem(&path), bytes)))
-            .map_err(|e| format!("Could not read {}: {e}", path.display())),
+            .map_err(|e| tf!("tasks.could_not_read", path = path.display(), e = e)),
     }
 }
 
 pub fn file_stem(path: &std::path::Path) -> String {
     path.file_stem()
         .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "Skin".into())
+        .unwrap_or_else(|| t!("tasks.skin").into())
 }
 
 /// How many looks-server downloads run at once.

@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.5203.0",
+  "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "evidence": "Existing cached text/pdata decoded as data and current source read, edited and manually reviewed only. No builds, tests, syntax checks, game/project/module execution, process inspection, native calls, GPU work or exports. Runtime parity remains unverified by user instruction.",
+  "nativeFacts": {
+    "consumer": "The existing hook target dfa1540..dfa1a2c consumes submitted used contexts whose context+2cbd0 fence is at most the requested value; context+2cbd8 is checked at dfa1668 and the fence comparison is at dfa167d. The routine uses queue+2f8d148 for its native fence context, including the completed value at +30.",
+    "vector": "Context+2cbe0/+2cbe8/+2cbf0 hold begin/end/capacity pointers. The same fields receive deferred texture resources on the ordinary df98520 cleanup path described in native-texture-retirement-source.json.",
+    "drain": "dfa16e9..dfa172b walks context pointers into a local temporary vector, with an in-function growth route. dfa1630..dfa1637 assigns context.end=context.begin. This reset alone does not demonstrate that releases have finished.",
+    "releaseBeforeFree": "dfa18ca..dfa1900 walks that temporary vector. Non-null entries are invoked through vtable+10 at dfa18f4..dfa18f8, the IUnknown Release slot for these deferred COM resources. Only afterward does dfa1913..dfa1996 push completed contexts into the free ring. dfa19ad checks completed != UINT64_MAX, and the success byte returns at dfa19ed..dfa1a02 after temporary-vector cleanup.",
+    "scope": "This establishes cached control-flow ordering inside the pinned routine. It does not prove live synchronization against arbitrary other engine writers, recover a backing-allocation/descriptor owner or supply a callable acquisition API."
+  },
+  "source": {
+    "module": "depth_queue",
+    "before": "For contexts with actual snapshot or draw-asset retirement tickets, copy the 24-byte deferred-vector header twice. Accept all-zero canonical empty storage or ordered, aligned user-address fields; changing/unreadable/malformed headers are unknown. No vector element or COM method is accessed.",
+    "after": "Only after original success and the existing exact queue/fence/list identities, completed native fence and used-to-free membership checks, require a stable header with unchanged begin/capacity and end==begin. Otherwise do not pass that context's tickets to either retirement pool.",
+    "bounds": "At most 272 contexts, constant two 24-byte reads per header sample, no traversal or allocation proportional to native vector capacity, and no new hooks, native calls or addresses in diagnostics.",
+    "lifetime": "A successful native handoff still removes replayability only for exact captured owner generations/submission identities. Private GPU-fence and existing pool collection conditions remain required before payload destruction. This metadata check does not construct Cohort.native_owner.",
+    "fixture": "The existing native handoff fixture's zero-filled context buffer was mechanically extended through +2cbf8 so it includes the newly read header. No test cases were added or executed."
+  },
+  "remaining": [
+    "Observed committed-storage owners now have source support in native-committed-resources-source.json. Placed/native allocator backing, content reuse, descriptor/GPU-address ownership, exclusive inline recording and an authoritative feature-phase/material producer/caller remain incomplete.",
+    "Complete live cosmetics/cape/emote/replay rendering and deterministic video export.",
+    "Build, runtime retirement/race/rendering comparisons and full feature-parity verification."
+  ],
+  "verified": {"built":false,"tested":false,"nativeRoutineCalled":false,"retirementObservedLive":false,"allocatorLeaseImplemented":false,"nativeInsertionCallerImplemented":false,"liveGame":false,"gpuRendering":false,"deterministicVideo":false,"fullParity":false}
+}

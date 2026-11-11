@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "purpose": "Primary client map, client/session/timer and exact getter metadata source migration",
+  "source": [
+    "../src/native_live_client_profile.rs",
+    "../src/live_client.rs",
+    "../src/native_scene_layout.rs",
+    "../src/world_hooks.rs"
+  ],
+  "bindings": "live-client-reader-bindings.json",
+  "nativeEvidence": "static-live-client-reader-layout-1.26.60.5.json",
+  "nativeFacts": {
+    "map": "Native lookup 81e6b0..81e7a4 maps to 8bd280..8bd370. The Game client map moves from 970 to 9d0, while node parent/nil/key remain 8/19/20. The client object field moves from node+30 to node+38. Native key comparison still consumes an unsigned byte; no uniform object-field shift is applied.",
+    "game": "Game class table e76e2d0 maps to f091b70. Its actual renderer getter at slot 360 maps from 80c4d0 to 8ac4e0 and loads Game+1440/1628. The complete anchored Game constructors and native client-map lookup are included in the same selected family.",
+    "client": "ClientInstance class table e9731b0 maps to f2b9330. Game/Minecraft/LevelRenderer fields move from 1a8/1b0/1c0 to 1c8/1d0/1e0. Weak camera/player references move from 218/248 to 238/268. Local-player/camera slots change from 31/43 to 30/42, while LevelRenderer/level slots change from 187/168 to 185/166. The source validates these individually rather than applying one slot delta.",
+    "minecraft": "Minecraft class table e7ca5b0 maps to f0a8920. Session/simulation/real-timer fields move from c8/e0/e8 to d0/e8/f0. Pause-getter/session-predicate slots remain 5/6 and point at 19da130/19da150 versus b85030/b85050. Both session predicates check session+28, active owner+30, its byte zero, and level+40. These methods are compared as code/table metadata and never invoked by the reader.",
+    "completeLevelGetter": "The earlier ClientInstance level-getter discovery stopped at the first return. The retained complete 47-byte leaves include both the ordinary level return and the zero-result branch: 5dc2630..5dc265f and 65b02f0..65b031f. This is separate from invoking either getter.",
+    "scope": "The metadata family does not own a native client/session/map node, acquire a backing allocation, implement ECS lifetime access or authorize a native render feature phase. Readbacks reject observed changes but do not prove an atomic snapshot or eliminate ABA without ownership."
+  },
+  "contract": {
+    "acceptedCompleteImageAndSceneFamilyRequired": true,
+    "acceptedPeImageSizeMustMatchReaderFamily": true,
+    "elevenCompleteFunctionsHashedBeforeCoreDetours": true,
+    "threeConstructorClassTableLeaRelationshipsRechecked": true,
+    "sevenRebasedActualMethodTableEntriesRechecked": true,
+    "weakGetterAndMinecraftPredicateRvasMustMatchSelectedReaders": true,
+    "mapAndNodeCopyExtentsBounded": true,
+    "primarySelectionLimitedToSixteenNodes": true,
+    "nilHeadParentLinksAndVisitedNodeUniquenessRequired": true,
+    "visitedNodeHeadAndMapCopiesReadBackBeforePublishingClient": true,
+    "productionGameAndClientConcreteClassIdentitiesReadBack": true,
+    "productionExactGetterMismatchCannotUseGenericPointerGetterFallback": true,
+    "productionReaderCannotFallThroughToUnboundFixturePath": true,
+    "sessionAndTimerPointerGraphReadbacksRetained": true,
+    "allFiveSampledSimulationTimerFloatBitPatternsReadBack": true,
+    "existingDataFixtureUsesSelectedLayoutAndRealParentLinksButWasNotRun": true,
+    "virtualMethodsOrConstructorsInvokedByReader": false,
+    "nativeObjectOwnershipOrFeaturePhaseCreated": false
+  },
+  "sourceImplemented": true,
+  "liveClientReaderSourceMigrationImplemented": true,
+  "currentCandidateActivated": false,
+  "remainingSceneDependencyMigrationComplete": false,
+  "runtimeVerified": false,
+  "fullParity": false,
+  "remaining": [
+    "Complete renderer, camera, actor and ECS dependency migrations before newer-image activation",
+    "Actual exclusive native feature phase, native object/resource ownership and custom geometry insertion",
+    "Complete live cosmetics, cape/emote rendering and deterministic replay/video export"
+  ],
+  "operations": {
+    "cachedBytesReadAsData": true,
+    "gameOpened": false,
+    "gameCodeExecuted": false,
+    "processInspected": false,
+    "buildExecuted": false,
+    "testsExecuted": false
+  }
+}

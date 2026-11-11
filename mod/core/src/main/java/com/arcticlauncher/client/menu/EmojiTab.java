@@ -6,6 +6,7 @@ import com.arcticlauncher.client.feature.Emoji;
 import com.arcticlauncher.client.ui.Button;
 import java.util.Map;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Symbols for chat: click one to copy it (paste into chat with Ctrl+V), or type its
  * shortcode (":heart:") and it's swapped when you send.
@@ -16,20 +17,20 @@ final class EmojiTab implements MenuTab {
 
 	@Override
 	public String title() {
-		return "Emoji and symbols";
+		return Lang.t("mods.emoji_and_symbols");
 	}
 
 	@Override
 	public String hint() {
-		return "Click to copy, or type :heart: in chat.";
+		return Lang.t("mods.click_to_copy_or_type_heart_in_chat");
 	}
 
 	@Override
 	public void build(Host host, int x, int top, int w, int bottom) {
 		final ClientConfig c = ArcticClient.config();
 		Form f = new Form(host, x, top, w, bottom);
-		f.section("Typing");
-		f.toggle("Shortcodes", "Type :heart: or :star: and it sends the symbol", () -> c.chatEmoji, on -> c.chatEmoji = on);
+		f.section(Lang.t("mods.typing"));
+		f.toggle(Lang.t("mods.shortcodes"), Lang.t("mods.type_heart_or_star_and_it_sends_the_symbol"), () -> c.chatEmoji, on -> c.chatEmoji = on);
 		StringBuilder sample = new StringBuilder();
 		int n = 0;
 		for (Map.Entry<String, String> e : Emoji.codes().entrySet()) {
@@ -38,8 +39,8 @@ final class EmojiTab implements MenuTab {
 			}
 			sample.append(':').append(e.getKey()).append(": ");
 		}
-		f.note("Some: " + sample.toString().trim());
-		f.note("The full list is below, under each symbol's group.");
+		f.note(Lang.t("mods.some") + sample.toString().trim());
+		f.note(Lang.t("mods.the_full_list_is_below_under_each_symbols"));
 		int perRow = Math.max(1, f.w / (CELL + GAP));
 		for (Map.Entry<String, String> group : Emoji.groups().entrySet()) {
 			f.section(group.getKey());
@@ -54,11 +55,11 @@ final class EmojiTab implements MenuTab {
 				final String symbol = symbols[i];
 				f.put(new Button(symbol, () -> {
 					ArcticClient.platform().setClipboard(symbol);
-					com.arcticlauncher.client.notice.Notices.post("Copied " + symbol, "Paste it into chat with Ctrl+V");
+					com.arcticlauncher.client.notice.Notices.post(Lang.t("mods.copied") + symbol, Lang.t("mods.paste_it_into_chat_with_ctrl_v"));
 				}), f.x + (i % perRow) * (CELL + GAP), topY, CELL, CELL);
 			}
 		}
-		f.section("Shortcodes");
+		f.section(Lang.t("mods.shortcodes"));
 		StringBuilder line = new StringBuilder();
 		for (Map.Entry<String, String> e : Emoji.codes().entrySet()) {
 			String item = ":" + e.getKey() + ": " + e.getValue() + "   ";

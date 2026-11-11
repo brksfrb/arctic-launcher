@@ -25,6 +25,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Friends, chat and screenshots in game. Checks for new messages every few
  * seconds and for friends and invites less often; shows pop-ups for
@@ -168,7 +169,7 @@ public final class Social {
 				}
 				markRead(friend);
 			} catch (Exception e) {
-				status = "Chat couldn't be loaded: " + e.getMessage();
+				status = Lang.t("social.chat_couldnt_be_loaded") + e.getMessage();
 			}
 		});
 	}
@@ -184,14 +185,14 @@ public final class Social {
 				added(friend, new Message(gson.fromJson(Http.send("POST", base() + "/v1/messages", token(), body.toString()), JsonObject.class)));
 				status = "";
 			} catch (Exception e) {
-				status = "Not sent: " + e.getMessage();
+				status = Lang.t("social.not_sent") + e.getMessage();
 			}
 		});
 	}
 
 	/** Shrink a screenshot, upload it and send it. */
 	public void sendScreenshot(final String friend, final File file) {
-		status = "Sending the screenshot…";
+		status = Lang.t("social.sending_the_screenshot");
 		worker.execute(() -> {
 			try {
 				byte[] png = shrink(file);
@@ -204,9 +205,9 @@ public final class Social {
 				Message m = new Message(gson.fromJson(Http.send("POST", base() + "/v1/messages", token(), body.toString()), JsonObject.class));
 				loadImage(m);
 				added(friend, m);
-				status = "Screenshot sent.";
+				status = Lang.t("social.screenshot_sent");
 			} catch (Exception e) {
-				status = "Screenshot not sent: " + e.getMessage();
+				status = Lang.t("social.screenshot_not_sent") + e.getMessage();
 			}
 		});
 	}
@@ -225,9 +226,9 @@ public final class Social {
 				body.addProperty("kind", kind);
 				body.addProperty("target", target);
 				Http.send("POST", base() + "/v1/invites", token(), body.toString());
-				status = "Invited " + friendName + ".";
+				status = Lang.t("social.invited") + friendName + ".";
 			} catch (Exception e) {
-				status = "Not invited: " + e.getMessage();
+				status = Lang.t("social.not_invited") + e.getMessage();
 			}
 		});
 	}
@@ -307,7 +308,7 @@ public final class Social {
 				if (seenInvites.add(id)) {
 					String from = str(inv.getAsJsonObject("from"), "name");
 					String what = "together".equals(str(inv, "kind")) ? "their world" : str(inv, "target");
-					Notices.post(from + " invited you", "to " + what + " · Right Shift → Friends to join");
+					Notices.post(from + Lang.t("social.invited_you"), "to " + what + Lang.t("social.right_shift_friends_to_join"));
 				}
 			}
 		}
@@ -368,14 +369,14 @@ public final class Social {
 			if (com.arcticlauncher.client.ArcticClient.config().copyScreenshots && copier != null) {
 				// The pop-up is up at once; its button says "Copying" until the picture really is
 				// on the clipboard, then "Copied" (or "Copy" to try again).
-				Notices.post("Screenshot saved", shot.getName(), "look:" + hash, thumb.getWidth(), thumb.getHeight(), "Copying...", null);
-				copier.copy(shot, ok -> Notices.relabel("Copying...", ok ? "Copied" : "Failed"));
+				Notices.post(Lang.t("social.screenshot_saved"), shot.getName(), "look:" + hash, thumb.getWidth(), thumb.getHeight(), Lang.t("social.copying"), null);
+				copier.copy(shot, ok -> Notices.relabel(Lang.t("social.copying"), ok ? Lang.t("social.copied") : Lang.t("social.failed")));
 			} else {
-				Notices.post("Screenshot saved", shot.getName(), "look:" + hash, thumb.getWidth(), thumb.getHeight(), "Copy",
-						copier == null ? null : () -> copier.copy(shot, ok -> Notices.relabel("Copy", ok ? "Copied" : "Failed")));
+				Notices.post(Lang.t("social.screenshot_saved"), shot.getName(), "look:" + hash, thumb.getWidth(), thumb.getHeight(), Lang.t("social.copy"),
+						copier == null ? null : () -> copier.copy(shot, ok -> Notices.relabel(Lang.t("social.copy"), ok ? Lang.t("social.copied") : Lang.t("social.failed"))));
 			}
 		} catch (Exception e) {
-			Notices.post("Screenshot saved", newest.getName());
+			Notices.post(Lang.t("social.screenshot_saved"), newest.getName());
 		}
 	}
 

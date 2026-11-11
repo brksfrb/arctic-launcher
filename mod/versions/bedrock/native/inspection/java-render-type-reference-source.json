@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "evidence": "Source reads/edits and cached Java class data decoded as bytes only; no builds, tests, syntax checks, class loading, helper/project/game execution, GPU commands or Bedrock launch",
+  "reference": {
+    "version": "Java 26.2",
+    "clientJarSha256": "40896ee9f1e2bec3c934daac7e93d41e9e3d9c2f8ae0ca366d52ffbfd1afa290",
+    "memoizeFunction": "Util.memoize(Function) creates Util$10, whose ConcurrentHashMap cache uses computeIfAbsent(argument,function)",
+    "memoizeBiFunction": "Util.memoize(BiFunction) creates Util$11, whose ConcurrentHashMap cache uses Pair.of(first,second) and computeIfAbsent",
+    "wrappers": "RenderTypes.entitySolid(texture) and armorCutoutNoCull(texture) invoke distinct function caches. One-argument entityTranslucent and entityTranslucentEmissive delegate to their separate BiFunction caches with Boolean.TRUE.",
+    "objectIdentity": "RenderType has no equals/hashCode override in the cached method table. Its reference identity is distinct from PreparedRenderType record equality.",
+    "preparedEquality": "RenderType.prepare constructs PreparedRenderType from pipeline, outputTarget, dynamicTransforms GpuBufferSlice, copied ScissorState and prepared texture-binding list. Matching names or pixel buffers alone do not establish those five fields.",
+    "phaseOrder": "SubmitNodeStorage stores order collections in Int2ObjectAVLTreeMap; default custom geometry uses order 0, while Arctic emissive custom submits use order 1. Complete feature sorting/delivery remains separate from factory references."
+  },
+  "port": {
+    "class": "JavaRenderType owns immutable factory, logical texture key and positive reference ID. Four caches implement only the selected one-argument factories, with Boolean.TRUE implicit for the two translucent families.",
+    "roles": "Cosmetic base, explicit visible skin and bent skin share entityTranslucent's factory cache; glow uses entityTranslucentEmissive; cape uses entitySolid; wings use armorCutoutNoCull. GENERAL and anonymous texture inputs remain unknown.",
+    "bounds": "Serialize admission across concurrent maps; retain existing reference objects without eviction or per-frame recycling. At most 65536 references across the four factories; exhaustion rejects new admission and fails staging rather than fabricating identity.",
+    "ownership": "Reference objects and IDs belong to the source-port renderer, not the installed Java client's JVM. They reproduce supported factory argument reuse; they are neither native pointers, captured identity hashes, prepared GPU equality nor feature-phase ownership.",
+    "staging": "NativeAvatarGeometry captures the selected immutable reference before texture/pixel staging; factory admission errors fail the builder transaction. Every Batch retains the reference independently of bitmap identity.",
+    "nativeValidation": "Decoder validates factory/pass compatibility, positive bounded reference ID, required logical texture key and bidirectional consistency between reference and complete supported factory recipe. Plan.new rejects supplied render-object IDs that differ from a packet's known factory-cache reference. Prepared IDs, groups and sorting policy remain explicit separate inputs."
+  },
+  "wire": {
+    "magic": "ARCGEO07 when any batch has a render reference; previous v6..v1 selection otherwise remains",
+    "extension": "After v5 logical texture metadata and before vertices, each v7 batch carries strict u8 presence; if 1, factory u8 and reference u64 little-endian",
+    "factoryCodes": {"1":"entityTranslucent(texture,true)","2":"entityTranslucentEmissive(texture,true)","3":"entitySolid(texture)","4":"armorCutoutNoCull(texture)"},
+    "budget": "One byte for an unknown reference or ten for a known reference, included in the 96 MiB frame budget; at most 2048 batches",
+    "compatibility": "Rust retains ARCGEO01..06, with unknown references for older packets. V7 retains all earlier material, visibility, texture, actor, topology and pixel validation. No engine ABI or existing material flags change."
+  },
+  "remaining": [
+    "Authoritative prepared pipeline/target/dynamic/scissor/texture equality inputs",
+    "Complete feature-phase/group production, HashMap traversal/debug policy and model-level ordering",
+    "Native scene/resource ownership, GPU input producer and scheduled insertion caller",
+    "Runtime rendering, animation, replay camera and deterministic-video fidelity verification"
+  ],
+  "verified": {"built": false, "tested": false, "jniRoundTrip": false, "phaseOrder": false, "liveGame": false, "gpuRendering": false, "deterministicVideo": false, "fullParity": false}
+}

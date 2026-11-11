@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.5203.0",
+  "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "evidence": "Cached native text/pdata decoded as data; current Rust sources read/edited only; no project/game loading or execution, builds, syntax checks, tests, GPU calls or process inspection",
+  "nativeFacts": {
+    "textureRegistry": "Renderer backend+bde170",
+    "framebuffer": "Entry at renderer+c97690+handle*68; color texture handle words begin at +0, depth word at +10, color count byte at +32",
+    "textureStride": "b8, established by the resource-transition helper and registry ensure routine",
+    "inlineEntries": 4096,
+    "pageBytes": "b8000",
+    "allocatedExtent": "Registry+b8008, divided by b8 after exact divisibility/bounds checks",
+    "extensionRoot": "Registry+b8000 points to a root whose first word points to extension page one; subsequent pages link at page+b8000",
+    "extensionMode": "Only the observed zero-mode extension path is admitted; nonzero mode remains unknown",
+    "resourceField": "Texture entry+0 is loaded into ResourceBarrier's pResource field",
+    "retirementMode": "Texture entry+9b bit 40 bypasses ordinary df98520 resource retirement/slot clearing. The source reader now guards the entire byte and exposes its stable scalar value; this does not supply an allocation lease (native-texture-retirement-source.json).",
+    "stateCacheRoot": "Command context+14458 points to the same native texture registry",
+    "transitionHelper": {"range":["0xdfb5890","0xdfb5bce"], "resourceLoad":"0xdfb5b53", "resourceStore":"0xdfb5b5f", "allSubresources":"0xdfb5b64", "publicBarrierDispatch":"0xdfb5ba4", "vtableSlotBytes":"d0"},
+    "textureEnsure": {"range":["0xdfc2970","0xdfc2a9f"], "extentRead":"0xdfc2991", "extentUpdate":"0xdfc29ea", "newSlotNullResourceStore":"0xdfc2a03"},
+    "recordedStateLookup": {"range":["0xdfc2c90","0xdfc2e81"], "entryStride":12, "currentStateOffset":4, "validityOffset":8},
+    "firstUseState": {"range":["0xdfc2e90","0xdfc2fac"], "behavior":"Appends a handle and stores the requested state into two cached words, setting validity; no immediate public ResourceBarrier call in the inspected body", "inference":"These cache words do not establish actual queued GPU resource state"}
+  },
+  "sourcePort": {
+    "module": "native_framebuffer_resources",
+    "entry": "Attachments.copy(context,renderer,framebuffer)",
+    "integration": "Lazy capture on an actual whole-resource unsplit transition inside the pinned framebuffer routine; depth_tracker forwards the real resource argument to native_framebuffer.transition",
+    "rootJoin": "Context state-cache registry pointer must equal renderer+bde170",
+    "attachments": "Copy selected color/depth handle fields; merge duplicate handle roles; skip ffff sentinel",
+    "bounds": {"uniqueAttachmentHandles":9, "maximumRegistryEntries":65536, "inlinePageEntries":4096, "maximumExtensionLinks":14, "guardsPerTextureSample":32, "bytesPerTextureSample":2048},
+    "lookup": "Read existing native metadata only; never call native allocation/ensure/growth helpers; reject bad extents, pointers, cycles, unsupported extension mode and missing slots",
+    "objectJoin": "Compare the copied slot pointer numerically with the actual public ID3D12Resource argument; never invoke COM through a guessed slot pointer",
+    "lifetime": "Clone only the actual callback resource; a matching successful public committed-creation receipt can now also supply a retained committed-storage owner. Incomplete samples end with the native call, while a complete pair may transfer into the separately bounded native list binding shadow. See native-committed-resources-source.json and native-bound-surfaces-source.json; this is not an exclusive scene/allocator lease",
+    "rechecks": "Framebuffer handle fields, registry/page/resource-pointer/retirement-mode copies and actual resource description must remain stable before a sample reports the join",
+    "stateFacts": "Only report the observed public transition before/after values; split or partial/post-bind transition cohorts remain unknown",
+    "output": "Bounded role/handle/description samples without addresses; matchedTextureResourceJoins counts logical texture-slot joins, not unique GPU objects or completed GPU barriers"
+  },
+  "limitations": [
+    "Default swapchain resources use a separate path and are not resolved by this registry reader",
+    "An attachment with no matching public transition within the native call remains unobserved",
+    "First-use/deferred state initialization is not promoted to actual queue state",
+    "Resource-pointer correlation alone does not prove exact RTV/DSV mapping; native-surface-views-source.json records the subsequent bounded API-descriptor argument join, still without driver or live verification",
+    "Callback COM retention does not establish exclusive native rendering ownership or prevent later engine reuse",
+    "World/view/shader/group joins, native synchronization or state-restored insertion, actual drawing and verification remain unfinished"
+  ],
+  "verified": {"built":false, "tested":false, "hookExecuted":false, "resourceObservedLive":false, "surfaceViewMappingVerified":false, "queuedGpuStateVerified":false, "targetLeaseVerified":false, "gpuWorldRendered":false, "deterministicVideo":false, "fullParity":false}
+}

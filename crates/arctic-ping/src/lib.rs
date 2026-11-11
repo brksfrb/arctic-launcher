@@ -4,6 +4,7 @@
 //! servers from cracked ones. Shared by the launcher and the Arctic server.
 
 mod address;
+mod bedrock;
 mod dns;
 mod ping;
 
@@ -11,6 +12,9 @@ use base64::Engine;
 use serde_json::Value;
 
 pub use address::{Address, DEFAULT_PORT};
+/// A Bedrock address as typed, with Bedrock's default port.
+pub use bedrock::parse_address as parse_bedrock_address;
+pub use bedrock::{BEDROCK_PORT, BedrockStatus, ping_bedrock, ping_bedrock_each};
 pub use ping::{Login, login_check, status_json};
 
 /// Player names shown from a server's sample.

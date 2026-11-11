@@ -6,9 +6,9 @@
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crate::t;
 use discord_rich_presence::activity::{Activity, ActivityType, Assets, Button, Timestamps};
 use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
-
 /// Discord application "Arctic Launcher".
 const APP_ID: &str = "1553107151306760263";
 /// Discord application "Arctic Client", shown while the game runs (Discord
@@ -79,7 +79,7 @@ impl Discord {
         }
         let want = enabled.then(|| {
             let mut presence = self.game.clone().unwrap_or_else(|| Presence {
-                details: "In the launcher".into(),
+                details: t!("tasks.in_the_launcher").into(),
                 state: None,
                 since: self.launcher_since,
                 in_game: false,
@@ -143,7 +143,7 @@ fn worker(rx: Receiver<Option<Presence>>) {
         // Read Discord's reply so errors are visible and replies don't pile up.
         match c.set_activity(activity(presence)).and_then(|()| c.recv()) {
             Ok((_, reply)) => {
-                if reply["evt"] == "ERROR" {
+                if reply["evt"] == /* i18n-ignore */ "ERROR" {
                     log::warn!("discord presence rejected: {}", reply["data"]);
                 }
                 shown = Some(presence.clone());
@@ -170,7 +170,7 @@ fn activity(p: &Presence) -> Activity<'_> {
         } else {
             "Arctic Launcher"
         }))
-        .buttons(vec![Button::new("Get Arctic Launcher", SITE)]);
+        .buttons(vec![Button::new(t!("tasks.get_arctic_launcher"), SITE)]);
     if let Some(state) = &p.state {
         activity = activity.state(state.as_str());
     }

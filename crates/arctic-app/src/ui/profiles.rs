@@ -9,10 +9,10 @@ use crate::app::ArcticApp;
 use crate::art::flakes::SWATCHES;
 use crate::art::icons::{self, Icon};
 use crate::art::lerp_color;
+use crate::t;
 use crate::theme::Palette;
 use crate::toasts::Kind;
 use crate::widgets;
-
 /// State of the profile dialogs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProfileDialog {
@@ -58,7 +58,7 @@ impl ArcticApp {
             egui::Rect::from_center_size(rect.right_center() - vec2(14.0, 0.0), vec2(10.0, 10.0));
         icons::draw(ui.painter(), Icon::ChevronDown, chevron, p.muted);
         let response = response
-            .on_hover_text("Switch profile")
+            .on_hover_text(t!("play.switch_profile"))
             .on_hover_cursor(CursorIcon::PointingHand);
         Popup::from_toggle_button_response(&response)
             .align(RectAlign::BOTTOM_START)
@@ -104,12 +104,12 @@ impl ArcticApp {
             }
         }
         ui.separator();
-        if ui.button("New profile…").clicked() {
+        if ui.button(t!("play.new_profile")).clicked() {
             self.profile_dialog = ProfileDialog::Create {
                 name: String::new(),
             };
         }
-        if ui.button("Manage profiles…").clicked() {
+        if ui.button(t!("play.manage_profiles")).clicked() {
             self.profile_dialog = ProfileDialog::Manage {
                 renaming: None,
                 confirm_remove: None,
@@ -145,19 +145,16 @@ impl ArcticApp {
         let p = self.palette();
         ui.set_width(380.0);
         ui.label(
-            RichText::new("New profile")
+            RichText::new(t!("play.new_profile_2"))
                 .size(22.0)
                 .strong()
                 .color(p.text),
         );
-        ui.label(
-            RichText::new("A profile has its own accounts, settings, instances and worlds.")
-                .color(p.muted),
-        );
+        ui.label(RichText::new(t!("play.a_profile_has_its_own_accounts_settings")).color(p.muted));
         ui.add_space(10.0);
         let edit = ui.add(
             widgets::text_field(&mut name)
-                .hint_text("e.g. Speedruns, Family, Testing")
+                .hint_text(t!("play.profile_name_hint"))
                 .char_limit(32)
                 .desired_width(f32::INFINITY),
         );
@@ -166,13 +163,13 @@ impl ArcticApp {
         ui.add_space(10.0);
         let mut close = false;
         crate::widgets::row(ui, |ui| {
-            if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
+            if crate::widgets::button(ui, p, None, t!("play.cancel"), false).clicked() {
                 close = true;
             }
             let valid = !name.trim().is_empty();
             let create = ui
                 .add_enabled_ui(valid, |ui| {
-                    widgets::button(ui, p, Some(Icon::Plus), "Create and switch", true)
+                    widgets::button(ui, p, Some(Icon::Plus), t!("play.create_and_switch"), true)
                 })
                 .inner;
             if valid && (create.clicked() || enter) {
@@ -181,10 +178,11 @@ impl ArcticApp {
                         close = true;
                         self.switch_profile(&id);
                     }
-                    Err(e) => {
-                        self.toasts
-                            .push(Kind::Error, "Could not create profile", e.to_string())
-                    }
+                    Err(e) => self.toasts.push(
+                        Kind::Error,
+                        t!("play.could_not_create_profile"),
+                        e.to_string(),
+                    ),
                 }
             }
         });
@@ -203,7 +201,12 @@ impl ArcticApp {
     ) {
         let p = self.palette();
         ui.set_width(460.0);
-        ui.label(RichText::new("Profiles").size(22.0).strong().color(p.text));
+        ui.label(
+            RichText::new(t!("play.profiles"))
+                .size(22.0)
+                .strong()
+                .color(p.text),
+        );
         ui.add_space(8.0);
         let profiles = self.profiles.profiles.clone();
         let mut changed = false;
@@ -217,16 +220,28 @@ impl ArcticApp {
                     ui.set_width(ui.available_width());
                     crate::widgets::row(ui, |ui| {
                         let (dot, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
-                        ui.painter().circle_filled(dot.center(), 6.0, rgb(profile.color));
+                        ui.painter()
+                            .circle_filled(dot.center(), 6.0, rgb(profile.color));
                         match &mut renaming {
                             Some((id, text)) if *id == profile.id => {
-                                let r = ui.add(widgets::text_field(text).char_limit(32).desired_width(180.0));
-                                let done = crate::widgets::button(ui, p, None, "Save", false).clicked()
-                                    || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
+                                let r = ui.add(
+                                    widgets::text_field(text)
+                                        .char_limit(32)
+                                        .desired_width(180.0),
+                                );
+                                let done =
+                                    crate::widgets::button(ui, p, None, t!("play.save"), false)
+                                        .clicked()
+                                        || (r.lost_focus()
+                                            && ui.input(|i| i.key_pressed(egui::Key::Enter)));
                                 if done {
                                     match self.profiles.rename(&profile.id, text) {
                                         Ok(()) => changed = true,
-                                        Err(e) => self.toasts.push(Kind::Error, "Could not rename", e.to_string()),
+                                        Err(e) => self.toasts.push(
+                                            Kind::Error,
+                                            t!("play.could_not_rename"),
+                                            e.to_string(),
+                                        ),
                                     }
                                     renaming = None;
                                 }
@@ -239,13 +254,18 @@ impl ArcticApp {
                             }
                         }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if !active && widgets::icon_button(ui, p, Icon::Trash, "Remove").clicked() {
+                            if !active
+                                && widgets::icon_button(ui, p, Icon::Trash, t!("play.remove_2"))
+                                    .clicked()
+                            {
                                 confirm = Some(profile.id.clone());
                             }
-                            if widgets::icon_button(ui, p, Icon::Document, "Rename").clicked() {
+                            if widgets::icon_button(ui, p, Icon::Document, t!("play.rename"))
+                                .clicked()
+                            {
                                 renaming = Some((profile.id.clone(), profile.name.clone()));
                             }
-                            if !active && ui.small_button("Switch").clicked() {
+                            if !active && ui.small_button(t!("play.switch")).clicked() {
                                 self.switch_profile(&profile.id);
                             }
                         });
@@ -253,10 +273,15 @@ impl ArcticApp {
                     ui.horizontal(|ui| {
                         ui.add_space(22.0);
                         for c in SWATCHES {
-                            let (r, resp) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::click());
+                            let (r, resp) =
+                                ui.allocate_exact_size(vec2(18.0, 18.0), Sense::click());
                             ui.painter().circle_filled(r.center(), 6.5, rgb(c));
                             if profile.color == c {
-                                ui.painter().circle_stroke(r.center(), 8.5, Stroke::new(1.5, rgb(c)));
+                                ui.painter().circle_stroke(
+                                    r.center(),
+                                    8.5,
+                                    Stroke::new(1.5, rgb(c)),
+                                );
                             }
                             if resp.on_hover_cursor(CursorIcon::PointingHand).clicked() {
                                 self.profiles.set_color(&profile.id, c);
@@ -267,18 +292,25 @@ impl ArcticApp {
                     if confirm.as_deref() == Some(profile.id.as_str()) {
                         ui.add_space(4.0);
                         ui.label(
-                            RichText::new("Remove this profile? Its folder (worlds included) is moved to profiles/.trash, not deleted.")
+                            RichText::new(t!("play.remove_this_profile_its_folder_worlds"))
                                 .small()
                                 .color(p.warn),
                         );
                         crate::widgets::row(ui, |ui| {
-                            if crate::widgets::button(ui, p, None, "Keep", false).clicked() {
+                            if crate::widgets::button(ui, p, None, t!("play.keep"), false).clicked()
+                            {
                                 confirm = None;
                             }
-                            if widgets::button(ui, p, Some(Icon::Trash), "Remove", true).clicked() {
+                            if widgets::button(ui, p, Some(Icon::Trash), t!("play.remove_2"), true)
+                                .clicked()
+                            {
                                 match self.profiles.remove(&self.root, &profile.id) {
                                     Ok(()) => changed = true,
-                                    Err(e) => self.toasts.push(Kind::Error, "Could not remove profile", e.to_string()),
+                                    Err(e) => self.toasts.push(
+                                        Kind::Error,
+                                        t!("play.could_not_remove_profile"),
+                                        e.to_string(),
+                                    ),
                                 }
                                 confirm = None;
                             }
@@ -288,21 +320,24 @@ impl ArcticApp {
             ui.add_space(6.0);
         }
         if changed && let Err(e) = self.profiles.save(&self.root) {
-            self.toasts
-                .push(Kind::Error, "Could not save profiles", e.to_string());
+            self.toasts.push(
+                Kind::Error,
+                t!("play.could_not_save_profiles"),
+                e.to_string(),
+            );
         }
         ui.add_space(4.0);
         crate::widgets::row(ui, |ui| {
-            if widgets::button(ui, p, Some(Icon::Plus), "New profile", false).clicked() {
+            if widgets::button(ui, p, Some(Icon::Plus), t!("play.new_profile_2"), false).clicked() {
                 self.profile_dialog = ProfileDialog::Create {
                     name: String::new(),
                 };
                 return;
             }
-            if widgets::button(ui, p, Some(Icon::Folder), "Open folder", false).clicked() {
+            if widgets::button(ui, p, Some(Icon::Folder), t!("play.open_folder"), false).clicked() {
                 let _ = open::that_detached(self.dirs.profile_root());
             }
-            if crate::widgets::button(ui, p, None, "Done", false).clicked() {
+            if crate::widgets::button(ui, p, None, t!("play.done"), false).clicked() {
                 self.profile_dialog = ProfileDialog::Closed;
             }
         });

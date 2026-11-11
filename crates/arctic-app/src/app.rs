@@ -25,7 +25,7 @@ use crate::tasks::{Event, LaunchId, LoginAttempt, Tasks};
 use crate::theme::{self, Palette};
 use crate::toasts::{Kind, ToastAction, Toasts};
 use crate::ui::{InstancesUi, ProfileDialog};
-
+use crate::{t, tf};
 /// Backdrop frame interval when focused / unfocused.
 const FRAME_FOCUSED: Duration = Duration::from_millis(33);
 const FRAME_UNFOCUSED: Duration = Duration::from_millis(100);
@@ -37,6 +37,7 @@ pub enum Tab {
     Play,
     Accounts,
     Instances,
+    Bedrock,
     Skins,
     Together,
     Screenshots,
@@ -46,10 +47,11 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 9] = [
+    pub const ALL: [Tab; 10] = [
         Tab::Play,
         Tab::Accounts,
         Tab::Instances,
+        Tab::Bedrock,
         Tab::Skins,
         Tab::Together,
         Tab::Screenshots,
@@ -187,6 +189,7 @@ pub struct ArcticApp {
     pub(crate) sharing: crate::ui::ShareUi,
     pub(crate) shots: crate::ui::ScreenshotsUi,
     pub(crate) servers: crate::ui::ServersUi,
+    pub(crate) bedrock: crate::ui::BedrockUi,
     pub(crate) discover: crate::ui::DiscoverUi,
     pub(crate) friends: crate::ui::FriendsUi,
     pub(crate) chat: crate::ui::ChatUi,
@@ -230,6 +233,8 @@ impl ArcticApp {
         let tasks = tasks.with_bridge(bridge.info.clone());
         let mut toasts = Toasts::default();
         let data = ProfileData::load(&dirs, &tasks, &mut toasts);
+        crate::i18n::set_language(&data.settings.language);
+        crate::i18n::ensure_fonts(&cc.egui_ctx);
         let voice = crate::voice::VoiceHub::new(dirs.clone(), data.settings.voice.clone());
         bridge.set_voice(voice.clone());
         tasks.load_manifest();
@@ -263,6 +268,7 @@ impl ArcticApp {
             sharing: crate::ui::ShareUi::default(),
             shots: crate::ui::ScreenshotsUi::default(),
             servers: crate::ui::ServersUi::default(),
+            bedrock: crate::ui::BedrockUi::default(),
             discover: crate::ui::DiscoverUi::default(),
             friends: crate::ui::FriendsUi::default(),
             chat: crate::ui::ChatUi::default(),
@@ -332,9 +338,11 @@ impl ArcticApp {
                 Some(id) => {
                     app.accounts.set_active(&id);
                 }
-                None => app
-                    .toasts
-                    .push(Kind::Error, format!("No account named '{query}'"), ""),
+                None => app.toasts.push(
+                    Kind::Error,
+                    tf!("tasks.no_account_named", query = query),
+                    "",
+                ),
             }
         }
         app.note_new_version();
@@ -368,8 +376,8 @@ impl ArcticApp {
         let current = arctic_core::APP_VERSION;
         self.toasts.push_with_action(
             Kind::Success,
-            format!("Updated to Arctic Launcher {current}"),
-            "See what's new in this version.",
+            tf!("tasks.updated_to_arctic_launcher", current = current),
+            t!("tasks.see_whats_new_in_this_version"),
             Some(ToastAction::WhatsNew(format!(
                 "https://github.com/{}/releases/tag/v{current}",
                 arctic_core::update::GITHUB_REPO
@@ -399,6 +407,7 @@ impl ArcticApp {
         if let Ok(settings) = Settings::load(&self.dirs) {
             self.saved_settings = settings.clone();
             self.settings = settings;
+            crate::i18n::set_language(&self.settings.language);
         }
         if let Ok(vanilla) = arctic_core::instances::load_default(&self.dirs) {
             self.instance = vanilla;
@@ -409,6 +418,7 @@ impl ArcticApp {
     pub(crate) fn apply_profile_data(&mut self, data: ProfileData) {
         self.saved_settings = data.settings.clone();
         self.settings = data.settings;
+        crate::i18n::set_language(&self.settings.language);
         self.accounts = data.accounts;
         self.instance = data.instance;
         self.custom_instances = data.custom_instances;
@@ -433,9 +443,11 @@ impl ArcticApp {
         if self.settings != self.saved_settings {
             match self.settings.save(&self.dirs) {
                 Ok(()) => self.saved_settings = self.settings.clone(),
-                Err(e) => self
-                    .toasts
-                    .push(Kind::Error, "Could not save settings", e.to_string()),
+                Err(e) => self.toasts.push(
+                    Kind::Error,
+                    t!("tasks.could_not_save_settings"),
+                    e.to_string(),
+                ),
             }
         }
     }
@@ -489,8 +501,11 @@ impl ArcticApp {
     pub(crate) fn save_accounts(&mut self) {
         self.bridge.update(&self.accounts, &self.tasks);
         if let Err(e) = self.accounts.save(&self.dirs) {
-            self.toasts
-                .push(Kind::Error, "Could not save accounts", e.to_string());
+            self.toasts.push(
+                Kind::Error,
+                t!("tasks.could_not_save_accounts"),
+                e.to_string(),
+            );
         }
     }
 
@@ -500,7 +515,7 @@ impl ArcticApp {
         }
         self.toasts.push(
             Kind::Success,
-            format!("Signed in as {}", account.username),
+            tf!("tasks.signed_in_as", username = account.username),
             "",
         );
         self.offer_profile_link(&account);
@@ -574,8 +589,8 @@ impl ArcticApp {
             let who = friend.as_ref().map_or("a friend", |f| f.1.as_str());
             self.toasts.push(
                 crate::toasts::Kind::Info,
-                "Starting a duel",
-                format!("The game makes an arena and invites {who}."),
+                t!("tasks.starting_a_duel"),
+                tf!("tasks.the_game_makes_an_arena_and_invites", who = who),
             );
         }
         self.launch_selected_as(false, Some(target));
@@ -623,10 +638,10 @@ impl ArcticApp {
         else {
             self.toasts.push(
                 Kind::Error,
-                "Unknown Minecraft version",
-                format!(
-                    "{} needs a version that isn't in Mojang's list.",
-                    instance.name
+                t!("tasks.unknown_minecraft_version"),
+                tf!(
+                    "tasks.needs_a_version_that_isnt_in_mojangs_list",
+                    name = instance.name
                 ),
             );
             return;
@@ -644,7 +659,7 @@ impl ArcticApp {
         if self.runs.active_for(&instance.id, same).is_some() && !another_copy {
             self.toasts.push(
                 Kind::Info,
-                format!("{} is already running", instance.name),
+                tf!("tasks.is_already_running", name = instance.name),
                 "Pick another instance to play more at once.",
             );
             return;
@@ -665,17 +680,18 @@ impl ArcticApp {
         {
             self.toasts.push(
                 Kind::Info,
-                format!("Vanilla is already running {}", other.version),
-                format!(
-                    "To play {} at the same time, make a new instance for it (Instances → New).                      Or close the {} game first.",
-                    version.id, other.version
+                tf!("tasks.vanilla_is_already_running", version = other.version),
+                tf!(
+                    "tasks.to_play_at_the_same_time_make_a_new_instance",
+                    id = version.id,
+                    version = other.version
                 ),
             );
             return;
         }
         self.warn_if_proxy_misses_servers(&instance, &version.id);
         self.discord.game_started(
-            format!("Minecraft {}", version.id),
+            tf!("tasks.minecraft", id = version.id),
             instance.loader.label().to_owned(),
         );
         let id = self.runs.start(
@@ -726,6 +742,10 @@ impl ArcticApp {
             self.persist_settings();
             crate::window::hide();
             crate::trim::now(ctx);
+        } else if ctx.input(|i| i.viewport().close_requested()) && self.prepare_bedrock_close() {
+            // Paired capture must return its connection/owner and acknowledge
+            // finalization before the launcher tears down its relay process.
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
         }
         crate::trim::tick(ctx, self.runs.any_game(), self.tab as usize);
         #[cfg(windows)]
@@ -779,7 +799,7 @@ impl ArcticApp {
             ctx.request_repaint_after(left);
             return;
         }
-        if self.runs.any_active() {
+        if self.runs.any_active() || self.bedrock.background_active() {
             // A game or a launch is going: look again later.
             self.hidden_since = Some(std::time::Instant::now());
             return;
@@ -815,11 +835,11 @@ impl ArcticApp {
             Some(id) => {
                 self.settings.last_version = Some(id);
                 self.toasts
-                    .push(Kind::Info, "Choose an account to play", "");
+                    .push(Kind::Info, t!("tasks.choose_an_account_to_play"), "");
             }
             None => self
                 .toasts
-                .push(Kind::Error, format!("Unknown version '{query}'"), ""),
+                .push(Kind::Error, tf!("tasks.unknown_version", query = query), ""),
         }
     }
 
@@ -857,7 +877,7 @@ impl ArcticApp {
                             let title = run.title.clone();
                             self.toasts.push(
                                 Kind::Info,
-                                format!("{title}: not much memory"),
+                                tf!("tasks.not_much_memory", title = title),
                                 warning,
                             );
                         }
@@ -912,8 +932,8 @@ impl ArcticApp {
             Event::WorldsDone(id, result) => self.on_worlds_done(id, result),
             Event::PickerMissing => self.toasts.push(
                 crate::toasts::Kind::Error,
-                "No file picker on this system",
-                "Install zenity or xdg-desktop-portal, or drop the file onto the launcher window.",
+                t!("tasks.no_file_picker_on_this_system"),
+                t!("tasks.install_zenity_or_xdg_desktop_portal_or_drop"),
             ),
             Event::ModpackInstalled(result) => self.on_modpack_installed(result),
             Event::MigrateScanned(folder, result) => {
@@ -943,6 +963,7 @@ impl ArcticApp {
             Event::PublicServers(list) => self.on_public_servers(list),
             Event::ServerSubmitted(result) => self.on_server_submitted(result),
             Event::ServerVerified(result) => self.on_server_verified(result),
+            Event::Bedrock(e) => self.on_bedrock_event(*e),
             Event::Screenshots(list) => self.on_screenshot_list(list),
             Event::ScreenshotThumb(path, result) => self.on_screenshot_thumb(ctx, path, result),
             Event::ScreenshotCopied(result) => self.on_screenshot_copied(result),
@@ -967,7 +988,7 @@ impl ArcticApp {
                 if let Ok(account) = arctic_core::auth::offline::create(&name) {
                     self.toasts.push(
                         Kind::Success,
-                        format!("Added {}", account.username),
+                        tf!("tasks.added", username = account.username),
                         "Offline account, from the game",
                     );
                     self.offer_profile_link(&account);
@@ -993,10 +1014,12 @@ impl ArcticApp {
             Event::CrashReportSent(result) => match result {
                 Ok(()) => self.toasts.push(
                     Kind::Success,
-                    "Crash report sent",
-                    "Thanks, that helps fix it.",
+                    t!("tasks.crash_report_sent"),
+                    t!("tasks.thanks_that_helps_fix_it"),
                 ),
-                Err(e) => self.toasts.push(Kind::Error, "Couldn't send the report", e),
+                Err(e) => self
+                    .toasts
+                    .push(Kind::Error, t!("tasks.couldnt_send_the_report"), e),
             },
             Event::SuggestionSent(result) => self.on_suggestion_sent(result),
             Event::UpdateChecked(result) => self.on_update_checked(result),
@@ -1081,8 +1104,17 @@ impl eframe::App for ArcticApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         arctic_core::cosmetics::set_reduce_cape_motion(self.settings.reduce_cape_motion);
         let ctx = ui.ctx().clone();
+        // The language's script font, once it's needed (a profile switch can change the language).
+        crate::i18n::ensure_fonts(&ctx);
         while let Ok(event) = self.events.try_recv() {
             self.handle_event(event, &ctx);
+        }
+        self.bedrock_poll_offline();
+        if self.bedrock.background_active() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(250));
+        }
+        if self.bedrock.recording_close_ready() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
         if std::mem::take(&mut self.maximize_pending) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
@@ -1094,7 +1126,7 @@ impl eframe::App for ArcticApp {
             self.settings.auto_install_updates,
             self.settings.restart_hidden_for_updates,
             self.settings.update_channel,
-            self.runs.any_active(),
+            self.runs.any_active() || self.bedrock.background_active(),
         );
         let playing = self.runs.any_active();
         let together = self.together_status();
@@ -1168,6 +1200,8 @@ impl eframe::App for ArcticApp {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.bedrock.cancel_video_export();
+        self.bedrock.close_recording(&self.tasks);
         self.cancel_login();
         if self.settings.exit_games_with_launcher {
             for run in self.runs.active() {

@@ -3,13 +3,13 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::t;
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
     CoUninitialize, IPersistFile,
 };
 use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
 use windows::core::{HSTRING, Interface};
-
 const NAME: &str = "Arctic Launcher";
 /// Which exe the shortcut was last made for (in the launcher's data folder).
 const MARKER: &str = "start-menu-shortcut.txt";
@@ -30,7 +30,7 @@ pub fn ensure(data_root: &Path) {
 }
 
 fn shortcut_path() -> Option<PathBuf> {
-    let appdata = std::env::var_os("APPDATA")?;
+    let appdata = std::env::var_os("APPDATA")?; // i18n-ignore
     Some(
         PathBuf::from(appdata)
             .join(r"Microsoft\Windows\Start Menu\Programs")
@@ -40,7 +40,7 @@ fn shortcut_path() -> Option<PathBuf> {
 
 fn make(data_root: &Path) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let lnk = shortcut_path().ok_or("no APPDATA folder")?;
+    let lnk = shortcut_path().ok_or(t!("nav.no_appdata_folder"))?;
     let marker = data_root.join(MARKER);
     let exe_text = exe.to_string_lossy().into_owned();
     // A build run straight from the source tree (tests, screenshots) isn't the installed launcher.

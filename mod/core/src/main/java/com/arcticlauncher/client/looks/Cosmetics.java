@@ -82,28 +82,53 @@ public final class Cosmetics {
 		public final long since;
 		/** Held at this many seconds (self-test screenshots), or below 0 to play on. */
 		private final float held;
+		private final java.util.function.LongSupplier clock;
 
 		Playing(Emote emote, long since) {
 			this(emote, since, -1f);
 		}
 
 		private Playing(Emote emote, long since, float held) {
+			this(emote, since, held, System::currentTimeMillis);
+		}
+
+		private Playing(Emote emote, long since, float held, java.util.function.LongSupplier clock) {
 			this.emote = emote;
 			this.since = since;
 			this.held = held;
+			this.clock = clock;
 		}
 
 		public float seconds() {
 			if (held >= 0) {
 				return held;
 			}
-			return (System.currentTimeMillis() - since) / 1000f;
+			return (float)Math.max(0, ((double)clock.getAsLong() - (double)since) / 1000d);
 		}
+
+		/** One clock read for a portable snapshot. Retain milliseconds before
+		 * float seconds rounding; held poses have only their explicit phase. */
+		public static final class Phase {
+			public final float seconds;
+			public final Double elapsedMillis;
+			private Phase(float seconds, Double elapsedMillis) { this.seconds=seconds;this.elapsedMillis=elapsedMillis; }
+		}
+
+		public Phase sample() {
+			if (held >= 0) return new Phase(held, null);
+			double elapsed=Math.max(0, (double)clock.getAsLong() - (double)since);
+			return new Phase((float)(elapsed/1000d), elapsed);
+		}
+
+		public boolean held() { return held >= 0; }
+		boolean heldForSnapshot() { return held(); }
 	}
 
 	private final Platform platform;
 	private final String baseUrl;
 	private final ScheduledExecutorService worker;
+	private final java.util.function.LongSupplier playbackClock;
+	private final java.util.concurrent.atomic.AtomicLong playbackEpoch = new java.util.concurrent.atomic.AtomicLong();
 	private volatile List<Item> items = Collections.emptyList();
 	private volatile List<Emote> emotes = Collections.emptyList();
 	private volatile boolean catalogAsked;
@@ -118,6 +143,7 @@ public final class Cosmetics {
 		this.platform = platform;
 		this.baseUrl = baseUrl;
 		this.worker = worker;
+		this.playbackClock = () -> platform == null ? System.currentTimeMillis() : platform.animationTimeMillis();
 	}
 
 	public List<Item> items() {
@@ -138,6 +164,12 @@ public final class Cosmetics {
 		}
 		// Someone wears a cosmetic added since the catalog loaded.
 		refreshAfter(MISSING_RETRY_MS);
+		return null;
+	}
+
+	/** Cache only; recording a snapshot must not refresh or fetch the catalog. */
+	Item loadedItem(String id) {
+		for(Item item:items)if(item.id.equals(id))return item;
 		return null;
 	}
 
@@ -198,6 +230,12 @@ public final class Cosmetics {
 		return p;
 	}
 
+	/** Cache only; do not schedule asset loading or remove future timeline state. */
+	Playing playingForSnapshot(UUID player) {
+		Playing p=playing.get(player);
+		return p==null||p.emote.animation==null||p.emote.animation.finished(p.seconds())?null:p;
+	}
+
 	/**
 	 * A player is on screen, so their emotes are polled. Called for every
 	 * player every frame; the map is only written a few times a second.
@@ -216,14 +254,23 @@ public final class Cosmetics {
 			playing.remove(me);
 		} else {
 			animation(emote);
-			playing.put(me, new Playing(emote, System.currentTimeMillis()));
+			playing.put(me, new Playing(emote, playbackClock.getAsLong(), -1f, playbackClock));
 		}
 	}
 
 	/** Hold the local player in {@code emote}'s pose at {@code seconds} (self-test screenshots). */
 	public void holdLocal(UUID me, Emote emote, float seconds) {
 		animation(emote);
-		playing.put(me, new Playing(emote, System.currentTimeMillis(), seconds));
+		playing.put(me, new Playing(emote, playbackClock.getAsLong(), seconds, playbackClock));
+	}
+
+	/** Discard playback and pending remote replies when the world/session changes. */
+	public void clearPlayback() {
+		synchronized (playing) {
+			playbackEpoch.incrementAndGet();
+			playing.clear();
+			watched.clear();
+		}
 	}
 
 	/** The emote's animation, loading it on first ask. */
@@ -246,6 +293,7 @@ public final class Cosmetics {
 
 	/** Once a second: which emotes the players we can see are playing. */
 	void pollEmotes(UUID me, java.util.function.Predicate<UUID> onArctic) throws Exception {
+		long epoch = playbackEpoch.get();
 		long now = System.currentTimeMillis();
 		List<UUID> asked = new ArrayList<UUID>();
 		for (Map.Entry<UUID, Long> e : watched.entrySet()) {
@@ -260,6 +308,7 @@ public final class Cosmetics {
 		}
 		StringBuilder ids = new StringBuilder();
 		for (UUID id : asked) {
+			if (playbackEpoch.get() != epoch) return;
 			ids.append(ids.length() == 0 ? "" : ",").append(Looks.compact(id));
 		}
 		JsonElement reply = GSON.fromJson(Http.getText(baseUrl + "/v1/emotes?uuids=" + ids, null), JsonElement.class);
@@ -273,12 +322,15 @@ public final class Cosmetics {
 				emote = emote(Looks.stringField(o, "id"));
 				elapsed = longField(o, "elapsed");
 			}
-			Playing current = playing.get(id);
-			if (emote == null) {
-				playing.remove(id);
-			} else if (current == null || current.emote != emote) {
-				animation(emote);
-				playing.put(id, new Playing(emote, now - elapsed));
+			synchronized (playing) {
+				if (playbackEpoch.get() != epoch) return;
+				Playing current = playing.get(id);
+				if (emote == null) {
+					playing.remove(id);
+				} else if (current == null || current.emote != emote) {
+					animation(emote);
+					playing.put(id, new Playing(emote, playbackClock.getAsLong() - elapsed, -1f, playbackClock));
+				}
 			}
 		}
 	}
@@ -408,7 +460,7 @@ public final class Cosmetics {
 	private void load(Item item) {
 		if (item.mesh != null) {
 			try {
-				item.meshModel = MeshModel.parse(Http.get(baseUrl + "/v1/assets/" + item.mesh, null));
+				item.meshModel = MeshModel.parse(AppearanceAssets.fetch(platform,baseUrl,"asset",item.mesh));
 				platform.registerMesh(item.id, item.meshModel);
 				return;
 			} catch (Exception | StackOverflowError e) {
@@ -437,7 +489,7 @@ public final class Cosmetics {
 
 	/** A cosmetic texture by hash; it must be a PNG within the size limit. */
 	private byte[] texture(String hash) throws Exception {
-		byte[] png = Http.get(baseUrl + "/v1/textures/" + hash + ".png", null);
+		byte[] png = AppearanceAssets.fetch(platform,baseUrl,"texture",hash);
 		int[] size = Looks.pngSize(png);
 		if (size == null || size[0] > Geometry.MAX_TEXTURE_SIDE || size[1] > Geometry.MAX_TEXTURE_SIDE) {
 			throw new IllegalArgumentException("texture isn't a small PNG");
@@ -446,7 +498,7 @@ public final class Cosmetics {
 	}
 
 	private JsonElement json(String hash) throws Exception {
-		byte[] bytes = Http.get(baseUrl + "/v1/assets/" + hash, null);
+		byte[] bytes = AppearanceAssets.fetch(platform,baseUrl,"asset",hash);
 		return GSON.fromJson(new String(bytes, StandardCharsets.UTF_8), JsonElement.class);
 	}
 

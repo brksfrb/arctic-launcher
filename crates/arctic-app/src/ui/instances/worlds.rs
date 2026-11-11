@@ -13,10 +13,9 @@ use eframe::egui::{self, CornerRadius, Id, Modal, RichText, Sense, vec2};
 use crate::app::{ArcticApp, Tab};
 use crate::art::icons::{self, Icon};
 use crate::motion::format_bytes;
-use crate::theme;
 use crate::toasts::Kind;
-use crate::widgets;
-
+use crate::{t, tf, tn};
+use crate::{theme, widgets};
 const ICON: f32 = 44.0;
 
 /// The "Import worlds" dialog.
@@ -38,20 +37,24 @@ impl ArcticApp {
             }
         };
         crate::widgets::row(ui, |ui| {
-            ui.label(RichText::new(format!("{} worlds", list.len())).color(p.muted));
+            ui.label(RichText::new(tf!("instances.worlds_2", count = list.len())).color(p.muted));
             if self.inst.worlds_busy {
                 ui.spinner();
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::button(ui, p, Some(Icon::Plus), "Import worlds", true).clicked() {
+                if widgets::button(ui, p, Some(Icon::Plus), t!("instances.import_worlds"), true)
+                    .clicked()
+                {
                     self.open_import(instance);
                 }
-                if widgets::button(ui, p, None, "From a .zip…", false).clicked() {
+                if widgets::button(ui, p, None, t!("instances.from_a_zip"), false).clicked() {
                     self.tasks
                         .import_world_zip(instance.id.clone(), saves.clone());
                     self.inst.worlds_busy = true;
                 }
-                if widgets::icon_button(ui, p, Icon::Folder, "Open saves folder").clicked() {
+                if widgets::icon_button(ui, p, Icon::Folder, t!("instances.open_saves_folder"))
+                    .clicked()
+                {
                     let _ = std::fs::create_dir_all(&saves);
                     let _ = open::that_detached(&saves);
                 }
@@ -64,16 +67,14 @@ impl ArcticApp {
                 ui.vertical_centered(|ui| {
                     ui.add_space(10.0);
                     ui.label(
-                        RichText::new("No worlds yet")
+                        RichText::new(t!("instances.no_worlds_yet"))
                             .size(17.0)
                             .strong()
                             .color(p.text),
                     );
                     ui.label(
-                        RichText::new(
-                            "Play to create one, or import worlds from another launcher.",
-                        )
-                        .color(p.muted),
+                        RichText::new(t!("instances.play_to_create_one_or_import_worlds_from"))
+                            .color(p.muted),
                     );
                     ui.add_space(10.0);
                 });
@@ -122,22 +123,26 @@ impl ArcticApp {
                 ui.label(RichText::new(detail).small().color(p.muted));
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, p, Icon::Trash, "Move to trash").clicked() {
+                if widgets::icon_button(ui, p, Icon::Trash, t!("instances.move_to_trash")).clicked()
+                {
                     let saves = instance.game_dir(&self.dirs).join("saves");
                     match worlds::trash(world, &saves) {
                         Ok(()) => self.toasts.push(
                             Kind::Info,
-                            format!("Moved {} to trash", world.name),
+                            tf!("instances.moved_to_trash", name = world.name),
                             "saves/.trash",
                         ),
-                        Err(e) => {
-                            self.toasts
-                                .push(Kind::Error, "Could not move world", e.to_string())
-                        }
+                        Err(e) => self.toasts.push(
+                            Kind::Error,
+                            t!("instances.could_not_move_world"),
+                            e.to_string(),
+                        ),
                     }
                     self.refresh_worlds(instance);
                 }
-                if widgets::icon_button(ui, p, Icon::Copy, "Back up to a .zip").clicked() {
+                if widgets::icon_button(ui, p, Icon::Copy, t!("instances.back_up_to_a_zip"))
+                    .clicked()
+                {
                     let backups = self
                         .dirs
                         .instance_dir(&instance.id)
@@ -146,10 +151,14 @@ impl ArcticApp {
                         .backup_world(instance.id.clone(), world.clone(), backups);
                     self.inst.worlds_busy = true;
                 }
-                if widgets::icon_button(ui, p, Icon::Folder, "Open world folder").clicked() {
+                if widgets::icon_button(ui, p, Icon::Folder, t!("instances.open_world_folder"))
+                    .clicked()
+                {
                     let _ = open::that_detached(&world.path);
                 }
-                if widgets::icon_button(ui, p, Icon::Play, "Play this world (1.20+)").clicked() {
+                if widgets::icon_button(ui, p, Icon::Play, t!("instances.play_this_world_1_20"))
+                    .clicked()
+                {
                     self.settings.last_instance =
                         (!instance.is_default()).then(|| instance.id.clone());
                     let now = ui.input(|i| i.time);
@@ -171,8 +180,8 @@ impl ArcticApp {
         if sources.is_empty() {
             self.toasts.push(
                 Kind::Info,
-                "No worlds found to import",
-                "Checked the Minecraft Launcher, Prism Launcher and your other instances.",
+                t!("instances.no_worlds_found_to_import"),
+                t!("instances.checked_the_minecraft_launcher_prism"),
             );
             return;
         }
@@ -202,13 +211,13 @@ impl ArcticApp {
                 ui.set_width(520.0);
                 crate::widgets::lift_controls(ui, p);
                 ui.label(
-                    RichText::new("Import worlds")
+                    RichText::new(t!("instances.import_worlds"))
                         .size(22.0)
                         .strong()
                         .color(p.text),
                 );
                 ui.label(
-                    RichText::new("Copies are made; the originals stay where they are.")
+                    RichText::new(t!("instances.copies_are_made_the_originals_stay_where"))
                         .color(p.muted),
                 );
                 ui.add_space(8.0);
@@ -247,14 +256,15 @@ impl ArcticApp {
                     });
                 ui.add_space(10.0);
                 crate::widgets::row(ui, |ui| {
-                    if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
+                    if crate::widgets::button(ui, p, None, t!("instances.cancel"), false).clicked()
+                    {
                         ui.close();
                     }
                     let n = dialog.picked.len();
                     let text = match n {
-                        0 => "Import".to_owned(),
-                        1 => "Import 1 world".to_owned(),
-                        n => format!("Import {n} worlds"),
+                        0 => t!("instances.import").to_owned(),
+                        1 => t!("instances.import_1_world").to_owned(),
+                        n => tf!("instances.import_worlds_2", n_value = n),
                     };
                     let go = ui
                         .add_enabled_ui(n > 0, |ui| {
@@ -281,7 +291,9 @@ impl ArcticApp {
         self.inst.worlds_busy = false;
         match result {
             Ok(message) => self.toasts.push(Kind::Success, message, ""),
-            Err(e) => self.toasts.push(Kind::Error, "World operation failed", e),
+            Err(e) => self
+                .toasts
+                .push(Kind::Error, t!("instances.world_operation_failed"), e),
         }
         if let Some(instance) = self.instance_by_id(&instance_id).cloned() {
             self.refresh_worlds(&instance);
@@ -309,22 +321,14 @@ fn world_icon_uri(ctx: &egui::Context, path: &std::path::Path) -> Option<String>
 /// "3 days ago"
 pub(super) fn ago(time: Option<SystemTime>) -> String {
     let Some(secs) = time.and_then(|t| t.elapsed().ok()).map(|d| d.as_secs()) else {
-        return "never played".into();
+        return t!("instances.never_played").into();
     };
     match secs {
-        0..60 => "just now".into(),
-        60..3600 => plural(secs / 60, "minute"),
-        3600..86_400 => plural(secs / 3600, "hour"),
-        86_400..2_592_000 => plural(secs / 86_400, "day"),
-        _ => plural(secs / 2_592_000, "month"),
-    }
-}
-
-fn plural(n: u64, unit: &str) -> String {
-    if n == 1 {
-        format!("1 {unit} ago")
-    } else {
-        format!("{n} {unit}s ago")
+        0..60 => t!("instances.just_now").into(),
+        60..3600 => tn!("common.minutes_ago", secs / 60),
+        3600..86_400 => tn!("common.hours_ago", secs / 3600),
+        86_400..2_592_000 => tn!("common.days_ago", secs / 86_400),
+        _ => tn!("common.months_ago", secs / 2_592_000),
     }
 }
 

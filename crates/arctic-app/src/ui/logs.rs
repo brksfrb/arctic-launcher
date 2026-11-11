@@ -13,11 +13,11 @@ use crate::logbook;
 use crate::theme::Palette;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 const LEVELS: [(Level, &str); 3] = [
-    (Level::Debug, "All"),
-    (Level::Warn, "Warnings"),
-    (Level::Error, "Errors"),
+    (Level::Debug, "play.logs.level_all"),
+    (Level::Warn, "play.logs.level_warnings"),
+    (Level::Error, "play.logs.level_errors"),
 ];
 
 /// What a cached filtered view was computed for.
@@ -35,8 +35,8 @@ impl ArcticApp {
         widgets::page_header(
             ui,
             p,
-            "Logs",
-            "Live output from Minecraft and the launcher.",
+            t!("play.logs"),
+            t!("play.live_output_from_minecraft_and_the_launcher"),
         );
         // Toolbar first: it may change the source, filter or clear the log,
         // and the view below must be built from the state it leaves behind.
@@ -87,7 +87,7 @@ impl ArcticApp {
             ));
             let count = text.len();
             self.toasts
-                .push(Kind::Info, format!("Copied {count} lines"), "");
+                .push(Kind::Info, tf!("play.copied_lines", count = count), "");
         }
         let line = |i: usize| self.log_line(source, i);
         console(ui, p, &indices, &line, self.log_follow, source);
@@ -144,21 +144,25 @@ impl ArcticApp {
                     format!("{marker}{}", run.title),
                 );
             }
-            ui.selectable_value(&mut self.log_source, LogSource::Launcher, "Launcher");
+            ui.selectable_value(
+                &mut self.log_source,
+                LogSource::Launcher,
+                t!("play.launcher"),
+            );
             ui.separator();
             for (level, name) in LEVELS {
-                ui.selectable_value(&mut self.log_min_level, level, name);
+                ui.selectable_value(&mut self.log_min_level, level, t!(name));
             }
             ui.separator();
             ui.add(
                 widgets::text_field(&mut self.log_search)
-                    .hint_text("Filter…")
+                    .hint_text(t!("play.filter"))
                     .desired_width(180.0),
             );
-            ui.checkbox(&mut self.log_follow, "Auto-scroll");
+            ui.checkbox(&mut self.log_follow, t!("play.auto_scroll"));
             ui.add_space(8.0);
             if let LogSource::Game(id) = self.log_source
-                && widgets::icon_button(ui, p, Icon::Trash, "Clear").clicked()
+                && widgets::icon_button(ui, p, Icon::Trash, t!("play.clear")).clicked()
                 && let Some(run) = self.runs.get_mut(id)
             {
                 run.clear_log();
@@ -171,11 +175,11 @@ impl ArcticApp {
                 LogSource::Launcher => self.dirs.launcher_logs().join("launcher.log"),
             };
             if file.is_file()
-                && widgets::icon_button(ui, p, Icon::Document, "Open log file").clicked()
+                && widgets::icon_button(ui, p, Icon::Document, t!("play.open_log_file")).clicked()
             {
                 let _ = open::that_detached(&file);
             }
-            if widgets::icon_button(ui, p, Icon::Copy, "Copy shown lines").clicked() {
+            if widgets::icon_button(ui, p, Icon::Copy, t!("play.copy_shown_lines")).clicked() {
                 copy = true;
             }
         });
@@ -208,8 +212,8 @@ fn console<'a>(
                 ui.set_min_height(height);
                 ui.centered_and_justified(|ui| {
                     let msg = match source {
-                        LogSource::Game(_) => "No output yet.",
-                        LogSource::Launcher => "Nothing logged yet.",
+                        LogSource::Game(_) => t!("play.no_output_yet"),
+                        LogSource::Launcher => t!("play.nothing_logged_yet"),
                     };
                     ui.label(RichText::new(msg).color(p.muted));
                 });

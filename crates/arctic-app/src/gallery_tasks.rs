@@ -6,7 +6,7 @@ use arctic_core::skins::Variant;
 
 use crate::skin_tasks::{cached, in_parallel};
 use crate::tasks::{Event, Tasks};
-
+use crate::{t, tf};
 /// A gallery page with every skin's texture.
 #[derive(Debug, Clone, Default)]
 pub struct GalleryResult {
@@ -70,7 +70,12 @@ impl Tasks {
             let base = cosmetics::base_url();
             let result = cosmetics::token_for(t.dirs(), &base, &account)
                 .and_then(|token| cosmetics::gallery_share(&base, &token, &png, variant, &name))
-                .map(|()| format!("{name} sent for review; it shows in the gallery once approved"))
+                .map(|()| {
+                    tf!(
+                        "tasks.sent_for_review_it_shows_in_the_gallery_once",
+                        name = name
+                    )
+                })
                 .map_err(|e| friendly(&e.to_string()));
             t.send(Event::GalleryDone(result));
         });
@@ -81,7 +86,7 @@ impl Tasks {
             let base = cosmetics::base_url();
             let result = cosmetics::token_for(t.dirs(), &base, &account)
                 .and_then(|token| cosmetics::gallery_report(&base, &token, &id))
-                .map(|()| "Reported. Thanks for keeping the gallery clean.".to_owned())
+                .map(|()| t!("tasks.reported_thanks_for_keeping_the_gallery").to_owned())
                 .map_err(|e| friendly(&e.to_string()));
             t.send(Event::GalleryDone(result));
         });
@@ -91,7 +96,7 @@ impl Tasks {
 fn friendly(e: &str) -> String {
     if e.starts_with("network error") {
         log::info!("gallery: {e}");
-        "Can't reach the Arctic gallery right now.".into()
+        t!("tasks.cant_reach_the_arctic_gallery_right_now").into()
     } else {
         e.to_owned()
     }

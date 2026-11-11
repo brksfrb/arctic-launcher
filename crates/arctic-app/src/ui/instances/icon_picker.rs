@@ -10,9 +10,9 @@ use crate::app::ArcticApp;
 use crate::art::flakes::{self, SWATCHES};
 
 use crate::art::lerp_color;
+use crate::t;
 use crate::theme;
 use crate::toasts::Kind;
-
 const STYLE_TILE: f32 = 58.0;
 
 impl ArcticApp {
@@ -33,8 +33,11 @@ impl ArcticApp {
             if let Some(instance) = self.instance_mut(instance_id) {
                 instance.icon = icon;
                 if let Err(e) = instance.save(&dirs) {
-                    self.toasts
-                        .push(Kind::Error, "Could not save instance", e.to_string());
+                    self.toasts.push(
+                        Kind::Error,
+                        t!("instances.could_not_save_instance"),
+                        e.to_string(),
+                    );
                 }
             }
         }
@@ -44,7 +47,11 @@ impl ArcticApp {
 fn icon_picker_body(ui: &mut egui::Ui, p: &theme::Palette, icon: &mut InstanceIcon) {
     {
         let color = flakes::icon_color(icon, p.accent);
-        ui.label(RichText::new("Snowflake").strong().color(p.text));
+        ui.label(
+            RichText::new(t!("instances.snowflake"))
+                .strong()
+                .color(p.text),
+        );
         egui::Grid::new("flake_styles")
             .spacing(vec2(8.0, 8.0))
             .show(ui, |ui| {
@@ -58,9 +65,14 @@ fn icon_picker_body(ui: &mut egui::Ui, p: &theme::Palette, icon: &mut InstanceIc
                 }
             });
         ui.add_space(6.0);
-        ui.label(RichText::new("Color").strong().color(p.text));
+        ui.label(RichText::new(t!("instances.color")).strong().color(p.text));
         ui.horizontal_wrapped(|ui| {
-            if swatch(ui, p.accent, icon.color.is_none(), "Theme accent") {
+            if swatch(
+                ui,
+                p.accent,
+                icon.color.is_none(),
+                t!("instances.theme_accent"),
+            ) {
                 icon.color = None;
             }
             for rgb in SWATCHES {

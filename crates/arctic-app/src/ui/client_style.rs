@@ -7,8 +7,8 @@ use eframe::egui::{
 
 use crate::art::icons::{self, Icon};
 use crate::art::lerp_color;
+use crate::t;
 use crate::theme::Palette;
-
 /// Preview height over width, as in the launcher theme tiles (58 / 112).
 const PREVIEW_RATIO: f32 = 58.0 / 112.0;
 const LABEL_HEIGHT: f32 = 26.0;
@@ -74,8 +74,8 @@ pub fn picker(ui: &mut egui::Ui, p: &Palette, settings: &mut Settings, tile_widt
 /// The Fancy switch (smooth font, rounded shapes), next to the style tiles.
 pub fn fancy_toggle(ui: &mut egui::Ui, settings: &mut Settings) {
     if ui
-        .checkbox(&mut settings.client_fancy, "Fancy")
-        .on_hover_text("Smooth font and rounded, smooth shapes everywhere in game.")
+        .checkbox(&mut settings.client_fancy, t!("skins.fancy"))
+        .on_hover_text(t!("skins.smooth_font_and_rounded_smooth_shapes"))
         .changed()
     {
         settings.client_style_set = arctic_core::auth::now_secs();

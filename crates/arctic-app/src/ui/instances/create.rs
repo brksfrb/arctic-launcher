@@ -9,7 +9,7 @@ use crate::app::{ArcticApp, ManifestState};
 use crate::art::icons::Icon;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 #[derive(Debug, Clone, Default)]
 pub struct CreateForm {
     pub name: String,
@@ -91,7 +91,9 @@ impl ArcticApp {
             }
         }
         if !form.name_edited {
-            let loader = form.loader.map_or("Vanilla", LoaderKind::label);
+            let loader = form
+                .loader
+                .map_or(t!("instances.vanilla"), LoaderKind::label);
             form.name = format!("{loader} {}", form.game.as_deref().unwrap_or(""))
                 .trim()
                 .to_owned();
@@ -111,15 +113,15 @@ impl ArcticApp {
             .show(ctx, |ui| {
                 ui.set_width(460.0);
                 ui.label(
-                    RichText::new("New instance")
+                    RichText::new(t!("instances.new_instance"))
                         .size(22.0)
                         .strong()
                         .color(p.text),
                 );
                 ui.add_space(10.0);
-                ui.label(RichText::new("LOADER").small().color(p.muted));
+                ui.label(RichText::new(t!("instances.loader")).small().color(p.muted));
                 ui.horizontal_wrapped(|ui| {
-                    ui.selectable_value(&mut form.loader, None, "Vanilla");
+                    ui.selectable_value(&mut form.loader, None, t!("instances.vanilla"));
                     for kind in LoaderKind::ALL {
                         ui.selectable_value(&mut form.loader, Some(kind), kind.label());
                     }
@@ -127,7 +129,7 @@ impl ArcticApp {
                 ui.add_space(8.0);
                 self.create_version_rows(ui, &mut form);
                 ui.add_space(8.0);
-                ui.label(RichText::new("NAME").small().color(p.muted));
+                ui.label(RichText::new(t!("instances.name_2")).small().color(p.muted));
                 if ui
                     .add(widgets::text_field(&mut form.name).desired_width(f32::INFINITY))
                     .changed()
@@ -135,20 +137,25 @@ impl ArcticApp {
                     form.name_edited = true;
                 }
                 ui.add_space(10.0);
-                ui.label(RichText::new("SETTINGS").small().color(p.muted));
+                ui.label(
+                    RichText::new(t!("instances.settings_2"))
+                        .small()
+                        .color(p.muted),
+                );
                 ui.radio_value(
                     &mut form.own_settings,
                     false,
-                    "Same as my other instances (server list, HUD, keys, FOV)",
+                    t!("instances.same_as_my_other_instances_server_list_hud"),
                 );
                 ui.radio_value(
                     &mut form.own_settings,
                     true,
-                    "Its own: start fresh and keep them separate",
+                    t!("instances.its_own_start_fresh_and_keep_them_separate"),
                 );
                 ui.add_space(14.0);
                 crate::widgets::row(ui, |ui| {
-                    if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
+                    if crate::widgets::button(ui, p, None, t!("instances.cancel"), false).clicked()
+                    {
                         ui.close();
                     }
                     let ready = !form.name.trim().is_empty()
@@ -156,7 +163,13 @@ impl ArcticApp {
                         && (form.loader.is_none() || form.loader_version.is_some());
                     let create = ui
                         .add_enabled_ui(ready, |ui| {
-                            widgets::button(ui, p, Some(Icon::Plus), "Create instance", true)
+                            widgets::button(
+                                ui,
+                                p,
+                                Some(Icon::Plus),
+                                t!("instances.create_instance"),
+                                true,
+                            )
                         })
                         .inner;
                     submit = ready && create.clicked();
@@ -180,7 +193,11 @@ impl ArcticApp {
 
     fn create_version_rows(&self, ui: &mut egui::Ui, form: &mut CreateForm) {
         let p = self.palette();
-        ui.label(RichText::new("MINECRAFT VERSION").small().color(p.muted));
+        ui.label(
+            RichText::new(t!("instances.minecraft_version"))
+                .small()
+                .color(p.muted),
+        );
         match self.create_game_versions(form.loader) {
             None => loading_row(
                 ui,
@@ -192,7 +209,10 @@ impl ArcticApp {
                     }),
             ),
             Some(games) if games.is_empty() => {
-                ui.label(RichText::new("No versions available for this loader.").color(p.warn));
+                ui.label(
+                    RichText::new(t!("instances.no_versions_available_for_this_loader"))
+                        .color(p.warn),
+                );
             }
             Some(games) => {
                 egui::ComboBox::from_id_salt("create_game")
@@ -211,9 +231,12 @@ impl ArcticApp {
         };
         ui.add_space(6.0);
         ui.label(
-            RichText::new(format!("{} VERSION", kind.label().to_uppercase()))
-                .small()
-                .color(p.muted),
+            RichText::new(tf!(
+                "instances.version_2",
+                to_uppercase = kind.label().to_uppercase()
+            ))
+            .small()
+            .color(p.muted),
         );
         match self.inst.loader_versions.get(&(kind, game)) {
             Some(Load::Ready(list)) if !list.is_empty() => {
@@ -237,7 +260,9 @@ impl ArcticApp {
                     });
             }
             Some(Load::Ready(_)) => {
-                ui.label(RichText::new("No loader builds for this version.").color(p.warn));
+                ui.label(
+                    RichText::new(t!("instances.no_loader_builds_for_this_version")).color(p.warn),
+                );
             }
             Some(Load::Failed(e)) => loading_row(ui, p, Some(e.clone())),
             _ => loading_row(ui, p, None),
@@ -256,16 +281,21 @@ impl ArcticApp {
             Ok(instance) => {
                 let id = instance.id.clone();
                 self.reload_instances();
-                self.toasts
-                    .push(Kind::Success, format!("Created {}", instance.name), "");
+                self.toasts.push(
+                    Kind::Success,
+                    tf!("instances.created", name = instance.name),
+                    "",
+                );
                 self.open_instance(&id);
                 if instance.loader.kind().is_some() {
                     self.inst.page = super::InstancePage::Browse;
                 }
             }
-            Err(e) => self
-                .toasts
-                .push(Kind::Error, "Could not create instance", e.to_string()),
+            Err(e) => self.toasts.push(
+                Kind::Error,
+                t!("instances.could_not_create_instance"),
+                e.to_string(),
+            ),
         }
     }
 }
@@ -277,7 +307,7 @@ fn loading_row(ui: &mut egui::Ui, p: &crate::theme::Palette, error: Option<Strin
         }
         None => {
             ui.spinner();
-            ui.label(RichText::new("Loading…").color(p.muted));
+            ui.label(RichText::new(t!("instances.loading")).color(p.muted));
         }
     });
 }

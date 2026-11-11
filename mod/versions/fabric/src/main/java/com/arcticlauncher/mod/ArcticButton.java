@@ -4,6 +4,7 @@ import com.arcticlauncher.client.ArcticClient;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 
+import com.arcticlauncher.client.Lang;
 /** The "Arctic" button on the pause screen and the Vanilla title screen. */
 public final class ArcticButton {
 	private ArcticButton() {}
@@ -31,22 +32,22 @@ public final class ArcticButton {
 	public static void addActions(net.minecraft.client.gui.screens.Screen screen, java.util.function.Consumer<Button> add) {
 		add.accept(create());
 		if (screen instanceof net.minecraft.client.gui.screens.TitleScreen) {
-			add.accept(create("Replays", () -> ArcticClient.platform().openPage(com.arcticlauncher.client.menu.Menus.page("replays"))));
-			add.accept(create("Edit HUD", () -> ArcticClient.platform().openPage(new com.arcticlauncher.client.menu.HudEditor())));
+			add.accept(create(Lang.t("platform.replays"), () -> ArcticClient.platform().openPage(com.arcticlauncher.client.menu.Menus.page("replays"))));
+			add.accept(create(Lang.t("platform.edit_hud"), () -> ArcticClient.platform().openPage(new com.arcticlauncher.client.menu.HudEditor())));
 		} else if (screen instanceof net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen) {
-			add.accept(create("Arctic servers", () -> ServerMenus.open(screen)));
+			add.accept(create(Lang.t("platform.arctic_servers"), () -> ServerMenus.open(screen)));
 		} else if (screen instanceof net.minecraft.client.gui.screens.DisconnectedScreen) {
-			add.accept(create("Arctic disconnect", () -> ServerMenus.open(screen)));
+			add.accept(create(Lang.t("platform.arctic_disconnect"), () -> ServerMenus.open(screen)));
 			com.arcticlauncher.client.servers.DisconnectedPage reconnect = new com.arcticlauncher.client.servers.DisconnectedPage("", "");
 			if (reconnect.canReconnect()) {
-				Button join = create("Reconnect", reconnect::reconnect); add.accept(join);
-				Button cancel = create("Cancel auto", reconnect::cancelReconnect); add.accept(cancel);
+				Button join = create(Lang.t("platform.reconnect"), reconnect::reconnect); add.accept(join);
+				Button cancel = create(Lang.t("platform.cancel_auto"), reconnect::cancelReconnect); add.accept(cancel);
 				TICKS.put(screen, () -> {
 					cancel.visible = reconnect.autoOn();
 					//#if MC >= 1.16
-					join.setMessage(Compat.literal(reconnect.autoOn() ? "Reconnect " + reconnect.countdown() : "Reconnect"));
+					join.setMessage(Compat.literal(reconnect.autoOn() ? Lang.t("platform.reconnect_2") + reconnect.countdown() : Lang.t("platform.reconnect")));
 					//#else
-					join.setMessage(reconnect.autoOn() ? "Reconnect " + reconnect.countdown() : "Reconnect");
+					join.setMessage(reconnect.autoOn() ? Lang.t("platform.reconnect_2") + reconnect.countdown() : Lang.t("platform.reconnect"));
 					//#endif
 					reconnect.tickReconnect();
 				});

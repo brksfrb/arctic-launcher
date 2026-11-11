@@ -1,0 +1,36 @@
+[package]
+name = "arctic-bedrock"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Native Windows renderer adapter for Arctic Client on Bedrock"
+
+[workspace]
+exclude = ["vendor/hudhook"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "arctic-bedrock-loader"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[target.'cfg(windows)'.dependencies]
+hudhook = { path = "vendor/hudhook", version = "=0.9.3", default-features = false, features = ["dx11", "dx12"] }
+jni = { version = "=0.21.1", features = ["invocation"] }
+windows = { version = "=0.62.2", features = ["Win32_Security_Cryptography", "Win32_Graphics_Direct3D_Dxc"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[target.'cfg(windows)'.dev-dependencies]
+windows = {version = "=0.62.2", features = ["Win32_System_Kernel", "Win32_Storage_FileSystem", "Win32_NetworkManagement_IpHelper"]}
+
+[[example]]
+name = "render_host"
+path = "examples/render_host.rs"

@@ -11,6 +11,7 @@ import net.minecraft.network.ClientConnection;
 import net.minecraft.network.Packet;
 import net.minecraft.server.integrated.IntegratedServer;
 
+import com.arcticlauncher.client.Lang;
 /** Recording on old versions: every connection that logs in, plus where you are each tick. */
 public final class LegacyReplayRecording {
 	private static volatile boolean swung;
@@ -31,7 +32,7 @@ public final class LegacyReplayRecording {
 			name = local.getLevelName();
 		} else {
 			SocketAddress address = connection.getAddress();
-			name = address instanceof InetSocketAddress ? ((InetSocketAddress) address).getHostString() : "Server";
+			name = address instanceof InetSocketAddress ? ((InetSocketAddress) address).getHostString() : Lang.t("platform.server");
 		}
 		return recorder.begin(name, singleplayer, LegacyReplayCodec.protocolVersion(), LegacyReplayView.VERSION);
 	}

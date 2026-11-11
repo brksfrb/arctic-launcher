@@ -18,7 +18,7 @@ use crate::app::{ArcticApp, LogSource};
 use crate::motion::RateMeter;
 use crate::tasks::{Event, LaunchId, ProgressSnapshot, Tasks};
 use crate::toasts::{Kind, ToastAction};
-
+use crate::{t, tf};
 /// Game log lines kept in memory per run (older ones are dropped).
 const LOG_LINES: usize = 20_000;
 /// Log lines searched for a crash cause (the end is where it is).
@@ -176,7 +176,7 @@ impl Runs {
             title,
             state: RunState::Preparing {
                 progress: ProgressSnapshot {
-                    stage: "Starting".into(),
+                    stage: t!("tasks.starting").into(),
                     ..ProgressSnapshot::default()
                 },
                 meter: RateMeter::default(),
@@ -289,7 +289,7 @@ impl ArcticApp {
                 if let Some(run) = self.runs.get_mut(id) {
                     run.state = RunState::Ended;
                 }
-                self.toasts.push(Kind::Error, "Launch failed", e);
+                self.toasts.push(Kind::Error, t!("tasks.launch_failed"), e);
             }
         }
     }
@@ -395,15 +395,18 @@ impl ArcticApp {
             Some(0) => {}
             Some(_) if watchdog => self.toasts.push(
                 Kind::Info,
-                format!("{title} closed"),
-                "It was slow to shut down, which happens without internet.",
+                tf!("tasks.closed", title = title),
+                t!("tasks.it_was_slow_to_shut_down_which_happens"),
             ),
             Some(c) => {
                 let (heading, body) = match diagnosis {
-                    Some(d) => (format!("{title} crashed: {}", d.title), d.detail),
+                    Some(d) => (
+                        tf!("tasks.crashed", title = title, title2 = d.title),
+                        d.detail,
+                    ),
                     None => (
-                        format!("{title} closed unexpectedly"),
-                        format!("Exit code {c}."),
+                        tf!("tasks.closed_unexpectedly", title = title),
+                        tf!("tasks.exit_code", c = c),
                     ),
                 };
                 self.toasts.push_with_action(
@@ -415,7 +418,7 @@ impl ArcticApp {
             }
             None => self
                 .toasts
-                .push(Kind::Info, format!("{title} was stopped"), ""),
+                .push(Kind::Info, tf!("tasks.was_stopped", title = title), ""),
         }
     }
 
@@ -431,8 +434,8 @@ impl ArcticApp {
                 }
                 self.toasts.push_with_action(
                     Kind::Info,
-                    "Help fix this crash?",
-                    "Send the log to Arctic. Your name, folders and sign-in details are taken out first.",
+                    t!("tasks.help_fix_this_crash"),
+                    t!("tasks.send_the_log_to_arctic_your_name_folders_and"),
                     Some(ToastAction::SendCrash(id)),
                 );
             }
@@ -496,8 +499,8 @@ impl ArcticApp {
         }
         self.toasts.push(
             crate::toasts::Kind::Error,
-            "The proxy won't cover this game's servers",
-            "Only Minecraft's login goes through it. Servers see your real address unless you play with the Arctic Client (Vanilla or Fabric instances).",
+            t!("tasks.the_proxy_wont_cover_this_games_servers"),
+            t!("tasks.only_minecrafts_login_goes_through_it"),
         );
     }
 }

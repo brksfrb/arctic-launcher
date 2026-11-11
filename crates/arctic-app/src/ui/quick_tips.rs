@@ -7,7 +7,7 @@ use eframe::egui::{self, Align2, CursorIcon, FontId, Sense, vec2};
 
 use crate::app::{ArcticApp, Tab};
 use crate::art::icons::{self, Icon};
-
+use crate::{t, tf};
 /// How long one tip stays.
 const TIP_EVERY: Duration = Duration::from_secs(5 * 60);
 const PAD: f32 = 8.0;
@@ -21,102 +21,72 @@ const MENU_ROOM: f32 = 4.0;
 
 /// A tip and where clicking it goes (`None`: it's in game, nothing to open).
 const TIPS: &[(&str, Option<Tab>)] = &[
-    ("Drag servers to put your favorites first.", Some(Tab::Play)),
+    ("nav.tip.drag_servers", Some(Tab::Play)),
+    ("nav.tip.discover_servers", Some(Tab::Play)),
+    ("nav.tip.right_shift_hud", None),
+    ("nav.tip.controllers", None),
+    ("nav.tip.tier_tags", None),
+    ("nav.tip.cosmetics_free", Some(Tab::Skins)),
+    ("nav.tip.skin_gallery", Some(Tab::Skins)),
+    ("nav.tip.face_items", Some(Tab::Skins)),
+    ("nav.tip.shoulder_pets", Some(Tab::Skins)),
+    ("nav.tip.play_together", Some(Tab::Together)),
+    ("nav.tip.friends_join", Some(Tab::Together)),
+    ("nav.tip.replays", Some(Tab::Instances)),
+    ("nav.tip.screenshots", Some(Tab::Screenshots)),
     (
-        "Discover servers finds new places to play.",
-        Some(Tab::Play),
-    ),
-    ("Right Shift in game moves or hides any HUD widget.", None),
-    ("Controllers work in game on every version.", None),
-    (
-        "Tier Tags show PvP tiers by names (Right Shift in game).",
-        None,
-    ),
-    ("Capes, wings, pets and emotes are free.", Some(Tab::Skins)),
-    (
-        "Cosmetics → Skin gallery: free skins to try on.",
-        Some(Tab::Skins),
-    ),
-    (
-        "Glasses off your eyes? Nudge face items in Cosmetics.",
-        Some(Tab::Skins),
-    ),
-    (
-        "Shoulder pets can sit on either shoulder.",
-        Some(Tab::Skins),
-    ),
-    (
-        "Play together without a server: share an invite code.",
-        Some(Tab::Together),
-    ),
-    (
-        "Friends see where you play and join in one click.",
-        Some(Tab::Together),
-    ),
-    (
-        "F9 saves the last 30 seconds; F10 starts or stops a recording.",
+        "nav.modrinth_modpacks_install_as_their_own",
         Some(Tab::Instances),
     ),
     (
-        "All your screenshots, every instance, one place.",
-        Some(Tab::Screenshots),
-    ),
-    (
-        "Modrinth modpacks install as their own instance.",
+        "nav.mods_that_would_stop_the_game_get_fixed",
         Some(Tab::Instances),
     ),
     (
-        "Mods that would stop the game get fixed before it starts.",
+        "nav.an_instance_can_keep_its_worlds_on_any_drive",
         Some(Tab::Instances),
     ),
     (
-        "An instance can keep its worlds on any drive.",
+        "nav.shaders_turn_on_iris_in_an_instances",
         Some(Tab::Instances),
     ),
     (
-        "Shaders: turn on Iris in an instance's settings.",
-        Some(Tab::Instances),
-    ),
-    (
-        "Short on space? Move Arctic in Settings → Storage.",
+        "nav.short_on_space_move_arctic_in_settings",
         Some(Tab::Settings),
     ),
     (
-        "Bring instances and HUDs from other launchers.",
-        Some(Tab::Settings),
-    ),
-    ("Share your setup or a HUD as a code.", Some(Tab::Settings)),
-    (
-        "Try the Glass theme in Settings → Appearance.",
+        "nav.bring_instances_and_huds_from_other",
         Some(Tab::Settings),
     ),
     (
-        "One switch adds Sodium and friends for more FPS.",
+        "nav.share_your_setup_or_a_hud_as_a_code",
         Some(Tab::Settings),
     ),
     (
-        "Voice chat works in shared worlds and SVC servers.",
+        "nav.try_the_glass_theme_in_settings_appearance",
         Some(Tab::Settings),
     ),
     (
-        "Animated capes too busy? Freeze them in Settings.",
+        "nav.one_switch_adds_sodium_and_friends_for_more",
         Some(Tab::Settings),
     ),
     (
-        "Crashes are explained, and fixed where Arctic can.",
+        "nav.voice_chat_works_in_shared_worlds_and_svc",
+        Some(Tab::Settings),
+    ),
+    (
+        "nav.animated_capes_too_busy_freeze_them_in",
+        Some(Tab::Settings),
+    ),
+    (
+        "nav.crashes_are_explained_and_fixed_where_arctic",
         Some(Tab::Logs),
     ),
-    ("Every game's log is kept in Logs.", Some(Tab::Logs)),
-    (
-        "Profiles keep accounts and instances apart (top left).",
-        None,
-    ),
-    (
-        "Auto Reconnect brings you back when a server drops you.",
-        None,
-    ),
-    ("Waypoints and a minimap come with the Arctic Client.", None),
-    ("The arctic command does it all too: arctic --help.", None),
+    ("nav.every_games_log_is_kept_in_logs", Some(Tab::Logs)),
+    ("nav.profiles_keep_accounts_and_instances_apart", None),
+    ("nav.auto_reconnect_brings_you_back_when_a_server", None),
+    ("nav.waypoints_and_a_minimap_come_with_the_arctic", None),
+    ("nav.the_arctic_command_does_it_all_too_arctic", None),
 ];
 
 #[derive(Default)]
@@ -165,6 +135,7 @@ impl ArcticApp {
         let p = self.palette();
         let index = self.quick_tips.tip(Instant::now());
         let (text, target) = TIPS[index];
+        let text = t!(text);
         let width = ui.available_width();
         let galley = ui.painter().layout(
             text.to_owned(),
@@ -196,7 +167,7 @@ impl ArcticApp {
         ui.painter().text(
             egui::pos2(rect.left() + PAD + 17.0, label_y),
             Align2::LEFT_CENTER,
-            "Quick tip",
+            t!("nav.quick_tip"),
             FontId::proportional(10.5),
             p.accent,
         );
@@ -208,7 +179,7 @@ impl ArcticApp {
         let next_response = ui
             .interact(next, ui.id().with("quick_tip_next"), Sense::click())
             .on_hover_cursor(CursorIcon::PointingHand)
-            .on_hover_text("Another tip");
+            .on_hover_text(t!("nav.another_tip"));
         icons::draw(
             ui.painter(),
             Icon::ChevronDown,
@@ -287,7 +258,7 @@ impl ArcticApp {
             galley,
             color,
         );
-        let response = response.on_hover_text(format!("Quick tip: {text}"));
+        let response = response.on_hover_text(tf!("nav.quick_tip_2", text = text));
         let response = match target {
             Some(_) => response.on_hover_cursor(CursorIcon::PointingHand),
             None => response,

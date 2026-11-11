@@ -13,6 +13,7 @@ import com.arcticlauncher.client.ui.Page;
 import com.arcticlauncher.client.ui.Scroll;
 import com.arcticlauncher.client.ui.TextField;
 
+import com.arcticlauncher.client.Lang;
 /**
  * The Mods screen: every Arctic feature as a card, with a search box and
  * category chips. Cards switch mods on and off and open their settings.
@@ -39,7 +40,7 @@ final class ModsScreen extends Page {
 	private static String query = "";
 	private static int scrollOffset;
 
-	private final TextField search = new TextField("Search mods", MAX_QUERY, TextField.ANY);
+	private final TextField search = new TextField(Lang.t("mods.search_mods"), MAX_QUERY, TextField.ANY);
 	/** Typing in the search box: rebuild the grid but keep typing. */
 	private boolean keepSearchFocus;
 	private Scroll scroll;
@@ -87,12 +88,12 @@ final class ModsScreen extends Page {
 		int styleX = hudX;
 		if (ArcticClient.platform().hasFeatures()) {
 			// The HUD layout, from anywhere (outside a world it shows sample values).
-			add(new Button("Edit HUD", () -> ArcticClient.platform().openPage(new HudEditor())))
+			add(new Button(Lang.t("mods.edit_hud"), () -> ArcticClient.platform().openPage(new HudEditor())))
 					.bounds(hudX, headerY, HUD_W, FIELD_H);
 			styleX = hudX - CHIP_GAP - STYLE_W;
 		}
 		if (styleX >= px + TabPage.PAD + TITLE_ROOM) {
-			add(new Button("Menu Style", this::openStyle)).bounds(styleX, headerY, STYLE_W, FIELD_H);
+			add(new Button(Lang.t("mods.menu_style"), this::openStyle)).bounds(styleX, headerY, STYLE_W, FIELD_H);
 		}
 		if (keepSearchFocus) {
 			keepSearchFocus = false;
@@ -163,10 +164,10 @@ final class ModsScreen extends Page {
 		int x = px + TabPage.PAD;
 		g.texture("icon", x, py + (TabPage.HEADER - LOGO) / 2, LOGO, LOGO, 0, 0, 256, 256, 256, 256);
 		g.text("§lArctic", x + LOGO + 6, py + 10, s.text, false);
-		g.text("Mods", x + LOGO + 6, py + 22, s.muted, false);
+		g.text(Lang.t("mods.mods"), x + LOGO + 6, py + 22, s.muted, false);
 		g.fill(x, py + TabPage.HEADER, px + pw - TabPage.PAD, py + TabPage.HEADER + 1, s.border);
 		if (shown == 0) {
-			Draw.centered(g, "No mods match \"" + query + "\".", px + pw / 2, gridTop + 30, s.muted, false);
+			Draw.centered(g, Lang.t("mods.no_mods_match") + query + "\".", px + pw / 2, gridTop + 30, s.muted, false);
 		}
 	}
 

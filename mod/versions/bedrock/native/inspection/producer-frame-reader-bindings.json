@@ -1,0 +1,141 @@
+{
+  "schema": 1,
+  "profiles": [
+    {
+      "productVersion": "1.26.5203.0",
+      "layout": {
+        "contextGlobal": 301131872,
+        "contextEncoder": 81168,
+        "contextSubmit": 30494920,
+        "contextRender": 30494912,
+        "firstFrame": 81216,
+        "frameStride": 15206848,
+        "frameNumber": 15206096
+      },
+      "functions": {
+        "frameStep": {
+          "rva": 192050352,
+          "bytes": 884,
+          "sha256": "74d61bab28865d4cadad4ac5d581f95aad22b23b5f701ef05fb9f916a3c0990e"
+        },
+        "swap": {
+          "rva": 192055952,
+          "bytes": 6754,
+          "sha256": "51663993bcb4f476a55f7d6fd6037e206aa4534cd17105195af2b67c7e949e9c"
+        },
+        "contextConstructor": {
+          "rva": 192074352,
+          "bytes": 3541,
+          "sha256": "a4cb92cda519d9561ec9c5ad9aff5cffdfefdb4ff1b9d05357aa586ac8793ff3"
+        },
+        "frameConstructor": {
+          "rva": 192122480,
+          "bytes": 683,
+          "sha256": "353f35da78bf6256268a06405e4c5f542458623441874c417c9f517ed75d98c5"
+        },
+        "globalAccessor": {
+          "rva": 87138288,
+          "bytes": 253,
+          "sha256": "0a7da594e74148c3e72a15c6b4f2946832fca1f3b88008bf0a0652f167ce3f21"
+        }
+      },
+      "globalLoads": [
+        {
+          "function": "globalAccessor",
+          "siteRva": 87138334,
+          "prefix": "488b3d"
+        },
+        {
+          "function": "globalAccessor",
+          "siteRva": 87138433,
+          "prefix": "488b0d"
+        }
+      ],
+      "edges": [
+        {
+          "from": "frameStep",
+          "to": "swap",
+          "siteRva": 192051087
+        },
+        {
+          "from": "contextConstructor",
+          "to": "frameConstructor",
+          "siteRva": 192074622
+        },
+        {
+          "from": "contextConstructor",
+          "to": "frameConstructor",
+          "siteRva": 192074653
+        }
+      ]
+    },
+    {
+      "productVersion": "1.26.60.5",
+      "layout": {
+        "contextGlobal": 313390920,
+        "contextEncoder": 81176,
+        "contextSubmit": 30396616,
+        "contextRender": 30396608,
+        "firstFrame": 81216,
+        "frameStride": 15157696,
+        "frameNumber": 15156952
+      },
+      "functions": {
+        "frameStep": {
+          "rva": 197544960,
+          "bytes": 893,
+          "sha256": "8122161d2b13273bf32c15444dbacb91771e52ab972e274c5734c8ff6e377b0a"
+        },
+        "swap": {
+          "rva": 197550560,
+          "bytes": 6615,
+          "sha256": "1e5d902fd795d8317a5f0b0d7939f7d3216b9bf7833478ac2efceb30414f7cd1"
+        },
+        "contextConstructor": {
+          "rva": 197568864,
+          "bytes": 4470,
+          "sha256": "2109b9de9a7354ea85a7c90b00b9cf2b5fb9882926f80d96697e6851de048136"
+        },
+        "frameConstructor": {
+          "rva": 197619152,
+          "bytes": 687,
+          "sha256": "5c0b9f19df47dbcb28d6192569cb8b0d73b51e8587d0b9459133efacd60df062"
+        },
+        "globalAccessor": {
+          "rva": 90807264,
+          "bytes": 213,
+          "sha256": "a22d23e9340213a618d8b247a92b30253d22fc6e32da055f9cb82a691c7d9a55"
+        }
+      },
+      "globalLoads": [
+        {
+          "function": "globalAccessor",
+          "siteRva": 90807288,
+          "prefix": "4c8b0d"
+        },
+        {
+          "function": "globalAccessor",
+          "siteRva": 90807367,
+          "prefix": "488b0d"
+        }
+      ],
+      "edges": [
+        {
+          "from": "frameStep",
+          "to": "swap",
+          "siteRva": 197545699
+        },
+        {
+          "from": "contextConstructor",
+          "to": "frameConstructor",
+          "siteRva": 197569140
+        },
+        {
+          "from": "contextConstructor",
+          "to": "frameConstructor",
+          "siteRva": 197569168
+        }
+      ]
+    }
+  ]
+}

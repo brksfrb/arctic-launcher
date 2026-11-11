@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "evidence": "Source reads, edits and manual review; cached Java/JOML class bytes decoded as data only. No Java class loading, builds, tests, syntax checks, project/game/renderer/JNI/shader/GPU execution, process inspection or exports. Runtime parity stays unverified by user instruction.",
+  "reference": {
+    "java": "26.2",
+    "clientJarSha256": "40896ee9f1e2bec3c934daac7e93d41e9e3d9c2f8ae0ca366d52ffbfd1afa290",
+    "joml": "org.joml:joml:1.10.8",
+    "jomlJarSha256": "bf19510145178df82cd3bd37edd514c13f411531ec5545299fd3abcbc98fe7c2",
+    "projection": "ProjectionType.<clinit> selects VertexSorting.DISTANCE_TO_ORIGIN at 0x07 for PERSPECTIVE and ORTHOGRAPHIC_Z at 0x1c for ORTHOGRAPHIC. vertexSorting returns that field.",
+    "centroid": "MeshData.decodeQuadCentroids reads Position from vertices 0 and 2. Each coordinate adds those floats then divides by float 2 (0x8f..0xa7), before CompactVectorArray.set. It does not average all four positions or use a clipped triangle's centroid.",
+    "perspective": "VertexSorting initializes DISTANCE_TO_ORIGIN with byDistance(0,0,0); byDistance(Vector3fc) captures that origin's distanceSquared receiver. JOML Vector3f.distanceSquared(Vector3fc) subtracts center from receiver (0x00..0x23) and returns nested Math.fma(dx,dx,Math.fma(dy,dy,dz*dz)) (0x25..0x34). The existing source profile uses JOML's default non-fused fallback; see software-model-phase-source.json for property/runtime byte evidence.",
+    "orthographic": "VertexSorting.lambda$static$0 reads Vector3f.z at 0x01 and negates it at 0x04; no view-matrix multiplication, camera-distance origin, perspective divide or clip-depth conversion is performed by this key function.",
+    "order": "VertexSorting.lambda$byDistance$0 initializes indices and calls IntArrays.mergeSort at 0x49. lambda$byDistance$1 compares keys[b] against keys[a] via Floats.compare at 0x06: stable descending float ordering, separate from the unstable whole-model sorter."
+  },
+  "software": {
+    "context": "ProjectionContext privately retains the validated projection type only after its existing finite view/raw-projection/combined-matrix checks succeed. WorldFrame.copyQuadSorting requires the raster's actual cloned projection to exactly match both the current world and the captured combined matrix, plus the existing camera-relative declaration. The immutable helper is selected from that transient captured type, not mutable raw JSON fields. Missing/unvalidated context has no new key.",
+    "positions": "JavaQuadSorting computes the original emitted 0/2 midpoint as float add/divide. Perspective uses dx*dx+(dy*dy+dz*dz) with zero-minus-centroid differences; orthographic uses unary negative centroid Z. Submitted software positions are used without additional view multiplication. This ports the key operator on its actual inputs and does not assert installed-Java/native vertex-space equivalence.",
+    "clipping": "One boxed float key is computed for a staged original quad and shared by both 0,1,2 and 2,3,0 primitives and every resulting clipped fan triangle. Stable Collections.sort retains original primitive, clipped-piece and equal-key source order within one prepared draw. No extra geometry emission or pixel copy.",
+    "admission": "A nullable key records unknown separately from all numeric float values. Infinity remains a numeric key, and Float.compare preserves signed-zero distinctions. Existing vertex/legacy-distance validity and geometry-budget admission are unchanged; this does not broaden overflow acceptance.",
+    "draws": "Known checked-view skin prepared draws and compatible simple base/bent/glow prepared draws request projection-aware sorting. Every triangle in one prepared draw must carry the key; otherwise the whole draw uses the existing comparator. Solid cape/wing and selected wing glint retain their no-sortOnUpload primitive order.",
+    "fallback": "All preview constructors, missing-projection contexts, older skin-stage fallback and abandoned/unknown phase queues retain the old Triangle.distance comparator, including the original distance/depth values. A new key on a previously staged triangle is never used by a legacy queue."
+  },
+  "compatibility": {
+    "wire": "No ARCGEO, replay archive, native ABI, JNI or shader change. No new execution or verification capability is enabled.",
+    "wholeModel": "JavaModelOrder still sorts complete model submissions by its own unstable model-distance rule. This per-draw stable quad ordering does not replace model sorting or change strict/consecutive versus simple/prepared grouping.",
+    "ownership": "The captured projection is an owned software camera context, not an owning native insertion callsite, Java prepared GPU equality receipt or complete foreign world phase. Native integration remains unfinished."
+  },
+  "remaining": [
+    "Authoritative Java-equivalent native vertex/model preparation space, full transform provenance and non-default math profiles.",
+    "Native world insertion and resource/descriptor/target lifetime ownership, complete foreign participants and unsupported material/outline/target variants.",
+    "Full geometry/shader/sampler/raster/depth/blend equivalence, live glint inputs, cape/emote fidelity and replay/editor/export integration.",
+    "Build, sort/group/matrix comparisons, installed-game rendered pixels, replay/video comparisons and full 1:1 runtime parity verification."
+  ],
+  "verified": {"built":false,"tested":false,"quadSortCompared":false,"vertexSpaceCompared":false,"pixelsCompared":false,"replayRendered":false,"liveGame":false,"gpuRendering":false,"deterministicVideo":false,"fullParity":false}
+}

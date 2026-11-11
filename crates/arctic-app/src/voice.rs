@@ -20,7 +20,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::voice_svc::{Frame, GameSvc, SvcSide};
-
+use crate::{t, tf};
 /// Check in to the room this often.
 const JOIN_EVERY: Duration = Duration::from_secs(20);
 /// No word from the game this long: it closed or left; stop.
@@ -210,20 +210,22 @@ impl VoiceHub {
         let st = lock(&self.state);
         match &st.session {
             Some(s) if s.engine.mic_error().is_some() => {
-                "Listening only: Arctic can't use your microphone. Check Windows Settings →                  Privacy → Microphone (\"Let desktop apps access your microphone\"), or pick                  another microphone below."
-                    .into()
+                t!("tasks.listening_only_arctic_cant_use_your").into()
             }
             Some(s) => {
                 let n = lock(&s.members).len();
                 if n == 0 {
-                    "On, nobody else here uses Arctic voice yet".into()
+                    t!("tasks.on_nobody_else_here_uses_arctic_voice_yet").into()
                 } else {
-                    format!("On, {n} other player(s) in voice on this server")
+                    tf!(
+                        "tasks.on_other_player_s_in_voice_on_this_server",
+                        n_value = n
+                    )
                 }
             }
             None if !st.status.is_empty() => st.status.clone(),
-            None if st.settings.enabled => "On: starts when you join a server".into(),
-            None => "Off".into(),
+            None if st.settings.enabled => t!("tasks.on_starts_when_you_join_a_server").into(),
+            None => t!("tasks.off").into(),
         }
     }
 
@@ -238,7 +240,7 @@ impl VoiceHub {
     /// The game's report; the answer tells it who's speaking.
     pub fn game_state(&self, body: &[u8]) -> String {
         let Ok(game) = serde_json::from_slice::<GameState>(body) else {
-            return json!({"error": "bad state"}).to_string();
+            return json!({"error": "bad state"}).to_string(); // i18n-ignore
         };
         let mut st = lock(&self.state);
         st.heard_game = Some(Instant::now());
@@ -267,7 +269,7 @@ impl VoiceHub {
                 Err(e) => {
                     log::warn!("voice chat couldn't start: {e}");
                     st.retry_at = Some(Instant::now() + RETRY_AFTER);
-                    st.status = format!("Voice chat couldn't start: {e}");
+                    st.status = tf!("tasks.voice_chat_couldnt_start", e = e);
                     return json!({"enabled": true, "active": false, "error": st.status})
                         .to_string();
                 }

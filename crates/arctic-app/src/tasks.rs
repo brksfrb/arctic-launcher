@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::Sender;
 
+use crate::t;
 use arctic_core::auth::avatar::{self, Face};
 use arctic_core::auth::microsoft::{self, DeviceCode, MsaConfig};
 use arctic_core::auth::{Account, now_secs};
@@ -20,7 +21,6 @@ use arctic_core::update::{self, UpdateChannel, UpdateInfo};
 use arctic_core::versions::{VersionEntry, VersionManifest};
 use arctic_core::{ProgressInfo, Result};
 use eframe::egui;
-
 /// Owned copy of a core `ProgressInfo`, sendable to the UI thread.
 #[derive(Debug, Clone, Default)]
 pub struct ProgressSnapshot {
@@ -166,6 +166,8 @@ pub enum Event {
     ServerSubmitted(Outcome<arctic_core::servers::public::Submitted>),
     /// The submission's state after the MOTD check.
     ServerVerified(Outcome<String>),
+    /// A Bedrock tab job (see `bedrock_tasks`).
+    Bedrock(Box<crate::bedrock_tasks::BedrockEvent>),
     Screenshots(Vec<arctic_core::screenshots::Shot>),
     ScreenshotThumb(PathBuf, Outcome<Vec<u8>>),
     ScreenshotCopied(Outcome<()>),
@@ -277,6 +279,9 @@ impl Tasks {
         let _ = self.tx.send(event);
         self.ctx.request_repaint();
     }
+    pub(crate) fn repaint(&self) {
+        self.ctx.request_repaint();
+    }
 
     pub fn load_manifest(&self) {
         self.run(|t| {
@@ -323,7 +328,7 @@ impl Tasks {
         let progress =
             |p: ProgressInfo| self.send(Event::LaunchProgress(id, ProgressSnapshot::from(p)));
         let account = if account.needs_refresh(now_secs()) {
-            progress(ProgressInfo::stage("Refreshing Microsoft login"));
+            progress(ProgressInfo::stage(t!("tasks.refreshing_microsoft_login")));
             let cfg = MsaConfig::load(&self.dirs)?;
             let fresh = microsoft::refresh(&cfg, &account)?;
             self.send(Event::AccountRefreshed(fresh.clone()));
@@ -426,8 +431,8 @@ impl Tasks {
         self.run(move |t| {
             let picked = path.or_else(|| {
                 rfd::FileDialog::new()
-                    .set_title("Choose a modpack")
-                    .add_filter("Modrinth modpack", &["mrpack", "zip"])
+                    .set_title(t!("tasks.choose_a_modpack"))
+                    .add_filter(t!("tasks.modrinth_modpack"), &["mrpack", "zip"])
                     .pick_file()
             });
             t.note_if_picker_missing(&picked);
@@ -477,7 +482,7 @@ impl Tasks {
                 let loader = instance
                     .loader
                     .kind()
-                    .ok_or("Vanilla instances have no mods to move")?;
+                    .ok_or(t!("tasks.vanilla_instances_have_no_mods_to_move"))?;
                 // The loader build first: a version without one changes nothing.
                 let loader_version = arctic_core::loaders::default_loader_version(loader, &version)
                     .map_err(|e| e.to_string())?;
@@ -528,7 +533,7 @@ impl Tasks {
                     }
                     result.map_err(|e| e.to_string())
                 }
-                None => Err("Vanilla instances can't load mods".to_owned()),
+                None => Err(t!("tasks.vanilla_instances_cant_load_mods").to_owned()),
             };
             t.send(Event::ModInstalled(instance.id, project_id, result));
         });
@@ -592,7 +597,7 @@ pub(crate) fn file_picker_available() -> bool {
         return true;
     }
     let in_path = |name: &str| {
-        std::env::var_os("PATH")
+        std::env::var_os("PATH") // i18n-ignore
             .is_some_and(|paths| std::env::split_paths(&paths).any(|dir| dir.join(name).is_file()))
     };
     in_path("zenity")

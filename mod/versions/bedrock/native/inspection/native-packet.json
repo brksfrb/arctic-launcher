@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.5203.0",
+  "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "packet": "network_stack_latency",
+  "packetId": 115,
+  "factoryRva": "016ad560",
+  "factoryCaseRva": "016ad65a",
+  "constructorRva": "016bac90",
+  "packetVtableRva": "0e7b0fd0",
+  "getIdRva": "03c40700",
+  "dispatcherInstanceRva": "1185b5b0",
+  "dispatcherVtableRva": "0e7bfea0",
+  "dispatcherHandleRva": "01733ce0",
+  "callbackVirtualOffset": 688,
+  "packetOffsets": { "dispatcher": 32, "timestamp": 48, "needsResponse": 56 },
+  "staticEvidence": "Previously copied installed-image factory jump table, constructor stores, packet ID accessor and dispatcher virtual thunk",
+  "sdkCommit": "9f7463515dd298a496da918285936d78c7416aad",
+  "gameStarted": false,
+  "packetApplicationVerified": false,
+  "terrainReady": false
+}

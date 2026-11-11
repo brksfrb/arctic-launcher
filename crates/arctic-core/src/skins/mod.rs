@@ -126,6 +126,13 @@ pub fn decode(png_bytes: &[u8]) -> Result<SkinImage> {
         }
     }
     let legacy = h == 32;
+    Ok(normalize_rgba(rgba, legacy))
+}
+
+/// Apply the same base-layer opacity and legacy limb preparation to a decoded
+/// RGBA skin from a second game adapter. Input is an already checked 64×64 buffer.
+pub(crate) fn normalize_rgba(mut rgba: Vec<u8>, legacy: bool) -> SkinImage {
+    debug_assert_eq!(rgba.len(), 64 * 64 * 4);
     let alpha = |x: usize, y: usize| rgba[(y * 64 + x) * 4 + 3];
     let slim_arms = !legacy && alpha(54, 20) == 0 && alpha(55, 31) == 0;
     if legacy {
@@ -140,11 +147,11 @@ pub fn decode(png_bytes: &[u8]) -> Result<SkinImage> {
             }
         }
     }
-    Ok(SkinImage {
+    SkinImage {
         rgba,
         legacy,
         slim_arms,
-    })
+    }
 }
 
 /// Old skins often fill the hat layer with solid color; the game treats a

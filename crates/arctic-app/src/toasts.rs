@@ -6,9 +6,9 @@ use eframe::egui::{
 
 use crate::art::icons::{self, Icon};
 use crate::motion::eased;
+use crate::t;
 use crate::theme::Palette;
 use crate::widgets;
-
 const WIDTH: f32 = 320.0;
 const SLIDE: f32 = 0.25;
 const FADE: f32 = 0.3;
@@ -48,11 +48,11 @@ pub enum ToastAction {
 impl ToastAction {
     fn label(&self) -> &'static str {
         match self {
-            ToastAction::ShowLogs(_) => "View logs",
-            ToastAction::OpenFriends => "Open",
-            ToastAction::LinkAccount { .. } => "Link",
-            ToastAction::SendCrash(_) => "Send report",
-            ToastAction::WhatsNew(_) => "What's new",
+            ToastAction::ShowLogs(_) => t!("nav.view_logs"),
+            ToastAction::OpenFriends => t!("nav.open"),
+            ToastAction::LinkAccount { .. } => t!("nav.link"),
+            ToastAction::SendCrash(_) => t!("nav.send_report"),
+            ToastAction::WhatsNew(_) => t!("nav.whats_new"),
         }
     }
 }
@@ -179,7 +179,7 @@ fn toast_body(ui: &mut egui::Ui, p: &Palette, toast: &Toast) -> Outcome {
                         outcome = Outcome::Action(action.clone());
                     }
                 });
-                if widgets::icon_button(ui, p, Icon::Close, "Dismiss").clicked() {
+                if widgets::icon_button(ui, p, Icon::Close, t!("nav.dismiss")).clicked() {
                     outcome = Outcome::Dismissed;
                 }
             });

@@ -7,6 +7,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Sharing from the menu, off the game thread: a code from the Arctic
  * server (falling back to text on the clipboard when it can't be reached),
@@ -53,7 +54,7 @@ public final class ShareService {
 		final JsonObject bundle = Shares.bundle(kind, ArcticClient.config());
 		final String what = Shares.HUD.equals(kind) ? "HUD layout" : "crosshair";
 		busy = true;
-		report("Making a code…", false);
+		report(Lang.t("social.making_a_code"), false);
 		WORKER.execute(new Runnable() {
 			@Override
 			public void run() {
@@ -61,7 +62,7 @@ public final class ShareService {
 				String why;
 				Looks looks = ArcticClient.looks();
 				if (looks == null || !looks.signedIn()) {
-					why = "not signed in to Arctic";
+					why = Lang.t("social.not_signed_in_to_arctic");
 				} else {
 					try {
 						code = Shares.cleanCode(looks.createShare(bundle.toString()));
@@ -82,12 +83,12 @@ public final class ShareService {
 						boolean onClipboard = copied.equals(ArcticClient.platform().clipboard());
 						busy = false;
 						if (pretty != null) {
-							report(onClipboard ? "Code " + pretty + " copied: your " + what + " for friends."
-									: "Your code: " + pretty + " (copying failed; give friends this code).", false);
+							report(onClipboard ? Lang.t("social.code") + pretty + " copied: your " + what + Lang.t("social.for_friends")
+									: Lang.t("social.your_code") + pretty + Lang.t("social.copying_failed_give_friends_this_code"), false);
 						} else if (onClipboard) {
-							report("No code (" + reason + "), so your " + what + " was copied as text instead.", false);
+							report(Lang.t("social.no_code") + reason + Lang.t("social.so_your") + what + Lang.t("social.was_copied_as_text_instead"), false);
 						} else {
-							report("Couldn't reach Arctic or copy the text; try again.", true);
+							report(Lang.t("social.couldnt_reach_arctic_or_copy_the_text_try"), true);
 						}
 					}
 				});
@@ -102,11 +103,11 @@ public final class ShareService {
 		}
 		final String trimmed = input.trim();
 		if (trimmed.isEmpty()) {
-			report("Paste a code or share text first.", true);
+			report(Lang.t("social.paste_a_code_or_share_text_first"), true);
 			return;
 		}
 		busy = true;
-		report("Looking it up…", false);
+		report(Lang.t("social.looking_it_up"), false);
 		WORKER.execute(new Runnable() {
 			@Override
 			public void run() {
@@ -147,23 +148,23 @@ public final class ShareService {
 		}
 		String code = Shares.cleanCode(input);
 		if (code == null) {
-			throw new Shares.ShareException("That's not a share code (like abcd-efgh) or share text.");
+			throw new Shares.ShareException(Lang.t("social.thats_not_a_share_code_like_abcd_efgh_or"));
 		}
 		Looks looks = ArcticClient.looks();
 		if (looks == null) {
-			throw new Shares.ShareException("Arctic isn't connected; ask for the share text instead.");
+			throw new Shares.ShareException(Lang.t("social.arctic_isnt_connected_ask_for_the_share_text"));
 		}
 		String json;
 		try {
 			json = looks.readShare(code);
 		} catch (java.io.FileNotFoundException e) {
-			throw new Shares.ShareException("No share has the code " + Shares.pretty(code) + ".");
+			throw new Shares.ShareException(Lang.t("social.no_share_has_the_code") + Shares.pretty(code) + ".");
 		} catch (Exception e) {
 			String msg = String.valueOf(e.getMessage());
 			if (msg.contains("404")) {
-				throw new Shares.ShareException("No share has the code " + Shares.pretty(code) + ".");
+				throw new Shares.ShareException(Lang.t("social.no_share_has_the_code") + Shares.pretty(code) + ".");
 			}
-			throw new Shares.ShareException("Couldn't reach Arctic; ask for the share text instead.");
+			throw new Shares.ShareException(Lang.t("social.couldnt_reach_arctic_ask_for_the_share_text"));
 		}
 		return Shares.parse(json);
 	}

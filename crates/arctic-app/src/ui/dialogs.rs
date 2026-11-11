@@ -13,7 +13,7 @@ use crate::art::lerp_color;
 use crate::theme::Palette;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 const DIALOG_WIDTH: f32 = 420.0;
 
 enum Choice {
@@ -34,7 +34,7 @@ impl ArcticApp {
             .show(ctx, |ui| {
                 ui.set_width(DIALOG_WIDTH);
                 ui.label(
-                    RichText::new("Add account")
+                    RichText::new(t!("play.add_account"))
                         .size(22.0)
                         .strong()
                         .color(p.text),
@@ -47,10 +47,14 @@ impl ArcticApp {
                     AddAccount::Microsoft { .. } => self.microsoft_view(ui),
                     AddAccount::Failed(e) => {
                         let e = e.clone();
-                        ui.label(RichText::new("Sign-in failed").strong().color(p.error));
+                        ui.label(
+                            RichText::new(t!("play.sign_in_failed"))
+                                .strong()
+                                .color(p.error),
+                        );
                         ui.label(RichText::new(e).color(p.muted));
                         ui.add_space(8.0);
-                        if widgets::button(ui, p, None, "Try again", true).clicked() {
+                        if widgets::button(ui, p, None, t!("play.try_again"), true).clicked() {
                             self.add_account = AddAccount::Choose;
                         }
                     }
@@ -68,7 +72,7 @@ impl ArcticApp {
         let ms_note = if self.msa_configured {
             None
         } else {
-            Some("Microsoft sign-in isn't available in this build")
+            Some(t!("play.microsoft_sign_in_isnt_available_in_this"))
         };
         #[cfg_attr(not(feature = "offline-accounts"), allow(unused_mut))]
         let mut options = vec![
@@ -76,14 +80,14 @@ impl ArcticApp {
                 Choice::Browser,
                 Icon::External,
                 "Microsoft",
-                "Sign in with your browser. Recommended.",
+                t!("play.sign_in_with_your_browser_recommended"),
                 ms_note,
             ),
             (
                 Choice::Code,
                 Icon::Copy,
-                "Microsoft with a code",
-                "Enter a short code on any device.",
+                t!("play.microsoft_with_a_code"),
+                t!("play.enter_a_short_code_on_any_device"),
                 ms_note,
             ),
         ];
@@ -92,8 +96,8 @@ impl ArcticApp {
             options.push((
                 Choice::Offline,
                 Icon::User,
-                "Offline",
-                "Singleplayer and offline-mode servers.",
+                t!("play.offline"),
+                t!("play.singleplayer_and_offline_mode_servers"),
                 None,
             ));
         }
@@ -128,7 +132,7 @@ impl ArcticApp {
         let AddAccount::Offline { name } = &mut self.add_account else {
             return;
         };
-        ui.label(RichText::new("Choose a username").color(p.muted));
+        ui.label(RichText::new(t!("play.choose_a_username")).color(p.muted));
         let response = ui.add(
             widgets::text_field(name)
                 .hint_text("Steve")
@@ -138,9 +142,9 @@ impl ArcticApp {
         response.request_focus();
         let valid = offline::validate_username(name.trim()).is_ok();
         let hint = if name.is_empty() || valid {
-            "1–16 letters, digits or _"
+            t!("play.1_16_letters_digits_or")
         } else {
-            "Only letters, digits and _ (max 16)"
+            t!("play.only_letters_digits_and_max_16")
         };
         ui.label(
             RichText::new(hint)
@@ -155,12 +159,12 @@ impl ArcticApp {
         let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
         let name = name.clone();
         crate::widgets::row(ui, |ui| {
-            if crate::widgets::button(ui, p, None, "Back", false).clicked() {
+            if crate::widgets::button(ui, p, None, t!("play.back"), false).clicked() {
                 self.add_account = AddAccount::Choose;
             }
             let add = ui
                 .add_enabled_ui(valid, |ui| {
-                    widgets::button(ui, p, Some(Icon::Plus), "Add", true)
+                    widgets::button(ui, p, Some(Icon::Plus), t!("play.add"), true)
                 })
                 .inner;
             if valid
@@ -170,7 +174,7 @@ impl ArcticApp {
                 self.add_account = AddAccount::Closed;
                 self.toasts.push(
                     Kind::Success,
-                    format!("Added {}", account.username),
+                    tf!("play.added", username = account.username),
                     "Offline account",
                 );
                 self.offer_profile_link(&account);
@@ -192,12 +196,15 @@ impl ArcticApp {
         };
         let (code, browser) = (device_code.clone(), *browser);
         match (browser, code) {
-            (true, _) => waiting(ui, p, "Finish signing in in your browser…"),
-            (false, None) => waiting(ui, p, "Getting a sign-in code…"),
+            (true, _) => waiting(ui, p, t!("play.finish_signing_in_in_your_browser")),
+            (false, None) => waiting(ui, p, t!("play.getting_a_sign_in_code")),
             (false, Some(code)) => {
                 ui.label(
-                    RichText::new(format!("Go to {} and enter:", code.verification_uri))
-                        .color(p.muted),
+                    RichText::new(tf!(
+                        "play.go_to_and_enter",
+                        verification_uri = code.verification_uri
+                    ))
+                    .color(p.muted),
                 );
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
@@ -208,23 +215,30 @@ impl ArcticApp {
                             .strong()
                             .color(p.accent),
                     );
-                    if widgets::icon_button(ui, p, Icon::Copy, "Copy code").clicked() {
+                    if widgets::icon_button(ui, p, Icon::Copy, t!("play.copy_code")).clicked() {
                         ui.ctx().copy_text(code.user_code.clone());
-                        self.toasts.push(Kind::Info, "Code copied", "");
+                        self.toasts.push(Kind::Info, t!("play.code_copied"), "");
                     }
                 });
                 ui.add_space(6.0);
-                if widgets::button(ui, p, Some(Icon::External), "Open sign-in page", true).clicked()
+                if widgets::button(
+                    ui,
+                    p,
+                    Some(Icon::External),
+                    t!("play.open_sign_in_page"),
+                    true,
+                )
+                .clicked()
                 {
                     ui.ctx()
                         .open_url(egui::OpenUrl::new_tab(&code.verification_uri));
                 }
                 ui.add_space(4.0);
-                waiting(ui, p, "Waiting for you to finish…");
+                waiting(ui, p, t!("play.waiting_for_you_to_finish"));
             }
         }
         ui.add_space(8.0);
-        if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
+        if crate::widgets::button(ui, p, None, t!("play.cancel"), false).clicked() {
             self.cancel_login();
         }
     }
@@ -243,22 +257,27 @@ impl ArcticApp {
             .show(ctx, |ui| {
                 ui.set_width(360.0);
                 ui.label(
-                    RichText::new(format!("Remove {}?", account.username))
+                    RichText::new(tf!("play.remove", username = account.username))
                         .size(20.0)
                         .strong(),
                 );
-                ui.label(RichText::new("You can add it again at any time.").color(p.muted));
+                ui.label(RichText::new(t!("play.you_can_add_it_again_at_any_time")).color(p.muted));
                 ui.add_space(12.0);
                 crate::widgets::row(ui, |ui| {
-                    if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
+                    if crate::widgets::button(ui, p, None, t!("play.cancel"), false).clicked() {
                         self.remove_confirm = None;
                     }
-                    if widgets::button(ui, p, Some(Icon::Trash), "Remove", true).clicked() {
+                    if widgets::button(ui, p, Some(Icon::Trash), t!("play.remove_2"), true)
+                        .clicked()
+                    {
                         self.accounts.remove(&id);
                         self.save_accounts();
                         self.remove_confirm = None;
-                        self.toasts
-                            .push(Kind::Info, format!("Removed {}", account.username), "");
+                        self.toasts.push(
+                            Kind::Info,
+                            tf!("play.removed", username = account.username),
+                            "",
+                        );
                     }
                 });
             });
@@ -277,19 +296,21 @@ impl ArcticApp {
             .frame(dialog_frame(p))
             .show(ctx, |ui| {
                 ui.set_width(380.0);
-                ui.label(RichText::new("Turn off performance mods?").size(20.0).strong());
                 ui.label(
-                    RichText::new(
-                        "Sodium, Lithium and the rest are removed from this instance. Expect much lower FPS and slower starts. You can turn them back on any time.",
-                    )
-                    .color(p.muted),
+                    RichText::new(t!("play.turn_off_performance_mods"))
+                        .size(20.0)
+                        .strong(),
+                );
+                ui.label(
+                    RichText::new(t!("play.sodium_lithium_and_the_rest_are_removed_from"))
+                        .color(p.muted),
                 );
                 ui.add_space(12.0);
                 crate::widgets::row(ui, |ui| {
-                    if crate::widgets::button(ui, p, None, "Keep them", false).clicked() {
+                    if crate::widgets::button(ui, p, None, t!("play.keep_them"), false).clicked() {
                         self.performance_off_confirm = None;
                     }
-                    if widgets::button(ui, p, None, "Turn off", true).clicked() {
+                    if widgets::button(ui, p, None, t!("play.turn_off"), true).clicked() {
                         self.update_instance(&id, |i| i.performance = false);
                         self.performance_off_confirm = None;
                     }
@@ -310,13 +331,13 @@ impl ArcticApp {
             .is_none_or(|i| i.loader.kind().is_none());
         let (title, about) = if vanilla {
             (
-                "Turn off the Arctic Client?",
-                "The game runs without Arctic's menus, HUD, cosmetics and replays, and the faster-start work that comes with it. Your Arctic settings are kept. You can turn it back on any time.",
+                t!("play.turn_off_the_arctic_client"),
+                t!("play.the_game_runs_without_arctics_menus_hud"),
             )
         } else {
             (
-                "Turn off the Arctic mod?",
-                "You won't see other players' Arctic looks (skins and capes) or the Arctic menu in game. Your Arctic settings are kept. You can turn it back on any time.",
+                t!("play.turn_off_the_arctic_mod"),
+                t!("play.you_wont_see_other_players_arctic_looks"),
             )
         };
         let p = self.palette();
@@ -328,10 +349,10 @@ impl ArcticApp {
                 ui.label(RichText::new(about).color(p.muted));
                 ui.add_space(12.0);
                 crate::widgets::row(ui, |ui| {
-                    if crate::widgets::button(ui, p, None, "Keep it", false).clicked() {
+                    if crate::widgets::button(ui, p, None, t!("play.keep_it"), false).clicked() {
                         self.client_off_confirm = None;
                     }
-                    if widgets::button(ui, p, None, "Turn off", true).clicked() {
+                    if widgets::button(ui, p, None, t!("play.turn_off"), true).clicked() {
                         self.update_instance(&id, |i| i.arctic_mod = false);
                         self.client_off_confirm = None;
                     }

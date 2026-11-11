@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.5203.0",
+  "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "evidence": "Static reads of cached installed-executable sections, class-file bytes and a pinned public header; no live process inspection or game execution",
+  "javaRequirement": "LocalPlayer.move snapshots double X/Z before and after each movement call, narrows each delta to float and adds Mth.length(deltaX,deltaZ)*0.6f; a completed-tick endpoint cannot establish the complete movement path",
+  "publicDeclaration": {
+    "url": "https://github.com/LiteLDev/LeviLamina/blob/310bf95e173df01bc08a490dbdcb2e8dd0ae1de2/src/mc/world/actor/Actor.h",
+    "method": "MCAPI void move(Vec3 const& posDelta)",
+    "virtual": false,
+    "installedClientAddressEstablished": false,
+    "localPlayerMovementCoverageEstablished": false
+  },
+  "moveRelativeCandidate": {
+    "nameStringRva": "0xec545f1",
+    "registrationFunction": ["0xd370b10", "0xd37e67f"],
+    "nameReferenceRva": "0xd37364f",
+    "callbackAddressLoadRva": "0xd373644",
+    "callbackRva": "0xd386cc0",
+    "callbackFunctionEnd": "0xd386d41",
+    "callbackCallRva": "0xd386cf5",
+    "calleeRva": "0x4a29c00",
+    "calleeFunctionEnd": "0x4a29d75",
+    "calleeObservation": "Branches on owner byte +0xf38, normalizes the supplied vector and constructs command/variant state associated with owner +0xf10 before calling 0x4a9e7a0",
+    "semanticInference": "A command/input-facing route; the name alone does not establish a synchronous displacement consumer or complete local-player movement coverage",
+    "admittedForHookInstallation": false,
+    "reason": "No established same-actor before/after position ownership, reentrancy contract, movement completion point or coverage of native physics/collision paths"
+  },
+  "nativeMovementHookInstalledByThisChange": false,
+  "finalizationTrace": "native-movement-finalization-source.json",
+  "nativeMovementAccumulatorPorted": true,
+  "sourceObserverEvidence": "native-movement-accumulator-source.json",
+  "completedTickApproximationRemoved": false,
+  "sourceBuilt": false,
+  "sourceTested": false,
+  "nativeMovementVerified": false,
+  "nativeAnimationParityVerified": false,
+  "deterministicVideoVerified": false
+}

@@ -1,6 +1,8 @@
 //#if MC >= 1.18
 package com.arcticlauncher.mod.startup;
 
+
+import com.arcticlauncher.client.Lang;
 /**
  * When each stage of the game's start was reached, in milliseconds since the game's process
  * began. Printed once, at the title screen, so a slow start can be taken apart.
@@ -48,14 +50,14 @@ public final class Timeline {
 			return;
 		}
 		mark("ready");
-		mark("mixin cache: " + mixinCacheStats());
+		mark("mixin cache: " + mixinCacheStats()); // i18n-ignore
 		//#if MC >= 26.1
 		if (System.getProperty("arctic.checkStates") != null) {
 			mark("states " + StateCaches.digest());
 		}
 		//#endif
 		done = true;
-		System.out.println("[Arctic startup] " + MARKS);
+		System.out.println(Lang.t("platform.arctic_startup") + MARKS);
 		Preloader.record();
 		tellMixinCache();
 	}
@@ -67,7 +69,7 @@ public final class Timeline {
 		try {
 			return String.valueOf(Class.forName("com.arcticlauncher.mod.startup.MixinCache", true, ClassLoader.getSystemClassLoader()).getMethod("stats").invoke(null));
 		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-			return "no agent";
+			return "no agent"; // i18n-ignore
 		}
 	}
 

@@ -15,7 +15,7 @@ use crate::tasks::Outcome;
 use crate::theme;
 use crate::toasts::{Kind, ToastAction};
 use crate::widgets;
-
+use crate::{t, tf};
 /// Seconds between refreshes while the page is open, and otherwise (for
 /// invites and "the launcher is open").
 const REFRESH_OPEN: f64 = 20.0;
@@ -91,13 +91,16 @@ impl ArcticApp {
                 None => {
                     ui.horizontal(|ui| {
                         ui.spinner();
-                        ui.label(RichText::new("Loading friends…").color(p.muted));
+                        ui.label(RichText::new(t!("social.loading_friends")).color(p.muted));
                     });
                     return;
                 }
                 Some(Err(e)) => {
                     let e = e.clone();
-                    ui.label(RichText::new(format!("Friends couldn't be loaded: {e}")).color(p.error));
+                    ui.label(
+                        RichText::new(tf!("social.friends_couldnt_be_loaded", e = e))
+                            .color(p.error),
+                    );
                     // An offline name used on another PC: the recovery
                     // code made there brings the profile here.
                     if !account.is_microsoft() && e.contains("used by another") {
@@ -117,10 +120,7 @@ impl ArcticApp {
             self.friend_requests(ui, &overview);
             if overview.friends.is_empty() {
                 ui.label(
-                    RichText::new(
-                        "No friends yet. Add someone by their friend code (or a Microsoft account's name); \
-                         they need to use Arctic too.",
-                    )
+                    RichText::new(t!("social.no_friends_yet_add_someone_by_their_friend"))
                         .small()
                         .color(p.muted),
                 );
@@ -142,25 +142,28 @@ impl ArcticApp {
         };
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new("Add a friend").size(18.0).strong().color(p.text));
             ui.label(
-                RichText::new(
-                    "Type their friend code or their Microsoft account's name. They need to use Arctic too.",
-                )
-                .color(p.muted),
+                RichText::new(t!("social.add_a_friend"))
+                    .size(18.0)
+                    .strong()
+                    .color(p.text),
+            );
+            ui.label(
+                RichText::new(t!("social.type_their_friend_code_or_their_microsoft"))
+                    .color(p.muted),
             );
             ui.add_space(8.0);
             crate::widgets::row(ui, |ui| {
                 let can_add = !self.friends.add_name.trim().is_empty() && !self.friends.busy;
                 let field = ui.add(
                     widgets::text_field(&mut self.friends.add_name)
-                        .hint_text("Friend code or Microsoft name")
+                        .hint_text(t!("social.friend_code_or_microsoft_name"))
                         .char_limit(16)
                         .desired_width(260.0),
                 );
                 let add = ui
                     .add_enabled_ui(can_add, |ui| {
-                        widgets::button(ui, p, Some(Icon::Plus), "Add friend", true)
+                        widgets::button(ui, p, Some(Icon::Plus), t!("social.add_friend"), true)
                     })
                     .inner
                     .clicked();
@@ -171,11 +174,14 @@ impl ArcticApp {
                 }
                 if let Some(code) = &code {
                     ui.add_space(12.0);
-                    ui.label(RichText::new("Your code").color(p.muted));
+                    ui.label(RichText::new(t!("social.your_code")).color(p.muted));
                     ui.label(RichText::new(code).monospace().color(p.accent));
-                    if widgets::icon_button(ui, p, Icon::Copy, "Copy your friend code").clicked() {
+                    if widgets::icon_button(ui, p, Icon::Copy, t!("social.copy_your_friend_code"))
+                        .clicked()
+                    {
                         ui.ctx().copy_text(code.clone());
-                        self.toasts.push(Kind::Success, "Friend code copied", "");
+                        self.toasts
+                            .push(Kind::Success, t!("social.friend_code_copied"), "");
                     }
                 }
             });
@@ -185,22 +191,30 @@ impl ArcticApp {
     fn friends_header(&mut self, ui: &mut egui::Ui, profile: &Profile) {
         let p = self.palette();
         crate::widgets::row(ui, |ui| {
-            ui.label(RichText::new("Friends").size(18.0).strong().color(p.text));
-            ui.label(RichText::new(format!("as {}", profile.name)).color(p.muted));
+            ui.label(
+                RichText::new(t!("social.friends"))
+                    .size(18.0)
+                    .strong()
+                    .color(p.text),
+            );
+            ui.label(RichText::new(tf!("social.as_name", name = profile.name)).color(p.muted));
             if !profile.code.is_empty() {
                 ui.label(
-                    RichText::new(format!("code {}", profile.code))
+                    RichText::new(tf!("social.code_value", code = profile.code))
                         .monospace()
                         .color(p.accent),
                 )
-                .on_hover_text("Your friend code: give it to people so they can add you");
-                if widgets::icon_button(ui, p, Icon::Copy, "Copy your friend code").clicked() {
+                .on_hover_text(t!("social.your_friend_code_give_it_to_people_so_they"));
+                if widgets::icon_button(ui, p, Icon::Copy, t!("social.copy_your_friend_code"))
+                    .clicked()
+                {
                     ui.ctx().copy_text(profile.code.clone());
-                    self.toasts.push(Kind::Success, "Friend code copied", "");
+                    self.toasts
+                        .push(Kind::Success, t!("social.friend_code_copied"), "");
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, p, Icon::Gear, "Profile & privacy").clicked() {
+                if widgets::icon_button(ui, p, Icon::Gear, t!("social.profile_privacy")).clicked() {
                     self.friends.settings_open = !self.friends.settings_open;
                     self.friends.name_edit = profile.name.clone();
                 }
@@ -220,7 +234,7 @@ impl ArcticApp {
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 crate::widgets::row(ui, |ui| {
-                    ui.label(RichText::new("Shown to friends as").color(p.muted));
+                    ui.label(RichText::new(t!("social.shown_to_friends_as")).color(p.muted));
                     ui.add(
                         widgets::text_field(&mut self.friends.name_edit)
                             .char_limit(24)
@@ -228,7 +242,7 @@ impl ArcticApp {
                     );
                     let changed = self.friends.name_edit.trim() != profile.name
                         && !self.friends.name_edit.trim().is_empty();
-                    if changed && widgets::button(ui, p, None, "Save", true).clicked() {
+                    if changed && widgets::button(ui, p, None, t!("social.save"), true).clicked() {
                         let name = self.friends.name_edit.trim().to_owned();
                         self.friend_act(FriendAction::Update(Some(name), profile.settings.clone()));
                     }
@@ -237,30 +251,36 @@ impl ArcticApp {
                 let mut s: Settings = profile.settings.clone();
                 let mut changed = false;
                 changed |= ui
-                    .checkbox(&mut s.share_online, "Friends can see when I'm online")
+                    .checkbox(
+                        &mut s.share_online,
+                        t!("social.friends_can_see_when_im_online"),
+                    )
                     .changed();
                 changed |= ui
                     .add_enabled(
                         s.share_online,
                         egui::Checkbox::new(
                             &mut s.share_server,
-                            "…and which server I'm playing on",
+                            t!("social.and_which_server_im_playing_on"),
                         ),
                     )
                     .changed();
                 changed |= ui
-                    .checkbox(&mut s.allow_invites, "Friends can invite me")
+                    .checkbox(&mut s.allow_invites, t!("social.friends_can_invite_me"))
                     .changed();
                 changed |= ui
-                    .checkbox(&mut s.show_accounts, "Show friends all my linked accounts")
-                    .on_hover_text("Off: friends see only your profile name, so alts stay private.")
+                    .checkbox(
+                        &mut s.show_accounts,
+                        t!("social.show_friends_all_my_linked_accounts"),
+                    )
+                    .on_hover_text(t!("social.off_friends_see_only_your_profile_name_so"))
                     .changed();
                 if changed {
                     self.friend_act(FriendAction::Update(None, s));
                 }
                 ui.add_space(8.0);
                 ui.label(
-                    RichText::new("ACCOUNTS ON THIS PROFILE")
+                    RichText::new(t!("social.accounts_on_this_profile"))
                         .small()
                         .color(p.muted),
                 );
@@ -275,7 +295,7 @@ impl ArcticApp {
                                 ui,
                                 p,
                                 Icon::Close,
-                                "Unlink (it keeps no friends)",
+                                t!("social.unlink_it_keeps_no_friends"),
                             )
                             .clicked()
                         {
@@ -294,9 +314,15 @@ impl ArcticApp {
                 for a in others {
                     crate::widgets::row(ui, |ui| {
                         ui.label(RichText::new(&a.username).color(p.muted));
-                        if widgets::button(ui, p, Some(Icon::Plus), "Link to this profile", false)
-                            .on_hover_text("Its friends move here too")
-                            .clicked()
+                        if widgets::button(
+                            ui,
+                            p,
+                            Some(Icon::Plus),
+                            t!("social.link_to_this_profile"),
+                            false,
+                        )
+                        .on_hover_text(t!("social.its_friends_move_here_too"))
+                        .clicked()
                         {
                             link = Some(a.clone());
                         }
@@ -326,38 +352,39 @@ impl ArcticApp {
     #[cfg(feature = "offline-accounts")]
     fn recovery_section(&mut self, ui: &mut egui::Ui, profile: &Profile) {
         let p = self.palette();
-        ui.label(RichText::new("RECOVERY CODE").small().color(p.muted));
+        ui.label(
+            RichText::new(t!("social.recovery_code"))
+                .small()
+                .color(p.muted),
+        );
         match self.friends.recovery_code.clone() {
             Some(code) => {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(&code).monospace().size(16.0).color(p.accent));
-                    if widgets::icon_button(ui, p, Icon::Copy, "Copy").clicked() {
+                    if widgets::icon_button(ui, p, Icon::Copy, t!("social.copy")).clicked() {
                         ui.ctx().copy_text(code.clone());
                     }
                 });
                 ui.label(
-                    RichText::new(
-                        "Save it somewhere safe: it's shown only this once. On a new PC, add the same \
-                         offline name and enter it to bring this profile and its friends back.",
-                    )
-                    .small()
-                    .color(p.warn),
+                    RichText::new(t!("social.save_it_somewhere_safe_its_shown_only_this"))
+                        .small()
+                        .color(p.warn),
                 );
             }
             None => {
                 ui.label(
                     RichText::new(if profile.has_recovery {
-                        "You made one before. A new one replaces it."
+                        t!("social.you_made_one_before_a_new_one_replaces_it")
                     } else {
-                        "Offline accounts belong to this PC. Make a code to move them to another one."
+                        t!("social.offline_accounts_belong_to_this_pc_make_a")
                     })
                     .small()
                     .color(p.muted),
                 );
                 let label = if profile.has_recovery {
-                    "Make a new code"
+                    t!("social.make_a_new_code")
                 } else {
-                    "Make a recovery code"
+                    t!("social.make_a_recovery_code")
                 };
                 if widgets::button(ui, p, None, label, false).clicked() {
                     self.friend_act(FriendAction::NewRecovery);
@@ -370,10 +397,7 @@ impl ArcticApp {
     fn restore_form(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         ui.add_space(6.0);
-        ui.label(
-            RichText::new("Used this name on another PC? Enter the recovery code you saved there.")
-                .color(p.muted),
-        );
+        ui.label(RichText::new(t!("social.used_this_name_on_another_pc_enter_the")).color(p.muted));
         crate::widgets::row(ui, |ui| {
             ui.add(
                 widgets::text_field(&mut self.friends.restore_code)
@@ -382,7 +406,9 @@ impl ArcticApp {
             );
             let ready = !self.friends.restore_code.trim().is_empty() && !self.friends.busy;
             if ui
-                .add_enabled_ui(ready, |ui| widgets::button(ui, p, None, "Restore", true))
+                .add_enabled_ui(ready, |ui| {
+                    widgets::button(ui, p, None, t!("social.restore"), true)
+                })
                 .inner
                 .clicked()
             {
@@ -405,10 +431,13 @@ impl ArcticApp {
         }
         self.toasts.push_with_action(
             Kind::Info,
-            format!("Link {} to your friends profile?", added.username),
-            format!(
-                "Friends follow you on {} too. Skip to keep it separate.",
-                added.username
+            tf!(
+                "social.link_to_your_friends_profile",
+                username = added.username
+            ),
+            tf!(
+                "social.friends_follow_you_on_too_skip_to_keep_it",
+                username = added.username
             ),
             Some(ToastAction::LinkAccount {
                 into,
@@ -432,7 +461,7 @@ impl ArcticApp {
             Ok(code) => self.friends.recovery_code = Some(code),
             Err(e) => self
                 .toasts
-                .push(Kind::Error, "Couldn't make a recovery code", e),
+                .push(Kind::Error, t!("social.couldnt_make_a_recovery_code"), e),
         }
     }
 
@@ -442,18 +471,22 @@ impl ArcticApp {
         for invite in &o.invites {
             crate::widgets::row(ui, |ui| {
                 let what = match invite.kind.as_str() {
-                    "together" => "their world".to_owned(),
+                    "together" => t!("social.their_world").to_owned(),
                     _ => invite.target.clone(),
                 };
                 ui.label(
-                    RichText::new(format!("{} invited you to {what}", invite.from.name))
-                        .color(p.accent),
+                    RichText::new(tf!(
+                        "social.invited_you_to",
+                        name = invite.from.name,
+                        what = what
+                    ))
+                    .color(p.accent),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if widgets::icon_button(ui, p, Icon::Close, "Dismiss").clicked() {
+                    if widgets::icon_button(ui, p, Icon::Close, t!("social.dismiss")).clicked() {
                         act = Some(FriendAction::Dismiss(invite.id.clone()));
                     }
-                    if widgets::button(ui, p, Some(Icon::Play), "Join", true).clicked() {
+                    if widgets::button(ui, p, Some(Icon::Play), t!("social.join"), true).clicked() {
                         act = Some(FriendAction::Dismiss(invite.id.clone()));
                         match invite.kind.as_str() {
                             "together" => {
@@ -469,10 +502,11 @@ impl ArcticApp {
         for person in &o.incoming {
             crate::widgets::row(ui, |ui| {
                 ui.label(
-                    RichText::new(format!("{} wants to be friends", person.name)).color(p.text),
+                    RichText::new(tf!("social.wants_to_be_friends", name = person.name))
+                        .color(p.text),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if widgets::icon_button(ui, p, Icon::Close, "Decline").clicked() {
+                    if widgets::icon_button(ui, p, Icon::Close, t!("social.decline")).clicked() {
                         act = Some(FriendAction::Remove(person.id.clone()));
                     }
                     if widgets::button(ui, p, Some(Icon::Check), "Accept", true).clicked() {
@@ -484,11 +518,11 @@ impl ArcticApp {
         for person in &o.outgoing {
             ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new(format!("Asked {}", person.name))
+                    RichText::new(tf!("social.asked", name = person.name))
                         .small()
                         .color(p.muted),
                 );
-                if widgets::icon_button(ui, p, Icon::Close, "Cancel request").clicked() {
+                if widgets::icon_button(ui, p, Icon::Close, t!("social.cancel_request")).clicked() {
                     act = Some(FriendAction::Remove(person.id.clone()));
                 }
             });
@@ -520,11 +554,11 @@ impl ArcticApp {
             if f.verified {
                 let (rect, resp) = ui.allocate_exact_size(vec2(12.0, 12.0), egui::Sense::hover());
                 crate::art::icons::draw(ui.painter(), Icon::Check, rect, p.accent);
-                resp.on_hover_text("Has a Microsoft account");
+                resp.on_hover_text(t!("social.has_a_microsoft_account"));
             }
             let status = match (&f.server, f.in_game, f.online) {
-                (Some(s), _, _) => format!("playing on {s}"),
-                (None, true, _) => "in game".into(),
+                (Some(s), _, _) => tf!("social.playing_on", s = s),
+                (None, true, _) => t!("social.in_game").into(),
                 (None, false, true) => "online".into(),
                 _ => "offline".into(),
             };
@@ -538,13 +572,13 @@ impl ArcticApp {
                 );
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, p, Icon::Trash, "Remove friend").clicked() {
+                if widgets::icon_button(ui, p, Icon::Trash, t!("social.remove_friend")).clicked() {
                     act = Some(FriendAction::Remove(f.id.clone()));
                 }
                 let chat = if f.unread > 0 {
-                    format!("Chat ({})", f.unread)
+                    tf!("social.chat", unread = f.unread)
                 } else {
-                    "Chat".to_owned()
+                    t!("social.chat_2").to_owned()
                 };
                 if widgets::button(ui, p, None, &chat, f.unread > 0).clicked() {
                     self.open_chat(f.id.clone(), f.name.clone());
@@ -553,10 +587,12 @@ impl ArcticApp {
                     && let Some(to) = invite_to.clone()
                 {
                     let tip = match &to {
-                        InviteTo::Server(s) => format!("Invite to {s}"),
-                        InviteTo::Together(_) => "Invite to your shared world".to_owned(),
+                        InviteTo::Server(s) => tf!("social.invite_to", s = s),
+                        InviteTo::Together(_) => {
+                            t!("social.invite_to_your_shared_world").to_owned()
+                        }
                     };
-                    if widgets::button(ui, p, None, "Invite", false)
+                    if widgets::button(ui, p, None, t!("social.invite"), false)
                         .on_hover_text(tip)
                         .clicked()
                     {
@@ -565,10 +601,10 @@ impl ArcticApp {
                 }
                 if f.online
                     && f.takes_invites
-                    && widgets::button(ui, p, None, "Duel", false)
-                        .on_hover_text(format!(
-                            "Start the game in a duel arena and invite {}",
-                            f.name
+                    && widgets::button(ui, p, None, t!("social.duel"), false)
+                        .on_hover_text(tf!(
+                            "social.start_the_game_in_a_duel_arena_and_invite",
+                            name = f.name
                         ))
                         .clicked()
                 {
@@ -578,8 +614,8 @@ impl ArcticApp {
                     });
                 }
                 if let Some(server) = &f.server
-                    && widgets::button(ui, p, Some(Icon::Play), "Join", true)
-                        .on_hover_text(format!("Start and join {server}"))
+                    && widgets::button(ui, p, Some(Icon::Play), t!("social.join"), true)
+                        .on_hover_text(tf!("social.start_and_join", server = server))
                         .clicked()
                 {
                     self.launch_into(QuickPlay::Server(server.clone()));
@@ -633,12 +669,12 @@ impl ArcticApp {
             for invite in fresh {
                 self.friends.seen_invites.insert(invite.id.clone());
                 let what = match invite.kind.as_str() {
-                    "together" => "their world".to_owned(),
+                    "together" => t!("social.their_world").to_owned(),
                     _ => invite.target.clone(),
                 };
                 self.toasts.push_with_action(
                     Kind::Info,
-                    format!("{} invited you", invite.from.name),
+                    tf!("social.invited_you", name = invite.from.name),
                     format!("to {what}"),
                     Some(ToastAction::OpenFriends),
                 );
@@ -652,7 +688,7 @@ impl ArcticApp {
         match result {
             Ok(msg) if msg.is_empty() => {}
             Ok(msg) => self.toasts.push(Kind::Success, msg, ""),
-            Err(e) => self.toasts.push(Kind::Error, "Friends", e),
+            Err(e) => self.toasts.push(Kind::Error, t!("social.friends"), e),
         }
     }
 }

@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
+import com.arcticlauncher.client.Lang;
 /** Arctic Client settings, in {@code config/arctic.json}. */
 public final class ClientConfig {
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -18,6 +19,8 @@ public final class ClientConfig {
 
 	/** Show Arctic looks (skins and capes) at all. */
 	public boolean showCosmetics = true;
+	/** Opt-in Bedrock body/cape/emote rendering while native parity remains unverified. */
+	public boolean bedrockNativeCosmetics;
 	/** Animated capes stay on their first frame on your screen (everyone's, not just yours). */
 	public boolean reduceCapeMotion;
 	/** Ids of animated preset capes you turned "Animate" off for (their still image is worn). */
@@ -61,7 +64,7 @@ public final class ClientConfig {
 	/** Streamer mode: your name, skin and the server are hidden on your screen. */
 	public boolean streamerMode;
 	/** What your name shows as in streamer mode. */
-	public String streamerName = "Streamer";
+	public String streamerName = Lang.t("hud.streamer");
 	/** Switches streamer mode. */
 	public String streamerKey = "key.keyboard.unknown";
 	/** Drops a waypoint where you stand. */

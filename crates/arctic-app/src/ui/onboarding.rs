@@ -17,7 +17,7 @@ use crate::art::{brand_mark, lerp_color};
 use crate::motion::eased;
 use crate::theme::{self, Palette};
 use crate::widgets;
-
+use crate::{t, tf};
 const WIDTH: f32 = 500.0;
 /// Seconds a step takes to slide in.
 const STEP_TRANSITION: f32 = 0.22;
@@ -25,10 +25,10 @@ const STEP_SLIDE: f32 = 18.0;
 /// Checkbox width, so hints line up with the label.
 const HINT_INDENT: f32 = 24.0;
 const THEMES: [(ThemeMode, &str); 4] = [
-    (ThemeMode::Default, "Aurora"),
-    (ThemeMode::Glass, "Glass"),
-    (ThemeMode::Dark, "Dark"),
-    (ThemeMode::Light, "Light"),
+    (ThemeMode::Default, "play.theme.aurora"),
+    (ThemeMode::Glass, "play.theme.glass"),
+    (ThemeMode::Dark, "play.theme.dark"),
+    (ThemeMode::Light, "play.theme.light"),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,20 +158,21 @@ impl ArcticApp {
                 ui.add_space(18.0);
                 crate::widgets::row(ui, |ui| {
                     if step == Step::Welcome {
-                        if ui.link("Skip setup").clicked() {
+                        if ui.link(t!("play.skip_setup")).clicked() {
                             finish = true;
                         }
-                    } else if crate::widgets::button(ui, p, None, "Back", false).clicked() {
+                    } else if crate::widgets::button(ui, p, None, t!("play.back"), false).clicked()
+                    {
                         go = Some(-1);
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let (label, icon) = match step {
-                            Step::Welcome => ("Get started", Icon::Play),
-                            Step::Start => ("Start playing", Icon::Check),
+                            Step::Welcome => (t!("play.get_started"), Icon::Play),
+                            Step::Start => (t!("play.start_playing"), Icon::Check),
                             Step::Account if self.accounts.active().is_none() => {
-                                ("Skip for now", Icon::Play)
+                                (t!("play.skip_for_now"), Icon::Play)
                             }
-                            _ => ("Next", Icon::Play),
+                            _ => (t!("play.next"), Icon::Play),
                         };
                         if widgets::button(ui, p, Some(icon), label, true).clicked() {
                             if step == Step::Start {
@@ -201,14 +202,14 @@ impl ArcticApp {
         heading(
             ui,
             p,
-            "Pick a look",
-            "You can change this any time in Settings.",
+            t!("play.pick_a_look"),
+            t!("play.you_can_change_this_any_time_in_settings"),
         );
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 12.0;
             for (mode, name) in THEMES {
-                if theme_tile(ui, p, mode, name, self.settings.theme == mode) {
+                if theme_tile(ui, p, mode, t!(name), self.settings.theme == mode) {
                     self.settings.theme = mode;
                 }
             }
@@ -216,9 +217,15 @@ impl ArcticApp {
         ui.add_space(12.0);
         crate::zoom::size_row(ui, &mut self.settings.interface_size);
         ui.add_space(4.0);
-        ui.checkbox(&mut self.settings.animations, "Animated background")
-            .on_hover_text("Aurora, snowfall and shooting stars. Pauses while you play.");
-        ui.checkbox(&mut self.settings.intro, "Intro animation on start");
+        ui.checkbox(
+            &mut self.settings.animations,
+            t!("play.animated_background"),
+        )
+        .on_hover_text(t!("play.aurora_snowfall_and_shooting_stars_pauses"));
+        ui.checkbox(
+            &mut self.settings.intro,
+            t!("play.intro_animation_on_start"),
+        );
     }
 
     fn behavior_step(&mut self, ui: &mut egui::Ui) {
@@ -226,24 +233,24 @@ impl ArcticApp {
         heading(
             ui,
             p,
-            "How Arctic behaves",
-            "You can change these any time in Settings.",
+            t!("play.how_arctic_behaves"),
+            t!("play.you_can_change_these_any_time_in_settings"),
         );
         ui.add_space(12.0);
-        ui.label(RichText::new("When the game starts").color(p.text));
+        ui.label(RichText::new(t!("play.when_the_game_starts")).color(p.text));
         ui.add_space(4.0);
         let choices = [
             (
                 GameStartAction::KeepOpen,
                 Icon::Play,
-                "Keep the launcher open",
-                "Handy for logs and switching instances.",
+                t!("play.keep_the_launcher_open"),
+                t!("play.handy_for_logs_and_switching_instances"),
             ),
             (
                 GameStartAction::Minimize,
                 Icon::Layers,
-                "Minimize it",
-                "Out of the way while you play; it comes back when the game closes.",
+                t!("play.minimize_it"),
+                t!("play.out_of_the_way_while_you_play_it_comes_back"),
             ),
         ];
         for (action, icon, title, desc) in choices {
@@ -264,17 +271,17 @@ impl ArcticApp {
         if cfg!(windows) {
             ui.checkbox(
                 &mut self.settings.tray,
-                "Keep Arctic in the system tray when closed",
+                t!("play.keep_arctic_in_the_system_tray_when_closed"),
             )
-            .on_hover_text("Reopens instantly. Quit from the tray icon.");
+            .on_hover_text(t!("play.reopens_instantly_quit_from_the_tray_icon"));
         }
         ui.checkbox(
             &mut self.settings.start_maximized,
-            "Start the launcher maximized",
+            t!("play.start_the_launcher_maximized"),
         );
         ui.checkbox(
             &mut self.settings.check_updates_on_start,
-            "Check for launcher updates on start",
+            t!("play.check_for_launcher_updates_on_start"),
         );
     }
 
@@ -283,8 +290,8 @@ impl ArcticApp {
         heading(
             ui,
             p,
-            "Add your account",
-            "Sign in with the Microsoft account that owns Minecraft.",
+            t!("play.add_your_account"),
+            t!("play.sign_in_with_the_microsoft_account_that_owns"),
         );
         ui.add_space(12.0);
         if let Some(account) = self.accounts.active() {
@@ -298,27 +305,27 @@ impl ArcticApp {
                 );
                 ui.add_space(26.0);
                 ui.label(
-                    RichText::new(format!("Signed in as {name}"))
+                    RichText::new(tf!("play.signed_in_as", name = name))
                         .size(16.0)
                         .color(p.text),
                 );
             });
             ui.add_space(8.0);
-            if ui.link("Add another account").clicked() {
+            if ui.link(t!("play.add_another_account")).clicked() {
                 self.add_account = AddAccount::Choose;
             }
             return;
         }
         let note = if self.msa_configured {
-            "Opens your browser, or gives you a code to enter on any device."
+            t!("play.opens_your_browser_or_gives_you_a_code_to")
         } else {
-            "Microsoft sign-in isn't available in this build."
+            t!("play.microsoft_sign_in_isnt_available_in_this_2")
         };
         if option_tile(
             ui,
             p,
             Icon::User,
-            "Add account",
+            t!("play.add_account"),
             note,
             self.msa_configured || cfg!(feature = "offline-accounts"),
             false,
@@ -327,11 +334,9 @@ impl ArcticApp {
         }
         ui.add_space(8.0);
         ui.label(
-            RichText::new(
-                "Your sign-in stays on this PC, encrypted. Arctic never sees your password.",
-            )
-            .small()
-            .color(p.muted),
+            RichText::new(t!("play.your_sign_in_stays_on_this_pc_encrypted"))
+                .small()
+                .color(p.muted),
         );
     }
 
@@ -341,8 +346,8 @@ impl ArcticApp {
         heading(
             ui,
             p,
-            "Memory and storage",
-            "How much RAM the game may use. The suggestion suits most setups.",
+            t!("play.memory_and_storage"),
+            t!("play.how_much_ram_the_game_may_use_the_suggestion"),
         );
         ui.add_space(14.0);
         let recommended = system::recommended_memory_mb(total);
@@ -356,23 +361,25 @@ impl ArcticApp {
         );
         ui.add_space(6.0);
         let detail = match total {
-            Some(t) => format!(
-                "Recommended: {:.1} GB (this PC has {:.0} GB)",
-                recommended as f32 / 1024.0,
-                t as f32 / 1024.0
+            Some(t) => tf!(
+                "play.recommended_gb_this_pc_has_gb",
+                value = format!("{:.1}", recommended as f32 / 1024.0),
+                value2 = format!("{:.0}", t as f32 / 1024.0)
             ),
-            None => format!("Recommended: {:.1} GB", recommended as f32 / 1024.0),
+            None => tf!(
+                "play.recommended_gb",
+                value = format!("{:.1}", recommended as f32 / 1024.0)
+            ),
         };
         ui.horizontal(|ui| {
             ui.label(RichText::new(detail).color(p.muted));
-            if self.settings.max_memory_mb != recommended && ui.link("Use it").clicked() {
+            if self.settings.max_memory_mb != recommended && ui.link(t!("play.use_it")).clicked() {
                 self.settings.max_memory_mb = recommended;
             }
         });
         if total.is_some_and(|t| u64::from(self.settings.max_memory_mb) > t / 2) {
             ui.label(
-                RichText::new("That's over half your RAM; your PC may slow down while playing.")
-                    .color(p.warn),
+                RichText::new(t!("play.thats_over_half_your_ram_your_pc_may_slow")).color(p.warn),
             );
         }
         self.storage_choice(ui, p);
@@ -383,13 +390,13 @@ impl ArcticApp {
         heading(
             ui,
             p,
-            "How the game looks",
-            "The Arctic Client restyles Minecraft's menus. Press Right Shift in game for HUD widgets, features and capes.",
+            t!("play.how_the_game_looks"),
+            t!("play.the_arctic_client_restyles_minecrafts_menus"),
         );
         ui.add_space(10.0);
         let mut client = self.instance.arctic_mod;
         if ui
-            .checkbox(&mut client, "Play with the Arctic Client")
+            .checkbox(&mut client, t!("play.play_with_the_arctic_client"))
             .changed()
         {
             let id = self.instance.id.clone();
@@ -397,11 +404,9 @@ impl ArcticApp {
         }
         if !client {
             ui.label(
-                RichText::new(
-                    "Pure vanilla: no cosmetics or capes, no playing together with friends, no Arctic menu or HUD in game.                      Turn it back on any time in Instances → Vanilla.",
-                )
-                .small()
-                .color(p.warn),
+                RichText::new(t!("play.pure_vanilla_no_cosmetics_or_capes_no"))
+                    .small()
+                    .color(p.warn),
             );
             ui.add_space(6.0);
         }
@@ -410,31 +415,23 @@ impl ArcticApp {
             super::client_style::picker(ui, p, &mut self.settings, (WIDTH - 24.0) / 3.0);
             ui.add_space(10.0);
             super::client_style::fancy_toggle(ui, &mut self.settings);
-            hint(
-                ui,
-                p,
-                "A smooth, sharp font and rounded buttons, switches and panels. Off keeps Minecraft's pixel look.",
-            );
+            hint(ui, p, t!("play.a_smooth_sharp_font_and_rounded_buttons"));
         });
         ui.add_space(6.0);
         let mut performance = self.instance.performance;
         if ui
-            .checkbox(&mut performance, "Boost FPS with performance mods")
+            .checkbox(&mut performance, t!("play.boost_fps_with_performance_mods"))
             .changed()
         {
             let id = self.instance.id.clone();
             self.update_instance(&id, |i| i.performance = performance);
         }
-        hint(
-            ui,
-            p,
-            "Adds Sodium, Lithium and friends to Vanilla for much higher FPS. Your worlds aren't changed.",
-        );
+        hint(ui, p, t!("play.adds_sodium_lithium_and_friends_to_vanilla"));
     }
 
     fn start_step(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        heading(ui, p, "What do you want to play?", "");
+        heading(ui, p, t!("play.what_do_you_want_to_play"), "");
         ui.add_space(10.0);
         let Some((first, others)) = self
             .onboarding
@@ -444,41 +441,49 @@ impl ArcticApp {
             return;
         };
         let found = match others.as_slice() {
-            [one] => format!("Found {one}. Copies; the originals stay as they are."),
-            [first, second] => format!("Found {first} and {second}. Originals stay as they are."),
-            [first, rest @ ..] => format!(
-                "Found {first} and {} more. Originals stay as they are.",
-                rest.len()
+            [one] => tf!(
+                "play.found_copies_the_originals_stay_as_they_are",
+                one = one
+            ),
+            [first, second] => tf!(
+                "play.found_and_originals_stay_as_they_are",
+                first = first,
+                second = second
+            ),
+            [first, rest @ ..] => tf!(
+                "play.found_and_more_originals_stay_as_they_are",
+                first = first,
+                count = rest.len()
             ),
             [] => String::new(),
         };
         let vanilla = if self.instance.arctic_mod {
-            "The latest Minecraft release, with the Arctic Client."
+            t!("play.the_latest_minecraft_release_with_the_arctic")
         } else {
-            "The latest Minecraft release, pure vanilla."
+            t!("play.the_latest_minecraft_release_pure_vanilla")
         };
         let mut choices = vec![];
         if !others.is_empty() {
             choices.push((
                 FirstPlay::Move,
                 Icon::Import,
-                "Bring my stuff over",
+                t!("play.bring_my_stuff_over"),
                 found.as_str(),
             ));
         }
         choices.extend([
-            (FirstPlay::Vanilla, Icon::Play, "Vanilla", vanilla),
+            (FirstPlay::Vanilla, Icon::Play, t!("play.vanilla"), vanilla),
             (
                 FirstPlay::Modded,
                 Icon::Layers,
-                "Modded",
-                "A Fabric instance with one-click mods from Modrinth.",
+                t!("play.modded"),
+                t!("play.a_fabric_instance_with_one_click_mods_from"),
             ),
             (
                 FirstPlay::Later,
                 Icon::Gear,
-                "I'll decide later",
-                "Look around first.",
+                t!("play.ill_decide_later"),
+                t!("play.look_around_first"),
             ),
         ]);
         for (choice, icon, title, desc) in choices {
@@ -492,7 +497,7 @@ impl ArcticApp {
         ui.add_space(4.0);
         ui.checkbox(
             &mut self.settings.discord_presence,
-            "Show what you're playing on Discord",
+            t!("play.show_what_youre_playing_on_discord"),
         );
     }
 
@@ -551,15 +556,14 @@ fn welcome(ui: &mut egui::Ui, p: &Palette, now: f64) {
         ui.ctx().request_repaint();
         ui.add_space(14.0);
         ui.label(
-            RichText::new("Welcome to Arctic")
+            RichText::new(t!("play.welcome_to_arctic"))
                 .size(28.0)
                 .strong()
                 .color(p.text),
         );
         ui.add_space(4.0);
         ui.label(
-            RichText::new("A fast, lightweight Minecraft launcher.\nLet's get you set up. It takes about a minute.")
-                .color(p.muted),
+            RichText::new(t!("play.a_fast_lightweight_minecraft_launcher_lets")).color(p.muted),
         );
     });
 }

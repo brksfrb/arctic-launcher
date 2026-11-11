@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "purpose": "Exact-family setup and dynamic parent evaluator hook source migration",
+  "source": [
+    "../src/native_expression_binding.rs",
+    "../src/native_expression_profile.rs",
+    "../src/native_scene_layout.rs"
+  ],
+  "bindings": "expression-observer-bindings.json",
+  "nativeEvidence": "static-expression-observer-layout-1.26.60.5.json",
+  "contract": {
+    "acceptedWholeImageAndSceneFamilyRequired": true,
+    "completeSetupWrapperAndEvaluatorBytesHashed": true,
+    "rootWrapperSetupEvaluatorCallChainChecked": true,
+    "threeRealCallEdgesInsideTheirDeclaredCallers": true,
+    "sevenSetupArgumentsPreserved": true,
+    "pinnedReturnAddressRequiredBeforeTypedObservation": true,
+    "oldParentNodeFromRbxCurrentParentNodeFromR12": true,
+    "targetBoneFromRsi": true,
+    "unrelatedDispatcherCallsJumpToOriginal": true,
+    "bothTrampolinesPublishedBeforeEitherEnablement": true,
+    "observationsRequireBothHookEnablements": true,
+    "failedInstallationResultCached": true,
+    "nestedDisabledSetupsStillQuarantined": true,
+    "existingPendingCopyAndSealRulesRetained": true,
+    "otherEquipmentGuardsRemoved": false,
+    "sceneOrGpuLeaseCreated": false
+  },
+  "sourceImplemented": true,
+  "currentCandidateActivated": false,
+  "remainingReaderMigrationComplete": false,
+  "runtimeVerified": false,
+  "fullParity": false,
+  "operations": {
+    "cachedBytesReadAsData": true,
+    "gameOpened": false,
+    "gameCodeExecuted": false,
+    "processInspected": false,
+    "buildExecuted": false,
+    "testsExecuted": false
+  }
+}

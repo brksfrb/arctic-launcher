@@ -6,6 +6,7 @@
 
 pub mod arctic_mod;
 pub mod auth;
+pub mod bedrock;
 pub mod bridge;
 pub mod cosmetic_models;
 pub mod cosmetics;

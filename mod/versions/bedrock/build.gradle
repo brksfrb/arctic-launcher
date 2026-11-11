@@ -1,0 +1,42 @@
+plugins {
+    id 'java-library'
+}
+
+repositories { mavenCentral() }
+
+dependencies {
+    implementation project(':core')
+    implementation 'com.google.code.gson:gson:2.2.4'
+    implementation 'io.netty:netty-all:4.0.23.Final'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 8
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    systemProperty 'java.awt.headless', 'true'
+}
+
+// A real adapter for the same client core, not a second implementation of its UI.
+tasks.register('bundle', Jar) {
+    dependsOn tasks.classes
+    dependsOn ':core:jar'
+    archiveFileName = 'arctic-bedrock.jar'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from sourceSets.main.output
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    exclude 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
+}
+
+tasks.register('smoke', JavaExec) {
+    dependsOn tasks.classes
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.arcticlauncher.bedrock.Smoke'
+    args layout.buildDirectory.dir('smoke').get().asFile.absolutePath
+    systemProperty 'java.awt.headless', 'true'
+}

@@ -19,7 +19,7 @@ use crate::art::lerp_color;
 use crate::skin_tasks::SkinChange;
 use crate::theme::{self, Palette};
 use crate::widgets;
-
+use crate::{t, tf};
 const PREVIEW_W: f32 = 300.0;
 const PREVIEW_H: f32 = 380.0;
 const RAIL_W: f32 = 150.0;
@@ -51,8 +51,8 @@ impl ArcticApp {
         widgets::page_header(
             ui,
             p,
-            "Cosmetics",
-            "Skins, capes and cosmetics every Arctic player sees, on any account.",
+            t!("skins.cosmetics"),
+            t!("skins.skins_capes_and_cosmetics_every_arctic"),
         );
         self.account_notice(ui, p);
         // What was pointed at last frame is tried on in the preview now.
@@ -107,17 +107,15 @@ impl ArcticApp {
     fn account_notice(&mut self, ui: &mut egui::Ui, p: &Palette) {
         let Some(account) = self.accounts.active() else {
             ui.label(
-                RichText::new(
-                    "Explore the collection below. Add an account to wear capes and cosmetics.",
-                )
-                .color(p.muted),
+                RichText::new(t!("skins.explore_the_collection_below_add_an_account"))
+                    .color(p.muted),
             );
             if self
                 .skins
                 .public_catalog
                 .as_ref()
                 .is_some_and(Result::is_err)
-                && ui.link("Collection unavailable · Retry").clicked()
+                && ui.link(t!("skins.collection_unavailable_retry")).clicked()
             {
                 self.request_skin_state(true);
             }
@@ -134,12 +132,12 @@ impl ArcticApp {
                 // Connection problems get a plain message; details go to the log.
                 let text = if e.starts_with("network error") {
                     log::info!("looks server: {e}");
-                    "Can't reach the Arctic looks server right now.".to_owned()
+                    t!("skins.cant_reach_the_arctic_looks_server_right_now").to_owned()
                 } else {
-                    format!("Arctic looks are unavailable: {e}")
+                    tf!("skins.arctic_looks_are_unavailable", e = e)
                 };
                 ui.label(RichText::new(text).color(p.muted));
-                if ui.link("Retry").clicked() {
+                if ui.link(t!("skins.retry")).clicked() {
                     self.request_skin_state(true);
                 }
             });
@@ -344,9 +342,9 @@ impl ArcticApp {
             }
             None => {
                 let text = if self.skins.arctic_busy || self.skins.busy {
-                    "Loading…"
+                    t!("skins.loading")
                 } else {
-                    "No skin yet"
+                    t!("skins.no_skin_yet")
                 };
                 painter.text(
                     rect.center(),
@@ -361,7 +359,7 @@ impl ArcticApp {
             painter.text(
                 rect.left_top() + vec2(12.0, 10.0),
                 Align2::LEFT_TOP,
-                "Trying on",
+                t!("skins.trying_on"),
                 FontId::proportional(12.0),
                 p.accent,
             );
@@ -369,15 +367,15 @@ impl ArcticApp {
             painter.text(
                 rect.left_top() + vec2(12.0, 10.0),
                 Align2::LEFT_TOP,
-                "Display model",
+                t!("skins.display_model"),
                 FontId::proportional(12.0),
                 p.muted,
             );
         }
         let hint = if current.skin_key.is_none() {
-            "Display model · drag to turn · scroll to zoom · double-click to reset"
+            t!("skins.display_model_drag_to_turn_scroll_to_zoom")
         } else {
-            "Drag to turn · scroll to zoom · double-click to reset"
+            t!("skins.drag_to_turn_scroll_to_zoom_double_click_to")
         };
         response.on_hover_text(hint);
     }
@@ -387,24 +385,24 @@ impl ArcticApp {
         let p = self.palette();
         let current = self.current_look();
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Equipped").strong().color(p.text));
+            ui.label(RichText::new(t!("skins.equipped")).strong().color(p.text));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 self.save_note(ui, p);
             });
         });
         ui.add_space(4.0);
         let skin = if current.arctic_skin {
-            "Arctic skin"
+            t!("skins.arctic_skin")
         } else if current.skin_key.is_some() {
-            "Minecraft skin"
+            t!("skins.minecraft_skin")
         } else {
-            "None"
+            t!("skins.none")
         };
-        if equipped_row(ui, p, "Skin", skin, current.arctic_skin) {
+        if equipped_row(ui, p, t!("skins.skin"), skin, current.arctic_skin) {
             self.stop_wearing_skin();
         }
         let (cape, arctic_cape) = self.equipped_cape_name();
-        if equipped_row(ui, p, "Cape", &cape, arctic_cape) {
+        if equipped_row(ui, p, t!("skins.cape"), &cape, arctic_cape) {
             self.set_arctic_cape(None, None);
         }
         // An animated cape can be switched to its still image.
@@ -414,13 +412,13 @@ impl ArcticApp {
             ui.horizontal(|ui| {
                 ui.add_sized(
                     [70.0, 20.0],
-                    egui::Label::new(RichText::new("Animate").small().color(p.muted)),
+                    egui::Label::new(RichText::new(t!("skins.animate")).small().color(p.muted)),
                 );
                 flip = switch(ui, p, on)
                     .on_hover_text(if on {
-                        "On. Turn off to show this cape's still image to everyone."
+                        t!("skins.on_turn_off_to_show_this_capes_still_image")
                     } else {
-                        "Off: everyone sees this cape's still image. Remembered for each cape."
+                        t!("skins.off_everyone_sees_this_capes_still_image")
                     })
                     .clicked();
             });
@@ -451,27 +449,28 @@ impl ArcticApp {
         ui.add_space(8.0);
         ui.horizontal_wrapped(|ui| {
             if names.len() > 1
-                && widgets::button(ui, p, Some(Icon::Close), "Remove all", false).clicked()
+                && widgets::button(ui, p, Some(Icon::Close), t!("skins.remove_all"), false)
+                    .clicked()
             {
                 self.set_cosmetics(Vec::new());
             }
             if let Some(key) = &current.skin_key
                 && let Some(png) = self.skin_png(key)
                 && ui
-                    .small_button("Save to library")
-                    .on_hover_text("Keep a copy of the skin you're wearing")
+                    .small_button(t!("skins.save_to_library"))
+                    .on_hover_text(t!("skins.keep_a_copy_of_the_skin_youre_wearing"))
                     .clicked()
             {
                 let name = self
                     .accounts
                     .active()
-                    .map_or("Skin".to_owned(), |a| a.username.clone());
+                    .map_or(t!("skins.skin").to_owned(), |a| a.username.clone());
                 let _ = self.add_skin(&name, &png, current.variant);
             }
             if self.can_change_minecraft_skin()
                 && ui
-                    .small_button("Reset Minecraft skin")
-                    .on_hover_text("Go back to the default Minecraft skin (seen by everyone)")
+                    .small_button(t!("skins.reset_minecraft_skin"))
+                    .on_hover_text(t!("skins.go_back_to_the_default_minecraft_skin_seen"))
                     .clicked()
             {
                 self.change_minecraft_skin(SkinChange::Reset);
@@ -507,7 +506,7 @@ impl ArcticApp {
             Some(hash) => {
                 let name = state
                     .and_then(|s| s.presets.iter().find(|p| p.is_texture(&hash)))
-                    .map_or("Your cape".to_owned(), |p| p.name.clone());
+                    .map_or(t!("skins.your_cape_2").to_owned(), |p| p.name.clone());
                 (name, true)
             }
             None => {
@@ -518,7 +517,7 @@ impl ArcticApp {
                     .and_then(|r| r.as_ref().ok())
                     .and_then(|m| m.profile.active_cape())
                     .map(|c| format!("{} (Minecraft)", c.alias));
-                (mc.unwrap_or_else(|| "None".to_owned()), false)
+                (mc.unwrap_or_else(|| t!("skins.none").to_owned()), false)
             }
         }
     }
@@ -527,7 +526,7 @@ impl ArcticApp {
     fn save_note(&self, ui: &mut egui::Ui, p: &Palette) {
         if self.skins.arctic_busy && self.arctic_state().is_some() {
             ui.spinner();
-            ui.label(RichText::new("Saving…").small().color(p.muted));
+            ui.label(RichText::new(t!("skins.saving")).small().color(p.muted));
             return;
         }
         let Some(at) = self.skins.saved_at else {
@@ -535,7 +534,7 @@ impl ArcticApp {
         };
         let age = super::now_secs_f64() - at;
         if age < SAVED_NOTE_SECS {
-            ui.label(RichText::new("Saved").small().color(p.accent));
+            ui.label(RichText::new(t!("skins.saved")).small().color(p.accent));
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_secs_f64(SAVED_NOTE_SECS - age));
         }
@@ -571,26 +570,36 @@ impl ArcticApp {
         let mut pick = None;
         let mut view = None;
         let on_skins = self.skins.section == Section::Skins;
-        ui.label(RichText::new("LOOKS").small().color(p.muted));
+        ui.label(RichText::new(t!("skins.looks")).small().color(p.muted));
         ui.add_space(2.0);
         // The gallery has its own row: as a toggle inside Skins it went unnoticed.
         for (skins_view, name) in [
-            (SkinsView::Library, "Skins"),
-            (SkinsView::Gallery, "Skin gallery"),
+            (SkinsView::Library, t!("skins.skins")),
+            (SkinsView::Gallery, t!("skins.skin_gallery")),
         ] {
             if rail_row(ui, p, name, None, on_skins && self.skins.view == skins_view) {
                 pick = Some(Section::Skins);
                 view = Some(skins_view);
             }
         }
-        if rail_row(ui, p, "Capes", capes, self.skins.section == Section::Capes) {
+        if rail_row(
+            ui,
+            p,
+            t!("skins.capes"),
+            capes,
+            self.skins.section == Section::Capes,
+        ) {
             pick = Some(Section::Capes);
         }
         if let Some(view) = view {
             self.skins.view = view;
         }
         ui.add_space(10.0);
-        ui.label(RichText::new("COSMETICS").small().color(p.muted));
+        ui.label(
+            RichText::new(t!("skins.cosmetics_2"))
+                .small()
+                .color(p.muted),
+        );
         ui.add_space(2.0);
         for (slot, n) in SLOTS.into_iter().zip(counts) {
             if rail_row(
@@ -670,7 +679,8 @@ fn equipped_row(ui: &mut egui::Ui, p: &Palette, what: &str, name: &str, removabl
         ui.label(RichText::new(name).color(p.text));
         if removable {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                clicked = widgets::icon_button(ui, p, Icon::Close, "Take it off").clicked();
+                clicked =
+                    widgets::icon_button(ui, p, Icon::Close, t!("skins.take_it_off")).clicked();
             });
         }
     });
@@ -735,11 +745,11 @@ pub(super) fn slot_key(slot: &str) -> &'static str {
 /// Words for a cosmetic slot.
 pub(super) fn slot_name(slot: &str) -> &'static str {
     match slot {
-        "head" => "Head",
-        "face" => "Face",
-        "back" => "Back",
-        "shoulders" => "Shoulders",
-        "arms" => "Arms",
-        _ => "Body",
+        "head" => t!("skins.head"),
+        "face" => t!("skins.face"),
+        "back" => t!("skins.back"),
+        "shoulders" => t!("skins.shoulders"),
+        "arms" => t!("skins.arms"),
+        _ => t!("skins.body"),
     }
 }

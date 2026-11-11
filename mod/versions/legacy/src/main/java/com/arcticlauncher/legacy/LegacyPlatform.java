@@ -1007,7 +1007,7 @@ public final class LegacyPlatform implements Platform {
 
 	// ---- Duels --------------------------------------------------------------------------
 
-	private static final String DUEL_PREFIX = "Arctic Duel ";
+	private static final String DUEL_PREFIX = "Arctic Duel "; // i18n-ignore // i18n-ignore
 
 	@Override
 	public boolean canDuel() {
@@ -1158,6 +1158,11 @@ public final class LegacyPlatform implements Platform {
 		String text = net.minecraft.client.resource.language.I18n.translate(key);
 		// Unknown keys come back as themselves.
 		return text == null || text.equals(key) ? english : text;
+	}
+
+	@Override
+	public String gameLanguage() {
+		return mc().options.language;
 	}
 
 	@Override

@@ -4,6 +4,7 @@ import com.arcticlauncher.client.Platform;
 import com.arcticlauncher.client.notice.Notices;
 import com.arcticlauncher.client.social.Social;
 
+import com.arcticlauncher.client.Lang;
 /**
  * "Duel someone": a flat PvP world with a kit, opened to LAN and shared
  * through play together; the code is copied (and sent to a friend when one
@@ -12,7 +13,7 @@ import com.arcticlauncher.client.social.Social;
  */
 public final class Duel {
 	/** Kits: {id, label}. */
-	public static final String[][] KITS = {{"sword", "Sword"}, {"uhc", "UHC"}, {"bare", "No kit"}};
+	public static final String[][] KITS = {{"sword", "social.duel.kit.sword"}, {"uhc", "social.duel.kit.uhc"}, {"bare", "social.duel.kit.bare"}};
 	/** Checks this often (ticks) while a duel is being set up or joined. */
 	private static final int POLL_TICKS = 20;
 	/** Give up after this many polls. */
@@ -51,7 +52,7 @@ public final class Duel {
 	/** Make a duel world; the friend (may be null) is invited when it's ready. */
 	public void start(String kitId, String friendId, String friendName) {
 		if (!available()) {
-			Notices.post("Duels need Arctic Launcher", "Start the game from Arctic Launcher to duel.");
+			Notices.post(Lang.t("social.duels_need_arctic_launcher"), Lang.t("social.start_the_game_from_arctic_launcher_to_duel"));
 			return;
 		}
 		this.kit = kitId;
@@ -66,13 +67,13 @@ public final class Duel {
 	/** Join a friend's duel (their play-together code). */
 	public void join(String code) {
 		if (!link.available()) {
-			Notices.post("Joining needs Arctic Launcher", "Start the game from Arctic Launcher to join.");
+			Notices.post(Lang.t("social.joining_needs_arctic_launcher"), Lang.t("social.start_the_game_from_arctic_launcher_to_join"));
 			return;
 		}
 		link.join(code);
 		stage = Stage.JOINING;
 		polls = 0;
-		Notices.post("Joining the duel…", "Connecting to your friend");
+		Notices.post(Lang.t("social.joining_the_duel"), Lang.t("social.connecting_to_your_friend"));
 	}
 
 	public boolean hosting() {
@@ -105,7 +106,7 @@ public final class Duel {
 					setUpWorld();
 					stage = Stage.OPENING;
 				} else if (++polls > MAX_POLLS) {
-					fail("The duel world didn't open.");
+					fail(Lang.t("social.the_duel_world_didnt_open"));
 				}
 				break;
 			case OPENING:
@@ -114,7 +115,7 @@ public final class Duel {
 					stage = Stage.SHARING;
 					polls = 0;
 				} else {
-					fail("Couldn't open the world to friends.");
+					fail(Lang.t("social.couldnt_open_the_world_to_friends"));
 				}
 				break;
 			case SHARING:
@@ -128,7 +129,7 @@ public final class Duel {
 			case READY:
 				link.refresh();
 				if (link.guests() > lastGuests) {
-					Notices.post("Your friend joined", "Right Shift → Friends → New round to start");
+					Notices.post(Lang.t("social.your_friend_joined"), Lang.t("social.right_shift_friends_new_round_to_start"));
 					newRound();
 				}
 				lastGuests = link.guests();
@@ -157,16 +158,16 @@ public final class Duel {
 		platform.setClipboard(code);
 		if (friendId != null && social != null) {
 			social.inviteTo(friendId, friendName, "together", code);
-			Notices.post("Duel ready: invited " + friendName, "Code copied: " + code);
+			Notices.post(Lang.t("social.duel_ready_invited") + friendName, Lang.t("social.code_copied") + code);
 		} else {
-			Notices.post("Duel ready: code copied", code);
+			Notices.post(Lang.t("social.duel_ready_code_copied"), code);
 		}
 	}
 
 	private void fail(String why) {
 		stage = Stage.NONE;
 		platform.log(true, "Duel not started: " + why);
-		Notices.post("Duel not started", why);
+		Notices.post(Lang.t("social.duel_not_started"), why);
 	}
 
 	/** Duel rules: no mobs, noon, keep the arena clean. */
@@ -209,25 +210,25 @@ public final class Duel {
 
 	/** Game rule names as of 26.x. */
 	private static final String[] RULES = {
-			"gamerule send_command_feedback false", "gamerule spawn_mobs false", "gamerule advance_time false",
-			"gamerule advance_weather false", "gamerule immediate_respawn true", "gamerule keep_inventory false",
-			"gamerule show_advancement_messages false", "gamerule pvp true",
-			"time set noon", "weather clear", "difficulty easy",
+			"gamerule send_command_feedback false", "gamerule spawn_mobs false", "gamerule advance_time false", // i18n-ignore
+			"gamerule advance_weather false", "gamerule immediate_respawn true", "gamerule keep_inventory false", // i18n-ignore
+			"gamerule show_advancement_messages false", "gamerule pvp true", // i18n-ignore
+			"time set noon", "weather clear", "difficulty easy", // i18n-ignore
 	};
 	/** 1.13 to 1.21.10: the same rules by their camelCase names (no PvP rule: it's on in worlds anyway). */
 	private static final String[] CAMEL_RULES = {
-			"gamerule sendCommandFeedback false", "gamerule doMobSpawning false", "gamerule doDaylightCycle false",
-			"gamerule doWeatherCycle false", "gamerule doImmediateRespawn true", "gamerule keepInventory false",
-			"gamerule announceAdvancements false", "time set noon", "weather clear", "difficulty easy",
+			"gamerule sendCommandFeedback false", "gamerule doMobSpawning false", "gamerule doDaylightCycle false", // i18n-ignore
+			"gamerule doWeatherCycle false", "gamerule doImmediateRespawn true", "gamerule keepInventory false", // i18n-ignore
+			"gamerule announceAdvancements false", "time set noon", "weather clear", "difficulty easy", // i18n-ignore
 	};
 	/** 1.8.9 to 1.12.2: camelCase rules (no weather or respawn rules yet; PvP is on in worlds); the flat ground is at y 4. */
 	private static final String[] OLD_RULES = {
-			"gamerule sendCommandFeedback false", "gamerule doMobSpawning false", "gamerule doDaylightCycle false",
-			"gamerule keepInventory false", "time set 6000", "weather clear 1000000", "difficulty 1", "setworldspawn 0 4 0",
+			"gamerule sendCommandFeedback false", "gamerule doMobSpawning false", "gamerule doDaylightCycle false", // i18n-ignore
+			"gamerule keepInventory false", "time set 6000", "weather clear 1000000", "difficulty 1", "setworldspawn 0 4 0", // i18n-ignore
 	};
 	private static final String[] ROUND = {
-			"clear @a", "effect clear @a", "effect give @a instant_health 1 10", "effect give @a saturation 1 10",
-			"gamemode survival @a",
+			"clear @a", "effect clear @a", "effect give @a instant_health 1 10", "effect give @a saturation 1 10", // i18n-ignore
+			"gamemode survival @a", // i18n-ignore
 	};
 	private static final String[] OLD_ROUND = {
 			"clear @a", "effect @a clear", "effect @a instant_health 1 10", "effect @a saturation 1 10",
@@ -256,15 +257,15 @@ public final class Duel {
 			return new String[] {
 					"give @a diamond_sword", "give @a bow", "give @a arrow 32", "give @a golden_apple 6",
 					"give @a cooked_beef 16", "give @a water_bucket", "give @a planks 64",
-					"replaceitem entity @a slot.armor.head diamond_helmet", "replaceitem entity @a slot.armor.chest diamond_chestplate",
-					"replaceitem entity @a slot.armor.legs diamond_leggings", "replaceitem entity @a slot.armor.feet diamond_boots",
+					"replaceitem entity @a slot.armor.head diamond_helmet", "replaceitem entity @a slot.armor.chest diamond_chestplate", // i18n-ignore
+					"replaceitem entity @a slot.armor.legs diamond_leggings", "replaceitem entity @a slot.armor.feet diamond_boots", // i18n-ignore
 			};
 		}
 		if ("sword".equals(id)) {
 			return new String[] {
 					"give @a iron_sword", "give @a golden_apple 4", "give @a cooked_beef 16",
-					"replaceitem entity @a slot.armor.head iron_helmet", "replaceitem entity @a slot.armor.chest iron_chestplate",
-					"replaceitem entity @a slot.armor.legs iron_leggings", "replaceitem entity @a slot.armor.feet iron_boots",
+					"replaceitem entity @a slot.armor.head iron_helmet", "replaceitem entity @a slot.armor.chest iron_chestplate", // i18n-ignore
+					"replaceitem entity @a slot.armor.legs iron_leggings", "replaceitem entity @a slot.armor.feet iron_boots", // i18n-ignore
 			};
 		}
 		return new String[0];
@@ -284,15 +285,15 @@ public final class Duel {
 			return new String[] {
 					"give @a diamond_sword", "give @a bow", "give @a arrow 32", "give @a golden_apple 6",
 					"give @a cooked_beef 16", "give @a water_bucket", "give @a oak_planks 64",
-					"item replace entity @a armor.head with diamond_helmet", "item replace entity @a armor.chest with diamond_chestplate",
-					"item replace entity @a armor.legs with diamond_leggings", "item replace entity @a armor.feet with diamond_boots",
+					"item replace entity @a armor.head with diamond_helmet", "item replace entity @a armor.chest with diamond_chestplate", // i18n-ignore
+					"item replace entity @a armor.legs with diamond_leggings", "item replace entity @a armor.feet with diamond_boots", // i18n-ignore
 			};
 		}
 		if ("sword".equals(id)) {
 			return new String[] {
 					"give @a iron_sword", "give @a golden_apple 4", "give @a cooked_beef 16",
-					"item replace entity @a armor.head with iron_helmet", "item replace entity @a armor.chest with iron_chestplate",
-					"item replace entity @a armor.legs with iron_leggings", "item replace entity @a armor.feet with iron_boots",
+					"item replace entity @a armor.head with iron_helmet", "item replace entity @a armor.chest with iron_chestplate", // i18n-ignore
+					"item replace entity @a armor.legs with iron_leggings", "item replace entity @a armor.feet with iron_boots", // i18n-ignore
 			};
 		}
 		return new String[0];

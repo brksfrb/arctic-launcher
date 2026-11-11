@@ -1,0 +1,8 @@
+{
+  "accounts.accounts": "Hesaplar",
+  "accounts.add_account": "Hesap ekle",
+  "accounts.click_an_account_to_play_as_it_sign_ins_stay": "Bir hesapla oynamak için ona tıkla. Oturumlar bu bilgisayarda, kullanıcın için şifrelenmiş olarak kalır.",
+  "accounts.offline": "Çevrimdışı",
+  "accounts.playing_as": "{username} olarak oynanıyor",
+  "accounts.remove_account": "Hesabı kaldır"
+}

@@ -200,6 +200,97 @@ Windows and Linux (x86-64) are supported from the same code. The differences are
 
 Rule evaluation maps the host to Mojang's `windows`/`linux`/`osx` names.
 
+## Bedrock Edition (`arctic-core::bedrock`)
+
+Windows only. Since 1.21.120 the game is a GDK package (`Microsoft.MinecraftUWP` for the
+release, `Microsoft.MinecraftWindowsBeta` for Preview) installed in `C:\XboxGames`; its data
+is in `%APPDATA%\Minecraft Bedrock\Users\`: `Shared\games\com.mojang` for packs and one
+folder per Xbox account for worlds, settings and the server list. An old UWP install's
+`LocalState\games\com.mojang` is read too.
+
+- **Finding and starting it** goes through Windows' `PackageManager` (WinRT): the package's
+  version and folder, and its app list entry to launch (the `minecraft:` link is the
+  fallback). "Running" is a `Minecraft.Windows.exe` from the package's folder.
+- **Versions** come from community archives of Microsoft's package links
+  (LiteLDev's `minecraft-windows-gdk-version-db`, then MinecraftBedrockArchiver's
+  `GdkLinks`), kept in `cache/bedrock-versions.json` for offline use; only `*.xboxlive.com`
+  / `.cn` `.msixvc` links are accepted. Installing hands the link to
+  `PackageManager.AddPackageByUriAsync` with `ForceUpdateFromAnyVersion`: Windows downloads
+  the encrypted package and unlocks it with the Store license, so nothing from the archives
+  but a link to Microsoft is trusted. Package version `1.26.5203.0` is game version 1.26.52.3.
+- **Worlds** (`minecraftWorlds\<id>`, name in `levelname.txt`) import from and export to
+  `.mcworld` (the folder's contents zipped). **Packs** are read from their `manifest.json`
+  (comments allowed, names looked up in `texts/en_US.lang`); `.mcpack` / `.mcaddon` files
+  are sorted into resource, behavior or skin packs by their modules, replacing a pack with the
+  same UUID. Removed worlds and packs move to `com.mojang\arctic-trash`.
+- **Servers** are `minecraftpe\external_servers.txt` (`id:name:host:port:time` lines) and
+  are pinged with RakNet's unconnected ping over UDP (`arctic_ping::ping_bedrock`).
+- **Offline connector** (`bedrock::offline`, `mod/versions/bedrock/offline`) is a
+  loopback-only Bedrock protocol relay for servers that accept unsigned identities.
+  Both relay legs use offline mode; online/Realm authentication entry points are
+  disabled in the private helper process. The chosen username is used on the upstream
+  session, with Java-compatible offline UUIDs. `bedrock::appearance` decodes bounded
+  PNGs into RGBA login data: skin preparation shares Java's legacy limb/opacity rules,
+  while static HD capes are reduced to 64×32. The helper checks dimensions and buffers
+  again before signing them and prevents downstream skin changes from replacing the
+  selected appearance. Node.js 24+ and pinned npm dependencies are prepared on first use, without
+  install scripts or optional native modules. A process guard stops the connector when
+  its launcher session ends. This does not patch the game's sign-in UI or Store license.
+- **Bedrock packet replays** record decrypted world packets and client input at the
+  offline relay boundary, with directions and monotonic arrival times. Authentication
+  and transport handshakes are excluded. Files use a bounded, exclusive `.abr` stream
+  with a finalization marker; incomplete recordings remain on disk and are refused.
+  A loopback offline server performs a fresh encrypted login, restores bootstrap and
+  world updates, and translates recorded self movement into server position packets.
+  Launcher/CLI controls select recording, live pause/resume, playback speed and forward
+  seeking. Camera keyframes use public CameraPresets/CameraInstruction packets with
+  deterministic position, shortest-yaw, pitch and FOV interpolation. Camera-path JSON
+  can be saved/opened; export bakes a 1–120 Hz track (default 25) into a new `.abr`
+  while preserving world packets/timing and source metadata. Integer-indexed
+  timestamps and canonical headers make repeated identical exports byte-identical.
+  Controls use the helper's owned bounded stdin JSON protocol;
+  periodic timeline events are coalesced rather than queued while another tab is open.
+  Backward seeking needs a fresh client connection and bootstrap restoration. The
+  helper finishes pending writes before shutdown, including when its parent exits.
+  Stock-client gameplay remains unverified. Native replay integration, deterministic
+  video frame stepping and singleplayer capture remain unfinished.
+- **Native client preview** (`mod/versions/bedrock`) embeds the shared Java client
+  core in a JVM inside a Windows DLL. A headless Java2D `Gfx` adapter renders shared
+  menus/HUD into RGBA, uploaded through hudhook's DirectX 11/12 swap-chain renderer.
+  Window events feed the shared pages; each JNI callback uses a bounded local frame.
+  The loader selects a PID, checks its executable, rejects duplicate loads and waits
+  for a first-render marker. Native configuration is checked before launching a game.
+  The local Arctic profile is explicitly offline; headless smoke tests use isolated
+  config directories and loopback cosmetics endpoints without reading saved accounts.
+  A software triangle backend draws the shared skin, cuboid, glTF, expressive
+  emote and cape models with depth testing, alpha blending, glow and fits. Cape
+  and mesh sampling also accept explicit animation clocks. A versioned C input
+  API copies bounded actor/camera/depth snapshots and textures into the render
+  thread; stale worlds expire after 500 ms. A limited exact-build producer now joins
+  player-list/EnTT identity and rotation copies, the native timer/camera, and scoped
+  legacy DX12 depth for standing head/body attachments. Unavailable limbs are masked
+  out and the original body/cape is retained. Installed-client execution is unverified.
+  Java 26.2 cape chasing motion, gait/flight response and model rotation are ported
+  for supplied tick data, including its sine lookup behavior and elytra suppression.
+  Complete actor/camera/depth binding, equipment rendering and the shared replay editor
+  remain unfinished. The preview makes no Java parity claim. A disposable hidden
+  D3D11 host verifies injection/JVM/menu rendering, fixture skin geometry, terrain
+  occlusion, moving cape geometry and disconnect clearing through actual GPU output.
+  A vendored hudhook 0.9.3 adds post-overlay DX11/DX12 callbacks. Native readback
+  copies the presented back buffer, restores DX12 PRESENT state and waits for its
+  direct-queue fence before mapping. A bounded encoder queue feeds external FFmpeg
+  on a worker, with exclusive MP4 creation, repeated frames for short real-time gaps,
+  and a watchdog. Atomic local request files and per-PID JSON reports connect GUI/CLI
+  controls to the loaded adapter; rejecting another request does not abort a capture.
+  Hidden DX11 and DX12 hosts verify full MP4 encode/decode round trips with offline
+  configs. This records real-time presented pixels, independently of Java replay APIs.
+  A separate windowless package-context probe can read the installed executable and
+  confirm signature uniqueness without starting Minecraft. Live actor/camera/depth
+  producer validation remains unfinished; signatures alone are not engine integration.
+  Exact-hash observers now detour world/actor/tick callbacks and safely copy candidate
+  camera matrices into per-PID diagnostics. ABI forwarding is tested with actual
+  headless fixture detours; UUID/limb mapping and matching depth remain unbound.
+
 ## Profiles (`arctic-core::profiles`)
 
 `profiles.json` lists profiles and the active one. `DataDirs::with_profile(id)` scopes the

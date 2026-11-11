@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "evidence": "Current source reads, edits and manual review only. No builds, tests, syntax checks, project/game/JNI/shader/GPU execution, process inspection, native commands or exports. Runtime parity remains unverified by user instruction.",
+  "problem": "An export cleanup previously sent an unconditional resume. Export step/sample and playback rate changes also checked acknowledged ownership after applying their operation. A current-state report alone cannot prevent a queued command from changing a replacement clock before that mismatch is detected.",
+  "contract": {
+    "field": "Optional expectedClock object on the existing schema-1 clock request. Fields: session, sequence, requestId (string or explicitly absent identity), freezeSequence, frozen, playbackRate (finite f32 0..16 or null). Frozen and rate modes are mutually exclusive. No C export or engine ABI change.",
+    "idle": "An idle expectation permits only freeze/rate acquisition and requires no active lease/pending acknowledgement, real step, world tick or rate application. Sequence zero requires no last acknowledgement and a null request identity. A nonzero idle sequence must match its last acknowledgement, including a known null request ID from a legacy manual command; missing metadata is not guessed into a new identity.",
+    "active": "Held/rate follow-ups require the same current session, acknowledgement sequence/request ID, freeze generation, frozen mode and exact f32 rate bits. A live lease and no outstanding acknowledgement/timer/world/rate work are required. A held expectation cannot acquire a replacement freeze.",
+    "checks": "Native command admission and the actual selected simulation-timer consumer both compare expectedClock under the native clock state lock before accepting the incoming transition. Ordinary operation/session/sequence/timer validations remain in place. Unrelated existing timer maintenance and independent lease expiry continue normally.",
+    "acknowledgement": "Accepted native receipts echo the applied expectedClock. The core worker requires that exact echo with its existing correlated request/op/completion checks. Guard mismatch at deferred application goes to requestRejected, preserving the current owner's last acknowledgement, lease and pending state instead of replacing them with a rejected request's receipt.",
+    "compatibility": "Unchanged explicit/manual clock_control requests may omit the optional guard and retain their prior behavior. Updated replay/export coordinators always send guards; they do not retry without them. Older native readers rejecting this new field are unsupported for these guarded paths. This is state coordination, not a security boundary or proof of native rendering."
+  },
+  "core": {
+    "acquire": "clock_control_from_idle validates the observed root clock identity/capability and encodes that expectation. Export binding retains its idle snapshot for initial freeze; playback acquisition reobserves the same idle sequence after helper correlation. Native admission/application rechecks make a stale report insufficient to acquire another controller's clock.",
+    "followup": "clock_control_owned derives a bounded active expectation from a successful acknowledged receipt. NativeExportClock uses it for step/sample; PlaybackClock uses it for rate changes and renewals. Initial acquisition is handled separately.",
+    "release": "resume_owned_clock derives the same active expectation. Export success/error cleanup, its pre-controller freeze fallback and playback release use this guarded operation. Changed ownership is an error; there is no unconditional recovery resume.",
+    "alreadyIdle": "For resume only, a bounded recent report may confirm that the same sequence/request/freeze identity is already idle with no lease/queued/pending/rate work or restoration failure. Return that actual status with releaseSkipped=owned_clock_already_idle. No command is published and no acknowledgement is synthesized. This observation does not promise that another controller cannot acquire afterward.",
+    "idempotence": "NativeExportClock caches a successful clock release or same-identity idle observation without publishing another command or consuming another sequence. Its direct-camera ownership cleanup now has a separate acknowledgement/cache (replay-camera-ownership-source.json); clock release is attempted independently of camera failure. A failed clock release remains failed and the native lease remains the independent fallback.",
+    "budgets": "Existing 4 KiB native request and bounded clock-report admission remain. The expectation contains only one prior identity, not a recursively nested receipt history. Command publication uses the existing unique request ID and atomic local file path."
+  },
+  "remaining": [
+    "Build and installed-game validation of guarded idle acquisition, follow-up/cleanup races, deferred rejection, exact acknowledgement echo, real-timer restoration, lease expiry and world replacement.",
+    "Recovery of commands whose acknowledgement was lost after possible application. The last known owner may no longer match; cleanup must report uncertainty and let native expiry act rather than release an unowned replacement state.",
+    "Atomic helper/native speed transitions, exact epoch alignment and scheduling drift. Guarded ownership does not prove shared replay time or native simulation/terrain/animation fidelity.",
+    "Actual live native cosmetics insertion/resource ownership, complete capes/emotes/materials, replay camera rebasing and deterministic video export/render comparisons.",
+    "Full Java-to-Bedrock feature parity remains incomplete and unverified."
+  ],
+  "verified": {"built":false,"tested":false,"guardAppliedInGame":false,"cleanupObserved":false,"leaseLifecycle":false,"clockAligned":false,"liveGame":false,"deterministicVideo":false,"fullParity":false}
+}

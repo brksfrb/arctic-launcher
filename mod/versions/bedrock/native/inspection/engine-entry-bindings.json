@@ -1,0 +1,95 @@
+{
+  "schema": 1,
+  "profiles": [
+    {
+      "productVersion": "1.26.5203.0",
+      "worldAbi": "rendererScreenFrame3Void",
+      "actorAbi": "dispatcherContextActorTargetPositionRotationByte7Void",
+      "tickAbi": "level1Void",
+      "worldStackBytes": 584,
+      "actorStackBytes": 232,
+      "actorFlagEntryOffset": 56,
+      "levelVtableRva": 242932400,
+      "tickSlot": 3264,
+      "levelVtableLeaRva": 19856997,
+      "imageSize": 314576896,
+      "functions": {
+        "world": {
+          "rva": 75466096,
+          "bytes": 5015,
+          "sha256": "d2d28bc49bdb7b48a1cd9b5f33e95426dc26d17214ad42e37c037f2f3c9f1d82"
+        },
+        "worldCaller": {
+          "rva": 4973408,
+          "bytes": 3950,
+          "sha256": "4330c3af477ac2a45bd4f680fdf05212f3d02a9d2567c3b92201f3efb8a89167"
+        },
+        "actor": {
+          "rva": 30741072,
+          "bytes": 1270,
+          "sha256": "5fc848ab163aba1034b21835ad06036c6440e12b34e29d10b6f5e706a86ca0ea"
+        },
+        "tick": {
+          "rva": 19876720,
+          "bytes": 1272,
+          "sha256": "646a4eda0b43d87db286c9ba55bf1b1fa145e9c177324e6a7fb6483283db8a65"
+        },
+        "levelConstructor": {
+          "rva": 19856880,
+          "bytes": 6318,
+          "sha256": "43666a95abeba03069fbb9dc7b0238cc78345b6de66541f20b0f199e4310e089"
+        }
+      },
+      "worldCalls": [
+        4974189,
+        4974745
+      ],
+      "runtimeVerified": false
+    },
+    {
+      "productVersion": "1.26.60.5",
+      "worldAbi": "rendererScreenFrame3Void",
+      "actorAbi": "dispatcherContextActorTargetPositionRotationByte7Void",
+      "tickAbi": "level1Void",
+      "worldStackBytes": 504,
+      "actorStackBytes": 232,
+      "actorFlagEntryOffset": 56,
+      "levelVtableRva": 254601104,
+      "tickSlot": 3264,
+      "levelVtableLeaRva": 112759526,
+      "imageSize": 327397376,
+      "functions": {
+        "world": {
+          "rva": 87423360,
+          "bytes": 3491,
+          "sha256": "3ea5332c6db97182b6612362b3a17a6f0b9e59d0e435d5108acdff8ea844d319"
+        },
+        "worldCaller": {
+          "rva": 81835152,
+          "bytes": 2653,
+          "sha256": "f4298f58b9d77bde358f6e36b06efc1f3216ebb7377ff606cd20383517664bdf"
+        },
+        "actor": {
+          "rva": 93634048,
+          "bytes": 1274,
+          "sha256": "e563fd2b33a7d8ad331db6dc1b384acbc528e3d5806718ace6a9dd43549a7ef8"
+        },
+        "tick": {
+          "rva": 112776528,
+          "bytes": 1273,
+          "sha256": "843dd60c443a64698485692a92186efba189bf7c4248a36238349e8cabb417c5"
+        },
+        "levelConstructor": {
+          "rva": 112759408,
+          "bytes": 6310,
+          "sha256": "662470645f3f9d78ededddc9d4804a8cceacfecb7d3e8da84ad3dea86d63c942"
+        }
+      },
+      "worldCalls": [
+        81835824,
+        81836156
+      ],
+      "runtimeVerified": false
+    }
+  ]
+}

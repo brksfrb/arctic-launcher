@@ -9,7 +9,7 @@ use crate::app::{AddAccount, ArcticApp, Tab};
 use crate::art::avatar::paint_face;
 use crate::art::icons::{self, Icon};
 use crate::art::{self, lerp_color};
-
+use crate::t;
 const ITEM_HEIGHT: f32 = 40.0;
 const ITEM_GAP: f32 = 4.0;
 /// Highlight slide duration (cubic ease-out, so it feels snappy).
@@ -17,15 +17,16 @@ const SLIDE_TIME: f32 = 0.14;
 
 fn tab_info(tab: Tab) -> (Icon, &'static str) {
     match tab {
-        Tab::Play => (Icon::Play, "Play"),
-        Tab::Accounts => (Icon::User, "Accounts"),
-        Tab::Instances => (Icon::Layers, "Instances"),
-        Tab::Skins => (Icon::Shirt, "Cosmetics"),
-        Tab::Together => (Icon::Friends, "Friends"),
-        Tab::Screenshots => (Icon::Image, "Screenshots"),
-        Tab::Logs => (Icon::Document, "Logs"),
-        Tab::Settings => (Icon::Gear, "Settings"),
-        Tab::About => (Icon::Info, "About"),
+        Tab::Play => (Icon::Play, t!("nav.play")),
+        Tab::Accounts => (Icon::User, t!("nav.accounts")),
+        Tab::Instances => (Icon::Layers, t!("nav.instances")),
+        Tab::Bedrock => (Icon::Cube, t!("nav.bedrock")),
+        Tab::Skins => (Icon::Shirt, t!("nav.cosmetics")),
+        Tab::Together => (Icon::Friends, t!("nav.friends")),
+        Tab::Screenshots => (Icon::Image, t!("nav.screenshots")),
+        Tab::Logs => (Icon::Document, t!("nav.logs")),
+        Tab::Settings => (Icon::Gear, t!("nav.settings")),
+        Tab::About => (Icon::Info, t!("nav.about")),
     }
 }
 
@@ -148,7 +149,7 @@ impl ArcticApp {
                 ui.painter().text(
                     rect.left_center() + vec2(52.0, 0.0),
                     Align2::LEFT_CENTER,
-                    "Add account",
+                    t!("nav.add_account"),
                     FontId::proportional(14.5),
                     p.text,
                 );
@@ -208,10 +209,10 @@ impl ArcticApp {
             }
         }
         ui.separator();
-        if ui.button("Add account…").clicked() {
+        if ui.button(t!("nav.add_account_2")).clicked() {
             self.add_account = AddAccount::Choose;
         }
-        if ui.button("Manage accounts").clicked() {
+        if ui.button(t!("nav.manage_accounts")).clicked() {
             let now = ui.input(|i| i.time);
             self.set_tab(Tab::Accounts, now);
         }

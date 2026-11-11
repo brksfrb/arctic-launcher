@@ -7,6 +7,7 @@ import java.util.function.Supplier;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.hud.HudWidget;
 
+import com.arcticlauncher.client.Lang;
 /**
  * One card on the Mods screen: a feature with an icon, an on/off switch
  * (when it has one) and settings, either a form ({@link #settings}) or a
@@ -15,13 +16,13 @@ import com.arcticlauncher.client.hud.HudWidget;
 final class Mod {
 	/** The Mods screen's filter chips. */
 	enum Category {
-		ALL("All"),
+		ALL(Lang.t("mods.all")),
 		HUD("HUD"),
-		VISUAL("Visual"),
-		GAMEPLAY("Gameplay"),
-		CHAT("Chat"),
-		SOCIAL("Social"),
-		CLIENT("Client");
+		VISUAL(Lang.t("mods.visual")),
+		GAMEPLAY(Lang.t("mods.gameplay")),
+		CHAT(Lang.t("mods.chat")),
+		SOCIAL(Lang.t("mods.social")),
+		CLIENT(Lang.t("mods.client"));
 
 		final String title;
 

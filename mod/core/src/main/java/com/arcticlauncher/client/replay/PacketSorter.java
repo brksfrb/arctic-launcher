@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Sorts recorded packets by their protocol names ("level_chunk_with_light",
  * "move_entity_pos"...), which stay the same across Minecraft versions: each
@@ -121,10 +122,10 @@ public final class PacketSorter implements ReplayBackend.Classifier {
 			simple = simple.substring(0, dollar);
 		}
 		if (simple.startsWith("Clientbound")) {
-			simple = simple.substring("Clientbound".length());
+			simple = simple.substring(Lang.t("replay.clientbound").length());
 		}
 		if (simple.endsWith("Packet")) {
-			simple = simple.substring(0, simple.length() - "Packet".length());
+			simple = simple.substring(0, simple.length() - Lang.t("replay.packet").length());
 		}
 		String name = snake(simple);
 		return inner.isEmpty() ? name : name + "_" + snake(inner);

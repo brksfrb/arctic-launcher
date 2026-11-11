@@ -13,6 +13,7 @@ import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.looks.Http;
 import com.google.gson.JsonObject;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Screenshots onto the clipboard as pictures. Arctic Launcher does it when the game was started from it;
  * otherwise the system's own tools do (the game runs Java without desktop access, so Java's clipboard
@@ -37,7 +38,7 @@ public final class ScreenshotCopy {
 			boolean ok = viaLauncher(file, launcherProblem) || viaSystem(file) || viaJava(file);
 			if (!ok) {
 				log("couldn't copy " + file.getName() + " to the clipboard"
-						+ (launcherProblem[0] != null ? " (launcher: " + launcherProblem[0] + ")" : ""));
+						+ (launcherProblem[0] != null ? Lang.t("hud.launcher") + launcherProblem[0] + ")" : ""));
 			}
 			done.accept(ok);
 		}, "arctic-copy");
@@ -71,10 +72,10 @@ public final class ScreenshotCopy {
 			}
 			if (os.contains("mac")) {
 				return run(Arrays.asList("osascript", "-e",
-						"set the clipboard to (read (POSIX file \"" + path.replace("\\", "\\\\").replace("\"", "\\\"") + "\") as «class PNGf»)"));
+						"set the clipboard to (read (POSIX file \"" + path.replace("\\", "\\\\").replace("\"", "\\\"") + "\") as «class PNGf»)")); // i18n-ignore
 			}
 			return run(Arrays.asList("sh", "-c", "if [ -n \"$WAYLAND_DISPLAY\" ] && command -v wl-copy >/dev/null; "
-					+ "then wl-copy --type image/png < \"$1\"; else xclip -selection clipboard -t image/png -i \"$1\"; fi", "sh", path));
+					+ "then wl-copy --type image/png < \"$1\"; else xclip -selection clipboard -t image/png -i \"$1\"; fi", "sh", path)); // i18n-ignore
 		} catch (Exception e) {
 			log("screenshot copy through the system: " + e);
 			return false;
@@ -86,12 +87,12 @@ public final class ScreenshotCopy {
 	 * console window flashes over the game (PowerShell started directly from the game would open one).
 	 */
 	private static boolean windows(String path) throws IOException, InterruptedException {
-		String powershell = "powershell -NoProfile -NonInteractive -STA -Command \"Add-Type -AssemblyName System.Windows.Forms,System.Drawing; "
+		String powershell = "powershell -NoProfile -NonInteractive -STA -Command \"Add-Type -AssemblyName System.Windows.Forms,System.Drawing; " // i18n-ignore
 				+ "$i = [System.Drawing.Image]::FromFile('" + path.replace("'", "''") + "'); "
-				+ "[System.Windows.Forms.Clipboard]::SetImage($i); $i.Dispose()\"";
+				+ "[System.Windows.Forms.Clipboard]::SetImage($i); $i.Dispose()\""; // i18n-ignore
 		File script = File.createTempFile("arctic-copy", ".vbs");
 		try {
-			String vbs = "WScript.Quit CreateObject(\"WScript.Shell\").Run(\"" + powershell.replace("\"", "\"\"") + "\", 0, True)\r\n";
+			String vbs = "WScript.Quit CreateObject(\"WScript.Shell\").Run(\"" + powershell.replace("\"", "\"\"") + "\", 0, True)\r\n"; // i18n-ignore
 			// UTF-16 with a byte order mark: Windows Script Host reads anything else as the ANSI code page,
 			// which would garble a path with non-English letters.
 			byte[] text = vbs.getBytes(StandardCharsets.UTF_16LE);

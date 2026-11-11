@@ -15,7 +15,7 @@ use crate::art::lerp_color;
 use crate::motion::{format_bytes, format_duration};
 use crate::runs::{Run, RunState};
 use crate::widgets::{self, PlayState};
-
+use crate::{t, tf};
 const PLAY_SIZE: [f32; 2] = [300.0, 62.0];
 const PICKER_WIDTH: f32 = 340.0;
 
@@ -31,7 +31,12 @@ pub enum VersionView {
 impl ArcticApp {
     pub(crate) fn play_tab(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        widgets::page_header(ui, p, "Play", "Pick an instance and jump in.");
+        widgets::page_header(
+            ui,
+            p,
+            t!("play.play"),
+            t!("play.pick_an_instance_and_jump_in"),
+        );
         let instance = self.selected_instance().clone();
         crate::theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -42,7 +47,7 @@ impl ArcticApp {
                 self.instance_switcher(ui, &instance);
                 // Right next to the name it belongs to (the account stays at the far end).
                 ui.add_space(2.0);
-                if widgets::icon_button(ui, p, Icon::Gear, "Instance settings").clicked() {
+                if widgets::icon_button(ui, p, Icon::Gear, t!("play.instance_settings")).clicked() {
                     let now = ui.input(|i| i.time);
                     self.set_tab(Tab::Instances, now);
                     self.open_instance(&instance.id);
@@ -53,7 +58,7 @@ impl ArcticApp {
                 });
             });
             ui.add_space(12.0);
-            ui.label(RichText::new("VERSION").small().color(p.muted));
+            ui.label(RichText::new(t!("play.version")).small().color(p.muted));
             if instance.is_default() {
                 self.version_picker(ui);
             } else {
@@ -103,16 +108,21 @@ impl ArcticApp {
             return;
         }
         ui.add_space(14.0);
-        ui.label(RichText::new("ALSO RUNNING").small().color(p.muted));
+        ui.label(
+            RichText::new(t!("play.also_running"))
+                .small()
+                .color(p.muted),
+        );
         let now = ui.input(|i| i.time);
         for (id, title, started) in others {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(&title).color(p.text));
-                if widgets::icon_button(ui, p, Icon::Document, "View its log").clicked() {
+                if widgets::icon_button(ui, p, Icon::Document, t!("play.view_its_log")).clicked() {
                     self.show_run_log(id, now);
                 }
                 if started
-                    && widgets::icon_button(ui, p, Icon::Stop, "Force close this game").clicked()
+                    && widgets::icon_button(ui, p, Icon::Stop, t!("play.force_close_this_game"))
+                        .clicked()
                     && let Some(game) = self.runs.get(id).and_then(Run::game)
                 {
                     game.kill();
@@ -160,15 +170,15 @@ impl ArcticApp {
                     icons::draw(ui.painter(), Icon::ChevronDown, r, p.muted);
                 });
                 let subtitle = if instance.is_default() {
-                    "Default instance".to_owned()
+                    t!("play.default_instance").to_owned()
                 } else {
-                    format!("{} instance", instance.loader.label())
+                    tf!("play.instance_2", label = instance.loader.label())
                 };
                 ui.add(egui::Label::new(RichText::new(subtitle).color(p.muted)).selectable(false));
             })
             .response
             .interact(Sense::click())
-            .on_hover_text("Switch instance")
+            .on_hover_text(t!("play.switch_instance"))
             .on_hover_cursor(CursorIcon::PointingHand);
         let hover = ui
             .ctx()
@@ -223,7 +233,7 @@ impl ArcticApp {
                     }
                 }
                 ui.separator();
-                create = ui.button("New instance…").clicked();
+                create = ui.button(t!("play.new_instance")).clicked();
             });
         if let Some(id) = pick {
             self.settings.last_instance = (id != self.instance.id).then_some(id);
@@ -236,7 +246,7 @@ impl ArcticApp {
     fn account_chip(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         let Some(account) = self.accounts.active().cloned() else {
-            if widgets::button(ui, p, Some(Icon::Plus), "Add account", true).clicked() {
+            if widgets::button(ui, p, Some(Icon::Plus), t!("play.add_account"), true).clicked() {
                 self.add_account = AddAccount::Choose;
             }
             return;
@@ -265,7 +275,7 @@ impl ArcticApp {
             p.text,
         );
         if response
-            .on_hover_text("Switch account")
+            .on_hover_text(t!("play.switch_account"))
             .on_hover_cursor(CursorIcon::PointingHand)
             .clicked()
         {
@@ -279,8 +289,10 @@ impl ArcticApp {
         let ManifestState::Ready(manifest) = &self.manifest else {
             match &self.manifest {
                 ManifestState::Failed(e) => {
-                    ui.label(RichText::new(format!("Could not load versions: {e}")).color(p.error));
-                    if crate::widgets::button(ui, p, None, "Retry", false).clicked() {
+                    ui.label(
+                        RichText::new(tf!("play.could_not_load_versions", e = e)).color(p.error),
+                    );
+                    if crate::widgets::button(ui, p, None, t!("play.retry"), false).clicked() {
                         self.manifest = ManifestState::Loading;
                         self.tasks.load_manifest();
                     }
@@ -310,9 +322,9 @@ impl ArcticApp {
             p.text,
         );
         let (label, color) = if installed {
-            ("Installed", p.accent)
+            (t!("play.installed"), p.accent)
         } else {
-            ("Not installed", p.muted)
+            (t!("play.not_installed"), p.muted)
         };
         ui.painter().text(
             rect.right_center() - vec2(36.0, 0.0),
@@ -333,8 +345,8 @@ impl ArcticApp {
                 let date: String = v.release_time.chars().take(10).collect();
                 let label = match v.kind {
                     VersionKind::Release => date,
-                    VersionKind::Snapshot => format!("{date} · snapshot"),
-                    _ => format!("{date} · old"),
+                    VersionKind::Snapshot => tf!("play.snapshot", date = date),
+                    _ => tf!("play.old", date = date),
                 };
                 (v.id, label)
             })
@@ -350,7 +362,7 @@ impl ArcticApp {
         let p = self.palette();
         ui.add(
             widgets::text_field(&mut self.version_filter)
-                .hint_text("Search versions")
+                .hint_text(t!("play.search_versions"))
                 .desired_width(f32::INFINITY),
         );
         ui.horizontal(|ui| {
@@ -359,16 +371,16 @@ impl ArcticApp {
                 .filter(|(id, _)| self.installed.contains(id))
                 .count();
             let favorites = self.settings.favorite_versions.len();
-            ui.selectable_value(&mut self.version_view, VersionView::All, "All");
+            ui.selectable_value(&mut self.version_view, VersionView::All, t!("play.all"));
             ui.selectable_value(
                 &mut self.version_view,
                 VersionView::Installed,
-                format!("Installed ({installed})"),
+                tf!("play.installed_2", installed = installed),
             );
             ui.selectable_value(
                 &mut self.version_view,
                 VersionView::Favorites,
-                format!("Favorites ({favorites})"),
+                tf!("play.favorites", favorites = favorites),
             );
         });
         ui.separator();
@@ -392,9 +404,9 @@ impl ArcticApp {
             .show(ui, |ui| {
                 if rows.is_empty() {
                     let text = if self.version_view == VersionView::Favorites {
-                        "Star a version to keep it here."
+                        t!("play.star_a_version_to_keep_it_here")
                     } else {
-                        "No matching versions"
+                        t!("play.no_matching_versions")
                     };
                     ui.label(RichText::new(text).color(p.muted));
                 }
@@ -416,7 +428,7 @@ impl ArcticApp {
                     );
                     let star = ui
                         .interact(star_rect, response.id.with("star"), Sense::click())
-                        .on_hover_text("Favorite")
+                        .on_hover_text(t!("play.favorite"))
                         .on_hover_cursor(CursorIcon::PointingHand);
                     let favorite = self.settings.favorite_versions.contains(id);
                     let (icon, color) = match (favorite, star.hovered()) {
@@ -453,7 +465,7 @@ impl ArcticApp {
                         ui.painter().text(
                             egui::pos2(x, rect.center().y),
                             Align2::RIGHT_CENTER,
-                            "LATEST",
+                            t!("play.latest"),
                             FontId::proportional(11.0),
                             p.accent,
                         );
@@ -495,7 +507,7 @@ impl ArcticApp {
                     .request_repaint_after(std::time::Duration::from_millis(250));
                 PlayState::Progress {
                     fraction: None,
-                    label: "Starting…",
+                    label: t!("play.starting"),
                 }
             }
             Some(RunState::Running { .. }) => PlayState::Running,
@@ -526,20 +538,28 @@ impl ArcticApp {
                 ui,
                 p,
                 Icon::Plus,
-                "Play another copy (switch account first for a second player)",
+                t!("play.play_another_copy_switch_account_first_for_a"),
                 PLAY_SIZE[1],
             )
             .clicked()
         {
             self.launch_another_copy();
         }
-        if widgets::tile_button(ui, p, Icon::Folder, "Open game folder", PLAY_SIZE[1]).clicked() {
+        if widgets::tile_button(
+            ui,
+            p,
+            Icon::Folder,
+            t!("play.open_game_folder"),
+            PLAY_SIZE[1],
+        )
+        .clicked()
+        {
             let dir = self.selected_instance().game_dir(&self.dirs);
             let _ = std::fs::create_dir_all(&dir);
             if let Err(e) = open::that_detached(&dir) {
                 self.toasts.push(
                     crate::toasts::Kind::Error,
-                    "Could not open folder",
+                    t!("play.could_not_open_folder"),
                     e.to_string(),
                 );
             }
@@ -549,14 +569,26 @@ impl ArcticApp {
             .logs()
             .join(format!("game-{}.log", self.selected_instance().id));
         if log.is_file()
-            && widgets::tile_button(ui, p, Icon::Document, "Open last game log", PLAY_SIZE[1])
-                .clicked()
+            && widgets::tile_button(
+                ui,
+                p,
+                Icon::Document,
+                t!("play.open_last_game_log"),
+                PLAY_SIZE[1],
+            )
+            .clicked()
         {
             let _ = open::that_detached(&log);
         }
         if let Some(game) = self.selected_run().and_then(Run::game)
-            && widgets::tile_button(ui, p, Icon::Stop, "Force close Minecraft", PLAY_SIZE[1])
-                .clicked()
+            && widgets::tile_button(
+                ui,
+                p,
+                Icon::Stop,
+                t!("play.force_close_minecraft"),
+                PLAY_SIZE[1],
+            )
+            .clicked()
         {
             game.kill();
         }
@@ -564,11 +596,11 @@ impl ArcticApp {
 
     fn blocked_reason(&self) -> Option<&'static str> {
         if self.update_required() {
-            Some("A required launcher update must be installed first.")
+            Some(t!("play.a_required_launcher_update_must_be_installed"))
         } else if self.accounts.active().is_none() {
-            Some("Add an account to play.")
+            Some(t!("play.add_an_account_to_play"))
         } else if !matches!(self.manifest, ManifestState::Ready(_)) {
-            Some("Loading versions…")
+            Some(t!("play.loading_versions"))
         } else {
             None
         }
@@ -586,13 +618,13 @@ impl ArcticApp {
                         format_bytes(progress.bytes_done),
                         format_bytes(progress.bytes_total)
                     ),
-                    format!("{}/{} files", progress.done, progress.total),
+                    tf!("play.files", done = progress.done, total = progress.total),
                 ];
                 if let Some(rate) = meter.bytes_per_sec() {
                     parts.push(format!("{}/s", format_bytes(rate as u64)));
                 }
                 if let Some(eta) = meter.eta_secs(remaining) {
-                    parts.push(format!("{} left", format_duration(eta)));
+                    parts.push(tf!("play.left", format_duration = format_duration(eta)));
                 }
                 parts.join("  ·  ")
             }
@@ -603,8 +635,8 @@ impl ArcticApp {
             Some(RunState::Running { .. }) => "Minecraft is running. Have fun!".into(),
             _ => match self.blocked_reason() {
                 Some(reason) => reason.into(),
-                None if self.selected_installed() => "Ready to play.".into(),
-                None => "This version will be downloaded when you press Play.".into(),
+                None if self.selected_installed() => t!("play.ready_to_play").into(),
+                None => t!("play.this_version_will_be_downloaded_when_you").into(),
             },
         };
         ui.label(RichText::new(text).color(p.muted));

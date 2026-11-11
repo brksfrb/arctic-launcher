@@ -96,6 +96,9 @@ pub enum Command {
     /// with `arctic launch --server <address>`.
     #[command(subcommand)]
     Servers(ServersCommand),
+    /// Minecraft: Bedrock Edition on Windows: play it, switch its version,
+    /// and manage its worlds, packs and servers.
+    Bedrock(BedrockArgs),
     /// Friends: who's online and where, requests, invites, your profile.
     #[command(subcommand)]
     Friends(FriendsCommand),
@@ -415,6 +418,231 @@ impl FriendsCommand {
             | Self::Profile { account, .. } => account.as_deref(),
         }
     }
+}
+
+#[derive(Debug, Args)]
+pub struct BedrockArgs {
+    /// Minecraft Preview instead of the release.
+    #[arg(long, global = true)]
+    pub preview: bool,
+    /// The Xbox account folder for worlds and servers (an id from
+    /// `arctic bedrock status`). Default: the one played last.
+    #[arg(long, global = true, value_name = "ID")]
+    pub account: Option<String>,
+    #[command(subcommand)]
+    pub command: BedrockCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BedrockCommand {
+    /// Compare two finished exports and their saved frame/decoded audits. Starts no game or decoder.
+    CompareExports {
+        /// First MP4; its .frames.jsonl and .decoded.jsonl siblings are required.
+        first: PathBuf,
+        /// A separate capture with matching dimensions, FPS and frame count.
+        second: PathBuf,
+    },
+    /// Save, record or mount appearance state in an already-loaded client (preview).
+    NativeAppearance {
+        #[arg(long)]
+        bundle: PathBuf,
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        sequence: u64,
+        /// JSON op=save/load/time/clear/state or history_begin/history_finish/history_cancel.
+        control: PathBuf,
+    },
+    /// Arm or await a correlated native replay marker without launching the game (preview).
+    NativePacket {
+        #[arg(long)]
+        bundle: PathBuf,
+        /// JSON session/sequence/generation/replaySequence/timeMs. Arm generates missing requestId/marker.
+        request: PathBuf,
+        /// Await dispatch and the next client tick using the exact populated arm request.
+        #[arg(long)]
+        wait: bool,
+        /// Await only the primary-thread dispatcher return, before permitting a planned tick.
+        #[arg(long, conflicts_with = "wait")]
+        wait_dispatch: bool,
+    },
+    /// Control indexed native frame capture without starting the game (preview).
+    NativeCapture {
+        #[arg(long)]
+        bundle: PathBuf,
+        /// Fresh identifier for this capture; reuse it for its sample/stop/finish commands.
+        #[arg(long)]
+        capture_id: String,
+        /// JSON start, observe, sample, stop or finish operation. Samples require actual native frame identities.
+        control: PathBuf,
+    },
+    /// Control the already-loaded native replay clock from a JSON operation (preview).
+    NativeClock {
+        #[arg(long)]
+        bundle: PathBuf,
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        sequence: u64,
+        /// JSON with op, partial, realTimer and leaseMs; op=rate also needs rate (0–16).
+        control: PathBuf,
+    },
+    /// Set or release a scoped native camera in an already-running game (preview).
+    NativeCamera {
+        #[arg(long)]
+        bundle: PathBuf,
+        /// Live session from the adapter's camera report.
+        #[arg(long)]
+        session: String,
+        /// Increasing sequence within this world session.
+        #[arg(long)]
+        sequence: u64,
+        /// JSON with position, orientation (native XYZW quaternion) and fieldOfView.
+        #[arg(long, required_unless_present = "release", conflicts_with = "release")]
+        target: Option<PathBuf>,
+        #[arg(long, required_unless_present = "target", conflicts_with = "target")]
+        release: bool,
+    },
+    /// Record MP4 from an already-running game with the native adapter loaded.
+    Capture {
+        #[arg(long)]
+        bundle: PathBuf,
+        #[arg(long)]
+        ffmpeg: PathBuf,
+        output: PathBuf,
+        #[arg(long, default_value_t = 10)]
+        seconds: u32,
+        #[arg(long, default_value_t = 30)]
+        fps: u32,
+    },
+    /// Whether the game is installed, its version, and its data folders.
+    Status,
+    /// Start the game.
+    Play {
+        /// Attach a built experimental native client bundle (directory). Shared
+        /// menus/HUD only; in-world skins, capes and cosmetics are not ported yet.
+        #[arg(long, value_name = "BUNDLE_DIRECTORY")]
+        native_client: Option<PathBuf>,
+    },
+    /// Connect to a server that accepts unsigned players, using a local relay.
+    /// No Xbox sign-in or token is requested. Requires Node.js 24+ with npm.
+    Offline {
+        /// Target server (host or host:port). It must permit offline players.
+        address: String,
+        /// The offline player name sent to the server.
+        #[arg(long)]
+        name: String,
+        /// Custom 64×64 or legacy 64×32 skin PNG sent to the offline server.
+        #[arg(long)]
+        skin: Option<PathBuf>,
+        /// Static 2:1 cape PNG (HD capes are reduced to Bedrock's 64×32).
+        #[arg(long)]
+        cape: Option<PathBuf>,
+        /// Use the slim arm model with --skin.
+        #[arg(long, requires = "skin")]
+        slim: bool,
+        /// Record decrypted world/input packets to a new Bedrock .abr file.
+        #[arg(long, value_name = "FILE")]
+        record_to: Option<PathBuf>,
+        #[arg(long, default_value_t = 19142)]
+        listen_port: u16,
+        /// Bedrock protocol data version (default: discover from the server).
+        #[arg(long)]
+        version: Option<String>,
+        /// Start the installed game once the local connector is ready.
+        #[arg(long)]
+        play: bool,
+    },
+    /// Serve a Bedrock .abr recording locally without Xbox authentication.
+    Replay {
+        file: PathBuf,
+        /// Local port: 19143 for direct playback, 7551 with --nethernet.
+        #[arg(long)]
+        listen_port: Option<u16>,
+        /// Advertise the recording as a local NetherNet LAN world (preview).
+        #[arg(long)]
+        nethernet: bool,
+        #[arg(long, default_value_t = 1.0)]
+        speed: f64,
+        /// Restore the recording from its bootstrap through this timestamp.
+        #[arg(long, default_value_t = 0)]
+        start_ms: u32,
+    },
+    /// Versions that can be installed (1.21.120 and newer), newest first.
+    Versions {
+        /// Every version, not just the newest ones.
+        #[arg(long)]
+        all: bool,
+    },
+    /// Install a version over the installed game (newer or older). Windows
+    /// downloads it from Microsoft; the game must be owned on this PC's
+    /// Microsoft Store account. Worlds and settings are kept.
+    Install {
+        /// A version ("1.26.52", "1.26.52.3") or `latest`.
+        version: String,
+    },
+    /// Worlds: list, import, export, back up, remove.
+    #[command(subcommand)]
+    Worlds(BedrockWorldsCommand),
+    /// Resource, behavior and skin packs: list, import, remove.
+    #[command(subcommand)]
+    Packs(BedrockPacksCommand),
+    /// The game's server list, with who's online.
+    #[command(subcommand)]
+    Servers(BedrockServersCommand),
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BedrockWorldsCommand {
+    /// List worlds, most recently played first.
+    List,
+    /// Import a .mcworld file (or a world folder).
+    Import { path: PathBuf },
+    /// Save a world as a .mcworld file.
+    Export {
+        /// The world's name or folder.
+        world: String,
+        /// Where to write it (default: `<name>.mcworld` here).
+        #[arg(long)]
+        to: Option<PathBuf>,
+    },
+    /// Save a .mcworld copy in Arctic's Bedrock backups folder.
+    Backup { world: String },
+    /// Move a world to com.mojangrctic-trash (kept, not deleted).
+    Remove { world: String },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BedrockPacksCommand {
+    /// List installed packs.
+    List,
+    /// Import a .mcpack or .mcaddon file (or a pack folder).
+    Import { path: PathBuf },
+    /// Move a pack to com.mojangrctic-trash (kept, not deleted).
+    Remove {
+        /// The pack's name, folder or UUID.
+        pack: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BedrockServersCommand {
+    /// The game's server list, each pinged.
+    List {
+        /// Only list them; don't contact the servers.
+        #[arg(long)]
+        no_ping: bool,
+    },
+    /// Ping any Bedrock server (`host` or `host:port`, port 19132 by default).
+    Ping { address: String },
+    /// Add a server to the game's server list.
+    Add {
+        address: String,
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Remove a server from the game's server list.
+    Remove { address: String },
 }
 
 #[derive(Debug, Subcommand)]

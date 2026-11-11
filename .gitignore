@@ -1,5 +1,12 @@
 # Build output
 /target/
+/mod/versions/bedrock/native/target/
+/mod/versions/bedrock/build/
+/mod/versions/bedrock/.gradle/
+/mod/versions/bedrock/dist/
+/mod/core/build/
+/mod/core/.gradle/
+/mod/versions/bedrock/offline/node_modules/
 # The Arctic Client's jars (their pack, mod/dist/arctic-client.pack, is committed)
 /mod/dist/*.jar
 **/*.rs.bk

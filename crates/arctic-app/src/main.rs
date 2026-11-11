@@ -4,6 +4,7 @@
 mod app;
 mod art;
 mod auto_update;
+mod bedrock_tasks;
 mod bridge_host;
 mod desktop_shortcut;
 mod devshot;
@@ -12,6 +13,7 @@ mod fonts;
 mod friend_tasks;
 mod gallery_tasks;
 mod glass;
+mod i18n;
 mod icon_raster;
 mod logbook;
 mod memstats;
@@ -39,6 +41,7 @@ mod tray;
 mod tray_host;
 mod trim;
 mod ui;
+mod video_decoder;
 mod video_encoder;
 mod voice;
 mod voice_svc;
@@ -66,6 +69,12 @@ fn main() -> eframe::Result {
     if args.first().map(String::as_str) == Some("--video-tool") {
         std::process::exit(video_encoder::run_tool(&args[1..]));
     }
+    if args.first().map(String::as_str) == Some(video_encoder::STREAM_SWITCH) {
+        std::process::exit(video_encoder::run_stream(&args[1..]));
+    }
+    if args.first().map(String::as_str) == Some(video_decoder::SWITCH) {
+        std::process::exit(video_decoder::run(&args[1..]));
+    }
     let dirs = match DataDirs::resolve() {
         Ok(dirs) => dirs,
         Err(e) => {
@@ -88,8 +97,14 @@ fn main() -> eframe::Result {
     };
     // Hidden in the tray (a hidden start, or the launcher handing the tray over): keep only the
     // icon, not a whole window's memory. Another start or the menu brings the launcher back.
-    let tray_setting = arctic_core::settings::Settings::load(&dirs).map_or(true, |s| s.tray);
+    let early_settings = arctic_core::settings::Settings::load(&dirs).ok();
+    let tray_setting = early_settings.as_ref().is_none_or(|s| s.tray);
     if tray_host::wanted(&args, tray_setting) {
+        i18n::set_language(
+            early_settings
+                .as_ref()
+                .map_or(i18n::SYSTEM, |s| &s.language),
+        );
         tray_host::run(&dirs, forwarded);
     }
     logbook::init(dirs.launcher_logs().join("launcher.log"));

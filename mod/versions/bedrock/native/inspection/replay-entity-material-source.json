@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "evidence": "Source reads and edits only; no builds, tests, syntax checks, archive execution/round trips, game launch, attachment or process inspection",
+  "archive": {
+    "track": "bedrock_entity_material_v1",
+    "magic": "0x4152434d41540001",
+    "byteOrder": "big endian DataOutput",
+    "block": "magic u64, frame count u32; each frame: time f64, tick i64, tick rate f32, strict u8 presence; optional sample follows",
+    "sample": "DataOutput UTF dimension, strict u8 camera-relative flag, six f64 camera fields, sixteen f32 projection fields, then 1058 f32 shader values",
+    "shaderOrder": "lightmap 1024 RGBA floats, ColorModulator 4, light directions 6, fog-position affine transform 12, selected overlay texel 4, fog color 4, fog ranges 4",
+    "limits": {"inflatedBytes": 524288, "framesPerBlock": 64, "indexChunks": 4096, "residentCacheBlocks": 2, "mountReservationBytes": 8388608},
+    "ownership": "Samples retain the already copied immutable JavaEntityShader and clone camera/projection context; no native pointers or mutable input arrays survive",
+    "writer": "Observe at appearance-history start, each recording sample and finish; flush through the existing serialized compressed asset writer",
+    "reader": "Validate bounded decompression, clock/order, presence flags, source context, shader array values, matching block index, no trailing data and unchanged archive manifest on reload"
+  },
+  "playback": {
+    "clock": "ReplayAppearance.exactTime(world), retaining fractional replay sampling",
+    "endpoints": "Use the exact recorded material at an exact observation time",
+    "interior": "Require neighboring observations with equal shader values, compatible dimension/space/context, no missed tick, contiguous chunks and no long pause; otherwise unknown",
+    "standardCameraEdits": "For camera-relative world positions with an exactly identity fog-position transform, entity.vsh fog derives from emitted Position before ModelViewMat. Re-emission under the edited replay camera supplies its new relative positions; the archived material can be reused without an invented affine transform.",
+    "otherTransforms": "Require bit-identical recorded camera and projection context; generalized fog-space camera rebasing remains unfinished",
+    "renderer": "WorldFrame.render selects the archived material during replay appearance; it never substitutes a live viewer profile",
+    "capture": "Appearance readiness requires an available recorded material for actors requiring recorded body references",
+    "legacy": "Archives without the new optional track still mount, but lack recorded material readiness"
+  },
+  "remaining": [
+    "Authoritative installed-game capture of Java-equivalent material/lightmap inputs",
+    "General affine fog-space rebasing and changing-material reconstruction between observations",
+    "Per-role/per-actor shader cohorts where the scene does not share one explicit material profile",
+    "Live group/phase production and draw insertion; ARCGEO02 material transport and native constant assembly now have source ports",
+    "General skin shader variants, native glint and raster/blend equivalence",
+    "Runtime replay-camera and deterministic-video fidelity verification"
+  ],
+  "verified": {"built": false, "tested": false, "archiveRoundTrip": false, "liveGame": false, "gpuRendering": false, "deterministicVideo": false, "fullParity": false}
+}

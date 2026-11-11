@@ -15,6 +15,7 @@ import net.minecraft.text.LiteralText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
+import com.arcticlauncher.client.Lang;
 /** What the 1.8.9 hooks call: small, so each mixin stays a one-liner. */
 public final class LegacyHooks {
 	/** The skin streamer mode shows for you. */
@@ -170,7 +171,7 @@ public final class LegacyHooks {
 		}
 		armedLeave = button;
 		leaveLabel = button.message;
-		button.message = "Click again to leave";
+		button.message = Lang.t("platform.click_again_to_leave");
 		return false;
 	}
 

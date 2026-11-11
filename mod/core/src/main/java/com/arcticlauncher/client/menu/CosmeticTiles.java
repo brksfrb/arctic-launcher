@@ -12,6 +12,7 @@ import com.arcticlauncher.client.ui.Widget;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.arcticlauncher.client.Lang;
 /** Tiles for the Looks tab's Cosmetics and Emotes pages. */
 final class CosmeticTiles {
 	private static final int TILE_H = 30;
@@ -131,7 +132,7 @@ final class CosmeticTiles {
 		int rows = (items.size() + cols - 1) / cols;
 		int end = top + rows * (TILE_H + GAP);
 		if (mine != null && !mine.cosmetics.isEmpty()) {
-			com.arcticlauncher.client.ui.Button off = new com.arcticlauncher.client.ui.Button("Remove all",
+			com.arcticlauncher.client.ui.Button off = new com.arcticlauncher.client.ui.Button(Lang.t("looks.remove_all"),
 					() -> ArcticClient.looks().wearCosmetics(java.util.Collections.<String>emptyList()));
 			off.enabled = canWear;
 			host.add(off).bounds(x, end, 90, 18);
@@ -158,17 +159,17 @@ final class CosmeticTiles {
 	static String slotName(String slot) {
 		switch (slot) {
 			case "head":
-				return "Head";
+				return Lang.t("looks.head");
 			case "face":
-				return "Face";
+				return Lang.t("looks.face");
 			case "back":
-				return "Back";
+				return Lang.t("looks.back");
 			case "shoulders":
-				return "Shoulders";
+				return Lang.t("looks.shoulders");
 			case "arms":
-				return "Arms";
+				return Lang.t("looks.arms");
 			default:
-				return "Body";
+				return Lang.t("looks.body");
 		}
 	}
 }

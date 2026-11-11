@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "evidence": "Source reads/edits, cached class disassembly as data, and cached shader/PNG resource parsing. PNG pixels were decoded as data to derive their hash. No compilation, tests, syntax checks, JNI/Java class loading, GPU/shader execution, game launch, process inspection or exports.",
+  "reference": {
+    "java": "26.2",
+    "clientJarSha256": "40896ee9f1e2bec3c934daac7e93d41e9e3d9c2f8ae0ca366d52ffbfd1afa290",
+    "vertexShaderSha256": "4289d03ad334f380cbe98f92d06433fc5d9153c9efd3fd0f0142bb0a8efd7c74",
+    "fragmentShaderSha256": "81bbc69ff2bb33a0f388c948e64970c4faf6af1b65eb2a33e3922df353385998",
+    "fogIncludeSha256": "c1b47816bc9a3689ea815226c8ff2ba1b143ea40f094eb61cfede85c604ac8e6",
+    "pipeline": "RenderPipelines.<clinit> 0xb48..0xbab builds GLINT: POSITION_TEX quads, cull=false at 0xb79/0xb7a, BlendFunction.GLINT at 0xb81, CompareOp.EQUAL and depthWrite=false at 0xb9b..0xba2.",
+    "blend": "BlendFunction.<clinit> 0x14..0x23 establishes RGB SRC_COLOR/ONE and alpha ZERO/ONE. Fragment RGB is therefore its own source blend factor; destination alpha survives.",
+    "shader": "glint.vsh uses Position/UV0, projection/model-view and TextureMat, emitting transformed UV and spherical/cylindrical fog distances. glint.fsh multiplies linear artwork by ColorModulator, cuts off alpha below 0.1, then scales RGB by (1-total_fog_value)*GlintAlpha. Vertex color/tint, normals, entity lightmap, selected overlay and fog-color RGB mix do not participate."
+  },
+  "artwork": {
+    "path": "assets/minecraft/textures/misc/enchanted_glint_armor.png",
+    "size": [128,128],
+    "pngSha256": "591205347810d37b6d6070a502468bbb1f2686fc0ab38b826b06cbba6349b23c",
+    "straightRgbaSha256": "0cdd3ee2f5b35382fad3f7a16886221de323ad8b7f41cf672a14349c10ae686b",
+    "pngStructure": "Cached resource is indexed palette PNG with IHDR/PLTE/IDAT/IEND only; no transparency, gamma or color-profile metadata. Static RGBA decode supplied the pinned pixel hash; Java ImageIO/JNI agreement has not been executed.",
+    "metadata": "Existing JavaReferenceAssets pins the PNG and .mcmeta (blur=true, clamp omitted) hashes from an explicitly configured local Java archive. No asset file was copied into the repository.",
+    "javaCopy": "JavaReferenceAssets.armorGlintRgba exports a bounded owned 65536-byte row-major straight RGBA copy using getRGB, or null when the verified reference asset is absent. NativeBridge exposes the asset-only getter with the existing presentation-context guard.",
+    "nativeCopy": "ClientVm.armor_glint_artwork is an unscheduled serialized-client-thread helper; it checks array length before JNI copying. GlintArtwork.from_rgba checks exact length and SHA-256 before admitting the artwork.",
+    "upload": "begin_with_glint appends one dedicated owned RGBA8_UNORM texture/descriptor to the existing upload ticket and fence retirement path. Ordinary packet texture handles remain bounded by packet texture count and cannot alias the extra slot. Glint rows are already RGBA and bypass the packet ARGB-to-RGBA swizzle. Existing 128 MiB upload limit remains; optional art adds exactly 16384 texels. Legacy begin delegates with no glint art."
+  },
+  "port": {
+    "module": "avatar_glint (Windows-only), shader shaders/avatar_glint.hlsl",
+    "inputs": "Explicit full texture matrix, fog-position transform, ColorModulator, four fog ranges and normalized GlintAlpha. No clock/options/selection defaults. Equipment-layer projection is taken through the same avatar_material.projection helper as the base wing draw, including reverse-Z conversion.",
+    "constants": "Each profile is a zero-padded 256-byte upload-heap cbuffer slice: projection words 0..15; texture matrix 16..31; row-major fog transform 32..43; modulator 44..47; fog ranges 48..51; GlintAlpha word 52, remaining words zero. for_profiles packs up to 2048 slices into one arena; for_uploaded delegates for a single profile. Validate finite values, ordered fog ranges, normalized strength, device node and nonzero aligned GPU address. Constants retain/join actual uploaded vertex/index resources and descriptor heap, not just frame IDs. Packet-selected profile assembly is in native-packet-glint-source.json.",
+    "pipeline": "Separate root signature, SM5 shader compiler entry, POSITION/TEXCOORD layout over the existing 40-byte vertex buffers, linear-repeat level-zero sampler, EQUAL depth/no writes, cull-none and Java GLINT blending. Shares the existing supported target-format/sample validation with entity materials. Constructor remains uncalled during this source port.",
+    "preflight": "Pipeline.prepare_wings accepts explicit selected model IDs in their owning glint phase order. Reject duplicate/missing/non-wing/unknown-eligibility models, different uploaded resources/heap/projection/node/device, unavailable pinned artwork and incoherent base vertex/index views. Reuse every selected model's exact base buffers/UVs/indices; retain empty metadata without issuing a draw.",
+    "recording": "Prepared borrows pipeline/upload/constants and records only the supplied selected models under the existing private-command classification guard. Its unsafe contract requires a serialized matching recording list, actual glint phase selection/order, already-written matching base depth, native state restoration and fence retention of all owners. It does not reset/close/execute a list or acquire/guess native target ownership.",
+    "scope": "Native source support for selected wing-model glint, not a complete armor/held-item renderer or live glint producer. No automatic native insertion or post-frame overlay draw was added.",
+    "phaseRecording": "Native source now identifies first wing glint as order 1 translucentModels phase 7, supports the complete explicitly supplied joint model sequence through the shared unstable sorter and boundary-preserving cursor, and provides native_avatar_record/depth_tracker transaction entries with state restoration/fence retention. Source entity phases remain separate. Actual complete joint participant/pose capture, native foreign dispatch, callsite and replay uniforms remain unfinished; see native-avatar-phase-recording-source.json and joint-glint-phase-source.json."
+  },
+  "remaining": [
+    "Authoritative live/replay glint selection and original phase/bucket placement, including coordination with foreign features and output targets.",
+    "GlintSample/GlintHistory preserve explicitly supplied transform/uniform/view observations in an optional replay track. Packet/profile preparation and the software-owned deferred phase now consume exact/stable observations in source (native-packet-glint-source.json, software-wing-glint-observation-source.json). Actual live input capture, changing-clock reconstruction, camera rebasing, native game insertion and rendered equivalence remain unfinished or unverified; enchantment/foil metadata alone cannot supply them.",
+    "Scheduling the serialized artwork/geometry helpers and optional uploader only under the actual native GPU input/phase/resource owner.",
+    "Source transaction wrappers now connect graphics-state restoration, world/depth checks and draw-fence owner retention. Actual native phase insertion, shared foreign-model interleaving, complete resource ownership and runtime validation remain unfinished; no engine lease or automatic suppression authority is supplied.",
+    "Shader compilation, Java ImageIO/JNI pixel agreement, EQUAL-depth raster equivalence, sampler/blend accuracy, full armor/emote rendering, replay/export and 1:1 runtime parity verification."
+  ],
+  "verified": {"built":false,"tested":false,"jniRoundTrip":false,"shaderCompiled":false,"pipelineCreated":false,"gpuUploaded":false,"gpuRecorded":false,"gpuExecuted":false,"liveGame":false,"deterministicVideo":false,"fullParity":false}
+}

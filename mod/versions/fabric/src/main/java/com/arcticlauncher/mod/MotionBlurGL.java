@@ -17,6 +17,7 @@ import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.opengl.GL33;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Motion blur before 26.1 (26.1+ uses a post effect in the client's pack): right after the world is
  * drawn, the previous frame is blended over the new one at the chosen strength, and the result is
@@ -175,7 +176,7 @@ public final class MotionBlurGL {
 		// 1.17+ runs a core OpenGL 3.2 context: a fullscreen triangle with a tiny shader.
 		if (program == 0) {
 			program = makeProgram();
-			prevUniform = GL20.glGetUniformLocation(program, "Prev");
+			prevUniform = GL20.glGetUniformLocation(program, Lang.t("platform.prev"));
 			vertexArray = GL30.glGenVertexArrays();
 		}
 		GL20.glUseProgram(program);

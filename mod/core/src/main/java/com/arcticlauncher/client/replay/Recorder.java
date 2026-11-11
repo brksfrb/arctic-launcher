@@ -14,6 +14,7 @@ import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import java.util.zip.*;
 
+import com.arcticlauncher.client.Lang;
 /** A rolling replay buffer and an independent, explicitly started recording. Packet writes are serialized; immutable snapshots are saved separately. */
 public final class Recorder {
 	static final String PACKETS_ENTRY = "recording.tmcpr";
@@ -80,7 +81,7 @@ public final class Recorder {
 				} catch (InterruptedException e) {
 					return;
 				} catch (Throwable t) {
-					log.accept("replay writer: " + t);
+					log.accept("replay writer: " + t); // i18n-ignore
 				}
 			}
 		}, "arctic-replay-writer");
@@ -161,7 +162,7 @@ public final class Recorder {
 		private long pending;
 
 		Take(String server, boolean singleplayer, int protocol, String mcVersion) {
-			this.server = server == null ? "Unknown" : server;
+			this.server = server == null ? Lang.t("replay.unknown") : server;
 			this.singleplayer = singleplayer;
 			this.protocol = protocol;
 			this.mcVersion = mcVersion;
@@ -182,7 +183,7 @@ public final class Recorder {
 			if (ended || failed || data == null) return;
 			if (pending + data.length > MAX_PENDING_BYTES) {
 				failed = true;
-				tasks.add(() -> fail("replay data arrived faster than it could be processed (64 MB queued); recording stopped to protect game memory"));
+				tasks.add(() -> fail(Lang.t("replay.replay_data_arrived_faster_than_it_could_be")));
 				return;
 			}
 			final int t = time();
@@ -258,7 +259,7 @@ public final class Recorder {
 							});
 						} catch (IOException | RuntimeException e) {
 							if (next != null) next.delete();
-							tasks.add(() -> { compacting = false; if (!ended && !failed) fail("buffer cleanup failed: " + e); });
+							tasks.add(() -> { compacting = false; if (!ended && !failed) fail("buffer cleanup failed: " + e); }); // i18n-ignore
 						} finally { for (Stream stream : prefix) stream.release(); }
 					});
 				}
@@ -268,8 +269,8 @@ public final class Recorder {
 				checkedAt = t;
 				ring.flush();
 				if (manual != null) { manual.flush(); manualDiskBytes = manual.diskBytes(); }
-				if (tempDir.getUsableSpace() < minFreeBytes) fail("less than 512 MB of disk space remains");
-				else if (ring.diskBytes() > maxBytes) fail("the replay's world data is too large for the temporary buffer");
+				if (tempDir.getUsableSpace() < minFreeBytes) fail(Lang.t("replay.less_than_512_mb_of_disk_space_remains"));
+				else if (ring.diskBytes() > maxBytes) fail(Lang.t("replay.the_replays_world_data_is_too_large_for_the"));
 			}
 		}
 
@@ -277,7 +278,7 @@ public final class Recorder {
 			if (ended) return false;
 			final int at = failed ? latest : time();
 			final int from = Math.max(0, at - clipSeconds.getAsInt() * 1000);
-			tasks.add(() -> saveLater(ring, from, at, "Clip", thumbnail, done));
+			tasks.add(() -> saveLater(ring, from, at, Lang.t("replay.clip"), thumbnail, done));
 			return true;
 		}
 		private synchronized boolean startRecording(Consumer<File> done) {
@@ -308,7 +309,7 @@ public final class Recorder {
 			Consumer<File> done = manualDone;
 			manual = null;
 			manualDone = null;
-			saveLater(stream, 0, Math.max(0, at - manualBase), "Recording", null, done);
+			saveLater(stream, 0, Math.max(0, at - manualBase), Lang.t("replay.recording"), null, done);
 			if (stream != null) stream.delete();
 		}
 		public synchronized void end() {
@@ -326,8 +327,8 @@ public final class Recorder {
 		private void fail(String why) {
 			failed = true;
 			recording = false;
-			log.accept("replay: stopped: " + why);
-			notice("Replay buffer stopped", why + ". Saved clips are safe.");
+			log.accept("replay: stopped: " + why); // i18n-ignore
+			notice(Lang.t("replay.replay_buffer_stopped"), why + Lang.t("replay.saved_clips_are_safe"));
 			if (manual != null) finishManual(time());
 		}
 		private void saveLater(Stream stream, int from, int to, String kind, byte[] thumbnail, Consumer<File> done) {
@@ -349,7 +350,7 @@ public final class Recorder {
 						for (Stream stream : streams) stream.release();
 					}
 				});
-			} catch (IOException e) { log.accept("replay: snapshot failed: " + e); if (done != null) done.accept(null); }
+			} catch (IOException e) { log.accept("replay: snapshot failed: " + e); if (done != null) done.accept(null); } // i18n-ignore
 		}
 		private File save(Snapshot stream, int from, int to, String kind, byte[] thumbnail) {
 			if (stream == null || stream.packetBytes == 0) return null;
@@ -392,7 +393,7 @@ public final class Recorder {
 				Files.move(part.toPath(), out.toPath(), StandardCopyOption.REPLACE_EXISTING);
 				return out;
 			} catch (IOException | RuntimeException e) {
-				part.delete(); log.accept("replay: save failed: " + e); return null;
+				part.delete(); log.accept("replay: save failed: " + e); return null; // i18n-ignore
 			}
 		}
 	}

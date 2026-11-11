@@ -13,6 +13,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
+import com.arcticlauncher.client.Lang;
 /** A bounded frame mailbox feeding one real-time encoder; saved clips only remux compressed segments. */
 final class LiveVideoSession {
 	private static final Gson JSON = new Gson();
@@ -54,7 +55,7 @@ final class LiveVideoSession {
 		writer.setDaemon(true); writer.setPriority(Thread.MIN_PRIORITY); writer.start();
 	}
 	static int pending() { return PENDING.get(); }
-	String description() { return height + "p / " + fps + " FPS · " + (codec.equals("libx264") ? "2 encoder threads" : "hardware encoder"); }
+	String description() { return height + "p / " + fps + Lang.t("replay.fps") + (codec.equals("libx264") ? "2 encoder threads" : "hardware encoder"); }
 	String error() { return failure; }
 	int fps() { return fps; }
 	int height() { return height; }
@@ -83,12 +84,12 @@ final class LiveVideoSession {
 	void audio(AudioEvent event) {
 		if (finishing) return;
 		AudioEvent copy = event.at(event.time, 0); copy.time = (int) (seconds() * 1000);
-		if (!audioEvents.offer(copy)) fail("The video encoder couldn't keep up with game audio");
+		if (!audioEvents.offer(copy)) fail(Lang.t("replay.the_video_encoder_couldnt_keep_up_with_game"));
 	}
-	void clip(int seconds) { double to = seconds(); save(new Job(Math.max(oldest, Math.max(0, to - seconds)), to, output("Clip"))); }
+	void clip(int seconds) { double to = seconds(); save(new Job(Math.max(oldest, Math.max(0, to - seconds)), to, output(Lang.t("replay.clip")))); }
 	synchronized void startRecording() {
 		if (manual != null) return;
-		manual = new Job(seconds(), -1, output("Recording"));
+		manual = new Job(seconds(), -1, output(Lang.t("replay.recording")));
 		Job begun = manual;
 		saves.execute(() -> { try { persist(begun); } catch (IOException e) { fail(e.getMessage()); } });
 	}
@@ -114,8 +115,8 @@ final class LiveVideoSession {
 					Thread.sleep(50);
 				}
 				remux(dir, videos, encoder, tool, selected, job);
-				jobFile(job).delete(); notice.accept("Saved " + job.output + " · replay_videos");
-			} catch (Exception e) { notice.accept("Couldn't save MP4: " + e.getMessage()); }
+				jobFile(job).delete(); notice.accept(Lang.t("replay.saved_2") + job.output + " · replay_videos");
+			} catch (Exception e) { notice.accept(Lang.t("replay.couldnt_save_mp4") + e.getMessage()); }
 			finally { synchronized (this) { jobs.remove(job); } PENDING.decrementAndGet(); }
 		});
 	}
@@ -125,7 +126,7 @@ final class LiveVideoSession {
 		if (failure != null) return;
 		failure = reason; finish();
 		Process p = process; if (p != null) p.destroy();
-		notice.accept("Capture stopped: " + reason + ". 3D replay recording continues.");
+		notice.accept(Lang.t("replay.capture_stopped") + reason + Lang.t("replay.3d_replay_recording_continues"));
 	}
 
 	private void write() {
@@ -152,7 +153,7 @@ final class LiveVideoSession {
 			audio = new Thread(this::writeAudio, "arctic-capture-audio"); audio.setDaemon(true); audio.setPriority(Thread.MIN_PRIORITY); audio.start();
 			Thread watchdog = new Thread(() -> {
 				while (!finished) {
-					if (System.nanoTime() - writeAt > TimeUnit.SECONDS.toNanos(15)) { fail("The video encoder stopped responding"); return; }
+					if (System.nanoTime() - writeAt > TimeUnit.SECONDS.toNanos(15)) { fail(Lang.t("replay.the_video_encoder_stopped_responding")); return; }
 					try { Thread.sleep(1000); } catch (InterruptedException e) { return; }
 				}
 			}, "arctic-capture-watch"); watchdog.setDaemon(true); watchdog.start();
@@ -201,7 +202,7 @@ final class LiveVideoSession {
 				int count = (int) (((index + 1) * AudioMix.RATE / fps) - (index * AudioMix.RATE / fps));
 				out.write(mix.block(count)); index++;
 			}
-		} catch (Exception e) { if (!finished && failure == null) fail("Game audio capture failed: " + e.getMessage()); }
+		} catch (Exception e) { if (!finished && failure == null) fail(Lang.t("replay.game_audio_capture_failed") + e.getMessage()); }
 	}
 	private synchronized void prune() throws IOException {
 		double before = Math.max(0, encodedTo - retentionSeconds);
@@ -300,8 +301,8 @@ final class LiveVideoSession {
 				List<Segment> all = segments(dir);
 				if (job.to < 0 && !all.isEmpty()) job.to = all.get(all.size() - 1).to;
 				if (all.isEmpty() || all.get(all.size() - 1).to < job.to - .1) throw new IOException("Capture ended before the clip completed");
-				remux(dir, videos, encoder, tool, select(all, job), job); file.delete(); notice.accept("Recovered " + job.output);
-			} catch (Exception e) { notice.accept("Saved video needs attention: " + e.getMessage()); }
+				remux(dir, videos, encoder, tool, select(all, job), job); file.delete(); notice.accept(Lang.t("replay.recovered") + job.output);
+			} catch (Exception e) { notice.accept(Lang.t("replay.saved_video_needs_attention") + e.getMessage()); }
 			// Keep unfinished saved jobs, remove only this recorder's disposable compressed buffer.
 			File[] remaining = dir.listFiles((d, name) -> name.startsWith("save-") && name.endsWith(".json"));
 			if (remaining != null && remaining.length == 0) cleanBuffer(dir);

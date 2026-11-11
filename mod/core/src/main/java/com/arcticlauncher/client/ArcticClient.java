@@ -49,8 +49,10 @@ public final class ArcticClient {
 		com.arcticlauncher.client.looks.OsTrust.installDefault();
 		platform = p;
 		com.arcticlauncher.client.config.RunningLock.hold(p.configDir());
-		config = ClientConfig.load(p.configDir());
 		Session session = Session.read(p.configDir());
+		// Before anything builds its text (the config's defaults, HUD widgets, menus).
+		Lang.init(p, session.language);
+		config = ClientConfig.load(p.configDir());
 		applyLauncherStyle(session);
 		applyLauncherProxy(session);
 		waypoints = com.arcticlauncher.client.waypoints.Waypoints.load(p.configDir());
@@ -205,7 +207,7 @@ public final class ArcticClient {
 			}
 			hud.render(g, style(), false);
 			if (com.arcticlauncher.client.replay.Replays.recording()) {
-				String recording = "REC · " + com.arcticlauncher.client.replay.Replays.recordingStatus();
+				String recording = Lang.t("mods.rec") + com.arcticlauncher.client.replay.Replays.recordingStatus();
 				g.text(recording, 6, 6, 0xFFFF6767, true);
 			}
 		}
@@ -341,6 +343,10 @@ public final class ArcticClient {
 	}
 
 	public static void tick(boolean screenOpen) {
+		if (Lang.follow() && hud != null) {
+			// The widgets' names were worked out in the old language.
+			hud = new Hud(config);
+		}
 		com.arcticlauncher.client.replay.Replays.tick(screenOpen);
 		com.arcticlauncher.client.servers.DisconnectedPage.tick(platform);
 		if (com.arcticlauncher.client.replay.Replays.watching()) {

@@ -62,7 +62,7 @@ public final class CapeFormat {
 	}
 
 	/** Null when nothing needs painting (or the image isn't a cape strip). */
-	static BufferedImage withElytra(BufferedImage in) {
+	public static BufferedImage withElytra(BufferedImage in) {
 		int w = in.getWidth();
 		int frames = Looks.capeFrames(w, in.getHeight());
 		if (w % BASE != 0 || frames == 0) {

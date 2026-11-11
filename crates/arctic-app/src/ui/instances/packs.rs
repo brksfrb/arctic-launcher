@@ -16,7 +16,7 @@ use crate::art::icons::Icon;
 use crate::theme;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 const PAGE_SIZE: usize = 20;
 const SEARCH_DELAY: f64 = 0.35;
 const RESCAN_EVERY: f64 = 2.0;
@@ -100,7 +100,9 @@ impl ArcticApp {
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, p, Icon::Folder, "Open the folder").clicked() {
+                if widgets::icon_button(ui, p, Icon::Folder, t!("instances.open_the_folder"))
+                    .clicked()
+                {
                     let dir = instance
                         .game_dir(&self.dirs)
                         .join(self.inst.packs.kind.folder());
@@ -132,15 +134,15 @@ impl ArcticApp {
             ui.set_width(ui.available_width());
             let hint = match kind {
                 PackKind::Resource => {
-                    "Switched-on packs stack; the last one switched on is on top."
+                    t!("instances.switched_on_packs_stack_the_last_one")
                 }
                 PackKind::Shader => {
-                    "One shader at a time. Shaders run through Iris (added for you)."
+                    t!("instances.one_shader_at_a_time_shaders_run_through")
                 }
             };
             ui.label(RichText::new(hint).small().color(p.muted));
             if list.is_empty() {
-                ui.label(RichText::new("None yet: find some below.").color(p.muted));
+                ui.label(RichText::new(t!("instances.none_yet_find_some_below")).color(p.muted));
                 return;
             }
             // Grouped packs sit together under the group's name; the rest come first.
@@ -171,25 +173,31 @@ impl ArcticApp {
                     ui.label(RichText::new(&pack.file_name).color(p.text));
                     ui.label(RichText::new(size).small().color(p.muted));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if widgets::icon_button(ui, p, Icon::Trash, "Delete").clicked() {
+                        if widgets::icon_button(ui, p, Icon::Trash, t!("instances.delete"))
+                            .clicked()
+                        {
                             match packs::remove(kind, &game_dir, &pack.file_name) {
                                 Ok(()) => self.refresh_packs(instance),
                                 Err(e) => self.toasts.push(
                                     Kind::Error,
-                                    "Couldn't delete it",
+                                    t!("instances.couldnt_delete_it"),
                                     e.to_string(),
                                 ),
                             }
                         }
                         self.pack_group_menu(ui, instance, kind, &game_dir, pack, group.as_deref());
-                        let label = if pack.active { "On" } else { "Off" };
+                        let label = if pack.active {
+                            "On"
+                        } else {
+                            t!("instances.off")
+                        };
                         if widgets::button(ui, p, None, label, pack.active).clicked() {
                             match packs::set_active(kind, &game_dir, &pack.file_name, !pack.active)
                             {
                                 Ok(()) => self.refresh_packs(instance),
                                 Err(e) => self.toasts.push(
                                     Kind::Error,
-                                    "Couldn't switch it",
+                                    t!("instances.couldnt_switch_it"),
                                     e.to_string(),
                                 ),
                             }
@@ -213,10 +221,13 @@ impl ArcticApp {
         let mut choice: Option<Option<String>> = None;
         let names = self.inst.packs.groups.names(kind);
         egui::ComboBox::from_id_salt(("pack_group", &pack.file_name))
-            .selected_text(current.unwrap_or("Group"))
+            .selected_text(current.unwrap_or(t!("instances.group")))
             .width(110.0)
             .show_ui(ui, |ui| {
-                if ui.selectable_label(current.is_none(), "No group").clicked() {
+                if ui
+                    .selectable_label(current.is_none(), t!("instances.no_group"))
+                    .clicked()
+                {
                     choice = Some(None);
                 }
                 for name in &names {
@@ -230,7 +241,7 @@ impl ArcticApp {
                 ui.separator();
                 let field = ui.add(
                     widgets::text_field(&mut self.inst.packs.new_group)
-                        .hint_text("New group…")
+                        .hint_text(t!("instances.new_group"))
                         .desired_width(120.0),
                 );
                 let typed = self.inst.packs.new_group.trim().to_owned();
@@ -247,9 +258,11 @@ impl ArcticApp {
             groups.set(kind, &pack.file_name, group.as_deref());
             match groups.save(game_dir) {
                 Ok(()) => self.refresh_packs(instance),
-                Err(e) => self
-                    .toasts
-                    .push(Kind::Error, "Couldn't save the group", e.to_string()),
+                Err(e) => self.toasts.push(
+                    Kind::Error,
+                    t!("instances.couldnt_save_the_group"),
+                    e.to_string(),
+                ),
             }
         }
     }
@@ -259,8 +272,8 @@ impl ArcticApp {
         let mut search = false;
         crate::widgets::row(ui, |ui| {
             let hint = match self.inst.packs.kind {
-                PackKind::Resource => "Search resource packs on Modrinth",
-                PackKind::Shader => "Search shaders on Modrinth",
+                PackKind::Resource => t!("instances.search_resource_packs_on_modrinth"),
+                PackKind::Shader => t!("instances.search_shaders_on_modrinth"),
             };
             let field = ui.add(
                 widgets::text_field(&mut self.inst.packs.text)
@@ -285,7 +298,7 @@ impl ArcticApp {
             let before = self.inst.packs.sort;
             sort_combo(ui, "pack_sort", &mut self.inst.packs.sort);
             search |= self.inst.packs.sort != before;
-            search |= widgets::button(ui, p, None, "Search", true).clicked();
+            search |= widgets::button(ui, p, None, t!("instances.search"), true).clicked();
         });
         if search {
             self.inst.packs.typed_at = None;
@@ -316,16 +329,16 @@ impl ArcticApp {
             None => {
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    ui.label(RichText::new("Searching Modrinth…").color(p.muted));
+                    ui.label(RichText::new(t!("instances.searching_modrinth")).color(p.muted));
                 });
                 return;
             }
             Some(Err(e)) => {
-                ui.label(RichText::new(format!("Search failed: {e}")).color(p.error));
+                ui.label(RichText::new(tf!("instances.search_failed", e = e)).color(p.error));
                 return;
             }
             Some(Ok(page)) if page.hits.is_empty() => {
-                ui.label(RichText::new("Nothing found.").color(p.muted));
+                ui.label(RichText::new(t!("instances.nothing_found")).color(p.muted));
                 return;
             }
             Some(Ok(page)) => page.hits.clone(),
@@ -340,23 +353,32 @@ impl ArcticApp {
                         ui.horizontal(|ui| {
                             ui.label(RichText::new(&hit.title).strong().color(p.text));
                             ui.label(
-                                RichText::new(format!("by {}", hit.author))
+                                RichText::new(tf!("common.by_author", author = hit.author))
                                     .small()
                                     .color(p.muted),
                             );
                         });
                         ui.label(RichText::new(&hit.description).color(p.muted));
                         ui.label(
-                            RichText::new(format!("{} downloads", compact(hit.downloads)))
-                                .small()
-                                .color(p.muted),
+                            RichText::new(tf!(
+                                "instances.downloads",
+                                compact = compact(hit.downloads)
+                            ))
+                            .small()
+                            .color(p.muted),
                         );
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if self.inst.packs.installing.contains(&hit.project_id) {
                             ui.spinner();
-                        } else if widgets::button(ui, p, Some(Icon::Plus), "Install", true)
-                            .clicked()
+                        } else if widgets::button(
+                            ui,
+                            p,
+                            Some(Icon::Plus),
+                            t!("instances.install"),
+                            true,
+                        )
+                        .clicked()
                         {
                             self.inst.packs.installing.insert(hit.project_id.clone());
                             self.tasks.pack_install(
@@ -391,10 +413,15 @@ impl ArcticApp {
                 if done.shaders_switched_on {
                     self.update_instance(&instance_id, |i| i.shaders = true);
                 }
-                self.toasts
-                    .push(Kind::Success, format!("Installed {}", done.file), done.note);
+                self.toasts.push(
+                    Kind::Success,
+                    tf!("instances.installed_5", file = done.file),
+                    done.note,
+                );
             }
-            Err(e) => self.toasts.push(Kind::Error, "Couldn't install it", e),
+            Err(e) => self
+                .toasts
+                .push(Kind::Error, t!("instances.couldnt_install_it"), e),
         }
         if self
             .inst

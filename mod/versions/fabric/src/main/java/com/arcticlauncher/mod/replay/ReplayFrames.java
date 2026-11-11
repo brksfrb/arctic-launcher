@@ -5,6 +5,7 @@ import com.arcticlauncher.client.replay.ReplayBackend;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Reads the finished frame back from the GPU for video export and replay
  * thumbnails, handing the pixels over as they are (rows bottom first, the
@@ -25,7 +26,7 @@ final class ReplayFrames {
 		if (texture == null) {
 			return;
 		}
-		final com.mojang.renderpearl.api.buffers.GpuBuffer buffer = RenderSystem.getDevice().createBuffer(() -> "Arctic replay frame",
+		final com.mojang.renderpearl.api.buffers.GpuBuffer buffer = RenderSystem.getDevice().createBuffer(() -> Lang.t("platform.arctic_replay_frame"),
 				READ_BACK, (long) width * height * texture.getFormat().blockSize());
 		RenderSystem.getDevice().createCommandEncoder().copyTextureToBuffer(texture, buffer, 0L, () -> {
 			try (com.mojang.renderpearl.api.buffers.GpuBufferSlice.MappedView read = buffer.map(true, false)) {
@@ -38,7 +39,7 @@ final class ReplayFrames {
 		if (texture == null) {
 			return;
 		}
-		final com.mojang.blaze3d.buffers.GpuBuffer buffer = RenderSystem.getDevice().createBuffer(() -> "Arctic replay frame",
+		final com.mojang.blaze3d.buffers.GpuBuffer buffer = RenderSystem.getDevice().createBuffer(() -> Lang.t("platform.arctic_replay_frame"),
 				READ_BACK, (long) width * height * texture.getFormat().blockSize());
 		RenderSystem.getDevice().createCommandEncoder().copyTextureToBuffer(texture, buffer, 0L, () -> {
 			try (com.mojang.blaze3d.buffers.GpuBufferSlice.MappedView read = buffer.map(true, false)) {
@@ -53,11 +54,11 @@ final class ReplayFrames {
 		}
 		final com.mojang.blaze3d.systems.CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
 		//#if MC >= 1.21.11
-		final com.mojang.blaze3d.buffers.GpuBuffer buffer = RenderSystem.getDevice().createBuffer(() -> "Arctic replay frame",
+		final com.mojang.blaze3d.buffers.GpuBuffer buffer = RenderSystem.getDevice().createBuffer(() -> Lang.t("platform.arctic_replay_frame"),
 				READ_BACK, (long) width * height * texture.getFormat().pixelSize());
 		encoder.copyTextureToBuffer(texture, buffer, 0L, () -> {
 		//#else
-		final com.mojang.blaze3d.buffers.GpuBuffer buffer = RenderSystem.getDevice().createBuffer(() -> "Arctic replay frame",
+		final com.mojang.blaze3d.buffers.GpuBuffer buffer = RenderSystem.getDevice().createBuffer(() -> Lang.t("platform.arctic_replay_frame"),
 				READ_BACK, width * height * texture.getFormat().pixelSize());
 		encoder.copyTextureToBuffer(texture, buffer, 0, () -> {
 		//#endif
@@ -72,7 +73,7 @@ final class ReplayFrames {
 			return;
 		}
 		final com.mojang.blaze3d.systems.CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
-		final com.mojang.blaze3d.buffers.GpuBuffer buffer = RenderSystem.getDevice().createBuffer(() -> "Arctic replay frame",
+		final com.mojang.blaze3d.buffers.GpuBuffer buffer = RenderSystem.getDevice().createBuffer(() -> Lang.t("platform.arctic_replay_frame"),
 				com.mojang.blaze3d.buffers.BufferType.PIXEL_PACK, com.mojang.blaze3d.buffers.BufferUsage.STATIC_READ,
 				width * height * texture.getFormat().pixelSize());
 		encoder.copyTextureToBuffer(texture, buffer, 0, () -> {

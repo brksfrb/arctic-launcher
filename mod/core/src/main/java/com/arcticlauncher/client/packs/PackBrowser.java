@@ -22,6 +22,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.reflect.TypeToken;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Resource packs from Modrinth, found and installed in game: the file goes
  * into the resource pack folder and is turned on at once (the game reloads
@@ -222,10 +223,10 @@ public final class PackBrowser {
 				all.addAll(found);
 				results = Collections.unmodifiableList(all);
 				more = found.size() == PAGE;
-				status = all.isEmpty() ? "No packs match these filters. Try another category or version." : "";
+				status = all.isEmpty() ? Lang.t("looks.no_packs_match_these_filters_try_another") : "";
 			} catch (IOException | RuntimeException e) {
 				if (id == searchId) {
-					status = "Couldn't reach Modrinth: " + e.getMessage();
+					status = Lang.t("looks.couldnt_reach_modrinth") + e.getMessage();
 				}
 			} finally {
 				if (id == searchId) {
@@ -252,7 +253,7 @@ public final class PackBrowser {
 			return;
 		}
 		busy = pack.id;
-		status = "Downloading " + pack.title + "…";
+		status = Lang.t("looks.downloading") + pack.title + "…";
 		worker.execute(() -> {
 			try {
 				JsonObject file = newestFile(pack.id);
@@ -277,13 +278,13 @@ public final class PackBrowser {
 				index.put(pack.id, name);
 				saveIndex();
 				if (kind == Kind.SHADER) {
-					status = pack.title + " installed. " + (shaders.available() ? "Select Turn on to use it." : ShaderPacks.NEEDS_IRIS);
+					status = pack.title + " installed. " + (shaders.available() ? Lang.t("looks.select_turn_on_to_use_it") : Lang.t(ShaderPacks.NEEDS_IRIS));
 				} else {
 					platform.runOnGameThread(() -> platform.enableResourcePack(name));
-					status = pack.title + " is on. The game is loading it…";
+					status = pack.title + Lang.t("looks.is_on_the_game_is_loading_it");
 				}
 			} catch (IOException | RuntimeException e) {
-				status = "Couldn't install " + pack.title + ": " + e.getMessage();
+				status = Lang.t("looks.couldnt_install") + pack.title + ": " + e.getMessage();
 			} finally {
 				busy = null;
 			}

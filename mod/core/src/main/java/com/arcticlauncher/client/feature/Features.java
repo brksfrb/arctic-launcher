@@ -4,6 +4,7 @@ import com.arcticlauncher.client.GameKey;
 import com.arcticlauncher.client.Platform;
 import com.arcticlauncher.client.config.ClientConfig;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Zoom (hold), Freelook (hold) and Fullbright (toggle). Adapters ask this
  * for the FOV factor, gamma and camera angles; keys are polled each tick.
@@ -76,7 +77,7 @@ public final class Features {
 			String server = platform.server();
 			if (!server.equals(toldFreelookBanned)) {
 				toldFreelookBanned = server;
-				com.arcticlauncher.client.notice.Notices.post("Freelook is off here", "This server's rules don't allow it");
+				com.arcticlauncher.client.notice.Notices.post(Lang.t("hud.freelook_is_off_here"), Lang.t("hud.this_servers_rules_dont_allow_it"));
 			}
 		}
 		if (wantLook != freelook) {
@@ -94,8 +95,8 @@ public final class Features {
 			config.streamerMode = !config.streamerMode;
 			config.save();
 			com.arcticlauncher.client.notice.Notices.post(
-					config.streamerMode ? "Streamer mode on" : "Streamer mode off",
-					config.streamerMode ? "Your name, skin and the server are hidden on screen." : "");
+					config.streamerMode ? Lang.t("hud.streamer_mode_on") : Lang.t("hud.streamer_mode_off"),
+					config.streamerMode ? Lang.t("hud.your_name_skin_and_the_server_are_hidden_on") : "");
 		}
 		streamerKeyWasDown = streamerDown;
 		boolean emoteDown = !screenOpen && down(config.emoteKey);
@@ -160,9 +161,9 @@ public final class Features {
 	/** "Sprinting (toggled)", "Sneaking (toggled)", or null. */
 	public String movement() {
 		if (sneak.on) {
-			return "Sneaking (toggled)";
+			return Lang.t("hud.sneaking_toggled");
 		}
-		return sprint.on ? "Sprinting (toggled)" : null;
+		return sprint.on ? Lang.t("hud.sprinting_toggled") : null;
 	}
 
 	/** Press the key once to keep a control held; press again to let go. */

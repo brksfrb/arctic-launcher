@@ -17,7 +17,7 @@ use crate::art::icons::Icon;
 use crate::art::lerp_color;
 use crate::theme::Palette;
 use crate::widgets;
-
+use crate::{t, tf};
 const SKIN_CARD: [f32; 2] = [132.0, 176.0];
 const CAPE_CARD: [f32; 2] = [112.0, 168.0];
 const COSMETIC_CARD: [f32; 2] = [150.0, 170.0];
@@ -41,7 +41,7 @@ impl ArcticApp {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.add(
                         widgets::text_field(&mut self.skins.search)
-                            .hint_text("Search")
+                            .hint_text(t!("skins.search"))
                             .desired_width(200.0),
                     );
                 });
@@ -63,20 +63,22 @@ impl ArcticApp {
         let library = self.skins.view == SkinsView::Library;
         let (title, about) = if library {
             (
-                "Skins",
-                "Arctic players see the skin you pick here; others see your Minecraft skin.",
+                t!("skins.skins"),
+                t!("skins.arctic_players_see_the_skin_you_pick_here"),
             )
         } else {
             (
-                "Skin gallery",
-                "Skins Arctic players have shared, free for anyone. Click one to wear it.",
+                t!("skins.skin_gallery"),
+                t!("skins.skins_arctic_players_have_shared_free_for"),
             )
         };
         self.list_header(ui, title, about, library);
         if library {
             // Wraps instead of overlapping when the window is narrow.
             ui.horizontal_wrapped(|ui| {
-                if widgets::icon_button(ui, p, Icon::Folder, "Open skins folder").clicked() {
+                if widgets::icon_button(ui, p, Icon::Folder, t!("skins.open_skins_folder"))
+                    .clicked()
+                {
                     let dir = self.skins_dir();
                     let _ = std::fs::create_dir_all(&dir);
                     let _ = open::that_detached(&dir);
@@ -103,7 +105,7 @@ impl ArcticApp {
         crate::widgets::row(ui, |ui| {
             let field = ui.add(
                 widgets::text_field(&mut self.skins.player_name)
-                    .hint_text("Copy a player's skin by name")
+                    .hint_text(t!("skins.copy_a_players_skin_by_name"))
                     .char_limit(16)
                     .desired_width(240.0),
             );
@@ -111,7 +113,7 @@ impl ArcticApp {
             let ready = !self.skins.player_name.trim().is_empty() && !self.skins.looking_up;
             let get = ui
                 .add_enabled_ui(ready, |ui| {
-                    crate::widgets::button(ui, p, None, "Get", false)
+                    crate::widgets::button(ui, p, None, t!("skins.get"), false)
                 })
                 .inner;
             if ready && (get.clicked() || enter) {
@@ -158,10 +160,16 @@ impl ArcticApp {
                 current.skin_key.clone()
             };
             let key = mc_key.unwrap_or_else(|| super::MANNEQUIN.to_owned());
-            if self.matches_search("Minecraft skin") {
-                let tile = self.skin_tile(ui, &key, "Minecraft skin", None, !current.arctic_skin);
+            if self.matches_search(t!("skins.minecraft_skin")) {
+                let tile = self.skin_tile(
+                    ui,
+                    &key,
+                    t!("skins.minecraft_skin"),
+                    None,
+                    !current.arctic_skin,
+                );
                 if tile
-                    .on_hover_text("Your own Minecraft skin, for Arctic players too")
+                    .on_hover_text(t!("skins.your_own_minecraft_skin_for_arctic_players"))
                     .clicked()
                     && current.arctic_skin
                     && can_wear
@@ -170,8 +178,8 @@ impl ArcticApp {
                 }
             }
             // Adding one sits with the skins, where you look for it.
-            if add_card(ui, p, SKIN_CARD, "Add skin…")
-                .on_hover_text("A .png skin file (64×64 or 64×32). You can also drop files here.")
+            if add_card(ui, p, SKIN_CARD, t!("skins.add_skin"))
+                .on_hover_text(t!("skins.a_png_skin_file_64_64_or_64_32_you_can_also"))
                 .clicked()
             {
                 self.tasks.pick_skin_file();
@@ -195,9 +203,9 @@ impl ArcticApp {
         }
         ui.add_space(8.0);
         let hint = if self.skins.library.skins.is_empty() {
-            "Drop .png skin files here, add one with the + card, or copy a player's skin."
+            t!("skins.drop_png_skin_files_here_add_one_with_the")
         } else {
-            "Right-click a skin to rename, share or delete it."
+            t!("skins.right_click_a_skin_to_rename_share_or_delete")
         };
         ui.label(RichText::new(hint).small().color(p.muted));
     }
@@ -210,15 +218,15 @@ impl ArcticApp {
         let p = self.palette();
         ui.add_space(6.0);
         crate::widgets::row(ui, |ui| {
-            ui.label("Name");
+            ui.label(t!("skins.name"));
             let field = ui.add(
                 widgets::text_field(&mut name)
                     .char_limit(48)
                     .desired_width(240.0),
             );
             let enter = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            let save = crate::widgets::button(ui, p, None, "Save", false).clicked();
-            let cancel = crate::widgets::button(ui, p, None, "Cancel", false).clicked();
+            let save = crate::widgets::button(ui, p, None, t!("skins.save"), false).clicked();
+            let cancel = crate::widgets::button(ui, p, None, t!("skins.cancel"), false).clicked();
             if save || enter {
                 let trimmed = name.trim().to_owned();
                 if !trimmed.is_empty() {
@@ -239,12 +247,15 @@ impl ArcticApp {
     /// A library skin's right-click menu.
     fn skin_menu(&mut self, ui: &mut egui::Ui, entry: &SkinEntry) {
         let id = entry.id.clone();
-        if ui.button("Rename…").clicked() {
+        if ui.button(t!("skins.rename")).clicked() {
             self.skins.renaming = Some((id.clone(), entry.name.clone()));
             ui.close();
         }
         for v in [Variant::Classic, Variant::Slim] {
-            let label = format!("{} arms", v.label());
+            let label = t!(match v {
+                Variant::Classic => "skins.classic_arms",
+                Variant::Slim => "skins.slim_arms",
+            });
             if ui.radio(entry.variant == v, label).clicked() && entry.variant != v {
                 self.update_skin(&id, |e| e.variant = v);
                 ui.close();
@@ -253,8 +264,8 @@ impl ArcticApp {
         ui.separator();
         if self.can_change_minecraft_skin()
             && ui
-                .button("Set as Minecraft skin")
-                .on_hover_text("Changes your real Minecraft skin, seen by everyone")
+                .button(t!("skins.set_as_minecraft_skin"))
+                .on_hover_text(t!("skins.changes_your_real_minecraft_skin_seen_by"))
                 .clicked()
         {
             self.set_minecraft_skin(entry);
@@ -264,7 +275,7 @@ impl ArcticApp {
             ui.close();
         }
         ui.separator();
-        if ui.button("Delete").clicked() {
+        if ui.button(t!("skins.delete")).clicked() {
             self.remove_skin(&id);
             ui.close();
         }
@@ -316,7 +327,14 @@ impl ArcticApp {
                 ctx.request_repaint();
             }
         }
-        card_label(ui, p, rect, name, worn.then_some("Wearing"), hover);
+        card_label(
+            ui,
+            p,
+            rect,
+            name,
+            worn.then_some(t!("skins.wearing")),
+            hover,
+        );
         worn_frame(ui, p, rect, worn);
         response.on_hover_cursor(egui::CursorIcon::PointingHand)
     }
@@ -326,8 +344,8 @@ impl ArcticApp {
     pub(super) fn capes_header(&mut self, ui: &mut egui::Ui) {
         self.list_header(
             ui,
-            "Capes",
-            "Arctic players see an Arctic cape; without one, your Minecraft cape shows.",
+            t!("skins.capes"),
+            t!("skins.arctic_players_see_an_arctic_cape_without"),
             true,
         );
     }
@@ -342,7 +360,7 @@ impl ArcticApp {
     fn arctic_capes(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         let Some(state) = self.catalog_state() else {
-            ui.label(RichText::new("Arctic capes are loading.").color(p.muted));
+            ui.label(RichText::new(t!("skins.arctic_capes_are_loading")).color(p.muted));
             return;
         };
         let all_presets = state.presets.clone();
@@ -364,7 +382,15 @@ impl ArcticApp {
         let mut upload = false;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(GAP, GAP);
-            let r = cape_card(ui, p, None, Icon::Close, "No cape", None, worn.is_none());
+            let r = cape_card(
+                ui,
+                p,
+                None,
+                Icon::Close,
+                t!("skins.no_cape"),
+                None,
+                worn.is_none(),
+            );
             if r.hovered() {
                 self.skins.hover = Some(Hover::Cape(None));
             }
@@ -374,9 +400,8 @@ impl ArcticApp {
             let mut hovered_card = None;
             // Your own, up front: add one, then the ones you've added (newest first).
             if can_wear {
-                let r = add_card(ui, p, CAPE_CARD, "Your own…").on_hover_text(
-                    "Use your own cape image: 64×32 up to 1024×512; stack up to 32 frames (12288 pixels tall) to animate it, at 8 frames a second. It stays here to wear again.",
-                );
+                let r = add_card(ui, p, CAPE_CARD, t!("skins.your_own"))
+                    .on_hover_text(t!("skins.use_your_own_cape_image_64_32_up_to_1024_512"));
                 if r.clicked() {
                     upload = true;
                 }
@@ -388,8 +413,16 @@ impl ArcticApp {
                 let key = format!("acape:{hash}");
                 let tex = self.cape_card_texture(&ctx, &key, None, now);
                 let active = worn.as_deref() == Some(hash.as_str());
-                let r = cape_card(ui, p, tex, Icon::Close, &format!("Your cape {}", own.len() - i), None, active)
-                    .on_hover_text("Right-click to take it off this list");
+                let r = cape_card(
+                    ui,
+                    p,
+                    tex,
+                    Icon::Close,
+                    &tf!("skins.your_cape", i = own.len() - i),
+                    None,
+                    active,
+                )
+                .on_hover_text(t!("skins.right_click_to_take_it_off_this_list"));
                 if r.hovered() {
                     self.skins.hover = Some(Hover::Cape(Some(key.clone())));
                     hovered_card = Some(key.clone());
@@ -398,7 +431,7 @@ impl ArcticApp {
                     wear_own = Some(hash.clone());
                 }
                 r.context_menu(|ui| {
-                    if ui.button("Remove from my capes").clicked() {
+                    if ui.button(t!("skins.remove_from_my_capes")).clicked() {
                         forget_own = Some(hash.clone());
                         ui.close();
                     }
@@ -411,7 +444,8 @@ impl ArcticApp {
             if let Some(hash) = custom {
                 let key = format!("acape:{hash}");
                 let tex = self.cape_card_texture(&ctx, &key, None, now);
-                if cape_card(ui, p, tex, Icon::Close, "Your cape", None, true).hovered() {
+                if cape_card(ui, p, tex, Icon::Close, t!("skins.your_cape_2"), None, true).hovered()
+                {
                     hovered_card = Some(key);
                 }
             }
@@ -470,11 +504,11 @@ impl ArcticApp {
             .profile
             .capes
             .iter()
-            .map(|c| (c.id.clone(), c.alias.clone(), c.state == "ACTIVE"))
+            .map(|c| (c.id.clone(), c.alias.clone(), c.state == "ACTIVE")) // i18n-ignore
             .collect();
         let none_active = !capes.iter().any(|c| c.2);
         ui.horizontal(|ui| {
-            section_label(ui, p, "Minecraft capes · seen by everyone");
+            section_label(ui, p, t!("skins.minecraft_capes_seen_by_everyone"));
             if self.skins.busy {
                 ui.spinner();
             }
@@ -483,7 +517,16 @@ impl ArcticApp {
         let mut pick: Option<Option<String>> = None;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(GAP, GAP);
-            if cape_card(ui, p, None, Icon::Close, "None", None, none_active).clicked()
+            if cape_card(
+                ui,
+                p,
+                None,
+                Icon::Close,
+                t!("skins.none"),
+                None,
+                none_active,
+            )
+            .clicked()
                 && !none_active
             {
                 pick = Some(None);
@@ -565,9 +608,9 @@ impl ArcticApp {
     /// (replacing what's in that slot) or takes it off.
     pub(super) fn cosmetics_header(&mut self, ui: &mut egui::Ui, slot: &'static str) {
         let hint = if self.arctic_state().is_some() {
-            "One per slot. Point at one to try it on; click to wear it, again to take it off."
+            t!("skins.one_per_slot_point_at_one_to_try_it_on_click")
         } else {
-            "Point at one to try it on. Add an account to wear it."
+            t!("skins.point_at_one_to_try_it_on_add_an_account_to")
         };
         self.list_header(ui, slot_name(slot), hint, true);
     }
@@ -575,7 +618,7 @@ impl ArcticApp {
     pub(super) fn cosmetics_body(&mut self, ui: &mut egui::Ui, slot: &'static str) {
         let p = self.palette();
         let Some(entries) = self.catalog_state().map(cosmetic_entries) else {
-            ui.label(RichText::new("Cosmetics are loading.").color(p.muted));
+            ui.label(RichText::new(t!("skins.cosmetics_are_loading")).color(p.muted));
             return;
         };
         let can_wear = self.arctic_state().is_some();
@@ -587,7 +630,7 @@ impl ArcticApp {
             .filter(|e| slot_key(&e.slot) == slot && self.matches_search(&e.name))
             .collect();
         if items.is_empty() {
-            ui.label(RichText::new("Nothing here yet.").color(p.muted));
+            ui.label(RichText::new(t!("skins.nothing_here_yet")).color(p.muted));
             return;
         }
         if let Some(on) = items.iter().find(|e| worn_ids.contains(&e.id)) {
@@ -657,7 +700,7 @@ impl ArcticApp {
         match slot {
             "face" => {
                 widgets::row(ui, |ui| {
-                    ui.label(RichText::new(format!("Fit {name}")).color(p.text));
+                    ui.label(RichText::new(tf!("skins.fit", name = name)).color(p.text));
                     ui.add_space(8.0);
                     let step = |ui: &mut egui::Ui, label: &str, enabled: bool| {
                         ui.add_enabled_ui(enabled, |ui| widgets::button(ui, p, None, label, false))
@@ -667,21 +710,21 @@ impl ArcticApp {
                     if step(ui, "Up", fit.up < FIT_UP) {
                         next.up += 1;
                     }
-                    if step(ui, "Down", fit.up > -FIT_UP) {
+                    if step(ui, t!("skins.down"), fit.up > -FIT_UP) {
                         next.up -= 1;
                     }
-                    if step(ui, "Closer", fit.forward < FIT_FORWARD) {
+                    if step(ui, t!("skins.closer"), fit.forward < FIT_FORWARD) {
                         next.forward += 1;
                     }
-                    if step(ui, "Farther", fit.forward > -FIT_FORWARD) {
+                    if step(ui, t!("skins.farther"), fit.forward > -FIT_FORWARD) {
                         next.forward -= 1;
                     }
-                    if step(ui, "Reset", !fit.is_default()) {
+                    if step(ui, t!("skins.reset"), !fit.is_default()) {
                         next = Fit::default();
                     }
                 });
                 ui.label(
-                    RichText::new("Moves it half a pixel at a time, to sit on your skin's eyes.")
+                    RichText::new(t!("skins.moves_it_half_a_pixel_at_a_time_to_sit_on"))
                         .small()
                         .color(p.muted),
                 );
@@ -692,7 +735,10 @@ impl ArcticApp {
                     if widgets::switch(ui, p, &mut other).changed() {
                         next.mirror = other;
                     }
-                    ui.label(RichText::new(format!("{name} on the other shoulder")).color(p.text));
+                    ui.label(
+                        RichText::new(tf!("skins.on_the_other_shoulder", name = name))
+                            .color(p.text),
+                    );
                 });
             }
             _ => return,
@@ -843,7 +889,11 @@ fn cape_card(
             crate::art::icons::draw(ui.painter(), empty_icon, r, p.muted);
         }
     }
-    let badge = if active { Some("Wearing") } else { badge };
+    let badge = if active {
+        Some(t!("skins.wearing"))
+    } else {
+        badge
+    };
     card_label(ui, p, rect, name, badge, hover);
     worn_frame(ui, p, rect, active);
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -1016,7 +1066,14 @@ fn cosmetic_card(
                 .circle_filled(model_rect.center(), 4.0, p.muted);
         }
     }
-    card_label(ui, p, rect, name, worn.then_some("Wearing"), hover);
+    card_label(
+        ui,
+        p,
+        rect,
+        name,
+        worn.then_some(t!("skins.wearing")),
+        hover,
+    );
     worn_frame(ui, p, rect, worn);
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }

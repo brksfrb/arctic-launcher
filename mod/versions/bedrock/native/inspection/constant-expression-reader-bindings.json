@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "profiles": [
+    {
+      "productVersion": "1.26.5203.0",
+      "tableRva": 243099744,
+      "methods": [
+        30372064,
+        30308960,
+        673424,
+        542880,
+        30309280,
+        30309408,
+        30309760,
+        486336,
+        486336,
+        542880,
+        542880,
+        486432,
+        30309776,
+        486432,
+        30309840,
+        486432
+      ],
+      "cloneRva": 30308960,
+      "cloneBytes": 229,
+      "cloneSha256": "8e368ac90b49b9c3a93c60c75d68d7f3b264b4df237171bb2f121eb45d5c845b",
+      "tableLeaRva": 30309029,
+      "evalRva": 673424,
+      "objectReadBytes": 24,
+      "valueTagOffset": 8,
+      "valueHashOffset": 16,
+      "hashTag": 1,
+      "expressionBytes": 16,
+      "expressionVariantOffset": 8
+    },
+    {
+      "productVersion": "1.26.60.5",
+      "tableRva": 253523072,
+      "methods": [
+        66578784,
+        66477152,
+        497008,
+        541968,
+        66477472,
+        66477600,
+        66477952,
+        485616,
+        485616,
+        541968,
+        541968,
+        485664,
+        66477968,
+        485664,
+        66478032,
+        485664
+      ],
+      "cloneRva": 66477152,
+      "cloneBytes": 228,
+      "cloneSha256": "03459ea89df608ad059aba01a84232e6ebe180506428079aa36901281d0f2de6",
+      "tableLeaRva": 66477221,
+      "evalRva": 497008,
+      "objectReadBytes": 24,
+      "valueTagOffset": 8,
+      "valueHashOffset": 16,
+      "hashTag": 1,
+      "expressionBytes": 16,
+      "expressionVariantOffset": 8
+    }
+  ]
+}

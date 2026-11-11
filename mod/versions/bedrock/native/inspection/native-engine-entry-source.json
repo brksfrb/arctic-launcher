@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "purpose": "World, actor dispatcher and completed-level-tick entry source migration",
+  "source": [
+    "../src/native_engine_entry_profile.rs",
+    "../src/world_hooks.rs",
+    "../src/native_scene_layout.rs"
+  ],
+  "bindings": "engine-entry-bindings.json",
+  "nativeEvidence": "static-engine-entry-layout-1.26.60.5.json",
+  "nativeFacts": {
+    "world": "Old 47f8570..47f9907 maps to 535f980..5360723. Both retain renderer RCX, screen RDX and frame R8 in their prologues. The local stack changes from 248 to 1f8. The independently hashed native callers at 4be360..4bf2ce and 4e0b490..4e0beed each make two actual three-argument E8 calls; their sites are 4be66d/4be899 and 4e0b730/4e0b87c. Neither caller consumes a return value from these world calls.",
+    "actor": "Old 1d51250..1d51746 maps to 594be00..594c2fa. Both push eight nonvolatile general registers, reserve e8 bytes and address RBP as RSP+80. The native position and rotation pointers are read from RBP+d0/d8, corresponding to entry stack+28/+30. The seventh argument is read with MOVZX byte at RBP+e0, corresponding to entry stack+38, at 1d513bf/594bf6f. The callback and trampoline therefore use u8, retaining all bits during native forwarding; only the copied ignore-lighting sample becomes a boolean.",
+    "levelClass": "Old class initializer 12efdf0..12f169e installs Level table e7adab0 using its RIP-relative LEA at 12efe65. The current initializer 6b89270..6b8ab16 installs table f2ce790 using the LEA at 6b892e6. Both actual table slots cc0 name the matching completed-tick entry: 12f4b70..12f5068 and 6b8d550..6b8da49. The complete initializer and tick bytes, actual LEA target and rebased tick slot are all joined before hook creation. No virtual method or initializer is invoked by admission.",
+    "scope": "These entry/caller/class facts do not migrate the actor, camera, ECS, scene, material, native allocation or world-work readers. The newer image remains inactive until all selected dependencies and its whole-image profile agree. Runtime rendering and tick semantics remain unverified."
+  },
+  "contract": {
+    "acceptedCompleteImageAndSceneFamilyRequired": true,
+    "acceptedPeImageSizeMustMatchEntryFamily": true,
+    "fiveCompleteFunctionsHashedBeforeAnyCoreDetour": true,
+    "twoWorldCallEdgesRecheckedWithinHashedCaller": true,
+    "levelClassInitializerLeaMustTargetSelectedConcreteTable": true,
+    "rebasedConcreteLevelTickSlotMustNameHashedTickEntry": true,
+    "legacyManifestTargetsMustAgreeWithIndependentlyAdmittedEntries": true,
+    "allNativeArgumentsForwardedUnchangedExactlyOnce": true,
+    "actorSeventhArgumentRetainsAllEightBits": true,
+    "onlyCopiedActorLightingSampleIsNormalizedToBoolean": true,
+    "partialCoreEnablementCallbacksOnlyForward": true,
+    "worldActorAndTickObservationsRequireAllThreeCoreHooks": true,
+    "existingForwardingFixtureSignatureAdaptedButNotRun": true,
+    "privateNativeMethodsInvokedByAdmission": false,
+    "sceneGpuOrFeaturePhaseOwnershipCreated": false
+  },
+  "sourceImplemented": true,
+  "coreEntryHookSourceMigrationImplemented": true,
+  "currentCandidateActivated": false,
+  "currentSceneDependencyMigrationComplete": false,
+  "runtimeVerified": false,
+  "fullParity": false,
+  "remaining": [
+    "Complete current actor, camera, ECS, scene, terrain and material readers",
+    "Actual native feature-phase producer and custom world-geometry insertion",
+    "Native resource, backing allocation and descriptor lifetime ownership",
+    "Complete live cosmetics, cape/emote rendering and deterministic replay/video export"
+  ],
+  "operations": {
+    "cachedBytesReadAsData": true,
+    "gameOpened": false,
+    "gameCodeExecuted": false,
+    "processInspected": false,
+    "buildExecuted": false,
+    "testsExecuted": false
+  },
+  "liveClientReaderSourceEvidence": "native-live-client-reader-source.json",
+  "liveClientReaderSourceMigrationImplemented": true
+}

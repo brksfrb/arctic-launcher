@@ -37,6 +37,8 @@ pub enum Icon {
     Share,
     /// Arrow down into a tray.
     Import,
+    /// A block seen from a corner (Bedrock Edition).
+    Cube,
 }
 
 /// Draw `icon` centered in `rect` (square-ish, ~16-24 px works best).
@@ -290,6 +292,24 @@ pub fn draw(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
         Icon::Stop => {
             let r = Rect::from_center_size(c, vec2(1.1, 1.1) * s);
             painter.rect_filled(r, 2.0, color);
+        }
+        Icon::Cube => {
+            let (top, left, right) = (vec2(0.0, -0.8), vec2(-0.72, -0.4), vec2(0.72, -0.4));
+            let middle = vec2(0.0, 0.0);
+            poly(
+                &[
+                    top,
+                    right,
+                    right + vec2(0.0, 0.82),
+                    middle + vec2(0.0, 0.82),
+                    left + vec2(0.0, 0.82),
+                    left,
+                ],
+                true,
+            );
+            line(left, middle);
+            line(right, middle);
+            line(middle, middle + vec2(0.0, 0.82));
         }
     }
 }

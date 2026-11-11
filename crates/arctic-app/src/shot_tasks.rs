@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::tasks::{Event, Tasks};
-
+use crate::{t, tf};
 const THUMB_W: u32 = 480;
 
 impl Tasks {
@@ -25,8 +25,8 @@ impl Tasks {
     pub fn pick_backdrop(&self) {
         self.run(|t| {
             let picked = rfd::FileDialog::new()
-                .set_title("Choose a background picture")
-                .add_filter("Picture", &["png", "jpg", "jpeg", "webp", "bmp"])
+                .set_title(t!("tasks.choose_a_background_picture"))
+                .add_filter(t!("tasks.picture"), &["png", "jpg", "jpeg", "webp", "bmp"])
                 .pick_file();
             t.note_if_picker_missing(&picked);
             t.send(Event::BackdropPicked(picked));
@@ -64,7 +64,7 @@ fn copy_image(path: &Path) -> Result<(), String> {
             Err(e) => last = e.to_string(),
         }
     }
-    Err(format!("the clipboard is busy ({last})"))
+    Err(tf!("tasks.the_clipboard_is_busy", last = last))
 }
 
 /// A small PNG of the screenshot, from the cache when it's still current.

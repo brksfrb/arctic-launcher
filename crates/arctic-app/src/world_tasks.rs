@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use arctic_core::worlds::{self, World};
 
 use crate::tasks::{Event, Tasks};
-
+use crate::{t, tf};
 impl Tasks {
     /// Copy world folders into `saves`.
     pub fn import_worlds(&self, instance_id: String, worlds: Vec<PathBuf>, saves: PathBuf) {
@@ -21,8 +21,8 @@ impl Tasks {
             let result = match (imported, error) {
                 (0, Some(e)) => Err(e),
                 (n, _) => Ok(match n {
-                    1 => "Imported 1 world".to_owned(),
-                    n => format!("Imported {n} worlds"),
+                    1 => t!("tasks.imported_1_world").to_owned(),
+                    n => tf!("tasks.imported_worlds", n_value = n),
                 }),
             };
             t.send(Event::WorldsDone(instance_id, result));
@@ -33,14 +33,14 @@ impl Tasks {
     pub fn import_world_zip(&self, instance_id: String, saves: PathBuf) {
         self.run(move |t| {
             let picked = rfd::FileDialog::new()
-                .set_title("Choose a world archive")
-                .add_filter("World archive", &["zip"])
+                .set_title(t!("tasks.choose_a_world_archive"))
+                .add_filter(t!("tasks.world_archive"), &["zip"])
                 .pick_file();
             t.note_if_picker_missing(&picked);
             let result = match picked {
-                None => Ok("No file chosen".to_owned()),
+                None => Ok(t!("tasks.no_file_chosen").to_owned()),
                 Some(zip) => worlds::import_zip(&zip, &saves)
-                    .map(|name| format!("Imported {name}"))
+                    .map(|name| tf!("tasks.imported", name = name))
                     .map_err(|e| e.to_string()),
             };
             t.send(Event::WorldsDone(instance_id, result));
@@ -53,10 +53,11 @@ impl Tasks {
             let result = worlds::backup(&world, &backups)
                 .map(|path| {
                     let _ = open::that_detached(&backups);
-                    format!(
-                        "Backed up {} to {}",
-                        world.name,
-                        path.file_name()
+                    tf!(
+                        "tasks.backed_up_to",
+                        name = world.name,
+                        value = path
+                            .file_name()
                             .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
                     )
                 })

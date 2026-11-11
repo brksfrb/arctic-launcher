@@ -7,6 +7,7 @@ import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Button;
 import com.arcticlauncher.client.ui.Page;
 
+import com.arcticlauncher.client.Lang;
 /** Arctic's title screen, in place of Minecraft's. */
 public final class TitleMenu extends Page {
 	private static final int BUTTON_W = 200;
@@ -43,28 +44,28 @@ public final class TitleMenu extends Page {
 		int y = buttonsTop();
 		add(new Button(tr("menu.singleplayer", "Singleplayer"), run(MenuAction.SINGLEPLAYER)).primary()).bounds(left, y, BUTTON_W, BUTTON_H);
 		y += BUTTON_H + GAP;
-		add(new Button(tr("menu.multiplayer", "Multiplayer"), run(MenuAction.MULTIPLAYER))).bounds(left, y, BUTTON_W, BUTTON_H);
+		add(new Button(tr("menu.multiplayer", Lang.t("mods.multiplayer")), run(MenuAction.MULTIPLAYER))).bounds(left, y, BUTTON_W, BUTTON_H);
 		y += BUTTON_H + GAP;
-		add(new Button(tr("menu.online", "Realms"), run(MenuAction.REALMS))).bounds(left, y, BUTTON_W, BUTTON_H);
+		add(new Button(tr("menu.online", Lang.t("mods.realms")), run(MenuAction.REALMS))).bounds(left, y, BUTTON_W, BUTTON_H);
 		y += BUTTON_H + GAP * 3;
 		int third = (BUTTON_W - GAP * 2) / 3;
-		add(new Button(tr("menu.options", "Options"), run(MenuAction.OPTIONS))).bounds(left, y, third, BUTTON_H);
+		add(new Button(tr("menu.options", Lang.t("mods.options")), run(MenuAction.OPTIONS))).bounds(left, y, third, BUTTON_H);
 		add(new Button("Arctic", new Runnable() {
 			@Override
 			public void run() {
 				ArcticClient.platform().openPage(Menus.page("mods"));
 			}
 		})).bounds(left + third + GAP, y, third, BUTTON_H);
-		add(new Button(tr("menu.quit", "Quit"), run(MenuAction.QUIT))).bounds(left + (third + GAP) * 2, y, BUTTON_W - (third + GAP) * 2, BUTTON_H);
-		corner("Accessibility", MenuAction.ACCESSIBILITY, width - 6);
-		corner(tr("options.language", "Language"), MenuAction.LANGUAGE, width - 6 - 76 - GAP);
+		add(new Button(tr("menu.quit", Lang.t("mods.quit")), run(MenuAction.QUIT))).bounds(left + (third + GAP) * 2, y, BUTTON_W - (third + GAP) * 2, BUTTON_H);
+		corner(Lang.t("mods.accessibility"), MenuAction.ACCESSIBILITY, width - 6);
+		corner(tr("options.language", Lang.t("mods.language")), MenuAction.LANGUAGE, width - 6 - 76 - GAP);
 		int right = width - 6 - (76 + GAP) * 2;
 		if (com.arcticlauncher.client.replay.Replays.canWatch()) {
-			add(new Button("Replays", () -> ArcticClient.platform().openPage(Menus.page("replays")))).bounds(right - 76, 6, 76, 16);
+			add(new Button(Lang.t("mods.replays"), () -> ArcticClient.platform().openPage(Menus.page("replays")))).bounds(right - 76, 6, 76, 16);
 			right -= 76 + GAP;
 		}
 		if (ArcticClient.platform().hasFeatures()) {
-			add(new Button("Edit HUD", () -> ArcticClient.platform().openPage(new HudEditor()))).bounds(right - 76, 6, 76, 16);
+			add(new Button(Lang.t("mods.edit_hud"), () -> ArcticClient.platform().openPage(new HudEditor()))).bounds(right - 76, 6, 76, 16);
 		}
 	}
 

@@ -1,0 +1,305 @@
+{
+  "schema": 1,
+  "profiles": [
+    {
+      "productVersion": "1.26.5203.0",
+      "imageSize": 314576896,
+      "layout": {
+        "gameVtable": 242672336,
+        "primaryClients": 2416,
+        "gameRenderer": 5184,
+        "mapHead": 0,
+        "mapCount": 8,
+        "nodeLeft": 0,
+        "nodeParent": 8,
+        "nodeNil": 25,
+        "nodeKey": 32,
+        "nodeClient": 48,
+        "clientVtable": 244789680,
+        "clientGame": 424,
+        "clientMinecraft": 432,
+        "clientLevelRenderer": 448,
+        "localPlayerGetterSlot": 31,
+        "localPlayerGetterRva": 98233648,
+        "cameraGetterSlot": 43,
+        "cameraGetterRva": 98280992,
+        "weakCameraReference": 536,
+        "weakPlayerReference": 584,
+        "minecraftVtable": 243049904,
+        "minecraftSession": 200,
+        "simulationTimer": 224,
+        "realTimer": 232,
+        "simulationPauseGetterSlot": 5,
+        "simulationPauseGetterRva": 27107632,
+        "sessionAccessSlot": 6,
+        "sessionAccessRva": 27107664,
+        "sessionReady": 40,
+        "sessionActiveOwner": 48,
+        "sessionActive": 0,
+        "sessionLevel": 64
+      },
+      "functions": {
+        "gameConstructor": {
+          "rva": 7769200,
+          "bytes": 9694,
+          "sha256": "7547db58c2cd48f7e22f91725a79e1af2242d748dc2a91fdfdbc3f3f7d2b229f"
+        },
+        "gameLookup": {
+          "rva": 8513200,
+          "bytes": 244,
+          "sha256": "106d3c0bcef22925cdc226b5e98fff0943eb03cdfc4319a8e1231247481f49d7"
+        },
+        "gameRendererGetter": {
+          "rva": 8438992,
+          "bytes": 8,
+          "sha256": "f56b8225e3f967e3d1550d5034e9936bb6d4d64717858433d8b7255501613f3d"
+        },
+        "clientConstructor": {
+          "rva": 98137472,
+          "bytes": 9556,
+          "sha256": "d99d24b250ee74778ad0a1be22bbef203312084d5000f352267bf4cbcaa9948a"
+        },
+        "localPlayerGetter": {
+          "rva": 98233648,
+          "bytes": 87,
+          "sha256": "c4022ff04bea2cffc130d3de0b999df1299e30a3dcaf96ff24f28a6ba2b7ac85"
+        },
+        "cameraGetter": {
+          "rva": 98280992,
+          "bytes": 133,
+          "sha256": "9c79ca1cb9516854731ef6df425eb8c9626b13634858b4391993bad95771bcef"
+        },
+        "clientRendererGetter": {
+          "rva": 98318128,
+          "bytes": 8,
+          "sha256": "8c39853fbef49f85fb914e0fc83fa384aa03ce8004fdfc14f798ebe105b13597"
+        },
+        "clientLevelGetter": {
+          "rva": 98313776,
+          "bytes": 47,
+          "sha256": "dab36b0b0cee001925bed957e7df6b5beb65b71b9376cd34c0bc1d28b4d04383"
+        },
+        "minecraftConstructor": {
+          "rva": 27091696,
+          "bytes": 2027,
+          "sha256": "9a3cd5cf516bc68158224e9b964614f5dedec1ef98b695b1e7c298afde6f07a2"
+        },
+        "simulationPauseGetter": {
+          "rva": 27107632,
+          "bytes": 22,
+          "sha256": "0a59c0625fa56ac5b2f91272bd489644c006a6a9e44ce04295e7ee86717d529c"
+        },
+        "sessionPredicate": {
+          "rva": 27107664,
+          "bytes": 64,
+          "sha256": "3449aab685aae058b9860a18c56f47262a04e0d7f7656bdb3dfaec54f2414fbb"
+        }
+      },
+      "classes": [
+        {
+          "role": "gameConstructor",
+          "tableRva": 242672336,
+          "siteRva": 7769690
+        },
+        {
+          "role": "clientConstructor",
+          "tableRva": 244789680,
+          "siteRva": 98137712
+        },
+        {
+          "role": "minecraftConstructor",
+          "tableRva": 243049904,
+          "siteRva": 27091830
+        }
+      ],
+      "methods": [
+        {
+          "tableRva": 242672336,
+          "slot": 108,
+          "role": "gameRendererGetter"
+        },
+        {
+          "tableRva": 244789680,
+          "slot": 31,
+          "role": "localPlayerGetter"
+        },
+        {
+          "tableRva": 244789680,
+          "slot": 43,
+          "role": "cameraGetter"
+        },
+        {
+          "tableRva": 244789680,
+          "slot": 187,
+          "role": "clientRendererGetter"
+        },
+        {
+          "tableRva": 244789680,
+          "slot": 168,
+          "role": "clientLevelGetter"
+        },
+        {
+          "tableRva": 243049904,
+          "slot": 5,
+          "role": "simulationPauseGetter"
+        },
+        {
+          "tableRva": 243049904,
+          "slot": 6,
+          "role": "sessionPredicate"
+        }
+      ],
+      "runtimeVerified": false
+    },
+    {
+      "productVersion": "1.26.60.5",
+      "imageSize": 327397376,
+      "layout": {
+        "gameVtable": 252255088,
+        "primaryClients": 2512,
+        "gameRenderer": 5672,
+        "mapHead": 0,
+        "mapCount": 8,
+        "nodeLeft": 0,
+        "nodeParent": 8,
+        "nodeNil": 25,
+        "nodeKey": 32,
+        "nodeClient": 56,
+        "clientVtable": 254513968,
+        "clientGame": 456,
+        "clientMinecraft": 464,
+        "clientLevelRenderer": 480,
+        "localPlayerGetterSlot": 30,
+        "localPlayerGetterRva": 106554480,
+        "cameraGetterSlot": 42,
+        "cameraGetterRva": 106597408,
+        "weakCameraReference": 568,
+        "weakPlayerReference": 616,
+        "minecraftVtable": 252348704,
+        "minecraftSession": 208,
+        "simulationTimer": 232,
+        "realTimer": 240,
+        "simulationPauseGetterSlot": 5,
+        "simulationPauseGetterRva": 12079152,
+        "sessionAccessSlot": 6,
+        "sessionAccessRva": 12079184,
+        "sessionReady": 40,
+        "sessionActiveOwner": 48,
+        "sessionActive": 0,
+        "sessionLevel": 64
+      },
+      "functions": {
+        "gameConstructor": {
+          "rva": 8575008,
+          "bytes": 9639,
+          "sha256": "ece5a7ff9be5a63c175ac772fce342839076f6ab75c925404fdd73a049023c33"
+        },
+        "gameLookup": {
+          "rva": 9163392,
+          "bytes": 240,
+          "sha256": "e49cd47cc7a42981862fee9a4e5d8b0ac989daa8881bedbe9b8a0782bf6dcde1"
+        },
+        "gameRendererGetter": {
+          "rva": 9094368,
+          "bytes": 8,
+          "sha256": "1522bf33ce3e44c13d6a92b836452288ffaddb05a56abd8cf78301bda2a5a5a2"
+        },
+        "clientConstructor": {
+          "rva": 106461168,
+          "bytes": 9758,
+          "sha256": "b8ea84ee5e740f12ffc31d450da292ec8bdfc518c8816bb23262b7ab12c6ef49"
+        },
+        "localPlayerGetter": {
+          "rva": 106554480,
+          "bytes": 98,
+          "sha256": "3c4da5c0400a9e8645ee8f34e6459121bc78e34fe927e75b535f993fd982516e"
+        },
+        "cameraGetter": {
+          "rva": 106597408,
+          "bytes": 144,
+          "sha256": "98631c8e80fdf0b643fd0d69aa6ddbe2cd09bafae3cc6a6f1d84576c94ca2a0b"
+        },
+        "clientRendererGetter": {
+          "rva": 9090688,
+          "bytes": 8,
+          "sha256": "99df28ee12560ae02740fde419db27ee134a079d1a52b87be7d0b74ade356434"
+        },
+        "clientLevelGetter": {
+          "rva": 106627824,
+          "bytes": 47,
+          "sha256": "a019964bd30d15a8f178caefb9736ccfa88a58368530dca091d94bed0ba7017a"
+        },
+        "minecraftConstructor": {
+          "rva": 12061488,
+          "bytes": 2064,
+          "sha256": "5eaab7742ce7e327b356efdeb1e8f97f269fb8cecfa58ade3142bca0548c0388"
+        },
+        "simulationPauseGetter": {
+          "rva": 12079152,
+          "bytes": 22,
+          "sha256": "3de35348b7e59b7d58093333e03fe268a00c92715c7f9ee541b488bc40de5196"
+        },
+        "sessionPredicate": {
+          "rva": 12079184,
+          "bytes": 64,
+          "sha256": "9ca81287d6eab3efd2cf6fc4233c42996cbcc10c19a802ada21b452ccc844742"
+        }
+      },
+      "classes": [
+        {
+          "role": "gameConstructor",
+          "tableRva": 252255088,
+          "siteRva": 8575418
+        },
+        {
+          "role": "clientConstructor",
+          "tableRva": 254513968,
+          "siteRva": 106461408
+        },
+        {
+          "role": "minecraftConstructor",
+          "tableRva": 252348704,
+          "siteRva": 12061622
+        }
+      ],
+      "methods": [
+        {
+          "tableRva": 252255088,
+          "slot": 108,
+          "role": "gameRendererGetter"
+        },
+        {
+          "tableRva": 254513968,
+          "slot": 30,
+          "role": "localPlayerGetter"
+        },
+        {
+          "tableRva": 254513968,
+          "slot": 42,
+          "role": "cameraGetter"
+        },
+        {
+          "tableRva": 254513968,
+          "slot": 185,
+          "role": "clientRendererGetter"
+        },
+        {
+          "tableRva": 254513968,
+          "slot": 166,
+          "role": "clientLevelGetter"
+        },
+        {
+          "tableRva": 252348704,
+          "slot": 5,
+          "role": "simulationPauseGetter"
+        },
+        {
+          "tableRva": 252348704,
+          "slot": 6,
+          "role": "sessionPredicate"
+        }
+      ],
+      "runtimeVerified": false
+    }
+  ]
+}

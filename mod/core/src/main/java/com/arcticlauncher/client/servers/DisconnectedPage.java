@@ -12,6 +12,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.arcticlauncher.client.Lang;
 /**
  * In place of the game's "Connection lost" screen: why, and a Reconnect button; with
  * auto-reconnect on (Arctic → Reconnect), it joins again after a countdown, a few times at most.
@@ -55,7 +56,7 @@ public final class DisconnectedPage extends Page {
 	}
 
 	public DisconnectedPage(String title, String reason, Runnable vanillaScreen) {
-		this.title = title == null || title.isEmpty() ? "Connection Lost" : title;
+		this.title = title == null || title.isEmpty() ? Lang.t("servers.connection_lost") : title;
 		this.reason = reason == null ? "" : reason;
 		this.vanillaScreen = vanillaScreen;
 	}
@@ -169,23 +170,23 @@ public final class DisconnectedPage extends Page {
 		int left = width / 2 - BUTTON_W / 2;
 		int y = layout()[4];
 		if (address != null) {
-			add(new Button("Reconnect", this::reconnect).primary()).bounds(left, y, BUTTON_W, BUTTON_H);
+			add(new Button(Lang.t("servers.reconnect"), this::reconnect).primary()).bounds(left, y, BUTTON_W, BUTTON_H);
 			y += BUTTON_H + GAP;
 		}
 		// The game's own wording: "gui.toMenu" is its "Back to Server List".
-		add(new Button(tr("gui.toMenu", "Back to Server List"), () -> platform.openPage(new ServersPage()))).bounds(left, y, BUTTON_W, BUTTON_H);
+		add(new Button(tr("gui.toMenu", Lang.t("servers.back_to_server_list")), () -> platform.openPage(new ServersPage()))).bounds(left, y, BUTTON_W, BUTTON_H);
 		y += BUTTON_H + GAP;
 		// The less common ones share a row, so the page isn't a wall of buttons.
 		List<Button> small = new java.util.ArrayList<Button>();
-		small.add(new Button("Title Screen", () -> platform.openPage(ArcticClient.titleMenu())));
+		small.add(new Button(Lang.t("servers.title_screen"), () -> platform.openPage(ArcticClient.titleMenu())));
 		if (autoOn()) {
-			small.add(new Button("Stop retrying", () -> {
+			small.add(new Button(Lang.t("servers.stop_retrying"), () -> {
 				cancelled = true;
 				rebuild();
 			}));
 		}
 		if (vanillaScreen != null) {
-			small.add(new Button("Vanilla screen", vanillaScreen));
+			small.add(new Button(Lang.t("servers.vanilla_screen"), vanillaScreen));
 		}
 		int gap = 6;
 		int each = (BUTTON_W - gap * (small.size() - 1)) / small.size();
@@ -236,7 +237,7 @@ public final class DisconnectedPage extends Page {
 				reconnect();
 				return;
 			}
-			String text = "Reconnecting in " + (left < 1000 ? left + " ms" : (left + 999) / 1000 + " s") + "…";
+			String text = Lang.t("servers.reconnecting_in") + (left < 1000 ? left + " ms" : (left + 999) / 1000 + " s") + "…";
 			if (tries > 0) {
 				text += " (try " + (tries + 1) + " of " + maxTries() + ")";
 			}

@@ -12,6 +12,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import com.arcticlauncher.client.Lang;
 /** Extend the original menus without replacing their screens or existing buttons. */
 @Mixin({TitleScreen.class, MultiplayerScreen.class, DisconnectedScreen.class})
 abstract class NativeMenuMixin extends Screen {
@@ -24,16 +25,16 @@ abstract class NativeMenuMixin extends Screen {
 		arctic$actions.clear(); arctic$reconnect = null; arctic$cancel = null;
 		arctic$main = arctic$add("Arctic", () -> ArcticClient.platform().openPage(ArcticClient.arcticMenu()));
 		if ((Object) this instanceof TitleScreen) {
-			arctic$add("Replays", () -> ArcticClient.platform().openPage(com.arcticlauncher.client.menu.Menus.page("replays")));
-			arctic$add("Edit HUD", () -> ArcticClient.platform().openPage(new com.arcticlauncher.client.menu.HudEditor()));
+			arctic$add(Lang.t("platform.replays"), () -> ArcticClient.platform().openPage(com.arcticlauncher.client.menu.Menus.page("replays")));
+			arctic$add(Lang.t("platform.edit_hud"), () -> ArcticClient.platform().openPage(new com.arcticlauncher.client.menu.HudEditor()));
 		} else if ((Object) this instanceof MultiplayerScreen) {
-			arctic$add("Arctic servers", () -> com.arcticlauncher.legacy.ServerMenus.open((Screen) (Object) this));
+			arctic$add(Lang.t("platform.arctic_servers"), () -> com.arcticlauncher.legacy.ServerMenus.open((Screen) (Object) this));
 		} else {
-			arctic$add("Arctic disconnect", () -> com.arcticlauncher.legacy.ServerMenus.open((Screen) (Object) this));
+			arctic$add(Lang.t("platform.arctic_disconnect"), () -> com.arcticlauncher.legacy.ServerMenus.open((Screen) (Object) this));
 			arctic$reconnect = new com.arcticlauncher.client.servers.DisconnectedPage("", "");
 			if (arctic$reconnect.canReconnect()) {
-				arctic$add("Reconnect", arctic$reconnect::reconnect);
-				arctic$cancel = arctic$add("Cancel auto", arctic$reconnect::cancelReconnect);
+				arctic$add(Lang.t("platform.reconnect"), arctic$reconnect::reconnect);
+				arctic$cancel = arctic$add(Lang.t("platform.cancel_auto"), arctic$reconnect::cancelReconnect);
 			}
 		}
 	}

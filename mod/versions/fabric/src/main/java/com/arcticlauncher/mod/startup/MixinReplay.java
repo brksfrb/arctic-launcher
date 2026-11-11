@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.arcticlauncher.client.Lang;
 /**
  * What Mixin's setup (reading every mixin and its targets, about a second of a start) does that the game
  * needs once the classes are read back from the {@link MixinCache}: it asks each mod's Mixin plugin
@@ -152,7 +153,7 @@ public final class MixinReplay {
 					case "T" -> current.targets.add(part[1]);
 					case "A" -> current.applies.add(new String[] {part[1], part[2]});
 					default -> {
-						why = "unreadable record";
+						why = "unreadable record"; // i18n-ignore
 						return false;
 					}
 				}
@@ -167,7 +168,7 @@ public final class MixinReplay {
 				live.add(config);
 			}
 			if (live.size() != records.size()) {
-				why = "config count " + live.size() + " vs " + records.size();
+				why = "config count " + live.size() + " vs " + records.size(); // i18n-ignore
 				return false;
 			}
 			Set<String> all = new HashSet<>();
@@ -228,7 +229,7 @@ public final class MixinReplay {
 				accept.invoke(plugin, new HashSet<>(record.targets), everything);
 				accepted++;
 			}
-			did = live.size() + " configs, " + selects + " selected, " + nullHandles + " without plugin handle, " + unavailable + " without plugin, " + applied + " shouldApply calls, " + accepted + " acceptTargets calls";
+			did = live.size() + " configs, " + selects + " selected, " + nullHandles + " without plugin handle, " + unavailable + " without plugin, " + applied + " shouldApply calls, " + accepted + " acceptTargets calls"; // i18n-ignore
 			return true;
 		} catch (ReflectiveOperationException | java.io.IOException | RuntimeException e) {
 			Throwable cause = e.getCause() != null ? e.getCause() : e;

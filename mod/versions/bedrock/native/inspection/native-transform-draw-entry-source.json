@@ -1,0 +1,95 @@
+{
+  "schema": 1,
+  "purpose": "Exact-family native draw-entry observation source path; no current-build activation",
+  "nativeByteEvidence": "static-transform-component-layout-1.26.60.5.json",
+  "entries": [
+    {
+      "productVersion": "1.26.5203.0",
+      "draw": {
+        "rva": "0x1c35ff0",
+        "endRva": "0x1c37c0b",
+        "bytes": 7195,
+        "sha256": "918c355dd91fe382ef1cdf7eb7db26f79bda465f03b308eb291585e3dce77465",
+        "prefix27": "5541574156415541545657534881ec68020000488dac2480000000"
+      },
+      "callerEdges": [
+        {
+          "siteRva": "0x558e105",
+          "returnRva": "0x558e10a",
+          "targetRva": "0x1c35ff0"
+        }
+      ],
+      "rendererRva": "0x558d300",
+      "rendererTableRva": "0xe942b70",
+      "rendererSlot": 2,
+      "observation": "helperThenDraw"
+    },
+    {
+      "productVersion": "1.26.60.5",
+      "draw": {
+        "rva": "0x58b5250",
+        "endRva": "0x58b6c59",
+        "bytes": 6665,
+        "sha256": "2b1ed4a57a56f9c86f22e3ce269775592e49654cda13df1228140a179bd74f1f",
+        "prefix27": "5541574156415541545657534881ec48020000488dac2480000000"
+      },
+      "callerEdges": [
+        {
+          "siteRva": "0x5986423",
+          "returnRva": "0x5986428",
+          "targetRva": "0x58b5250"
+        }
+      ],
+      "rendererRva": "0x5985040",
+      "rendererTableRva": "0xf26a7f0",
+      "rendererSlot": 2,
+      "observation": "drawEntry"
+    }
+  ],
+  "source": [
+    "../src/native_transform_profile.rs",
+    "../src/native_transform.rs",
+    "../src/native_scene_layout.rs",
+    "../src/world_hooks.rs",
+    "1.26.5203.0.json"
+  ],
+  "contract": {
+    "originalFivePointerVoidAbiPreserved": true,
+    "originalInvokedExactlyOnce": true,
+    "completeImageAndSceneFamilyRequired": true,
+    "realE8CallerAndRendererSlotRechecked": true,
+    "allProloguesPreflightedBeforeDetourCreation": true,
+    "bindingsAndOriginalsPublishedBeforeEnablement": true,
+    "partialEnablementRollsBackEarlierMembers": true,
+    "observationsGatedUntilWholeGroupEnabled": true,
+    "actorFrameAndScopeRecheckedAfterCopies": true,
+    "modelViewProjectionCopiedFromNativeStack": true,
+    "jointMatrixSnapshotEvidence":"static-native-draw-matrix-layout-1.26.60.5.json",
+    "helperPairOptionalWithExplicitObservationSource": true,
+    "missingHelperPairReplacedByIdentityMatrices": false,
+    "olderJsonArraysAndMissingStrategyReadable": true,
+    "sceneGpuLeaseCreated": false,
+    "currentComponentFrameChangesStillRejectDownstreamReceipts": false,
+    "frameChangesRequireTypedActiveOriginalDrawScope": true,
+    "frameHandoffSourceEvidence": "native-transform-frame-handoff-source.json"
+  },
+  "remaining": [
+    "Complete current component/frame layout migration and runtime phase validation",
+    "Complete render-data and camera-stack member migration",
+    "Native scene/GPU ownership and feature insertion",
+    "Deterministic replay rendering and video export",
+    "Runtime verification when authorized"
+  ],
+  "sourceImplemented": true,
+  "currentCandidateActivated": false,
+  "fullParity": false,
+  "runtimeVerified": false,
+  "operations": {
+    "cachedEvidenceReadAsData": true,
+    "gameCodeExecuted": false,
+    "gameStarted": false,
+    "processInspected": false,
+    "built": false,
+    "tested": false
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "evidence": "Repository source reads/edits, cached Java class-data inspection and primary SDK enum documentation; no builds, tests, syntax checks, project/game code execution or Bedrock launch",
+  "reference": {
+    "version": "Java 26.2",
+    "spectator": "AvatarRenderer.shouldRenderLayers returns !isSpectator",
+    "custom": "Fabric CosmeticsLayer.submit skips worn cosmetics and drawLimbs for state.isInvisible",
+    "cape": "CapeLayer.submit returns for state.isInvisible or !state.showCape, before equipment checks",
+    "wings": "WingsLayer.submit has no isInvisible/showCape early return. getPlayerElytraTexture prefers explicit skin.elytra before its showCape-controlled cape fallback; Arctic's AbstractClientPlayerMixin installs loaded Arctic cape art as both cape and explicit elytra.",
+    "nativeFlag": "ActorFlags::Invisible = 5, cross-referenced with https://docs.levimc.org/LeviLamina/api/d5/d1b/ActorFlags_8h_source.html; the adapter already uses that flag in its copied ActorDataFlagComponent words"
+  },
+  "port": {
+    "input": "Optional WorldFrame.Player.javaLayerVisibility with numeric schema 1 and actual JSON booleans for known spectator, invisible and showCape facts. Missing/null fields stay independently unknown; strings/numbers reject. An all-unknown value canonicalizes to null.",
+    "value": "Immutable JavaLayerVisibility with independent known/value masks, separate from actor culling, skin ModelPart masks and the emote-derived cape body-parent gate",
+    "producer": "live_frame.player emits invisibility from copied component words and optional spectator state from guarded ActorGameTypeComponent copies (native-spectator-source.json). Default(5) may resolve through the exact-profile copied client-level data reader; unavailable/unrecognized modes and showCape remain unknown. Actual selected elytra draws may now publish wing observations and copied colors during invisibility. Existing native culling/body/wing suppression conditions are unchanged.",
+    "renderer": "Spectator disables cape, wing, worn and bent-skin layers. Invisible disables cape, worn and bent skin while wings retain their separate equipment path. showCape additionally controls the cape. Normal skin material and part visibility remain separate inputs.",
+    "unknown": "Legacy software/anonymous previews retain prior unknown-input behavior; missing facts cannot qualify native layer preparation",
+    "staging": "Builder resets eligibility per actor, rejects changes within a quad and rejects sinks for explicitly hidden roles. Positive eligibility requires spectator known for wings, spectator+invisible for custom/bent skin, and all three facts for capes. An unrelated unknown fact does not revoke a proven wing decision.",
+    "native": "ARCGEO06 bit 16 means supplied layer eligibility. The decoder permits it only on layer roles. Constants.from_frame and prepare_batch reject every nonempty layer draw without it; older packets decode as unknown. No other v5 payload layout changes."
+  },
+  "replay": {
+    "kind": "bedrock_body_samples_v7",
+    "magic": "0x415243424f440007",
+    "encoding": "After v6 skin visibility, strict u8 presence; if 1, u8 known mask then u8 value mask: 1 spectator, 2 invisible, 4 showCape. Known must be 1..7 and value bits must be a subset of known; other representations reject.",
+    "budget": "At most 3 additional bytes per actor sample, charged to existing 2 MiB blocks, 64 frames and 128 actors; the unexecuted/unpublished v7 source schema carries partial observations explicitly",
+    "compatibility": "Readers retain body versions 1..6; v6 has its own VISIBILITY_KIND/MAGIC alias. Mixed body tracks remain rejected.",
+    "sampling": "Exact endpoints retain both masks. Each interior fact survives only when known and equal at both endpoints; changing or missing facts become independently unknown, with no inferred transition time. Unchanged spectator state can still govern wings while invisibility changes.",
+    "selection": "World rendering and replay preview use archived facts; no viewer-live fallback. Complete appearance readiness and v7 body plans require all three recorded facts; partial records do not establish full visibility parity.",
+    "invisibleObservations": "BodyHistory, WingHistory and LayerColorHistory retain actual native-model-draw observations with all 63 available parts when either visible or explicitly observed invisible. Pose writers still require copied part matrices, and wing history requires copied wing matrices and equipped elytra. Unknown hidden actors, failed native roots and unavailable parts remain gaps. This retains copied layer facts, body references, wing curves and colors without enabling invisible-player replacement or changing archive schemas.",
+    "status": "Track availability is separate from playback verification, which remains false"
+  },
+  "remaining": [
+    "Runtime validation of inherited/default spectator resolution and a showCape producer; partial native facts do not establish complete eligibility",
+    "Complete invisible-player wing observation/replacement: existing global culling and suppression restrictions remain",
+    "Owning native material/feature-phase inputs, scene lifetime and scheduled insertion",
+    "Invisible/ghost/outline normal-skin variants and complete equipment/glint parity",
+    "Runtime layer/cape/emote and deterministic video fidelity verification"
+  ],
+  "verified": {"built": false, "tested": false, "jniRoundTrip": false, "liveGame": false, "gpuRendering": false, "deterministicVideo": false, "fullParity": false}
+}

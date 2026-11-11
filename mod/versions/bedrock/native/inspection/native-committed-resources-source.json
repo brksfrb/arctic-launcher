@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.5203.0",
+  "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "cachedDataSha256": {"rdata":"cb4769f88ab4f06fa154d97b3994761d1e35804ea2aca6d85c2de58db72cc402","data":"91ba3ece9705e666e576c51c2da2aaba127fe1023b838399bccd494674162f2d"},
+  "evidence": "Current source read, edited and manually reviewed; existing cached native text/pdata/rdata/data decoded as data and local windows 0.62.2 API definitions read. No builds, syntax checks, tests, project/game/module loading or execution, process inspection, native/API/GPU calls or exports. Runtime parity remains unverified by user instruction.",
+  "nativeFacts": {
+    "registryCaller": "df9d4a0..df9d77f resolves the b8-byte renderer+bde170 texture slot and calls dfa4fe0 at df9d63a with that slot as its first argument.",
+    "creationRoutine": "Pdata bounds dfa4fe0..dfa66fc. dfa52ca obtains the device from the global renderer's +3f8. A branch at dfa5795 chooses the ordinary route at dfa583e or a separate allocator helper route.",
+    "committedRoute": "dfa5853 loads vtable+d8. dfa585e..dfa5891 supplies an output pointer, IID, clear value, initial state, heap properties, zero heap flags and the resource description, matching the local ID3D12Device.CreateCommittedResource ABI. After successful HRESULT, dfa589f obtains the output and dfa5940 stores it at texture slot+0; dfa5943 writes slot+b2=0.",
+    "dataJoins": "The cached IID at RVA eb8d790 decodes to 696442be-a72e-4059-bc79-5b5c98040fad, ID3D12Resource. Cached heap properties at RVA 11cecd48 decode as five u32 values (1,0,0,0,0), DEFAULT with unspecified masks. The IID is in cached rdata; the heap properties are in cached data, not rdata.",
+    "allocatorRoute": "The other branch calls e014bc0 at dfa5817, stores its returned pointer at slot+0 at dfa5820 and writes slot+b2=1 at dfa582c. Pdata bounds e014bc0..e015430; its inspected prefix has mutex-protected pool/allocation selection. The ordinary cleanup conditionally invokes e016430 at df985ae before deferring the resource. No allocator acquisition ABI or exclusive owner is inferred from these observations.",
+    "interpretation": "The registry resource pointer alone cannot distinguish these paths or supply an allocation lease. The implementation instead relies on an actual successful public committed-creation result; it does not infer provenance from slot+b2 or invoke allocator helpers."
+  },
+  "source": {
+    "module": "native_committed_resources",
+    "hook": "The existing device observer now hooks the actual device's base CreateCommittedResource function, with its exact public ABI. It publishes the trampoline before hook enablement, forwards once with unchanged arguments/HRESULT, ignores failures and null validation-only outputs, excludes private Arctic commands and contains observer unwinding.",
+    "capture": "Query the real returned COM interface for ID3D12Resource and canonical IUnknown; compare its actual device's canonical identity with the intercepted device. Retain the typed resource/device, immutable description and queried allocation size for single-array/single-mip 2D render/depth targets and now bounded row-major buffers with actual numeric GPU address ranges. No registry/GPU pointer is invoked or made into a COM object.",
+    "locking": "COM queries occur before the cache mutex. Cache comparisons use already canonical numeric identities, because windows-core IUnknown.PartialEq can QueryInterface on mismatch and IUnknown itself is not the retained cross-thread typed resource. Evicted/cleared owners are moved out and released after unlocking. Observer queries run inside the existing private-command guard to exclude nested bookkeeping from command observers.",
+    "bounds": "Separate discovery pools retain at most 16 targets/256 MiB and 64 buffers/256 MiB of queried resource-allocation bytes. Buffer churn does not evict target discovery. Old discovery entries can be evicted without dropping owners already cloned into bound frames, restore snapshots or retained transactions. This is not a bound on all driver/heap overhead or the separately bounded shadow/draw pools. Disabled discovery is cleared by the existing frame collection path outside tracker/pool locks.",
+    "join": "A matched native framebuffer public-barrier resource can retain an Arc only when canonical resource/device identities and immutable description equal a still-held creation receipt. That Arc travels with the existing Witness, Attachments, Bound and retained draw-asset owner; cache eviction cannot invalidate its committed-storage reference.",
+    "pair": "Bound.committed_allocations returns both strong owners only after the existing complete color/depth pair guards pass. Unknown or one-sided provenance returns None. It is an allocation component, not a complete Cohort.native_owner or insertion authorization.",
+    "restoredBuffers": "The complete non-null graphics root-address and nonempty vertex/index view cohort can now resolve to deduplicated committed buffer owners on the actual list device and remain retained by Snapshot. Root addresses prove an allocation point, not shader read extents; see native-restore-buffer-owners-source.json. Missing/ambiguous coverage stays unknown and does not discharge the caller's lifetime contract.",
+    "diagnostics": "Stable attachment summaries report observedCommittedResourceOwner. Native queue status includes bounded retained/bytes/observed/evicted discovery counters with no addresses. Runtime/placed-owner/exclusive-lease verification remains false."
+  },
+  "remaining": [
+    "Placed/reserved/allocator-managed and newer committed-creation API variants, or resources created before hook installation, remain unknown unless separately proven. No retroactive receipt is manufactured.",
+    "Committed COM ownership pins storage lifetime only; engine pooling/content reuse, aliasing, exclusive recording, descriptor contents and unknown/placed restored GPU-address allocations still need their actual owning contracts.",
+    "Authoritative feature-phase/material inputs and a game-facing native recording caller, complete live cosmetics/cape/emote/replay integration and deterministic video export.",
+    "Build, API/ownership/handoff/rendering/race comparisons and full 1:1 parity verification."
+  ],
+  "implemented": {"publicCommittedResultOwner":true,"framebufferOwnerHandoff":true,"committedRestoreBufferOwners":true,"placedAllocatorOwner":false,"exclusiveNativeSceneLease":false,"nativeInsertionCaller":false},
+  "verified": {"built":false,"tested":false,"hookExecuted":false,"committedResourceObservedLive":false,"gpuWorldRendered":false,"deterministicVideo":false,"fullParity":false}
+}

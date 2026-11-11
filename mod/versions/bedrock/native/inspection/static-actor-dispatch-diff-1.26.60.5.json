@@ -1,0 +1,364 @@
+{
+  "schema": 1,
+  "oldRva": "0x1d51250",
+  "newCandidateRva": "0x594be00",
+  "oldInstructions": 305,
+  "newInstructions": 318,
+  "canonicalInstructionSequenceEqual": false,
+  "differences": [
+    "--- 1.26.5203.0\n",
+    "+++ 1.26.60.5\n",
+    "@@ -21,22 +21,22 @@\n",
+    " call EXTERNAL",
+    " test eax, eax",
+    "-jne L299",
+    "+jne L312",
+    " cmp dword ptr [rip ADDRESS], 0x7fffffff",
+    "-je L301",
+    "+je L314",
+    " mov rax, qword ptr [rip ADDRESS]",
+    " test rax, rax",
+    " je L36",
+    " movsx ecx, r14w",
+    "-mov edx, dword ptr [rax + 0xf65c]",
+    "+mov edx, dword ptr [rax + 0xf6b8]",
+    " inc edx",
+    "-mov dword ptr [rax + 0xf65c], edx",
+    "+mov dword ptr [rax + 0xf6b8], edx",
+    " and edx, 0x7f",
+    " shl rcx, 0x20",
+    " or rcx, 0xe",
+    "-mov qword ptr [rax + rdx*8 + 0xf664], rcx",
+    "+mov qword ptr [rax + rdx*8 + 0xf6c0], rcx",
+    " lea rcx, [rip ADDRESS]",
+    " call EXTERNAL",
+    "-cmp byte ptr [rsi + 0x269], 0",
+    "-jne L287",
+    "+cmp byte ptr [rsi + 0x289], 0",
+    "+jne L300",
+    " mov rax, qword ptr [rsi]",
+    " mov rax, qword ptr [rax + 0x228]",
+    "@@ -83,11 +83,11 @@\n",
+    " mov rbx, qword ptr [rbp - 0x40]",
+    " test rbx, rbx",
+    "-je L237",
+    "+je L246",
+    " mov r15, qword ptr [rbp + 0xd8]",
+    " mov r12, qword ptr [rbp + 0xd0]",
+    " movzx r14d, byte ptr [rbp + 0xe0]",
+    "-movzx eax, byte ptr [rsi + 0x174]",
+    "+movzx eax, byte ptr [rsi + 0x19c]",
+    " mov byte ptr [rbp + 0x37], al",
+    "-mov byte ptr [rsi + 0x174], r14b",
+    "+mov byte ptr [rsi + 0x19c], r14b",
+    " mov rcx, qword ptr [rsi + 0x10]",
+    " mov eax, dword ptr [rsi + 0x18]",
+    "@@ -139,5 +139,6 @@\n",
+    " mov rcx, rsi",
+    " call qword ptr [rip ADDRESS]",
+    "-lea rcx, [rsi + 0x370]",
+    "+nop ",
+    "+lea rcx, [rsi + 0x390]",
+    " mov qword ptr [rbp - 0x30], rsi",
+    " mov dword ptr [rbp], 0",
+    "@@ -153,5 +154,5 @@\n",
+    " movaps xmm2, xmm6",
+    " call EXTERNAL",
+    "-mov rdi, qword ptr [rsi + 0x228]",
+    "+mov rdi, qword ptr [rsi + 0x250]",
+    " movss xmm0, dword ptr [rdi + 4]",
+    " subss xmm0, dword ptr [rdi + 0xc]",
+    "@@ -171,8 +172,6 @@\n",
+    " mov eax, dword ptr [r12 + 8]",
+    " mov dword ptr [rbp - 0x18], eax",
+    "-movss xmm0, dword ptr [r15]",
+    "-movss dword ptr [rbp - 0x14], xmm0",
+    "-movss xmm0, dword ptr [r15 + 4]",
+    "-movss dword ptr [rbp - 0x10], xmm0",
+    "+movsd xmm0, qword ptr [r15]",
+    "+movsd qword ptr [rbp - 0x14], xmm0",
+    " mov byte ptr [rbp - 3], r14b",
+    " mov rax, qword ptr [rsi]",
+    "@@ -180,7 +179,9 @@\n",
+    " mov rcx, rsi",
+    " call qword ptr [rip ADDRESS]",
+    "+nop ",
+    " mov byte ptr [rbp - 4], al",
+    " mov rcx, rsi",
+    " call EXTERNAL",
+    "+nop ",
+    " mov r13d, dword ptr [rax + 0x80]",
+    " mov rax, qword ptr [rsi]",
+    "@@ -188,8 +189,10 @@\n",
+    " mov rcx, rsi",
+    " call qword ptr [rip ADDRESS]",
+    "+nop ",
+    " mov r14b, al",
+    " lea r12, [rsi + 8]",
+    " mov rcx, r12",
+    " call EXTERNAL",
+    "+nop ",
+    " mov r15b, al",
+    " mov rax, qword ptr [rsi]",
+    "@@ -197,10 +200,12 @@\n",
+    " mov rcx, rsi",
+    " call qword ptr [rip ADDRESS]",
+    "+nop ",
+    " mov edi, 8",
+    " test al, al",
+    "-jne L206",
+    "+jne L211",
+    " mov rcx, r12",
+    " mov edx, 0x1b",
+    " call EXTERNAL",
+    "+nop ",
+    " movzx edi, al",
+    " shl edi, 3",
+    "@@ -208,4 +213,5 @@\n",
+    " mov edx, 9",
+    " call EXTERNAL",
+    "+nop ",
+    " movzx ecx, r14b",
+    " movzx edx, r15b",
+    "@@ -224,4 +230,5 @@\n",
+    " mov rdx, qword ptr [rbp + 0x28]",
+    " call qword ptr [rip ADDRESS]",
+    "+nop ",
+    " mov rax, qword ptr [rbx]",
+    " mov rax, qword ptr [rax + 0x28]",
+    "@@ -230,19 +237,22 @@\n",
+    " mov rdx, qword ptr [rbp + 0x28]",
+    " call qword ptr [rip ADDRESS]",
+    "+nop ",
+    " lea rdx, [rbp - 0x30]",
+    " mov rcx, qword ptr [rbp + 0x28]",
+    " call EXTERNAL",
+    "+nop ",
+    " movzx eax, byte ptr [rbp + 0x37]",
+    "-mov byte ptr [rsi + 0x174], al",
+    "-jmp L272",
+    "+mov byte ptr [rsi + 0x19c], al",
+    "+jmp L285",
+    " mov rax, qword ptr [rsi]",
+    " mov rax, qword ptr [rax + 0x228]",
+    " mov rcx, rsi",
+    " call qword ptr [rip ADDRESS]",
+    "+nop ",
+    " mov rcx, qword ptr [rax + 0x18]",
+    " cmp qword ptr [rax + 0x20], 0x10",
+    "-jb L246",
+    "+jb L256",
+    " mov rax, qword ptr [rax + 8]",
+    "-jmp L247",
+    "+jmp L257",
+    " add rax, 8",
+    " mov qword ptr [rbp - 0x30], rax",
+    "@@ -254,7 +264,8 @@\n",
+    " lea r8, [rbp + 0x20]",
+    " call EXTERNAL",
+    "+nop ",
+    " mov rdx, qword ptr [rbp + 0x20]",
+    " bt rdx, 0x37",
+    "-jae L265",
+    "+jae L277",
+    " mov rcx, qword ptr [rip ADDRESS]",
+    " movabs rax, 0xff00ffffffffffff",
+    "@@ -264,4 +275,5 @@\n",
+    " mov rax, qword ptr [rax + 0x20]",
+    " call qword ptr [rip ADDRESS]",
+    "+nop ",
+    " lea r9, [rip ADDRESS]",
+    " mov cl, 1",
+    "@@ -269,11 +281,12 @@\n",
+    " mov r8d, 0x1a",
+    " call EXTERNAL",
+    "+nop ",
+    " lea rcx, [rbp - 0x58]",
+    " call EXTERNAL",
+    " mov rsi, qword ptr [rbp - 0x38]",
+    " test rsi, rsi",
+    "-je L287",
+    "+je L300",
+    " lock dec dword ptr [rsi + 8]",
+    "-jne L287",
+    "+jne L300",
+    " mov rax, qword ptr [rsi]",
+    " mov rax, qword ptr [rax]",
+    "@@ -281,5 +294,5 @@\n",
+    " call qword ptr [rip ADDRESS]",
+    " lock dec dword ptr [rsi + 0xc]",
+    "-jne L287",
+    "+jne L300",
+    " mov rax, qword ptr [rsi]",
+    " mov rax, qword ptr [rax + 8]"
+  ],
+  "oldExternalBranches": [
+    {
+      "instruction": "0x1d51287",
+      "kind": "call",
+      "target": "0x19f1e90"
+    },
+    {
+      "instruction": "0x1d51296",
+      "kind": "call",
+      "target": "0xe5a5020"
+    },
+    {
+      "instruction": "0x1d512eb",
+      "kind": "call",
+      "target": "0xe5a5040"
+    },
+    {
+      "instruction": "0x1d51369",
+      "kind": "call",
+      "target": "0xe5a64c0"
+    },
+    {
+      "instruction": "0x1d5139f",
+      "kind": "call",
+      "target": "0x1d563e0"
+    },
+    {
+      "instruction": "0x1d514d3",
+      "kind": "call",
+      "target": "0x1a241f0"
+    },
+    {
+      "instruction": "0x1d5155f",
+      "kind": "call",
+      "target": "0x19f1010"
+    },
+    {
+      "instruction": "0x1d51588",
+      "kind": "call",
+      "target": "0x253b310"
+    },
+    {
+      "instruction": "0x1d515b4",
+      "kind": "call",
+      "target": "0x1e144a0"
+    },
+    {
+      "instruction": "0x1d515c7",
+      "kind": "call",
+      "target": "0x1e144a0"
+    },
+    {
+      "instruction": "0x1d51624",
+      "kind": "call",
+      "target": "0x1d51870"
+    },
+    {
+      "instruction": "0x1d51680",
+      "kind": "call",
+      "target": "0x2b1180"
+    },
+    {
+      "instruction": "0x1d516c9",
+      "kind": "call",
+      "target": "0x40da90"
+    },
+    {
+      "instruction": "0x1d516d2",
+      "kind": "call",
+      "target": "0x2b14f0"
+    },
+    {
+      "instruction": "0x1d5172c",
+      "kind": "call",
+      "target": "0xe5a5030"
+    },
+    {
+      "instruction": "0x1d51740",
+      "kind": "call",
+      "target": "0xe5a5030"
+    }
+  ],
+  "newExternalBranches": [
+    {
+      "instruction": "0x594be37",
+      "kind": "call",
+      "target": "0xb9cab0"
+    },
+    {
+      "instruction": "0x594be46",
+      "kind": "call",
+      "target": "0xeec4df0"
+    },
+    {
+      "instruction": "0x594be9b",
+      "kind": "call",
+      "target": "0xeec4e10"
+    },
+    {
+      "instruction": "0x594bf19",
+      "kind": "call",
+      "target": "0xeec62b0"
+    },
+    {
+      "instruction": "0x594bf4f",
+      "kind": "call",
+      "target": "0x5950d70"
+    },
+    {
+      "instruction": "0x594c084",
+      "kind": "call",
+      "target": "0xbcda70"
+    },
+    {
+      "instruction": "0x594c106",
+      "kind": "call",
+      "target": "0xb9c600"
+    },
+    {
+      "instruction": "0x594c131",
+      "kind": "call",
+      "target": "0x2979a40"
+    },
+    {
+      "instruction": "0x594c15f",
+      "kind": "call",
+      "target": "0x3d56740"
+    },
+    {
+      "instruction": "0x594c173",
+      "kind": "call",
+      "target": "0x3d56740"
+    },
+    {
+      "instruction": "0x594c1d3",
+      "kind": "call",
+      "target": "0x594c420"
+    },
+    {
+      "instruction": "0x594c231",
+      "kind": "call",
+      "target": "0x3d2d90"
+    },
+    {
+      "instruction": "0x594c27c",
+      "kind": "call",
+      "target": "0xeaa30"
+    },
+    {
+      "instruction": "0x594c286",
+      "kind": "call",
+      "target": "0x3d3110"
+    },
+    {
+      "instruction": "0x594c2e0",
+      "kind": "call",
+      "target": "0xeec4e00"
+    },
+    {
+      "instruction": "0x594c2f4",
+      "kind": "call",
+      "target": "0xeec4e00"
+    }
+  ],
+  "method": "Linear decoded instructions; internal branches use instruction labels, external direct targets and RIP address operands normalized; registers/member offsets/non-address immediates retained",
+  "externalTargetsSemanticallyJoined": false,
+  "abiRuntimeVerified": false,
+  "nativeHookActivated": false,
+  "gameCodeExecuted": false
+}

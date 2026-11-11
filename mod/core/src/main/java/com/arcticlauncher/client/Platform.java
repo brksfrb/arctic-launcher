@@ -21,13 +21,24 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return english;
 	}
 
+	/** The game's language code ("en_us", "tr_tr"), or null when this version can't say. */
+	default String gameLanguage() {
+		return null;
+	}
+
 	File configDir();
+
+	/** Owned raw appearance files for portable replay snapshots; null when unavailable. */
+	default com.arcticlauncher.client.looks.AppearanceAssets appearanceAssets() { return null; }
 
 	void log(boolean warning, String message);
 
 	// ---- Game state -------------------------------------------------------
 
 	int fps();
+
+	/** Animation clock; replay-capable adapters may supply recorded world time. */
+	default long animationTimeMillis() { return System.currentTimeMillis(); }
 
 	/** Latency to the server in ms, or -1 in singleplayer / menus. */
 	int ping();
@@ -78,6 +89,10 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 
 	/** Zoom, Freelook, Fullbright and the other game features work on this version. */
 	boolean hasFeatures();
+	/** Individual HUD data adapters can exist before the remaining features. */
+	default boolean supportsGameWidget(String id) {return hasFeatures();}
+	/** This adapter exposes the experimental native cosmetics setting. */
+	default boolean supportsNativeCosmeticsPreview() {return false;}
 
 	/** The smooth font pack is on. */
 	boolean smoothFont();

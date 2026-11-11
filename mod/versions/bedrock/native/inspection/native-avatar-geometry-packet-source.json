@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "evidence": "Current Java and Rust sources read and edited only; no build, test, syntax check, project/game execution or process inspection",
+  "producer": {
+    "entry": "NativeBridge.worldGeometry(session,sequence)",
+    "jniSignature": "(Ljava/lang/String;J)[B",
+    "depthIndependentEntry": "NativeBridge.worldGeometryFromFrame(json,session,sequence), (Ljava/lang/String;Ljava/lang/String;J)[B; native-geometry-input-source.json documents the shared validated no-readback input path",
+    "staleResult": "null for missing/unrenderable world, unavailable current input, changed session or different world sequence",
+    "selection": "WorldFrame.emitAvatars shared with the software render path; same acknowledged appearances, emote targets, cape frames and replay selections",
+    "ownership": "One bounded builder for the entire visible actor set; shared texture identity map; owned arrays and copied pixels",
+    "actorOrder": "Canonical lowercase UUIDs in visible emission order; batch actor indices are nondecreasing",
+    "interleaving": "A sink cannot resume after a subsequent draw or actor; incomplete quads reject the transaction"
+  },
+  "wire": {
+    "magic": "ARCGEO10 for explicit known model glint observations; otherwise v9 known owned simple-phase collector output, v8 model-submit boundaries, v7 owned supported Java factory references, v6 supplied Java layer eligibility, v5 logical texture identifiers, v4 skin visibility/bent skin, v3 explicit normal skin, v2 common material or v1 material-free geometry",
+    "endian": "little",
+    "maximumBytes": 100663296,
+    "headerOrder": [
+      "8 magic bytes",
+      "session: u32 UTF-8 byte length then ASCII bytes, 1..64",
+      "world sequence u64; world clock milliseconds u64; cosmetic math time f64",
+      "replay flag u8; if 1: replay timeMs u64, remainder u32, denominator u32",
+      "width u32; height u32; coordinate space u8 (0 unknown,1 world,2 camera-relative)",
+      "dimension: u32 UTF-8 byte length then bytes, at most 256 bytes/64 UTF-16 units",
+      "camera: three f64; viewProjection: sixteen f32",
+      "equipment matrix flag u8; if 1: sixteen f32",
+      "ARCGEO02 and later: material flag u8; if 1: 1058 f32 shader/lightmap values, detailed in native-geometry-material-source.json",
+      "actor count u32; canonical UUID ASCII bytes, 36 each",
+      "batch count u32; texture count u32"
+    ],
+    "batchOrder": [
+      "actor index u16; pass u8; flags u8; texture index i32 (-1 for no texture)",
+      "tint: four f32; vertex count u32; index count u32",
+      "ARCGEO03 and later pass 6 only: four f32 body-overlay components before the vertex array",
+      "ARCGEO05 and later: logical texture ID presence u8 after any body overlay; if 1, u32 byte length plus at most 256 ASCII namespace:path bytes",
+      "ARCGEO07 and later: strict render-reference presence u8 after logical texture metadata; if 1, factory u8 then bounded positive reference u64 (java-render-type-reference-source.json)",
+      "ARCGEO08 and later: strict model-submit presence u8 after render-reference metadata; if 1, frame-local model ID u16 (1..2048), then copied root translation x/y/z f32 in the declared packet space",
+      "ARCGEO10: glint state u8 after model-submit metadata: 0 unknown, 1 explicit inactive, 2 active plus 40 f32 values (native-packet-glint-source.json); known state requires a wing model and exact state/uniform agreement across its parts",
+      "per vertex: position3 f32, normal3 f32, UV2 f32, ARGB u32, packed Java light u32",
+      "indices: u32 values with canonical Java quad pattern (0,1,2),(2,3,0) rebased per quad; empty batches preserve submit boundaries"
+    ],
+    "passIds": {"1":"general", "2":"cosmetic base", "3":"cosmetic glow", "4":"cape solid", "5":"wing cutout", "6":"explicit visible skin translucent (v3+)", "7":"bent skin using cosmetic base (v4+)"},
+    "flags": {"1":"translucent", "2":"emissive", "4":"explicit packed scene-light source; absent for preview fallback and older packets", "8":"supplied skin visibility source, only skin roles in v4+", "16":"supplied Java layer eligibility, only cosmetic/glow/cape/wing/bent-skin roles in v6+"},
+    "sceneLightCompatibility": "No byte layout change. Readers without bit 2 support reject flagged batches. Updated readers accept older unflagged staging but native lit-material preparation rejects it; emissive glow bypasses the lightmap.",
+    "textureOrder": "width u32, height u32, then width*height little-endian ARGB u32 values; not RGBA byte order",
+    "phaseTrailer": "After every texture: v9 requires positive collector epoch u64, phase count u8 (0..3), then ascending nonempty (order u8, stage u8, batch-count u32, batch indices u32). V10 first writes strict presence u8; 0 means unknown and 1 precedes those same records. Allowed keys (0,0),(0,8),(1,8), complete simple-role coverage and per-reference source order. These are owned avatar collector drains, not native phase ownership; see java-simple-phase-source.json.",
+    "replayIdentity": "Retains the unreduced rational sample as integers; f64 is pose math only and must match its projection",
+    "modelSubmissions": "Skin parts retain one model boundary, each cape one, and a wing pair one. All-hidden skin emits an empty batch. Decoder requires contiguous increasing model IDs and an unchanged actor, pass and bitwise root translation within a model. Earlier packets have unknown boundaries. Root translation does not establish Java view-space equivalence; native model ordering requires its separate owning pose input (java-model-submit-source.json).",
+    "nativeAbiFields": false
+  },
+  "consumer": {
+    "jniRequest": "ClientVm.geometry for the current software world; ClientVm.geometry_input for an owned exact no-readback observation; both remain unscheduled pending the native GPU input/phase producer",
+    "jniCopyBound": "Check Java array length before copying into Rust",
+    "decoder": "avatar_geometry::Frame::decode(bytes,expected_session,expected_sequence)",
+    "limits": {"actors":128, "draws":2048, "vertices":400000, "textures":32, "textureSide":4096, "totalTexturePixels":16777216},
+    "validation": ["exact magic", "session/sequence join", "Java clock range", "exact replay fraction/math agreement", "finite camera/attributes/tint", "surface dimensions", "coordinate-space enum", "camera-relative equipment projection", "unique canonical UUIDs", "actor emission order", "pass/flag compatibility", "texture references", "quad topology and budgets", "pixel budgets", "no trailing bytes"],
+    "payloadOwnership": "One Rust-owned packet allocation with bounded ranges for attributes, indices and texture pixels; no engine vector/destructor ownership",
+    "scopeLimitation": "A matching packet identifies copied Java input for a requested frame. It does not prove a live engine lease, producer scope, completed upload or GPU submission. Future consumption must rejoin those independently."
+  },
+  "runtimePresentation": {"automaticGeometryRequests":false, "softwarePixelsReplaced":false, "newSuppressionAuthority":false, "gpuConsumerImplemented":false},
+  "verified": {"built":false, "tested":false, "jniRoundTrip":false, "liveGame":false, "gpuRendering":false, "deterministicVideo":false, "fullParity":false}
+}

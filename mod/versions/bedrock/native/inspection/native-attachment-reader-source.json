@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "purpose": "Native equipment metadata and parent-bone binding reader source migration",
+  "source": [
+    "../src/native_attachment_profile.rs",
+    "../src/native_attachment_binding.rs",
+    "../src/native_expression_binding.rs",
+    "../src/native_model_body_profile.rs",
+    "../src/native_scene_layout.rs"
+  ],
+  "bindings": "attachment-reader-bindings.json",
+  "nativeEvidence": "static-attachment-reader-layout-1.26.60.5.json",
+  "relatedEvidence": [
+    "native-expression-observer-source.json",
+    "native-hierarchy-query-reader-source.json",
+    "native-constant-expression-reader-source.json"
+  ],
+  "contract": {
+    "acceptedCompleteImageAndSceneFamilyRequired": true,
+    "threeEquipmentFunctionsHashedBeforeAdmission": true,
+    "setupPreflightSharedWithExpressionObserverBeforeDetours": true,
+    "rootDrawControllerAndSetupMustJoinTheirIndependentBindings": true,
+    "fourActualCallOrTailJumpEdgesRechecked": true,
+    "bodyReturnDerivedFromValidatedSevenPointerCall": true,
+    "equipmentReturnDerivedFromValidatedControllerCall": true,
+    "noOldLiteralCallersInEquipmentReader": true,
+    "sharedChildAndBoneLayoutConstants": true,
+    "unadmittedReaderRejectsBindingCopies": true,
+    "slotChildModelActorAndFrameIdentityChecksRetained": true,
+    "parentCopyMethodAndCompletedMatrixChecksRetained": true,
+    "referenceLivenessAndReadbacksRetained": true,
+    "nativeMethodsInvokedByReader": false,
+    "nativeSceneOrGpuLeaseCreated": false
+  },
+  "equipmentMetadataReaderSourcePortImplemented": true,
+  "currentCandidateActivated": false,
+  "completeSceneMigration": false,
+  "runtimeVerified": false,
+  "fullParity": false,
+  "remaining": [
+    "Complete current animation/scene reader dependencies",
+    "Native geometry submission and exclusive feature-phase integration",
+    "Real material, texture, descriptor and resource lifetimes",
+    "Java-equivalent live world inputs and deterministic replay rendering/export"
+  ],
+  "operations": {
+    "cachedBytesReadAsData": true,
+    "gameOpened": false,
+    "gameCodeExecuted": false,
+    "processInspected": false,
+    "buildExecuted": false,
+    "testsExecuted": false
+  }
+}

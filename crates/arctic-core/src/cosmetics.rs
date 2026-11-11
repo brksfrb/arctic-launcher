@@ -683,6 +683,8 @@ pub struct ModSession<'a> {
     pub duel: Option<serde_json::Value>,
     /// A replay to watch from the title screen (see `QuickPlay::Replay`).
     pub replay: Option<serde_json::Value>,
+    /// The language picked in the launcher ("tr"), or "" to follow the game's own.
+    pub language: &'a str,
 }
 
 /// Write the session file for the Arctic mod in `game_dir`.
@@ -698,6 +700,7 @@ pub fn write_mod_session(game_dir: &Path, session: &ModSession) -> Result<()> {
         share_server,
         duel,
         replay,
+        language,
     } = session;
     let path = game_dir.join("config").join("arctic-session.json");
     save_json(
@@ -722,6 +725,7 @@ pub fn write_mod_session(game_dir: &Path, session: &ModSession) -> Result<()> {
             "share_server": share_server,
             "duel": duel,
             "replay": replay,
+            "language": language,
         }),
     )
 }

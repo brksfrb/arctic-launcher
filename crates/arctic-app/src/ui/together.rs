@@ -9,7 +9,7 @@ use crate::art::icons::Icon;
 use crate::theme::{self, Palette};
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum Session {
     #[default]
@@ -72,18 +72,17 @@ impl ArcticApp {
 
     pub(crate) fn together_tab(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        widgets::page_header(ui, p, "Friends", "");
+        widgets::page_header(ui, p, t!("social.friends"), "");
         self.friends_card(ui);
         ui.add_space(16.0);
         ui.label(
-            RichText::new("Play together")
+            RichText::new(t!("social.play_together"))
                 .size(18.0)
                 .strong()
                 .color(p.text),
         );
         ui.label(
-            RichText::new("Invite friends into your world. No server and no port forwarding.")
-                .color(p.muted),
+            RichText::new(t!("social.invite_friends_into_your_world_no_server_and")).color(p.muted),
         );
         ui.add_space(8.0);
         if let Some(error) = self.together.error.clone() {
@@ -102,12 +101,9 @@ impl ArcticApp {
         });
         ui.add_space(12.0);
         ui.label(
-            RichText::new(
-                "Everyone needs the same Minecraft version and mods. Connections are direct \
-                 between your PCs when possible, and relayed (still encrypted) when not.",
-            )
-            .small()
-            .color(p.muted),
+            RichText::new(t!("social.everyone_needs_the_same_minecraft_version"))
+                .small()
+                .color(p.muted),
         );
         ui.add_space(12.0);
         self.sponsor_card(ui);
@@ -115,20 +111,25 @@ impl ArcticApp {
 
     fn host_card(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        card_title(ui, p, "Host a world");
+        card_title(ui, p, t!("social.host_a_world"));
         match self.together.session.clone() {
             Session::Hosting {
                 code,
                 world,
                 guests,
             } => {
-                ui.label(RichText::new("Your invite code").small().color(p.muted));
+                ui.label(
+                    RichText::new(t!("social.your_invite_code"))
+                        .small()
+                        .color(p.muted),
+                );
                 // Copy first, then the code wrapping in what's left: on one line it ran out of the
                 // card (and under the next one) in a narrow window.
                 ui.horizontal_top(|ui| {
-                    if widgets::icon_button(ui, p, Icon::Copy, "Copy code").clicked() {
+                    if widgets::icon_button(ui, p, Icon::Copy, t!("social.copy_code")).clicked() {
                         ui.ctx().copy_text(code.clone());
-                        self.toasts.push(Kind::Success, "Invite code copied", "");
+                        self.toasts
+                            .push(Kind::Success, t!("social.invite_code_copied"), "");
                     }
                     ui.add(
                         egui::Label::new(
@@ -141,7 +142,7 @@ impl ArcticApp {
                 match world {
                     Some(w) => {
                         ui.label(
-                            RichText::new(format!("Sharing \"{}\"", w.motd))
+                            RichText::new(tf!("social.sharing", motd = w.motd))
                                 .strong()
                                 .color(p.text),
                         );
@@ -150,27 +151,31 @@ impl ArcticApp {
                         ui.horizontal(|ui| {
                             ui.spinner();
                             ui.label(
-                                RichText::new("Waiting for a world. In game, press Esc and choose Open to LAN.")
-                                    .color(p.muted),
+                                RichText::new(t!(
+                                    "social.waiting_for_a_world_in_game_press_esc_and"
+                                ))
+                                .color(p.muted),
                             );
                         });
                     }
                 }
                 let friends = match guests {
-                    0 => "No friends connected yet".to_owned(),
+                    0 => t!("social.no_friends_connected_yet").to_owned(),
                     1 => "1 friend connected".to_owned(),
-                    n => format!("{n} friends connected"),
+                    n => tf!("social.friends_connected", n_value = n),
                 };
                 ui.label(RichText::new(friends).color(p.muted));
                 ui.add_space(8.0);
-                if widgets::button(ui, p, Some(Icon::Stop), "Stop sharing", false).clicked() {
+                if widgets::button(ui, p, Some(Icon::Stop), t!("social.stop_sharing"), false)
+                    .clicked()
+                {
                     self.stop_together();
                 }
             }
             Session::Starting => {
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    ui.label(RichText::new("Starting…").color(p.muted));
+                    ui.label(RichText::new(t!("social.starting")).color(p.muted));
                 });
             }
             session => {
@@ -178,29 +183,29 @@ impl ArcticApp {
                     ui,
                     p,
                     &[
-                        "Start a world in singleplayer.",
-                        "Press Esc, choose Open to LAN, then Start LAN World.",
-                        "Send your friends the invite code.",
+                        t!("social.start_a_world_in_singleplayer"),
+                        t!("social.press_esc_choose_open_to_lan_then_start_lan"),
+                        t!("social.send_your_friends_the_invite_code"),
                     ],
                 );
                 ui.add_space(8.0);
                 let busy = session != Session::Idle;
                 let start = ui
                     .add_enabled_ui(!busy, |ui| {
-                        widgets::button(ui, p, Some(Icon::Play), "Start sharing", true)
+                        widgets::button(ui, p, Some(Icon::Play), t!("social.start_sharing"), true)
                     })
                     .inner;
                 if start.clicked() {
                     self.start_hosting();
                 }
-                ui.collapsing("Share a specific port", |ui| {
+                ui.collapsing(t!("social.share_a_specific_port"), |ui| {
                     ui.add(
                         widgets::text_field(&mut self.together.port_input)
-                            .hint_text("e.g. 25565")
+                            .hint_text(t!("social.port_hint"))
                             .desired_width(120.0),
                     );
                     ui.label(
-                        RichText::new("Leave empty to find the LAN world automatically.")
+                        RichText::new(t!("social.leave_empty_to_find_the_lan_world"))
                             .small()
                             .color(p.muted),
                     );
@@ -211,11 +216,11 @@ impl ArcticApp {
 
     fn join_card(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        card_title(ui, p, "Join a friend");
+        card_title(ui, p, t!("social.join_a_friend"));
         match self.together.session.clone() {
             Session::Joined { motd, port } => {
                 ui.label(
-                    RichText::new(format!("Connected to \"{motd}\""))
+                    RichText::new(tf!("social.connected_to", motd = motd))
                         .strong()
                         .color(p.text),
                 );
@@ -224,15 +229,16 @@ impl ArcticApp {
                     ui,
                     p,
                     &[
-                        "Start Minecraft (same version as your friend).",
-                        "Open Multiplayer. The world is listed under the LAN section.",
+                        t!("social.start_minecraft_same_version_as_your_friend"),
+                        t!("social.open_multiplayer_the_world_is_listed_under"),
                     ],
                 );
                 let address = format!("localhost:{port}");
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("Or Direct Connect to").color(p.muted));
+                    ui.label(RichText::new(t!("social.or_direct_connect_to")).color(p.muted));
                     ui.label(RichText::new(&address).monospace().color(p.accent));
-                    if widgets::icon_button(ui, p, Icon::Copy, "Copy address").clicked() {
+                    if widgets::icon_button(ui, p, Icon::Copy, t!("social.copy_address")).clicked()
+                    {
                         ui.ctx().copy_text(address.clone());
                     }
                 });
@@ -241,13 +247,21 @@ impl ArcticApp {
                     let idle = !self.runs.instance_active(&self.selected_instance().id);
                     let play = ui
                         .add_enabled_ui(idle, |ui| {
-                            widgets::button(ui, p, Some(Icon::Play), "Launch Minecraft", true)
+                            widgets::button(
+                                ui,
+                                p,
+                                Some(Icon::Play),
+                                t!("social.launch_minecraft"),
+                                true,
+                            )
                         })
                         .inner;
                     if play.clicked() {
                         self.launch_selected();
                     }
-                    if widgets::button(ui, p, Some(Icon::Close), "Leave", false).clicked() {
+                    if widgets::button(ui, p, Some(Icon::Close), t!("social.leave"), false)
+                        .clicked()
+                    {
                         self.stop_together();
                     }
                 });
@@ -255,20 +269,21 @@ impl ArcticApp {
             Session::Joining => {
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    ui.label(RichText::new("Connecting to your friend…").color(p.muted));
+                    ui.label(RichText::new(t!("social.connecting_to_your_friend")).color(p.muted));
                 });
-                if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
+                if crate::widgets::button(ui, p, None, t!("social.cancel"), false).clicked() {
                     self.stop_together();
                 }
             }
             session => {
                 ui.label(
-                    RichText::new("Paste the invite code your friend sent you.").color(p.muted),
+                    RichText::new(t!("social.paste_the_invite_code_your_friend_sent_you"))
+                        .color(p.muted),
                 );
                 ui.add_space(6.0);
                 let field = ui.add(
                     widgets::text_field(&mut self.together.code_input)
-                        .hint_text("arctic-xxxx-xxxx-…")
+                        .hint_text("arctic-xxxx-xxxx-…") // i18n-ignore
                         .desired_width(f32::INFINITY),
                 );
                 let enter = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -276,7 +291,7 @@ impl ArcticApp {
                 let ready = session == Session::Idle && !self.together.code_input.trim().is_empty();
                 let join = ui
                     .add_enabled_ui(ready, |ui| {
-                        widgets::button(ui, p, Some(Icon::Play), "Join", true)
+                        widgets::button(ui, p, Some(Icon::Play), t!("social.join"), true)
                     })
                     .inner;
                 if ready && (join.clicked() || enter) {
@@ -289,10 +304,14 @@ impl ArcticApp {
     /// Short status for Discord while sharing or joined.
     pub(crate) fn together_status(&self) -> Option<String> {
         match &self.together.session {
-            Session::Hosting { guests: 0, .. } => Some("Hosting a world".into()),
-            Session::Hosting { guests: 1, .. } => Some("Hosting a world · 1 friend".into()),
-            Session::Hosting { guests, .. } => Some(format!("Hosting a world · {guests} friends")),
-            Session::Joined { .. } => Some("Playing with friends".into()),
+            Session::Hosting { guests: 0, .. } => Some(t!("social.hosting_a_world").into()),
+            Session::Hosting { guests: 1, .. } => {
+                Some(t!("social.hosting_a_world_1_friend").into())
+            }
+            Session::Hosting { guests, .. } => {
+                Some(tf!("social.hosting_a_world_friends", guests = guests))
+            }
+            Session::Joined { .. } => Some(t!("social.playing_with_friends").into()),
             _ => None,
         }
     }
@@ -302,7 +321,7 @@ impl ArcticApp {
             match Share::new(self.tasks.share_sink()) {
                 Ok(s) => self.together.service = Some(s),
                 Err(e) => {
-                    self.together.error = Some(format!("Could not start networking: {e}"));
+                    self.together.error = Some(tf!("social.could_not_start_networking", e = e));
                     return None;
                 }
             }
@@ -316,7 +335,8 @@ impl ArcticApp {
             text => match text.parse::<u16>() {
                 Ok(p) if p > 0 => Some(p),
                 _ => {
-                    self.together.error = Some("That port isn't a number from 1 to 65535.".into());
+                    self.together.error =
+                        Some(t!("social.that_port_isnt_a_number_from_1_to_65535").into());
                     return;
                 }
             },
@@ -325,7 +345,7 @@ impl ArcticApp {
         let key = match arctic_share::load_or_create_key(&key_path) {
             Ok(k) => k,
             Err(e) => {
-                self.together.error = Some(format!("Could not create your invite key: {e}"));
+                self.together.error = Some(tf!("social.could_not_create_your_invite_key", e = e));
                 return;
             }
         };
@@ -380,7 +400,8 @@ impl ArcticApp {
             ShareEvent::Guests(n) => {
                 if let Session::Hosting { guests, .. } = &mut t.session {
                     if n > *guests {
-                        self.toasts.push(Kind::Info, "A friend joined", "");
+                        self.toasts
+                            .push(Kind::Info, t!("social.a_friend_joined"), "");
                     }
                     *guests = n;
                 }
@@ -389,8 +410,8 @@ impl ArcticApp {
                 t.session = Session::Joined { motd, port };
                 self.toasts.push(
                     Kind::Success,
-                    "Connected",
-                    "The world now shows up in Multiplayer.",
+                    t!("social.connected"),
+                    t!("social.the_world_now_shows_up_in_multiplayer"),
                 );
             }
             ShareEvent::Stopped { error } => {

@@ -7,6 +7,7 @@ import com.arcticlauncher.client.style.Skin;
 import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Widget;
 
+import com.arcticlauncher.client.Lang;
 /**
  * A mod on the Mods screen: its icon and name, and a bar at the bottom that
  * switches it on and off (green when on). Clicking the rest of the card opens
@@ -46,10 +47,10 @@ final class ModCard extends Widget {
 			boolean on = mod.on();
 			int color = on ? ON : OFF;
 			Draw.round(g, x + 2, by, x + w - 2, y + h - 2, 2, overBar ? Draw.mix(color, 0xFFFFFFFF, 0.15f) : color);
-			Draw.centered(g, on ? "ON" : "OFF", x + w / 2, by + (BAR - 2 - 8) / 2 + 1, 0xFFFFFFFF, true);
+			Draw.centered(g, Lang.t(on ? "mods.badge_on" : "mods.badge_off"), x + w / 2, by + (BAR - 2 - 8) / 2 + 1, 0xFFFFFFFF, true);
 		} else {
 			Draw.round(g, x + 2, by, x + w - 2, y + h - 2, 2, Draw.alpha(s.accent, overBar ? 0.5f : 0.3f));
-			Draw.centered(g, "Open", x + w / 2, by + (BAR - 2 - 8) / 2 + 1, s.text, true);
+			Draw.centered(g, Lang.t("mods.open"), x + w / 2, by + (BAR - 2 - 8) / 2 + 1, s.text, true);
 		}
 		com.arcticlauncher.client.ui.Hints.offer(mod.description, x, y, w, h - BAR);
 		if (mod.hasSettings() && mod.hasSwitch()) {

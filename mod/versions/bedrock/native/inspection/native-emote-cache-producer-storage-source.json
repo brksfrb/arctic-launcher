@@ -1,0 +1,162 @@
+{
+  "schema": 1,
+  "purpose": "Producer-wide flat-cache storage journal; source-only port for native key movement and in-place matrix insertion",
+  "nativeEvidence": "static-emote-cache-layout-1.26.60.5.json",
+  "producer": {
+    "rva": "0x589f3f0",
+    "endRva": "0x58a00b3",
+    "bytes": 3267,
+    "sha256": "15561f2df5054aea8e97bcdf7f7e28541358b96e3fd5ce103be1cb24825c318e",
+    "directCalls": [
+      {
+        "siteRva": "0x589f444",
+        "returnRva": "0x589f449",
+        "targetRva": "0x589f280"
+      },
+      {
+        "siteRva": "0x589f4b9",
+        "returnRva": "0x589f4be",
+        "targetRva": "0xeec61e0"
+      },
+      {
+        "siteRva": "0x589f4d7",
+        "returnRva": "0x589f4dc",
+        "targetRva": "0x9d6d0"
+      },
+      {
+        "siteRva": "0x589f5e7",
+        "returnRva": "0x589f5ec",
+        "targetRva": "0xeec62b0"
+      },
+      {
+        "siteRva": "0x589f777",
+        "returnRva": "0x589f77c",
+        "targetRva": "0xeec62b0"
+      },
+      {
+        "siteRva": "0x589f899",
+        "returnRva": "0x589f89e",
+        "targetRva": "0xe934b00"
+      },
+      {
+        "siteRva": "0x589fa3f",
+        "returnRva": "0x589fa44",
+        "targetRva": "0xe934b00"
+      },
+      {
+        "siteRva": "0x589faa6",
+        "returnRva": "0x589faab",
+        "targetRva": "0x9bc820"
+      },
+      {
+        "siteRva": "0x589fcf0",
+        "returnRva": "0x589fcf5",
+        "targetRva": "0xe934b00"
+      },
+      {
+        "siteRva": "0x589fd9b",
+        "returnRva": "0x589fda0",
+        "targetRva": "0xe934b00"
+      },
+      {
+        "siteRva": "0x589fe96",
+        "returnRva": "0x589fe9b",
+        "targetRva": "0x5907980"
+      },
+      {
+        "siteRva": "0x58a0003",
+        "returnRva": "0x58a0008",
+        "targetRva": "0xe934b00"
+      },
+      {
+        "siteRva": "0x58a0058",
+        "returnRva": "0x58a005d",
+        "targetRva": "0x589f3f0"
+      },
+      {
+        "siteRva": "0x58a0077",
+        "returnRva": "0x58a007c",
+        "targetRva": "0x78ed0"
+      },
+      {
+        "siteRva": "0x58a0081",
+        "returnRva": "0x58a0086",
+        "targetRva": "0x9bc820"
+      },
+      {
+        "siteRva": "0x58a00a6",
+        "returnRva": "0x58a00ab",
+        "targetRva": "0x75740"
+      },
+      {
+        "siteRva": "0x58a00ac",
+        "returnRva": "0x58a00b1",
+        "targetRva": "0x75740"
+      }
+    ]
+  },
+  "source": [
+    "../src/native_emote_cache_producer_storage.rs",
+    "../src/native_emote_cache.rs",
+    "../src/native_emote_cache_history.rs",
+    "../src/native_emote_cache_relocation.rs",
+    "../src/native_emote_history.rs"
+  ],
+  "contract": {
+    "entryUsesOriginalFivePointerProducerDetour": true,
+    "originalNativeArgumentsAndInvocationUnchanged": true,
+    "scopeOwnsEventBeforeSnapshotCapture": true,
+    "oneSnapshotPerOutermostActorOwnerOnCurrentThread": true,
+    "hiddenParentsLeaveClaimsToVisibleDescendants": true,
+    "requiresCurrentActorComponentAndProducerEvent": true,
+    "stableEqualVectorCountsRequiredBeforeAndAfterWholeProducer": true,
+    "transitionalUnequalCountsInsideOriginalAreNotReadAsStableSnapshots": true,
+    "keysCopiedInNativeCompositeOrder": true,
+    "allMatrixValuesCopiedAndRechecked": true,
+    "oldNativeAllocationsReadAfterOriginalReturns": false,
+    "newerChildWritesRemainAuthoritative": true,
+    "successfulWitnessedChildWritesSealedAtTicketCompletion": true,
+    "finalTargetsIncludeNewlyInsertedChildSlots": true,
+    "childWritesCanFollowLaterSiblingStorageMovement": true,
+    "onlyStrictlyOlderSameThreadAncestorTicketsMayRemainPendingForACompletedChildSeal": true,
+    "historyReadsRequireAllProducersAndPendingTicketsClosed": true,
+    "conflictedRevokedOrReplacedRecordsAreNotRestored": true,
+    "equalBytesOrSerialWatermarksDoNotAuthorizeNewPoses": true,
+    "unchangedEligiblePosesMayFollowFinalLogicalSlotPositions": true,
+    "missingOrChangedUnpairedSlotsLoseEligibility": true,
+    "narrowReallocatorDefersWhileOwnerJournalIsActive": true,
+    "sameThreadProducerAdmissionRequired": true,
+    "historyLockHeldAcrossNativeOriginal": false,
+    "nativeCacheWritesAdded": false,
+    "recordedClockSerialFrameOrPoseValuesRecomputed": false,
+    "persistentHistoryContainsNativePointers": false
+  },
+  "bounds": {
+    "maximumEntries": 1024,
+    "maximumCopiedReadBytesPerSnapshot": 131072,
+    "maximumOwnedSnapshotBytes": 524288,
+    "maximumSealedCompletedChildWrites": 1024,
+    "childRecordAndKeyPayloadRetentionReservedBeforeOriginal": true,
+    "maximumSharedRetentionPerThread": 4194304,
+    "completionSnapshotAndTargetArrayReservedBeforeOriginal": true
+  },
+  "remaining": [
+    "Clear/assignment and structural mutation outside recognized producer scopes",
+    "Current actor/component reader migration",
+    "Native scene/GPU ownership and cosmetics insertion",
+    "Deterministic replay rendering/video export",
+    "Runtime verification when authorized"
+  ],
+  "sourceImplemented": true,
+  "currentCandidateActivated": false,
+  "completeMutationCoverage": false,
+  "fullParity": false,
+  "operations": {
+    "cachedEvidenceReadAsData": true,
+    "engineCodeExecuted": false,
+    "processInspected": false,
+    "gameStarted": false,
+    "built": false,
+    "tested": false
+  }
+}

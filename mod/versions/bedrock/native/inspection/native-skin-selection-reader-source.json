@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "purpose": "Selected controller/geometry skin reference source migration; not complete native skin rendering",
+  "source": [
+    "../src/native_skin_selection.rs",
+    "../src/native_skin_selection_profile.rs",
+    "../src/native_scene_layout.rs"
+  ],
+  "bindings": "skin-selection-reader-bindings.json",
+  "nativeEvidence": "static-skin-selection-layout-1.26.60.5.json",
+  "contract": {
+    "exactAcceptedImageAndSceneFamilyRequired": true,
+    "rootAndControllerMustJoinAcceptedBodyBinding": true,
+    "tenInstructionWindowsPerFamily": true,
+    "windowsBoundedInsideTheirDeclaredFunctions": true,
+    "instructionBytesComparedBeforeReaderAdmission": true,
+    "preflightCachedBeforeBodyHookEnablement": true,
+    "readerRejectsCopiesBeforeAdmission": true,
+    "sharedControllerGeometryPairOffsets": true,
+    "ambiguousSelectionsAndExpiredReferencesStillRejected": true,
+    "copiesRemainFrameAndActorScoped": true,
+    "rechecksRemainRequired": true,
+    "nativeMethodsInvokedByReader": false,
+    "nativeGpuOrSceneLeaseCreated": false
+  },
+  "sourceImplemented": true,
+  "selectedPairReaderMigrationImplemented": true,
+  "fullSkinReaderMigrationComplete": false,
+  "currentCandidateActivated": false,
+  "runtimeVerified": false,
+  "fullParity": false,
+  "remaining": [
+    "Current animation component and skin identity/geometry-name dependencies",
+    "Equipment and expression reader/hook migration",
+    "Native feature phase, resource ownership and geometry submission",
+    "Live material inputs and deterministic replay export"
+  ],
+  "operations": {
+    "cachedBytesReadAsData": true,
+    "gameOpened": false,
+    "gameCodeExecuted": false,
+    "processInspected": false,
+    "buildExecuted": false,
+    "testsExecuted": false
+  }
+}

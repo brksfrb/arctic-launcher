@@ -7,6 +7,7 @@ import java.util.Set;
 import com.arcticlauncher.client.Platform;
 import com.arcticlauncher.client.notice.Notices;
 
+import com.arcticlauncher.client.Lang;
 /** A pop-up when worn armor or the held tool is about to break (once per item until repaired). */
 public final class DurabilityWatch {
 	/** Warn at or below this share of durability left. */
@@ -31,7 +32,7 @@ public final class DurabilityWatch {
 			if (max > 0 && left <= max * LOW) {
 				low.add(key);
 				if (warned.add(key)) {
-					Notices.post(name + " is about to break", left + " of " + max + " durability left");
+					Notices.post(name + " is about to break", left + " of " + max + Lang.t("hud.durability_left"));
 				}
 			}
 		}

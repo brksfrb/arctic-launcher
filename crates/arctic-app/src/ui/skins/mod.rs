@@ -24,7 +24,7 @@ use crate::app::ArcticApp;
 use crate::skin_tasks::{AccountSkin, ArcticState, SkinChange};
 use crate::tasks::Event;
 use crate::toasts::Kind;
-
+use crate::{t, tf};
 /// The category picked in the rail on the right.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Section {
@@ -168,9 +168,11 @@ impl ArcticApp {
                 Some(CapeChoice::Custom(Texture::Png(png))),
                 Some(format!("acape:{hash}")),
             ),
-            Err(e) => self
-                .toasts
-                .push(Kind::Error, "Could not read that cape", e.to_string()),
+            Err(e) => self.toasts.push(
+                Kind::Error,
+                t!("skins.could_not_read_that_cape"),
+                e.to_string(),
+            ),
         }
     }
 
@@ -178,9 +180,11 @@ impl ArcticApp {
     pub(super) fn forget_own_cape(&mut self, hash: &str) {
         match arctic_core::skins::capes::remove(&self.own_capes_dir(), hash) {
             Ok(()) => self.skins.own_capes.retain(|h| h != hash),
-            Err(e) => self
-                .toasts
-                .push(Kind::Error, "Could not remove that cape", e.to_string()),
+            Err(e) => self.toasts.push(
+                Kind::Error,
+                t!("skins.could_not_remove_that_cape"),
+                e.to_string(),
+            ),
         }
     }
 
@@ -243,7 +247,7 @@ impl ArcticApp {
             }
             Err(e) => self.toasts.push(
                 Kind::Error,
-                "Could not read your skin library",
+                t!("skins.could_not_read_your_skin_library"),
                 e.to_string(),
             ),
         }
@@ -354,7 +358,7 @@ impl ArcticApp {
             }
             Err(e) => self
                 .toasts
-                .push(Kind::Error, "Could not read skin", e.to_string()),
+                .push(Kind::Error, t!("skins.could_not_read_skin"), e.to_string()),
         }
     }
 
@@ -610,19 +614,22 @@ impl ArcticApp {
         let dir = self.skins_dir();
         if let Some(existing) = self.skins.library.find_same(&dir, png) {
             let existing = existing.clone();
-            self.toasts
-                .push(Kind::Info, "Already in your library", existing.name.clone());
+            self.toasts.push(
+                Kind::Info,
+                t!("skins.already_in_your_library"),
+                existing.name.clone(),
+            );
             return Some(existing);
         }
         match self.skins.library.add(&dir, name, png, variant) {
             Ok(entry) => {
                 self.toasts
-                    .push(Kind::Success, format!("Added {}", entry.name), "");
+                    .push(Kind::Success, tf!("skins.added", name = entry.name), "");
                 Some(entry)
             }
             Err(e) => {
                 self.toasts
-                    .push(Kind::Error, "Could not add skin", e.to_string());
+                    .push(Kind::Error, t!("skins.could_not_add_skin"), e.to_string());
                 None
             }
         }
@@ -631,8 +638,11 @@ impl ArcticApp {
     fn remove_skin(&mut self, id: &str) {
         let dir = self.skins_dir();
         if let Err(e) = self.skins.library.remove(&dir, id) {
-            self.toasts
-                .push(Kind::Error, "Could not delete skin", e.to_string());
+            self.toasts.push(
+                Kind::Error,
+                t!("skins.could_not_delete_skin"),
+                e.to_string(),
+            );
         }
         self.skins.textures.remove(&format!("lib:{id}"));
         self.skins.lib_hashes.remove(id);
@@ -642,7 +652,7 @@ impl ArcticApp {
         let dir = self.skins_dir();
         if let Err(e) = self.skins.library.update(&dir, id, change) {
             self.toasts
-                .push(Kind::Error, "Could not save skin", e.to_string());
+                .push(Kind::Error, t!("skins.could_not_save_skin"), e.to_string());
         }
     }
 
@@ -651,7 +661,7 @@ impl ArcticApp {
             Ok(png) => self.change_minecraft_skin(SkinChange::Upload(entry.variant, png)),
             Err(e) => self
                 .toasts
-                .push(Kind::Error, "Could not read skin", e.to_string()),
+                .push(Kind::Error, t!("skins.could_not_read_skin"), e.to_string()),
         }
     }
 
@@ -662,7 +672,8 @@ impl ArcticApp {
             let bytes = match file.bytes() {
                 Ok(b) => b,
                 Err(e) => {
-                    self.toasts.push(Kind::Error, "Could not read file", e);
+                    self.toasts
+                        .push(Kind::Error, t!("skins.could_not_read_file"), e);
                     continue;
                 }
             };
@@ -710,7 +721,8 @@ impl ArcticApp {
                 // A save failed: back to the look the server has.
                 self.skins.intended = None;
                 self.skins.trying = Trying::default();
-                self.toasts.push(Kind::Error, "Couldn't save your look", e);
+                self.toasts
+                    .push(Kind::Error, t!("skins.couldnt_save_your_look"), e);
             }
             result => {
                 let ok = result.is_ok();
@@ -747,8 +759,11 @@ impl ArcticApp {
                 self.skins.textures.retain(|k, _| !k.starts_with("mc"));
                 self.skins.failed.clear();
                 if let Err(e) = &result {
-                    self.toasts
-                        .push(Kind::Error, "Minecraft skin change failed", e.clone());
+                    self.toasts.push(
+                        Kind::Error,
+                        t!("skins.minecraft_skin_change_failed"),
+                        e.clone(),
+                    );
                 }
                 self.skins.account.insert(account_id, result);
             }
@@ -767,7 +782,9 @@ impl ArcticApp {
                         let _ = self.add_skin(&name, &png, Some(variant));
                         self.skins.player_name.clear();
                     }
-                    Err(e) => self.toasts.push(Kind::Error, "Could not get skin", e),
+                    Err(e) => self
+                        .toasts
+                        .push(Kind::Error, t!("skins.could_not_get_skin"), e),
                 }
             }
             Event::SkinFile(result) => match result {
@@ -775,7 +792,9 @@ impl ArcticApp {
                     let _ = self.add_skin(&name, &bytes, None);
                 }
                 Ok(None) => {}
-                Err(e) => self.toasts.push(Kind::Error, "Could not read file", e),
+                Err(e) => self
+                    .toasts
+                    .push(Kind::Error, t!("skins.could_not_read_file"), e),
             },
             e @ (Event::Gallery(..) | Event::GalleryTaken(..) | Event::GalleryDone(..)) => {
                 self.on_gallery_event(e)
@@ -795,7 +814,9 @@ impl ArcticApp {
                     self.skins.trying.cape = None;
                 }
                 Ok(None) => {}
-                Err(e) => self.toasts.push(Kind::Error, "Could not read file", e),
+                Err(e) => self
+                    .toasts
+                    .push(Kind::Error, t!("skins.could_not_read_file"), e),
             },
             _ => {}
         }

@@ -1,0 +1,211 @@
+{
+  "schema": 1,
+  "profiles": [
+    {
+      "productVersion": "1.26.5203.0",
+      "abi": "contextRendererDwordHandleDwordFlag4",
+      "backendRva": 234530528,
+      "callRva": 234533665,
+      "layout": {
+        "headerBytes": 32,
+        "contextColors": 16,
+        "contextDepth": 24,
+        "contextHandle": 32,
+        "contextFlag": 44,
+        "contextList": 48,
+        "framebuffers": 13203088,
+        "framebufferStride": 104,
+        "framebufferCount": 50,
+        "framebufferDepth": 16,
+        "textures": 12444016,
+        "stateCache": 83032,
+        "textureStride": 184,
+        "pageEntries": 4096,
+        "retirementFlag": 155,
+        "retirementMask": 64
+      },
+      "functions": {
+        "setter": {
+          "rva": 234528496,
+          "bytes": 2030,
+          "sha256": "8c8e3a9d168a98ac93e9573d7bcda887b61d36f8ff6738ab59f0da6877beeb6c"
+        },
+        "transition": {
+          "rva": 234576016,
+          "bytes": 830,
+          "sha256": "10cb409c5d6ec3c963ca8b5af0edaa0c17b554533f815b3d59727792b2bfb5a2"
+        },
+        "textureEnsure": {
+          "rva": 234629488,
+          "bytes": 303,
+          "sha256": "b966eb8a3f6ba1eab8550b2d8ef962e1f59dafac4daa3f05b77bd21403c07558"
+        },
+        "cleanup": {
+          "rva": 234456352,
+          "bytes": 851,
+          "sha256": "db34406827434732271b7e4e0d92ea84226756657846bc1bf585765434b33eee"
+        },
+        "override": {
+          "rva": 234482896,
+          "bytes": 316,
+          "sha256": "09a6145a2b2f49f7566897c9e5da8386981ac4cba461bf920630ccb443114f57"
+        }
+      },
+      "edges": [
+        {
+          "from": "setter",
+          "to": "transition",
+          "siteRva": 234528861
+        },
+        {
+          "from": "setter",
+          "to": "textureEnsure",
+          "siteRva": 234528892
+        },
+        {
+          "from": "setter",
+          "to": "textureEnsure",
+          "siteRva": 234529212
+        },
+        {
+          "from": "setter",
+          "to": "transition",
+          "siteRva": 234529517
+        },
+        {
+          "from": "setter",
+          "to": "textureEnsure",
+          "siteRva": 234529548
+        },
+        {
+          "from": "setter",
+          "to": "textureEnsure",
+          "siteRva": 234529858
+        },
+        {
+          "from": "setter",
+          "to": "transition",
+          "siteRva": 234530139
+        },
+        {
+          "from": "setter",
+          "to": "transition",
+          "siteRva": 234530423
+        },
+        {
+          "from": "override",
+          "to": "textureEnsure",
+          "siteRva": 234482935
+        },
+        {
+          "from": "override",
+          "to": "cleanup",
+          "siteRva": 234483187
+        }
+      ]
+    },
+    {
+      "productVersion": "1.26.60.5",
+      "abi": "contextRendererDwordHandleDwordFlag4",
+      "backendRva": 243402016,
+      "callRva": 243405192,
+      "layout": {
+        "headerBytes": 32,
+        "contextColors": 16,
+        "contextDepth": 24,
+        "contextHandle": 32,
+        "contextFlag": 44,
+        "contextList": 48,
+        "framebuffers": 13203096,
+        "framebufferStride": 104,
+        "framebufferCount": 50,
+        "framebufferDepth": 16,
+        "textures": 12444024,
+        "stateCache": 83032,
+        "textureStride": 184,
+        "pageEntries": 4096,
+        "retirementFlag": 155,
+        "retirementMask": 64
+      },
+      "functions": {
+        "setter": {
+          "rva": 243399952,
+          "bytes": 2060,
+          "sha256": "0f395f494fbbcb5a20f2e09b3a6093137390515d70bcc5709663cf942fe2d44a"
+        },
+        "transition": {
+          "rva": 243453280,
+          "bytes": 857,
+          "sha256": "3fc4377a6fb6ab8929215f88f4756e285001a69770dc9b671a7d1b94dd3d93c4"
+        },
+        "textureEnsure": {
+          "rva": 243507120,
+          "bytes": 303,
+          "sha256": "35a019c1c287e1425e228455abdda342fc725968525396983242639be01b9818"
+        },
+        "cleanup": {
+          "rva": 243328656,
+          "bytes": 862,
+          "sha256": "dfe0b93f95c86c157589e326eabddd01233db6fd9b789462231ba9070a6b1018"
+        },
+        "override": {
+          "rva": 243355696,
+          "bytes": 316,
+          "sha256": "99793ff94c88be399e3187b219e0ec87f7bbce68e8a3bfae454db203f22db77b"
+        }
+      },
+      "edges": [
+        {
+          "from": "setter",
+          "to": "transition",
+          "siteRva": 243400317
+        },
+        {
+          "from": "setter",
+          "to": "textureEnsure",
+          "siteRva": 243400348
+        },
+        {
+          "from": "setter",
+          "to": "textureEnsure",
+          "siteRva": 243400668
+        },
+        {
+          "from": "setter",
+          "to": "transition",
+          "siteRva": 243400973
+        },
+        {
+          "from": "setter",
+          "to": "textureEnsure",
+          "siteRva": 243401008
+        },
+        {
+          "from": "setter",
+          "to": "textureEnsure",
+          "siteRva": 243401318
+        },
+        {
+          "from": "setter",
+          "to": "transition",
+          "siteRva": 243401611
+        },
+        {
+          "from": "setter",
+          "to": "transition",
+          "siteRva": 243401895
+        },
+        {
+          "from": "override",
+          "to": "textureEnsure",
+          "siteRva": 243355735
+        },
+        {
+          "from": "override",
+          "to": "cleanup",
+          "siteRva": 243355987
+        }
+      ]
+    }
+  ]
+}

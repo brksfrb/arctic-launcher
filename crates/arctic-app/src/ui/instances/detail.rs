@@ -10,7 +10,7 @@ use crate::art::icons::Icon;
 use crate::theme::{self, Palette};
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 const MAX_MEMORY_MB: u32 = 32 * 1024;
 
 pub(crate) fn dialog_frame(p: &Palette) -> egui::Frame {
@@ -32,7 +32,15 @@ impl ArcticApp {
             ui.ctx()
                 .request_repaint_after(crate::mod_tasks::POLL_INTERVAL);
         }
-        if widgets::button(ui, p, Some(Icon::ChevronLeft), "All instances", false).clicked() {
+        if widgets::button(
+            ui,
+            p,
+            Some(Icon::ChevronLeft),
+            t!("instances.all_instances"),
+            false,
+        )
+        .clicked()
+        {
             self.inst.open = None;
             return;
         }
@@ -57,7 +65,7 @@ impl ArcticApp {
                     let idle = !self.runs.instance_active(id);
                     let play = ui
                         .add_enabled_ui(idle, |ui| {
-                            widgets::button(ui, p, Some(Icon::Play), "Play", true)
+                            widgets::button(ui, p, Some(Icon::Play), t!("instances.play"), true)
                         })
                         .inner;
                     if play.clicked() {
@@ -67,12 +75,24 @@ impl ArcticApp {
                         self.set_tab(Tab::Play, now);
                         self.launch_selected();
                     }
-                    if widgets::icon_button(ui, p, Icon::Share, "Share: mods, HUD, crosshair")
-                        .clicked()
+                    if widgets::icon_button(
+                        ui,
+                        p,
+                        Icon::Share,
+                        t!("instances.share_mods_hud_crosshair"),
+                    )
+                    .clicked()
                     {
                         self.open_share(Some(id.to_owned()));
                     }
-                    if widgets::icon_button(ui, p, Icon::Folder, "Open instance folder").clicked() {
+                    if widgets::icon_button(
+                        ui,
+                        p,
+                        Icon::Folder,
+                        t!("instances.open_instance_folder"),
+                    )
+                    .clicked()
+                    {
                         let dir = instance.game_dir(&self.dirs);
                         let _ = std::fs::create_dir_all(&dir);
                         let _ = open::that_detached(&dir);
@@ -84,15 +104,39 @@ impl ArcticApp {
         let modded = instance.loader.kind().is_some();
         ui.horizontal(|ui| {
             if modded {
-                ui.selectable_value(&mut self.inst.page, InstancePage::Mods, "Mods");
-                ui.selectable_value(&mut self.inst.page, InstancePage::Browse, "Browse mods");
+                ui.selectable_value(
+                    &mut self.inst.page,
+                    InstancePage::Mods,
+                    t!("instances.mods"),
+                );
+                ui.selectable_value(
+                    &mut self.inst.page,
+                    InstancePage::Browse,
+                    t!("instances.browse_mods"),
+                );
             }
-            ui.selectable_value(&mut self.inst.page, InstancePage::Packs, "Packs & shaders");
-            ui.selectable_value(&mut self.inst.page, InstancePage::Worlds, "Worlds");
+            ui.selectable_value(
+                &mut self.inst.page,
+                InstancePage::Packs,
+                t!("instances.packs_shaders"),
+            );
+            ui.selectable_value(
+                &mut self.inst.page,
+                InstancePage::Worlds,
+                t!("instances.worlds"),
+            );
             if instance.arctic_mod {
-                ui.selectable_value(&mut self.inst.page, InstancePage::Replays, "Replays");
+                ui.selectable_value(
+                    &mut self.inst.page,
+                    InstancePage::Replays,
+                    t!("instances.replays"),
+                );
             }
-            ui.selectable_value(&mut self.inst.page, InstancePage::Settings, "Settings");
+            ui.selectable_value(
+                &mut self.inst.page,
+                InstancePage::Settings,
+                t!("instances.settings"),
+            );
         });
         ui.add_space(10.0);
         // A mod dropped on any other tab is added too, and the Mods tab opens to show it.
@@ -121,14 +165,17 @@ impl ArcticApp {
         let id = instance.id.clone();
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new("General").size(17.0).strong().color(p.text));
+            ui.label(
+                RichText::new(t!("instances.general"))
+                    .size(17.0)
+                    .strong()
+                    .color(p.text),
+            );
             ui.add_space(6.0);
             if instance.is_default() {
                 ui.label(
-                    RichText::new(
-                        "The default instance plays whichever release you pick on the Play tab.",
-                    )
-                    .color(p.muted),
+                    RichText::new(t!("instances.the_default_instance_plays_whichever_release"))
+                        .color(p.muted),
                 );
             } else {
                 let mut name = self
@@ -137,7 +184,7 @@ impl ArcticApp {
                     .clone()
                     .unwrap_or_else(|| instance.name.clone());
                 widgets::field_row(ui, |ui| {
-                    ui.label("Name");
+                    ui.label(t!("instances.name"));
                     ui.add(
                         widgets::text_field(&mut name)
                             .char_limit(48)
@@ -145,7 +192,8 @@ impl ArcticApp {
                     );
                     if name.trim() != instance.name
                         && !name.trim().is_empty()
-                        && crate::widgets::button(ui, p, None, "Save", false).clicked()
+                        && crate::widgets::button(ui, p, None, t!("instances.save"), false)
+                            .clicked()
                     {
                         self.update_instance(&id, |i| i.name = name.trim().to_owned());
                         self.inst.rename = None;
@@ -160,13 +208,21 @@ impl ArcticApp {
         ui.add_space(12.0);
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new("Memory").size(17.0).strong().color(p.text));
+            ui.label(
+                RichText::new(t!("instances.memory"))
+                    .size(17.0)
+                    .strong()
+                    .color(p.text),
+            );
             let mut custom = instance.max_memory_mb.is_some();
             let mut mb = instance
                 .max_memory_mb
                 .unwrap_or(self.settings.max_memory_mb);
             let mut changed = ui
-                .checkbox(&mut custom, "Use a custom amount for this instance")
+                .checkbox(
+                    &mut custom,
+                    t!("instances.use_a_custom_amount_for_this_instance"),
+                )
                 .changed();
             if custom {
                 changed |= ui
@@ -178,9 +234,9 @@ impl ArcticApp {
                     .changed();
             } else {
                 ui.label(
-                    RichText::new(format!(
-                        "Using the launcher setting ({:.1} GB).",
-                        self.settings.max_memory_mb as f32 / 1024.0
+                    RichText::new(tf!(
+                        "instances.using_the_launcher_setting_gb",
+                        value = format!("{:.1}", self.settings.max_memory_mb as f32 / 1024.0)
                     ))
                     .color(p.muted),
                 );
@@ -200,20 +256,32 @@ impl ArcticApp {
         ui.add_space(12.0);
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new("Remove instance").size(17.0).strong().color(p.text));
-            ui.label(RichText::new("The folder (worlds and mods included) is moved to instances/.trash, not deleted.").color(p.muted));
+            ui.label(
+                RichText::new(t!("instances.remove_instance"))
+                    .size(17.0)
+                    .strong()
+                    .color(p.text),
+            );
+            ui.label(
+                RichText::new(t!("instances.the_folder_worlds_and_mods_included_is_moved"))
+                    .color(p.muted),
+            );
             ui.add_space(6.0);
             if !self.inst.confirm_delete {
-                if widgets::button(ui, p, Some(Icon::Trash), "Remove", false).clicked() {
+                if widgets::button(ui, p, Some(Icon::Trash), t!("instances.remove"), false)
+                    .clicked()
+                {
                     self.inst.confirm_delete = true;
                 }
                 return;
             }
             crate::widgets::row(ui, |ui| {
-                if crate::widgets::button(ui, p, None, "Keep it", false).clicked() {
+                if crate::widgets::button(ui, p, None, t!("instances.keep_it"), false).clicked() {
                     self.inst.confirm_delete = false;
                 }
-                if widgets::button(ui, p, Some(Icon::Trash), "Yes, remove", true).clicked() {
+                if widgets::button(ui, p, Some(Icon::Trash), t!("instances.yes_remove"), true)
+                    .clicked()
+                {
                     self.delete_instance(&id);
                 }
             });
@@ -230,7 +298,10 @@ impl ArcticApp {
             ui.label(RichText::new("Java").size(17.0).strong().color(p.text));
             let mut custom = instance.java_path.is_some();
             if ui
-                .checkbox(&mut custom, "Use a specific Java for this instance")
+                .checkbox(
+                    &mut custom,
+                    t!("instances.use_a_specific_java_for_this_instance"),
+                )
                 .changed()
             {
                 let path = custom.then(|| self.settings.java_override.clone().unwrap_or_default());
@@ -239,7 +310,7 @@ impl ArcticApp {
             if let Some(path) = &instance.java_path {
                 let mut text = path.display().to_string();
                 let response = widgets::field_row(ui, |ui| {
-                    ui.label("Path");
+                    ui.label(t!("instances.path"));
                     ui.add(
                         widgets::text_field(&mut text)
                             .hint_text("C:\\Program Files\\Java\\bin\\javaw.exe")
@@ -252,23 +323,23 @@ impl ArcticApp {
                 }
                 if !path.as_os_str().is_empty() && !path.is_file() {
                     ui.label(
-                        RichText::new("That file doesn't exist; the managed Java will be used.")
+                        RichText::new(t!("instances.that_file_doesnt_exist_the_managed_java_will"))
                             .color(p.warn),
                     );
                 }
             } else {
                 ui.label(
-                    RichText::new("Arctic downloads the right Java for each Minecraft version.")
+                    RichText::new(t!("instances.arctic_downloads_the_right_java_for_each"))
                         .color(p.muted),
                 );
             }
             ui.add_space(6.0);
             let mut args = instance.jvm_args.clone();
             let changed = widgets::field_row(ui, |ui| {
-                ui.label("Extra JVM arguments");
+                ui.label(t!("instances.extra_jvm_arguments"));
                 ui.add(
                     widgets::text_field(&mut args)
-                        .hint_text("e.g. -XX:+UseZGC")
+                        .hint_text(t!("instances.java_args_hint"))
                         .desired_width(420.0),
                 )
                 .changed()
@@ -309,10 +380,8 @@ impl ArcticApp {
                         .color(p.text),
                 );
                 ui.label(
-                    RichText::new(
-                        "The Arctic Client runs on Vanilla, Fabric and Quilt instances, and on Forge 1.8.9. Not on this loader or version yet: make a Vanilla or Fabric instance of the same version to play with it.",
-                    )
-                    .color(p.muted),
+                    RichText::new(t!("instances.the_arctic_client_runs_on_vanilla_fabric_and"))
+                        .color(p.muted),
                 );
             });
             return;
@@ -332,14 +401,14 @@ impl ArcticApp {
         let (title, about, toggle) = if vanilla {
             (
                 "Arctic Client",
-                "Arctic's menus, HUD and looks in game. Minecraft runs through Fabric underneath; turn this and Performance off for pure vanilla.",
-                "Play with the Arctic Client",
+                t!("instances.arctics_menus_hud_and_looks_in_game"),
+                t!("instances.play_with_the_arctic_client"),
             )
         } else {
             (
-                "Arctic mod",
-                "Shows everyone's Arctic looks (skins and capes) and adds an Arctic menu in game.",
-                "Install the Arctic mod",
+                t!("instances.arctic_mod"),
+                t!("instances.shows_everyones_arctic_looks_skins_and_capes"),
+                t!("instances.install_the_arctic_mod"),
             )
         };
         ui.add_space(12.0);
@@ -358,7 +427,8 @@ impl ArcticApp {
             }
             if !supported {
                 ui.label(
-                    RichText::new("Not available for this Minecraft version yet.").color(p.muted),
+                    RichText::new(t!("instances.not_available_for_this_minecraft_version_yet"))
+                        .color(p.muted),
                 );
             }
         });
@@ -371,16 +441,22 @@ impl ArcticApp {
         ui.add_space(12.0);
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new("Settings").size(17.0).strong().color(p.text));
             ui.label(
-                RichText::new(
-                    "Your server list, HUD and Arctic Client settings, and Minecraft's keys, FOV and video settings are the same in every instance that shares them, so a new one feels like the one you already set up.",
-                )
-                .color(p.muted),
+                RichText::new(t!("instances.settings"))
+                    .size(17.0)
+                    .strong()
+                    .color(p.text),
+            );
+            ui.label(
+                RichText::new(t!("instances.your_server_list_hud_and_arctic_client"))
+                    .color(p.muted),
             );
             let mut shared = !instance.own_settings;
             if ui
-                .checkbox(&mut shared, "Share settings with my other instances")
+                .checkbox(
+                    &mut shared,
+                    t!("instances.share_settings_with_my_other_instances"),
+                )
                 .changed()
             {
                 let id = instance.id.clone();
@@ -388,9 +464,9 @@ impl ArcticApp {
             }
             ui.label(
                 RichText::new(if shared {
-                    "Changes you make here show up in the others, and theirs show up here."
+                    t!("instances.changes_you_make_here_show_up_in_the_others")
                 } else {
-                    "This instance keeps its own settings; nothing is copied in or out."
+                    t!("instances.this_instance_keeps_its_own_settings_nothing")
                 })
                 .small()
                 .color(p.muted),
@@ -411,22 +487,25 @@ impl ArcticApp {
         ui.add_space(12.0);
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new("Performance").size(17.0).strong().color(p.text));
             ui.label(
-                RichText::new(
-                    "Adds Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, ModernFix and Polarium for much higher FPS and faster starts. Downloaded from Modrinth for your version (Polarium comes with Arctic); ones not updated yet are skipped.",
-                )
-                .color(p.muted),
+                RichText::new(t!("instances.performance"))
+                    .size(17.0)
+                    .strong()
+                    .color(p.text),
             );
+            ui.label(RichText::new(t!("instances.adds_sodium_lithium_ferritecore")).color(p.muted));
             if modded {
                 ui.label(
-                    RichText::new("Ones you've added yourself (or mods that do the same job) are left as they are.")
+                    RichText::new(t!("instances.ones_youve_added_yourself_or_mods_that_do"))
                         .small()
                         .color(p.muted),
                 );
             }
             let mut on = instance.performance;
-            if ui.checkbox(&mut on, "Boost FPS with performance mods").changed() {
+            if ui
+                .checkbox(&mut on, t!("instances.boost_fps_with_performance_mods"))
+                .changed()
+            {
                 let id = instance.id.clone();
                 if on {
                     self.update_instance(&id, |i| i.performance = true);
@@ -441,14 +520,18 @@ impl ArcticApp {
             }
             if on && !installed.is_empty() {
                 ui.label(
-                    RichText::new(format!("Installed: {}", installed.join(", ")))
+                    RichText::new(tf!("instances.installed_2", join = installed.join(", ")))
                         .small()
                         .color(p.muted),
                 );
             }
             // Extras: useful mods on their own switches, so nobody has to search for them.
             ui.add_space(8.0);
-            ui.label(RichText::new("Extra mods").strong().color(p.text));
+            ui.label(
+                RichText::new(t!("instances.extra_mods"))
+                    .strong()
+                    .color(p.text),
+            );
             for (project, name, about) in arctic_core::mods::performance::OPTIONAL {
                 let mut wanted = instance.extras.iter().any(|e| e == project);
                 if ui
@@ -476,8 +559,11 @@ impl ArcticApp {
         };
         change(instance);
         if let Err(e) = instance.save(&dirs) {
-            self.toasts
-                .push(Kind::Error, "Could not save instance", e.to_string());
+            self.toasts.push(
+                Kind::Error,
+                t!("instances.could_not_save_instance"),
+                e.to_string(),
+            );
         }
     }
 
@@ -490,12 +576,17 @@ impl ArcticApp {
                 self.inst.open = None;
                 self.inst.confirm_delete = false;
                 self.reload_instances();
-                self.toasts
-                    .push(Kind::Info, "Instance removed", "Moved to instances/.trash");
+                self.toasts.push(
+                    Kind::Info,
+                    t!("instances.instance_removed"),
+                    t!("instances.moved_to_instances_trash"),
+                );
             }
-            Err(e) => self
-                .toasts
-                .push(Kind::Error, "Could not remove instance", e.to_string()),
+            Err(e) => self.toasts.push(
+                Kind::Error,
+                t!("instances.could_not_remove_instance"),
+                e.to_string(),
+            ),
         }
     }
 }
