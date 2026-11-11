@@ -318,6 +318,21 @@ public final class Compat {
 		//#endif
 	}
 
+	/** The name of the game key binding on this key ("Jump"), or null. Settings screens only, so it may allocate. */
+	public static String keyUsedBy(String name) {
+		//#if MC >= 1.16
+		if (name == null || name.endsWith(".unknown")) {
+			return null;
+		}
+		for (net.minecraft.client.KeyMapping k : mc().options.keyMappings) {
+			if (name.equals(k.saveString())) {
+				return net.minecraft.client.resources.language.I18n.get(k.getName());
+			}
+		}
+		//#endif
+		return null;
+	}
+
 	public static String keyLabel(String name) {
 		//#if MC >= 1.16
 		return InputConstants.getKey(name).getDisplayName().getString();

@@ -111,6 +111,7 @@ public final class Features {
 			config.save();
 		}
 		fullbrightKeyWasDown = fullbrightDown;
+		com.arcticlauncher.client.menu.ToggleKeys.tick(platform, config, !inGame);
 		boolean streamerDown = inGame && down(config.streamerKey);
 		if (streamerDown && !streamerKeyWasDown) {
 			config.streamerMode = !config.streamerMode;

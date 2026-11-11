@@ -74,6 +74,8 @@ public final class ClientConfig {
 	public boolean snaplookEnabled;
 	public String snaplookKey = "key.keyboard.unknown";
 	public String fullbrightKey = "key.keyboard.unknown";
+	/** Keys that switch a feature on and off, by the feature's id in the Mods list (unbound ones are left out). */
+	public Map<String, String> toggleKeys = new LinkedHashMap<String, String>();
 	/** Opens the emote wheel. */
 	public String emoteKey = "key.keyboard.b";
 	/** The emote wheel stays open while its key is held (let go to play); off: press to open, click to play. */
@@ -450,6 +452,9 @@ public final class ClientConfig {
 		}
 		if (hud == null) {
 			hud = new LinkedHashMap<String, HudSlot>();
+		}
+		if (toggleKeys == null) {
+			toggleKeys = new LinkedHashMap<String, String>();
 		}
 		if (style == null) {
 			style = "arctic";

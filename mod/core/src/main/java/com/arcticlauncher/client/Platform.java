@@ -78,6 +78,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	/** The Minecraft name of a key the game reported (a native key code). */
 	String keyName(int nativeKey);
 
+	/** The name of a game key binding ("Jump") that uses this key, or null when none does (or this version can't tell). */
+	default String keyUsedBy(String key) {
+		return null;
+	}
+
 	/** Switch to third person (true) or back to the view before (false). */
 	void setThirdPerson(boolean on);
 

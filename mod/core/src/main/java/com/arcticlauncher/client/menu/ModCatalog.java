@@ -480,6 +480,7 @@ final class ModCatalog {
 				.settings((host, f) -> f.note("Connects matching glass and panes. Applies immediately. Continuity takes priority when installed.")));
 		out.add(new Mod("fullbright", "Fullbright", "See in the dark", "fullbright", Category.VISUAL, "gamma brightness night vision")
 				.toggle(() -> c.fullbright, on -> c.fullbright = on)
+				.ownToggleKey()
 				.settings((host, f) -> {
 					f.section("Key");
 					f.key("Fullbright key", "Switches it on and off", Form.key(() -> c.fullbrightKey, k -> c.fullbrightKey = k));
@@ -749,6 +750,7 @@ final class ModCatalog {
 		out.add(new Mod("streamer", "Streamer Mode", "Hide your name, skin and the server on screen", "streamer", Category.CHAT,
 				"privacy snipe hide name")
 				.toggle(() -> c.streamerMode, on -> c.streamerMode = on)
+				.ownToggleKey()
 				.settings(ChatForms::streamer));
 	}
 

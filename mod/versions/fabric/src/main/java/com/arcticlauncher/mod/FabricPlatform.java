@@ -336,6 +336,11 @@ final class FabricPlatform implements Platform {
 		return Compat.keyName(nativeKey);
 	}
 
+	@Override
+	public String keyUsedBy(String key) {
+		return Compat.keyUsedBy(key);
+	}
+
 	/** The camera before Freelook switched to third person (-1: none). */
 	private int before = -1;
 

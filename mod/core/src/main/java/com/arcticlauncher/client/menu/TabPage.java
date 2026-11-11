@@ -7,6 +7,7 @@ import com.arcticlauncher.client.style.Skin;
 import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Button;
 import com.arcticlauncher.client.ui.KeyButton;
+import com.arcticlauncher.client.ui.Label;
 import com.arcticlauncher.client.ui.Page;
 import com.arcticlauncher.client.ui.Scroll;
 import com.arcticlauncher.client.ui.Toggle;
@@ -74,6 +75,11 @@ final class TabPage extends Page {
 					.bounds(px + pw - PAD - SWITCH_W, py + (HEADER - 16) / 2, SWITCH_W, 16);
 		}
 		shownState = tab.state();
+		int top = contentTop();
+		if (hasToggleKey()) {
+			buildToggleKey(top);
+			top += Form.ROW + 4;
+		}
 		tab.build(new Host() {
 			@Override
 			public Widget add(Widget w) {
@@ -96,7 +102,46 @@ final class TabPage extends Page {
 				TabPage.this.add(scroll.bar());
 				return scroll;
 			}
-		}, contentX(), contentTop(), contentW(), py + ph - PAD);
+		}, contentX(), top, contentW(), py + ph - PAD);
+	}
+
+	/** Every feature with a switch gets a key that flips it (the ones with a key of their own already show it). */
+	private boolean hasToggleKey() {
+		return mod != null && mod.hasSwitch() && !mod.ownToggleKey;
+	}
+
+	/** The "Toggle key" row, laid out like a Form's key row. */
+	private void buildToggleKey(int top) {
+		final Mod m = mod;
+		int x = contentX();
+		int w = contentW();
+		int textW = w - Form.KEY_W - 10;
+		add(new Label("Toggle key", Label.Kind.TEXT)).bounds(x + 4, top + 3, textW, 9);
+		final Label hint = add(new Label("Press it in game to switch " + m.name + " on or off", Label.Kind.MUTED));
+		hint.bounds(x + 4, top + 13, textW, 9);
+		final Label warn = add(new Label("", Label.Kind.ACCENT));
+		warn.bounds(x + 4, top + 13, textW, 9);
+		final Runnable note = () -> {
+			String other = ToggleKeys.usedBy(m, ToggleKeys.get(m));
+			warn.text(other == null ? "" : "Also used by " + other + ". It still works");
+			warn.visible = other != null;
+			hint.visible = other == null;
+		};
+		note.run();
+		KeyButton button = new KeyButton(new KeyButton.Binding() {
+			@Override
+			public String get() {
+				return ToggleKeys.get(m);
+			}
+
+			@Override
+			public void set(String k) {
+				ToggleKeys.set(m, k);
+				note.run();
+			}
+		});
+		add(button).bounds(x + w - Form.KEY_W, top + 3, Form.KEY_W, Form.ROW - 6);
+		keyButtons.add(button);
 	}
 
 	int contentX() {
