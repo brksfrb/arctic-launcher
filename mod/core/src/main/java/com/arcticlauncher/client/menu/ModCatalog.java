@@ -182,7 +182,7 @@ final class ModCatalog {
 		}
 		if (!p.hasScreenHooks()) {
 			// This version has no hooks for them: better not offered than switched on and silent.
-			List<String> missing = java.util.Arrays.asList("slotlocks", "invsearch", "invsort", "particles", "helditem", "shulkerpeek");
+			List<String> missing = java.util.Arrays.asList("slotlocks", "invsearch", "invsort", "particles", "helditem");
 			for (int i = out.size() - 1; i >= 0; i--) {
 				if (missing.contains(out.get(i).id)) {
 					out.remove(i);

@@ -34,7 +34,7 @@ def jar_for(version):
     found += [j for j in glob.glob(f"{LOOM}/minecraft-merged-legacy*/{version}-*/*.jar")
               if not os.path.basename(os.path.dirname(os.path.dirname(j))).endswith("-intermediary")]
     found = [j for j in found if not j.endswith("-sources.jar")]
-    return found[0] if found else None
+    return max(found, key=os.path.getmtime) if found else None
 
 
 class Jar:
