@@ -91,8 +91,7 @@ jobs:
           run-id: ${{ inputs.build_run || github.run_id }}
       - name: Test tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xvfb xauth x11-xserver-utils libgl1-mesa-dri mesa-vulkan-drivers vulkan-tools mesa-utils libasound2t64 pulseaudio libflite1 ffmpeg
+          .github/scripts/apt-install.sh --no-recommends xvfb xauth x11-xserver-utils libgl1-mesa-dri mesa-vulkan-drivers vulkan-tools mesa-utils libasound2t64 pulseaudio libflite1 ffmpeg
           chmod +x audio-test-bin/arctic
       - name: Record and export audible clips
         env:
