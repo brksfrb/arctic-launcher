@@ -289,6 +289,13 @@ final class Form {
 		put(value, right - STEP_VALUE_W, top, STEP_VALUE_W, ROW);
 	}
 
+	/** A picture of joined clear glass at the level the slider above it is on. */
+	void glassPreview(java.util.function.IntSupplier level) {
+		int top = row(GlassPreview.SIZE + 6);
+		rowLabel(top, "Preview");
+		put(new GlassPreview(level), x + LABEL_W, top + 2, GlassPreview.SIZE, GlassPreview.SIZE);
+	}
+
 	/** "Label     <  Sword  >": one of many options, stepped through (too many for {@link #choice}). */
 	void cycle(String label, final String[] options, final java.util.function.IntSupplier get,
 			final java.util.function.IntConsumer set) {

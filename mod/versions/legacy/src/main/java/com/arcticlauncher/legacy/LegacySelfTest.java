@@ -79,6 +79,14 @@ final class LegacySelfTest {
 			return;
 		}
 		//#endif
+		if ("ctmframes".equals(System.getProperty("arctic.selftest"))) {
+			GlassFramesTest.start();
+			return;
+		}
+		if ("ctmlines".equals(System.getProperty("arctic.selftest"))) {
+			GlassFramesTest.startLines();
+			return;
+		}
 		//#endif
 		if ("ctm".equals(System.getProperty("arctic.selftest"))) {
 			//#if DEV_SCENES

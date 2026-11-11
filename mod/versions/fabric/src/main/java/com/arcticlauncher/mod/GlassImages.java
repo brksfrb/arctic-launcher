@@ -22,7 +22,7 @@ public final class GlassImages {
 			//#endif
 		}
 		java.awt.image.BufferedImage preferred = GlassResources.packs.tile(original, tile);
-		if (preferred == null) pixels = GlassTiles.generate(pixels, w, h, fw, fh, tile);
+		if (preferred == null) pixels = GlassTiles.generate(pixels, w, h, fw, fh, tile, GlassTiles.clear(original) ? com.arcticlauncher.client.ctm.GlassLines.stitched() : 0);
 		else for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
 			int color = preferred.getRGB((x % fw) * preferred.getWidth() / fw, (y % fh) * preferred.getHeight() / fh);
 			//#if MC < 1.21.2

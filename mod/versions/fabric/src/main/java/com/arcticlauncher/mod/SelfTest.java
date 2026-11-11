@@ -112,6 +112,14 @@ final class SelfTest {
 			GlassBordersTest.start();
 			return;
 		}
+		if ("ctmframes".equals(System.getProperty("arctic.selftest"))) {
+			GlassFramesTest.start();
+			return;
+		}
+		if ("ctmlines".equals(System.getProperty("arctic.selftest"))) {
+			GlassFramesTest.startLines();
+			return;
+		}
 		//#endif
 		//#endif
 		if ("fog".equals(System.getProperty("arctic.selftest"))) {

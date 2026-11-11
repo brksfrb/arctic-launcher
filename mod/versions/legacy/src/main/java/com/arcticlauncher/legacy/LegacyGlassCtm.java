@@ -30,6 +30,8 @@ public final class LegacyGlassCtm {
 	public static boolean enabled() { return available() && (ArcticClient.config() == null || ArcticClient.config().connectedGlass); }
 
 	public static void tick() {
+		// The line level is part of the tiles: stitching the atlas again also rebuilds every chunk.
+		if (available() && com.arcticlauncher.client.ctm.GlassLines.due()) { lastEnabled = enabled(); MinecraftClient.getInstance().reloadResources(); return; }
 		boolean on = enabled();
 		if (lastEnabled != on) {
 			lastEnabled = on;
@@ -76,6 +78,7 @@ public final class LegacyGlassCtm {
 		//#if MC < 1.9
 		if (GlassBordersTest.watching(pos)) GlassBordersTest.observe(pos, c.mask(Direction.DOWN) << 8 | c.mask(Direction.SOUTH));
 		//#endif
+		GlassFramesTest.meshing(c.x, c.y, c.z);
 		//#endif
 	}
 
@@ -90,6 +93,17 @@ public final class LegacyGlassCtm {
 		int masks = c.active ? c.mask(Direction.DOWN) << 8 | c.mask(Direction.SOUTH) : -1;
 		end();
 		return masks;
+	}
+	//#endif
+
+	//#if DEV_SCENES
+	/** The mask one face of a block gets from a view; -1 when Connected Glass leaves the block alone. */
+	static int mask(BlockView world, BlockState block, BlockPos pos, Direction face) {
+		begin(world, block, pos);
+		Context c = LOCAL.get();
+		int mask = c.active ? c.mask(face) : -1;
+		end();
+		return mask;
 	}
 	//#endif
 
@@ -170,6 +184,9 @@ public final class LegacyGlassCtm {
 			if ((mask & 80) == 80 && joins(rx, -by, rz - bz)) mask |= 32;
 			if ((mask & 65) == 65 && joins(-rx, -by, -rz - bz)) mask |= 128;
 			faces |= 1 << index;
+			//#if DEV_SCENES
+			GlassFramesTest.observe(x, y, z, index, mask);
+			//#endif
 			return masks[index] = mask;
 		}
 	}

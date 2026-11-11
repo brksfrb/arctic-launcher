@@ -42,6 +42,9 @@ public final class ClientConfig {
 	/** Features: Fullbright (on/off), and the keys (Minecraft key names). */
 	public boolean fullbright;
 	public volatile boolean connectedGlass = true;
+	/** Connected Glass: how much of the borders between joined clear glass blocks stays, 0 (none) to 100 (all). */
+	public static final int CLEAR_GLASS_LINES = 25;
+	public volatile int clearGlassLines = CLEAR_GLASS_LINES;
 	/** With Fullbright: the client's light engine does no work (faster). Takes effect when you rejoin a world. */
 	public boolean fullbrightSkipLight;
 	public boolean zoomEnabled = true;
@@ -480,6 +483,7 @@ public final class ClientConfig {
 		debugLabelColor = Math.max(0, Math.min(7, debugLabelColor));
 		debugValueColor = Math.max(0, Math.min(7, debugValueColor));
 		zoomAnimation = Math.max(0, Math.min(ZOOM_CURVES.length - 1, zoomAnimation));
+		clearGlassLines = Math.max(0, Math.min(100, clearGlassLines));
 		zoomDurationMs = Math.max(0, Math.min(1500, zoomDurationMs));
 		if (snaplookKey == null) {
 			snaplookKey = "key.keyboard.unknown";

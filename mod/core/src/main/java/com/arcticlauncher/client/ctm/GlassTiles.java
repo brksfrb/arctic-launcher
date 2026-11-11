@@ -55,6 +55,11 @@ public final class GlassTiles {
 				|| s.startsWith("glass_") && !s.contains("pane");
 	}
 
+	/** Plain (clear) glass: the block's own sprite, which its pane shares on every version. */
+	public static boolean clear(String id) {
+		return id.startsWith("minecraft:") && id.substring(id.lastIndexOf('/') + 1).equals("glass") && !id.contains("tinted");
+	}
+
 	public static boolean paneEdge(String id) { return id.startsWith("minecraft:") && (id.contains("glass_pane_top") || id.endsWith("_stained_glass_pane_top")); }
 
 	public static String variant(String original, int tile) {
@@ -74,7 +79,19 @@ public final class GlassTiles {
 
 	/** Generate one tile, retaining every animation frame and the pack's interior artwork. */
 	public static int[] generate(int[] source, int imageWidth, int imageHeight, int frameWidth, int frameHeight, int tile) {
+		return generate(source, imageWidth, imageHeight, frameWidth, frameHeight, tile, 0);
+	}
+
+	/**
+	 * As above, keeping {@code lines} percent of every border shared with a joined neighbour. The kept part grows
+	 * from the block's corners towards the middle of the edge: 0 removes shared borders, 100 keeps them whole.
+	 * Coverage rather than opacity, because plain glass is drawn without blending (a faint texel would be solid).
+	 */
+	public static int[] generate(int[] source, int imageWidth, int imageHeight, int frameWidth, int frameHeight, int tile, int lines) {
 		int[] out = source.clone();
+		lines = Math.max(0, Math.min(100, lines));
+		int reachX = lines == 0 ? 0 : Math.max(1, Math.round(lines * frameWidth / 200f));
+		int reachY = lines == 0 ? 0 : Math.max(1, Math.round(lines * frameHeight / 200f));
 		int mask = MASKS[tile];
 		if (mask == 0 || frameWidth < 4 || frameHeight < 4) return out;
 		for (int oy = 0; oy + frameHeight <= imageHeight; oy += frameHeight) {
@@ -96,6 +113,7 @@ public final class GlassTiles {
 						int corner = l ? (b ? 2 : 128) : (b ? 8 : 32);
 						if ((mask & corner) == 0) { sx = x; sy = y; }
 					}
+					if (sx != x && Math.min(y, frameHeight - 1 - y) < reachY || sy != y && Math.min(x, frameWidth - 1 - x) < reachX) { sx = x; sy = y; }
 					out[(oy + y) * imageWidth + ox + x] = source[(oy + sy) * imageWidth + ox + sx];
 				}
 			}
@@ -134,5 +152,26 @@ public final class GlassTiles {
 	}
 	private static int distance(int a, int b) {
 		return Math.abs((a & 255) - (b & 255)) + Math.abs(((a >>> 8) & 255) - ((b >>> 8) & 255)) + Math.abs(((a >>> 16) & 255) - ((b >>> 16) & 255));
+	}
+
+	/** A clear-glass tile like the game's: a light frame around an open pane with two small glints. */
+	static int[] sample() {
+		int[] tile = new int[256];
+		for (int i = 0; i < 16; i++) tile[i] = tile[240 + i] = tile[i * 16] = tile[i * 16 + 15] = 0xFFD8ECEE;
+		tile[4 * 16 + 5] = tile[5 * 16 + 4] = tile[10 * 16 + 11] = tile[11 * 16 + 10] = 0xFFBFDDE2;
+		return tile;
+	}
+
+	/** A wall of {@code blocks} x {@code blocks} joined clear glass at a line level, 16 pixels a block, for the settings preview. */
+	public static int[] preview(int blocks, int lines) {
+		int size = blocks * 16;
+		int[] out = new int[size * size], sample = sample();
+		for (int by = 0; by < blocks; by++) for (int bx = 0; bx < blocks; bx++) {
+			boolean w = bx > 0, e = bx < blocks - 1, n = by > 0, s = by < blocks - 1;
+			int mask = (w ? 1 : 0) | (w && s ? 2 : 0) | (s ? 4 : 0) | (s && e ? 8 : 0) | (e ? 16 : 0) | (e && n ? 32 : 0) | (n ? 64 : 0) | (n && w ? 128 : 0);
+			int[] tile = generate(sample, 16, 16, 16, 16, index(mask), lines);
+			for (int y = 0; y < 16; y++) System.arraycopy(tile, y * 16, out, (by * 16 + y) * size + bx * 16, 16);
+		}
+		return out;
 	}
 }
