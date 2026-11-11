@@ -336,6 +336,20 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public String keyUsedBy(String key) {
+		int code = LegacyKeys.code(key);
+		if (code == 0) {
+			return null;
+		}
+		for (KeyBinding k : mc().options.allKeys) {
+			if (k.getCode() == code && !"of.key.zoom".equals(k.getTranslationKey())) {
+				return net.minecraft.client.resource.language.I18n.translate(k.getTranslationKey());
+			}
+		}
+		return null;
+	}
+
+	@Override
 	public void setThirdPerson(boolean on) {
 		GameOptions options = mc().options;
 		if (on) {

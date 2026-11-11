@@ -28,8 +28,27 @@ final class GlassCtmTest {
 		command("fill -1 220 0 1 222 0 minecraft:stained_glass 14");
 		command("fill 3 221 0 5 221 0 minecraft:glass_pane");
 		command("time set 6000"); command("weather clear"); command("tp @p 0.5 220 -7 0 0");
-		MinecraftClient.getInstance().options.hudHidden = true;
+		boolean hold = Boolean.getBoolean("arctic.togglekeys");
+		MinecraftClient.getInstance().options.hudHidden = !hold;
 		ArcticClient.config().connectedGlass = true;
+		if (hold) {
+			// Toggle-key proof: stay in the scene; log each change so the log shows what the keys did.
+			final boolean[] last = {true, true};
+			TIMER.scheduleAtFixedRate(() -> {
+				boolean glass = ArcticClient.config().connectedGlass;
+				boolean fps = false;
+				for (com.arcticlauncher.client.hud.HudWidget w : ArcticClient.hud().widgets()) {
+					if ("fps".equals(w.id)) fps = ArcticClient.hud().slot(w).enabled;
+				}
+				if (glass != last[0] || fps != last[1]) {
+					last[0] = glass;
+					last[1] = fps;
+					ArcticLegacy.LOG.info("togglekeys-proof: connectedGlass={} fpsWidget={}", glass, fps);
+				}
+			}, 0, 100, TimeUnit.MILLISECONDS);
+			ArcticLegacy.LOG.info("togglekeys-proof: ready");
+			return;
+		}
 		TIMER.schedule(() -> run(() -> LegacyWorldTest.shot("ctm-on")), 8, TimeUnit.SECONDS);
 		TIMER.schedule(() -> run(() -> ArcticClient.config().connectedGlass = false), 12, TimeUnit.SECONDS);
 		TIMER.schedule(() -> run(() -> LegacyWorldTest.shot("ctm-off")), 20, TimeUnit.SECONDS);
