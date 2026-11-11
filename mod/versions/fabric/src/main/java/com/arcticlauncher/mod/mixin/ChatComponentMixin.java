@@ -25,6 +25,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** Chat timestamps, repeated lines stacked as "(x3)", mentions of you marked, and a longer history. */
 @Mixin(ChatComponent.class)
 abstract class ChatComponentMixin {
+	/** Text width in GUI pixels, fractions included where the game keeps them (a proportional font's digits are not whole pixels). */
+	@Unique
+	private static com.arcticlauncher.client.feature.ChatStampWidth.Measure arctic$measure(net.minecraft.client.gui.Font font) {
+		//#if MC >= 1.16
+		return text -> font.getSplitter().stringWidth(text);
+		//#else
+		return font::width;
+		//#endif
+	}
+
 	@Unique
 	private void arctic$restore() {
 		com.arcticlauncher.client.feature.PersistentChat history = ArcticClient.persistentChat();
@@ -241,8 +251,13 @@ abstract class ChatComponentMixin {
 			if (c.chatStampItalic) {
 				stamp = stamp.withStyle(ChatFormatting.ITALIC);
 			}
-			out = com.arcticlauncher.mod.Compat.empty()
-					.append(com.arcticlauncher.mod.ChatCopyComponents.tag(stamp, text, true)).append(out);
+			// The slot padding sits beside the tagged stamp, so the hover/click target is only the time.
+			net.minecraft.client.gui.Font font = net.minecraft.client.Minecraft.getInstance().font;
+			String shown = com.arcticlauncher.client.feature.ChatStamp.text(c);
+			Component pad = com.arcticlauncher.mod.ChatHistoryText.decode(com.arcticlauncher.client.feature.ChatStampWidth.padding(c, font, arctic$measure(font), shown));
+			out = com.arcticlauncher.client.feature.ChatStampWidth.right()
+					? com.arcticlauncher.mod.Compat.empty().append(pad).append(com.arcticlauncher.mod.ChatCopyComponents.tag(stamp, text, true)).append(out)
+					: com.arcticlauncher.mod.Compat.empty().append(com.arcticlauncher.mod.ChatCopyComponents.tag(stamp, text, true)).append(pad).append(out);
 		} else if (c.chatCopy) {
 			out = com.arcticlauncher.mod.Compat.empty()
 					.append(com.arcticlauncher.mod.ChatCopyComponents.tag(

@@ -54,6 +54,10 @@ final class SelfTest {
 			PersistentChatProof.start();
 			return;
 		}
+		if ("stampwidth".equals(System.getProperty("arctic.selftest"))) {
+			StampWidthTest.start();
+			return;
+		}
 		if ("chatcopy".equals(System.getProperty("arctic.selftest"))) {
 			ChatCopyTest.start();
 			return;
