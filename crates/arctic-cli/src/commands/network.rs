@@ -79,19 +79,36 @@ pub fn proxy(ctx: &Ctx, cmd: &ProxyCommand) -> Result<i32> {
 
 /// Explain a crash from a log or crash report (default: an instance's last game log).
 pub fn crash(ctx: &Ctx, file: Option<&PathBuf>, instance: Option<&str>) -> Result<i32> {
+    // The instance's mods (when one is named, or its own log is read) let the diagnosis spot
+    // clashing mods; without them it falls back to the mod list in the log.
+    let mut mods_dir = None;
     let path = match (file, instance) {
-        (Some(f), _) => f.clone(),
+        (Some(f), q) => {
+            if q.is_some() {
+                mods_dir = Some(
+                    instance_or_default(ctx, q)?
+                        .game_dir(&ctx.dirs)
+                        .join("mods"),
+                );
+            }
+            f.clone()
+        }
         (None, query) => {
             let instance = instance_or_default(ctx, query)?;
+            mods_dir = Some(instance.game_dir(&ctx.dirs).join("mods"));
             ctx.dirs.logs().join(format!("game-{}.log", instance.id))
         }
     };
     let text = std::fs::read(&path).map_err(|e| Error::io(&path, e))?;
     let text = String::from_utf8_lossy(&text);
-    match crash::diagnose(&text) {
+    let found = match &mods_dir {
+        Some(dir) => arctic_core::crash_conflicts::diagnose_in(&text, dir),
+        None => arctic_core::crash_conflicts::refine(crash::diagnose(&text), &text, &[]),
+    };
+    match found {
         Some(d) => {
             ctx.out.emit(
-                json!({"cause": d.title, "detail": d.detail, "mods": d.mods}),
+                json!({"cause": d.title, "detail": d.detail, "mods": d.mods, "fix": d.fix.is_some()}),
                 || format!("{}\n{}", d.title, d.detail),
             );
             Ok(0)

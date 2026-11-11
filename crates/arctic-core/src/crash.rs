@@ -35,7 +35,11 @@ impl Diagnosis {
         Self::new("", "", Vec::new())
     }
 
-    fn new(title: impl Into<String>, detail: impl Into<String>, mods: Vec<String>) -> Self {
+    pub(crate) fn new(
+        title: impl Into<String>,
+        detail: impl Into<String>,
+        mods: Vec<String>,
+    ) -> Self {
         Self {
             title: title.into(),
             detail: detail.into(),
