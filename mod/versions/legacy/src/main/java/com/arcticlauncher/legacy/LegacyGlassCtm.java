@@ -72,7 +72,23 @@ public final class LegacyGlassCtm {
 		c.world = world; c.block = block.getBlock(); c.data = c.block.getData(block);
 		c.x = pos.getX(); c.y = pos.getY(); c.z = pos.getZ();
 		c.checked = 0; c.connected = 0; c.faces = 0; c.viewIndex = 0; c.active = true;
+		//#if DEV_SCENES
+		//#if MC < 1.9
+		if (GlassBordersTest.watching(pos)) GlassBordersTest.observe(pos, c.mask(Direction.DOWN) << 8 | c.mask(Direction.SOUTH));
+		//#endif
+		//#endif
 	}
+
+	//#if DEV_SCENES
+	/** The masks a block gets from a view: down << 8 | south. */
+	static int masks(BlockView world, BlockState block, BlockPos pos) {
+		begin(world, block, pos);
+		Context c = LOCAL.get();
+		int masks = c.active ? c.mask(Direction.DOWN) << 8 | c.mask(Direction.SOUTH) : -1;
+		end();
+		return masks;
+	}
+	//#endif
 
 	public static void end() { Context c = LOCAL.get(); c.active = false; c.world = null; }
 
@@ -91,6 +107,9 @@ public final class LegacyGlassCtm {
 		}
 		return list;
 	}
+
+	/** A meshing view that knows which of its chunk columns the server has not sent yet. */
+	public interface Chunks { boolean arctic$missing(int chunkX, int chunkZ); }
 
 	private static final class Context {
 		boolean active, pane;
@@ -111,6 +130,11 @@ public final class LegacyGlassCtm {
 				checked |= bit;
 			}
 			return (connected & bit) != 0;
+		}
+		/** Same glass, or a chunk that has not arrived yet: its load rebuilds this section with what is really there. */
+		boolean joins(int dx, int dy, int dz) {
+			return same(dx, dy, dz) || (dx != 0 || dz != 0) && GlassTiles.crossesChunk(x, z, dx, dz)
+					&& world instanceof Chunks && ((Chunks) world).arctic$missing((x + dx) >> 4, (z + dz) >> 4);
 		}
 		boolean hide(Variants variants) {
 			if (!pane || variants == null || !variants.edge || !variants.boundary) return false;
@@ -133,14 +157,14 @@ public final class LegacyGlassCtm {
 				case DOWN: rx = 1; by = 0; bz = -1; break;
 			}
 			int mask = 0;
-			if (same(-rx, 0, -rz)) mask |= 1;
-			if (same(0, by, bz)) mask |= 4;
-			if (same(rx, 0, rz)) mask |= 16;
-			if (same(0, -by, -bz)) mask |= 64;
-			if ((mask & 5) == 5 && same(-rx, by, -rz + bz)) mask |= 2;
-			if ((mask & 20) == 20 && same(rx, by, rz + bz)) mask |= 8;
-			if ((mask & 80) == 80 && same(rx, -by, rz - bz)) mask |= 32;
-			if ((mask & 65) == 65 && same(-rx, -by, -rz - bz)) mask |= 128;
+			if (joins(-rx, 0, -rz)) mask |= 1;
+			if (joins(0, by, bz)) mask |= 4;
+			if (joins(rx, 0, rz)) mask |= 16;
+			if (joins(0, -by, -bz)) mask |= 64;
+			if ((mask & 5) == 5 && joins(-rx, by, -rz + bz)) mask |= 2;
+			if ((mask & 20) == 20 && joins(rx, by, rz + bz)) mask |= 8;
+			if ((mask & 80) == 80 && joins(rx, -by, rz - bz)) mask |= 32;
+			if ((mask & 65) == 65 && joins(-rx, -by, -rz - bz)) mask |= 128;
 			faces |= 1 << index;
 			return masks[index] = mask;
 		}

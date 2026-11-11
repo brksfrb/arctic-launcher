@@ -22,6 +22,33 @@ class GlassTilesTest {
 		assertEquals(4097, GlassPacks.expand("0-4096").size());
 	}
 
+	@Test void onlyNeighboursInAnotherChunkColumnCrossABorder() {
+		// Inside a chunk nothing crosses, whatever the offset.
+		for (int x : new int[]{1, 8, 14, -2, -15, 17}) for (int z : new int[]{1, 8, 14, -2, -15, 17})
+			for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) assertFalse(GlassTiles.crossesChunk(x, z, dx, dz), x + "," + z + " " + dx + "," + dz);
+		// The last and first block of a chunk, on both sides of zero: only the outward offsets cross.
+		for (int edge : new int[]{15, 31, -1, -17}) {
+			assertTrue(GlassTiles.crossesChunk(edge, 5, 1, 0));
+			assertFalse(GlassTiles.crossesChunk(edge, 5, -1, 0));
+			assertFalse(GlassTiles.crossesChunk(edge, 5, 0, 1));
+			assertTrue(GlassTiles.crossesChunk(5, edge, 0, 1));
+			assertFalse(GlassTiles.crossesChunk(5, edge, 0, -1));
+		}
+		for (int edge : new int[]{0, 16, -16, -32}) {
+			assertTrue(GlassTiles.crossesChunk(edge, 5, -1, 0));
+			assertFalse(GlassTiles.crossesChunk(edge, 5, 1, 0));
+			assertTrue(GlassTiles.crossesChunk(5, edge, 0, -1));
+			assertFalse(GlassTiles.crossesChunk(5, edge, 0, 1));
+		}
+		// A corner block: the diagonal neighbour is in a third chunk, and a diagonal along one border crosses too.
+		assertTrue(GlassTiles.crossesChunk(15, 15, 1, 1));
+		assertTrue(GlassTiles.crossesChunk(15, 8, 1, -1));
+		assertTrue(GlassTiles.crossesChunk(-16, -16, -1, -1));
+		assertFalse(GlassTiles.crossesChunk(15, 15, -1, -1));
+		// The block itself never does.
+		assertFalse(GlassTiles.crossesChunk(15, 0, 0, 0));
+	}
+
 	@Test void all256NeighbourPatternsReduceTo47DistinctTiles() {
 		Set<Integer> distinct = new HashSet<>();
 		for (int mask = 0; mask < 256; mask++) {
