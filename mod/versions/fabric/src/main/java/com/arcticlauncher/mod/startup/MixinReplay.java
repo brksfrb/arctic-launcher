@@ -31,6 +31,11 @@ public final class MixinReplay {
 	public static volatile String why = "";
 	/** What the last successful replay did, for the startup line. */
 	public static volatile String did = "";
+	/** Includes partially completed replays, which can also have changed plugin state. */
+	public static volatile int callsAttempted;
+	public static volatile int callsCompleted;
+	public static volatile int decisionsAttempted;
+	public static volatile int decisionsCompleted;
 	private static Path file;
 	private static boolean recording;
 	private static final Map<Object, List<String[]>> APPLIES = new java.util.IdentityHashMap<>();
@@ -181,7 +186,9 @@ public final class MixinReplay {
 					Object mixinConfig = config.getClass().getMethod("getConfig").invoke(config);
 					Method onSelect = mixinConfig.getClass().getDeclaredMethod("onSelect");
 					onSelect.setAccessible(true);
+					callsAttempted++;
 					onSelect.invoke(mixinConfig);
+					callsCompleted++;
 					selects++;
 				}
 			}
@@ -207,10 +214,16 @@ public final class MixinReplay {
 				Method apply = handle.getClass().getDeclaredMethod("shouldApplyMixin", String.class, String.class);
 				apply.setAccessible(true);
 				for (String[] pair : record.applies) {
+					callsAttempted++;
+					decisionsAttempted++;
 					apply.invoke(handle, pair[0], pair[1]);
+					decisionsCompleted++;
+					callsCompleted++;
 					applied++;
 				}
+				callsAttempted++;
 				mixins.invoke(handle);
+				callsCompleted++;
 			}
 			for (Object config : live) {
 				Object handle = handleOf(config);
@@ -225,7 +238,9 @@ public final class MixinReplay {
 				}
 				Record record = records.get((String) config.getClass().getMethod("getName").invoke(config));
 				Method accept = Class.forName("org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin").getMethod("acceptTargets", Set.class, Set.class);
+				callsAttempted++;
 				accept.invoke(plugin, new HashSet<>(record.targets), everything);
+				callsCompleted++;
 				accepted++;
 			}
 			did = live.size() + " configs, " + selects + " selected, " + nullHandles + " without plugin handle, " + unavailable + " without plugin, " + applied + " shouldApply calls, " + accepted + " acceptTargets calls";

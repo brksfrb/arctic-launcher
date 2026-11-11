@@ -694,6 +694,19 @@ impl Report {
         java: Option<&str>,
     ) -> Self {
         let all = lines.join("\n");
+        // Reserve the resolved mod inventory and agent failure context before trimming verbose
+        // logs/reports. Fabric's mod list often starts beyond the old 16 KB report prefix.
+        let mods = compact_mod_inventory(&all, crash_report.unwrap_or(""));
+        let mixin = mixin_failure_evidence(&all);
+        let mut priority = String::new();
+        if !mods.is_empty() {
+            priority.push_str(&mod_inventory_section(&mods));
+        }
+        if !mixin.is_empty() {
+            priority.push_str("\n---- mixin failure context ----\n");
+            priority.push_str(&scrub(&mixin, &Own::this_pc()));
+        }
+        let remaining = (47 * 1024usize).saturating_sub(priority.len() + 512);
         let skip = lines.len().saturating_sub(REPORT_LOG_LINES);
         let tail = lines[skip..].join("\n");
         let mut text = tail_of(&tail, REPORT_LOG_BYTES).to_owned();
@@ -761,10 +774,130 @@ impl Report {
                 },
                 &Own::this_pc(),
             ),
-            log: head_of(&scrub(&text, &Own::this_pc()), 47 * 1024).to_owned(),
+            // Mod ids/versions are public loader metadata. Keep version strings verbatim;
+            // the generic scrubber would mistake four-part versions for IP addresses.
+            log: head_of(
+                &format!(
+                    "{priority}\n{}",
+                    scrub(head_of(&text, remaining), &Own::this_pc())
+                ),
+                47 * 1024,
+            )
+            .to_owned(),
             contact: String::new(),
         }
     }
+}
+
+/// Resolve inventory from the untrimmed Fabric report, or its startup list when Minecraft
+/// died too early to write one. The agent sidecar also covers failures swallowed by preloading.
+fn compact_mod_inventory(output: &str, report: &str) -> String {
+    let mut mods = std::collections::BTreeMap::new();
+    static STARTUP_MOD: OnceLock<Regex> = OnceLock::new();
+    let startup = STARTUP_MOD
+        .get_or_init(|| Regex::new(r"^\s*(?:- |[| \\+]*-- )([a-z][a-z0-9_-]*) (.+)$").unwrap());
+    let mut in_startup = false;
+    for line in output.lines() {
+        if line.contains("Loading ") && line.ends_with(" mods:") {
+            in_startup = true;
+            continue;
+        }
+        if in_startup {
+            if let Some(c) = startup.captures(line) {
+                mods.insert(c[1].to_owned(), c[2].to_owned());
+            } else if !line.trim().is_empty() {
+                in_startup = false;
+            }
+        }
+    }
+    let mut in_report = false;
+    for line in report.lines() {
+        if line.trim() == "Fabric Mods:" {
+            in_report = true;
+            continue;
+        }
+        if !in_report || line.trim().is_empty() {
+            continue;
+        }
+        let Some((id, detail)) = line.trim().split_once(':') else {
+            break;
+        };
+        if id.is_empty()
+            || !id
+                .bytes()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_' || c == b'-')
+        {
+            break;
+        }
+        if let Some(version) = detail.split_whitespace().last() {
+            mods.insert(id.to_owned(), version.to_owned());
+        }
+    }
+    // Prefer Fabric's live resolved metadata if the failure sidecar supplies it.
+    for line in output.lines() {
+        if let Some(entry) = line
+            .split_once("[Arctic mixin mod] ")
+            .map(|(_, entry)| entry)
+            && let Some((id, version)) = entry.split_once(' ')
+        {
+            mods.insert(id.to_owned(), version.to_owned());
+        }
+    }
+    let mut out = String::new();
+    for (id, version) in mods {
+        out.push_str(&format!("{id} {version}\n"));
+    }
+    out
+}
+
+/// Keep very large inventories complete within the existing 48 KB upload limit. Typical
+/// packs stay readable; exceptionally large packs carry a lossless gzip+base64 section.
+fn mod_inventory_section(mods: &str) -> String {
+    if mods.len() > 24 * 1024 {
+        use base64::Engine as _;
+        use std::io::Write as _;
+        let mut gzip = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        if gzip.write_all(mods.as_bytes()).is_ok()
+            && let Ok(bytes) = gzip.finish()
+        {
+            return format!(
+                "---- full mod list (gzip+base64; decoded lines are id version) ----\n{}\n",
+                base64::engine::general_purpose::STANDARD.encode(bytes)
+            );
+        }
+    }
+    format!("---- full mod list (id version) ----\n{mods}")
+}
+
+/// Deduplicate stderr/log/sidecar copies, preserving input method signatures and all target mixins.
+fn mixin_failure_evidence(output: &str) -> String {
+    let mut blocks = Vec::new();
+    let mut current = String::new();
+    for line in output.lines() {
+        let Some((_, context)) = line.split_once("[Arctic mixin] ") else {
+            continue;
+        };
+        if context == "failure begin" && !current.is_empty() {
+            blocks.push(std::mem::take(&mut current));
+        }
+        if context == "failure begin" || !current.is_empty() {
+            current.push_str(context);
+            current.push('\n');
+            if context == "failure end" {
+                blocks.push(std::mem::take(&mut current));
+            }
+        } else {
+            blocks.push(format!("{context}\n"));
+        }
+    }
+    if !current.is_empty() {
+        blocks.push(current);
+    }
+    let mut seen = std::collections::HashSet::new();
+    blocks
+        .into_iter()
+        .filter(|block| seen.insert(block.clone()))
+        .collect()
 }
 
 /// Compact only launch lines, before taking the byte tail. Java's separate summary stays intact.
@@ -1499,6 +1632,113 @@ USERNAME=someone
             assert!(!clean.contains(secret), "{secret} left in: {clean}");
         }
         assert!(clean.contains("<home>") && clean.contains("<hidden>") && clean.contains("<ip>"));
+    }
+
+    #[test]
+    fn large_pack_inventory_survives_report_and_transport_limits() {
+        let mut written = format!("{}\n\tFabric Mods:\n", "stack frame\n".repeat(3000));
+        for i in 0..500 {
+            written.push_str(&format!(
+                "\t\tmod_{i}: A long display name for mod {i} 1.2.3.4+build-{i}\n"
+            ));
+        }
+        written.push_str("\tLaunched Version: 26.3\n");
+        let noise = "noise".repeat(4000);
+        let context = "[Arctic mixin] class=net.minecraft.world.entity.item.ItemEntity; role=preloader\n\
+            [Arctic mixin] cache lookup=miss\n[Arctic mixin] tick()V\n\
+            [Arctic mixin] architectury.mixins.json:MixinItemEntity\n\
+            [Arctic mixin] other.json:OtherItemMixin";
+        let report = Report::build(
+            "26.3",
+            "fabric",
+            "Crash",
+            &[context, &noise],
+            &[&noise],
+            Some(&written),
+            Some(&noise),
+        );
+        for i in 0..500 {
+            assert!(
+                report.log.contains(&format!("mod_{i} 1.2.3.4+build-{i}\n")),
+                "missing mod {i}"
+            );
+        }
+        assert!(report.log.contains("tick()V"));
+        assert!(report.log.contains("other.json:OtherItemMixin"));
+        assert!(report.log.len() < 48 * 1024);
+        assert!(!report.log.contains("Launched Version 26.3"));
+    }
+
+    #[test]
+    fn exceptionally_large_inventory_is_lossless_instead_of_cut_off() {
+        use base64::Engine as _;
+        use std::io::Read as _;
+        let mods: String = (0..3000)
+            .map(|i| format!("mod_{i} 1.2.3.4+build-{i}\n"))
+            .collect();
+        let section = mod_inventory_section(&mods);
+        assert!(section.contains("gzip+base64"));
+        let encoded = section.lines().nth(1).unwrap();
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .unwrap();
+        let mut decoded = String::new();
+        flate2::read::GzDecoder::new(bytes.as_slice())
+            .read_to_string(&mut decoded)
+            .unwrap();
+        assert_eq!(mods, decoded);
+        assert!(section.len() < 24 * 1024);
+    }
+
+    #[test]
+    fn startup_and_agent_inventory_cover_early_crashes_and_nested_mods() {
+        let output = "[main/INFO] Loading 4 mods:\n\t- arctic 1.0.0\n\
+            \t- architectury 22.0.5\n\t   |-- nested 2.0.0\n\t   \\-- last 3.0.0\n\
+            [main/INFO] other message\n- unrelated line\n\
+            [Arctic mixin mod] architectury 22.0.5+resolved\n\
+            [Arctic mixin mod] polarium 0.31.3";
+        let mods = compact_mod_inventory(output, "");
+        assert!(mods.contains("arctic 1.0.0\n"));
+        assert!(mods.contains("architectury 22.0.5+resolved\n"));
+        assert!(mods.contains("nested 2.0.0\n"));
+        assert!(mods.contains("last 3.0.0\n"));
+        assert!(mods.contains("polarium 0.31.3\n"));
+        assert!(!mods.contains("unrelated"));
+    }
+
+    #[test]
+    fn agent_evidence_is_deduplicated_and_still_scrubbed() {
+        let context = "[Arctic mixin] class=example.Item; role=main\n\
+            [Arctic mixin] tick()V\n[Arctic mixin] error=message to user@example.com";
+        let noise = "unrelated\n".repeat(4000);
+        let report = Report::build(
+            "26.3",
+            "fabric",
+            "Crash",
+            &[context, context, &noise],
+            &[],
+            None,
+            None,
+        );
+        assert_eq!(
+            mixin_failure_evidence(&format!("{context}\n{context}"))
+                .matches("tick()V")
+                .count(),
+            1
+        );
+        assert!(report.log.contains("class=example.Item; role=main"));
+        assert!(report.log.contains("tick()V"));
+        assert!(!report.log.contains("user@example.com"));
+    }
+
+    #[test]
+    fn each_failed_class_keeps_its_own_complete_method_list() {
+        let a = "[Arctic mixin] failure begin\n[Arctic mixin] class=A\n[Arctic mixin] tick()V\n[Arctic mixin] failure end";
+        let b = a.replace("class=A", "class=B");
+        let evidence = mixin_failure_evidence(&format!("{a}\n{b}\n{a}\n{b}"));
+        assert_eq!(evidence.matches("tick()V").count(), 2);
+        assert_eq!(evidence.matches("failure begin").count(), 2);
+        assert_eq!(evidence.matches("failure end").count(), 2);
     }
 
     #[test]

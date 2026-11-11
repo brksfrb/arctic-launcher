@@ -102,6 +102,11 @@ impl Run {
     /// The crash as a report, from the game log's end and the crash report it wrote.
     fn crash_report(&self, title: &str, code: Option<i32>) -> crash::Report {
         let mut lines: Vec<&str> = self.log.iter().map(|l| l.text.as_str()).collect();
+        let mixin =
+            fresh_diagnostic_sidecar(&self.game_dir, self.started, "arctic-mixin-failure.txt");
+        if let Some(context) = &mixin {
+            lines.push(context);
+        }
         let hang = fresh_hang_dump(&self.game_dir, self.started);
         if let Some(dump) = &hang {
             lines.push(dump);
@@ -200,7 +205,15 @@ impl Run {
 
 /// The sidecar survives long sessions and resource reloads that push the dump out of the UI log.
 fn fresh_hang_dump(game_dir: &std::path::Path, since: SystemTime) -> Option<String> {
-    let path = game_dir.join("arctic-hang.txt");
+    fresh_diagnostic_sidecar(game_dir, since, "arctic-hang.txt")
+}
+
+fn fresh_diagnostic_sidecar(
+    game_dir: &std::path::Path,
+    since: SystemTime,
+    name: &str,
+) -> Option<String> {
+    let path = game_dir.join(name);
     let meta = std::fs::metadata(&path).ok()?;
     if meta.modified().ok()? < since || meta.len() > 4 * 1024 * 1024 {
         return None;
@@ -704,6 +717,40 @@ impl Tasks {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn mixin_sidecar_survives_log_eviction_and_ignores_previous_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("arctic-mixin-failure.txt");
+        let started = SystemTime::now() - Duration::from_secs(1);
+        std::fs::write(&path, "[Arctic mixin] class=example.Item; role=preloader\n[Arctic mixin] tick()V\n[Arctic mixin mod] last_mod 1.2.3").unwrap();
+        assert!(
+            fresh_diagnostic_sidecar(dir.path(), started, "arctic-mixin-failure.txt").is_some()
+        );
+        assert!(
+            fresh_diagnostic_sidecar(
+                dir.path(),
+                SystemTime::now() + Duration::from_secs(1),
+                "arctic-mixin-failure.txt"
+            )
+            .is_none()
+        );
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "26.3", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = started;
+        let report = run.crash_report("Crash", Some(1));
+        assert!(report.log.contains("class=example.Item; role=preloader"));
+        assert!(report.log.contains("last_mod 1.2.3"));
+        std::fs::File::create(&path)
+            .unwrap()
+            .set_len(5 * 1024 * 1024)
+            .unwrap();
+        assert!(
+            fresh_diagnostic_sidecar(dir.path(), started, "arctic-mixin-failure.txt").is_none()
+        );
+    }
 
     #[test]
     fn a_small_heap_does_not_hide_a_missing_library_or_disable_repair() {
