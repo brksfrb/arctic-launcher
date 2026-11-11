@@ -308,7 +308,7 @@ impl ArcticApp {
                     None => {
                         ui.label(
                             RichText::new(
-                                "Link your Discord to get this profile back, with its friends, on another PC.",
+                                "Link Discord to sync your badge role color and recover this profile on another PC.",
                             )
                             .small()
                             .color(p.muted),
