@@ -6,40 +6,58 @@
       "height": 8,
       "ascent": 7,
       "chars": [
-        ""
+        "\ue0a0"
       ]
     },
     {
       "type": "bitmap",
-      "file": "arctic:font/badge1.png",
-      "height": 8,
-      "ascent": 7,
+      "file": "arctic:font/badge_tab.png",
+      "height": 9,
+      "ascent": 8,
       "chars": [
-        ""
+        "\ue0b0"
       ]
     },
     {
       "type": "bitmap",
-      "file": "arctic:font/badge2.png",
+      "file": "arctic:font/badge_ice_tile.png",
       "height": 8,
       "ascent": 7,
       "chars": [
-        ""
+        "\ue0a1"
       ]
     },
     {
       "type": "bitmap",
-      "file": "arctic:font/badge3.png",
+      "file": "arctic:font/badge_ice_tile_tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": [
+        "\ue0b1"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_line_tile.png",
       "height": 8,
       "ascent": 7,
       "chars": [
-        ""
+        "\ue0a2"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "arctic:font/badge_line_tile_tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": [
+        "\ue0b2"
       ]
     },
     {
       "type": "space",
       "advances": {
-        "": 1
+        "\ue0af": 1
       }
     }
   ]

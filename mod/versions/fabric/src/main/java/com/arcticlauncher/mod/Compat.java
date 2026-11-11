@@ -543,28 +543,28 @@ public final class Compat {
 	}
 
 	/**
-	 * The badge picture of the chosen style, then the gap before the name: 8x8 from the top of the line, 10 wide
-	 * (Badge.SIZE, Badge.ADVANCE). 1.16 and newer: a text font per picture ({@code arctic:badge}, badge1, ...);
+	 * The wearer's badge and gap: 8px for nametags, 9px centered in a tab row.
+	 * 1.16 and newer use a text font for each style and size;
 	 * 1.13-1.15, where text has no fonts: a character of the same picture in the default font
 	 * (assets/minecraft/font/default.json). Empty with "Force Unicode Font" on in 1.13-1.15, where that font drops it.
 	 */
-	public static net.minecraft.network.chat.MutableComponent arcticBadgeWithGap() {
-		int style = com.arcticlauncher.client.feature.Badge.style();
+	public static net.minecraft.network.chat.MutableComponent arcticBadgeWithGap(java.util.UUID wearer, boolean tab) {
+		int style = com.arcticlauncher.client.feature.Badge.style(wearer);
 		//#if MC < 1.16
 		if (net.minecraft.client.Minecraft.getInstance().options.forceUnicodeFont) {
 			return literal("");
 		}
-		return literal("\u00a7r" + (char) (com.arcticlauncher.client.feature.Badge.GLYPH_BASE + style) + com.arcticlauncher.client.feature.Badge.GLYPH_GAP + "\u00a7r");
+		return literal("\u00a7r" + (char) (com.arcticlauncher.client.feature.Badge.GLYPH_BASE + style + (tab ? 0x10 : 0)) + com.arcticlauncher.client.feature.Badge.GLYPH_GAP + "\u00a7r");
 		//#else
-		net.minecraft.network.chat.MutableComponent badge = literal("\uE000 ").withStyle(badgeStyle(style));
+		net.minecraft.network.chat.MutableComponent badge = literal("\uE000 ").withStyle(badgeStyle(style, tab));
 		return badge;
 		//#endif
 	}
 
 	//#if MC >= 1.16
 	/** The text style that puts a text in the font of badge picture {@code style}. */
-	public static net.minecraft.network.chat.Style badgeStyle(int style) {
-		net.minecraft.resources.Identifier font = id(ArcticMod.ID, com.arcticlauncher.client.feature.Badge.name(style));
+	public static net.minecraft.network.chat.Style badgeStyle(int style, boolean tab) {
+		net.minecraft.resources.Identifier font = id(ArcticMod.ID, com.arcticlauncher.client.feature.Badge.definition(style).font + (tab ? "_tab" : ""));
 		//#if MC >= 1.21.9
 		return net.minecraft.network.chat.Style.EMPTY.withFont(new net.minecraft.network.chat.FontDescription.Resource(font));
 		//#else
@@ -578,7 +578,7 @@ public final class Compat {
 		//#if MC < 1.16
 		return literal("\u00a7b\u2744\u00a7r ");
 		//#else
-		return literal("").withStyle(badgeStyle(0));
+		return literal("").withStyle(badgeStyle(0, false));
 		//#endif
 	}
 

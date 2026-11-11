@@ -100,10 +100,12 @@ final class SelfTest {
 			//#endif
 			return;
 		}
+		//#if DEV
 		if (BadgeTest.requested()) {
 			BadgeTest.start();
 			return;
 		}
+		//#endif
 		if (WorldTest.requested()) {
 			WorldTest.start();
 			return;

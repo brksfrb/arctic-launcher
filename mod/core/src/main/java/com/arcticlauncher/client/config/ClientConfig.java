@@ -158,8 +158,6 @@ public final class ClientConfig {
 	public boolean badgeNametags = true;
 	/** Where the badge shows: 0 the player list and name tags, 1 the player list only, 2 name tags only. */
 	public int badgeWhere;
-	/** Which badge picture you see (local display only): 0 the snowflake, see {@code Badge.STYLES}. */
-	public int badgeStyle;
 	/** The badge only on other players, not on you. */
 	public boolean badgeOthersOnly;
 	/** Dynamic FOV: the view no longer widens with speed (sprinting, speed potions, flying). */

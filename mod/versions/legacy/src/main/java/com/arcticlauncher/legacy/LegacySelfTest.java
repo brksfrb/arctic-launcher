@@ -74,10 +74,12 @@ final class LegacySelfTest {
 			LegacyFitTest.start();
 			return;
 		}
+		//#if DEV
 		if (LegacyBadgeTest.requested()) {
 			LegacyBadgeTest.start();
 			return;
 		}
+		//#endif
 		if (LegacyVisualsTest.requested()) {
 			LegacyVisualsTest.start();
 			return;

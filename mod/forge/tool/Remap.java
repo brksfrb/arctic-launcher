@@ -1,3 +1,4 @@
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import net.fabricmc.tinyremapper.NonClassCopyMode;
@@ -10,6 +11,8 @@ import net.fabricmc.tinyremapper.extension.mixin.MixinExtension;
 public final class Remap {
 	public static void main(String[] args) throws Exception {
 		Path in = Paths.get(args[0]), out = Paths.get(args[1]), mappings = Paths.get(args[2]);
+		// TinyRemapper otherwise updates an existing archive, retaining retired assets/classes.
+		Files.deleteIfExists(out);
 		Path[] classpath = new Path[args.length - 5];
 		for (int i = 5; i < args.length; i++) {
 			classpath[i - 5] = Paths.get(args[i]);
