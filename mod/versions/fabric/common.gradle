@@ -452,3 +452,16 @@ tasks.named('jar') {
 		attributes('Premain-Class': 'com.arcticlauncher.mod.startup.ArcticAgent')
 	}
 }
+
+// The startup diagnostics guard is exercised against generated Knot fixtures and the real Loader.
+if (atLeast('1.18')) {
+	dependencies {
+		testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+		testImplementation 'org.ow2.asm:asm:9.9'
+		testImplementation 'org.ow2.asm:asm-tree:9.9'
+		testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	}
+	tasks.named('test') { useJUnitPlatform() }
+} else {
+	sourceSets.test.java.setSrcDirs([])
+}
