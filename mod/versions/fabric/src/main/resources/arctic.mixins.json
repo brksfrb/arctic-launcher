@@ -63,6 +63,7 @@
 		"GlassPackOrderMixin",<% } %>
 		"GlassBakedQuadMixin",<% if (ctmQuadAccess) { %>
 		"GlassQuadAccess",<% } %>
+		"GlassDamageMixin",
 		"GlassRenderMixin",<% if (ctmSodium) { %>
 		"GlassSodiumMixin",<% } %><% if (ctmSodiumContext) { %>
 		"GlassSodiumContextMixin",<% } %><% if (ctmSodiumOld) { %>
