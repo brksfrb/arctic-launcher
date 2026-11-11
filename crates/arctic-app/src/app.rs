@@ -387,6 +387,10 @@ impl ArcticApp {
         app.note_new_version();
         app.devshot_update_prompts();
         crate::auto_update::spawn(app.dirs.clone(), app.tasks.clone());
+        // Show, hide and close must reach the window whether or not this PC has a system tray.
+        crate::window::remember_context(&cc.egui_ctx);
+        // eframe only shows the window after the first frame is painted; make sure that happens.
+        crate::window::watch_until_painted(&cc.egui_ctx);
         app
     }
 
@@ -1383,19 +1387,20 @@ impl ArcticApp {
 }
 
 impl eframe::App for ArcticApp {
-    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+    /// Everything that isn't drawing. eframe runs no egui pass at all while it believes the window
+    /// is hidden, minimized or occluded (or while a Wayland compositor withholds frame callbacks),
+    /// and calls this instead — so the launcher's own work has to live here, not in [`Self::ui`],
+    /// or it would stop the moment the window went to the tray or behind a game: game events, the
+    /// tray menu, starts handed over by another copy, auto-update, Discord and voice all included.
+    fn logic(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         arctic_core::cosmetics::set_reduce_cape_motion(self.settings.reduce_cape_motion);
-        self.check_renderer(frame);
-        let ctx = ui.ctx().clone();
         while let Ok(event) = self.events.try_recv() {
-            self.handle_event(event, &ctx);
+            self.handle_event(event, ctx);
         }
         if std::mem::take(&mut self.maximize_pending) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
         }
-        self.update_theme(&ctx, frame);
-        crate::zoom::apply(&ctx, self.settings.interface_size);
-        self.window_and_tray(&ctx, frame);
+        self.window_and_tray(ctx, frame);
         crate::auto_update::sync(
             self.settings.auto_install_updates,
             self.settings.restart_hidden_for_updates,
@@ -1420,11 +1425,6 @@ impl eframe::App for ArcticApp {
         if playing && self.settings.discord_presence && self.settings.discord_show_server {
             ctx.request_repaint_after(Duration::from_secs(1));
         }
-        self.go_back(&ctx);
-        self.shell(ui);
-        self.splash.show(&ctx, self.palette());
-        self.autosave_settings(&ctx);
-        self.pace_scenery(&ctx);
         if let Some(muted) = self.voice.take_muted() {
             self.settings.voice.muted = muted;
             self.persist_settings();
@@ -1434,6 +1434,25 @@ impl eframe::App for ArcticApp {
         self.voice.tick();
         self.together_bridge();
         self.forget_idle_images();
+        // Hidden in the tray nothing draws, so nothing asks for the next pass either: a slow tick
+        // keeps the work that goes by the clock (auto-update, the open-time count) going.
+        if crate::window::hidden() {
+            ctx.request_repaint_after(Duration::from_secs(1));
+        }
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        // Counts frames: the watchdog in `window` watches for a window that never comes up.
+        crate::window::painted();
+        self.check_renderer(frame);
+        let ctx = ui.ctx().clone();
+        self.update_theme(&ctx, frame);
+        crate::zoom::apply(&ctx, self.settings.interface_size);
+        self.go_back(&ctx);
+        self.shell(ui);
+        self.splash.show(&ctx, self.palette());
+        self.autosave_settings(&ctx);
+        self.pace_scenery(&ctx);
         if std::env::var("ARCTIC_DEVSHOT_PAGE").as_deref() == Ok("modpacks")
             && crate::devshot::enabled()
             && !self.inst.modpacks_open
