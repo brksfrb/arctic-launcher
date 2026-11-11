@@ -120,6 +120,10 @@ public final class Replays {
 	/** Keys never retrigger merely because a screen opened or closed while held. */
 	public static void tick(boolean screenOpen) {
 		boolean atTitle = platform.atTitleScreen();
+		// Switching Replay on while already in a world starts its buffer from that moment.
+		boolean enabled = ArcticClient.config().replayEnabled;
+		if (enabled && !enabledSeen && viewer == null && platform.inWorld()) bufferInWorld();
+		enabledSeen = enabled;
 		if (viewer == null && platform.inWorld()) worldTake = recorder == null ? null : recorder.current();
 		// Minecraft can discard a connection without ticking handleDisconnection again.
 		// Only a return from a world ends it: 1.8.9 also shows the title during login.
@@ -146,6 +150,7 @@ public final class Replays {
 		worldTake = null;
 	}
 
+	private static boolean enabledSeen = true;
 	public static boolean recording() { return recorder != null && recorder.recording(); }
 	public static int pendingSaves() { return recorder == null ? 0 : recorder.pendingSaves(); }
 	public static String recordingStatus() {
@@ -157,8 +162,19 @@ public final class Replays {
 		if (recorder == null || recorder.current() == null) return "Join a world to buffer instant clips";
 		return recorder.bufferReady() ? "Instant clips ready" : "Replay buffer stopped";
 	}
+	/** In a world with nothing buffering it (Replay was off at the join, or switched on since): start the buffer now. */
+	private static boolean bufferInWorld() {
+		if (recorder == null) return false;
+		if (recorder.current() != null) return true;
+		if (platform == null || viewer != null || !platform.inWorld() || !ArcticClient.config().replayEnabled) return false;
+		boolean started = platform.beginReplayInWorld();
+		if (started) worldTake = recorder.current();
+		return started;
+	}
+
 	public static void toggleRecording() {
 		if (recorder == null) return;
+		bufferInWorld();
 		if (recorder.stopRecording()) {
 			if (liveVideo != null) liveVideo.stopRecording();
 			Notices.post("Saving recording", "Instant clips are still available."); return;
@@ -167,7 +183,9 @@ public final class Replays {
 				file == null ? "Couldn't write the file." : file.getName()))) {
 			if (liveVideo != null && ArcticClient.config().replayVideoEnabled) liveVideo.startRecording();
 			Notices.post("Recording started", "Press " + platform.keyLabel(ArcticClient.config().replayRecordKey) + " to stop. Instant clips work separately.");
-		} else Notices.post("Cannot start recording", "Join a world first, or check the replay buffer notice.");
+		} else Notices.post("Cannot start recording", !platform.inWorld() ? "Join a world first."
+				: !ArcticClient.config().replayEnabled ? "Replay is off. Turn it on in the Replays tab."
+				: "This version can't record a world you were already in. Rejoin it, then record.");
 	}
 
 	public static int queuedVideos() { return liveVideo == null ? 0 : liveVideo.pending(); }
@@ -181,6 +199,7 @@ public final class Replays {
 
 	/** Save the recent window with a thumbnail; never alter an active manual recording. */
 	public static void saveMoment() {
+		bufferInWorld();
 		if (recorder == null || recorder.current() == null) {
 			Notices.post("Nothing to save yet", "Join a world to start the instant replay buffer.");
 			return;

@@ -45,6 +45,12 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return true;
 	}
 
+	/**
+	 * Recording was asked for inside a world that isn't being buffered: start a buffer now that opens
+	 * with the world as it is. False when this version can't (the caller says to rejoin).
+	 */
+	default boolean beginReplayInWorld() { return false; }
+
 	/** Safe place to start deferred replay exports (never while browsing another menu). */
 	default boolean atTitleScreen() { return false; }
 

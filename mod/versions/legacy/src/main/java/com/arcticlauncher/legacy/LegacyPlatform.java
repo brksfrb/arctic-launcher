@@ -111,6 +111,11 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean beginReplayInWorld() {
+		return com.arcticlauncher.legacy.replay.LegacyReplayRecording.beginInWorld();
+	}
+
+	@Override
 	public boolean inWorld() {
 		return mc().world != null && mc().player != null;
 	}

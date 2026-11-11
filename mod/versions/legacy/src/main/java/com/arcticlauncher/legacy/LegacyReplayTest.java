@@ -34,7 +34,7 @@ final class LegacyReplayTest {
 
 	static boolean requested() {
 		String mode = System.getProperty("arctic.selftest");
-		return "replay".equals(mode) || "replayfile".equals(mode) || "replayperf".equals(mode) || "replayperfopen".equals(mode);
+		return "replay".equals(mode) || "replayfile".equals(mode) || "replayperf".equals(mode) || "replayperfopen".equals(mode) || "replaymid".equals(mode);
 	}
 
 	static void start() {
@@ -53,6 +53,22 @@ final class LegacyReplayTest {
 			final File file = new File(System.getProperty("arctic.replayfile", ""));
 			log("scheduled, opening " + file.getName());
 			TIMER.schedule(() -> run(() -> openFile(file)), 10, TimeUnit.SECONDS);
+			return;
+		}
+		if ("replaymid".equals(System.getProperty("arctic.selftest"))) {
+			// Join a world, wait, then start/stop a manual recording through the same path as the key.
+			log("mid: scheduled");
+			if (Boolean.getBoolean("arctic.midoff")) {
+				// Replay is off while joining; it is switched on only after you are already in the world.
+				com.arcticlauncher.client.ArcticClient.config().replayEnabled = false;
+			}
+			final Runnable later = () -> after(Integer.getInteger("arctic.midwait", 12), LegacyReplayTest::mid);
+			if (Boolean.getBoolean("arctic.midserver")) {
+				// Already connected to a server (--server): no world to create, just wait for the join.
+				TIMER.schedule(() -> run(() -> when("joined the server", () -> MinecraftClient.getInstance().world != null && MinecraftClient.getInstance().player != null, later)), 5, TimeUnit.SECONDS);
+			} else {
+				TIMER.schedule(() -> run(() -> LegacyWorldTest.createTestWorld(later)), 10, TimeUnit.SECONDS);
+			}
 			return;
 		}
 		log("scheduled");
@@ -143,6 +159,47 @@ final class LegacyReplayTest {
 		//#else
 		after(9, () -> LegacyWorldTest.command("playsound note.pling @a ~ ~ ~ 1 1"));
 		//#endif
+	}
+
+	private static void mid() {
+		if (Boolean.getBoolean("arctic.midoff")) {
+			com.arcticlauncher.client.ArcticClient.config().replayEnabled = true;
+			log("mid: replay switched on inside the world");
+		}
+		MinecraftClient mc = MinecraftClient.getInstance();
+		log("mid: in world=" + (mc.world != null) + " current take=" + (Replays.recorder().current() != null) + " bufferReady=" + Replays.recorder().bufferReady());
+		LegacyWorldTest.shot("mid before recording");
+		Replays.toggleRecording();
+		log("mid: recording=" + Replays.recording());
+		if (!Replays.recording()) { fail("recording did not start in an existing world"); return; }
+		LegacyWorldTest.command("time set 6000");
+		for (int i = 0; i < 5; i++) {
+			after(1 + i, () -> {
+				MinecraftClient m = MinecraftClient.getInstance();
+				if (m.player == null) return;
+				m.player.updatePosition(m.player.x + 1.5, m.player.y, m.player.z);
+				m.player.yaw += 30;
+				LegacyWorldTest.command("setblock ~ ~-1 ~2 minecraft:gold_block");
+			});
+		}
+		after(8, () -> {
+			Replays.toggleRecording();
+			when("mid recording saved", () -> Replays.recorder().pendingSaves() == 0 && Replays.folder().listFiles((d, n) -> n.endsWith(".mcpr")) != null
+					&& Replays.folder().listFiles((d, n) -> n.endsWith(".mcpr")).length > 0, () -> {
+				File[] files = Replays.folder().listFiles((d, n) -> n.endsWith(".mcpr"));
+				final File f = files[0];
+				log("mid: saved " + f.getName() + " " + f.length() / 1024 + " KB");
+				com.arcticlauncher.client.ArcticClient.platform().leaveWorld();
+				when("left the world", () -> MinecraftClient.getInstance().world == null, () -> after(3, () -> {
+					Replays.watch(f);
+					when("mid replay opened", () -> Replays.viewer() != null && (Replays.viewer().ready() || Replays.viewer().status() != null), () -> {
+						ReplayViewer v = Replays.viewer();
+						log("mid: opened ready=" + v.ready() + " status=" + v.status() + " duration=" + v.duration());
+						after(4, () -> { LegacyWorldTest.shot("mid replay playing"); log(v.ready() && v.duration() > 3000 ? "PASSED" : "FAILED mid replay unusable"); MinecraftClient.getInstance().scheduleStop(); });
+					});
+				}));
+			});
+		});
 	}
 
 	private static void keep() {
