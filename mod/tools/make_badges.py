@@ -2,8 +2,9 @@
 
 SVG sources are reviewable beside this script. Picker art keeps the sheet's
 3-unit outline; tag/tab variants use 7 units (1.75/1.97 framebuffer px at GUI
-scale 2). Filter at GUI scale 2 before expanding the atlas with nearest sampling, so
-thin mark details cannot fall between the game's nearest-filtered texels.
+scale 2). Font textures are rendered straight from the SVG at 8 texels per GUI pixel
+(never prefiltered to a coarse grid and blown up), so the art keeps full alpha in its
+body and stays sharp when a name tag is seen up close.
 """
 import io
 import json
@@ -26,7 +27,7 @@ for name, style in STYLES:
     for tab, height, ascent in [(False, 8, 7), (True, 9, 8)]:
         font = name + ('_tab' if tab else '')
         size = height * 8
-        small = small_art.resize((height * 2, height * 2), Image.Resampling.LANCZOS).resize((size, size), Image.Resampling.NEAREST)
+        small = small_art.resize((size, size), Image.Resampling.LANCZOS)
         small.save(ROOT / 'textures/font' / (font + '.png'))
         small.save(ROOT / (name + ('_tab' if tab else '_tag') + '.png'))
         bitmap = dict(type='bitmap', file='arctic:font/' + font + '.png', height=height, ascent=ascent, chars=['\uE000'])

@@ -42,7 +42,86 @@ final class BadgeTest {
     }
     private static void log(String text) { ArcticMod.LOG.info("badgeproof: " + text); }
 
+    @SuppressWarnings("unchecked")
+
+    // Solo scene (-Darctic.badge.solo=true -Darctic.badge.label=x): own name tag and player list in each style, no server.
+    private static final UUID OTHER_SOLO = UUID.nameUUIDFromBytes(("OfflinePlayer:BadgeLine" + (false ? "" : "M")).getBytes(StandardCharsets.UTF_8));
+    private static final String LABEL = System.getProperty("arctic.badge.label", "run");
+    private static void seed(int style) {
+        try {
+            java.lang.reflect.Field field = com.arcticlauncher.client.looks.Looks.class.getDeclaredField("players");
+            field.setAccessible(true);
+            java.util.Map<UUID, com.arcticlauncher.client.looks.Look> cache = (java.util.Map<UUID, com.arcticlauncher.client.looks.Look>) field.get(ArcticClient.looks());
+            java.lang.reflect.Constructor<com.arcticlauncher.client.looks.Look> ctor = com.arcticlauncher.client.looks.Look.class.getDeclaredConstructor(
+                String.class, boolean.class, String.class, java.util.List.class, boolean.class, long.class, java.util.Map.class, int.class);
+            ctor.setAccessible(true);
+            for (UUID who : new UUID[] {ArcticClient.platform().worldPlayerId(), OTHER_SOLO}) cache.put(who, ctor.newInstance(null, false, null, java.util.Collections.emptyList(), true,
+                System.currentTimeMillis() + 3600000L, java.util.Collections.emptyMap(), style));
+        } catch (Exception e) { throw new RuntimeException(e); }
+    }
+    private static void soloStep(int step) {
+        int style = step / 3, kind = step % 3;
+        if (style >= Badge.STYLES.size()) { fov(70); log("DONE"); Minecraft.getInstance().stop(); return; }
+        seed(style);
+        later(1, () -> {
+            seed(style);
+            if (kind == 0) { tab(false); camera(true); fov(70); }
+            if (kind == 1) { fov(30); }
+            if (kind == 2) { fov(70); camera(false); tab(true); }
+        });
+        later(4, () -> { seed(style); soloShot("style" + style + "-" + new String[] {"normal", "close", "tab"}[kind]); });
+        later(6, () -> soloStep(step + 1));
+    }
+    private static void fov(int degrees) { Minecraft.getInstance().options.fov().set(degrees); }
+    private static void soloShot(String suffix) {
+        Minecraft mc = Minecraft.getInstance();
+        net.minecraft.client.Screenshot.takeScreenshot(mc.getMainRenderTarget(), image -> {
+            try { image.writeToFile(PROOF.resolve("1.21.11-" + LABEL + "-" + suffix + ".png")); }
+            catch (Exception e) { throw new RuntimeException(e); }
+            finally { image.close(); }
+        });
+        log("screenshot " + suffix);
+    }
+
+    private static void lanThenSteps() {
+        if (!Boolean.getBoolean("arctic.badge.lan")) { soloStep(0); return; }
+        Minecraft mc = Minecraft.getInstance();
+        int port = net.minecraft.util.HttpUtil.getAvailablePort();
+        mc.getSingleplayerServer().setUsesAuthentication(false);
+        mc.getSingleplayerServer().publishServer(net.minecraft.world.level.GameType.CREATIVE, true, port);
+        try { Files.write(PORT, Integer.toString(port).getBytes(StandardCharsets.UTF_8)); } catch (Exception e) { throw new RuntimeException(e); }
+        waitSecond(0);
+    }
+    private static void waitSecond(int tries) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.getConnection().getOnlinePlayers().size() >= 2) { later(5, () -> soloStep(0)); }
+        else if (tries < 240) later(1, () -> waitSecond(tries + 1));
+        else throw new IllegalStateException("peer never joined");
+    }
+    private static void soloPeer() {
+        later(10, () -> {
+            Minecraft.getInstance().options.pauseOnLostFocus = false;
+            try { ArcticClient.platform().joinSaved("Badge proof", "127.0.0.1:" + new String(Files.readAllBytes(PORT), StandardCharsets.UTF_8).trim(), false); }
+            catch (Exception e) { throw new RuntimeException(e); }
+            later(150, () -> Minecraft.getInstance().stop());
+        });
+    }
+    private static void solo() {
+        later(10, () -> {
+            Minecraft mc = Minecraft.getInstance(); mc.options.pauseOnLostFocus = false;
+            ClientConfig c = ArcticClient.config(); c.fancy = false; c.badgeNametags = true;
+            c.badgeOthersOnly = false; c.badgeWhere = 0; c.ownNametag = true;
+            WorldTest.createTestWorld(() -> {
+                command("gamerule doDaylightCycle false"); command("time set 6000"); command("weather clear");
+                command("tp BadgeIce 0.5 120 0.5 0 20");
+                later(3, () -> { command("fill -5 119 -5 5 119 9 stone"); command("tp BadgeIce 0.5 120 0.5 0 20"); });
+                later(7, () -> lanThenSteps());
+            });
+        });
+    }
+
     static void start() {
+        if (Boolean.getBoolean("arctic.badge.solo")) { if (PEER) soloPeer(); else solo(); return; }
         later(10, () -> {
             Minecraft mc = Minecraft.getInstance(); mc.options.pauseOnLostFocus = false;
             ClientConfig c = ArcticClient.config(); c.fancy = false; c.badgeNametags = true;
