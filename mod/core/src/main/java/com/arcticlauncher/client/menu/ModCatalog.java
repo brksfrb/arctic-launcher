@@ -100,6 +100,16 @@ final class ModCatalog {
 		}
 	}
 
+	/** The "Light" HUD widget (the old readout), or null. */
+	private static HudWidget lightReadout() {
+		for (HudWidget w : ArcticClient.hud().widgets()) {
+			if ("light".equals(w.id)) {
+				return w;
+			}
+		}
+		return null;
+	}
+
 	static List<Mod> all() {
 		final ClientConfig c = ArcticClient.config();
 		Platform p = ArcticClient.platform();
@@ -592,6 +602,25 @@ final class ModCatalog {
 			out.add(new Mod("chunkborders", "Chunk Borders", "The chunk edges drawn as lines, like F3+G in one click", "target", Category.GAMEPLAY,
 					"chunk border grid f3 g slime lines")
 					.toggle(() -> c.chunkBorders, on -> c.chunkBorders = on));
+		}
+		if (p.lightOverlayWorks()) {
+			out.add(new Mod("lightoverlay", "Light Overlay", "Marks the ground where hostile mobs can spawn: red now, yellow at night, green safe",
+					"target", Category.GAMEPLAY, "light level lighty spawn mob spawning dark cave lit")
+					.toggle(() -> c.lightOverlay, on -> c.lightOverlay = on)
+					.settings((host, f) -> {
+						f.section("Overlay");
+						f.note("Red: mobs spawn here now. Yellow: only at night. Green: safe.");
+						f.slider("Range", () -> c.lightRange, v -> c.lightRange = (int) v, 4, 32, 1, "%.0f");
+						f.choice("Style", com.arcticlauncher.client.feature.LightOverlay.STYLES, () -> c.lightStyle, i -> c.lightStyle = i);
+						f.toggle("Show safe blocks", "Green markers where mobs can't spawn", () -> c.lightShowSafe, on -> c.lightShowSafe = on);
+						f.key("Toggle key", "Switches the overlay on and off", Form.key(() -> c.lightKey, k -> c.lightKey = k));
+						f.section("Readout");
+						HudWidget readout = lightReadout();
+						if (readout != null) {
+							final HudSlot slot = ArcticClient.hud().slot(readout);
+							f.toggle("Light readout", "Keep the \"Light: 8 (sky 0)\" line on screen", () -> slot.enabled, on -> slot.enabled = on);
+						}
+					}));
 		}
 		if (p.tooltipScrollWorks()) {
 			out.add(new Mod("tooltipscroll", "Scrollable Tooltips", "A tooltip too tall for the screen (long item lore) moves with the mouse wheel", "tooltips",

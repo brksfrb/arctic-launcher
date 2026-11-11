@@ -1422,6 +1422,22 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean lightOverlayWorks() {
+		//#if MC >= 1.21.11 && MC < 26.1
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	//#if MC >= 1.21.11 && MC < 26.1
+	@Override
+	public com.arcticlauncher.client.feature.LightOverlay.Probe lightProbe() {
+		return LightOverlayDraw.probe();
+	}
+	//#endif
+
+	@Override
 	public boolean itemPhysicsWorks() {
 		return true;
 	}

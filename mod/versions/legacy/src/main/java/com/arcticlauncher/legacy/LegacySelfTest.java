@@ -66,6 +66,12 @@ final class LegacySelfTest {
 			//#endif
 			return;
 		}
+		if ("lightoverlay".equals(System.getProperty("arctic.selftest"))) {
+			//#if DEV_SCENES
+			LightOverlayTest.start();
+			//#endif
+			return;
+		}
 		if (LegacyWorldTest.requested()) {
 			LegacyWorldTest.start();
 			return;

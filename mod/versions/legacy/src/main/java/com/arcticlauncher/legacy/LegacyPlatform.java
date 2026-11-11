@@ -535,6 +535,22 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean lightOverlayWorks() {
+		//#if MC < 1.9
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	//#if MC < 1.9
+	@Override
+	public com.arcticlauncher.client.feature.LightOverlay.Probe lightProbe() {
+		return LegacyLightOverlay.probe();
+	}
+	//#endif
+
+	@Override
 	public boolean itemPhysicsWorks() {
 		return true;
 	}

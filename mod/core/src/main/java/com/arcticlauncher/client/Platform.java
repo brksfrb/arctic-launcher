@@ -455,6 +455,16 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
+	/** The Light Overlay works on this version. */
+	default boolean lightOverlayWorks() {
+		return false;
+	}
+
+	/** The world's light and spawn rules for the Light Overlay, or null (not in a world). */
+	default com.arcticlauncher.client.feature.LightOverlay.Probe lightProbe() {
+		return null;
+	}
+
 	/** Item physics works on this version. */
 	default boolean itemPhysicsWorks() {
 		return false;

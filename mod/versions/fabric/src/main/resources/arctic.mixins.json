@@ -114,6 +114,7 @@
 <% } %>		"TooltipWheelMixin",
 		"ShinyPotsMixin",
 <% if (chunkOwn13) { %>		"ChunkBorders13Mixin",
+<% } %><% if (lightOverlay) { %>		"LightOverlayMixin",
 <% } %>		"DynamicFovMixin",
 <% if (teamViewClient) { %>		"TeamViewClientMixin",
 <% } %><% if (teamViewEntity) { %>		"TeamViewEntityMixin",
