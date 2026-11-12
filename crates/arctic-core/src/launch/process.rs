@@ -610,13 +610,16 @@ fn is_link(path: &Path) -> bool {
     let Ok(meta) = std::fs::symlink_metadata(path) else {
         return false;
     };
-    if meta.file_type().is_symlink() {
-        return true;
-    }
-    #[cfg(windows)]
-    if junction::exists(path).unwrap_or(false) {
-        return true;
-    }
+    meta.file_type().is_symlink() || is_junction(path)
+}
+
+#[cfg(windows)]
+fn is_junction(path: &Path) -> bool {
+    junction::exists(path).unwrap_or(false)
+}
+
+#[cfg(all(not(windows), test))]
+fn is_junction(_path: &Path) -> bool {
     false
 }
 
