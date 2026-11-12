@@ -800,6 +800,10 @@ impl ArcticApp {
     }
 
     fn on_look_saved(&mut self, account_id: String, result: Result<ArcticState, String>) {
+        // Once, when the result is stored: the notice that shows it is drawn every frame.
+        if let Err(e) = &result {
+            log::info!("looks server: {e}");
+        }
         self.skins.arctic_busy = false;
         self.skins.failed.clear();
         let had_look = self

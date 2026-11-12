@@ -133,7 +133,6 @@ impl ArcticApp {
             ui.horizontal(|ui| {
                 // Connection problems get a plain message; details go to the log.
                 let text = if e.starts_with("network error") {
-                    log::info!("looks server: {e}");
                     "Can't reach the Arctic looks server right now.".to_owned()
                 } else {
                     format!("Arctic looks are unavailable: {e}")
@@ -154,6 +153,11 @@ impl ArcticApp {
                         .color(p.muted),
                 );
             });
+            ui.add_space(6.0);
+        }
+        // Logins can't be saved (the data folder isn't writable): they work until the launcher closes.
+        if let Some(problem) = arctic_core::secret::problem() {
+            ui.label(RichText::new(format!("Logins aren't being saved: {problem}")).color(p.muted));
             ui.add_space(6.0);
         }
     }

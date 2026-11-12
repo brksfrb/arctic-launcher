@@ -165,7 +165,6 @@ impl Tasks {
     ) -> Result<ArcticState> {
         let base = cosmetics::base_url();
         let account = self.fresh_account(account)?;
-        let token = cosmetics::token_for(self.dirs(), &base, &account)?;
         // What's uploaded now is already here: no need to download it back.
         let mut textures = known.textures;
         let uploaded = [
@@ -180,7 +179,9 @@ impl Tasks {
                 textures.push((cosmetics::texture_hash(png), png.clone()));
             }
         }
-        let look = cosmetics::set_look(&base, &token, &change)?;
+        let look = cosmetics::with_session(self.dirs(), &base, &account, |token| {
+            cosmetics::set_look(&base, token, &change)
+        })?;
         for hash in look.skin.iter().chain(look.cape.iter()) {
             if !textures.iter().any(|(h, _)| h == hash) {
                 textures.push((hash.clone(), cosmetics::texture(&base, hash)?));
@@ -202,11 +203,10 @@ impl Tasks {
     ) -> Result<ArcticState> {
         let base = cosmetics::base_url();
         let account = self.fresh_account(account)?;
-        let token = cosmetics::token_for(self.dirs(), &base, &account)?;
-        let look = match change {
-            Some(new) => cosmetics::set_look(&base, &token, &new)?,
-            None => cosmetics::my_look(&base, &token)?,
-        };
+        let look = cosmetics::with_session(self.dirs(), &base, &account, |token| match &change {
+            Some(new) => cosmetics::set_look(&base, token, new),
+            None => cosmetics::my_look(&base, token),
+        })?;
         self.load_catalog_blocking(&base, look)
     }
 

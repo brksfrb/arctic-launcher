@@ -31,28 +31,97 @@ const PREFIX_V1: &str = "dpapi:";
 /// just by asking the system.
 const APP_KEY: &[u8] = b"arctic-launcher/secret/v1";
 
-/// An encrypted value.
+/// An encrypted value. When it can't be encrypted (the key file can't be written) the value is kept in
+/// memory for this run only: it is never written out, and never written as an empty "sealed" value.
 #[derive(Clone, Default)]
 pub struct Secret {
     sealed: Vec<u8>,
+    unsealed: Option<Zeroizing<String>>,
+}
+
+static SEAL_PROBLEM: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+static KEY_PROBLEM: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+fn slot(
+    slot: &'static std::sync::Mutex<Option<String>>,
+) -> std::sync::MutexGuard<'static, Option<String>> {
+    slot.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Sealing failed: say why, once until it works again (never the secret itself).
+fn seal_failed(reason: String) {
+    let mut problem = slot(&SEAL_PROBLEM);
+    if problem.as_deref() != Some(reason.as_str()) {
+        log::warn!(
+            "can't encrypt saved logins ({reason}); they stay in memory for this session and are not saved"
+        );
+        *problem = Some(reason);
+    }
+}
+
+/// Something that must be saved can't be (the data folder isn't writable): shown in the UI.
+pub(crate) fn key_unsaved(reason: String) {
+    *slot(&KEY_PROBLEM) = Some(reason);
+}
+
+pub(crate) fn key_saved() {
+    *slot(&KEY_PROBLEM) = None;
+}
+
+/// A one-line reason saved logins or offline keys can't be kept on this PC right now, if so.
+pub fn problem() -> Option<String> {
+    slot(&SEAL_PROBLEM)
+        .clone()
+        .or_else(|| slot(&KEY_PROBLEM).clone())
 }
 
 impl Secret {
     /// Encrypt `plain`; the given string is wiped.
     pub fn new(plain: impl Into<String>) -> Self {
         let mut plain = plain.into();
-        let sealed = if plain.is_empty() {
-            Vec::new()
-        } else {
-            seal(plain.as_bytes())
+        if plain.is_empty() {
+            return Self::default();
+        }
+        let this = match seal(plain.as_bytes()) {
+            Ok(sealed) if !sealed.is_empty() => {
+                *slot(&SEAL_PROBLEM) = None;
+                Self {
+                    sealed,
+                    unsealed: None,
+                }
+            }
+            Ok(_) => {
+                seal_failed("encryption returned nothing".into());
+                Self::in_memory(&plain)
+            }
+            Err(reason) => {
+                seal_failed(reason);
+                Self::in_memory(&plain)
+            }
         };
         plain.zeroize();
-        Self { sealed }
+        this
+    }
+
+    fn in_memory(plain: &str) -> Self {
+        Self {
+            sealed: Vec::new(),
+            unsealed: Some(Zeroizing::new(plain.to_owned())),
+        }
+    }
+
+    /// Holds a value that couldn't be encrypted, so it can't be saved.
+    pub fn unsaveable(&self) -> bool {
+        self.unsealed.is_some()
     }
 
     /// The value, wiped from memory when the returned buffer is dropped.
     /// Empty if it can't be decrypted (a file from another PC or user).
     pub fn reveal(&self) -> Zeroizing<String> {
+        if let Some(plain) = &self.unsealed {
+            return Zeroizing::new(plain.to_string());
+        }
         if self.sealed.is_empty() {
             return Zeroizing::new(String::new());
         }
@@ -63,7 +132,7 @@ impl Secret {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.sealed.is_empty()
+        self.sealed.is_empty() && self.unsealed.is_none()
     }
 
     /// False when it was encrypted on another PC or by another user.
@@ -71,7 +140,11 @@ impl Secret {
         self.sealed.is_empty() || unseal(&self.sealed).is_some()
     }
 
+    /// Nothing at all for an empty value: never a prefix with nothing sealed behind it.
     fn to_stored(&self) -> String {
+        if self.sealed.is_empty() {
+            return String::new();
+        }
         format!("{PREFIX}{}", STANDARD.encode(&self.sealed))
     }
 
@@ -79,6 +152,7 @@ impl Secret {
         if let Some(b64) = text.strip_prefix(PREFIX) {
             return Self {
                 sealed: STANDARD.decode(b64).unwrap_or_default(),
+                unsealed: None,
             };
         }
         #[cfg(windows)]
@@ -108,6 +182,12 @@ impl PartialEq for Secret {
 
 impl Serialize for Secret {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        if self.unsealed.is_some() {
+            return Err(serde::ser::Error::custom(format!(
+                "can't encrypt it to save it ({})",
+                problem().unwrap_or_else(|| "no reason known".into())
+            )));
+        }
         s.serialize_str(&self.to_stored())
     }
 }
@@ -138,12 +218,44 @@ pub mod on_disk_opt {
     use super::*;
 
     pub fn serialize<S: Serializer>(value: &Option<String>, s: S) -> Result<S::Ok, S::Error> {
-        value.as_deref().map(Secret::new).serialize(s)
+        // A value that can't be encrypted is left out, not saved empty (it stays usable in memory).
+        value
+            .as_deref()
+            .map(Secret::new)
+            .filter(|secret| !secret.unsaveable())
+            .serialize(s)
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
         let secret = Option::<Secret>::deserialize(d)?;
         Ok(secret.map(|s| s.reveal().to_string()))
+    }
+}
+
+/// For `Option<String>` fields saved as they are (not encrypted) that older builds saved encrypted: a
+/// plain value is returned as it is, never sent through encryption (which can fail).
+pub mod plain_or_sealed_opt {
+    use super::*;
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
+        let text = Option::<String>::deserialize(d)?;
+        Ok(text.map(|text| {
+            if text.starts_with(PREFIX) || is_old_prefix(&text) {
+                Secret::from_stored(text).reveal().to_string()
+            } else {
+                text
+            }
+        }))
+    }
+
+    #[cfg(windows)]
+    fn is_old_prefix(text: &str) -> bool {
+        text.starts_with(PREFIX_V1)
+    }
+
+    #[cfg(not(windows))]
+    fn is_old_prefix(_: &str) -> bool {
+        false
     }
 }
 
@@ -168,9 +280,19 @@ pub fn has_plain(json: &str, fields: &[&str]) -> bool {
     walk(&value, fields)
 }
 
+/// Tests: from now on this thread's key file can't be created (its folder is under a plain file).
+#[cfg(all(test, not(windows)))]
+pub(crate) fn break_key_file_for_this_thread(root: &std::path::Path) -> std::path::PathBuf {
+    let blocker = root.join("not-a-folder");
+    std::fs::write(&blocker, b"x").unwrap();
+    let path = blocker.join("sub").join(".secret-key");
+    local::TEST_KEY_FILE.with(|p| *p.borrow_mut() = Some(path.clone()));
+    path
+}
+
 #[cfg(windows)]
-fn seal(plain: &[u8]) -> Vec<u8> {
-    dpapi::protect(plain, &windows_key()).unwrap_or_default()
+fn seal(plain: &[u8]) -> Result<Vec<u8>, String> {
+    dpapi::protect(plain, &windows_key()).ok_or_else(|| "Windows refused to encrypt (DPAPI)".into())
 }
 
 #[cfg(windows)]
@@ -187,8 +309,8 @@ fn windows_key() -> Vec<u8> {
 }
 
 #[cfg(not(windows))]
-fn seal(plain: &[u8]) -> Vec<u8> {
-    local::seal(plain).unwrap_or_default()
+fn seal(plain: &[u8]) -> Result<Vec<u8>, String> {
+    local::seal(plain)
 }
 
 #[cfg(not(windows))]
@@ -314,27 +436,38 @@ mod local {
     const NONCE_LEN: usize = 12;
     const KEY_LEN: usize = 32;
 
-    fn key_file() -> Option<std::path::PathBuf> {
+    #[cfg(test)]
+    thread_local! {
+        pub static TEST_KEY_FILE: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) };
+    }
+
+    pub fn key_file() -> Option<std::path::PathBuf> {
+        #[cfg(test)]
+        if let Some(path) = TEST_KEY_FILE.with(|p| p.borrow().clone()) {
+            return Some(path);
+        }
         dirs::data_local_dir().map(|d| d.join("arctic-launcher").join(".secret-key"))
     }
 
-    /// The random key, created on first use.
-    fn file_key() -> Option<Vec<u8>> {
-        let path = key_file()?;
+    /// The random key, created on first use. The error says which file and why.
+    fn file_key() -> Result<Vec<u8>, String> {
+        let path = key_file().ok_or("no data folder known for this user")?;
         if let Ok(bytes) = std::fs::read(&path)
             && bytes.len() == KEY_LEN
         {
-            return Some(bytes);
+            return Ok(bytes);
         }
         let mut key = vec![0u8; KEY_LEN];
-        getrandom::fill(&mut key).ok()?;
-        std::fs::create_dir_all(path.parent()?).ok()?;
-        write_private(&path, &key)?;
-        Some(key)
+        getrandom::fill(&mut key).map_err(|e| format!("no random numbers: {e}"))?;
+        let parent = path.parent().ok_or("key file has no folder")?;
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("can't create {}: {e}", parent.display()))?;
+        write_private(&path, &key).map_err(|e| format!("can't write {}: {e}", path.display()))?;
+        Ok(key)
     }
 
     #[cfg(unix)]
-    fn write_private(path: &std::path::Path, bytes: &[u8]) -> Option<()> {
+    fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
         use std::io::Write;
         use std::os::unix::fs::OpenOptionsExt;
         let mut f = std::fs::OpenOptions::new()
@@ -342,14 +475,13 @@ mod local {
             .create(true)
             .truncate(true)
             .mode(0o600)
-            .open(path)
-            .ok()?;
-        f.write_all(bytes).ok()
+            .open(path)?;
+        f.write_all(bytes)
     }
 
     #[cfg(not(unix))]
-    fn write_private(path: &std::path::Path, bytes: &[u8]) -> Option<()> {
-        std::fs::write(path, bytes).ok()
+    fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+        std::fs::write(path, bytes)
     }
 
     fn machine_id() -> String {
@@ -360,7 +492,7 @@ mod local {
             .unwrap_or_default()
     }
 
-    fn cipher() -> Option<Aes256Gcm> {
+    fn cipher() -> Result<Aes256Gcm, String> {
         let mut file = file_key()?;
         let mut hasher = Sha256::new();
         hasher.update(&file);
@@ -368,16 +500,18 @@ mod local {
         hasher.update(super::APP_KEY);
         let mut key = hasher.finalize().to_vec();
         file.zeroize();
-        let cipher = Aes256Gcm::new_from_slice(&key).ok();
+        let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| e.to_string());
         key.zeroize();
         cipher
     }
 
-    pub fn seal(plain: &[u8]) -> Option<Vec<u8>> {
+    pub fn seal(plain: &[u8]) -> Result<Vec<u8>, String> {
         let mut nonce = [0u8; NONCE_LEN];
-        getrandom::fill(&mut nonce).ok()?;
-        let sealed = cipher()?.encrypt(Nonce::from_slice(&nonce), plain).ok()?;
-        Some([nonce.as_slice(), &sealed].concat())
+        getrandom::fill(&mut nonce).map_err(|e| format!("no random numbers: {e}"))?;
+        let sealed = cipher()?
+            .encrypt(Nonce::from_slice(&nonce), plain)
+            .map_err(|e| e.to_string())?;
+        Ok([nonce.as_slice(), &sealed].concat())
     }
 
     pub fn unseal(sealed: &[u8]) -> Option<Vec<u8>> {
@@ -385,7 +519,7 @@ mod local {
             return None;
         }
         let (nonce, body) = sealed.split_at(NONCE_LEN);
-        cipher()?.decrypt(Nonce::from_slice(nonce), body).ok()
+        cipher().ok()?.decrypt(Nonce::from_slice(nonce), body).ok()
     }
 }
 
@@ -426,6 +560,54 @@ mod tests {
         let s: Secret = serde_json::from_str(&format!("\"{PREFIX}AAAAAAAAAAA=\"")).unwrap();
         assert!(!s.readable());
         assert_eq!(&*s.reveal(), "");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn a_secret_that_cannot_be_sealed_is_never_saved_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let key_file = break_key_file_for_this_thread(dir.path());
+        let s = Secret::new("M.C123-refresh-token");
+        // Still usable for this run...
+        assert_eq!(&*s.reveal(), "M.C123-refresh-token");
+        assert!(!s.is_empty() && s.unsaveable());
+        // ...but saving it is an error naming the cause, never an empty "local1:" value.
+        let err = serde_json::to_string(&s).unwrap_err().to_string();
+        assert!(err.contains("can't encrypt"), "{err}");
+        assert!(!err.contains("refresh-token"));
+        let reason = problem().unwrap();
+        assert!(
+            reason.contains(&*key_file.parent().unwrap().to_string_lossy()),
+            "{reason}"
+        );
+        assert!(!reason.contains("refresh-token"));
+        // An optional field (the session token) is left out instead.
+        #[derive(Serialize)]
+        struct Holder {
+            #[serde(with = "on_disk_opt")]
+            token: Option<String>,
+        }
+        let json = serde_json::to_string(&Holder {
+            token: Some("session-token".into()),
+        })
+        .unwrap();
+        assert_eq!(json, r#"{"token":null}"#);
+        // An empty value is saved as nothing, with no prefix.
+        assert_eq!(serde_json::to_string(&Secret::new("")).unwrap(), "\"\"");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn a_plain_stored_value_reads_back_even_when_sealing_is_broken() {
+        let dir = tempfile::tempdir().unwrap();
+        break_key_file_for_this_thread(dir.path());
+        #[derive(Deserialize)]
+        struct Holder {
+            #[serde(with = "plain_or_sealed_opt")]
+            key: Option<String>,
+        }
+        let h: Holder = serde_json::from_str(r#"{"key":"abcdef0123456789"}"#).unwrap();
+        assert_eq!(h.key.as_deref(), Some("abcdef0123456789"));
     }
 
     #[test]
