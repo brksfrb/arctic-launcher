@@ -31,7 +31,7 @@ public final class LegacyGlassCtm {
 
 	public static void tick() {
 		// The line level is part of the tiles: stitching the atlas again also rebuilds every chunk.
-		if (available() && com.arcticlauncher.client.ctm.GlassLines.due()) { lastEnabled = enabled(); MinecraftClient.getInstance().reloadResources(); return; }
+		if (available() && com.arcticlauncher.client.ctm.GlassLines.due(enabled())) { lastEnabled = enabled(); MinecraftClient.getInstance().reloadResources(); return; }
 		boolean on = enabled();
 		if (lastEnabled != on) {
 			lastEnabled = on;

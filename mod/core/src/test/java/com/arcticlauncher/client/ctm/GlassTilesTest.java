@@ -262,4 +262,16 @@ class GlassTilesTest {
 		for (int i = 0; i < 100; i++) assertFalse(GlassLines.due(60));
 		GlassLines.reset();
 	}
+
+	@Test
+	void noReloadWhileConnectedGlassIsOffAndItCatchesUpWhenOn() {
+		GlassLines.reset();
+		assertFalse(GlassLines.due(25, true));
+		for (int i = 0; i < 100; i++) assertFalse(GlassLines.due(80, false));
+		assertEquals(25, GlassLines.stitched());
+		for (int i = 0; i < GlassLines.REST; i++) assertFalse(GlassLines.due(80, true));
+		assertTrue(GlassLines.due(80, true));
+		assertEquals(80, GlassLines.stitched());
+		GlassLines.reset();
+	}
 }
