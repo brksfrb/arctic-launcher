@@ -422,8 +422,23 @@ public final class LegacyHooks {
 			out = LegacyChatCopy.tag(new LiteralText("§e» §r"), source, false).append(out);
 			ArcticClient.platform().mentionSound();
 		}
+		return stamped(out, source, new java.util.Date());
+	}
+
+	/** A line restored from the saved chat: no sound or stacking, but the time it arrived (0: no stamp). */
+	public static Text restoredChat(Text message, long time) {
+		ClientConfig c = ArcticClient.config();
+		if (c == null || time <= 0) {
+			return message;
+		}
+		String source = message.asUnformattedString();
+		return stamped(LegacyChatCopy.tag(message, source, false), source, new java.util.Date(time));
+	}
+
+	private static Text stamped(Text out, String source, java.util.Date when) {
+		ClientConfig c = ArcticClient.config();
 		if (c.chatTimestamps) {
-			String shown = com.arcticlauncher.client.feature.ChatStamp.text(c);
+			String shown = com.arcticlauncher.client.feature.ChatStamp.text(c, when);
 			net.minecraft.client.font.TextRenderer font = MinecraftClient.getInstance().textRenderer;
 			// The slot padding sits beside the tagged stamp, so the hover/click target is only the time.
 			Text pad = new LiteralText("§8" + com.arcticlauncher.client.feature.ChatStampWidth.padding(c, font, font::getStringWidth, shown));

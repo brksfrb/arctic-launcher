@@ -50,6 +50,10 @@ final class SelfTest {
 
 	static void maybeStart() {
 		//#if DEV
+		if ("chat-history".equals(System.getProperty("arctic.selftest"))) {
+			ChatHistoryProof.start();
+			return;
+		}
 		if ("persistent-chat".equals(System.getProperty("arctic.selftest"))) {
 			PersistentChatProof.start();
 			return;

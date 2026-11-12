@@ -748,8 +748,13 @@ final class ModCatalog {
 					f.toggle("Hide the chat", "No chat lines on screen (you can still type, and the history keeps them)", () -> c.chatOff,
 							on -> c.chatOff = on);
 					f.section("Keep");
-					f.toggle("Save chat across restarts", "Keep the last 300 messages and sent history in this instance", () -> c.chatPersistent,
+					f.toggle("Save chat across restarts", "Keep all messages and sent history in this instance", () -> c.chatPersistent,
 							on -> c.chatPersistent = on);
+					f.action("Saved chat", "Clear saved chat", "Sure?", () -> {
+						com.arcticlauncher.client.feature.PersistentChat saved = ArcticClient.persistentChat();
+						int removed = saved == null ? 0 : saved.clear();
+						com.arcticlauncher.client.notice.Notices.post("Saved chat cleared", removed == 0 ? "Nothing was saved" : "Deleted the saved chat and sent history");
+					});
 					f.toggle("Keep chat when leaving", "The lines stay when you disconnect or change server", () -> c.chatKeep,
 							on -> c.chatKeep = on);
 					f.section("Mute");

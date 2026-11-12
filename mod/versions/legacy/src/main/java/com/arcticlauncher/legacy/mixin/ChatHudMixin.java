@@ -18,19 +18,85 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** Chat timestamps, repeated lines stacked, mentions of you marked, and Auto GG. */
 @Mixin(ChatHud.class)
 abstract class ChatHudMixin {
+	/** Lines (and display lines) put into the chat from the saved log: the history limit does not count them. */
+	@Unique
+	private int arctic$loadedLines;
+
+	/** True while saved lines are put into the chat (the history limit is lifted for that). */
+	@Unique
+	private boolean arctic$loading;
+
+	@Unique
+	private static final int ARCTIC_PAGE = 200;
+
+	@Shadow
+	@Final
+	private java.util.List<net.minecraft.client.gui.hud.ChatHudLine> visibleMessages;
+
+	@Shadow
+	private int scrolledLines;
+
+	@Shadow
+	private boolean hasUnreadNewMessages;
+
+	@Shadow
+	public int getVisibleLineCount() {
+		return 0;
+	}
+
 	@Unique
 	private void arctic$restore() {
 		com.arcticlauncher.client.feature.PersistentChat history = ArcticClient.persistentChat();
 		if (history == null || history.restoring()) return;
 		final ChatHud chat = (ChatHud) (Object) this;
-		history.restore(new com.arcticlauncher.client.feature.PersistentChat.View() {
-			public void message(String text) {
-				chat.addMessage(new net.minecraft.text.LiteralText(text));
-			}
-			public void sent(String text) {
-				chat.getMessageHistory().add(text);
-			}
-		});
+		arctic$loading = true;
+		try {
+			history.restore(new com.arcticlauncher.client.feature.PersistentChat.View() {
+				public void message(String text, long time) {
+					chat.addMessage(new net.minecraft.text.LiteralText(text));
+				}
+				public void sent(String text) {
+					chat.getMessageHistory().add(text);
+				}
+			});
+		} finally {
+			arctic$loading = false;
+		}
+		arctic$loadedLines = visibleMessages.size();
+	}
+
+	/** Scrolled near the top of what is loaded: read the next older page from the log and put it above. */
+	@Inject(method = "scroll", at = @At("RETURN"))
+	private void arctic$older(int amount, CallbackInfo ci) {
+		com.arcticlauncher.client.feature.PersistentChat history = ArcticClient.persistentChat();
+		if (history == null || arctic$loading || history.restoring() || !history.hasOlder()
+				|| visibleMessages.size() - scrolledLines > getVisibleLineCount() * 3) {
+			return;
+		}
+		java.util.List<com.arcticlauncher.client.feature.PersistentChat.Entry> page = history.olderMessages(ARCTIC_PAGE);
+		if (page.isEmpty()) return;
+		final ChatHud chat = (ChatHud) (Object) this;
+		int scroll = scrolledLines;
+		boolean unread = hasUnreadNewMessages;
+		int messagesBefore = messages.size();
+		int linesBefore = visibleMessages.size();
+		arctic$loading = true;
+		try {
+			// Added the usual way, each at the front (oldest first), then the block moves to the far end.
+			history.replay(page, new com.arcticlauncher.client.feature.PersistentChat.View() {
+				public void message(String text, long time) {
+					chat.addMessage(new net.minecraft.text.LiteralText(text));
+				}
+				public void sent(String text) {}
+			});
+			java.util.Collections.rotate(messages, -(messages.size() - messagesBefore));
+			java.util.Collections.rotate(visibleMessages, -(visibleMessages.size() - linesBefore));
+			arctic$loadedLines += visibleMessages.size() - linesBefore;
+		} finally {
+			arctic$loading = false;
+			scrolledLines = scroll;
+			hasUnreadNewMessages = unread;
+		}
 	}
 
 	@Inject(method = "addToMessageHistory", at = @At("HEAD"))
@@ -69,7 +135,15 @@ abstract class ChatHudMixin {
 	@ModifyConstant(method = "addMessage(Lnet/minecraft/text/Text;IIZ)V", constant = @Constant(intValue = 100))
 	private int arctic$history(int vanilla) {
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
-		return c == null ? vanilla : c.chatHistory;
+		if (arctic$loading) return Integer.MAX_VALUE;
+		return c == null ? vanilla : c.chatHistory + arctic$loadedLines;
+	}
+
+	/** The up-arrow list is not capped at 100 while it is saved (the log would have gaps). */
+	@ModifyConstant(method = "addToMessageHistory", constant = @Constant(intValue = 100), require = 0)
+	private int arctic$sentLimit(int vanilla) {
+		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
+		return c != null && c.chatPersistent ? Integer.MAX_VALUE : vanilla;
 	}
 
 	/** Hide the chat: none of its lines are drawn. */
@@ -88,6 +162,10 @@ abstract class ChatHudMixin {
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
 		if (c != null && c.chatKeep) {
 			ci.cancel();
+		} else if (ArcticClient.persistentChat() != null) {
+			// The lines are gone for good: the log is not scrolled back into an emptied chat.
+			arctic$loadedLines = 0;
+			ArcticClient.persistentChat().stopPaging();
 		}
 	}
 
@@ -104,7 +182,9 @@ abstract class ChatHudMixin {
 	private Text arctic$chat(Text message) {
 		arctic$restore();
 		if (ArcticClient.persistentChat() != null) {
-			if (ArcticClient.persistentChat().restoring()) return message;
+			if (ArcticClient.persistentChat().restoring()) {
+				return LegacyHooks.restoredChat(message, ArcticClient.persistentChat().restoringTime());
+			}
 			if (!ArcticClient.chatHidden(message.asUnformattedString())) {
 				ArcticClient.persistentChat().message(message.asFormattedString());
 			}

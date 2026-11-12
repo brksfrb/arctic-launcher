@@ -35,6 +35,7 @@
 		"PortalScreenMixin",
 		"OwnNametagMixin",
 		"ChatEmojiMixin",
+		"ChatSentHistoryMixin",
 		"ScreenNoticesMixin",
 		"DebugScaleMixin",
 <% if (hurtCam) { %>		"NoHurtCamMixin",
