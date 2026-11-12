@@ -1457,9 +1457,14 @@ mod tests {
         let base = "http://127.0.0.1:1";
         let path = credentials_path(&dirs);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        // What a token saved while the secret key file was unwritable looks like on disk.
+        // What a token saved while the secret key file was unwritable looks like on disk:
+        // this platform's sealed-value prefix with nothing sealed behind it.
+        #[cfg(windows)]
+        let empty_sealed = "dpapi2:";
+        #[cfg(not(windows))]
+        let empty_sealed = "local1:";
         let creds = format!(
-            r#"{{"accounts":{{"{}":{{"token":"local1:","expires":{},"server":"{base}"}}}}}}"#,
+            r#"{{"accounts":{{"{}":{{"token":"{empty_sealed}","expires":{},"server":"{base}"}}}}}}"#,
             account.uuid,
             now_secs() + 7 * 24 * 3600
         );
