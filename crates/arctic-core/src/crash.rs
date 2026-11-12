@@ -104,6 +104,15 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
+        // Fatal Java module conflicts take precedence over Connector's earlier resolver hints.
+        pattern: r"java\.lang\.module\.ResolutionException: Modules (\S+) and (\S+) export package (\S+) to module \S+",
+        explain: |c, _| split_package(&c[1], &c[2], &c[3]),
+    },
+    Rule {
+        pattern: r"java\.lang\.module\.ResolutionException: Module \S+ reads package (\S+) from both (\S+) and (\S+)",
+        explain: |c, _| split_package(&c[2], &c[3], &c[1]),
+    },
+    Rule {
         // Fabric's newer wording, with names in quotes and ranges:
         //  "- Mod 'SpruceUI' (spruceui) 9.1 requires any version between 1.21.11- (inclusive) and 1.22- (exclusive) of 'Minecraft' (minecraft), but only the wrong version is present: 26.3!"
         //  "- Mod 'ModernFix' (modernfix) 5.2 requires version 0.16.10 or later of mod 'Fabric Loader' (fabricloader), but only the wrong version is present: 0.15.11!"
@@ -160,7 +169,7 @@ const RULES: &[Rule] = &[
         // "Mod 'X' ... requires" lines above are translated, and then match nothing):
         //  "Reason: [HARD_DEP nuit_interop 1.0.0-beta.5 {depends nuit @ [1.0.0-beta.5]}, HARD_DEP macos_fix 1.16+1.21.11 {depends minecraft @ [<26.1]}]"
         //  "Fix: add [], remove [], replace [[nuit 1.0.0-beta.4] -> add:nuit 1.0.0-beta.5 ([[1.0.0-beta.5,1.0.0-beta.5]])]"
-        pattern: r"HARD_DEP \S+ \S+ \{depends \S+ @",
+        pattern: r"HARD_DEP(?:_NO_CANDIDATE)? \S+ \S+ \{depends \S+ @",
         explain: |_, text| resolution_log(text),
     },
     Rule {
@@ -450,6 +459,16 @@ const RULES: &[Rule] = &[
     },
 ];
 
+fn split_package(a: &str, b: &str, package: &str) -> Diagnosis {
+    Diagnosis::new(
+        "Two mods contain the same code",
+        format!(
+            "{a} and {b} both contain package {package} and can't be loaded together. Remove or update one of them. Usually one is a duplicate or bundles another mod."
+        ),
+        vec![a.to_owned(), b.to_owned()],
+    )
+}
+
 /// The mod list of a Fabric crash report names each mod with its version, and a build for another
 /// Minecraft version says so ("1.8.3+mc1.21.4"): (the mod's version, the Minecraft version it is
 /// built for, the game's) when that is more than a patch release away from the game.
@@ -519,12 +538,21 @@ fn compiled() -> &'static [Regex] {
 /// The largest amount of text looked at (the end of it, where crashes are).
 const MAX_TEXT: usize = 2 * 1024 * 1024;
 
+/// Real replacement versions from Fabric's resolver, excluding unbounded placeholders.
+fn resolver_updates(text: &str) -> Vec<(String, String)> {
+    let re = Regex::new(r"\[([^\s\[\]]+) [^\s\]]+\] -> add:(\S+) (\S+) (\S+)")
+        .expect("resolver update pattern is valid");
+    re.captures_iter(text)
+        .filter(|m| !(m[3].chars().all(|c| c.is_ascii_digit()) && m[4].contains("(-∞,∞)")))
+        .map(|m| (m[1].to_owned(), m[3].to_owned()))
+        .collect()
+}
+
 /// The loader's own suggestion from its English "Fix:" line: "update sodium to 0.8.12".
 fn update_hint(text: &str) -> Option<String> {
-    let re = Regex::new(r"\[([^\s\[\]]+) [^\s\]]+\] -> add:(\S+) (\S+) ").ok()?;
-    let updates: Vec<String> = re
-        .captures_iter(text)
-        .map(|m| format!("update {} to {}", &m[1], &m[3]))
+    let updates: Vec<String> = resolver_updates(text)
+        .into_iter()
+        .map(|(id, version)| format!("update {id} to {version}"))
         .collect();
     (!updates.is_empty()).then(|| updates.join(", "))
 }
@@ -550,24 +578,40 @@ pub fn silent_exit(text: &str, code: i32) -> Option<Diagnosis> {
 
 /// What Fabric's English resolver lines say is wrong with the mods (see the rule that calls this).
 fn resolution_log(text: &str) -> Diagnosis {
+    let updates = resolver_updates(text);
     let mut for_other_minecraft: Vec<String> = Vec::new();
     let mut needs_newer_loader = false;
-    if let Ok(re) = Regex::new(r"HARD_DEP (\S+) \S+ \{depends (\S+) @") {
+    let mut missing: Vec<String> = Vec::new();
+    let mut involved: Vec<String> = Vec::new();
+    if let Ok(re) =
+        Regex::new(r"HARD_DEP(?:_NO_CANDIDATE)? (\S+) \S+ \{depends (\S+) @ ([^}\r\n]+)\}")
+    {
         for m in re.captures_iter(text) {
             match &m[2] {
                 "minecraft" if !for_other_minecraft.contains(&m[1].to_owned()) => {
                     for_other_minecraft.push(m[1].to_owned());
                 }
+                "minecraft" => {}
                 "fabricloader" => needs_newer_loader = true,
-                _ => {}
+                // A concrete replacement identifies an installed dependency with the wrong version.
+                id if updates.iter().any(|(updated, _)| updated == id) => {}
+                _ => {
+                    let detail = format!(
+                        "{} needs {} (version {}), which isn't installed.",
+                        &m[1],
+                        &m[2],
+                        m[3].trim()
+                    );
+                    if !missing.contains(&detail) {
+                        missing.push(detail);
+                    }
+                    for id in [&m[1], &m[2]] {
+                        if !involved.iter().any(|name| name == id) {
+                            involved.push(id.to_owned());
+                        }
+                    }
+                }
             }
-        }
-    }
-    // The loader's own suggestion: swap a mod for another version of it.
-    let mut updates: Vec<String> = Vec::new();
-    if let Ok(re) = Regex::new(r"\[([^\s\[\]]+) [^\s\]]+\] -> add:(\S+) (\S+) ") {
-        for m in re.captures_iter(text) {
-            updates.push(format!("{} to {}", &m[1], &m[3]));
         }
     }
     let have = Regex::new(r"Loading Minecraft (\S+) with")
@@ -577,6 +621,10 @@ fn resolution_log(text: &str) -> Diagnosis {
     let also = if updates.is_empty() {
         String::new()
     } else {
+        let updates: Vec<String> = updates
+            .iter()
+            .map(|(id, version)| format!("{id} to {version}"))
+            .collect();
         format!(" Also update {}.", updates.join(", "))
     };
     if !for_other_minecraft.is_empty() {
@@ -606,6 +654,9 @@ fn resolution_log(text: &str) -> Diagnosis {
                 Vec::new(),
             )
         };
+    }
+    if !missing.is_empty() {
+        return Diagnosis::new("A mod dependency is missing", missing.join(" "), involved);
     }
     if !updates.is_empty() {
         return Diagnosis::new(
@@ -944,6 +995,102 @@ USERNAME=someone
         let d = diagnose(log).unwrap();
         assert_eq!(d.mods, ["fabric-api", "cloth-config"]);
         assert!(d.detail.contains("Sodium Extra"));
+    }
+
+    const CONNECTOR_RESOLUTION: &str = "[FabricLoader/Resolution]: Immediate reason: [HARD_DEP_NO_CANDIDATE betterend 4.0.11 {depends bclib @ [3.0.x]}, ROOT_FORCELOAD_SINGLE betterend 4.0.11]
+[FabricLoader/Resolution]: Reason: [HARD_DEP betterend 4.0.11 {depends bclib @ [3.0.x]}]
+[FabricLoader/Resolution]: Fix: add [], remove [], replace [[betterend 4.0.11] -> add:betterend 1 ([(-∞,∞)])]";
+
+    #[test]
+    fn split_packages_override_connector_resolver_hints() {
+        // Report #272: Fabric mods running on Forge through Sinytra Connector.
+        for fatal in [
+            "Exception in thread \"main\" java.lang.module.ResolutionException: Modules luna_minecraft and e4all export package link.e4mc to module fabric_renderer_api_v1",
+            "java.lang.module.ResolutionException: Module fabric_renderer_api_v1 reads package link.e4mc from both luna_minecraft and e4all",
+        ] {
+            for log in [fatal.to_owned(), format!("{CONNECTOR_RESOLUTION}\n{fatal}")] {
+                let d = diagnose(&log).unwrap();
+                assert_eq!(d.title, "Two mods contain the same code");
+                assert_eq!(d.mods, ["luna_minecraft", "e4all"]);
+                assert!(d.detail.contains("luna_minecraft and e4all"));
+                assert!(d.detail.contains("package link.e4mc"));
+                assert!(d.detail.contains("can't be loaded together"));
+                assert!(d.detail.contains("Remove or update one"));
+                assert!(!d.detail.contains("betterend"));
+                assert!(!d.repair);
+                assert_eq!(d.fix, None);
+            }
+        }
+    }
+
+    #[test]
+    fn resolver_missing_dependencies_name_the_mod_and_version_range() {
+        // Either reason line alone must work, as well as the complete resolver block.
+        for log in [
+            CONNECTOR_RESOLUTION,
+            "[HARD_DEP_NO_CANDIDATE betterend 4.0.11 {depends bclib @ [3.0.x]}]",
+            "[HARD_DEP betterend 4.0.11 {depends bclib @ [3.0.x]}]",
+        ] {
+            let d = diagnose(log).unwrap();
+            assert_eq!(d.title, "A mod dependency is missing");
+            assert_eq!(d.mods, ["betterend", "bclib"]);
+            assert_eq!(
+                d.detail,
+                "betterend needs bclib (version [3.0.x]), which isn't installed."
+            );
+        }
+    }
+
+    #[test]
+    fn resolver_hints_ignore_unbounded_placeholder_versions() {
+        assert_eq!(update_hint(CONNECTOR_RESOLUTION), None);
+        assert!(resolver_updates(CONNECTOR_RESOLUTION).is_empty());
+        let sodium = "Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 ([[0.8.12,∞)])]";
+        assert_eq!(
+            update_hint(sodium).as_deref(),
+            Some("update sodium to 0.8.12")
+        );
+        assert_eq!(
+            resolver_updates(sodium),
+            [("sodium".into(), "0.8.12".into())]
+        );
+        assert_eq!(
+            update_hint(&format!("{CONNECTOR_RESOLUTION}\n{sodium}")).as_deref(),
+            Some("update sodium to 0.8.12")
+        );
+        // A real single-component version with a bounded range is still usable.
+        assert_eq!(
+            update_hint("[[example 0] -> add:example 1 ([[1,1]])]").as_deref(),
+            Some("update example to 1")
+        );
+        let placeholder = CONNECTOR_RESOLUTION.lines().last().unwrap();
+        let d = diagnose(&format!(
+            "{placeholder}\nMod 'More Culling' (moreculling) 1.0.10 is incompatible with any version of mod 'Sodium' (sodium)"
+        ))
+        .unwrap();
+        assert_eq!(d.title, "More Culling and Sodium don't work together");
+        assert!(!d.detail.contains("update betterend to 1"));
+        for (dependency, expected_title) in [
+            ("minecraft", "1 mod(s) are for another Minecraft version"),
+            ("fabricloader", "Fabric Loader is too old for these mods"),
+        ] {
+            let d = diagnose(&format!(
+                "{CONNECTOR_RESOLUTION}\nHARD_DEP_NO_CANDIDATE example 1.0 {{depends {dependency} @ [>=1.0]}}"
+            ))
+            .unwrap();
+            assert_eq!(d.title, expected_title);
+            assert!(!d.detail.contains("update betterend to 1"));
+        }
+    }
+
+    #[test]
+    fn a_real_resolver_update_for_an_installed_dependency_is_preserved() {
+        let log = "Reason: [HARD_DEP betterblockentities 1.2.1 {depends sodium @ [>=0.8.12]}]
+Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 ([[0.8.12,∞)])]";
+        let d = diagnose(log).unwrap();
+        assert_eq!(d.title, "Some mods need updating together");
+        assert!(d.detail.contains("update sodium to 0.8.12"));
+        assert!(!d.detail.contains("isn't installed"));
     }
 
     #[test]
