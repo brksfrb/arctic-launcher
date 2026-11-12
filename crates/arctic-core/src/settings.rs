@@ -65,6 +65,8 @@ pub struct Settings {
     /// Animated capes stand still on their first frame in the launcher (a
     /// viewer's choice; it doesn't change what anyone else sees).
     pub reduce_cape_motion: bool,
+    /// The 3D player preview (Skins, Cosmetics) never turns by itself; only dragging turns it.
+    pub lock_preview_rotation: bool,
     /// Ids of animated capes whose wearer turned "Animate" off: the still
     /// image is published instead. Capes not listed animate.
     pub capes_still: Vec<String>,
@@ -286,6 +288,7 @@ impl Default for Settings {
             bedrock_client: None,
             animations: true,
             reduce_cape_motion: false,
+            lock_preview_rotation: false,
             capes_still: Vec::new(),
             intro: true,
             start_maximized: false,
@@ -506,6 +509,21 @@ mod tests {
             !s.discord_show_server,
             "showing the server on Discord stays off until chosen"
         );
+    }
+
+    #[test]
+    fn preview_rotation_lock_defaults_off_and_persists() {
+        assert!(!Settings::default().lock_preview_rotation);
+        let old: Settings = serde_json::from_str(r#"{"max_memory_mb": 6144}"#).unwrap();
+        assert!(!old.lock_preview_rotation);
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        let s = Settings {
+            lock_preview_rotation: true,
+            ..Settings::default()
+        };
+        s.save(&dirs).unwrap();
+        assert!(Settings::load(&dirs).unwrap().lock_preview_rotation);
     }
 
     #[test]
