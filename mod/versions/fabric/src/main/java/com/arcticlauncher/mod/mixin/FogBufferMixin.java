@@ -3,6 +3,7 @@ package com.arcticlauncher.mod.mixin;
 //#if MC >= 1.21.5
 import com.arcticlauncher.client.Fog;
 //#if MC >= 1.21.6
+import net.minecraft.client.renderer.fog.FogData;
 import net.minecraft.client.renderer.fog.FogRenderer;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 //#else
@@ -16,32 +17,27 @@ import org.spongepowered.asm.mixin.injection.At;
 
 /**
  * Fog on 1.21.5 and newer, where the fog goes to the GPU as a buffer: 1.21.5 builds a FogParameters in
- * FogRenderer.setupFog (stretched on its way out); 1.21.6 and newer write the distances into the buffer in
- * FogRenderer.updateBuffer (the four distances are stretched on their way in).
+ * FogRenderer.setupFog (stretched on its way out); 1.21.6 and newer fill a FogData in FogRenderer.setupFog and the
+ * game (and Sodium, which copies the FogData for its own chunk shader) read the distances from it, so the FogData is
+ * stretched where it is complete, before anything reads it. Stretching the vanilla buffer write instead would leave
+ * Sodium's terrain fog untouched.
  */
 @Mixin(FogRenderer.class)
 abstract class FogBufferMixin {
 	//#if MC >= 1.21.6
-	private static final String WRITE = "updateBuffer(Ljava/nio/ByteBuffer;ILorg/joml/Vector4f;FFFFFF)V";
-
-	@ModifyVariable(method = WRITE, at = @At("HEAD"), argsOnly = true, ordinal = 0)
-	private float arctic$environmentStart(float value) {
-		return Fog.stretch(value);
-	}
-
-	@ModifyVariable(method = WRITE, at = @At("HEAD"), argsOnly = true, ordinal = 1)
-	private float arctic$environmentEnd(float value) {
-		return Fog.stretch(value);
-	}
-
-	@ModifyVariable(method = WRITE, at = @At("HEAD"), argsOnly = true, ordinal = 2)
-	private float arctic$renderStart(float value) {
-		return Fog.stretch(value);
-	}
-
-	@ModifyVariable(method = WRITE, at = @At("HEAD"), argsOnly = true, ordinal = 3)
-	private float arctic$renderEnd(float value) {
-		return Fog.stretch(value);
+	/** Right after setupFog stored the last of the distances (PUTFIELD = 181), before updateBuffer, Sodium or the return read them. */
+	@ModifyVariable(method = "setupFog", at = @At(value = "FIELD", target = "Lnet/minecraft/client/renderer/fog/FogData;renderDistanceEnd:F", opcode = 181, shift = At.Shift.AFTER), ordinal = 0)
+	private FogData arctic$fog(FogData data) {
+		float f = Fog.factor();
+		if (f != 1f && data != null) {
+			data.environmentalStart = Fog.stretch(data.environmentalStart, f);
+			data.environmentalEnd = Fog.stretch(data.environmentalEnd, f);
+			data.renderDistanceStart = Fog.stretch(data.renderDistanceStart, f);
+			data.renderDistanceEnd = Fog.stretch(data.renderDistanceEnd, f);
+			data.skyEnd = Fog.stretch(data.skyEnd, f);
+			data.cloudEnd = Fog.stretch(data.cloudEnd, f);
+		}
+		return data;
 	}
 	//#else
 	@Inject(method = "setupFog", at = @At("RETURN"), cancellable = true)

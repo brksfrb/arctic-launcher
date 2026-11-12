@@ -13,6 +13,12 @@ public final class Fog {
 	/** The largest distance handed to the game; no view is anywhere near this long. */
 	public static final float MAX_DISTANCE = 1.0e7f;
 
+	/** Diagnostics for the dev fog scenes: how many distances the hooks have seen/changed, and the last pair. */
+	public static volatile int seen;
+	public static volatile int changed;
+	public static volatile float lastIn;
+	public static volatile float lastOut;
+
 	private Fog() {}
 
 	/** The factor for the current settings; 1 (vanilla) when Fog is off or there is no config yet. */
@@ -36,10 +42,15 @@ public final class Fog {
 	 * finite one (vanilla's "no fog" Float.MAX_VALUE, NaN) or negative; capped at {@link #MAX_DISTANCE}.
 	 */
 	public static float stretch(float distance, float factor) {
+		seen++;
 		if (factor == 1f || !(distance > 0f) || distance >= MAX_DISTANCE || !Float.isFinite(distance)) {
 			return distance;
 		}
-		return Math.min(distance * factor, MAX_DISTANCE);
+		float out = Math.min(distance * factor, MAX_DISTANCE);
+		lastIn = distance;
+		lastOut = out;
+		changed++;
+		return out;
 	}
 
 	public static float stretch(float distance) {
