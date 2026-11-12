@@ -1516,6 +1516,26 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public java.util.Collection<UUID> onlinePlayerIds() {
+		ClientPacketListener connection = mc().getConnection();
+		if (connection == null) {
+			return java.util.Collections.emptyList();
+		}
+		java.util.List<UUID> ids = new java.util.ArrayList<UUID>();
+		//#if MC >= 1.19.3
+		for (net.minecraft.client.multiplayer.PlayerInfo info : connection.getListedOnlinePlayers()) {
+		//#else
+		for (net.minecraft.client.multiplayer.PlayerInfo info : connection.getOnlinePlayers()) {
+		//#endif
+			UUID id = Compat.profileId(info.getProfile());
+			if (id != null) {
+				ids.add(id);
+			}
+		}
+		return ids;
+	}
+
+	@Override
 	public int playerCount() {
 		ClientPacketListener connection = mc().getConnection();
 		//#if MC >= 1.19.3

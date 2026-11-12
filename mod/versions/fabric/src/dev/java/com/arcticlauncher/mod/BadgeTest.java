@@ -24,7 +24,7 @@ final class BadgeTest {
     private static final Path PORT = PROOF.resolve("1.21.11-lan-port.txt");
     private static final Path SCENE = PROOF.resolve("1.21.11-scene-ready");
     private static final String PREFIX = "1.21.11-" + (PEER ? "B" : "A");
-    private static final String HOST_NAME = "BadgeIceM";
+    private static final String HOST_NAME = System.getProperty("arctic.badge.name", "BadgeIceM");
     private static final String PEER_NAME = "BadgeLineM";
     private static final UUID OTHER = UUID.nameUUIDFromBytes(("OfflinePlayer:" + (PEER ? HOST_NAME : PEER_NAME)).getBytes(StandardCharsets.UTF_8));
     private BadgeTest() {}
@@ -73,24 +73,26 @@ final class BadgeTest {
         later(6, () -> soloStep(step + 1));
     }
     private static void fov(int degrees) { Minecraft.getInstance().options.fov().set(degrees); }
-    private static void soloShot(String suffix) {
-        Minecraft mc = Minecraft.getInstance();
-        net.minecraft.client.Screenshot.takeScreenshot(mc.getMainRenderTarget(), image -> {
-            try { image.writeToFile(PROOF.resolve("1.21.11-" + LABEL + "-" + suffix + ".png")); }
-            catch (Exception e) { throw new RuntimeException(e); }
-            finally { image.close(); }
-        });
-        log("screenshot " + suffix);
-    }
+    private static void soloShot(String suffix) { WorldTest.shot(suffix); log("screenshot " + suffix); }
 
     private static void lanThenSteps() {
+        if (Boolean.getBoolean("arctic.badge.pair")) { pairEnd(); return; }
+        if (Boolean.getBoolean("arctic.badge.flow")) { flowEnd(); return; }
         if (!Boolean.getBoolean("arctic.badge.lan")) { soloStep(0); return; }
         Minecraft mc = Minecraft.getInstance();
         int port = net.minecraft.util.HttpUtil.getAvailablePort();
-        mc.getSingleplayerServer().setUsesAuthentication(false);
-        mc.getSingleplayerServer().publishServer(net.minecraft.world.level.GameType.CREATIVE, true, port);
+        publish(port);
         try { Files.write(PORT, Integer.toString(port).getBytes(StandardCharsets.UTF_8)); } catch (Exception e) { throw new RuntimeException(e); }
         waitSecond(0);
+    }
+    private static void publish(int port) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.getSingleplayerServer().setUsesAuthentication(false);
+        //#if MC >= 26.2
+        mc.getSingleplayerServer().publishServer(net.minecraft.server.MinecraftServer.MultiplayerScope.LAN, net.minecraft.world.level.GameType.CREATIVE, true, port);
+        //#else
+        mc.getSingleplayerServer().publishServer(net.minecraft.world.level.GameType.CREATIVE, true, port);
+        //#endif
     }
     private static void waitSecond(int tries) {
         Minecraft mc = Minecraft.getInstance();
@@ -101,17 +103,107 @@ final class BadgeTest {
     private static void soloPeer() {
         later(10, () -> {
             Minecraft.getInstance().options.pauseOnLostFocus = false;
+            ClientConfig c = ArcticClient.config(); c.fancy = Boolean.getBoolean("arctic.badge.fancy"); c.badgeNametags = true; c.badgeOthersOnly = false; c.badgeWhere = 0;
+            flowPoll(); mark("join-start");
             try { ArcticClient.platform().joinSaved("Badge proof", "127.0.0.1:" + new String(Files.readAllBytes(PORT), StandardCharsets.UTF_8).trim(), false); }
             catch (Exception e) { throw new RuntimeException(e); }
-            later(150, () -> Minecraft.getInstance().stop());
+            later(Integer.getInteger("arctic.badge.peerlife", 150), () -> Minecraft.getInstance().stop());
         });
+    }
+    /** Join-to-badge timing: epoch-ms marks of the first time each thing is true (read without side effects). */
+    private static final java.util.Set<String> MARKS = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static void mark(String what) { if (MARKS.add(what)) log("MARK " + what + " " + System.currentTimeMillis()); }
+    @SuppressWarnings("unchecked")
+    private static boolean lastOtherBadge;
+    private static void flowPoll() {
+        Thread t = new Thread(() -> {
+            try {
+                java.lang.reflect.Field players = com.arcticlauncher.client.looks.Looks.class.getDeclaredField("players"); players.setAccessible(true);
+                java.lang.reflect.Field items = com.arcticlauncher.client.looks.Cosmetics.class.getDeclaredField("items"); items.setAccessible(true);
+                while (true) {
+                    Minecraft mc = Minecraft.getInstance();
+                    if (mc.level != null && mc.getConnection() != null && !mc.getConnection().getOnlinePlayers().isEmpty()) mark("playerlist");
+                    if (mc.level != null && mc.getConnection() != null && mc.getConnection().getOnlinePlayers().size() >= 2) mark("playerlist-2");
+                    if (mc.player != null) mark("in-world");
+                    if (mc.player != null && ArcticClient.looks() != null && OTHER != null) {
+                        com.arcticlauncher.client.looks.Look seen = ((java.util.Map<UUID, com.arcticlauncher.client.looks.Look>) players.get(ArcticClient.looks())).get(OTHER);
+                        boolean on = seen != null && seen.arctic;
+                        if (on != lastOtherBadge) { lastOtherBadge = on; log("TRANS other-badge " + (on ? "on" : "off") + " " + System.currentTimeMillis()); }
+                    }
+                    if (mc.level != null && OTHER != null && mc.level.getPlayerByUUID(OTHER) != null) mark("other-entity");
+                    if (mc.player != null && ArcticClient.looks() != null) {
+                        com.arcticlauncher.client.looks.Look o = ((java.util.Map<UUID, com.arcticlauncher.client.looks.Look>) players.get(ArcticClient.looks())).get(OTHER);
+                        if (o != null && o.arctic) { mark("other-look-arctic"); if (!o.cosmetics.isEmpty()) mark("other-look-has-cosmetics"); }
+                    }
+                    if (mc.player != null && ArcticClient.looks() != null) {
+                        UUID me = ArcticClient.platform().worldPlayerId();
+                        com.arcticlauncher.client.looks.Look look = me == null ? null : ((java.util.Map<UUID, com.arcticlauncher.client.looks.Look>) players.get(ArcticClient.looks())).get(me);
+                        if (look != null && look.arctic) { mark("look-arctic"); if (!look.cosmetics.isEmpty()) mark("look-has-cosmetics"); }
+                        for (Object item : (java.util.List<Object>) items.get(ArcticClient.looks().cosmetics())) {
+                            java.lang.reflect.Field r = item.getClass().getDeclaredField("ready"); r.setAccessible(true);
+                            if (r.getBoolean(item)) mark("cosmetic-ready-" + ((com.arcticlauncher.client.looks.Cosmetics.Item) item).id);
+                        }
+                    }
+                    Thread.sleep(20);
+                }
+            } catch (InterruptedException e) { return; } catch (Exception e) { log("poll failed " + e); }
+        }, "arctic-badge-flow"); t.setDaemon(true); t.start();
+    }
+    /** Host: wait for the peer, then stand 4 blocks apart; shots of the other's name tag (sweeping distance) and the two-row list. */
+    private static void pairEnd() {
+        Minecraft mc = Minecraft.getInstance();
+        int port = net.minecraft.util.HttpUtil.getAvailablePort();
+        publish(port);
+        try { Files.write(PORT, Integer.toString(port).getBytes(StandardCharsets.UTF_8)); } catch (Exception e) { throw new RuntimeException(e); }
+        log("LAN ready " + port);
+        pairWait(0);
+    }
+    private static void pairWait(int tries) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.getConnection().getOnlinePlayers().size() >= 2) {
+            command("gamemode creative BadgeIce"); command("gamemode creative BadgeLine");
+            command("tp BadgeIce 0.5 120 0.5 0 -8"); command("tp BadgeLine 0.5 120 4.5 180 -8");
+            command("scoreboard objectives add arctic dummy"); command("scoreboard objectives setdisplay list arctic");
+            camera(false);
+            for (int i = 0; i < 6; i++) { final int step = i; later(8 + 2 * i, () -> soloShot("pair-near-" + step)); }
+            later(22, () -> { fov(30); });
+            later(25, () -> soloShot("pair-close"));
+            later(26, () -> { fov(70); tab(true); });
+            later(30, () -> soloShot("pair-tab"));
+            later(32, () -> { tab(false); command("tp BadgeLine 0.5 120 14.5 180 -8"); });
+            later(37, () -> soloShot("pair-far"));
+            later(60, () -> { log("DONE"); mc.stop(); });
+        } else if (tries < 240) later(1, () -> pairWait(tries + 1));
+        else throw new IllegalStateException("peer never joined");
+    }
+    private static void flowEnd() {
+        if (Boolean.getBoolean("arctic.badge.sweep")) {
+            later(1, () -> { command("scoreboard objectives add arctic dummy"); command("scoreboard objectives setdisplay list arctic"); camera(true); });
+            for (int i = 0; i < 12; i++) {
+                final int step = i;
+                later(3 + 2 * i, () -> fov(70 - 5 * step));
+                later(4 + 2 * i, () -> soloShot("sweep-" + step));
+            }
+            later(30, () -> { log("DONE"); Minecraft.getInstance().stop(); });
+            return;
+        }
+        later(1, () -> { command("scoreboard objectives add arctic dummy"); command("scoreboard objectives setdisplay list arctic"); camera(true); fov(70); });
+        later(8, () -> soloShot("flow-nametag"));
+        later(10, () -> { fov(30); });
+        later(13, () -> soloShot("flow-close"));
+        later(14, () -> { fov(70); camera(false); tab(true); });
+        later(18, () -> soloShot("flow-tab"));
+        later(20, () -> { log("DONE"); Minecraft.getInstance().stop(); });
     }
     private static void solo() {
         later(10, () -> {
+            if (Boolean.getBoolean("arctic.badge.flow")) { log("flow start " + System.currentTimeMillis()); flowPoll(); }
             Minecraft mc = Minecraft.getInstance(); mc.options.pauseOnLostFocus = false;
-            ClientConfig c = ArcticClient.config(); c.fancy = false; c.badgeNametags = true;
+            ClientConfig c = ArcticClient.config(); c.fancy = Boolean.getBoolean("arctic.badge.fancy"); c.badgeNametags = true;
             c.badgeOthersOnly = false; c.badgeWhere = 0; c.ownNametag = true;
+            if (Boolean.getBoolean("arctic.badge.pair")) { flowPoll(); mark("host-start"); }
             WorldTest.createTestWorld(() -> {
+                if (Boolean.getBoolean("arctic.badge.flow")) { mark("scene"); camera(true); }
                 command("gamerule doDaylightCycle false"); command("time set 6000"); command("weather clear");
                 command("tp BadgeIce 0.5 120 0.5 0 20");
                 later(3, () -> { command("fill -5 119 -5 5 119 9 stone"); command("tp BadgeIce 0.5 120 0.5 0 20"); });
@@ -152,8 +244,7 @@ final class BadgeTest {
         later(25, () -> {
             Minecraft mc = Minecraft.getInstance();
             int port = net.minecraft.util.HttpUtil.getAvailablePort();
-            mc.getSingleplayerServer().setUsesAuthentication(false);
-            mc.getSingleplayerServer().publishServer(net.minecraft.world.level.GameType.CREATIVE, true, port);
+            publish(port);
             try { Files.write(PORT, Integer.toString(port).getBytes(StandardCharsets.UTF_8)); } catch (Exception e) { throw new RuntimeException(e); }
             log("LAN ready " + port);
             camera(false);
@@ -194,13 +285,5 @@ final class BadgeTest {
         else throw new IllegalStateException("wearer sync failed: present=" + present + ", arctic=" + arctic + ", other=" + other);
     }
 
-    private static void shot(String suffix) {
-        Minecraft mc = Minecraft.getInstance();
-        net.minecraft.client.Screenshot.takeScreenshot(mc.getMainRenderTarget(), image -> {
-            try { image.writeToFile(PROOF.resolve(PREFIX + "-" + suffix + ".png")); }
-            catch (Exception e) { throw new RuntimeException(e); }
-            finally { image.close(); }
-        });
-        log("screenshot " + PREFIX + "-" + suffix);
-    }
+    private static void shot(String suffix) { WorldTest.shot(suffix); log("screenshot " + PREFIX + "-" + suffix); }
 }

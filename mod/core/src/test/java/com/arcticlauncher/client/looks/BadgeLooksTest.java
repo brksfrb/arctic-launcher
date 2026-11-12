@@ -30,9 +30,100 @@ class BadgeLooksTest {
 	}
 
 	private static void close(Looks looks) throws Exception {
-		java.lang.reflect.Field field = Looks.class.getDeclaredField("worker");
-		field.setAccessible(true);
-		((ScheduledExecutorService) field.get(looks)).shutdownNow();
+		for (String name : new String[] {"worker", "lookupWorker"}) {
+			java.lang.reflect.Field field = Looks.class.getDeclaredField(name);
+			field.setAccessible(true);
+			((ScheduledExecutorService) field.get(looks)).shutdownNow();
+		}
+	}
+
+	/** Runs a lookup now, and waits for anything already on its way (a name being asked about sends one by itself). */
+	private static void lookUp(Looks looks) throws Exception {
+		java.lang.reflect.Method flush = Looks.class.getDeclaredMethod("flushLookups");
+		flush.setAccessible(true);
+		flush.invoke(looks);
+		Thread.sleep(150);
+	}
+
+	private static HttpServer players(java.util.function.Supplier<String> reply, java.util.function.IntSupplier status) throws Exception {
+		HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		server.createContext("/v1/players", ex -> {
+			byte[] bytes = reply.get().getBytes(StandardCharsets.UTF_8);
+			ex.sendResponseHeaders(status.getAsInt(), bytes.length); ex.getResponseBody().write(bytes); ex.close();
+		});
+		server.start();
+		return server;
+	}
+
+	@Test
+	void aFailedLookupKeepsTheBadgeAlreadyShownAndRetriesSoon() throws Exception {
+		java.util.concurrent.atomic.AtomicInteger status = new java.util.concurrent.atomic.AtomicInteger(200);
+		HttpServer server = players(() -> "{\"" + Looks.compact(B) + "\":{\"badge_style\":1,\"arctic\":true}}", status::get);
+		Looks looks = new Looks(platform(), new ClientConfig(), "http://127.0.0.1:" + server.getAddress().getPort(), "fixture");
+		try {
+			assertFalse(looks.isArctic(B));
+			lookUp(looks);
+			assertTrue(looks.isArctic(B));
+			assertEquals(1, looks.badgeStyle(B));
+			// The server falls over while the answer is refreshed: B is still shown with the snowflake.
+			status.set(503);
+			looks.checkInNow();
+			lookUp(looks);
+			assertTrue(looks.isArctic(B), "one failed request must not hide a known snowflake");
+			assertEquals(1, looks.badgeStyle(B));
+			// ...and is asked about again after a short wait, not a minute.
+			java.lang.reflect.Field backoff = Looks.class.getDeclaredField("lookupBackoffUntil");
+			backoff.setAccessible(true);
+			long wait = backoff.getLong(looks) - System.currentTimeMillis();
+			assertTrue(wait > 0 && wait <= 5000, "retry in seconds, was " + wait);
+		} finally { close(looks); server.stop(0); }
+	}
+
+	@Test
+	void aPlayerWhoStopsBeingReportedOnArcticKeepsTheBadgeForTheServersWholeCheckInWindow() throws Exception {
+		java.util.concurrent.atomic.AtomicBoolean on = new java.util.concurrent.atomic.AtomicBoolean(true);
+		HttpServer server = players(() -> "{\"" + Looks.compact(B) + "\":{\"arctic\":" + on.get() + "}}", () -> 200);
+		Looks looks = new Looks(platform(), new ClientConfig(), "http://127.0.0.1:" + server.getAddress().getPort(), "fixture");
+		try {
+			looks.isArctic(B);
+			lookUp(looks);
+			assertTrue(looks.isArctic(B));
+			on.set(false);
+			looks.checkInNow();
+			lookUp(looks);
+			assertTrue(looks.isArctic(B), "one answer that says otherwise is a late check-in, not a goodbye");
+			// Past the window the server's word stands.
+			java.lang.reflect.Field seen = Looks.class.getDeclaredField("arcticSeen");
+			seen.setAccessible(true);
+			@SuppressWarnings("unchecked")
+			java.util.Map<UUID, Long> map = (java.util.Map<UUID, Long>) seen.get(looks);
+			map.put(B, System.currentTimeMillis() - 151_000L);
+			looks.checkInNow();
+			lookUp(looks);
+			assertFalse(looks.isArctic(B));
+		} finally { close(looks); server.stop(0); }
+	}
+
+	@Test
+	void everyoneInThePlayerListIsAskedAboutAtOnceInOneRequest() throws Exception {
+		java.util.concurrent.atomic.AtomicInteger requests = new java.util.concurrent.atomic.AtomicInteger();
+		java.util.List<String> asked = java.util.Collections.synchronizedList(new java.util.ArrayList<String>());
+		HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		server.createContext("/v1/players", ex -> {
+			requests.incrementAndGet(); asked.add(ex.getRequestURI().getQuery());
+			byte[] bytes = ("{\"" + Looks.compact(A) + "\":{\"arctic\":true},\"" + Looks.compact(B) + "\":{\"arctic\":true}}").getBytes(StandardCharsets.UTF_8);
+			ex.sendResponseHeaders(200, bytes.length); ex.getResponseBody().write(bytes); ex.close();
+		});
+		server.start();
+		Looks looks = new Looks(platform(), new ClientConfig(), "http://127.0.0.1:" + server.getAddress().getPort(), "fixture");
+		try {
+			looks.expect(java.util.Arrays.asList(A, B));
+			long until = System.nanoTime() + 3_000_000_000L;
+			while (!(looks.isArctic(A) && looks.isArctic(B)) && System.nanoTime() < until) Thread.sleep(10);
+			assertTrue(looks.isArctic(A) && looks.isArctic(B), "looks arrive without the one-a-second poll (never started here)");
+			assertEquals(1, requests.get());
+			assertTrue(asked.get(0).contains(Looks.compact(A)) && asked.get(0).contains(Looks.compact(B)));
+		} finally { close(looks); server.stop(0); }
 	}
 
 	@Test
@@ -78,8 +169,7 @@ class BadgeLooksTest {
 		Looks looks = new Looks(platform(), new ClientConfig(), "http://127.0.0.1:" + server.getAddress().getPort(), "fixture");
 		try {
 			looks.badgeStyle(A); looks.badgeStyle(B);
-			java.lang.reflect.Method flush = Looks.class.getDeclaredMethod("flushLookups");
-			flush.setAccessible(true); flush.invoke(looks);
+			lookUp(looks);
 			assertEquals(1, looks.badgeStyle(A));
 			assertEquals(2, looks.badgeStyle(B));
 			assertTrue(looks.isArctic(A)); assertTrue(looks.isArctic(B));

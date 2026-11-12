@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 import cairosvg
 from PIL import Image
+from badge_tab import tab_art
 
 MOD = Path(__file__).resolve().parents[1]
 ASSETS = MOD / 'core/src/main/resources/assets'
@@ -27,7 +28,8 @@ for name, style in STYLES:
     for tab, height, ascent in [(False, 8, 7), (True, 9, 8)]:
         font = name + ('_tab' if tab else '')
         size = height * 8
-        small = small_art.resize((size, size), Image.Resampling.LANCZOS)
+        # The logo's player list picture is pre-filtered onto a coarse grid (see badge_tab.py).
+        small = tab_art(small_art) if tab and style == 0 else small_art.resize((size, size), Image.Resampling.LANCZOS)
         small.save(ROOT / 'textures/font' / (font + '.png'))
         small.save(ROOT / (name + ('_tab' if tab else '_tag') + '.png'))
         bitmap = dict(type='bitmap', file='arctic:font/' + font + '.png', height=height, ascent=ascent, chars=['\uE000'])

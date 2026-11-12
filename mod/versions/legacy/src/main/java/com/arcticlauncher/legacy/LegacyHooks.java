@@ -336,7 +336,8 @@ public final class LegacyHooks {
 		com.mojang.blaze3d.platform.GlStateManager.enableBlend();
 		com.mojang.blaze3d.platform.GlStateManager.blendFuncSeparate(org.lwjgl.opengl.GL11.GL_SRC_ALPHA,
 				org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA, org.lwjgl.opengl.GL11.GL_ONE, org.lwjgl.opengl.GL11.GL_ZERO);
-		if (shadow) {
+		// The player list's picture has no shadow, its names do.
+		if (shadow && !tab) {
 			com.mojang.blaze3d.platform.GlStateManager.color(0.25f, 0.25f, 0.25f, a);
 			net.minecraft.client.gui.DrawableHelper.drawTexture(Math.round(x) + 1, Math.round(y) + 1, 0f, 0f, resolution, resolution, side, side, resolution, resolution);
 		}

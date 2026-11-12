@@ -182,6 +182,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return null;
 	}
 
+	/** Everyone in the player list (the server's tab list), by UUID; empty outside a world or when unknown. */
+	default java.util.Collection<java.util.UUID> onlinePlayerIds() {
+		return java.util.Collections.emptyList();
+	}
+
 	/** Run on the game's main thread. */
 	default void runOnGameThread(Runnable r) {
 		r.run();
