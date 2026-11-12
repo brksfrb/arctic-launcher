@@ -28,6 +28,15 @@ public final class GlassLines {
 	/** Once per client tick: true when a changed level has rested and the textures should be loaded again. */
 	public static boolean due() { return due(level()); }
 
+	/** As {@link #due()}, but with Connected Glass off nothing shows the level, so the textures are left alone until it is on again. */
+	public static boolean due(boolean enabled) { return due(level(), enabled); }
+
+	static boolean due(int level, boolean enabled) {
+		if (enabled) return due(level);
+		pending = -1;
+		return false;
+	}
+
 	static boolean due(int level) {
 		if (stitched < 0) stitched = level;
 		if (level == stitched) { pending = -1; return false; }
