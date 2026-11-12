@@ -164,6 +164,14 @@ pub struct SkinsUi {
     pub dragged_at: f64,
 }
 
+/// The looks server answered, and the answer was no: a session it won't accept, rather than a
+/// server it couldn't reach. Worth telling apart — "check your connection" is useless advice when
+/// the connection is the part that worked. Offline accounts are told this way too: the server
+/// signs them in but serves them no look.
+pub(super) fn refused(error: &str) -> bool {
+    error.contains("http status: 401") || error.contains("http status: 403")
+}
+
 impl ArcticApp {
     fn skins_dir(&self) -> PathBuf {
         Library::dir(self.dirs.profile_root())
@@ -359,6 +367,23 @@ impl ArcticApp {
             ));
         };
         match self.skins.arctic.get(&account.id) {
+            // The server answered and refused the session. "Check your connection" would be
+            // useless advice: the connection is the part that worked.
+            Some(Err(e)) if refused(e) => Some(if account.is_microsoft() {
+                (
+                    "Arctic wants you to sign in again",
+                    "The looks server turned down this account's session. Sign in again on the Accounts tab."
+                        .to_owned(),
+                    true,
+                )
+            } else {
+                (
+                    "Arctic looks need a Microsoft account",
+                    "This offline account can sign in, but the looks server won't serve a look for it. Add a Microsoft account to wear skins, capes and cosmetics."
+                        .to_owned(),
+                    false,
+                )
+            }),
             Some(Err(e)) if e.starts_with("network error") => Some((
                 "Can't reach the Arctic looks server",
                 "Nothing can be worn until it answers. Check your connection; the launcher keeps trying."
@@ -820,6 +845,11 @@ impl ArcticApp {
                 if let Ok(state) = &result {
                     self.update_offline_face(&account_id, state);
                 }
+                if let Err(e) = &result {
+                    // Here, not in the drawing code: the page would otherwise print this once a
+                    // frame for as long as it is open.
+                    log::info!("looks server: {e}");
+                }
                 self.skins.arctic.insert(account_id.clone(), result);
                 let active = self.accounts.active().cloned();
                 let state = self.arctic_state().cloned();
@@ -1144,4 +1174,18 @@ fn now_secs_f64() -> f64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0.0, |d| d.as_secs_f64())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn refused_is_about_the_answer_not_the_connection() {
+        // The server replied and turned the session down.
+        assert!(super::refused("network error: http status: 401"));
+        assert!(super::refused("network error: http status: 403"));
+        // These are the server being unreachable or broken, which a retry may well fix.
+        assert!(!super::refused("network error: timeout: receive response"));
+        assert!(!super::refused("network error: http status: 500"));
+        assert!(!super::refused("network error: dns failure"));
+    }
 }

@@ -130,16 +130,25 @@ impl ArcticApp {
             .get(&account.id)
             .and_then(|r| r.as_ref().err().cloned());
         if let Some(e) = error {
+            // A refused session is not a connection problem, and must not be reported as one.
+            // (The failure is logged where it happens, not here: this runs every frame.)
+            let refused = super::refused(&e);
+            let microsoft = account.is_microsoft();
+            let text = if refused && microsoft {
+                "Arctic turned this account's session down. Sign in again on the Accounts tab."
+                    .to_owned()
+            } else if refused {
+                "Arctic looks need a Microsoft account; this one is offline.".to_owned()
+            } else if e.starts_with("network error") {
+                "Can't reach the Arctic looks server right now.".to_owned()
+            } else {
+                format!("Arctic looks are unavailable: {e}")
+            };
+            // Asking a refused offline account again only gets it refused again.
+            let worth_retrying = !refused || microsoft;
             ui.horizontal(|ui| {
-                // Connection problems get a plain message; details go to the log.
-                let text = if e.starts_with("network error") {
-                    log::info!("looks server: {e}");
-                    "Can't reach the Arctic looks server right now.".to_owned()
-                } else {
-                    format!("Arctic looks are unavailable: {e}")
-                };
                 ui.label(RichText::new(text).color(p.muted));
-                if ui.link("Retry").clicked() {
+                if worth_retrying && ui.link("Retry").clicked() {
                     self.request_skin_state(true);
                 }
             });
