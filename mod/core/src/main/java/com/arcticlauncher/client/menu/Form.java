@@ -269,6 +269,13 @@ final class Form {
 		put(new com.arcticlauncher.client.ui.Button(text, run), x + LABEL_W, top + (ROW - CHOICE_H) / 2, 64, CHOICE_H);
 	}
 
+	/** Like {@link #action(String, String, Runnable)}, but the first click only asks ("Sure?"); the second runs it. */
+	void action(String label, String text, String confirm, Runnable run) {
+		int top = row(ROW);
+		rowLabel(top, label);
+		put(new com.arcticlauncher.client.ui.Button(text, run).confirm(confirm), x + LABEL_W, top + (ROW - CHOICE_H) / 2, 120, CHOICE_H);
+	}
+
 	/** "Label   ----o----   35%": a number on a track, set by click or drag. */
 	void slider(String label, final java.util.function.DoubleSupplier get, final java.util.function.DoubleConsumer set, double min,
 			double max, double step, final String format) {

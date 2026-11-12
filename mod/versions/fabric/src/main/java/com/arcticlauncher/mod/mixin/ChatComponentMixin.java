@@ -25,25 +25,96 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** Chat timestamps, repeated lines stacked as "(x3)", mentions of you marked, and a longer history. */
 @Mixin(ChatComponent.class)
 abstract class ChatComponentMixin {
+	/** Lines (and display lines) put into the chat from the saved log: the history limit does not count them. */
+	@Unique
+	private int arctic$loadedLines;
+
+	/** True while saved lines are put into the chat (the history limit is lifted for that). */
+	@Unique
+	private boolean arctic$loading;
+
+	@Unique
+	private static final int ARCTIC_PAGE = 200;
+
+	@Shadow
+	@Final
+	private List<?> trimmedMessages;
+
+	@Shadow
+	private int chatScrollbarPos;
+
+	@Shadow
+	private boolean newMessageSinceScroll;
+
+	@Shadow
+	public int getLinesPerPage() {
+		return 0;
+	}
+
+	@Unique
+	private void arctic$add(Component text) {
+		final ChatComponent chat = (ChatComponent) (Object) this;
+		//#if MC >= 26.1
+		chat.addClientSystemMessage(text);
+		//#else
+		chat.addMessage(text);
+		//#endif
+	}
+
 	@Unique
 	private void arctic$restore() {
 		com.arcticlauncher.client.feature.PersistentChat history = ArcticClient.persistentChat();
 		if (history == null || history.restoring()) return;
 		final ChatComponent chat = (ChatComponent) (Object) this;
-		history.restore(new com.arcticlauncher.client.feature.PersistentChat.View() {
-			public void message(String text) {
-				//#if MC >= 26.1
-				chat.addClientSystemMessage(com.arcticlauncher.mod.ChatHistoryText.decode(text));
-				//#else
-				chat.addMessage(com.arcticlauncher.mod.ChatHistoryText.decode(text));
-				//#endif
-			}
-			public void sent(String text) {
-				// Populate up-arrow history directly: newer games also write command history
-				// from addRecentChat, which must not run while restoring.
-				chat.getRecentChat().add(text);
-			}
-		});
+		arctic$loading = true;
+		try {
+			history.restore(new com.arcticlauncher.client.feature.PersistentChat.View() {
+				public void message(String text, long time) {
+					arctic$add(com.arcticlauncher.mod.ChatHistoryText.decode(text));
+				}
+				public void sent(String text) {
+					// Populate up-arrow history directly: newer games also write command history
+					// from addRecentChat, which must not run while restoring.
+					chat.getRecentChat().add(text);
+				}
+			});
+		} finally {
+			arctic$loading = false;
+		}
+		arctic$loadedLines = trimmedMessages.size();
+	}
+
+	/** Scrolled near the top of what is loaded: read the next older page from the log and put it above. */
+	@Inject(method = "scrollChat", at = @At("RETURN"))
+	private void arctic$older(CallbackInfo ci) {
+		com.arcticlauncher.client.feature.PersistentChat history = ArcticClient.persistentChat();
+		if (history == null || arctic$loading || history.restoring() || !history.hasOlder()
+				|| trimmedMessages.size() - chatScrollbarPos > getLinesPerPage() * 3) {
+			return;
+		}
+		java.util.List<com.arcticlauncher.client.feature.PersistentChat.Entry> page = history.olderMessages(ARCTIC_PAGE);
+		if (page.isEmpty()) return;
+		int scroll = chatScrollbarPos;
+		boolean unread = newMessageSinceScroll;
+		int messagesBefore = allMessages.size();
+		int linesBefore = trimmedMessages.size();
+		arctic$loading = true;
+		try {
+			// Added the usual way, each at the front (oldest first), then the block moves to the far end.
+			history.replay(page, new com.arcticlauncher.client.feature.PersistentChat.View() {
+				public void message(String text, long time) {
+					arctic$add(com.arcticlauncher.mod.ChatHistoryText.decode(text));
+				}
+				public void sent(String text) {}
+			});
+			java.util.Collections.rotate(allMessages, -(allMessages.size() - messagesBefore));
+			java.util.Collections.rotate((List) trimmedMessages, -(trimmedMessages.size() - linesBefore));
+			arctic$loadedLines += trimmedMessages.size() - linesBefore;
+		} finally {
+			arctic$loading = false;
+			chatScrollbarPos = scroll;
+			newMessageSinceScroll = unread;
+		}
 	}
 
 	@Inject(method = "addRecentChat", at = @At("HEAD"))
@@ -83,7 +154,8 @@ abstract class ChatComponentMixin {
 			constant = @Constant(intValue = 100))
 	private int arctic$history(int vanilla) {
 		ClientConfig c = ArcticClient.config();
-		return c == null ? vanilla : c.chatHistory;
+		if (arctic$loading) return Integer.MAX_VALUE;
+		return c == null ? vanilla : c.chatHistory + arctic$loadedLines;
 	}
 
 	@Shadow
@@ -118,7 +190,18 @@ abstract class ChatComponentMixin {
 		ClientConfig c = ArcticClient.config();
 		if (c != null && c.chatKeep) {
 			ci.cancel();
+		} else if (ArcticClient.persistentChat() != null) {
+			// The lines are gone for good: the log is not scrolled back into an emptied chat.
+			arctic$loadedLines = 0;
+			ArcticClient.persistentChat().stopPaging();
 		}
+	}
+
+	/** The up-arrow list is not capped at 100 while it is saved (the log would have gaps). */
+	@ModifyConstant(method = "addRecentChat", constant = @Constant(intValue = 100), require = 0)
+	private int arctic$sentLimit(int vanilla) {
+		ClientConfig c = ArcticClient.config();
+		return c != null && c.chatPersistent ? Integer.MAX_VALUE : vanilla;
 	}
 
 	/** Muted players and hidden words: the line never reaches the chat. */
@@ -164,7 +247,12 @@ abstract class ChatComponentMixin {
 	private Component arctic$chat(Component message) {
 		arctic$restore();
 		if (ArcticClient.persistentChat() != null) {
-			if (ArcticClient.persistentChat().restoring()) return message;
+			if (ArcticClient.persistentChat().restoring()) {
+				long time = ArcticClient.persistentChat().restoringTime();
+				// Date lines and the session divider carry no time and no stamp.
+				return time <= 0 ? message : arctic$stamped(com.arcticlauncher.mod.ChatCopyComponents.tag(message, message.getString(), false),
+						message.getString(), new java.util.Date(time));
+			}
 			if (!ArcticClient.chatHidden(message.getString())) {
 				ArcticClient.persistentChat().message(com.arcticlauncher.mod.ChatHistoryText.encode(message));
 			}
@@ -209,9 +297,16 @@ abstract class ChatComponentMixin {
 							com.arcticlauncher.mod.Compat.literal("» ").withStyle(ChatFormatting.YELLOW), text, false)).append(out);
 			ArcticClient.platform().mentionSound();
 		}
+		return arctic$stamped(out, text, new java.util.Date());
+	}
+
+	/** The time (or the copy tag) in front of a line; restored lines carry the time they arrived. */
+	@Unique
+	private static Component arctic$stamped(Component out, String text, java.util.Date when) {
+		ClientConfig c = ArcticClient.config();
 		if (c.chatTimestamps) {
 			net.minecraft.network.chat.MutableComponent stamp = com.arcticlauncher.mod.Compat
-					.literal(com.arcticlauncher.client.feature.ChatStamp.text(c)).withStyle(ChatFormatting.DARK_GRAY);
+					.literal(com.arcticlauncher.client.feature.ChatStamp.text(c, when)).withStyle(ChatFormatting.DARK_GRAY);
 			if (c.chatStampBold) {
 				stamp = stamp.withStyle(ChatFormatting.BOLD);
 			}
