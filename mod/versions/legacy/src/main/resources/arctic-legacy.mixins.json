@@ -7,6 +7,7 @@
 		"ScreenshotMixin",
 		"ScreenshotKeyMixin",
 		"MinecraftClientMixin",
+		"MainSessionLogMixin",
 		"GlassLegacyAtlasMixin",
 		"GlassLegacyPackAccess",
 		"GlassLegacyResourceMixin",

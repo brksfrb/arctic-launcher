@@ -71,4 +71,42 @@ class MinimapViewTest {
 		// Turning with you: your own way is always up.
 		assertEquals(0, Math.toDegrees(MinimapView.screenAngle(37, true, 37)), 1e-9);
 	}
+
+	@Test
+	void theRoundEdgeIsOnePixelSoft() {
+		MinimapView v = new MinimapView();
+		v.update(WORLD, 0.5, 0.5, 0);
+		v.compose(0.5, 0.5, 0, 64, false, true, Collections.<MinimapView.Marker>emptyList(), 0);
+		double half = MinimapView.PICTURE / 2.0;
+		// Away from the middle (where your own arrow is): the land's own color, see-through by how far out it is.
+		for (int y = 0; y < MinimapView.PICTURE; y++) {
+			for (int x = 0; x < 40; x++) {
+				double cover = Math.max(0, Math.min(1, half - Math.hypot(x + 0.5 - half, y + 0.5 - half)));
+				assertEquals((int) Math.round(cover * 255), pixel(v, x, y) >>> 24, x + "," + y);
+			}
+		}
+	}
+
+	@Test
+	void anArrowIsSolidInsideAndSmoothAtItsEdge() {
+		MinimapView v = new MinimapView();
+		v.update(WORLD, 0.5, 0.5, 0);
+		// Another player 20 blocks east, facing north, in red: 60 pixels right of the middle at 64 blocks across.
+		java.util.List<MinimapView.Marker> one = Collections.singletonList(new MinimapView.Marker(20.5, 0.5, 180, 0xFFFF0000, false));
+		v.compose(0.5, 0.5, 0, 64, false, false, one, 0);
+		int mid = MinimapView.PICTURE / 2;
+		assertEquals(0xFFFF0000, pixel(v, mid + 60, mid), "the arrow's middle");
+		assertEquals(0xFF000000, pixel(v, mid + 60, mid - 8), "its outline, past the tip");
+		int partly = 0;
+		for (int y = mid - 12; y < mid + 12; y++) {
+			for (int x = mid + 48; x < mid + 72; x++) {
+				int red = (pixel(v, x, y) >> 16) & 0xFF;
+				int blue = pixel(v, x, y) & 0xFF;
+				if (red > 0 && red < 255 && blue == 0) {
+					partly++;
+				}
+			}
+		}
+		assertTrue(partly > 4, "blended edge pixels: " + partly);
+	}
 }

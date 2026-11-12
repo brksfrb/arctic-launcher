@@ -1096,6 +1096,8 @@ pub fn scrub(text: &str, own: &Own) -> String {
     static PATTERNS: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
     let patterns = PATTERNS.get_or_init(|| {
         [
+            // The game's own start-up line (1.8.9 writes it to latest.log): the token and the player's id.
+            (r"\(Session ID is [^)\r\n]*\)?", "(Session ID is <hidden>)"),
             (
                 r"(?i)(--(?:accessToken|uuid|username|xuid|clientId|session)\s+)\S+",
                 "${1}<hidden>",
@@ -1743,6 +1745,37 @@ USERNAME=someone
         assert_eq!(evidence.matches("tick()V").count(), 2);
         assert_eq!(evidence.matches("failure begin").count(), 2);
         assert_eq!(evidence.matches("failure end").count(), 2);
+    }
+
+    #[test]
+    fn the_games_session_line_never_leaves_with_its_token() {
+        let own = Own {
+            home: None,
+            user: None,
+        };
+        // 1.8.9's latest.log: a Microsoft token (a JWT), an old Mojang one, and an offline player.
+        let jwt = "eyJraWQiOiJhYzg0YSJ9.eyJ4dWlkIjoiMjUzNTQyIn0.c2lnbmF0dXJlLXBhcnQ";
+        let id = "593fd4c3951f39ada7bd19ddba5fcb41";
+        for token in [jwt, "0123456789abcdef0123456789abcdef", "0"] {
+            let text = format!(
+                "[00:16:35] [Client thread/INFO]: Setting user: Steve\n\
+                 [00:16:35] [Client thread/INFO]: (Session ID is token:{token}:{id})\n\
+                 [00:16:36] [Client thread/INFO]: LWJGL Version: 2.9.4"
+            );
+            let clean = scrub(&text, &own);
+            assert!(
+                clean.contains("(Session ID is <hidden>)\n"),
+                "not masked: {clean}"
+            );
+            assert!(!clean.contains(id), "player id left in: {clean}");
+            if token.len() > 1 {
+                assert!(!clean.contains(token), "token left in: {clean}");
+            }
+            assert!(clean.contains("LWJGL Version: 2.9.4"));
+        }
+        // Cut off mid-line (the report keeps a bounded tail): still nothing of the token.
+        let cut = scrub(&format!("(Session ID is token:{jwt}"), &own);
+        assert_eq!(cut, "(Session ID is <hidden>)");
     }
 
     #[test]
