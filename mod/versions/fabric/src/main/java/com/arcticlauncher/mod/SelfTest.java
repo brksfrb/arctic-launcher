@@ -79,6 +79,12 @@ final class SelfTest {
 			return;
 		}
 		//#endif
+		//#if DEV
+		if ("nametagsharp".equals(System.getProperty("arctic.selftest"))) {
+			NametagSharpTest.start();
+			return;
+		}
+		//#endif
 		if ("nametagproof".equals(System.getProperty("arctic.selftest"))) {
 			NametagProof.start();
 			return;

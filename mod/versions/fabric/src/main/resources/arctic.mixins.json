@@ -98,7 +98,8 @@
 		"ScaledTextStateMixin",
 		"TextProjectionMixin",
 		"TextProjectionBufferMixin",<% } %><% if (worldTextScale) { %>
-		"WorldTextScaleMixin",<% } %><% if (oldScaledFont) { %>
+		"WorldTextScaleMixin",<% } %><% if (nameTagTextScale) { %>
+		"NameTagTextScaleMixin",<% } %><% if (oldScaledFont) { %>
 		"ScaledFontSetMixin",<% } %><% if (oldScaledTexture) { %>
 		"ScaledFontTextureMixin",<% } %><% if (gpuFontTexture && !scaledFont) { %>
 		"FontTextureMixin",<% } %><% if (textShader) { %>
