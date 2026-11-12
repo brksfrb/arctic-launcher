@@ -54,7 +54,7 @@ final class FogMatrixTest {
 		ClientConfig c = ArcticClient.config();
 		int seen = Fog.seen;
 		int changed = Fog.changed;
-		ArcticMod.LOG.info("fog-matrix: {} fog={} off={} scale={} factor={} hooks-seen={} hooks-changed={} last={}->{}", label, c.fog, c.fogOff, c.fogScale,
+		ArcticMod.LOG.info("fog-matrix: {} y={} fog={} off={} scale={} factor={} hooks-seen={} hooks-changed={} last={}->{}", label, Minecraft.getInstance().player.getY(), c.fog, c.fogOff, c.fogScale,
 				Fog.factor(), seen - seen0, changed - changed0, Fog.lastIn, Fog.lastOut);
 		seen0 = seen;
 		changed0 = changed;
@@ -70,13 +70,15 @@ final class FogMatrixTest {
 		step(3000, () -> shot(place + "-3-nofog"));
 	}
 
-	/** A stone floor and magenta pillars on alternating sides of the view line, 16 blocks apart. */
+	/** A stone floor and magenta pillars on alternating sides of the view line, 24 blocks apart out to 168. */
 	private static void pillars() {
-		command("fill -12 94 -12 12 99 110 minecraft:stone");
-		command("fill -12 100 -12 12 112 110 minecraft:air");
-		for (int z = 16, i = 0; z <= 110; z += 16, i++) {
+		for (int z0 = -12; z0 < 180; z0 += 64) {
+			command("fill -10 94 " + z0 + " 10 99 " + (z0 + 63) + " minecraft:stone");
+			command("fill -10 100 " + z0 + " 10 112 " + (z0 + 63) + " minecraft:air");
+		}
+		for (int z = 24, i = 0; z <= 168; z += 24, i++) {
 			int x = i % 2 == 0 ? -7 : 4;
-			command("fill " + x + " 100 " + z + " " + (x + 3) + " 108 " + z + " minecraft:magenta_wool");
+			command("fill " + x + " 100 " + z + " " + (x + 3) + " 110 " + z + " minecraft:magenta_wool");
 		}
 	}
 
@@ -88,7 +90,7 @@ final class FogMatrixTest {
 		command("weather clear");
 		command("tp @s 0 100 0 0 0");
 		at = 0;
-		step(6000, () -> {
+		step(9000, () -> {
 			pillars();
 			//#if MC >= 26.2
 			if (!Compat.hudHidden()) {
@@ -98,7 +100,8 @@ final class FogMatrixTest {
 			Minecraft.getInstance().options.hideGui = true;
 			//#endif
 		});
-		step(3000, () -> command("tp @s 0 100 0 0 0"));
+		step(3000, FogMatrixTest::pillars);
+		step(2000, () -> command("tp @s 0 100 0 0 0"));
 		settings("a-edge");
 		step(100, () -> command("weather rain"));
 		step(4000, () -> {});
@@ -114,6 +117,7 @@ final class FogMatrixTest {
 			command("execute in minecraft:the_nether run tp @s 0 100 0 0 0");
 		});
 		step(6000, FogMatrixTest::pillars);
+		step(2000, FogMatrixTest::pillars);
 		step(2000, () -> command("tp @s 0 100 0 0 0"));
 		settings("d-nether");
 		step(500, () -> {
