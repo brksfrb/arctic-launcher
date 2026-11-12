@@ -4,6 +4,7 @@ import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.Keys;
 import com.arcticlauncher.client.config.HudSlot;
 import com.arcticlauncher.client.gfx.Draw;
+import com.arcticlauncher.client.gfx.DimGfx;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.hud.Hud;
 import com.arcticlauncher.client.hud.HudWidget;
@@ -18,8 +19,9 @@ import java.util.Map;
 /**
  * Right Shift in a world: your HUD, live and movable. Drag a widget to move
  * it (it snaps to edges and to other widgets), drag its bottom-right corner
- * or scroll on it to resize it, right-click it for its settings. The bar in the middle opens Mods and the
- * other Arctic screens; drop a widget on the bar to take it off the HUD.
+ * or scroll on it to resize it, right-click it for its settings. The card in the middle opens Mods and the
+ * other Arctic screens. A widget under the card wins the mouse (the card dims then, and while one is being
+ * moved); the card moves by its header, and double-clicking the header puts it back in the middle.
  */
 public final class HudEditor extends Page {
 	private static final float SCALE_STEP = 0.1f;
@@ -32,6 +34,10 @@ public final class HudEditor extends Page {
 	private static final int SMALL_H = 16;
 	private static final int GAP = 4;
 	private static final int PAD = 8;
+	/** The card's header row (title and version): the handle that moves it. */
+	private static final int HEADER_H = 20;
+	private static final float DIMMED = 0.3f;
+	private static final long DOUBLE_CLICK_MS = 400;
 	private static final int MENU_W = 96;
 	/** The resize corner: this many pixels in from a widget's bottom-right. */
 	private static final int HANDLE = 6;
@@ -44,7 +50,7 @@ public final class HudEditor extends Page {
 
 	private int bx;
 	private int by;
-	/** Bar opacity: 1 normally, faded while dragging. */
+	/** Card opacity: 1 normally, faded while a widget is moved or under the mouse. */
 	private float shown = 1f;
 	private long lastFrame;
 
@@ -67,6 +73,16 @@ public final class HudEditor extends Page {
 	private HudWidget menuFor;
 	private int menuX;
 	private int menuY;
+	/** The right-click menu is the card's (reset), not a widget's. */
+	private boolean cardMenu;
+	/** The card is being moved by its header; the grab point inside it. */
+	private boolean cardDragging;
+	private int cardGrabX;
+	private int cardGrabY;
+	private long lastHeaderClick;
+	/** The real mouse (the card's widgets are shown a faraway one while a HUD widget has it). */
+	private int realX;
+	private int realY;
 
 	private final List<Button> barButtons = new ArrayList<Button>();
 	private Map<HudWidget, int[]> rects = new java.util.HashMap<HudWidget, int[]>();
@@ -90,8 +106,9 @@ public final class HudEditor extends Page {
 
 	@Override
 	protected void build() {
-		bx = (width - BAR_W) / 2;
-		by = (height - BAR_H) / 2;
+		com.arcticlauncher.client.config.ClientConfig cfg = ArcticClient.config();
+		bx = clamp((width - BAR_W) / 2 + cfg.hudCardDx, width - BAR_W);
+		by = clamp((height - BAR_H) / 2 + cfg.hudCardDy, height - BAR_H);
 		barButtons.clear();
 		Button mods = new Button("Mods", Menus::mods).primary();
 		add(mods).bounds(bx + PAD, by + 22, BAR_W - PAD * 2, MODS_H);
@@ -111,9 +128,23 @@ public final class HudEditor extends Page {
 			add(b).bounds(bx + PAD + i * (sw + GAP), by + 22 + MODS_H + GAP, sw, SMALL_H);
 			barButtons.add(b);
 		}
-		if (menuFor != null) {
+		if (menuFor != null || cardMenu) {
 			buildMenu();
 		}
+	}
+
+	/** Keep the card fully on screen. */
+	private static int clamp(int v, int max) {
+		return Math.max(0, Math.min(Math.max(0, max), v));
+	}
+
+	private void setCard(int x, int y) {
+		bx = clamp(x, width - BAR_W);
+		by = clamp(y, height - BAR_H);
+		com.arcticlauncher.client.config.ClientConfig cfg = ArcticClient.config();
+		cfg.hudCardDx = bx - (width - BAR_W) / 2;
+		cfg.hudCardDy = by - (height - BAR_H) / 2;
+		rebuild();
 	}
 
 	/** Right-click on a widget: its settings, or take it off. */
@@ -121,6 +152,14 @@ public final class HudEditor extends Page {
 		final HudWidget w = menuFor;
 		int x = Math.min(menuX, width - MENU_W - 2);
 		int y = Math.min(menuY, height - 42);
+		if (w == null) {
+			add(new Button("Reset card", () -> {
+				cardMenu = false;
+				setCard((width - BAR_W) / 2, (height - BAR_H) / 2);
+				ArcticClient.saveConfig();
+			})).bounds(x, y, MENU_W, 18);
+			return;
+		}
 		add(new Button("Settings", () -> {
 			menuFor = null;
 			Menus.open("hud." + w.id, this);
@@ -136,17 +175,38 @@ public final class HudEditor extends Page {
 		return mx >= bx && my >= by && mx < bx + BAR_W && my < by + BAR_H;
 	}
 
+	private boolean inHeader(double mx, double my) {
+		return inBar(mx, my) && my < by + HEADER_H;
+	}
+
+	private boolean busy() {
+		return resizing != null || cardDragging || (dragging != null && moved);
+	}
+
+	private boolean inMenu(double mx, double my) {
+		return (menuFor != null || cardMenu) && mx >= Math.min(menuX, width - MENU_W - 2) && mx < Math.min(menuX, width - MENU_W - 2) + MENU_W
+				&& my >= Math.min(menuY, height - 42) && my < Math.min(menuY, height - 42) + 38;
+	}
+
 	@Override
 	public void render(Gfx g, int mx, int my) {
 		long now = System.nanoTime();
 		float dt = lastFrame == 0 ? 0f : Math.min(0.1f, (now - lastFrame) / 1e9f);
 		lastFrame = now;
-		float target = dragging != null && moved ? 0.25f : 1f;
+		realX = mx;
+		realY = my;
+		// A HUD widget has the mouse wherever it is, even under the card: the card is dimmed then.
+		HudWidget under = busy() || inMenu(mx, my) ? null : placedAt(mx, my);
+		boolean dim = busy() || (under != null && inBar(mx, my));
+		float target = dim ? DIMMED : 1f;
 		shown += (target - shown) * Math.min(1f, dt * FADE_SPEED);
-		for (Button b : barButtons) {
-			b.visible = shown > 0.5f;
-		}
-		super.render(g, mx, my);
+		boolean away = busy() || under != null;
+		super.render(g, away ? -10000 : mx, away ? -10000 : my);
+	}
+
+	@Override
+	protected Gfx widgetGfx(Gfx g) {
+		return shown < 0.99f ? new DimGfx(g, shown) : g;
 	}
 
 	@Override
@@ -165,7 +225,7 @@ public final class HudEditor extends Page {
 		for (Map.Entry<HudWidget, int[]> e : hud.sorted(rects)) {
 			HudWidget w = e.getKey();
 			int[] r = e.getValue();
-			boolean over = w == dragging || w == resizing || w == menuFor || (dragging == null && resizing == null && !inBar(mx, my) && inside(r, mx, my));
+			boolean over = w == dragging || w == resizing || w == menuFor || (dragging == null && resizing == null && !cardDragging && !inMenu(realX, realY) && inside(r, realX, realY));
 			// One pixel out: half the gap between stacked widgets, so boxes touch but never overlap.
 			int o = HIGHLIGHT;
 			g.fill(r[0] - o, r[1] - o, r[0] + r[2] + o, r[1] + r[3] + o, Draw.alpha(0xFFFFFFFF, over ? 0.12f : 0.04f));
@@ -181,28 +241,21 @@ public final class HudEditor extends Page {
 			}
 		}
 		snapper.draw(g, s, width, height);
-		drawBar(g, s, mx, my);
+		drawBar(shown < 0.99f ? new DimGfx(g, shown) : g, s);
 		String help = "Drag to move  ·  drag the corner (or scroll) to resize  ·  right-click for settings";
 		int hw = g.textWidth(help) / 2 + HINT_PAD;
 		// Under the menu bar: at the bottom it would sit on the hotbar.
 		int hy = by + BAR_H + 10;
-		Draw.round(g, width / 2 - hw, hy - 5, width / 2 + hw, hy + 13, 4, Draw.alpha(0xC0000000, shown));
-		Draw.centered(g, help, width / 2, hy, Draw.alpha(0xFFFFFFFF, shown), false);
+		if (hy + 13 > height) {
+			hy = by - 18;
+		}
+		int hx = Math.max(hw, Math.min(width - hw, bx + BAR_W / 2));
+		Draw.round(g, hx - hw, hy - 5, hx + hw, hy + 13, 4, Draw.alpha(0xC0000000, shown));
+		Draw.centered(g, help, hx, hy, Draw.alpha(0xFFFFFFFF, shown), false);
 	}
 
-	private void drawBar(Gfx g, Style s, int mx, int my) {
-		// Where the widget is being dragged (the same as the mouse, when a mouse drags it).
-		boolean removing = dragging != null && moved && inBar(mouseX, mouseY);
-		float a = removing ? 1f : shown;
+	private void drawBar(Gfx g, Style s) {
 		Skin.panel(g, s, bx, by, bx + BAR_W, by + BAR_H);
-		if (removing) {
-			Draw.outline(g, bx, by, bx + BAR_W, by + BAR_H, 2, s.accent);
-			Draw.centered(g, "Drop here to take it off", bx + BAR_W / 2, by + BAR_H / 2 - 4, s.accent, false);
-			return;
-		}
-		if (a < 0.5f) {
-			return;
-		}
 		g.texture("icon", bx + PAD, by + 6, 12, 12, 0, 0, 256, 256, 256, 256);
 		g.text("§lArctic", bx + PAD + 16, by + 8, s.text, false);
 		String version = ArcticClient.platform().minecraftVersion();
@@ -257,19 +310,45 @@ public final class HudEditor extends Page {
 
 	@Override
 	public boolean mouseClicked(double mx, double my, int button) {
-		if (super.mouseClicked(mx, my, button)) {
+		if (busy()) {
 			return true;
 		}
-		if (menuFor != null) {
+		boolean menuHit = inMenu(mx, my);
+		HudWidget w = menuHit ? null : placedAt(mx, my);
+		// A widget under the card wins; the card's buttons only take clicks where none is.
+		if (w == null && super.mouseClicked(mx, my, button)) {
+			return true;
+		}
+		if (menuFor != null || cardMenu) {
 			menuFor = null;
+			cardMenu = false;
 			rebuild();
 		}
-		if (inBar(mx, my)) {
-			return true;
-		}
-		HudWidget w = placedAt(mx, my);
 		if (w == null) {
-			return false;
+			if (!inBar(mx, my)) {
+				return false;
+			}
+			if (inHeader(mx, my)) {
+				if (button == Keys.MOUSE_RIGHT) {
+					cardMenu = true;
+					menuX = (int) mx;
+					menuY = (int) my;
+					rebuild();
+					return true;
+				}
+				long now = System.currentTimeMillis();
+				if (now - lastHeaderClick < DOUBLE_CLICK_MS) {
+					lastHeaderClick = 0;
+					setCard((width - BAR_W) / 2, (height - BAR_H) / 2);
+					ArcticClient.saveConfig();
+					return true;
+				}
+				lastHeaderClick = now;
+				cardDragging = true;
+				cardGrabX = (int) mx - bx;
+				cardGrabY = (int) my - by;
+			}
+			return true;
 		}
 		if (button == Keys.MOUSE_RIGHT) {
 			menuFor = w;
@@ -303,6 +382,10 @@ public final class HudEditor extends Page {
 
 	@Override
 	public boolean mouseDragged(double mx, double my, int button) {
+		if (cardDragging) {
+			setCard((int) mx - cardGrabX, (int) my - cardGrabY);
+			return true;
+		}
 		if (resizing != null) {
 			mouseX = (int) mx;
 			mouseY = (int) my;
@@ -321,6 +404,11 @@ public final class HudEditor extends Page {
 
 	@Override
 	public boolean mouseReleased(double mx, double my, int button) {
+		if (cardDragging) {
+			cardDragging = false;
+			ArcticClient.saveConfig();
+			return true;
+		}
 		if (resizing != null) {
 			resizing = null;
 			ArcticClient.saveConfig();
@@ -329,13 +417,8 @@ public final class HudEditor extends Page {
 		if (dragging == null) {
 			return super.mouseReleased(mx, my, button);
 		}
-		HudWidget w = dragging;
-		boolean wasMoved = moved;
 		dragging = null;
 		moved = false;
-		if (wasMoved && inBar(mx, my)) {
-			hide(w);
-		}
 		ArcticClient.saveConfig();
 		return true;
 	}
@@ -343,8 +426,7 @@ public final class HudEditor extends Page {
 	private void hide(HudWidget w) {
 		HudSlot slot = ArcticClient.hud().slot(w);
 		slot.enabled = false;
-		// It was dropped on the bar, so that spot is under the bar: showing it again lays it out
-		// where it would have gone, never back under the bar where it can't be grabbed.
+		// Showing it again lays it out where it would have gone, not where it was left.
 		slot.placed = false;
 		ArcticClient.saveConfig();
 	}
