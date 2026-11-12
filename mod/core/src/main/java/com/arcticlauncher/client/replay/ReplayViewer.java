@@ -19,6 +19,7 @@ public final class ReplayViewer {
 	private static final double MAX_FRAME_MS = 250;
 	/** While joining: packets handed over per frame at most. */
 	private static final int JOIN_BATCH = 4000;
+	static final int MAX_PACKET_FAILURES = 16;
 	/** Arrow keys jump this far (ms); with Ctrl, further. */
 	static final int SHORT_JUMP = 5_000;
 	static final int LONG_JUMP = 30_000;
@@ -46,6 +47,7 @@ public final class ReplayViewer {
 	private final List<Keyframe> keyframes;
 	private final Runnable onKeyframesChanged;
 	private final FreeCamera free = new FreeCamera();
+	private int consecutivePacketFailures;
 	private boolean placed;
 	private double time;
 	private int cursor;
@@ -67,6 +69,8 @@ public final class ReplayViewer {
 	private VideoExport export;
 	private long exportFrameAt;
 	private String problem;
+	/** Why playback can't continue (set once), or null. */
+	private String failure;
 	/** When the world first showed (ms): the timeline starts here, not at the login. */
 	private int start;
 	/** Last time the player touched the controls (nanoTime), for hiding the bar. */
@@ -130,7 +134,7 @@ public final class ReplayViewer {
 
 	/** Before a frame is drawn (game thread). */
 	void frame() {
-		if (seeking) return;
+		if (seeking || failure != null) return;
 		if (export != null) {
 			// Pace rendering as well as encoding: never spin the GPU at an uncapped frame rate.
 			long wait = exportFrameAt + 1_000_000_000L / 30 - System.nanoTime();
@@ -148,6 +152,7 @@ public final class ReplayViewer {
 			double target = pendingSeek;
 			pendingSeek = -1;
 			seekNow(target);
+			if (failure != null) return;
 			// Rebuilding the world is not elapsed playback or free-camera movement.
 			realMs = 0;
 			lastFrame = System.nanoTime();
@@ -168,6 +173,7 @@ public final class ReplayViewer {
 			ReplayClock.scale(paused && export == null ? 0 : SPEEDS[speed]);
 		}
 		feed(time, false);
+		if (failure != null) return;
 		self();
 		camera(realMs / 1000.0);
 	}
@@ -178,7 +184,7 @@ public final class ReplayViewer {
 		// seek and camera change must be applied before we capture frame zero.
 		// Seeking can rebuild the world: don't encode the terrain-loading screen
 		// or advance the export timeline while that world is still joining.
-		if (export == null || seeking || pendingSeek >= 0 || !ready()) {
+		if (export == null || seeking || failure != null || pendingSeek >= 0 || !ready()) {
 			return;
 		}
 		if (export.failed() != null) {
@@ -197,9 +203,10 @@ public final class ReplayViewer {
 	/** Log in and configure as fast as the game takes it; the clock starts once in the world. */
 	private void join() {
 		int n = 0;
-		while (!backend.ready() && cursor < data.count() && n++ < JOIN_BATCH) {
+		while (failure == null && !backend.ready() && cursor < data.count() && n++ < JOIN_BATCH) {
 			apply(cursor++, false);
 		}
+		if (failure != null) return;
 		if (backend.ready()) {
 			joined = true;
 			status = null;
@@ -212,25 +219,46 @@ public final class ReplayViewer {
 	}
 
 	private void feed(double until, boolean jumping) {
-		while (cursor < data.count() && data.time(cursor) <= until) {
+		while (failure == null && cursor < data.count() && data.time(cursor) <= until) {
 			apply(cursor++, jumping);
 		}
 	}
 
 	private void apply(int i, boolean jumping) {
+		if (failure != null) {
+			return;
+		}
 		try {
 			backend.apply(data.packet(i), jumping);
+		} catch (ReplayBackend.Unusable e) {
+			// One line, then stop: the packets after it would all fail the same way.
+			failure = e.getMessage();
+			platform.log(true, "replay: packet " + i + " left playback unusable, stopping: " + e.getMessage());
 		} catch (RuntimeException e) {
-			if (problem == null) {
+			if (++consecutivePacketFailures == 1) {
 				// Where it failed too: a bare NullPointerException says nothing on its own.
 				StackTraceElement[] at = e.getStackTrace();
 				StringBuilder where = new StringBuilder();
 				for (int k = 0; k < Math.min(3, at.length); k++) {
 					where.append(" at ").append(at[k]);
 				}
-				platform.log(true, "replay: packet " + i + " failed: " + e + where);
+				platform.log(true, "replay: packet " + i + " failed: " + e + where + "; cause=" + e.getCause());
 			}
+			if (e instanceof ReplayBackend.ProtocolFailure || consecutivePacketFailures >= MAX_PACKET_FAILURES) {
+				stopPacketFeeding("Replay playback stopped because its packets could not be read. Try another recording.");
+			}
+			return;
 		}
+		consecutivePacketFailures = 0;
+		if (failure != null) stopPacketFeeding(failure);
+	}
+
+	private void stopPacketFeeding(String message) {
+		paused = true;
+		status = null;
+		problem = failure = message;
+		if (export != null) cancelExport();
+		ReplayClock.scale(0);
 	}
 
 	private void self() {
@@ -319,6 +347,7 @@ public final class ReplayViewer {
 
 	/** Jump to {@code ms} (done at the start of the next frame). */
 	public void seek(double ms) {
+		if (failure != null) return;
 		pendingSeek = Math.max(start, Math.min(data.duration(), ms));
 		status = "Jumping…";
 		touched();
@@ -371,13 +400,14 @@ public final class ReplayViewer {
 			cursor = 0;
 			lastSelf = -1;
 			// The world is rebuilt from scratch: the login and configuration come first.
-			while (!backend.ready() && cursor < to) {
+			while (failure == null && !backend.ready() && cursor < to) {
 				apply(cursor++, true);
 			}
 		}
 		if (cats != null) {
 			int[] plan = SeekPlan.plan(cats, keys, cursor, to, data.removals);
 			for (int i : plan) {
+				if (failure != null) break;
 				apply(i, true);
 			}
 			platform.log(false, "replay: jumped " + (to - cursor) + " packets using " + plan.length + " in "
@@ -386,6 +416,7 @@ public final class ReplayViewer {
 		} else {
 			feed(target, true);
 		}
+		if (failure != null) return;
 		time = target;
 		lastSelf = data.selfIndexAt(target) - 1;
 		self();
@@ -623,6 +654,11 @@ public final class ReplayViewer {
 	/** What's happening ("Joining…", "Jumping…"), or null. */
 	public String status() {
 		return status;
+	}
+
+	/** Why playback can't go on (the replay should be closed), or null. */
+	public String failure() {
+		return failure;
 	}
 
 	/** Something went wrong the player should know about (then cleared), or null. */

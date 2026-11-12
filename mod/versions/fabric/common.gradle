@@ -418,3 +418,36 @@ tasks.named('jar') {
 		attributes('Premain-Class': 'com.arcticlauncher.mod.startup.ArcticAgent')
 	}
 }
+
+// Protocol regression tests use the same version preprocessing as the adapter.
+def preprocessedTests = layout.buildDirectory.dir("preprocessed/${mc}/test")
+tasks.register('preprocessTestJava') {
+	inputs.dir new File(adapterRoot, 'src/test/java')
+	inputs.property 'minecraft_version', mc
+	outputs.dir preprocessedTests
+	outputs.upToDateWhen { false }
+	doLast {
+		def outDir = preprocessedTests.get().asFile
+		project.delete(outDir)
+		def root = new File(adapterRoot, 'src/test/java')
+		if (root.exists()) root.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+			def rel = root.toPath().relativize(f.toPath()).toString()
+			def target = new File(outDir, rel)
+			target.parentFile.mkdirs()
+			target.text = applyRenames(preprocessSource(f.getText('UTF-8'), rel))
+		}
+	}
+}
+sourceSets.test.java.srcDirs = [preprocessedTests]
+tasks.named('compileTestJava') { dependsOn 'preprocessTestJava' }
+dependencies {
+	testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+tasks.named('test') {
+	useJUnitPlatform()
+	maxHeapSize = '1G'
+	maxParallelForks = 1
+	workingDir = layout.buildDirectory.dir('test-runtime').get().asFile
+	doFirst { workingDir.mkdirs() }
+}
