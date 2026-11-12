@@ -239,7 +239,7 @@ fn fresh_freeze_files(game_dir: &std::path::Path, since: SystemTime) -> Vec<Stri
             (modified >= since).then(|| (modified, e.path()))
         })
         .collect();
-    files.sort_by(|a, b| b.0.cmp(&a.0));
+    files.sort_by_key(|a| std::cmp::Reverse(a.0));
     files
         .into_iter()
         .take(2)
