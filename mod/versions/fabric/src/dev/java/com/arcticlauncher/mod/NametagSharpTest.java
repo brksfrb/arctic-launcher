@@ -58,33 +58,38 @@ final class NametagSharpTest {
 		//#endif
 		command("time set 6000");
 		command("weather clear");
-		command("tp @s 0.5 200 0.5 0 0");
-		if (!"false".equals(System.getProperty("arctic.nts.chat"))) {
-			// A busy chat first: the GUI-size font atlas holds many neighbours, as in a long session.
-			Compat.sendChat("The quick brown fox jumps over the lazy dog 0123456789 | lil Il1 !");
-			Compat.sendChat("[Rank] Mod: \"seen\" (top1) #BlocksMC.com <Tokens> 32682 {Gifts} 200 ~ lazys reported j4zqq for AutoClicker");
-		}
+		// First the chat shot, once the chunks are in: looking straight down at the stone floor gives an opaque, fixed
+		// backdrop behind the chat, so shots of different builds compare pixel for pixel.
 		later(4, () -> {
 			command("fill -5 199 -40 5 199 5 stone");
+			command("tp @s 0.5 200 0.5 0 90");
+			if (!"false".equals(System.getProperty("arctic.nts.chat"))) {
+				// A busy chat: the GUI-size font atlas holds many neighbours, as in a long session.
+				Compat.sendChat("The quick brown fox jumps over the lazy dog 0123456789 | lil Il1 !");
+				Compat.sendChat("[Rank] Mod: \"seen\" (top1) #BlocksMC.com <Tokens> 32682 {Gifts} 200 ~ lazys reported j4zqq for AutoClicker");
+			}
+		});
+		later(8, () -> WorldTest.shot("nts-chat"));
+		later(10, () -> {
 			command("summon armor_stand 0.5 199.5 5.5 {CustomName:{\"text\":\"seentop1\",\"color\":\"green\"},CustomNameVisible:1b,NoGravity:1b,Invisible:1b}");
 			command("summon armor_stand 0.5 198.5 5.5 {CustomName:\"102ms | 3MAR_GAMER_YT\",CustomNameVisible:1b,NoGravity:1b,Invisible:1b}");
 			Compat.setScreen(null);
 		});
 		for (int i = 0; i < DISTANCES.length; i++) {
 			final int n = i;
-			later(8 + i * 6, () -> {
+			later(16 + i * 6, () -> {
 				double d = DISTANCES[n];
 				// Fractional camera x so the quad lands on a different sub-pixel every step.
 				command(String.format(java.util.Locale.ROOT, "tp @s %.3f 200 %.3f 0 0", 0.5 + n * 0.0371, 5.5 - d - 0.5 + 0.5));
 				Compat.setScreen(null);
 			});
-			later(11 + i * 6, () -> {
+			later(19 + i * 6, () -> {
 				mc.player.setYRot(0);
 				mc.player.setXRot(0);
 				WorldTest.shot("nts-d" + DISTANCES[n]);
 			});
 		}
-		later(14 + DISTANCES.length * 6, () -> {
+		later(22 + DISTANCES.length * 6, () -> {
 			ArcticMod.LOG.info("nametagsharp: DONE");
 			mc.stop();
 		});
