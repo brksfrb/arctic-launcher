@@ -412,6 +412,7 @@ impl ArcticApp {
             if widgets::button(ui, p, None, "Restore defaults", false).clicked() {
                 self.settings = Settings {
                     last_version: self.settings.last_version.clone(),
+                    version_view: self.settings.version_view,
                     ..Settings::default()
                 };
             }

@@ -44,6 +44,8 @@ pub struct Settings {
     pub last_version: Option<String>,
     /// Instance last selected on the Play tab (`None` = Vanilla).
     pub last_instance: Option<String>,
+    /// Tab last chosen in the Play tab's version picker (All, Installed, Favorites).
+    pub version_view: VersionView,
     /// Offer snapshots in version pickers.
     pub show_snapshots: bool,
     /// Offer old alpha/beta versions in version pickers.
@@ -262,6 +264,28 @@ pub enum ThemeMode {
     Glass,
 }
 
+/// Which versions the Play tab's version picker lists.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VersionView {
+    #[default]
+    All,
+    Installed,
+    Favorites,
+}
+
+impl VersionView {
+    /// The tab to open this session. A saved Installed or Favorites tab that is empty opens on
+    /// All instead; the saved choice itself is left alone.
+    pub fn for_session(self, has_favorites: bool, has_installed: bool) -> Self {
+        match self {
+            Self::Favorites if !has_favorites => Self::All,
+            Self::Installed if !has_installed => Self::All,
+            tab => tab,
+        }
+    }
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -278,6 +302,7 @@ impl Default for Settings {
             java_override: None,
             last_version: None,
             last_instance: None,
+            version_view: VersionView::All,
             show_snapshots: false,
             show_old_versions: false,
             update_channel: UpdateChannel::Stable,
@@ -536,5 +561,78 @@ mod tests {
         };
         s.save(&dirs).unwrap();
         assert_eq!(Settings::load(&dirs).unwrap(), s);
+    }
+
+    #[test]
+    fn version_view_missing_field_loads_as_all() {
+        let old: Settings = serde_json::from_str(r#"{"max_memory_mb": 6144}"#).unwrap();
+        assert_eq!(old.version_view, VersionView::All);
+        assert_eq!(Settings::default().version_view, VersionView::All);
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        save_json(&dirs.settings_file(), &serde_json::json!({"theme": "dark"})).unwrap();
+        assert_eq!(
+            Settings::load(&dirs).unwrap().version_view,
+            VersionView::All
+        );
+    }
+
+    #[test]
+    fn version_view_favorites_and_installed_save_then_load() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        for view in [VersionView::Favorites, VersionView::Installed] {
+            let s = Settings {
+                version_view: view,
+                ..Settings::default()
+            };
+            s.save(&dirs).unwrap();
+            assert_eq!(Settings::load(&dirs).unwrap().version_view, view);
+        }
+        let persisted: serde_json::Value = load_json(&dirs.settings_file()).unwrap().unwrap();
+        assert_eq!(persisted["version_view"], "installed");
+    }
+
+    #[test]
+    fn version_view_empty_saved_tab_opens_as_all_for_session() {
+        assert_eq!(
+            VersionView::Favorites.for_session(false, true),
+            VersionView::All
+        );
+        assert_eq!(
+            VersionView::Installed.for_session(true, false),
+            VersionView::All
+        );
+        assert_eq!(
+            VersionView::Favorites.for_session(true, false),
+            VersionView::Favorites
+        );
+        assert_eq!(
+            VersionView::Installed.for_session(false, true),
+            VersionView::Installed
+        );
+        assert_eq!(VersionView::All.for_session(false, false), VersionView::All);
+    }
+
+    #[test]
+    fn empty_tab_fallback_does_not_overwrite_saved_choice() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        let saved = Settings {
+            version_view: VersionView::Favorites,
+            ..Settings::default()
+        };
+        saved.save(&dirs).unwrap();
+        // Startup with no favorites: the session shows All, but the saved settings stay put.
+        let loaded = Settings::load(&dirs).unwrap();
+        assert_eq!(
+            loaded.version_view.for_session(false, true),
+            VersionView::All
+        );
+        loaded.save(&dirs).unwrap();
+        assert_eq!(
+            Settings::load(&dirs).unwrap().version_view,
+            VersionView::Favorites
+        );
     }
 }
