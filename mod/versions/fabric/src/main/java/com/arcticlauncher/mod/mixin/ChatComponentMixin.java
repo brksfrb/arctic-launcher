@@ -154,6 +154,10 @@ abstract class ChatComponentMixin {
 
 	@Unique private boolean arctic$emojiWasOn = true;
 
+	/** The font (and its width of a probe string) the visible lines were last wrapped with. */
+	@Unique private net.minecraft.client.gui.Font arctic$fontSeen;
+	@Unique private float arctic$fontProbe;
+
 	@Inject(
 			//#if MC >= 26.1
 			method = "extractRenderState",
@@ -164,7 +168,15 @@ abstract class ChatComponentMixin {
 	private void arctic$emojiSetting(CallbackInfo ci) {
 		ClientConfig c = ArcticClient.config();
 		boolean on = c != null && c.chatEmoji;
-		if (on == arctic$emojiWasOn) return;
+		// The visible lines are wrapped once, with the font of that moment. A font reload (the smooth
+		// font switching on or off, a resource pack) changes the glyph widths: lines wrapped before it
+		// would run past the box, so they are wrapped again when the font or its widths change.
+		net.minecraft.client.gui.Font font = net.minecraft.client.Minecraft.getInstance().font;
+		float probe = font == null ? 0f : arctic$measure(font).width("The quick brown fox WMi. 0123456789 [:]");
+		boolean fontChanged = arctic$fontSeen != null && (font != arctic$fontSeen || probe != arctic$fontProbe);
+		arctic$fontSeen = font;
+		arctic$fontProbe = probe;
+		if (on == arctic$emojiWasOn && !fontChanged) return;
 		arctic$emojiWasOn = on;
 		//#if MC >= 1.20.6
 		refreshTrimmedMessages();

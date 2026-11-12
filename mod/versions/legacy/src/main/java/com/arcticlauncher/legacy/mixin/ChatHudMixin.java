@@ -128,8 +128,19 @@ abstract class ChatHudMixin {
 	private void arctic$emojiSetting(CallbackInfo ci) {
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
 		boolean on = c != null && c.chatEmoji;
-		if (on != arctic$emojiWasOn) { arctic$emojiWasOn = on; reset(); }
+		// The visible lines are wrapped once, with the font of that moment: when the smooth font is
+		// switched (or its widths change) they are wrapped again, or they run past the box.
+		net.minecraft.client.font.TextRenderer font = net.minecraft.client.MinecraftClient.getInstance().textRenderer;
+		float probe = font == null ? 0f : font.getStringWidth("The quick brown fox WMi. 0123456789 [:]");
+		boolean fontChanged = arctic$fontSeen && probe != arctic$fontProbe;
+		arctic$fontSeen = font != null;
+		arctic$fontProbe = probe;
+		if (on != arctic$emojiWasOn || fontChanged) { arctic$emojiWasOn = on; reset(); }
 	}
+
+	/** The width of a probe string when the visible lines were last wrapped (0 before the first frame). */
+	@Unique private float arctic$fontProbe;
+	@Unique private boolean arctic$fontSeen;
 
 	/** How many messages the chat keeps: the game's 100 become the player's setting. */
 	@ModifyConstant(method = "addMessage(Lnet/minecraft/text/Text;IIZ)V", constant = @Constant(intValue = 100))
