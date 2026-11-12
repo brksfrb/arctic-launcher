@@ -88,7 +88,13 @@ final class FogMatrixTest {
 		at = 0;
 		step(6000, () -> {
 			pillars("minecraft:overworld");
+			//#if MC >= 26.2
+			if (!Compat.hudHidden()) {
+				Minecraft.getInstance().gui.hud.toggle();
+			}
+			//#else
 			Minecraft.getInstance().options.hideGui = true;
+			//#endif
 		});
 		step(3000, () -> command("tp @s 0 100 0 0 0"));
 		settings("a-edge");
