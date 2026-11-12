@@ -236,14 +236,70 @@ class GlassTilesTest {
 	}
 
 	@Test
-	void previewIsAFramedWallWhoseInsideFollowsTheLevel() {
-		int[] none = GlassTiles.preview(3, 0), all = GlassTiles.preview(3, 100);
-		for (int i = 0; i < 48; i++) { assertTrue(none[i] != 0 && none[i * 48] != 0 && none[47 * 48 + i] != 0 && none[i * 48 + 47] != 0); }
-		for (int y = 1; y < 47; y++) { assertEquals(0, none[y * 48 + 15]); assertEquals(0, none[y * 48 + 16]); assertTrue(all[y * 48 + 15] != 0 && all[y * 48 + 16] != 0); }
-		int quarter = 0;
-		int[] light = GlassTiles.preview(3, 25);
-		for (int y = 1; y < 47; y++) if (light[y * 48 + 15] != 0) quarter++;
-		assertEquals(10, quarter);
+	void previewIsAFramedWallWhoseStreaksFollowTheLevel() {
+		for (int level : new int[]{0, 25, 100}) {
+			int[] wall = GlassTiles.preview(3, level);
+			// Joined neighbours lose the shared border at every level; the outer frame stays.
+			for (int i = 0; i < 48; i++) assertTrue(wall[i] != 0 && wall[i * 48] != 0 && wall[47 * 48 + i] != 0 && wall[i * 48 + 47] != 0);
+			for (int y = 1; y < 47; y++) { assertEquals(0, wall[y * 48 + 15]); assertEquals(0, wall[y * 48 + 16]); }
+		}
+		// Inside the middle block (no frame left on any side) only the streaks differ with the level.
+		assertEquals(0, streaks(GlassTiles.preview(3, 0)));
+		assertEquals(5, streaks(GlassTiles.preview(3, 100)));
+		assertEquals(1, streaks(GlassTiles.preview(3, 25)));
+	}
+
+	private static int streaks(int[] wall) {
+		int n = 0;
+		for (int y = 16; y < 32; y++) for (int x = 16; x < 32; x++) if (wall[y * 48 + x] != 0) n++;
+		return n;
+	}
+
+	/** The game's own glass.png (alpha, grey): light frame, shaded right and bottom edges, a diagonal streak and a fleck. */
+	private static int[] vanillaGlass() {
+		int[] t = new int[256];
+		for (int i = 0; i < 16; i++) t[i] = t[i * 16] = 0xFFD0D0D0;
+		for (int i = 0; i < 16; i++) { t[15 * 16 + i] = 0xFF8B8B8B; t[i * 16 + 15] = 0xFF8B8B8B; }
+		t[2 * 16 + 4] = t[3 * 16 + 3] = t[4 * 16 + 2] = t[12 * 16 + 13] = t[13 * 16 + 12] = 0xFFD0D0D0;
+		return t;
+	}
+
+	@Test
+	void clarityFadesTheStreaksOfTheTextureItselfFromVanillaToClear() {
+		int[] glass = vanillaGlass();
+		assertEquals(5, GlassTiles.marks(glass, 16, 16, 16, 16));
+		assertArrayEquals(glass, GlassTiles.clarity(glass, 16, 16, 16, 16, 100));
+		int previous = 5;
+		for (int level = 100; level >= 0; level -= 5) {
+			int[] faded = GlassTiles.clarity(glass, 16, 16, 16, 16, level);
+			int marks = GlassTiles.marks(faded, 16, 16, 16, 16);
+			assertTrue(marks <= previous, "level " + level);
+			previous = marks;
+			// Frame untouched at every level.
+			for (int i = 0; i < 16; i++) assertEquals(glass[i], faded[i]);
+			for (int i = 0; i < 16; i++) assertEquals(glass[15 * 16 + i], faded[15 * 16 + i]);
+		}
+		int[] clear = GlassTiles.clarity(glass, 16, 16, 16, 16, 0);
+		assertEquals(0, GlassTiles.marks(clear, 16, 16, 16, 16));
+		for (int y = 1; y < 15; y++) for (int x = 1; x < 15; x++) assertEquals(0, clear[y * 16 + x]);
+		assertEquals(1, GlassTiles.marks(GlassTiles.clarity(glass, 16, 16, 16, 16, 25), 16, 16, 16, 16));
+		// A lone tile (no neighbours) is the faded texture itself.
+		assertArrayEquals(clear, GlassTiles.generate(clear, 16, 16, 16, 16, 0));
+	}
+
+	@Test
+	void clarityTreatsEveryAnimationFrameAndLeavesFramelessArtAlone() {
+		int[] strip = new int[16 * 32];
+		System.arraycopy(vanillaGlass(), 0, strip, 0, 256);
+		System.arraycopy(vanillaGlass(), 0, strip, 256, 256);
+		int[] clear = GlassTiles.clarity(strip, 16, 32, 16, 16, 0);
+		assertEquals(0, GlassTiles.marks(clear, 16, 32, 16, 16));
+		for (int i = 0; i < 15; i++) assertEquals(0xFFD0D0D0, clear[256 + i]);
+		int[] noisy = new int[256];
+		for (int i = 0; i < 256; i++) noisy[i] = 0x80000000 | (i * 2654435) & 0xFFFFFF;
+		assertArrayEquals(noisy, GlassTiles.clarity(noisy, 16, 16, 16, 16, 0));
+		int[] plain = new int[256];
+		assertArrayEquals(plain, GlassTiles.clarity(plain, 16, 16, 16, 16, 0));
 	}
 
 	@Test
@@ -264,7 +320,7 @@ class GlassTilesTest {
 	}
 
 	@Test
-	void noReloadWhileConnectedGlassIsOffAndItCatchesUpWhenOn() {
+	void noReloadWhereOurGlassIsNotInUseAndItCatchesUpWhenAvailable() {
 		GlassLines.reset();
 		assertFalse(GlassLines.due(25, true));
 		for (int i = 0; i < 100; i++) assertFalse(GlassLines.due(80, false));

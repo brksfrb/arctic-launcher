@@ -46,6 +46,7 @@ final class GlassLinesTest {
 		fill(-14, 220, 9, 20, 226, 9, "minecraft:bookshelf");
 		fill(-9, 220, 3, -7, 222, 3, "minecraft:glass");
 		fill(-4, 220, 3, -2, 222, 3, "minecraft:glass_pane");
+		fill(0, 220, 3, 0, 220, 3, "minecraft:glass");
 		fill(3, 220, 3, 7, 220, 3, "minecraft:glass_pane");
 		fill(9, 220, 3, 9, 220, 3, "minecraft:glass_pane");
 		fill(11, 220, 3, 13, 222, 3, "minecraft:light_blue_stained_glass");
@@ -96,9 +97,9 @@ final class GlassLinesTest {
 			Compat.setScreen(null);
 			status(levels[i]);
 			String tag = (i == 3 ? "back0-" : "") + levels[i];
-			later(1, () -> hold(-5.5, 221.5, -1.5, 0, 0, System.nanoTime(), 3, () -> {
+			later(1, () -> hold(-7.5, 221.5, -1.0, 0, 0, System.nanoTime(), 3, () -> {
 				WorldTest.shot("lines-" + tag + "-A");
-				later(0.5, () -> hold(6, 220.8, -0.5, 0, 0, System.nanoTime(), 2, () -> {
+				later(0.5, () -> hold(2.5, 221.0, -4.5, 0, 0, System.nanoTime(), 2, () -> {
 					WorldTest.shot("lines-" + tag + "-B");
 					later(0.5, () -> hold(14.5, 221.5, -1.5, 0, 0, System.nanoTime(), 2, () -> {
 						WorldTest.shot("lines-" + tag + "-C");

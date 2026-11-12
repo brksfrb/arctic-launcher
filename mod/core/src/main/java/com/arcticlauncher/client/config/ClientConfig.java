@@ -42,7 +42,7 @@ public final class ClientConfig {
 	/** Features: Fullbright (on/off), and the keys (Minecraft key names). */
 	public boolean fullbright;
 	public volatile boolean connectedGlass = true;
-	/** Connected Glass: how much of the borders between joined clear glass blocks stays, 0 (none) to 100 (all). */
+	/** Clear glass: how much of the white streaks and flecks in the glass texture stays, 0 (clear) to 100 (as vanilla). Joined neighbours lose their shared border either way. */
 	public static final int CLEAR_GLASS_LINES = 25;
 	public volatile int clearGlassLines = CLEAR_GLASS_LINES;
 	/** With Fullbright: the client's light engine does no work (faster). Takes effect when you rejoin a world. */
