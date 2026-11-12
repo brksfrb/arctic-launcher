@@ -30,8 +30,8 @@ public final class LegacyGlassCtm {
 	public static boolean enabled() { return available() && (ArcticClient.config() == null || ArcticClient.config().connectedGlass); }
 
 	public static void tick() {
-		// The line level is part of the tiles: stitching the atlas again also rebuilds every chunk.
-		if (available() && com.arcticlauncher.client.ctm.GlassLines.due(enabled())) { lastEnabled = enabled(); MinecraftClient.getInstance().reloadResources(); return; }
+		// The line level (clarity of the glass texture) is part of the tiles: stitching the atlas again also rebuilds every chunk.
+		if (available() && com.arcticlauncher.client.ctm.GlassLines.due(available())) { lastEnabled = enabled(); MinecraftClient.getInstance().reloadResources(); return; }
 		boolean on = enabled();
 		if (lastEnabled != on) {
 			lastEnabled = on;
@@ -61,7 +61,9 @@ public final class LegacyGlassCtm {
 	public static void begin(BlockView world, BlockState block, BlockPos pos) {
 		Context c = LOCAL.get();
 		c.active = false;
-		if (c.damageDepth != 0 || !enabled()) return;
+		// With Connected Glass off the glass still takes our texture (lone tile, clarity applied), it just joins to nothing.
+		if (c.damageDepth != 0 || !available()) return;
+		c.joined = enabled();
 		Integer type = c.blocks.get(block.getBlock());
 		if (type == null) {
 			String id = Block.REGISTRY.getIdentifier(block.getBlock()).toString();
@@ -129,7 +131,7 @@ public final class LegacyGlassCtm {
 	public interface Chunks { boolean arctic$missing(int chunkX, int chunkZ); }
 
 	private static final class Context {
-		boolean active, pane;
+		boolean active, pane, joined;
 		int damageDepth;
 		int data, x, y, z, checked, connected, faces, viewIndex;
 		Block block;
@@ -155,7 +157,7 @@ public final class LegacyGlassCtm {
 					&& world instanceof Chunks && ((Chunks) world).arctic$missing((x + dx) >> 4, (z + dz) >> 4);
 		}
 		boolean hide(Variants variants) {
-			if (!pane || variants == null || !variants.edge || !variants.boundary) return false;
+			if (!joined || !pane || variants == null || !variants.edge || !variants.boundary) return false;
 			Direction face = variants.direction;
 			return same(face == Direction.EAST ? 1 : face == Direction.WEST ? -1 : 0,
 					face == Direction.UP ? 1 : face == Direction.DOWN ? -1 : 0,
@@ -164,6 +166,7 @@ public final class LegacyGlassCtm {
 		int mask(Direction face) {
 			int index = face.ordinal();
 			if ((faces & (1 << index)) != 0) return masks[index];
+			if (!joined) { faces |= 1 << index; return masks[index] = 0; }
 			// Face-local right and bottom in vanilla's UV orientation.
 			int rx = 0, rz = 0, by = -1, bz = 0;
 			switch (face) {

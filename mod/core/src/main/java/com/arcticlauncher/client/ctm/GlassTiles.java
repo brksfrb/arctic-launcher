@@ -77,6 +77,54 @@ public final class GlassTiles {
 		return Integer.parseInt(id.substring(11, id.indexOf('/', 11)));
 	}
 
+	/**
+	 * Clarity of the glass texture itself: keeps {@code lines} percent of the interior marks (the white streaks and
+	 * flecks inside the frame, in vanilla two diagonal runs) and clears the rest to the pane's open interior. 100
+	 * is the texture as shipped, 0 is one clear sheet inside its frame. Every animation frame is treated alone.
+	 * The marks that stay are spread by a fixed order, so a level always shows the same pixels. Coverage rather than
+	 * opacity, because plain glass is drawn without blending (a faint texel would be solid). A texture with no
+	 * detectable frame is returned as it is.
+	 */
+	public static int[] clarity(int[] source, int imageWidth, int imageHeight, int frameWidth, int frameHeight, int lines) {
+		int[] out = source.clone();
+		lines = Math.max(0, Math.min(100, lines));
+		if (lines == 100 || frameWidth < 4 || frameHeight < 4) return out;
+		for (int oy = 0; oy + frameHeight <= imageHeight; oy += frameHeight) {
+			for (int ox = 0; ox + frameWidth <= imageWidth; ox += frameWidth) {
+				int left = border(source, imageWidth, ox, oy, frameWidth, frameHeight, 0);
+				int bottom = border(source, imageWidth, ox, oy, frameWidth, frameHeight, 1);
+				int right = border(source, imageWidth, ox, oy, frameWidth, frameHeight, 2);
+				int top = border(source, imageWidth, ox, oy, frameWidth, frameHeight, 3);
+				if (left == 0 || bottom == 0 || right == 0 || top == 0) continue;
+				// The open interior is the most common texel inside the frame.
+				java.util.HashMap<Integer, Integer> counts = new java.util.HashMap<>();
+				int open = 0, best = 0;
+				for (int y = top; y < frameHeight - bottom; y++) for (int x = left; x < frameWidth - right; x++) {
+					int c = counts.merge(source[(oy + y) * imageWidth + ox + x], 1, Integer::sum);
+					if (c > best) { best = c; open = source[(oy + y) * imageWidth + ox + x]; }
+				}
+				java.util.ArrayList<int[]> marks = new java.util.ArrayList<>();
+				for (int y = top; y < frameHeight - bottom; y++) for (int x = left; x < frameWidth - right; x++) {
+					if (source[(oy + y) * imageWidth + ox + x] != open) marks.add(new int[]{x, y, (x * 7 + y * 13 + x * y * 5) & 255});
+				}
+				// Marks beyond a quarter of the interior are artwork, not streaks: leave it alone.
+				if (marks.size() * 4 > (frameWidth - left - right) * (frameHeight - top - bottom)) continue;
+				marks.sort((a, b) -> a[2] != b[2] ? Integer.compare(a[2], b[2]) : a[1] != b[1] ? Integer.compare(a[1], b[1]) : Integer.compare(a[0], b[0]));
+				int keep = Math.round(marks.size() * lines / 100f);
+				for (int i = keep; i < marks.size(); i++) out[(oy + marks.get(i)[1]) * imageWidth + ox + marks.get(i)[0]] = open;
+			}
+		}
+		return out;
+	}
+
+	/** How many interior marks (see {@link #clarity}) a texture has, summed over its frames, for tests and logs. */
+	public static int marks(int[] source, int imageWidth, int imageHeight, int frameWidth, int frameHeight) {
+		int total = 0;
+		int[] cleared = clarity(source, imageWidth, imageHeight, frameWidth, frameHeight, 0);
+		for (int i = 0; i < source.length; i++) if (source[i] != cleared[i]) total++;
+		return total;
+	}
+
 	/** Generate one tile, retaining every animation frame and the pack's interior artwork. */
 	public static int[] generate(int[] source, int imageWidth, int imageHeight, int frameWidth, int frameHeight, int tile) {
 		return generate(source, imageWidth, imageHeight, frameWidth, frameHeight, tile, 0);
@@ -154,22 +202,24 @@ public final class GlassTiles {
 		return Math.abs((a & 255) - (b & 255)) + Math.abs(((a >>> 8) & 255) - ((b >>> 8) & 255)) + Math.abs(((a >>> 16) & 255) - ((b >>> 16) & 255));
 	}
 
-	/** A clear-glass tile like the game's: a light frame around an open pane with two small glints. */
+	/** A clear-glass tile like the game's: a light frame around an open pane with its diagonal streak and fleck. */
 	static int[] sample() {
 		int[] tile = new int[256];
-		for (int i = 0; i < 16; i++) tile[i] = tile[240 + i] = tile[i * 16] = tile[i * 16 + 15] = 0xFFD8ECEE;
-		tile[4 * 16 + 5] = tile[5 * 16 + 4] = tile[10 * 16 + 11] = tile[11 * 16 + 10] = 0xFFBFDDE2;
+		for (int i = 0; i < 16; i++) tile[i] = tile[240 + i] = tile[i * 16] = tile[i * 16 + 15] = 0xFFD0D0D0;
+		for (int i = 0; i < 16; i++) tile[i * 16 + 15] = tile[240 + i] = 0xFF8B8B8B;
+		tile[16 + 15] = 0xFFA8A8A8;
+		tile[2 * 16 + 4] = tile[3 * 16 + 3] = tile[4 * 16 + 2] = tile[13 * 16 + 12] = tile[12 * 16 + 13] = 0xFFD0D0D0;
 		return tile;
 	}
 
 	/** A wall of {@code blocks} x {@code blocks} joined clear glass at a line level, 16 pixels a block, for the settings preview. */
 	public static int[] preview(int blocks, int lines) {
 		int size = blocks * 16;
-		int[] out = new int[size * size], sample = sample();
+		int[] out = new int[size * size], sample = clarity(sample(), 16, 16, 16, 16, lines);
 		for (int by = 0; by < blocks; by++) for (int bx = 0; bx < blocks; bx++) {
 			boolean w = bx > 0, e = bx < blocks - 1, n = by > 0, s = by < blocks - 1;
 			int mask = (w ? 1 : 0) | (w && s ? 2 : 0) | (s ? 4 : 0) | (s && e ? 8 : 0) | (e ? 16 : 0) | (e && n ? 32 : 0) | (n ? 64 : 0) | (n && w ? 128 : 0);
-			int[] tile = generate(sample, 16, 16, 16, 16, index(mask), lines);
+			int[] tile = generate(sample, 16, 16, 16, 16, index(mask));
 			for (int y = 0; y < 16; y++) System.arraycopy(tile, y * 16, out, (by * 16 + y) * size + bx * 16, 16);
 		}
 		return out;

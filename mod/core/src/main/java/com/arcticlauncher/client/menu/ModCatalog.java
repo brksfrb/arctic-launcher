@@ -485,14 +485,15 @@ final class ModCatalog {
 	}
 
 	private static void visuals(List<Mod> out, final ClientConfig c, Platform p) {
-		out.add(new Mod("connected-glass", "Connected Glass", "Join matching glass borders", "fullbright", Category.VISUAL, "ctm textures panes stained tinted video looks")
+		out.add(new Mod("connected-glass", "Connected Glass", "Join matching glass borders", "fullbright", Category.VISUAL, "ctm textures panes stained tinted video looks clarity streaks lines clear")
 				.toggle(() -> c.connectedGlass, on -> c.connectedGlass = on)
 				.settings((host, f) -> {
 					f.note("Connects matching glass and panes. Applies immediately. Continuity takes priority when installed.");
 					f.section("Clear glass");
-					f.slider("Interior lines", () -> c.clearGlassLines, v -> c.clearGlassLines = (int) Math.round(v), 0, 100, 5, "%.0f%%");
+					f.slider("Lines in the glass", () -> c.clearGlassLines, v -> c.clearGlassLines = (int) Math.round(v), 0, 100, 5, "%.0f%%");
 					f.glassPreview(() -> c.clearGlassLines);
-					f.note("0% is one clear sheet with a frame around it. 100% keeps every block's border.");
+					f.note("How much of the white streaks and flecks in the glass texture stays. 0% is clear glass with only its frame, 100% is vanilla's streaks. About 25% by default.");
+					f.note("Works with Connected Glass on or off. Joined glass loses the border between blocks either way. Stained glass is left as it is.");
 					f.note("Applies a moment after you let go, without a restart.");
 				}));
 		out.add(new Mod("fullbright", "Fullbright", "See in the dark", "fullbright", Category.VISUAL, "gamma brightness night vision")
