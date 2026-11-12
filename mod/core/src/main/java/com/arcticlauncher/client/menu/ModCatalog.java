@@ -100,6 +100,16 @@ final class ModCatalog {
 		}
 	}
 
+	/** The "Light" HUD widget (the old readout), or null. */
+	private static HudWidget lightReadout() {
+		for (HudWidget w : ArcticClient.hud().widgets()) {
+			if ("light".equals(w.id)) {
+				return w;
+			}
+		}
+		return null;
+	}
+
 	static List<Mod> all() {
 		final ClientConfig c = ArcticClient.config();
 		Platform p = ArcticClient.platform();
@@ -182,7 +192,7 @@ final class ModCatalog {
 		}
 		if (!p.hasScreenHooks()) {
 			// This version has no hooks for them: better not offered than switched on and silent.
-			List<String> missing = java.util.Arrays.asList("slotlocks", "invsearch", "invsort", "particles", "helditem", "shulkerpeek");
+			List<String> missing = java.util.Arrays.asList("slotlocks", "invsearch", "invsort", "particles", "helditem");
 			for (int i = out.size() - 1; i >= 0; i--) {
 				if (missing.contains(out.get(i).id)) {
 					out.remove(i);
@@ -269,10 +279,11 @@ final class ModCatalog {
 		out.add(new Mod("pingtags", "Ping Tags", "Other players' ping in front of their name tag: 48ms | Steve", "pingtags", Category.SOCIAL,
 				"ping latency nametag lag ms")
 				.toggle(() -> c.pingNametags, on -> c.pingNametags = on));
-		out.add(new Mod("badgetags", "Arctic Badge", "The snowflake in front of other Arctic players' name tags and in the player list", "badgetags", Category.SOCIAL,
+		out.add(new Mod("badgetags", "Arctic Badge", "Your badge, shared with every Arctic player in name tags and the player list", "badgetags", Category.SOCIAL,
 				"badge snowflake arctic nametag tag above head")
 				.toggle(() -> c.badgeNametags, on -> c.badgeNametags = on)
 				.settings((host, f) -> {
+					f.badgeStyles();
 					f.choice("Show in", com.arcticlauncher.client.feature.Badge.WHERE, () -> c.badgeWhere, i -> c.badgeWhere = i);
 					f.toggle("Only on others", "No badge on your own name", () -> c.badgeOthersOnly, on -> c.badgeOthersOnly = on);
 				}));
@@ -474,8 +485,19 @@ final class ModCatalog {
 	}
 
 	private static void visuals(List<Mod> out, final ClientConfig c, Platform p) {
+		out.add(new Mod("connected-glass", "Connected Glass", "Join matching glass borders", "fullbright", Category.VISUAL, "ctm textures panes stained tinted video looks")
+				.toggle(() -> c.connectedGlass, on -> c.connectedGlass = on)
+				.settings((host, f) -> {
+					f.note("Connects matching glass and panes. Applies immediately. Continuity takes priority when installed.");
+					f.section("Clear glass");
+					f.slider("Interior lines", () -> c.clearGlassLines, v -> c.clearGlassLines = (int) Math.round(v), 0, 100, 5, "%.0f%%");
+					f.glassPreview(() -> c.clearGlassLines);
+					f.note("0% is one clear sheet with a frame around it. 100% keeps every block's border.");
+					f.note("Applies a moment after you let go, without a restart.");
+				}));
 		out.add(new Mod("fullbright", "Fullbright", "See in the dark", "fullbright", Category.VISUAL, "gamma brightness night vision")
 				.toggle(() -> c.fullbright, on -> c.fullbright = on)
+				.ownToggleKey()
 				.settings((host, f) -> {
 					f.section("Key");
 					f.key("Fullbright key", "Switches it on and off", Form.key(() -> c.fullbrightKey, k -> c.fullbrightKey = k));
@@ -588,6 +610,25 @@ final class ModCatalog {
 			out.add(new Mod("chunkborders", "Chunk Borders", "The chunk edges drawn as lines, like F3+G in one click", "target", Category.GAMEPLAY,
 					"chunk border grid f3 g slime lines")
 					.toggle(() -> c.chunkBorders, on -> c.chunkBorders = on));
+		}
+		if (p.lightOverlayWorks()) {
+			out.add(new Mod("lightoverlay", "Light Overlay", "Marks the ground where hostile mobs can spawn: red now, yellow at night, green safe",
+					"target", Category.GAMEPLAY, "light level lighty spawn mob spawning dark cave lit")
+					.toggle(() -> c.lightOverlay, on -> c.lightOverlay = on)
+					.settings((host, f) -> {
+						f.section("Overlay");
+						f.note("Red: mobs spawn here now. Yellow: only at night. Green: safe.");
+						f.slider("Range", () -> c.lightRange, v -> c.lightRange = (int) v, 4, 32, 1, "%.0f");
+						f.choice("Style", com.arcticlauncher.client.feature.LightOverlay.STYLES, () -> c.lightStyle, i -> c.lightStyle = i);
+						f.toggle("Show safe blocks", "Green markers where mobs can't spawn", () -> c.lightShowSafe, on -> c.lightShowSafe = on);
+						f.key("Toggle key", "Switches the overlay on and off", Form.key(() -> c.lightKey, k -> c.lightKey = k));
+						f.section("Readout");
+						HudWidget readout = lightReadout();
+						if (readout != null) {
+							final HudSlot slot = ArcticClient.hud().slot(readout);
+							f.toggle("Light readout", "Keep the \"Light: 8 (sky 0)\" line on screen", () -> slot.enabled, on -> slot.enabled = on);
+						}
+					}));
 		}
 		if (p.tooltipScrollWorks()) {
 			out.add(new Mod("tooltipscroll", "Scrollable Tooltips", "A tooltip too tall for the screen (long item lore) moves with the mouse wheel", "tooltips",
@@ -714,6 +755,13 @@ final class ModCatalog {
 					f.toggle("Hide the chat", "No chat lines on screen (you can still type, and the history keeps them)", () -> c.chatOff,
 							on -> c.chatOff = on);
 					f.section("Keep");
+					f.toggle("Save chat across restarts", "Keep all messages and sent history in this instance", () -> c.chatPersistent,
+							on -> c.chatPersistent = on);
+					f.action("Saved chat", "Clear saved chat", "Sure?", () -> {
+						com.arcticlauncher.client.feature.PersistentChat saved = ArcticClient.persistentChat();
+						int removed = saved == null ? 0 : saved.clear();
+						com.arcticlauncher.client.notice.Notices.post("Saved chat cleared", removed == 0 ? "Nothing was saved" : "Deleted the saved chat and sent history");
+					});
 					f.toggle("Keep chat when leaving", "The lines stay when you disconnect or change server", () -> c.chatKeep,
 							on -> c.chatKeep = on);
 					f.section("Mute");
@@ -743,6 +791,7 @@ final class ModCatalog {
 		out.add(new Mod("streamer", "Streamer Mode", "Hide your name, skin and the server on screen", "streamer", Category.CHAT,
 				"privacy snipe hide name")
 				.toggle(() -> c.streamerMode, on -> c.streamerMode = on)
+				.ownToggleKey()
 				.settings(ChatForms::streamer));
 	}
 

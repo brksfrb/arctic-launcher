@@ -41,6 +41,10 @@ public final class ClientConfig {
 	public int hudVersion = HUD_VERSION;
 	/** Features: Fullbright (on/off), and the keys (Minecraft key names). */
 	public boolean fullbright;
+	public volatile boolean connectedGlass = true;
+	/** Connected Glass: how much of the borders between joined clear glass blocks stays, 0 (none) to 100 (all). */
+	public static final int CLEAR_GLASS_LINES = 25;
+	public volatile int clearGlassLines = CLEAR_GLASS_LINES;
 	/** With Fullbright: the client's light engine does no work (faster). Takes effect when you rejoin a world. */
 	public boolean fullbrightSkipLight;
 	public boolean zoomEnabled = true;
@@ -73,6 +77,8 @@ public final class ClientConfig {
 	public boolean snaplookEnabled;
 	public String snaplookKey = "key.keyboard.unknown";
 	public String fullbrightKey = "key.keyboard.unknown";
+	/** Keys that switch a feature on and off, by the feature's id in the Mods list (unbound ones are left out). */
+	public Map<String, String> toggleKeys = new LinkedHashMap<String, String>();
 	/** Opens the emote wheel. */
 	public String emoteKey = "key.keyboard.b";
 	/** The emote wheel stays open while its key is held (let go to play); off: press to open, click to play. */
@@ -243,6 +249,7 @@ public final class ClientConfig {
 	public boolean chatStampItalic;
 	/** Keep the chat lines when you disconnect or change server. */
 	public boolean chatKeep;
+	public boolean chatPersistent = true;
 	/** While you host a world in Arctic Launcher's play together, the world you're in opens to LAN by itself. */
 	public boolean lanAuto = true;
 	/** Brackets around the crosshair while a creature is within hit reach. */
@@ -347,6 +354,16 @@ public final class ClientConfig {
 	public boolean hitboxes;
 	/** Chunk Borders: the chunk edges as lines, like F3+G in one click. */
 	public boolean chunkBorders;
+	/** Light Overlay: markers on the ground where hostile mobs can spawn (red now, yellow at night, green safe). */
+	public boolean lightOverlay;
+	/** How far around you it marks, in blocks (4 to 32). */
+	public int lightRange = 16;
+	/** 0 colored squares, 1 crosses, 2 the block light as a number. */
+	public int lightStyle;
+	/** Also mark the safe (green) blocks. */
+	public boolean lightShowSafe = true;
+	/** Key that switches the overlay on and off. */
+	public String lightKey = "key.keyboard.unknown";
 	/** Mob Size: creatures other than players drawn at this scale (0.25 to 3). */
 	public boolean mobSize;
 	/** Fog: stretch (1 to 10 times) or remove the fog. */
@@ -449,6 +466,9 @@ public final class ClientConfig {
 		if (hud == null) {
 			hud = new LinkedHashMap<String, HudSlot>();
 		}
+		if (toggleKeys == null) {
+			toggleKeys = new LinkedHashMap<String, String>();
+		}
 		if (style == null) {
 			style = "arctic";
 		}
@@ -463,6 +483,7 @@ public final class ClientConfig {
 		debugLabelColor = Math.max(0, Math.min(7, debugLabelColor));
 		debugValueColor = Math.max(0, Math.min(7, debugValueColor));
 		zoomAnimation = Math.max(0, Math.min(ZOOM_CURVES.length - 1, zoomAnimation));
+		clearGlassLines = Math.max(0, Math.min(100, clearGlassLines));
 		zoomDurationMs = Math.max(0, Math.min(1500, zoomDurationMs));
 		if (snaplookKey == null) {
 			snaplookKey = "key.keyboard.unknown";
@@ -476,6 +497,11 @@ public final class ClientConfig {
 		if (waypointKey == null) {
 			waypointKey = "key.keyboard.unknown";
 		}
+		if (lightKey == null) {
+			lightKey = "key.keyboard.unknown";
+		}
+		lightRange = Math.max(4, Math.min(32, lightRange));
+		lightStyle = Math.max(0, Math.min(2, lightStyle));
 		if (stopwatchKey == null) {
 			stopwatchKey = "key.keyboard.unknown";
 		}

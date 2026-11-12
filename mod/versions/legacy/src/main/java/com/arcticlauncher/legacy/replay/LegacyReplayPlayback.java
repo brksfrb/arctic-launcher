@@ -140,7 +140,8 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 			LegacyReplayView.fov = 0;
 			ClientConnection conn = new ClientConnection(NetworkSide.CLIENTBOUND);
 			((LegacyReplayConnection) conn).arctic$markReplay();
-			channel = new EmbeddedChannel(conn);
+			// Named "packet_handler" like a real connection: Forge adds its handshake handler before that name.
+			channel = com.arcticlauncher.client.replay.ReplayChannel.open(conn);
 			connection = conn;
 			conn.setState(NetworkState.LOGIN);
 			conn.setPacketListener(new ClientLoginNetworkHandler(conn, mc, new TitleScreen()));
@@ -194,6 +195,15 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 			packet.apply(listener);
 		} catch (OffThreadException ignored) {
 			// Queued for the game thread by the game itself.
+		} catch (RuntimeException e) {
+			// Still at the login handler after a failure: every later packet would fail too.
+			if (connection.getPacketListener() instanceof ClientLoginNetworkHandler) {
+				throw new Unusable("The game didn't leave the login step (" + e + ").");
+			}
+			throw e;
+		}
+		if ("game_profile".equals(name) && connection.getPacketListener() instanceof ClientLoginNetworkHandler) {
+			throw new Unusable("The game didn't accept the replay's login.");
 		}
 	}
 

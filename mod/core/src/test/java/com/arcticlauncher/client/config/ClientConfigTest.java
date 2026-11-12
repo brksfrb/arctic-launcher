@@ -120,4 +120,14 @@ class ClientConfigTest {
 		}
 	}
 
+
+	@Test
+	void toggleKeysLoadEmptyFromAnOldFileAndPersist() throws Exception {
+		assertTrue(load("{}").toggleKeys.isEmpty());
+		assertTrue(load("{\"toggleKeys\":null}").toggleKeys.isEmpty());
+		ClientConfig c = load("{}");
+		c.toggleKeys.put("connected-glass", "key.keyboard.j");
+		assertEquals(null, c.save());
+		assertEquals("key.keyboard.j", ClientConfig.load(dir.toFile()).toggleKeys.get("connected-glass"));
+	}
 }

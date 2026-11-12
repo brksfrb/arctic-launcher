@@ -59,7 +59,9 @@ abstract class TitleScreenMixin extends Screen {
 		if (ArcticClient.restyles()) TitleBranding.draw(gfx, width, height);
 		else com.arcticlauncher.client.menu.Badge.drawCentered(gfx, width, height);
 		//#if MC >= 1.19.4
+		//#if DEV_SCENES
 		if ("title-compat".equals(System.getProperty("arctic.selftest"))) com.arcticlauncher.mod.TitleCompatTest.rendered((TitleScreen) (Object) this);
+		//#endif
 		//#endif
 	}
 

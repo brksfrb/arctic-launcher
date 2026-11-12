@@ -56,6 +56,8 @@ final class Mod {
 	Settings settings;
 	/** A whole tab of its own instead of a settings form. */
 	Supplier<MenuTab> page;
+	/** It has a key of its own that switches it (so its page doesn't get the generic Toggle key row). */
+	boolean ownToggleKey;
 	/** For HUD widgets: the widget (its page shows a live preview). */
 	HudWidget widget;
 
@@ -72,6 +74,11 @@ final class Mod {
 	Mod toggle(BooleanSupplier get, Consumer<Boolean> set) {
 		this.on = get;
 		this.set = set;
+		return this;
+	}
+
+	Mod ownToggleKey() {
+		this.ownToggleKey = true;
 		return this;
 	}
 

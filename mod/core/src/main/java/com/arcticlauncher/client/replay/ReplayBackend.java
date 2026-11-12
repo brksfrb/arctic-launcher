@@ -18,6 +18,8 @@ public interface ReplayBackend {
 		byte classify(ByteBuffer packet, long[] key);
 		/** Ids removed by an ENTITY_REMOVE packet; null if its format is unknown. */
 		default int[] removedEntities(ByteBuffer packet) { return null; }
+		/** Chunk keys ({@link Category#chunk}) a CHUNK_BULK packet loads; null if its format is unknown. */
+		default long[] bulkChunks(ByteBuffer packet) { return null; }
 	}
 
 	/** The network protocol this game speaks (a replay must match it); 0 if unknown. */
@@ -41,6 +43,18 @@ public interface ReplayBackend {
 
 	/** Finish the seek after world, body and camera are restored; also called on failure. */
 	default void endSeek() {}
+
+	/**
+	 * Thrown by {@link #apply} when playback can't work at all (say the connection never left the
+	 * login state): the viewer stops, tells the player, and doesn't feed the rest of the packets.
+	 */
+	final class Unusable extends RuntimeException {
+		private static final long serialVersionUID = 1L;
+
+		public Unusable(String message) {
+			super(message);
+		}
+	}
 
 	/** Hand one recorded packet to the game; {@code jumping}: nobody sees it, skip what only shows. */
 	void apply(ByteBuffer packet, boolean jumping);

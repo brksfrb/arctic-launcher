@@ -336,6 +336,11 @@ final class FabricPlatform implements Platform {
 		return Compat.keyName(nativeKey);
 	}
 
+	@Override
+	public String keyUsedBy(String key) {
+		return Compat.keyUsedBy(key);
+	}
+
 	/** The camera before Freelook switched to third person (-1: none). */
 	private int before = -1;
 
@@ -1420,6 +1425,22 @@ final class FabricPlatform implements Platform {
 	public boolean chunkBordersWorks() {
 		return true;
 	}
+
+	@Override
+	public boolean lightOverlayWorks() {
+		//#if MC >= 1.21.11 && MC < 26.1
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	//#if MC >= 1.21.11 && MC < 26.1
+	@Override
+	public com.arcticlauncher.client.feature.LightOverlay.Probe lightProbe() {
+		return LightOverlayDraw.probe();
+	}
+	//#endif
 
 	@Override
 	public boolean itemPhysicsWorks() {

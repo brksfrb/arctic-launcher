@@ -35,7 +35,11 @@ impl Diagnosis {
         Self::new("", "", Vec::new())
     }
 
-    fn new(title: impl Into<String>, detail: impl Into<String>, mods: Vec<String>) -> Self {
+    pub(crate) fn new(
+        title: impl Into<String>,
+        detail: impl Into<String>,
+        mods: Vec<String>,
+    ) -> Self {
         Self {
             title: title.into(),
             detail: detail.into(),
@@ -100,6 +104,26 @@ const RULES: &[Rule] = &[
                     &c[1]
                 ),
                 missing,
+            )
+        },
+    },
+    Rule {
+        pattern: r"(?is)SDL3\.dll.{0,1500}(?:error code\s*=\s*1114|DLL init.*failed)",
+        explain: |_, _| {
+            Diagnosis::new(
+                "SDL could not initialize the graphics driver",
+                "Windows returned ERROR_DLL_INIT_FAILED (1114) while loading SDL3.dll. Try turning off Settings → High-performance GPU, then restart the game. An old graphics driver can also cause this; update it from the graphics vendor.",
+                Vec::new(),
+            )
+        },
+    },
+    Rule {
+        pattern: r"OpenGL is not supported: Could not retrieve OpenGL functions",
+        explain: |_, _| {
+            Diagnosis::new(
+                "OpenGL functions are unavailable",
+                "The graphics backend could not load OpenGL functions. On Linux/XWayland, check that the GPU's OpenGL driver and XWayland GL support are installed and working; try another desktop session or update the graphics driver.",
+                Vec::new(),
             )
         },
     },
@@ -535,12 +559,15 @@ pub fn silent_exit(text: &str, code: i32) -> Option<Diagnosis> {
     let wrote_something = text
         .lines()
         .map(str::trim)
-        .any(|l| !l.is_empty() && !l.starts_with("────"));
+        .any(|l| !l.is_empty() && !l.starts_with("────") && !l.starts_with("[Arctic diagnostics]"));
     if wrote_something {
         return None;
     }
     Some(Diagnosis::new(
-        "The game stopped before it wrote anything",
+        format!(
+            "The game stopped before it wrote anything (exit {})",
+            exit_description(code)
+        ),
         format!(
             "Java ended right after it started (exit code {code}) without a message. Usually antivirus or a security tool blocked Java or a game file, the Java runtime is damaged, or the memory setting is more than the computer can give. Try: add the Arctic folder to your antivirus' exceptions, lower Maximum memory in Settings, and use Repair on the instance."
         ),
@@ -649,8 +676,8 @@ pub struct Report {
 const REPORT_LOG_LINES: usize = 150;
 /// Most of the log's end, and of the crash report's start, that are sent (bytes). All together they
 /// stay under what the server keeps (48 KB).
-const REPORT_LOG_BYTES: usize = 12 * 1024;
-const REPORT_CRASH_BYTES: usize = 24 * 1024;
+const REPORT_LOG_BYTES: usize = 8 * 1024;
+const REPORT_CRASH_BYTES: usize = 16 * 1024;
 /// How Java was started: its flags and the classpath's file names.
 const REPORT_JAVA_BYTES: usize = 5 * 1024;
 /// The launcher's own log (sign-in failures, downloads, launch steps): its last lines.
@@ -670,12 +697,49 @@ impl Report {
         crash_report: Option<&str>,
         java: Option<&str>,
     ) -> Self {
+        let all = lines.join("\n");
+        // Reserve the resolved mod inventory and agent failure context before trimming verbose
+        // logs/reports. Fabric's mod list often starts beyond the old 16 KB report prefix.
+        let mods = compact_mod_inventory(&all, crash_report.unwrap_or(""));
+        let mixin = mixin_failure_evidence(&all);
+        let mut priority = String::new();
+        if !mods.is_empty() {
+            priority.push_str(&mod_inventory_section(&mods));
+        }
+        if !mixin.is_empty() {
+            priority.push_str("\n---- mixin failure context ----\n");
+            priority.push_str(&scrub(&mixin, &Own::this_pc()));
+        }
+        let remaining = (47 * 1024usize).saturating_sub(priority.len() + 512);
         let skip = lines.len().saturating_sub(REPORT_LOG_LINES);
         let tail = lines[skip..].join("\n");
         let mut text = tail_of(&tail, REPORT_LOG_BYTES).to_owned();
+        text.push_str("\n\n---- initial output ----\n");
+        text.push_str(head_of(&all, 2 * 1024));
+        let launcher_compact = launcher_lines
+            .iter()
+            .rev()
+            .take(REPORT_LAUNCHER_LINES)
+            .rev()
+            .map(|line| compact_launch(line))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let reserved = launcher_compact.len().min(REPORT_LAUNCHER_BYTES)
+            + java.map_or(0, |s| s.len().min(REPORT_JAVA_BYTES))
+            + crash_report.map_or(0, |s| s.len().min(REPORT_CRASH_BYTES));
+        let evidence_budget = (48 * 1024usize).saturating_sub(text.len() + reserved + 1024);
+        let evidence = diagnostic_evidence(&all, evidence_budget);
+        if !evidence.is_empty() {
+            text.push_str("\n\n---- diagnostics ----\n");
+            text.push_str(head_of(&evidence, evidence_budget));
+        }
         if !launcher_lines.is_empty() {
             let skip = launcher_lines.len().saturating_sub(REPORT_LAUNCHER_LINES);
-            let launcher = launcher_lines[skip..].join("\n");
+            let launcher = launcher_lines[skip..]
+                .iter()
+                .map(|l| compact_launch(l))
+                .collect::<Vec<_>>()
+                .join("\n");
             text.push_str("\n\n---- launcher log ----\n");
             text.push_str(tail_of(&launcher, REPORT_LAUNCHER_BYTES));
         }
@@ -687,16 +751,279 @@ impl Report {
             text.push_str("\n\n---- crash report ----\n");
             text.push_str(head_of(report, REPORT_CRASH_BYTES));
         }
+        let title = exit_title(title, &all, java.unwrap_or(""));
         Self {
             launcher: env!("CARGO_PKG_VERSION").to_owned(),
             game: game.to_owned(),
             loader: loader.to_owned(),
             os: std::env::consts::OS.to_owned(),
-            title: title.to_owned(),
-            log: scrub(&text, &Own::this_pc()),
+            title: scrub(
+                if crash_report.is_none()
+                    && diagnose(&all).is_none()
+                    && (title.is_empty()
+                        || title.starts_with("Game exited with code")
+                        || title.starts_with("The game stopped before")
+                        || title == "unknown"
+                        || title == "The game froze and was closed")
+                    && freeze_evidence(&all)
+                {
+                    "The game froze and was closed"
+                } else if orderly_shutdown(&all)
+                    && crash_report.is_none()
+                    && diagnose(&all).is_none()
+                {
+                    "Non-crash: Minecraft stopped normally"
+                } else {
+                    &title
+                },
+                &Own::this_pc(),
+            ),
+            // Mod ids/versions are public loader metadata. Keep version strings verbatim;
+            // the generic scrubber would mistake four-part versions for IP addresses.
+            log: head_of(
+                &format!(
+                    "{priority}\n{}",
+                    scrub(head_of(&text, remaining), &Own::this_pc())
+                ),
+                47 * 1024,
+            )
+            .to_owned(),
             contact: String::new(),
         }
     }
+}
+
+/// Resolve inventory from the untrimmed Fabric report, or its startup list when Minecraft
+/// died too early to write one. The agent sidecar also covers failures swallowed by preloading.
+fn compact_mod_inventory(output: &str, report: &str) -> String {
+    let mut mods = std::collections::BTreeMap::new();
+    static STARTUP_MOD: OnceLock<Regex> = OnceLock::new();
+    let startup = STARTUP_MOD
+        .get_or_init(|| Regex::new(r"^\s*(?:- |[| \\+]*-- )([a-z][a-z0-9_-]*) (.+)$").unwrap());
+    let mut in_startup = false;
+    for line in output.lines() {
+        if line.contains("Loading ") && line.ends_with(" mods:") {
+            in_startup = true;
+            continue;
+        }
+        if in_startup {
+            if let Some(c) = startup.captures(line) {
+                mods.insert(c[1].to_owned(), c[2].to_owned());
+            } else if !line.trim().is_empty() {
+                in_startup = false;
+            }
+        }
+    }
+    let mut in_report = false;
+    for line in report.lines() {
+        if line.trim() == "Fabric Mods:" {
+            in_report = true;
+            continue;
+        }
+        if !in_report || line.trim().is_empty() {
+            continue;
+        }
+        let Some((id, detail)) = line.trim().split_once(':') else {
+            break;
+        };
+        if id.is_empty()
+            || !id
+                .bytes()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_' || c == b'-')
+        {
+            break;
+        }
+        if let Some(version) = detail.split_whitespace().last() {
+            mods.insert(id.to_owned(), version.to_owned());
+        }
+    }
+    // Prefer Fabric's live resolved metadata if the failure sidecar supplies it.
+    for line in output.lines() {
+        if let Some(entry) = line
+            .split_once("[Arctic mixin mod] ")
+            .map(|(_, entry)| entry)
+            && let Some((id, version)) = entry.split_once(' ')
+        {
+            mods.insert(id.to_owned(), version.to_owned());
+        }
+    }
+    let mut out = String::new();
+    for (id, version) in mods {
+        out.push_str(&format!("{id} {version}\n"));
+    }
+    out
+}
+
+/// Keep very large inventories complete within the existing 48 KB upload limit. Typical
+/// packs stay readable; exceptionally large packs carry a lossless gzip+base64 section.
+fn mod_inventory_section(mods: &str) -> String {
+    if mods.len() > 24 * 1024 {
+        use base64::Engine as _;
+        use std::io::Write as _;
+        let mut gzip = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        if gzip.write_all(mods.as_bytes()).is_ok()
+            && let Ok(bytes) = gzip.finish()
+        {
+            return format!(
+                "---- full mod list (gzip+base64; decoded lines are id version) ----\n{}\n",
+                base64::engine::general_purpose::STANDARD.encode(bytes)
+            );
+        }
+    }
+    format!("---- full mod list (id version) ----\n{mods}")
+}
+
+/// Deduplicate stderr/log/sidecar copies, preserving input method signatures and all target mixins.
+fn mixin_failure_evidence(output: &str) -> String {
+    let mut blocks = Vec::new();
+    let mut current = String::new();
+    for line in output.lines() {
+        let Some((_, context)) = line.split_once("[Arctic mixin] ") else {
+            continue;
+        };
+        if context == "failure begin" && !current.is_empty() {
+            blocks.push(std::mem::take(&mut current));
+        }
+        if context == "failure begin" || !current.is_empty() {
+            current.push_str(context);
+            current.push('\n');
+            if context == "failure end" {
+                blocks.push(std::mem::take(&mut current));
+            }
+        } else {
+            blocks.push(format!("{context}\n"));
+        }
+    }
+    if !current.is_empty() {
+        blocks.push(current);
+    }
+    let mut seen = std::collections::HashSet::new();
+    blocks
+        .into_iter()
+        .filter(|block| seen.insert(block.clone()))
+        .collect()
+}
+
+/// Compact only launch lines, before taking the byte tail. Java's separate summary stays intact.
+fn compact_launch(line: &str) -> String {
+    if !line.contains("launching") {
+        return line.to_owned();
+    }
+    static CP: OnceLock<Regex> = OnceLock::new();
+    CP.get_or_init(|| {
+        Regex::new(r#"((?:-cp|-classpath|--class-path)\s+)(?:"[^"\n]*"|'[^'\n]*'|\S+)"#).unwrap()
+    })
+    .replace_all(line, "${1}<classpath>")
+    .into_owned()
+}
+
+/// Only an unrecovered client watchdog stall is evidence of a hang.
+pub fn freeze_evidence(text: &str) -> bool {
+    text.rfind("[Arctic diagnostics] hang begin")
+        .is_some_and(|hang| {
+            text.rfind("[Arctic diagnostics] hang recovered")
+                .is_none_or(|recovered| recovered < hang)
+        })
+}
+
+/// Require explicit shutdown evidence; a Stopping! line alone does not explain exit(1).
+pub fn orderly_shutdown(text: &str) -> bool {
+    text.contains("Stopping!")
+        && (text.contains("All dimensions are saved")
+            || text.contains("All chunks are saved")
+            || text.contains("Saved the game"))
+        && text.contains("[Arctic diagnostics] minecraft stop complete")
+        && text.contains("[Arctic diagnostics] exit caller vanilla")
+        && !text.contains("[Arctic diagnostics] exit caller other")
+        && !freeze_evidence(text)
+}
+
+/// Preserve the latest dump and exit trace even when they are outside the log tail.
+fn diagnostic_evidence(text: &str, budget: usize) -> String {
+    let mut out = String::new();
+    if let Some(start) = text.rfind("[Arctic diagnostics] hang begin") {
+        let dump = &text[start..];
+        let end = dump
+            .find("[Arctic diagnostics] hang end")
+            .map_or(dump.len(), |n| n + "[Arctic diagnostics] hang end".len());
+        let limit = budget.saturating_sub(4 * 1024);
+        out.push_str(head_of(&dump[..end], limit));
+        if end > limit {
+            out.push_str(
+                "\n[dump truncated to fit 48 KB; full dump saved locally as arctic-hang.txt]\n",
+            );
+        }
+        out.push('\n');
+        if let Some(recovered) = dump
+            .lines()
+            .find(|line| line.contains("[Arctic diagnostics] hang recovered"))
+        {
+            out.push_str(recovered);
+            out.push('\n');
+        }
+    }
+    for line in text.lines().filter(|l| {
+        l.contains("[Arctic diagnostics]") && !l.contains("hang ") && !l.contains("thread ")
+    }) {
+        if out.len() < budget.saturating_sub(1024) {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    let packs: Vec<_> = text
+        .lines()
+        .filter(|l| {
+            l.contains("Couldn't load") && l.contains("pack metadata")
+                || l.contains("Missing metadata in pack")
+                || l.contains("MalformedJsonException") && l.contains("$.pack")
+        })
+        .collect();
+    if !packs.is_empty() {
+        out.push_str("Broken resource-pack metadata: ");
+        out.push_str(&packs.join(" | "));
+    }
+    out
+}
+
+fn exit_title(original: &str, text: &str, java: &str) -> String {
+    if !original.is_empty()
+        && original != "unknown"
+        && !original.starts_with("The game stopped before")
+    {
+        return original.to_owned();
+    }
+    let caller = text.lines().find_map(|line| {
+        line.split_once("[Arctic diagnostics] exit caller other ")
+            .map(|(_, frame)| frame.split('<').next().unwrap_or(frame).trim())
+    });
+    static CODE: OnceLock<Regex> = OnceLock::new();
+    let combined = format!("{java}\n{text}");
+    let code = CODE
+        .get_or_init(|| Regex::new(r"(?:exit code |status: )(-?\d+)").unwrap())
+        .captures(&combined)
+        .and_then(|c| c[1].parse::<i32>().ok());
+    match (code, caller) {
+        (Some(code), Some(frame)) => {
+            format!("Game exited with code {code}: {}", head_of(frame, 180))
+        }
+        (Some(code), None) => format!("Game exited with code {code} (0x{:08X})", code as u32),
+        _ => original.to_owned(),
+    }
+}
+
+/// Codes are unsigned on Windows; 0xCFFFFFFF is not a documented NTSTATUS.
+pub fn exit_description(code: i32) -> String {
+    let name = match code as u32 {
+        0xC0000005 => "STATUS_ACCESS_VIOLATION",
+        0xC0000142 => "STATUS_DLL_INIT_FAILED",
+        0xC0000135 => "STATUS_DLL_NOT_FOUND",
+        0xC0000409 => "STATUS_STACK_BUFFER_OVERRUN / fail-fast",
+        0xCFFFFFFF => {
+            "undocumented Windows exit code; hang termination or native failure, not enough evidence to distinguish"
+        }
+        _ => "no known NTSTATUS name",
+    };
+    format!("{code} (0x{:08X}; {name})", code as u32)
 }
 
 fn head_of(text: &str, max: usize) -> &str {
@@ -769,6 +1096,8 @@ pub fn scrub(text: &str, own: &Own) -> String {
     static PATTERNS: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
     let patterns = PATTERNS.get_or_init(|| {
         [
+            // The game's own start-up line (1.8.9 writes it to latest.log): the token and the player's id.
+            (r"\(Session ID is [^)\r\n]*\)?", "(Session ID is <hidden>)"),
             (
                 r"(?i)(--(?:accessToken|uuid|username|xuid|clientId|session)\s+)\S+",
                 "${1}<hidden>",
@@ -814,6 +1143,195 @@ pub fn scrub(text: &str, own: &Own) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires offline client logs from the diagnostics proof runs"]
+    fn real_client_diagnostic_reports() {
+        let dir = std::path::PathBuf::from(std::env::var_os("CRASHDIAG_PROOF_DIR").unwrap());
+        for (version, mode) in [
+            ("1.8.9", "exit77"),
+            ("1.20.1", "exit77"),
+            ("26.3", "exit77"),
+            ("26.3", "sleep40"),
+        ] {
+            let log = std::fs::read_to_string(dir.join(format!("{version}-{mode}.log"))).unwrap();
+            let mut parser = crate::launch::logparse::LogParser::default();
+            let plain = log
+                .lines()
+                .flat_map(|line| parser.feed(line))
+                .map(|l| l.text)
+                .collect::<Vec<_>>();
+            let lines = plain.iter().map(String::as_str).collect::<Vec<_>>();
+            let report = Report::build(
+                version,
+                "fabric",
+                "",
+                &lines,
+                &[],
+                None,
+                Some("exit code 77 (0x0000004D)"),
+            );
+            if mode == "sleep40" {
+                assert_eq!(report.title, "The game froze and was closed");
+                assert!(
+                    report.log.contains("java.lang.Thread.sleep")
+                        || report
+                            .log
+                            .contains("java.base@25.0.1/java.lang.Thread.sleep")
+                );
+            } else {
+                assert!(
+                    report.title.contains("diagnosticsExit77"),
+                    "{}",
+                    report.title
+                );
+                assert!(report.log.contains("exit caller other"));
+            }
+            assert!(report.log.len() < 48 * 1024);
+            std::fs::write(
+                dir.join(format!("{version}-{mode}-report.txt")),
+                format!("{}\n{}", report.title, report.log),
+            )
+            .unwrap();
+        }
+    }
+
+    #[test]
+    fn freeze_classification_needs_evidence_and_silent_titles_split_by_caller() {
+        let hang = "[Arctic diagnostics] hang begin\n[Arctic diagnostics] hang end";
+        let recovered = format!(
+            "{hang}\n[Arctic diagnostics] hang recovered; render progress resumed\nexit code 77"
+        );
+        assert!(freeze_evidence(hang));
+        assert!(!freeze_evidence(&recovered));
+        let report = Report::build(
+            "1.20.1",
+            "",
+            "",
+            &[&recovered],
+            &[],
+            None,
+            Some("exit code 77"),
+        );
+        assert_ne!(report.title, "The game froze and was closed");
+        assert!(report.log.contains("hang recovered"));
+        assert!(freeze_evidence(&format!("{recovered}\n{hang}")));
+        assert!(!freeze_evidence("exit code -805306369 (0xCFFFFFFF)"));
+        assert!(!freeze_evidence("Can't keep up! 160523ms behind"));
+        assert!(!freeze_evidence(
+            "Can't keep up! 160523ms behind\nexit code 1 (0x00000001)"
+        ));
+        for prefix in ["Can't keep up! 60000ms behind", hang, &recovered] {
+            let text = format!(
+                "{prefix}\njava.lang.OutOfMemoryError: Java heap space\nexit code 1 (0x00000001)"
+            );
+            let diagnosis = diagnose(&text).expect("specific memory diagnosis");
+            let report = Report::build("1.20.1", "", &diagnosis.title, &[&text], &[], None, None);
+            assert_eq!(report.title, diagnosis.title);
+        }
+        let report = Report::build(
+            "1.20.1",
+            "",
+            "",
+            &["[Arctic diagnostics] exit caller other mod.Example.quit(Example.java:12)"],
+            &[],
+            None,
+            Some("exit code 77"),
+        );
+        assert_eq!(
+            report.title,
+            "Game exited with code 77: mod.Example.quit(Example.java:12)"
+        );
+    }
+
+    #[test]
+    fn diagnostics_survive_tail_and_keep_report_under_limit() {
+        let mut lines = vec![
+            "[Arctic diagnostics] hang begin",
+            "Render thread sleeping",
+            "[Arctic diagnostics] hang end",
+            "Missing metadata in pack broken.zip",
+        ];
+        lines.extend(std::iter::repeat_n("later noise", 400));
+        let command = format!("launching: java -cp \"{}\" Main", "huge.jar:".repeat(3000));
+        let launcher = ["important launcher evidence", command.as_str()];
+        let report = Report::build(
+            "26.3",
+            "fabric",
+            "unknown",
+            &lines,
+            &launcher,
+            None,
+            Some("java summary"),
+        );
+        assert_eq!(report.title, "The game froze and was closed");
+        assert!(report.log.contains("Render thread sleeping"));
+        assert!(report.log.contains("Broken resource-pack metadata:"));
+        assert!(report.log.contains("important launcher evidence"));
+        assert!(report.log.contains("<classpath>"));
+        assert!(report.log.len() < 48 * 1024);
+    }
+
+    #[test]
+    fn diagnostic_sections_stay_scrubbed_and_bounded() {
+        let own = Own::this_pc();
+        let home = own.home.as_deref().unwrap_or("/home/example");
+        let diagnostic = format!(
+            "[Arctic diagnostics] exit caller other example.Exit.quit(Exit.java:1) {home} --accessToken secret-token --username SecretName"
+        );
+        let noise = "noise ".repeat(10_000);
+        let dump =
+            format!("[Arctic diagnostics] hang begin\n{noise}\n[Arctic diagnostics] hang end");
+        let report = Report::build(
+            "26.3",
+            "",
+            "",
+            &[&diagnostic, &dump],
+            &[&noise],
+            Some(&noise),
+            Some(&noise),
+        );
+        assert!(report.log.len() < 48 * 1024);
+        assert!(!report.log.contains("secret-token"));
+        assert!(!report.log.contains("SecretName"));
+        if own.home.is_some() {
+            assert!(!report.log.contains(home));
+        }
+        assert!(!report.title.contains(home));
+    }
+
+    #[test]
+    fn shutdown_requires_caller_and_completed_stop() {
+        let text = "Stopping!\nAll dimensions are saved\n[Arctic diagnostics] minecraft stop complete\n[Arctic diagnostics] exit caller vanilla net.minecraft.client.Minecraft.destroy";
+        assert!(orderly_shutdown(text));
+        assert!(!orderly_shutdown("Stopping!\nSaved all chunks"));
+        assert!(!orderly_shutdown(&format!(
+            "{text}\n[Arctic diagnostics] exit caller other mod.Exit.quit"
+        )));
+        assert!(exit_description(-805306369).contains("0xCFFFFFFF"));
+        let report = Report::build("1.20.1", "", "unknown", &[text], &[], None, None);
+        assert!(report.title.starts_with("Non-crash:"));
+    }
+
+    #[test]
+    fn normal_shutdown_preserves_specific_crash_diagnosis() {
+        let text = "java.lang.OutOfMemoryError: Java heap space\nStopping!\nAll dimensions are saved\n[Arctic diagnostics] minecraft stop complete\n[Arctic diagnostics] exit caller vanilla net.minecraft.client.Minecraft.destroy\nexit code 1 (0x00000001)";
+        assert!(orderly_shutdown(text));
+        let diagnosis = diagnose(text).expect("specific memory diagnosis");
+        let report = Report::build("1.20.1", "", &diagnosis.title, &[text], &[], None, None);
+        assert_eq!(report.title, "Minecraft ran out of memory");
+    }
+
+    #[test]
+    fn driver_diagnostics_match_the_closed_groups() {
+        assert!(
+            diagnose("SDL3.dll failed: error code = 1114")
+                .unwrap()
+                .detail
+                .contains("High-performance GPU")
+        );
+        assert!(diagnose("BackendCreationException: OpenGL is not supported: Could not retrieve OpenGL functions").unwrap().detail.contains("XWayland"));
+    }
 
     #[test]
     fn java_crash_files_are_cut_before_the_process_section() {
@@ -1120,6 +1638,144 @@ USERNAME=someone
             assert!(!clean.contains(secret), "{secret} left in: {clean}");
         }
         assert!(clean.contains("<home>") && clean.contains("<hidden>") && clean.contains("<ip>"));
+    }
+
+    #[test]
+    fn large_pack_inventory_survives_report_and_transport_limits() {
+        let mut written = format!("{}\n\tFabric Mods:\n", "stack frame\n".repeat(3000));
+        for i in 0..500 {
+            written.push_str(&format!(
+                "\t\tmod_{i}: A long display name for mod {i} 1.2.3.4+build-{i}\n"
+            ));
+        }
+        written.push_str("\tLaunched Version: 26.3\n");
+        let noise = "noise".repeat(4000);
+        let context = "[Arctic mixin] class=net.minecraft.world.entity.item.ItemEntity; role=preloader\n\
+            [Arctic mixin] cache lookup=miss\n[Arctic mixin] tick()V\n\
+            [Arctic mixin] architectury.mixins.json:MixinItemEntity\n\
+            [Arctic mixin] other.json:OtherItemMixin";
+        let report = Report::build(
+            "26.3",
+            "fabric",
+            "Crash",
+            &[context, &noise],
+            &[&noise],
+            Some(&written),
+            Some(&noise),
+        );
+        for i in 0..500 {
+            assert!(
+                report.log.contains(&format!("mod_{i} 1.2.3.4+build-{i}\n")),
+                "missing mod {i}"
+            );
+        }
+        assert!(report.log.contains("tick()V"));
+        assert!(report.log.contains("other.json:OtherItemMixin"));
+        assert!(report.log.len() < 48 * 1024);
+        assert!(!report.log.contains("Launched Version 26.3"));
+    }
+
+    #[test]
+    fn exceptionally_large_inventory_is_lossless_instead_of_cut_off() {
+        use base64::Engine as _;
+        use std::io::Read as _;
+        let mods: String = (0..3000)
+            .map(|i| format!("mod_{i} 1.2.3.4+build-{i}\n"))
+            .collect();
+        let section = mod_inventory_section(&mods);
+        assert!(section.contains("gzip+base64"));
+        let encoded = section.lines().nth(1).unwrap();
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .unwrap();
+        let mut decoded = String::new();
+        flate2::read::GzDecoder::new(bytes.as_slice())
+            .read_to_string(&mut decoded)
+            .unwrap();
+        assert_eq!(mods, decoded);
+        assert!(section.len() < 24 * 1024);
+    }
+
+    #[test]
+    fn startup_and_agent_inventory_cover_early_crashes_and_nested_mods() {
+        let output = "[main/INFO] Loading 4 mods:\n\t- arctic 1.0.0\n\
+            \t- architectury 22.0.5\n\t   |-- nested 2.0.0\n\t   \\-- last 3.0.0\n\
+            [main/INFO] other message\n- unrelated line\n\
+            [Arctic mixin mod] architectury 22.0.5+resolved\n\
+            [Arctic mixin mod] polarium 0.31.3";
+        let mods = compact_mod_inventory(output, "");
+        assert!(mods.contains("arctic 1.0.0\n"));
+        assert!(mods.contains("architectury 22.0.5+resolved\n"));
+        assert!(mods.contains("nested 2.0.0\n"));
+        assert!(mods.contains("last 3.0.0\n"));
+        assert!(mods.contains("polarium 0.31.3\n"));
+        assert!(!mods.contains("unrelated"));
+    }
+
+    #[test]
+    fn agent_evidence_is_deduplicated_and_still_scrubbed() {
+        let context = "[Arctic mixin] class=example.Item; role=main\n\
+            [Arctic mixin] tick()V\n[Arctic mixin] error=message to user@example.com";
+        let noise = "unrelated\n".repeat(4000);
+        let report = Report::build(
+            "26.3",
+            "fabric",
+            "Crash",
+            &[context, context, &noise],
+            &[],
+            None,
+            None,
+        );
+        assert_eq!(
+            mixin_failure_evidence(&format!("{context}\n{context}"))
+                .matches("tick()V")
+                .count(),
+            1
+        );
+        assert!(report.log.contains("class=example.Item; role=main"));
+        assert!(report.log.contains("tick()V"));
+        assert!(!report.log.contains("user@example.com"));
+    }
+
+    #[test]
+    fn each_failed_class_keeps_its_own_complete_method_list() {
+        let a = "[Arctic mixin] failure begin\n[Arctic mixin] class=A\n[Arctic mixin] tick()V\n[Arctic mixin] failure end";
+        let b = a.replace("class=A", "class=B");
+        let evidence = mixin_failure_evidence(&format!("{a}\n{b}\n{a}\n{b}"));
+        assert_eq!(evidence.matches("tick()V").count(), 2);
+        assert_eq!(evidence.matches("failure begin").count(), 2);
+        assert_eq!(evidence.matches("failure end").count(), 2);
+    }
+
+    #[test]
+    fn the_games_session_line_never_leaves_with_its_token() {
+        let own = Own {
+            home: None,
+            user: None,
+        };
+        // 1.8.9's latest.log: a Microsoft token (a JWT), an old Mojang one, and an offline player.
+        let jwt = "eyJraWQiOiJhYzg0YSJ9.eyJ4dWlkIjoiMjUzNTQyIn0.c2lnbmF0dXJlLXBhcnQ";
+        let id = "593fd4c3951f39ada7bd19ddba5fcb41";
+        for token in [jwt, "0123456789abcdef0123456789abcdef", "0"] {
+            let text = format!(
+                "[00:16:35] [Client thread/INFO]: Setting user: Steve\n\
+                 [00:16:35] [Client thread/INFO]: (Session ID is token:{token}:{id})\n\
+                 [00:16:36] [Client thread/INFO]: LWJGL Version: 2.9.4"
+            );
+            let clean = scrub(&text, &own);
+            assert!(
+                clean.contains("(Session ID is <hidden>)\n"),
+                "not masked: {clean}"
+            );
+            assert!(!clean.contains(id), "player id left in: {clean}");
+            if token.len() > 1 {
+                assert!(!clean.contains(token), "token left in: {clean}");
+            }
+            assert!(clean.contains("LWJGL Version: 2.9.4"));
+        }
+        // Cut off mid-line (the report keeps a bounded tail): still nothing of the token.
+        let cut = scrub(&format!("(Session ID is token:{jwt}"), &own);
+        assert_eq!(cut, "(Session ID is <hidden>)");
     }
 
     #[test]

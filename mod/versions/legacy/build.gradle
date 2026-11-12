@@ -8,6 +8,8 @@ plugins {
 // versions sits in //#if MC >= 1.12 … //#else … //#endif blocks, like the
 // modern adapter (versions/fabric).
 def mc = project.minecraft_version
+// The CTM development scene and its startup call are opt-in (-Pdevelopment_scenes=true).
+def developmentScenes = project.findProperty('development_scenes') == 'true'
 // -Pforge=true: the Forge 1.8.9 flavour (mod/forge/build_forge.py remaps it to Forge's names). Mixins that
 // use MixinExtras (not available to Forge's Mixin) are replaced by the ones in src/forge.
 def forge = project.findProperty('forge') == 'true'
@@ -34,6 +36,8 @@ def atLeast = { String v -> compareVersions(mc, v) >= 0 }
 def evalCondition
 evalCondition = { String expr ->
 	if (expr == 'DEV') return project.findProperty('chatcopyDev') == 'true'
+	if (expr.trim() == 'DEV_SCENES') return developmentScenes
+	if (expr.trim() == 'FABRIC') return !forge
 	if (expr.contains('||')) {
 		return expr.split(/\|\|/).any { evalCondition(it.trim()) }
 	}
@@ -129,6 +133,7 @@ tasks.register('preprocessJava') {
 			def root = file(source)
 			root.eachFileRecurse(groovy.io.FileType.FILES) { f ->
 				def rel = root.toPath().relativize(f.toPath()).toString()
+				if (!developmentScenes && (f.name.endsWith('Test.java') || f.name.endsWith('Proof.java') || f.name in ['HotbarScrollCheck.java', 'LegacyHotbarScrollCheck.java'])) return
 				def target = new File(outDir, rel)
 				if (forge && (forgeReplaced.contains(f.name) || forgeSkipped.contains(f.name))) {
 					return
@@ -170,6 +175,7 @@ dependencies {
 	mappings(legacy.yarn(mc, project.yarn_build))
 	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+	testImplementation 'org.ow2.asm:asm:9.9'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	if (forge) {
 		// Only the Forge entry class (FML's @Mod and events) compiles against this.

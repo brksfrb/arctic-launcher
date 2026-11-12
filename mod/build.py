@@ -64,8 +64,8 @@ def mirror(src, dst):
 
 def has_chatcopy_proof(jar):
     """Reject proof helpers and their anonymous/nested classes from releases."""
-    forbidden = {"ChatCopyTest", "LegacyChatCopyTest", "ChatCopyProof", "NametagFontTest", "LegacyNametagFontTest"}
-    return any(Path(name).stem.split("$", 1)[0] in forbidden for name in jar.namelist())
+    forbidden = {"ChatCopyTest", "LegacyChatCopyTest", "ChatCopyProof", "EmoteProof", "PersistentChatProof", "LegacyPersistentChatProof", "ChatHistoryProof", "LegacyChatHistoryProof", "PersistentChatTest", "NametagFontTest", "LegacyNametagFontTest", "BadgeTest", "LegacyBadgeTest"}
+    return any((Path(name).stem.split("$", 1)[0] in forbidden or Path(name).stem.split("$", 1)[0].endswith(("Test", "Proof", "HotbarScrollCheck"))) for name in jar.namelist())
 
 
 def build_one(root, target):
@@ -82,10 +82,10 @@ def build_one(root, target):
     if result.returncode != 0:
         return f"{version} failed:\n{result.stdout[-3000:]}{result.stderr[-3000:]}"
     built = root / f"versions/{project}/build/libs" / f"arctic-mod-{version}-1.0.0.jar"
-    # Release builds must never ship the opt-in world/clipboard proof harness.
+    # Release builds must never ship opt-in proof harnesses.
     with zipfile.ZipFile(built) as jar:
         if has_chatcopy_proof(jar):
-            return f"{version}: development chat-copy proof leaked into release jar"
+            return f"{version}: development proof leaked into release jar"
     shutil.copyfile(built, DIST / f"arctic-mod-{version}.jar")
     print(f"== {version} (covers {covers}) in {time.time() - started:.0f}s", flush=True)
     return None
@@ -127,7 +127,7 @@ def pack(targets):
         entries = []
         with zipfile.ZipFile(path) as z:
             if has_chatcopy_proof(z):
-                sys.exit(f"{version}: development chat-copy proof cannot be packed for release")
+                sys.exit(f"{version}: development proof cannot be packed for release")
             for info in z.infolist():
                 if info.is_dir():
                     entries.append([info.filename, -1])

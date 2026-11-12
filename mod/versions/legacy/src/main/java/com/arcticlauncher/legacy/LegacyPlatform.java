@@ -111,6 +111,11 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean beginReplayInWorld() {
+		return com.arcticlauncher.legacy.replay.LegacyReplayRecording.beginInWorld();
+	}
+
+	@Override
 	public boolean inWorld() {
 		return mc().world != null && mc().player != null;
 	}
@@ -336,6 +341,20 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public String keyUsedBy(String key) {
+		int code = LegacyKeys.code(key);
+		if (code == 0) {
+			return null;
+		}
+		for (KeyBinding k : mc().options.allKeys) {
+			if (k.getCode() == code && !"of.key.zoom".equals(k.getTranslationKey())) {
+				return net.minecraft.client.resource.language.I18n.translate(k.getTranslationKey());
+			}
+		}
+		return null;
+	}
+
+	@Override
 	public void setThirdPerson(boolean on) {
 		GameOptions options = mc().options;
 		if (on) {
@@ -533,6 +552,22 @@ public final class LegacyPlatform implements Platform {
 	public boolean chunkBordersWorks() {
 		return true;
 	}
+
+	@Override
+	public boolean lightOverlayWorks() {
+		//#if MC < 1.9
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	//#if MC < 1.9
+	@Override
+	public com.arcticlauncher.client.feature.LightOverlay.Probe lightProbe() {
+		return LegacyLightOverlay.probe();
+	}
+	//#endif
 
 	@Override
 	public boolean itemPhysicsWorks() {
@@ -1495,7 +1530,7 @@ public final class LegacyPlatform implements Platform {
 		LegacyHooks.onNextFrame(() -> {
 			MinecraftClient mc = mc();
 			leave(mc);
-			LegacyWorldTest.deleteWorlds(new File(mc.runDirectory, "saves"), DUEL_PREFIX);
+			WorldCleanup.deleteWorlds(new File(mc.runDirectory, "saves"), DUEL_PREFIX);
 			String name = DUEL_PREFIX + com.arcticlauncher.client.LocalClock.formatter("MM-dd HH.mm").format(new java.util.Date());
 			//#if MC >= 1.10
 			net.minecraft.world.level.LevelInfo info = new net.minecraft.world.level.LevelInfo(System.currentTimeMillis(),

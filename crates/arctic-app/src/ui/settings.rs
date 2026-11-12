@@ -27,14 +27,26 @@ const THEMES: [(ThemeMode, &str); 4] = [
 const GROUPS: [&str; 4] = ["General", "Game", "Network & voice", "Data"];
 
 thread_local! {
+    /// A pending section or control to reveal.
+    static SCROLL_TO: std::cell::Cell<Option<&'static str>> = const { std::cell::Cell::new(None) };
     /// The group being shown (the UI runs on one thread).
     static GROUP: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Select the containing tab and reveal the requested section on the next frame.
+pub(super) fn open_section(title: &'static str) {
+    GROUP.with(|g| g.set(group_of(title)));
+    SCROLL_TO.with(|s| s.set(Some(title)));
 }
 
 /// Which group a section belongs to.
 fn group_of(title: &str) -> usize {
     match title {
-        "Appearance" | "Arctic Client" | "Launching" | "Updates" => 0,
+        "Freeze animated capes and cosmetics"
+        | "Appearance"
+        | "Arctic Client"
+        | "Launching"
+        | "Updates" => 0,
         "Memory" | "Versions" | "Game window" | "Java" => 1,
         "Network" | "Voice chat" => 2,
         _ => 3,
@@ -104,8 +116,12 @@ impl ArcticApp {
                     .color(p.warn),
                 );
             }
-            ui.checkbox(&mut s.reduce_cape_motion, "Freeze animated capes and cosmetics")
+            let freeze = ui.checkbox(&mut s.reduce_cape_motion, "Freeze animated capes and cosmetics")
                 .on_hover_text("Animated capes and sculpted cosmetics stand still here. Only your own view changes; what you and others wear stays as chosen.");
+            if SCROLL_TO.with(|s| s.get()) == Some("Freeze animated capes and cosmetics") {
+                freeze.scroll_to_me(Some(egui::Align::Center));
+                SCROLL_TO.with(|s| s.set(None));
+            }
             ui.checkbox(&mut s.intro, "Intro animation on start");
             ui.checkbox(&mut s.start_maximized, "Start the launcher maximized");
             if cfg!(windows) {
@@ -418,12 +434,16 @@ fn section(ui: &mut egui::Ui, p: &Palette, title: &str, body: impl FnOnce(&mut e
     if group_of(title) != GROUP.with(|g| g.get()) {
         return;
     }
-    theme::card(p).show(ui, |ui| {
+    let response = theme::card(p).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.label(RichText::new(title).size(17.0).strong().color(p.text));
         ui.add_space(6.0);
         body(ui);
     });
+    if SCROLL_TO.with(|s| s.get()) == Some(title) {
+        ui.scroll_to_rect(response.response.rect, Some(egui::Align::Min));
+        SCROLL_TO.with(|s| s.set(None));
+    }
     ui.add_space(14.0);
 }
 
@@ -540,5 +560,27 @@ fn java_override(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) {
                 RichText::new("File not found; the managed runtime will be used.").color(p.warn),
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quick_tip_settings_select_the_containing_group_and_request_scroll() {
+        for (section, group) in [
+            ("Storage", 3),
+            ("Appearance", 0),
+            ("Arctic Client", 0),
+            ("Voice chat", 2),
+            ("Freeze animated capes and cosmetics", 0),
+        ] {
+            GROUP.with(|g| g.set(1));
+            open_section(section);
+            assert_eq!(GROUP.with(|g| g.get()), group, "{section}");
+            assert_eq!(SCROLL_TO.with(|s| s.get()), Some(section));
+        }
+        SCROLL_TO.with(|s| s.set(None));
     }
 }

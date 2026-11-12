@@ -27,8 +27,8 @@ mine = tuple(int(x) for x in ver.split("."))
 if not os.environ.get("JAVA_HOME"):
     sys.exit("JAVA_HOME is not set (javap is needed)")
 J = os.path.join(os.environ["JAVA_HOME"], "bin", "javap")
-home = os.path.expanduser("~")
-JAR = glob.glob(home + f"/.gradle/caches/fabric-loom/minecraftMaven/net/minecraft/minecraft-merged-legacy-intermediary-1-v2/{ver}-*/*.jar")[0]
+gradle_home = os.environ.get("GRADLE_USER_HOME", os.path.expanduser("~/.gradle"))
+JAR = glob.glob(gradle_home + f"/caches/fabric-loom/minecraftMaven/net/minecraft/minecraft-merged-legacy-intermediary-1-v2/{ver}-*/*.jar")[0]
 cache = {}
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), "src/main/java/com/arcticlauncher/legacy/mixin"))
 

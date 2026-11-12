@@ -394,7 +394,7 @@ public final class Looks {
 		if (previewCape) {
 			return look == null ? new Look(null, false, capeTrying,
 					java.util.Collections.<String>emptyList(), true, now)
-					: new Look(look.skin, look.slim, capeTrying, look.cosmetics, look.arctic, look.fetched, look.fits);
+					: new Look(look.skin, look.slim, capeTrying, look.cosmetics, look.arctic, look.fetched, look.fits, look.badgeStyle);
 		}
 		return look == null || look.isEmpty() ? null : look;
 	}
@@ -416,7 +416,7 @@ public final class Looks {
 		}
 		return look == null
 				? new Look(null, false, hash, java.util.Collections.<String>emptyList(), false, System.currentTimeMillis())
-				: new Look(look.skin, look.slim, hash, look.cosmetics, look.arctic, look.fetched, look.fits);
+				: new Look(look.skin, look.slim, hash, look.cosmetics, look.arctic, look.fetched, look.fits, look.badgeStyle);
 	}
 
 	/** A cape from somewhere other than Arctic's server (OptiFine's): registered, never downloaded from the server. */
@@ -437,6 +437,14 @@ public final class Looks {
 			pending.add(player);
 		}
 		return look != null && look.arctic;
+	}
+
+	/** Badges share the looks cache but refresh promptly when another wearer changes their choice. */
+	public int badgeStyle(UUID player) {
+		if (player == null) return 0;
+		Look look = players.get(player);
+		if (look == null || System.currentTimeMillis() - look.fetched > TimeUnit.SECONDS.toMillis(20)) pending.add(player);
+		return look == null ? 0 : look.badgeStyle;
 	}
 
 	private static long othersTtl(Look look) {
@@ -528,7 +536,7 @@ public final class Looks {
 		UUID me = platform.playerId();
 		long now = System.currentTimeMillis();
 		players.put(me, mine == null ? new Look(null, false, null, ids, true, now)
-				: new Look(mine.skin, mine.slim, mine.cape, ids, mine.arctic, now, mine.fits));
+				: new Look(mine.skin, mine.slim, mine.cape, ids, mine.arctic, now, mine.fits, mine.badgeStyle));
 		version.incrementAndGet();
 		if (busy) {
 			nextCosmetics = ids;
@@ -686,7 +694,7 @@ public final class Looks {
 	}
 
 	/** One player's look; anything malformed counts as no look. */
-	private Look parseLook(JsonElement e, long now) {
+	Look parseLook(JsonElement e, long now) {
 		if (e == null || !e.isJsonObject()) {
 			return new Look(null, false, null, java.util.Collections.<String>emptyList(), false, now);
 		}
@@ -699,7 +707,17 @@ public final class Looks {
 		JsonElement arctic = o.get("arctic");
 		boolean onArctic = arctic != null && arctic.isJsonPrimitive() && arctic.getAsJsonPrimitive().isBoolean() && arctic.getAsBoolean();
 		return new Look(skin, "slim".equals(stringField(o, "model")), cape, Cosmetics.worn(o.get("cosmetics")), onArctic, now,
-				Fit.parse(o.get("fit")));
+				Fit.parse(o.get("fit")), parseBadgeStyle(o.get("badge_style")));
+	}
+
+	/** Only integer JSON numbers are styles: strings, fractions and huge numbers use the default. */
+	static int parseBadgeStyle(JsonElement e) {
+		if (e == null || !e.isJsonPrimitive() || !e.getAsJsonPrimitive().isNumber()) return 0;
+		try {
+			return com.arcticlauncher.client.feature.Badge.normalize(new java.math.BigDecimal(e.getAsString()).intValueExact());
+		} catch (RuntimeException invalid) {
+			return 0;
+		}
 	}
 
 	/** A string field, or null when missing or not a string. */
@@ -964,13 +982,48 @@ public final class Looks {
 	/** {@link #putLook} cape argument: keep the current cape. */
 	private static final String KEEP_CAPE = "\u0000keep";
 
+	/** Publish the chosen badge through the same authenticated looks API as capes and cosmetics. */
+	public void wearBadgeStyle(final int style) {
+		if (busy || token == null) return;
+		setBusy(true, "Saving badge...");
+		worker.execute(new Runnable() {
+			@Override public void run() {
+				try {
+					putLook(KEEP_CAPE, null, com.arcticlauncher.client.feature.Badge.normalize(style));
+					List<String> queued = nextCosmetics;
+					nextCosmetics = null;
+					while (queued != null) {
+						putLook(KEEP_CAPE, queued);
+						queued = nextCosmetics;
+						nextCosmetics = null;
+					}
+					setBusy(false, "Every Arctic player sees your badge.");
+				} catch (Throwable t) {
+					survive(t, "badge save");
+					nextCosmetics = null;
+					pending.add(platform.playerId());
+					setBusy(false, "Couldn't save your badge. Try again.");
+				}
+			}
+		});
+	}
+
 	/**
 	 * Publish the look: the current skin, a preset cape ({@code null} = none,
 	 * {@link #KEEP_CAPE} = the current one) and, when given, worn cosmetics.
 	 */
 	private void putLook(String capePreset, List<String> cosmeticIds) throws Exception {
+		putLook(capePreset, cosmeticIds, null);
+	}
+
+	private void putLook(String capePreset, List<String> cosmeticIds, Integer badgeStyle) throws Exception {
 		JsonObject body = new JsonObject();
 		Look mine = myLook();
+		if (badgeStyle != null) {
+			// Read the latest look so an early picker click cannot clear a skin/cape before the cache fills.
+			mine = parseLook(GSON.fromJson(Http.getText(baseUrl + "/v1/look", token), JsonElement.class), System.currentTimeMillis());
+			body.addProperty("badge_style", badgeStyle);
+		}
 		if (mine != null && mine.skin != null) {
 			JsonObject skin = new JsonObject();
 			skin.addProperty("hash", mine.skin);
@@ -1000,7 +1053,17 @@ public final class Looks {
 			body.add("cosmetics", list);
 		}
 		String response = Http.send("PUT", baseUrl + "/v1/look", token, body.toString());
-		players.put(platform.playerId(), parseLook(GSON.fromJson(response, JsonElement.class), System.currentTimeMillis()));
+		Look saved = parseLook(GSON.fromJson(response, JsonElement.class), System.currentTimeMillis());
+		if (badgeStyle != null && saved.badgeStyle != badgeStyle.intValue()) {
+			throw new java.io.IOException("badge choice was not accepted");
+		}
+		players.put(platform.playerId(), saved);
+		pending.add(platform.playerId());
+		UUID world = platform.worldPlayerId();
+		if (world != null && !world.equals(platform.playerId())) {
+			players.remove(world);
+			pending.add(world);
+		}
 	}
 
 	private void setBusy(boolean now, String message) {

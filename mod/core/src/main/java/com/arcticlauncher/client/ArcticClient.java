@@ -20,6 +20,12 @@ public final class ArcticClient {
 	/** Overrides the Arctic server (for development). */
 	public static final String SERVER_PROPERTY = "arctic.cosmetics.url";
 
+	private static com.arcticlauncher.client.feature.PersistentChat persistentChat;
+
+	public static com.arcticlauncher.client.feature.PersistentChat persistentChat() {
+		return persistentChat;
+	}
+
 	private static Platform platform;
 	private static ClientConfig config;
 	private static Hud hud;
@@ -48,10 +54,17 @@ public final class ArcticClient {
 	private static com.arcticlauncher.client.looks.LauncherSkins launcherSkins;
 
 	public static void init(Platform p) {
+		CrashDiagnostics.start();
 		com.arcticlauncher.client.looks.OsTrust.installDefault();
 		platform = p;
+		FreezeWatchdog.logTo(new java.util.function.Consumer<String>() {
+			public void accept(String line) {
+				p.log(true, line);
+			}
+		});
 		com.arcticlauncher.client.config.RunningLock.hold(p.configDir());
 		config = ClientConfig.load(p.configDir());
+		persistentChat = new com.arcticlauncher.client.feature.PersistentChat(p.configDir());
 		Session session = Session.read(p.configDir());
 		applyLauncherStyle(session);
 		applyLauncherProxy(session);
@@ -74,7 +87,6 @@ public final class ArcticClient {
 		packIcons = new com.arcticlauncher.client.packs.PackIcons(p, session.bridgePort, session.bridgeSecret);
 		screenshotCopy = new com.arcticlauncher.client.feature.ScreenshotCopy(session.bridgePort, session.bridgeSecret);
 		com.arcticlauncher.client.replay.Replays.init(p, session.bridgePort, session.bridgeSecret);
-		com.arcticlauncher.client.net.ProxySelfTest.maybeStart(p);
 		com.arcticlauncher.client.together.TogetherLink together =
 				new com.arcticlauncher.client.together.TogetherLink(session.bridgePort, session.bridgeSecret);
 		launcherJoin = new com.arcticlauncher.client.servers.LauncherJoin(session.bridgePort, session.bridgeSecret, session.launchToken);
@@ -303,6 +315,13 @@ public final class ArcticClient {
 
 	private static final com.arcticlauncher.client.feature.Stopwatch STOPWATCH = new com.arcticlauncher.client.feature.Stopwatch();
 
+	private static final com.arcticlauncher.client.feature.LightOverlay LIGHT_OVERLAY = new com.arcticlauncher.client.feature.LightOverlay();
+
+	/** The Light Overlay's scan and mesh. */
+	public static com.arcticlauncher.client.feature.LightOverlay lightOverlay() {
+		return LIGHT_OVERLAY;
+	}
+
 	public static com.arcticlauncher.client.feature.Stopwatch stopwatch() {
 		return STOPWATCH;
 	}
@@ -361,6 +380,7 @@ public final class ArcticClient {
 
 	/** Each frame, before it's drawn (the game thread). */
 	public static void frame(boolean screenOpen) {
+		CrashDiagnostics.frame();
 		com.arcticlauncher.client.gfx.RenderWork.drain();
 		long now = System.nanoTime();
 		double seconds = lastFrame == 0 ? 0 : (now - lastFrame) / 1e9;
@@ -372,6 +392,7 @@ public final class ArcticClient {
 	}
 
 	public static void tick(boolean screenOpen) {
+		FreezeWatchdog.state(platform == null || platform.windowFocused(), platform != null && platform.inWorld());
 		com.arcticlauncher.client.feature.DynamicFps.tick(platform, screenOpen);
 		com.arcticlauncher.client.replay.Replays.tick(screenOpen);
 		// Gameplay ticks are skipped outside a world and while watching a replay.
@@ -418,6 +439,7 @@ public final class ArcticClient {
 			AUTO_REPLIES.tick(platform);
 			com.arcticlauncher.client.servers.QuickJoin.tick(platform);
 			STOPWATCH.tick(!screenOpen && platform.isKeyDown(config.stopwatchKey));
+			LIGHT_OVERLAY.tick(platform, config, screenOpen);
 		}
 	}
 

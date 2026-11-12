@@ -33,8 +33,28 @@ final class LegacySelfTest {
 		}
 		//#endif
 
+		if ("nametagproof".equals(System.getProperty("arctic.selftest"))) {
+			LegacyNametagProof.start();
+			return;
+		}
 		String mode = System.getProperty("arctic.selftest");
 		//#if DEV
+		if ("chat-history".equals(System.getProperty("arctic.selftest"))) {
+			LegacyChatHistoryProof.start();
+			return;
+		}
+		if ("persistent-chat".equals(System.getProperty("arctic.selftest"))) {
+			LegacyPersistentChatProof.start();
+			return;
+		}
+		if ("stampwidth".equals(mode)) {
+			LegacyStampWidthTest.start();
+			return;
+		}
+		if ("freezechat".equals(mode)) {
+			LegacyFreezeChatTest.start();
+			return;
+		}
 		if ("chatcopy".equals(mode)) {
 			LegacyChatCopyTest.start();
 			return;
@@ -52,6 +72,40 @@ final class LegacySelfTest {
 			LegacyKeysTest.start();
 			return;
 		}
+		//#if DEV_SCENES
+		//#if MC < 1.9
+		if ("ctmborders".equals(System.getProperty("arctic.selftest"))) {
+			GlassBordersTest.start();
+			return;
+		}
+		//#endif
+		if ("ctmframes".equals(System.getProperty("arctic.selftest"))) {
+			GlassFramesTest.start();
+			return;
+		}
+		if ("ctmlines".equals(System.getProperty("arctic.selftest"))) {
+			GlassFramesTest.startLines();
+			return;
+		}
+		//#endif
+		if ("ctm".equals(System.getProperty("arctic.selftest"))) {
+			//#if DEV_SCENES
+			GlassCtmTest.start();
+			//#endif
+			return;
+		}
+		if ("lightoverlay".equals(System.getProperty("arctic.selftest"))) {
+			//#if DEV_SCENES
+			LightOverlayTest.start();
+			//#endif
+			return;
+		}
+		if (LegacyFogTest.requested()) {
+			//#if DEV_SCENES
+			LegacyFogTest.start();
+			//#endif
+			return;
+		}
 		if (LegacyWorldTest.requested()) {
 			LegacyWorldTest.start();
 			return;
@@ -60,6 +114,12 @@ final class LegacySelfTest {
 			LegacyFitTest.start();
 			return;
 		}
+		//#if DEV
+		if (LegacyBadgeTest.requested()) {
+			LegacyBadgeTest.start();
+			return;
+		}
+		//#endif
 		if (LegacyVisualsTest.requested()) {
 			LegacyVisualsTest.start();
 			return;

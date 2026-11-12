@@ -120,6 +120,10 @@ public final class Replays {
 	/** Keys never retrigger merely because a screen opened or closed while held. */
 	public static void tick(boolean screenOpen) {
 		boolean atTitle = platform.atTitleScreen();
+		// Switching Replay on while already in a world starts its buffer from that moment.
+		boolean enabled = ArcticClient.config().replayEnabled;
+		if (enabled && !enabledSeen && viewer == null && platform.inWorld()) bufferInWorld();
+		enabledSeen = enabled;
 		if (viewer == null && platform.inWorld()) worldTake = recorder == null ? null : recorder.current();
 		// Minecraft can discard a connection without ticking handleDisconnection again.
 		// Only a return from a world ends it: 1.8.9 also shows the title during login.
@@ -146,6 +150,7 @@ public final class Replays {
 		worldTake = null;
 	}
 
+	private static boolean enabledSeen = true;
 	public static boolean recording() { return recorder != null && recorder.recording(); }
 	public static int pendingSaves() { return recorder == null ? 0 : recorder.pendingSaves(); }
 	public static String recordingStatus() {
@@ -157,8 +162,19 @@ public final class Replays {
 		if (recorder == null || recorder.current() == null) return "Join a world to buffer instant clips";
 		return recorder.bufferReady() ? "Instant clips ready" : "Replay buffer stopped";
 	}
+	/** In a world with nothing buffering it (Replay was off at the join, or switched on since): start the buffer now. */
+	private static boolean bufferInWorld() {
+		if (recorder == null) return false;
+		if (recorder.current() != null) return true;
+		if (platform == null || viewer != null || !platform.inWorld() || !ArcticClient.config().replayEnabled) return false;
+		boolean started = platform.beginReplayInWorld();
+		if (started) worldTake = recorder.current();
+		return started;
+	}
+
 	public static void toggleRecording() {
 		if (recorder == null) return;
+		bufferInWorld();
 		if (recorder.stopRecording()) {
 			if (liveVideo != null) liveVideo.stopRecording();
 			Notices.post("Saving recording", "Instant clips are still available."); return;
@@ -167,7 +183,9 @@ public final class Replays {
 				file == null ? "Couldn't write the file." : file.getName()))) {
 			if (liveVideo != null && ArcticClient.config().replayVideoEnabled) liveVideo.startRecording();
 			Notices.post("Recording started", "Press " + platform.keyLabel(ArcticClient.config().replayRecordKey) + " to stop. Instant clips work separately.");
-		} else Notices.post("Cannot start recording", "Join a world first, or check the replay buffer notice.");
+		} else Notices.post("Cannot start recording", !platform.inWorld() ? "Join a world first."
+				: !ArcticClient.config().replayEnabled ? "Replay is off. Turn it on in the Replays tab."
+				: "This version can't record a world you were already in. Rejoin it, then record.");
 	}
 
 	public static int queuedVideos() { return liveVideo == null ? 0 : liveVideo.pending(); }
@@ -181,6 +199,7 @@ public final class Replays {
 
 	/** Save the recent window with a thumbnail; never alter an active manual recording. */
 	public static void saveMoment() {
+		bufferInWorld();
 		if (recorder == null || recorder.current() == null) {
 			Notices.post("Nothing to save yet", "Join a world to start the instant replay buffer.");
 			return;
@@ -228,6 +247,7 @@ public final class Replays {
 		Notices.post("Opening replay", file.getName().replace(".mcpr", ""));
 		Thread t = new Thread(() -> {
 			try {
+				long began = System.nanoTime();
 				final ReplayData data = ReplayData.open(file, new File(gameDir, ".arctic/replay-cache"));
 				if (data.meta.protocol != 0 && backend.protocol() != 0 && data.meta.protocol != backend.protocol()) {
 					data.close();
@@ -235,9 +255,20 @@ public final class Replays {
 							+ ". Open it from an instance of that version."));
 					return;
 				}
+				long unpacked = System.nanoTime();
+				// Sorted before joining, so the opening world can be applied like a jump (see ReplayViewer).
+				ReplayBackend.Classifier classifier = backend.classifier(data);
+				if (classifier != null) data.classify(classifier);
+				platform.log(false, "replay: opened " + file.getName() + ": " + data.count() + " packets, unpacked in "
+						+ (unpacked - began) / 1_000_000 + " ms, sorted in " + (System.nanoTime() - unpacked) / 1_000_000 + " ms");
 				platform.runOnGameThread(() -> start(data, then));
 			} catch (IOException | RuntimeException e) {
 				platform.runOnGameThread(() -> openFailed(String.valueOf(e.getMessage())));
+			} catch (OutOfMemoryError e) {
+				// Never leave "Opening replay" up forever: the next Watch must still work.
+				platform.runOnGameThread(() -> openFailed("Not enough memory to open it. Give the game more memory and try again."));
+			} catch (Throwable e) {
+				platform.runOnGameThread(() -> openFailed(String.valueOf(e)));
 			}
 		}, "arctic-replay-open");
 		t.setDaemon(true);
@@ -261,6 +292,7 @@ public final class Replays {
 		String error = v.begin();
 		if (error != null) {
 			viewer = null;
+			try { data.close(); } catch (IOException ignored) { /* the cache is cleared next time */ }
 			Notices.post("Can't open this replay", error);
 			return;
 		}
@@ -285,6 +317,8 @@ public final class Replays {
 		if (v != null) {
 			ReplayClock.stop();
 			backend.cleanView(false);
+			// Release the unpacked file (Windows can't delete or replace it while open).
+			try { v.data.close(); } catch (IOException ignored) { /* cleared on the next open */ }
 		}
 	}
 
@@ -301,6 +335,11 @@ public final class Replays {
 			// release the free camera. Read the actual screen every rendered frame.
 			viewer.screenOpen(screenOpen);
 			viewer.frame();
+			String failure = viewer.failure();
+			if (failure != null) {
+				Notices.post("Can't open this replay", failure);
+				stopWatching();
+			}
 		} finally {
 			inFrame = false;
 		}
@@ -390,8 +429,22 @@ public final class Replays {
 		}
 	}
 
-	/** Saved replays, newest first. */
-	public static List<Info> list() {
+	/** The last scan: menus ask every tick, and on Windows each file's details cost a system call or two. */
+	private static List<Info> listed;
+	private static long listedAt;
+	private static final long LIST_REFRESH_NANOS = 1_000_000_000L;
+
+	/** Saved replays, newest first (rescanned at most once a second). */
+	public static synchronized List<Info> list() {
+		long now = System.nanoTime();
+		if (listed == null || now - listedAt >= LIST_REFRESH_NANOS) {
+			listed = Collections.unmodifiableList(scan());
+			listedAt = now;
+		}
+		return listed;
+	}
+
+	private static List<Info> scan() {
 		File[] files = folder().listFiles((dir, name) -> name.endsWith(".mcpr"));
 		List<Info> out = new ArrayList<Info>();
 		if (files == null) {
@@ -453,7 +506,11 @@ public final class Replays {
 	public static boolean delete(Info info) {
 		removeExport(info.file);
 		new File(gameDir, ".arctic/replay-paths/" + info.file.getName() + ".json").delete();
-		return info.file.delete();
+		boolean deleted = info.file.delete();
+		synchronized (Replays.class) {
+			listed = null;
+		}
+		return deleted;
 	}
 
 	// ---- Camera paths (kept beside the replay, per file) ---------------------------------
