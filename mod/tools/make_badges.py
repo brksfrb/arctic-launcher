@@ -38,7 +38,9 @@ for name, style in STYLES:
             contents.insert(1, dict(type='bitmap', file='arctic:font/speaker.png', height=8, ascent=7, chars=['\uE001']))
         (ROOT / 'font' / (font + '.json')).write_text(json.dumps(dict(providers=contents), indent=2) + '\n')
         providers.append(dict(bitmap, chars=[chr(0xE0A0 + style + (0x10 if tab else 0))]))
-providers.append(dict(type='space', advances={'\uE0AF': 1}))
+# Versions before 1.16 draw the player list's picture as a default-font character, and a text's shadow with the
+# picture's own width but nothing in it (BadgeShadow13Mixin): the tab picture is 9 wide plus one advance.
+providers.append(dict(type='space', advances={'\uE0AF': 1, '\uE0C0': 10}))
 (ASSETS / 'minecraft/font/default.json').write_text(json.dumps(dict(providers=providers), indent=2) + '\n')
 for old in ['badge1', 'badge2', 'badge3', 'badge_shield', 'badge_shield_tab', 'badge_shield_tag']:
     for path in [ROOT / (old+'.png'), ROOT / 'font' / (old+'.json'), ROOT / 'textures/font' / (old+'.png')]:
