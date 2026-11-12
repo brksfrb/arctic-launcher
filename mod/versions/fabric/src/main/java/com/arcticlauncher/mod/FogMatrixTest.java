@@ -78,10 +78,12 @@ final class FogMatrixTest {
 			command("fill -10 94 " + z0 + " 10 99 " + (z0 + 63) + " minecraft:stone");
 			command("fill -10 100 " + z0 + " 10 112 " + (z0 + 63) + " minecraft:air");
 		}
-		for (int z = 30, i = 0; z <= 110; z += 16, i++) {
+		for (int z = 30, i = 0; z <= 62; z += 16, i++) {
 			int x = i % 2 == 0 ? -6 : 3;
 			command("fill " + x + " 100 " + z + " " + (x + 3) + " 110 " + z + " minecraft:magenta_wool");
 		}
+		// A wall near the end of the view (render distance 6 = 96 blocks): the fog shows as it fading into the sky.
+		command("fill -10 100 86 10 125 87 minecraft:magenta_wool");
 	}
 
 	private static void scene() {
