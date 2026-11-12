@@ -650,7 +650,9 @@ fn token_for_locked(dirs: &DataDirs, base: &str, account: &Account) -> Result<St
         save_json(&path, &creds)?;
     }
     let entry = creds.accounts.entry(account.uuid.clone()).or_default();
-    if let Some(token) = &entry.token
+    // An empty token is no token: where the secret key file can't be written (read-only or missing data
+    // folder) a saved token reads back empty, and sending `Bearer ` gets a 401 on every look request.
+    if let Some(token) = entry.token.as_ref().filter(|t| !t.is_empty())
         && entry.expires > now_secs() + TOKEN_MARGIN_SECS
         && entry.server == base
     {
@@ -1211,6 +1213,28 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let dirs = DataDirs::new(dir.path().join("data"));
         (dir, dirs)
+    }
+
+    #[test]
+    fn a_saved_token_that_reads_back_empty_is_never_reused() {
+        let (_dir, dirs) = key_dirs();
+        let account = crate::auth::offline::create("Alex").unwrap();
+        // Nothing listens here: any sign-in attempt fails, a reused token would not.
+        let base = "http://127.0.0.1:1";
+        let path = credentials_path(&dirs);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        // What a token saved while the secret key file was unwritable looks like on disk.
+        let creds = format!(
+            r#"{{"accounts":{{"{}":{{"token":"local1:","expires":{},"server":"{base}"}}}}}}"#,
+            account.uuid,
+            now_secs() + 7 * 24 * 3600
+        );
+        std::fs::write(&path, creds).unwrap();
+        let result = token_for_locked(&dirs, base, &account);
+        assert!(
+            result.is_err(),
+            "an empty token was handed out as a session: {result:?}"
+        );
     }
 
     #[test]
