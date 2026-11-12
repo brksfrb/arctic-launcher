@@ -11,7 +11,9 @@
 		"EditBoxMixin",<% } %>
 <% if (widgets13) { %>		"ScreenButtonsAccess",
 <% } %>		"AbstractClientPlayerMixin",
-		"FontMaskMixin",
+		"FontMaskMixin",<% if (badgeShadow) { %>
+		"BadgeShadowMixin",<% } %><% if (badgeShadow13) { %>
+		"BadgeShadow13Mixin",<% } %>
 <% if (emoteOldGlyph) { %>		"EmoteGlyphMixin",
 <% } %>
 		"ClientBrandMixin",
