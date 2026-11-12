@@ -47,17 +47,128 @@ pub struct Tray {
 #[cfg(not(windows))]
 static TRIED: AtomicBool = AtomicBool::new(false);
 
+/// Linux: the icon being made, on its own thread.
+///
+/// Creating it talks to D-Bus, and ksni's blocking `spawn` does not always come back: on a
+/// session whose StatusNotifier host never answers it parks whoever called it, for good. That
+/// caller used to be the UI thread, inside the first `logic` pass — before a single frame had
+/// been painted. eframe keeps the window hidden until the first frame (to avoid a white flash)
+/// and un-hides it in `post_rendering`, so the launcher sat there with no window at all, on
+/// Wayland and on X11 alike, until the tray was switched off.
+#[cfg(not(windows))]
+static MAKING: std::sync::Mutex<Option<Making>> = std::sync::Mutex::new(None);
+
+/// How long to wait before saying out loud that the tray is being slow.
+#[cfg(not(windows))]
+const TRAY_SLOW: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// When to stop waiting altogether. ksni's `spawn` can park its thread for good, and looking for
+/// an answer that is never coming would keep the launcher awake four times a second for the rest
+/// of the session — on a handheld, that is a flat battery for a missing icon. The thread is left
+/// where it is (one parked thread costs nothing) and the launcher goes on without a tray.
+#[cfg(not(windows))]
+const TRAY_GIVE_UP: std::time::Duration = std::time::Duration::from_secs(30);
+
+#[cfg(not(windows))]
+struct Making {
+    /// The finished icon, or `None` when this session has no tray to put it in.
+    icon: Receiver<Option<imp::Handle>>,
+    /// Made up front, so menu clicks have somewhere to go the moment the icon is live.
+    actions: Receiver<Action>,
+    since: std::time::Instant,
+    said_slow: bool,
+}
+
 impl Tray {
-    /// Create the tray icon (on the UI thread, after the window exists).
+    /// Ask for the tray icon.
+    ///
+    /// Windows builds it here and hands it back at once. Linux cannot: see [`MAKING`]. There the
+    /// first call starts a thread and returns `None`, and a later call returns the icon once it
+    /// is live — so the window is never waiting on a tray.
+    #[cfg(windows)]
     pub fn new(ctx: &egui::Context) -> Option<Self> {
-        #[cfg(not(windows))]
-        if TRIED.swap(true, Ordering::Relaxed) {
-            return None;
-        }
         let (tx, rx) = mpsc::channel();
         imp::create(ctx, tx).map(|_icon| Tray { _icon, actions: rx })
     }
+
+    #[cfg(not(windows))]
+    pub fn new(ctx: &egui::Context) -> Option<Self> {
+        use std::sync::mpsc::TryRecvError;
+
+        let mut slot = MAKING.lock().ok()?;
+        if slot.is_none() {
+            if TRIED.swap(true, Ordering::Relaxed) {
+                // Already been through this: there is no tray here, or there is one already.
+                return None;
+            }
+            let (action_tx, actions) = mpsc::channel();
+            let (icon_tx, icon) = mpsc::channel();
+            let thread_ctx = ctx.clone();
+            std::thread::Builder::new()
+                .name("tray".to_owned())
+                .spawn(move || {
+                    // Whatever this does — answer, fail, or never return — the UI thread is
+                    // already drawing.
+                    let _ = icon_tx.send(imp::create(&thread_ctx, action_tx));
+                })
+                .map_err(|e| log::warn!("no thread for the tray icon: {e}"))
+                .ok()?;
+            *slot = Some(Making {
+                icon,
+                actions,
+                since: std::time::Instant::now(),
+                said_slow: false,
+            });
+            ctx.request_repaint_after(TRAY_POLL);
+            return None;
+        }
+
+        let ready = slot.as_mut().and_then(|making| match making.icon.try_recv() {
+            Ok(icon) => Some(icon),
+            // The thread is gone without an answer; treat it as no tray.
+            Err(TryRecvError::Disconnected) => Some(None),
+            Err(TryRecvError::Empty) => {
+                let waited = making.since.elapsed();
+                if waited > TRAY_GIVE_UP {
+                    log::warn!("the system tray never answered in {waited:?}: carrying on without it");
+                    // Same as having no tray at all, so the polling stops here.
+                    return Some(None);
+                }
+                if !making.said_slow && waited > TRAY_SLOW {
+                    making.said_slow = true;
+                    log::warn!(
+                        "the system tray is taking its time ({waited:?} so far); the launcher carries on without it"
+                    );
+                }
+                None
+            }
+        });
+
+        match ready {
+            // Still working: come back for it.
+            None => {
+                ctx.request_repaint_after(TRAY_POLL);
+                None
+            }
+            // No tray in this session. `TRIED` keeps it from being asked again.
+            Some(None) => {
+                *slot = None;
+                None
+            }
+            Some(Some(_icon)) => {
+                let making = slot.take()?;
+                Some(Tray {
+                    _icon,
+                    actions: making.actions,
+                })
+            }
+        }
+    }
 }
+
+/// How often to look for the finished icon while it is being made.
+#[cfg(not(windows))]
+const TRAY_POLL: std::time::Duration = std::time::Duration::from_millis(250);
 
 #[cfg(windows)]
 mod imp {
