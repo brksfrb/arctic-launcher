@@ -68,16 +68,18 @@ final class FogMatrixTest {
 		step(3000, () -> shot(place + "-2-push"));
 		step(100, () -> set(true, true, 3));
 		step(3000, () -> shot(place + "-3-nofog"));
+		step(100, () -> set(false, false, 3));
+		step(2500, () -> shot(place + "-4-off-again"));
 	}
 
-	/** A stone floor and magenta pillars on alternating sides of the view line, 24 blocks apart out to 168. */
+	/** A stone floor and magenta pillars on alternating sides of the view line, 24 blocks apart out to 110. */
 	private static void pillars() {
 		for (int z0 = -12; z0 < 180; z0 += 64) {
 			command("fill -10 94 " + z0 + " 10 99 " + (z0 + 63) + " minecraft:stone");
 			command("fill -10 100 " + z0 + " 10 112 " + (z0 + 63) + " minecraft:air");
 		}
-		for (int z = 24, i = 0; z <= 168; z += 24, i++) {
-			int x = i % 2 == 0 ? -7 : 4;
+		for (int z = 30, i = 0; z <= 110; z += 16, i++) {
+			int x = i % 2 == 0 ? -6 : 3;
 			command("fill " + x + " 100 " + z + " " + (x + 3) + " 110 " + z + " minecraft:magenta_wool");
 		}
 	}
