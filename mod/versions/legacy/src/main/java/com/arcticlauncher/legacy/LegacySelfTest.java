@@ -51,6 +51,10 @@ final class LegacySelfTest {
 			LegacyStampWidthTest.start();
 			return;
 		}
+		if ("freezechat".equals(mode)) {
+			LegacyFreezeChatTest.start();
+			return;
+		}
 		if ("chatcopy".equals(mode)) {
 			LegacyChatCopyTest.start();
 			return;

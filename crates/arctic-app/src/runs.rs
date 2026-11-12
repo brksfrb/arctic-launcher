@@ -111,6 +111,11 @@ impl Run {
         if let Some(dump) = &hang {
             lines.push(dump);
         }
+        // Short freezes the in-game watchdog recorded this run (the same report, consent and scrubbing).
+        let freezes = fresh_freeze_files(&self.game_dir, self.started);
+        for freeze in &freezes {
+            lines.push(freeze);
+        }
         // The game's own log file often says more than what it printed (a mod that quits quietly writes
         // only there), and Java writes a file of its own when it dies.
         let own_log = latest_log_tail(&self.game_dir, self.started);
@@ -219,6 +224,32 @@ fn fresh_diagnostic_sidecar(
         return None;
     }
     std::fs::read_to_string(path).ok()
+}
+
+/// The newest short-freeze files (`logs/arctic-freezes/`) this run wrote, each cut to its first lines.
+fn fresh_freeze_files(game_dir: &std::path::Path, since: SystemTime) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(game_dir.join("logs").join("arctic-freezes")) else {
+        return Vec::new();
+    };
+    let mut files: Vec<(SystemTime, std::path::PathBuf)> = entries
+        .filter_map(Result::ok)
+        .filter(|e| e.file_name().to_string_lossy().starts_with("freeze-"))
+        .filter_map(|e| {
+            let modified = e.metadata().ok()?.modified().ok()?;
+            (modified >= since).then(|| (modified, e.path()))
+        })
+        .collect();
+    files.sort_by(|a, b| b.0.cmp(&a.0));
+    files
+        .into_iter()
+        .take(2)
+        .filter_map(|(_, path)| {
+            let text = std::fs::read_to_string(&path).ok()?;
+            let name = path.file_name()?.to_string_lossy().into_owned();
+            let head: String = text.lines().take(120).collect::<Vec<_>>().join("\n");
+            Some(format!("---- logs/arctic-freezes/{name} ----\n{head}"))
+        })
+        .collect()
 }
 
 /// Lines of `logs/latest.log` that are looked at.
@@ -750,6 +781,26 @@ mod tests {
         assert!(
             fresh_diagnostic_sidecar(dir.path(), started, "arctic-mixin-failure.txt").is_none()
         );
+    }
+
+    #[test]
+    fn this_runs_freeze_files_ride_along_with_the_crash_report() {
+        let dir = tempfile::tempdir().unwrap();
+        let freezes = dir.path().join("logs").join("arctic-freezes");
+        std::fs::create_dir_all(&freezes).unwrap();
+        let before = SystemTime::now() - std::time::Duration::from_secs(60);
+        std::fs::write(
+            freezes.join("freeze-20260101-000000.txt"),
+            "Arctic: game froze for 5.1s",
+        )
+        .unwrap();
+        std::fs::write(freezes.join("notes.txt"), "not a freeze file").unwrap();
+        let found = fresh_freeze_files(dir.path(), before);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].contains("game froze for 5.1s"));
+        // A freeze from an earlier run is not this run's.
+        let after = SystemTime::now() + std::time::Duration::from_secs(60);
+        assert!(fresh_freeze_files(dir.path(), after).is_empty());
     }
 
     #[test]

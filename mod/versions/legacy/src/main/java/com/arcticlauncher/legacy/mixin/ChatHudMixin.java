@@ -181,6 +181,12 @@ abstract class ChatHudMixin {
 	@ModifyVariable(method = "addMessage(Lnet/minecraft/text/Text;I)V", at = @At("HEAD"), argsOnly = true)
 	private Text arctic$chat(Text message) {
 		arctic$restore();
+		com.arcticlauncher.client.FreezeWatchdog.note("chat line, chars", message.asUnformattedString().length());
+		// Blank lines (a server clearing the chat) stay plain: no stack, timestamp, mention or archive entry.
+		if (com.arcticlauncher.client.feature.ChatStacker.isBlank(message.asUnformattedString())) {
+			arctic$stacker.reset();
+			return message;
+		}
 		if (ArcticClient.persistentChat() != null) {
 			if (ArcticClient.persistentChat().restoring()) {
 				return LegacyHooks.restoredChat(message, ArcticClient.persistentChat().restoringTime());
