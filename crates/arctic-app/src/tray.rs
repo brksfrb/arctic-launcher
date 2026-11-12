@@ -62,6 +62,13 @@ static MAKING: std::sync::Mutex<Option<Making>> = std::sync::Mutex::new(None);
 #[cfg(not(windows))]
 const TRAY_SLOW: std::time::Duration = std::time::Duration::from_secs(5);
 
+/// When to stop waiting altogether. ksni's `spawn` can park its thread for good, and looking for
+/// an answer that is never coming would keep the launcher awake four times a second for the rest
+/// of the session — on a handheld, that is a flat battery for a missing icon. The thread is left
+/// where it is (one parked thread costs nothing) and the launcher goes on without a tray.
+#[cfg(not(windows))]
+const TRAY_GIVE_UP: std::time::Duration = std::time::Duration::from_secs(30);
+
 #[cfg(not(windows))]
 struct Making {
     /// The finished icon, or `None` when this session has no tray to put it in.
@@ -121,11 +128,16 @@ impl Tray {
             // The thread is gone without an answer; treat it as no tray.
             Err(TryRecvError::Disconnected) => Some(None),
             Err(TryRecvError::Empty) => {
-                if !making.said_slow && making.since.elapsed() > TRAY_SLOW {
+                let waited = making.since.elapsed();
+                if waited > TRAY_GIVE_UP {
+                    log::warn!("the system tray never answered in {waited:?}: carrying on without it");
+                    // Same as having no tray at all, so the polling stops here.
+                    return Some(None);
+                }
+                if !making.said_slow && waited > TRAY_SLOW {
                     making.said_slow = true;
                     log::warn!(
-                        "the system tray is taking its time ({:?} so far); the launcher carries on without it",
-                        making.since.elapsed()
+                        "the system tray is taking its time ({waited:?} so far); the launcher carries on without it"
                     );
                 }
                 None
