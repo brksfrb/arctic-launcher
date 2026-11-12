@@ -216,7 +216,7 @@ pub struct ArcticApp {
     pub(crate) storage: crate::ui::StorageUi,
     pub(crate) quick_tips: crate::ui::QuickTips,
     pub(crate) skins: crate::ui::SkinsUi,
-    devshot: crate::devshot::DevShot,
+    pub(crate) devshot: crate::devshot::DevShot,
     /// Command lines from later starts (see `single_instance`).
     forwarded: std::sync::mpsc::Receiver<Vec<String>>,
     tray: Option<crate::tray::Tray>,
@@ -1353,7 +1353,8 @@ impl ArcticApp {
         // SAFETY: a plain string query on the context eframe is drawing with.
         let name = unsafe { gl.get_parameter_string(eframe::glow::RENDERER) };
         self.gl_checked = true;
-        self.software_gl = is_software_renderer(&name);
+        self.software_gl = is_software_renderer(&name)
+            && !(crate::devshot::enabled() && std::env::var_os("ARCTIC_DEVSHOT_ANIM").is_some());
         log::info!(
             "graphics: {name}{}",
             if self.software_gl {
