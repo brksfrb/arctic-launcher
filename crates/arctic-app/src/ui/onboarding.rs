@@ -524,7 +524,7 @@ impl ArcticApp {
         if o.heard.is_some_and(|i| HEARD[i].0 == "other") {
             ui.add_space(10.0);
             ui.add(
-                egui::TextEdit::singleline(&mut o.heard_other)
+                crate::widgets::text_field(&mut o.heard_other)
                     .hint_text("Where?")
                     .char_limit(HEARD_OTHER_MAX)
                     .desired_width(260.0),

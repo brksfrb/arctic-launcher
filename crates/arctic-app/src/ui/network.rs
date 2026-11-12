@@ -51,7 +51,7 @@ impl ArcticApp {
                 ui.add(
                     widgets::text_field(&mut draft.host)
                         .hint_text("127.0.0.1 or proxy.example.com")
-                        .desired_width(220.0),
+                        .desired_width(widgets::INPUT_WIDTH),
                 );
                 ui.label("Port");
                 ui.add(egui::DragValue::new(&mut draft.port).range(1..=u16::MAX));
@@ -61,14 +61,14 @@ impl ArcticApp {
                 ui.add(
                     widgets::text_field(&mut draft.username)
                         .hint_text("optional")
-                        .desired_width(160.0),
+                        .desired_width(widgets::INPUT_WIDTH),
                 );
                 ui.label("Password");
                 ui.add(
                     widgets::text_field(&mut draft.password)
                         .password(true)
                         .hint_text("optional")
-                        .desired_width(160.0),
+                        .desired_width(widgets::INPUT_WIDTH),
                 );
             });
         });

@@ -186,7 +186,7 @@ impl ArcticApp {
         }
         ui.add_space(8.0);
         if state.applying {
-            ui.horizontal(|ui| {
+            crate::widgets::row(ui, |ui| {
                 ui.spinner();
                 let stage = self
                     .inst

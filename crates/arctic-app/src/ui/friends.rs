@@ -238,7 +238,7 @@ impl ArcticApp {
                     ui.add(
                         widgets::text_field(&mut self.friends.name_edit)
                             .char_limit(24)
-                            .desired_width(180.0),
+                            .desired_width(widgets::INPUT_WIDTH),
                     );
                     let changed = self.friends.name_edit.trim() != profile.name
                         && !self.friends.name_edit.trim().is_empty();
@@ -419,7 +419,7 @@ impl ArcticApp {
             ui.add(
                 widgets::text_field(&mut self.friends.restore_code)
                     .hint_text("xxxx-xxxx-xxxx-xxxx")
-                    .desired_width(200.0),
+                    .desired_width(widgets::INPUT_WIDTH),
             );
             let ready = !self.friends.restore_code.trim().is_empty() && !self.friends.busy;
             if ui

@@ -419,7 +419,7 @@ impl ArcticApp {
         }
         let catalog = match &self.bedrock.catalog {
             None => {
-                ui.horizontal(|ui| {
+                crate::widgets::row(ui, |ui| {
                     ui.spinner();
                     ui.label(RichText::new("Loading the version list…").color(p.muted));
                 });
@@ -659,7 +659,8 @@ impl ArcticApp {
                     .filter(|(path, _)| *path == world.path);
                 match renaming {
                     Some((_, name)) => {
-                        let field = ui.add(widgets::text_field(name).desired_width(220.0));
+                        let field =
+                            ui.add(widgets::text_field(name).desired_width(widgets::INPUT_WIDTH));
                         field.request_focus();
                         if field.lost_focus() {
                             let name = name.clone();
@@ -892,12 +893,12 @@ impl ArcticApp {
             ui.add(
                 widgets::text_field(&mut self.bedrock.server_name)
                     .hint_text("Name")
-                    .desired_width(150.0),
+                    .desired_width(widgets::INPUT_WIDTH),
             );
             let field = ui.add(
                 widgets::text_field(&mut self.bedrock.server_address)
                     .hint_text("play.example.net:19132")
-                    .desired_width(220.0),
+                    .desired_width(widgets::INPUT_WIDTH),
             );
             add = widgets::button(ui, p, Some(Icon::Plus), "Add server", true).clicked()
                 || (field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));

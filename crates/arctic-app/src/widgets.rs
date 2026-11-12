@@ -484,6 +484,12 @@ fn paint_emblem_with_hover(
 /// Height of text fields, and of controls placed next to them.
 pub const FIELD_HEIGHT: f32 = 36.0;
 
+/// Spacing scale: gap between controls in one row / between stacked rows.
+pub const GAP: f32 = 8.0;
+
+/// Minimum width of a text input that holds a name or a short search.
+pub const INPUT_WIDTH: f32 = 240.0;
+
 /// A row as tall as a text field, with its contents vertically centered
 /// (so a label lines up with the field next to it).
 pub fn field_row<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> egui::InnerResponse<R> {
