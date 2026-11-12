@@ -54,13 +54,18 @@ final class LegacyWorldTest {
 
 	/** A fresh creative test world; {@code then} runs (game thread) a few seconds after it's loaded. */
 	static void createTestWorld(Runnable then) {
+		createTestWorld(then, System.currentTimeMillis());
+	}
+
+	/** The same with a chosen seed (same terrain every run). */
+	static void createTestWorld(Runnable then, long seed) {
 		MinecraftClient mc = MinecraftClient.getInstance();
 		deleteOld(new File(mc.runDirectory, "saves"));
 		String name = PREFIX + System.currentTimeMillis();
 		//#if MC >= 1.10
-		LevelInfo info = new LevelInfo(System.currentTimeMillis(), net.minecraft.world.GameMode.CREATIVE, true, false, LevelGeneratorType.DEFAULT)
+		LevelInfo info = new LevelInfo(seed, net.minecraft.world.GameMode.CREATIVE, true, false, LevelGeneratorType.DEFAULT)
 		//#else
-		LevelInfo info = new LevelInfo(System.currentTimeMillis(), LevelInfo.GameMode.CREATIVE, true, false, LevelGeneratorType.DEFAULT)
+		LevelInfo info = new LevelInfo(seed, LevelInfo.GameMode.CREATIVE, true, false, LevelGeneratorType.DEFAULT)
 		//#endif
 				.enableCommands();
 		ArcticLegacy.LOG.info("worldtest: creating {}", name);

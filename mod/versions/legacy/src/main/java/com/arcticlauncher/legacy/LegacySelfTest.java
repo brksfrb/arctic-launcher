@@ -84,6 +84,12 @@ final class LegacySelfTest {
 			//#endif
 			return;
 		}
+		if (LegacyFogTest.requested()) {
+			//#if DEV_SCENES
+			LegacyFogTest.start();
+			//#endif
+			return;
+		}
 		if (LegacyWorldTest.requested()) {
 			LegacyWorldTest.start();
 			return;
