@@ -39,6 +39,10 @@ pub enum Icon {
     Import,
     /// A block seen from a corner (Bedrock Edition).
     Cube,
+    /// Closed padlock.
+    Lock,
+    /// Padlock with the shackle open.
+    Unlock,
 }
 
 /// Draw `icon` centered in `rect` (square-ish, ~16-24 px works best).
@@ -319,6 +323,19 @@ pub fn draw(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
             line(left, middle);
             line(right, middle);
             line(middle, middle + vec2(0.0, 0.82));
+        }
+        Icon::Lock | Icon::Unlock => {
+            let body = Rect::from_min_max(c + vec2(-0.6, -0.05) * s, c + vec2(0.6, 0.8) * s);
+            painter.rect_filled(body, 2.0, color);
+            // Shackle: a flat-bottomed arch; open = right leg lifted clear of the body.
+            let right_leg = if icon == Icon::Lock { -0.05 } else { -0.35 };
+            let mut pts = vec![vec2(-0.38, -0.05), vec2(-0.38, -0.45)];
+            pts.extend((0..=8).map(|i| {
+                let a = std::f32::consts::PI * (1.0 + i as f32 / 8.0);
+                vec2(a.cos() * 0.38, -0.45 + a.sin() * 0.38)
+            }));
+            pts.push(vec2(0.38, right_leg));
+            poly(&pts, false);
         }
     }
 }
