@@ -24,7 +24,13 @@ const THEMES: [(ThemeMode, &str); 4] = [
 ];
 
 /// The groups of the Settings page: one is shown at a time (picked with the chips at the top).
-const GROUPS: [&str; 4] = ["General", "Game", "Network & voice", "Data"];
+const GROUPS: [&str; 5] = ["General", "Game", "Network & voice", "Data", "Experiments"];
+
+/// Versions the Rust client can run: 1.8.9 is Arctic's own rewrite, 26.3 is Horizon's.
+const RUST_CLIENT_VERSIONS: [&str; 2] = ["1.8.9", "26.3"];
+
+/// Whether a Rust client is actually here yet. One line to flip when it is.
+const RUST_CLIENT_READY: bool = false;
 
 thread_local! {
     /// The group being shown (the UI runs on one thread).
@@ -37,6 +43,7 @@ fn group_of(title: &str) -> usize {
         "Appearance" | "Arctic Client" | "Launching" | "Updates" => 0,
         "Memory" | "Versions" | "Game window" | "Java" => 1,
         "Network" | "Voice chat" => 2,
+        "Experiments" => 4,
         _ => 3,
     }
 }
@@ -60,6 +67,11 @@ impl ArcticApp {
         let mut restart_update = false;
         let update_installed = matches!(self.update, crate::app::UpdateState::Installed { .. });
         let software_gl = self.software_gl;
+        // Read from the set the app already keeps: `installed_versions` walks the disk, and this
+        // runs on every painted frame.
+        let rust_client_version = RUST_CLIENT_VERSIONS
+            .into_iter()
+            .find(|v| self.installed.contains(*v));
         let s = &mut self.settings;
 
         section(ui, p, "Appearance", |ui| {
@@ -161,6 +173,63 @@ impl ArcticApp {
                     "Downloads a few files at a time and starts the game at low priority, so a \
                      computer that freezes under load stays usable. Starting takes longer.",
                 );
+        });
+
+        section(ui, p, "Experiments", |ui| {
+            ui.label(
+                RichText::new("Unfinished work, off by default. Expect rough edges.")
+                    .small()
+                    .color(p.muted),
+            );
+            ui.add_space(6.0);
+
+            let usable = RUST_CLIENT_READY && rust_client_version.is_some();
+            ui.add_enabled_ui(usable, |ui| {
+                ui.checkbox(&mut s.rust_client, "Use rust rewrite for client");
+            });
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(
+                    "Runs Minecraft 1.8.9 rebuilt in Rust rather than starting the Java game. \
+                     Everything that plugs into Java — Fabric, Forge, OptiFine, mixins — is left \
+                     behind, because there is no JVM for it to plug into.",
+                )
+                .small()
+                .color(p.muted),
+            );
+
+            // Say which of the two reasons it is, rather than leaving a dead switch unexplained.
+            let why = if !RUST_CLIENT_READY {
+                Some(
+                    "Greyed out because the Rust client isn't finished yet. The switch is here so \
+                     you can see it coming; it will turn on by itself when the client can run."
+                        .to_owned(),
+                )
+            } else {
+                rust_client_version.is_none().then(|| {
+                    format!(
+                        "Greyed out because neither {} is installed. The Rust client reads the \
+                         game's textures and sounds from your own copy, so install one of those \
+                         versions first — downloading it is enough, you never have to start it.",
+                        RUST_CLIENT_VERSIONS.join(" nor ")
+                    )
+                })
+            };
+            if let Some(why) = why {
+                ui.add_space(4.0);
+                ui.label(RichText::new(why).small().color(p.warn));
+            }
+
+            ui.add_space(6.0);
+            ui.label(
+                RichText::new(
+                    "The idea and the groundwork are Horizon's (playhorizon.dev), who rebuilt \
+                     Minecraft Java Edition 26.3 in Rust. Arctic's client targets 1.8.9 and builds \
+                     on their MIT-licensed work.",
+                )
+                .small()
+                .color(p.muted),
+            );
         });
 
         section(ui, p, "Memory", |ui| {

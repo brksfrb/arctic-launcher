@@ -30,6 +30,10 @@ pub struct Settings {
     /// Prepare and start the game without using everything the PC has: a few downloads at a
     /// time and the game starting at low priority, for computers that freeze under load.
     pub gentle_launch: bool,
+    /// Experiment: start the game in the Rust client instead of the Java one. Off until the
+    /// Rust client can run the installed version, and ignored by every other code path.
+    #[serde(default)]
+    pub rust_client: bool,
     /// On by default: a launcher waiting in the tray restarts into an installed update by itself.
     /// Off: use the update on the next launch, or with "Restart now" in Settings.
     pub restart_hidden_for_updates: bool,
@@ -270,6 +274,7 @@ impl Default for Settings {
             fullscreen: false,
             game_maximized: false,
             gentle_launch: false,
+            rust_client: false,
             restart_hidden_for_updates: true,
             quiet_updates_migrated: true,
             extra_jvm_args: String::new(),
