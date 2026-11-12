@@ -25,19 +25,6 @@ enum Thumb {
     Failed,
 }
 
-/// How the big preview is opening or closing: the picture grows out of its cell and shrinks
-/// back into it.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-enum Motion {
-    #[default]
-    Settled,
-    Opening,
-    /// The picture has arrived and the dialog is fading in under it: the grown picture fades out
-    /// over that, so there is no empty frame between the two.
-    Handoff,
-    Closing,
-}
-
 /// The open picture's file and what its header says: its size, or why it can't be shown.
 type OpenCheck = (PathBuf, Result<(u32, u32), String>);
 
@@ -48,37 +35,14 @@ enum Load {
     Failed(String),
 }
 
-/// How long the picture takes to grow or shrink (seconds).
-const MOTION_SECS: f64 = 0.22;
-
-/// How long to wait for a picture that is still loading before showing the dialog (with a
-/// spinner) instead of the grow-out animation.
-const LOAD_PATIENCE_SECS: f64 = 1.5;
-
 /// A picture that still hasn't loaded after this long is given up on (an error instead of waiting
 /// for ever).
 const LOAD_GIVE_UP_SECS: f64 = 20.0;
 
-/// The dialog frame's inner margin (see `dialog_frame`).
-const DIALOG_PADDING: f32 = 22.0;
-
-/// How long the grown picture and the dialog cross-fade (seconds).
-const HANDOFF_SECS: f64 = 0.14;
-
-/// How much taller the dialog is than its picture (the bar below it and the frame), until it has been
-/// measured: the grown picture stops where the dialog's picture will be, so nothing jumps.
-const DEFAULT_DIALOG_EXTRA: f32 = 86.0;
-
 #[derive(Default)]
 pub struct ScreenshotsUi {
-    /// Where the open picture's cell is on screen (it grows from and shrinks back to it).
-    cell: Option<egui::Rect>,
-    motion: Motion,
-    motion_started: f64,
     /// When the picture was clicked open (egui time).
     opened_at: f64,
-    /// The dialog's height minus its picture's, measured the last time it was shown (0 = not yet).
-    dialog_extra: f32,
     shots: Option<Vec<Shot>>,
     thumbs: HashMap<PathBuf, Thumb>,
     /// Instance id to show, or every instance.
@@ -87,6 +51,7 @@ pub struct ScreenshotsUi {
     /// Whether the open picture can be drawn at all, worked out once per opening.
     open_check: Option<OpenCheck>,
     loading: bool,
+    dev_opened: bool,
     /// When the list was last asked for (egui time), to look again now and then.
     asked: f64,
 }
@@ -151,6 +116,7 @@ impl ArcticApp {
             for shot in shown {
                 self.thumbnail(ui, shot);
             }
+            self.devshot_open_viewer(ui);
         });
         self.screenshot_preview(ui.ctx());
     }
@@ -186,12 +152,32 @@ impl ArcticApp {
             .on_hover_text(format!("{} · {}", shot.instance_name, when(shot.taken)));
         if response.clicked() {
             self.shots.open = Some(shot.clone());
-            self.shots.cell = Some(response.rect);
-            self.shots.motion = Motion::Opening;
-            self.shots.motion_started = ui.input(|i| i.time);
-            self.shots.opened_at = self.shots.motion_started;
+            self.shots.opened_at = ui.input(|i| i.time);
             self.shots.open_check = None;
         }
+    }
+
+    /// Dev builds, `ARCTIC_DEVSHOT_FRAMES`: opens the first shot's viewer the way a click does, once
+    /// its thumbnail is drawn, and starts recording every frame.
+    fn devshot_open_viewer(&mut self, ui: &egui::Ui) {
+        if !crate::devshot::enabled() || !self.devshot.wants_frames() || self.shots.dev_opened {
+            return;
+        }
+        let Some(shot) = self.shots.shots.as_ref().and_then(|l| l.first()).cloned() else {
+            return;
+        };
+        let Some(Thumb::Ready(_)) = self.shots.thumbs.get(&shot.path) else {
+            return;
+        };
+        let now = ui.input(|i| i.time);
+        if now < 3.0 {
+            return;
+        }
+        self.shots.dev_opened = true;
+        self.shots.open = Some(shot);
+        self.shots.opened_at = now;
+        self.shots.open_check = None;
+        self.devshot.start_recording();
     }
 
     /// A screenshot's thumbnail at `size` (loaded in the background).
@@ -286,49 +272,15 @@ impl ArcticApp {
         }
     }
 
-    /// Where the dialog's picture sits: the dialog is centred with its bar below the picture, so the
-    /// picture's middle is half of that extra height above the screen's middle.
-    fn dialog_picture_center(&self, screen: egui::Rect) -> egui::Pos2 {
-        let extra = if self.shots.dialog_extra > 0.0 {
-            self.shots.dialog_extra
-        } else {
-            DEFAULT_DIALOG_EXTRA
-        };
-        screen.center() - vec2(0.0, extra / 2.0)
-    }
-
     /// How big the picture is drawn in `room`: its own shape (from the file's header, so it is the
     /// same before and after the picture has loaded), as large as fits. The dialog is sized from
     /// this, never from `room` itself: an unloaded picture must not leave a window-sized empty frame.
-    fn picture_size(&self, room: egui::Vec2, cell: Option<egui::Rect>) -> egui::Vec2 {
+    fn picture_size(&self, room: egui::Vec2) -> egui::Vec2 {
         let aspect = match &self.shots.open_check {
             Some((_, Ok((w, h)))) if *w > 0 && *h > 0 => *w as f32 / *h as f32,
-            _ => cell.map_or(16.0 / 9.0, |c| c.width() / c.height().max(1.0)),
+            _ => 16.0 / 9.0,
         };
         fit_aspect(room, aspect)
-    }
-
-    /// "Opening the picture…" while it loads; Esc gives up on it.
-    fn loading_note(&mut self, ctx: &egui::Context) {
-        let p = self.palette();
-        egui::Area::new(Id::new("shot_loading"))
-            .order(egui::Order::Foreground)
-            .anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0))
-            .interactable(false)
-            .show(ctx, |ui| {
-                super::instances::dialog_frame(p).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.spinner();
-                        ui.label(RichText::new("Opening the picture…").color(p.muted));
-                    });
-                });
-            });
-        ctx.request_repaint_after(std::time::Duration::from_millis(100));
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
-            self.shots.motion = Motion::Settled;
-            self.shots.open = None;
-            self.shots.cell = None;
-        }
     }
 
     fn screenshot_preview(&mut self, ctx: &egui::Context) {
@@ -340,53 +292,37 @@ impl ArcticApp {
         let uri = crate::widgets::file_uri(&shot.path);
         let room = ctx.content_rect().size() * vec2(0.9, 0.82) - vec2(0.0, 60.0);
         let mut load = self.preview_load(ctx, &shot.path, &uri, room);
-        let picture = self.picture_size(room, self.shots.cell);
+        let picture = self.picture_size(room);
         let waited = ctx.input(|i| i.time) - self.shots.opened_at;
         if matches!(load, Load::Pending) && waited > LOAD_GIVE_UP_SECS {
             load = Load::Failed("It is taking too long to load.".to_owned());
         }
-        // The picture grows out of its cell only once it can really be drawn. A dim backdrop with
-        // nothing on it (still loading, or unreadable) is what looked like a dark, dead screen.
-        match (&load, self.shots.motion) {
-            (Load::Ready, _) | (_, Motion::Settled) => {}
-            (Load::Pending, Motion::Opening)
-                if ctx.input(|i| i.time) - self.shots.opened_at < LOAD_PATIENCE_SECS =>
-            {
-                // Wait for it without dimming anything.
-                ctx.request_repaint_after(std::time::Duration::from_millis(30));
-                return;
-            }
-            (_, Motion::Closing) => {
-                // Nothing to shrink: just let go of it.
-                self.shots.motion = Motion::Settled;
-                self.shots.open = None;
-                self.shots.cell = None;
-                return;
-            }
-            _ => self.shots.motion = Motion::Settled,
-        }
+        self.devshot.frame_note(&format!(
+            "  viewer load={}",
+            match &load {
+                Load::Ready => "ready",
+                Load::Pending => "pending",
+                Load::Failed(_) => "failed",
+            },
+        ));
         if matches!(load, Load::Pending) {
-            // No dialog (and no dim) for a picture that isn't here yet: a frame sized for it, with
-            // nothing in it, is what a dead screen looks like. A small note says it is coming.
-            self.loading_note(ctx);
-            return;
+            ctx.request_repaint_after(std::time::Duration::from_millis(30));
         }
-        if matches!(self.shots.motion, Motion::Opening | Motion::Closing)
-            && self.animate_preview(ctx, &uri)
-        {
-            return;
-        }
-        if self.shots.motion == Motion::Handoff {
-            self.handoff_overlay(ctx, &uri);
-        }
-        let mut picture_height = 0.0;
-        let mut content_height = 0.0;
+        // The dialog is drawn from the very first frame, in its final size and place: the picture's
+        // shape comes from the file's header, so nothing waits for (or is re-measured after) the
+        // decode. Until the picture has loaded its thumbnail fills the same rectangle.
+        let placeholder = match self.shots.thumbs.get(&shot.path) {
+            Some(Thumb::Ready(uri)) => Some(uri.clone()),
+            _ => None,
+        };
+        let area = Modal::default_area(Id::new("shot_preview")).fade_in(false);
         let modal = Modal::new(Id::new("shot_preview"))
+            .area(area)
             .frame(super::instances::dialog_frame(p))
             .show(ctx, |ui| {
                 // As large as the window allows (room left for the bar below),
                 // keeping the shot's shape.
-                let (image_width, height) = if let Load::Failed(why) = &load {
+                let image_width = if let Load::Failed(why) = &load {
                     // Say what went wrong, in a box about the size of a small picture.
                     let size = vec2(room.x.min(520.0), room.y.min(260.0));
                     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
@@ -404,7 +340,7 @@ impl ArcticApp {
                             );
                         });
                     });
-                    (size.x, size.y)
+                    size.x
                 } else {
                     let view_id = Id::new(("shot_view", &shot.path));
                     let (mut zoom, mut center): (f32, egui::Vec2) = ui
@@ -414,21 +350,35 @@ impl ArcticApp {
                         })
                         .unwrap_or((1.0, vec2(0.5, 0.5)));
                     let half = 0.5 / zoom;
-                    let image = ui.add(
+                    // The rectangle is reserved at its final size whether or not the picture is
+                    // here yet.
+                    let (rect, image) = ui.allocate_exact_size(picture, Sense::click_and_drag());
+                    let image = ui.interact(rect, image.id, Sense::click_and_drag());
+                    if matches!(load, Load::Ready) {
                         egui::Image::new(uri.clone())
-                            .fit_to_exact_size(picture)
                             .uv(egui::Rect::from_min_max(
                                 (center - vec2(half, half)).to_pos2(),
                                 (center + vec2(half, half)).to_pos2(),
                             ))
                             .corner_radius(CornerRadius::same(8))
-                            .sense(Sense::click_and_drag()),
-                    );
+                            .paint_at(ui, rect);
+                    } else {
+                        ui.painter()
+                            .rect_filled(rect, CornerRadius::same(8), p.surface);
+                        if let Some(thumb) = &placeholder {
+                            egui::Image::new(thumb.clone())
+                                .corner_radius(CornerRadius::same(8))
+                                .paint_at(ui, rect);
+                        }
+                        ui.place(
+                            egui::Rect::from_center_size(rect.center(), vec2(24.0, 24.0)),
+                            egui::Spinner::new(),
+                        );
+                    }
                     zoom_and_pan(ui, &image, &mut zoom, &mut center);
                     ui.data_mut(|d| d.insert_temp(view_id, (zoom, center)));
-                    (image.rect.width(), image.rect.height())
+                    rect.width()
                 };
-                picture_height = height;
                 ui.set_max_width(image_width.max(480.0));
                 ui.add_space(8.0);
                 let name = shot
@@ -484,110 +434,10 @@ impl ArcticApp {
                         self.send_shot_menu(ui, &shot.path);
                     });
                 });
-                content_height = ui.min_rect().height();
             });
-        // Remembered for the next opening, so the picture lands where the dialog puts it. (Not the
-        // modal's own rectangle: that one includes the whole-window backdrop.)
-        let extra = content_height + 2.0 * DIALOG_PADDING - picture_height;
-        if picture_height > 0.0 && matches!(load, Load::Ready) && extra > 20.0 {
-            self.shots.dialog_extra = extra;
-        }
         if close || modal.should_close() {
-            if self.shots.cell.is_some() {
-                self.shots.motion = Motion::Closing;
-                self.shots.motion_started = ctx.input(|i| i.time);
-                ctx.request_repaint();
-            } else {
-                self.shots.open = None;
-            }
+            self.shots.open = None;
         }
-    }
-
-    /// One frame of the picture growing out of its cell (or shrinking back into it). True while
-    /// it's moving, so the dialog waits.
-    fn animate_preview(&mut self, ctx: &egui::Context, uri: &str) -> bool {
-        let t = ((ctx.input(|i| i.time) - self.shots.motion_started) / MOTION_SECS).clamp(0.0, 1.0);
-        let closing = self.shots.motion == Motion::Closing;
-        let Some(cell) = self.shots.cell else {
-            self.shots.motion = Motion::Settled;
-            return false;
-        };
-        if t >= 1.0 {
-            if closing {
-                self.shots.motion = Motion::Settled;
-                self.shots.open = None;
-                self.shots.cell = None;
-                return true;
-            }
-            // The dialog appears now; the picture stays on top of it while it fades in.
-            self.shots.motion = Motion::Handoff;
-            self.shots.motion_started = ctx.input(|i| i.time);
-            return false;
-        }
-        // Where the dialog's picture ends up: as large as the window allows, in its middle.
-        let screen = ctx.content_rect();
-        let room = screen.size() * vec2(0.9, 0.82) - vec2(0.0, 60.0);
-        let fitted = self.picture_size(room, Some(cell));
-        let target = egui::Rect::from_center_size(self.dialog_picture_center(screen), fitted);
-        let eased = 1.0 - (1.0 - t as f32).powi(3);
-        let progress = if closing { 1.0 - eased } else { eased };
-        let rect = egui::Rect::from_min_max(
-            cell.min.lerp(target.min, progress),
-            cell.max.lerp(target.max, progress),
-        );
-        let dim = (progress * 140.0) as u8;
-        egui::Area::new(Id::new("shot_motion"))
-            .order(egui::Order::Foreground)
-            .fixed_pos(screen.min)
-            .interactable(false)
-            .show(ctx, |ui| {
-                ui.painter()
-                    .rect_filled(screen, 0.0, egui::Color32::from_black_alpha(dim));
-                egui::Image::new(uri.to_owned())
-                    .corner_radius(CornerRadius::same(8))
-                    .fit_to_exact_size(rect.size())
-                    .paint_at(ui, rect);
-            });
-        ctx.request_repaint();
-        true
-    }
-
-    /// The grown picture, fading out over the dialog that is fading in (same size and place, so it
-    /// reads as one thing settling instead of a flash).
-    fn handoff_overlay(&mut self, ctx: &egui::Context, uri: &str) {
-        let h =
-            ((ctx.input(|i| i.time) - self.shots.motion_started) / HANDOFF_SECS).clamp(0.0, 1.0);
-        let Some(cell) = self.shots.cell else {
-            self.shots.motion = Motion::Settled;
-            return;
-        };
-        if h >= 1.0 {
-            self.shots.motion = Motion::Settled;
-            return;
-        }
-        let screen = ctx.content_rect();
-        let room = screen.size() * vec2(0.9, 0.82) - vec2(0.0, 60.0);
-        let fitted = self.picture_size(room, Some(cell));
-        let rect = egui::Rect::from_center_size(self.dialog_picture_center(screen), fitted);
-        let left = 1.0 - h as f32;
-        egui::Area::new(Id::new("shot_handoff"))
-            .order(egui::Order::Tooltip)
-            .fixed_pos(screen.min)
-            .interactable(false)
-            .fade_in(false)
-            .show(ctx, |ui| {
-                ui.painter().rect_filled(
-                    screen,
-                    0.0,
-                    egui::Color32::from_black_alpha((140.0 * left) as u8),
-                );
-                egui::Image::new(uri.to_owned())
-                    .corner_radius(CornerRadius::same(8))
-                    .fit_to_exact_size(rect.size())
-                    .tint(egui::Color32::from_white_alpha((255.0 * left) as u8))
-                    .paint_at(ui, rect);
-            });
-        ctx.request_repaint();
     }
 
     pub(crate) fn on_screenshot_list(&mut self, shots: Vec<Shot>) {
