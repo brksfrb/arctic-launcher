@@ -70,11 +70,13 @@ final class FogMatrixTest {
 		step(3000, () -> shot(place + "-3-nofog"));
 	}
 
-	private static void pillars(String dim) {
-		command("execute in " + dim + " run fill -12 94 -12 12 99 110 minecraft:stone");
-		command("execute in " + dim + " run fill -12 100 -12 12 112 110 minecraft:air");
-		for (int z = 16; z <= 110; z += 16) {
-			command("execute in " + dim + " run fill -3 100 " + z + " 3 108 " + z + " minecraft:magenta_wool");
+	/** A stone floor and magenta pillars on alternating sides of the view line, 16 blocks apart. */
+	private static void pillars() {
+		command("fill -12 94 -12 12 99 110 minecraft:stone");
+		command("fill -12 100 -12 12 112 110 minecraft:air");
+		for (int z = 16, i = 0; z <= 110; z += 16, i++) {
+			int x = i % 2 == 0 ? -7 : 4;
+			command("fill " + x + " 100 " + z + " " + (x + 3) + " 108 " + z + " minecraft:magenta_wool");
 		}
 	}
 
@@ -87,7 +89,7 @@ final class FogMatrixTest {
 		command("tp @s 0 100 0 0 0");
 		at = 0;
 		step(6000, () -> {
-			pillars("minecraft:overworld");
+			pillars();
 			//#if MC >= 26.2
 			if (!Compat.hudHidden()) {
 				Minecraft.getInstance().gui.hud.toggle();
@@ -109,10 +111,10 @@ final class FogMatrixTest {
 		settings("c-water");
 		step(100, () -> {
 			command("fill -3 95 -3 3 99 3 minecraft:stone");
-			pillars("minecraft:the_nether");
 			command("execute in minecraft:the_nether run tp @s 0 100 0 0 0");
 		});
-		step(4000, () -> {});
+		step(6000, FogMatrixTest::pillars);
+		step(2000, () -> command("tp @s 0 100 0 0 0"));
 		settings("d-nether");
 		step(500, () -> {
 			ArcticMod.LOG.info("fog-matrix: done");
