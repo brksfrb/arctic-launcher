@@ -107,6 +107,14 @@ final class SelfTest {
 		}
 		//#endif
 		//#if DEV_SCENES
+		//#if MC >= 1.21.11
+		if ("ctmlines".equals(System.getProperty("arctic.selftest"))) {
+			GlassLinesTest.startLines();
+			return;
+		}
+		//#endif
+		//#endif
+		//#if DEV_SCENES
 		//#if MC >= 1.21.11 && MC < 26.1
 		if ("ctmborders".equals(System.getProperty("arctic.selftest"))) {
 			GlassBordersTest.start();
@@ -114,10 +122,6 @@ final class SelfTest {
 		}
 		if ("ctmframes".equals(System.getProperty("arctic.selftest"))) {
 			GlassFramesTest.start();
-			return;
-		}
-		if ("ctmlines".equals(System.getProperty("arctic.selftest"))) {
-			GlassFramesTest.startLines();
 			return;
 		}
 		//#endif

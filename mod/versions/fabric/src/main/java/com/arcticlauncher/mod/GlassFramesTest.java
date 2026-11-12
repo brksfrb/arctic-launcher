@@ -150,45 +150,5 @@ final class GlassFramesTest {
 		wrong += framed + joined + (faces == 0 ? 1 : 0);
 		ArcticMod.LOG.info("ctmframes {} {}: blocks={} faces={} framed={} (own full frame={}) wrongly joined={}{}", framed + joined == 0 && faces > 0 ? "ok" : "WRONG", NAMES[scene], blocks, faces, framed, lone, joined, first);
 	}
-
-	/**
-	 * -Darctic.selftest=ctmlines: the "Lines between blocks" slider, changed while in the world. Each level is
-	 * set as the slider sets it; the picture must follow without a restart. Clear glass, its panes, and stained
-	 * glass beside them (which the slider leaves alone); then the settings page with its preview.
-	 */
-	static void startLines() { later(10, () -> WorldTest.createTestWorld(() -> { command("tp @p 0.5 220 -2.5 0 0"); later(8, GlassFramesTest::buildLines); })); }
-	private static void buildLines() {
-		Minecraft mc = Minecraft.getInstance();
-		command("gamemode creative");
-		fill(-12, 219, -8, 12, 219, 12, "minecraft:stone");
-		fill(-12, 220, -8, 12, 232, 12, "minecraft:air");
-		fill(-9, 220, 9, 9, 226, 9, "minecraft:bookshelf");
-		fill(-4, 220, 3, 0, 223, 3, "minecraft:glass");
-		fill(2, 220, 3, 5, 222, 3, "minecraft:glass_pane");
-		fill(-8, 220, 3, -6, 222, 3, "minecraft:light_blue_stained_glass");
-		fill(-3, 220, 0, -1, 220, 1, "minecraft:glass");
-		command("time set 6000"); command("weather clear"); command("gamerule advance_time false");
-		com.arcticlauncher.client.ArcticClient.config().connectedGlass = true;
-		mc.options.hideGui = true;
-		later(4, () -> lines(new int[] {0, 25, 50, 100}, 0));
-	}
-	private static void lines(int[] levels, int i) {
-		Minecraft mc = Minecraft.getInstance();
-		if (i == levels.length) { later(1, () -> Minecraft.getInstance().stop()); return; }
-		com.arcticlauncher.client.ArcticClient.config().clearGlassLines = levels[i];
-		hold(-0.5, 220.4, -2.2, 0, 2, System.nanoTime(), 9, () -> {
-			ArcticMod.LOG.info("ctmlines level {}: tiles stitched at {} ({})", levels[i], com.arcticlauncher.client.ctm.GlassLines.stitched(),
-					com.arcticlauncher.client.ctm.GlassLines.stitched() == levels[i] ? "ok" : "WRONG");
-			WorldTest.shot("lines-" + levels[i] + "-world");
-			later(0.5, () -> {
-				mc.options.hideGui = false;
-				com.arcticlauncher.client.menu.Menus.open("connected-glass");
-				later(2, () -> {
-					WorldTest.shot("lines-" + levels[i] + "-settings");
-					later(0.5, () -> { mc.setScreen(null); mc.options.hideGui = true; later(0.5, () -> lines(levels, i + 1)); });
-				});
-			});
-		});
-	}
 }
 //#endif

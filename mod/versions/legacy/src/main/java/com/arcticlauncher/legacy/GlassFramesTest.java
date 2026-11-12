@@ -168,24 +168,40 @@ final class GlassFramesTest {
 		command("time set 6000"); command("weather clear"); command("gamerule doDaylightCycle false");
 		com.arcticlauncher.client.ArcticClient.config().connectedGlass = true;
 		mc.options.hudHidden = true;
-		later(4, () -> lines(new int[] {0, 25, 50, 100}, 0));
+		later(4, () -> lines(new int[] {0, 100, 50}, 0));
 	}
+	/** Moves the real slider on the real settings page (click, release), as a hand does, then lets the reload finish with the page still open. */
+	private static void slide(int level, Runnable then) {
+		com.arcticlauncher.client.ui.Page page = com.arcticlauncher.client.menu.Menus.page("connected-glass");
+		com.arcticlauncher.client.ArcticClient.platform().openPage(page);
+		later(2, () -> {
+			try {
+				java.lang.reflect.Field f = com.arcticlauncher.client.ui.Page.class.getDeclaredField("widgets");
+				f.setAccessible(true);
+				for (Object o : (java.util.List<?>) f.get(page)) {
+					com.arcticlauncher.client.ui.Widget w = (com.arcticlauncher.client.ui.Widget) o;
+					if (!w.getClass().getSimpleName().equals("SliderBar")) continue;
+					double mx = w.x + 3 + level / 100.0 * (w.w - 6), my = w.y + w.h / 2.0;
+					page.mouseClicked(mx, my, com.arcticlauncher.client.Keys.MOUSE_LEFT);
+					page.mouseReleased(mx, my, com.arcticlauncher.client.Keys.MOUSE_LEFT);
+					break;
+				}
+			} catch (ReflectiveOperationException e) { throw new IllegalStateException(e); }
+			ArcticLegacy.LOG.info("ctmlines slider set to " + com.arcticlauncher.client.ArcticClient.config().clearGlassLines + " by the widget (wanted " + level + ")");
+			later(RELOAD_WAIT, then);
+		});
+	}
+	private static final double RELOAD_WAIT = 30;
 	private static void lines(int[] levels, int i) {
 		MinecraftClient mc = MinecraftClient.getInstance();
 		if (i == levels.length) { later(1, () -> MinecraftClient.getInstance().scheduleStop()); return; }
-		com.arcticlauncher.client.ArcticClient.config().clearGlassLines = levels[i];
-		hold(-0.5, 220.4, -2.2, 0, 2, System.nanoTime(), 9, () -> {
-			ArcticLegacy.LOG.info("ctmlines level {}: tiles stitched at {} ({})", levels[i], com.arcticlauncher.client.ctm.GlassLines.stitched(),
-					com.arcticlauncher.client.ctm.GlassLines.stitched() == levels[i] ? "ok" : "WRONG");
-			LegacyWorldTest.shot("lines-" + levels[i] + "-world");
-			later(0.5, () -> {
-				mc.options.hudHidden = false;
-				com.arcticlauncher.client.menu.Menus.open("connected-glass");
-				later(2, () -> {
-					LegacyWorldTest.shot("lines-" + levels[i] + "-settings");
-					later(0.5, () -> { mc.setScreen(null); mc.options.hudHidden = true; later(0.5, () -> lines(levels, i + 1)); });
-				});
-			});
+		slide(levels[i], () -> {
+			mc.setScreen(null);
+			later(1, () -> hold(-0.5, 220.4, -2.2, 0, 2, System.nanoTime(), 3, () -> {
+				ArcticLegacy.LOG.info("ctmlines level {}: stitched {} ({})", levels[i], com.arcticlauncher.client.ctm.GlassLines.stitched(), com.arcticlauncher.client.ctm.GlassLines.stitched() == levels[i] ? "ok" : "WRONG");
+				LegacyWorldTest.shot("lines-" + levels[i] + "-world");
+				later(0.5, () -> lines(levels, i + 1));
+			}));
 		});
 	}
 }

@@ -64,7 +64,7 @@ final class FogTest {
 			for (int z = 20; z <= 100; z += 20) {
 				command("fill -3 220 " + z + " 3 228 " + z + " minecraft:magenta_wool");
 			}
-			Minecraft.getInstance().options.hideGui = true;
+			if (!Minecraft.getInstance().gui.hud.isHidden()) Minecraft.getInstance().gui.hud.toggle();
 		});
 		step(3000, () -> {
 			command("tp @s 0 220 0 0 0");
