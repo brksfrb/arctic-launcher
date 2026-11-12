@@ -99,7 +99,7 @@ final class LegacyBadgeTest {
             ClientConfig c = ArcticClient.config(); c.fancy = false; c.badgeNametags = true;
             c.badgeOthersOnly = false; c.badgeWhere = 0; c.ownNametag = true;
             LegacyWorldTest.createTestWorld(() -> {
-                command("gamerule doDaylightCycle false"); command("time set 6000"); command("weather clear");
+                command("gamerule doDaylightCycle false"); command("scoreboard objectives add arctic dummy"); command("scoreboard objectives setdisplay list arctic"); command("time set 6000"); command("weather clear");
                 command("tp BadgeIce 0.5 120 0.5 0 20");
                 later(3, () -> { command("fill -5 119 -5 5 119 9 stone"); command("tp BadgeIce 0.5 120 0.5 0 20"); });
                 later(7, () -> lanThenSteps());

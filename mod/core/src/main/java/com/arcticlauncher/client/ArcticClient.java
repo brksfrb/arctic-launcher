@@ -391,6 +391,8 @@ public final class ArcticClient {
 		CONTROLLER.frame(platform, config.controller, seconds, screenOpen, platform.inWorld());
 	}
 
+	private static int lookPrefetchTicks;
+
 	public static void tick(boolean screenOpen) {
 		FreezeWatchdog.state(platform == null || platform.windowFocused(), platform != null && platform.inWorld());
 		com.arcticlauncher.client.feature.DynamicFps.tick(platform, screenOpen);
@@ -421,6 +423,11 @@ public final class ArcticClient {
 			voice.tick(config.voiceKey, screenOpen);
 		}
 		if (platform.inWorld()) {
+			// Looks of everyone on the server are fetched when the player list arrives, not when a name is first drawn.
+			if (looks != null && ++lookPrefetchTicks >= 5) {
+				lookPrefetchTicks = 0;
+				looks.expect(platform.onlinePlayerIds());
+			}
 			features.tick(screenOpen);
 			stopEmoteWhenMoving();
 			if (platform.hasFeatures()) {
