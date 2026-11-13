@@ -1,4 +1,5 @@
-"""Rasterize the three picked round-3 badges, using the official Arctic mark.
+"""Rasterize the three picked badges. Style 0 is BrandMark (the official Arctic mark);
+ice and line still come from their SVG sources.
 
 SVG sources are reviewable beside this script. Picker art keeps the sheet's
 3-unit outline; tag/tab variants use 7 units (1.75/1.97 framebuffer px at GUI
@@ -12,6 +13,7 @@ from pathlib import Path
 import cairosvg
 from PIL import Image
 from badge_tab import tab_art
+from brand_mark import native
 
 MOD = Path(__file__).resolve().parents[1]
 ASSETS = MOD / 'core/src/main/resources/assets'
@@ -22,14 +24,22 @@ for name, style in STYLES:
     svg = (MOD / 'tools/badges' / (name + '.svg')).read_text()
     def raster(source):
         return Image.open(io.BytesIO(cairosvg.svg2png(bytestring=source.encode(), output_width=1024, output_height=1024))).convert('RGBA')
-    im = raster(svg)
-    im.resize((256, 256), Image.Resampling.LANCZOS).save(ROOT / (name + '.png'))
-    small_art = raster(svg.replace('stroke-width="3"', 'stroke-width="7"')) if style == 2 else im
+    if style == 0:
+        im = native(256)
+        small_art = native(1024)
+        im.save(ROOT / (name + '.png'))
+    else:
+        im = raster(svg)
+        small_art = raster(svg.replace('stroke-width="3"', 'stroke-width="7"')) if style == 2 else im
+        im.resize((256, 256), Image.Resampling.LANCZOS).save(ROOT / (name + '.png'))
     for tab, height, ascent in [(False, 8, 7), (True, 9, 8)]:
         font = name + ('_tab' if tab else '')
         size = height * 8
         # The logo's player list picture is pre-filtered onto a coarse grid (see badge_tab.py).
-        small = tab_art(small_art) if tab and style == 0 else small_art.resize((size, size), Image.Resampling.LANCZOS)
+        if style == 0:
+            small = tab_art(small_art) if tab else native(size)
+        else:
+            small = small_art.resize((size, size), Image.Resampling.LANCZOS)
         small.save(ROOT / 'textures/font' / (font + '.png'))
         small.save(ROOT / (name + ('_tab' if tab else '_tag') + '.png'))
         bitmap = dict(type='bitmap', file='arctic:font/' + font + '.png', height=height, ascent=ascent, chars=['\uE000'])
