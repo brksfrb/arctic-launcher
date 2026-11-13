@@ -102,6 +102,20 @@ impl Run {
     /// The crash as a report, from the game log's end and the crash report it wrote.
     fn crash_report(&self, title: &str, code: Option<i32>) -> crash::Report {
         let mut lines: Vec<&str> = self.log.iter().map(|l| l.text.as_str()).collect();
+        let mixin =
+            fresh_diagnostic_sidecar(&self.game_dir, self.started, "arctic-mixin-failure.txt");
+        if let Some(context) = &mixin {
+            lines.push(context);
+        }
+        let hang = fresh_hang_dump(&self.game_dir, self.started);
+        if let Some(dump) = &hang {
+            lines.push(dump);
+        }
+        // Short freezes the in-game watchdog recorded this run (the same report, consent and scrubbing).
+        let freezes = fresh_freeze_files(&self.game_dir, self.started);
+        for freeze in &freezes {
+            lines.push(freeze);
+        }
         // The game's own log file often says more than what it printed (a mod that quits quietly writes
         // only there), and Java writes a file of its own when it dies.
         let own_log = latest_log_tail(&self.game_dir, self.started);
@@ -120,7 +134,8 @@ impl Run {
         // How it ended: a game that wrote nothing at all is otherwise a report with nothing in it.
         let java = self.java.as_deref().map(|j| match code {
             Some(c) => format!(
-                "{j}\n(exit code {c})\n{}",
+                "{j}\n(exit code {})\n{}",
+                crash::exit_description(c),
                 self.run_summary(written.is_some())
             ),
             None => format!("{j}\n{}", self.run_summary(written.is_some())),
@@ -165,7 +180,7 @@ impl Run {
 
     /// Why the game crashed, from its log and the crash report it wrote.
     fn diagnose(&self) -> Option<Diagnosis> {
-        crash::diagnose(&self.crash_text())
+        arctic_core::crash_conflicts::diagnose_in(&self.crash_text(), &self.game_dir.join("mods"))
     }
 
     /// The end of the game's log and the crash report it wrote, as one text.
@@ -191,6 +206,50 @@ impl Run {
         }
         text
     }
+}
+
+/// The sidecar survives long sessions and resource reloads that push the dump out of the UI log.
+fn fresh_hang_dump(game_dir: &std::path::Path, since: SystemTime) -> Option<String> {
+    fresh_diagnostic_sidecar(game_dir, since, "arctic-hang.txt")
+}
+
+fn fresh_diagnostic_sidecar(
+    game_dir: &std::path::Path,
+    since: SystemTime,
+    name: &str,
+) -> Option<String> {
+    let path = game_dir.join(name);
+    let meta = std::fs::metadata(&path).ok()?;
+    if meta.modified().ok()? < since || meta.len() > 4 * 1024 * 1024 {
+        return None;
+    }
+    std::fs::read_to_string(path).ok()
+}
+
+/// The newest short-freeze files (`logs/arctic-freezes/`) this run wrote, each cut to its first lines.
+fn fresh_freeze_files(game_dir: &std::path::Path, since: SystemTime) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(game_dir.join("logs").join("arctic-freezes")) else {
+        return Vec::new();
+    };
+    let mut files: Vec<(SystemTime, std::path::PathBuf)> = entries
+        .filter_map(Result::ok)
+        .filter(|e| e.file_name().to_string_lossy().starts_with("freeze-"))
+        .filter_map(|e| {
+            let modified = e.metadata().ok()?.modified().ok()?;
+            (modified >= since).then(|| (modified, e.path()))
+        })
+        .collect();
+    files.sort_by_key(|a| std::cmp::Reverse(a.0));
+    files
+        .into_iter()
+        .take(2)
+        .filter_map(|(_, path)| {
+            let text = std::fs::read_to_string(&path).ok()?;
+            let name = path.file_name()?.to_string_lossy().into_owned();
+            let head: String = text.lines().take(120).collect::<Vec<_>>().join("\n");
+            Some(format!("---- logs/arctic-freezes/{name} ----\n{head}"))
+        })
+        .collect()
 }
 
 /// Lines of `logs/latest.log` that are looked at.
@@ -472,9 +531,21 @@ impl ArcticApp {
                     }
                     self.playtime = arctic_core::playtime::Stats::load(&self.dirs);
                 }
+                let froze = crash::freeze_evidence(
+                    &fresh_hang_dump(&run.game_dir, run.started)
+                        .unwrap_or_else(|| run.crash_text()),
+                ) && newest_crash_report(&run.game_dir, run.started).is_none()
+                    && newest_hs_err(&run.game_dir, run.started).is_none();
+                let specific = run.diagnose();
                 let diagnosis = match code {
-                    Some(c) if c != 0 && !watchdog => run
-                        .diagnose()
+                    Some(c) if c != 0 && !watchdog && specific.is_none() && froze => Some(Diagnosis {
+                        title: "The game froze and was closed".into(),
+                        detail: "The run contains evidence of a freeze. Any captured thread dump is included in the report.".into(),
+                        mods: Vec::new(),
+                        repair: false,
+                        fix: None,
+                    }),
+                    Some(c) if c != 0 && !watchdog => specific
                         .or_else(|| crash::silent_exit(&run.crash_text(), c)),
                     _ => None,
                 };
@@ -677,6 +748,60 @@ impl Tasks {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn mixin_sidecar_survives_log_eviction_and_ignores_previous_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("arctic-mixin-failure.txt");
+        let started = SystemTime::now() - Duration::from_secs(1);
+        std::fs::write(&path, "[Arctic mixin] class=example.Item; role=preloader\n[Arctic mixin] tick()V\n[Arctic mixin mod] last_mod 1.2.3").unwrap();
+        assert!(
+            fresh_diagnostic_sidecar(dir.path(), started, "arctic-mixin-failure.txt").is_some()
+        );
+        assert!(
+            fresh_diagnostic_sidecar(
+                dir.path(),
+                SystemTime::now() + Duration::from_secs(1),
+                "arctic-mixin-failure.txt"
+            )
+            .is_none()
+        );
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "26.3", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = started;
+        let report = run.crash_report("Crash", Some(1));
+        assert!(report.log.contains("class=example.Item; role=preloader"));
+        assert!(report.log.contains("last_mod 1.2.3"));
+        std::fs::File::create(&path)
+            .unwrap()
+            .set_len(5 * 1024 * 1024)
+            .unwrap();
+        assert!(
+            fresh_diagnostic_sidecar(dir.path(), started, "arctic-mixin-failure.txt").is_none()
+        );
+    }
+
+    #[test]
+    fn this_runs_freeze_files_ride_along_with_the_crash_report() {
+        let dir = tempfile::tempdir().unwrap();
+        let freezes = dir.path().join("logs").join("arctic-freezes");
+        std::fs::create_dir_all(&freezes).unwrap();
+        let before = SystemTime::now() - std::time::Duration::from_secs(60);
+        std::fs::write(
+            freezes.join("freeze-20260101-000000.txt"),
+            "Arctic: game froze for 5.1s",
+        )
+        .unwrap();
+        std::fs::write(freezes.join("notes.txt"), "not a freeze file").unwrap();
+        let found = fresh_freeze_files(dir.path(), before);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].contains("game froze for 5.1s"));
+        // A freeze from an earlier run is not this run's.
+        let after = SystemTime::now() + std::time::Duration::from_secs(60);
+        assert!(fresh_freeze_files(dir.path(), after).is_empty());
+    }
 
     #[test]
     fn a_small_heap_does_not_hide_a_missing_library_or_disable_repair() {

@@ -46,6 +46,11 @@ def check(target):
          f"-Pminecraft_version={version}", f"-Pcovers={covers}"],
     )
     if compiled.returncode != 0:
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            # Make dependency/compile failures readable from the check annotations too.
+            # Logs require a GitHub login even for a public repository.
+            detail = compiled.stdout[-12000:].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+            print(f"::error title=Gradle build failed ({version})::{detail}", flush=True)
         return f"{version}: does not compile"
     if project in ("fabric", "fabric13") and subprocess.run([sys.executable, str(MIXCHECK), version]).returncode != 0:
         return f"{version}: mixin problems"

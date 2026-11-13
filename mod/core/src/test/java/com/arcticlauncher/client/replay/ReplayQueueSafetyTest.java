@@ -52,7 +52,7 @@ class ReplayQueueSafetyTest {
 			for (Field f : Replays.class.getDeclaredFields()) {
 				if (Modifier.isStatic(f.getModifiers()) && !Modifier.isFinal(f.getModifiers())) {
 					f.setAccessible(true); previous.put(f, f.get(null));
-					f.set(null, f.getType() == boolean.class ? false : f.getType() == int.class ? 0 : null);
+					f.set(null, f.getType() == boolean.class ? false : f.getType() == int.class ? (Object) 0 : f.getType() == long.class ? (Object) 0L : null);
 				}
 			}
 			Field c = ArcticClient.class.getDeclaredField("config"); c.setAccessible(true);

@@ -5,16 +5,13 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Symbols the game's font can draw, and ":heart:"-style shortcodes for typing them: chat has
- * no color emoji, but these show the same on every version.
+ * Legacy font-drawable shortcodes. Approved atlas names take precedence and stay on the wire.
  */
 public final class Emoji {
 	/** A shortcode's longest length (so a lone ":" is never scanned far). */
-	private static final int MAX_CODE = 20;
+	private static final int MAX_CODE = EmoteAtlas.MAX_CODE;
 
 	private static final Map<String, String> CODES = new LinkedHashMap<String, String>();
-	/** Name of a group, then its symbols separated by spaces (the picker). */
-	private static final Map<String, String> GROUPS = new LinkedHashMap<String, String>();
 
 	private static void add(String code, String symbol) {
 		CODES.put(code, symbol);
@@ -98,28 +95,16 @@ public final class Emoji {
 		add("yen", "¥");
 		add("trademark", "™");
 
-		GROUPS.put("Hearts and stars", "♥ ♡ ★ ☆ ✿ ❀ ❄ ❅ ✵ ✶ ✷ ✽");
-		GROUPS.put("Faces and signs", "☺ ☻ ☹ ☠ ☮ ☯ ♀ ♂ ✔ ✓ ✖ ✗");
-		GROUPS.put("Weather and nature", "☀ ☁ ☂ ☃ ⚡ ☾ ☄ ☕ ♨ ♻");
-		GROUPS.put("Arrows", "← ↑ → ↓ ↔ ↕ ⇒ ⇐ ⇔ ➔ ➤ ↺");
-		GROUPS.put("Games and music", "♠ ♣ ♥ ♦ ♛ ♔ ♟ ♪ ♫ ♬ ⚔ ⚒");
-		GROUPS.put("Shapes and marks", "■ □ ● ○ ▲ ▼ ▶ ◀ • ‣ ⚑ ⚠");
-		GROUPS.put("Letters and math", "∞ ± ½ ° π Σ Ω λ © ™ € £");
 	}
 
 	private Emoji() {}
-
-	/** Group names with their symbols (space separated), in order. */
-	public static Map<String, String> groups() {
-		return GROUPS;
-	}
 
 	/** Shortcode ("heart") to symbol, in order. */
 	public static Map<String, String> codes() {
 		return CODES;
 	}
 
-	/** {@code text} with each ":name:" turned into its symbol; unknown names stay as typed. */
+	/** Expand only legacy symbols; atlas names, aliases and unknown names stay as typed. */
 	public static String expand(String text) {
 		if (text == null || text.indexOf(':') < 0) {
 			return text;
@@ -132,7 +117,14 @@ public final class Emoji {
 			if (c == ':') {
 				int end = text.indexOf(':', i + 1);
 				if (end > i + 1 && end - i - 1 <= MAX_CODE) {
-					String symbol = CODES.get(text.substring(i + 1, end).toLowerCase(Locale.ROOT));
+					String name = text.substring(i + 1, end).toLowerCase(Locale.ROOT);
+					// Atlas names (including aliases) always remain readable on the wire.
+					if (EmoteAtlas.named(name) != null) {
+						if (out != null) out.append(text, i, end + 1);
+						i = end + 1;
+						continue;
+					}
+					String symbol = CODES.get(name);
 					if (symbol != null) {
 						if (out == null) {
 							out = new StringBuilder(n).append(text, 0, i);

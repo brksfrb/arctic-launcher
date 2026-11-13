@@ -26,7 +26,7 @@ final class LegacyReplayTest {
 		t.setDaemon(true);
 		return t;
 	});
-	private static final int WAIT_LIMIT_S = 120;
+	private static final int WAIT_LIMIT_S = Integer.getInteger("arctic.waitlimit", 120);
 	private static final AtomicReference<File> manual = new AtomicReference<File>();
 	private static long videoSince;
 
@@ -34,15 +34,41 @@ final class LegacyReplayTest {
 
 	static boolean requested() {
 		String mode = System.getProperty("arctic.selftest");
-		return "replay".equals(mode) || "replayfile".equals(mode);
+		return "replay".equals(mode) || "replayfile".equals(mode) || "replayperf".equals(mode) || "replayperfopen".equals(mode) || "replaymid".equals(mode);
 	}
 
 	static void start() {
+		if ("replayperf".equals(System.getProperty("arctic.selftest"))) {
+			log("perf: scheduled");
+			TIMER.schedule(() -> run(() -> LegacyWorldTest.createTestWorld(LegacyReplayTest::perfSession)), 10, TimeUnit.SECONDS);
+			return;
+		}
+		if ("replayperfopen".equals(System.getProperty("arctic.selftest"))) {
+			final File file = new File(System.getProperty("arctic.replayfile", ""));
+			TIMER.schedule(() -> run(() -> perfOpen(file)), 10, TimeUnit.SECONDS);
+			return;
+		}
 		if ("replayfile".equals(System.getProperty("arctic.selftest"))) {
 			// -Darctic.replayfile=<a .mcpr>: just open that recording and say whether the world comes up.
 			final File file = new File(System.getProperty("arctic.replayfile", ""));
 			log("scheduled, opening " + file.getName());
 			TIMER.schedule(() -> run(() -> openFile(file)), 10, TimeUnit.SECONDS);
+			return;
+		}
+		if ("replaymid".equals(System.getProperty("arctic.selftest"))) {
+			// Join a world, wait, then start/stop a manual recording through the same path as the key.
+			log("mid: scheduled");
+			if (Boolean.getBoolean("arctic.midoff")) {
+				// Replay is off while joining; it is switched on only after you are already in the world.
+				com.arcticlauncher.client.ArcticClient.config().replayEnabled = false;
+			}
+			final Runnable later = () -> after(Integer.getInteger("arctic.midwait", 12), LegacyReplayTest::mid);
+			if (Boolean.getBoolean("arctic.midserver")) {
+				// Already connected to a server (--server): no world to create, just wait for the join.
+				TIMER.schedule(() -> run(() -> when("joined the server", () -> MinecraftClient.getInstance().world != null && MinecraftClient.getInstance().player != null, later)), 5, TimeUnit.SECONDS);
+			} else {
+				TIMER.schedule(() -> run(() -> LegacyWorldTest.createTestWorld(later)), 10, TimeUnit.SECONDS);
+			}
 			return;
 		}
 		log("scheduled");
@@ -133,6 +159,47 @@ final class LegacyReplayTest {
 		//#else
 		after(9, () -> LegacyWorldTest.command("playsound note.pling @a ~ ~ ~ 1 1"));
 		//#endif
+	}
+
+	private static void mid() {
+		if (Boolean.getBoolean("arctic.midoff")) {
+			com.arcticlauncher.client.ArcticClient.config().replayEnabled = true;
+			log("mid: replay switched on inside the world");
+		}
+		MinecraftClient mc = MinecraftClient.getInstance();
+		log("mid: in world=" + (mc.world != null) + " current take=" + (Replays.recorder().current() != null) + " bufferReady=" + Replays.recorder().bufferReady());
+		LegacyWorldTest.shot("mid before recording");
+		Replays.toggleRecording();
+		log("mid: recording=" + Replays.recording());
+		if (!Replays.recording()) { fail("recording did not start in an existing world"); return; }
+		LegacyWorldTest.command("time set 6000");
+		for (int i = 0; i < 5; i++) {
+			after(1 + i, () -> {
+				MinecraftClient m = MinecraftClient.getInstance();
+				if (m.player == null) return;
+				m.player.updatePosition(m.player.x + 1.5, m.player.y, m.player.z);
+				m.player.yaw += 30;
+				LegacyWorldTest.command("setblock ~ ~-1 ~2 minecraft:gold_block");
+			});
+		}
+		after(8, () -> {
+			Replays.toggleRecording();
+			when("mid recording saved", () -> Replays.recorder().pendingSaves() == 0 && Replays.folder().listFiles((d, n) -> n.endsWith(".mcpr")) != null
+					&& Replays.folder().listFiles((d, n) -> n.endsWith(".mcpr")).length > 0, () -> {
+				File[] files = Replays.folder().listFiles((d, n) -> n.endsWith(".mcpr"));
+				final File f = files[0];
+				log("mid: saved " + f.getName() + " " + f.length() / 1024 + " KB");
+				com.arcticlauncher.client.ArcticClient.platform().leaveWorld();
+				when("left the world", () -> MinecraftClient.getInstance().world == null, () -> after(3, () -> {
+					Replays.watch(f);
+					when("mid replay opened", () -> Replays.viewer() != null && (Replays.viewer().ready() || Replays.viewer().status() != null), () -> {
+						ReplayViewer v = Replays.viewer();
+						log("mid: opened ready=" + v.ready() + " status=" + v.status() + " duration=" + v.duration());
+						after(4, () -> { LegacyWorldTest.shot("mid replay playing"); log(v.ready() && v.duration() > 3000 ? "PASSED" : "FAILED mid replay unusable"); MinecraftClient.getInstance().scheduleStop(); });
+					});
+				}));
+			});
+		});
 	}
 
 	private static void keep() {
@@ -311,5 +378,99 @@ final class LegacyReplayTest {
 		int found = 0;
 		if (files != null) for (File file : files) if (file.lastModified() >= videoSince && file.length() > 512) found++;
 		return found >= 2;
+	}
+
+	// ---- Load-time check (-Darctic.selftest=replayperf / replayperfopen) ------------------------------
+
+	/** Longest gap between two game-thread frames while measuring (ms): how long the game froze. */
+	private static volatile long stallMs;
+	private static volatile long lastBeat;
+	private static volatile boolean beating;
+
+	private static void beat() {
+		long now = System.nanoTime();
+		if (lastBeat != 0) stallMs = Math.max(stallMs, (now - lastBeat) / 1_000_000);
+		lastBeat = now;
+		if (beating) TIMER.schedule(() -> LegacyHooks.onNextFrame(LegacyReplayTest::beat), 1, TimeUnit.MILLISECONDS);
+	}
+
+	private static void startStallWatch() {
+		stallMs = 0;
+		lastBeat = 0;
+		if (!beating) {
+			beating = true;
+			beat();
+		}
+	}
+
+	/** A long play session: teleport between two far areas so the server streams chunks over and over. */
+	private static void perfSession() {
+		final int rounds = Integer.getInteger("arctic.perfrounds", 40);
+		com.arcticlauncher.client.ArcticClient.config().clipSeconds = 10;
+		com.arcticlauncher.client.ArcticClient.config().replayAutoExport = false;
+		MinecraftClient.getInstance().options.viewDistance = 8;
+		log("perf: session of " + rounds + " teleports");
+		LegacyWorldTest.command("gamerule doDaylightCycle false");
+		LegacyWorldTest.command("summon Villager ~2 ~ ~2");
+		for (int i = 0; i < rounds; i++) {
+			final int round = i;
+			after(2 + i * 3, () -> LegacyWorldTest.command("tp @p " + (round % 2 == 0 ? 3000 : 0) + " 120 " + (round % 4 < 2 ? 0 : 3000)));
+		}
+		after(2 + rounds * 3 + 5, () -> {
+			final long since = System.currentTimeMillis() - 1000;
+			final AtomicReference<File> saved = new AtomicReference<File>();
+			Replays.saveMoment();
+			when("perf: clip kept", () -> {
+				File[] files = Replays.folder().listFiles((d, n) -> n.endsWith(".mcpr"));
+				if (files != null) for (File f : files) if (f.lastModified() >= since) saved.set(f);
+				return saved.get() != null && Replays.pendingSaves() == 0;
+			}, () -> {
+				log("perf: clip " + saved.get().getAbsolutePath() + " " + saved.get().length() / 1024 + " KB");
+				com.arcticlauncher.client.ArcticClient.platform().leaveWorld();
+				when("left the world", () -> MinecraftClient.getInstance().world == null, () -> after(3, () -> perfOpen(saved.get())));
+			});
+		});
+	}
+
+	private static void perfOpen(final File file) {
+		log("perf: opening " + file.getName() + " (" + file.length() / 1024 + " KB)");
+		startStallWatch();
+		final long begun = System.currentTimeMillis();
+		Replays.watch(file);
+		when("perf: world showing", () -> Replays.viewer() != null && Replays.viewer().ready() && Replays.viewer().status() == null
+				&& MinecraftClient.getInstance().world != null && !(MinecraftClient.getInstance().currentScreen instanceof net.minecraft.client.gui.screen.DownloadingTerrainScreen), () -> {
+			final long openMs = System.currentTimeMillis() - begun;
+			final long openStall = stallMs;
+			after(3, () -> {
+				LegacyWorldTest.shot("perf replay open");
+				final ReplayViewer v = Replays.viewer();
+				log("perf: RESULT open_ms=" + openMs + " open_max_frame_ms=" + openStall + " duration_ms=" + v.duration()
+						+ " fast_jumps=" + v.fastJumps());
+				stallMs = 0;
+				final long f0 = System.currentTimeMillis();
+				v.seek(v.duration() * 0.9);
+				when("perf: jumped forward", () -> v.status() == null && v.ready(), () -> {
+					final long fwd = System.currentTimeMillis() - f0;
+					final long fwdStall = stallMs;
+					after(2, () -> {
+						stallMs = 0;
+						final long b0 = System.currentTimeMillis();
+						v.seek(v.start());
+						when("perf: jumped back", () -> v.status() == null && v.ready() && MinecraftClient.getInstance().world != null
+								&& !(MinecraftClient.getInstance().currentScreen instanceof net.minecraft.client.gui.screen.DownloadingTerrainScreen), () -> {
+							log("perf: RESULT seek_forward_ms=" + fwd + " seek_forward_max_frame_ms=" + fwdStall
+									+ " seek_back_ms=" + (System.currentTimeMillis() - b0) + " seek_back_max_frame_ms=" + stallMs);
+							after(2, () -> {
+								LegacyWorldTest.shot("perf replay after seeks");
+								beating = false;
+								Replays.stopWatching();
+								log("PASSED");
+								after(2, () -> MinecraftClient.getInstance().scheduleStop());
+							});
+						});
+					});
+				});
+			});
+		});
 	}
 }

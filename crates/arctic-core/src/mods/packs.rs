@@ -63,23 +63,68 @@ pub struct Pack {
     pub active: bool,
 }
 
-/// Download the newest version of `project` that fits `game_version`.
-/// Returns the file name.
+/// A downloaded pack and whether its file was tagged for another game version.
+#[derive(Debug, Clone)]
+pub struct InstalledPack {
+    pub file_name: String,
+    pub used_fallback: bool,
+}
+
+/// Prefer an exact game version, then the newest file for these pack loaders,
+/// using the same release/beta/alpha preference as the exact picker.
+fn pick_pack_version<'a>(
+    versions: &'a [modrinth::Version],
+    loaders: &[&str],
+    game_version: &str,
+) -> Option<&'a modrinth::Version> {
+    modrinth::pick_version(versions, loaders, game_version).or_else(|| {
+        versions
+            .iter()
+            .filter(|v| {
+                v.loaders.iter().any(|l| loaders.contains(&l.as_str()))
+                    && v.files.iter().any(|file| file.primary)
+            })
+            .min_by(|a, b| {
+                modrinth::channel_rank(&a.version_type)
+                    .cmp(&modrinth::channel_rank(&b.version_type))
+                    .then_with(|| b.date_published.cmp(&a.date_published))
+            })
+    })
+}
+
+fn resolve_version(
+    kind: PackKind,
+    project: &str,
+    game_version: &str,
+) -> Result<(modrinth::Version, bool)> {
+    let loaders = kind.loaders();
+    let versions = modrinth::project_versions(project, loaders, game_version)?;
+    if let Some(version) = modrinth::pick_version(&versions, loaders, game_version) {
+        return Ok((version.clone(), false));
+    }
+    let versions: Vec<modrinth::Version> = modrinth::get_api(
+        &modrinth::project_versions_any_game_url(project, loaders),
+        &format!("project {project}"),
+    )?;
+    let version = pick_pack_version(&versions, loaders, game_version)
+        .ok_or_else(|| Error::Other("it has no file for this pack type to download".into()))?;
+    Ok((
+        version.clone(),
+        !version.is_compatible(loaders, game_version),
+    ))
+}
+
+/// Download an exact game-version file when available, otherwise the newest
+/// tagged file for this pack type, preferring release, then beta, then alpha.
 pub fn install(
     kind: PackKind,
     project: &str,
     game_version: &str,
     game_dir: &Path,
     progress: Progress,
-) -> Result<String> {
+) -> Result<InstalledPack> {
     progress(ProgressInfo::stage("Finding a version"));
-    let loaders = kind.loaders();
-    let versions = modrinth::project_versions(project, loaders, game_version)?;
-    let version = modrinth::pick_version(&versions, loaders, game_version).ok_or_else(|| {
-        Error::Other(format!(
-            "it has no version for Minecraft {game_version} yet"
-        ))
-    })?;
+    let (version, used_fallback) = resolve_version(kind, project, game_version)?;
     let file = version
         .primary_file()
         .ok_or_else(|| Error::Other("it has no file to download".into()))?;
@@ -96,7 +141,10 @@ pub fn install(
         }],
         progress,
     )?;
-    Ok(file.filename.clone())
+    Ok(InstalledPack {
+        file_name: file.filename.clone(),
+        used_fallback,
+    })
 }
 
 /// Packs in the instance (files and unpacked folders), by name.
@@ -297,6 +345,165 @@ pub fn shader_mod(loader: LoaderKind) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn version(id: &str, channel: &str, date: &str, game: &str, loader: &str) -> modrinth::Version {
+        serde_json::from_value(serde_json::json!({
+            "id": id, "project_id": "pack", "version_number": id,
+            "version_type": channel, "date_published": date,
+            "game_versions": [game], "loaders": [loader],
+            "files": [{"url": format!("https://cdn/{id}.zip"),
+                       "filename": format!("{id}.zip"), "primary": true}]
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn pack_fallback_prefers_channel_then_date_for_both_pack_kinds() {
+        for kind in [PackKind::Shader, PackKind::Resource] {
+            let loader = kind.loaders()[0];
+            let all = vec![
+                version("alpha", "alpha", "2026-06-01", "1.21.10", loader),
+                version("beta-new", "beta", "2026-05-01", "1.21.10", loader),
+                version("beta-old", "beta", "2026-04-01", "1.21.10", loader),
+                version("release-old", "release", "2026-02-01", "1.21.10", loader),
+                version("release-new", "release", "2026-03-01", "1.21.10", loader),
+            ];
+            for game in ["1.21.11", "26.2", "26.3"] {
+                for (candidates, expected) in [
+                    (all.as_slice(), "release-new"),
+                    (&all[..3], "beta-new"),
+                    (&all[..1], "alpha"),
+                ] {
+                    let chosen = pick_pack_version(candidates, kind.loaders(), game).unwrap();
+                    assert_eq!(chosen.id, expected);
+                    assert!(chosen.primary_file().unwrap().primary);
+                    assert!(!chosen.is_compatible(kind.loaders(), game));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn exact_pack_file_wins_over_a_newer_more_stable_fallback() {
+        for kind in [PackKind::Shader, PackKind::Resource] {
+            for game in ["1.21.11", "26.3"] {
+                let all = vec![
+                    version(
+                        "fallback",
+                        "release",
+                        "2026-06-01",
+                        "1.21.10",
+                        kind.loaders()[0],
+                    ),
+                    version("exact", "alpha", "2026-01-01", game, kind.loaders()[0]),
+                ];
+                assert_eq!(
+                    pick_pack_version(&all, kind.loaders(), game).unwrap().id,
+                    "exact"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn fallback_requires_a_file_and_a_pack_loader() {
+        for kind in [PackKind::Shader, PackKind::Resource] {
+            let mut missing = version(
+                "missing",
+                "release",
+                "2026-06-01",
+                "1.21.10",
+                kind.loaders()[0],
+            );
+            missing.files.clear();
+            let mut no_primary = version(
+                "no-primary",
+                "release",
+                "2026-06-01",
+                "1.21.10",
+                kind.loaders()[0],
+            );
+            no_primary.files[0].primary = false;
+            let all = vec![
+                missing,
+                no_primary,
+                version("mod", "release", "2026-06-01", "1.21.10", "fabric"),
+            ];
+            assert!(pick_pack_version(&all, kind.loaders(), "26.3").is_none());
+        }
+        let optifine = [version(
+            "optifine",
+            "beta",
+            "2026-01-01",
+            "1.21.10",
+            "optifine",
+        )];
+        assert!(pick_pack_version(&optifine, PackKind::Shader.loaders(), "26.3").is_some());
+        assert!(pick_pack_version(&optifine, PackKind::Resource.loaders(), "26.3").is_none());
+    }
+
+    #[test]
+    #[ignore = "live Modrinth API proof; run explicitly with --ignored --nocapture"]
+    fn live_rethinking_voxels_search_and_install_fallback() {
+        use super::super::{SearchQuery, search};
+
+        for game in ["1.21.11", "26.3"] {
+            let query = SearchQuery {
+                text: "Rethinking Voxels".into(),
+                game_version: game.into(),
+                project_type: super::super::ProjectType::Shader,
+                ..SearchQuery::default()
+            };
+            println!("search: {}", modrinth::search_url(&query));
+            let page = search(&query).unwrap();
+            let hit = page
+                .hits
+                .iter()
+                .find(|h| h.project_id == "kmwfVOoi")
+                .unwrap();
+            assert_eq!(hit.slug, "rethinking-voxels");
+            assert!(hit.is_incompatible(game));
+            println!(
+                "Minecraft {game}: found {} / {}, incompatible=true, tags={:?}",
+                hit.project_id, hit.slug, hit.game_versions
+            );
+
+            let facets = serde_json::json!([["project_type:shader"], [format!("versions:{game}")]]);
+            let filtered_url = format!(
+                "{}/search?query={}&facets={}&index=relevance&offset=0&limit=20",
+                modrinth::API,
+                modrinth::encode(&query.text),
+                modrinth::encode(&facets.to_string())
+            );
+            println!("negative control: {filtered_url}");
+            let filtered: modrinth::SearchResponse =
+                modrinth::get_api(&filtered_url, "filtered search").unwrap();
+            assert!(filtered.hits.iter().all(|h| h.project_id != "kmwfVOoi"));
+            println!(
+                "Exact-version facet hides kmwfVOoi: true ({} hits)",
+                filtered.total_hits
+            );
+
+            let (version, fallback) =
+                resolve_version(PackKind::Shader, &hit.project_id, game).unwrap();
+            assert!(fallback);
+            let file = version.primary_file().unwrap();
+            assert!(file.primary);
+            println!(
+                "Install resolution for {game}: fallback={fallback}, id={}, version={}, channel={}, published={}, loaders={:?}, game_versions={:?}",
+                version.id,
+                version.version_number,
+                version.version_type,
+                version.date_published,
+                version.loaders,
+                version.game_versions
+            );
+            println!(
+                "Primary file: {} (primary={}), URL={}, size={:?}, sha1={:?}",
+                file.filename, file.primary, file.url, file.size, file.hashes.sha1
+            );
+        }
+    }
 
     fn game() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();

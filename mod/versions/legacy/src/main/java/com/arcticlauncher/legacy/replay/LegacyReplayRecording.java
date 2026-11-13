@@ -36,6 +36,39 @@ public final class LegacyReplayRecording {
 		return recorder.begin(name, singleplayer, LegacyReplayCodec.protocolVersion(), LegacyReplayView.VERSION);
 	}
 
+	/**
+	 * Recording was asked for inside a world that was not being buffered (Replay was off when you
+	 * joined, or was switched on since): start a buffer now, opening with the world as it is.
+	 * Game thread only. False if this version can't, or you aren't in a world.
+	 */
+	public static boolean beginInWorld() {
+		Recorder recorder = Replays.recorder();
+		MinecraftClient mc = MinecraftClient.getInstance();
+		if (recorder == null || mc.world == null || mc.player == null || mc.getNetworkHandler() == null || Replays.watching()) {
+			return false;
+		}
+		if (recorder.current() != null) {
+			return true;
+		}
+		if (!LegacyReplaySnapshot.supported()) {
+			return false;
+		}
+		ClientConnection connection = mc.getNetworkHandler().getClientConnection();
+		if (!(connection instanceof LegacyReplayConnection)) {
+			return false;
+		}
+		Recorder.Take take = begin(connection);
+		if (take == null) {
+			return false;
+		}
+		((LegacyReplayConnection) connection).arctic$attach(take);
+		//#if MC < 1.9
+		int packets = LegacyReplaySnapshot.write(take);
+		com.arcticlauncher.legacy.ArcticLegacy.LOG.info("replay: no buffer from the join; started one in the world with " + packets + " opening packets");
+		//#endif
+		return true;
+	}
+
 	/** A packet arrived (network thread). */
 	public static void record(Recorder.Take take, Packet<?> packet) {
 		byte[] bytes = LegacyReplayCodec.encode(packet);

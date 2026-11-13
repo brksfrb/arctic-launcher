@@ -116,7 +116,58 @@ final class ChatCopyTest {
 			throw new AssertionError("body server hover changed after toggles");
 	}
 
+	private static void emoteMessages() {
+		try { log = ChatCopyProof.log(VERSION); }
+		catch (Exception error) { throw new RuntimeException(error); }
+		ArcticClient.config().chatEmoji = true;
+		ArcticClient.config().emojiButton = true;
+		ArcticClient.config().chatTimestamps = true;
+		ArcticClient.config().chatCopy = true;
+		ArcticClient.config().chatStack = false;
+		ArcticClient.config().chatKeep = true;
+		ArcticClient.config().fancy = !Boolean.getBoolean("arctic.emotePixelFont");
+		Minecraft mc = Minecraft.getInstance();
+		//#if MC >= 1.21.9
+		Compat.setScreen(new ChatScreen("", false));
+		//#else
+		Compat.setScreen(new ChatScreen(""));
+		//#endif
+		add(com.arcticlauncher.client.feature.EmoteProof.INCOMING);
+		add(com.arcticlauncher.client.feature.EmoteProof.WRAP);
+		add(Compat.literal("Split :s").append(Compat.literal("ob: styled")));
+		//#if MC >= 1.16
+		net.minecraft.network.chat.FormattedText layout = EmoteComponents.layout(Compat.literal(":sob:"));
+		if (layout.getString().length() != 1 || mc.font.width(layout) != 10) throw new AssertionError("sprite metrics " + mc.font.width(layout));
+		//#endif
+		ArcticClient.platform().sendChat(com.arcticlauncher.client.feature.QuickMessages.fillTyped(":sob:"));
+		log.println("PASS shortcode layout is one 10px glyph; sent literal :sob: to offline integrated server");
+		later(4, () -> {
+			com.arcticlauncher.client.feature.EmoteProof.check(new ChatCopyProof.Game() {
+				public String hoverText(Object style) { return ""; }
+				public void hoverAt(int x, int y) {}
+				public boolean colored(int x, int y, Object style) { return false; }
+				public String action(Object style) { return ""; }
+				public int width() { return mc.getWindow().getGuiScaledWidth(); }
+				public int height() { return mc.getWindow().getGuiScaledHeight(); }
+				public Object hit(int x, int y) { return ChatCopyInput.hit(x, y); }
+				public boolean click(int button, int x, int y, boolean shift) { return ChatCopyInput.click(button, x, y, shift); }
+			}, log);
+			shot("emotes-chat");
+			int width = mc.getWindow().getGuiScaledWidth(), height = mc.getWindow().getGuiScaledHeight();
+			com.arcticlauncher.client.feature.EmojiPicker.click(ArcticClient.config(), width - 10, height - 8, width, height);
+			later(2, () -> {
+				shot("emotes-picker");
+				later(2, () -> {
+					com.arcticlauncher.client.feature.EmojiPicker.closed();
+					ArcticClient.config().chatEmoji = false;
+					later(2, () -> { shot("emotes-disabled"); finish(); });
+				});
+			});
+		});
+	}
+
 	private static void phase(int phase) {
+		if (Boolean.getBoolean("arctic.emoteProof")) { emoteMessages(); return; }
 		try { if (log == null) log = ChatCopyProof.log(VERSION); }
 		catch (Exception error) { throw new RuntimeException(error); }
 		//#if MC >= 1.16

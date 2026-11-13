@@ -45,6 +45,12 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return true;
 	}
 
+	/**
+	 * Recording was asked for inside a world that isn't being buffered: start a buffer now that opens
+	 * with the world as it is. False when this version can't (the caller says to rejoin).
+	 */
+	default boolean beginReplayInWorld() { return false; }
+
 	/** Safe place to start deferred replay exports (never while browsing another menu). */
 	default boolean atTitleScreen() { return false; }
 
@@ -77,6 +83,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 
 	/** The Minecraft name of a key the game reported (a native key code). */
 	String keyName(int nativeKey);
+
+	/** The name of a game key binding ("Jump") that uses this key, or null when none does (or this version can't tell). */
+	default String keyUsedBy(String key) {
+		return null;
+	}
 
 	/** Switch to third person (true) or back to the view before (false). */
 	void setThirdPerson(boolean on);
@@ -169,6 +180,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	 */
 	default java.util.UUID worldPlayerId() {
 		return null;
+	}
+
+	/** Everyone in the player list (the server's tab list), by UUID; empty outside a world or when unknown. */
+	default java.util.Collection<java.util.UUID> onlinePlayerIds() {
+		return java.util.Collections.emptyList();
 	}
 
 	/** Run on the game's main thread. */
@@ -455,6 +471,16 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
+	/** The Light Overlay works on this version. */
+	default boolean lightOverlayWorks() {
+		return false;
+	}
+
+	/** The world's light and spawn rules for the Light Overlay, or null (not in a world). */
+	default com.arcticlauncher.client.feature.LightOverlay.Probe lightProbe() {
+		return null;
+	}
+
 	/** Item physics works on this version. */
 	default boolean itemPhysicsWorks() {
 		return false;
@@ -570,7 +596,7 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	/** Lit TNT shows the seconds left above it ("2.4"); with {@code on} false the names are put back. Each tick. */
 	default void tntLabels(boolean on) {}
 
-	/** The screen, particle and hand hooks of Lock Slots, Inventory Search, Particle Control, Held Item and Shulker Peek exist on this version (not on 1.13.2). */
+	/** The screen, particle and hand hooks of Lock Slots, Inventory Search, Particle Control and Held Item exist on this version (not on 1.13.2). */
 	default boolean hasScreenHooks() {
 		return true;
 	}

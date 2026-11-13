@@ -26,6 +26,8 @@ public final class ArcticMod implements ClientModInitializer {
 		//#if MC >= 1.13
 		com.arcticlauncher.client.replay.Replays.backend(com.arcticlauncher.mod.replay.ReplayPlayback.INSTANCE);
 		//#endif
+		//#if DEV_SCENES
 		SelfTest.maybeStart();
+		//#endif
 	}
 }

@@ -2,7 +2,8 @@
 	"required": true,
 	"package": "com.arcticlauncher.mod.mixin",
 	"compatibilityLevel": "JAVA_${java}",
-	"client": [<% if (restyleWidgets) { %>
+	"client": [
+		"ScreenshotMixin",<% if (restyleWidgets) { %>
 		"AbstractButtonMixin",
 		"AbstractSliderButtonMixin",
 		"ButtonMixin",
@@ -10,7 +11,11 @@
 		"EditBoxMixin",<% } %>
 <% if (widgets13) { %>		"ScreenButtonsAccess",
 <% } %>		"AbstractClientPlayerMixin",
-		"FontMaskMixin",
+		"FontMaskMixin",<% if (badgeShadow) { %>
+		"BadgeShadowMixin",<% } %><% if (badgeShadow13) { %>
+		"BadgeShadow13Mixin",<% } %>
+<% if (emoteOldGlyph) { %>		"EmoteGlyphMixin",
+<% } %>
 		"ClientBrandMixin",
 		"ConnectionProxyMixin",
 <% if (playerInfoRace) { %>		"PlayerInfoLookupMixin",
@@ -32,6 +37,7 @@
 		"PortalScreenMixin",
 		"OwnNametagMixin",
 		"ChatEmojiMixin",
+		"ChatSentHistoryMixin",
 		"ScreenNoticesMixin",
 		"DebugScaleMixin",
 <% if (hurtCam) { %>		"NoHurtCamMixin",
@@ -40,9 +46,11 @@
 <% if (framerateTracker) { %>		"FramerateTrackerMixin",
 <% } %>		"ParticleEngineMixin",
 		"HeldItemMixin",
-		"ContainerSearchMixin",
-		"DropLockMixin",
-<% } %>		"NativeMenuMixin",
+<% if (recipeBookPeek) { %>		"RecipeBookScreenMixin",
+		"ContainerHoverAccess",
+<% } %>		"DropLockMixin",
+<% } %>		"ContainerSearchMixin",
+		"NativeMenuMixin",
 		"HudMixin",
 		"KeyboardHandlerMixin",
 		"MouseHandlerMixin",
@@ -56,6 +64,22 @@
 <% } %>		"ServerTimeMixin",
 		"ChatPlaceholderMixin",
 		"MinecraftTickMixin",
+		"GlassModelMixin",<% if (ctmPackOrder) { %>
+		"GlassPackOrderMixin",<% } %>
+		"GlassBakedQuadMixin",<% if (ctmQuadAccess) { %>
+		"GlassQuadAccess",<% } %>
+		"GlassDamageMixin",
+		"GlassRenderMixin",<% if (ctmSodium) { %>
+		"GlassSodiumMixin",<% } %><% if (ctmSodiumContext) { %>
+		"GlassSodiumContextMixin",<% } %><% if (ctmSodiumOld) { %>
+		"GlassSodiumOldMixin",<% } %>
+		"GlassAtlasMixin",<% if (ctmContents) { %>
+		"GlassContentsMixin",
+		"GlassStitchMixin",<% } else { %>
+		"GlassOldAtlasMixin",
+		"GlassOldImageMixin",<% if (ctmInfo) { %>
+		"GlassInfoAccess",<% } %><% if (ctmSpriteAccess) { %>
+		"GlassOldSpriteAccess",<% } %><% } %>
 		"ServerMenuScreenMixin",<% if (postBlur) { %>
 		"MotionBlurPostMixin",
 		"EffectsPackMixin",<% } %><% if (oldMotionBlur) { %>
@@ -65,7 +89,8 @@
 		"FontHintingMixin",
 		"FontBitmapHintingMixin",<% } %><% if (smoothFontManager) { %>
 		"SmoothFontManagerMixin",
-		"SmoothFontGlyphInfoMixin",<% } %><% if (glowText) { %>
+		"SmoothFontGlyphInfoMixin",<% } %><% if (emoteFontManager) { %>
+		"SmoothFontManagerMixin",<% } %><% if (glowText) { %>
 		"GlowTextMixin",<% } %><% if (scaledFont) { %>
 		"FontTextureMixin",
 		"ScaledGlyphMixin",<% } %><% if (!worldTextScale) { %>
@@ -73,7 +98,8 @@
 		"ScaledTextStateMixin",
 		"TextProjectionMixin",
 		"TextProjectionBufferMixin",<% } %><% if (worldTextScale) { %>
-		"WorldTextScaleMixin",<% } %><% if (oldScaledFont) { %>
+		"WorldTextScaleMixin",<% } %><% if (nameTagTextScale) { %>
+		"NameTagTextScaleMixin",<% } %><% if (oldScaledFont) { %>
 		"ScaledFontSetMixin",<% } %><% if (oldScaledTexture) { %>
 		"ScaledFontTextureMixin",<% } %><% if (gpuFontTexture && !scaledFont) { %>
 		"FontTextureMixin",<% } %><% if (textShader) { %>
@@ -96,6 +122,7 @@
 <% } %>		"TooltipWheelMixin",
 		"ShinyPotsMixin",
 <% if (chunkOwn13) { %>		"ChunkBorders13Mixin",
+<% } %><% if (lightOverlay) { %>		"LightOverlayMixin",
 <% } %>		"DynamicFovMixin",
 <% if (teamViewClient) { %>		"TeamViewClientMixin",
 <% } %><% if (teamViewEntity) { %>		"TeamViewEntityMixin",
@@ -105,6 +132,8 @@
 <% } %>
 		"LightmapMixin",
 		"ChatComponentMixin",
+<% if (emoteLayout) { %>		"ChatEmoteLayoutMixin",
+<% } %>
 		"ChatCopyStyleMixin",
 		${chatCopyStyleAccess}
 <% if (chatLine111) { %>		"ChatLine111Mixin",

@@ -33,6 +33,18 @@ abstract class SmoothTextRendererMixin {
 	@Shadow
 	private boolean bold;
 
+	@Shadow private float red;
+	@Shadow private float green;
+	@Shadow private float blue;
+	@Shadow private float alpha;
+	private boolean arctic$emoteShadow;
+
+	@Inject(method = "draw(Ljava/lang/String;Z)V", at = @At("HEAD"))
+	private void arctic$shadowPass(String text, boolean shadow, CallbackInfo ci) {
+		arctic$emoteShadow = shadow;
+		arctic$boldSecond = false;
+	}
+
 	/** Which of a bold character's two draws this is (they alternate; the second draws nothing here). */
 	private boolean arctic$boldSecond;
 
@@ -78,6 +90,13 @@ abstract class SmoothTextRendererMixin {
 		return mc != null && mc.textRenderer == (Object) this && LegacySmoothFont.on() && !isUnicode();
 	}
 
+	@Inject(method = {"draw(Ljava/lang/String;FFIZ)I", "drawLayer(Ljava/lang/String;IIIIZ)I"}, at = @At("HEAD"))
+	private void arctic$drawTransform(CallbackInfoReturnable<Integer> cir) {
+		if (arctic$smooth()) {
+			LegacySmoothFont.beginDraw();
+		}
+	}
+
 	@Inject(method = "drawLayer(Ljava/lang/String;FFIZ)I", at = @At("HEAD"))
 	private void arctic$pixelSize(String text, float x, float y, int color, boolean shadow, CallbackInfoReturnable<Integer> cir) {
 		if (arctic$smooth()) {
@@ -94,6 +113,16 @@ abstract class SmoothTextRendererMixin {
 	@Redirect(method = "draw(Ljava/lang/String;Z)V", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/font/TextRenderer;drawLayer(CZ)F"))
 	private float arctic$draw(TextRenderer renderer, char c, boolean italic) {
+		com.arcticlauncher.client.feature.EmoteAtlas.Emote emote = com.arcticlauncher.client.feature.EmoteAtlas.glyph(c);
+		if (emote != null) {
+			boolean second = bold && arctic$boldSecond;
+			arctic$boldSecond = bold && !arctic$boldSecond;
+			if (!second) {
+				com.arcticlauncher.legacy.LegacyHooks.drawEmote(emote, x, y, alpha, arctic$emoteShadow);
+				GlStateManager.color(red, green, blue, alpha);
+			}
+			return com.arcticlauncher.client.feature.EmoteAtlas.ADVANCE - (bold && arctic$smooth() ? 1 : 0);
+		}
 		if (!arctic$smooth()) {
 			return drawLayer(c, italic);
 		}
@@ -140,6 +169,10 @@ abstract class SmoothTextRendererMixin {
 	/** Whole GUI pixels, the same step drawing moves the pen by. */
 	@Inject(method = "getCharWidth", at = @At("HEAD"), cancellable = true)
 	private void arctic$charWidth(char c, CallbackInfoReturnable<Integer> cir) {
+		if (com.arcticlauncher.client.feature.EmoteAtlas.glyph(c) != null) {
+			cir.setReturnValue(com.arcticlauncher.client.feature.EmoteAtlas.ADVANCE);
+			return;
+		}
 		if (c == '§' || !arctic$smooth()) {
 			return;
 		}

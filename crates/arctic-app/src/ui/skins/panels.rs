@@ -36,6 +36,16 @@ const ZOOM_FOCUS: f32 = 28.0;
 /// Cosmetic slots in the order they're listed.
 pub(super) const SLOTS: [&str; 6] = ["head", "face", "back", "shoulders", "arms", "body"];
 
+/// How far the idle auto-turn moves the preview this frame: nothing while locked, or until
+/// `AUTO_TURN_AFTER` seconds after the last drag (`dragged_at < 0` = never auto-turn yet).
+fn auto_turn_step(locked: bool, now: f64, dragged_at: f64, dt: f32) -> f32 {
+    if locked || dragged_at < 0.0 || now - dragged_at <= AUTO_TURN_AFTER {
+        0.0
+    } else {
+        dt * AUTO_TURN_SPEED
+    }
+}
+
 /// What "you" look like to others: Arctic skin first, then Minecraft's.
 /// Changes still being saved are already in it.
 pub(super) struct CurrentLook {
@@ -253,9 +263,14 @@ impl ArcticApp {
             self.skins.yaw += d.x * 0.012;
             self.skins.pitch = model::clamp_pitch(self.skins.pitch + d.y * 0.008);
             self.skins.dragged_at = now;
-        } else if now - self.skins.dragged_at > AUTO_TURN_AFTER && self.skins.dragged_at >= 0.0 {
+        } else {
             let dt = ui.input(|i| i.stable_dt).min(0.1);
-            self.skins.yaw += dt * AUTO_TURN_SPEED;
+            self.skins.yaw += auto_turn_step(
+                self.settings.lock_preview_rotation,
+                now,
+                self.skins.dragged_at,
+                dt,
+            );
         }
         if response.double_clicked() {
             self.skins.yaw = 0.5;
@@ -395,6 +410,28 @@ impl ArcticApp {
             "Drag to turn · scroll to zoom · double-click to reset"
         };
         response.on_hover_text(hint);
+        // Lock toggle in the top-right corner; its own click target, so it never turns the figure.
+        let locked = self.settings.lock_preview_rotation;
+        let button = Rect::from_min_size(
+            pos2(rect.right() - 36.0, rect.top() + 8.0),
+            vec2(28.0, 28.0),
+        );
+        let tip = if locked {
+            "Unlock rotation"
+        } else {
+            "Lock rotation"
+        };
+        let icon = if locked { Icon::Lock } else { Icon::Unlock };
+        let toggled = ui
+            .scope_builder(egui::UiBuilder::new().max_rect(button), |ui| {
+                widgets::icon_button(ui, p, icon, tip)
+            })
+            .inner
+            .clicked();
+        if toggled {
+            self.settings.lock_preview_rotation = !locked;
+            self.persist_settings();
+        }
     }
 
     /// What you're wearing, each with a way to take it off, and how saving goes.
@@ -756,5 +793,22 @@ pub(super) fn slot_name(slot: &str) -> &'static str {
         "shoulders" => "Shoulders",
         "arms" => "Arms",
         _ => "Body",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn auto_turn_waits_after_a_drag_and_never_runs_locked() {
+        assert!(auto_turn_step(false, 10.0, 0.0, 0.016) > 0.0);
+        assert_eq!(auto_turn_step(false, 2.0, 0.0, 0.016), 0.0, "just dragged");
+        assert_eq!(
+            auto_turn_step(false, 10.0, -1.0, 0.016),
+            0.0,
+            "devshot still"
+        );
+        assert_eq!(auto_turn_step(true, 10.0, 0.0, 0.016), 0.0, "locked");
     }
 }

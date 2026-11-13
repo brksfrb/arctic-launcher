@@ -178,7 +178,7 @@ pub struct ArcticApp {
     pub(crate) toasts: Toasts,
     pub(crate) msa_configured: bool,
     pub(crate) version_filter: String,
-    pub(crate) version_view: crate::ui::VersionView,
+    pub(crate) version_view: arctic_core::settings::VersionView,
     /// Games started from here (several can run at once).
     pub(crate) runs: crate::runs::Runs,
     pub(crate) launcher_log: Vec<LogLine>,
@@ -216,7 +216,7 @@ pub struct ArcticApp {
     pub(crate) storage: crate::ui::StorageUi,
     pub(crate) quick_tips: crate::ui::QuickTips,
     pub(crate) skins: crate::ui::SkinsUi,
-    devshot: crate::devshot::DevShot,
+    pub(crate) devshot: crate::devshot::DevShot,
     /// Command lines from later starts (see `single_instance`).
     forwarded: std::sync::mpsc::Receiver<Vec<String>>,
     tray: Option<crate::tray::Tray>,
@@ -267,6 +267,11 @@ impl ArcticApp {
         let mut toasts = Toasts::default();
         let data = ProfileData::load(&dirs, &tasks, &mut toasts);
         let voice = crate::voice::VoiceHub::new(dirs.clone(), data.settings.voice.clone());
+        let installed = versions::installed_versions(&dirs);
+        let version_view = data.settings.version_view.for_session(
+            !data.settings.favorite_versions.is_empty(),
+            !installed.is_empty(),
+        );
         bridge.set_voice(voice.clone());
         tasks.load_manifest();
         // A game that crashed or was killed leaves its unfinished replay recording
@@ -324,7 +329,7 @@ impl ArcticApp {
             maximize_pending: data.settings.start_maximized,
             pending_launch: startup.launch.clone(),
             msa_configured: MsaConfig::load(&dirs).is_ok(),
-            installed: versions::installed_versions(&dirs),
+            installed,
             custom_instances: Vec::new(),
             saved_settings: data.settings.clone(),
             settings: data.settings.clone(),
@@ -358,7 +363,7 @@ impl ArcticApp {
             whats_new: None,
             toasts,
             version_filter: String::new(),
-            version_view: crate::ui::VersionView::All,
+            version_view,
             runs: crate::runs::Runs::default(),
             launcher_log: Vec::new(),
             launcher_log_seen: 0,
@@ -1353,7 +1358,8 @@ impl ArcticApp {
         // SAFETY: a plain string query on the context eframe is drawing with.
         let name = unsafe { gl.get_parameter_string(eframe::glow::RENDERER) };
         self.gl_checked = true;
-        self.software_gl = is_software_renderer(&name);
+        self.software_gl = is_software_renderer(&name)
+            && !(crate::devshot::enabled() && std::env::var_os("ARCTIC_DEVSHOT_ANIM").is_some());
         log::info!(
             "graphics: {name}{}",
             if self.software_gl {

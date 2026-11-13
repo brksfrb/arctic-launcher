@@ -1,8 +1,7 @@
 package com.arcticlauncher.mod.mixin;
 
 //#if MC >= 1.13 && MC < 1.21.5
-import com.arcticlauncher.client.ArcticClient;
-import com.arcticlauncher.client.config.ClientConfig;
+import com.arcticlauncher.client.Fog;
 //#if MC >= 1.15
 import com.mojang.blaze3d.systems.RenderSystem;
 //#else
@@ -28,34 +27,29 @@ abstract class FogMixin {
 	//#if MC >= 1.21.2
 	@ModifyVariable(method = "setShaderFog", at = @At("HEAD"), argsOnly = true)
 	private static FogParameters arctic$fog(FogParameters fog) {
-		float f = factor();
-		return f == 1f || fog == null ? fog : new FogParameters(fog.start() * f, fog.end() * f, fog.shape(), fog.red(), fog.green(), fog.blue(), fog.alpha());
+		float f = Fog.factor();
+		return f == 1f || fog == null ? fog : new FogParameters(Fog.stretch(fog.start(), f), Fog.stretch(fog.end(), f), fog.shape(), fog.red(), fog.green(), fog.blue(), fog.alpha());
 	}
 	//#elif MC >= 1.17
 	@ModifyVariable(method = "setShaderFogStart", at = @At("HEAD"), argsOnly = true)
 	private static float arctic$start(float start) {
-		return start * factor();
+		return Fog.stretch(start);
 	}
 
 	@ModifyVariable(method = "setShaderFogEnd", at = @At("HEAD"), argsOnly = true)
 	private static float arctic$end(float end) {
-		return end * factor();
+		return Fog.stretch(end);
 	}
 	//#else
 	@ModifyVariable(method = "fogStart", at = @At("HEAD"), argsOnly = true)
 	private static float arctic$start(float start) {
-		return start * factor();
+		return Fog.stretch(start);
 	}
 
 	@ModifyVariable(method = "fogEnd", at = @At("HEAD"), argsOnly = true)
 	private static float arctic$end(float end) {
-		return end * factor();
+		return Fog.stretch(end);
 	}
 	//#endif
-
-	private static float factor() {
-		ClientConfig c = ArcticClient.config();
-		return c == null || !c.fog ? 1f : c.fogOff ? 1000f : (float) Math.max(1.0, Math.min(10.0, c.fogScale));
-	}
 }
 //#endif

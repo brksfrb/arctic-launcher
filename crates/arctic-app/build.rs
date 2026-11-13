@@ -23,9 +23,19 @@ fn main() {
     res.set("ProductName", "Arctic Launcher");
     res.set("FileDescription", "Arctic Launcher");
     res.set("LegalCopyright", "GPL-3.0-or-later");
-    // A missing resource compiler must not break the build; the exe just
-    // keeps the default icon.
+    // A missing or broken resource compiler used to only warn, which silently
+    // shipped icon-less exes. Fail the build instead; ARCTIC_ALLOW_NO_ICON=1
+    // opts back into the warning.
+    println!("cargo:rerun-if-env-changed=ARCTIC_ALLOW_NO_ICON");
     if let Err(e) = res.compile() {
-        println!("cargo:warning=could not embed exe icon: {e}");
+        if std::env::var("ARCTIC_ALLOW_NO_ICON").as_deref() == Ok("1") {
+            println!("cargo:warning=could not embed exe icon: {e}");
+        } else {
+            panic!(
+                "could not embed exe icon: {e}. Make sure a resource compiler works \
+                 (llvm-rc in PATH and an existing TMPDIR for cargo-xwin builds), or set \
+                 ARCTIC_ALLOW_NO_ICON=1 to build without an icon."
+            );
+        }
     }
 }

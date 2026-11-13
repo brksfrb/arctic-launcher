@@ -336,6 +336,11 @@ final class FabricPlatform implements Platform {
 		return Compat.keyName(nativeKey);
 	}
 
+	@Override
+	public String keyUsedBy(String key) {
+		return Compat.keyUsedBy(key);
+	}
+
 	/** The camera before Freelook switched to third person (-1: none). */
 	private int before = -1;
 
@@ -1422,6 +1427,22 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean lightOverlayWorks() {
+		//#if MC >= 1.21.11 && MC < 26.1
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	//#if MC >= 1.21.11 && MC < 26.1
+	@Override
+	public com.arcticlauncher.client.feature.LightOverlay.Probe lightProbe() {
+		return LightOverlayDraw.probe();
+	}
+	//#endif
+
+	@Override
 	public boolean itemPhysicsWorks() {
 		return true;
 	}
@@ -1492,6 +1513,26 @@ final class FabricPlatform implements Platform {
 	@Override
 	public void sendChat(String text) {
 		WorldStats.sendChat(text);
+	}
+
+	@Override
+	public java.util.Collection<UUID> onlinePlayerIds() {
+		ClientPacketListener connection = mc().getConnection();
+		if (connection == null) {
+			return java.util.Collections.emptyList();
+		}
+		java.util.List<UUID> ids = new java.util.ArrayList<UUID>();
+		//#if MC >= 1.19.3
+		for (net.minecraft.client.multiplayer.PlayerInfo info : connection.getListedOnlinePlayers()) {
+		//#else
+		for (net.minecraft.client.multiplayer.PlayerInfo info : connection.getOnlinePlayers()) {
+		//#endif
+			UUID id = Compat.profileId(info.getProfile());
+			if (id != null) {
+				ids.add(id);
+			}
+		}
+		return ids;
 	}
 
 	@Override

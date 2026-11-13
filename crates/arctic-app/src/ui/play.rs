@@ -6,6 +6,7 @@ use eframe::egui::{
 };
 
 use arctic_core::instances::Instance;
+use arctic_core::settings::VersionView;
 use arctic_core::versions::{VersionEntry, VersionKind, VersionManifest};
 
 use crate::app::{AddAccount, ArcticApp, ManifestState, Tab};
@@ -27,15 +28,6 @@ fn bytes_percent(done: u64, total: u64) -> Option<u8> {
     }
     let pct = u128::from(done.min(total)) * 100 / u128::from(total);
     Some(pct.min(99) as u8)
-}
-
-/// Which versions the picker lists.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum VersionView {
-    #[default]
-    All,
-    Installed,
-    Favorites,
 }
 
 impl ArcticApp {
@@ -417,24 +409,32 @@ impl ArcticApp {
                 .hint_text("Search versions")
                 .desired_width(f32::INFINITY),
         );
+        let mut picked = None;
         ui.horizontal(|ui| {
             let installed = releases
                 .iter()
                 .filter(|(id, _)| self.installed.contains(id))
                 .count();
             let favorites = self.settings.favorite_versions.len();
-            ui.selectable_value(&mut self.version_view, VersionView::All, "All");
-            ui.selectable_value(
-                &mut self.version_view,
-                VersionView::Installed,
-                format!("Installed ({installed})"),
-            );
-            ui.selectable_value(
-                &mut self.version_view,
-                VersionView::Favorites,
-                format!("Favorites ({favorites})"),
-            );
+            let tabs = [
+                (VersionView::All, "All".to_string()),
+                (VersionView::Installed, format!("Installed ({installed})")),
+                (VersionView::Favorites, format!("Favorites ({favorites})")),
+            ];
+            for (view, label) in tabs {
+                if ui
+                    .selectable_value(&mut self.version_view, view, label)
+                    .clicked()
+                {
+                    picked = Some(view);
+                }
+            }
         });
+        // A click is saved even on an empty tab; the session fallback never is.
+        if let Some(view) = picked {
+            self.settings.version_view = view;
+            self.persist_settings();
+        }
         ui.separator();
         let filter = self.version_filter.trim().to_lowercase();
         let rows: Vec<&(String, String)> = releases

@@ -45,6 +45,7 @@ public final class ArcticAgent {
 	public static void premain(String args, Instrumentation instrumentation) {
 		ExitTrace.install();
 		MixinCache.init();
+		try { MixinFailureDiagnostics.init(); } catch (Throwable ignored) { }
 		instrumentation.addTransformer(new ClassFileTransformer() {
 			@Override
 			public byte[] transform(ClassLoader loader, String name, Class<?> redefined, ProtectionDomain domain, byte[] bytes) {
@@ -87,12 +88,69 @@ public final class ArcticAgent {
 		ClassNode node = new ClassNode();
 		new ClassReader(bytes).accept(node, 0);
 		lockLoading(node);
+		diagnoseFailures(node);
 		cacheTransformed(node);
 		hideServed(node);
 		// The class's own frames stay as they are; only the wrappers' are written above.
 		ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
 		node.accept(writer);
 		return writer.toByteArray();
+	}
+
+	/** Catch only the actual Mixin call: its arguments are the bytes Mixin received, not a reread
+	 * from the jar (which could omit earlier Fabric transforms). Nothing is parsed on success. */
+	private static void diagnoseFailures(ClassNode node) {
+		String transformer = "org/spongepowered/asm/mixin/transformer/IMixinTransformer";
+		String desc = "(Ljava/lang/String;Ljava/lang/String;[B)[B";
+		String guardedDesc = "(L" + transformer + ";Ljava/lang/String;Ljava/lang/String;[B)[B";
+		boolean found = false;
+		for (MethodNode method : node.methods) {
+			if (!POST.equals(method.name) || !POST_DESC.equals(method.desc)) continue;
+			for (org.objectweb.asm.tree.AbstractInsnNode insn : method.instructions.toArray()) {
+				if (insn instanceof MethodInsnNode call && transformer.equals(call.owner)
+						&& "transformClassBytes".equals(call.name) && desc.equals(call.desc)) {
+					method.instructions.set(call, new MethodInsnNode(Opcodes.INVOKESTATIC, node.name,
+							"arctic$transformWithDiagnostics", guardedDesc, false));
+					found = true;
+				}
+			}
+		}
+		if (!found) return; // A future Loader shape must still load normally.
+		MethodNode guard = new MethodNode(Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_SYNTHETIC,
+				"arctic$transformWithDiagnostics", guardedDesc, null, null);
+		LabelNode start = new LabelNode(), end = new LabelNode(), failed = new LabelNode();
+		LabelNode reporting = new LabelNode(), reported = new LabelNode(), ignored = new LabelNode(), rethrow = new LabelNode();
+		InsnList code = guard.instructions;
+		code.add(start);
+		for (int i = 0; i < 4; i++) code.add(new VarInsnNode(Opcodes.ALOAD, i));
+		code.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, transformer, "transformClassBytes", desc, true));
+		code.add(end);
+		code.add(new InsnNode(Opcodes.ARETURN));
+		code.add(failed);
+		Object[] args = {transformer, "java/lang/String", "java/lang/String", "[B"};
+		code.add(new FrameNode(Opcodes.F_FULL, 4, args, 1, new Object[] {"java/lang/Throwable"}));
+		code.add(new VarInsnNode(Opcodes.ASTORE, 4));
+		code.add(reporting);
+		code.add(new VarInsnNode(Opcodes.ALOAD, 2));
+		code.add(new VarInsnNode(Opcodes.ALOAD, 3));
+		code.add(new VarInsnNode(Opcodes.ALOAD, 0));
+		code.add(new VarInsnNode(Opcodes.ALOAD, 4));
+		code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "com/arcticlauncher/mod/startup/MixinFailureDiagnostics",
+				"failure", "(Ljava/lang/String;[BLjava/lang/Object;Ljava/lang/Throwable;)V", false));
+		code.add(reported);
+		code.add(new org.objectweb.asm.tree.JumpInsnNode(Opcodes.GOTO, rethrow));
+		code.add(ignored);
+		Object[] withError = {transformer, "java/lang/String", "java/lang/String", "[B", "java/lang/Throwable"};
+		code.add(new FrameNode(Opcodes.F_FULL, 5, withError, 1, new Object[] {"java/lang/Throwable"}));
+		code.add(new InsnNode(Opcodes.POP));
+		code.add(rethrow);
+		code.add(new FrameNode(Opcodes.F_FULL, 5, withError, 0, new Object[0]));
+		code.add(new VarInsnNode(Opcodes.ALOAD, 4));
+		code.add(new InsnNode(Opcodes.ATHROW));
+		guard.tryCatchBlocks.add(new TryCatchBlockNode(start, end, failed, "java/lang/Throwable"));
+		// Even a missing diagnostics class or an I/O/linkage error cannot replace the original failure.
+		guard.tryCatchBlocks.add(new TryCatchBlockNode(reporting, reported, ignored, "java/lang/Throwable"));
+		node.methods.add(guard);
 	}
 
 	/**

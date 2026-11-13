@@ -178,6 +178,7 @@ impl ArcticApp {
                         downloads: 0,
                         icon_url: None,
                         categories: vec![],
+                        game_versions: vec![],
                     },
                     std::env::var("ARCTIC_DEVSHOT_KIND")
                         .ok()
@@ -250,6 +251,15 @@ impl ArcticApp {
                             "{} downloads",
                             compact(detail.map_or(preview.hit.downloads, |d| d.downloads))
                         ));
+                        if preview.kind.is_some()
+                            && preview.hit.is_incompatible(&self.pack_game(instance))
+                        {
+                            ui.label(RichText::new("Incompatible").color(p.error))
+                                .on_hover_text(format!(
+                                    "No file is tagged for Minecraft {}. You can still install it.",
+                                    self.pack_game(instance)
+                                ));
+                        }
                     });
                     let busy = match preview.kind {
                         Some(_) => self.inst.packs.installing.contains(&preview.hit.project_id),
@@ -439,6 +449,7 @@ mod tests {
                 downloads: 0,
                 icon_url: None,
                 categories: vec![],
+                game_versions: vec![],
             },
             kind: None,
             receiver,

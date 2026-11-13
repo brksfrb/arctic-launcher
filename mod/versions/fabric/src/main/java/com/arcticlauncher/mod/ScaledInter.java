@@ -100,15 +100,32 @@ public final class ScaledInter {
 		//#endif
 	}
 
-	/** The smallest bucket at least {@code times} the GUI scale (the largest one past x8). */
-	private static Bucket bucket(float times, int gui) {
-		int slot = MULTIPLES.length - 1;
+	/** The index of the smallest multiple at least {@code times} (the largest one past x8). */
+	private static int slotFor(float times) {
 		for (int i = 0; i < MULTIPLES.length; i++) {
 			if (MULTIPLES[i] >= times) {
-				slot = i;
-				break;
+				return i;
 			}
 		}
+		return MULTIPLES.length - 1;
+	}
+
+	/**
+	 * Which bucket text drawn {@code times} the GUI scale takes its letters from: 0 for the GUI-size font, else 1..3
+	 * (a different bucket gives different letters). For caches that keep laid-out text and must keep one per bucket.
+	 */
+	public static int variant(float times) {
+		int gui = baseScale();
+		if (gui <= 0 || !(times > UPSCALE_AT)) {
+			return 0;
+		}
+		int slot = slotFor(times);
+		return Math.min(MAX_PIXEL_SCALE, gui * MULTIPLES[slot]) <= gui ? 0 : slot + 1;
+	}
+
+	/** The smallest bucket at least {@code times} the GUI scale (the largest one past x8). */
+	private static Bucket bucket(float times, int gui) {
+		int slot = slotFor(times);
 		int pixels = Math.min(MAX_PIXEL_SCALE, gui * MULTIPLES[slot]);
 		if (pixels <= gui || failed[slot]) {
 			return null;

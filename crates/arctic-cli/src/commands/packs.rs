@@ -48,7 +48,7 @@ pub fn run(ctx: &Ctx, command: &PacksCommand) -> Result<i32> {
             let progress = |p: arctic_core::ProgressInfo| ctx.out.progress(p);
             let file = packs::install(kind, project, &game(ctx, &inst), &game_dir, &progress);
             ctx.out.end_progress();
-            let file = file?;
+            let file = file?.file_name;
             if !keep_off {
                 packs::set_active(kind, &game_dir, &file, true)?;
             }

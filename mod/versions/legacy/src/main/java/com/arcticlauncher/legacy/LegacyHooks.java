@@ -316,21 +316,46 @@ public final class LegacyHooks {
 		com.arcticlauncher.client.feature.ContainerPeek.hover(new LegacyGfx(), mouseX, mouseY, slot.getStack());
 	}
 
-	/** The Arctic badge in the {@code size}-wide blank at ({@code x}, {@code y}), with the text's own transparency. */
-	public static void drawBadge(float x, float y, int size, int argb) {
-		net.minecraft.util.Identifier texture = LegacyTextures.resolve("asset:badge");
+	/**
+	 * The Arctic badge of the chosen style at ({@code x}, {@code y}), the top left of a text line: always
+	 * {@code Badge.SIZE} square from the line's top (the font's glyphs are 8 high from there), as the
+	 * newer versions' font picture, with the text's own transparency and, with a shadow, its shadow.
+	 */
+	public static void drawBadge(float x, float y, int argb, boolean shadow, int style, boolean tab) {
+		net.minecraft.util.Identifier texture = LegacyTextures.resolve("asset:" + com.arcticlauncher.client.feature.Badge.name(style) + (tab ? "_tab" : "_tag"));
 		if (texture == null) {
 			return;
 		}
-		int side = Math.max(6, Math.min(9, size - 2));
+		int side = com.arcticlauncher.client.feature.Badge.size(tab);
+		int resolution = side * 8;
+		y -= tab ? 1 : 0;
 		int alpha = argb >>> 24;
+		// Text with no alpha is opaque, as the game draws it.
+		float a = alpha == 0 ? 1f : alpha / 255f;
 		MinecraftClient.getInstance().getTextureManager().bindTexture(texture);
 		com.mojang.blaze3d.platform.GlStateManager.enableBlend();
 		com.mojang.blaze3d.platform.GlStateManager.blendFuncSeparate(org.lwjgl.opengl.GL11.GL_SRC_ALPHA,
 				org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA, org.lwjgl.opengl.GL11.GL_ONE, org.lwjgl.opengl.GL11.GL_ZERO);
-		// Text with no alpha is opaque, as the game draws it.
-		com.mojang.blaze3d.platform.GlStateManager.color(1f, 1f, 1f, alpha == 0 ? 1f : alpha / 255f);
-		net.minecraft.client.gui.DrawableHelper.drawTexture(Math.round(x), Math.round(y) - 1, 0f, 0f, 64, 64, side, side, 64, 64);
+		// The player list's picture has no shadow, its names do.
+		if (shadow && !tab) {
+			com.mojang.blaze3d.platform.GlStateManager.color(0.25f, 0.25f, 0.25f, a);
+			net.minecraft.client.gui.DrawableHelper.drawTexture(Math.round(x) + 1, Math.round(y) + 1, 0f, 0f, resolution, resolution, side, side, resolution, resolution);
+		}
+		com.mojang.blaze3d.platform.GlStateManager.color(1f, 1f, 1f, a);
+		net.minecraft.client.gui.DrawableHelper.drawTexture(Math.round(x), Math.round(y), 0f, 0f, resolution, resolution, side, side, resolution, resolution);
+	}
+
+	/** RGBA chat glyph, using the same one-texture path as the badge. */
+	public static void drawEmote(com.arcticlauncher.client.feature.EmoteAtlas.Emote emote, float x, float y, float alpha, boolean shadow) {
+		net.minecraft.util.Identifier texture = LegacyTextures.resolve("asset:emotes");
+		if (texture == null) return;
+		MinecraftClient.getInstance().getTextureManager().bindTexture(texture);
+		com.mojang.blaze3d.platform.GlStateManager.enableBlend();
+		com.mojang.blaze3d.platform.GlStateManager.blendFuncSeparate(org.lwjgl.opengl.GL11.GL_SRC_ALPHA,
+				org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA, org.lwjgl.opengl.GL11.GL_ONE, org.lwjgl.opengl.GL11.GL_ZERO);
+		float tint = shadow ? 0.25f : 1f;
+		com.mojang.blaze3d.platform.GlStateManager.color(tint, tint, tint, alpha);
+		net.minecraft.client.gui.DrawableHelper.drawTexture(Math.round(x), Math.round(y) - 1, emote.u(), emote.v(), 144, 144, 10, 10, 1152, 1152);
 	}
 
 	/** The ping number in the player list, in the place of the ping bars; false when the latency is unknown. */
@@ -398,9 +423,31 @@ public final class LegacyHooks {
 			out = LegacyChatCopy.tag(new LiteralText("§e» §r"), source, false).append(out);
 			ArcticClient.platform().mentionSound();
 		}
+		return stamped(out, source, new java.util.Date());
+	}
+
+	/** A line restored from the saved chat: no sound or stacking, but the time it arrived (0: no stamp). */
+	public static Text restoredChat(Text message, long time) {
+		ClientConfig c = ArcticClient.config();
+		if (c == null || time <= 0) {
+			return message;
+		}
+		String source = message.asUnformattedString();
+		return stamped(LegacyChatCopy.tag(message, source, false), source, new java.util.Date(time));
+	}
+
+	private static Text stamped(Text out, String source, java.util.Date when) {
+		ClientConfig c = ArcticClient.config();
 		if (c.chatTimestamps) {
-			out = new LiteralText("").append(LegacyChatCopy.tag(new LiteralText("§8" + (c.chatStampBold ? "§l" : "") + (c.chatStampItalic ? "§o" : "")
-					+ com.arcticlauncher.client.feature.ChatStamp.text(c) + "§r"), source, true)).append(out);
+			String shown = com.arcticlauncher.client.feature.ChatStamp.text(c, when);
+			net.minecraft.client.font.TextRenderer font = MinecraftClient.getInstance().textRenderer;
+			// The slot padding sits beside the tagged stamp, so the hover/click target is only the time.
+			Text pad = new LiteralText("§8" + com.arcticlauncher.client.feature.ChatStampWidth.padding(c, font, font::getStringWidth, shown));
+			Text stamp = LegacyChatCopy.tag(new LiteralText("§8" + (c.chatStampBold ? "§l" : "") + (c.chatStampItalic ? "§o" : "")
+					+ shown + "§r"), source, true);
+			out = com.arcticlauncher.client.feature.ChatStampWidth.right()
+					? new LiteralText("").append(pad).append(stamp).append(out)
+					: new LiteralText("").append(stamp).append(pad).append(out);
 		} else if (c.chatCopy) {
 			out = new LiteralText("").append(LegacyChatCopy.tag(new LiteralText("§8[Copy] §r"), source, true)).append(out);
 		}

@@ -116,6 +116,7 @@ public final class SmoothFont {
 
 	/** The default font's providers, with Inter first when Fancy is on. */
 	public static <T> List<T> withInter(List<T> providers, java.util.function.Function<GlyphProvider, T> wrap) {
+		providers = EmoteFont.prepend(providers, wrap);
 		if (!on()) {
 			return providers;
 		}

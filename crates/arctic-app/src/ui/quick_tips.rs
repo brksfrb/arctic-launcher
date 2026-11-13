@@ -19,12 +19,31 @@ const SHORT_PAD: f32 = 7.0;
 /// Room the sidebar's menu keeps above the card; without it the card isn't shown.
 const MENU_ROOM: f32 = 4.0;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Target {
+    Tab(Tab),
+    Settings(&'static str),
+    Migrate,
+    Share,
+    Discover,
+    Gallery,
+    Cosmetic(&'static str),
+    Modpacks,
+    Instances,
+    Shaders,
+    Instance(crate::ui::InstancePage),
+    InstanceSetting(&'static str),
+}
+
 /// A tip and where clicking it goes (`None`: it's in game, nothing to open).
-const TIPS: &[(&str, Option<Tab>)] = &[
-    ("Drag servers to put your favorites first.", Some(Tab::Play)),
+const TIPS: &[(&str, Option<Target>)] = &[
+    (
+        "Drag servers to put your favorites first.",
+        Some(Target::Tab(Tab::Play)),
+    ),
     (
         "Discover servers finds new places to play.",
-        Some(Tab::Play),
+        Some(Target::Discover),
     ),
     ("Right Shift in game moves or hides any HUD widget.", None),
     ("Controllers work in game on every version.", None),
@@ -32,81 +51,87 @@ const TIPS: &[(&str, Option<Tab>)] = &[
         "Tier Tags show PvP tiers by names (Right Shift in game).",
         None,
     ),
-    ("Capes, wings, pets and emotes are free.", Some(Tab::Skins)),
+    (
+        "Capes, wings, pets and emotes are free.",
+        Some(Target::Tab(Tab::Skins)),
+    ),
     (
         "Cosmetics → Skin gallery: free skins to try on.",
-        Some(Tab::Skins),
+        Some(Target::Gallery),
     ),
     (
         "Glasses off your eyes? Nudge face items in Cosmetics.",
-        Some(Tab::Skins),
+        Some(Target::Cosmetic("face")),
     ),
     (
         "Shoulder pets can sit on either shoulder.",
-        Some(Tab::Skins),
+        Some(Target::Cosmetic("shoulders")),
     ),
     (
         "Play together without a server: share an invite code.",
-        Some(Tab::Together),
+        Some(Target::Tab(Tab::Together)),
     ),
     (
         "Friends see where you play and join in one click.",
-        Some(Tab::Together),
+        Some(Target::Tab(Tab::Together)),
     ),
     (
         "F9 saves the last 30 seconds; F10 starts or stops a recording.",
-        Some(Tab::Instances),
+        Some(Target::Instance(crate::ui::InstancePage::Replays)),
     ),
     (
         "All your screenshots, every instance, one place.",
-        Some(Tab::Screenshots),
+        Some(Target::Tab(Tab::Screenshots)),
     ),
     (
         "Modrinth modpacks install as their own instance.",
-        Some(Tab::Instances),
+        Some(Target::Modpacks),
     ),
     (
         "Mods that would stop the game get fixed before it starts.",
-        Some(Tab::Instances),
+        Some(Target::Instances),
     ),
     (
         "An instance can keep its worlds on any drive.",
-        Some(Tab::Instances),
+        Some(Target::InstanceSetting("Game folder")),
     ),
     (
-        "Shaders: turn on Iris in an instance's settings.",
-        Some(Tab::Instances),
+        "Shaders: find and enable them in Packs & shaders.",
+        Some(Target::Shaders),
     ),
     (
         "Short on space? Move Arctic in Settings → Storage.",
-        Some(Tab::Settings),
+        Some(Target::Settings("Storage")),
     ),
     (
         "Bring instances and HUDs from other launchers.",
-        Some(Tab::Settings),
+        Some(Target::Migrate),
     ),
-    ("Share your setup or a HUD as a code.", Some(Tab::Settings)),
+    ("Share your setup or a HUD as a code.", Some(Target::Share)),
     (
         "Try the Glass theme in Settings → Appearance.",
-        Some(Tab::Settings),
+        Some(Target::Settings("Appearance")),
     ),
     (
         "One switch adds Sodium and friends for more FPS.",
-        Some(Tab::Settings),
+        Some(Target::Settings("Arctic Client")),
     ),
     (
         "Voice chat works in shared worlds and SVC servers.",
-        Some(Tab::Settings),
+        Some(Target::Settings("Voice chat")),
     ),
     (
         "Animated capes too busy? Freeze them in Settings.",
-        Some(Tab::Settings),
+        Some(Target::Settings("Freeze animated capes and cosmetics")),
     ),
     (
         "Crashes are explained, and fixed where Arctic can.",
-        Some(Tab::Logs),
+        Some(Target::Tab(Tab::Logs)),
     ),
-    ("Every game's log is kept in Logs.", Some(Tab::Logs)),
+    (
+        "Every game's log is kept in Logs.",
+        Some(Target::Tab(Tab::Logs)),
+    ),
     (
         "Profiles keep accounts and instances apart (top left).",
         None,
@@ -123,6 +148,7 @@ const TIPS: &[(&str, Option<Tab>)] = &[
 pub struct QuickTips {
     /// Index into `TIPS` and when it was picked.
     current: Option<(usize, Instant)>,
+    pub(super) instance_section: Option<&'static str>,
 }
 
 impl QuickTips {
@@ -157,13 +183,70 @@ fn pick(last: Option<usize>) -> usize {
 }
 
 impl ArcticApp {
+    fn open_quick_tip(&mut self, target: Target, now: f64) {
+        match target {
+            Target::Tab(tab) => self.set_tab(tab, now),
+            Target::Settings(section) => {
+                self.set_tab(Tab::Settings, now);
+                super::settings::open_section(section);
+            }
+            Target::Migrate => self.open_migrate(),
+            Target::Share => self.open_share(None),
+            Target::Discover => {
+                self.set_tab(Tab::Play, now);
+                self.open_discover();
+            }
+            Target::Gallery => {
+                self.set_tab(Tab::Skins, now);
+                self.skins.section = super::skins::Section::Skins;
+                self.skins.view = super::skins::SkinsView::Gallery;
+            }
+            Target::Cosmetic(slot) => {
+                self.set_tab(Tab::Skins, now);
+                self.skins.section = super::skins::Section::Slot(slot);
+            }
+            Target::Instances => {
+                self.set_tab(Tab::Instances, now);
+                self.inst.modpacks_open = false;
+                self.inst.open = None;
+            }
+            Target::Modpacks => {
+                self.set_tab(Tab::Instances, now);
+                self.inst.modpacks_open = true;
+            }
+            Target::Shaders => {
+                self.open_quick_tip(Target::Instance(crate::ui::InstancePage::Packs), now);
+                self.inst.packs.show_shaders();
+            }
+            Target::InstanceSetting(section) => {
+                self.open_quick_tip(Target::Instance(crate::ui::InstancePage::Settings), now);
+                self.quick_tips.instance_section = Some(section);
+            }
+            Target::Instance(page) => {
+                self.set_tab(Tab::Instances, now);
+                self.inst.modpacks_open = false;
+                let id = self.selected_instance().id.clone();
+                self.open_instance(&id);
+                self.inst.page = page;
+            }
+        }
+    }
+
     /// Sidebar, above the supporter row: a feature worth knowing.
     pub(crate) fn quick_tip(&mut self, ui: &mut egui::Ui) {
         if !self.settings.quick_tips {
             return;
         }
         let p = self.palette();
-        let index = self.quick_tips.tip(Instant::now());
+        let index = if crate::devshot::enabled() {
+            std::env::var("ARCTIC_DEVSHOT_TIP")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .filter(|i| *i < TIPS.len())
+        } else {
+            None
+        }
+        .unwrap_or_else(|| self.quick_tips.tip(Instant::now()));
         let (text, target) = TIPS[index];
         let width = ui.available_width();
         let galley = ui.painter().layout(
@@ -234,10 +317,10 @@ impl ArcticApp {
             None => response,
         };
         if response.clicked()
-            && let Some(tab) = target
+            && let Some(target) = target
         {
             let now = ui.input(|i| i.time);
-            self.set_tab(tab, now);
+            self.open_quick_tip(target, now);
         }
     }
 }
@@ -245,7 +328,13 @@ impl ArcticApp {
 impl ArcticApp {
     /// The tip without its heading, on two lines at most (cut short; all of it on hover), if
     /// that fits in `room`.
-    fn quick_tip_short(&mut self, ui: &mut egui::Ui, room: f32, text: &str, target: Option<Tab>) {
+    fn quick_tip_short(
+        &mut self,
+        ui: &mut egui::Ui,
+        room: f32,
+        text: &str,
+        target: Option<Target>,
+    ) {
         let p = self.palette();
         let width = ui.available_width();
         let text_left = SHORT_PAD + 17.0;
@@ -293,10 +382,10 @@ impl ArcticApp {
             None => response,
         };
         if response.clicked()
-            && let Some(tab) = target
+            && let Some(target) = target
         {
             let now = ui.input(|i| i.time);
-            self.set_tab(tab, now);
+            self.open_quick_tip(target, now);
         }
     }
 }
@@ -304,6 +393,118 @@ impl ArcticApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_tip_has_its_intended_destination() {
+        let expected = [
+            (
+                "Drag servers to put your favorites first.",
+                Some(Target::Tab(Tab::Play)),
+            ),
+            (
+                "Discover servers finds new places to play.",
+                Some(Target::Discover),
+            ),
+            ("Right Shift in game moves or hides any HUD widget.", None),
+            ("Controllers work in game on every version.", None),
+            (
+                "Tier Tags show PvP tiers by names (Right Shift in game).",
+                None,
+            ),
+            (
+                "Capes, wings, pets and emotes are free.",
+                Some(Target::Tab(Tab::Skins)),
+            ),
+            (
+                "Cosmetics → Skin gallery: free skins to try on.",
+                Some(Target::Gallery),
+            ),
+            (
+                "Glasses off your eyes? Nudge face items in Cosmetics.",
+                Some(Target::Cosmetic("face")),
+            ),
+            (
+                "Shoulder pets can sit on either shoulder.",
+                Some(Target::Cosmetic("shoulders")),
+            ),
+            (
+                "Play together without a server: share an invite code.",
+                Some(Target::Tab(Tab::Together)),
+            ),
+            (
+                "Friends see where you play and join in one click.",
+                Some(Target::Tab(Tab::Together)),
+            ),
+            (
+                "F9 saves the last 30 seconds; F10 starts or stops a recording.",
+                Some(Target::Instance(crate::ui::InstancePage::Replays)),
+            ),
+            (
+                "All your screenshots, every instance, one place.",
+                Some(Target::Tab(Tab::Screenshots)),
+            ),
+            (
+                "Modrinth modpacks install as their own instance.",
+                Some(Target::Modpacks),
+            ),
+            (
+                "Mods that would stop the game get fixed before it starts.",
+                Some(Target::Instances),
+            ),
+            (
+                "An instance can keep its worlds on any drive.",
+                Some(Target::InstanceSetting("Game folder")),
+            ),
+            (
+                "Shaders: find and enable them in Packs & shaders.",
+                Some(Target::Shaders),
+            ),
+            (
+                "Short on space? Move Arctic in Settings → Storage.",
+                Some(Target::Settings("Storage")),
+            ),
+            (
+                "Bring instances and HUDs from other launchers.",
+                Some(Target::Migrate),
+            ),
+            ("Share your setup or a HUD as a code.", Some(Target::Share)),
+            (
+                "Try the Glass theme in Settings → Appearance.",
+                Some(Target::Settings("Appearance")),
+            ),
+            (
+                "One switch adds Sodium and friends for more FPS.",
+                Some(Target::Settings("Arctic Client")),
+            ),
+            (
+                "Voice chat works in shared worlds and SVC servers.",
+                Some(Target::Settings("Voice chat")),
+            ),
+            (
+                "Animated capes too busy? Freeze them in Settings.",
+                Some(Target::Settings("Freeze animated capes and cosmetics")),
+            ),
+            (
+                "Crashes are explained, and fixed where Arctic can.",
+                Some(Target::Tab(Tab::Logs)),
+            ),
+            (
+                "Every game's log is kept in Logs.",
+                Some(Target::Tab(Tab::Logs)),
+            ),
+            (
+                "Profiles keep accounts and instances apart (top left).",
+                None,
+            ),
+            (
+                "Auto Reconnect brings you back when a server drops you.",
+                None,
+            ),
+            ("Waypoints and a minimap come with the Arctic Client.", None),
+            ("The arctic command does it all too: arctic --help.", None),
+        ];
+        assert_eq!(TIPS, expected);
+    }
 
     #[test]
     fn a_new_tip_is_never_the_same_as_the_last() {
