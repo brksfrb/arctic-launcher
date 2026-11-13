@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.gfx.Draw;
+import com.arcticlauncher.client.gfx.BrandMark;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Skin;
 import com.arcticlauncher.client.style.Style;
@@ -206,7 +207,7 @@ final class ModsScreen extends Page {
 	protected void drawBehind(Gfx g, Style s, int mx, int my) {
 		Skin.panel(g, s, px, py, px + pw, py + ph);
 		int x = px + TabPage.PAD;
-		g.texture("icon", x, py + (TabPage.HEADER - LOGO) / 2, LOGO, LOGO, 0, 0, 256, 256, 256, 256);
+		BrandMark.draw(g, x, py + (TabPage.HEADER - LOGO) / 2, LOGO);
 		g.text("§lArctic", x + LOGO + 6, py + 10, s.text, false);
 		g.text("Mods", x + LOGO + 6, py + 22, s.muted, false);
 		g.fill(x, py + TabPage.HEADER, px + pw - TabPage.PAD, py + TabPage.HEADER + 1, s.border);

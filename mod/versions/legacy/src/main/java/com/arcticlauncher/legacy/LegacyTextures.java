@@ -1,5 +1,7 @@
 package com.arcticlauncher.legacy;
 
+import com.arcticlauncher.client.gfx.BrandMark;
+
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -48,7 +50,21 @@ final class LegacyTextures {
 			return asset(key.substring(6));
 		}
 		if (key.startsWith("dyn:")) {
-			return dyn(key.substring(4));
+			String name = key.substring(4);
+			Identifier id = dyn(name);
+			if (name.startsWith("brand-") && !LOADED.contains(id)) {
+				boolean smooth = name.startsWith("brand-smooth-");
+				int size = BrandMark.clampSize(Integer.parseInt(name.substring(smooth ? 13 : 6)));
+				BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+				image.setRGB(0, 0, size, size, BrandMark.raster(size), 0, size);
+				if (!register(id, image)) return null;
+				if (smooth) {
+					MinecraftClient.getInstance().getTextureManager().bindTexture(id);
+					org.lwjgl.opengl.GL11.glTexParameteri(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_MIN_FILTER, org.lwjgl.opengl.GL11.GL_LINEAR);
+					org.lwjgl.opengl.GL11.glTexParameteri(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_MAG_FILTER, org.lwjgl.opengl.GL11.GL_LINEAR);
+				}
+			}
+			return id;
 		}
 		if (!iconLoaded) {
 			iconLoaded = true;
