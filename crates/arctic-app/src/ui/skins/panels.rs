@@ -46,6 +46,22 @@ fn auto_turn_step(locked: bool, now: f64, dragged_at: f64, dt: f32) -> f32 {
     }
 }
 
+/// Overlay the lock without allocating space again: the preview already advanced the cursor.
+fn preview_lock_button(
+    ui: &mut egui::Ui,
+    rect: Rect,
+    p: &Palette,
+    icon: Icon,
+    tip: &str,
+) -> egui::Response {
+    let button = Rect::from_min_size(
+        pos2(rect.right() - 36.0, rect.top() + 8.0),
+        vec2(28.0, 28.0),
+    );
+    let mut overlay = ui.new_child(egui::UiBuilder::new().max_rect(button));
+    widgets::icon_button(&mut overlay, p, icon, tip)
+}
+
 /// What "you" look like to others: Arctic skin first, then Minecraft's.
 /// Changes still being saved are already in it.
 pub(super) struct CurrentLook {
@@ -412,22 +428,13 @@ impl ArcticApp {
         response.on_hover_text(hint);
         // Lock toggle in the top-right corner; its own click target, so it never turns the figure.
         let locked = self.settings.lock_preview_rotation;
-        let button = Rect::from_min_size(
-            pos2(rect.right() - 36.0, rect.top() + 8.0),
-            vec2(28.0, 28.0),
-        );
         let tip = if locked {
             "Unlock rotation"
         } else {
             "Lock rotation"
         };
         let icon = if locked { Icon::Lock } else { Icon::Unlock };
-        let toggled = ui
-            .scope_builder(egui::UiBuilder::new().max_rect(button), |ui| {
-                widgets::icon_button(ui, p, icon, tip)
-            })
-            .inner
-            .clicked();
+        let toggled = preview_lock_button(ui, rect, p, icon, tip).clicked();
         if toggled {
             self.settings.lock_preview_rotation = !locked;
             self.persist_settings();
@@ -799,6 +806,54 @@ pub(super) fn slot_name(slot: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lock_overlay_keeps_equipped_below_preview() {
+        for size in [
+            vec2(640.0, 360.0),
+            vec2(1024.0, 576.0),
+            vec2(1920.0, 1080.0),
+        ] {
+            let ctx = egui::Context::default();
+            let output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, size)),
+                    ..Default::default()
+                },
+                |ui| {
+                    theme::card(&theme::DARK).show(ui, |ui| {
+                        ui.set_width(PREVIEW_W);
+                        egui::ScrollArea::vertical()
+                            .auto_shrink([false, true])
+                            .show(ui, |ui| {
+                                ui.vertical(|ui| {
+                                    let (preview, _) = ui.allocate_exact_size(
+                                        vec2(PREVIEW_W, PREVIEW_H),
+                                        Sense::click_and_drag(),
+                                    );
+                                    let before = ui.cursor();
+                                    for icon in [Icon::Lock, Icon::Unlock] {
+                                        let lock = preview_lock_button(
+                                            ui,
+                                            preview,
+                                            &theme::DARK,
+                                            icon,
+                                            "Rotation",
+                                        );
+                                        assert!(preview.contains_rect(lock.rect));
+                                        assert_eq!(ui.cursor(), before);
+                                    }
+                                    ui.add_space(10.0);
+                                    let equipped = ui.label("Equipped");
+                                    assert!(equipped.rect.top() >= preview.bottom() + 10.0);
+                                });
+                            });
+                    });
+                },
+            );
+            output.drop_without_applying_deltas();
+        }
+    }
 
     #[test]
     fn auto_turn_waits_after_a_drag_and_never_runs_locked() {
