@@ -1154,6 +1154,17 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public java.util.List<java.util.UUID> tabPlayerIds() {
+		java.util.List<java.util.UUID> ids = new java.util.ArrayList<>();
+		if (mc().getNetworkHandler() != null) {
+			for (PlayerListEntry entry : mc().getNetworkHandler().getPlayerList()) {
+				ids.add(entry.getProfile().getId());
+			}
+		}
+		return ids;
+	}
+
+	@Override
 	public int playerCount() {
 		return mc().getNetworkHandler() == null ? -1 : mc().getNetworkHandler().getPlayerList().size();
 	}

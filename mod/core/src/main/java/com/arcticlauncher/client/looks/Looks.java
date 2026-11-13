@@ -72,6 +72,12 @@ public final class Looks {
 	private final Platform platform;
 	private final ClientConfig config;
 	private final String baseUrl;
+	/** Presence transport is injectable so join timing can be tested without a live server. */
+	interface PresenceTransport {
+		String request(String method, String url, String token, String body) throws java.io.IOException;
+	}
+	private final PresenceTransport presence;
+
 	private final ScheduledExecutorService worker = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
 		@Override
 		public Thread newThread(Runnable r) {
@@ -110,8 +116,21 @@ public final class Looks {
 	private volatile java.util.Map<String, Integer> capeFps = Collections.emptyMap();
 
 	private volatile boolean shareServer;
+	/** World last observed on the game thread (independent of successful check-ins). */
+	private UUID observedPlayer;
+	private String observedWorld;
 
 	public Looks(Platform platform, ClientConfig config, String baseUrl, String token) {
+		this(platform, config, baseUrl, token, new PresenceTransport() {
+			@Override
+			public String request(String method, String url, String session, String body) throws java.io.IOException {
+				return "GET".equals(method) ? Http.getText(url, session) : Http.send(method, url, session, body);
+			}
+		});
+	}
+
+	Looks(Platform platform, ClientConfig config, String baseUrl, String token, PresenceTransport presence) {
+		this.presence = presence;
 		this.platform = platform;
 		this.config = config;
 		this.baseUrl = baseUrl;
@@ -129,12 +148,77 @@ public final class Looks {
 		shareServer = share;
 	}
 
+	/** Game-thread world transition detection; network work stays on the worker. */
+	public void tick() {
+		UUID me = platform.inWorld() ? platform.worldPlayerId() : null;
+		String world = me == null ? null : platform.worldKey();
+		boolean changed = !java.util.Objects.equals(me, observedPlayer)
+				|| !java.util.Objects.equals(world, observedWorld);
+		observedPlayer = me;
+		observedWorld = world;
+		if (me != null) {
+			// Also catches tab entries arriving after the initial world tick. Respect existing TTLs.
+			for (UUID id : platform.tabPlayerIds()) {
+				isArctic(id);
+			}
+		}
+		if (changed) {
+			worker.execute(new Runnable() {
+				@Override
+				public void run() {
+					try {
+						// A server change can keep the same UUID without an intervening menu tick.
+						lastCheckIn = 0;
+						if (platform.inWorld()) {
+							// A join is a new opportunity to read the launcher's late session.
+							adoptLauncherToken(true);
+							loadOwnLook();
+						}
+						checkIn();
+						flushLookups();
+					} catch (Throwable t) {
+						survive(t, "world change");
+					}
+				}
+			});
+		}
+	}
+
+	/** Fetch the account look independently of online presence (also works before joining). */
+	private void loadOwnLook() {
+		UUID account = platform.playerId();
+		if (account == null) {
+			return;
+		}
+		Look own = players.get(account);
+		if (own == null || System.currentTimeMillis() - own.fetched > OWN_TTL_MS) {
+			pending.remove(account);
+			fetchLookups(Collections.singletonList(account));
+		}
+	}
+
 	public void start() {
+		if (token != null) {
+			worker.execute(new Runnable() {
+				@Override
+				public void run() {
+					try {
+						loadOwnLook();
+					} catch (Throwable t) {
+						survive(t, "own look on startup");
+					}
+				}
+			});
+		}
 		worker.scheduleWithFixedDelay(new Runnable() {
 			@Override
 			public void run() {
 				// A task that throws is never run again: keep the worker alive.
 				try {
+					// The 5 s reread throttle, rather than the 10 s presence poll, governs late tokens.
+					if (waitingForLauncher) {
+						checkIn();
+					}
 					flushLookups();
 				} catch (Throwable t) {
 					survive(t, "look lookups");
@@ -198,8 +282,7 @@ public final class Looks {
 			checkInAt = now;
 			checkInResult = as == null ? "signed off (not in a world)" : "ok, as " + as;
 			if (inWorld != null && changed) {
-				// Show our own snowflake without waiting for the cache.
-				players.remove(inWorld);
+				// Refresh cosmetics after check-in without hiding a cached badge.
 				pending.add(inWorld);
 			}
 		} catch (Exception e) {
@@ -268,7 +351,7 @@ public final class Looks {
 		if (server != null && !"Singleplayer".equals(server)) {
 			body.addProperty("server", server);
 		}
-		Http.send("POST", baseUrl + "/v1/online", token, body.toString());
+		presence.request("POST", baseUrl + "/v1/online", token, body.toString());
 	}
 
 	/** The game is closing while in a world: sign off, briefly (never hold up quitting). */
@@ -376,10 +459,21 @@ public final class Looks {
 		}
 		Look look = players.get(player);
 		boolean mine = isMe(player);
+		UUID lookupPlayer = player;
+		if (mine) {
+			// Offline-mode servers may give us a different UUID. Reuse the newest own look,
+			// but honor a newer world look that intentionally has no cosmetics.
+			UUID account = platform.playerId();
+			Look own = players.get(account);
+			if (own != null && (look == null || own.fetched > look.fetched)) {
+				look = own;
+				lookupPlayer = account;
+			}
+		}
 		long now = System.currentTimeMillis();
 		long ttl = !mine ? othersTtl(look) : now < menuOpenUntil ? OWN_TTL_OPEN_MS : OWN_TTL_MS;
 		if (look == null || now - look.fetched > ttl) {
-			pending.add(player);
+			pending.add(lookupPlayer);
 		}
 		// Hovering a cosmetic in the Looks menu: shown on you, only here.
 		java.util.List<String> trying = tryOn;
@@ -430,13 +524,13 @@ public final class Looks {
 		platform.log(false, message);
 	}
 
-	/** Whether this player is playing with Arctic (from the lookup cache; queues one if needed). */
+	/** Local signed-in session or cached Arctic presence; queues a lookup if needed. */
 	public boolean isArctic(UUID player) {
 		Look look = players.get(player);
 		if (look == null || System.currentTimeMillis() - look.fetched > othersTtl(look)) {
 			pending.add(player);
 		}
-		return look != null && look.arctic;
+		return knownArctic(player);
 	}
 
 	private static long othersTtl(Look look) {
@@ -459,8 +553,12 @@ public final class Looks {
 
 	/** A token the launcher wrote into the session file after the game started (at most every few seconds). */
 	private void adoptLauncherToken() {
+		adoptLauncherToken(false);
+	}
+
+	private void adoptLauncherToken(boolean joining) {
 		long now = System.currentTimeMillis();
-		if (!waitingForLauncher || now - lastSessionRead < SESSION_REREAD_MS) {
+		if (!waitingForLauncher || !joining && now - lastSessionRead < SESSION_REREAD_MS) {
 			return;
 		}
 		lastSessionRead = now;
@@ -488,9 +586,15 @@ public final class Looks {
 		return true;
 	}
 
-	/** Whether a player is known to be on Arctic (cache only, no lookup). */
+	/** Whether a player is known to be on Arctic (local session or cache, no lookup). */
 	private boolean knownArctic(UUID player) {
 		Look look = players.get(player);
+		if (player.equals(platform.worldPlayerId()) && platform.inWorld()) {
+			Look own = players.get(platform.playerId());
+			if (token != null || own != null && own.arctic) {
+				return true;
+			}
+		}
 		return look != null && look.arctic;
 	}
 
@@ -664,13 +768,17 @@ public final class Looks {
 			batch.add(it.next());
 			it.remove();
 		}
+		fetchLookups(batch);
+	}
+
+	private void fetchLookups(List<UUID> batch) {
 		StringBuilder ids = new StringBuilder();
 		for (UUID id : batch) {
 			ids.append(ids.length() == 0 ? "" : ",").append(compact(id));
 		}
 		long now = System.currentTimeMillis();
 		try {
-			JsonElement reply = GSON.fromJson(Http.getText(baseUrl + "/v1/players?uuids=" + ids, null), JsonElement.class);
+			JsonElement reply = GSON.fromJson(presence.request("GET", baseUrl + "/v1/players?uuids=" + ids, null, null), JsonElement.class);
 			JsonObject found = reply != null && reply.isJsonObject() ? reply.getAsJsonObject() : null;
 			for (UUID player : batch) {
 				players.put(player, parseLook(found == null ? null : found.get(compact(player)), now));

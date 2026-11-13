@@ -372,6 +372,9 @@ public final class ArcticClient {
 	}
 
 	public static void tick(boolean screenOpen) {
+		if (looks != null) {
+			looks.tick();
+		}
 		com.arcticlauncher.client.feature.DynamicFps.tick(platform, screenOpen);
 		com.arcticlauncher.client.replay.Replays.tick(screenOpen);
 		// Gameplay ticks are skipped outside a world and while watching a replay.

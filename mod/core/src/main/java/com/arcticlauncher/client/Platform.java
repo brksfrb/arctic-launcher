@@ -529,6 +529,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	/** Send a chat message, or a command when it starts with "/". */
 	default void sendChat(String text) {}
 
+	/** UUIDs in the tab list, sampled on the game thread. */
+	default java.util.List<java.util.UUID> tabPlayerIds() {
+		return java.util.Collections.emptyList();
+	}
+
 	/** Players online on the server (the tab list), or -1 when not connected. */
 	default int playerCount() {
 		return -1;
