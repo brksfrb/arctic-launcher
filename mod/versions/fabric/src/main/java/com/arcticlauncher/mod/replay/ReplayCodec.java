@@ -53,10 +53,10 @@ public final class ReplayCodec {
 		//#endif
 	}
 
-	/** The protocol a login starts with (before 1.20.5; later the connection's own). */
+	/** The protocol a login starts with, also used before any playback listener runs. */
 	public static Object loginProtocol() {
 		//#if MC >= 1.20.5
-		return null;
+		return LoginProtocols.CLIENTBOUND;
 		//#else
 		return ConnectionProtocol.LOGIN;
 		//#endif
@@ -76,13 +76,68 @@ public final class ReplayCodec {
 
 	/**
 	 * A replay connection is about to handle {@code packet}: switch its
-	 * reading protocol the way the network code would have (1.20.2–1.20.4;
-	 * the listeners check it).
+	 * reading protocol the way the network decoder would have. The replay
+	 * decodes outside that handler, so it must also run the handover barrier.
 	 */
 	public static void beforeHandle(io.netty.channel.Channel channel, Packet<?> packet) {
-		//#if MC >= 1.20.2 && MC < 1.20.5
+		//#if MC >= 1.20.5
+		// decode() runs outside PacketDecoder: reproduce its terminal-packet
+		// barrier before the listener installs the next protocol and registry codec.
+		if (packet.isTerminal()) {
+			net.minecraft.network.ProtocolSwapHandler.handleInboundTerminalPacket(channel.pipeline().context("decoder"), packet);
+			// Recording flattens bundles, so playback also bypasses PacketBundlePacker.
+			// Like its terminal-packet path, remove it before a later play codec installs one.
+			if (channel.pipeline().get("bundler") != null) channel.pipeline().remove("bundler");
+		}
+		//#elif MC >= 1.20.2
 		net.minecraft.network.ProtocolSwapHandler.swapProtocolIfNeeded(
 				channel.attr(net.minecraft.network.Connection.ATTRIBUTE_CLIENTBOUND_PROTOCOL), packet);
+		//#endif
+	}
+
+	public static boolean changesPhase(String name) {
+		return "login_finished".equals(name) || "game_profile".equals(name)
+				|| "start_configuration".equals(name) || "finish_configuration".equals(name);
+	}
+
+	/** Complete a handover only after the listener has installed its next codec. */
+	public static Object afterHandle(Object protocol, Packet<?> packet, Object inbound) {
+		//#if MC >= 1.20.5
+		String name = name(packet);
+		net.minecraft.network.ConnectionProtocol expected = ((ProtocolInfo<?>) protocol).id();
+		if ("login_finished".equals(name) || "game_profile".equals(name) || "start_configuration".equals(name)) {
+			expected = net.minecraft.network.ConnectionProtocol.CONFIGURATION;
+		} else if ("finish_configuration".equals(name)) {
+			expected = net.minecraft.network.ConnectionProtocol.PLAY;
+		}
+		if (inbound == null || ((ProtocolInfo<?>) inbound).id() != expected) {
+			throw new IllegalStateException("replay handover after " + name + " expected " + expected + ", got " + phaseName(inbound));
+		}
+		return inbound;
+		//#else
+		return next(protocol, packet);
+		//#endif
+	}
+
+	/** Include the phase and wire id in the first failure, before decode consumes bytes. */
+	public static String context(Object protocol, ByteBuffer bytes) {
+		String prefix = "protocol=" + protocolVersion() + " phase=" + phaseName(protocol) + " packetId=";
+		ByteBuffer copy = bytes.duplicate();
+		int id = 0;
+		for (int shift = 0; shift < 35; shift += 7) {
+			if (!copy.hasRemaining()) return prefix + "truncated";
+			int b = copy.get() & 255;
+			id |= (b & 127) << shift;
+			if (b < 128) return prefix + id;
+		}
+		return prefix + "invalid";
+	}
+
+	public static String phaseName(Object protocol) {
+		//#if MC >= 1.20.5
+		return protocol == null ? "unset" : ((ProtocolInfo<?>) protocol).id().toString();
+		//#else
+		return String.valueOf(protocol);
 		//#endif
 	}
 
@@ -260,6 +315,7 @@ public final class ReplayCodec {
 	@SuppressWarnings("rawtypes")
 	public static Packet<?> decode(Object protocol, ByteBuffer bytes) {
 		ByteBuf buf = Unpooled.wrappedBuffer(bytes);
+		try {
 		//#if MC >= 1.20.5
 		return (Packet<?>) ((ProtocolInfo) protocol).codec().decode(buf);
 		//#else
@@ -283,6 +339,9 @@ public final class ReplayCodec {
 		}
 		//#endif
 		//#endif
+		} finally {
+			buf.release();
+		}
 	}
 }
 //#endif

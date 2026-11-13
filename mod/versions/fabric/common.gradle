@@ -461,15 +461,41 @@ tasks.named('jar') {
 	}
 }
 
-// The startup diagnostics guard is exercised against generated Knot fixtures and the real Loader.
+// Adapter tests (startup diagnostics guard, protocol regressions) use the same version preprocessing as the adapter.
+def preprocessedTests = layout.buildDirectory.dir("preprocessed/${mc}/test")
+tasks.register('preprocessTestJava') {
+	inputs.dir new File(adapterRoot, 'src/test/java')
+	inputs.property 'minecraft_version', mc
+	outputs.dir preprocessedTests
+	outputs.upToDateWhen { false }
+	doLast {
+		def outDir = preprocessedTests.get().asFile
+		project.delete(outDir)
+		def root = new File(adapterRoot, 'src/test/java')
+		if (root.exists()) root.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+			def rel = root.toPath().relativize(f.toPath()).toString()
+			def target = new File(outDir, rel)
+			target.parentFile.mkdirs()
+			target.text = applyRenames(preprocessSource(f.getText('UTF-8'), rel))
+		}
+	}
+}
 if (atLeast('1.18')) {
+	sourceSets.test.java.srcDirs = [preprocessedTests]
+	tasks.named('compileTestJava') { dependsOn 'preprocessTestJava' }
 	dependencies {
 		testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
 		testImplementation 'org.ow2.asm:asm:9.9'
 		testImplementation 'org.ow2.asm:asm-tree:9.9'
 		testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	}
-	tasks.named('test') { useJUnitPlatform() }
+	tasks.named('test') {
+		useJUnitPlatform()
+		maxHeapSize = '1G'
+		maxParallelForks = 1
+		workingDir = layout.buildDirectory.dir('test-runtime').get().asFile
+		doFirst { workingDir.mkdirs() }
+	}
 } else {
 	sourceSets.test.java.setSrcDirs([])
 }

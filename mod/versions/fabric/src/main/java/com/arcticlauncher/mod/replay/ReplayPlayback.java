@@ -66,7 +66,7 @@ public final class ReplayPlayback implements ReplayBackend {
 
 	private Connection connection;
 	private EmbeddedChannel channel;
-	/** Before 1.20.5: the phase the next packet is read in (later the connection knows). */
+	/** The last successfully installed playback protocol, independent of a failed listener handover. */
 	private Object phase;
 	/** The recording player's entity id in this login (-1 until the login). */
 	private int selfId = -1;
@@ -146,7 +146,7 @@ public final class ReplayPlayback implements ReplayBackend {
 			ReplayView.fov = 0;
 			Connection conn = new Connection(PacketFlow.CLIENTBOUND);
 			((ReplayConnection) conn).arctic$markReplay();
-			channel = new EmbeddedChannel(conn);
+			channel = ReplayTransport.open(conn);
 			connection = conn;
 			ClientHandshakePacketListenerImpl login = ReplayCompat.loginListener(conn);
 			phase = ReplayCodec.loginProtocol();
@@ -163,7 +163,7 @@ public final class ReplayPlayback implements ReplayBackend {
 			((ReplayConnection) connection).arctic$retire();
 		}
 		if (channel != null) {
-			channel.close();
+			channel.finishAndReleaseAll();
 		}
 	}
 
@@ -174,16 +174,19 @@ public final class ReplayPlayback implements ReplayBackend {
 			return;
 		}
 		drainOutgoing();
-		Object protocol = phase != null ? phase : ((ReplayConnection) connection).arctic$inbound();
-		if (protocol == null) {
-			return;
+		Object protocol = phase;
+		Packet<?> packet;
+		try {
+			packet = ReplayCodec.decode(protocol, bytes);
+		} catch (RuntimeException e) {
+			throw new IllegalStateException("replay decode " + ReplayCodec.context(protocol, bytes), e);
 		}
-		Packet<?> packet = ReplayCodec.decode(protocol, bytes);
-		if (phase != null) {
-			phase = ReplayCodec.next(phase, packet);
-		}
-		ReplayCodec.beforeHandle(channel, packet);
 		String name = ReplayCodec.name(packet);
+		try {
+			ReplayCodec.beforeHandle(channel, packet);
+		} catch (RuntimeException e) {
+			throw new ReplayBackend.ProtocolFailure("Replay protocol barrier failed (" + ReplayCodec.context(protocol, bytes) + ")", e);
+		}
 		if (PacketSorter.dropped(name) || (jumping && PacketSorter.category(name) == Category.TRANSIENT)) {
 			return;
 		}
@@ -193,12 +196,19 @@ public final class ReplayPlayback implements ReplayBackend {
 		}
 		PacketListener listener = connection.getPacketListener();
 		if (listener == null) {
-			return;
+			throw new ReplayBackend.ProtocolFailure("Replay has no packet listener (" + ReplayCodec.context(protocol, bytes) + ")", null);
 		}
 		try {
 			((Packet) packet).handle(listener);
-		} catch (RunningOnDifferentThreadException ignored) {
-			// Queued for the game thread by the game itself.
+			phase = ReplayCodec.afterHandle(protocol, packet, ((ReplayConnection) connection).arctic$inbound());
+		} catch (RunningOnDifferentThreadException e) {
+			// Feeding the next phase before this handler runs would lose the handover.
+			throw new ReplayBackend.ProtocolFailure("Replay packet handler left the game thread (" + ReplayCodec.context(protocol, bytes) + ")", e);
+		} catch (RuntimeException e) {
+			if (ReplayCodec.changesPhase(name)) {
+				throw new ReplayBackend.ProtocolFailure("Replay protocol handover failed (" + ReplayCodec.context(protocol, bytes) + "): " + e, e);
+			}
+			throw new IllegalStateException("replay handler " + ReplayCodec.context(protocol, bytes) + " " + name, e);
 		}
 	}
 

@@ -12,6 +12,13 @@ import java.util.UUID;
  * camera, the timeline) is the core's. Game thread unless noted.
  */
 public interface ReplayBackend {
+	/** A protocol handover failed: later packets cannot safely be delivered. */
+	final class ProtocolFailure extends RuntimeException {
+		private static final long serialVersionUID = 1L;
+
+		public ProtocolFailure(String message, Throwable cause) { super(message, cause); }
+	}
+
 	/** Sorts recorded packets into {@link Category categories}; used on a background thread. */
 	interface Classifier {
 		/** The category of {@code packet} (its id, then its body); may put a key in {@code key[0]}. */

@@ -330,6 +330,8 @@ public final class Replays {
 			return;
 		}
 		inFrame = true;
+		// Packet handling can close the global viewer while this frame is still unwinding.
+		ReplayViewer viewer = Replays.viewer;
 		try {
 			// Pausing stops game ticks, but opening/closing the editor must still
 			// release the free camera. Read the actual screen every rendered frame.
