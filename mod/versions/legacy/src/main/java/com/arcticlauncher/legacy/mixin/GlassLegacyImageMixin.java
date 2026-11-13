@@ -31,7 +31,7 @@ abstract class GlassLegacyImageMixin {
 		int[] pixels = image.getRGB(0, 0, w, h, null, 0, w);
 		BufferedImage preferred = com.arcticlauncher.legacy.LegacyGlassCtm.packs.tile(GlassTiles.original(name), GlassTiles.tile(name));
 		if (preferred == null) {
-			if (GlassTiles.clear(GlassTiles.original(name))) pixels = GlassTiles.clarity(pixels, w, h, w, w, com.arcticlauncher.client.ctm.GlassLines.stitched());
+			if (GlassTiles.fades(GlassTiles.original(name))) pixels = GlassTiles.clarity(pixels, w, h, w, w, com.arcticlauncher.client.ctm.GlassLines.stitched());
 			pixels = GlassTiles.generate(pixels, w, h, w, w, GlassTiles.tile(name));
 		}
 		else for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) pixels[y * w + x] = preferred.getRGB(x * preferred.getWidth() / w, (y % w) * preferred.getHeight() / w);
