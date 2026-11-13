@@ -189,24 +189,21 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
+        // A conflict with older versions can be fixed by updating the affected mods.
+        pattern: r"NEG_HARD_DEP \S+ \S+ \{breaks \S+ @|is incompatible with any version before",
+        explain: |_, text| bounded_conflicts(text).unwrap_or_else(Diagnosis::none),
+    },
+    Rule {
         // Resolver conflicts must win over dependency and replacement hints, even in translated logs.
         pattern: r"NEG_HARD_DEP \S+ \S+ \{breaks \S+ @",
         explain: |_, text| {
             let re = Regex::new(r"NEG_HARD_DEP (\S+) \S+ \{breaks (\S+) @")
                 .expect("resolver conflict pattern is valid");
-            let names = Regex::new(r"(?:Mod|mod) '([^']+)' \(([^)]+)\)")
-                .expect("mod display name pattern is valid");
-            let name = |id: &str| {
-                names
-                    .captures_iter(text)
-                    .find(|c| &c[2] == id)
-                    .map_or_else(|| id.to_owned(), |c| c[1].to_owned())
-            };
             resolver_causes(text)
                 .find_map(|line| {
                     re.captures(line).map(|c| {
-                        let first = name(&c[1]);
-                        let second = name(&c[2]);
+                        let first = mod_name(text, &c[1]);
+                        let second = mod_name(text, &c[2]);
                         Diagnosis::new(
                             format!("{first} and {second} don't work together"),
                             format!("{first} doesn't work alongside {second}. Remove one of them."),
@@ -254,6 +251,9 @@ const RULES: &[Rule] = &[
         // Fabric: "... requires version 1.21.4 of minecraft, but only the wrong version is present: 1.21.6!"
         pattern: r"Mod '([^']+)' \(([^)]+)\) \S+ requires (?:version )?([^,]+?) of (minecraft|java|fabricloader), but only the wrong version is present: ([^!\s]+)",
         explain: |c, _| {
+            if &c[4] == "java" {
+                return Diagnosis::none(); // Collected alongside every other Fabric diagnosis.
+            }
             let what = match &c[4] {
                 "minecraft" => "Minecraft",
                 "java" => "Java",
@@ -274,8 +274,24 @@ const RULES: &[Rule] = &[
         // (the Minecraft and Fabric Loader versions are handled above): the other mod is simply too old.
         pattern: r"Mod '([^']+)' \(([^)]+)\) \S+ requires (?:any version|version) (.+?) of (?:mod )?'([^']+)' \(([^)]+)\), but only the wrong version is present: ([^!\s]+)",
         explain: |c, text| {
+            if &c[5] == "java" {
+                return Diagnosis::none(); // Java requirements are not mod updates.
+            }
             let hint = update_hint(text)
                 .map_or_else(String::new, |h| format!(" Fabric Loader suggests: {h}."));
+            if resolver_replacements(text).iter().any(|r| {
+                r.id == c[5]
+                    && compare_versions(&r.version, &r.installed) == Some(std::cmp::Ordering::Less)
+            }) {
+                return Diagnosis::new(
+                    format!("{} has the wrong version for {}", &c[4], &c[1]),
+                    format!(
+                        "{} needs {} of {}, but this instance has {}.{hint}",
+                        &c[1], &c[3], &c[4], &c[6]
+                    ),
+                    vec![c[1].to_owned(), c[4].to_owned()],
+                );
+            }
             Diagnosis::new(
                 format!("{} is too old for {}", &c[4], &c[1]),
                 format!(
@@ -285,6 +301,11 @@ const RULES: &[Rule] = &[
                 vec![c[1].to_owned(), c[4].to_owned()],
             )
         },
+    },
+    Rule {
+        // A translated log may retain only the language-independent Fix line.
+        pattern: r"\[[^\s\[\]]+ [^\s\]]+\] -> add:",
+        explain: |_, text| resolution_log(text),
     },
     Rule {
         // NeoForge/Forge: "Mod ID: 'jei', Requested by: 'x', Expected range: '[...]', Actual version: '[MISSING]'"
@@ -591,35 +612,189 @@ fn compiled() -> &'static [Regex] {
 /// The largest amount of text looked at (the end of it, where crashes are).
 const MAX_TEXT: usize = 2 * 1024 * 1024;
 
-/// Real replacement versions from Fabric's resolver, excluding bare-number placeholders.
-fn resolver_updates(text: &str) -> Vec<(String, String)> {
-    let re = Regex::new(r"\[([^\s\[\]]+) [^\s\]]+\] -> add:(\S+) (\S+) (\S+)")
+/// A concrete replacement from Fabric; retain the installed version to detect downgrades.
+struct Replacement {
+    id: String,
+    installed: String,
+    version: String,
+}
+
+impl Replacement {
+    fn advice(&self) -> String {
+        let action = match compare_versions(&self.version, &self.installed) {
+            Some(std::cmp::Ordering::Less) => "downgrade",
+            Some(std::cmp::Ordering::Greater) => "update",
+            _ => "replace",
+        };
+        format!("{action} {} to {}", self.id, self.version)
+    }
+}
+
+/// Compare numeric Fabric versions conservatively, ignoring build metadata.
+fn compare_versions(left: &str, right: &str) -> Option<std::cmp::Ordering> {
+    let parse = |version: &str| {
+        let version = version.split('+').next()?;
+        let (core, pre) = version.split_once('-').unwrap_or((version, ""));
+        let core = core
+            .split('.')
+            .map(str::parse::<u64>)
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?;
+        let pre = semver::Prerelease::new(pre).ok()?;
+        Some((core, pre))
+    };
+    let ((left, left_pre), (right, right_pre)) = (parse(left)?, parse(right)?);
+    for i in 0..left.len().max(right.len()) {
+        let order = left.get(i).unwrap_or(&0).cmp(right.get(i).unwrap_or(&0));
+        if !order.is_eq() {
+            return Some(order);
+        }
+    }
+    Some(left_pre.cmp(&right_pre))
+}
+
+fn resolver_replacements(text: &str) -> Vec<Replacement> {
+    let re = Regex::new(r"\[([^\s\[\]]+) ([^\s\]]+)\] -> add:(\S+) (\S+) (\S+)")
         .expect("resolver update pattern is valid");
     re.captures_iter(text)
         .filter(|m| {
-            let version = &m[3];
-            let lower = m[4]
+            let version = &m[4];
+            let lower = m[5]
                 .trim_start_matches(['(', '['])
                 .split(',')
                 .next()
                 .unwrap_or_default();
             // Fabric can suggest a bare number (e.g. "1") instead of a concrete version.
             // Keep actual single-component versions, whose lower bound agrees with the hint.
-            !(version.chars().all(|c| c.is_ascii_digit())
-                && lower != version
-                && lower.chars().any(|c| !c.is_ascii_digit()))
+            m[1] == m[3]
+                && !(version.chars().all(|c| c.is_ascii_digit())
+                    && lower != version
+                    && lower.chars().any(|c| !c.is_ascii_digit()))
         })
-        .map(|m| (m[1].to_owned(), m[3].to_owned()))
+        .map(|m| Replacement {
+            id: m[1].to_owned(),
+            installed: m[2].to_owned(),
+            version: m[4].to_owned(),
+        })
         .collect()
 }
 
-/// The loader's own suggestion from its English "Fix:" line: "update sodium to 0.8.12".
-fn update_hint(text: &str) -> Option<String> {
-    let updates: Vec<String> = resolver_updates(text)
+/// Real replacement versions from Fabric's resolver, excluding bare-number placeholders.
+fn resolver_updates(text: &str) -> Vec<(String, String)> {
+    resolver_replacements(text)
         .into_iter()
-        .map(|(id, version)| format!("update {id} to {version}"))
+        .map(|r| (r.id, r.version))
+        .collect()
+}
+
+/// The loader's own suggestion from its English "Fix:" line.
+fn update_hint(text: &str) -> Option<String> {
+    let updates: Vec<String> = resolver_replacements(text)
+        .iter()
+        .map(Replacement::advice)
         .collect();
     (!updates.is_empty()).then(|| updates.join(", "))
+}
+
+/// Display names are optional: resolver-only (translated) logs still provide mod ids.
+fn mod_name(text: &str, id: &str) -> String {
+    let re =
+        Regex::new(r"(?:Mod|mod) '(.+?)' \(([^)]+)\)").expect("mod display name pattern is valid");
+    re.captures_iter(text)
+        .find(|c| &c[2] == id)
+        .map_or_else(|| id.to_owned(), |c| c[1].to_owned())
+}
+
+/// Only an exclusive upper bound proves that updating the other mod removes a breaks constraint.
+fn bounded_conflicts(text: &str) -> Option<Diagnosis> {
+    let resolver = Regex::new(r"NEG_HARD_DEP \S+ \S+ \{breaks (\S+) @ ([^}\r\n]+)\}")
+        .expect("resolver breaks pattern is valid");
+    let english = Regex::new(
+        r"Mod '.+?' \([^)]+\) \S+ is incompatible with (.+?) of (?:mod )?'(.+?)' \(([^)]+)\)",
+    )
+    .expect("English breaks pattern is valid");
+    let mut updates = Vec::new();
+    let mut mods = Vec::new();
+    let mut add = |id: &str, version: &str| {
+        let name = mod_name(text, id);
+        let advice = format!("{name} to {version}+");
+        if !updates.contains(&advice) {
+            updates.push(advice);
+        }
+        if !mods.contains(&name) {
+            mods.push(name);
+        }
+    };
+    let causes: Vec<_> = resolver_causes(text)
+        .flat_map(|line| resolver.captures_iter(line))
+        .collect();
+    if causes.is_empty() {
+        for c in english.captures_iter(text) {
+            let version = c[1].strip_prefix("any version before ")?;
+            if version.split_whitespace().count() != 1 {
+                return None;
+            }
+            add(&c[3], version);
+        }
+    } else {
+        for c in causes {
+            let version = c[2].trim().strip_prefix("[<")?.strip_suffix(']')?;
+            if version.contains([',', ' ', '|']) || version.is_empty() {
+                return None;
+            }
+            add(&c[1], version);
+        }
+    }
+    if updates.is_empty() {
+        return None;
+    }
+    let alternative = update_hint(text).map_or_else(String::new, |hint| {
+        format!(" Alternatively, Fabric Loader suggests: {hint}.")
+    });
+    Some(Diagnosis::new(
+        "Some mods need updating together",
+        format!(
+            "To keep the installed newer mod versions, update {} from the instance's Mods page. These are the minimum versions needed to remove the reported conflicts; they must also support this Minecraft version.{alternative}",
+            updates.join(", ")
+        ),
+        mods,
+    ))
+}
+
+/// Java constraints must survive whichever mod conflict is selected as the primary diagnosis.
+fn java_requirements(text: &str) -> Vec<(String, String)> {
+    let english = Regex::new(r"Mod '(.+?)' \(([^)]+)\) \S+ requires (?:(?:any version|version) )?(.+?) of (?:(?:mod )?'[^'\r\n]+' \(java\)|java), but only the wrong version is present: ([^!\s]+)")
+        .expect("English Java requirement pattern is valid");
+    let resolver =
+        Regex::new(r"HARD_DEP(?:_NO_CANDIDATE)? (\S+) \S+ \{depends java @ ([^}\r\n]+)\}")
+            .expect("resolver Java requirement pattern is valid");
+    let mut needs = Vec::new();
+    let mut seen = Vec::new();
+    for c in english.captures_iter(text) {
+        if !seen.contains(&c[2].to_owned()) {
+            seen.push(c[2].to_owned());
+            needs.push((
+                c[1].to_owned(),
+                format!(
+                    "{} needs Java {}, but this instance ran on Java {}.",
+                    &c[1], &c[3], &c[4]
+                ),
+            ));
+        }
+    }
+    for c in resolver_causes(text).flat_map(|line| resolver.captures_iter(line)) {
+        if !seen.contains(&c[1].to_owned()) {
+            seen.push(c[1].to_owned());
+            let name = mod_name(text, &c[1]);
+            let range = c[2].trim();
+            let version = range.strip_prefix("[>=").and_then(|v| v.strip_suffix(']'));
+            let required = version
+                .filter(|v| !v.contains([',', ' ', '|']))
+                .map_or_else(|| range.to_owned(), |v| format!("{v} or later"));
+            needs.push((name.clone(), format!("{name} needs Java {required}.")));
+        }
+    }
+    needs
 }
 
 /// A game that stopped without writing a single line (only the launcher's banner is there): what it
@@ -669,6 +844,7 @@ fn resolution_log(text: &str) -> Diagnosis {
                 }
                 "minecraft" => {}
                 "fabricloader" => needs_newer_loader = true,
+                "java" => {} // Reported alongside the primary diagnosis, never as a missing mod.
                 // A concrete replacement identifies an installed dependency with the wrong version.
                 id if updates.iter().any(|(updated, _)| updated == id) => {}
                 _ => {
@@ -694,15 +870,7 @@ fn resolution_log(text: &str) -> Diagnosis {
         .ok()
         .and_then(|re| re.captures(text).map(|c| c[1].to_owned()))
         .unwrap_or_else(|| "this one".to_owned());
-    let also = if updates.is_empty() {
-        String::new()
-    } else {
-        let updates: Vec<String> = updates
-            .iter()
-            .map(|(id, version)| format!("{id} to {version}"))
-            .collect();
-        format!(" Also update {}.", updates.join(", "))
-    };
+    let also = update_hint(text).map_or_else(String::new, |hint| format!(" Also {hint}."));
     if !for_other_minecraft.is_empty() {
         return Diagnosis {
             fix: Some(Fix::DisableMods(for_other_minecraft.clone())),
@@ -736,8 +904,14 @@ fn resolution_log(text: &str) -> Diagnosis {
     }
     if !updates.is_empty() {
         return Diagnosis::new(
-            "Some mods need updating together",
-            format!("Mods in this instance don't match each other's versions:{also}"),
+            if resolver_replacements(text).iter().any(|r| {
+                compare_versions(&r.version, &r.installed) == Some(std::cmp::Ordering::Less)
+            }) {
+                "Some mod versions don't match"
+            } else {
+                "Some mods need updating together"
+            },
+            format!("Mods in this instance don't match each other's versions.{also}"),
             Vec::new(),
         );
     }
@@ -751,11 +925,29 @@ pub fn diagnose(text: &str) -> Option<Diagnosis> {
         .find(|&i| text.is_char_boundary(i))
         .unwrap_or(0);
     let text = &text[start..];
-    RULES
+    let primary = RULES
         .iter()
         .zip(compiled())
         .filter_map(|(rule, re)| re.captures(text).map(|c| (rule.explain)(&c, text)))
-        .find(|d| !d.title.is_empty())
+        .find(|d| !d.title.is_empty());
+    let java = java_requirements(text);
+    if java.is_empty() {
+        return primary;
+    }
+    let mut diagnosis = primary.unwrap_or_else(|| {
+        Diagnosis::new("Some mods need a different Java version", "", Vec::new())
+    });
+    for (name, requirement) in java {
+        if !diagnosis.detail.is_empty() {
+            diagnosis.detail.push(' ');
+        }
+        diagnosis.detail.push_str(&requirement);
+        if !diagnosis.mods.contains(&name) {
+            diagnosis.mods.push(name);
+        }
+    }
+    diagnosis.detail.push_str(" Install a Java version that meets these requirements, then in the instance's settings, under Java, enable \"Use a specific Java for this instance\" and set \"Path\" to its Java executable (javaw.exe on Windows, java on Linux/macOS).");
+    Some(diagnosis)
 }
 
 /// A crash as it's sent: the log's end and the crash report, with anything
@@ -1567,6 +1759,154 @@ USERNAME=someone
     const CONNECTOR_RESOLUTION: &str = "[FabricLoader/Resolution]: Immediate reason: [HARD_DEP_NO_CANDIDATE betterend 4.0.11 {depends bclib @ [3.0.x]}, ROOT_FORCELOAD_SINGLE betterend 4.0.11]
 [FabricLoader/Resolution]: Reason: [HARD_DEP betterend 4.0.11 {depends bclib @ [3.0.x]}]
 [FabricLoader/Resolution]: Fix: add [], remove [], replace [[betterend 4.0.11] -> add:betterend 1 ([(-∞,∞)])]";
+
+    // Report #282 (also #88 and #109): a suggested Sodium downgrade masks four
+    // older companion mods and an independent Java requirement.
+    const DEPVER_JAVA_282: &str = "[main/INFO] Fix: add [], remove [], replace [[sodium 0.8.13+mc1.21.1] -> add:sodium 0.6.0-beta.2 ([[0.6.0-beta.2,0.7-)])]
+[main/ERROR] Incompatible mods found!
+    net.fabricmc.loader.impl.FormattedException: Some of your mods are incompatible with the game or each other!
+    A potential solution has been determined, this may resolve your problem:
+      - Replace mod 'Sodium' (sodium) 0.8.13+mc1.21.1 with any version between 0.6.0-beta.2 (inclusive) and 0.7- (exclusive).
+    More details:
+      - Mod 'Iris' (iris) 1.8.0-beta.8+mc1.21.1 requires any 0.6.x version of mod 'Sodium' (sodium), but only the wrong version is present: 0.8.13+mc1.21.1!
+      - Mod 'Sodium' (sodium) 0.8.13+mc1.21.1 is incompatible with any version before 1.8.13 of mod 'Iris' (iris), but a matching version is present: 1.8.0-beta.8+mc1.21.1!
+      - Mod 'Sodium' (sodium) 0.8.13+mc1.21.1 is incompatible with any version before 1.8.0 of mod 'Reese's Sodium Options' (reeses-sodium-options), but a matching version is present: 1.8.0-beta.4+mc1.21.1!
+      - Mod 'Sodium' (sodium) 0.8.13+mc1.21.1 is incompatible with any version before 0.8.7 of mod 'Sodium Extra' (sodium-extra), but a matching version is present: 0.6.0-beta.3+mc1.21.1!
+      - Mod 'Sodium' (sodium) 0.8.13+mc1.21.1 is incompatible with any version before 1.0.8 of mod 'More Culling' (moreculling), but a matching version is present: 1.0.1!
+      - Mod 'Concurrent Chunk Management Engine (Optimizations/Natives Math)' (c2me-opts-natives-math) 0.3.0+alpha.0.299+1.21.1 requires version 22 or later of 'OpenJDK 64-Bit Server VM' (java), but only the wrong version is present: 21!";
+
+    // The resolver equivalent, which Fabric emits independently of the UI language.
+    const DEPVER_JAVA_RESOLVER: &str = "Reason: [HARD_DEP iris 1.8.0-beta.8+mc1.21.1 {depends sodium @ [0.6.x]}, NEG_HARD_DEP sodium 0.8.13+mc1.21.1 {breaks iris @ [<1.8.13]}, NEG_HARD_DEP sodium 0.8.13+mc1.21.1 {breaks reeses-sodium-options @ [<1.8.0]}, NEG_HARD_DEP sodium 0.8.13+mc1.21.1 {breaks sodium-extra @ [<0.8.7]}, NEG_HARD_DEP sodium 0.8.13+mc1.21.1 {breaks moreculling @ [<1.0.8]}, HARD_DEP c2me-opts-natives-math 0.3.0+alpha.0.299+1.21.1 {depends java @ [>=22]}]";
+
+    #[test]
+    fn report_282_prefers_companion_updates_and_keeps_java_requirement() {
+        let full = format!("{DEPVER_JAVA_RESOLVER}\n{DEPVER_JAVA_282}");
+        for log in [DEPVER_JAVA_282, full.as_str()] {
+            let d = diagnose(log).unwrap();
+            assert_eq!(d.title, "Some mods need updating together");
+            for update in [
+                "Iris to 1.8.13+",
+                "Reese's Sodium Options to 1.8.0+",
+                "Sodium Extra to 0.8.7+",
+                "More Culling to 1.0.8+",
+            ] {
+                assert!(d.detail.contains(update), "{}", d.detail);
+            }
+            let downgrade = d.detail.find("downgrade sodium to 0.6.0-beta.2").unwrap();
+            assert!(d.detail.find("More Culling to 1.0.8+").unwrap() < downgrade);
+            assert!(d.detail.contains("Alternatively"));
+            assert!(!d.detail.contains("update sodium to"));
+            assert!(d.detail.contains("Concurrent Chunk Management Engine (Optimizations/Natives Math) needs Java 22 or later"));
+            assert!(d.detail.contains("ran on Java 21"));
+            assert!(d.detail.contains("Use a specific Java for this instance"));
+            assert!(d.detail.contains("Path"));
+            assert!(d.mods.contains(&"Reese's Sodium Options".to_owned()));
+            assert_eq!(d.detail.matches("needs Java").count(), 1);
+            assert_eq!(d.fix, None);
+            assert!(!d.repair);
+        }
+    }
+
+    #[test]
+    fn translated_report_282_uses_resolver_ids_and_minimum_versions() {
+        let fix = DEPVER_JAVA_282.lines().next().unwrap();
+        let log =
+            format!("{DEPVER_JAVA_RESOLVER}\n{fix}\nDes mods incompatibles ont été trouvés !");
+        let d = diagnose(&log).unwrap();
+        for update in [
+            "iris to 1.8.13+",
+            "reeses-sodium-options to 1.8.0+",
+            "sodium-extra to 0.8.7+",
+            "moreculling to 1.0.8+",
+        ] {
+            assert!(d.detail.contains(update), "{}", d.detail);
+        }
+        assert!(d.detail.contains("downgrade sodium to 0.6.0-beta.2"));
+        assert!(
+            d.detail
+                .contains("c2me-opts-natives-math needs Java 22 or later")
+        );
+        assert!(!d.detail.contains("isn't installed"));
+        // The update advice also works without the resolver's Fix line.
+        let d = diagnose(DEPVER_JAVA_RESOLVER).unwrap();
+        assert!(d.detail.contains("iris to 1.8.13+"));
+        assert!(d.detail.contains("Java 22 or later"));
+    }
+
+    #[test]
+    fn replacement_hints_distinguish_downgrades_and_unknown_versions() {
+        let fix = DEPVER_JAVA_282.lines().next().unwrap();
+        let d = diagnose(fix).unwrap();
+        assert_eq!(d.title, "Some mod versions don't match");
+        assert!(d.detail.contains("downgrade sodium to 0.6.0-beta.2"));
+        for (installed, wanted, action) in [
+            ("0.10.0", "0.9.0", "downgrade"),
+            ("1.8.0", "1.8.0-beta.4", "downgrade"),
+            ("1.8.0-beta.10", "1.8.0-beta.4", "downgrade"),
+            ("1.8.0-beta.4", "1.8.0", "update"),
+            ("1.8", "1.8.1", "update"),
+            ("1.8.0+mc1.21.1", "1.8.0+build.2", "replace"),
+            ("custom", "other", "replace"),
+        ] {
+            let log =
+                format!("[[example {installed}] -> add:example {wanted} ([[{wanted},{wanted}]])]");
+            assert_eq!(
+                update_hint(&log),
+                Some(format!("{action} example to {wanted}"))
+            );
+        }
+    }
+
+    #[test]
+    fn java_requirements_work_alone_or_alongside_other_failures() {
+        let java = DEPVER_JAVA_282.lines().last().unwrap();
+        for log in [
+            java.to_owned(),
+            "Reason: [HARD_DEP c2me 1.0 {depends java @ [>=22]}]".to_owned(),
+        ] {
+            let d = diagnose(&log).unwrap();
+            assert_eq!(d.title, "Some mods need a different Java version");
+            assert!(d.detail.contains("Java 22 or later"));
+            assert!(!d.detail.contains("isn't installed"));
+        }
+        let log = format!("{CONNECTOR_RESOLUTION}\n{java}");
+        let d = diagnose(&log).unwrap();
+        assert_eq!(d.title, "A mod dependency is missing");
+        assert!(d.detail.contains("bclib"));
+        assert!(d.detail.contains("needs Java 22 or later"));
+        let log = format!("{VULKAN_SODIUM_CONFLICT}\n{java}");
+        let d = diagnose(&log).unwrap();
+        assert_eq!(d.title, "Sodium and VulkanMod don't work together");
+        assert!(d.detail.contains("Remove one of them"));
+        assert!(d.detail.contains("needs Java 22 or later"));
+    }
+
+    #[test]
+    fn java_constraints_preserve_legacy_wording_and_multiple_mods() {
+        let log = "Mod 'Native Math' (native-math) 1 requires 22 or later of java, but only the wrong version is present: 21!
+Reason: [HARD_DEP native-math 1 {depends java @ [>=22]}, HARD_DEP other 1 {depends java @ [>=23]}]";
+        let d = diagnose(log).unwrap();
+        assert_eq!(d.title, "Some mods need a different Java version");
+        assert!(d.detail.contains("Native Math needs Java 22 or later"));
+        assert!(d.detail.contains("other needs Java 23 or later"));
+        assert_eq!(d.detail.matches("needs Java").count(), 2);
+        assert_eq!(
+            d.detail
+                .matches("Use a specific Java for this instance")
+                .count(),
+            1
+        );
+        assert_eq!(d.mods, ["Native Math", "other"]);
+    }
+
+    #[test]
+    fn satisfied_immediate_java_constraints_are_not_reported() {
+        let log = format!(
+            "Immediate reason: [HARD_DEP example 1 {{depends java @ [>=21]}}]\n{VULKAN_SODIUM_CONFLICT}"
+        );
+        let d = diagnose(&log).unwrap();
+        assert!(!d.detail.contains("Java"));
+    }
 
     // Report #279: Sodium breaks every VulkanMod version; Not Enough Vulkan's dependency is met.
     const VULKAN_SODIUM_CONFLICT: &str = "[main/INFO] Immediate reason: [HARD_DEP not-enough-vulkan 1.6.2+mc1.21.11 {depends vulkanmod @ [>=0.6.3]}, NEG_HARD_DEP sodium 0.8.14+mc1.21.11 {breaks vulkanmod @ [*]}, ROOT_FORCELOAD_SINGLE not-enough-vulkan 1.6.2+mc1.21.11, ROOT_FORCELOAD_SINGLE sodium 0.8.14+mc1.21.11]
