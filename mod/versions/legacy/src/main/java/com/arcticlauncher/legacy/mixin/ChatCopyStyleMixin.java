@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import com.arcticlauncher.client.Lang;
 /** Legacy setters (including color changes) mutate this style.
  * Only copy/deepCopy allocate a replacement, so both must snapshot ownership.
  */
@@ -35,7 +36,7 @@ abstract class ChatCopyStyleMixin implements ChatCopy.Tagged {
 			return;
 		}
 		cir.setReturnValue(new net.minecraft.text.HoverEvent(net.minecraft.text.HoverEvent.Action.SHOW_TEXT,
-				new net.minecraft.text.LiteralText("Click to copy")));
+				new net.minecraft.text.LiteralText(Lang.t("platform.click_to_copy"))));
 	}
 
 	@Inject(method = "equals", at = @At("RETURN"), cancellable = true)

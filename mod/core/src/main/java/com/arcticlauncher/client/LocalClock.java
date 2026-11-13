@@ -30,7 +30,7 @@ public final class LocalClock {
 				int seconds = Integer.parseInt(supplied);
 				if (seconds >= -18 * 3600 && seconds <= 18 * 3600) {
 					// SimpleTimeZone has a fixed raw offset and no tzdb/DST rules.
-					return new SimpleTimeZone(seconds * 1000, "Arctic OS local offset");
+					return new SimpleTimeZone(seconds * 1000, "Arctic OS local offset"); // i18n-ignore
 				}
 			} catch (NumberFormatException ignored) {}
 		}

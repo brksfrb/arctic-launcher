@@ -6,7 +6,7 @@ use arctic_core::mods::{self, SearchQuery};
 use arctic_core::{Error, ProgressInfo, Result};
 
 use crate::tasks::{Event, ProgressSnapshot, Tasks};
-
+use crate::{t, tf};
 /// A finished pack install.
 #[derive(Debug, Clone)]
 pub struct PackDone {
@@ -52,8 +52,7 @@ impl Tasks {
                 None => {
                     shaders_switched_on = !instance.shaders;
                     if shaders_switched_on {
-                        note = "Shaders are on for this instance; Iris comes with the next start."
-                            .into();
+                        note = t!("tasks.shaders_are_on_for_this_instance_iris_comes").into();
                     }
                 }
                 Some(loader) => {
@@ -74,11 +73,12 @@ impl Tasks {
                             &progress,
                         )
                         .map_err(|e| {
-                            Error::Other(format!(
-                                "shaders need Iris, which couldn't be installed: {e}"
+                            Error::Other(tf!(
+                                "tasks.shaders_need_iris_which_couldnt_be_installed",
+                                e = e
                             ))
                         })?;
-                        note = "Iris was added so shaders work.".into();
+                        note = t!("tasks.iris_was_added_so_shaders_work").into();
                     }
                 }
             }
@@ -86,13 +86,13 @@ impl Tasks {
         let installed = packs::install(kind, project, game, &game_dir, &progress)?;
         let file = installed.file_name;
         if let Err(e) = packs::set_active(kind, &game_dir, &file, true) {
-            note = format!("Installed but not switched on: {e}");
+            note = tf!("tasks.installed_but_not_switched_on", e = e);
         }
         if installed.used_fallback {
             if !note.is_empty() {
                 note.push(' ');
             }
-            note.push_str("Installed the newest file tagged for another Minecraft version.");
+            note.push_str(t!("tasks.installed_the_newest_file_tagged_for_another"));
         }
         Ok(PackDone {
             file,

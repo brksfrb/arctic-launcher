@@ -1,0 +1,8 @@
+{
+  "accounts.accounts": "Cuentas",
+  "accounts.add_account": "Añadir cuenta",
+  "accounts.click_an_account_to_play_as_it_sign_ins_stay": "Haz clic en una cuenta para jugar con ella. Los inicios de sesión se quedan en este PC, cifrados para tu usuario.",
+  "accounts.offline": "Sin conexión",
+  "accounts.playing_as": "Jugando como {username}",
+  "accounts.remove_account": "Quitar cuenta"
+}

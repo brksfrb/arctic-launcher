@@ -15,7 +15,7 @@ use crate::motion::format_bytes;
 use crate::theme;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 /// Most gameplay videos listed at once (the folder holds the rest).
 const MAX_VIDEOS: usize = 30;
 /// Thumbnails are 16:9.
@@ -33,14 +33,16 @@ impl ArcticApp {
             }
         };
         crate::widgets::row(ui, |ui| {
-            ui.label(RichText::new(format!("{} replays", list.len())).color(p.muted));
+            ui.label(RichText::new(tf!("instances.replays_2", count = list.len())).color(p.muted));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, p, Icon::Folder, "Open replays folder").clicked() {
+                if widgets::icon_button(ui, p, Icon::Folder, t!("instances.open_replays_folder"))
+                    .clicked()
+                {
                     let folder = game_dir.join(replays::FOLDER);
                     let _ = std::fs::create_dir_all(&folder);
                     let _ = open::that_detached(&folder);
                 }
-                if widgets::button(ui, p, None, "Refresh", false).clicked() {
+                if widgets::button(ui, p, None, t!("instances.refresh"), false).clicked() {
                     self.refresh_replays(instance);
                 }
             });
@@ -53,16 +55,14 @@ impl ArcticApp {
                 ui.vertical_centered(|ui| {
                     ui.add_space(10.0);
                     ui.label(
-                        RichText::new("No replays yet")
+                        RichText::new(t!("instances.no_replays_yet"))
                             .size(17.0)
                             .strong()
                             .color(p.text),
                     );
                     ui.label(
-                        RichText::new(
-                            "F9 saves the last 30 seconds. F10 starts or stops a recording. Both keys can be changed in Arctic's Replays settings.",
-                        )
-                        .color(p.muted),
+                        RichText::new(t!("instances.f9_saves_the_last_30_seconds_f10_starts_or"))
+                            .color(p.muted),
                     );
                     ui.add_space(10.0);
                 });
@@ -88,7 +88,7 @@ impl ArcticApp {
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.label(
-                RichText::new(format!("Gameplay videos ({})", videos.len()))
+                RichText::new(tf!("instances.gameplay_videos", count = videos.len()))
                     .size(17.0)
                     .strong()
                     .color(p.text),
@@ -115,22 +115,27 @@ impl ArcticApp {
                         );
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if widgets::icon_button(ui, p, Icon::Trash, "Move to trash").clicked() {
+                        if widgets::icon_button(ui, p, Icon::Trash, t!("instances.move_to_trash"))
+                            .clicked()
+                        {
                             match replays::trash_video(video) {
                                 Ok(()) => trashed = true,
                                 Err(e) => self.toasts.push(
                                     Kind::Error,
-                                    "Could not move the video",
+                                    t!("instances.could_not_move_the_video"),
                                     e.to_string(),
                                 ),
                             }
                         }
-                        if widgets::icon_button(ui, p, Icon::Folder, "Show in folder").clicked()
+                        if widgets::icon_button(ui, p, Icon::Folder, t!("instances.show_in_folder"))
+                            .clicked()
                             && let Some(dir) = video.path.parent()
                         {
                             let _ = open::that_detached(dir);
                         }
-                        if widgets::button(ui, p, Some(Icon::Play), "Play", true).clicked() {
+                        if widgets::button(ui, p, Some(Icon::Play), t!("instances.play"), true)
+                            .clicked()
+                        {
                             let _ = open::that_detached(&video.path);
                         }
                     });
@@ -139,8 +144,9 @@ impl ArcticApp {
             }
             if videos.len() > MAX_VIDEOS {
                 ui.label(
-                    RichText::new(format!(
-                        "The newest {MAX_VIDEOS} are shown; the rest are in the folder."
+                    RichText::new(tf!(
+                        "instances.the_newest_are_shown_the_rest_are_in_the",
+                        MAX_VIDEOS = MAX_VIDEOS
                     ))
                     .small()
                     .color(p.muted),
@@ -195,26 +201,29 @@ impl ArcticApp {
                 ui.label(RichText::new(detail).small().color(p.muted));
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, p, Icon::Trash, "Move to trash").clicked() {
+                if widgets::icon_button(ui, p, Icon::Trash, t!("instances.move_to_trash")).clicked()
+                {
                     match replays::trash(replay) {
                         Ok(()) => self.toasts.push(
                             Kind::Info,
-                            "Replay moved to trash",
+                            t!("instances.replay_moved_to_trash"),
                             "replay_recordings/.trash",
                         ),
-                        Err(e) => {
-                            self.toasts
-                                .push(Kind::Error, "Could not move replay", e.to_string())
-                        }
+                        Err(e) => self.toasts.push(
+                            Kind::Error,
+                            t!("instances.could_not_move_replay"),
+                            e.to_string(),
+                        ),
                     }
                     self.refresh_replays(instance);
                 }
-                if widgets::icon_button(ui, p, Icon::Folder, "Show in folder").clicked()
+                if widgets::icon_button(ui, p, Icon::Folder, t!("instances.show_in_folder"))
+                    .clicked()
                     && let Some(dir) = replay.path.parent()
                 {
                     let _ = open::that_detached(dir);
                 }
-                if widgets::button(ui, p, Some(Icon::Play), "Watch", true).clicked() {
+                if widgets::button(ui, p, Some(Icon::Play), t!("instances.watch"), true).clicked() {
                     self.settings.last_instance =
                         (!instance.is_default()).then(|| instance.id.clone());
                     let now = ui.input(|i| i.time);

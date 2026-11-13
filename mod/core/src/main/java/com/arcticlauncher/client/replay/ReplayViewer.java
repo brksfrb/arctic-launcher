@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Watching one replay: its clock (pause, speed, jumping), the camera (free,
  * first person as recorded, following a player, or along a path) and video
@@ -27,15 +28,20 @@ public final class ReplayViewer {
 	private static final double LOW_EYES = 0.4;
 
 	public enum Mode {
-		FREE("Free camera"),
-		FIRST_PERSON("First person"),
-		FOLLOW("Following"),
-		PATH("Camera path");
+		FREE("replay.free_camera_2"),
+		FIRST_PERSON("replay.first_person"),
+		FOLLOW("replay.following_2"),
+		PATH("replay.camera_path");
 
-		public final String label;
+		/** The camera's text key. */
+		private final String key;
 
-		Mode(String label) {
-			this.label = label;
+		Mode(String key) {
+			this.key = key;
+		}
+
+		public String label() {
+			return Lang.t(key);
 		}
 	}
 
@@ -108,7 +114,7 @@ public final class ReplayViewer {
 			t.setPriority(Thread.MIN_PRIORITY + 1);
 			t.start();
 		}
-		status = "Joining…";
+		status = Lang.t("replay.joining");
 		return null;
 	}
 
@@ -209,7 +215,7 @@ public final class ReplayViewer {
 			start = (int) time;
 			skipBootstrap();
 		} else if (failure == null && cursor >= data.count()) {
-			problem = "This replay never reaches the world.";
+			problem = Lang.t("replay.this_replay_never_reaches_the_world");
 			joined = true;
 		}
 	}
@@ -356,7 +362,7 @@ public final class ReplayViewer {
 	/** Jump to {@code ms} (done at the start of the next frame). */
 	public void seek(double ms) {
 		pendingSeek = Math.max(start, Math.min(data.duration(), ms));
-		status = "Jumping…";
+		status = Lang.t("replay.jumping");
 		touched();
 	}
 
@@ -540,7 +546,7 @@ public final class ReplayViewer {
 	public void playPath() {
 		CameraPath p = new CameraPath(keyframes);
 		if (!p.usable()) {
-			problem = "Add keyframes at two different times first (K).";
+			problem = Lang.t("replay.add_keyframes_at_two_different_times_first_k");
 			return;
 		}
 		if (mode == Mode.FOLLOW) {
@@ -576,7 +582,7 @@ public final class ReplayViewer {
 		if (camera == Mode.PATH) {
 			CameraPath p = new CameraPath(keyframes);
 			if (!p.usable()) {
-				problem = "Add keyframes at two different times first (K).";
+				problem = Lang.t("replay.add_keyframes_at_two_different_times_first_k");
 				return;
 			}
 			path = p;

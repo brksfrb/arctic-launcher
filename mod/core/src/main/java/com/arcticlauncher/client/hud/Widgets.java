@@ -11,18 +11,19 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
+import com.arcticlauncher.client.Lang;
 /** The built-in HUD widgets, in the order they stack and list. */
 final class Widgets {
 	private static final String[] COMPASS = {"S", "SW", "W", "NW", "N", "NE", "E", "SE"};
 	private static final long TICKS_PER_DAY = 24000;
 	private static final double MB = 1024 * 1024;
-	/** Item id part → label, for the Items widget. */
+	/** Item id part → label key, for the Items widget. */
 	private static final String[][] COUNTED = {
-			{"totem_of_undying", "Totems"}, {"ender_pearl", "Pearls"}, {"golden_apple", "Gapples"},
+			{"totem_of_undying", "hud.totems"}, {"ender_pearl", "hud.pearls"}, {"golden_apple", "hud.gapples"},
 	};
 
-	/** Item id part → label, for the Cooldowns widget. */
-	private static final String[][] COOLDOWNS = {{"ender_pearl", "Pearl"}, {"chorus_fruit", "Chorus"}, {"wind_charge", "Wind"}, {"shield", "Shield"}};
+	/** Item id part → label key, for the Cooldowns widget. */
+	private static final String[][] COOLDOWNS = {{"ender_pearl", "hud.cooldown.pearl"}, {"chorus_fruit", "hud.cooldown.chorus"}, {"wind_charge", "hud.cooldown.wind"}, {"shield", "hud.cooldown.shield"}};
 
 	private Widgets() {}
 
@@ -51,20 +52,20 @@ final class Widgets {
 
 	static List<HudWidget> all(final Cps cps) {
 		List<HudWidget> all = new ArrayList<HudWidget>();
-		all.add(new TextWidget("fps", "FPS", "Frames per second", true) {
+		all.add(new TextWidget("fps", "FPS", Lang.t("hud.frames_per_second"), true) {
 			@Override
 			protected String value(boolean preview) {
 				return String.valueOf(platform().fps());
 			}
 		});
 		all.add(new Watermark());
-		all.add(new TextWidget("cps", "CPS", "Clicks per second (left | right)", true) {
+		all.add(new TextWidget("cps", "CPS", Lang.t("hud.clicks_per_second_left_right"), true) {
 			@Override
 			protected String value(boolean preview) {
 				return cps.get(Keys.MOUSE_LEFT) + " | " + cps.get(Keys.MOUSE_RIGHT);
 			}
 		});
-		all.add(new TextWidget("ping", "Ping", "Latency to the server", true) {
+		all.add(new TextWidget("ping", Lang.t("hud.ping"), Lang.t("hud.latency_to_the_server"), true) {
 			@Override
 			protected String value(boolean preview) {
 				int ms = platform().ping();
@@ -78,14 +79,14 @@ final class Widgets {
 		all.add(new ChatFeed());
 		all.add(direction());
 		all.add(new Speed());
-		all.add(new TextWidget("biome", "Biome", "The biome you're in", false) {
+		all.add(new TextWidget("biome", Lang.t("hud.biome"), Lang.t("hud.the_biome_youre_in"), false) {
 			@Override
 			protected String value(boolean preview) {
 				String biome = platform().biome();
-				return biome == null ? "Plains" : biome;
+				return biome == null ? Lang.t("hud.plains") : biome;
 			}
 		});
-		all.add(new TextWidget("day", "Day", "Days passed in this world", false) {
+		all.add(new TextWidget("day", Lang.t("hud.day"), Lang.t("hud.days_passed_in_this_world"), false) {
 			@Override
 			protected String value(boolean preview) {
 				long time = platform().dayTime();
@@ -93,7 +94,7 @@ final class Widgets {
 			}
 		});
 		all.add(clock());
-		all.add(new TextWidget("memory", "Memory", "Java memory in use", false) {
+		all.add(new TextWidget("memory", Lang.t("hud.memory"), Lang.t("hud.java_memory_in_use"), false) {
 			@Override
 			protected String value(boolean preview) {
 				Runtime rt = Runtime.getRuntime();
@@ -103,14 +104,14 @@ final class Widgets {
 		});
 		all.addAll(ResourceWidgets.all());
 		all.addAll(PvpWidgets.all());
-		all.add(new TextWidget("server", "Server", "The server you're playing on", false) {
+		all.add(new TextWidget("server", Lang.t("hud.server"), Lang.t("hud.the_server_youre_playing_on"), false) {
 			@Override
 			protected String value(boolean preview) {
 				String server = platform().server();
 				return server == null ? "Singleplayer" : server;
 			}
 		});
-		all.add(new TextWidget("tps", "TPS", "The server's ticks per second (20 = no lag)", false) {
+		all.add(new TextWidget("tps", "TPS", Lang.t("hud.the_servers_ticks_per_second_20_no_lag"), false) {
 			@Override
 			protected String value(boolean preview) {
 				double tps = Tps.get();
@@ -120,7 +121,7 @@ final class Widgets {
 				return Num.fixed(tps, 1);
 			}
 		});
-		all.add(new TextWidget("players", "Players", "Players online on the server", false) {
+		all.add(new TextWidget("players", Lang.t("hud.players"), Lang.t("hud.players_online_on_the_server"), false) {
 			@Override
 			protected String value(boolean preview) {
 				int n = platform().playerCount();
@@ -135,9 +136,9 @@ final class Widgets {
 		all.add(new Keystrokes(cps));
 		all.addAll(GameWidgets.all());
 		if (platform().movesVanillaParts()) {
-			all.add(new VanillaPart(VanillaParts.SCOREBOARD, "Scoreboard", "The server's scoreboard: move it, resize it or turn it off",
+			all.add(new VanillaPart(VanillaParts.SCOREBOARD, Lang.t("hud.scoreboard"), Lang.t("hud.the_servers_scoreboard_move_it_resize_it_or"),
 					90, 40));
-			all.add(new VanillaPart(VanillaParts.BOSSBAR, "Boss bar", "Boss health bars: move them, resize them or turn them off",
+			all.add(new VanillaPart(VanillaParts.BOSSBAR, Lang.t("hud.boss_bar"), Lang.t("hud.boss_health_bars_move_them_resize_them_or"),
 					VanillaParts.BOSSBAR_WIDTH, 14));
 		}
 		return all;
@@ -146,14 +147,14 @@ final class Widgets {
 	/** Widgets many clients have: light, chunk, session, arrows, food, pack, date, last death. */
 	private static List<HudWidget> more() {
 		List<HudWidget> all = new ArrayList<HudWidget>();
-		all.add(new TextWidget("light", "Light", "Block light where you stand (mobs spawn at 0)", false) {
+		all.add(new TextWidget("light", Lang.t("hud.light"), Lang.t("hud.block_light_where_you_stand_mobs_spawn_at_0"), false) {
 			@Override
 			protected String value(boolean preview) {
 				int[] l = platform().light();
 				return l == null ? "12 (sky 15)" : l[0] + " (sky " + l[1] + ")";
 			}
 		});
-		all.add(new TextWidget("chunk", "Chunk", "The chunk you're in, and your spot inside it", false) {
+		all.add(new TextWidget("chunk", Lang.t("hud.chunk"), Lang.t("hud.the_chunk_youre_in_and_your_spot_inside_it"), false) {
 			@Override
 			protected String value(boolean preview) {
 				double[] p = platform().position();
@@ -165,7 +166,7 @@ final class Widgets {
 				return (x >> 4) + " " + (z >> 4) + " (" + (x & 15) + " " + (z & 15) + ")";
 			}
 		});
-		all.add(new TextWidget("session", "Session", "How long you've been playing", false) {
+		all.add(new TextWidget("session", Lang.t("hud.session"), Lang.t("hud.how_long_youve_been_playing"), false) {
 			private final long started = System.currentTimeMillis();
 
 			@Override
@@ -174,7 +175,7 @@ final class Widgets {
 				return minutes < 60 ? minutes + "m" : minutes / 60 + "h " + minutes % 60 + "m";
 			}
 		});
-		all.add(new TextWidget("food", "Food", "Hunger and saturation (the hidden part)", false) {
+		all.add(new TextWidget("food", Lang.t("hud.food"), Lang.t("hud.hunger_and_saturation_the_hidden_part"), false) {
 			@Override
 			protected String value(boolean preview) {
 				float[] f = platform().food();
@@ -184,14 +185,14 @@ final class Widgets {
 				return (int) f[0] + " (" + Num.fixed(f[1], 1) + ")";
 			}
 		});
-		all.add(new TextWidget("pack", "Pack", "Your top resource pack", false) {
+		all.add(new TextWidget("pack", Lang.t("hud.pack"), Lang.t("hud.your_top_resource_pack"), false) {
 			@Override
 			protected String value(boolean preview) {
 				String pack = platform().resourcePack();
-				return pack == null ? (preview ? "Faithful 32x" : "Default") : pack;
+				return pack == null ? (preview ? Lang.t("hud.faithful_32x") : Lang.t("hud.default")) : pack;
 			}
 		});
-		all.add(new TextWidget("date", "Date", "Today's date", false) {
+		all.add(new TextWidget("date", Lang.t("hud.date"), Lang.t("hud.todays_date"), false) {
 			private final SimpleDateFormat format = LocalClock.formatter("EEE d MMM", Locale.ENGLISH);
 
 			@Override
@@ -199,14 +200,14 @@ final class Widgets {
 				return format.format(new Date());
 			}
 		});
-		all.add(new TextWidget("entities", "Entities", "Entities the world has loaded around you", false) {
+		all.add(new TextWidget("entities", Lang.t("hud.entities"), Lang.t("hud.entities_the_world_has_loaded_around_you"), false) {
 			@Override
 			protected String value(boolean preview) {
 				int n = platform().entityCount();
 				return n < 0 ? (preview ? "312" : "--") : String.valueOf(n);
 			}
 		});
-		all.add(new TextWidget("worldtime", "World time", "The in-game clock (not your computer's)", false) {
+		all.add(new TextWidget("worldtime", Lang.t("hud.world_time"), Lang.t("hud.the_in_game_clock_not_your_computers"), false) {
 			@Override
 			protected String value(boolean preview) {
 				long ticks = platform().dayTime();
@@ -218,7 +219,7 @@ final class Widgets {
 				return String.format(Locale.ROOT, "%02d:%02d", (t / 1000 + 6) % 24, t % 1000 * 60 / 1000);
 			}
 		});
-		all.add(new TextWidget("stopwatch", "Stopwatch", "Set its key in Features: start, stop, clear", false) {
+		all.add(new TextWidget("stopwatch", Lang.t("hud.stopwatch"), Lang.t("hud.set_its_key_in_features_start_stop_clear"), false) {
 			@Override
 			protected String value(boolean preview) {
 				com.arcticlauncher.client.feature.Stopwatch s = ArcticClient.stopwatch();
@@ -226,36 +227,36 @@ final class Widgets {
 				return preview && ms == 0 ? "1:05.3" : com.arcticlauncher.client.feature.Stopwatch.format(ms);
 			}
 		});
-		all.add(new TextWidget("items", "Items", "Totems, pearls and golden apples you carry", false) {
+		all.add(new TextWidget("items", Lang.t("hud.items"), Lang.t("hud.totems_pearls_and_golden_apples_you_carry"), false) {
 			@Override
 			protected String value(boolean preview) {
 				StringBuilder out = new StringBuilder();
 				for (String[] kind : counted()) {
 					int n = platform().countItems(kind[0]);
 					if (n > 0 || (preview && n < 0)) {
-						out.append(out.length() == 0 ? "" : "  ").append(kind[1]).append(' ').append(n > 0 ? n : 2);
+						out.append(out.length() == 0 ? "" : "  ").append(Lang.t(kind[1])).append(' ').append(n > 0 ? n : 2);
 					}
 				}
-				return out.length() == 0 ? (preview ? "Totems 2  Pearls 16" : "--") : out.toString();
+				return out.length() == 0 ? (preview ? Lang.t("hud.totems_2_pearls_16") : "--") : out.toString();
 			}
 		});
 		if (platform().cooldownsWork()) {
-			all.add(new TextWidget("cooldowns", "Cooldowns", "Ender pearl, chorus fruit, wind charge and shield cooldowns", false) {
+			all.add(new TextWidget("cooldowns", Lang.t("hud.cooldowns"), Lang.t("hud.ender_pearl_chorus_fruit_wind_charge_and"), false) {
 				@Override
 				protected String value(boolean preview) {
 					StringBuilder out = new StringBuilder();
 					for (String[] kind : COOLDOWNS) {
 						float left = platform().cooldown(kind[0]);
 						if (left > 0f) {
-							out.append(out.length() == 0 ? "" : "  ").append(kind[1]).append(' ').append(Math.round(left * 100)).append('%');
+							out.append(out.length() == 0 ? "" : "  ").append(Lang.t(kind[1])).append(' ').append(Math.round(left * 100)).append('%');
 						}
 					}
-					return out.length() == 0 ? (preview ? "Pearl 60%" : "--") : out.toString();
+					return out.length() == 0 ? (preview ? Lang.t("hud.pearl_60") : "--") : out.toString();
 				}
 			});
 		}
 		if (platform().horseStatsWorks()) {
-			all.add(new TextWidget("horse", "Horse stats", "Speed and jump height of the horse you ride or aim at", false) {
+			all.add(new TextWidget("horse", Lang.t("hud.horse_stats"), Lang.t("hud.speed_and_jump_height_of_the_horse_you_ride"), false) {
 				@Override
 				protected String value(boolean preview) {
 					float[] h = platform().horseStats();
@@ -266,14 +267,14 @@ final class Widgets {
 				}
 			});
 		}
-		all.add(new TextWidget("aimed", "Looking at", "The block or creature under your crosshair", false) {
+		all.add(new TextWidget("aimed", Lang.t("hud.looking_at"), Lang.t("hud.the_block_or_creature_under_your_crosshair"), false) {
 			@Override
 			protected String value(boolean preview) {
 				String name = platform().aimedName();
-				return name == null ? (preview ? "Oak Planks" : "--") : name;
+				return name == null ? (preview ? Lang.t("hud.oak_planks") : "--") : name;
 			}
 		});
-		all.add(new TextWidget("death", "Last death", "Where you last died", false) {
+		all.add(new TextWidget("death", Lang.t("hud.last_death"), Lang.t("hud.where_you_last_died"), false) {
 			@Override
 			protected String value(boolean preview) {
 				String at = ArcticClient.lastDeath();
@@ -284,7 +285,7 @@ final class Widgets {
 	}
 
 	private static HudWidget coords() {
-		return new TextWidget("coords", "XYZ", "Your coordinates", false) {
+		return new TextWidget("coords", "XYZ", Lang.t("hud.your_coordinates"), false) {
 			@Override
 			protected String value(boolean preview) {
 				double[] p = platform().position();
@@ -292,7 +293,7 @@ final class Widgets {
 					p = new double[] {0, 64, 0};
 				}
 				int decimals = Math.max(0, Math.min(2, ArcticClient.config().coordDecimals));
-				return "X: " + number(p[0], decimals) + "  Y: " + number(p[1], decimals) + "  Z: " + number(p[2], decimals);
+				return Lang.t("hud.x_2") + number(p[0], decimals) + Lang.t("hud.y") + number(p[1], decimals) + Lang.t("hud.z") + number(p[2], decimals);
 			}
 		}.ownLabels();
 	}
@@ -303,7 +304,7 @@ final class Widgets {
 	}
 
 	private static HudWidget direction() {
-		return new TextWidget("direction", "Facing", "Compass direction and angle", false) {
+		return new TextWidget("direction", Lang.t("hud.facing"), Lang.t("hud.compass_direction_and_angle"), false) {
 			@Override
 			protected String value(boolean preview) {
 				double[] p = platform().position();
@@ -322,7 +323,7 @@ final class Widgets {
 	}
 
 	private static HudWidget clock() {
-		return new TextWidget("clock", "Time", "Your local time", false) {
+		return new TextWidget("clock", Lang.t("hud.time"), Lang.t("hud.your_local_time"), false) {
 			private final SimpleDateFormat format = LocalClock.formatter("HH:mm");
 
 			@Override
@@ -353,7 +354,7 @@ final class Widgets {
 		private double shown;
 
 		Speed() {
-			super("speed", "Speed", "How fast you're moving (blocks/s)", false);
+			super("speed", Lang.t("hud.speed"), Lang.t("hud.how_fast_youre_moving_blocks_s"), false);
 		}
 
 		@Override

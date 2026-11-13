@@ -1,0 +1,8 @@
+{
+  "accounts.accounts": "Аккаунты",
+  "accounts.add_account": "Добавить аккаунт",
+  "accounts.click_an_account_to_play_as_it_sign_ins_stay": "Нажми на аккаунт, чтобы играть под ним. Данные входа остаются на этом ПК, зашифрованные для твоего пользователя.",
+  "accounts.offline": "Офлайн",
+  "accounts.playing_as": "Вы играете как {username}",
+  "accounts.remove_account": "Убрать аккаунт"
+}

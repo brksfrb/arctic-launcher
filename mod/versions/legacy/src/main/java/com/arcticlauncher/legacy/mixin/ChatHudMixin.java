@@ -15,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import com.arcticlauncher.client.Lang;
 /** Chat timestamps, repeated lines stacked, mentions of you marked, and Auto GG. */
 @Mixin(ChatHud.class)
 abstract class ChatHudMixin {
@@ -131,7 +132,7 @@ abstract class ChatHudMixin {
 		// The visible lines are wrapped once, with the font of that moment: when the smooth font is
 		// switched (or its widths change) they are wrapped again, or they run past the box.
 		net.minecraft.client.font.TextRenderer font = net.minecraft.client.MinecraftClient.getInstance().textRenderer;
-		float probe = font == null ? 0f : font.getStringWidth("The quick brown fox WMi. 0123456789 [:]");
+		float probe = font == null ? 0f : font.getStringWidth("The quick brown fox WMi. 0123456789 [:]"); // i18n-ignore
 		boolean fontChanged = arctic$fontSeen && probe != arctic$fontProbe;
 		arctic$fontSeen = font != null;
 		arctic$fontProbe = probe;
@@ -192,7 +193,8 @@ abstract class ChatHudMixin {
 	@ModifyVariable(method = "addMessage(Lnet/minecraft/text/Text;I)V", at = @At("HEAD"), argsOnly = true)
 	private Text arctic$chat(Text message) {
 		arctic$restore();
-		com.arcticlauncher.client.FreezeWatchdog.note("chat line, chars", message.asUnformattedString().length());
+		com.arcticlauncher.client.FreezeWatchdog.note("chat line, chars", // i18n-ignore: diagnostics
+				 message.asUnformattedString().length());
 		// Blank lines (a server clearing the chat) stay plain: no stack, timestamp, mention or archive entry.
 		if (com.arcticlauncher.client.feature.ChatStacker.isBlank(message.asUnformattedString())) {
 			arctic$stacker.reset();

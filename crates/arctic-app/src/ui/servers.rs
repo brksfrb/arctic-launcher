@@ -12,7 +12,7 @@ use crate::art::icons::{self, Icon};
 use crate::tasks::Outcome;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 const ICON: f32 = 40.0;
 /// The held row's frame around its content.
 const HELD_PAD: f32 = 8.0;
@@ -91,7 +91,7 @@ impl ArcticApp {
             Some(Err(e)) => {
                 ui.add_space(18.0);
                 ui.label(
-                    RichText::new(format!("Your server list couldn't be read: {e}"))
+                    RichText::new(tf!("social.your_server_list_couldnt_be_read", e = e))
                         .small()
                         .color(p.muted),
                 );
@@ -101,20 +101,20 @@ impl ArcticApp {
         };
         ui.add_space(18.0);
         crate::widgets::row(ui, |ui| {
-            ui.label(RichText::new("SERVERS").small().color(p.muted));
+            ui.label(RichText::new(t!("social.servers")).small().color(p.muted));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let busy = self
                     .servers
                     .status
                     .values()
                     .any(|s| matches!(s, Ping::Waiting));
-                if widgets::button(ui, p, None, "Discover servers", false).clicked() {
+                if widgets::button(ui, p, None, t!("social.discover_servers"), false).clicked() {
                     self.open_discover();
                 }
                 if busy {
                     ui.spinner();
                 } else if !list.is_empty()
-                    && widgets::button(ui, p, None, "Refresh", false).clicked()
+                    && widgets::button(ui, p, None, t!("social.refresh"), false).clicked()
                 {
                     self.refresh_servers(now);
                 }
@@ -125,11 +125,9 @@ impl ArcticApp {
         ui.add_space(6.0);
         if list.is_empty() {
             ui.label(
-                RichText::new(
-                    "Servers you add in Minecraft (or from Discover) show up here with who's online.",
-                )
-                .small()
-                .color(p.muted),
+                RichText::new(t!("social.servers_you_add_in_minecraft_or_from"))
+                    .small()
+                    .color(p.muted),
             );
             return;
         }
@@ -284,10 +282,11 @@ impl ArcticApp {
                         self.servers.list = Some(Ok(order));
                         self.servers_changed();
                     }
-                    Err(e) => {
-                        self.toasts
-                            .push(Kind::Error, "Couldn't move the server", e.to_string())
-                    }
+                    Err(e) => self.toasts.push(
+                        Kind::Error,
+                        t!("social.couldnt_move_the_server"),
+                        e.to_string(),
+                    ),
                 }
             }
             self.servers.settle = Some((d.address, top));
@@ -319,14 +318,19 @@ impl ArcticApp {
         crate::widgets::row(ui, |ui| {
             let field = ui.add(
                 widgets::text_field(&mut self.servers.direct)
-                    .hint_text("Direct join: play.example.net")
+                    .hint_text(t!("social.direct_join_play_example_net"))
                     .desired_width(240.0),
             );
-            join = widgets::button(ui, p, Some(Icon::Play), "Join", valid).clicked()
+            join = widgets::button(ui, p, Some(Icon::Play), t!("social.join"), valid).clicked()
                 || (field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && valid);
-            add = widgets::button(ui, p, Some(Icon::Plus), "Add to list", false).clicked();
+            add =
+                widgets::button(ui, p, Some(Icon::Plus), t!("social.add_to_list"), false).clicked();
             if !typed.is_empty() && !valid {
-                ui.label(RichText::new("Not a server address").small().color(p.muted));
+                ui.label(
+                    RichText::new(t!("social.not_a_server_address"))
+                        .small()
+                        .color(p.muted),
+                );
             }
         });
         if valid && typed == self.servers.direct_asked {
@@ -334,13 +338,16 @@ impl ArcticApp {
                 None => {
                     ui.horizontal(|ui| {
                         ui.spinner();
-                        ui.label(RichText::new("Pinging…").small().color(p.muted));
+                        ui.label(RichText::new(t!("social.pinging")).small().color(p.muted));
                     });
                 }
                 Some(Ok(status)) => {
-                    let text = format!(
-                        "{} / {} online · {} ms · {}",
-                        status.online, status.max, status.ping_ms, status.version
+                    let text = tf!(
+                        "social.online_ms",
+                        online = status.online,
+                        max = status.max,
+                        ping_ms = status.ping_ms,
+                        version = status.version
                     );
                     ui.label(RichText::new(text).small().color(p.text));
                     if !status.motd.is_empty() {
@@ -352,7 +359,7 @@ impl ArcticApp {
                 }
                 Some(Err(e)) => {
                     ui.label(
-                        RichText::new(format!("No answer: {e}"))
+                        RichText::new(tf!("social.no_answer", e = e))
                             .small()
                             .color(p.muted),
                     );
@@ -367,19 +374,20 @@ impl ArcticApp {
                 Ok(true) => {
                     self.toasts.push(
                         Kind::Success,
-                        format!("Added {typed}"),
-                        format!("It's in {}'s server list.", instance.name),
+                        tf!("social.added", typed = typed),
+                        tf!("social.its_in_s_server_list", name = instance.name),
                     );
                     self.servers.direct.clear();
                     self.servers_changed();
                 }
-                Ok(false) => {
-                    self.toasts
-                        .push(Kind::Info, format!("{typed} is already on your list"), "")
-                }
+                Ok(false) => self.toasts.push(
+                    Kind::Info,
+                    tf!("social.is_already_on_your_list", typed = typed),
+                    "",
+                ),
                 Err(e) => self
                     .toasts
-                    .push(Kind::Error, "Couldn't add it", e.to_string()),
+                    .push(Kind::Error, t!("social.couldnt_add_it"), e.to_string()),
             }
         }
         if join {
@@ -499,8 +507,8 @@ impl ArcticApp {
                 }
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let button = widgets::button(ui, p, Some(Icon::Play), "Join", false)
-                    .on_hover_text(format!("Start {} and join", server.name));
+                let button = widgets::button(ui, p, Some(Icon::Play), t!("social.join"), false)
+                    .on_hover_text(tf!("social.start_and_join_2", name = server.name));
                 join_rect = Some(button.rect);
                 if button.clicked() {
                     join = true;
@@ -658,7 +666,7 @@ fn inline_names(status: &Status) -> Option<String> {
         .collect();
     let rest = status.online.saturating_sub(shown.len() as u32);
     Some(if rest > 0 {
-        format!("{} +{} more", shown.join(", "), group(rest))
+        tf!("social.more", join = shown.join(", "), group = group(rest))
     } else {
         shown.join(", ")
     })

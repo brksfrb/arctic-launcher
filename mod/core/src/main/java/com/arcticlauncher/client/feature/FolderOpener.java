@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Locale;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Opens a folder in the system's file manager. The game runs Java without desktop access
  * ({@code java.awt.Desktop} is unsupported), so the system's own opener is started instead.
@@ -32,7 +33,7 @@ public final class FolderOpener {
 			// explorer.exe exits 1 even when it opened the folder, so the exit code means nothing.
 			new ProcessBuilder(command).redirectErrorStream(true).start();
 		} catch (IOException e) {
-			Notices.post("Couldn't open the folder", folder.getName());
+			Notices.post(Lang.t("hud.couldnt_open_the_folder"), folder.getName());
 		}
 	}
 }

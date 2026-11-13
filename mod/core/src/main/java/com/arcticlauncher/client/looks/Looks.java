@@ -19,6 +19,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Arctic looks: every player picks their own skin and cape and publishes
  * it; this shows everyone's. Lookups are batched and cached, and nothing
@@ -179,7 +180,7 @@ public final class Looks {
 				try {
 					flushLookups();
 				} catch (Throwable t) {
-					survive(t, "look lookups");
+					survive(t, "look lookups"); // i18n-ignore
 				}
 			}
 		}, 1, 1, TimeUnit.SECONDS);
@@ -189,7 +190,7 @@ public final class Looks {
 				try {
 					checkIn();
 				} catch (Throwable t) {
-					survive(t, "Arctic check-in");
+					survive(t, Lang.t("looks.arctic_check_in"));
 				}
 			}
 		}, CHECK_IN_POLL_MS, CHECK_IN_POLL_MS, TimeUnit.MILLISECONDS);
@@ -223,7 +224,7 @@ public final class Looks {
 			adoptLauncherToken();
 		}
 		if (token == null) {
-			checkInResult = "not signed in: the game was started without the launcher's Arctic session";
+			checkInResult = Lang.t("looks.not_signed_in_the_game_was_started_without");
 			return;
 		}
 		UUID inWorld = platform.inWorld() ? platform.worldPlayerId() : null;
@@ -238,7 +239,7 @@ public final class Looks {
 			sendCheckIn(as);
 			playingAs = as;
 			checkInAt = now;
-			checkInResult = as == null ? "signed off (not in a world)" : "ok, as " + as;
+			checkInResult = as == null ? Lang.t("looks.signed_off_not_in_a_world") : "ok, as " + as; // i18n-ignore: diagnostics, read by support
 			if (inWorld != null && changed) {
 				// Show our own snowflake without waiting for the cache.
 				players.remove(inWorld);
@@ -252,7 +253,7 @@ public final class Looks {
 	}
 
 	/** Why a check-in last did what it did, for {@link #diagnostics()}. */
-	private volatile String checkInResult = "none yet";
+	private volatile String checkInResult = Lang.t("looks.none_yet");
 	private volatile long checkInAt;
 
 	/**
@@ -269,18 +270,18 @@ public final class Looks {
 			// no session yet
 		}
 		UUID world = platform.worldPlayerId();
-		out.add("Signed in to Arctic: " + (token == null ? "no" : "yes"));
-		out.add("Account: " + (account == null ? "?" : compact(account)));
-		out.add("In this world as: " + (world == null ? "not in a world" : compact(world)));
+		out.add(Lang.t("looks.signed_in_to_arctic") + (token == null ? "no" : "yes"));
+		out.add(Lang.t("looks.account") + (account == null ? "?" : compact(account)));
+		out.add(Lang.t("looks.in_this_world_as") + (world == null ? "not in a world" : compact(world)));
 		long ago = checkInAt == 0 ? -1 : (System.currentTimeMillis() - checkInAt) / 1000;
-		out.add("Last check-in: " + (ago < 0 ? "none yet" : ago + " s ago") + " - " + checkInResult);
+		out.add(Lang.t("looks.last_check_in") + (ago < 0 ? "none yet" : ago + " s ago") + " - " + checkInResult); // i18n-ignore: diagnostics, read by support
 		int arctic = 0;
 		for (Look look : players.values()) {
 			if (look.arctic) {
 				arctic++;
 			}
 		}
-		out.add("Players looked up: " + players.size() + ", on Arctic now: " + arctic);
+		out.add(Lang.t("looks.players_looked_up") + players.size() + ", on Arctic now: " + arctic); // i18n-ignore: diagnostics, read by support
 		int shown = 0;
 		for (Map.Entry<UUID, Look> e : players.entrySet()) {
 			if (shown++ >= 12) {
@@ -289,8 +290,8 @@ public final class Looks {
 			Look look = e.getValue();
 			String id = compact(e.getKey());
 			out.add(id.substring(0, 8) + (isMe(e.getKey()) ? " (you)" : "") + ": "
-					+ (look.arctic ? "on Arctic" : "not on Arctic") + ", skin " + (look.skin != null ? "yes" : "no")
-					+ ", cape " + (look.cape != null ? "yes" : "no") + ", cosmetics " + look.cosmetics.size());
+					+ (look.arctic ? Lang.t("looks.on_arctic") : Lang.t("looks.not_on_arctic")) + ", skin " + (look.skin != null ? "yes" : "no") // i18n-ignore: diagnostics, read by support
+					+ ", cape " + (look.cape != null ? "yes" : "no") + ", cosmetics " + look.cosmetics.size()); // i18n-ignore: diagnostics, read by support
 		}
 		return out;
 	}
@@ -432,7 +433,7 @@ public final class Looks {
 					try {
 						flushLookups();
 					} catch (Throwable t) {
-						survive(t, "look lookups");
+						survive(t, "look lookups"); // i18n-ignore
 					}
 				}
 			}, LOOKUP_GATHER_MS, TimeUnit.MILLISECONDS);
@@ -643,7 +644,7 @@ public final class Looks {
 			nextCosmetics = ids;
 			return;
 		}
-		setBusy(true, "Saving...");
+		setBusy(true, Lang.t("looks.saving"));
 		worker.execute(new Runnable() {
 			@Override
 			public void run() {
@@ -654,12 +655,12 @@ public final class Looks {
 						sending = nextCosmetics;
 						nextCosmetics = null;
 					}
-					setBusy(false, "Every Arctic player sees your cosmetics.");
+					setBusy(false, Lang.t("looks.every_arctic_player_sees_your_cosmetics"));
 				} catch (Throwable t) {
-					survive(t, "Arctic look");
+					survive(t, Lang.t("looks.arctic_look"));
 					nextCosmetics = null;
 					want(platform.playerId());
-					setBusy(false, "Couldn't save: " + t.getMessage());
+					setBusy(false, Lang.t("looks.couldnt_save") + t.getMessage());
 				}
 			}
 		});
@@ -749,7 +750,7 @@ public final class Looks {
 			byte[] png = Http.get(baseUrl + "/v1/textures/" + hash + ".png", null);
 			boolean cape = capes.contains(hash);
 			if (!fitsTexture(png, cape)) {
-				throw new java.io.IOException("not a " + (cape ? "cape" : "skin") + "-sized PNG");
+				throw new java.io.IOException("not a " + (cape ? "cape" : "skin") + Lang.t("looks.sized_png")); // i18n-ignore: diagnostics, read by support
 			}
 			// Old 64x32 skins into the layout the player model reads (Minecraft does this for its own downloads).
 			platform.registerTexture(hash, cape ? CapeFormat.withElytra(png) : SkinFormat.modern(png), cape);
@@ -976,15 +977,15 @@ public final class Looks {
 		if (busy) {
 			return;
 		}
-		setBusy(true, "Connecting to Arctic...");
+		setBusy(true, Lang.t("looks.connecting_to_arctic"));
 		worker.execute(new Runnable() {
 			@Override
 			public void run() {
 				try {
 					loadCatalog();
 				} catch (Throwable t) {
-					survive(t, "Arctic catalog");
-					setBusy(false, "Couldn't reach Arctic. Try again later.");
+					survive(t, Lang.t("looks.arctic_catalog"));
+					setBusy(false, Lang.t("looks.couldnt_reach_arctic_try_again_later"));
 				}
 			}
 		});
@@ -1007,7 +1008,7 @@ public final class Looks {
 			platform.log(false, "Arctic capes: " + presets.size() + " from " + baseUrl);
 		} catch (Exception e) {
 			platform.log(true, "Arctic catalog: " + e);
-			setBusy(false, "Couldn't reach Arctic. Try again later.");
+			setBusy(false, Lang.t("looks.couldnt_reach_arctic_try_again_later"));
 			return;
 		}
 		if (token == null) {
@@ -1015,7 +1016,7 @@ public final class Looks {
 				signInWithMojang();
 			} catch (Exception e) {
 				platform.log(false, "Arctic sign-in: " + e);
-				setBusy(false, "Launch through Arctic Launcher to change your look.");
+				setBusy(false, Lang.t("looks.launch_through_arctic_launcher_to_change"));
 				return;
 			}
 		}
@@ -1050,7 +1051,7 @@ public final class Looks {
 	/** Printable text only (no control or formatting codes), at most MAX_NAME long. */
 	static String cleanName(String name) {
 		if (name == null) {
-			return "Cape";
+			return Lang.t("looks.cape");
 		}
 		StringBuilder out = new StringBuilder();
 		for (int i = 0; i < name.length() && out.length() < MAX_NAME; i++) {
@@ -1060,7 +1061,7 @@ public final class Looks {
 			}
 		}
 		String cleaned = out.toString().trim();
-		return cleaned.isEmpty() ? "Cape" : cleaned;
+		return cleaned.isEmpty() ? Lang.t("looks.cape") : cleaned;
 	}
 
 	private void signInWithMojang() throws Exception {
@@ -1079,15 +1080,15 @@ public final class Looks {
 		if (busy || token == null) {
 			return;
 		}
-		setBusy(true, "Saving...");
+		setBusy(true, Lang.t("looks.saving"));
 		worker.execute(new Runnable() {
 			@Override
 			public void run() {
 				try {
 					putCape(presetId);
 				} catch (Throwable t) {
-					survive(t, "Arctic look");
-					setBusy(false, "Couldn't save your look.");
+					survive(t, Lang.t("looks.arctic_look"));
+					setBusy(false, Lang.t("looks.couldnt_save_your_look"));
 				}
 			}
 		});
@@ -1102,9 +1103,9 @@ public final class Looks {
 				choice = HASH_PREFIX + p.still;
 			}
 			putLook(choice, null);
-			setBusy(false, presetId == null ? "Cape removed." : "Every Arctic player sees your new cape.");
+			setBusy(false, presetId == null ? Lang.t("looks.cape_removed") : Lang.t("looks.every_arctic_player_sees_your_new_cape"));
 		} catch (Exception e) {
-			setBusy(false, "Couldn't save: " + e.getMessage());
+			setBusy(false, Lang.t("looks.couldnt_save") + e.getMessage());
 		}
 	}
 
@@ -1114,7 +1115,7 @@ public final class Looks {
 	/** Publish the chosen badge through the same authenticated looks API as capes and cosmetics. */
 	public void wearBadgeStyle(final int style) {
 		if (busy || token == null) return;
-		setBusy(true, "Saving badge...");
+		setBusy(true, Lang.t("looks.saving_badge"));
 		worker.execute(new Runnable() {
 			@Override public void run() {
 				try {
@@ -1126,12 +1127,12 @@ public final class Looks {
 						queued = nextCosmetics;
 						nextCosmetics = null;
 					}
-					setBusy(false, "Every Arctic player sees your badge.");
+					setBusy(false, Lang.t("looks.every_arctic_player_sees_your_badge"));
 				} catch (Throwable t) {
-					survive(t, "badge save");
+					survive(t, "badge save"); // i18n-ignore
 					nextCosmetics = null;
 					want(platform.playerId());
-					setBusy(false, "Couldn't save your badge. Try again.");
+					setBusy(false, Lang.t("looks.couldnt_save_your_badge_try_again"));
 				}
 			}
 		});

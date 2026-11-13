@@ -21,6 +21,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return english;
 	}
 
+	/** The game's language code ("en_us", "tr_tr"), or null when this version can't say. */
+	default String gameLanguage() {
+		return null;
+	}
+
 	File configDir();
 
 	void log(boolean warning, String message);

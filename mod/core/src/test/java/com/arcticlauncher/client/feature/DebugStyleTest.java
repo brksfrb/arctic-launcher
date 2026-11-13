@@ -29,8 +29,10 @@ class DebugStyleTest {
 		ClientConfig config = new ClientConfig();
 		config.debugStyle = true;
 		for (String label : labels) {
+			// A group's label is its text key ("mods.f3_group.coordinates"), or a name that stays as it is ("FPS").
+			String key = "mods.f3_group." + label.toLowerCase(java.util.Locale.ROOT).replace(' ', '_');
 			for (int i = 0; i < DebugStyle.GROUPS.length; i++) {
-				if (DebugStyle.GROUPS[i].label.equals(label)) {
+				if (DebugStyle.GROUPS[i].label.equals(label) || DebugStyle.GROUPS[i].label.equals(key)) {
 					DebugStyle.setHidden(config, i, true);
 				}
 			}

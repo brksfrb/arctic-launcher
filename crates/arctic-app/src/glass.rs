@@ -10,7 +10,6 @@ use std::sync::{Arc, Mutex, PoisonError};
 use eframe::egui::{self, Color32, Rect};
 use eframe::egui_glow;
 use eframe::glow::{self, HasContext};
-
 /// The blur runs at 1/DOWNSCALE of the window's size: cheap, and blurrier for free.
 const DOWNSCALE: i32 = 4;
 /// Horizontal + vertical blur passes.
@@ -369,14 +368,14 @@ unsafe fn program(
             ""
         };
         let vertex_head = if new {
-            "#define ATTR in\n#define VARY_OUT out\n"
+            "#define ATTR in\n#define VARY_OUT out\n" // i18n-ignore
         } else {
-            "#define ATTR attribute\n#define VARY_OUT varying\n"
+            "#define ATTR attribute\n#define VARY_OUT varying\n" // i18n-ignore
         };
         let fragment_head = if new {
             "#define VARY_IN in\n#define TEX texture\nout vec4 arctic_frag;\n#define FRAG arctic_frag\n"
         } else {
-            "#define VARY_IN varying\n#define TEX texture2D\n#define FRAG gl_FragColor\n"
+            "#define VARY_IN varying\n#define TEX texture2D\n#define FRAG gl_FragColor\n" // i18n-ignore
         };
         let program = gl.create_program()?;
         let mut shaders = Vec::new();

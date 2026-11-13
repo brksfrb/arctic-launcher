@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
+import com.arcticlauncher.client.Lang;
 /** Arctic Client settings, in {@code config/arctic.json}. */
 public final class ClientConfig {
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -69,7 +70,7 @@ public final class ClientConfig {
 	public int zoomDurationMs = 250;
 	/** The scroll wheel eases to its new zoom level instead of jumping. */
 	public boolean zoomSmoothScroll = true;
-	public static final String[] ZOOM_CURVES = {"Instant", "Linear", "Ease out", "Ease in and out", "Snappy"};
+	public static final String[] ZOOM_CURVES = {"mods.zoom_curve.instant", "mods.zoom_curve.linear", "mods.zoom_curve.ease_out", "mods.zoom_curve.ease_in_and_out", "mods.zoom_curve.snappy"};
 	/** The Compass widget's middle tick (ARGB; 0 = the menu's accent color). */
 	public int compassPointer;
 	public String freelookKey = "key.keyboard.left.alt";
@@ -88,7 +89,7 @@ public final class ClientConfig {
 	/** Streamer mode: your name, skin and the server are hidden on your screen. */
 	public boolean streamerMode;
 	/** What your name shows as in streamer mode. */
-	public String streamerName = "Streamer";
+	public String streamerName = Lang.t("hud.streamer");
 	/** Switches streamer mode. */
 	public String streamerKey = "key.keyboard.unknown";
 	/** Drops a waypoint where you stand. */

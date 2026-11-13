@@ -17,9 +17,10 @@ import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
+import com.arcticlauncher.client.Lang;
 /** Agent/system-loader only. No class bytes, mixin lists, or per-class history retained on success. */
 public final class MixinFailureDiagnostics {
-	private static final String PREFIX = "[Arctic mixin] ";
+	private static final String PREFIX = "[Arctic mixin] "; // i18n-ignore: log
 	private static final PrintStream OUT = new PrintStream(new FileOutputStream(FileDescriptor.err), true);
 	private static final Map<String, String> FAILURES = new LinkedHashMap<>();
 	private static Thread mainThread;
@@ -29,9 +30,9 @@ public final class MixinFailureDiagnostics {
 
 	static void init() {
 		mainThread = Thread.currentThread();
-		OUT.println(PREFIX + "agent installed; cache=" + MixinCache.stats()
-				+ "; preloader requested=" + (System.getProperty("arctic.preload") != null)
-				+ "; replay requested=" + Boolean.getBoolean("arctic.replay"));
+		OUT.println(PREFIX + "agent installed; cache=" + MixinCache.stats() // i18n-ignore
+				+ "; preloader requested=" + (System.getProperty("arctic.preload") != null) // i18n-ignore
+				+ "; replay requested=" + Boolean.getBoolean("arctic.replay")); // i18n-ignore
 	}
 
 	/** Called by the guarded transformClassBytes invocation; the original Throwable is rethrown by Knot. */
@@ -44,34 +45,34 @@ public final class MixinFailureDiagnostics {
 			Thread thread = Thread.currentThread();
 			String role = thread.getName().startsWith("arctic-preload-") ? "preloader"
 					: thread == mainThread ? "main" : "other";
-			StringBuilder out = new StringBuilder(PREFIX + "failure begin\n");
+			StringBuilder out = new StringBuilder(PREFIX + "failure begin\n"); // i18n-ignore
 			line(out, "class=" + name + "; thread=" + thread.getName() + "; role=" + role);
 			// This boundary is reached only after the cache wrapper missed. Hits return already-mixed
 			// bytes (or NULL_MARK) without invoking Mixin at all, even with a cache index present.
-			line(out, "cache lookup=miss; input=live pre-mixin bytes; cache=" + MixinCache.stats());
-			line(out, "agent lock=" + System.getProperty("arctic.agent.lock", "0")
+			line(out, "cache lookup=miss; input=live pre-mixin bytes; cache=" + MixinCache.stats()); // i18n-ignore
+			line(out, "agent lock=" + System.getProperty("arctic.agent.lock", "0") // i18n-ignore
 					+ "; preloader started=" + System.getProperty("arctic.diagnostics.preloader.started", "false")
-					+ "; setup replay succeeded=" + MixinCache.active()
-					+ "; replay plugin calls attempted=" + MixinReplay.callsAttempted
+					+ "; setup replay succeeded=" + MixinCache.active() // i18n-ignore
+					+ "; replay plugin calls attempted=" + MixinReplay.callsAttempted // i18n-ignore
 					+ "; completed=" + MixinReplay.callsCompleted
-					+ "; shouldApply decisions attempted=" + MixinReplay.decisionsAttempted
-					+ "; completed=" + MixinReplay.decisionsCompleted + "; replay reason=" + MixinReplay.why);
+					+ "; shouldApply decisions attempted=" + MixinReplay.decisionsAttempted // i18n-ignore
+					+ "; completed=" + MixinReplay.decisionsCompleted + "; replay reason=" + MixinReplay.why); // i18n-ignore
 			line(out, "error=" + error);
 			try {
-				line(out, "pre-mixin methods (name+descriptor):");
+				line(out, "pre-mixin methods (name+descriptor):"); // i18n-ignore
 				out.append(methods(input));
 			} catch (Throwable unavailable) {
-				line(out, "methods unavailable: " + unavailable.getClass().getSimpleName());
+				line(out, "methods unavailable: " + unavailable.getClass().getSimpleName()); // i18n-ignore
 			}
 			try {
-				line(out, "targeting mixins (config:class; includes failing mixin):");
+				line(out, "targeting mixins (config:class; includes failing mixin):"); // i18n-ignore
 				TreeSet<String> mixins = targetingMixins(transformer, name);
-				line(out, "selected target mixin count=" + mixins.size());
+				line(out, "selected target mixin count=" + mixins.size()); // i18n-ignore
 				for (String mixin : mixins) line(out, mixin);
 			} catch (Throwable unavailable) {
-				line(out, "targeting mixins unavailable: " + unavailable.getClass().getSimpleName());
+				line(out, "targeting mixins unavailable: " + unavailable.getClass().getSimpleName()); // i18n-ignore
 			}
-			line(out, "failure end");
+			line(out, "failure end"); // i18n-ignore
 			// Avoid full mod names/paths: just resolved ids and versions, including nested jars.
 			try {
 				Class<?> api = Class.forName("net.fabricmc.loader.api.FabricLoader", false, transformer.getClass().getClassLoader());
@@ -81,9 +82,9 @@ public final class MixinFailureDiagnostics {
 					Object metadata = invoke(mod, "getMetadata");
 					mods.add(invoke(metadata, "getId") + " " + invoke(invoke(metadata, "getVersion"), "getFriendlyString"));
 				}
-				for (String mod : mods) out.append("[Arctic mixin mod] ").append(mod).append('\n');
+				for (String mod : mods) out.append("[Arctic mixin mod] ").append(mod).append('\n'); // i18n-ignore
 			} catch (Throwable unavailable) {
-				line(out, "resolved mods unavailable: " + unavailable.getClass().getSimpleName());
+				line(out, "resolved mods unavailable: " + unavailable.getClass().getSimpleName()); // i18n-ignore
 			}
 			String report = out.toString();
 			if (FAILURES.size() == 4) {

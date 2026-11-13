@@ -6,7 +6,7 @@ package com.arcticlauncher.client;
  * a file that gets shared for help. This tells such a line and gives it back without the token.
  */
 public final class SessionLine {
-	private static final String START = "(Session ID is ";
+	private static final String START = "(Session ID is "; // i18n-ignore: log
 	private static final String TOKEN = "token:";
 	public static final String HIDDEN = "<hidden>";
 

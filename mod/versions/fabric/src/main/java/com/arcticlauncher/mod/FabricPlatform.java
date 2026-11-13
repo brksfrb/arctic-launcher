@@ -42,6 +42,7 @@ import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 
+import com.arcticlauncher.client.Lang;
 /** {@link Platform} for Minecraft 26.3. */
 final class FabricPlatform implements Platform {
 	private static Minecraft mc() {
@@ -69,6 +70,11 @@ final class FabricPlatform implements Platform {
 		//#else
 		return net.minecraft.client.resources.language.I18n.exists(key) ? net.minecraft.client.resources.language.I18n.get(key) : english;
 		//#endif
+	}
+
+	@Override
+	public String gameLanguage() {
+		return mc().options.languageCode;
 	}
 
 	@Override
@@ -480,11 +486,11 @@ final class FabricPlatform implements Platform {
 		com.arcticlauncher.client.gfx.RenderWork.post(() -> {
 			try {
 				net.minecraft.resources.Identifier texture = GfxImpl.look("cosmetic/" + id);
-				mc().getTextureManager().register(texture, Compat.texture("Arctic cosmetic " + id, image));
+				mc().getTextureManager().register(texture, Compat.texture(Lang.t("platform.arctic_cosmetic") + id, image));
 				net.minecraft.resources.Identifier glow = null;
 				if (glowFinal != null) {
 					glow = GfxImpl.look("cosmetic/" + id + "_glow");
-					mc().getTextureManager().register(glow, Compat.texture("Arctic cosmetic glow " + id, glowFinal));
+					mc().getTextureManager().register(glow, Compat.texture(Lang.t("platform.arctic_cosmetic_glow") + id, glowFinal));
 				}
 				com.arcticlauncher.mod.cosmetic.CosmeticModels.bake(id, geometry, item == null ? null : item.idle, texture, glow);
 				ArcticClient.looks().cosmetics().ready(id);
@@ -819,10 +825,10 @@ final class FabricPlatform implements Platform {
 		}
 		//#else
 		String kind = String.valueOf(mc.hitResult.type);
-		if ("BLOCK".equals(kind)) {
+		if ("BLOCK".equals(kind)) { // i18n-ignore: enum name
 			return mc.level.getBlockState(mc.hitResult.getBlockPos()).getBlock().getName().getString();
 		}
-		if ("ENTITY".equals(kind)) {
+		if ("ENTITY".equals(kind)) { // i18n-ignore: enum name
 			return mc.hitResult.entity.getName().getString();
 		}
 		//#endif
@@ -840,7 +846,7 @@ final class FabricPlatform implements Platform {
 		net.minecraft.world.entity.Entity e = hit.getEntity();
 		//#else
 		// 1.13 has one kind of hit result, with the entity in it.
-		if (mc.hitResult == null || !"ENTITY".equals(String.valueOf(mc.hitResult.type))) {
+		if (mc.hitResult == null || !"ENTITY".equals(String.valueOf(mc.hitResult.type))) { // i18n-ignore: enum name
 			return 0;
 		}
 		net.minecraft.world.entity.Entity e = mc.hitResult.entity;
@@ -1173,8 +1179,8 @@ final class FabricPlatform implements Platform {
 		mc.execute(() -> {
 			leaveWorld(mc);
 			// One duel world at a time: earlier ones are thrown away (they're only arenas).
-			WorldStats.deleteWorlds(new java.io.File(mc.gameDirectory, "saves"), "Arctic Duel ");
-			String name = "Arctic Duel " + com.arcticlauncher.client.LocalClock.formatter("MM-dd HH.mm").format(new java.util.Date());
+			WorldStats.deleteWorlds(new java.io.File(mc.gameDirectory, "saves"), "Arctic Duel "); // i18n-ignore
+			String name = "Arctic Duel " + com.arcticlauncher.client.LocalClock.formatter("MM-dd HH.mm").format(new java.util.Date()); // i18n-ignore
 			//#if MC >= 26.1
 			net.minecraft.world.level.LevelSettings settings = new net.minecraft.world.level.LevelSettings(name,
 					net.minecraft.world.level.GameType.SURVIVAL,
@@ -1223,7 +1229,7 @@ final class FabricPlatform implements Platform {
 		Minecraft mc = mc();
 		mc.execute(() -> {
 			leaveWorld(mc);
-			WorldStats.deleteWorlds(new java.io.File(mc.gameDirectory, "saves"), "Arctic Duel ");
+			WorldStats.deleteWorlds(new java.io.File(mc.gameDirectory, "saves"), "Arctic Duel "); // i18n-ignore
 			//#if MC >= 1.19
 			net.minecraft.client.gui.screens.worldselection.CreateWorldScreen.openFresh(mc, null);
 			//#elif MC >= 1.18
@@ -1257,7 +1263,7 @@ final class FabricPlatform implements Platform {
 			return;
 		}
 		com.arcticlauncher.mod.mixin.CreateWorldScreenAccess screen = (com.arcticlauncher.mod.mixin.CreateWorldScreenAccess) Compat.screen();
-		screen.arctic$nameEdit().setValue("Arctic Duel " + com.arcticlauncher.client.LocalClock.formatter("MM-dd HH.mm").format(new java.util.Date()));
+		screen.arctic$nameEdit().setValue("Arctic Duel " + com.arcticlauncher.client.LocalClock.formatter("MM-dd HH.mm").format(new java.util.Date())); // i18n-ignore
 		screen.arctic$setCommands(true);
 		screen.arctic$setCommandsChanged(true);
 		screen.arctic$create();

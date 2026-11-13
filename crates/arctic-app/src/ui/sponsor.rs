@@ -10,13 +10,13 @@ use crate::art::flash;
 use crate::art::icons::Icon;
 use crate::theme;
 use crate::widgets;
-
+use crate::{t, tf};
 const NAME: &str = "Flash Hosting";
 const URL: &str = "https://flashhosting.net";
 /// The sidebar row's height and the gap the nav keeps above it.
 const SIDEBAR_ROW: f32 = 30.0;
 const SIDEBAR_GAP: f32 = 6.0;
-const PITCH: &str = "Minecraft servers that stay up 24/7, priced by player slots.";
+const PITCH: &str = "nav.sponsor_pitch";
 
 impl ArcticApp {
     /// Sidebar, above the account: the mark and the name, quiet.
@@ -45,7 +45,7 @@ impl ArcticApp {
         ui.painter().text(
             egui::pos2(rect.left() + 36.0, rect.center().y - 6.5),
             egui::Align2::LEFT_CENTER,
-            "Supported by",
+            t!("nav.supported_by"),
             egui::FontId::proportional(9.5),
             p.muted,
         );
@@ -58,7 +58,7 @@ impl ArcticApp {
         );
         if response
             .on_hover_cursor(CursorIcon::PointingHand)
-            .on_hover_text(format!("{PITCH} {URL}"))
+            .on_hover_text(format!("{} {URL}", t!(PITCH)))
             .clicked()
         {
             ui.ctx().open_url(egui::OpenUrl::new_tab(URL));
@@ -77,7 +77,7 @@ impl ArcticApp {
             row,
             egui::Layout::left_to_right(egui::Align::Center),
             |ui| {
-                ui.label(RichText::new("Supported by").color(p.muted));
+                ui.label(RichText::new(t!("nav.supported_by")).color(p.muted));
                 let (mark, _) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::hover());
                 flash::mark(ui.painter(), mark);
                 if widgets::button(ui, p, Some(Icon::External), NAME, false)
@@ -113,12 +113,17 @@ impl ArcticApp {
                     ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
                         ui.horizontal(|ui| {
                             ui.label(RichText::new(NAME).size(16.0).strong().color(p.text));
-                            ui.label(RichText::new("Supports Arctic").small().color(flash::AMBER));
+                            ui.label(
+                                RichText::new(t!("nav.supports_arctic"))
+                                    .small()
+                                    .color(flash::AMBER),
+                            );
                         });
                         ui.add(
                             egui::Label::new(
-                                RichText::new(format!(
-                                    "Want your world up while you're offline? {PITCH}"
+                                RichText::new(tf!(
+                                    "nav.want_your_world_up_while_youre_offline",
+                                    PITCH = t!(PITCH)
                                 ))
                                 .color(p.muted),
                             )

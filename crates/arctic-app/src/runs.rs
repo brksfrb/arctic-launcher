@@ -18,7 +18,7 @@ use crate::app::{ArcticApp, LogSource};
 use crate::motion::RateMeter;
 use crate::tasks::{Event, LaunchId, ProgressSnapshot, Tasks};
 use crate::toasts::{Kind, ToastAction};
-
+use crate::{t, tf};
 /// Game log lines kept in memory per run (older ones are dropped).
 const LOG_LINES: usize = 20_000;
 /// Log lines searched for a crash cause (the end is where it is).
@@ -162,12 +162,14 @@ impl Run {
             Ok(m) if m.modified().is_ok_and(|t| t < self.started) => {
                 "left over from an earlier run".to_owned()
             }
-            Ok(m) => format!("{} bytes", m.len()),
+            Ok(m) => format!("{count} bytes", count = m.len()), // i18n-ignore
         };
         format!(
-            "run: ended after {lived} s; {} lines printed; logs/latest.log: {own}; crash report or hs_err: {}",
-            self.log.len(),
-            if has_report { "yes" } else { "none" }
+            "run: ended after {lived} s; {count} lines printed; logs/latest.log: {own}; crash report or hs_err: {value}", // i18n-ignore: diagnostics
+            lived = lived,
+            count = self.log.len(),
+            own = own,
+            value = if has_report { "yes" } else { "none" }
         )
     }
 
@@ -331,7 +333,7 @@ impl Runs {
             title,
             state: RunState::Preparing {
                 progress: ProgressSnapshot {
-                    stage: "Starting".into(),
+                    stage: t!("tasks.starting").into(),
                     ..ProgressSnapshot::default()
                 },
                 meter: RateMeter::default(),
@@ -447,7 +449,7 @@ impl ArcticApp {
                 // The same text as the toast, including every cause. This used to
                 // reach the screen and never `logs/launcher.log`.
                 log::error!("Launch failed: {e}");
-                self.toasts.push(Kind::Error, "Launch failed", e);
+                self.toasts.push(Kind::Error, t!("tasks.launch_failed"), e);
             }
         }
     }
@@ -538,15 +540,18 @@ impl ArcticApp {
                     && newest_hs_err(&run.game_dir, run.started).is_none();
                 let specific = run.diagnose();
                 let diagnosis = match code {
-                    Some(c) if c != 0 && !watchdog && specific.is_none() && froze => Some(Diagnosis {
-                        title: "The game froze and was closed".into(),
-                        detail: "The run contains evidence of a freeze. Any captured thread dump is included in the report.".into(),
-                        mods: Vec::new(),
-                        repair: false,
-                        fix: None,
-                    }),
-                    Some(c) if c != 0 && !watchdog => specific
-                        .or_else(|| crash::silent_exit(&run.crash_text(), c)),
+                    Some(c) if c != 0 && !watchdog && specific.is_none() && froze => {
+                        Some(Diagnosis {
+                            title: t!("tasks.the_game_froze_and_was_closed").into(),
+                            detail: t!("tasks.the_run_contains_evidence_of_a_freeze_any").into(),
+                            mods: Vec::new(),
+                            repair: false,
+                            fix: None,
+                        })
+                    }
+                    Some(c) if c != 0 && !watchdog => {
+                        specific.or_else(|| crash::silent_exit(&run.crash_text(), c))
+                    }
                     _ => None,
                 };
                 if let Some(d) = &diagnosis {
@@ -582,10 +587,11 @@ impl ArcticApp {
                         arctic_core::auth::now_secs(),
                         &place,
                     ) {
-                        Ok(Some(hint)) => {
-                            self.toasts
-                                .push(Kind::Info, "This may be a problem with your PC", hint)
-                        }
+                        Ok(Some(hint)) => self.toasts.push(
+                            Kind::Info,
+                            t!("tasks.this_may_be_a_problem_with_your_pc"),
+                            hint,
+                        ),
                         Ok(None) => {}
                         Err(e) => log::warn!("crash history: {e}"),
                     }
@@ -614,17 +620,20 @@ impl ArcticApp {
             Some(0) => {}
             Some(_) if watchdog => self.toasts.push(
                 Kind::Info,
-                format!("{title} closed"),
-                "It was slow to shut down, which happens without internet.",
+                tf!("tasks.closed", title = title),
+                t!("tasks.it_was_slow_to_shut_down_which_happens"),
             ),
             Some(c) => {
                 // A crash the launcher can fix gets a "Fix it" button instead of the logs one.
                 let fix = diagnosis.as_ref().and_then(|d| d.fix.clone());
                 let (heading, body) = match diagnosis {
-                    Some(d) => (format!("{title} crashed: {}", d.title), d.detail),
+                    Some(d) => (
+                        tf!("tasks.crashed", title = title, title2 = d.title),
+                        d.detail,
+                    ),
                     None => (
-                        format!("{title} closed unexpectedly"),
-                        format!("Exit code {c}."),
+                        tf!("tasks.closed_unexpectedly", title = title),
+                        tf!("tasks.exit_code", c = c),
                     ),
                 };
                 let action = match fix {
@@ -639,7 +648,7 @@ impl ArcticApp {
             }
             None => self
                 .toasts
-                .push(Kind::Info, format!("{title} was stopped"), ""),
+                .push(Kind::Info, tf!("tasks.was_stopped", title = title), ""),
         }
     }
 
@@ -662,8 +671,8 @@ impl ArcticApp {
                 }
                 self.toasts.push_with_action(
                     Kind::Info,
-                    "Help fix this crash?",
-                    "Send the log to Arctic. Your name, folders and sign-in details are taken out first.",
+                    t!("tasks.help_fix_this_crash"),
+                    t!("tasks.send_the_log_to_arctic_your_name_folders_and"),
                     Some(ToastAction::SendCrash(id)),
                 );
             }
@@ -727,8 +736,8 @@ impl ArcticApp {
         }
         self.toasts.push(
             crate::toasts::Kind::Error,
-            "The proxy won't cover this game's servers",
-            "Only Minecraft's login goes through it. Servers see your real address unless you play with the Arctic Client (Vanilla or Fabric instances).",
+            t!("tasks.the_proxy_wont_cover_this_games_servers"),
+            t!("tasks.only_minecrafts_login_goes_through_it"),
         );
     }
 }

@@ -11,6 +11,7 @@ import com.arcticlauncher.client.ui.KeyButton;
 import com.arcticlauncher.client.ui.Label;
 import com.arcticlauncher.client.ui.TextField;
 
+import com.arcticlauncher.client.Lang;
 /** Settings forms for the chat mods: quick messages, Auto GG, streamer mode. */
 final class ChatForms {
 	private static final int FIELD_H = 18;
@@ -27,9 +28,9 @@ final class ChatForms {
 	/** Keys that send a line: key, text, remove; then Add. */
 	static void quickMessages(final Host host, Form f) {
 		final List<QuickMessage> list = ArcticClient.config().quickMessages;
-		f.section("Messages");
-		f.note("Press the key to send the line. Start with / for a command.");
-		f.note("Fills in: " + QuickMessages.PLACEHOLDERS);
+		f.section(Lang.t("social.messages"));
+		f.note(Lang.t("social.press_the_key_to_send_the_line_start_with"));
+		f.note(Lang.t("social.fills_in") + QuickMessages.PLACEHOLDERS);
 		f.gap(4);
 		for (final QuickMessage m : list) {
 			int top = f.row(FIELD_H + GAP);
@@ -46,7 +47,7 @@ final class ChatForms {
 				}
 			}), f.x, top, Form.KEY_W, FIELD_H);
 			host.listenKeys(key);
-			final TextField text = new TextField("Message, or /command", MAX_TEXT, TextField.ANY).text(m.text);
+			final TextField text = new TextField(Lang.t("social.message_or_command"), MAX_TEXT, TextField.ANY).text(m.text);
 			text.onChange(() -> m.text = text.text());
 			f.put(text, f.x + Form.KEY_W + GAP, top, f.w - Form.KEY_W - REMOVE_W - GAP * 2, FIELD_H);
 			f.put(new Button("×", () -> {
@@ -57,9 +58,9 @@ final class ChatForms {
 		}
 		if (list.size() < QuickMessages.MAX) {
 			int top = f.row(FIELD_H + GAP);
-			f.put(new Button("Add a message", () -> {
+			f.put(new Button(Lang.t("social.add_a_message"), () -> {
 				QuickMessage m = new QuickMessage();
-				m.text = list.isEmpty() ? "I'm at {x} {y} {z}" : "";
+				m.text = list.isEmpty() ? Lang.t("social.im_at") : "";
 				list.add(m);
 				ArcticClient.saveConfig();
 				host.rebuild();
@@ -69,17 +70,17 @@ final class ChatForms {
 
 	static void autoText(final Host host, Form f) {
 		final java.util.List<com.arcticlauncher.client.config.AutoReply> list = ArcticClient.config().autoReplies;
-		f.section("Answers");
-		f.note("When a chat line contains the left text, the right text is sent (start with / for a command).");
-		f.note("Each answer is sent at most every 5 seconds. Fills in: " + QuickMessages.PLACEHOLDERS);
+		f.section(Lang.t("social.answers"));
+		f.note(Lang.t("social.when_a_chat_line_contains_the_left_text_the"));
+		f.note(Lang.t("social.each_answer_is_sent_at_most_every_5_seconds") + QuickMessages.PLACEHOLDERS);
 		f.gap(4);
 		for (final com.arcticlauncher.client.config.AutoReply r : list) {
 			int top = f.row(FIELD_H + GAP);
 			int half = (f.w - REMOVE_W - GAP * 2) / 2;
-			final TextField when = new TextField("When a line says", MAX_TEXT, TextField.ANY).text(r.when);
+			final TextField when = new TextField(Lang.t("social.when_a_line_says"), MAX_TEXT, TextField.ANY).text(r.when);
 			when.onChange(() -> r.when = when.text());
 			f.put(when, f.x, top, half, FIELD_H);
-			final TextField say = new TextField("Send", MAX_TEXT, TextField.ANY).text(r.say);
+			final TextField say = new TextField(Lang.t("social.send"), MAX_TEXT, TextField.ANY).text(r.say);
 			say.onChange(() -> r.say = say.text());
 			f.put(say, f.x + half + GAP, top, f.w - half - REMOVE_W - GAP * 2, FIELD_H);
 			f.put(new Button("×", () -> {
@@ -90,7 +91,7 @@ final class ChatForms {
 		}
 		if (list.size() < com.arcticlauncher.client.feature.AutoReplies.MAX) {
 			int top = f.row(FIELD_H + GAP);
-			f.put(new Button("Add an answer", () -> {
+			f.put(new Button(Lang.t("social.add_an_answer"), () -> {
 				list.add(new com.arcticlauncher.client.config.AutoReply());
 				ArcticClient.saveConfig();
 				host.rebuild();
@@ -100,25 +101,25 @@ final class ChatForms {
 
 	static void autoGg(Host host, Form f) {
 		final ClientConfig c = ArcticClient.config();
-		f.section("Message");
+		f.section(Lang.t("social.message"));
 		int top = f.row(Form.ROW);
-		f.put(new Label("What to say", Label.Kind.TEXT), f.x + 4, top, f.w - SIDE_FIELD_W - 8, Form.ROW);
+		f.put(new Label(Lang.t("social.what_to_say"), Label.Kind.TEXT), f.x + 4, top, f.w - SIDE_FIELD_W - 8, Form.ROW);
 		final TextField gg = new TextField("gg", MAX_GG, TextField.ANY).text(c.autoGgMessage);
 		gg.onChange(() -> c.autoGgMessage = gg.text().trim().isEmpty() ? "gg" : gg.text());
 		f.put(gg, f.x + f.w - SIDE_FIELD_W, top + (Form.ROW - FIELD_H) / 2, SIDE_FIELD_W, FIELD_H);
-		f.note("Sent once when a game ends (Hypixel, Minemen and others).");
+		f.note(Lang.t("social.sent_once_when_a_game_ends_hypixel_minemen"));
 	}
 
 	static void streamer(Host host, Form f) {
 		final ClientConfig c = ArcticClient.config();
-		f.section("Key");
-		f.key("Streamer mode key", "Switches it on and off", Form.key(() -> c.streamerKey, k -> c.streamerKey = k));
-		f.section("Name");
+		f.section(Lang.t("social.key"));
+		f.key(Lang.t("social.streamer_mode_key"), Lang.t("social.switches_it_on_and_off"), Form.key(() -> c.streamerKey, k -> c.streamerKey = k));
+		f.section(Lang.t("social.name"));
 		int top = f.row(Form.ROW);
-		f.put(new Label("Shown instead of yours", Label.Kind.TEXT), f.x + 4, top, f.w - SIDE_FIELD_W - 8, Form.ROW);
-		final TextField name = new TextField("Streamer", MAX_NAME, TextField.ANY).text(c.streamerName);
+		f.put(new Label(Lang.t("social.shown_instead_of_yours"), Label.Kind.TEXT), f.x + 4, top, f.w - SIDE_FIELD_W - 8, Form.ROW);
+		final TextField name = new TextField(Lang.t("social.streamer"), MAX_NAME, TextField.ANY).text(c.streamerName);
 		name.onChange(() -> c.streamerName = name.text().trim().isEmpty() ? "Streamer" : name.text().trim());
 		f.put(name, f.x + f.w - SIDE_FIELD_W, top + (Form.ROW - FIELD_H) / 2, SIDE_FIELD_W, FIELD_H);
-		f.note("Also hides your skin and the server address on screen.");
+		f.note(Lang.t("social.also_hides_your_skin_and_the_server_address"));
 	}
 }

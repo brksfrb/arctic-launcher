@@ -7,25 +7,26 @@ import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Button;
 
+import com.arcticlauncher.client.Lang;
 /** The same approved pictures as chat; copying preserves the readable shortcode. */
 final class EmojiTab implements MenuTab {
-	public String title() { return "Chat emotes"; }
-	public String hint() { return "Click a picture to copy its shortcode, then paste into chat."; }
+	public String title() { return Lang.t("mods.chat_emotes"); }
+	public String hint() { return Lang.t("mods.click_a_picture_to_copy_its_shortcode_then"); }
 	public void build(Host host, int x, int top, int w, int bottom) {
 		final ClientConfig c = ArcticClient.config();
 		Form f = new Form(host, x, top, w, bottom);
-		f.section("Typing");
-		f.toggle("Chat button", "The :) button opens the picture picker", () -> c.emojiButton, on -> c.emojiButton = on);
-		f.toggle("Chat emotes", "Show pictures for shortcodes; send readable :name: text", () -> c.chatEmoji, on -> c.chatEmoji = on);
-		f.note("Twemoji by Twitter, CC-BY 4.0. Arctic mark and ice crystal by Arctic.");
+		f.section(Lang.t("mods.typing"));
+		f.toggle(Lang.t("mods.chat_button"), Lang.t("mods.the_button_opens_the_picture_picker"), () -> c.emojiButton, on -> c.emojiButton = on);
+		f.toggle(Lang.t("mods.chat_emotes"), Lang.t("mods.show_pictures_for_shortcodes_send_readable"), () -> c.chatEmoji, on -> c.chatEmoji = on);
+		f.note(Lang.t("mods.twemoji_by_twitter_cc_by_4_0_arctic_mark_and"));
 		int perRow = Math.max(1, f.w / 25), column = 0, y = 0;
 		String group = "";
 		for (final EmoteAtlas.Emote emote : EmoteAtlas.all()) {
-			if (!group.equals(emote.group)) { f.section(emote.group); column = 0; group = emote.group; }
+			if (!group.equals(emote.group)) { f.section(Lang.t(emote.group)); column = 0; group = emote.group; }
 			if (column == 0) y = f.row(25);
 			f.put(new Button("", () -> {
 				ArcticClient.platform().setClipboard(emote.shortcode());
-				com.arcticlauncher.client.notice.Notices.post("Copied " + emote.shortcode(), "Paste into chat with Ctrl+V");
+				com.arcticlauncher.client.notice.Notices.post(Lang.t("mods.copied") + emote.shortcode(), Lang.t("mods.paste_into_chat_with_ctrl_v"));
 			}) {
 				@Override protected void draw(Gfx g, Style s, int mx, int my, float dt) {
 					super.draw(g, s, mx, my, dt);

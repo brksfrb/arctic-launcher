@@ -5,6 +5,7 @@ import com.arcticlauncher.client.Platform;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.arcticlauncher.client.Lang;
 /** Fight helpers on the HUD: whether you are blocking, what the fall in front of you costs, the pearl cooldown. All off until turned on. */
 final class PvpWidgets {
 	/** Falls of this many blocks or fewer cost nothing. */
@@ -23,13 +24,13 @@ final class PvpWidgets {
 
 	static List<HudWidget> all() {
 		List<HudWidget> all = new ArrayList<HudWidget>();
-		all.add(new TextWidget("blocking", "Block", "Whether you are blocking: a shield (1.9 and newer) or a sword (1.8)", false) {
+		all.add(new TextWidget("blocking", Lang.t("hud.block_2"), Lang.t("hud.whether_you_are_blocking_a_shield_1_9_and"), false) {
 			@Override
 			protected String value(boolean preview) {
 				return blocking() || preview ? "ON" : "off";
 			}
 		}.itemIcon("shield", "iron_sword"));
-		all.add(new TextWidget("falldamage", "Fall", "What your fall costs if you land now (health points; 2 = a heart)", false) {
+		all.add(new TextWidget("falldamage", Lang.t("hud.fall"), Lang.t("hud.what_your_fall_costs_if_you_land_now_health"), false) {
 			@Override
 			protected String value(boolean preview) {
 				float fell = platform().fallDistance();
@@ -39,7 +40,7 @@ final class PvpWidgets {
 				return fell <= SAFE_FALL ? "safe" : "-" + (int) Math.ceil(fell - SAFE_FALL) + " HP";
 			}
 		}.itemIcon("feather"));
-		all.add(new TextWidget("pearl", "Pearl", "The ender pearl cooldown (1.8: counted from when you throw one)", false) {
+		all.add(new TextWidget("pearl", Lang.t("hud.pearl"), Lang.t("hud.the_ender_pearl_cooldown_1_8_counted_from"), false) {
 			@Override
 			protected String value(boolean preview) {
 				if (preview) {

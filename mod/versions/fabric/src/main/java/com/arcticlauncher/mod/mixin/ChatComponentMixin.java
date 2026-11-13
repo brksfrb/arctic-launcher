@@ -22,6 +22,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import com.arcticlauncher.client.Lang;
 /** Chat timestamps, repeated lines stacked as "(x3)", mentions of you marked, and a longer history. */
 @Mixin(ChatComponent.class)
 abstract class ChatComponentMixin {
@@ -172,7 +173,7 @@ abstract class ChatComponentMixin {
 		// font switching on or off, a resource pack) changes the glyph widths: lines wrapped before it
 		// would run past the box, so they are wrapped again when the font or its widths change.
 		net.minecraft.client.gui.Font font = net.minecraft.client.Minecraft.getInstance().font;
-		float probe = font == null ? 0f : arctic$measure(font).width("The quick brown fox WMi. 0123456789 [:]");
+		float probe = font == null ? 0f : arctic$measure(font).width("The quick brown fox WMi. 0123456789 [:]"); // i18n-ignore
 		boolean fontChanged = arctic$fontSeen != null && (font != arctic$fontSeen || probe != arctic$fontProbe);
 		arctic$fontSeen = font;
 		arctic$fontProbe = probe;
@@ -291,7 +292,8 @@ abstract class ChatComponentMixin {
 			argsOnly = true)
 	private Component arctic$chat(Component message) {
 		arctic$restore();
-		com.arcticlauncher.client.FreezeWatchdog.note("chat line, chars", message.getString().length());
+		com.arcticlauncher.client.FreezeWatchdog.note("chat line, chars", // i18n-ignore: diagnostics
+				 message.getString().length());
 		// Blank lines (a server clearing the chat) stay plain: no stack, timestamp, mention or archive entry.
 		if (com.arcticlauncher.client.feature.ChatStacker.isBlank(message.getString())) {
 			arctic$stacker.reset();

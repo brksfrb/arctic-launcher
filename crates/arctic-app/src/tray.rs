@@ -4,8 +4,9 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 
+#[cfg(any(windows, target_os = "linux"))]
+use crate::t;
 use eframe::egui;
-
 /// What the tray asked the app to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(not(any(windows, target_os = "linux")), allow(dead_code))] // no tray on macOS yet
@@ -182,9 +183,9 @@ mod imp {
     const ICON_SIZE: u32 = 32;
 
     pub fn create(ctx: &egui::Context, tx: Sender<Action>) -> Option<Handle> {
-        let open = MenuItem::new("Open Arctic Launcher", true, None);
-        let play = MenuItem::new("Play", true, None);
-        let quit = MenuItem::new("Quit", true, None);
+        let open = MenuItem::new(t!("nav.open_arctic_launcher"), true, None);
+        let play = MenuItem::new(t!("nav.play"), true, None);
+        let quit = MenuItem::new(t!("nav.quit"), true, None);
         let menu = Menu::new();
         menu.append_items(&[&open, &play, &PredefinedMenuItem::separator(), &quit])
             .ok()?;
@@ -278,13 +279,13 @@ mod imp {
             use ksni::menu::StandardItem;
             vec![
                 StandardItem {
-                    label: "Open Arctic Launcher".into(),
+                    label: t!("nav.open_arctic_launcher").into(),
                     activate: Box::new(|tray: &mut Self| tray.open()),
                     ..Default::default()
                 }
                 .into(),
                 StandardItem {
-                    label: "Play".into(),
+                    label: t!("nav.play").into(),
                     activate: Box::new(|tray: &mut Self| {
                         tray.open();
                         let _ = tray.tx.send(Action::Play);
@@ -294,7 +295,7 @@ mod imp {
                 .into(),
                 ksni::MenuItem::Separator,
                 StandardItem {
-                    label: "Quit".into(),
+                    label: t!("nav.quit").into(),
                     activate: Box::new(|tray: &mut Self| {
                         set_quitting();
                         window::close();

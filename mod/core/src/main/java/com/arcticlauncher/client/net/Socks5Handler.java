@@ -11,6 +11,7 @@ import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
+import com.arcticlauncher.client.Lang;
 /**
  * The client side of a SOCKS5 handshake (RFC 1928, login per RFC 1929),
  * first in a connection's pipeline. The game only sees the channel become
@@ -71,7 +72,7 @@ public final class Socks5Handler extends ChannelDuplexHandler {
 		// Connected to the proxy; the game hears about it once the tunnel is up.
 		startedNanos = System.nanoTime();
 		try {
-			timeout = ctx.executor().schedule(() -> fail(ctx, "the proxy didn't answer in time"), TIMEOUT_SECONDS, TimeUnit.SECONDS);
+			timeout = ctx.executor().schedule(() -> fail(ctx, Lang.t("servers.the_proxy_didnt_answer_in_time")), TIMEOUT_SECONDS, TimeUnit.SECONDS);
 		} catch (UnsupportedOperationException e) {
 			// Netty 4.0's test channel can't schedule; real connections can.
 		}
@@ -179,7 +180,7 @@ public final class Socks5Handler extends ChannelDuplexHandler {
 
 	/** The tunnel is up: step aside and let the game start talking. */
 	private void open(ChannelHandlerContext ctx) {
-		ProxyRoutes.note("proxy: tunnel to " + host + ":" + port + " up in " + (System.nanoTime() - startedNanos) / 1_000_000L + " ms");
+		ProxyRoutes.note("proxy: tunnel to " + host + ":" + port + " up in " + (System.nanoTime() - startedNanos) / 1_000_000L + " ms"); // i18n-ignore
 		ByteBuf rest = pending.readableBytes() > 0 ? pending.readSlice(pending.readableBytes()).retain() : null;
 		ctx.pipeline().remove(this);
 		ctx.fireChannelActive();
@@ -189,7 +190,7 @@ public final class Socks5Handler extends ChannelDuplexHandler {
 	}
 
 	private void sendLogin(ChannelHandlerContext ctx) throws IOException {
-		byte[] user = field(username, "user name");
+		byte[] user = field(username, Lang.t("servers.user_name"));
 		byte[] pass = field(password, "password");
 		ByteBuf out = ctx.alloc().buffer();
 		out.writeByte(LOGIN_VERSION);
@@ -213,7 +214,7 @@ public final class Socks5Handler extends ChannelDuplexHandler {
 			out.writeByte(IPV6);
 			out.writeBytes(literal.getAddress());
 		} else {
-			byte[] name = field(host, "server name");
+			byte[] name = field(host, Lang.t("servers.server_name"));
 			out.writeByte(DOMAIN);
 			out.writeByte(name.length);
 			out.writeBytes(name);
@@ -239,17 +240,17 @@ public final class Socks5Handler extends ChannelDuplexHandler {
 	private static String reason(byte reply) {
 		switch (reply) {
 			case 2:
-				return "the proxy's rules don't allow this connection";
+				return Lang.t("servers.the_proxys_rules_dont_allow_this_connection");
 			case 3:
-				return "the proxy can't reach the network";
+				return Lang.t("servers.the_proxy_cant_reach_the_network");
 			case 4:
-				return "the proxy can't reach the server";
+				return Lang.t("servers.the_proxy_cant_reach_the_server");
 			case 5:
-				return "the server refused the connection (through the proxy)";
+				return Lang.t("servers.the_server_refused_the_connection_through");
 			case 6:
 				return "the connection timed out at the proxy";
 			default:
-				return "the proxy couldn't connect (error " + (reply & 0xFF) + ")";
+				return Lang.t("servers.the_proxy_couldnt_connect_error") + (reply & 0xFF) + ")";
 		}
 	}
 

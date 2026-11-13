@@ -8,6 +8,7 @@ import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.notice.Notices;
 import com.arcticlauncher.client.ui.KeyButton;
 
+import com.arcticlauncher.client.Lang;
 /**
  * The key a player binds on a feature's page to switch it on and off. Every
  * feature with a switch in the Mods list gets one, through {@link Mod}; the
@@ -113,6 +114,6 @@ public final class ToggleKeys {
 	private static void flip(Mod mod) {
 		boolean now = !mod.on();
 		mod.setOn(now);
-		Notices.post(mod.name + ": " + (now ? "On" : "Off"), "");
+		Notices.post(mod.name + ": " + (now ? "On" : Lang.t("mods.off")), "");
 	}
 }

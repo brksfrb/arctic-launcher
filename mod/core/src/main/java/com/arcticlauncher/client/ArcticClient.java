@@ -63,9 +63,11 @@ public final class ArcticClient {
 			}
 		});
 		com.arcticlauncher.client.config.RunningLock.hold(p.configDir());
+		Session session = Session.read(p.configDir());
+		// Before anything builds its text (the config's defaults, HUD widgets, menus).
+		Lang.init(p, session.language);
 		config = ClientConfig.load(p.configDir());
 		persistentChat = new com.arcticlauncher.client.feature.PersistentChat(p.configDir());
-		Session session = Session.read(p.configDir());
 		applyLauncherStyle(session);
 		applyLauncherProxy(session);
 		waypoints = com.arcticlauncher.client.waypoints.Waypoints.load(p.configDir());
@@ -229,7 +231,7 @@ public final class ArcticClient {
 			}
 			hud.render(g, style(), false);
 			if (com.arcticlauncher.client.replay.Replays.recording()) {
-				String recording = "REC · " + com.arcticlauncher.client.replay.Replays.recordingStatus();
+				String recording = Lang.t("mods.rec") + com.arcticlauncher.client.replay.Replays.recordingStatus();
 				g.text(recording, 6, 6, 0xFFFF6767, true);
 			}
 		}
@@ -251,7 +253,7 @@ public final class ArcticClient {
 		int y = g.height() / 2 - 20;
 		if (voice.sending()) {
 			com.arcticlauncher.client.gfx.Draw.round(g, 4, y, 64, y + 12, 3, 0xC0000000 | (s.panel & 0xFFFFFF));
-			g.text("● Talking", 8, y + 2, 0xFF86EFAC, false);
+			g.text(Lang.t("mods.talking"), 8, y + 2, 0xFF86EFAC, false);
 			y += 14;
 		}
 		for (String name : voice.speakingNames()) {
@@ -394,6 +396,10 @@ public final class ArcticClient {
 	private static int lookPrefetchTicks;
 
 	public static void tick(boolean screenOpen) {
+		if (Lang.follow() && hud != null) {
+			// The widgets' names were worked out in the old language.
+			hud = new Hud(config);
+		}
 		FreezeWatchdog.state(platform == null || platform.windowFocused(), platform != null && platform.inWorld());
 		com.arcticlauncher.client.feature.DynamicFps.tick(platform, screenOpen);
 		com.arcticlauncher.client.replay.Replays.tick(screenOpen);
@@ -536,7 +542,7 @@ public final class ArcticClient {
 	/** The Arctic button's label: with the number of unread chats and new features, if any. */
 	public static String hubLabel() {
 		int n = config == null ? 0 : Menus.badge();
-		return n > 0 ? "Arctic (" + (n > 9 ? "9+" : String.valueOf(n)) + ")" : "Arctic";
+		return n > 0 ? Lang.t("mods.arctic") + (n > 9 ? "9+" : String.valueOf(n)) + ")" : "Arctic";
 	}
 
 	/** Right Shift: the HUD screen in a world, the Mods menu elsewhere. */

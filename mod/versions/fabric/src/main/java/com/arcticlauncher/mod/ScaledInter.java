@@ -27,6 +27,7 @@ import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.util.freetype.FT_Face;
 import org.lwjgl.util.freetype.FreeType;
 
+import com.arcticlauncher.client.Lang;
 /**
  * The smooth font drawn scaled up (titles at 4x, a scaled scoreboard or HUD) stays sharp: Inter is rasterized at
  * the GUI scale, so magnified text used to show its texels. The projected footprint of each GUI or world
@@ -183,7 +184,7 @@ public final class ScaledInter {
 				synchronized (FreeTypeUtil.LIBRARY_LOCK) {
 					try (MemoryStack stack = MemoryStack.stackPush()) {
 						PointerBuffer handle = stack.mallocPointer(1);
-						FreeTypeUtil.assertError(FreeType.FT_New_Memory_Face(FreeTypeUtil.getLibrary(), font, 0L, handle), "Initializing font face");
+						FreeTypeUtil.assertError(FreeType.FT_New_Memory_Face(FreeTypeUtil.getLibrary(), font, 0L, handle), "Initializing font face"); // i18n-ignore: an error label
 						face = FT_Face.create(handle.get());
 					}
 					if (FreeType.FT_Select_Charmap(face, FreeType.FT_ENCODING_UNICODE) != 0) {

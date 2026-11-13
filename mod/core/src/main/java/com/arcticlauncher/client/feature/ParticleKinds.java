@@ -2,6 +2,7 @@ package com.arcticlauncher.client.feature;
 
 import com.arcticlauncher.client.config.ClientConfig;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Particle Control, per kind (OptiFine's Details > Particles): each kind is named by the particle's
  * registry path ("smoke", "flame", …), so the same names work on every version; 1.8.9-1.12.2 map their
@@ -9,8 +10,8 @@ import com.arcticlauncher.client.config.ClientConfig;
  */
 public final class ParticleKinds {
 	/** Menu label and the registry paths that belong to it. */
-	public static final String[] LABELS = {"Smoke", "Flames", "Explosions", "Crits and hits", "Portal", "Water and bubbles", "Potion effects",
-			"Redstone dust", "Lava drips", "Block breaking"};
+	public static final String[] LABELS = {"mods.particles.smoke", "mods.particles.flames", "mods.particles.explosions", "mods.particles.crits_and_hits", "mods.particles.portal", "mods.particles.water_and_bubbles", "mods.particles.potion_effects",
+			"hud.redstone_dust", "hud.lava_drips", "hud.block_breaking"};
 	private static final String[][] PATHS = {
 			{"smoke", "large_smoke", "campfire_cosy_smoke", "campfire_signal_smoke"},
 			{"flame", "small_flame", "soul_fire_flame"},
