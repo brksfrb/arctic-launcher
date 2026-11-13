@@ -66,6 +66,10 @@ final class SelfTest {
 			FreezeChatTest.start();
 			return;
 		}
+		if ("hudcard".equals(System.getProperty("arctic.selftest"))) {
+			HudCardTest.start();
+			return;
+		}
 		if ("chatcopy".equals(System.getProperty("arctic.selftest"))) {
 			ChatCopyTest.start();
 			return;

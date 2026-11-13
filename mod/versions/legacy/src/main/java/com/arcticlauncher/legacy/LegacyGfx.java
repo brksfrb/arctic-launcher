@@ -111,6 +111,11 @@ final class LegacyGfx implements Gfx {
 		if ((color >>> 24) < 4) {
 			return;
 		}
+		if ((color >>> 24) < 255) {
+			// A faded colour only fades with blending on.
+			GlStateManager.enableBlend();
+			GlStateManager.blendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
+		}
 		mc.textRenderer.draw(text, (float) x, (float) y, color, shadow);
 		GlStateManager.color(1f, 1f, 1f, 1f);
 	}

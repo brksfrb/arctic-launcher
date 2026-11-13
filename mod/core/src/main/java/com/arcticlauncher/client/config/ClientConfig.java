@@ -30,6 +30,9 @@ public final class ClientConfig {
 	public long styleFromLauncher;
 	/** HUD widget id → placement. */
 	public Map<String, HudSlot> hud = new LinkedHashMap<String, HudSlot>();
+	/** The HUD editor's Arctic card: offset in GUI pixels from the screen center (0, 0 = centered). */
+	public int hudCardDx;
+	public int hudCardDy;
 	/** Bumped whenever {@link #hud} is replaced or cleared (the HUD keeps its slots looked up until then). Not saved. */
 	public transient int hudEpoch;
 
