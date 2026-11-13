@@ -165,7 +165,7 @@ fn wait_for_game(
             GameEvent::WindowReady => ctx.out.emit(json!({"event": "window_ready"}), || {
                 "── Game window is up ──".into()
             }),
-            GameEvent::Exited { code } => {
+            GameEvent::Exited { code, .. } => {
                 ctx.out.emit(json!({"event": "exited", "code": code}), || {
                     format!(
                         "Minecraft exited ({})",
