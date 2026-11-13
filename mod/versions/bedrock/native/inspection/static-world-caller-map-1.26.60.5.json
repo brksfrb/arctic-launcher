@@ -1,0 +1,322 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.60.5",
+  "oldCallerRva": "0x4be360",
+  "anchor": "Game Play Screen - Render 1st person objects workaround",
+  "stringMatches": 1,
+  "references": [
+    {
+      "site": "0x4e0be74",
+      "function": "0x4e0b490"
+    }
+  ],
+  "functions": [
+    {
+      "rva": "0x4e0b490",
+      "end": "0x4e0beed",
+      "bytes": 2653,
+      "calls": [
+        {
+          "site": "0x4e0b61f",
+          "target": "0x6c2dc20",
+          "targetBytes": 4190,
+          "context": [
+            "mov rcx, rdi",
+            "movdqa xmm1, xmm0",
+            "mov r8, r12",
+            "call 0x6c2dc20",
+            "test byte ptr [r14 + 0x238], 1",
+            "mov qword ptr [rbp + 0xb8], rbx"
+          ]
+        },
+        {
+          "site": "0x4e0b678",
+          "target": "0xe934b00",
+          "targetBytes": 0,
+          "context": [
+            "nop dword ptr [rax + rax]",
+            "mov rdi, qword ptr [rcx]",
+            "mov edx, 0x28",
+            "call 0xe934b00",
+            "mov rcx, rdi",
+            "test rdi, rdi"
+          ]
+        },
+        {
+          "site": "0x4e0b714",
+          "target": "0x539dc10",
+          "targetBytes": 776,
+          "context": [
+            "je 0x4e0b515",
+            "jmp 0x4e0b520",
+            "mov rcx, rbx",
+            "call 0x539dc10",
+            "mov rbx, qword ptr [rbp + 0xb0]",
+            "mov rcx, rbx"
+          ]
+        },
+        {
+          "site": "0x4e0b730",
+          "target": "0x535f980",
+          "targetBytes": 3491,
+          "context": [
+            "mov r13, qword ptr [rbp + 0xc0]",
+            "mov rdx, r13",
+            "mov r8, r15",
+            "call 0x535f980",
+            "mov rax, qword ptr [rsi + 0x1a8]",
+            "test rax, rax"
+          ]
+        },
+        {
+          "site": "0x4e0b77f",
+          "target": "0x297c120",
+          "targetBytes": 0,
+          "context": [
+            "je 0x4e0b7be",
+            "mov r12, rax",
+            "lea rcx, [rax + 8]",
+            "call 0x297c120",
+            "mov r15d, eax",
+            "cmp eax, -1"
+          ]
+        },
+        {
+          "site": "0x4e0b87c",
+          "target": "0x535f980",
+          "targetBytes": 3491,
+          "context": [
+            "mov rcx, rbx",
+            "mov rdx, r13",
+            "mov r8, r15",
+            "call 0x535f980",
+            "xor edi, edi",
+            "mov rax, qword ptr [rsi + 0x1a8]"
+          ]
+        },
+        {
+          "site": "0x4e0bb0e",
+          "target": "0x57e1da0",
+          "targetBytes": 775,
+          "context": [
+            "mov r8, qword ptr [rsi + 0x1b8]",
+            "lea rcx, [rbp - 0x50]",
+            "mov rdx, r13",
+            "call 0x57e1da0",
+            "mov rax, qword ptr [r15]",
+            "mov rax, qword ptr [rax + 0xa78]"
+          ]
+        },
+        {
+          "site": "0x4e0bb40",
+          "target": "0x539daf0",
+          "targetBytes": 288,
+          "context": [
+            "mov rcx, rdi",
+            "mov r8, r14",
+            "mov r9, rax",
+            "call 0x539daf0",
+            "nop ",
+            "lea rcx, [rbp - 0x50]"
+          ]
+        },
+        {
+          "site": "0x4e0bb4a",
+          "target": "0x57e2220",
+          "targetBytes": 290,
+          "context": [
+            "call 0x539daf0",
+            "nop ",
+            "lea rcx, [rbp - 0x50]",
+            "call 0x57e2220",
+            "mov byte ptr [r13 + 0x76], 1",
+            "mov rcx, rsi"
+          ]
+        },
+        {
+          "site": "0x4e0bb57",
+          "target": "0x4e0dbf0",
+          "targetBytes": 515,
+          "context": [
+            "call 0x57e2220",
+            "mov byte ptr [r13 + 0x76], 1",
+            "mov rcx, rsi",
+            "call 0x4e0dbf0",
+            "nop ",
+            "test al, al"
+          ]
+        },
+        {
+          "site": "0x4e0bbbc",
+          "target": "0x39a7de0",
+          "targetBytes": 1554,
+          "context": [
+            "mov byte ptr [rbp - 0x18], 0",
+            "lea r8, [rbp - 0x50]",
+            "mov rdx, r14",
+            "call 0x39a7de0",
+            "nop ",
+            "mov byte ptr [rbp + 0x98], al"
+          ]
+        },
+        {
+          "site": "0x4e0bbd5",
+          "target": "0x4e0de00",
+          "targetBytes": 1915,
+          "context": [
+            "mov rcx, rsi",
+            "mov rdx, qword ptr [rbp + 0xc0]",
+            "mov r8, rbx",
+            "call 0x4e0de00",
+            "nop ",
+            "cmp byte ptr [rbp + 0x98], 1"
+          ]
+        },
+        {
+          "site": "0x4e0bbf9",
+          "target": "0x77a1900",
+          "targetBytes": 857,
+          "context": [
+            "add r8, 0x60",
+            "lea rcx, [rip + 0xd64210a]",
+            "mov rdx, r14",
+            "call 0x77a1900",
+            "nop ",
+            "mov rax, qword ptr [rsi + 0x1a8]"
+          ]
+        },
+        {
+          "site": "0x4e0bd83",
+          "target": "0x53d58b0",
+          "targetBytes": 0,
+          "context": [
+            "dec r8",
+            "and r8, rax",
+            "mov rdx, qword ptr [rdx + r8*8]",
+            "call 0x53d58b0",
+            "nop ",
+            "cmp byte ptr [rbx + 0x1014], 0"
+          ]
+        },
+        {
+          "site": "0x4e0bdcf",
+          "target": "0x53d58b0",
+          "targetBytes": 0,
+          "context": [
+            "and rdx, rax",
+            "mov rdx, qword ptr [rcx + rdx*8]",
+            "mov rcx, rbx",
+            "call 0x53d58b0",
+            "nop ",
+            "mov rcx, qword ptr [rsi + 0xb8]"
+          ]
+        },
+        {
+          "site": "0x4e0bde7",
+          "target": "0x530c1d0",
+          "targetBytes": 441,
+          "context": [
+            "mov rcx, qword ptr [rsi + 0xb8]",
+            "mov r8, qword ptr [rbp - 0x50]",
+            "mov rdx, qword ptr [rbp + 0xc0]",
+            "call 0x530c1d0",
+            "nop ",
+            "mov rdi, qword ptr [rbp - 0x48]"
+          ]
+        },
+        {
+          "site": "0x4e0be36",
+          "target": "0x53be930",
+          "targetBytes": 300,
+          "context": [
+            "mov byte ptr [rdx + 0x76], 0",
+            "add rsi, 0xc0",
+            "mov rcx, rsi",
+            "call 0x53be930",
+            "movaps xmm6, xmmword ptr [rbp + 0xd0]",
+            "add rsp, 0x168"
+          ]
+        },
+        {
+          "site": "0x4e0be56",
+          "target": "0x1166e0",
+          "targetBytes": 57,
+          "context": [
+            "pop r15",
+            "pop rbp",
+            "ret ",
+            "call 0x1166e0",
+            "lea rcx, [rip + 0xdbb391e]",
+            "call 0xe9380b0"
+          ]
+        },
+        {
+          "site": "0x4e0be62",
+          "target": "0xe9380b0",
+          "targetBytes": 123,
+          "context": [
+            "ret ",
+            "call 0x1166e0",
+            "lea rcx, [rip + 0xdbb391e]",
+            "call 0xe9380b0",
+            "cmp dword ptr [rip + 0xdbb3912], -1",
+            "jne 0x4e0bb8a"
+          ]
+        },
+        {
+          "site": "0x4e0bec3",
+          "target": "0x2fe330",
+          "targetBytes": 267,
+          "context": [
+            "lea rdx, [rbp + 0x70]",
+            "lea r9, [rbp + 0x80]",
+            "mov r8b, 1",
+            "call 0x2fe330",
+            "nop ",
+            "lea rcx, [rip + 0x92c0]"
+          ]
+        },
+        {
+          "site": "0x4e0bed0",
+          "target": "0xe934b40",
+          "targetBytes": 23,
+          "context": [
+            "call 0x2fe330",
+            "nop ",
+            "lea rcx, [rip + 0x92c0]",
+            "call 0xe934b40",
+            "lea rcx, [rip + 0xdbb38a4]",
+            "call 0xe938170"
+          ]
+        },
+        {
+          "site": "0x4e0bedc",
+          "target": "0xe938170",
+          "targetBytes": 105,
+          "context": [
+            "lea rcx, [rip + 0x92c0]",
+            "call 0xe934b40",
+            "lea rcx, [rip + 0xdbb38a4]",
+            "call 0xe938170",
+            "mov rbx, qword ptr [rbp + 0xb0]",
+            "jmp 0x4e0bb8a"
+          ]
+        }
+      ],
+      "repeatedTargets": [
+        {
+          "target": "0x535f980",
+          "count": 2
+        },
+        {
+          "target": "0x53d58b0",
+          "count": 2
+        }
+      ]
+    }
+  ],
+  "abiProven": false,
+  "layoutProven": false,
+  "engineCodeExecuted": false,
+  "profileActivated": false
+}

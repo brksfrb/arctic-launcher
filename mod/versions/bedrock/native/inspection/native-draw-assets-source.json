@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.5203.0",
+  "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "evidence": "Cached instruction bytes decoded as data and source files manually reviewed/edited only; no project/game loading, builds, tests, syntax checks, GPU/API execution, process inspection or Bedrock operations",
+  "nativeFacts": {
+    "completionRoutine": "0xdfa1540",
+    "contextSubmittedCheck": "0xdfa1668 reads context+2cbd8",
+    "contextFenceCheck": "0xdfa167d compares context+2cbd0 with the requested fence",
+    "usedPop": "0xdfa16b3 through 0xdfa16e2 updates the inclusive used ring and empty sentinel",
+    "freePush": "0xdfa1913 through 0xdfa1996 transfers completed contexts into the free ring",
+    "fenceRemovedCheck": "0xdfa19ad compares the native completed value with UINT64_MAX",
+    "existingContract": "The pinned native queue observer requires stable queue/fence/context/list identities, completed native fence, used-to-free membership and now a drained deferred-vector header with unchanged backing storage; the inspected native allocation route resets allocator/list before subsequent recording/execution",
+    "deferredRelease": "dfa1630..dfa1637 resets context+2cbe8 to +2cbe0 after copying deferred pointers to a temporary vector. dfa18e9..dfa18f8 invokes their Release slots before the free-ring push. Detailed static evidence and its limits are in native-fence-retirement-source.json"
+  },
+  "sourcePort": {
+    "module": "native_draw_assets",
+    "capacity": 16,
+    "registration": "Unsafe retain_recording API transfers an opaque asset owner before any inserted command; caller must provide a live engine-owned direct recording list, serialize recording/reset/execute and pin every referenced resource/descriptor/pipeline",
+    "registrationFailure": "Returns assets with the error rather than destroying arbitrary payloads inside caller observer locks",
+    "identity": "Public Execute and Reset use canonical IUnknown identity; the actual intercepted graphics-list pointer is retained only as a numeric alias for the native context join; the pool holds no owning command-list reference",
+    "submission": "depth_tracker's existing submission gate encloses owner reservation, actual ExecuteCommandLists and per-owner private fence signals; monotonic submission ordinals revalidate generation/queue identity",
+    "replayability": "Private GPU fence completion alone cannot retire a still-replayable closed native list",
+    "reset": "Successful public Reset marks the old list generation non-replayable without assuming GPU completion",
+    "destruction": "Release candidates are atomically captured before the actual Release, with no post-destruction object access; a zero return records only the captured generations",
+    "nativeHandoff": "depth_queue used-to-free validation carries separate draw-asset tickets; same owner generation, canonical list, actual queue and submission ordinal must survive before replayability can be removed. Both snapshot and draw-asset tickets now also require stable before/after deferred-resource vector metadata, unchanged begin/capacity and drained end==begin; unreadable/changed/nonempty headers leave owners pinned",
+    "collection": "The DX12 frame callback collects outside tracker/submission/pool locks; release requires non-replayability and the last private fence completion, or actual device removal; payload destructors run after the pool lock is released",
+    "uncertainty": "Failed signals, cross-queue execution, poisoned submission gates, unresolved COM identity, excessive list arrays and counter exhaustion do not authorize early asset release",
+    "bounds": "At most 16 opaque payloads; no timeout, sleeping worker, polling thread or unsafe eviction; submission array normalization is capped at 4096 lists",
+    "diagnostics": "Bounded owner/replayable/failed/pending/retired counters and a separate native asset-handoff count, without object addresses"
+  },
+  "limitations": [
+    "native_avatar_record now invokes retain_recording in its source transaction, but no game-facing insertion caller invokes that transaction; live inserted draws remain unfinished",
+    "An unrecognized final COM interface alias can conservatively leave an owner pinned until native retirement/reset or device removal",
+    "Failed or uncertain submissions can occupy bounded slots until device removal; memory safety is not inferred from elapsed time",
+    "The registration contract still requires actual native target/world/material ownership and complete graphics-state restoration from its future caller",
+    "Live native lighting/feature-group inputs, default/deferred targets, native drawing, camera/video comparisons and full feature parity remain unfinished"
+  ],
+  "verified": {"built":false, "tested":false, "hooksExecuted":false, "assetsObservedLive":false, "nativeInsertionImplemented":false, "gpuWorldRendered":false, "deterministicVideo":false, "fullParity":false}
+}

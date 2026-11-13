@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "evidence": "Source reads and edits only; no builds, tests, syntax checks, JNI/project/game execution, shader compilation, GPU calls, launch, attachment or process inspection",
+  "producer": {
+    "selection": "WorldFrame.geometry selects the same immutable live/recorded JavaEntityShader as software rendering, with archived camera/space checks during replay",
+    "version": "ARCGEO06 for supplied layer eligibility (java-layer-visibility-source.json); otherwise v5 logical texture identity or the existing v4/v3/v2/v1 selection.",
+    "positionSpace": "Material-bearing packets require a declared world or camera-relative coordinate space",
+    "layout": "After the optional equipment matrix and before actor count: strict u8 material presence, then 1058 little-endian f32 values when present",
+    "scalarOrder": "lightmap 1024 RGBA channels, ColorModulator 4, two light directions 6, fog-position affine transform 12, selected overlay texel 4, fog color 4, fog ranges 4",
+    "bound": "The existing 96 MiB packet budget includes the 4233-byte material extension"
+  },
+  "decoder": {
+    "versions": ["ARCGEO01", "ARCGEO02", "ARCGEO03", "ARCGEO04", "ARCGEO05", "ARCGEO06"],
+    "ownership": "EntityMaterial arrays are Rust-owned, decoded with the frame; no engine object layout or native pointer is created",
+    "validation": ["finite floats", "normalized lightmap and overlay RGBA", "non-reversed fog ranges", "strict material presence flag", "declared position space", "existing frame/session/camera/geometry bounds and no trailing data"],
+    "legacy": "ARCGEO01 yields no material; no white lightmap, inferred fog or copied presentation state fills absence"
+  },
+  "nativeAssembly": {
+    "input": "Inputs.for_frame derives explicit material fields from the copied cohort and selects the matching body/equipment projection with the existing reverse-Z conversion",
+    "constants": "Constants.from_frame preflights each nonempty batch's supported role, scene-light provenance, skin visibility and layer eligibility when applicable, tint, camera and shader encoding before allocating its owned upload resource",
+    "emptySubmits": "The uniform-index vector retains one entry per source batch; empty submits have no constant slot and remain present in the order plan",
+    "identity": "For material-bearing frames, draw preparation compares all 256 draw-constant bytes and all 4096 lightmap bytes against the copied cohort, in addition to existing kind/projection/tint checks",
+    "geometry": "Geometry.from_uploaded validates caller-supplied feature groups, builds packet-derived constants and preflights their complete draw mapping; no commands are recorded or submitted by assembly",
+    "notSupplied": "Feature-group object/equality identities, actual native target/descriptor ownership and the current feature phase still require their real owning adapter"
+  },
+  "remaining": [
+    "Authoritative installed-game capture of Java-equivalent material/lightmap/packed-light inputs",
+    "Per-role/per-actor material cohorts when a scene does not share the explicit profile",
+    "Ghost/outline/dissolve skin and native glint material variants; explicit normal skin source support now uses batch-specific overlay inputs",
+    "Live feature-group producer, insertion caller and full scene lifetime joins; serialized geometry scheduling and completed upload handoff are now connected in native-geometry-stream-source.json",
+    "Runtime GPU/camera/replay and deterministic-video verification"
+  ],
+  "verified": {"built": false, "tested": false, "jniRoundTrip": false, "gpuRendering": false, "liveGame": false, "deterministicVideo": false, "fullParity": false}
+}

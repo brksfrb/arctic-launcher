@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "evidence": "Source reads/edits and manual reference review only; no tests, builds, syntax checks, UI automation, encoder/export, project/helper/game execution, process inspection or Bedrock launch",
+  "reference": {
+    "source": "mod/core/src/main/java/com/arcticlauncher/client/replay/VideoExport.java",
+    "minimumRange": "Constructor selects max(from+1,to)",
+    "frameTime": "from + index * (1000.0 / fps)",
+    "endpoint": "advance continues while frameTime <= to"
+  },
+  "sourcePort": {
+    "range": "ExportRange retains integer fromMs/toMs. Its constructor applies Java's one-millisecond minimum; decoding/validation rejects unordered, out-of-day or over-two-hour selections",
+    "count": "Estimate the last index with integer arithmetic, then apply Java's actual double division/multiplication/addition endpoint predicate. This preserves the endpoint decision instead of assuming duration*FPS always lands on the same rounded double",
+    "ui": "Select export range exposes start/end times and derives frame count at the chosen FPS; Use camera path range takes its earliest/latest key times. A range uses the existing world-rebuild path and cannot silently become a playhead export",
+    "worker": "The selected range, start and derived frame count pass through ReplayVideoRequest into ExportOptions. Validation rejects disagreement before native export operations",
+    "sourceBounds": "Before world reset, a selected start cannot be clamped to a later bootstrap time and its end cannot exceed recording duration. After reset, the actual attached replay origin must still equal the requested start",
+    "camera": "Existing camera sampling uses absolute replay timestamps from the validated origin; keyframes are not shifted or rebased to clip zero",
+    "endpointBudget": "Indexed capture, native timeline, built-in stream encoder and decoded audit/comparison allow at most FPS*7200+1 samples, permitting the sample at exactly two hours. Real-time capture retains its prior FPS*7200 budget",
+    "intent": "New exports use intent schema 4 and arctic-bedrock-export-intent-v4 hash domain. Optional selectedRange is content-bound and validated against origin/FPS/frame count; frame-count mode leaves it absent",
+    "legacy": "Intent schemas 1..3 keep their original hash domains, omitted-field serialization and old sample limits. Schema 4 keeps the same explicit encoding-profile and native cadence checks",
+    "comparison": "Paired export diagnostics identify selectedRange differences even if two end selections happen to produce the same set of sample timestamps",
+    "unchangedProof": "Range selection is not native simulation, shader/appearance, GPU presentation, audio or deterministic video evidence"
+  },
+  "remaining": [
+    "Runtime comparison against Java's endpoint/frame sequence and actual camera/export behavior",
+    "Native world cosmetics material/insertion completion",
+    "Replay audio export and Java-equivalent output formatting",
+    "Actual repeated decoded-video/native-world fidelity evidence"
+  ],
+  "verified": {"built":false,"tested":false,"uiExecuted":false,"exportExecuted":false,"endpointComparedAtRuntime":false,"nativeWorld":false,"deterministicVideo":false,"fullParity":false}
+}

@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "purpose": "Native framebuffer setter, descriptor header and paged texture resource reader source migration",
+  "source": [
+    "../src/native_framebuffer_profile.rs",
+    "../src/native_framebuffer.rs",
+    "../src/native_framebuffer_resources.rs",
+    "../src/native_backend_profile.rs",
+    "../src/render_bridge.rs",
+    "../src/native_scene_layout.rs"
+  ],
+  "bindings": "framebuffer-reader-bindings.json",
+  "nativeEvidence": "static-framebuffer-reader-layout-1.26.60.5.json",
+  "contract": {
+    "acceptedCompleteImageAndSceneFamilyRequired": true,
+    "fiveCompleteSetterTransitionEnsureCleanupOverrideFunctionsHashed": true,
+    "actualBackendCallerCheckedWithinItsIndependentlyAdmittedFunction": true,
+    "tenInternalNativeCallEdgesRechecked": true,
+    "framebufferTextureReaderPreflightBeforeBackendDetours": true,
+    "fourNativeArgumentsAndAllDwordHandleFlagBitsPreserved": true,
+    "framebufferTableTextureRegistryAndHeaderFieldsSelectOneFamily": true,
+    "pagedTextureReaderRequiresAdmittedFramebufferFamily": true,
+    "wholeRetirementFlagByteCapturedAndRechecked": true,
+    "actualPublicBarrierResourceArgumentRequiredForComClone": true,
+    "nativeRegistryPointersNeverInvokedAsComObjects": true,
+    "descriptorAndResourceCohortReadbacksRetained": true,
+    "originalPublishedBeforeEnablement": true,
+    "installedStatusRequiresActualEnablement": true,
+    "partialEnablementCallbackOnlyForwards": true,
+    "failedInstallationResultCached": true,
+    "privateLookupCleanupAndOverrideNeverInvokedByReader": true,
+    "backingHeapOrExclusivePhaseLeaseCreated": false
+  },
+  "sourceImplemented": true,
+  "framebufferAndTextureReaderSourceMigrationImplemented": true,
+  "currentCandidateActivated": false,
+  "remainingGraphicsStateReaderMigrationComplete": false,
+  "runtimeVerified": false,
+  "fullParity": false,
+  "remaining": [
+    "Current scene, actor, terrain and material dependency migrations",
+    "Actual exclusive native feature phase and custom geometry insertion",
+    "Real backing allocation, material, descriptor and native object lifetime ownership",
+    "Complete scene dependencies and deterministic replay rendering/video export"
+  ],
+  "operations": {
+    "cachedBytesReadAsData": true,
+    "gameOpened": false,
+    "gameCodeExecuted": false,
+    "processInspected": false,
+    "buildExecuted": false,
+    "testsExecuted": false
+  },
+  "queueRetirementReaderSourceMigrationImplemented": true,
+  "queueReaderSourceEvidence": "native-queue-reader-source.json",
+  "graphicsStatePublicApiIntegrationImplemented": true,
+  "graphicsStateAdmissionSourceEvidence": "native-graphics-admission-source.json"
+}

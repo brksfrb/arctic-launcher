@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "purpose": "Version-specific native queue consumer and fence retirement reader source migration",
+  "source": [
+    "../src/native_queue_profile.rs",
+    "../src/depth_queue.rs",
+    "../src/depth_tracker.rs",
+    "../src/render_bridge.rs",
+    "../src/native_scene_layout.rs"
+  ],
+  "bindings": "queue-retirement-reader-bindings.json",
+  "nativeEvidence": "static-native-queue-layout-1.26.60.5.json",
+  "nativeFacts": {
+    "consumer": "Old dfa1540..dfa1a2c maps to e817890..e817d76. Both receive queue pointer in RCX, requested u64 fence in RDX and u32 timeout in R8D, and return a full byte. The local stack changes from 918 to 908; no extra entry arguments were inferred from local spills.",
+    "caller": "Old dfa1110..dfa153a maps to e817450..e817888. The actual E8 consumer calls at dfa1160/e8174a0 pass a queue address formed from renderer+cc9260/cc9268, an actual fence value and the full timeout DWORD. AL is tested afterward.",
+    "publicQueue": "Old dfa41d0..dfa430d maps to e81a4f0..e81a63b. At dfa42c6/e81a5e6 the renderer loads the queue COM pointer from the same cc9260/cc9268 member and dispatches ExecuteCommandLists through public vtable slot 50. Therefore queue-relative offset zero remains the actual public queue object.",
+    "rings": "Both use 272-slot used/free inclusive rings, with arrays at 2f8c028/2f8c8b8 and head/tail fields at 2f8c8a8/2f8c8b0 and 2f8d138/2f8d140. The empty sentinel is 110. These internal queue fields did not follow the containing renderer's eight-byte shift.",
+    "fence": "Both load the fence context at queue+2f8d148. Poll dfa4480..dfa458e maps to e81a7b0..e81a8c8; the actual public fence object is at +18, its GetCompletedValue dispatch uses vtable+40, and the returned u64 is stored at +30. UINT64_MAX remains device loss rather than completion.",
+    "deferredReleaseOrder": "The current consumer checks context submitted byte+2cbd8 and fence+2cbd0, copies deferred references from the vector at +2cbe0, and clears its end at e817980..e817987. Its e817c29..e817c38 public Release loop finishes before e817c58..e817cd3 returns contexts to the free ring. Current success is set at e817ced..e817cf2 and the byte survives temporary storage cleanup.",
+    "reuse": "Allocator dfa3d60..dfa3eec maps to e81a080..e81a20c. Each calls its actual consumer before taking from the free ring, clears context+2cbd8 and resets the public command list loaded at context+30. This does not supply ownership of backing allocations or an exclusive feature phase."
+  },
+  "contract": {
+    "acceptedCompleteImageAndSceneFamilyRequired": true,
+    "fiveCompleteConsumerCallerPollSubmitAllocatorFunctionsHashed": true,
+    "fiveActualCallEdgesRecheckedWithinHashedCallers": true,
+    "immutablePreflightBeforeBackendDetours": true,
+    "queueAndFenceAndDeferredReaderFieldsSelectOneFamily": true,
+    "ringExtentAndSentinelBoundsRetained": true,
+    "queueFenceListAndUsedToFreeIdentitiesRequired": true,
+    "stableDrainedDeferredHeaderRequired": true,
+    "nativeVectorElementsNeverDereferencedByReader": true,
+    "nativePointersNeverInvokedForComOwnership": true,
+    "allArgumentsAndFullReturnByteForwardedExactlyOnce": true,
+    "originalPublishedBeforeEnablement": true,
+    "disabledCallbackOnlyForwards": true,
+    "installedStatusRequiresActualEnablement": true,
+    "failedInstallationResultCached": true,
+    "existingRingAndHandoffFixturesUseSharedLayoutButWereNotRun": true,
+    "backingAllocationOrExclusivePhaseLeaseCreated": false
+  },
+  "sourceImplemented": true,
+  "queueRetirementReaderSourceMigrationImplemented": true,
+  "currentCandidateActivated": false,
+  "runtimeVerified": false,
+  "fullParity": false,
+  "remaining": [
+    "Complete current scene, actor and terrain dependencies before activating the newer image family",
+    "Actual exclusive native feature phase and custom geometry insertion",
+    "Real backing allocation, material and descriptor lifetime ownership",
+    "Complete live cosmetics, cape physics, emotes and deterministic replay rendering/video export"
+  ],
+  "operations": {
+    "cachedBytesReadAsData": true,
+    "gameOpened": false,
+    "gameCodeExecuted": false,
+    "processInspected": false,
+    "buildExecuted": false,
+    "testsExecuted": false
+  }
+}

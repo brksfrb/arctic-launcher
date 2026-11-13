@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "evidence": "Current sources read/edited only. No builds, tests, syntax checks, project/game/JNI/shader/GPU execution, process inspection or exports.",
+  "input": {
+    "field": "WorldFrame.Player.javaWingGlint, optional explicit target-Java input object; parsed once into immutable GlintSample. Omission/null remains unknown and does not mean no glint.",
+    "inactive": "Exactly schema=1 and selected=false. This records an explicitly absent selected pass, not an alpha-zero or strength-zero approximation.",
+    "active": "Exactly eight fields: numeric schema=1, literal boolean selected=true, textureMatrix (16 column-major floats), fogPosition (12 row-major affine floats), colorModulator (4 floats), fogRanges (4 floats), glintAlpha (float in 0..1), and actual submitted Java viewTranslation (3 floats). Numeric values must be finite; fog ranges ordered. No clock, speed, strength, transform or pose is inferred from native enchantment/glow/forced-glint flags.",
+    "validation": "Strict JSON primitive/array types and field count; no string-to-boolean/number coercion. Active input requires the existing declared layered camera. A copied empty chest or known Java hasFoil=false conflicts with active glint and is rejected. HasFoil=true alone never selects or constructs a pass.",
+    "ownership": "Copies 40 active floats; same/copy/archive helpers retain exact float values. The parsed input is neither an installed-game receipt nor new native suppression/renderer authority. Existing native glint/wing feature gates remain.",
+    "producer": "An authoritative installed-game adapter supplying these target-Java selection/uniform/pose observations remains missing. No live producer was synthesized."
+  },
+  "archive": {
+    "kind": "bedrock_glint_samples_v1",
+    "magic": "0x415243474c540001, Java DataOutput big-endian",
+    "sample": "u8 1 for explicit inactive or 2 for active; active then stores 40 f32 values in textureMatrix16, fogPosition12, colorModulator4, fogRanges4, glintAlpha1, viewTranslation3 order. Unknown actors have no map entry; state 0/other inside an entry is rejected.",
+    "frame": "time f64, native tick i64, tick rate f32, strict context-presence u8, optional context, actor count u16, then sorted UUID i64/i64 plus sample entries. Context is present exactly when at least one actor has an active sample.",
+    "context": "Bounded dimension via DataOutput UTF, strict position-space byte, six f64 camera values, sixteen f32 world projection values and sixteen f32 layered equipment projection values. Copies are owned; active playback requires exact context equality.",
+    "writer": "GlintHistory.Writer participates in the existing appearance recording begin/observe/finish lifecycle and serialized appendTrack queue. It observes explicit samples only for complete model observations with equipped wings, wing matrices and part matrices. All-unknown 64-frame blocks are omitted as gaps. Backward time/ticks or changed data without timeline advancement fail the recording rather than overwrite observations.",
+    "reader": "Optional track mounted by ReplayAppearance. Validate the complete index and every block before mount; 1..4096 chunks, 1..64 frames/chunk, finite bounded ordered clocks, 128 actors/frame, strict selection/context flags, unique actors, complete index/time agreement and no trailing bytes. Compressed/inflated input is bounded to 2 MiB blocks plus compressed overhead; reject incomplete/trailing compressed streams. Two-block LRU rechecks the source manifest before lazy reads.",
+    "budget": "Reserve 16 MiB for the glint reader and keep a bounded aggregate appearance preparation budget of 128 MiB (previously 80 MiB), allowing the added reader alongside existing track reservations/assets. The existing VM heap setting is unchanged. This is an admission budget, not measured runtime memory.",
+    "compatibility": "Existing archives without this track still mount with unknown glint data; no inactive pass is fabricated. New track data needs a reader that recognizes this kind. Other track and ARCGEO01..09 wire layouts do not change."
+  },
+  "sampling": {
+    "entry": "ReplayAppearance.wingGlint and BedrockPlatform.recordedWingGlint resolve the recorded actor at exactTime and query this track only. The live viewer's profile/clock/options are never queried as fallback.",
+    "exact": "Exact observations return owned copies. Active data requires exact dimension, position space, camera, world projection and layered projection agreement. Known inactive data carries no transform and can survive camera edits.",
+    "interior": "Return only identical selected inputs across contiguous observations with at most one tick and the existing bounded observation interval. Active endpoints additionally need identical camera contexts and a matching viewer context. Missing actors/blocks, changed selection/uniforms/poses, long gaps or incompatible cameras return unknown.",
+    "noReconstruction": "V1 stores actual selected transforms, not an assumed Java Util clock-rate model. Animated changing matrices are not linearly blended across wraps, extrapolated, held through gaps or regenerated from viewer time. Camera-dependent view poses/fog are not guessed under camera edits.",
+    "status": "wingGlintTrackAvailable and lastWingGlintSampleError describe data availability. wingGlintPlaybackVerified stays false; no new render-ready or parity assertion is introduced."
+  },
+  "remaining": [
+    "Actual installed-game target-Java glint selection/uniform/pose capture; raw foil/enchantment metadata does not provide it.",
+    "Recorded exact/stable samples now reach staged wing models, the optional ARCGEO10 native preparation path and the software-owned deferred glint phase (native-packet-glint-source.json, software-wing-glint-observation-source.json). Actual native phase input production/callsite and full rendering fidelity remain missing or unverified.",
+    "An authoritative recorded clock/options model for changing glint matrices, including wall-clock motion while native timeline time is unchanged; v1 intentionally leaves those intervals unknown or fails unrepresentable same-time changes.",
+    "Proven camera/fog/view-pose rebasing for the replay camera editor, native world/resource/phase ownership and full rendering/export integration.",
+    "Archive round-trip, runtime memory, native recording/rendering, interpolation/clock equivalence and complete deterministic-video/1:1 parity verification."
+  ],
+  "verified": {"built":false,"tested":false,"archiveRoundTrip":false,"recordedInGame":false,"replayRendered":false,"liveGame":false,"gpuRendering":false,"deterministicVideo":false,"fullParity":false}
+}

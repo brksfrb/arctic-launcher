@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "evidence": "Repository source reads and edits only; no builds, tests, syntax checks, helper/project/game execution or Bedrock launch",
+  "reference": {
+    "speeds": "mod/core ReplayViewer.SPEEDS = {0.25,0.5,1,2,4,8,16}; speedUp/speedDown select adjacent bounded indices",
+    "frameCap": "ReplayViewer.MAX_FRAME_MS = 250; frame caps monotonic real elapsed milliseconds before multiplying by selected replay speed",
+    "cameraTime": "ReplayViewer retains its normal playhead as double and passes it to CameraPath.at; flooring the packet receipt timestamp is not the camera sampling rule",
+    "nativeClock": "Java ReplayViewer also updates ReplayClock.scale. Matching native Bedrock simulation scaling is separate from protocol-helper packet/camera scheduling."
+  },
+  "port": {
+    "range": "Rust playback admission and both helper configuration/live speed commands accept finite 0.1..16; the older continuous 0.1 minimum remains accepted",
+    "editor": "Shared speed controls in the connection form and active replay editor provide the seven Java steps via Slower/Faster. Existing numeric adjustment remains. A non-preset value steps to the next preset strictly in the requested direction; endpoint buttons disable when no such preset exists.",
+    "timeline": "Normal helper playback clamps max(0, now-previous) to 250ms before speed multiplication. Its existing bounded packet queues, initialization/resource-pack waits and duration bound remain. Indexed export steps retain their explicit rational clock and do not use this real-time cap.",
+    "cameraSampling": "Normal camera sampling and viewer cameraTarget retain fractional elapsed time, independently of the floor used for packet position receipts. An explicitly supplied indexed-export cameraTime still takes precedence; its exact rational conversion and path checks remain unchanged.",
+    "bounds": "No automatic client launch, game input, native timer write or change to an existing speed setting is introduced by source editing"
+  },
+  "remaining": [
+    "Runtime validation of launcher/CLI integration, native simulation/animation clock scaling and pause fidelity; native rate and coordinator source paths now exist",
+    "Native render-frame camera application and cadence; protocol queuing is not a presented-camera receipt",
+    "Actual installed-client packet application and terrain readiness",
+    "Live native cosmetics, full camera modes and deterministic video fidelity verification"
+  ],
+  "verified": {"built": false, "tested": false, "helperPlayback": false, "liveGame": false, "nativeClockScaling": false, "deterministicVideo": false, "fullParity": false}
+}

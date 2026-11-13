@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "evidence": "Current source reads/edits and cached Java shader/class bytes decoded as data; no classes loaded, compilation, syntax checks, tests, GPU calls or game/process operations",
+  "javaReference": {
+    "version": "26.2",
+    "clientJarSha256": "40896ee9f1e2bec3c934daac7e93d41e9e3d9c2f8ae0ca366d52ffbfd1afa290",
+    "assets": {
+      "assets/minecraft/shaders/core/entity.vsh": "cbcb78cbca26ffd6474191e9cc701a28f9ff798b5c17a195d97f66eb5d5d536e",
+      "assets/minecraft/shaders/core/entity.fsh": "14cdae28f2a2e30029ef4278034a8d73f302b03a24f20aaf40afafd5d93bb620",
+      "assets/minecraft/shaders/include/light.glsl": "54190d6e376de13163c96d74e0cebb52ea2cbefdc8999b655253b1dad57cd52c",
+      "assets/minecraft/shaders/include/fog.glsl": "c1b47816bc9a3689ea815226c8ff2ba1b143ea40f094eb61cfede85c604ac8e6",
+      "assets/minecraft/shaders/include/sample_lightmap.glsl": "4ec239a8fbfe90a0b2519daebc3075dff32d0341e6c58c6f32037f87655159a6",
+      "assets/minecraft/shaders/include/dynamictransforms.glsl": "bb48ff3521e88334a0ff7c27fc9fc33c200cb45bcc4955790f7a1a8ea9a9ed8d",
+      "assets/minecraft/shaders/include/projection.glsl": "1a192328e4d691f127667f6e363b5c37b774605fa146e5808d2710d3f2950c85"
+    },
+    "pipelineEvidence": "RenderPipelines cached <clinit>: ARMOR_CUTOUT_NO_CULL store 005b9; ENTITY_SOLID 00660; ENTITY_TRANSLUCENT 0079a; ENTITY_TRANSLUCENT_EMISSIVE 007ea",
+    "blendEvidence": "BlendFunction cached <clinit> 00040..0004f: translucent RGB SRC_ALPHA/ONE_MINUS_SRC_ALPHA; alpha ONE/ONE_MINUS_SRC_ALPHA",
+    "overlayEvidence": "Arctic Fabric PoseXform writes OverlayTexture.NO_OVERLAY; wing pipeline explicitly defines NO_OVERLAY, other three selected roles retain overlay input"
+  },
+  "sourcePort": {
+    "shader": "src/shaders/avatar_entity.hlsl",
+    "module": "avatar_material",
+    "features": [
+      "40-byte vertex input matching owned geometry uploads",
+      "ARGB channel unpack and retained native tint",
+      "Signed-short UV2 unpack from packed Java light",
+      "Cardinal/per-face front/back lighting with no normal renormalization",
+      "Explicit 16x16 lightmap and clamped bilinear vertex sampling",
+      "Nearest-repeat artwork sampling",
+      "Sample-alpha cutout before vertex/tint/fade",
+      "Explicit ColorModulator and selected overlay texel emitted as a smooth vertex-to-fragment varying (entity-overlay-varying-source.json)",
+      "Emissive lightmap bypass retaining per-face cardinal lighting",
+      "Spherical/cylindrical environmental and render-distance fog, preserving fragment alpha",
+      "D3D12 root signature, input layout and four material pipeline states",
+      "Owned upload-heap constants and indexed draw recording"
+    ],
+    "generalSkinMaterial": "Untyped GENERAL remains rejected. Explicit visible SkinTranslucent now uses a copied batch-specific body overlay and the entity-translucent state; see java-skin-material-source.json.",
+    "liveInputProducer": false,
+    "bedrockConstantsReinterpretedAsJavaInputs": false,
+    "automaticPresentationInvocation": false
+  },
+  "constantLayout": {
+    "drawBytes": 256,
+    "wordOffsets": {"viewProjection":0, "fogPosition3x4":16, "colorModulator":28, "vertexTint":32, "light0":36, "light1":40, "fogColor":44, "fogRanges":48, "overlayColor":52, "features":56, "cutout":60},
+    "lightmapBytes": 4096,
+    "lightmapFormat": "256 normalized float4 texels, explicit input, not a white fallback",
+    "maximumDraws": 2048,
+    "gpuAddresses": "Nonzero and 256-byte aligned",
+    "drawJoin": "Selected material, encoded tint and projection must match uploaded packet metadata bit-for-bit before recording",
+    "projection": "Use packet forward DirectX matrix; for reverse-Z DSV convert full clip Z row as W-Z; wings require the separate layered camera",
+    "floatingPointNativeProjectionEquivalenceVerified": false
+  },
+  "pipelineStates": {
+    "cosmeticBase": {"blend":"translucent", "depthWrite":true, "cull":false, "alphaCutout":0.1, "perFaceLighting":true},
+    "cosmeticGlow": {"blend":"translucent", "depthWrite":false, "cull":false, "alphaCutout":0.1, "perFaceLighting":true, "emissive":true},
+    "capeSolid": {"blend":"none", "depthWrite":true, "cull":true, "alphaCutout":0, "perFaceLighting":false},
+    "wingCutout": {"blend":"none", "depthWrite":true, "cull":false, "alphaCutout":0.1, "perFaceLighting":true, "overlay":false},
+    "depthCompare": "LESS_EQUAL for forward depth, GREATER_EQUAL for reverse depth",
+    "frontFace": "Explicit target convention; not inferred from native object names",
+    "colorTargets": ["RGBA8_UNORM", "BGRA8_UNORM"],
+    "hdrAndSrgbFidelity": "Unported",
+    "compilation": "Future runtime constructor uses shader model 5 with strict/IEEE compilation flags; compiler not invoked in this work"
+  },
+  "ownership": {
+    "constantResources": "Immutable CPU-written upload-heap buffers; no queue work submitted by constant creation",
+    "pipelineDescription": "Root-signature COM reference is cleaned on success and failure",
+    "recording": "Sets root/PSO, SRV heap, constant views, texture table, vertex/index views and DrawIndexedInstanced on caller-owned recording list",
+    "callerRequirements": "Correct live world RTV/DSV, state transitions, device/node, camera, viewport/scissor and explicit input cohort; retain Pipelines, Constants and Uploaded until draw fence completion",
+    "nativeWorldLeaseProven": false,
+    "queueSubmissionImplementedHere": false
+  },
+  "remaining": ["Live Java-equivalent lightmap/fog/overlay/lighting and scene packed-light producer", "General skin material variants", "World/depth/producer ownership joins", "Authoritative live feature-group inputs for the new quad order planner", "Native target lease and callsite wiring for owned draw submission", "Native presentation integration", "Glint core shader/pipeline/artwork now have separate explicit-input source support (native-armor-glint-source.json), while selection, recorded uniforms, phase insertion and runtime verification remain unfinished; HDR/sRGB remains unported", "Runtime cross-backend and Java comparisons"],
+  "verified": {"built":false, "tested":false, "shaderCompiled":false, "pipelineCreated":false, "drawRecorded":false, "gpuExecuted":false, "liveWorldRendered":false, "deterministicVideo":false, "fullParity":false}
+}

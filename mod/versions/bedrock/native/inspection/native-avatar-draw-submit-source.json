@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "evidence": "Current Rust source reads and edits only; no build, syntax check, tests, shader compilation, GPU calls, project/game execution or process inspection",
+  "submission": {
+    "module": "avatar_draw_submit",
+    "entry": "unsafe submit(queue,caller_owned_targets,uploaded,pipelines,constants,groups,uniform_indices)",
+    "callerLease": "Targets.from_owned requires an actual current native world color/depth owner, per-plane states and a thread-safe retained owner token; identifiers and COM pointers do not establish that lease",
+    "joins": ["nonzero native world scope", "packet session/sequence", "surface dimensions", "distinct color/depth resources", "same device for targets, uploaded geometry, constants and pipelines", "direct queue and compatible node", "resource/view formats", "matching multisample descriptions", "RTV/DSV resource flags", "explicit stencil-plane state when needed"],
+    "recording": "Construct the Java order once, create private RTV/DSV heaps and direct allocator/list, set matching viewport/scissor, record ordered geometry, restore incoming states and close before queue execution",
+    "stateTransitions": "Color plane 0 -> RENDER_TARGET; depth plane 0 -> DEPTH_WRITE; stencil plane 1 -> DEPTH_READ with READ_ONLY_STENCIL DSV; restore every changed plane in reverse order",
+    "shape": "Single-mip, single-array Texture2D surfaces matching the packet; typed or compatible typeless color/depth resource formats",
+    "stencilContents": "Stencil testing/writes remain disabled by the material pipelines; separate incoming stencil state is retained/restored",
+    "preparationFailure": "Drop an unsubmitted private list; no GPU target modifications have executed",
+    "owners": ["native target owner token", "color/depth COM references", "uploaded vertex/index/textures/SRV heap", "constant allocation", "cached pipeline Arc", "RTV/DSV heaps", "allocator", "command list", "queue", "device", "private fence"],
+    "completion": "Return only a private-fence-retired receipt for the caller-supplied scope; not shader/pixel or independently observed native-lease verification",
+    "automaticRuntimeDrawInvocation": false,
+    "nativeTargetLeaseProducerImplemented": false
+  },
+  "sharedRetirement": {
+    "module": "gpu_flight",
+    "uploadSlots": 1,
+    "drawSlots": 3,
+    "preSubmitChecks": "Queue, allocator and list must belong to the supplied direct device",
+    "ownershipTransfer": "All owners enter a ticket before ExecuteCommandLists",
+    "completion": "Private fence is signaled once and must complete value 1; UINT64_MAX is not success",
+    "droppedPendingTicket": "Move into its bounded abandoned slot and retain its permit/owners",
+    "signalFailure": "Keep submitted owners even without a usable completion signal; release only on proven retirement or reported device removal",
+    "polling": "Nonblocking; no helper threads, sleeps or timeout release",
+    "destruction": "Retired payload/native owner destructors run outside slot locks to permit adapter reentry",
+    "runtimeCleanup": "DX12 before-frame callback collects retired upload/draw payloads even when no new draw is requested",
+    "cleanupImpliesNewDrawing": false
+  },
+  "observerIsolation": {
+    "guard": "depth_tracker.private_commands preserves/restores the previous TLS marker across nested private/readback scopes",
+    "coverage": "Upload/draw recording and shared submission exclude Arctic-owned descriptors, lists, barriers and submissions from native-world evidence",
+    "readback": "Existing readback scopes use the same nesting-safe guard",
+    "nativeProofGranted": false
+  },
+  "remaining": [
+    "Installed-game native target lease/state producer and synchronization against engine writes/reuse",
+    "Authoritative feature groups and Java-equivalent lightmap/fog/overlay/scene packed-light inputs",
+    "Native presentation callsite and suppression/readiness handover",
+    "General skin variants, glint, HDR/sRGB and DX11 path",
+    "Actual queue/device failure behavior, performance, rendering and deterministic replay/video validation"
+  ],
+  "verified": {"built":false, "tested":false, "gpuRecorded":false, "queueSubmitted":false, "fenceRetired":false, "nativeLeaseObserved":false, "liveWorldRendered":false, "deterministicVideo":false, "fullParity":false}
+}

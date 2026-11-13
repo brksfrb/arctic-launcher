@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "evidence": "Source reads/edits and cached Java shader resources read as ZIP data only; no build, test, syntax check, shader execution, game launch, attachment or process inspection",
+  "reference": {
+    "version": "26.2",
+    "resources": ["assets/minecraft/shaders/core/entity.vsh", "assets/minecraft/shaders/core/entity.fsh", "assets/minecraft/shaders/include/sample_lightmap.glsl", "assets/minecraft/shaders/include/fog.glsl"],
+    "hashes": "See native-avatar-material-source.json for the same pinned resource hashes"
+  },
+  "implementation": {
+    "module": "JavaEntityShader",
+    "input": "WorldFrame.javaEntityShaderInputs, schema 1, copied during validated world parsing; declared position space is required",
+    "fields": {"lightmap": "Exactly one of 1024 normalized pixel floats or explicit lightmapState generator inputs (java-lightmap-generator-source.json); resolves to row-major 16x16 RGBA", "colorModulator": "4 finite floats", "lightDirections": "6 finite floats, no implicit normalization", "fogPosition": "12 finite floats, row-major affine emitted-position to Java fog-position transform", "overlayColor": "4 normalized floats, actual selected NO_OVERLAY texel", "fogColor": "4 finite floats", "fogRanges": "environmental start/end, distance start/end; finite and non-reversed"},
+    "vertex": ["Signed-byte shader-normal conversion in existing pose sink", "Explicit front/back cardinal lighting", "Signed-short packed block/sky UV2 decoding", "Half-texel normalized clamp and bilinear 16x16 lightmap lookup", "Explicit transformed spherical/cylindrical fog distances", "Selected common/skin overlay texel emitted as RGBA vertex attributes", "Perspective-correct interpolation and clipping of RGBA lightmap/overlay/fog varyings"],
+    "fragment": ["Artwork-alpha cutout before tint/modulator", "Face vertex color times ColorModulator", "Interpolated vertex-stage overlay RGB mix, omitted for wings (entity-overlay-varying-source.json)", "Interpolated RGBA lightmap multiply, bypassed for emissive glow", "Environmental/distance fog RGB mix preserving alpha", "Quantization after shader stages", "Surviving zero-alpha base fragments still write depth"],
+    "roles": ["cosmetic base", "cosmetic glow", "cape solid", "wing cutout", "explicit normal skin with separate body overlay (java-skin-material-source.json)"],
+    "missingLight": "Explicit lightmap shading of a lit role requires a corresponding packed scene-light input; the preview fallback cannot establish it",
+    "previewCompatibility": "Constructors without explicit inputs retain the existing preview path",
+    "replay": "World rendering selects the new recorded material/lightmap track during replay appearance, with source-space/camera checks and no live profile fallback; see replay-entity-material-source.json"
+  },
+  "limitations": [
+    "No authoritative installed-game producer supplies Java-equivalent material/lightmap inputs yet",
+    "Untyped GENERAL skin and software glint retain separate paths; explicit normal skin now selects its own overlay, while ghost/outline/dissolve variants remain unfinished",
+    "The immutable profile now has ARCGEO02 native transport and packet-derived constant assembly; live capture and phase insertion remain unfinished (native-geometry-material-source.json)",
+    "Recorded material playback now covers exact/stable observations; changing-material reconstruction, generic fog-space rebasing and per-role/actor cohorts remain unfinished",
+    "Existing software blend/composition, raster precision and draw ordering do not establish GPU pixel equivalence",
+    "No runtime or deterministic-video comparison was performed"
+  ],
+  "verified": {"built": false, "tested": false, "shaderComparison": false, "liveGame": false, "gpuRendering": false, "deterministicVideo": false, "fullParity": false}
+}

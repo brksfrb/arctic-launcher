@@ -1,0 +1,139 @@
+{
+  "schema": 1,
+  "profiles": [
+    {
+      "productVersion": "1.26.5203.0",
+      "rootRva": 29581296,
+      "rootBytes": 7195,
+      "controllerRva": 30113536,
+      "setupRva": 29592656,
+      "layout": {
+        "children": 768,
+        "childStride": 80,
+        "childShared": 64,
+        "slots": 7,
+        "slotInParams": 508,
+        "componentReload": 880,
+        "hierarchyMap": 792,
+        "boneBytes": 232,
+        "boneHash": 8,
+        "boneMatrix": 56,
+        "boneExpression": 200,
+        "boneMethod": 228,
+        "boneOverride": 230,
+        "indexedMethod": 2,
+        "expressionMethod": 3
+      },
+      "functions": {
+        "wrapper": {
+          "rva": 29592080,
+          "bytes": 567,
+          "sha256": "a79070f8e40d6aa5bf15566218584a357b9212feb623612f036988e3ca223a28"
+        },
+        "draw": {
+          "rva": 29617808,
+          "bytes": 2195,
+          "sha256": "94db5103cfd291f0a45cd88a909f6ed234f487a20d82b08a53879fca6a6f875a"
+        },
+        "childGetter": {
+          "rva": 29098720,
+          "bytes": 776,
+          "sha256": "759a272058c0ce6fa7e07ef62d98d0face2ba29c1ac823ca348a3332ee3e6925"
+        }
+      },
+      "edges": [
+        {
+          "from": "root",
+          "to": "wrapper",
+          "siteRva": 29584875,
+          "kind": "call"
+        },
+        {
+          "from": "wrapper",
+          "to": "draw",
+          "siteRva": 29592496,
+          "kind": "jump"
+        },
+        {
+          "from": "draw",
+          "to": "childGetter",
+          "siteRva": 29618266,
+          "kind": "call"
+        },
+        {
+          "from": "draw",
+          "to": "controller",
+          "siteRva": 29619701,
+          "kind": "call"
+        }
+      ]
+    },
+    {
+      "productVersion": "1.26.60.5",
+      "rootRva": 93016656,
+      "rootBytes": 6665,
+      "controllerRva": 112367264,
+      "setupRva": 93027008,
+      "layout": {
+        "children": 768,
+        "childStride": 80,
+        "childShared": 64,
+        "slots": 7,
+        "slotInParams": 508,
+        "componentReload": 880,
+        "hierarchyMap": 792,
+        "boneBytes": 232,
+        "boneHash": 8,
+        "boneMatrix": 56,
+        "boneExpression": 200,
+        "boneMethod": 228,
+        "boneOverride": 230,
+        "indexedMethod": 2,
+        "expressionMethod": 3
+      },
+      "functions": {
+        "wrapper": {
+          "rva": 93026432,
+          "bytes": 567,
+          "sha256": "5845152e7d84fc67971a08461f6fe49f8d74ceaef5ee0567d90f5577b5f6a72c"
+        },
+        "draw": {
+          "rva": 93051600,
+          "bytes": 2048,
+          "sha256": "1b642a820442e204dadedd87830bbf922abf35602cb1aa25c1d8e59f296d71f4"
+        },
+        "childGetter": {
+          "rva": 102281296,
+          "bytes": 776,
+          "sha256": "b9032495419500b1bbdcf37635f9e1b296ae65f5f01b34ba65e3eef713da79f4"
+        }
+      },
+      "edges": [
+        {
+          "from": "root",
+          "to": "wrapper",
+          "siteRva": 93020206,
+          "kind": "call"
+        },
+        {
+          "from": "wrapper",
+          "to": "draw",
+          "siteRva": 93026848,
+          "kind": "jump"
+        },
+        {
+          "from": "draw",
+          "to": "childGetter",
+          "siteRva": 93052059,
+          "kind": "call"
+        },
+        {
+          "from": "draw",
+          "to": "controller",
+          "siteRva": 93053350,
+          "kind": "call"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.5203.0",
+  "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "evidence": "Cached text/pdata decoded as data, both cached text copies hashed, current source read/edited and manually reviewed. No game/module loading, builds, tests, syntax checks, project/helper/JNI/shader/GPU execution, process inspection, native calls or exports. Runtime parity remains unverified by user instruction.",
+  "nativeFacts": {
+    "cacheJoin": "The disassembler's 532e9a0cf3364fd7bea166acd1f12bb4 and xref reader's 11b625f494ac42bfbaeb3d4ddd5d31a2 cached .text sections both match textSha256. These are existing local copies, not a newly inspected live process.",
+    "slot": "The existing renderer+bde170 texture registry uses b8-byte entries. Getter candidate df9ee10..df9ef3b ensures the entry then returns slot+0 at df9ef30 without an AddRef/retained owner operation. It is not a lease API.",
+    "cleanup": "Pdata bounds identify df98520..df98873. At df9857f the routine tests slot+9b bit 40; when set it jumps to df9884b, bypassing the ordinary retirement and slot-clearing branch. An earlier auxiliary operation at df9854e..df98574 remains outside that bypass.",
+    "ordinaryPath": "At df9858c the routine loads the global pointer at RVA 12006060. At df985c4 it follows +19f50 to a context whose pointer vector uses +2cbe0/+2cbe8/+2cbf0. The current slot resource is appended on the fast path at df985de..df985e1, with a growth path in the same function. The first 40 slot bytes are cleared at df98839..df98848. This establishes pointer transfer/defer behavior, not a completed release/fence or allocator lease.",
+    "overrideCandidate": "df9ecd0..df9ee0c preserves its third incoming argument, calls df98520 at df9edf3, ORs slot+9b with 40 at df9edf8, and stores that argument into slot+0 at df9edff. This supports distinguishing the bypass path; no ownership or ABI call is inferred from a raw pointer.",
+    "wrapper": "df9ef40..df9f05f resolves the slot and tail-jumps to df98520 at df9f05a. Selected call sites and bodies were disassembled; raw rel32 scans remain candidate searches rather than proof that every match is an instruction boundary.",
+    "negativeStringSearch": "No requested D3D12MA/D3D12MemAlloc/Allocation@/TextureD3D12/MemoryAllocator ASCII marker was found by the bounded cached-rdata string scan. This does not establish allocator absence or identify a backing allocation owner."
+  },
+  "source": {
+    "guard": "Texture.copy now reads the whole slot+9b byte into its existing Copies guard set alongside the resource pointer. A changed retirement-path flag now invalidates transition joins, complete pair consumption and stable diagnostics even when slot+0 still has the same pointer.",
+    "diagnostic": "Stable attachment summaries expose ordinaryRetirementBypassed as the observed bit value; unavailable/changed slots expose null. Neither value means exclusive ownership, a retained external owner, safe insertion or successful GPU retirement.",
+    "bounds": "One extra one-byte read/guard per copied texture; existing 32-guard/2048-byte per-snapshot caps, nine attachment-role bound, registry/paging bounds and before/after rechecks remain. No new native hook, mutation, function invocation or COM object is obtained from a registry pointer.",
+    "preserved": "Only actual public barrier resource arguments are cloned as COM objects. Current native surface/descriptor/world/list joins remain. Cohort.native_owner and the actual feature-phase/material insertion producer are still required; the new bit guard does not construct them.",
+    "samplerReview": "Cached DynamicTexture.createTexture selects repeat plus nearest through SamplerCache.getRepeat(NEAREST); RenderSetup's ordinary withTexture supplier returns null so the texture supplies its sampler. Existing Arctic entity repeat/nearest sampling was retained without a speculative sampler change."
+  },
+  "remaining": [
+    "The context/vector consumer and native fence ordering are traced statically in native-fence-retirement-source.json. The committed creation route now has actual public-result owner source in native-committed-resources-source.json; allocator-managed backing and exclusive ownership remain unresolved. Do not call the cleanup/getter/growth routines as an acquisition API.",
+    "Actual native external/resource/descriptor-content owners, exclusive inline recording and the game-facing feature-phase/material producer/caller.",
+    "Complete live cosmetics/cape/emote/replay integration, matrix/material/visibility fidelity and deterministic video export.",
+    "Build, runtime lifetime/retirement/flag-change comparisons, installed-game rendering and full 1:1 parity verification."
+  ],
+  "verified": {"built":false,"tested":false,"nativeRoutineCalled":false,"retirementObservedLive":false,"retirementFenceProven":false,"allocatorLeaseImplemented":false,"nativeInsertionCallerImplemented":false,"liveGame":false,"gpuRendering":false,"deterministicVideo":false,"fullParity":false}
+}

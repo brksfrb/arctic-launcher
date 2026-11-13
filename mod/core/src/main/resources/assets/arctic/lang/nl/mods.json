@@ -685,5 +685,14 @@
   "mods.zoom_curve.linear": "Lineair",
   "mods.zoom_curve.snappy": "Vlot",
   "mods.zoom_key": "Zoomtoets",
-  "mods.zoom_sensitivity": "Zoomgevoeligheid"
+  "mods.zoom_sensitivity": "Zoomgevoeligheid",
+  "mods.hold_the_emote_wheel_key": "Houd de emotewieltoets ingedrukt",
+  "mods.let_go_to_play_the_selected_emote": "Laat los om de gekozen emote af te spelen",
+  "mods.choose_and_play_one_of_your_emotes": "Choose and play one of your emotes",
+  "mods.experimental_rendering_full_java_parity_is": "Experimentele weergave; volledige gelijkheid met Java is nog niet gecontroleerd.",
+  "mods.bedrock_cosmetics": "Bedrock-cosmetica",
+  "mods.experimental_skins_capes_wings_and_emotes_in": "Experimentele skins, capes, vleugels en emotes in Bedrock-werelden",
+  "mods.animate_capes": "Capes animeren",
+  "mods.play_animated_cape_frames_on_your_screen": "Frames van bewegende capes op je scherm afspelen",
+  "mods.choose_your_skins_capes_and_emotes_in_arctic": "Kies je skins, capes en emotes in Arctic Launcher → Cosmetica."
 }

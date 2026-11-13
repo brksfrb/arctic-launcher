@@ -685,5 +685,14 @@
   "mods.zoom_curve.linear": "Линейно",
   "mods.zoom_curve.snappy": "Резко",
   "mods.zoom_key": "Клавиша зума",
-  "mods.zoom_sensitivity": "Чувствительность зума"
+  "mods.zoom_sensitivity": "Чувствительность зума",
+  "mods.hold_the_emote_wheel_key": "Зажмите клавишу колеса эмоций",
+  "mods.let_go_to_play_the_selected_emote": "Отпустите, чтобы показать выбранную эмоцию",
+  "mods.choose_and_play_one_of_your_emotes": "Choose and play one of your emotes",
+  "mods.experimental_rendering_full_java_parity_is": "Экспериментальная отрисовка; полное соответствие Java ещё не проверено.",
+  "mods.bedrock_cosmetics": "Косметика Bedrock",
+  "mods.experimental_skins_capes_wings_and_emotes_in": "Экспериментальные скины, плащи, крылья и эмоции в мирах Bedrock",
+  "mods.animate_capes": "Анимировать плащи",
+  "mods.play_animated_cape_frames_on_your_screen": "Проигрывать кадры анимированных плащей на вашем экране",
+  "mods.choose_your_skins_capes_and_emotes_in_arctic": "Выбирайте скины, плащи и эмоции в Arctic Launcher → Косметика."
 }

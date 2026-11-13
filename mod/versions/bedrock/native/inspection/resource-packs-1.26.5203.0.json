@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.5203.0",
+  "inspectedAt": "2026-10-27",
+  "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "evidence": "Offline disassembly of the existing cached executable sections; not a runtime observation or test",
+  "client": {
+    "vtableRva": "0xe9731b0",
+    "resourceDelegateSlot": "0x60",
+    "resourceDelegateRva": "0x5dbdfb0",
+    "gameFieldOffset": "0x1a8",
+    "gameResourceGetterSlotBytes": "0x260",
+    "getterPolicy": "Decode only a bounded in-image plain mov/lea field getter, with at most three direct jump thunks; never invoke it"
+  },
+  "manager": {
+    "vtableRva": "0xe7b7f10",
+    "fullStackOffset": "0xb8",
+    "initializationFlagsOffset": "0xe8",
+    "composeRva": "0x14c8d20",
+    "composeEvidenceRvas": ["0x14c8d75", "0x14c8d93", "0x14c8db3", "0x14c8ddc", "0x14c8e34"],
+    "indexLookupRva": "0x14c4350",
+    "indexForwardIterationEvidenceRvas": ["0x14c44c2", "0x14c452e", "0x14c45a0", "0x14c45c1"],
+    "defaultLoadRva": "0x14c0070",
+    "defaultLoadEvidenceRvas": ["0x14c0270", "0x14c066f", "0x14c07ac", "0x14c07c1"]
+  },
+  "stack": {
+    "vtableRva": "0xe7c84b0",
+    "vectorOffset": 8,
+    "packInstanceStride": "0x128",
+    "packSharedPointerOffset": "0x100",
+    "subpackIndexOffset": "0x120",
+    "revisionByteOffset": "0x124",
+    "identityRanges": ["0x100..0x110", "0x120..0x125"],
+    "identityPolicy": "Exclude mutable PackStats and padding; revision byte is declaration-derived opaque identity, not a verified runtime counter",
+    "priority": "Forward vector order for resource lookup"
+  },
+  "resourcePack": {
+    "getResourceRva": "0x1931650",
+    "wrapperImplPointerOffset": 0,
+    "implBasePackPointerOffset": 8,
+    "implOverlayStrategyOffset": "0x18",
+    "implSubResourcePacksVectorOffset": "0x38",
+    "subResourcePackStride": 16,
+    "basePackAccessStrategyOffset": 8,
+    "lookupOrder": ["selected child with index -1", "own optional overlay strategy", "base pack strategy"],
+    "lookupEvidenceRvas": ["0x1931700", "0x1931733", "0x193180d", "0x1931839"]
+  },
+  "directoryStrategy": {
+    "vtableRva": "0xe7c9f40",
+    "locationGetterRva": "0x9e32e0",
+    "nameGetterRva": "0x19b8710",
+    "getAssetRva": "0x19b9540",
+    "strategyTypeGetterRva": "0x76c20",
+    "strategyType": 0,
+    "resolvedDirectoryStringOffset": "0x70",
+    "pathPrefixEvidenceRvas": ["0x19b9698", "0x19b9ade", "0x19b9af6", "0x19b9c36"],
+    "policy": "Only observed absolute directory strings; no ResourceFileSystem alias mapping, ZIP/encrypted strategy fallback, directory search, or SDK getter calls"
+  },
+  "bounds": {"packInstances": 64, "totalRoots": 64, "rootBytes": 4096, "totalPathBytes": 65536, "guardBytes": 262144, "guards": 2048},
+  "gameStarted": false,
+  "portBuilt": false,
+  "testsRun": false,
+  "activeEngineStackVerified": false
+}

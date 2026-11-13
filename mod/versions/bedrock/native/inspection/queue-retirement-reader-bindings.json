@@ -1,0 +1,163 @@
+{
+  "schema": 1,
+  "profiles": [
+    {
+      "productVersion": "1.26.5203.0",
+      "abi": "queueU64FenceU32TimeoutU8Return3",
+      "stackBytes": 2328,
+      "layout": {
+        "capacity": 272,
+        "rendererQueue": 13406816,
+        "queueObject": 0,
+        "used": 49856552,
+        "usedRead": 49858728,
+        "usedWrite": 49858736,
+        "free": 49858744,
+        "freeRead": 49860920,
+        "freeWrite": 49860928,
+        "fenceContext": 49860936,
+        "fenceObject": 24,
+        "fenceCompleted": 48,
+        "contextList": 48,
+        "contextFence": 183248,
+        "contextSubmitted": 183256,
+        "contextDeferred": 183264,
+        "deferredBytes": 24
+      },
+      "functions": {
+        "consumer": {
+          "rva": 234493248,
+          "bytes": 1260,
+          "sha256": "6398fb067de0829b3f3bea0b64cd4c9caffa2cc109e59f8487dea03b6f322156"
+        },
+        "caller": {
+          "rva": 234492176,
+          "bytes": 1066,
+          "sha256": "d64cdb7f45bfa6f6fafbf280007742e8e396d2e931c4dd347ec74213500302e3"
+        },
+        "poll": {
+          "rva": 234505344,
+          "bytes": 270,
+          "sha256": "2ffdc7a09163d7d0a0fcb41e9aa3e1aec0d2e401d819aa907f7872a15095093d"
+        },
+        "submit": {
+          "rva": 234504656,
+          "bytes": 317,
+          "sha256": "000977ff62d84808feb81f934dfac962b3fc52eaf35afa21375f40d5ec834aa6"
+        },
+        "allocator": {
+          "rva": 234503520,
+          "bytes": 396,
+          "sha256": "d34106c86a3a5f76fabaa45e4999e26a1cea8851d52e6b48f7310a0e22d60810"
+        }
+      },
+      "edges": [
+        {
+          "fromRole": "consumer",
+          "toRole": "poll",
+          "siteRva": 234493324
+        },
+        {
+          "fromRole": "consumer",
+          "toRole": "poll",
+          "siteRva": 234493397
+        },
+        {
+          "fromRole": "caller",
+          "toRole": "consumer",
+          "siteRva": 234492256
+        },
+        {
+          "fromRole": "caller",
+          "toRole": "allocator",
+          "siteRva": 234492955
+        },
+        {
+          "fromRole": "allocator",
+          "toRole": "consumer",
+          "siteRva": 234503619
+        }
+      ],
+      "runtimeVerified": false
+    },
+    {
+      "productVersion": "1.26.60.5",
+      "abi": "queueU64FenceU32TimeoutU8Return3",
+      "stackBytes": 2312,
+      "layout": {
+        "capacity": 272,
+        "rendererQueue": 13406824,
+        "queueObject": 0,
+        "used": 49856552,
+        "usedRead": 49858728,
+        "usedWrite": 49858736,
+        "free": 49858744,
+        "freeRead": 49860920,
+        "freeWrite": 49860928,
+        "fenceContext": 49860936,
+        "fenceObject": 24,
+        "fenceCompleted": 48,
+        "contextList": 48,
+        "contextFence": 183248,
+        "contextSubmitted": 183256,
+        "contextDeferred": 183264,
+        "deferredBytes": 24
+      },
+      "functions": {
+        "consumer": {
+          "rva": 243366032,
+          "bytes": 1254,
+          "sha256": "770e2f8006ac4eea500237fc4d5118c855410c7cb9df1b95ab2045877736574a"
+        },
+        "caller": {
+          "rva": 243364944,
+          "bytes": 1080,
+          "sha256": "343b98268e94ae0dae62429786990520c17c97021d8068ab81058c85e38ccd46"
+        },
+        "poll": {
+          "rva": 243378096,
+          "bytes": 280,
+          "sha256": "e1008ee457041dfb357bdefe77339b2aeb6296d9ebab1988846f616550388bd8"
+        },
+        "submit": {
+          "rva": 243377392,
+          "bytes": 331,
+          "sha256": "16bdd39e78173381782a23f00b75829277f4857d9ab1d1816175fece621a8546"
+        },
+        "allocator": {
+          "rva": 243376256,
+          "bytes": 396,
+          "sha256": "fa3f27e2ff70d85c82c89905b89d24561966476f43e1ec5ea6c740e48b3bc3d1"
+        }
+      },
+      "edges": [
+        {
+          "fromRole": "consumer",
+          "toRole": "poll",
+          "siteRva": 243366108
+        },
+        {
+          "fromRole": "consumer",
+          "toRole": "poll",
+          "siteRva": 243366181
+        },
+        {
+          "fromRole": "caller",
+          "toRole": "consumer",
+          "siteRva": 243365024
+        },
+        {
+          "fromRole": "caller",
+          "toRole": "allocator",
+          "siteRva": 243365723
+        },
+        {
+          "fromRole": "allocator",
+          "toRole": "consumer",
+          "siteRva": 243376355
+        }
+      ],
+      "runtimeVerified": false
+    }
+  ]
+}

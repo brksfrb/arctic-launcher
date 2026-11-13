@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "evidence": "Source inspection of AppearanceSnapshot, AppearanceAssets, AppearanceHistory, NativeEquipmentCapture, BedrockPlatform and ReplayAppearance; no project or game code executed",
+  "sourcePorted": true,
+  "problem": "Inline equipment was subject to the generic 8192-byte actor adapter limit despite retaining up to six slots with raw enchantment lists, component projections and optional layer inputs",
+  "newCapture": "Equipment JSON is retained as an asset up to 65536 UTF-8 bytes per actor; logical state carries optional bedrockEquipmentSource with schema 1 and its 40-character content hash",
+  "retainedSemantics": "Canonical empty and unknown groups/fields, raw list order and nullable shorts, recomputed components/foil and explicit cape layer facts are preserved without truncation",
+  "captureMemo": "At most 256 SHA-256-keyed references scoped to one AppearanceAssets owner; memo retains no equipment payloads or engine pointers; archive/history writer still verifies actual retained bytes",
+  "referenceValidation": "Exact schema/hash fields, bounded schema 1, lowercase 40-character hash; conflicting non-null inline and referenced equipment rejected",
+  "payloadValidation": "Archive metadata size checked against 64 KiB before allocation, followed by bounded read, manifest size, SHA-1 and independent SHA-256 checks; existing structural and semantic equipment validation retained",
+  "replayPreparation": "Private validated equipment shared by content hash across events and charged once against the existing resident budget at bytes*8+512; consumers read the resolved state",
+  "legacyInlineReaderRetained": true,
+  "newArchiveReadableByOldReadersVerified": false,
+  "genericActorAdapterLimitChanged": false,
+  "archiveTotalOrResidentLimitsChanged": false,
+  "readinessGatesChanged": false,
+  "sourceBuilt": false,
+  "sourceTested": false,
+  "archiveRoundTripVerified": false,
+  "capturePerformanceVerified": false,
+  "nativeAnimationParityVerified": false,
+  "deterministicVideoVerified": false
+}

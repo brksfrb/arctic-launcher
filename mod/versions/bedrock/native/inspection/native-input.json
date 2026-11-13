@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.5203.0",
+  "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "component": "MoveInputComponent",
+  "typeHash": "018b1887",
+  "stride": 100,
+  "offsets": {
+    "inputState": 0,
+    "rawInputState": 16,
+    "move": 36,
+    "flags": 96,
+    "paddling": 98
+  },
+  "inputBits": {
+    "sneakDown": 0,
+    "sneakToggleDown": 1,
+    "jumpDown": 7,
+    "upLeft": 9,
+    "upRight": 10,
+    "downLeft": 11,
+    "downRight": 12,
+    "up": 13,
+    "down": 14,
+    "left": 15,
+    "right": 16
+  },
+  "flagBits": { "sneaking": 0, "jumping": 4 },
+  "staticEvidence": {
+    "source": "Previously copied installed-image sections and public SDK declarations",
+    "sdkCommit": "9f7463515dd298a496da918285936d78c7416aad",
+    "componentHashReferenceRva": "02834858",
+    "jumpAccessorRva": "028348f0",
+    "sneakAccessorRva": "028349d0",
+    "movementAccessorRva": "02834b90"
+  },
+  "gameStarted": false,
+  "nativeMovementVerified": false
+}

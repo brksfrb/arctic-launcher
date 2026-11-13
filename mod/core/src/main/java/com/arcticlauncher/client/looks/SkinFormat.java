@@ -37,7 +37,7 @@ public final class SkinFormat {
 	}
 
 	/** Null for sizes that aren't a skin (W x W or W x W/2, W a multiple of 64). */
-	static BufferedImage modern(BufferedImage in) {
+	public static BufferedImage modern(BufferedImage in) {
 		int w = in.getWidth();
 		int h = in.getHeight();
 		if (w % BASE != 0 || (h != w && h * 2 != w)) {

@@ -1,0 +1,98 @@
+{
+  "schema": 1,
+  "purpose": "Source-only exact-family expression observer entries and register contracts",
+  "profiles": [
+    {
+      "productVersion": "1.26.5203.0",
+      "setupAbi": "modelItemSlotParamsActorFlags7",
+      "evalAbi": "expressionParamsResult2",
+      "parentRegister": "rbx",
+      "boneRegister": "rsi",
+      "setupStackBytes": 440,
+      "evalVirtualSlotBytes": 16,
+      "rootRva": 29581296,
+      "rootBytes": 7195,
+      "functions": {
+        "setup": {
+          "rva": 29592656,
+          "bytes": 7514,
+          "sha256": "00e06fc1c74e1e9033eafa76f410b50627edb704877ac204865fcee10a0ee008"
+        },
+        "wrapper": {
+          "rva": 29591216,
+          "bytes": 858,
+          "sha256": "ae06c7aa269eeb63f27a659ef24e41a23fad19319fec41a4e8c4400ce81b2d9f"
+        },
+        "evaluator": {
+          "rva": 8166912,
+          "bytes": 17,
+          "sha256": "fed7659cc3edd185c5402a7a9669e7f43eef0351089cdbc3461ea26bac849354"
+        }
+      },
+      "edges": [
+        {
+          "from": "root",
+          "siteRva": 29583300,
+          "to": "wrapper"
+        },
+        {
+          "from": "wrapper",
+          "siteRva": 29592051,
+          "to": "setup"
+        },
+        {
+          "from": "setup",
+          "siteRva": 29598420,
+          "to": "evaluator"
+        }
+      ],
+      "returnRva": 29598425
+    },
+    {
+      "productVersion": "1.26.60.5",
+      "setupAbi": "modelItemSlotParamsActorFlags7",
+      "evalAbi": "expressionParamsResult2",
+      "parentRegister": "r12",
+      "boneRegister": "rsi",
+      "setupStackBytes": 456,
+      "evalVirtualSlotBytes": 16,
+      "rootRva": 93016656,
+      "rootBytes": 6665,
+      "functions": {
+        "setup": {
+          "rva": 93027008,
+          "bytes": 7006,
+          "sha256": "3b5a841e8b21be2125699b773712a56dc0c31529a8c3a71b85ce42fb4f10e267"
+        },
+        "wrapper": {
+          "rva": 93025568,
+          "bytes": 851,
+          "sha256": "6ff84b5bea22280e8027960727a1d19d7efc3204f0fd5bb68c4bbaf6d038861e"
+        },
+        "evaluator": {
+          "rva": 8833760,
+          "bytes": 17,
+          "sha256": "fe9a0fe0aa4e2316f8e3cd3636f12bca61b9f962be1f6697fc819488af9d0763"
+        }
+      },
+      "edges": [
+        {
+          "from": "root",
+          "siteRva": 93018599,
+          "to": "wrapper"
+        },
+        {
+          "from": "wrapper",
+          "siteRva": 93026396,
+          "to": "setup"
+        },
+        {
+          "from": "setup",
+          "siteRva": 93032304,
+          "to": "evaluator"
+        }
+      ],
+      "returnRva": 93032309
+    }
+  ]
+}

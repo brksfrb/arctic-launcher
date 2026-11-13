@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "profiles": [
+    {
+      "productVersion": "1.26.5203.0",
+      "rva": 1596624,
+      "bytes": 74,
+      "sha256": "9eb31898f865e72b2caddbbafc9c867be1f5626a8e4ce17279ebd3d24ac4103b",
+      "slotBytes": 64,
+      "vectorOffset": 920,
+      "elementBytes": 4,
+      "abi": "componentAndOutputSpan2"
+    },
+    {
+      "productVersion": "1.26.60.5",
+      "rva": 32012608,
+      "bytes": 74,
+      "sha256": "975a6dc1fabeb81f845a4c80367fb248445796755b2ce93c5e262662f829e199",
+      "slotBytes": 64,
+      "vectorOffset": 920,
+      "elementBytes": 4,
+      "abi": "componentAndOutputSpan2"
+    }
+  ]
+}

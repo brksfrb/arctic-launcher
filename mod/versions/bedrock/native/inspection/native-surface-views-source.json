@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "evidence": "Static source port and manual source review only; no builds, syntax checks, tests, project/game execution, GPU/API calls, process inspection or Bedrock operations",
+  "sourcePort": {
+    "module": "native_surface_views",
+    "callbacks": ["CreateRenderTargetView", "CreateDepthStencilView", "CopyDescriptors", "CopyDescriptorsSimple"],
+    "integration": "depth_tracker marks destination metadata pending before forwarding the real call and publishes the copied arguments after that original call returns",
+    "bounds": {"viewEntries":4096, "copyDescriptors":256, "singleArrayTexture2D":true, "maximumWidth":16384, "maximumHeight":16384, "maximumFramebufferRoles":9},
+    "identity": "Per-object private scalar tokens on actual public device/resource arguments; global monotonic token/revision counter; recycled interface addresses are not persistent identities",
+    "ownership": "Metadata stores copied scalar descriptors and identity tokens only, without GPU object references or raw COM pointers",
+    "views": "Single-array Texture2D and Texture2DMS; explicit format/mip/RTV plane/DSV flags retained; restricted typed null-descriptor defaults; unsupported or null resource arguments leave the overwritten handle unknown",
+    "copyRules": "Snapshot every source before invalidating destinations; exact nonzero handle counts; bound 256; reject overlapping source/destination or duplicate destination handles; unknown sources remain unknown",
+    "publication": "Destination revision and copied source revisions must survive the real driver call; pending or superseded writes cannot publish old known mappings; capacity invalidation and counter exhaustion fail closed; writes while observation is disabled clear old mappings before returning",
+    "bindingJoin": "The actual OMSetRenderTargets list supplies its device; descriptor kind/handle/device token, resource token and resource description must match the scoped native attachment's real transition resource",
+    "scope": "Attachments retain up to nine role snapshots inside the original native framebuffer call; a complete single color/depth pair may transfer to the bounded native list binding shadow; exact role/handle counts and descriptor revisions are rechecked on consumption",
+    "rechecks": "Descriptor snapshots must retain their exact revision/value, with the full descriptor cohort rechecked under one metadata lock; existing framebuffer/texture/resource guards are also retained",
+    "unknownOperations": "Malformed legacy barrier arrays, aliasing barriers and enhanced barriers invalidate the current framebuffer resource cohort; partial, split and post-bind transitions were already rejected",
+    "output": "Scalar format/mip/plane/sample/dimension/DSV flag facts and per-role/aggregate argument-correlation status; no addresses and no rendering authorization"
+  },
+  "limitations": [
+    "The original view creation APIs return void; observed argument metadata does not establish driver validation or valid physical descriptor contents",
+    "Array, 3D, buffer and unsupported default-format views remain unknown",
+    "Only attachment resources already witnessed by actual transitions in the same native framebuffer call can join; unchanged-state, deferred-first-use and default swapchain resources remain unresolved",
+    "Late attachment can miss prior view creation; the source does not fabricate metadata for unseen descriptors",
+    "Read-only DSV flags are preserved as supplied facts, without promoting them to known queued depth/stencil states",
+    "Descriptor correlation does not establish exclusive target ownership, safe native insertion or asset retirement on the native queue",
+    "Actual world/shader/feature-group joins, installed-game native rendering and full parity remain unfinished"
+  ],
+  "verified": {"built":false, "tested":false, "hookExecuted":false, "viewObservedLive":false, "surfaceViewMappingVerified":false, "queuedGpuStateVerified":false, "targetLeaseVerified":false, "gpuWorldRendered":false, "deterministicVideo":false, "fullParity":false}
+}

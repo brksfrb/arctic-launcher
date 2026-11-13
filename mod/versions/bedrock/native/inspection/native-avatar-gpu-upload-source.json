@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "evidence": "Current Rust sources read and edited only; no compilation, syntax check, test, GPU call, game/project execution or process inspection",
+  "implementation": {
+    "module": "avatar_gpu_upload",
+    "entry": "begin(device,direct_queue,decoded_frame)",
+    "completion": "Ticket.take_completed is nonblocking; returns Uploaded once after the upload fence completes",
+    "emptyFrame": "Returns None without recording/submitting GPU commands",
+    "automaticPresentationInvocation": false,
+    "engineMeshAllocatorInvoked": false
+  },
+  "resources": {
+    "vertices": "One owned default-heap buffer; 40-byte packet vertex records; per-draw vertex buffer views",
+    "indices": "One owned default-heap buffer; R32_UINT canonical quad indices; per-draw index buffer views",
+    "textures": "Owned RGBA8_UNORM default-heap textures plus one white fallback texel",
+    "textureConversion": "Little-endian ARGB u32 source bytes B,G,R,A become R,G,B,A without premultiplication or color-space conversion",
+    "descriptors": "One shader-visible SRV heap; slot 0 white, packet texture N uses slot N+1",
+    "upload": "One owned generic-read upload buffer, capped at 134217728 bytes",
+    "footprints": "GetCopyableFootprints with zero base offset; validate format/dimensions/rows/row size/pitch/extent before placing each texture at an independently aligned 512-byte offset",
+    "padding": "Upload allocation initialized before copying; row padding never reads beyond packet pixels",
+    "finalStates": ["VERTEX_AND_CONSTANT_BUFFER", "INDEX_BUFFER", "PIXEL_SHADER_RESOURCE"],
+    "worldResourcesTouched": false
+  },
+  "identityAndBounds": {
+    "queue": "Matching device identity, direct list type, one valid node bit with default node zero mapped to heap bit 1",
+    "input": "Recheck draw/texture budgets, attribute and index lengths, quad counts, total vertex/index bytes, dimensions and pixel bytes before GPU allocation",
+    "maximumDraws": 2048,
+    "maximumVertices": 400000,
+    "maximumIndices": 600000,
+    "maximumPacketTextures": 32,
+    "maximumTextureSide": 4096,
+    "maximumPacketTexturePixels": 16777216,
+    "nativeWorldJoin": "Still required from the rendering owner; this upload API alone does not prove session/frame freshness, native producer scope, camera or world depth"
+  },
+  "retirement": {
+    "concurrency": "Single global upload permit",
+    "preSubmissionFailure": "Ordinary COM owners and permit guard release preparation allocations; no command list has executed",
+    "submission": "All GPU resources, staging buffer, allocator, command list, queue, device and fence enter Ticket before ExecuteCommandLists",
+    "success": "Private fence must complete value 1; upload staging owners retire while Uploaded retains draw resources",
+    "deviceRemoval": "GetDeviceRemovedReason must report removal before removal cleanup; UINT64_MAX fence sentinel is not success",
+    "abandonment": "An unfinished dropped ticket moves into one global retirement slot, retaining the permit and all owners",
+    "signalFailure": "Submitted work remains owned even if signaling fails; no unproven completion or timeout release",
+    "reclamation": "A later begin call rechecks abandoned fence/device state before allowing another submission",
+    "laterDrawLifetime": "The actual draw owner must retain Uploaded until its own draw fence; upload completion is not draw completion",
+    "helperThreadsOrBlockingWaits": false
+  },
+  "remaining": ["Native presentation integration", "World/depth/camera ownership joins", "Live material-input and feature-group producers", "Native target lease producer for avatar_draw_submit", "DX11 path", "Lighting/fog/glint fidelity", "Runtime validation and full parity"],
+  "verified": {"built":false, "tested":false, "gpuUploadExecuted":false, "liveWorldRendering":false, "deterministicVideo":false, "fullParity":false}
+}

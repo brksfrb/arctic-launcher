@@ -685,5 +685,14 @@
   "mods.zoom_curve.linear": "一定",
   "mods.zoom_curve.snappy": "きびきび",
   "mods.zoom_key": "ズームキー",
-  "mods.zoom_sensitivity": "ズーム感度"
+  "mods.zoom_sensitivity": "ズーム感度",
+  "mods.hold_the_emote_wheel_key": "エモートホイールのキーを押したままにする",
+  "mods.let_go_to_play_the_selected_emote": "離すと選んだエモートを再生",
+  "mods.choose_and_play_one_of_your_emotes": "Choose and play one of your emotes",
+  "mods.experimental_rendering_full_java_parity_is": "実験的な描画です。Java版との完全な一致はまだ確認されていません。",
+  "mods.bedrock_cosmetics": "統合版コスメティック",
+  "mods.experimental_skins_capes_wings_and_emotes_in": "統合版ワールドでの実験的なスキン、マント、翼、エモート",
+  "mods.animate_capes": "マントをアニメーション",
+  "mods.play_animated_cape_frames_on_your_screen": "画面上でアニメーションマントのフレームを再生",
+  "mods.choose_your_skins_capes_and_emotes_in_arctic": "スキン、マント、エモートはArctic Launcher → コスメティックで選べます。"
 }

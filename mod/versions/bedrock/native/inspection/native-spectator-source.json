@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "evidence": "Cached native sections decoded as data, primary SDK declarations and source reads/edits only; no builds, tests, syntax checks, project/game execution or Bedrock launch",
+  "nativeReference": {
+    "productVersion": "1.26.5203.0",
+    "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+    "componentName": "ActorGameTypeComponent",
+    "componentHash": "0x88d3eddf",
+    "declaration": "https://docs.levimc.org/LeviLamina/api/d4/da5/ActorGameTypeComponent_8h_source.html",
+    "enum": "https://raw.githubusercontent.com/LiteLDev/LeviLamina/4ca13569fc0d1cdeb873cf6e7c48ddcc7a74e59c/src/mc/world/level/GameType.h",
+    "layout": "SDK declares one TypedStorage<4,4,GameType> member; native consumers independently index four-byte packed components at offset zero",
+    "consumer1": "0x209d80..0x209e82 uses the exact hash, sparse generation and 128-element packed-page lookup; dword load at 0x209e5a, Default(5) comparison at 0x209e5e",
+    "consumer2": "0x19e0840..0x19e095a uses the exact hash and dword packed load at 0x19e0916. It distinguishes Undefined(-1), direct Spectator(6), and Default(5) with an indirect level-mode result. No native function is called by the reader.",
+    "registration": "0x229c10..0x229ca2 emits type metadata including hash 0x88d3eddf",
+    "defaultMode": {
+      "clientLevelVtableRva": "0xe8e9380",
+      "constructor": "0x4860400..0x4860783 calls base constructor 0x222cb50, then installs this primary vtable at 0x486046a; destructor independently reinstalls it at 0x486097f",
+      "virtualSlot": "0x460 (entry 140), containing getter RVA 0x2241430",
+      "getter": "48 8b 81 f0 0b 00 00 8b 80 28 01 00 00 c3: load [level+0xbf0], then signed GameType dword at data+0x128, return",
+      "sharedReference": "Base constructor copies object/control pointers to level+0xbf0/0xbf8 at 0x222cc6a/0x222cc76 and increments the control strong count at control+8 at 0x222cc3e",
+      "scope": "Constructor/getter evidence comes from cached native sections, independent of older SDK Level layouts. The reader does not invoke this virtual slot or increment a reference count."
+    }
+  },
+  "port": {
+    "reader": "players.spectator uses the existing guarded ECS traversal for a four-byte component, with two equal scalar copies and repeated actor-context, registry-generation and component-location checks",
+    "output": "Owned Option<bool> in Components; direct Survival(0), Creative(1), Adventure(2) map to false and Spectator(6) maps to true. Default(5) uses the optional native_game_mode copied level-data reader with the same supported resolved values.",
+    "defaultModeReader": "Configured only after full executable-section hash validation, with an additional exact getter-byte and vtable-slot fingerprint. Two equal copies include the shared object/control pair and scalar mode. Both copies check the exact client-level vtable, bounded nonzero control counts and unchanged shared pair; actor-to-level identity is rechecked. Outer component/context/generation checks bracket the fallback.",
+    "unknown": "Missing storage, unmatched getter/vtable, changing copies/identity, expired/implausible shared metadata, Undefined(-1), unresolved Default(5) and other unsupported values remain None. A fallback fingerprint mismatch leaves direct actor modes available; no absent/default value is relabeled nonspectator.",
+    "transport": "live_frame.player emits Components.spectator into javaLayerVisibility alongside copied invisibility; showCape stays explicitly null",
+    "consumption": "Existing JavaLayerVisibility parsing, rendering, per-role native eligibility, independent fact interpolation and body-v7 replay recording consume the new fact",
+    "bounds": "No new native object lifetime, virtual call, component write, draw suppression or process inspection is introduced. Shared-reference/count observations are copied metadata and do not establish a lifetime lease or atomic cross-object snapshot.",
+    "fixtureMaintenance": "The existing Actor fixture initializes the new optional component field to None; no new test or test execution"
+  },
+  "remaining": [
+    "Runtime validation of the optional copied default-mode source and transition behavior",
+    "Cape-option and complete normal-skin visibility inputs",
+    "Native feature/material producer, scene ownership and live insertion",
+    "Runtime spectator/rendering/replay fidelity verification"
+  ],
+  "verified": {"built": false, "tested": false, "liveComponentRead": false, "liveDefaultModeRead": false, "liveGame": false, "gpuRendering": false, "deterministicVideo": false, "fullParity": false}
+}

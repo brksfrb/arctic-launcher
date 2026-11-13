@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "evidence": "Source reads/edits and cached Java classes decoded as data only; no class loading, builds, tests, syntax checks, project/game execution or Bedrock operations",
+  "reference": {
+    "fabric": "CosmeticsLayer submit/render calls draw(worn cosmetics) before drawLimbs in all supported version branches",
+    "layer": "AvatarRendererMixin and OldPlayerRendererMixin append CosmeticsLayer at constructor TAIL",
+    "skin": "The expressive rig hides only bending original limbs; normal body pieces remain in the earlier player model. A legacy joint-only non-expressive emote does not enter the mixin's hide branch even though CosmeticsLayer.drawLimbs still emits custom split geometry (player-part-traversal-source.json).",
+    "customBase": "Canvas.base uses entityTranslucent and the default submit collector; cached SubmitNodeStorage.submitCustomGeometry delegates to order(0)",
+    "glow": "Canvas.glow explicitly uses order(1) with entityTranslucentEmissive",
+    "phase": "Cached SubmitNodeCollection.submitCustomGeometry routes blended non-outline types to translucentCustomGeometry",
+    "capeInheritance": "Cached PlayerCapeModel extends PlayerModel, invokes PlayerModel.setupAnim and attaches its cape beneath BODY. PlayerModelEmoteMixin's setupAnim tail therefore also poses and hides the cape model's bent body.",
+    "capeTraversal": "Cached ModelPart.render returns immediately for visible=false, before walking children. PlayerModelEmoteMixin hides BODY when Rig.expressive and SkinLimbs.bends(BODY); Rig.split recognizes chest/pelvis bones.",
+    "separateLayers": "CosmeticsLayer applies part transforms directly rather than calling ModelPart.render; WingsLayer submits an independent ElytraModel. The cape body's hidden flag does not remove either layer's geometry.",
+    "emptyCapeSubmit": "Cached CapeLayer.submit tests invisibility/showCape/texture/equipment but does not skip a hidden model BODY; it still calls SubmitNodeCollector.submitModel. The hidden model then emits no vertices, retaining its phase/consolidation boundary."
+  },
+  "change": {
+    "before": "AvatarRenderer emitted bent skin in its early normal skin loop, before cape/wing and worn submissions",
+    "after": "The early skin loop omits bending originals only for expressive rigs; after cape/wing and all worn models, it emits matching custom bent pieces through bentSkinSink with the cosmetic base material. Legacy joint-only originals remain in the normal loop.",
+    "attributes": "Retains copied poses, emote-only joint curves, sample time, packed scene light, skin texture and existing skin tint",
+    "normalTraversal": "Normal model skin now follows the cached root definition's default HashMap-to-ordered-bake traversal, retaining cube-before-child emission. The later custom bent path keeps SkinLimbs enum order; these are different traversal sources (player-part-traversal-source.json).",
+    "legacyJoints": "Normal originals are now hidden only for expressive rigs. Non-expressive joint-only animations keep both original normal parts and the separately submitted custom split pieces, as current Fabric source does.",
+    "opacity": "The worn-layer opacity scope is restored before bent skin, whose tint already carries its own alpha",
+    "paths": "Shared AvatarDrawTarget emission updates both Raster3D and NativeAvatarGeometry",
+    "capeVisibility": "AvatarRenderer emits no cape vertices for an expressive emote with a split BODY, matching inherited cape-parent visibility, but retains an empty cape model submit (java-simple-phase-source.json). Normal skin visibility is not reused as another model's visibility receipt; worn attachments and independent wings retain their paths."
+  },
+  "remaining": [
+    "Authoritative feature-group/object/equality identities and native phase insertion",
+    "Native-only texture identifiers and source-backed factory/cache identities; Arctic named identifiers are carried separately from copied image identity",
+    "General skin material variants, native visibility producers, invisible/spectator layer eligibility and native emote attachment fidelity",
+    "Runtime draw-order/pixel and full parity verification"
+  ],
+  "verified": {"built": false, "tested": false, "liveGame": false, "gpuRendering": false, "fullParity": false}
+}

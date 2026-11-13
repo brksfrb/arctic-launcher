@@ -1,0 +1,14 @@
+{
+  "name": "arctic-bedrock-offline-connector",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "description": "Local Bedrock connector for servers accepting unsigned player identities; never requests Xbox tokens",
+  "engines": { "node": ">=24" },
+  "scripts": { "test": "node --test", "start": "node connector.cjs" },
+  "dependencies": {
+    "bedrock-protocol": "3.60.1",
+    "prismarine-xbox-services": "https://codeload.github.com/PrismarineJS/prismarine-xbox-services/tar.gz/052a9676f514c5470a723651b1dbb1adcf238944"
+  },
+  "overrides": { "prismarine-xbox-services": "$prismarine-xbox-services" }
+}

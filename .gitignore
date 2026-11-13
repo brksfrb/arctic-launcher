@@ -39,3 +39,9 @@ __pycache__/
 # Cosmetic kit output (regenerate with the scripts in tools/)
 /crates/arctic-cosmetics/assets/tools/out/
 /crates/arctic-cosmetics/assets/tools/__pycache__/
+
+# Bedrock standalone native build and local relay dependencies
+/mod/versions/bedrock/native/target/
+/mod/versions/bedrock/offline/node_modules/
+/mod/versions/bedrock/build/
+/mod/versions/bedrock/.gradle/

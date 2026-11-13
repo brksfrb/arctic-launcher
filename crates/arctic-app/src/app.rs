@@ -955,6 +955,12 @@ impl ArcticApp {
                 self.trim_now(ctx);
             }
         }
+        if (!tray_on || crate::tray::quitting())
+            && ctx.input(|i| i.viewport().close_requested())
+            && self.prepare_bedrock_close()
+        {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        }
         if crate::trim::tick(ctx, self.runs.any_game(), self.tab as usize) {
             self.trim_now(ctx);
         }
@@ -1062,7 +1068,7 @@ impl ArcticApp {
             ctx.request_repaint_after(left);
             return;
         }
-        if self.runs.any_active() {
+        if self.runs.any_active() || self.bedrock.background_active() {
             // A game or a launch is going: look again later.
             self.hidden_since = Some(std::time::Instant::now());
             return;
@@ -1232,7 +1238,7 @@ impl ArcticApp {
             Event::ChatNew(after, result) => self.on_chat_new(after, result),
             Event::PublicServers(list) => self.on_public_servers(list),
             Event::ServerSubmitted(result) => self.on_server_submitted(result),
-            Event::Bedrock(e) => self.on_bedrock_event(e),
+            Event::Bedrock(e) => self.on_bedrock_event(*e),
             Event::Screenshots(list) => self.on_screenshot_list(list),
             Event::ScreenshotThumb(path, result) => self.on_screenshot_thumb(ctx, path, result),
             Event::ScreenshotCopied(result) => self.on_screenshot_copied(result),
@@ -1421,6 +1427,13 @@ impl eframe::App for ArcticApp {
         while let Ok(event) = self.events.try_recv() {
             self.handle_event(event, ctx);
         }
+        self.bedrock_poll_offline();
+        if self.bedrock.background_active() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(250));
+        }
+        if self.bedrock.recording_close_ready() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
         if std::mem::take(&mut self.maximize_pending) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
         }
@@ -1429,7 +1442,7 @@ impl eframe::App for ArcticApp {
             self.settings.auto_install_updates,
             self.settings.restart_hidden_for_updates,
             self.settings.update_channel,
-            self.runs.any_active(),
+            self.runs.any_active() || self.bedrock.background_active(),
         );
         let playing = self.runs.any_active();
         if !playing {
@@ -1534,6 +1547,8 @@ impl eframe::App for ArcticApp {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.bedrock.cancel_video_export();
+        self.bedrock.close_recording(&self.tasks);
         self.cancel_login();
         if self.settings.exit_games_with_launcher {
             for run in self.runs.active() {

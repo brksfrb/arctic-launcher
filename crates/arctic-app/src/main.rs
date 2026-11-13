@@ -42,6 +42,7 @@ mod tray;
 mod tray_host;
 mod trim;
 mod ui;
+mod video_decoder;
 mod video_encoder;
 mod voice;
 mod voice_svc;
@@ -68,6 +69,12 @@ fn main() -> eframe::Result {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().map(String::as_str) == Some("--video-tool") {
         std::process::exit(video_encoder::run_tool(&args[1..]));
+    }
+    if args.first().map(String::as_str) == Some(video_encoder::STREAM_SWITCH) {
+        std::process::exit(video_encoder::run_stream(&args[1..]));
+    }
+    if args.first().map(String::as_str) == Some(video_decoder::SWITCH) {
+        std::process::exit(video_decoder::run(&args[1..]));
     }
     let dirs = match DataDirs::resolve() {
         Ok(dirs) => dirs,

@@ -122,6 +122,20 @@ final class ModCatalog {
 			chat(out, c);
 		}
 		social(out, c);
+		if (p.supportsNativeCosmeticsPreview()) {
+			out.add(new Mod("bedrock-cosmetics", Lang.t("mods.bedrock_cosmetics"), Lang.t("mods.experimental_skins_capes_wings_and_emotes_in"), "looks", Category.SOCIAL,
+					"bedrock native skin cape elytra wings emote experimental")
+					.toggle(() -> c.bedrockNativeCosmetics, on -> c.bedrockNativeCosmetics = on)
+					.settings((host, f) -> {
+						f.note(Lang.t("mods.experimental_rendering_full_java_parity_is"));
+						f.note(Lang.t("mods.choose_your_skins_capes_and_emotes_in_arctic"));
+						f.section(Lang.t("mods.animation"));
+						f.toggle(Lang.t("mods.animate_capes"), Lang.t("mods.play_animated_cape_frames_on_your_screen"), () -> !c.reduceCapeMotion, on -> c.reduceCapeMotion = !on);
+						f.key(Lang.t("mods.emote_wheel_key"), Lang.t("mods.choose_and_play_one_of_your_emotes"), Form.key(() -> c.emoteKey, k -> c.emoteKey = k));
+						f.toggle(Lang.t("mods.hold_the_emote_wheel_key"), Lang.t("mods.let_go_to_play_the_selected_emote"), () -> c.emoteWheelHold, on -> c.emoteWheelHold = on);
+					}));
+		}
+
 		out.add(hudStyle(c));
 		for (final HudWidget w : ArcticClient.hud().widgets()) {
 			final HudSlot slot = ArcticClient.hud().slot(w);

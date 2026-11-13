@@ -94,6 +94,73 @@ public final class Rig {
 		}
 	}
 
+	/**
+	 * Matrix-preserving form for native adapters. Each baseline is a rigid,
+	 * row-major 3x4 part-to-model transform in blocks. Emote offsets are still
+	 * pixels, as in {@link #pose}; results are new matrices and never change the
+	 * engine's input. Untouched rotations do not pass through Euler extraction.
+	 */
+	public static float[][] poseMatrices(Animation animation, float t, float[][] baseline) {
+		if (baseline == null || baseline.length != PARTS || !Float.isFinite(t)) {
+			throw new IllegalArgumentException("emote posing needs six native part matrices and a finite time");
+		}
+		for (float[] m : baseline) {
+			if (m == null || m.length != 12) throw new IllegalArgumentException("invalid native part matrix");
+			for (float v : m) if (!Float.isFinite(v)) throw new IllegalArgumentException("invalid native part matrix");
+		}
+		float[][] result = new float[PARTS][];
+		if (animation == null) {
+			for (int i = 0; i < PARTS; i++) result[i] = baseline[i].clone();
+			return result;
+		}
+		if (!expressive(animation)) {
+			for (int i = 0; i < PARTS; i++) {
+				String bone = i == BODY ? "body" : BONES[i];
+				float[] r = animation.rotation(bone, t);
+				float[] p = animation.position(bone, t);
+				float[] m = baseline[i].clone();
+				if (r != null) putRotation(m, euler(r, DEG));
+				if (p != null) { m[3] += p[0] / 16f; m[7] -= p[1] / 16f; m[11] += p[2] / 16f; }
+				result[i] = m;
+			}
+			return result;
+		}
+		float[] rootRot = orZero(animation.rotation("root", t));
+		float[] rootPos = orZero(animation.position("root", t));
+		float[] root = euler(0, rootRot[1] * DEG, 0);
+		boolean split = split(animation);
+		float[] torso = euler(orZero(animation.rotation(split ? "chest" : "torso", t)), DEG);
+		float[] legs = split ? mul(torso, euler(orZero(animation.rotation("pelvis", t)), DEG)) : null;
+		float[] waist = {baseline[BODY][3] * 16f, baseline[BODY][7] * 16f + (split ? MIDDLE : WAIST), baseline[BODY][11] * 16f};
+		float[] lift = {rootPos[0], -rootPos[1], rootPos[2]};
+		for (int i = 0; i < PARTS; i++) {
+			float[] r = i == BODY ? null : animation.rotation(BONES[i], t);
+			float[] local = i == BODY ? identity() : r == null ? rotationOf(baseline[i]) : euler(r, DEG);
+			float[] pivot = {baseline[i][3] * 16f, baseline[i][7] * 16f, baseline[i][11] * 16f};
+			float[] offset = BONES[i] == null ? null : animation.position(BONES[i], t);
+			if (offset != null) { pivot[0] += offset[0]; pivot[1] -= offset[1]; pivot[2] += offset[2]; }
+			float[] frame = ON_TORSO[i] ? torso : legs;
+			if (frame != null) {
+				pivot = add(waist, apply(frame, sub(pivot, waist)));
+				local = mul(frame, local);
+			}
+			pivot = add(apply(root, pivot), lift);
+			float[] m = new float[12];
+			putRotation(m, mul(root, local));
+			m[3] = pivot[0] / 16f; m[7] = pivot[1] / 16f; m[11] = pivot[2] / 16f;
+			result[i] = m;
+		}
+		return result;
+	}
+
+	private static float[] rotationOf(float[] m) {
+		return new float[] {m[0], m[1], m[2], m[4], m[5], m[6], m[8], m[9], m[10]};
+	}
+
+	private static void putRotation(float[] target, float[] rotation) {
+		for (int row = 0; row < 3; row++) System.arraycopy(rotation, row * 3, target, row * 4, 3);
+	}
+
 	private static float[] localRotation(Animation animation, String bone, float t, float[] current) {
 		float[] r = animation.rotation(bone, t);
 		return r == null ? euler(current, 1f) : euler(r, DEG);

@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "evidence": "Source reads/edits and cached Java class bytes decoded as data only. No builds, tests, syntax checks, Java/JNI loading, shader/GPU execution, game/process operations or exports.",
+  "reference": {
+    "java": "26.2",
+    "clientJarSha256": "40896ee9f1e2bec3c934daac7e93d41e9e3d9c2f8ae0ca366d52ffbfd1afa290",
+    "wingStart": "WingsLayer.submit calls the explicit EquipmentLayerRenderer.renderLayers overload with start order 0 at bytecode 0x6f..0x70. The shorter general equipment overload defaults to order 1; it must not be substituted for this wing call.",
+    "equipmentOrder": "EquipmentLayerRenderer initializes the running order from its explicit argument. Each rendered layer uses order++ for the armorCutoutNoCull base at 0x86..0xa7, then, when hasFoil, order++ for armorEntityGlint at 0xb1..0xd0. It clears its first-layer glint boolean at 0xd5..0xd6. The supported first wing base is order 0 and its glint order 1.",
+    "blendRouting": "RenderType.hasBlending returns pipeline ColorTargetState.blendFunction.isPresent; GLINT has BlendFunction.GLINT present. SubmitNodeCollection.submitModel routes blended regular models to translucentModels, phase index 7. Glint is therefore order 1 phase 7, ahead of Arctic glow's order 1 custom phase 8, independently of its EQUAL depth/no-write behavior.",
+    "glintFactory": "RenderTypes.armorEntityGlint returns the static ARMOR_ENTITY_GLINT object. Its setup uses GLINT, the armor artwork, ARMOR_ENTITY_GLINT_TEXTURING and VIEW_OFFSET_Z_LAYERING. No sortOnUpload call occurs in that setup; whole-model phase distance ordering is separate from per-quad sorting. Base armorCutoutNoCull also uses VIEW_OFFSET_Z_LAYERING."
+  },
+  "port": {
+    "locations": "PhaseKey and OrderedPhase preserve supported owned collector (numeric order, phase index) locations. Phase.owned_avatar_ordered supplies (0,0),(0,7),(0,8),(1,8); the existing unkeyed owned_avatars wrapper preserves compatibility.",
+    "groupMapping": "Geometry.from_owned_avatar_inputs stores the group indices produced by each distinct ordered phase. Legacy/unkeyed from_uploaded/from_phase_outputs retain unknown locations rather than fabricating them.",
+    "drawRanges": "Plan retains a bounded range slice for every feature group, including empty groups. Pipelines.prepare_groups requires unique increasing selected group indices and reuses the existing complete uploaded-frame/material/range preflight before selecting only those source ranges.",
+    "entityRecording": "record_phase and depth_tracker.record_avatar_phase select only the current supported phase. Unsupported/unknown locations fail; an absent supported phase emits no commands. The legacy whole-frame recorder rejects known owned geometry spanning multiple phases rather than flattening it into one insertion call.",
+    "glintOrdering": "avatar_glint.order_wing_models validates selected known wing IDs in original model order, then uses the shared model_order helper: finite submitted view translations, Mth left-associated float distance, descending Float.compare semantics and the cached fastutil unstable comparator quicksort. No actor/world-position or packet-root equivalence is inferred.",
+    "glintOwner": "GlintGeometry owns its upload-complete base Geometry Arc, actual glint pipeline/constants and selected sorted models. It requires matching base/glint targets, explicit uniforms/poses and all existing artwork/upload/preparation checks. WING_PHASE is (1,7).",
+    "transaction": "Entity full/phase and glint recording share record_transaction. It validates current exact world/batch/list/camera/device/node/surfaces, snapshots restorable native state, retains geometry/glint/native/surface/restore owners through native_draw_assets before commands, rechecks world/surface/snapshot state, emits under private-command classification, and restores state on completion/unwind. Successful glint transactions have a separate counter; no counter was advanced during this source-only work.",
+    "trackedEntry": "depth_tracker.record_avatar_glint uses the existing open-list tracker lock and private-command reentry guard. A PhaseKey is source membership metadata, not proof that the engine is at that callsite.",
+    "wireCompatibility": "No packet/archive/ABI change. Source phase mapping is retained from existing ARCGEO09 inputs; glint model selection/uniforms/view poses remain explicit owning inputs, with no live/replay producer or automatic insertion.",
+    "jointModelSchedule": "WingSchedule now sorts the complete explicitly supplied original owned/foreign sequence and preserves foreign delivery boundaries in a guarded GlintCursor. Native owners perform and acknowledge foreign deliveries between owned-run transactions. Same unsubmitted recording lifetime coalesces bounded asset chunks onto one fence reservation. Source participant/dispatch producers and runtime verification remain missing; see joint-glint-phase-source.json."
+  },
+  "remaining": [
+    "An actual installed-game native phase callsite and native resource/descriptor lifetime owner. These APIs remain unscheduled and do not manufacture a lease.",
+    "Joint foreign-feature participant/pose/order capture and native draw dispatch. The generic complete-sequence sorter/cursor now has source support, but actual joint inputs and native deliveries remain unavailable. Exclusive-owned helpers cannot substitute for a shared phase, and a foreign acknowledgement is bookkeeping rather than draw proof.",
+    "Authoritative Java-equivalent layer view poses, glint selection, prepared equality, complete material/lighting and native base-depth observations.",
+    "Recorded actual glint texture transform/clock/options/modulator/fog inputs and replay reconstruction; no live clock or options are substituted into replay.",
+    "Native execution, state restoration/fence integration, cross-language sort and pixel comparisons, and full animation/replay/export parity verification."
+  ],
+  "verified": {"built":false,"tested":false,"gpuRecorded":false,"gpuExecuted":false,"liveGame":false,"phaseCallsite":false,"stateRestored":false,"deterministicVideo":false,"fullParity":false}
+}

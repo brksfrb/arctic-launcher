@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "purpose": "Native View record reader and observation strategy source migration",
+  "source": [
+    "../src/native_view_profile.rs",
+    "../src/render_bridge.rs",
+    "../src/native_producer_frame_profile.rs",
+    "../src/native_scene_layout.rs"
+  ],
+  "bindings": "view-reader-bindings.json",
+  "nativeEvidence": "static-view-reader-layout-1.26.60.5.json",
+  "contract": {
+    "acceptedCompleteImageAndSceneFamilyRequired": true,
+    "fullNativeWriterFrameCopyAndOptionalSetterFunctionsHashed": true,
+    "frameCopyMustBeIndependentlyAdmittedProducerSwap": true,
+    "nativeCopyAndLegacySetterCallTargetsRechecked": true,
+    "oldEightArgumentSetterPreservedForOldFamily": true,
+    "currentMappedWriterUsesInlinedNativeCopies": true,
+    "noCurrentStandaloneSetterRvaOrAbiInvented": true,
+    "currentObservationUsesActualFrameViewRecords": true,
+    "viewRecordSizeRectangleMatricesDimensionsSelectOneSceneFamily": true,
+    "worldScopeMatchingRequiresAdmittedViewReader": true,
+    "viewportAndMatricesCopiedThenReadBackBeforeScopeMatch": true,
+    "numberDimensionsAndSnapshotPresenceRechecked": true,
+    "diagnosticArrayCopyReadBackBeforePublication": true,
+    "snapshotReadCountSeparateFromNativeSetterCalls": true,
+    "oldHookInstalledStatusRequiresActualEnablement": true,
+    "existingForwardingAndViewFixturesAdaptedButNotRun": true,
+    "exclusivePhaseOrNativeGpuLeaseCreated": false,
+    "worldFrameScopeAmbiguityAndExpectedMatricesRechecked": true
+  },
+  "sourceImplemented": true,
+  "viewLayoutSourceMigrationImplemented": true,
+  "currentCandidateActivated": false,
+  "backendEntryMigrationComplete": false,
+  "runtimeVerified": false,
+  "fullParity": false,
+  "remaining": [
+    "Current scene, actor, terrain and material dependency migrations",
+    "Actual exclusive native feature phase and custom geometry insertion",
+    "Real material, texture, descriptor and resource ownership",
+    "Complete scene dependencies and deterministic replay rendering/video export"
+  ],
+  "operations": {
+    "cachedBytesReadAsData": true,
+    "gameOpened": false,
+    "gameCodeExecuted": false,
+    "processInspected": false,
+    "buildExecuted": false,
+    "testsExecuted": false
+  },
+  "backendEntryAndBatchSourceMigrationImplemented": true,
+  "backendBatchSourceEvidence": "native-backend-batch-source.json",
+  "framebufferAndTextureReaderSourceMigrationImplemented": true,
+  "framebufferReaderSourceEvidence": "native-framebuffer-reader-source.json",
+  "queueRetirementReaderSourceMigrationImplemented": true,
+  "queueReaderSourceEvidence": "native-queue-reader-source.json",
+  "graphicsStatePublicApiIntegrationImplemented": true,
+  "graphicsStateAdmissionSourceEvidence": "native-graphics-admission-source.json"
+}

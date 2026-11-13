@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "evidence": "Source reads, edits and manual review; cached class bytes decoded as data and dependency archives hashed. No Java class loading, builds, tests, syntax checks, project/game/renderer/JNI/shader/GPU execution, process inspection, native commands or exports. Runtime parity remains unverified by user instruction.",
+  "reference": {
+    "java": "26.2",
+    "clientJarSha256": "40896ee9f1e2bec3c934daac7e93d41e9e3d9c2f8ae0ca366d52ffbfd1afa290",
+    "guava": "Cached com.google.guava:guava:33.6.0-jre; Maps.newHashMap() allocates java.util.HashMap with its no-argument constructor (0x00..0x07).",
+    "guavaJarSha256": "dc573e1fca4fd5454f4a5fd3d7da2df03002876a4175bafc14a95980dd7713b3",
+    "fastutil": "it.unimi.dsi:fastutil:8.5.18",
+    "fastutilJarSha256": "9094ae67d01d0ad246f886f11ad557fc2e79c72cbf3feed83e1512a8ae90a74a",
+    "definition": "PartDefinition.<init> initializes children through Maps.newHashMap (0x05). HumanoidModel.createMesh adds root children head, body, right_arm, left_arm, right_leg, left_leg, in that order. Hat is added beneath head. PlayerModel.createMesh replaces existing arm/leg keys and adds sleeve/pants/jacket children beneath their owners; those child layers are not extra root keys.",
+    "replacement": "PartDefinition.addOrReplaceChild(String,PartDefinition) uses children.put at 0x06 and copies an existing child's children into its replacement at 0x1b. Replacing a root key does not create a separate root part or an arbitrary new emission order.",
+    "bake": "PartDefinition.bake streams children.entrySet in encounter order (0x04..0x09) and collects it with a supplied Object2ObjectArrayMap constructor (0x1f..0x27). ModelPart.<init> stores that map directly at 0x26. Object2ObjectArrayMap.put replaces an existing value in place (0x0b..0x1c), appends new keys/values at size (0x8a..0x9d), and its ValuesCollection iterator reads value[pos++] (0x0f..0x24).",
+    "render": "ModelFeatureRenderer.prepareModel invokes Model.renderToBuffer at 0x5e. Model.renderToBuffer invokes root().render (0x01..0x0b). ModelPart.render compiles its own cubes at 0x3c before iterating children.values at 0x43 and rendering each child at 0x6e. It does not use Arctic Attach/SkinLimbs enum order or sort child names.",
+    "emoteHide": "Repository Fabric PlayerModelEmoteMixin.arctic$pose invokes arctic$hideBentLimbs only inside Rig.expressive(animation). The non-expressive branch poses its six ordinary parts without hiding them. CosmeticsLayer.drawLimbs independently checks SkinLimbs.bends and emits matching custom split geometry, including for a joint-only non-expressive animation."
+  },
+  "port": {
+    "root": "JavaPlayerMesh builds the same six named root entries in a default HashMap and snapshots its value traversal into one immutable List. It intentionally uses the actual default Java HashMap traversal, not a hand-written rig order, sorted names, or an insertion-ordered map. The supported recipe is the cached stock 26.2 model, not an observed arbitrary game/mod model.",
+    "normalSkin": "AvatarRenderer emits normal skin through that root traversal. Each selected part still emits its own cube before its outer child. Availability, supplied base/outer visibility, texture/material/color/light, original model boundary and the all-hidden empty submit remain in place. No extra model, transform, vertex or texture is invented.",
+    "emote": "Compute expressive rig selection once. Hide an original bent skin part only when the Java mixin would enter that expressive branch. The later custom bent path keeps its existing SkinLimbs enum order and remains eligible independently of that normal-part hide. A legacy rightForearm-only emote therefore retains its normal right arm plus its custom split geometry, matching current Java source rather than silently changing that behavior.",
+    "cape": "The existing cape-body hide uses the same expressive decision and split-body rule. Hidden expressive cape models still retain empty model submissions. Independent wings, attachment transforms and worn-cosmetic visibility/order are unchanged.",
+    "paths": "The shared AvatarDrawTarget emitter changes both software Raster3D and staged NativeAvatarGeometry. Compatible prepared draws/stable quad ties now begin with this normal-model source traversal, independently of whole-model sorting and simple phase bucket traversal. No native insertion callsite or resource lease is inferred from these changes.",
+    "budget": "One immutable six-element traversal snapshot per class initialization; no per-frame map construction or emitted geometry copy. Existing frame/model/batch/triangle budgets remain. No tests were added or executed."
+  },
+  "compatibility": {
+    "wire": "No ARCGEO, replay archive, JNI/native ABI, shader or native hook offset change. Old archives select their known geometry/visibility through the same shared emitter.",
+    "profile": "HashMap traversal follows the host Java implementation just as the existing source phase collector does. No target-JVM traversal capture or cross-JVM comparison was performed. Replaced/extended model definitions, different Java reference versions and native/Java pose equivalence remain separate requirements.",
+    "verification": "No source capability is promoted to live geometry/GPU, replay/video or full-parity verification. The authoritative native surface/material producer and game-facing insertion callsite remain missing."
+  },
+  "remaining": [
+    "Target-JVM/root-map traversal and normal/bent/cape submission comparisons, including equal centroid keys and legacy joint-only animation behavior.",
+    "Full native/Java model transform, visibility, material, equipment, cape/wing and attachment fidelity.",
+    "Owning live native surface/resource/material/feature producer and actual world insertion with complete foreign phase participants.",
+    "Build, installed-game pixels/depth, replay/video comparisons and full 1:1 parity verification."
+  ],
+  "verified": {"built":false,"tested":false,"rootTraversalCompared":false,"emoteSubmissionsCompared":false,"pixelsCompared":false,"liveGame":false,"gpuRendering":false,"deterministicVideo":false,"fullParity":false}
+}

@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "purpose": "Independent exact-family skinned material info/path preflight and callback-thread owner admission; not a scene/GPU lease",
+  "bindingCatalog": "skinned-material-reader-bindings.json",
+  "nativeEvidence": [
+    "native-material-info-owner-source.json",
+    "static-skinned-description-layout-1.26.60.5.json",
+    "static-skinned-material-consumer-layout-1.26.60.5.json",
+    "static-material-variation-layout-1.26.60.5.json"
+  ],
+  "source": [
+    "../src/native_skinned_material_profile.rs",
+    "../src/native_frame_material.rs",
+    "../src/native_skinned_desc.rs",
+    "../src/native_shader_consumer.rs",
+    "../src/world_hooks.rs"
+  ],
+  "families": [
+    {
+      "productVersion": "1.26.5203.0",
+      "materialTableRva": 244282704,
+      "controlTableRva": 244666336,
+      "functionCount": 11,
+      "functionBytes": 39331
+    },
+    {
+      "productVersion": "1.26.60.5",
+      "materialTableRva": 253839328,
+      "controlTableRva": 254065408,
+      "functionCount": 11,
+      "functionBytes": 36950
+    }
+  ],
+  "contract": {
+    "requiresApprovedCompleteImageAndSelectedSceneFamily": true,
+    "catalogSelectsExecutableImage": false,
+    "concreteRebasedMaterialAndInfoControlMethodsChecked": true,
+    "sceneOffsetsAndDescriptionConsumerBindingsJoined": true,
+    "elevenCompleteFunctionDigestsCheckedBeforeHooks": true,
+    "preflightResultCachedBeforeDependencyHookPatching": true,
+    "skinnedReaderNoLongerRequiresTerrainLayerValidation": true,
+    "terrainReaderKeepsIndependentFullValidation": true,
+    "variationReaderRequiresNativeSetCloneAndNodeCodeAndFiveDirectEdges": true,
+    "unmigratedVariationMetadataStaysUnknown": true,
+    "existingStrongInfoOwnerAndEndpointChecksPreserved": true,
+    "nestedRenderMaterialUniquePtrRetained": false,
+    "nativeDescriptorContentsOrSceneGpuLeaseCreated": false
+  },
+  "bounds": {
+    "maximumFunctionBytes": 65536,
+    "maximumTotalFunctionBytes": 131072,
+    "materialTableMethods": 5,
+    "infoControlMethods": 3
+  },
+  "sourceImplemented": true,
+  "currentCandidateActivated": false,
+  "runtimeVerified": false,
+  "fullParity": false,
+  "remaining": [
+    "Complete current terrain and remaining component reader migration",
+    "Native scene/resource/descriptor ownership and actual feature-phase insertion",
+    "Java-equivalent live lightmap/fog/material inputs",
+    "Deterministic replay rendering/video export",
+    "Runtime parity verification when authorized"
+  ],
+  "operations": {
+    "cachedBytesAndSourceReadAsData": true,
+    "gameCodeExecuted": false,
+    "gameStarted": false,
+    "processInspected": false,
+    "built": false,
+    "tested": false
+  }
+}

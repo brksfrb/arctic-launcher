@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "evidence": "Repository source reads/edits only; no builds, tests, syntax checks, helper/project/game execution, process inspection, clock commands or Bedrock launch",
+  "port": {
+    "module": "arctic-core bedrock::playback_clock::PlaybackClock; synchronous worker-owned controller",
+    "binding": "Requires an already-loaded native bundle with fresh clock/packet reports, idle rate/held modes and one initialized helper viewer. ReplayQueue pauses/catches up the helper, queues a unique dispatch-only marker, awaits the native primary-thread dispatcher return and reconfirms the same viewer/step. Native clock sequence/idle state is rechecked before the first rate. This is correlation, not packet-application or terrain proof.",
+    "controls": "Pause/speed commands validate their exact fields, helper viewer/generation/step, and the owned native rate receipt. Fresh correlated helper replies must retain the requested pause/speed before the native rate is applied. Original pause/speed is restored on successful attach; failed acquisition can leave helper playback paused.",
+    "renewal": "The owner worker services once per second using fresh correlated helper state and native receipt checks, renewing a 5-second native lease. A caught-up end-of-replay viewer is paused. Cached UI/periodic events alone never renew a lease.",
+    "ownership": "Native session, acknowledged command sequence, requestId, rate bits, active lease, pending state and restoration flag must match. Initial acquisition now carries its observed idle identity; rate follow-ups and release carry the acknowledged active expectation. Native admission and timer consumption recheck it, and the worker checks its echoed acknowledgement (replay-clock-ownership-source.json). A different rate, export freeze, world, viewer or step invalidates coordination. An expired same-identity idle mode needs no new command. Sequence admission reserves a later release operation.",
+    "failure": "Control/renewal failures poison the coordinator and attempt owned release. Drop also attempts release on the worker; native expiry remains independent if acknowledgement or the owner process is lost.",
+    "cli": "The existing replay watch loop accepts native_clock_attach with bundle and native_clock_release. Attached speed/pause controls use the coordinator; regular loop service renews it. Reset, seek, exact step, replay-file export and indexed video release it before handoff. Stop/stdin closure release before connection shutdown and report cleanup failure. Input draining is bounded to 32 commands per service turn.",
+    "launcher": "The replay editor now uses worker-owned attach/service/commands/release jobs through passive lease handoffs; export, stop, close and unconsumed results have worker cleanup paths. See replay-playback-ui-source.json; no UI/native lifecycle was executed.",
+    "launch": "Attachment operates only on an existing helper and already-running native client; source editing does not execute this path"
+  },
+  "remaining": [
+    "Runtime validation of launcher UI background ownership, cancellation, cleanup and export handoff",
+    "Atomic helper/native speed transitions, exact epoch alignment and drift behavior under real frame scheduling",
+    "Native timer ten-tick-cap behavior, loading/terrain and animation/integrated-server equivalence",
+    "Live native cosmetics, full camera modes and deterministic video fidelity verification"
+  ],
+  "verified": {"built": false, "tested": false, "markerBound": false, "leaseLifecycle": false, "nativePlaybackSynchronized": false, "liveGame": false, "deterministicVideo": false, "fullParity": false}
+}

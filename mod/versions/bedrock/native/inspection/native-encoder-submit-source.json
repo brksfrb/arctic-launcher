@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "purpose": "Exact-family encoder observation and RenderItem reader source migration",
+  "source": [
+    "../src/native_submit.rs",
+    "../src/native_submit_profile.rs",
+    "../src/native_scene_layout.rs"
+  ],
+  "bindings": "encoder-submit-bindings.json",
+  "nativeEvidence": "static-encoder-submit-layout-1.26.60.5.json",
+  "contract": {
+    "acceptedCompleteImageAndSceneFamilyRequired": true,
+    "encoderAndNativeCallerFullBytesHashedBeforeDetour": true,
+    "actualCallerE8MustTargetSelectedEncoder": true,
+    "sixNativeScalarArgumentsForwardedExactlyOnce": true,
+    "itemArrayAndBothCountersSelectSameSceneFamilyAsHook": true,
+    "allocationIntervalMustContainExactlyOneItemAndOneSuccessfulSubmission": true,
+    "matchingProducerFrameBeforeAndAfterRequired": true,
+    "gpuMatchRequiresExactFrameSlotScopeAndAge": true,
+    "unrelatedAndAmbiguousPacketsStayUnowned": true,
+    "originalPublishedBeforeEnablement": true,
+    "installedStatusRequiresSuccessfulEnablement": true,
+    "partialEnablementCallbackOnlyForwards": true,
+    "failureResultCached": true,
+    "existingScopeAddressAndFrameFixtureAdaptedButNotExecuted": true,
+    "customGeometrySubmitted": false,
+    "nativeSceneOrGpuLeaseCreated": false
+  },
+  "sourceImplemented": true,
+  "currentCandidateActivated": false,
+  "producerContextReaderMigrationComplete": false,
+  "backendConsumerMigrationComplete": false,
+  "runtimeVerified": false,
+  "fullParity": false,
+  "remaining": [
+    "Current scene, actor, terrain and material dependency migrations",
+    "Native custom geometry insertion into the actual exclusive feature phase",
+    "Real material, texture, descriptor and resource ownership",
+    "Complete scene dependencies and deterministic replay rendering/video export"
+  ],
+  "operations": {
+    "cachedBytesReadAsData": true,
+    "gameOpened": false,
+    "gameCodeExecuted": false,
+    "processInspected": false,
+    "buildExecuted": false,
+    "testsExecuted": false
+  },
+  "producerContextReaderSourceMigrationImplemented": true,
+  "producerContextReaderSourceEvidence": "native-producer-frame-reader-source.json",
+  "viewLayoutSourceMigrationImplemented": true,
+  "viewReaderSourceEvidence": "native-view-reader-source.json",
+  "backendEntryAndBatchSourceMigrationImplemented": true,
+  "backendBatchSourceEvidence": "native-backend-batch-source.json",
+  "framebufferAndTextureReaderSourceMigrationImplemented": true,
+  "framebufferReaderSourceEvidence": "native-framebuffer-reader-source.json",
+  "queueRetirementReaderSourceMigrationImplemented": true,
+  "queueReaderSourceEvidence": "native-queue-reader-source.json",
+  "graphicsStatePublicApiIntegrationImplemented": true,
+  "graphicsStateAdmissionSourceEvidence": "native-graphics-admission-source.json"
+}

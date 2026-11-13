@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "evidence": "Source reads, edits and manual review only. No builds, tests, syntax checks, project/game/JNI/shader/GPU execution, process inspection or exports. Runtime parity remains unverified by user instruction.",
+  "staging": {
+    "selection": "WorldFrame attaches the current explicit GlintSample to replacement wing avatars. During replay it queries only recordedWingGlint for the recorded actor/current context; unavailable recorded inputs stay unknown rather than borrowing live observations.",
+    "model": "AvatarRenderer calls modelGlint inside each wing model scope before its first sink. NativeAvatarGeometry.Builder copies that sample into an immutable ModelSubmission and forbids changing it after any sink in the scope, including a general sink. Known glint metadata is restricted to wing batches.",
+    "software": "AvatarDrawTarget defaults to ignoring this metadata; Raster3D now overrides it to retain selected base-wing geometry for its software-owned deferred glint phase (software-wing-glint-observation-source.json). Existing visibility, replacement and native suppression receipts remain required; software consumption supplies no native phase lease."
+  },
+  "wire": {
+    "magic": "ARCGEO10 whenever at least one staged model has a known glint selection. Otherwise retain existing ARCGEO01..09 version selection and layouts.",
+    "endian": "little",
+    "batch": "After the v8 model-submit metadata and before vertices: u8 state on every batch. 0 unknown, 1 explicitly inactive, 2 active followed by 40 f32 values. States 1/2 require a wing model boundary. All parts of a model must have identical state and exact float bit patterns.",
+    "activeFloats": "textureMatrix16, fogPosition12, colorModulator4, fogRanges4, glintAlpha1, viewTranslation3. All finite, fog ranges ordered and alpha in 0..1. Active state requires declared position space and an equipment projection; inactive state has no shader transform.",
+    "trailer": "After all textures v10 adds a strict simple-phase presence u8. 0 means unknown; 1 is followed by the unchanged v9 epoch/count/phase records. V9 still has its mandatory trailer without a presence byte. A known glint observation never fabricates known simple phases.",
+    "budget": "Every state byte, active 160-byte payload and optional trailer byte is included in the existing 96 MiB packet limit. No native ABI or archive format change."
+  },
+  "consumer": {
+    "preflight": "packet_observations rejects unknown selection or boundaries for staged wing batches, retaining explicit inactive separately from active. An empty result describes absence only in the owned staged wing scope. It can be called before requesting artwork/upload.",
+    "schedule": "packet_schedule requires every active packet model exactly once, in original owned source order, alongside the complete caller-supplied foreign sequence. Own view translations come from the packet. Existing WingSchedule sorts the complete joint list once and preserves foreign boundaries; supplied tokens cannot establish completeness or native provenance.",
+    "assembly": "GlintGeometry.from_packet returns no owned glint pass for known absence. Otherwise it converts each selected model's shader inputs and preflights every selected model against its actual uploaded base geometry and pipeline.",
+    "profiles": "Only identical first 37 f32 bit patterns share a shader profile. The last three view-pose values affect model ordering and are excluded from constant-content deduplication. This is not Java PreparedRenderType equality or permission to reorder models.",
+    "arena": "Constants.for_profiles writes one upload buffer with 256-byte aligned slices, bounded to 2048 profiles and 512 KiB logical constant data. Every slice retains the resource and exact uploaded buffers/descriptor heap, node and projection association.",
+    "recording": "prepare_models splits only adjacent equal-profile spans in the supplied schedule order. Each prepared span is emitted sequentially inside the existing native state/surface/owner recording transaction. Foreign delivery boundaries and per-list retention remain intact."
+  },
+  "remaining": [
+    "Authoritative installed-game target-Java glint selection, transforms, options, fog and view-pose producer; raw foil flags are insufficient.",
+    "Actual owning native game insertion callsite, complete joint foreign participant producer/dispatcher and native target/resource/descriptor lifetime ownership.",
+    "The software-owned deferred glint phase is now connected in source (software-wing-glint-observation-source.json). Complete other material/feature variants, ordinary phase fidelity and live world replacement integration remain unfinished.",
+    "Recorded clock reconstruction for changing glint inputs, camera-editor rebasing and deterministic replay/export integration.",
+    "Build, wire round-trip, native recording/restoration/retirement, rendered fidelity and complete 1:1 parity verification."
+  ],
+  "verified": {"built":false,"tested":false,"wireRoundTrip":false,"gpuRecorded":false,"replayRendered":false,"liveGame":false,"deterministicVideo":false,"fullParity":false}
+}

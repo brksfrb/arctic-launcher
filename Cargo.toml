@@ -2,6 +2,8 @@
 resolver = "3"
 members = ["crates/arctic-core", "crates/arctic-ping", "crates/arctic-voice", "crates/arctic-app", "crates/arctic-cli", "crates/arctic-share", "crates/arctic-mesh"]
 
+exclude = ["mod/versions/bedrock/native"]
+
 [workspace.package]
 version = "0.6.1"
 edition = "2024"

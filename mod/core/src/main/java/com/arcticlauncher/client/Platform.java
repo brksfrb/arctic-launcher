@@ -28,6 +28,15 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 
 	File configDir();
 
+	/** Owned raw appearance files for portable replay snapshots; null when unavailable. */
+	default com.arcticlauncher.client.looks.AppearanceAssets appearanceAssets() { return null; }
+
+	/** Animation clock; replay adapters may supply recorded world time. */
+	default long animationTimeMillis() { return System.currentTimeMillis(); }
+
+	default boolean supportsGameWidget(String id) { return hasFeatures(); }
+	default boolean supportsNativeCosmeticsPreview() { return false; }
+
 	void log(boolean warning, String message);
 
 	// ---- Game state -------------------------------------------------------

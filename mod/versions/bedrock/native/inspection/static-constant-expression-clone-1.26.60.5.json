@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "oldProductVersion": "1.26.5203.0",
+  "newProductVersion": "1.26.60.5",
+  "requestedRoots": [
+    "0x1ce7a60"
+  ],
+  "calleesOf": [],
+  "rootsOnly": true,
+  "oldTextSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "newTextSha256": "7ca5d1baef049979e9785d5bbafe7100a829e1107a3d374975962cc64ecc76fe",
+  "sourceReferencedFunctions": 1,
+  "probed": 1,
+  "truncated": false,
+  "counts": {
+    "changed_or_missing": 1
+  },
+  "method": "Full function instruction bytes with only external relative address operands masked; internal branches/member offsets/immediates retained",
+  "limitations": [
+    "Candidate identity is not semantic equivalence",
+    "External callees and referenced constants need independent joins",
+    "No ABI/layout/ownership/runtime or supported-profile promotion"
+  ],
+  "gameStartedByInspection": false,
+  "gameModuleLoadedByInspection": false,
+  "gameCodeExecuted": false,
+  "functions": [
+    {
+      "oldRva": "0x1ce7a60",
+      "oldBytes": 229,
+      "references": [
+        {
+          "root": "0x1ce7a60"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 0,
+      "oldRawSha256": "8e368ac90b49b9c3a93c60c75d68d7f3b264b4df237171bb2f121eb45d5c845b",
+      "normalizedSha256": "024bfde6e1eac0cee8cb307adc7368cf8af5d04b84a4be4c53c89925c8b4d62f",
+      "maskedBytes": 20,
+      "state": "changed_or_missing"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "evidence": "Source reads/edits and cached Java class data decoded only; no class loading, builds, tests, syntax checks, project/game execution or Bedrock operations",
+  "reference": {
+    "normal": "Cached Java 26.2 PlayerModel.setupAnim copies showHat/showJacket/showRightSleeve/showLeftSleeve/showRightPants/showLeftPants into outer ModelPart visibility; base part visibility is separate",
+    "emote": "Fabric CosmeticsLayer.drawLimbs passes the corresponding outer flag to SkinLimbs.piece and translates the parent part even when its ordinary geometry is hidden"
+  },
+  "input": {
+    "class": "Immutable JavaSkinVisibility with separate base and outer masks",
+    "namespace": "Arctic Attach order: head, body, right arm, left arm, right leg, left leg. These are not Java/Bedrock network or engine bit layouts.",
+    "json": "WorldFrame.Player.javaSkinVisibility, schema 1, required baseParts 0..63 and all six named nullable Boolean flags: hat, jacket, rightSleeve, leftSleeve, rightPants, leftPants",
+    "absence": "Null remains unknown. Preview geometry retains legacy visible layers; it does not establish native visibility provenance."
+  },
+  "emission": {
+    "normal": "Base mask selects normal JavaPlayerMesh parts; outer mask selects each owning part's hat/jacket/sleeve/pants child",
+    "bent": "Arctic split skin uses the outer option without being suppressed by the hidden normal parent-part flag",
+    "attachments": "Available pose matrices remain separate from mesh visibility; worn cosmetics still receive the same attachment transforms",
+    "ownership": "Native builder clears visibility knowledge on actor changes and snapshots it per skin draw; changing the context during a partial quad rejects"
+  },
+  "wire": {
+    "version": "ARCGEO04; v1-v3 remain decodable with visibility unknown",
+    "newRole": "Pass 7 BentSkin, same entityTranslucent custom material as cosmetic base; no body overlay extension",
+    "flag": "Bit 8 means the emitter had a supplied visibility object. Valid only for explicit normal/bent skin roles in v4.",
+    "layout": "Existing v3 header/batch/vertex layout; pass 6 retains its four-float body overlay. No extra visibility payload is inserted because masks already select emitted geometry.",
+    "preparation": "Both frame-derived and low-level native draw preparation reject nonempty skin roles without copied visibility knowledge. This flag is input provenance, not a native ownership or suppression receipt.",
+    "sort": "BentSkin shares adapter-proven entityTranslucent prepared identities with base/normal skin; actual groups/object/equality IDs are still required"
+  },
+  "replay": {
+    "kind": "bedrock_body_samples_v6",
+    "magic": "0x415243424f440006",
+    "extension": "After v5 material: presence u8 0 unknown or 1 known; if known, base mask u8 and outer mask u8, each 0..63",
+    "budget": "Three-byte maximum actor extension included in the existing bounded block estimate",
+    "sampling": "Exact endpoints retain masks; interior samples retain them only when both observations agree. No mask interpolation or viewer-state fallback.",
+    "legacy": "V1-v5 tracks remain readable with unknown visibility; required body visibility is part of capture readiness and v6 body-plan availability"
+  },
+  "remaining": [
+    "Authoritative installed-game producer of equivalent final model visibility and outer options",
+    "Cape/armor/held-item visibility and additional model/effect variants",
+    "Native live group/phase production, scene lifetime owner and insertion caller",
+    "Runtime geometry/animation, replay-camera and deterministic-video fidelity verification"
+  ],
+  "verified": {"built": false, "tested": false, "archiveRoundTrip": false, "jniRoundTrip": false, "liveGame": false, "gpuRendering": false, "deterministicVideo": false, "fullParity": false}
+}

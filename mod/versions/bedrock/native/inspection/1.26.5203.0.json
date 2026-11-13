@@ -1,0 +1,264 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.5203.0",
+  "purpose": "Exact-image observer hook profile; not a complete cosmetics binding",
+  "installedFileSize": 311215984,
+  "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "machine": 34404,
+  "timestamp": 1790266935,
+  "imageSize": 314576896,
+  "preferredBase": 5368709120,
+  "relocations": 482251,
+  "textRelocations": 0,
+  "layoutEvidence": {
+    "actorTypeLookupRva": 27205264,
+    "identityHashReferenceRva": 2012932,
+    "identityStrideInstructionRva": 2013101,
+    "identityUuidStoreRva": 1958129,
+    "identityStride": 592,
+    "identityUuidOffset": 184,
+    "levelPlayerListGetterRva": 18334768
+  },
+  "candidates": {
+    "platformGlobal": {
+      "matches": 1,
+      "matchRva": 514290,
+      "targetRva": 298958720
+    },
+    "renderWorld": {
+      "matches": 1,
+      "matchRva": 4974745,
+      "targetRva": 75466096
+    },
+    "renderActor": {
+      "matches": 1,
+      "matchRva": 30741072,
+      "targetRva": 30741072
+    },
+    "levelTick": {
+      "matches": 1,
+      "matchRva": 19876720,
+      "targetRva": 19876720
+    },
+    "gameUpdate": {
+      "matches": 1,
+      "matchRva": 8204043,
+      "targetRva": 8204768
+    },
+    "timerAdvance": {
+      "matches": 1,
+      "targetRva": 74654640,
+      "abi": "timerFloat"
+    },
+    "makeScreenContext": {
+      "matches": 1,
+      "targetRva": 75160304,
+      "abi": "rendererScreenFloat",
+      "stackBytes": 424,
+      "worldReturnRva": 75140900
+    },
+    "fmodThunk": {
+      "matches": 1,
+      "targetRva": 240806576,
+      "abi": "doubleDouble",
+      "iatRva": 252724456,
+      "totalReturnRva": 75141886,
+      "deltaReturnRva": 75141921,
+      "worldReturnRva": 75142386
+    },
+    "presentationClock": {
+      "matches": 1,
+      "targetRva": 6737968,
+      "abi": "qpcNanosecondsEpoch",
+      "epochRva": 299033472,
+      "guardRva": 299033480,
+      "shaderTimeReturnRva": 75141843
+    },
+    "cameraUpdate": {
+      "matches": 1,
+      "targetRva": 108213088,
+      "abi": "cameraComponentModeActor",
+      "witnessRva": 108450867,
+      "witnessKind": "call"
+    },
+    "cameraIterate": {
+      "matches": 1,
+      "targetRva": 108448048,
+      "abi": "cameraIteratorComponent",
+      "witnessRva": 108450247,
+      "witnessKind": "call"
+    },
+    "cameraConsumer": {
+      "matches": 1,
+      "targetRva": 74252080,
+      "abi": "rendererCameraPartial",
+      "stackBytes": 264,
+      "witnessRva": 4973021,
+      "witnessKind": "call"
+    },
+    "cameraMatrix": {
+      "matches": 1,
+      "targetRva": 10440368,
+      "abi": "threePointers",
+      "witnessRva": 74253559,
+      "witnessKind": "call"
+    },
+    "cameraPreRender": {
+      "matches": 1,
+      "targetRva": 73946752,
+      "abi": "cameraScreenFrame",
+      "stackBytes": 232,
+      "witnessRva": 74097957,
+      "witnessKind": "call"
+    },
+    "skinnedDescription": {
+      "matches": 1,
+      "targetRva": 99214560,
+      "abi": "skinnedDescription21",
+      "frameLayout": "legacyRbpMinus8",
+      "witnessRva": 19835894,
+      "witnessKind": "call"
+    },
+    "paletteWriter": {
+      "matches": 1,
+      "targetRva": 19851248,
+      "abi": "paletteWriter7",
+      "previousMatrixInput": "inlineOptionalMatrix",
+      "witnessRva": 29493873,
+      "witnessKind": "call"
+    },
+    "skinnedInsert": {
+      "matches": 1,
+      "targetRva": 98873920,
+      "abi": "frameBuilderVariant2",
+      "vtableRva": 244803008,
+      "vtableOffset": 856
+    },
+    "skinnedMaterial": {
+      "matches": 1,
+      "targetRva": 99520080,
+      "abi": "skinnedMaterial5",
+      "stackBytes": 3800,
+      "inputLayout": "actorInputsPrefix184",
+      "witnessRva": 98892135,
+      "witnessKind": "call"
+    },
+    "palettePack": {
+      "matches": 1,
+      "targetRva": 99265808,
+      "abi": "boneSpanOutput2",
+      "spanLayout": "countPointer",
+      "matrixBytes": 64,
+      "paddedMatrices": 8,
+      "securityCookieRva": 293445760,
+      "witnessRva": 99531047,
+      "witnessKind": "call"
+    },
+    "nativeModelDraw": {
+      "matches": 1,
+      "targetRva": 29581296,
+      "abi": "fivePointerVoid",
+      "stackBytes": 616,
+      "matrixStackLayout": "msvcDequeMatrix64Block1",
+      "observation": "helperThenDraw",
+      "rendererRva": 89707264,
+      "rendererVtableRva": 244591472,
+      "rendererSlot": 2,
+      "witnessRva": 89710853,
+      "witnessKind": "call"
+    },
+    "nativeGlobalTransform": {
+      "matches": 1,
+      "targetRva": 30789520,
+      "abi": "dataMatrixContext3",
+      "witnessRva": 89709816,
+      "witnessKind": "call"
+    },
+    "actorDestructor": {
+      "matches": 1,
+      "targetRva": 27162928,
+      "abi": "actorDestructor1",
+      "ownerVtableRva": 243051088,
+      "deletingDestructorRva": 27748992,
+      "witnessRva": 27749003,
+      "witnessKind": "call"
+    },
+    "actorCacheDestructor": {
+      "matches": 1,
+      "targetRva": 27158576,
+      "abi": "actorCacheDestructor1",
+      "storage": "tree",
+      "ownerOffset": 280,
+      "witnessRva": 27162494,
+      "witnessKind": "call"
+    },
+    "emoteCacheProducer": {
+      "matches": 1,
+      "targetRva": 29497088,
+      "abi": "partParamsBonesKeyGeometry5",
+      "witnessRva": 29498567,
+      "witnessKind": "call"
+    },
+    "emoteCachePredicate": {
+      "matches": 1,
+      "targetRva": 29496720,
+      "abi": "partParamsKeyByte3",
+      "witnessRva": 29497154,
+      "witnessKind": "call"
+    },
+    "emoteCachePrepare": {
+      "matches": 1,
+      "targetRva": 29495072,
+      "abi": "partParamsBonesKeyGeometryHistory6",
+      "storage": "tree",
+      "witnessRva": 29495820,
+      "witnessKind": "call",
+      "writerReturnRva": 29495748,
+      "fallbackPredicateReturnRva": 29495563,
+      "cachedPredicateReturnRva": 29496682,
+      "lookupReturnRvas": [
+        29496200,
+        29496266,
+        29496342
+      ]
+    },
+    "emoteCacheErase": {
+      "matches": 1,
+      "targetRva": 27753568,
+      "abi": "cacheNode1",
+      "witnessRva": 27158591,
+      "witnessKind": "call"
+    },
+    "emoteCacheLookup": {
+      "matches": 1,
+      "targetRva": 29915920,
+      "abi": "cacheMapResultPart3",
+      "witnessRva": 29496195,
+      "witnessKind": "call"
+    },
+    "modelBodyDraw": {
+      "matches": 1,
+      "targetRva": 29642608,
+      "bytes": 297,
+      "sha256": "cc66d0b60fc28bf77959f288952bf7d6056a4de152fd72bf67ebd0d33f4b7ddd",
+      "abi": "modelParamsMetadataControllerGeometryTexturesMers7",
+      "layout": "geometryGroups96Pairs16",
+      "stackBytes": 88,
+      "witnessRva": 30116639,
+      "witnessKind": "call",
+      "callerRva": 30113536,
+      "callerBytes": 5073,
+      "callerSha256": "cdd79ff23cb518410543d48a9f04126c379a3dc735e64166e41814c526ef99b6",
+      "rootDrawRva": 29581296,
+      "rootDrawEndRva": 29588491,
+      "rootCallRva": 29584526
+    }
+  },
+  "gameStarted": false,
+  "liveCosmeticsVerified": false,
+  "remaining": [
+    "Validate actor identity/pose layouts",
+    "Bind matching world camera and terrain depth",
+    "Verify renderer replacement in Minecraft"
+  ]
+}

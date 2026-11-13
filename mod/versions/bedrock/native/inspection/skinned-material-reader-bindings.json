@@ -1,0 +1,282 @@
+{
+  "schema": 1,
+  "purpose": "Embedded skinned-material reader code bindings; selected only after complete executable image and scene-family approval, not an executable-image profile",
+  "nativeEvidence": [
+    "native-material-info-owner-source.json",
+    "static-skinned-description-layout-1.26.60.5.json",
+    "static-skinned-material-consumer-layout-1.26.60.5.json",
+    "static-material-variation-layout-1.26.60.5.json"
+  ],
+  "profiles": [
+    {
+      "productVersion": "1.26.5203.0",
+      "materialTableRva": 244282704,
+      "materialMethods": [
+        78734320,
+        78675552,
+        486336,
+        78692192,
+        78689856
+      ],
+      "controlTableRva": 244666336,
+      "controlMethods": [
+        94758480,
+        486352,
+        2624976
+      ],
+      "infoInControl": 16,
+      "renderMaterialInInfo": 64,
+      "shaderPathsOffset": 208,
+      "descriptionMaterialOffset": 360,
+      "functions": [
+        {
+          "role": "infoLoader",
+          "rva": 94744704,
+          "bytes": 486,
+          "sha256": "9ff43fdb60008a39f77eff32386416197fbff10aa2224d84838fbbb533c10b34"
+        },
+        {
+          "role": "infoDestroy",
+          "rva": 94758480,
+          "bytes": 183,
+          "sha256": "c5c0d02c66b5c32a0520b01d501690e79f4f5f7d7f1c94b0d0b29a196f5caeda"
+        },
+        {
+          "role": "infoDelete",
+          "rva": 486352,
+          "bytes": 22,
+          "sha256": "aa8f270b3ef42de4e6c9c6341fa2813ce55c20b8cc9cfb1081ac05360937f3ae"
+        },
+        {
+          "role": "infoDeletingDestructor",
+          "rva": 2624976,
+          "bytes": 34,
+          "sha256": "302b4841d9155c6e69981fbc84275aacaf7f0723c7eb1573267b03298583ea5f"
+        },
+        {
+          "role": "shaderPathParser",
+          "rva": 78689856,
+          "bytes": 210,
+          "sha256": "c5a795731624d7c27b42c9cbaf8012aab9ab52c86a78ea72f309933cc4d2b1ec"
+        },
+        {
+          "role": "description",
+          "rva": 99214560,
+          "bytes": 1614,
+          "sha256": "911c9a4a6e3a8f4f9a2422145f692407e3fe43fb0dbbce5c89b90cf03b28751e"
+        },
+        {
+          "role": "consumer",
+          "rva": 99520080,
+          "bytes": 31884,
+          "sha256": "7548a75b7dd52c6bce91fc6d1283e5eebc631fc7aceaf29d274ccaf3feb3c45e"
+        },
+        {
+          "role": "materialCopy",
+          "rva": 94749120,
+          "bytes": 4113,
+          "sha256": "abc9eb6ad407c996403e86208d3af7fdf2face285b15c8dab3e5761850a3c63c"
+        },
+        {
+          "role": "defineSetCopy",
+          "rva": 18372160,
+          "bytes": 244,
+          "sha256": "aaea445a0cbd7207d5b49845713c47fc689dc3c4626009a7cbceb9d844c823ca"
+        },
+        {
+          "role": "defineTreeClone",
+          "rva": 4397792,
+          "bytes": 125,
+          "sha256": "beaac630a71ffedb21c28ad9c5ce2ab128cf995f37bddf01d4a94e8c8eed1f2d"
+        },
+        {
+          "role": "defineNodeConstruct",
+          "rva": 4397968,
+          "bytes": 416,
+          "sha256": "50764ad45421beca24ac2e3a620701c01b104e4a9f31ef8338d9f6ef87bae334"
+        }
+      ],
+      "variationLayout": {
+        "definesOffset": 152,
+        "stateMaskOffset": 168,
+        "fieldsBytes": 18,
+        "sentinelBytes": 32,
+        "nodeBytes": 64,
+        "nodeKeyOffset": 32,
+        "stringBytes": 32,
+        "stringLengthOffset": 16,
+        "stringCapacityOffset": 24,
+        "stringInlineCapacity": 16,
+        "nodeLeft": 0,
+        "nodeParent": 8,
+        "nodeRight": 16,
+        "nodeColor": 24,
+        "nodeNil": 25,
+        "setHead": 0,
+        "setCount": 8
+      },
+      "variationEdges": [
+        {
+          "from": "materialCopy",
+          "to": "defineSetCopy",
+          "siteRva": 94750090
+        },
+        {
+          "from": "defineSetCopy",
+          "to": "defineTreeClone",
+          "siteRva": 18372268
+        },
+        {
+          "from": "defineTreeClone",
+          "to": "defineNodeConstruct",
+          "siteRva": 4397838
+        },
+        {
+          "from": "defineTreeClone",
+          "to": "defineTreeClone",
+          "siteRva": 4397872
+        },
+        {
+          "from": "defineTreeClone",
+          "to": "defineTreeClone",
+          "siteRva": 4397892
+        }
+      ]
+    },
+    {
+      "productVersion": "1.26.60.5",
+      "materialTableRva": 253839328,
+      "materialMethods": [
+        81816464,
+        81733504,
+        485616,
+        81750192,
+        81747792
+      ],
+      "controlTableRva": 254065408,
+      "controlMethods": [
+        88396336,
+        485632,
+        1183936
+      ],
+      "infoInControl": 16,
+      "renderMaterialInInfo": 64,
+      "shaderPathsOffset": 208,
+      "descriptionMaterialOffset": 320,
+      "functions": [
+        {
+          "role": "infoLoader",
+          "rva": 88382432,
+          "bytes": 484,
+          "sha256": "d9038e92b2f842fdc791c2dc50d0faff4a259c1c9e5cf5b18ad1deb94da4bc35"
+        },
+        {
+          "role": "infoDestroy",
+          "rva": 88396336,
+          "bytes": 182,
+          "sha256": "ce87c2c990294f31b9973f75cfc1ed5e794273c4c604cd46befc529d6628edb2"
+        },
+        {
+          "role": "infoDelete",
+          "rva": 485632,
+          "bytes": 22,
+          "sha256": "bea6fcfc7e4b671876f128cc97e1eb2857130e42e8d3a412716515682e73cc4a"
+        },
+        {
+          "role": "infoDeletingDestructor",
+          "rva": 1183936,
+          "bytes": 35,
+          "sha256": "1355b2194f36f9462be5caefecf70e2c43c9b360f17560abe6b227291a08c2ae"
+        },
+        {
+          "role": "shaderPathParser",
+          "rva": 81747792,
+          "bytes": 213,
+          "sha256": "62a888d6af27e1e8f0ca118d20b9f4804795e301f561788a42ed6fe0f9412a14"
+        },
+        {
+          "role": "description",
+          "rva": 107530064,
+          "bytes": 1487,
+          "sha256": "0bf42ad5f09b2e2915c36e6377ac219e61b90bf9704b10cee8f63e1c87639c17"
+        },
+        {
+          "role": "consumer",
+          "rva": 107806208,
+          "bytes": 29579,
+          "sha256": "4cce75b46d37ca9117aa69e9d98258586c82ec2b23de9fb318dd0fd69c8657b5"
+        },
+        {
+          "role": "materialCopy",
+          "rva": 88386832,
+          "bytes": 4166,
+          "sha256": "bb97829ed083a779569b6a7c24ac10cdc4e89ee8021053e2bab07029230401b3"
+        },
+        {
+          "role": "defineSetCopy",
+          "rva": 7030128,
+          "bytes": 242,
+          "sha256": "f04a787f9f61b4e575b29742ac479a77a25e525e72635f2895cb789e8ccc5bf1"
+        },
+        {
+          "role": "defineTreeClone",
+          "rva": 1147280,
+          "bytes": 127,
+          "sha256": "f890c0e8f71af3b074dd3dda9273556593fa019ca5edd9bc5342e4f5fb19e982"
+        },
+        {
+          "role": "defineNodeConstruct",
+          "rva": 1147456,
+          "bytes": 413,
+          "sha256": "86f4227678438aa20dde7b434e6ede0243f0b9af1dac3d84f455b1e4d36b587a"
+        }
+      ],
+      "variationLayout": {
+        "definesOffset": 152,
+        "stateMaskOffset": 168,
+        "fieldsBytes": 18,
+        "sentinelBytes": 32,
+        "nodeBytes": 64,
+        "nodeKeyOffset": 32,
+        "stringBytes": 32,
+        "stringLengthOffset": 16,
+        "stringCapacityOffset": 24,
+        "stringInlineCapacity": 16,
+        "nodeLeft": 0,
+        "nodeParent": 8,
+        "nodeRight": 16,
+        "nodeColor": 24,
+        "nodeNil": 25,
+        "setHead": 0,
+        "setCount": 8
+      },
+      "variationEdges": [
+        {
+          "from": "materialCopy",
+          "to": "defineSetCopy",
+          "siteRva": 88387839
+        },
+        {
+          "from": "defineSetCopy",
+          "to": "defineTreeClone",
+          "siteRva": 7030236
+        },
+        {
+          "from": "defineTreeClone",
+          "to": "defineNodeConstruct",
+          "siteRva": 1147326
+        },
+        {
+          "from": "defineTreeClone",
+          "to": "defineTreeClone",
+          "siteRva": 1147360
+        },
+        {
+          "from": "defineTreeClone",
+          "to": "defineTreeClone",
+          "siteRva": 1147381
+        }
+      ]
+    }
+  ]
+}

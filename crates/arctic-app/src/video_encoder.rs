@@ -9,8 +9,132 @@
 use std::io::Read;
 use std::path::Path;
 
+#[cfg(windows)]
+#[path = "video_encoder_stream.rs"]
+mod output_stream;
+
 /// The command-line switch that runs the encoder instead of the launcher.
 pub const SWITCH: &str = "--encode-video";
+/// Bedrock capture owns the output file and passes its seekable stdout handle.
+pub const STREAM_SWITCH: &str = "--encode-video-stream";
+
+pub fn run_stream(args: &[String]) -> i32 {
+    let result = (|| {
+        let [width, height, fps, frames, mode] = args else {
+            return Err(
+                "expected width height fps frames indexed|indexed_mf_hardware_disabled_v1|realtime"
+                    .into(),
+            );
+        };
+        let parse = |value: &String| {
+            value
+                .parse::<u32>()
+                .map_err(|_| "invalid encoder dimensions/frame count".to_owned())
+        };
+        let (width, height, fps, frames) =
+            (parse(width)?, parse(height)?, parse(fps)?, parse(frames)?);
+        if !(1..=3840).contains(&width)
+            || !(1..=2160).contains(&height)
+            || !(1..=60).contains(&fps)
+            || frames == 0
+            || frames > fps * 7200 + u32::from(mode != "realtime")
+            || !matches!(
+                mode.as_str(),
+                "indexed" | "indexed_mf_hardware_disabled_v1" | "realtime"
+            )
+        {
+            return Err("invalid bounded Bedrock video stream".into());
+        }
+        encode_stream(
+            std::io::stdin().lock(),
+            width,
+            height,
+            fps,
+            frames,
+            mode != "realtime",
+            mode == "indexed_mf_hardware_disabled_v1",
+        )
+    })();
+    match result {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("video export: {error}");
+            1
+        }
+    }
+}
+
+#[cfg(windows)]
+fn encode_stream(
+    mut input: impl Read,
+    width: u32,
+    height: u32,
+    fps: u32,
+    limit: u32,
+    exact: bool,
+    hardware_disabled: bool,
+) -> Result<(), String> {
+    use std::os::windows::io::AsHandle;
+    let output = std::io::stdout()
+        .as_handle()
+        .try_clone_to_owned()
+        .map_err(|e| e.to_string())?;
+    let (w, h) = ((width + 1) & !1, (height + 1) & !1);
+    let mut writer = mf::Writer::open_stream(
+        std::fs::File::from(output),
+        w,
+        h,
+        fps,
+        bitrate(w, h, fps),
+        hardware_disabled,
+    )?;
+    let mut rgba = vec![0; width as usize * height as usize * 4];
+    let mut nv12 = vec![0; w as usize * h as usize * 3 / 2];
+    let mut count = 0;
+    while count < limit {
+        let mut filled = 0;
+        while filled < rgba.len() {
+            match input.read(&mut rgba[filled..]) {
+                Ok(0) if filled == 0 => break,
+                Ok(0) => return Err("truncated presented RGBA frame".into()),
+                Ok(length) => filled += length,
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(error) => return Err(format!("reading frames: {error}")),
+            }
+        }
+        if filled == 0 {
+            break;
+        }
+        rgba_to_nv12(&rgba, width as usize, w as usize, h as usize, &mut nv12);
+        writer.write(&nv12, u64::from(count))?;
+        count += 1;
+    }
+    let mut extra = [0];
+    loop {
+        match input.read(&mut extra) {
+            Ok(0) => break,
+            Ok(_) => return Err("video stream exceeds its frame limit".into()),
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(format!("reading frame boundary: {error}")),
+        }
+    }
+    if count == 0 || exact && count != limit {
+        return Err("video stream ended before all indexed frames arrived".into());
+    }
+    writer.finish()
+}
+#[cfg(not(windows))]
+fn encode_stream(
+    _: impl Read,
+    _: u32,
+    _: u32,
+    _: u32,
+    _: u32,
+    _: bool,
+    _: bool,
+) -> Result<(), String> {
+    Err("the built-in encoder is Windows-only; use FFmpeg".into())
+}
 
 /// The live recorder's encoder and copy-only remuxer run below the game's priority.
 pub fn run_tool(args: &[String]) -> i32 {
@@ -168,6 +292,11 @@ fn read_frame(input: &mut impl Read, frame: &mut [u8]) -> Result<bool, String> {
 fn rgba_to_nv12(rgba: &[u8], stride: usize, w: usize, h: usize, nv12: &mut [u8]) {
     let (luma, chroma) = nv12.split_at_mut(w * h);
     let px = |x: usize, y: usize| {
+        // The Bedrock stream pads an odd final row/column instead of dropping
+        // any presented source pixels. Java's existing even crop is unchanged.
+        if x >= stride || y >= rgba.len() / (stride * 4) {
+            return (0, 0, 0);
+        }
         let i = (y * stride + x) * 4;
         (
             i32::from(rgba[i]),
@@ -202,6 +331,8 @@ mod mf {
     use windows::Win32::Media::MediaFoundation::*;
     use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoTaskMemFree};
     use windows::core::{GUID, HSTRING};
+
+    use super::output_stream;
 
     /// 100-nanosecond units per second (Media Foundation's clock).
     const TICKS: i64 = 10_000_000;
@@ -257,6 +388,7 @@ mod mf {
         stream: u32,
         fps: u32,
         audio_stream: Option<u32>,
+        _byte_stream: Option<IMFByteStream>,
     }
 
     impl Writer {
@@ -273,15 +405,55 @@ mod mf {
             // take this video, Windows' own.
             let hardware = std::env::var_os("ARCTIC_SOFTWARE_ENCODER").is_none();
             let first = if hardware {
-                Self::try_open(out, w, h, fps, bitrate, true, audio)
+                Self::try_open(Some(out), None, w, h, fps, bitrate, true, audio)
             } else {
                 Err("hardware encoder off".into())
             };
-            first.or_else(|_| Self::try_open(out, w, h, fps, bitrate, false, audio))
+            first.or_else(|_| Self::try_open(Some(out), None, w, h, fps, bitrate, false, audio))
         }
 
+        pub fn open_stream(
+            file: std::fs::File,
+            w: u32,
+            h: u32,
+            fps: u32,
+            bitrate: u32,
+            hardware_disabled: bool,
+        ) -> Result<Self, String> {
+            start()?;
+            let stream = output_stream::open(file).map_err(|e| format!("output handle: {e}"))?;
+            let stream = unsafe { MFCreateMFByteStreamOnStream(&stream) }
+                .map_err(|e| format!("output byte stream: {e}"))?;
+            if hardware_disabled {
+                // Bind the indexed profile to this explicit attribute request.
+                // No hardware-enabled retry or environment override is allowed.
+                // Locally registered MFTs and encoder internals remain outside
+                // this declaration; this is not proof of deterministic output.
+                return Self::try_open(None, Some(&stream), w, h, fps, bitrate, false, false);
+            }
+            let hardware = std::env::var_os("ARCTIC_SOFTWARE_ENCODER").is_none();
+            let first = if hardware {
+                Self::try_open(None, Some(&stream), w, h, fps, bitrate, true, false)
+            } else {
+                Err("hardware encoder off".into())
+            };
+            first.or_else(|_| {
+                unsafe {
+                    stream
+                        .SetCurrentPosition(0)
+                        .map_err(|e| format!("resetting encoder output: {e}"))?;
+                    stream
+                        .SetLength(0)
+                        .map_err(|e| format!("resetting encoder output: {e}"))?;
+                }
+                Self::try_open(None, Some(&stream), w, h, fps, bitrate, false, false)
+            })
+        }
+
+        #[allow(clippy::too_many_arguments)]
         fn try_open(
-            out: &Path,
+            out: Option<&Path>,
+            byte_stream: Option<&IMFByteStream>,
             w: u32,
             h: u32,
             fps: u32,
@@ -295,7 +467,7 @@ mod mf {
             };
             unsafe {
                 let mut attrs = None;
-                MFCreateAttributes(&mut attrs, 2).map_err(err("attributes"))?;
+                MFCreateAttributes(&mut attrs, 3).map_err(err("attributes"))?;
                 let attrs = attrs.ok_or("no attributes")?;
                 attrs
                     .SetUINT32(
@@ -307,10 +479,18 @@ mod mf {
                 attrs
                     .SetUINT32(&MF_SINK_WRITER_DISABLE_THROTTLING, 1)
                     .map_err(err("attributes"))?;
-                let _ = std::fs::remove_file(out);
-                let url = HSTRING::from(out.as_os_str());
-                let writer =
-                    MFCreateSinkWriterFromURL(&url, None, &attrs).map_err(err("output file"))?;
+                let writer = if let Some(stream) = byte_stream {
+                    attrs
+                        .SetGUID(&MF_TRANSCODE_CONTAINERTYPE, &MFTranscodeContainerType_MPEG4)
+                        .map_err(err("MP4 container"))?;
+                    MFCreateSinkWriterFromURL(windows::core::PCWSTR::null(), stream, &attrs)
+                        .map_err(err("output stream"))?
+                } else {
+                    let out = out.ok_or("no output file")?;
+                    let _ = std::fs::remove_file(out);
+                    let url = HSTRING::from(out.as_os_str());
+                    MFCreateSinkWriterFromURL(&url, None, &attrs).map_err(err("output file"))?
+                };
 
                 let target = video_type(&MFVideoFormat_H264, w, h, fps).map_err(err("H.264"))?;
                 target
@@ -351,6 +531,7 @@ mod mf {
                     stream,
                     fps,
                     audio_stream,
+                    _byte_stream: byte_stream.cloned(),
                 })
             }
         }
@@ -443,6 +624,13 @@ mod mf {
             t.SetUINT32(&MF_MT_VIDEO_PRIMARIES, MFVideoPrimaries_BT709.0 as u32)?;
             t.SetUINT32(&MF_MT_TRANSFER_FUNCTION, MFVideoTransFunc_709.0 as u32)?;
             t.SetUINT32(&MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_16_235.0 as u32)?;
+            // rgba_to_nv12 averages each 2x2 luma block: chroma is centered in
+            // both directions, with aligned UV planes and progressive rows.
+            t.SetUINT32(
+                &MF_MT_VIDEO_CHROMA_SITING,
+                (MFVideoChromaSubsampling_MPEG1.0 | MFVideoChromaSubsampling_ProgressiveChroma.0)
+                    as u32,
+            )?;
             Ok(t)
         }
     }

@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "evidence": "Current source reads/edits and manual reference review only. No builds, tests, syntax checks, project/helper/game execution, GPU/JNI calls, process inspection, attachment or export",
+  "problem": "The native observer captured selected wing transforms and shader values, but final wing palettes had no archive role and the replay color/material consumer admitted only capes",
+  "sourcePort": {
+    "role": "WING_SLOT=8 is an archive discriminator, never an engine child-component slot. Admission requires the actual selected MeshRole.Elytra, exact geometry.elytra identity, accepted current WingPose and matching animation frame",
+    "paletteSpace": "A real child binding preserves its checked pose space; a root wing layer uses the same current model draw as both sides of the existing root conversion. The existing indexed hierarchy/group/owner/name/cache guards remain required",
+    "capture": "The existing final-current-palette observer and ledger now retain wing palettes along with attachment/cape palettes. Partial, conflicting or unconsumed collections remain incomplete",
+    "archive": "bedrock_attachment_samples_v3, magic 0x4152434154540003, admits the wing role. The v2 cape and v1 attachment readers remain explicit alternatives; new samples are not silently written into older formats",
+    "bounds": "Existing 16 palettes, 128 total bones, eight bones per palette, 256 native bone index, 2 MiB history block, 16 MiB replay resident/plan budget and 8 MiB serialized plan limits remain",
+    "playback": "The serialized Java plan selects exact recorded wing palette samples and optional independently recorded layer color/dithering/shader values. Unknown colors are omitted rather than supplied from the viewer",
+    "nativePaletteConsumer": "native_emote_upload applies the existing exact replay target to real current-output buffers. Historical entries keep their existing supplied-history semantics. Root wings bypass emote torso retargeting when no recorded palette is selected",
+    "nativeMaterialConsumer": "native_skinned_desc matches the actual copied description root, tint, selected wing palette and source spans, then copies archived RGBA/dithering to that owned output. native_shader_consumer admits the same wing/frame identity and uses its existing pinned synchronous stack-local material-copy path",
+    "materialGuards": "The source shader cohort, selected concrete material/path/variation guards, actual description and current palette spans are rechecked before/after copy. Globals, material programs, native texture references and descriptor contents are not modified",
+    "receipts": "Separate elytraReplayColor/conflict state and nativeWingReplayColor carry exact actor/world/animation/replay identity, source/applied RGBA, flag and shader-copy counts. Cape receipts retain their default role for legacy input. One missing or failed matching description cannot be hidden by a successful later draw",
+    "recordAfterReplay": "LayerColorSample consumes either cape or wing applied receipts when rerecording; complete copied shader cohorts are distinguished from original live values and incomplete copies",
+    "readiness": "This code does not promote GPU, complete material, deterministic export or full parity flags; existing wing export limitations remain"
+  },
+  "remaining": [
+    "Runtime validation of the installed selected wing hierarchy, palette and synchronous material consumer",
+    "Complete native wing texture/program/participant fidelity and deterministic video proof",
+    "Java-equivalent entity material producer and native insertion for Arctic-owned custom world meshes",
+    "Complete emote/equipment, cape, cosmetics and replay parity verification"
+  ],
+  "verified": {"built":false,"tested":false,"archiveRoundTrip":false,"nativePaletteApplied":false,"nativeMaterialApplied":false,"gpuRendered":false,"deterministicVideo":false,"fullParity":false}
+}

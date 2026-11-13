@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "evidence": "Source edits and manual source/API-definition review only; no builds, syntax checks, tests, project/game execution, shader compilation, GPU/API execution, process inspection or Bedrock operations",
+  "primaryApiReferences": [
+    "https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-a-root-signature",
+    "https://learn.microsoft.com/en-us/windows/win32/desktop/direct3d12/setting-descriptor-heaps",
+    "https://learn.microsoft.com/en-us/windows/win32/direct3d12/indirect-drawing"
+  ],
+  "sourcePort": {
+    "modules": ["native_graphics_state", "native_graphics_observer"],
+    "scope": "Exactly the state changed by the current avatar_material.record_ordered implementation; not an arbitrary D3D12 state block, world/target lease or active draw insertion",
+    "captured": ["pipeline state", "complete declared graphics root argument set", "shader-visible descriptor heaps", "compute root descriptor tables", "primitive topology", "vertex buffer slot zero", "index buffer including an observed null binding", "viewport/scissor arguments, checked for native insertion but left unchanged by restoration"],
+    "rootLayout": "CreateRootSignature now copies bounded parameter type/constant-width, descriptor range type/count/offset and root-flag metadata onto the actual returned root object using the public versioned deserializer. ARCRS002 retains ARCRS001 parameter restoration compatibility without inventing missing legacy range/flag facts; see native-descriptor-spans-source.json",
+    "bounds": {"serializedRootBytes":65536, "rootParameters":64, "rootDwords":64, "descriptorRanges":256, "privateLayoutBytes":3856, "declaredDescriptorSlotsAcrossStages":256, "shaderVisibleHeaps":2, "trackedListsInheritedFromDepthTracker":512},
+    "constants": "Individual and offset array root constant writes preserve exact u32 bits and per-word initialization; graphics CBV/SRV/UAV addresses retain their actual distinct parameter types",
+    "rootChanges": "Changing a root signature clears that stage's arguments; redundant binding of the same object preserves them",
+    "heapChanges": "Heap sets are normalized by actual descriptor type; a changed set invalidates both stages' table arguments; redundant identical sets preserve them",
+    "compute": "Only tables are restored because the cosmetics recorder does not change compute signature/constants/root descriptors; an observed compute signature with an unknown table/layout prevents snapshots",
+    "readiness": "Requires observed creation/reset, known pipeline/heaps, complete graphics arguments, known compute tables, defined topology and observed vertex-zero/index bindings; partial or late history cannot authorize restoration",
+    "lifetime": "Every observed create/reset attaches a fresh monotonic private list token; snapshots and stamp checks query that live token, preventing old history from surviving a reused COM address",
+    "opaqueCalls": "ExecuteBundle, all ExecuteIndirect calls including zero maximum count, and optional SetPipelineState1 invalidate readiness until reset",
+    "ownership": "Shadow state owns copied PSO/root/heaps until close/reset/eviction; snapshots retain their own copies and now a complete known committed-buffer owner cohort for restored graphics root addresses and vertex/index spans when available (native-restore-buffer-owners-source.json); no command list, engine vector or guessed native resource pointer is adopted",
+    "tableSlotPlan": "Snapshots now also retain optional bounded graphics/compute descriptor spans resolved against their actual bound heap/device/type/stride/start/count, including explicit/APPEND/unbounded ranges. Direct indexing, missing legacy flags/ranges, mixed heap classes and oversized/invalid spans remain unknown; no descriptor content/resource ownership is inferred",
+    "descriptorResources": "Actual public heap/view/sampler and descriptor-copy observations can now supply a separately bounded retained slot/value cohort from that plan. It holds actual referenced resource objects and known committed owners; Snapshot.matches checks known revisions before emission. Overlaps/query failures remain unknown. No descriptor contents are frozen or treated as fully owned solely from this metadata (native-descriptor-resources-source.json)",
+    "restoration": "Unsafe restore checks the captured list lifetime before writes, restores heaps/pipeline/graphics signature and arguments, compute tables and IA bindings inside the private-command guard; the future caller must pin the snapshot and referenced native assets through native retirement",
+    "settings": "Disabled capture and unobserved/reset-less lists do not accumulate guessed state; a setting change that skips a setter invalidates that recording epoch",
+    "diagnostics": "nativeGraphicsState reports tracked lists and scalar readiness candidates, with explicit unverified restoration/insertion/rendering flags"
+  },
+  "limitations": [
+    "native_avatar_record captures/retains/restores snapshots in its source transaction, but no game-facing native insertion caller invokes it yet",
+    "The snapshot does not discover or establish world scope, native color/depth states, actual surface ownership or engine asset lifetime",
+    "Targets, viewport/scissor, compute non-table arguments and other dynamic state are outside this restore set and must remain unchanged by its caller",
+    "Opaque indirect/bundle/ray-tracing state is rejected rather than expanded; newer generic-program mutation APIs are not supported by an insertion caller",
+    "Observed public committed-buffer creation can now supply actual storage owners for a complete restored address cohort. Missing/placed buffer owners, shader read extents, mutable contents and resources referenced through descriptor tables still require the actual native owner's contract",
+    "Late root/list creation or incomplete binding initialization remains unknown; runtime hook coverage, performance and restoration fidelity are unverified",
+    "Native world rendering, complete cape/emote fidelity, deterministic video and full feature parity remain unfinished"
+  ],
+  "verified": {"built":false, "tested":false, "hooksExecuted":false, "snapshotObservedLive":false, "stateRestorationVerified":false, "nativeInsertionImplemented":false, "gpuWorldRendered":false, "deterministicVideo":false, "fullParity":false}
+}

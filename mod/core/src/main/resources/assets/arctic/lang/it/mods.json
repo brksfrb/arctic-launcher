@@ -685,5 +685,14 @@
   "mods.zoom_curve.linear": "Lineare",
   "mods.zoom_curve.snappy": "Scattante",
   "mods.zoom_key": "Tasto zoom",
-  "mods.zoom_sensitivity": "Sensibilità dello zoom"
+  "mods.zoom_sensitivity": "Sensibilità dello zoom",
+  "mods.hold_the_emote_wheel_key": "Tieni premuto il tasto della ruota delle emote",
+  "mods.let_go_to_play_the_selected_emote": "Rilascia per eseguire l'emote scelta",
+  "mods.choose_and_play_one_of_your_emotes": "Choose and play one of your emotes",
+  "mods.experimental_rendering_full_java_parity_is": "Rendering sperimentale; la piena parità con Java non è ancora verificata.",
+  "mods.bedrock_cosmetics": "Cosmetici Bedrock",
+  "mods.experimental_skins_capes_wings_and_emotes_in": "Skin, mantelli, ali ed emote sperimentali nei mondi Bedrock",
+  "mods.animate_capes": "Anima i mantelli",
+  "mods.play_animated_cape_frames_on_your_screen": "Riproduci i fotogrammi dei mantelli animati sul tuo schermo",
+  "mods.choose_your_skins_capes_and_emotes_in_arctic": "Scegli skin, mantelli ed emote in Arctic Launcher → Cosmetici."
 }

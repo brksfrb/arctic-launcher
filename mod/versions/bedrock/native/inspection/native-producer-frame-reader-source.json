@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "purpose": "Independent exact-family producer Context/embedded-frame reader source migration",
+  "source": [
+    "../src/native_producer_frame_profile.rs",
+    "../src/render_bridge.rs",
+    "../src/native_submit.rs",
+    "../src/native_scene_layout.rs"
+  ],
+  "bindings": "producer-frame-reader-bindings.json",
+  "nativeEvidence": "static-producer-frame-layout-1.26.60.5.json",
+  "contract": {
+    "acceptedCompleteImageAndSceneFamilyRequired": true,
+    "fiveCompleteNativeFunctionsHashedBeforeAdmission": true,
+    "actualFrameStepSwapAndTwoFrameConstructorCallEdgesRechecked": true,
+    "twoNativeRipLoadsMustSelectSameContextGlobal": true,
+    "twoEmbeddedFrameExtentsEndAtRenderAndSubmitPointerFields": true,
+    "encoderPointerAndFrameNumberFitTheirEstablishedExtents": true,
+    "producerAdmissionIndependentOfBackendDetours": true,
+    "submissionObserverRequiresProducerPreflight": true,
+    "submitAndRenderMustBeDistinctMembersOfActualEmbeddedPair": true,
+    "encoderFrameMustEqualActualSubmit": true,
+    "globalContextBothFramePointersEncoderAndNumberReadbacksRequired": true,
+    "backendFrameMetadataRechecksGlobalAndNumber": true,
+    "frameNumberConsumersUseSharedSelectedField": true,
+    "existingMetadataAndForwardingFixturesAdaptedButNotRun": true,
+    "nativeMethodsInvokedByReader": false,
+    "newHooksInstalledByReader": false,
+    "exclusivePhaseOrNativeGpuLeaseCreated": false
+  },
+  "sourceImplemented": true,
+  "producerContextReaderSourceMigrationImplemented": true,
+  "currentCandidateActivated": false,
+  "viewLayoutMigrationComplete": false,
+  "backendEntryMigrationComplete": false,
+  "runtimeVerified": false,
+  "fullParity": false,
+  "remaining": [
+    "Current scene, actor, terrain and material dependency migrations",
+    "Actual exclusive native feature phase and custom geometry insertion",
+    "Real material, texture, descriptor and resource ownership",
+    "Complete scene dependencies and deterministic replay rendering/video export"
+  ],
+  "operations": {
+    "cachedBytesReadAsData": true,
+    "gameOpened": false,
+    "gameCodeExecuted": false,
+    "processInspected": false,
+    "buildExecuted": false,
+    "testsExecuted": false
+  },
+  "viewLayoutSourceMigrationImplemented": true,
+  "viewReaderSourceEvidence": "native-view-reader-source.json",
+  "backendEntryAndBatchSourceMigrationImplemented": true,
+  "backendBatchSourceEvidence": "native-backend-batch-source.json",
+  "framebufferAndTextureReaderSourceMigrationImplemented": true,
+  "framebufferReaderSourceEvidence": "native-framebuffer-reader-source.json",
+  "queueRetirementReaderSourceMigrationImplemented": true,
+  "queueReaderSourceEvidence": "native-queue-reader-source.json",
+  "graphicsStatePublicApiIntegrationImplemented": true,
+  "graphicsStateAdmissionSourceEvidence": "native-graphics-admission-source.json"
+}

@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "evidence": "Source reads and edits only; no builds, tests, syntax checks, project/game execution, game launch, attachment or process inspection",
+  "reference": {
+    "base": "Fabric CosmeticsLayer.draw and drawLimbs pass the supplied light to CuboidModel; drawMesh passes it to MeshDraw",
+    "glow": "Cuboid glow uses fullBright; shared MeshDraw selects FULL_BRIGHT for glow and sheen"
+  },
+  "port": {
+    "input": "WorldFrame.Player.packedLight and AvatarRenderer.Avatar.packedLight: nullable Java packed block/sky light for the same actor/frame",
+    "roles": "Skin pieces, bent emote limbs, base cuboids/meshes, Java cape boxes and both Java/native-pose wing boxes receive the explicit light argument",
+    "preview": "Missing input retains the existing software full-bright fallback; it does not establish scene provenance",
+    "staging": "NativeAvatarGeometry snapshots the scene source per batch; changing actors clears it, changing light during a partial quad rejects the transaction, and known lit vertices must match their batch's source value",
+    "wire": "ARCGEO01 batch flag 4 conveys sceneLightKnown without altering the byte layout; old readers reject the new flag",
+    "consumer": "Native material preparation rejects nonempty lit batches lacking scene provenance before GPU commands; emissive glow does not need packed scene light",
+    "replay": "Body samples v4 record optional packed light with the actor pose; playback uses that archived value and never borrows the viewer's live light. Exact endpoints preserve the observation; interior values survive only when both known endpoints agree. See replay-packed-scene-light-source.json."
+  },
+  "remaining": [
+    "An authoritative live producer of Java-equivalent packed light, lightmap and the matching material/feature phase",
+    "Recorded lightmap and complete material timelines for replay fidelity; authoritative observations around packed-light changes",
+    "Exact general skin material variants and actual GPU scheduling/insertion",
+    "Runtime Java comparisons and deterministic video verification"
+  ],
+  "verified": {"built": false, "tested": false, "liveGame": false, "gpuRendering": false, "deterministicVideo": false, "fullParity": false}
+}

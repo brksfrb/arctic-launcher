@@ -131,7 +131,7 @@ public final class Hud {
 		this.config = config;
 		List<HudWidget> all = new ArrayList<HudWidget>();
 		for (HudWidget w : Widgets.all(cps)) {
-			if (!w.needsGame() || ArcticClient.platform().hasFeatures()) {
+			if (!w.needsGame() || ArcticClient.platform().supportsGameWidget(w.id)) {
 				all.add(w);
 			}
 		}

@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "evidence": "Source edits and manual source review only; no builds, syntax checks, tests, project/game execution, JNI calls, GPU/API execution, process inspection or Bedrock operations",
+  "sourcePort": {
+    "nativeProducer": "world_hooks.geometry_input(scope,width,height,reverseZ) copies one exact retained observation through live_frame.geometry_input without requiring Observation.depth",
+    "sharedPacketBuilder": "The legacy live_frame.build path delegates to the same JSON builder and separately requires/downsamples its real depth image; projection, actor/appearance/timing/receipt fields remain shared",
+    "inputOwnership": "Private GeometryInput fields hold owned JSON, session/sequence/surface/camera facts and a guarded numeric producer FrameKey; no native object reference or borrowed image buffer",
+    "inputBound": "At most 1 MiB JSON is transmitted; retained history scope/session/sequence and the unique producer FrameKey must remain current",
+    "javaParser": "WorldFrame.parseGeometry shares the full existing actor/appearance/equipment/pose/camera/timing validator with parse, skipping only CPU terrain-image validation/allocation",
+    "rasterSeparation": "Geometry-only frames have an internal transient flag; WorldState.frame, WorldFrame.render and depthSnapshot reject their use as a software-renderable world/depth source",
+    "jniEntry": "NativeBridge.worldGeometryFromFrame(json,expectedSession,expectedSequence), descriptor (Ljava/lang/String;Ljava/lang/String;J)[B",
+    "clientContext": "Serialized client-thread geometry emission temporarily supplies that owned world to appearance/replay helpers, then restores platform.world and input availability in finally; WORLD/presentation readiness and body plans are not published",
+    "reentrancy": "Geometry staging rejects nested world/presentation mutation and body/attachment-plan APIs while its temporary context is active",
+    "nativeConsumer": "ClientVm.geometry_input requires a mutable client borrow, checks scope freshness before and after Java work, bounds the array before copying, decodes ARCGEO01..10 including optional material/visibility/texture identity, layer eligibility, model/glint and simple-phase data, and matches session/sequence/surface/space and exact camera/projection bits",
+    "clockAndAppearance": "The existing WorldFrame.emitAvatars and NativeGeometryPacket retain acknowledged body/cape/emote/wing choices and rational replay samples; this path does not tick client/physics controllers",
+    "activation": "When native cosmetics are enabled, the DX12 present owner selects exact submitted surface metadata without terrain readback; after its ordinary client frame imports textures and updates controllers, it calls geometry_input and stages an owned asynchronous upload if the packet has explicit entity material inputs. No Java calls run on native draw workers and no extra suppression/readiness authority is granted",
+    "completedConsumer": "native_geometry_stream retains one pending upload ticket and one completed upload, rejects expired producer identities and camera/surface mismatches, and exposes only exact scope/size/reverse-Z lookup to Geometry.from_stream with independently supplied phase preparation and pose inputs"
+  },
+  "limitations": [
+    "Client-thread scheduling and completed upload handoff are wired in source; the actual game-facing feature-phase caller remains absent",
+    "Surface/depth convention come from exact submitted native depth metadata; Java-equivalent live material/lightmap/fog and complete feature preparation/group inputs remain missing",
+    "Java appearance emission remains mutable client logic; it must run on its serialized client owner and is not a native draw-worker callback",
+    "An owned geometry packet and successful camera matching are not target ownership, GPU execution, presentation or parity evidence",
+    "General skin/glint/HDR material variants, native rendering, cape/emote fidelity and deterministic replay/video comparison remain unfinished"
+  ],
+  "verified": {"built":false, "tested":false, "jniExecuted":false, "depthFreeGeometryObservedLive":false, "gamePhaseCallerImplemented":false, "gpuWorldRendered":false, "deterministicVideo":false, "fullParity":false}
+}

@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "profiles": [
+    {
+      "productVersion": "1.26.5203.0",
+      "abi": "encoderViewProgramOcclusionDepthFlags6",
+      "stackBytes": 104,
+      "layout": {
+        "encoderFrame": 0,
+        "itemsBase": 788224,
+        "itemsCount": 14489576,
+        "encoderSubmitted": 1356,
+        "itemStride": 128,
+        "itemIndices": 68,
+        "itemVertices": 76,
+        "itemCapacity": 65535
+      },
+      "functions": {
+        "encoder": {
+          "rva": 192029808,
+          "bytes": 1538,
+          "sha256": "e749af920ecdfcbd445ba9c2e3110de9b3c371a37d81fa0b8f902ee2bc41a303"
+        },
+        "caller": {
+          "rva": 87138288,
+          "bytes": 253,
+          "sha256": "0a7da594e74148c3e72a15c6b4f2946832fca1f3b88008bf0a0652f167ce3f21"
+        }
+      },
+      "callRva": 87138527
+    },
+    {
+      "productVersion": "1.26.60.5",
+      "abi": "encoderViewProgramOcclusionDepthFlags6",
+      "stackBytes": 104,
+      "layout": {
+        "encoderFrame": 0,
+        "itemsBase": 739072,
+        "itemsCount": 14440424,
+        "encoderSubmitted": 1676,
+        "itemStride": 128,
+        "itemIndices": 68,
+        "itemVertices": 76,
+        "itemCapacity": 65535
+      },
+      "functions": {
+        "encoder": {
+          "rva": 197524288,
+          "bytes": 1488,
+          "sha256": "240591b5bec12d06035200189247e0756c28fa97a6fe462b5b65de66c8bcb287"
+        },
+        "caller": {
+          "rva": 90807264,
+          "bytes": 213,
+          "sha256": "a22d23e9340213a618d8b247a92b30253d22fc6e32da055f9cb82a691c7d9a55"
+        }
+      },
+      "callRva": 90807465
+    }
+  ]
+}

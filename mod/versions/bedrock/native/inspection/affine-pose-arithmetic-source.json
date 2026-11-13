@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "evidence": "Source reads, edits and manual review; cached Java/JOML class bytes decoded as data and the JOML archive hashed. No Java class loading, builds, tests, syntax checks, project/game/renderer/JNI/shader/GPU execution, process inspection, native commands or exports. Runtime parity remains unverified by user instruction.",
+  "reference": {
+    "java": "26.2",
+    "clientJarSha256": "40896ee9f1e2bec3c934daac7e93d41e9e3d9c2f8ae0ca366d52ffbfd1afa290",
+    "joml": "org.joml:joml:1.10.8",
+    "jomlJarSha256": "bf19510145178df82cd3bd37edd514c13f411531ec5545299fd3abcbc98fe7c2",
+    "points": "Repository Fabric PoseXform.position calls pose.pose().transformPosition(px,py,pz,v). Cached ModelPart$Cube.compile also calls Matrix4f.transformPosition(FFF,Vector3f) at 0x89. Matrix4f delegates to Vector3f.mulPosition. Its generic Matrix4fc branch uses three nested Math.fma calls for each translated coordinate (0x2f..0x35, 0x59..0x5f, 0x83..0x89).",
+    "properties": "Vector3f.mulPosition(Matrix4fc) checks property bit 4 for identity (return input unchanged) and bit 8 for translation before choosing generic arithmetic (0x00..0x23). Matrix4f.mul similarly dispatches based on matrix properties. Copied row-major native arrays do not contain those original flags; this port does not infer them from approximate matrix entries.",
+    "composition": "Matrix4f.mulAffine(Matrix4fc,Matrix4f) uses two nested Math.fma calls after the third product for each linear entry (0x95..0x164). Translation uses three nested calls with the left translation innermost (0x16e..0x1be). The previous shared helper added into zero and added translation before its three products.",
+    "fit": "Repository CosmeticsLayer.fit returns immediately when !fit.moves(), otherwise calls PoseStack.translate(0,fit.dy()/16.0,fit.dz()/16.0), then scale(-1,1,1) when mirrored. Fit uses bounded half-pixel values, exactly representable after division by 16. PoseStack.translate(DDD) narrows each argument to float; Pose.translate(FFF) calls Matrix4f.translate. The generic translation branch uses three nested Math.fma calls for each row, retaining even the zero-X term (0x09..0x65 in the destination overload).",
+    "defaultMath": "The existing software-model-phase-source.json records the cached JOML Options default joml.useMathFma=false and Runtime/Math fallback. This port preserves that explicit non-fused arithmetic profile; no runtime options were read or code executed."
+  },
+  "port": {
+    "helper": "JavaAffinePose evaluates row-major 3x4 generic point, affine product and translated-copy formulas with explicit right-nested float multiplication/addition. It adds no leading zero accumulator and does not reassociate, use doubles/FMA, clamp or normalize results. Outputs are new arrays for composition/translation; point evaluation allocates nothing.",
+    "composition": "AvatarRenderer.multiply now uses this shared default generic affine recipe for its supplied model/part/cape/wing composition. The older native-wing torso rebasing product was removed by wing-layer-root-source.json. Shared composition changes affect previews too; they do not recover the original target PoseStack property/rotation/normal history.",
+    "positions": "AvatarPoseSink selects generic Java point arithmetic separately from Java normal handling. Known Java skin/base/bent/glow/cape/wing staging uses the new point recipe in both software and NativeAvatarGeometry. Untyped GENERAL vertex sinks retain their existing point calculation. Normal-matrix reconstruction and signed-byte conversion are unchanged.",
+    "glint": "Raster3D's explicit JAVA_ARMOR_GLINT sink selects the same position recipe as its base wing sink even though its normals do not use the Java entity normal matrix. The existing deferred observed glint path still copies the base clip coordinates directly; no second emission is added there.",
+    "fitting": "Fit.NONE now clones the supplied pose without performing a translation. Moved/mirrored fits first translate the copy using the full generic row, including zero X, then mirror the first basis column as before. The supplied parent pose is never mutated.",
+    "scope": "This ports arithmetic on this renderer's actual owned inputs under the default generic profile. It does not claim that a native engine pose is a Java-equivalent matrix or that every target call takes this generic branch. Identity/translation shortcuts, matrix metadata, trusted normal history and non-default math profiles remain distinct unfinished requirements."
+  },
+  "compatibility": {
+    "wire": "No ARCGEO, replay archive, native/JNI ABI, hook offset, shader format or readiness gate change. The new helper introduces no game/API dependency or runtime command.",
+    "admission": "Existing pose copies/finite checks, native vertex rejection, clipping and model/frame/triangle/texture budgets remain. Later nonfinite output still follows existing rejection/drop behavior; the math helper does not replace it with fabricated positions.",
+    "verification": "No tests were added or executed. No build/syntax check, vertex/sort/pixel comparison, native rendering or deterministic export verification was performed. All parity flags remain false."
+  },
+  "remaining": [
+    "Original target matrix properties, rotation/normal history, optimized branch provenance, non-default JOML math and native/Java pose equivalence.",
+    "Complete cape/emote/wing/attachment/material/visibility fidelity and replay camera/glint rebasing.",
+    "Owning native surface/resource/material/phase producer and actual game-facing world insertion callsite.",
+    "Build, point/matrix/fit comparisons, installed-game pixels/depth, replay/video comparisons and full 1:1 parity verification."
+  ],
+  "verified": {"built":false,"tested":false,"pointTransformsCompared":false,"affineCompositionCompared":false,"fitCompared":false,"glintDepthCompared":false,"pixelsCompared":false,"liveGame":false,"gpuRendering":false,"deterministicVideo":false,"fullParity":false}
+}
