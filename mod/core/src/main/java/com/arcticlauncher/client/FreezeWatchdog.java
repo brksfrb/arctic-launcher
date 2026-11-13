@@ -20,14 +20,15 @@ import java.util.Map;
  * Finds short freezes (over 2 s, where the 30 s hang watchdog in {@link CrashDiagnostics} is silent).
  * The client thread only writes a timestamp per frame ({@link CrashDiagnostics#frame()}) and a few
  * volatile fields per tick; everything else runs on a daemon thread. While the client thread is
- * stuck, its stack is sampled every 500 ms. When it recovers, one file per freeze is written to
- * {@code <game dir>/logs/arctic-freezes/} and one summary line goes to the game log.
+ * stuck, its stack is sampled every 500 ms. One file per freeze is written to
+ * {@code <game dir>/logs/arctic-freezes/} after about 3 s, then overwritten every 3 s so a killed
+ * process leaves evidence. Recovery finishes that same file and logs one summary line.
  * Java 8 compatible.
  */
 public final class FreezeWatchdog {
 	static final long THRESHOLD_NANOS = 2_000_000_000L;
 	private static final long POLL_MS = 250;
-	private static final long REWRITE_NANOS = 10_000_000_000L;
+	private static final long REWRITE_NANOS = 3_000_000_000L;
 	private static final int MAX_SAMPLES = 2000;
 	private static final int MAX_DEPTH = 60;
 	private static final int KEEP_FILES = 30;
@@ -148,7 +149,6 @@ public final class FreezeWatchdog {
 			boolean all = true;
 			long lastSample = 0;
 			while (true) {
-				long now = System.nanoTime();
 				long current = CrashDiagnostics.progressNanos();
 				if (current != beat) {
 					f.end = current;
@@ -167,7 +167,9 @@ public final class FreezeWatchdog {
 						f.others = otherThreads(client);
 					}
 				}
-				if (now > nextWrite) {
+				// Always capture the first client stack and other threads before publishing evidence.
+				long now = System.nanoTime();
+				if (now >= nextWrite) {
 					nextWrite = now + REWRITE_NANOS;
 					f.end = 0;
 					write(f, false);

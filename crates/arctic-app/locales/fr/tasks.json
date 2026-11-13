@@ -48,6 +48,8 @@
   "tasks.game_folder_for_this_instance": "Dossier de jeu de cette instance",
   "tasks.game_open": "Jeu ouvert",
   "tasks.get_arctic_launcher": "Obtenir Arctic Launcher",
+  "tasks.hang_at_exit_client_hung_for_at_least": "Blocage à la fermeture : le client était figé depuis au moins {duration} ; toujours figé au dernier instantané du watchdog, aucune reprise enregistrée.",
+  "tasks.hang_at_exit_client_hung_for_at_least_in": "Blocage à la fermeture : le client était figé depuis au moins {duration} dans {frame} ; toujours figé au dernier instantané du watchdog, aucune reprise enregistrée.",
   "tasks.help_fix_this_crash": "Aider à corriger ce plantage ?",
   "tasks.hide_server_and_world_names": "Masquer les noms des serveurs et des mondes",
   "tasks.hud": "HUD {name} ({profile})",

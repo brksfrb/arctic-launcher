@@ -48,6 +48,8 @@
   "tasks.game_folder_for_this_instance": "Pasta do jogo desta instância",
   "tasks.game_open": "Jogo aberto",
   "tasks.get_arctic_launcher": "Baixe o Arctic Launcher",
+  "tasks.hang_at_exit_client_hung_for_at_least": "Travamento ao sair: o cliente ficou travado por pelo menos {duration}; ainda travado no último instantâneo do watchdog, sem recuperação registrada.",
+  "tasks.hang_at_exit_client_hung_for_at_least_in": "Travamento ao sair: o cliente ficou travado por pelo menos {duration} em {frame}; ainda travado no último instantâneo do watchdog, sem recuperação registrada.",
   "tasks.help_fix_this_crash": "Ajudar a corrigir este travamento?",
   "tasks.hide_server_and_world_names": "Ocultar nomes de servidores e mundos",
   "tasks.hud": "HUD de {name} ({profile})",

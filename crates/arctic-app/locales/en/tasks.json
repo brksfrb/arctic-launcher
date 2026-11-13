@@ -48,6 +48,8 @@
   "tasks.game_folder_for_this_instance": "Game folder for this instance",
   "tasks.game_open": "Game open",
   "tasks.get_arctic_launcher": "Get Arctic Launcher",
+  "tasks.hang_at_exit_client_hung_for_at_least": "Hang at exit: client hung for at least {duration}; still frozen at the last watchdog snapshot, no recovery recorded.",
+  "tasks.hang_at_exit_client_hung_for_at_least_in": "Hang at exit: client hung for at least {duration} in {frame}; still frozen at the last watchdog snapshot, no recovery recorded.",
   "tasks.help_fix_this_crash": "Help fix this crash?",
   "tasks.hide_server_and_world_names": "Hide server and world names",
   "tasks.hud": "{name} HUD ({profile})",

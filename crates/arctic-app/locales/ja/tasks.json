@@ -48,6 +48,8 @@
   "tasks.game_folder_for_this_instance": "このインスタンスのゲームフォルダー",
   "tasks.game_open": "ゲーム起動中",
   "tasks.get_arctic_launcher": "Arctic Launcherを入手",
+  "tasks.hang_at_exit_client_hung_for_at_least": "終了時にハング: クライアントは少なくとも {duration} 間ハングしていました。最後のウォッチドッグスナップショットでもフリーズしたままで、回復は記録されていません。",
+  "tasks.hang_at_exit_client_hung_for_at_least_in": "終了時にハング: クライアントは {frame} で少なくとも {duration} 間ハングしていました。最後のウォッチドッグスナップショットでもフリーズしたままで、回復は記録されていません。",
   "tasks.help_fix_this_crash": "このクラッシュの修正に協力しますか？",
   "tasks.hide_server_and_world_names": "サーバー名とワールド名を隠す",
   "tasks.hud": "{name} HUD（{profile}）",

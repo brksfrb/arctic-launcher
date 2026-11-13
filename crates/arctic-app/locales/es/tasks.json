@@ -48,6 +48,8 @@
   "tasks.game_folder_for_this_instance": "Carpeta del juego para esta instancia",
   "tasks.game_open": "Juego abierto",
   "tasks.get_arctic_launcher": "Consigue Arctic Launcher",
+  "tasks.hang_at_exit_client_hung_for_at_least": "Cuelgue al salir: el cliente estuvo colgado al menos {duration}; seguía congelado en la última instantánea del watchdog, sin recuperación registrada.",
+  "tasks.hang_at_exit_client_hung_for_at_least_in": "Cuelgue al salir: el cliente estuvo colgado al menos {duration} en {frame}; seguía congelado en la última instantánea del watchdog, sin recuperación registrada.",
   "tasks.help_fix_this_crash": "¿Ayudar a arreglar este cierre inesperado?",
   "tasks.hide_server_and_world_names": "Ocultar nombres de servidores y mundos",
   "tasks.hud": "HUD de {name} ({profile})",

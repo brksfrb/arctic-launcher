@@ -48,6 +48,8 @@
   "tasks.game_folder_for_this_instance": "此实例的游戏文件夹",
   "tasks.game_open": "游戏已打开",
   "tasks.get_arctic_launcher": "获取 Arctic Launcher",
+  "tasks.hang_at_exit_client_hung_for_at_least": "退出时仍在卡死：客户端至少已卡住 {duration}；最后一次看门狗快照时仍处于冻结状态，未记录到恢复。",
+  "tasks.hang_at_exit_client_hung_for_at_least_in": "退出时仍在卡死：客户端至少已在 {frame} 卡住 {duration}；最后一次看门狗快照时仍处于冻结状态，未记录到恢复。",
   "tasks.help_fix_this_crash": "帮助修复这次崩溃？",
   "tasks.hide_server_and_world_names": "隐藏服务器和世界名称",
   "tasks.hud": "{name} HUD（{profile}）",

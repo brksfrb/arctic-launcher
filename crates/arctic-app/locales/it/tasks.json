@@ -48,6 +48,8 @@
   "tasks.game_folder_for_this_instance": "Cartella di gioco per questa istanza",
   "tasks.game_open": "Gioco aperto",
   "tasks.get_arctic_launcher": "Scarica Arctic Launcher",
+  "tasks.hang_at_exit_client_hung_for_at_least": "Blocco in uscita: il client era bloccato da almeno {duration}; ancora bloccato all'ultimo snapshot del watchdog, nessun recupero registrato.",
+  "tasks.hang_at_exit_client_hung_for_at_least_in": "Blocco in uscita: il client era bloccato da almeno {duration} in {frame}; ancora bloccato all'ultimo snapshot del watchdog, nessun recupero registrato.",
   "tasks.help_fix_this_crash": "Aiutare a risolvere questo crash?",
   "tasks.hide_server_and_world_names": "Nascondi i nomi di server e mondi",
   "tasks.hud": "HUD {name} ({profile})",

@@ -48,6 +48,8 @@
   "tasks.game_folder_for_this_instance": "Folder gry tej instancji",
   "tasks.game_open": "Gra otwarta",
   "tasks.get_arctic_launcher": "Pobierz Arctic Launcher",
+  "tasks.hang_at_exit_client_hung_for_at_least": "Zawieszenie przy wyjściu: klient był zawieszony przez co najmniej {duration}; nadal zawieszony na ostatniej migawce watchdog, nie zarejestrowano odzyskania.",
+  "tasks.hang_at_exit_client_hung_for_at_least_in": "Zawieszenie przy wyjściu: klient był zawieszony przez co najmniej {duration} w {frame}; nadal zawieszony na ostatniej migawce watchdog, nie zarejestrowano odzyskania.",
   "tasks.help_fix_this_crash": "Pomóc naprawić tę awarię?",
   "tasks.hide_server_and_world_names": "Ukryj nazwy serwerów i światów",
   "tasks.hud": "HUD {name} ({profile})",

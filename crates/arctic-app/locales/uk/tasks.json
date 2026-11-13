@@ -48,6 +48,8 @@
   "tasks.game_folder_for_this_instance": "Тека гри для цієї збірки",
   "tasks.game_open": "Гра відкрита",
   "tasks.get_arctic_launcher": "Завантажити Arctic Launcher",
+  "tasks.hang_at_exit_client_hung_for_at_least": "Зависання під час виходу: клієнт завис щонайменше на {duration}; на останньому знімку watchdog досі був заморожений, відновлення не зафіксовано.",
+  "tasks.hang_at_exit_client_hung_for_at_least_in": "Зависання під час виходу: клієнт завис щонайменше на {duration} у {frame}; на останньому знімку watchdog досі був заморожений, відновлення не зафіксовано.",
   "tasks.help_fix_this_crash": "Допомогти виправити цей виліт?",
   "tasks.hide_server_and_world_names": "Приховувати назви серверів і світів",
   "tasks.hud": "HUD {name} ({profile})",

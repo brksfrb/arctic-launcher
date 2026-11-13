@@ -48,6 +48,8 @@
   "tasks.game_folder_for_this_instance": "이 인스턴스의 게임 폴더",
   "tasks.game_open": "게임 열림",
   "tasks.get_arctic_launcher": "Arctic Launcher 받기",
+  "tasks.hang_at_exit_client_hung_for_at_least": "종료 시 멈춤: 클라이언트가 최소 {duration} 동안 멈춘 상태였습니다. 마지막 워치독 스냅샷에서도 여전히 멈춰 있었고, 복구가 기록되지 않았습니다.",
+  "tasks.hang_at_exit_client_hung_for_at_least_in": "종료 시 멈춤: 클라이언트가 {frame}에서 최소 {duration} 동안 멈춘 상태였습니다. 마지막 워치독 스냅샷에서도 여전히 멈춰 있었고, 복구가 기록되지 않았습니다.",
   "tasks.help_fix_this_crash": "이 충돌을 고치는 데 도움을 줄까요?",
   "tasks.hide_server_and_world_names": "서버와 월드 이름 숨기기",
   "tasks.hud": "{name} HUD ({profile})",

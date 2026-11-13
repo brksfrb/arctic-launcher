@@ -99,26 +99,6 @@ impl Run {
         if self.killed { None } else { code }
     }
 
-    fn exit_diagnosis(&self, code: Option<i32>, watchdog: bool) -> Option<Diagnosis> {
-        let code = code.filter(|c| *c != 0 && !watchdog)?;
-        let froze = crash::freeze_evidence(
-            &fresh_hang_dump(&self.game_dir, self.started).unwrap_or_else(|| self.crash_text()),
-        ) && newest_crash_report(&self.game_dir, self.started).is_none()
-            && newest_hs_err(&self.game_dir, self.started).is_none();
-        let specific = self.diagnose();
-        if specific.is_none() && froze {
-            Some(Diagnosis {
-                title: t!("tasks.the_game_froze_and_was_closed").into(),
-                detail: t!("tasks.the_run_contains_evidence_of_a_freeze_any").into(),
-                mods: Vec::new(),
-                repair: false,
-                fix: None,
-            })
-        } else {
-            specific.or_else(|| crash::silent_exit(&self.crash_text(), code))
-        }
-    }
-
     pub fn push_log(&mut self, lines: impl IntoIterator<Item = LogLine>) {
         self.log_rev += 1;
         self.log.extend(lines);
@@ -150,15 +130,21 @@ impl Run {
         }
         // Short freezes the in-game watchdog recorded this run (the same report, consent and scrubbing).
         let freezes = fresh_freeze_files(&self.game_dir, self.started);
-        for freeze in &freezes {
-            lines.push(freeze);
-        }
         // The game's own log file often says more than what it printed (a mod that quits quietly writes
         // only there), and Java writes a file of its own when it dies.
         let own_log = latest_log_tail(&self.game_dir, self.started);
         if !own_log.is_empty() {
             lines.push("---- logs/latest.log ----");
             lines.extend(own_log.iter().map(String::as_str));
+        }
+        // Keep both bounded snapshots and the fatal hang summary within the report's 8 KB log tail.
+        // Newest last, so its client stacks have priority if the report's budget changes.
+        for freeze in freezes.iter().rev() {
+            lines.push(freeze);
+        }
+        let hang_at_exit = freezes.first().and_then(|text| freeze_at_exit(text));
+        if let Some(summary) = &hang_at_exit {
+            lines.push(summary);
         }
         let written = newest_crash_report(&self.game_dir, self.started)
             .or_else(|| newest_hs_err(&self.game_dir, self.started));
@@ -222,6 +208,34 @@ impl Run {
         arctic_core::crash_conflicts::diagnose_in(&self.crash_text(), &self.game_dir.join("mods"))
     }
 
+    fn exit_diagnosis(&self, code: Option<i32>, shutdown_watchdog: bool) -> Option<Diagnosis> {
+        let code = code.filter(|c| *c != 0 && !shutdown_watchdog)?;
+        if let Some(specific) = self.diagnose() {
+            return Some(specific);
+        }
+        if newest_crash_report(&self.game_dir, self.started).is_none()
+            && newest_hs_err(&self.game_dir, self.started).is_none()
+        {
+            let freezes = fresh_freeze_files(&self.game_dir, self.started);
+            let hang_at_exit = freezes.first().and_then(|text| freeze_at_exit(text));
+            let froze = crash::freeze_evidence(
+                &fresh_hang_dump(&self.game_dir, self.started).unwrap_or_else(|| self.crash_text()),
+            );
+            if hang_at_exit.is_some() || froze {
+                return Some(Diagnosis {
+                    title: t!("tasks.the_game_froze_and_was_closed").into(),
+                    detail: hang_at_exit.unwrap_or_else(|| {
+                        t!("tasks.the_run_contains_evidence_of_a_freeze_any").into()
+                    }),
+                    mods: Vec::new(),
+                    repair: false,
+                    fix: None,
+                });
+            }
+        }
+        crash::silent_exit(&self.crash_text(), code)
+    }
+
     /// The end of the game's log and the crash report it wrote, as one text.
     fn crash_text(&self) -> String {
         let skip = self.log.len().saturating_sub(DIAGNOSE_LINES);
@@ -265,16 +279,25 @@ fn fresh_diagnostic_sidecar(
     std::fs::read_to_string(path).ok()
 }
 
-/// The newest short-freeze files (`logs/arctic-freezes/`) this run wrote, each cut to its first lines.
+/// The newest short-freeze files this run wrote. Two 3 KB heads leave room for the hang-at-exit
+/// summary in the report's 8 KB log tail; the full files remain in `logs/arctic-freezes/`.
 fn fresh_freeze_files(game_dir: &std::path::Path, since: SystemTime) -> Vec<String> {
     let Ok(entries) = std::fs::read_dir(game_dir.join("logs").join("arctic-freezes")) else {
         return Vec::new();
     };
     let mut files: Vec<(SystemTime, std::path::PathBuf)> = entries
         .filter_map(Result::ok)
-        .filter(|e| e.file_name().to_string_lossy().starts_with("freeze-"))
+        .filter(|e| {
+            let name = e.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with("freeze-") && name.ends_with(".txt")
+        })
         .filter_map(|e| {
-            let modified = e.metadata().ok()?.modified().ok()?;
+            let meta = e.metadata().ok()?;
+            if !meta.is_file() || meta.len() > 4 * 1024 * 1024 {
+                return None;
+            }
+            let modified = meta.modified().ok()?;
             (modified >= since).then(|| (modified, e.path()))
         })
         .collect();
@@ -285,10 +308,52 @@ fn fresh_freeze_files(game_dir: &std::path::Path, since: SystemTime) -> Vec<Stri
         .filter_map(|(_, path)| {
             let text = std::fs::read_to_string(&path).ok()?;
             let name = path.file_name()?.to_string_lossy().into_owned();
-            let head: String = text.lines().take(120).collect::<Vec<_>>().join("\n");
+            let mut head: String = text.lines().take(120).collect::<Vec<_>>().join("\n");
+            if head.len() > 3 * 1024 {
+                let mut end = 3 * 1024;
+                while !head.is_char_boundary(end) {
+                    end -= 1;
+                }
+                head.truncate(end);
+                // i18n-ignore: crash-report diagnostic, not UI text
+                head.push_str("\n[snapshot truncated; full file saved locally]");
+            }
             Some(format!("---- logs/arctic-freezes/{name} ----\n{head}"))
         })
         .collect()
+}
+
+/// An unfinished snapshot is a lower bound on the hang, not its final duration.
+/// Only call this for the newest freeze: a later recovered freeze rules out an older one at exit.
+fn freeze_at_exit(text: &str) -> Option<String> {
+    let duration = text.lines().find_map(|line| {
+        line.strip_prefix("duration: ")?
+            .strip_suffix(" (still frozen when written)")
+    })?;
+    let top = text.lines().find_map(|line| {
+        line.strip_prefix("Arctic: game froze for ")?
+            .split_once(", mostly in ")
+            .map(|(_, frame)| {
+                frame
+                    .split(" (Arctic code:")
+                    .next()
+                    .unwrap_or(frame)
+                    .split(" [")
+                    .next()
+                    .unwrap_or(frame)
+            })
+    });
+    Some(match top {
+        Some(frame) => tf!(
+            "tasks.hang_at_exit_client_hung_for_at_least_in",
+            duration = duration,
+            frame = frame
+        ),
+        None => tf!(
+            "tasks.hang_at_exit_client_hung_for_at_least",
+            duration = duration
+        ),
+    })
 }
 
 /// Lines of `logs/latest.log` that are looked at.
@@ -874,12 +939,165 @@ mod tests {
         )
         .unwrap();
         std::fs::write(freezes.join("notes.txt"), "not a freeze file").unwrap();
+        std::fs::write(freezes.join("freeze-partial.tmp"), "unfinished write").unwrap();
+        std::fs::create_dir(freezes.join("freeze-directory.txt")).unwrap();
         let found = fresh_freeze_files(dir.path(), before);
         assert_eq!(found.len(), 1);
         assert!(found[0].contains("game froze for 5.1s"));
         // A freeze from an earlier run is not this run's.
         let after = SystemTime::now() + std::time::Duration::from_secs(60);
         assert!(fresh_freeze_files(dir.path(), after).is_empty());
+    }
+
+    const UNFINISHED_FREEZE: &str = "Arctic: game froze for 3.1s, mostly in org.lwjgl.vulkan.VK10.vkQueuePresentKHR(Native Method) [not in a world (menu/loading) - may be normal]\nstarted: 2026-11-13 12:00:00.000\nduration: 3.12s (still frozen when written)\nsamples: 3 client-thread stacks\n== Distinct client-thread stacks (count of samples) ==\n[3x] stack 1\n    at org.lwjgl.vulkan.VK10.vkQueuePresentKHR(Native Method)\n    at example.Game.render(Game.java:42)\n== All other threads (captured once, at the first sample) ==\nthread \"worker\" WAITING\n";
+
+    #[test]
+    fn windows_kill_with_an_unfinished_freeze_reports_the_hang_at_exit() {
+        let dir = tempfile::tempdir().unwrap();
+        let freezes = dir.path().join("logs/arctic-freezes");
+        std::fs::create_dir_all(&freezes).unwrap();
+        std::fs::write(
+            freezes.join("freeze-20261113-120000.txt"),
+            UNFINISHED_FREEZE,
+        )
+        .unwrap();
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.21.11", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        run.java = Some("Java 21".into());
+        let diagnosis = run.exit_diagnosis(Some(-805306369), false).unwrap();
+        assert_eq!(diagnosis.title, "The game froze and was closed");
+        assert!(diagnosis.detail.contains(
+            "hung for at least 3.12s in org.lwjgl.vulkan.VK10.vkQueuePresentKHR(Native Method)"
+        ));
+        assert!(!diagnosis.detail.contains("may be normal"));
+        assert!(!diagnosis.repair);
+        let report = run.crash_report(&diagnosis.title, Some(-805306369));
+        assert_eq!(report.title, diagnosis.title);
+        assert!(
+            report
+                .log
+                .contains("Hang at exit: client hung for at least 3.12s")
+        );
+        assert!(report.log.contains("still frozen when written"));
+        assert!(report.log.contains("at example.Game.render(Game.java:42)"));
+        assert!(report.log.contains("thread \"worker\" WAITING"));
+        assert!(report.log.contains("0xCFFFFFFF"));
+        assert!(run.exit_diagnosis(Some(0), false).is_none());
+        assert!(run.exit_diagnosis(Some(-805306369), true).is_none());
+
+        // Two large snapshots and a verbose on-disk log must retain the fatal stack and summary
+        // within Report's byte limit, including when truncation lands inside a UTF-8 character.
+        let large_snapshot = format!(
+            "{UNFINISHED_FREEZE}{}",
+            format!("extra snapshot detail: {}\n", "é".repeat(2000)).repeat(120)
+        );
+        let old = freezes.join("freeze-20261113-115930.txt");
+        std::fs::write(
+            &old,
+            large_snapshot.replace(" (still frozen when written)", ""),
+        )
+        .unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&old)
+            .unwrap()
+            .set_times(
+                std::fs::FileTimes::new().set_modified(SystemTime::now() - Duration::from_secs(30)),
+            )
+            .unwrap();
+        std::fs::write(freezes.join("freeze-20261113-120000.txt"), large_snapshot).unwrap();
+        std::fs::write(
+            dir.path().join("logs/latest.log"),
+            format!("verbose log line {}\n", "x".repeat(300)).repeat(3000),
+        )
+        .unwrap();
+        let large_report = run.crash_report(&diagnosis.title, Some(-805306369));
+        assert!(
+            large_report
+                .log
+                .contains("Hang at exit: client hung for at least 3.12s")
+        );
+        assert!(large_report.log.contains("freeze-20261113-120000.txt"));
+        assert!(
+            large_report
+                .log
+                .contains("at example.Game.render(Game.java:42)")
+        );
+        assert!(large_report.log.contains("snapshot truncated"));
+
+        // A specific error still takes priority over the freeze evidence.
+        run.push_log([LogLine {
+            level: Level::Error,
+            text: "java.lang.OutOfMemoryError: Java heap space".into(),
+        }]);
+        assert_eq!(
+            run.exit_diagnosis(Some(-805306369), false).unwrap().title,
+            "Minecraft ran out of memory"
+        );
+        run.clear_log();
+
+        // The same file is finished on recovery; it is no longer evidence of a hang at exit.
+        std::fs::write(
+            freezes.join("freeze-20261113-120000.txt"),
+            UNFINISHED_FREEZE.replace(" (still frozen when written)", ""),
+        )
+        .unwrap();
+        assert!(run.exit_diagnosis(Some(-805306369), false).is_none());
+        assert!(
+            !run.crash_report("", Some(-805306369))
+                .log
+                .contains("Hang at exit:")
+        );
+
+        // No snapshot from a previous run can diagnose this run.
+        std::fs::write(
+            freezes.join("freeze-20261113-120000.txt"),
+            UNFINISHED_FREEZE,
+        )
+        .unwrap();
+        run.started = SystemTime::now() + Duration::from_secs(60);
+        assert_ne!(
+            run.exit_diagnosis(Some(-805306369), false).unwrap().title,
+            diagnosis.title
+        );
+        assert!(
+            !run.crash_report("", Some(-805306369))
+                .log
+                .contains("still frozen when written")
+        );
+    }
+
+    #[test]
+    fn a_later_recovered_freeze_rules_out_an_older_unfinished_snapshot_at_exit() {
+        let dir = tempfile::tempdir().unwrap();
+        let freezes = dir.path().join("logs/arctic-freezes");
+        std::fs::create_dir_all(&freezes).unwrap();
+        let old = freezes.join("freeze-20261113-120000.txt");
+        std::fs::write(&old, UNFINISHED_FREEZE).unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&old)
+            .unwrap()
+            .set_times(
+                std::fs::FileTimes::new().set_modified(SystemTime::now() - Duration::from_secs(30)),
+            )
+            .unwrap();
+        std::fs::write(
+            freezes.join("freeze-20261113-120020.txt"),
+            UNFINISHED_FREEZE.replace(" (still frozen when written)", ""),
+        )
+        .unwrap();
+        let found = fresh_freeze_files(dir.path(), SystemTime::now() - Duration::from_secs(60));
+        assert_eq!(found.len(), 2);
+        assert!(freeze_at_exit(&found[0]).is_none());
+        assert!(freeze_at_exit(&found[1]).is_some());
+        assert!(
+            freeze_at_exit("duration: 3.00s (still frozen when written)\n")
+                .unwrap()
+                .contains("hung for at least 3.00s;")
+        );
     }
 
     #[test]

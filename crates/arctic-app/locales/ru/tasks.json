@@ -48,6 +48,8 @@
   "tasks.game_folder_for_this_instance": "Папка игры для этой сборки",
   "tasks.game_open": "Игра открыта",
   "tasks.get_arctic_launcher": "Скачать Arctic Launcher",
+  "tasks.hang_at_exit_client_hung_for_at_least": "Зависание при выходе: клиент завис как минимум на {duration}; на последнем снимке watchdog всё ещё был заморожен, восстановление не зафиксировано.",
+  "tasks.hang_at_exit_client_hung_for_at_least_in": "Зависание при выходе: клиент завис как минимум на {duration} в {frame}; на последнем снимке watchdog всё ещё был заморожен, восстановление не зафиксировано.",
   "tasks.help_fix_this_crash": "Помочь исправить этот вылет?",
   "tasks.hide_server_and_world_names": "Скрывать названия серверов и миров",
   "tasks.hud": "HUD {name} ({profile})",
