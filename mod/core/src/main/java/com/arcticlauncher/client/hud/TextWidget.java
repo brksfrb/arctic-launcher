@@ -44,8 +44,10 @@ public abstract class TextWidget extends HudWidget {
 	private String[] measuredParts;
 	private int partWidth0;
 	private int partWidth1;
+	/** The gap between the label part and the value part: one space of the font in use, never 0. */
+	private int gap;
 	/** The font the widths were measured in (smooth or the game's). */
-	private boolean measuredFancy;
+	private int measuredFont = -1;
 
 	protected TextWidget(String id, String label, String description, boolean onByDefault) {
 		super(id, label, description, onByDefault, Column.LEFT);
@@ -137,11 +139,11 @@ public abstract class TextWidget extends HudWidget {
 		}
 		switch (look.labelMode) {
 			case HudSlot.LABEL_AFTER:
-				return new String[] {open + value + " ", label + close, "after"};
+				return new String[] {open + value, label + close, "after"};
 			case HudSlot.LABEL_NONE:
 				return new String[] {"", open + value + close, "none"};
 			default:
-				return new String[] {open + label + ": ", value + close, "before"};
+				return new String[] {open + label + ":", value + close, "before"};
 		}
 	}
 
@@ -168,16 +170,20 @@ public abstract class TextWidget extends HudWidget {
 	/** This draw's text, measured (only the parts that changed since the last measuring). */
 	private String[] measured(Gfx g, boolean preview) {
 		String[] p = current(preview);
-		boolean fancy = com.arcticlauncher.client.gfx.Draw.fancy;
-		boolean fontChanged = measuredFancy != fancy;
+		int font = Hud.fontKey(g);
+		boolean fontChanged = measuredFont != font;
 		if (measuredParts == null || fontChanged || !p[0].equals(measuredParts[0])) {
 			partWidth0 = g.textWidth(p[0]);
+		}
+		if (fontChanged || measuredParts == null) {
+			// Measured between two letters: a space at the end of a string is not always counted by the font.
+			gap = Math.max(1, g.textWidth("a a") - g.textWidth("aa"));
 		}
 		if (measuredParts == null || fontChanged || !p[1].equals(measuredParts[1])) {
 			partWidth1 = g.textWidth(p[1]);
 		}
 		measuredParts = p;
-		measuredFancy = fancy;
+		measuredFont = font;
 		return p;
 	}
 
@@ -189,9 +195,14 @@ public abstract class TextWidget extends HudWidget {
 		return iconItems != null ? ITEM_ROOM : ICON_ROOM;
 	}
 
+	/** The gap between the two parts (only when both are there, i.e. a label and a value in text). */
+	private int gapWidth() {
+		return measuredParts != null && !measuredParts[0].isEmpty() && !measuredParts[1].isEmpty() ? gap : 0;
+	}
+
 	private int textWidth(Gfx g) {
 		measured(g, previewing);
-		return partWidth0 + partWidth1 + iconRoom();
+		return partWidth0 + partWidth1 + gapWidth() + iconRoom();
 	}
 
 	@Override
@@ -246,7 +257,7 @@ public abstract class TextWidget extends HudWidget {
 			return;
 		}
 		g.text(p[0], x, y, first, shadow());
-		g.text(p[1], x + partWidth0, y, second, shadow());
+		g.text(p[1], x + partWidth0 + gapWidth(), y, second, shadow());
 	}
 
 	/** A value with its own labels ("X: 4  Y: 70  Z: 3"): each word ending in a colon is a label, in the accent colour. */
@@ -262,10 +273,11 @@ public abstract class TextWidget extends HudWidget {
 			while (end < text.length() && text.charAt(end) == ' ') {
 				end++;
 			}
-			String token = text.substring(i, end);
+			String token = text.substring(i, word);
 			boolean label = word > i && text.charAt(word - 1) == ':';
 			g.text(token, at, y, label ? accent() : text(), shadow());
-			at += g.textWidth(token);
+			// The spaces after a word are counted as the gap, not measured: a font may not count a trailing space.
+			at += g.textWidth(token) + (end - word) * gap;
 			i = end;
 		}
 	}

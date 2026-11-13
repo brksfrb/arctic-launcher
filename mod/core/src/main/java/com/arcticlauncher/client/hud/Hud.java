@@ -48,7 +48,7 @@ public final class Hud {
 		/** The size worked out for {@link #sizedContent}. */
 		Object sizedContent;
 		long sizedLook;
-		boolean sizedFancy;
+		int sizedFont;
 		/** The GUI scale it was measured at: text is rasterized per scale, so its width follows it. */
 		float sizedScale;
 		int width;
@@ -58,7 +58,7 @@ public final class Hud {
 		Object drawnContent;
 		long drawnLook;
 		boolean drawnPreview;
-		boolean drawnFancy;
+		int drawnFont;
 		float drawnScale;
 		Style drawnStyle;
 		int[] drawnRect;
@@ -80,19 +80,27 @@ public final class Hud {
 		return k;
 	}
 
+	/**
+	 * Tells fonts apart: changes when the font the game draws with changes (the smooth font is a resource pack that
+	 * can be switched without the Fancy setting changing), so measured widths and recorded drawings are made again.
+	 */
+	public static int fontKey(Gfx g) {
+		return g.textWidth("Wag a gaW") * 2 + (com.arcticlauncher.client.gfx.Draw.fancy ? 1 : 0);
+	}
+
 	/** Width and height (unscaled): worked out again only when what it shows, or its look, changed. */
 	private Kept sized(Gfx g, HudWidget w, HudSlot slot) {
 		Kept k = kept(w, slot, previewing);
 		long look = slot.look();
-		boolean fancy = com.arcticlauncher.client.gfx.Draw.fancy;
-		if (k.content == null || !k.content.equals(k.sizedContent) || k.sizedLook != look || k.sizedFancy != fancy
+		int font = fontKey(g);
+		if (k.content == null || !k.content.equals(k.sizedContent) || k.sizedLook != look || k.sizedFont != font
 				|| k.sizedScale != g.pixelScale()) {
 			w.use(slot);
 			k.width = w.width(g);
 			k.height = w.height();
 			k.sizedContent = k.content;
 			k.sizedLook = look;
-			k.sizedFancy = fancy;
+			k.sizedFont = font;
 			k.sizedScale = g.pixelScale();
 		}
 		return k;
@@ -428,10 +436,10 @@ public final class Hud {
 		HudSlot slot = slot(w);
 		Kept k = kept(w, slot, preview);
 		long look = slot.look();
-		boolean fancy = com.arcticlauncher.client.gfx.Draw.fancy;
+		int font = fontKey(g);
 		// Showing the same thing, the same way, in the same place: last frame's drawing again.
 		if (k.content != null && k.drawing != null && k.content.equals(k.drawnContent) && k.drawnLook == look && k.drawnPreview == preview
-				&& k.drawnFancy == fancy && k.drawnScale == g.pixelScale() && k.drawnStyle == s && java.util.Arrays.equals(rect, k.drawnRect) && g.replay(k.drawing)) {
+				&& k.drawnFont == font && k.drawnScale == g.pixelScale() && k.drawnStyle == s && java.util.Arrays.equals(rect, k.drawnRect) && g.replay(k.drawing)) {
 			return;
 		}
 		boolean recording = k.content != null && g.startRecording();
@@ -448,7 +456,7 @@ public final class Hud {
 		k.drawnContent = k.content;
 		k.drawnLook = look;
 		k.drawnPreview = preview;
-		k.drawnFancy = fancy;
+		k.drawnFont = font;
 		k.drawnScale = g.pixelScale();
 		k.drawnStyle = s;
 		k.drawnRect = rect.clone();
