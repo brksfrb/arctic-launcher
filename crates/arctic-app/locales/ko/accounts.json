@@ -1,0 +1,10 @@
+{
+  "accounts.accounts": "계정",
+  "accounts.add_account": "계정 추가",
+  "accounts.click_an_account_to_play_as_it_sign_ins_stay": "계정을 클릭하면 그 계정으로 플레이합니다. 로그인 정보는 이 PC에만, 내 사용자용으로 암호화되어 보관됩니다.",
+  "accounts.offline": "오프라인",
+  "accounts.playing_as": "{username}(으)로 플레이 중",
+  "accounts.remove_account": "계정 제거",
+  "accounts.sign_in_again": "Sign in again",
+  "accounts.signed_out": "Signed out"
+}

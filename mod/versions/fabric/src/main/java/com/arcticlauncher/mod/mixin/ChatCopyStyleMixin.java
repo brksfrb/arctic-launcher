@@ -8,6 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import com.arcticlauncher.client.Lang;
 /** Preserve message ownership when vanilla resolves inherited styles during wrapping. */
 @Mixin(Style.class)
 abstract class ChatCopyStyleMixin implements ChatCopy.Tagged {
@@ -80,10 +81,10 @@ abstract class ChatCopyStyleMixin implements ChatCopy.Tagged {
 			return;
 		}
 		//#if MC >= 1.21.5
-		cir.setReturnValue(new net.minecraft.network.chat.HoverEvent.ShowText(com.arcticlauncher.mod.Compat.literal("Click to copy")));
+		cir.setReturnValue(new net.minecraft.network.chat.HoverEvent.ShowText(com.arcticlauncher.mod.Compat.literal(Lang.t("platform.click_to_copy"))));
 		//#else
 		cir.setReturnValue(new net.minecraft.network.chat.HoverEvent(net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT,
-				com.arcticlauncher.mod.Compat.literal("Click to copy")));
+				com.arcticlauncher.mod.Compat.literal(Lang.t("platform.click_to_copy"))));
 		//#endif
 	}
 

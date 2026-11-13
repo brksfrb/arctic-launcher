@@ -4,6 +4,7 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.UUID;
 
+import com.arcticlauncher.client.Lang;
 /**
  * What watching a replay needs from Minecraft. Each version adapter
  * implements this: it turns recorded bytes back into the game's packets and
@@ -117,7 +118,7 @@ public interface ReplayBackend {
 
 	/** Open a resolved sound from the same resource packs used by the game. Export worker only. */
 	default java.io.InputStream audioResource(String resource) throws java.io.IOException {
-		throw new java.io.IOException("Game audio resources are unavailable");
+		throw new java.io.IOException(Lang.t("replay.game_audio_resources_are_unavailable"));
 	}
 
 	/** Why videos can't be made here (shown instead of starting one), or null when they can. */

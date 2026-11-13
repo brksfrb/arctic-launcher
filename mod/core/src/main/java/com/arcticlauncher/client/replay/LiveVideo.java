@@ -6,12 +6,13 @@ import java.io.File;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.arcticlauncher.client.Lang;
 /** Capture only the game's finished framebuffer. Encoding never owns the world or camera. */
 public final class LiveVideo {
 	private final Ffmpeg encoder;
 	private final File root, videos;
 	private volatile File ready;
-	private volatile String codec = "libx264", state = "Preparing video encoder";
+	private volatile String codec = "libx264", state = Lang.t("replay.preparing_video_encoder");
 	private volatile String captureFailure;
 	private volatile LiveVideoSession session;
 	private volatile boolean closed;
@@ -35,15 +36,15 @@ public final class LiveVideo {
 			while (!closed) {
 				try {
 					if (ArcticClient.config() != null && (!ArcticClient.config().replayVideoEnabled || !ArcticClient.config().replayEnabled)) {
-						state = "Gameplay video off"; Thread.sleep(1000); continue;
+						state = Lang.t("replay.gameplay_video_off"); Thread.sleep(1000); continue;
 					}
 					File tool = encoder.get();
 					if (tool != null && ready == null) {
 						codec = LiveVideoSession.chooseCodec(encoder, tool);
 						if (!recovered) { recovered = true; LiveVideoSession.recover(root, videos, encoder, tool, LiveVideo::notice); }
-						ready = tool; state = "Gameplay video ready";
+						ready = tool; state = Lang.t("replay.gameplay_video_ready");
 					}
-					if (ready != null) state = "Gameplay video ready";
+					if (ready != null) state = Lang.t("replay.gameplay_video_ready");
 					if (tool == null) {
 						state = "downloading".equals(encoder.state()) ? "Preparing video encoder · " + Math.round(encoder.progress() * 100) + "%"
 								: "Gameplay video needs FFmpeg · Get video encoder below";
@@ -53,7 +54,7 @@ public final class LiveVideo {
 					}
 					Thread.sleep(1000);
 				} catch (InterruptedException stop) { return; }
-				catch (Exception error) { state = "Gameplay video unavailable: " + error.getMessage(); }
+				catch (Exception error) { state = Lang.t("replay.gameplay_video_unavailable") + error.getMessage(); }
 			}
 		}, "arctic-video-prepare");
 		prepare.setDaemon(true); prepare.setPriority(Thread.MIN_PRIORITY); prepare.start();
@@ -70,7 +71,7 @@ public final class LiveVideo {
 
 	private static void notice(String message) {
 		if (ArcticClient.platform() != null) ArcticClient.platform().log(false, "gameplay video: " + message);
-		Notices.post("Gameplay video", message);
+		Notices.post(Lang.t("replay.gameplay_video"), message);
 	}
 	public Ffmpeg encoder() { return encoder; }
 	public String status() {
@@ -131,7 +132,7 @@ public final class LiveVideo {
 	}
 	private void captureFailed(Recorder.Take owner, RuntimeException error) {
 		stop(); lastTake = owner; stoppedForTake = true;
-		captureFailure = "Video capture unavailable: " + error.getMessage(); notice(captureFailure + ". 3D recording continues.");
+		captureFailure = Lang.t("replay.video_capture_unavailable") + error.getMessage(); notice(captureFailure + Lang.t("replay.3d_recording_continues"));
 	}
 
 	public static int[] size(int w, int h, int height) {

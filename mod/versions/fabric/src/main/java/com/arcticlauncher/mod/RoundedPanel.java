@@ -25,6 +25,7 @@ import org.joml.Matrix3x2f;
 import org.joml.Matrix3x2fc;
 import org.jspecify.annotations.Nullable;
 
+import com.arcticlauncher.client.Lang;
 /**
  * A rounded panel as one GUI piece: nine quads (four anti-aliased corners,
  * four edges, the middle) over one small texture, instead of three fills
@@ -158,7 +159,7 @@ final class RoundedPanel implements GuiElementRenderState {
 		Identifier id = TEXTURES.get(r);
 		if (id == null) {
 			id = Compat.id(ArcticMod.ID, "dyn/panel_" + r);
-			DynamicTexture texture = Compat.texture("Arctic rounded panel", image(r));
+			DynamicTexture texture = Compat.texture(Lang.t("platform.arctic_rounded_panel"), image(r));
 			Minecraft.getInstance().getTextureManager().register(id, texture);
 			TEXTURES.put(r, id);
 		}

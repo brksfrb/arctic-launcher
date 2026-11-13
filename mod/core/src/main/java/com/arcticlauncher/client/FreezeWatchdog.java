@@ -236,7 +236,7 @@ public final class FreezeWatchdog {
 			for (int i = 0; i < ACTIVITY; i++) {
 				int at = (actNext + i) % ACTIVITY;
 				if (actLabel[at] == null) continue;
-				sb.append(String.format("  %7.2fs ago  %s %d%n", (now - actAt[at]) / 1e9, actLabel[at], actValue[at]));
+				sb.append(String.format("  %7.2fs ago  %s %d%n", (now - actAt[at]) / 1e9, actLabel[at], actValue[at])); // i18n-ignore
 			}
 		}
 		return sb.toString();
@@ -317,8 +317,8 @@ public final class FreezeWatchdog {
 		String summary() {
 			String top = best(tops);
 			String arctic = best(arcticFrames);
-			StringBuilder sb = new StringBuilder(String.format(java.util.Locale.ROOT, "Arctic: game froze for %.1fs", seconds(System.nanoTime())));
-			sb.append(top == null ? ", no stack captured" : ", mostly in " + top);
+			StringBuilder sb = new StringBuilder(String.format(java.util.Locale.ROOT, "Arctic: game froze for %.1fs", seconds(System.nanoTime()))); // i18n-ignore
+			sb.append(top == null ? ", no stack captured" : ", mostly in " + top); // i18n-ignore
 			if (arctic != null && !arctic.equals(top)) sb.append(" (Arctic code: ").append(arctic).append(')');
 			String tag = tag();
 			if (!tag.isEmpty()) sb.append(" [").append(tag).append(']');
@@ -327,8 +327,8 @@ public final class FreezeWatchdog {
 
 		String tag() {
 			StringBuilder sb = new StringBuilder();
-			if (!focused) sb.append("window unfocused/minimized - may be normal");
-			if (!inWorld) sb.append(sb.length() > 0 ? ", " : "").append("not in a world (menu/loading) - may be normal");
+			if (!focused) sb.append("window unfocused/minimized - may be normal"); // i18n-ignore
+			if (!inWorld) sb.append(sb.length() > 0 ? ", " : "").append("not in a world (menu/loading) - may be normal"); // i18n-ignore
 			return sb.toString();
 		}
 
@@ -337,18 +337,18 @@ public final class FreezeWatchdog {
 			StringBuilder sb = new StringBuilder();
 			sb.append(summary()).append('\n');
 			sb.append(String.format(l, "started: %s%n", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(new Date(wallStart))));
-			sb.append(String.format(l, "duration: %.2fs%s%n", seconds(now), complete ? "" : " (still frozen when written)"));
-			sb.append("context: window ").append(focused ? "focused" : "NOT focused/minimized").append(", ")
-					.append(inWorld ? "in a world" : "no world (menu/loading screen)").append('\n');
-			sb.append("samples: ").append(samples).append(" client-thread stacks, one per ~500 ms; thread state at last sample ").append(lastState).append('\n');
-			sb.append(String.format(l, "sampler: slowest getStackTrace %.0f ms, largest gap between samples %.0f ms%s%n", maxSampleNanos / 1e6, maxGapNanos / 1e6,
-					maxSampleNanos > 400_000_000L || maxGapNanos > 900_000_000L ? "  <- the whole JVM stalled (GC / safepoint / OS)" : ""));
+			sb.append(String.format(l, "duration: %.2fs%s%n", seconds(now), complete ? "" : " (still frozen when written)")); // i18n-ignore
+			sb.append("context: window ").append(focused ? "focused" : "NOT focused/minimized").append(", ") // i18n-ignore
+					.append(inWorld ? "in a world" : "no world (menu/loading screen)").append('\n'); // i18n-ignore
+			sb.append("samples: ").append(samples).append(" client-thread stacks, one per ~500 ms; thread state at last sample ").append(lastState).append('\n'); // i18n-ignore
+			sb.append(String.format(l, "sampler: slowest getStackTrace %.0f ms, largest gap between samples %.0f ms%s%n", maxSampleNanos / 1e6, maxGapNanos / 1e6, // i18n-ignore
+					maxSampleNanos > 400_000_000L || maxGapNanos > 900_000_000L ? "  <- the whole JVM stalled (GC / safepoint / OS)" : "")); // i18n-ignore
 			if (gcBefore != null && gcAfter != null) {
-				sb.append(String.format(l, "gc during freeze: %d collections, %d ms%n", gcAfter[0] - gcBefore[0], gcAfter[1] - gcBefore[1]));
+				sb.append(String.format(l, "gc during freeze: %d collections, %d ms%n", gcAfter[0] - gcBefore[0], gcAfter[1] - gcBefore[1])); // i18n-ignore
 			}
 			if (heapBefore != null) {
-				sb.append(String.format(l, "heap: %d MB used of %d MB max at start", heapBefore.getUsed() >> 20, heapBefore.getMax() >> 20));
-				if (heapAfter != null) sb.append(String.format(l, ", %d MB at end", heapAfter.getUsed() >> 20));
+				sb.append(String.format(l, "heap: %d MB used of %d MB max at start", heapBefore.getUsed() >> 20, heapBefore.getMax() >> 20)); // i18n-ignore
+				if (heapAfter != null) sb.append(String.format(l, ", %d MB at end", heapAfter.getUsed() >> 20)); // i18n-ignore
 				sb.append('\n');
 			}
 			sb.append("\n== Where the time went (frames present in the most samples) ==\n");
@@ -369,7 +369,7 @@ public final class FreezeWatchdog {
 				sb.append("\n[").append(e.getValue()).append("x] stack ").append(++n).append('\n').append(e.getKey());
 			}
 			sb.append("\n== Recent Arctic feature activity before the freeze (oldest first) ==\n");
-			sb.append(activity.isEmpty() ? "  (none recorded)\n" : activity);
+			sb.append(activity.isEmpty() ? "  (none recorded)\n" : activity); // i18n-ignore
 			sb.append("\n== All other threads (captured once, at the first sample) ==\n").append(others);
 			return sb.toString();
 		}

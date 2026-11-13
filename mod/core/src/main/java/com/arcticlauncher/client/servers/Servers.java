@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.arcticlauncher.client.Lang;
 /**
  * The game's saved servers ({@link ServersFile}) and what each answered when asked: the server
  * list page reorders, adds, edits and joins through it.
@@ -187,7 +188,7 @@ public final class Servers {
 				a.status = status;
 			} catch (Throwable e) {
 				// Anything (an Error too) ends the wait: a row never stays at "Pinging…".
-				a.error = e instanceof java.net.UnknownHostException ? "Can't resolve hostname" : "Can't connect to server";
+				a.error = e instanceof java.net.UnknownHostException ? Lang.t("servers.cant_resolve_hostname") : Lang.t("servers.cant_connect_to_server");
 			}
 		});
 	}

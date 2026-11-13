@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Right Shift in a world: your HUD, live and movable. Drag a widget to move
  * it (it snaps to edges and to other widgets), drag its bottom-right corner
@@ -45,7 +46,7 @@ public final class HudEditor extends Page {
 	private static final int HINT_PAD = 8;
 	private static final float SCALE_SNAP = 0.05f;
 	private static final String[][] SHORTCUTS = {
-			{"Waypoints", "waypoints"}, {"Replays", "replays"}, {"Packs", "packs"}, {"Friends", "friends"},
+			{"mods.waypoints", "waypoints"}, {"mods.replays", "replays"}, {"mods.packs", "packs"}, {"mods.friends", "friends"},
 	};
 
 	private int bx;
@@ -110,7 +111,7 @@ public final class HudEditor extends Page {
 		bx = clamp((width - BAR_W) / 2 + cfg.hudCardDx, width - BAR_W);
 		by = clamp((height - BAR_H) / 2 + cfg.hudCardDy, height - BAR_H);
 		barButtons.clear();
-		Button mods = new Button("Mods", Menus::mods).primary();
+		Button mods = new Button(Lang.t("mods.mods"), Menus::mods).primary();
 		add(mods).bounds(bx + PAD, by + 22, BAR_W - PAD * 2, MODS_H);
 		barButtons.add(mods);
 		java.util.List<String[]> shortcuts = new java.util.ArrayList<String[]>();
@@ -124,7 +125,7 @@ public final class HudEditor extends Page {
 		int sw = (BAR_W - PAD * 2 - GAP * (n - 1)) / n;
 		for (int i = 0; i < n; i++) {
 			final String id = shortcuts.get(i)[1];
-			Button b = new Button(shortcuts.get(i)[0], () -> Menus.open(id, this));
+			Button b = new Button(Lang.t(shortcuts.get(i)[0]), () -> Menus.open(id, this));
 			add(b).bounds(bx + PAD + i * (sw + GAP), by + 22 + MODS_H + GAP, sw, SMALL_H);
 			barButtons.add(b);
 		}
@@ -153,18 +154,18 @@ public final class HudEditor extends Page {
 		int x = Math.min(menuX, width - MENU_W - 2);
 		int y = Math.min(menuY, height - 42);
 		if (w == null) {
-			add(new Button("Reset card", () -> {
+			add(new Button(Lang.t("mods.reset_card"), () -> {
 				cardMenu = false;
 				setCard((width - BAR_W) / 2, (height - BAR_H) / 2);
 				ArcticClient.saveConfig();
 			})).bounds(x, y, MENU_W, 18);
 			return;
 		}
-		add(new Button("Settings", () -> {
+		add(new Button(Lang.t("mods.settings"), () -> {
 			menuFor = null;
 			Menus.open("hud." + w.id, this);
 		})).bounds(x, y, MENU_W, 18);
-		add(new Button("Remove", () -> {
+		add(new Button(Lang.t("mods.remove"), () -> {
 			hide(w);
 			menuFor = null;
 			rebuild();
@@ -242,7 +243,7 @@ public final class HudEditor extends Page {
 		}
 		snapper.draw(g, s, width, height);
 		drawBar(shown < 0.99f ? new DimGfx(g, shown) : g, s);
-		String help = "Drag to move  ·  drag the corner (or scroll) to resize  ·  right-click for settings";
+		String help = Lang.t("mods.drag_to_move_drag_the_corner_or_scroll_to");
 		int hw = g.textWidth(help) / 2 + HINT_PAD;
 		// Under the menu bar: at the bottom it would sit on the hotbar.
 		int hy = by + BAR_H + 10;
@@ -257,7 +258,7 @@ public final class HudEditor extends Page {
 	private void drawBar(Gfx g, Style s) {
 		Skin.panel(g, s, bx, by, bx + BAR_W, by + BAR_H);
 		g.texture("icon", bx + PAD, by + 6, 12, 12, 0, 0, 256, 256, 256, 256);
-		g.text("§lArctic", bx + PAD + 16, by + 8, s.text, false);
+		g.text("§lArctic", bx + PAD + 16, by + 8, s.text, false); // i18n-ignore: the brand
 		String version = ArcticClient.platform().minecraftVersion();
 		g.text(version, bx + BAR_W - PAD - g.textWidth(version), by + 8, s.muted, false);
 	}

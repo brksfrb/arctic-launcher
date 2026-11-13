@@ -8,7 +8,7 @@ use arctic_core::sharing::{self, Bundle};
 use arctic_core::{Error, ProgressInfo, Result};
 
 use crate::tasks::{Event, ProgressSnapshot, Tasks};
-
+use crate::{t, tf};
 /// What an import did, for the UI.
 #[derive(Debug, Clone)]
 pub struct Imported {
@@ -42,15 +42,15 @@ impl Tasks {
     pub fn share_save(&self, bundle: Bundle, file_name: String) {
         self.run(move |t| {
             let picked = rfd::FileDialog::new()
-                .set_title("Save share file")
+                .set_title(t!("tasks.save_share_file"))
                 .set_file_name(&file_name)
-                .add_filter("Arctic share", &["json"])
+                .add_filter(t!("tasks.arctic_share"), &["json"])
                 .save_file();
             let result = match picked {
                 None => Ok(None),
                 Some(path) => std::fs::write(&path, bundle.to_file_text())
                     .map(|()| Some(path.clone()))
-                    .map_err(|e| format!("Could not save {}: {e}", path.display())),
+                    .map_err(|e| tf!("tasks.could_not_save", path = path.display(), e = e)),
             };
             t.send(Event::ShareSaved(result));
         });
@@ -60,8 +60,8 @@ impl Tasks {
     pub fn share_open_file(&self) {
         self.run(|t| {
             let picked = rfd::FileDialog::new()
-                .set_title("Open share file")
-                .add_filter("Arctic share", &["json", "txt"])
+                .set_title(t!("tasks.open_share_file"))
+                .add_filter(t!("tasks.arctic_share"), &["json", "txt"])
                 .pick_file();
             t.note_if_picker_missing(&picked);
             let result = match picked {
@@ -125,10 +125,10 @@ fn import(
         Bundle::Instance(pack) => {
             let (instance, report) = pack.install(dirs, progress)?;
             Ok(Imported {
-                title: format!("Added {}", instance.name),
-                detail: format!(
-                    "{} mods installed. Press Play when you're ready.",
-                    report.installed.len()
+                title: tf!("tasks.added_2", name = instance.name),
+                detail: tf!(
+                    "tasks.mods_installed_press_play_when_youre_ready",
+                    count = report.installed.len()
                 ),
                 warnings: skipped(&report.skipped),
                 open: Some(instance.id),
@@ -140,8 +140,8 @@ fn import(
                 target.ok_or_else(|| Error::Other("pick an instance to apply it to".into()))?;
             part.apply(&target.game_dir(dirs))?;
             Ok(Imported {
-                title: format!("Applied to {}", target.name),
-                detail: "You'll see it next time you play.".into(),
+                title: tf!("tasks.applied_to", name = target.name),
+                detail: t!("tasks.youll_see_it_next_time_you_play").into(),
                 warnings: Vec::new(),
                 open: None,
                 settings_changed: false,
@@ -150,10 +150,10 @@ fn import(
         Bundle::Options(defaults) => {
             defaults.save(dirs)?;
             Ok(Imported {
-                title: "Default game settings saved".into(),
-                detail: format!(
-                    "{} settings go into every new instance's first start.",
-                    defaults.values.len()
+                title: t!("tasks.default_game_settings_saved").into(),
+                detail: tf!(
+                    "tasks.settings_go_into_every_new_instances_first",
+                    count = defaults.values.len()
                 ),
                 warnings: Vec::new(),
                 open: None,
@@ -167,13 +167,13 @@ fn import(
                 report
                     .existing
                     .iter()
-                    .map(|n| format!("Kept your own \"{n}\" (same name)")),
+                    .map(|n| tf!("tasks.kept_your_own_same_name", n_value = n)),
             );
             Ok(Imported {
-                title: "Profile imported".into(),
-                detail: format!(
-                    "Settings applied, {} instance(s) added.",
-                    report.created.len()
+                title: t!("tasks.profile_imported").into(),
+                detail: tf!(
+                    "tasks.settings_applied_instance_s_added",
+                    count = report.created.len()
                 ),
                 warnings,
                 open: None,
@@ -185,6 +185,6 @@ fn import(
 
 fn skipped(list: &[arctic_core::mods::Skipped]) -> Vec<String> {
     list.iter()
-        .map(|s| format!("Skipped {}: {}", s.title, s.reason))
+        .map(|s| tf!("tasks.skipped", title = s.title, reason = s.reason))
         .collect()
 }

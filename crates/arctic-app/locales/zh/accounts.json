@@ -1,0 +1,10 @@
+{
+  "accounts.accounts": "账户",
+  "accounts.add_account": "添加账户",
+  "accounts.click_an_account_to_play_as_it_sign_ins_stay": "点击一个账户即可用它游玩。登录信息只保存在这台电脑上，并为你的用户加密。",
+  "accounts.offline": "离线",
+  "accounts.playing_as": "正在以 {username} 游玩",
+  "accounts.remove_account": "移除账户",
+  "accounts.sign_in_again": "Sign in again",
+  "accounts.signed_out": "Signed out"
+}

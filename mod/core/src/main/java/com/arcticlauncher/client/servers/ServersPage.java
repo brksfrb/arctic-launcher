@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Arctic's multiplayer list, in place of the game's: your servers with their icons, messages
  * and pings; pick one up and drag it to reorder (the others make room as it moves); LAN worlds
@@ -75,13 +76,12 @@ public final class ServersPage extends Page {
 	private final java.util.Map<String, Integer> publicPlayers = new java.util.concurrent.ConcurrentHashMap<String, Integer>();
 	/** How Discover is ordered (see {@link #SORTS}); random is the point of it and the default. */
 	private int sort;
-	private static final String[] SORTS = {"Random", "Most players", "Fewest players", "Name"};
+	private static final String[] SORTS = {"servers.sort.random", "servers.sort.most_players", "servers.sort.fewest_players", "servers.sort.name"};
 	private volatile String publicError;
 	private int selectedPublic = -1;
 	/** Height of the abuse note under the Discover list, set while it's drawn. */
 	private int discoverNoteH;
-	private static final String ABUSE_LINE =
-			"See a misleading listing, or own this server and want it changed? Email abuse@arcticlauncher.com";
+	private static final String ABUSE_LINE = "servers.see_a_misleading_listing_or_own_this_server";
 
 	public ServersPage() {
 		this(null);
@@ -134,10 +134,10 @@ public final class ServersPage extends Page {
 		int tabsLeft = (width - tab * 2 - GAP) / 2;
 		if (vanillaList != null) {
 			tabsLeft = Math.max(118, tabsLeft);
-			add(new Button("Vanilla server list", vanillaList)).bounds(4, 8, 110, 18);
+			add(new Button(Lang.t("servers.vanilla_server_list"), vanillaList)).bounds(4, 8, 110, 18);
 		}
-		add(new Button("My Servers", () -> tab(false)).selected(!discover)).bounds(tabsLeft, 8, tab, 18);
-		add(new Button("Discover", () -> tab(true)).selected(discover)).bounds(tabsLeft + tab + GAP, 8, tab, 18);
+		add(new Button(Lang.t("servers.my_servers"), () -> tab(false)).selected(!discover)).bounds(tabsLeft, 8, tab, 18);
+		add(new Button(Lang.t("servers.discover"), () -> tab(true)).selected(discover)).bounds(tabsLeft + tab + GAP, 8, tab, 18);
 		if (discover) {
 			buildDiscover();
 			return;
@@ -146,16 +146,16 @@ public final class ServersPage extends Page {
 		int left = listLeft();
 		int y = height - BUTTONS_H;
 		boolean any = selected >= 0 || selectedLan != null;
-		add(new Button(tr("selectServer.select", "Join Server"), this::joinSelected).primary().enabled(any)).bounds(left, y, bw, BUTTON_H);
-		add(new Button(tr("selectServer.direct", "Direct Connection"), () -> open(Mode.DIRECT))).bounds(left + bw + GAP, y, bw, BUTTON_H);
-		add(new Button(tr("selectServer.add", "Add Server"), () -> open(Mode.ADD))).bounds(left + (bw + GAP) * 2, y, LIST_W - (bw + GAP) * 2, BUTTON_H);
+		add(new Button(tr("selectServer.select", Lang.t("servers.join_server")), this::joinSelected).primary().enabled(any)).bounds(left, y, bw, BUTTON_H);
+		add(new Button(tr("selectServer.direct", Lang.t("servers.direct_connection")), () -> open(Mode.DIRECT))).bounds(left + bw + GAP, y, bw, BUTTON_H);
+		add(new Button(tr("selectServer.add", Lang.t("servers.add_server")), () -> open(Mode.ADD))).bounds(left + (bw + GAP) * 2, y, LIST_W - (bw + GAP) * 2, BUTTON_H);
 		y += BUTTON_H + GAP;
 		int qw = (LIST_W - GAP * 3) / 4;
-		add(new Button(tr("selectServer.edit", "Edit"), () -> open(Mode.EDIT)).enabled(selected >= 0)).bounds(left, y, qw, BUTTON_H);
-		add(new Button(tr("selectServer.delete", "Delete"), this::deleteSelected).confirm("Delete it?").enabled(selected >= 0))
+		add(new Button(tr("selectServer.edit", Lang.t("servers.edit")), () -> open(Mode.EDIT)).enabled(selected >= 0)).bounds(left, y, qw, BUTTON_H);
+		add(new Button(tr("selectServer.delete", Lang.t("servers.delete")), this::deleteSelected).confirm(Lang.t("servers.delete_it")).enabled(selected >= 0))
 				.bounds(left + qw + GAP, y, qw, BUTTON_H);
-		add(new Button(tr("selectServer.refresh", "Refresh"), () -> servers.pingAll(entries))).bounds(left + (qw + GAP) * 2, y, qw, BUTTON_H);
-		add(new Button(tr("gui.back", "Back"), () -> platform.openPage(ArcticClient.titleMenu())))
+		add(new Button(tr("selectServer.refresh", Lang.t("servers.refresh")), () -> servers.pingAll(entries))).bounds(left + (qw + GAP) * 2, y, qw, BUTTON_H);
+		add(new Button(tr("gui.back", Lang.t("servers.back")), () -> platform.openPage(ArcticClient.titleMenu())))
 				.bounds(left + (qw + GAP) * 3, y, LIST_W - (qw + GAP) * 3, BUTTON_H);
 	}
 
@@ -164,12 +164,12 @@ public final class ServersPage extends Page {
 		int y = height - BUTTONS_H;
 		int bw = (LIST_W - GAP) / 2;
 		boolean any = selectedPublic >= 0 && publicList != null && selectedPublic < publicList.size();
-		add(new Button(tr("selectServer.select", "Join Server"), () -> {
+		add(new Button(tr("selectServer.select", Lang.t("servers.join_server")), () -> {
 			if (publicList != null && selectedPublic >= 0) {
 				platform.connectTo(publicList.get(selectedPublic).address);
 			}
 		}).primary().enabled(any)).bounds(left, y, bw, BUTTON_H);
-		add(new Button("Add to My Servers", () -> {
+		add(new Button(Lang.t("servers.add_to_my_servers"), () -> {
 			Servers.Entry e = publicList.get(selectedPublic);
 			if (servers.add(e.name, e.address)) {
 				reload();
@@ -178,14 +178,14 @@ public final class ServersPage extends Page {
 		}).enabled(any)).bounds(left + bw + GAP, y, LIST_W - bw - GAP, BUTTON_H);
 		y += BUTTON_H + GAP;
 		int tw = (LIST_W - GAP * 2) / 3;
-		add(new Button(tr("selectServer.refresh", "Refresh"), () -> loadPublic(true))).bounds(left, y, tw, BUTTON_H);
-		add(new Button("Sort: " + SORTS[sort], () -> {
+		add(new Button(tr("selectServer.refresh", Lang.t("servers.refresh")), () -> loadPublic(true))).bounds(left, y, tw, BUTTON_H);
+		add(new Button(Lang.t("servers.sort") + Lang.t(SORTS[sort]), () -> {
 			sort = (sort + 1) % SORTS.length;
 			publicList = sorted(publicRandom);
 			selectedPublic = -1;
 			rebuild();
 		})).bounds(left + tw + GAP, y, tw, BUTTON_H);
-		add(new Button(tr("gui.back", "Back"), () -> platform.openPage(ArcticClient.titleMenu())))
+		add(new Button(tr("gui.back", Lang.t("servers.back")), () -> platform.openPage(ArcticClient.titleMenu())))
 				.bounds(left + (tw + GAP) * 2, y, LIST_W - (tw + GAP) * 2, BUTTON_H);
 	}
 
@@ -255,7 +255,7 @@ public final class ServersPage extends Page {
 				publicRandom = list;
 				publicList = sorted(list);
 			} catch (Exception e) {
-				publicError = "Couldn't load the server list";
+				publicError = Lang.t("servers.couldnt_load_the_server_list");
 			}
 		}, "arctic-public-servers");
 		t.setDaemon(true);
@@ -270,18 +270,18 @@ public final class ServersPage extends Page {
 		boolean direct = mode == Mode.DIRECT;
 		Servers.Entry editing = mode == Mode.EDIT && selected >= 0 ? entries.get(selected) : null;
 		if (!direct) {
-			nameField = add(new TextField(tr("addServer.enterName", "Server Name"), 64, TextField.ANY));
+			nameField = add(new TextField(tr("addServer.enterName", Lang.t("servers.server_name_2")), 64, TextField.ANY));
 			nameField.bounds(x, y, w, BUTTON_H);
 			if (editing != null) {
 				nameField.text(editing.name);
 			}
 			y += BUTTON_H + GAP + 10;
 		}
-		addressField = add(new TextField(tr("addServer.enterIp", "Server Address"), 256, TextField.ANY));
+		addressField = add(new TextField(tr("addServer.enterIp", Lang.t("servers.server_address")), 256, TextField.ANY));
 		int copyW = 44;
 		addressField.bounds(x, y, w - copyW - GAP, BUTTON_H);
 		addressField.onEnter(this::submit);
-		add(new Button("Copy", () -> {
+		add(new Button(Lang.t("servers.copy"), () -> {
 			String a = addressField.text().trim();
 			if (!a.isEmpty()) {
 				platform.setClipboard(a);
@@ -295,9 +295,9 @@ public final class ServersPage extends Page {
 		focus(direct ? addressField : nameField);
 		y += BUTTON_H + GAP * 2;
 		int bw = (w - GAP) / 2;
-		String ok = direct ? tr("selectServer.select", "Join Server") : tr("gui.done", "Done");
+		String ok = direct ? tr("selectServer.select", Lang.t("servers.join_server")) : tr("gui.done", Lang.t("servers.done"));
 		add(new Button(ok, this::submit).primary()).bounds(x, y, bw, BUTTON_H);
-		add(new Button(tr("gui.cancel", "Cancel"), () -> open(Mode.LIST))).bounds(x + bw + GAP, y, w - bw - GAP, BUTTON_H);
+		add(new Button(tr("gui.cancel", Lang.t("servers.cancel")), () -> open(Mode.LIST))).bounds(x + bw + GAP, y, w - bw - GAP, BUTTON_H);
 	}
 
 	private void open(Mode m) {
@@ -475,27 +475,27 @@ public final class ServersPage extends Page {
 			g.pop();
 		}
 		if (entries.isEmpty() && lan.worlds().isEmpty()) {
-			Draw.centered(g, "No servers yet: Add Server or Direct Connection", width / 2, (top + bottom) / 2 - 4, s.muted, false);
+			Draw.centered(g, Lang.t("servers.no_servers_yet_add_server_or_direct"), width / 2, (top + bottom) / 2 - 4, s.muted, false);
 		}
 		if (mode != Mode.LIST) {
 			g.fill(0, 0, width, height, 0x88000000);
 			Skin.panel(g, s, width / 2 - 130, height / 2 - 60, width / 2 + 130, height / 2 + 50);
-			String title = mode == Mode.DIRECT ? tr("selectServer.direct", "Direct Connection")
-					: mode == Mode.EDIT ? tr("selectServer.edit", "Edit") : tr("selectServer.add", "Add Server");
+			String title = mode == Mode.DIRECT ? tr("selectServer.direct", Lang.t("servers.direct_connection"))
+					: mode == Mode.EDIT ? tr("selectServer.edit", Lang.t("servers.edit")) : tr("selectServer.add", Lang.t("servers.add_server"));
 			Draw.centered(g, title, width / 2, height / 2 - 54, s.text, false);
 		}
 	}
 
 	private void drawDiscover(Gfx g, Style s, int left, int top, int bottom, int mx, int my) {
 		List<Servers.Entry> list = publicList;
-		List<String> note = Hints.wrap(g, ABUSE_LINE, LIST_W - 8);
+		List<String> note = Hints.wrap(g, Lang.t(ABUSE_LINE), LIST_W - 8);
 		discoverNoteH = note.isEmpty() ? 0 : note.size() * 10 + 6;
 		int rowsBottom = bottom - discoverNoteH;
 		float max = list == null ? 0 : Math.max(0, list.size() * (ROW_H + ROW_GAP) - (rowsBottom - top));
 		motion.frame(max);
 		Skin.panel(g, s, left - 4, top - 4, left + LIST_W + 4, bottom + 4);
 		if (list == null) {
-			Draw.centered(g, publicError != null ? publicError : "Loading…", width / 2, (top + rowsBottom) / 2 - 4, s.muted, false);
+			Draw.centered(g, publicError != null ? publicError : Lang.t("servers.loading"), width / 2, (top + rowsBottom) / 2 - 4, s.muted, false);
 		} else {
 			g.scissor(left - 3, top - 3, left + LIST_W + 3, rowsBottom + 3);
 			for (int i = 0; i < list.size(); i++) {
@@ -523,7 +523,7 @@ public final class ServersPage extends Page {
 		float y = entries.size() * (ROW_H + ROW_GAP);
 		g.push();
 		g.translate(0, top + y - motion.offset() + 2);
-		g.text(tr("lanServer.title", "LAN World"), left + 2, 0, s.muted, false);
+		g.text(tr("lanServer.title", Lang.t("servers.lan_world")), left + 2, 0, s.muted, false);
 		g.pop();
 		y += 14;
 		for (LanScan.World w : worlds) {
@@ -582,7 +582,7 @@ public final class ServersPage extends Page {
 		boolean up = a != null && a.status != null;
 		boolean down = a != null && a.error != null;
 		// Top right: how fast it answered (or that it didn't), always shown, then the bars.
-		String speed = up ? (a.status.ping < 0 ? "?" : a.status.ping + " ms") : down ? "Offline" : "...";
+		String speed = up ? (a.status.ping < 0 ? "?" : a.status.ping + " ms") : down ? Lang.t("servers.offline") : "...";
 		int speedColor = up ? pingColor(a.status.ping) : down ? RED : s.muted;
 		int barsX = right - BARS_W;
 		int speedW = g.textWidth(speed);
@@ -608,7 +608,7 @@ public final class ServersPage extends Page {
 			tip = playersTip(a);
 		}
 		if (a == null || !a.done()) {
-			g.text("Pinging…", tx, y + 15, s.muted, false);
+			g.text(Lang.t("servers.pinging"), tx, y + 15, s.muted, false);
 			return;
 		}
 		if (down) {
@@ -691,10 +691,10 @@ public final class ServersPage extends Page {
 
 	private List<String> speedTip(Servers.Answer a, boolean incompatible) {
 		if (a == null || !a.done()) {
-			return java.util.Collections.singletonList(tr("multiplayer.status.pinging", "Pinging..."));
+			return java.util.Collections.singletonList(tr("multiplayer.status.pinging", Lang.t("servers.pinging_2")));
 		}
 		if (a.error != null) {
-			return java.util.Collections.singletonList("§c" + tr("multiplayer.status.no_connection", "(no connection)"));
+			return java.util.Collections.singletonList("§c" + tr("multiplayer.status.no_connection", Lang.t("servers.no_connection")));
 		}
 		List<String> lines = new java.util.ArrayList<String>();
 		lines.add(a.status.ping < 0 ? "?" : a.status.ping + " ms");
@@ -709,7 +709,7 @@ public final class ServersPage extends Page {
 		if (lines.isEmpty()) {
 			lines.add(a.status.online + " / " + a.status.max);
 		} else if (a.status.online > lines.size()) {
-			lines.add("§7... and " + (a.status.online - lines.size()) + " more");
+			lines.add("§7" + Lang.t("servers.and_more", a.status.online - lines.size()));
 		}
 		return lines;
 	}

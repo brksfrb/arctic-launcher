@@ -1,3 +1,4 @@
+// i18n-ignore-file: shader code and GPU names, nothing people read.
 package com.arcticlauncher.legacy;
 
 import com.arcticlauncher.client.ArcticClient;

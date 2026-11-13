@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Replays: instant clips, independent manual recordings, deferred video exports
  * and playback. Adapters register a {@link ReplayBackend}
@@ -158,9 +159,9 @@ public final class Replays {
 		return bufferStatus() + (saving == 0 ? "" : " · Saving " + saving + (saving == 1 ? " replay" : " replays"));
 	}
 	private static String bufferStatus() {
-		if (recording()) return "Recording " + clock(recorder.recordingMillis()) + String.format(java.util.Locale.ROOT, " · %.1f MB", recorder.recordingBytes() / (1024.0 * 1024.0));
-		if (recorder == null || recorder.current() == null) return "Join a world to buffer instant clips";
-		return recorder.bufferReady() ? "Instant clips ready" : "Replay buffer stopped";
+		if (recording()) return Lang.t("replay.recording_2") + clock(recorder.recordingMillis()) + String.format(java.util.Locale.ROOT, " · %.1f MB", recorder.recordingBytes() / (1024.0 * 1024.0));
+		if (recorder == null || recorder.current() == null) return Lang.t("replay.join_a_world_to_buffer_instant_clips");
+		return recorder.bufferReady() ? Lang.t("replay.instant_clips_ready") : Lang.t("replay.replay_buffer_stopped");
 	}
 	/** In a world with nothing buffering it (Replay was off at the join, or switched on since): start the buffer now. */
 	private static boolean bufferInWorld() {
@@ -177,15 +178,15 @@ public final class Replays {
 		bufferInWorld();
 		if (recorder.stopRecording()) {
 			if (liveVideo != null) liveVideo.stopRecording();
-			Notices.post("Saving recording", "Instant clips are still available."); return;
+			Notices.post(Lang.t("replay.saving_recording"), Lang.t("replay.instant_clips_are_still_available")); return;
 		}
-		if (recorder.startRecording(file -> Notices.post(file == null ? "Recording not saved" : "Recording saved",
-				file == null ? "Couldn't write the file." : file.getName()))) {
+		if (recorder.startRecording(file -> Notices.post(file == null ? Lang.t("replay.recording_not_saved") : Lang.t("replay.recording_saved"),
+				file == null ? Lang.t("replay.couldnt_write_the_file") : file.getName()))) {
 			if (liveVideo != null && ArcticClient.config().replayVideoEnabled) liveVideo.startRecording();
-			Notices.post("Recording started", "Press " + platform.keyLabel(ArcticClient.config().replayRecordKey) + " to stop. Instant clips work separately.");
-		} else Notices.post("Cannot start recording", !platform.inWorld() ? "Join a world first."
-				: !ArcticClient.config().replayEnabled ? "Replay is off. Turn it on in the Replays tab."
-				: "This version can't record a world you were already in. Rejoin it, then record.");
+			Notices.post(Lang.t("replay.recording_started"), Lang.t("replay.press_to_stop", platform.keyLabel(ArcticClient.config().replayRecordKey)));
+		} else Notices.post(Lang.t("replay.cannot_start_recording"), !platform.inWorld() ? Lang.t("replay.join_a_world_first")
+				: !ArcticClient.config().replayEnabled ? Lang.t("replay.replay_is_off_turn_it_on_in_the_replays_tab")
+				: Lang.t("replay.this_version_cant_record_a_world_you_were"));
 	}
 
 	public static int queuedVideos() { return liveVideo == null ? 0 : liveVideo.pending(); }
@@ -201,15 +202,15 @@ public final class Replays {
 	public static void saveMoment() {
 		bufferInWorld();
 		if (recorder == null || recorder.current() == null) {
-			Notices.post("Nothing to save yet", "Join a world to start the instant replay buffer.");
+			Notices.post(Lang.t("replay.nothing_to_save_yet"), Lang.t("replay.join_a_world_to_start_the_instant_replay"));
 			return;
 		}
 		// A crowded-world save can take seconds. Acknowledge the key before even capturing its thumbnail.
 		int ahead = recorder.pendingSaves();
-		String moment = "Last " + ArcticClient.config().clipSeconds + "s";
-		Notices.post(ahead == 0 ? "Saving clip" : "Clip queued", ahead == 0
-				? moment + " is saving. You can keep playing."
-				: moment + " queued behind " + ahead + (ahead == 1 ? " replay." : " replays."));
+		String moment = Lang.t("replay.last") + ArcticClient.config().clipSeconds + "s";
+		Notices.post(ahead == 0 ? Lang.t("replay.saving_clip") : Lang.t("replay.clip_queued"), ahead == 0
+				? moment + Lang.t("replay.is_saving_you_can_keep_playing")
+				: moment + Lang.t("replay.queued_behind") + ahead + (ahead == 1 ? " replay." : " replays."));
 		if (liveVideo != null && ArcticClient.config().replayVideoEnabled) liveVideo.clip(ArcticClient.config().clipSeconds);
 		if (backend != null && recorder.current() != null) {
 			try {
@@ -225,10 +226,10 @@ public final class Replays {
 	private static void keep(byte[] thumbnail) {
 		boolean saving = recorder.saveMoment(thumbnail, file -> {
 			if (file != null) {
-				Notices.post("3D clip saved", file.getName() + (recorder.recording() ? " · Your recording continues." : ""));
-			} else Notices.post("Clip not saved", "No replay data is available, or the file couldn't be written.");
+				Notices.post(Lang.t("replay.3d_clip_saved"), file.getName() + (recorder.recording() ? Lang.t("replay.your_recording_continues") : ""));
+			} else Notices.post(Lang.t("replay.clip_not_saved"), Lang.t("replay.no_replay_data_is_available_or_the_file"));
 		});
-		if (!saving) Notices.post("Nothing to save yet", "Join a world to start the instant replay buffer.");
+		if (!saving) Notices.post(Lang.t("replay.nothing_to_save_yet"), Lang.t("replay.join_a_world_to_start_the_instant_replay"));
 	}
 
 	// ---- Watching -------------------------------------------------------------
@@ -244,15 +245,15 @@ public final class Replays {
 			return;
 		}
 		opening = true;
-		Notices.post("Opening replay", file.getName().replace(".mcpr", ""));
+		Notices.post(Lang.t("replay.opening_replay"), file.getName().replace(".mcpr", ""));
 		Thread t = new Thread(() -> {
 			try {
 				long began = System.nanoTime();
 				final ReplayData data = ReplayData.open(file, new File(gameDir, ".arctic/replay-cache"));
 				if (data.meta.protocol != 0 && backend.protocol() != 0 && data.meta.protocol != backend.protocol()) {
 					data.close();
-					platform.runOnGameThread(() -> openFailed("It was recorded on Minecraft " + data.meta.mcversion
-							+ ". Open it from an instance of that version."));
+					platform.runOnGameThread(() -> openFailed(Lang.t("replay.it_was_recorded_on_minecraft") + data.meta.mcversion
+							+ Lang.t("replay.open_it_from_an_instance_of_that_version")));
 					return;
 				}
 				long unpacked = System.nanoTime();
@@ -266,7 +267,7 @@ public final class Replays {
 				platform.runOnGameThread(() -> openFailed(String.valueOf(e.getMessage())));
 			} catch (OutOfMemoryError e) {
 				// Never leave "Opening replay" up forever: the next Watch must still work.
-				platform.runOnGameThread(() -> openFailed("Not enough memory to open it. Give the game more memory and try again."));
+				platform.runOnGameThread(() -> openFailed(Lang.t("replay.not_enough_memory_to_open_it_give_the_game")));
 			} catch (Throwable e) {
 				platform.runOnGameThread(() -> openFailed(String.valueOf(e)));
 			}
@@ -277,7 +278,7 @@ public final class Replays {
 
 	private static void openFailed(String message) {
 		opening = false;
-		Notices.post("Can't open this replay", message);
+		Notices.post(Lang.t("replay.cant_open_this_replay"), message);
 	}
 
 	private static void start(ReplayData data, java.util.function.Consumer<ReplayViewer> then) {
@@ -293,7 +294,7 @@ public final class Replays {
 		if (error != null) {
 			viewer = null;
 			try { data.close(); } catch (IOException ignored) { /* the cache is cleared next time */ }
-			Notices.post("Can't open this replay", error);
+			Notices.post(Lang.t("replay.cant_open_this_replay"), error);
 			return;
 		}
 		if (then != null) {
@@ -339,7 +340,7 @@ public final class Replays {
 			viewer.frame();
 			String failure = viewer.failure();
 			if (failure != null) {
-				Notices.post("Can't open this replay", failure);
+				Notices.post(Lang.t("replay.cant_open_this_replay"), failure);
 				stopWatching();
 			}
 		} finally {

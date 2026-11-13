@@ -42,6 +42,7 @@ import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.LightType;
 
+import com.arcticlauncher.client.Lang;
 /** {@link Platform} for old Minecraft (1.8.9) on Legacy Fabric. */
 public final class LegacyPlatform implements Platform {
 	private static final int TICKS_PER_SECOND = 20;
@@ -1378,16 +1379,16 @@ public final class LegacyPlatform implements Platform {
 			return null;
 		}
 		int size = com.arcticlauncher.client.feature.ContainerPeek.slotsFor(id.getPath());
-		net.minecraft.nbt.NbtCompound tag = stack.getNbt().getCompound("BlockEntityTag");
+		net.minecraft.nbt.NbtCompound tag = stack.getNbt().getCompound("BlockEntityTag"); // i18n-ignore
 		if (!tag.contains("Items", 9)) {
 			return null;
 		}
-		net.minecraft.nbt.NbtList list = tag.getList("Items", 10);
+		net.minecraft.nbt.NbtList list = tag.getList("Items", 10); // i18n-ignore: an NBT tag
 		Object[] out = new Object[size];
 		boolean any = false;
 		for (int i = 0; i < list.size(); i++) {
 			net.minecraft.nbt.NbtCompound entry = list.getCompound(i);
-			int slot = entry.getByte("Slot") & 255;
+			int slot = entry.getByte("Slot") & 255; // i18n-ignore: an NBT tag
 			ItemStack item = new ItemStack(entry);
 			if (slot < out.length && present(item)) {
 				out[slot] = item;
@@ -1526,7 +1527,7 @@ public final class LegacyPlatform implements Platform {
 
 	// ---- Duels --------------------------------------------------------------------------
 
-	private static final String DUEL_PREFIX = "Arctic Duel ";
+	private static final String DUEL_PREFIX = "Arctic Duel "; // i18n-ignore // i18n-ignore
 
 	@Override
 	public boolean canDuel() {
@@ -1693,6 +1694,11 @@ public final class LegacyPlatform implements Platform {
 		String text = net.minecraft.client.resource.language.I18n.translate(key);
 		// Unknown keys come back as themselves.
 		return text == null || text.equals(key) ? english : text;
+	}
+
+	@Override
+	public String gameLanguage() {
+		return mc().options.language;
 	}
 
 	@Override

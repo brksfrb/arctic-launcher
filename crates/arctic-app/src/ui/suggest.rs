@@ -8,7 +8,7 @@ use crate::app::ArcticApp;
 use crate::art::icons::Icon;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 /// Most characters of the message (the server keeps this many).
 const MAX_CHARS: usize = 2000;
 const TEXT_HEIGHT: f32 = 150.0;
@@ -41,20 +41,20 @@ impl ArcticApp {
             .show(ctx, |ui| {
                 ui.set_width(460.0);
                 ui.label(
-                    RichText::new("Suggest a feature or report a bug")
+                    RichText::new(t!("nav.suggest_a_feature_or_report_a_bug"))
                         .size(22.0)
                         .strong()
                         .color(p.text),
                 );
                 ui.add_space(4.0);
                 ui.label(
-                    RichText::new("It goes straight to the Arctic team. Nothing is sent until you press Send.")
+                    RichText::new(t!("nav.it_goes_straight_to_the_arctic_team_nothing"))
                         .color(p.muted),
                 );
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
-                    ui.selectable_value(&mut form.bug, false, "Idea");
-                    ui.selectable_value(&mut form.bug, true, "Bug");
+                    ui.selectable_value(&mut form.bug, false, t!("nav.idea"));
+                    ui.selectable_value(&mut form.bug, true, t!("nav.bug"));
                 });
                 ui.add_space(6.0);
                 egui::ScrollArea::vertical()
@@ -63,9 +63,9 @@ impl ArcticApp {
                         ui.add(
                             egui::TextEdit::multiline(&mut form.text)
                                 .hint_text(if form.bug {
-                                    "What went wrong, and what were you doing?"
+                                    t!("nav.what_went_wrong_and_what_were_you_doing")
                                 } else {
-                                    "What would you like Arctic to do?"
+                                    t!("nav.what_would_you_like_arctic_to_do")
                                 })
                                 .char_limit(MAX_CHARS)
                                 .desired_rows(6)
@@ -73,41 +73,47 @@ impl ArcticApp {
                         );
                     });
                 ui.add_space(8.0);
-                ui.label(RichText::new("HOW TO REACH YOU (OPTIONAL)").small().color(p.muted));
+                ui.label(
+                    RichText::new(t!("nav.how_to_reach_you_optional"))
+                        .small()
+                        .color(p.muted),
+                );
                 ui.add(
                     widgets::text_field(&mut form.contact)
-                        .hint_text("Discord name or email, if you want an answer")
+                        .hint_text(t!("nav.discord_name_or_email_if_you_want_an_answer"))
                         .desired_width(f32::INFINITY),
                 );
                 ui.add_space(8.0);
-                ui.checkbox(&mut form.launcher_log, "Attach the launcher's log");
-                ui.checkbox(&mut form.game_log, "Attach the last game's log");
+                ui.checkbox(&mut form.launcher_log, t!("nav.attach_the_launchers_log"));
+                ui.checkbox(&mut form.game_log, t!("nav.attach_the_last_games_log"));
                 ui.label(
-                    RichText::new(
-                        "Logs help find what went wrong. Your user name, folders, emails, IP addresses and sign-in tokens are taken out before sending.",
-                    )
-                    .small()
-                    .color(p.muted),
+                    RichText::new(t!("nav.logs_help_find_what_went_wrong_your_user"))
+                        .small()
+                        .color(p.muted),
                 );
                 ui.add_space(6.0);
                 crate::widgets::row(ui, |ui| {
                     ui.label(
-                        RichText::new("Need an answer sooner? Our Discord is quick to help.")
+                        RichText::new(t!("nav.need_an_answer_sooner_our_discord_is_quick"))
                             .small()
                             .color(p.muted),
                     );
                     ui.hyperlink_to(
-                        RichText::new("Join the Discord").small(),
+                        RichText::new(t!("nav.join_the_discord")).small(),
                         crate::ui::about::DISCORD,
                     );
                 });
                 ui.add_space(12.0);
                 crate::widgets::row(ui, |ui| {
-                    if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
+                    if crate::widgets::button(ui, p, None, t!("nav.cancel"), false).clicked() {
                         ui.close();
                     }
                     let ready = form.text.trim().chars().count() >= 3 && !form.sending;
-                    let label = if form.sending { "Sending…" } else { "Send" };
+                    let label = if form.sending {
+                        t!("nav.sending")
+                    } else {
+                        t!("nav.send")
+                    };
                     let sent = ui
                         .add_enabled_ui(ready, |ui| {
                             widgets::button(ui, p, Some(Icon::External), label, true)
@@ -159,8 +165,11 @@ impl ArcticApp {
         match result {
             Ok(()) => {
                 self.suggest = None;
-                self.toasts
-                    .push(Kind::Success, "Sent, thank you", "We read every one.");
+                self.toasts.push(
+                    Kind::Success,
+                    t!("nav.sent_thank_you"),
+                    t!("nav.we_read_every_one"),
+                );
             }
             Err(e) => {
                 if let Some(form) = &mut self.suggest {
@@ -168,8 +177,8 @@ impl ArcticApp {
                 }
                 self.toasts.push(
                     Kind::Error,
-                    "Couldn't send it",
-                    format!("{e}. Your text is still here."),
+                    t!("nav.couldnt_send_it"),
+                    tf!("nav.your_text_is_still_here", e = e),
                 );
             }
         }
@@ -179,7 +188,10 @@ impl ArcticApp {
 /// The ends of the chosen logs, with names and tokens taken out.
 fn attached_logs(launcher: Option<&std::path::Path>, game: Option<&std::path::Path>) -> String {
     let mut out = String::new();
-    for (title, path) in [("launcher log", launcher), ("game log", game)] {
+    for (title, path) in [
+        (t!("nav.launcher_log"), launcher),
+        (t!("nav.game_log"), game),
+    ] {
         let Some(path) = path else {
             continue;
         };

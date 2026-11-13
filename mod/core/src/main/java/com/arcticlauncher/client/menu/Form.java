@@ -10,6 +10,7 @@ import com.arcticlauncher.client.ui.Scroll;
 import com.arcticlauncher.client.ui.Toggle;
 import com.arcticlauncher.client.ui.Widget;
 
+import com.arcticlauncher.client.Lang;
 /**
  * A settings tab laid out top to bottom in a scrolling box: sections,
  * switches (some with a key), key rows, notes and custom rows. Every change
@@ -175,8 +176,8 @@ final class Form {
 		int pickerTop = row(ColorPicker.HEIGHT + 6);
 		final int left = x + LABEL_W;
 		final int hexTop = row(ROW);
-		put(new Label("Hex", Label.Kind.TEXT), x + 4, hexTop, LABEL_W - 4, ROW);
-		final com.arcticlauncher.client.ui.TextField hex = new com.arcticlauncher.client.ui.TextField("RRGGBB", 6, HEX)
+		put(new Label(Lang.t("mods.hex"), Label.Kind.TEXT), x + 4, hexTop, LABEL_W - 4, ROW);
+		final com.arcticlauncher.client.ui.TextField hex = new com.arcticlauncher.client.ui.TextField(Lang.t("mods.rrggbb"), 6, HEX)
 				.text(hexOf(get.getAsInt()));
 		put(new ColorPicker(PICKER_HSV, () -> {
 			set.accept(ColorPicker.rgb(PICKER_HSV[0], PICKER_HSV[1], PICKER_HSV[2]));
@@ -203,7 +204,7 @@ final class Form {
 
 	/** Images and labels come from the style registry; adding a style needs no picker changes. */
 	void badgeStyles() {
-		section("Your badge");
+		section(Lang.t("mods.your_badge"));
 		final com.arcticlauncher.client.looks.Looks looks = ArcticClient.looks();
 		if (looks != null) looks.refreshOwn();
 		int columns = Math.max(1, w / 100);
@@ -219,8 +220,8 @@ final class Form {
 		}
 		put(new Label("", Label.Kind.MUTED) {
 			@Override protected void draw(com.arcticlauncher.client.gfx.Gfx g, com.arcticlauncher.client.style.Style s, int mx, int my, float dt) {
-				text(looks == null || !looks.signedIn() ? "Launch with your Arctic account to choose a badge."
-						: looks.status().isEmpty() ? "Everyone sees the badge you choose." : looks.status());
+				text(looks == null || !looks.signedIn() ? Lang.t("mods.launch_with_your_arctic_account_to_choose_a")
+						: looks.status().isEmpty() ? Lang.t("mods.everyone_sees_the_badge_you_choose") : looks.status());
 				super.draw(g, s, mx, my, dt);
 			}
 		}, x + 4, row(16), w - 4, 16);
@@ -292,7 +293,7 @@ final class Form {
 	/** A picture of joined clear glass at the level the slider above it is on. */
 	void glassPreview(java.util.function.IntSupplier level) {
 		int top = row(GlassPreview.SIZE + 6);
-		rowLabel(top, "Preview");
+		rowLabel(top, Lang.t("mods.preview"));
 		put(new GlassPreview(level), x + LABEL_W, top + 2, GlassPreview.SIZE, GlassPreview.SIZE);
 	}
 

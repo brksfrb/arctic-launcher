@@ -6,7 +6,7 @@ use arctic_core::friends::{self, InviteTo, Overview, Profile, Settings};
 use arctic_core::{Result, cosmetics};
 
 use crate::tasks::{Event, Tasks};
-
+use crate::{t, tf};
 /// Something the player did on the Friends page.
 #[derive(Debug, Clone)]
 pub enum FriendAction {
@@ -76,21 +76,23 @@ impl Tasks {
                 FriendAction::Recover(code) => {
                     let base = cosmetics::base_url();
                     let result = cosmetics::recover_offline(t.dirs(), &base, &account, code)
-                        .map(|()| "Your profile and friends are here now".to_owned())
+                        .map(|()| t!("tasks.your_profile_and_friends_are_here_now").to_owned())
                         .map_err(|e| e.to_string());
                     t.send(Event::FriendDone(result));
                 }
                 FriendAction::DiscordRecover => {
-                    t.send(Event::FriendDone(Ok(
-                        "Finish the Discord login in your browser".to_owned(),
-                    )));
+                    t.send(Event::FriendDone(Ok(t!(
+                        "tasks.finish_the_discord_login_in_your_browser"
+                    )
+                    .to_owned())));
                     let result = t.discord_recover(&account).map_err(|e| e.to_string());
                     t.send(Event::FriendDone(result));
                 }
                 FriendAction::DiscordLink => {
-                    t.send(Event::FriendDone(Ok(
-                        "Finish the Discord login in your browser".to_owned(),
-                    )));
+                    t.send(Event::FriendDone(Ok(t!(
+                        "tasks.finish_the_discord_login_in_your_browser"
+                    )
+                    .to_owned())));
                     let result = t.discord_link(account.clone()).map_err(|e| e.to_string());
                     t.send(Event::FriendDone(result));
                 }
@@ -114,12 +116,14 @@ impl Tasks {
         while started.elapsed() < DISCORD_WAIT {
             std::thread::sleep(DISCORD_POLL);
             if let Some(answer) = friends::discord_result(&base, &login)? {
-                let name = answer["discord"].as_str().unwrap_or("your Discord account");
-                return Ok(format!("Discord linked: {name}"));
+                let name = answer["discord"]
+                    .as_str()
+                    .unwrap_or(t!("tasks.your_discord_account"));
+                return Ok(tf!("tasks.discord_linked", name = name));
             }
         }
         Err(arctic_core::Error::Other(
-            "The Discord login took too long. Try again.".into(),
+            t!("tasks.the_discord_login_took_too_long_try_again").into(),
         ))
     }
 
@@ -132,11 +136,11 @@ impl Tasks {
         while started.elapsed() < DISCORD_WAIT {
             std::thread::sleep(DISCORD_POLL);
             if cosmetics::discord_restore_poll(self.dirs(), &base, account, &restore)? {
-                return Ok("Your profile and friends are here now".to_owned());
+                return Ok(t!("tasks.your_profile_and_friends_are_here_now").to_owned());
             }
         }
         Err(arctic_core::Error::Other(
-            "The Discord login took too long. Try again.".into(),
+            t!("tasks.the_discord_login_took_too_long_try_again").into(),
         ))
     }
 
@@ -151,19 +155,19 @@ impl Tasks {
             }
             FriendAction::DiscordUnlink => {
                 friends::discord_unlink(&base, &token)?;
-                "Discord unlinked".to_owned()
+                t!("tasks.discord_unlinked").to_owned()
             }
             FriendAction::Request(who) => {
                 let r = friends::request(&base, &token, who)?;
                 if r.friends {
-                    format!("You and {} are friends now", r.name)
+                    tf!("tasks.you_and_are_friends_now", name = r.name)
                 } else {
-                    format!("Asked {} to be friends", r.name)
+                    tf!("tasks.asked_to_be_friends", name = r.name)
                 }
             }
             FriendAction::Accept(id) => {
                 friends::accept(&base, &token, id)?;
-                "Friend added".into()
+                t!("tasks.friend_added").into()
             }
             FriendAction::Remove(id, done) => {
                 friends::remove(&base, &token, id)?;
@@ -171,7 +175,7 @@ impl Tasks {
             }
             FriendAction::Invite(id, to) => {
                 friends::invite(&base, &token, id, to)?;
-                "Invite sent".into()
+                t!("tasks.invite_sent").into()
             }
             FriendAction::Dismiss(id) => {
                 friends::dismiss(&base, &token, id)?;
@@ -179,16 +183,16 @@ impl Tasks {
             }
             FriendAction::Update(name, settings) => {
                 friends::update(&base, &token, name.as_deref(), settings)?;
-                "Saved".into()
+                t!("tasks.saved").into()
             }
             FriendAction::Link(other) => {
                 let (_, other_token) = self.arctic_token(other.clone())?;
                 friends::link(&base, &token, &other_token)?;
-                format!("Linked {}", other.username)
+                tf!("tasks.linked", username = other.username)
             }
             FriendAction::Unlink(uuid) => {
                 friends::unlink(&base, &token, uuid)?;
-                "Unlinked".into()
+                t!("tasks.unlinked").into()
             }
         })
     }
@@ -273,7 +277,7 @@ impl Tasks {
 
 /// The screenshot as a PNG small enough to send.
 fn shrink_png(path: &std::path::Path) -> std::result::Result<Vec<u8>, String> {
-    let img = image::open(path).map_err(|e| format!("couldn't read that screenshot: {e}"))?;
+    let img = image::open(path).map_err(|e| tf!("tasks.couldnt_read_that_screenshot", e = e))?;
     for width in SEND_WIDTHS {
         let small = if img.width() > width {
             img.resize(width, u32::MAX, image::imageops::FilterType::Triangle)

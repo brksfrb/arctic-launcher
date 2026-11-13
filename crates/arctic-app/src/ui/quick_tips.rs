@@ -7,7 +7,7 @@ use eframe::egui::{self, Align2, CursorIcon, FontId, Sense, vec2};
 
 use crate::app::{ArcticApp, Tab};
 use crate::art::icons::{self, Icon};
-
+use crate::{t, tf};
 /// How long one tip stays.
 const TIP_EVERY: Duration = Duration::from_secs(5 * 60);
 const PAD: f32 = 8.0;
@@ -37,111 +37,80 @@ enum Target {
 
 /// A tip and where clicking it goes (`None`: it's in game, nothing to open).
 const TIPS: &[(&str, Option<Target>)] = &[
+    ("nav.tip.drag_servers", Some(Target::Tab(Tab::Play))),
+    ("nav.tip.discover_servers", Some(Target::Discover)),
+    ("nav.tip.right_shift_hud", None),
+    ("nav.tip.controllers", None),
+    ("nav.tip.tier_tags", None),
+    ("nav.tip.cosmetics_free", Some(Target::Tab(Tab::Skins))),
+    ("nav.tip.skin_gallery", Some(Target::Gallery)),
+    ("nav.tip.face_items", Some(Target::Cosmetic("face"))),
+    ("nav.tip.shoulder_pets", Some(Target::Cosmetic("shoulders"))),
+    ("nav.tip.play_together", Some(Target::Tab(Tab::Together))),
+    ("nav.tip.friends_join", Some(Target::Tab(Tab::Together))),
     (
-        "Drag servers to put your favorites first.",
-        Some(Target::Tab(Tab::Play)),
-    ),
-    (
-        "Discover servers finds new places to play.",
-        Some(Target::Discover),
-    ),
-    ("Right Shift in game moves or hides any HUD widget.", None),
-    ("Controllers work in game on every version.", None),
-    (
-        "Tier Tags show PvP tiers by names (Right Shift in game).",
-        None,
-    ),
-    (
-        "Capes, wings, pets and emotes are free.",
-        Some(Target::Tab(Tab::Skins)),
-    ),
-    (
-        "Cosmetics → Skin gallery: free skins to try on.",
-        Some(Target::Gallery),
-    ),
-    (
-        "Glasses off your eyes? Nudge face items in Cosmetics.",
-        Some(Target::Cosmetic("face")),
-    ),
-    (
-        "Shoulder pets can sit on either shoulder.",
-        Some(Target::Cosmetic("shoulders")),
-    ),
-    (
-        "Play together without a server: share an invite code.",
-        Some(Target::Tab(Tab::Together)),
-    ),
-    (
-        "Friends see where you play and join in one click.",
-        Some(Target::Tab(Tab::Together)),
-    ),
-    (
-        "F9 saves the last 30 seconds; F10 starts or stops a recording.",
+        "nav.tip.replays",
         Some(Target::Instance(crate::ui::InstancePage::Replays)),
     ),
+    ("nav.tip.screenshots", Some(Target::Tab(Tab::Screenshots))),
     (
-        "All your screenshots, every instance, one place.",
-        Some(Target::Tab(Tab::Screenshots)),
-    ),
-    (
-        "Modrinth modpacks install as their own instance.",
+        "nav.modrinth_modpacks_install_as_their_own",
         Some(Target::Modpacks),
     ),
     (
-        "Mods that would stop the game get fixed before it starts.",
+        "nav.mods_that_would_stop_the_game_get_fixed",
         Some(Target::Instances),
     ),
     (
-        "An instance can keep its worlds on any drive.",
-        Some(Target::InstanceSetting("Game folder")),
+        "nav.an_instance_can_keep_its_worlds_on_any_drive",
+        Some(Target::InstanceSetting("instances.game_folder")),
     ),
     (
-        "Shaders: find and enable them in Packs & shaders.",
+        "nav.shaders_find_and_enable_them_in_packs",
         Some(Target::Shaders),
     ),
     (
-        "Short on space? Move Arctic in Settings → Storage.",
-        Some(Target::Settings("Storage")),
+        "nav.short_on_space_move_arctic_in_settings",
+        Some(Target::Settings("settings.storage")),
     ),
     (
-        "Bring instances and HUDs from other launchers.",
+        "nav.bring_instances_and_huds_from_other",
         Some(Target::Migrate),
     ),
-    ("Share your setup or a HUD as a code.", Some(Target::Share)),
     (
-        "Try the Glass theme in Settings → Appearance.",
-        Some(Target::Settings("Appearance")),
+        "nav.share_your_setup_or_a_hud_as_a_code",
+        Some(Target::Share),
     ),
     (
-        "One switch adds Sodium and friends for more FPS.",
-        Some(Target::Settings("Arctic Client")),
+        "nav.try_the_glass_theme_in_settings_appearance",
+        Some(Target::Settings("settings.appearance")),
     ),
     (
-        "Voice chat works in shared worlds and SVC servers.",
-        Some(Target::Settings("Voice chat")),
+        "nav.one_switch_adds_sodium_and_friends_for_more",
+        Some(Target::Settings("settings.arctic_client")),
     ),
     (
-        "Animated capes too busy? Freeze them in Settings.",
-        Some(Target::Settings("Freeze animated capes and cosmetics")),
+        "nav.voice_chat_works_in_shared_worlds_and_svc",
+        Some(Target::Settings("settings.voice_chat")),
     ),
     (
-        "Crashes are explained, and fixed where Arctic can.",
+        "nav.animated_capes_too_busy_freeze_them_in",
+        Some(Target::Settings(
+            "settings.freeze_animated_capes_and_cosmetics",
+        )),
+    ),
+    (
+        "nav.crashes_are_explained_and_fixed_where_arctic",
         Some(Target::Tab(Tab::Logs)),
     ),
     (
-        "Every game's log is kept in Logs.",
+        "nav.every_games_log_is_kept_in_logs",
         Some(Target::Tab(Tab::Logs)),
     ),
-    (
-        "Profiles keep accounts and instances apart (top left).",
-        None,
-    ),
-    (
-        "Auto Reconnect brings you back when a server drops you.",
-        None,
-    ),
-    ("Waypoints and a minimap come with the Arctic Client.", None),
-    ("The arctic command does it all too: arctic --help.", None),
+    ("nav.profiles_keep_accounts_and_instances_apart", None),
+    ("nav.auto_reconnect_brings_you_back_when_a_server", None),
+    ("nav.waypoints_and_a_minimap_come_with_the_arctic", None),
+    ("nav.the_arctic_command_does_it_all_too_arctic", None),
 ];
 
 #[derive(Default)]
@@ -248,6 +217,7 @@ impl ArcticApp {
         }
         .unwrap_or_else(|| self.quick_tips.tip(Instant::now()));
         let (text, target) = TIPS[index];
+        let text = t!(text);
         let width = ui.available_width();
         let galley = ui.painter().layout(
             text.to_owned(),
@@ -279,7 +249,7 @@ impl ArcticApp {
         ui.painter().text(
             egui::pos2(rect.left() + PAD + 17.0, label_y),
             Align2::LEFT_CENTER,
-            "Quick tip",
+            t!("nav.quick_tip"),
             FontId::proportional(10.5),
             p.accent,
         );
@@ -291,7 +261,7 @@ impl ArcticApp {
         let next_response = ui
             .interact(next, ui.id().with("quick_tip_next"), Sense::click())
             .on_hover_cursor(CursorIcon::PointingHand)
-            .on_hover_text("Another tip");
+            .on_hover_text(t!("nav.another_tip"));
         icons::draw(
             ui.painter(),
             Icon::ChevronDown,
@@ -376,7 +346,7 @@ impl ArcticApp {
             galley,
             color,
         );
-        let response = response.on_hover_text(format!("Quick tip: {text}"));
+        let response = response.on_hover_text(tf!("nav.quick_tip_2", text = text));
         let response = match target {
             Some(_) => response.on_hover_cursor(CursorIcon::PointingHand),
             None => response,
@@ -397,111 +367,80 @@ mod tests {
     #[test]
     fn every_tip_has_its_intended_destination() {
         let expected = [
+            ("nav.tip.drag_servers", Some(Target::Tab(Tab::Play))),
+            ("nav.tip.discover_servers", Some(Target::Discover)),
+            ("nav.tip.right_shift_hud", None),
+            ("nav.tip.controllers", None),
+            ("nav.tip.tier_tags", None),
+            ("nav.tip.cosmetics_free", Some(Target::Tab(Tab::Skins))),
+            ("nav.tip.skin_gallery", Some(Target::Gallery)),
+            ("nav.tip.face_items", Some(Target::Cosmetic("face"))),
+            ("nav.tip.shoulder_pets", Some(Target::Cosmetic("shoulders"))),
+            ("nav.tip.play_together", Some(Target::Tab(Tab::Together))),
+            ("nav.tip.friends_join", Some(Target::Tab(Tab::Together))),
             (
-                "Drag servers to put your favorites first.",
-                Some(Target::Tab(Tab::Play)),
-            ),
-            (
-                "Discover servers finds new places to play.",
-                Some(Target::Discover),
-            ),
-            ("Right Shift in game moves or hides any HUD widget.", None),
-            ("Controllers work in game on every version.", None),
-            (
-                "Tier Tags show PvP tiers by names (Right Shift in game).",
-                None,
-            ),
-            (
-                "Capes, wings, pets and emotes are free.",
-                Some(Target::Tab(Tab::Skins)),
-            ),
-            (
-                "Cosmetics → Skin gallery: free skins to try on.",
-                Some(Target::Gallery),
-            ),
-            (
-                "Glasses off your eyes? Nudge face items in Cosmetics.",
-                Some(Target::Cosmetic("face")),
-            ),
-            (
-                "Shoulder pets can sit on either shoulder.",
-                Some(Target::Cosmetic("shoulders")),
-            ),
-            (
-                "Play together without a server: share an invite code.",
-                Some(Target::Tab(Tab::Together)),
-            ),
-            (
-                "Friends see where you play and join in one click.",
-                Some(Target::Tab(Tab::Together)),
-            ),
-            (
-                "F9 saves the last 30 seconds; F10 starts or stops a recording.",
+                "nav.tip.replays",
                 Some(Target::Instance(crate::ui::InstancePage::Replays)),
             ),
+            ("nav.tip.screenshots", Some(Target::Tab(Tab::Screenshots))),
             (
-                "All your screenshots, every instance, one place.",
-                Some(Target::Tab(Tab::Screenshots)),
-            ),
-            (
-                "Modrinth modpacks install as their own instance.",
+                "nav.modrinth_modpacks_install_as_their_own",
                 Some(Target::Modpacks),
             ),
             (
-                "Mods that would stop the game get fixed before it starts.",
+                "nav.mods_that_would_stop_the_game_get_fixed",
                 Some(Target::Instances),
             ),
             (
-                "An instance can keep its worlds on any drive.",
-                Some(Target::InstanceSetting("Game folder")),
+                "nav.an_instance_can_keep_its_worlds_on_any_drive",
+                Some(Target::InstanceSetting("instances.game_folder")),
             ),
             (
-                "Shaders: find and enable them in Packs & shaders.",
+                "nav.shaders_find_and_enable_them_in_packs",
                 Some(Target::Shaders),
             ),
             (
-                "Short on space? Move Arctic in Settings → Storage.",
-                Some(Target::Settings("Storage")),
+                "nav.short_on_space_move_arctic_in_settings",
+                Some(Target::Settings("settings.storage")),
             ),
             (
-                "Bring instances and HUDs from other launchers.",
+                "nav.bring_instances_and_huds_from_other",
                 Some(Target::Migrate),
             ),
-            ("Share your setup or a HUD as a code.", Some(Target::Share)),
             (
-                "Try the Glass theme in Settings → Appearance.",
-                Some(Target::Settings("Appearance")),
+                "nav.share_your_setup_or_a_hud_as_a_code",
+                Some(Target::Share),
             ),
             (
-                "One switch adds Sodium and friends for more FPS.",
-                Some(Target::Settings("Arctic Client")),
+                "nav.try_the_glass_theme_in_settings_appearance",
+                Some(Target::Settings("settings.appearance")),
             ),
             (
-                "Voice chat works in shared worlds and SVC servers.",
-                Some(Target::Settings("Voice chat")),
+                "nav.one_switch_adds_sodium_and_friends_for_more",
+                Some(Target::Settings("settings.arctic_client")),
             ),
             (
-                "Animated capes too busy? Freeze them in Settings.",
-                Some(Target::Settings("Freeze animated capes and cosmetics")),
+                "nav.voice_chat_works_in_shared_worlds_and_svc",
+                Some(Target::Settings("settings.voice_chat")),
             ),
             (
-                "Crashes are explained, and fixed where Arctic can.",
+                "nav.animated_capes_too_busy_freeze_them_in",
+                Some(Target::Settings(
+                    "settings.freeze_animated_capes_and_cosmetics",
+                )),
+            ),
+            (
+                "nav.crashes_are_explained_and_fixed_where_arctic",
                 Some(Target::Tab(Tab::Logs)),
             ),
             (
-                "Every game's log is kept in Logs.",
+                "nav.every_games_log_is_kept_in_logs",
                 Some(Target::Tab(Tab::Logs)),
             ),
-            (
-                "Profiles keep accounts and instances apart (top left).",
-                None,
-            ),
-            (
-                "Auto Reconnect brings you back when a server drops you.",
-                None,
-            ),
-            ("Waypoints and a minimap come with the Arctic Client.", None),
-            ("The arctic command does it all too: arctic --help.", None),
+            ("nav.profiles_keep_accounts_and_instances_apart", None),
+            ("nav.auto_reconnect_brings_you_back_when_a_server", None),
+            ("nav.waypoints_and_a_minimap_come_with_the_arctic", None),
+            ("nav.the_arctic_command_does_it_all_too_arctic", None),
         ];
         assert_eq!(TIPS, expected);
     }

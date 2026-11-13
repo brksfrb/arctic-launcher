@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.concurrent.TimeUnit;
 
+import com.arcticlauncher.client.Lang;
 /**
  * The client side of an HTTP proxy tunnel ({@code CONNECT host:port}, login as Basic), first in a
  * connection's pipeline. Like {@link Socks5Handler}: the game only sees the channel become active
@@ -39,13 +40,13 @@ public final class HttpConnectHandler extends ChannelDuplexHandler {
 	/** The CONNECT request for a target, with a Basic login when there is one. */
 	public static String request(String host, int port, String username, String password) {
 		String target = (host.indexOf(':') >= 0 && !host.startsWith("[") ? "[" + host + "]" : host) + ":" + port;
-		StringBuilder sb = new StringBuilder("CONNECT ").append(target).append(" HTTP/1.1\r\nHost: ").append(target).append("\r\n");
+		StringBuilder sb = new StringBuilder("CONNECT ").append(target).append(" HTTP/1.1\r\nHost: ").append(target).append("\r\n"); // i18n-ignore
 		if (username != null && !username.isEmpty()) {
 			String login = username + ":" + (password == null ? "" : password);
-			sb.append("Proxy-Authorization: Basic ")
+			sb.append("Proxy-Authorization: Basic ") // i18n-ignore
 					.append(Base64.getEncoder().encodeToString(login.getBytes(StandardCharsets.UTF_8))).append("\r\n");
 		}
-		return sb.append("Proxy-Connection: keep-alive\r\n\r\n").toString();
+		return sb.append("Proxy-Connection: keep-alive\r\n\r\n").toString(); // i18n-ignore
 	}
 
 	/** Why a status line (the proxy's first line) isn't a success, or null when it is. */
@@ -60,11 +61,11 @@ public final class HttpConnectHandler extends ChannelDuplexHandler {
 			case "407":
 				return "the proxy refused the user name or password";
 			case "403":
-				return "the proxy's rules don't allow this connection";
+				return Lang.t("servers.the_proxys_rules_dont_allow_this_connection");
 			case "502":
 			case "503":
 			case "504":
-				return "the proxy can't reach the server";
+				return Lang.t("servers.the_proxy_cant_reach_the_server");
 			default:
 				return "the proxy answered " + parts[1] + (parts.length > 2 ? " " + parts[2] : "");
 		}
@@ -90,7 +91,7 @@ public final class HttpConnectHandler extends ChannelDuplexHandler {
 	public void channelActive(ChannelHandlerContext ctx) {
 		startedNanos = System.nanoTime();
 		try {
-			timeout = ctx.executor().schedule(() -> fail(ctx, "the proxy didn't answer in time"), TIMEOUT_SECONDS, TimeUnit.SECONDS);
+			timeout = ctx.executor().schedule(() -> fail(ctx, Lang.t("servers.the_proxy_didnt_answer_in_time")), TIMEOUT_SECONDS, TimeUnit.SECONDS);
 		} catch (UnsupportedOperationException e) {
 			// Netty 4.0's test channel can't schedule; real connections can.
 		}
@@ -114,7 +115,7 @@ public final class HttpConnectHandler extends ChannelDuplexHandler {
 		int end = endOfHeader();
 		if (end < 0) {
 			if (pending.readableBytes() > MAX_HEADER) {
-				fail(ctx, "that isn't an HTTP proxy");
+				fail(ctx, Lang.t("servers.that_isnt_an_http_proxy"));
 			}
 			return;
 		}
@@ -127,7 +128,7 @@ public final class HttpConnectHandler extends ChannelDuplexHandler {
 		}
 		pending.skipBytes(end - pending.readerIndex());
 		done = true;
-		ProxyRoutes.note("proxy: tunnel to " + host + ":" + port + " up in " + (System.nanoTime() - startedNanos) / 1_000_000L + " ms");
+		ProxyRoutes.note("proxy: tunnel to " + host + ":" + port + " up in " + (System.nanoTime() - startedNanos) / 1_000_000L + " ms"); // i18n-ignore
 		ByteBuf rest = pending.readableBytes() > 0 ? pending.readSlice(pending.readableBytes()).retain() : null;
 		ctx.pipeline().remove(this);
 		ctx.fireChannelActive();

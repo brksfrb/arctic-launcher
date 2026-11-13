@@ -5,6 +5,7 @@ import com.arcticlauncher.client.config.HudSlot;
 import com.arcticlauncher.client.hud.HudWidget;
 import com.arcticlauncher.client.hud.TextWidget;
 
+import com.arcticlauncher.client.Lang;
 /** How one HUD widget looks: text, colors, its box and size. */
 final class HudLookForm {
 	static final int[] TEXT_COLORS = {
@@ -22,10 +23,10 @@ final class HudLookForm {
 		final HudSlot s = ArcticClient.hud().slot(widget);
 		if (widget instanceof TextWidget) {
 			final TextWidget text = (TextWidget) widget;
-			f.section("Text");
+			f.section(Lang.t("mods.text"));
 			if (text.hasLabel()) {
 				final int[] modes = text.labelModes();
-				f.choice("Label", text.labelChoices(), () -> {
+				f.choice(Lang.t("mods.label"), text.labelChoices(), () -> {
 					for (int i = 0; i < modes.length; i++) {
 						if (modes[i] == s.labelMode) {
 							return i;
@@ -34,21 +35,21 @@ final class HudLookForm {
 					return 0;
 				}, v -> s.labelMode = modes[v]);
 			}
-			f.toggle("Brackets", "Show the value in [brackets]", () -> s.brackets, on -> s.brackets = on);
+			f.toggle(Lang.t("mods.brackets"), Lang.t("mods.show_the_value_in_brackets"), () -> s.brackets, on -> s.brackets = on);
 		} else {
-			f.section("Text");
+			f.section(Lang.t("mods.text"));
 		}
-		f.swatches("Text color", TEXT_COLORS, () -> s.textColor, v -> s.textColor = v);
+		f.swatches(Lang.t("mods.text_color"), TEXT_COLORS, () -> s.textColor, v -> s.textColor = v);
 		if (widget instanceof TextWidget) {
 			int[] shown = LABEL_COLORS.clone();
 			shown[0] = SAME_AS_TEXT;
-			f.swatches("Label color", shown, () -> s.labelColor == 0 ? SAME_AS_TEXT : s.labelColor,
+			f.swatches(Lang.t("mods.label_color"), shown, () -> s.labelColor == 0 ? SAME_AS_TEXT : s.labelColor,
 					v -> s.labelColor = v == SAME_AS_TEXT ? 0 : v);
 		}
-		f.toggle("Chroma", "The text cycles through the rainbow", () -> s.chroma, on -> s.chroma = on);
-		f.toggle("Text shadow", "A dark shadow under the text, like Minecraft's", () -> s.shadow, on -> s.shadow = on);
-		f.section("Box");
-		f.toggle("Background", "A box behind the widget", () -> s.background, on -> {
+		f.toggle(Lang.t("mods.chroma"), Lang.t("mods.the_text_cycles_through_the_rainbow"), () -> s.chroma, on -> s.chroma = on);
+		f.toggle(Lang.t("mods.text_shadow"), Lang.t("mods.a_dark_shadow_under_the_text_like_minecrafts"), () -> s.shadow, on -> s.shadow = on);
+		f.section(Lang.t("mods.box"));
+		f.toggle(Lang.t("mods.background"), Lang.t("mods.a_box_behind_the_widget"), () -> s.background, on -> {
 			s.background = on;
 			host.rebuild();
 		});
@@ -57,16 +58,16 @@ final class HudLookForm {
 			for (int i = 0; i < boxes.length; i++) {
 				boxes[i] = 0xFF000000 | BOX_COLORS[i];
 			}
-			f.swatches("Box color", boxes, () -> 0xFF000000 | (s.backgroundColor & 0xFFFFFF),
+			f.swatches(Lang.t("mods.box_color"), boxes, () -> 0xFF000000 | (s.backgroundColor & 0xFFFFFF),
 					v -> s.backgroundColor = (s.backgroundColor & 0xFF000000) | (v & 0xFFFFFF));
-			f.stepper("Opacity", () -> Math.round(((s.backgroundColor >>> 24) & 0xFF) / 2.55),
+			f.stepper(Lang.t("mods.opacity"), () -> Math.round(((s.backgroundColor >>> 24) & 0xFF) / 2.55),
 					v -> s.backgroundColor = ((int) Math.round(v * 2.55) << 24) | (s.backgroundColor & 0xFFFFFF), 0, 100, 5, "%.0f%%");
-			f.toggle("Border", "A thin line around the box", () -> s.border, on -> s.border = on);
+			f.toggle(Lang.t("mods.border"), Lang.t("mods.a_thin_line_around_the_box"), () -> s.border, on -> s.border = on);
 		}
-		f.section("Visibility");
-		f.toggle("Hide while Tab is held", "It steps aside while the player list is open", () -> s.hideOnTab, on -> s.hideOnTab = on);
-		f.section("Size");
-		f.stepper("Scale", () -> s.scale, v -> s.scale = (float) v, 0.5, 2.5, 0.1, "%.1fx");
-		f.note("Drag it on the HUD screen (Right Shift) to move it.");
+		f.section(Lang.t("mods.visibility"));
+		f.toggle(Lang.t("mods.hide_while_tab_is_held"), Lang.t("mods.it_steps_aside_while_the_player_list_is_open"), () -> s.hideOnTab, on -> s.hideOnTab = on);
+		f.section(Lang.t("mods.size"));
+		f.stepper(Lang.t("mods.scale"), () -> s.scale, v -> s.scale = (float) v, 0.5, 2.5, 0.1, "%.1fx");
+		f.note(Lang.t("mods.drag_it_on_the_hud_screen_right_shift_to"));
 	}
 }

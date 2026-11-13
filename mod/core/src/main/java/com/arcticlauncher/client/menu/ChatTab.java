@@ -13,6 +13,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Chat history: every line since the game started (across servers), searched as you type and
  * narrowed by saved filters. A filter can also be shown on screen as a second chat (the
@@ -40,7 +41,7 @@ final class ChatTab implements MenuTab {
 		@Override
 		public boolean click(double mx, double my, int button) {
 			ArcticClient.platform().setClipboard(copy);
-			com.arcticlauncher.client.notice.Notices.post("Copied", "The line is on your clipboard");
+			com.arcticlauncher.client.notice.Notices.post(Lang.t("social.copied"), Lang.t("social.the_line_is_on_your_clipboard"));
 			return true;
 		}
 	}
@@ -54,19 +55,19 @@ final class ChatTab implements MenuTab {
 	private static final int MAX_TEXT = 120;
 	private static final int[] HISTORY = {100, 500, 1000, 5000, 10000, 25000, 100000};
 
-	private final TextField search = new TextField("Search the chat…", MAX_TEXT, TextField.ANY);
+	private final TextField search = new TextField(Lang.t("social.search_the_chat"), MAX_TEXT, TextField.ANY);
 	/** 0 = everything, n = the n-th saved filter. */
 	private int view;
 	private final SimpleDateFormat time = LocalClock.formatter("HH:mm:ss");
 
 	@Override
 	public String title() {
-		return "Chat history";
+		return Lang.t("social.chat_history");
 	}
 
 	@Override
 	public String hint() {
-		return "Search every line, or keep a filter as a second chat.";
+		return Lang.t("social.search_every_line_or_keep_a_filter_as_a");
 	}
 
 	@Override
@@ -89,7 +90,7 @@ final class ChatTab implements MenuTab {
 			view = 0;
 		}
 		Form f = new Form(host, x, top, w, bottom);
-		f.section("Find");
+		f.section(Lang.t("social.find"));
 		int row = f.row(FIELD_H + GAP);
 		f.put(search, f.x, row, f.w, FIELD_H);
 		// "All" and each saved filter, to narrow the search to.
@@ -98,17 +99,17 @@ final class ChatTab implements MenuTab {
 		int cw = Math.min(90, (f.w - GAP * (chips - 1)) / chips);
 		for (int i = 0; i < chips; i++) {
 			final int index = i;
-			String name = i == 0 ? "All" : c.chatFilters.get(i - 1).name;
-			f.put(new Button(name.isEmpty() ? "(no name)" : name, () -> {
+			String name = i == 0 ? Lang.t("social.all") : c.chatFilters.get(i - 1).name;
+			f.put(new Button(name.isEmpty() ? Lang.t("social.no_name") : name, () -> {
 				view = index;
 				host.rebuild();
 			}).selected(view == i), f.x + i * (cw + GAP), chipsRow, cw, FIELD_H);
 		}
 		final String words = view == 0 ? "" : c.chatFilters.get(view - 1).words;
 		final List<ChatLog.Line> lines = log.search(words, search.text(), SHOWN);
-		f.section("Lines (" + log.size() + " kept, newest first; click one to copy it)");
+		f.section(Lang.t("social.lines") + log.size() + Lang.t("social.kept_newest_first_click_one_to_copy_it"));
 		if (lines.isEmpty()) {
-			f.note(log.size() == 0 ? "Nothing has been said yet." : "Nothing matches.");
+			f.note(log.size() == 0 ? Lang.t("social.nothing_has_been_said_yet") : Lang.t("social.nothing_matches"));
 		}
 		for (ChatLog.Line line : lines) {
 			String shown = "§8" + time.format(new Date(line.time)) + " §r" + line.text;
@@ -117,15 +118,15 @@ final class ChatTab implements MenuTab {
 		f.gap(4);
 		int actions = f.row(FIELD_H + GAP);
 		int bw = (f.w - GAP * 2) / 3;
-		f.put(new Button("Copy these lines", () -> {
+		f.put(new Button(Lang.t("social.copy_these_lines"), () -> {
 			StringBuilder out = new StringBuilder();
 			for (int i = lines.size() - 1; i >= 0; i--) {
 				out.append(lines.get(i).text).append('\n');
 			}
 			ArcticClient.platform().setClipboard(out.toString());
-			com.arcticlauncher.client.notice.Notices.post("Copied", lines.size() + " lines");
+			com.arcticlauncher.client.notice.Notices.post(Lang.t("social.copied"), Lang.t("social.n_lines", lines.size()));
 		}), f.x, actions, bw, FIELD_H);
-		f.put(new Button("Save as a filter", () -> {
+		f.put(new Button(Lang.t("social.save_as_a_filter"), () -> {
 			String typed = search.text().trim();
 			if (typed.isEmpty() || c.chatFilters.size() >= MAX_FILTERS) {
 				return;
@@ -135,17 +136,17 @@ final class ChatTab implements MenuTab {
 			search.text("");
 			host.rebuild();
 		}), f.x + bw + GAP, actions, bw, FIELD_H);
-		f.put(new Button("Clear the log", () -> {
+		f.put(new Button(Lang.t("social.clear_the_log"), () -> {
 			log.clear();
 			host.rebuild();
-		}).confirm("Sure?"), f.x + (bw + GAP) * 2, actions, f.w - (bw + GAP) * 2, FIELD_H);
+		}).confirm(Lang.t("social.sure")), f.x + (bw + GAP) * 2, actions, f.w - (bw + GAP) * 2, FIELD_H);
 
-		f.section("Filters");
-		f.note("Words separated by commas; a line with any of them matches. \"-word\" keeps lines out.");
-		f.note("Show one on screen as a second chat with the \"Filtered chat\" HUD widget.");
+		f.section(Lang.t("social.filters"));
+		f.note(Lang.t("social.words_separated_by_commas_a_line_with_any_of"));
+		f.note(Lang.t("social.show_one_on_screen_as_a_second_chat_with_the"));
 		for (final ChatFilter filter : c.chatFilters) {
 			int r = f.row(FIELD_H + GAP);
-			final TextField name = new TextField("Name", 24, TextField.ANY).text(filter.name);
+			final TextField name = new TextField(Lang.t("social.name"), 24, TextField.ANY).text(filter.name);
 			name.onChange(() -> {
 				filter.name = name.text();
 				ArcticClient.saveConfig();
@@ -160,7 +161,7 @@ final class ChatTab implements MenuTab {
 			int showW = 50;
 			f.put(wordsField, f.x + nameW + GAP, r, f.w - nameW - showW - REMOVE_W - GAP * 3, FIELD_H);
 			boolean on = filter.name.equals(c.chatFeedFilter);
-			f.put(new Button(on ? "On HUD" : "Show", () -> {
+			f.put(new Button(on ? Lang.t("social.on_hud") : Lang.t("social.show"), () -> {
 				c.chatFeedFilter = filter.name.equals(c.chatFeedFilter) ? "" : filter.name;
 				ArcticClient.saveConfig();
 				host.rebuild();
@@ -176,21 +177,21 @@ final class ChatTab implements MenuTab {
 		}
 		if (c.chatFilters.size() < MAX_FILTERS) {
 			int r = f.row(FIELD_H + GAP);
-			f.put(new Button("Add a filter", () -> {
-				c.chatFilters.add(new ChatFilter("Filter " + (c.chatFilters.size() + 1), ""));
+			f.put(new Button(Lang.t("social.add_a_filter"), () -> {
+				c.chatFilters.add(new ChatFilter(Lang.t("social.filter") + (c.chatFilters.size() + 1), ""));
 				ArcticClient.saveConfig();
 				host.rebuild();
 			}), f.x, r, 120, FIELD_H);
 		}
 
-		f.section("History");
+		f.section(Lang.t("social.history"));
 		String[] labels = new String[HISTORY.length];
 		for (int i = 0; i < labels.length; i++) {
 			labels[i] = HISTORY[i] + (HISTORY[i] == 100 ? " (game)" : "");
 		}
-		f.cycle("Chat keeps", labels, () -> indexOf(c.chatHistory), i -> c.chatHistory = HISTORY[i]);
-		f.note("How many lines the game's chat window can scroll back through.");
-		f.note("This list keeps the last " + ChatLog.MAX + " lines whatever you choose.");
+		f.cycle(Lang.t("social.chat_keeps"), labels, () -> indexOf(c.chatHistory), i -> c.chatHistory = HISTORY[i]);
+		f.note(Lang.t("social.how_many_lines_the_games_chat_window_can"));
+		f.note(Lang.t("social.this_list_keeps_the_last") + ChatLog.MAX + Lang.t("social.lines_whatever_you_choose"));
 		f.done();
 	}
 

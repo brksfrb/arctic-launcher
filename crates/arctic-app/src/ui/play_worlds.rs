@@ -9,7 +9,7 @@ use eframe::egui::{self, CornerRadius, RichText, Sense, vec2};
 
 use crate::app::ArcticApp;
 use crate::art::icons::{self, Icon};
-
+use crate::{t, tf};
 /// Tiles shown (the rest are on the instance's Worlds page).
 const SHOWN: usize = 4;
 const TILE_W: f32 = 150.0;
@@ -54,7 +54,7 @@ impl ArcticApp {
             return;
         }
         ui.add_space(18.0);
-        ui.label(RichText::new("WORLDS").small().color(p.muted));
+        ui.label(RichText::new(t!("play.worlds")).small().color(p.muted));
         ui.add_space(4.0);
         let mut open: Option<(String, String)> = None;
         ui.horizontal_wrapped(|ui| {
@@ -102,7 +102,7 @@ impl ArcticApp {
                     p.muted,
                 );
                 if response
-                    .on_hover_text(format!("Play {}", world.name))
+                    .on_hover_text(tf!("play.play_2", name = world.name))
                     .on_hover_cursor(egui::CursorIcon::PointingHand)
                     .clicked()
                 {
@@ -134,7 +134,7 @@ impl ArcticApp {
                 ui.set_width(380.0);
                 crate::widgets::lift_controls(ui, p);
                 ui.label(
-                    RichText::new("Do you want to launch Minecraft to play this world?")
+                    RichText::new(t!("play.do_you_want_to_launch_minecraft_to_play_this"))
                         .size(18.0)
                         .strong()
                         .color(p.text),
@@ -143,10 +143,10 @@ impl ArcticApp {
                 ui.add(egui::Label::new(RichText::new(&world.name).color(p.muted)).truncate());
                 ui.add_space(14.0);
                 crate::widgets::row(ui, |ui| {
-                    if crate::widgets::button(ui, p, None, "Cancel", false).clicked() {
+                    if crate::widgets::button(ui, p, None, t!("play.cancel"), false).clicked() {
                         cancel = true;
                     }
-                    if crate::widgets::button(ui, p, None, "Play", true).clicked() {
+                    if crate::widgets::button(ui, p, None, t!("play.play"), true).clicked() {
                         yes = true;
                     }
                 });
@@ -175,11 +175,11 @@ fn ago(when: Option<SystemTime>) -> String {
         return String::new();
     };
     match secs {
-        0..60 => "Just now".into(),
-        60..3600 => format!("{} min ago", secs / 60),
-        3600..86_400 => format!("{} h ago", secs / 3600),
-        86_400..172_800 => "Yesterday".into(),
-        _ => format!("{} days ago", secs / 86_400),
+        0..60 => t!("play.just_now").into(),
+        60..3600 => tf!("play.min_ago", value = secs / 60),
+        3600..86_400 => tf!("common.h_ago", n = secs / 3600),
+        86_400..172_800 => t!("play.yesterday").into(),
+        _ => tf!("play.days_ago", _400 = secs / 86_400),
     }
 }
 

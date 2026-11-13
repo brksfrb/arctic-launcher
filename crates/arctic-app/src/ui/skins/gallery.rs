@@ -12,18 +12,18 @@ use crate::gallery_tasks::GalleryResult;
 use crate::tasks::Event;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf, tn};
 const SEARCH_DELAY: f64 = 0.35;
 const COLLECTIONS: [(&str, &str); 9] = [
-    ("", "All"),
-    ("adventure", "Adventure"),
-    ("fantasy", "Fantasy"),
-    ("gamer", "Gamer"),
-    ("animals", "Animals"),
-    ("pvp", "PvP"),
-    ("casual", "Casual"),
-    ("minecraft", "Minecraft"),
-    ("community", "Community"),
+    ("", "skins.collection.all"),
+    ("adventure", "skins.collection.adventure"),
+    ("fantasy", "skins.collection.fantasy"),
+    ("gamer", "skins.collection.gamer"),
+    ("animals", "skins.collection.animals"),
+    ("pvp", "skins.collection.pvp"),
+    ("casual", "skins.collection.casual"),
+    ("minecraft", "skins.collection.minecraft"),
+    ("community", "skins.collection.community"),
 ];
 
 #[derive(Default)]
@@ -66,7 +66,7 @@ impl ArcticApp {
         crate::widgets::row(ui, |ui| {
             let field = ui.add(
                 widgets::text_field(&mut self.skins.gallery.query)
-                    .hint_text("Search skins or creators")
+                    .hint_text(t!("skins.search_skins_or_creators"))
                     .desired_width(240.0),
             );
             let now = ui.input(|i| i.time);
@@ -87,9 +87,13 @@ impl ArcticApp {
             ui.selectable_value(
                 &mut self.skins.gallery.sort,
                 GallerySort::Popular,
-                "Popular",
+                t!("skins.popular"),
             );
-            ui.selectable_value(&mut self.skins.gallery.sort, GallerySort::New, "New");
+            ui.selectable_value(
+                &mut self.skins.gallery.sort,
+                GallerySort::New,
+                t!("skins.new"),
+            );
             search |= self.skins.gallery.sort != before;
             if self.skins.gallery.loading {
                 ui.spinner();
@@ -99,7 +103,7 @@ impl ArcticApp {
             ui.spacing_mut().item_spacing.x = 6.0;
             for (key, label) in COLLECTIONS {
                 if ui
-                    .selectable_label(self.skins.gallery.category == key, label)
+                    .selectable_label(self.skins.gallery.category == key, t!(label))
                     .clicked()
                     && self.skins.gallery.category != key
                 {
@@ -126,7 +130,8 @@ impl ArcticApp {
             }
             Some(Ok(items)) if items.is_empty() => {
                 ui.label(
-                    RichText::new("No skins match this collection and search.").color(p.muted),
+                    RichText::new(t!("skins.no_skins_match_this_collection_and_search"))
+                        .color(p.muted),
                 );
                 return;
             }
@@ -146,9 +151,10 @@ impl ArcticApp {
                 let worn = trying.as_deref() == Some(key.as_str());
                 let tile = self
                     .skin_tile(ui, &key, &item.name, Some(item.variant()), worn)
-                    .on_hover_text(format!(
-                        "by {} · used {} times",
-                        item.author, item.downloads
+                    .on_hover_text(tn!(
+                        "skins.by_author_used",
+                        item.downloads,
+                        author = item.author
                     ));
                 if tile.clicked() && !worn {
                     if can_wear {
@@ -171,9 +177,9 @@ impl ArcticApp {
         }
         ui.add_space(6.0);
         ui.label(
-            RichText::new(format!(
-                "{} skins. Click one to wear it (it's saved to your library). Right-click for more.",
-                self.skins.gallery.total.max(items.len() as i64)
+            RichText::new(tf!(
+                "skins.skins_click_one_to_wear_it_its_saved_to_your",
+                value = self.skins.gallery.total.max(items.len() as i64)
             ))
             .small()
             .color(p.muted),
@@ -230,7 +236,7 @@ impl ArcticApp {
     fn gallery_menu(&mut self, ui: &mut egui::Ui, item: &GalleryItem) {
         let busy = self.skins.gallery.busy;
         if ui
-            .add_enabled(!busy, egui::Button::new("Add to library"))
+            .add_enabled(!busy, egui::Button::new(t!("skins.add_to_library")))
             .clicked()
         {
             self.skins.gallery.busy = true;
@@ -238,7 +244,7 @@ impl ArcticApp {
             ui.close();
         }
         if let Some(account) = self.accounts.active().cloned()
-            && ui.button("Report this skin").clicked()
+            && ui.button(t!("skins.report_this_skin")).clicked()
         {
             self.tasks.gallery_report(account, item.id.clone());
             ui.close();
@@ -256,8 +262,8 @@ impl ArcticApp {
         }
         let enabled = self.arctic_state().is_some() && !self.skins.gallery.busy;
         let share = ui
-            .add_enabled(enabled, egui::Button::new("Share to gallery"))
-            .on_hover_text("Everyone can find and use it in the Arctic gallery");
+            .add_enabled(enabled, egui::Button::new(t!("skins.share_to_gallery")))
+            .on_hover_text(t!("skins.everyone_can_find_and_use_it_in_the_arctic"));
         if share.clicked() {
             // The name is asked for first; a name that already is a real one is offered as it is.
             let start = if arctic_core::skins::name_problem(&entry.name).is_none() {
@@ -288,17 +294,19 @@ impl ArcticApp {
             .frame(crate::ui::dialogs::dialog_frame(p))
             .show(ctx, |ui| {
                 ui.set_width(380.0);
-                ui.label(RichText::new("Name your skin").size(20.0).strong());
                 ui.label(
-                    RichText::new(
-                        "Everyone sees this name in the gallery. Pick one that says what the skin is, like \"Ice Knight\".",
-                    )
-                    .color(p.muted),
+                    RichText::new(t!("skins.name_your_skin"))
+                        .size(20.0)
+                        .strong(),
+                );
+                ui.label(
+                    RichText::new(t!("skins.everyone_sees_this_name_in_the_gallery_pick"))
+                        .color(p.muted),
                 );
                 ui.add_space(10.0);
                 let field = ui.add(
                     widgets::text_field(&mut text)
-                        .hint_text("Skin name")
+                        .hint_text(t!("skins.skin_name"))
                         .char_limit(32)
                         .desired_width(f32::INFINITY),
                 );
@@ -311,15 +319,19 @@ impl ArcticApp {
                 }
                 ui.add_space(12.0);
                 widgets::row(ui, |ui| {
-                    if widgets::button(ui, p, None, "Cancel", false).clicked() {
+                    if widgets::button(ui, p, None, t!("skins.cancel"), false).clicked() {
                         cancel = true;
                     }
                     let ok = problem.is_none();
                     let go = ui
-                        .add_enabled_ui(ok, |ui| widgets::button(ui, p, None, "Share", true))
+                        .add_enabled_ui(ok, |ui| {
+                            widgets::button(ui, p, None, t!("skins.share"), true)
+                        })
                         .inner;
                     if go.clicked()
-                        || (ok && field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))
+                        || (ok
+                            && field.lost_focus()
+                            && ui.input(|i| i.key_pressed(egui::Key::Enter)))
                     {
                         share = true;
                     }
@@ -378,7 +390,8 @@ impl ArcticApp {
                     }
                     Err(e) => {
                         self.skins.trying.skin = None;
-                        self.toasts.push(Kind::Error, "Could not get skin", e);
+                        self.toasts
+                            .push(Kind::Error, t!("skins.could_not_get_skin"), e);
                     }
                 }
             }
@@ -389,7 +402,7 @@ impl ArcticApp {
                         self.toasts.push(Kind::Success, message, "");
                         g.page = None;
                     }
-                    Err(e) => self.toasts.push(Kind::Error, "Gallery", e),
+                    Err(e) => self.toasts.push(Kind::Error, t!("skins.gallery"), e),
                 }
             }
             _ => {}

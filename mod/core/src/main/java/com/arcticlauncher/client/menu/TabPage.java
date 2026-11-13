@@ -13,6 +13,7 @@ import com.arcticlauncher.client.ui.Scroll;
 import com.arcticlauncher.client.ui.Toggle;
 import com.arcticlauncher.client.ui.Widget;
 
+import com.arcticlauncher.client.Lang;
 /**
  * One screen of the Arctic menu in the shared panel: a header with a back
  * arrow, the icon and title (and the mod's switch), and the tab's content.
@@ -116,14 +117,14 @@ final class TabPage extends Page {
 		int x = contentX();
 		int w = contentW();
 		int textW = w - Form.KEY_W - 10;
-		add(new Label("Toggle key", Label.Kind.TEXT)).bounds(x + 4, top + 3, textW, 9);
-		final Label hint = add(new Label("Press it in game to switch " + m.name + " on or off", Label.Kind.MUTED));
+		add(new Label(Lang.t("mods.toggle_key"), Label.Kind.TEXT)).bounds(x + 4, top + 3, textW, 9);
+		final Label hint = add(new Label(Lang.t("mods.press_it_in_game_to_switch", m.name), Label.Kind.MUTED));
 		hint.bounds(x + 4, top + 13, textW, 9);
 		final Label warn = add(new Label("", Label.Kind.ACCENT));
 		warn.bounds(x + 4, top + 13, textW, 9);
 		final Runnable note = () -> {
 			String other = ToggleKeys.usedBy(m, ToggleKeys.get(m));
-			warn.text(other == null ? "" : "Also used by " + other + ". It still works");
+			warn.text(other == null ? "" : Lang.t("mods.also_used_by") + other + Lang.t("mods.it_still_works"));
 			warn.visible = other != null;
 			hint.visible = other == null;
 		};

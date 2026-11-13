@@ -8,7 +8,7 @@ public final class CrashDiagnostics {
     // Minecraft redirects System.err into Log4j, which shuts down concurrently with hooks.
     // Keep the original OS stderr so shutdown stacks cannot disappear with the logger.
     private static final java.io.PrintStream OUT = new java.io.PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.err), true);
-    private static final String PREFIX = "[Arctic diagnostics] ";
+    private static final String PREFIX = "[Arctic diagnostics] "; // i18n-ignore: log
     private static final java.nio.file.Path HANG_FILE = java.nio.file.Paths.get(System.getProperty("arctic.diagnostics.hangFile", "arctic-hang.txt")).toAbsolutePath();
     private static volatile long progress;
     private static long startProgress;
@@ -23,14 +23,14 @@ public final class CrashDiagnostics {
         System.setProperty("arctic.diagnostics.installed", "true");
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
             public void run() {
-                OUT.println(PREFIX + "shutdown; minecraft stop started=" + System.getProperty("arctic.diagnostics.stopping", "false") + "; minecraft stop complete=" + System.getProperty("arctic.diagnostics.stopped", "false"));
+                OUT.println(PREFIX + "shutdown; minecraft stop started=" + System.getProperty("arctic.diagnostics.stopping", "false") + "; minecraft stop complete=" + System.getProperty("arctic.diagnostics.stopped", "false")); // i18n-ignore
                 for (Map.Entry<Thread, StackTraceElement[]> entry : Thread.getAllStackTraces().entrySet()) {
                     boolean exiting = false;
                     for (StackTraceElement frame : entry.getValue()) {
                         if ((frame.getClassName().equals("java.lang.Runtime") && frame.getMethodName().equals("exit"))
                                 || frame.getClassName().equals("java.lang.Shutdown")) exiting = true;
                     }
-                    if (exiting) printStack("exit thread " + entry.getKey().getName(), entry.getValue());
+                    if (exiting) printStack("exit thread " + entry.getKey().getName(), entry.getValue()); // i18n-ignore
                 }
                 OUT.flush();
             }
@@ -44,7 +44,7 @@ public final class CrashDiagnostics {
                     OUT.println(PREFIX + "exit " + java.text.MessageFormat.format(record.getMessage(), record.getParameters() == null ? new Object[0] : record.getParameters()));
                     if (record.getThrown() != null) {
                         OUT.println(PREFIX + record.getThrown());
-                        printStack("exit stack", record.getThrown().getStackTrace());
+                        printStack("exit stack", record.getThrown().getStackTrace()); // i18n-ignore
                     }
                     OUT.flush();
                 }
@@ -60,7 +60,7 @@ public final class CrashDiagnostics {
             for (StackTraceElement frame : stack) {
                 String name = frame.getClassName();
                 if (name.startsWith("java.") || name.startsWith("sun.") || name.startsWith("jdk.")) continue;
-                OUT.println(PREFIX + "exit caller " + (name.startsWith("net.minecraft.") ? "vanilla " : "other ") + frame);
+                OUT.println(PREFIX + "exit caller " + (name.startsWith("net.minecraft.") ? "vanilla " : "other ") + frame); // i18n-ignore
                 break;
             }
         }
@@ -91,7 +91,7 @@ public final class CrashDiagnostics {
                             hasDump = true;
                             java.io.StringWriter buffer = new java.io.StringWriter();
                             java.io.PrintWriter dump = new java.io.PrintWriter(buffer);
-                            dump.println(PREFIX + "hang begin; no render progress for " + ((now - last) / 1_000_000) + " ms");
+                            dump.println(PREFIX + "hang begin; no render progress for " + ((now - last) / 1_000_000) + " ms"); // i18n-ignore
                             dump.println(PREFIX + "thread \"" + clientThread.getName() + "\" " + clientThread.getState());
                             for (StackTraceElement frame : clientThread.getStackTrace()) dump.println("    at " + frame);
                             for (Map.Entry<Thread, StackTraceElement[]> entry : Thread.getAllStackTraces().entrySet()) {
@@ -99,7 +99,7 @@ public final class CrashDiagnostics {
                                 dump.println(PREFIX + "thread \"" + entry.getKey().getName() + "\" " + entry.getKey().getState());
                                 for (StackTraceElement frame : entry.getValue()) dump.println("    at " + frame);
                             }
-                            dump.println(PREFIX + "hang end");
+                            dump.println(PREFIX + "hang end"); // i18n-ignore
                             dump.flush();
                             OUT.print(buffer.toString());
                             OUT.flush();
@@ -114,7 +114,7 @@ public final class CrashDiagnostics {
                     }
                 }
             }
-        }, "Arctic hang watchdog");
+        }, "Arctic hang watchdog"); // i18n-ignore
         watcher.setDaemon(true);
         watcher.start();
         java.nio.file.Path parent = HANG_FILE.getParent();

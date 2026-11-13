@@ -766,6 +766,11 @@ fn share_cosmetics_session(
             bridge,
             duel: quick_play.and_then(QuickPlay::duel_json),
             replay: quick_play.and_then(QuickPlay::replay_json),
+            language: if settings.language == "system" {
+                ""
+            } else {
+                &settings.language
+            },
         };
         if let Err(e) = crate::cosmetics::write_mod_session(game_dir, &session) {
             log::warn!("arctic session file: {e}");

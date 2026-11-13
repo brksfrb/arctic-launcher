@@ -10,6 +10,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.MapColor;
 
+import com.arcticlauncher.client.Lang;
 /**
  * The minimap's two halves on this side: the top block's map color for each column (like a
  * map item), and the texture the core's finished picture is shown from (core {@code MinimapView}).
@@ -69,7 +70,7 @@ final class MinimapTexture {
 			if (texture != null) {
 				texture.close();
 			}
-			texture = Compat.texture("Arctic minimap", new NativeImage(size, size, false));
+			texture = Compat.texture(Lang.t("platform.arctic_minimap"), new NativeImage(size, size, false));
 			textureSize = size;
 			mc.getTextureManager().register(ID, texture);
 		}

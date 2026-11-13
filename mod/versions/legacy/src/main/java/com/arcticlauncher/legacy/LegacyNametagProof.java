@@ -7,6 +7,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import net.minecraft.client.MinecraftClient;
 
+import com.arcticlauncher.client.Lang;
 /** Opt-in, two real clients on an offline local server; commands come from a private test file. */
 final class LegacyNametagProof {
  private LegacyNametagProof() {}
@@ -30,8 +31,8 @@ final class LegacyNametagProof {
     com.arcticlauncher.client.looks.Look.class.getDeclaredConstructor(String.class, boolean.class, String.class,
       java.util.List.class, boolean.class, long.class);
    ctor.setAccessible(true);
-   for (String name : new String[]{"ArcticDev", "ArcticDev2"}) {
-    java.util.UUID id = java.util.UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+   for (String name : new String[]{"ArcticDev", "ArcticDev2"}) { // i18n-ignore
+    java.util.UUID id = java.util.UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(java.nio.charset.StandardCharsets.UTF_8)); // i18n-ignore
     cache.put(id, ctor.newInstance(null, false, null, java.util.Collections.emptyList(), true, System.currentTimeMillis()));
    }
    mc.options.pauseOnLostFocus = false;

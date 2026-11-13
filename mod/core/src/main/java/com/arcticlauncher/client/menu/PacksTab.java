@@ -19,13 +19,14 @@ import com.arcticlauncher.client.ui.Scroll;
 import com.arcticlauncher.client.ui.TextField;
 import com.arcticlauncher.client.ui.Toggle;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Resource packs: yours (turn them on and off, change their order, then
  * Apply) and Modrinth's (search as you type, install and turn on in one
  * click; no restart).
  */
 final class PacksTab implements MenuTab {
-	private static final String[] VIEWS = {"Your packs", "Browse Modrinth"};
+	private static final String[] VIEWS = {"looks.packs.view_yours", "looks.packs.view_browse"};
 	private static final int CHIP_H = 16;
 	private static final int CHIP_W = 110;
 	private static final int FIELD_H = 18;
@@ -50,7 +51,7 @@ final class PacksTab implements MenuTab {
 	private static final int[] SORT = {0, 0}, CATEGORY = {0, 0}, DETAIL = {0, 0};
 	private static final boolean[] THIS_VERSION = {true, true};
 	private static final String[] SORT_IDS = {"downloads", "relevance", "updated", "newest"};
-	private static final String[] SORT_LABELS = {"Most downloaded", "Best match", "Recently updated", "Newest"};
+	private static final String[] SORT_LABELS = {"looks.packs.sort.most_downloaded", "looks.packs.sort.best_match", "looks.packs.sort.recently_updated", "looks.packs.sort.newest"};
 	private static final String[][] CATEGORIES = {
 			{"", "combat", "cursed", "decoration", "modded", "realistic", "simplistic", "themed", "tweaks", "utility", "vanilla-like"},
 			{"", "cartoon", "cursed", "fantasy", "realistic", "semi-realistic", "vanilla-like"}};
@@ -63,9 +64,9 @@ final class PacksTab implements MenuTab {
 	/** What you've set (on packs, top first); null = nothing changed yet. */
 	private static List<String> pending;
 
-	private final TextField search = new TextField("Search Modrinth packs", MAX_QUERY, TextField.ANY);
+	private final TextField search = new TextField(Lang.t("looks.search_modrinth_packs"), MAX_QUERY, TextField.ANY);
 	/** A new group's name, typed before its first pack's Group button is clicked. */
-	private final TextField newGroup = new TextField("New group name", 24, TextField.ANY);
+	private final TextField newGroup = new TextField(Lang.t("looks.new_group_name"), 24, TextField.ANY);
 	private PackGroups groups;
 	private long typedAt;
 	/** Your packs as the game has them now. */
@@ -115,13 +116,13 @@ final class PacksTab implements MenuTab {
 
 	@Override
 	public String title() {
-		return "Packs & Shaders";
+		return Lang.t("looks.packs_shaders");
 	}
 
 	@Override
 	public String hint() {
-		return shader && !ArcticClient.shaders().available() ? ShaderPacks.NEEDS_IRIS
-				: "Turn packs on and off, or find new ones on Modrinth.";
+		return shader && !ArcticClient.shaders().available() ? Lang.t(ShaderPacks.NEEDS_IRIS)
+				: Lang.t("looks.turn_packs_on_and_off_or_find_new_ones_on");
 	}
 
 	@Override
@@ -150,7 +151,7 @@ final class PacksTab implements MenuTab {
 		this.w = w;
 		for (int i = 0; i < 2; i++) {
 			final boolean shaders = i == 1;
-			host.add(new Button(shaders ? "Shaders" : "Resource packs", () -> {
+			host.add(new Button(shaders ? Lang.t("looks.shaders") : Lang.t("looks.resource_packs"), () -> {
 				shader = shaders;
 				query = QUERIES[kind()];
 				search.text(query);
@@ -164,14 +165,14 @@ final class PacksTab implements MenuTab {
 		int viewWidth = Math.min(CHIP_W, (w - 80 - GAP * 2) / 2);
 		for (int i = 0; i < VIEWS.length; i++) {
 			final int v = i;
-			host.add(new Button(VIEWS[i], () -> {
+			host.add(new Button(Lang.t(VIEWS[i]), () -> {
 				view = v;
 				resetScroll();
 				host.rebuild();
 			}).selected(view == i)).bounds(x + i * (viewWidth + GAP), top, viewWidth, CHIP_H);
 		}
 		final java.io.File folder = browser().folder();
-		host.add(new Button("Open folder", () -> openFolder(folder))).bounds(x + w - 80, top, 80, CHIP_H);
+		host.add(new Button(Lang.t("looks.open_folder"), () -> openFolder(folder))).bounds(x + w - 80, top, 80, CHIP_H);
 		int y = top + CHIP_H + 8;
 		listTop = y;
 		packs = shader ? new ArrayList<PackInfo>() : ArcticClient.platform().resourcePacks();
@@ -210,10 +211,10 @@ final class PacksTab implements MenuTab {
 		List<String> ids = new ArrayList<String>();
 		List<String> labels = new ArrayList<String>();
 		ids.add("");
-		labels.add("All");
+		labels.add(Lang.t("looks.all"));
 		if (!names.isEmpty()) {
 			ids.add(NO_GROUP);
-			labels.add("No group");
+			labels.add(Lang.t("looks.no_group"));
 		}
 		for (String name : names) {
 			ids.add(name);
@@ -237,7 +238,7 @@ final class PacksTab implements MenuTab {
 	/** The row's Group button: moves the pack to the next group, or to the one typed in the box. */
 	private Button groupButton(final Host host, final String fileName, final String current) {
 		final String typed = newGroup.text().trim();
-		String label = typed.isEmpty() ? (current == null ? "Group" : "Next") : "Set";
+		String label = typed.isEmpty() ? (current == null ? Lang.t("looks.group") : Lang.t("looks.next")) : Lang.t("looks.set");
 		return new Button(label, () -> {
 			String target = typed.isEmpty() ? groups.next(groupKind(), current) : typed;
 			groups.set(groupKind(), fileName, target);
@@ -330,8 +331,8 @@ final class PacksTab implements MenuTab {
 		}
 		scroll.settle();
 		if (changed) {
-			host.add(new Button("Apply changes", () -> apply(host)).primary()).bounds(x + w - 110, bottom - BTN_H, 110, BTN_H);
-			host.add(new Button("Undo", () -> {
+			host.add(new Button(Lang.t("looks.apply_changes"), () -> apply(host)).primary()).bounds(x + w - 110, bottom - BTN_H, 110, BTN_H);
+			host.add(new Button(Lang.t("looks.undo"), () -> {
 				pending = null;
 				host.rebuild();
 			})).bounds(x + w - 110 - GAP - 60, bottom - BTN_H, 60, BTN_H);
@@ -352,7 +353,7 @@ final class PacksTab implements MenuTab {
 	private void apply(final Host host) {
 		final List<String> wanted = pending;
 		pending = null;
-		applying = "Loading the packs… (a few seconds)";
+		applying = Lang.t("looks.loading_the_packs_a_few_seconds");
 		final Platform p = ArcticClient.platform();
 		p.runOnGameThread(() -> {
 			p.setResourcePacks(wanted);
@@ -385,12 +386,12 @@ final class PacksTab implements MenuTab {
 			String name = file.getName();
 			boolean on = name.equals(active);
 			String group = groups.groupOf(PackGroups.SHADER, name);
-			String line = (group == null ? "" : "[" + group + "] ") + (on ? "Active shader" : "Installed shader");
+			String line = (group == null ? "" : "[" + group + "] ") + (on ? Lang.t("looks.active_shader") : Lang.t("looks.installed_shader"));
 			scroll.add(host.add(new PackRow(name, line, () -> null, ACTION_W + GROUP_W + 8, !on)
 					.bounds(x, y, w - 8, PackRow.H)));
 			scroll.add(host.add(groupButton(host, name, group)
 					.bounds(x + w - 8 - ACTION_W - GROUP_W - 4, y + (PackRow.H - BTN_H) / 2, GROUP_W, BTN_H)));
-			scroll.add(host.add(new Button(on ? "Turn off" : "Turn on", () -> shaders.select(on ? null : name))
+			scroll.add(host.add(new Button(on ? Lang.t("looks.turn_off") : Lang.t("looks.turn_on"), () -> shaders.select(on ? null : name))
 					.selected(on).enabled(shaders.available() && !shaders.changing())
 					.bounds(x + w - 8 - ACTION_W, y + (PackRow.H - BTN_H) / 2, ACTION_W, BTN_H)));
 			y += PackRow.H + 2;
@@ -404,12 +405,12 @@ final class PacksTab implements MenuTab {
 			browser.search(query, filters());
 		}
 		host.add(search).bounds(x, y, w - 60, FIELD_H);
-		host.add(new Button("Refresh", browser::retry).enabled(!browser.searching())).bounds(x + w - 56, y, 56, FIELD_H);
+		host.add(new Button(Lang.t("looks.refresh"), browser::retry).enabled(!browser.searching())).bounds(x + w - 56, y, 56, FIELD_H);
 		y += FIELD_H + GAP;
 		final int k = kind();
 		int cw = (w - GAP * 2) / 3;
-		String[] titles = {SORT_LABELS[SORT[k]], "Category: " + label(CATEGORIES[k][CATEGORY[k]]),
-				(shader ? "Impact: " : "Resolution: ") + label(DETAILS[k][DETAIL[k]])};
+		String[] titles = {Lang.t(SORT_LABELS[SORT[k]]), Lang.t("looks.category") + label(CATEGORIES[k][CATEGORY[k]]),
+				(shader ? Lang.t("looks.impact") : Lang.t("looks.resolution")) + label(DETAILS[k][DETAIL[k]])};
 		for (int i = 0; i < 3; i++) {
 			final int filter = i + 1;
 			host.add(new Button(titles[i] + " ▾", () -> {
@@ -421,7 +422,7 @@ final class PacksTab implements MenuTab {
 		y += CHIP_H + GAP;
 		for (int i = 0; i < 2; i++) {
 			final boolean compatible = i == 0;
-			host.add(new Button(compatible ? "Minecraft " + ArcticClient.platform().minecraftVersion() : "All versions", () -> {
+			host.add(new Button(compatible ? "Minecraft " + ArcticClient.platform().minecraftVersion() : Lang.t("looks.all_versions"), () -> {
 				THIS_VERSION[k] = compatible;
 				resetScroll();
 				host.rebuild();
@@ -432,7 +433,7 @@ final class PacksTab implements MenuTab {
 		int ry = listTop;
 		if (expandedFilter != 0) {
 			final int filter = expandedFilter;
-			String[] choices = filter == 1 ? SORT_LABELS : filter == 2 ? CATEGORIES[k] : DETAILS[k];
+			String[] choices = filter == 1 ? Lang.all(SORT_LABELS) : filter == 2 ? CATEGORIES[k] : DETAILS[k];
 			int selected = filter == 1 ? SORT[k] : filter == 2 ? CATEGORY[k] : DETAIL[k];
 			for (int i = 0; i < choices.length; i++) {
 				final int choice = i;
@@ -454,7 +455,7 @@ final class PacksTab implements MenuTab {
 		for (final PackBrowser.Pack pack : list) {
 			String by = "by " + pack.author + " · " + downloads(pack.downloads) + " · " + pack.description;
 			if (!pack.compatible) {
-				by = "Not listed for Minecraft " + ArcticClient.platform().minecraftVersion() + " · " + by;
+				by = Lang.t("looks.not_listed_for_minecraft") + ArcticClient.platform().minecraftVersion() + " · " + by;
 			}
 			scroll.add(host.add(new PackRow(pack.title, by, () -> icons.remote(pack.iconUrl), ACTION_W + 4, false)
 					.bounds(x, ry, rowW, PackRow.H)));
@@ -462,7 +463,7 @@ final class PacksTab implements MenuTab {
 			ry += PackRow.H + 2;
 		}
 		if (browser.hasMore()) {
-			scroll.add(host.add(new Button(browser.searching() ? "Loading…" : "Show more", browser::loadMore)
+			scroll.add(host.add(new Button(browser.searching() ? Lang.t("looks.loading") : Lang.t("looks.show_more"), browser::loadMore)
 					.enabled(!browser.searching()).bounds(x + (w - 120) / 2, ry + 4, 120, BTN_H)));
 		}
 		scroll.settle();
@@ -471,11 +472,11 @@ final class PacksTab implements MenuTab {
 	/** Install, Installing…, Turn on, or On (click to turn off). */
 	private Button action(final Host host, final PackBrowser browser, final PackBrowser.Pack pack) {
 		if (pack.id.equals(browser.busy())) {
-			return new Button("Installing…", () -> {}).enabled(false);
+			return new Button(Lang.t("looks.installing"), () -> {}).enabled(false);
 		}
 		final String file = browser.installedFile(pack.id);
 		if (file == null) {
-			return new Button(pack.compatible ? "Install" : "Other version", () -> {
+			return new Button(pack.compatible ? Lang.t("looks.install") : Lang.t("looks.other_version"), () -> {
 				ArcticClient.shaders().clearStatus();
 				browser.install(pack);
 			})
@@ -484,7 +485,7 @@ final class PacksTab implements MenuTab {
 		if (shader) {
 			ShaderPacks shaders = ArcticClient.shaders();
 			boolean on = file.equals(shaders.active());
-			return new Button(!shaders.available() ? "Installed" : on ? "Turn off" : "Turn on", () -> shaders.select(on ? null : file))
+			return new Button(!shaders.available() ? Lang.t("looks.installed") : on ? Lang.t("looks.turn_off") : Lang.t("looks.turn_on"), () -> shaders.select(on ? null : file))
 					.selected(on).enabled(shaders.available() && !shaders.changing());
 		}
 		final PackInfo info = byFile(file);
@@ -496,7 +497,7 @@ final class PacksTab implements MenuTab {
 				apply(host);
 			}).selected(true);
 		}
-		return new Button("Turn on", () -> {
+		return new Button(Lang.t("looks.turn_on"), () -> {
 			if (info == null) {
 				ArcticClient.platform().runOnGameThread(() -> ArcticClient.platform().enableResourcePack(file));
 				return;
@@ -519,14 +520,14 @@ final class PacksTab implements MenuTab {
 
 	private static String downloads(int n) {
 		if (n >= 1_000_000) {
-			return String.format(Locale.ROOT, "%.1fM downloads", n / 1e6);
+			return String.format(Locale.ROOT, Lang.t("looks.m_downloads"), n / 1e6);
 		}
 		return n >= 1000 ? n / 1000 + "k downloads" : n + " downloads";
 	}
 
 	private static String label(String value) {
 		if (value.isEmpty()) {
-			return "All";
+			return Lang.t("looks.all");
 		}
 		return Character.isDigit(value.charAt(0)) ? value : Character.toUpperCase(value.charAt(0)) + value.substring(1).replace('-', ' ');
 	}
@@ -556,8 +557,8 @@ final class PacksTab implements MenuTab {
 		if (!empty || expandedFilter != 0) {
 			return;
 		}
-		String text = view == 0 ? "No packs yet. Browse Modrinth, or drop zips in the folder."
-				: browser().searching() ? "Searching…" : "No packs match. Adjust the filters or refresh.";
+		String text = view == 0 ? Lang.t("looks.no_packs_yet_browse_modrinth_or_drop_zips_in")
+				: browser().searching() ? Lang.t("looks.searching") : Lang.t("looks.no_packs_match_adjust_the_filters_or_refresh");
 		Draw.centered(g, text, x + w / 2, listTop + 30, s.muted, false);
 	}
 

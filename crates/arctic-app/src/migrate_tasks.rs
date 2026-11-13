@@ -11,7 +11,7 @@ use arctic_core::instances::Instance;
 use arctic_core::migrate::{self, Category, Found, FoundClient, Scan, Sizes};
 
 use crate::tasks::{Event, ProgressSnapshot, Tasks};
-
+use crate::{t, tf};
 const PROGRESS_EVERY: std::time::Duration = std::time::Duration::from_millis(150);
 
 /// What was found, with each instance's sizes (by key).
@@ -77,7 +77,7 @@ impl Tasks {
     pub fn migrate_pick_folder(&self) {
         self.run(|t| {
             let picked = rfd::FileDialog::new()
-                .set_title("Folder with instances")
+                .set_title(t!("tasks.folder_with_instances"))
                 .pick_folder();
             t.note_if_picker_missing(&picked);
             if let Some(folder) = picked {
@@ -141,7 +141,7 @@ impl Tasks {
                         Err(e) if e.is_cancelled() => Outcome {
                             title: label.clone(),
                             ok: false,
-                            lines: vec!["Cancelled; nothing of it was kept.".into()],
+                            lines: vec![t!("tasks.cancelled_nothing_of_it_was_kept").into()],
                             retry: Some(job.clone()),
                         },
                         Err(e) => {
@@ -161,10 +161,10 @@ impl Tasks {
                 if cancel.load(Ordering::Relaxed) {
                     break;
                 }
-                let label = format!(
-                    "{} HUD ({})",
-                    job.client.launcher.name(),
-                    job.client.profile
+                let label = tf!(
+                    "tasks.hud",
+                    name = job.client.launcher.name(),
+                    profile = job.client.profile
                 );
                 let result = job
                     .client
@@ -186,25 +186,26 @@ impl Tasks {
 }
 
 fn summary(done: &migrate::Imported) -> Vec<String> {
-    let mut lines = vec![format!("{} files copied", done.files)];
+    let mut lines = vec![tf!("tasks.files_copied", files = done.files)];
     if done.mods > 0 {
         let rec = done.recognized.as_ref().map_or(0, |r| r.tracked);
-        lines[0].push_str(&format!(
-            ", {} mods ({rec} recognized on Modrinth)",
-            done.mods
+        lines[0].push_str(&tf!(
+            "tasks.mods_recognized_on_modrinth",
+            mods = done.mods,
+            rec = rec
         ));
     }
     if done.kept > 0 {
-        lines.push(format!(
-            "{} files were already there; yours were kept",
-            done.kept
+        lines.push(tf!(
+            "tasks.files_were_already_there_yours_were_kept",
+            kept = done.kept
         ));
     }
-    lines.extend(done.added.iter().map(|a| format!("Added missing {a}")));
+    lines.extend(done.added.iter().map(|a| tf!("tasks.added_missing", a = a)));
     lines.extend(
         done.turned_off
             .iter()
-            .map(|m| format!("{m} doesn't run on this version: switched off")),
+            .map(|m| tf!("tasks.doesnt_run_on_this_version_switched_off", m = m)),
     );
     lines.extend(done.notes.iter().cloned());
     lines.extend(migrate::skipped_note(&done.skipped));

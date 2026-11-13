@@ -1,3 +1,4 @@
+// i18n-ignore-file: shader code and GPU names, nothing people read.
 //#if MC >= 26.1
 package com.arcticlauncher.mod;
 

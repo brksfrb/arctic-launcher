@@ -7,7 +7,7 @@ use crate::art::avatar::paint_face;
 use crate::art::icons::{self, Icon};
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 const CARD: [f32; 2] = [236.0, 96.0];
 
 impl ArcticApp {
@@ -16,8 +16,8 @@ impl ArcticApp {
         widgets::page_header(
             ui,
             p,
-            "Accounts",
-            "Click an account to play as it. Sign-ins stay on this PC, encrypted for your user.",
+            t!("accounts.accounts"),
+            t!("accounts.click_an_account_to_play_as_it_sign_ins_stay"),
         );
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(14.0, 14.0);
@@ -68,11 +68,11 @@ impl ArcticApp {
         );
         let signed_out = self.signed_out.contains(id);
         let (badge, color, badge_width) = if signed_out {
-            ("Signed out", p.error, 82.0)
+            (t!("accounts.signed_out"), p.error, 82.0)
         } else if account.is_microsoft() {
             ("Microsoft", p.accent, 74.0)
         } else {
-            ("Offline", p.muted, 56.0)
+            (t!("accounts.offline"), p.muted, 56.0)
         };
         let badge_rect =
             egui::Rect::from_min_size(rect.left_top() + vec2(90.0, 48.0), vec2(badge_width, 20.0));
@@ -136,7 +136,7 @@ impl ArcticApp {
             ui.painter().text(
                 link.left_center(),
                 Align2::LEFT_CENTER,
-                "Sign in again",
+                t!("accounts.sign_in_again"),
                 FontId::proportional(12.5),
                 color,
             );
@@ -147,13 +147,19 @@ impl ArcticApp {
         if sign_in {
             let now = ui.input(|i| i.time);
             self.sign_in_again(now);
-        } else if trash_response.on_hover_text("Remove account").clicked() {
+        } else if trash_response
+            .on_hover_text(t!("accounts.remove_account"))
+            .clicked()
+        {
             self.remove_confirm = Some(account.id.clone());
         } else if response.clicked() && !active {
             self.accounts.set_active(&account.id);
             self.save_accounts();
-            self.toasts
-                .push(Kind::Info, format!("Playing as {}", account.username), "");
+            self.toasts.push(
+                Kind::Info,
+                tf!("accounts.playing_as", username = account.username),
+                "",
+            );
         }
     }
 
@@ -188,7 +194,7 @@ impl ArcticApp {
         ui.painter().text(
             rect.center() + vec2(0.0, 18.0),
             Align2::CENTER_CENTER,
-            "Add account",
+            t!("accounts.add_account"),
             FontId::proportional(14.5),
             color,
         );

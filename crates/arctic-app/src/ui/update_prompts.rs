@@ -12,7 +12,7 @@ use crate::app::{ArcticApp, UpdateState};
 use crate::motion::format_bytes;
 use crate::theme::Palette;
 use crate::widgets;
-
+use crate::{t, tf};
 /// Seconds before a required update restarts the launcher by itself.
 const RESTART_COUNTDOWN: f64 = 5.0;
 /// How often the countdown redraws.
@@ -79,7 +79,7 @@ impl ArcticApp {
             .show(ctx, |ui| {
                 ui.set_width(OVERLAY_WIDTH);
                 ui.label(
-                    RichText::new("Update required")
+                    RichText::new(t!("play.update_required"))
                         .font(crate::fonts::heading(22.0))
                         .color(p.text),
                 );
@@ -91,12 +91,16 @@ impl ArcticApp {
                 let failed = matches!(self.update, UpdateState::Failed { .. });
                 let waiting = game_running && matches!(self.update, UpdateState::Installed { .. });
                 widgets::row(ui, |ui| {
-                    let label = if failed { "Retry" } else { "Update & Restart" };
+                    let label = if failed {
+                        t!("play.retry")
+                    } else {
+                        t!("play.update_restart")
+                    };
                     update_clicked = ui
                         .add_enabled_ui(!waiting, |ui| widgets::button(ui, p, None, label, true))
                         .inner
                         .clicked();
-                    exit_clicked = widgets::button(ui, p, None, "Exit", false).clicked();
+                    exit_clicked = widgets::button(ui, p, None, t!("play.exit"), false).clicked();
                 });
             });
         if update_clicked {
@@ -114,11 +118,12 @@ impl ArcticApp {
             | UpdateState::Installing { info, .. }
             | UpdateState::Failed {
                 retry: Some(info), ..
-            } => format!("Arctic Launcher {}", info.version),
-            _ => "This Arctic Launcher update".to_owned(),
+            } => tf!("play.arctic_launcher", version = info.version),
+            _ => t!("play.this_arctic_launcher_update").to_owned(),
         };
-        format!(
-            "{version} is a mandatory update: games can't be started with this version until it's installed."
+        tf!(
+            "play.is_a_mandatory_update_games_cant_be_started",
+            version = version
         )
     }
 
@@ -131,13 +136,16 @@ impl ArcticApp {
         game_running: bool,
     ) {
         let countdown = if confirmed {
-            "Restarting as soon as it's ready…".to_owned()
+            t!("play.restarting_as_soon_as_its_ready").to_owned()
         } else {
-            format!("Restarting in {seconds_left} s…")
+            tf!("play.restarting_in_s", seconds_left = seconds_left)
         };
         match &self.update {
             UpdateState::Available { .. } => {
-                ui.label(RichText::new(format!("Updating in {seconds_left} s…")).color(p.accent));
+                ui.label(
+                    RichText::new(tf!("play.updating_in_s", seconds_left = seconds_left))
+                        .color(p.accent),
+                );
             }
             UpdateState::Installing { done, total, .. } => {
                 let fraction = if *total > 0 {
@@ -145,25 +153,29 @@ impl ArcticApp {
                 } else {
                     0.0
                 };
-                ui.label(format!(
-                    "Downloading the update… {} / {}",
-                    format_bytes(*done),
-                    format_bytes(*total)
+                ui.label(tf!(
+                    "play.downloading_the_update",
+                    format_bytes = format_bytes(*done),
+                    format_bytes2 = format_bytes(*total)
                 ));
                 ui.add(egui::ProgressBar::new(fraction).desired_width(OVERLAY_WIDTH));
                 ui.label(RichText::new(countdown).small().color(p.muted));
             }
             UpdateState::Installed { .. } if game_running => {
                 ui.label(
-                    RichText::new("Installed. The launcher restarts when you close Minecraft.")
+                    RichText::new(t!("play.installed_the_launcher_restarts_when_you"))
                         .color(p.warn),
                 );
             }
             UpdateState::Installed { .. } => {
-                ui.label(RichText::new(format!("Installed. {countdown}")).color(p.accent));
+                ui.label(
+                    RichText::new(tf!("play.installed_3", countdown = countdown)).color(p.accent),
+                );
             }
             UpdateState::Failed { error, .. } => {
-                ui.label(RichText::new(format!("The update failed: {error}")).color(p.error));
+                ui.label(
+                    RichText::new(tf!("play.the_update_failed", error = error)).color(p.error),
+                );
             }
             _ => {}
         }
@@ -237,9 +249,12 @@ impl ArcticApp {
             .show(ctx, |ui| {
                 ui.set_width(NOTES_WIDTH);
                 ui.label(
-                    RichText::new(format!("Updated to Arctic Launcher {}", whats_new.version))
-                        .font(crate::fonts::heading(22.0))
-                        .color(p.text),
+                    RichText::new(tf!(
+                        "play.updated_to_arctic_launcher",
+                        version = whats_new.version
+                    ))
+                    .font(crate::fonts::heading(22.0))
+                    .color(p.text),
                 );
                 ui.add_space(10.0);
                 egui::ScrollArea::vertical()
@@ -248,18 +263,17 @@ impl ArcticApp {
                     .show(ui, |ui| notes_body(ui, p, &whats_new.notes));
                 ui.add_space(12.0);
                 ui.label(
-                    RichText::new(
-                        "You can turn this off in Settings → Updates → \"Show what's new after updating\".",
-                    )
-                    .small()
-                    .color(p.muted),
+                    RichText::new(t!("play.you_can_turn_this_off_in_settings_updates"))
+                        .small()
+                        .color(p.muted),
                 );
                 ui.add_space(10.0);
                 widgets::row(ui, |ui| {
-                    close = widgets::button(ui, p, None, "Got it", true).clicked();
-                    never = widgets::button(ui, p, None, "Don't show this again", false).clicked();
+                    close = widgets::button(ui, p, None, t!("play.got_it"), true).clicked();
+                    never = widgets::button(ui, p, None, t!("play.dont_show_this_again"), false)
+                        .clicked();
                     ui.hyperlink_to(
-                        "Full release notes",
+                        t!("play.full_release_notes"),
                         format!(
                             "https://github.com/{}/releases/tag/v{}",
                             arctic_core::update::GITHUB_REPO,
@@ -280,7 +294,7 @@ impl ArcticApp {
 
 fn notes_body(ui: &mut egui::Ui, p: &Palette, notes: &ReleaseNotes) {
     if !notes.new.is_empty() {
-        group_heading(ui, p, "What's new");
+        group_heading(ui, p, t!("play.whats_new"));
         for section in &notes.new {
             if let Some(title) = &section.title {
                 ui.add_space(4.0);
@@ -297,7 +311,7 @@ fn notes_body(ui: &mut egui::Ui, p: &Palette, notes: &ReleaseNotes) {
         if !notes.new.is_empty() {
             ui.add_space(12.0);
         }
-        group_heading(ui, p, "What's fixed");
+        group_heading(ui, p, t!("play.whats_fixed"));
         note_lines(ui, p, &notes.fixed);
     }
 }

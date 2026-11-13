@@ -11,11 +11,11 @@ use crate::server_tasks::SubmitForm;
 use crate::tasks::Outcome;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 const WIDTH: f32 = 640.0;
 const LIST_HEIGHT: f32 = 380.0;
 const MAX_TAGS: usize = 5;
-const ABUSE: &str = "See a misleading listing, or own this server and want it changed? Email abuse@arcticlauncher.com";
+const ABUSE: &str = "instances.see_a_misleading_listing_or_own_this_server_and_";
 
 #[derive(Default)]
 pub struct DiscoverUi {
@@ -42,17 +42,17 @@ enum Sort {
 
 impl Sort {
     const ALL: [(Sort, &'static str); 4] = [
-        (Sort::Random, "Random"),
-        (Sort::MostPlayers, "Most players"),
-        (Sort::FewestPlayers, "Fewest players"),
-        (Sort::Name, "Name"),
+        (Sort::Random, "instances.sort.random"),
+        (Sort::MostPlayers, "instances.sort.most_players"),
+        (Sort::FewestPlayers, "instances.sort.fewest_players"),
+        (Sort::Name, "instances.sort.name"),
     ];
 
     fn label(self) -> &'static str {
         Self::ALL
             .iter()
             .find(|(s, _)| *s == self)
-            .map_or("Random", |(_, l)| l)
+            .map_or(t!("instances.sort.random"), |(_, l)| t!(*l))
     }
 
     /// Ordered in place; servers that don't answer go last when sorting by players.
@@ -103,12 +103,20 @@ impl ArcticApp {
                 ui.add_space(10.0);
                 crate::widgets::row(ui, |ui| {
                     if self.discover.form.is_some()
-                        && widgets::button(ui, p, Some(Icon::ChevronLeft), "Back", false).clicked()
+                        && widgets::button(
+                            ui,
+                            p,
+                            Some(Icon::ChevronLeft),
+                            t!("instances.back"),
+                            false,
+                        )
+                        .clicked()
                     {
                         self.discover.form = None;
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        close |= widgets::button(ui, p, None, "Close", false).clicked();
+                        close |=
+                            widgets::button(ui, p, None, t!("instances.close"), false).clicked();
                     });
                 });
             });
@@ -123,20 +131,28 @@ impl ArcticApp {
         crate::widgets::row(ui, |ui| {
             ui.vertical(|ui| {
                 ui.label(
-                    RichText::new("Discover servers")
+                    RichText::new(t!("instances.discover_servers"))
                         .size(22.0)
                         .strong()
                         .color(p.text),
                 );
                 ui.label(
-                    RichText::new("A new random order every time. Nobody pays for a spot.")
+                    RichText::new(t!("instances.a_new_random_order_every_time_nobody_pays"))
                         .color(p.muted),
                 );
                 ui.add_space(4.0);
-                ui.label(RichText::new(ABUSE).small().color(p.muted));
+                ui.label(RichText::new(t!(ABUSE)).small().color(p.muted));
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                if widgets::button(ui, p, Some(Icon::Plus), "List your server", false).clicked() {
+                if widgets::button(
+                    ui,
+                    p,
+                    Some(Icon::Plus),
+                    t!("instances.list_your_server"),
+                    false,
+                )
+                .clicked()
+                {
                     self.discover.form = Some(ListForm::default());
                 }
             });
@@ -144,15 +160,15 @@ impl ArcticApp {
         ui.add_space(10.0);
         crate::widgets::row(ui, |ui| {
             for (access, label) in [
-                (Access::Any, "All"),
-                (Access::Cracked, "Cracked"),
-                (Access::Partners, "Partners"),
+                (Access::Any, t!("instances.all")),
+                (Access::Cracked, t!("instances.cracked")),
+                (Access::Partners, t!("instances.partners")),
             ] {
                 let tip = match access {
-                    Access::Any => "Every server",
-                    Access::Premium => "Need a Microsoft account",
-                    Access::Cracked => "Let any name in",
-                    Access::Partners => "Servers hosted with Flash Hosting, and ours",
+                    Access::Any => t!("instances.every_server"),
+                    Access::Premium => t!("instances.need_a_microsoft_account"),
+                    Access::Cracked => t!("instances.let_any_name_in"),
+                    Access::Partners => t!("instances.servers_hosted_with_flash_hosting_and_ours"),
                 };
                 if ui
                     .selectable_label(self.discover.access == access, label)
@@ -167,7 +183,7 @@ impl ArcticApp {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add(
                     widgets::text_field(&mut self.discover.search)
-                        .hint_text("Search names and tags")
+                        .hint_text(t!("instances.search_names_and_tags"))
                         .desired_width(ui.available_width().clamp(140.0, 240.0)),
                 );
             });
@@ -175,14 +191,14 @@ impl ArcticApp {
         // Their own row: next to the filters and search there wasn't room, and the button hid them.
         crate::widgets::row(ui, |ui| {
             widgets::modal_combo("discover-sort")
-                .selected_text(format!("Sort: {}", self.discover.sort.label()))
+                .selected_text(tf!("instances.sort", label = self.discover.sort.label()))
                 .show_ui(ui, |ui| {
                     for (sort, label) in Sort::ALL {
-                        ui.selectable_value(&mut self.discover.sort, sort, label);
+                        ui.selectable_value(&mut self.discover.sort, sort, t!(label));
                     }
                 });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::button(ui, p, None, "Surprise me", true).clicked() {
+                if widgets::button(ui, p, None, t!("instances.surprise_me"), true).clicked() {
                     self.surprise();
                 }
             });
@@ -192,12 +208,15 @@ impl ArcticApp {
             None => {
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    ui.label(RichText::new("Getting the list…").color(p.muted));
+                    ui.label(RichText::new(t!("instances.getting_the_list")).color(p.muted));
                 });
                 return;
             }
             Some(Err(e)) => {
-                ui.label(RichText::new(format!("The list couldn't be loaded: {e}")).color(p.error));
+                ui.label(
+                    RichText::new(tf!("instances.the_list_couldnt_be_loaded", e = e))
+                        .color(p.error),
+                );
                 return;
             }
             Some(Ok(list)) => list.clone(),
@@ -221,7 +240,7 @@ impl ArcticApp {
         if shown.is_empty() {
             // The same room as a full list, so the window doesn't jump.
             ui.allocate_ui(vec2(ui.available_width(), LIST_HEIGHT), |ui| {
-                ui.label(RichText::new("No servers match.").color(p.muted));
+                ui.label(RichText::new(t!("instances.no_servers_match")).color(p.muted));
             });
             return;
         }
@@ -245,7 +264,10 @@ impl ArcticApp {
                     let s = others.remove(i);
                     others.insert(0, s);
                 }
-                for (title, group) in [("Partners", partners), ("All servers", others)] {
+                for (title, group) in [
+                    (t!("instances.partners"), partners),
+                    (t!("instances.all_servers"), others),
+                ] {
                     if group.is_empty() {
                         continue;
                     }
@@ -269,7 +291,8 @@ impl ArcticApp {
             .map_or(0, |d| d.subsec_nanos().into());
         self.discover.picked = public::pick(list, self.discover.access, seed).map(|s| s.id.clone());
         if self.discover.picked.is_none() {
-            self.toasts.push(Kind::Info, "No servers to pick from", "");
+            self.toasts
+                .push(Kind::Info, t!("instances.no_servers_to_pick_from"), "");
         }
     }
 
@@ -297,7 +320,7 @@ impl ArcticApp {
                             ui.label(RichText::new(&s.address).small().color(p.muted));
                             if !s.partner.is_empty() {
                                 ui.label(RichText::new(&s.partner).small().color(p.accent))
-                                    .on_hover_text("A partner of Arctic Launcher");
+                                    .on_hover_text(t!("instances.a_partner_of_arctic_launcher"));
                             }
                         });
                         let mut detail = Vec::new();
@@ -323,9 +346,15 @@ impl ArcticApp {
                         }
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        join = widgets::button(ui, p, Some(Icon::Play), "Join", true).clicked();
-                        add = widgets::icon_button(ui, p, Icon::Plus, "Add to your server list")
+                        join = widgets::button(ui, p, Some(Icon::Play), t!("instances.join"), true)
                             .clicked();
+                        add = widgets::icon_button(
+                            ui,
+                            p,
+                            Icon::Plus,
+                            t!("instances.add_to_your_server_list"),
+                        )
+                        .clicked();
                         ui.add_space(6.0);
                         ui.vertical(|ui| {
                             ui.with_layout(egui::Layout::top_down(egui::Align::Max), |ui| {
@@ -335,9 +364,12 @@ impl ArcticApp {
                                 );
                                 // Only the exception is tagged: a Microsoft account is the normal case.
                                 let (label, tip) = match s.cracked {
-                                    Some(true) => {
-                                        ("cracked", "Lets any name in: works with offline accounts")
-                                    }
+                                    Some(true) => (
+                                        "cracked",
+                                        t!(
+                                            "instances.lets_any_name_in_works_with_offline_accounts"
+                                        ),
+                                    ),
                                     _ => ("", ""),
                                 };
                                 if !label.is_empty() {
@@ -355,19 +387,20 @@ impl ArcticApp {
                 Ok(true) => {
                     self.toasts.push(
                         Kind::Success,
-                        format!("Added {}", s.name),
-                        format!("It's in {}'s server list.", instance.name),
+                        tf!("instances.added", name = s.name),
+                        tf!("instances.its_in_s_server_list", name = instance.name),
                     );
                     self.servers_changed();
                 }
                 Ok(false) => self.toasts.push(
                     Kind::Info,
-                    format!("{} is already on your list", s.name),
+                    tf!("instances.is_already_on_your_list", name = s.name),
                     "",
                 ),
-                Err(e) => self
-                    .toasts
-                    .push(Kind::Error, "Couldn't add it", e.to_string()),
+                Err(e) => {
+                    self.toasts
+                        .push(Kind::Error, t!("instances.couldnt_add_it"), e.to_string())
+                }
             }
         }
         if join && self.join_server(&s.address) {
@@ -378,19 +411,16 @@ impl ArcticApp {
     fn list_form(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         ui.label(
-            RichText::new("List your server")
+            RichText::new(t!("instances.list_your_server"))
                 .size(22.0)
                 .strong()
                 .color(p.text),
         );
         ui.label(
-            RichText::new(
-                "Submit it for a short review. Once it's approved, it shows up for everyone.",
-            )
-            .color(p.muted),
+            RichText::new(t!("instances.submit_it_for_a_short_review_once_its")).color(p.muted),
         );
         ui.add_space(4.0);
-        ui.label(RichText::new(ABUSE).small().color(p.muted));
+        ui.label(RichText::new(t!(ABUSE)).small().color(p.muted));
         ui.add_space(10.0);
         let account = self.accounts.active().cloned();
         let Some(form) = self.discover.form.as_mut() else {
@@ -400,32 +430,32 @@ impl ArcticApp {
             .num_columns(2)
             .spacing(vec2(12.0, 8.0))
             .show(ui, |ui| {
-                ui.label(RichText::new("Address").color(p.muted));
+                ui.label(RichText::new(t!("instances.address")).color(p.muted));
                 ui.add(
                     widgets::text_field(&mut form.fields.address)
                         .hint_text("play.example.net")
                         .desired_width(360.0),
                 );
                 ui.end_row();
-                ui.label(RichText::new("Name").color(p.muted));
+                ui.label(RichText::new(t!("instances.name")).color(p.muted));
                 ui.add(
                     widgets::text_field(&mut form.fields.name)
                         .char_limit(40)
                         .desired_width(360.0),
                 );
                 ui.end_row();
-                ui.label(RichText::new("About it").color(p.muted));
+                ui.label(RichText::new(t!("instances.about_it")).color(p.muted));
                 ui.add(
                     widgets::text_field(&mut form.fields.description)
-                        .hint_text("Optional, one line")
+                        .hint_text(t!("instances.optional_one_line"))
                         .char_limit(200)
                         .desired_width(360.0),
                 );
                 ui.end_row();
-                ui.label(RichText::new("Tags").color(p.muted));
+                ui.label(RichText::new(t!("instances.tags")).color(p.muted));
                 ui.add(
                     widgets::text_field(&mut form.tags)
-                        .hint_text("smp, pvp, minigames (up to 5)")
+                        .hint_text(t!("instances.smp_pvp_minigames_up_to_5"))
                         .desired_width(360.0),
                 );
                 ui.end_row();
@@ -437,7 +467,7 @@ impl ArcticApp {
                 && !form.fields.name.trim().is_empty();
             let submit = ui
                 .add_enabled_ui(ready, |ui| {
-                    widgets::button(ui, p, None, "Submit for review", true)
+                    widgets::button(ui, p, None, t!("instances.submit_for_review"), true)
                 })
                 .inner
                 .clicked();
@@ -458,7 +488,9 @@ impl ArcticApp {
                         form.message = None;
                         self.tasks.public_submit(account, form.fields.clone());
                     }
-                    None => form.message = Some((true, "Add an account first.".into())),
+                    None => {
+                        form.message = Some((true, t!("instances.add_an_account_first").into()))
+                    }
                 }
             }
         });
@@ -480,7 +512,7 @@ impl ArcticApp {
         form.message = Some(match result {
             Ok(_) => (
                 false,
-                "Submitted. It waits for a quick review before it shows up.".into(),
+                t!("instances.submitted_it_waits_for_a_quick_review_before").into(),
             ),
             Err(e) => (true, e),
         });

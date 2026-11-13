@@ -1,0 +1,10 @@
+{
+  "accounts.accounts": "Accounts",
+  "accounts.add_account": "Add account",
+  "accounts.click_an_account_to_play_as_it_sign_ins_stay": "Click an account to play as it. Sign-ins stay on this PC, encrypted for your user.",
+  "accounts.offline": "Offline",
+  "accounts.playing_as": "Playing as {username}",
+  "accounts.remove_account": "Remove account",
+  "accounts.sign_in_again": "Sign in again",
+  "accounts.signed_out": "Signed out"
+}

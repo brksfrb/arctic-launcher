@@ -16,7 +16,7 @@ use crate::storage_tasks::{Checked, StorageEvent};
 use crate::theme::Palette;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 const DIALOG_WIDTH: f32 = 460.0;
 /// Made inside a picked folder that already holds other things.
 const OWN_FOLDER: &str = "Arctic Launcher";
@@ -63,9 +63,9 @@ fn note(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) {
 
 /// "<folder> isn't available…": the Storage section's note and the startup toast.
 fn missing_storage_text(chosen: &Path) -> String {
-    format!(
-        "{} isn't available (an unplugged drive?). Arctic uses its usual folder until it's back, so the instances and worlds kept there are not shown.",
-        chosen.display()
+    tf!(
+        "settings.isnt_available_an_unplugged_drive_arctic_2",
+        chosen = chosen.display()
     )
 }
 
@@ -76,7 +76,7 @@ impl ArcticApp {
         if let RootSource::ChosenMissing { chosen, .. } = self.root_source() {
             self.toasts.push_with_action(
                 Kind::Error,
-                "Your storage folder isn't available",
+                t!("settings.your_storage_folder_isnt_available"),
                 missing_storage_text(&chosen),
                 Some(crate::toasts::ToastAction::OpenStorage),
             );
@@ -114,31 +114,43 @@ impl ArcticApp {
         note(
             ui,
             p,
-            "Game files, Java, instances (worlds, mods, packs), accounts and settings are kept in:",
+            t!("settings.game_files_java_instances_worlds_mods_packs"),
         );
         ui.label(path_text(p, self.dirs.root()));
         ui.add_space(4.0);
         widgets::row(ui, |ui| {
-            if widgets::button(ui, p, Some(Icon::Folder), "Open folder", false).clicked()
+            if widgets::button(ui, p, Some(Icon::Folder), t!("settings.open_folder"), false)
+                .clicked()
                 && let Err(e) = open::that_detached(self.dirs.root())
             {
-                self.toasts
-                    .push(Kind::Error, "Could not open folder", e.to_string());
+                self.toasts.push(
+                    Kind::Error,
+                    t!("settings.could_not_open_folder"),
+                    e.to_string(),
+                );
             }
             let movable = source.movable();
             let change = ui.add_enabled_ui(movable, |ui| {
-                widgets::button(ui, p, Some(Icon::Import), "Change folder…", false)
+                widgets::button(
+                    ui,
+                    p,
+                    Some(Icon::Import),
+                    t!("settings.change_folder"),
+                    false,
+                )
             });
             if change.inner.clicked() {
                 self.tasks.storage_pick(self.dirs.root().to_path_buf());
             }
         });
         match &source {
-            RootSource::Env(_) => note(ui, p, "Set by the ARCTIC_DATA_DIR environment variable."),
+            RootSource::Env(_) => {
+                note(ui, p, t!("settings.set_by_the_arctic_data_dir_environment"))
+            }
             RootSource::Portable(_) => note(
                 ui,
                 p,
-                "Portable mode: portable.txt is next to the launcher, so everything stays in the data folder beside it.",
+                t!("settings.portable_mode_portable_txt_is_next_to_the"),
             ),
             RootSource::ChosenMissing { chosen, using } => {
                 ui.label(
@@ -147,14 +159,14 @@ impl ArcticApp {
                         .color(p.error),
                 );
                 widgets::row(ui, |ui| {
-                    if widgets::button(ui, p, None, "Pick another folder…", false)
-                        .on_hover_text("Move Arctic's files somewhere else")
+                    if widgets::button(ui, p, None, t!("settings.pick_another_folder"), false)
+                        .on_hover_text(t!("settings.move_arctics_files_somewhere_else"))
                         .clicked()
                     {
                         self.tasks.storage_pick(self.dirs.root().to_path_buf());
                     }
-                    if widgets::button(ui, p, None, "Forget that folder", false)
-                        .on_hover_text("Stop looking for it and keep using the usual folder")
+                    if widgets::button(ui, p, None, t!("settings.forget_that_folder"), false)
+                        .on_hover_text(t!("settings.stop_looking_for_it_and_keep_using_the_usual"))
                         .clicked()
                     {
                         match location::set_chosen(using, using) {
@@ -162,13 +174,13 @@ impl ArcticApp {
                                 self.storage.source = None;
                                 self.toasts.push(
                                     Kind::Success,
-                                    "Arctic now uses its usual folder",
-                                    "Nothing was deleted; the files on that drive stay where they are.",
+                                    t!("settings.arctic_now_uses_its_usual_folder"),
+                                    t!("settings.nothing_was_deleted_the_files_on_that_drive"),
                                 );
                             }
                             Err(e) => self.toasts.push(
                                 Kind::Error,
-                                "Couldn't forget that folder",
+                                t!("settings.couldnt_forget_that_folder"),
                                 e.to_string(),
                             ),
                         }
@@ -178,7 +190,7 @@ impl ArcticApp {
             RootSource::Chosen(_) | RootSource::Default(_) => note(
                 ui,
                 p,
-                "Another drive or a bigger disk? Change the folder and everything moves there.",
+                t!("settings.another_drive_or_a_bigger_disk_change_the"),
             ),
         }
     }
@@ -189,15 +201,23 @@ impl ArcticApp {
             return;
         }
         ui.add_space(18.0);
-        ui.label(RichText::new("Where Arctic keeps its files").color(p.text));
+        ui.label(RichText::new(t!("settings.where_arctic_keeps_its_files")).color(p.text));
         note(
             ui,
             p,
-            "Game files, Java and your worlds. Another drive has more room? Pick a folder there.",
+            t!("settings.game_files_java_and_your_worlds_another"),
         );
         ui.label(path_text(p, self.dirs.root()));
         ui.add_space(4.0);
-        if widgets::button(ui, p, Some(Icon::Import), "Change folder…", false).clicked() {
+        if widgets::button(
+            ui,
+            p,
+            Some(Icon::Import),
+            t!("settings.change_folder"),
+            false,
+        )
+        .clicked()
+        {
             self.tasks.storage_pick(self.dirs.root().to_path_buf());
         }
     }
@@ -225,10 +245,10 @@ impl ArcticApp {
                 self.storage.dialog = None;
                 self.toasts.push(
                     Kind::Info,
-                    "Move cancelled",
-                    format!(
-                        "Nothing changed: Arctic still uses {}.",
-                        self.dirs.root().display()
+                    t!("settings.move_cancelled"),
+                    tf!(
+                        "settings.nothing_changed_arctic_still_uses_2",
+                        root = self.dirs.root().display()
                     ),
                 );
             }
@@ -245,11 +265,14 @@ impl ArcticApp {
                 match result {
                     Ok(updated) => {
                         self.update_instance(&id, |i| *i = updated);
-                        self.toasts.push(Kind::Success, "Game folder changed", "");
+                        self.toasts
+                            .push(Kind::Success, t!("settings.game_folder_changed"), "");
                     }
-                    Err(e) => self
-                        .toasts
-                        .push(Kind::Error, "Couldn't change the game folder", e),
+                    Err(e) => self.toasts.push(
+                        Kind::Error,
+                        t!("settings.couldnt_change_the_game_folder"),
+                        e,
+                    ),
                 }
             }
         }
@@ -278,7 +301,7 @@ impl ArcticApp {
                         total,
                         cancel,
                     } => {
-                        title(ui, p, "Moving Arctic's files…");
+                        title(ui, p, t!("settings.moving_arctics_files"));
                         ui.label(path_text(p, to));
                         ui.add_space(8.0);
                         let fraction = if *total == 0 {
@@ -291,13 +314,13 @@ impl ArcticApp {
                             format_bytes(*done),
                             format_bytes(*total)
                         )));
-                        note(ui, p, "When it's done, Arctic asks to restart.");
+                        note(ui, p, t!("settings.when_its_done_arctic_asks_to_restart"));
                         ui.add_space(8.0);
                         let cancelling = cancel.load(std::sync::atomic::Ordering::Relaxed);
                         if cancelling {
-                            note(ui, p, "Stopping after this file…");
-                        } else if widgets::button(ui, p, None, "Cancel", false)
-                            .on_hover_text("What was copied so far is removed; nothing changes.")
+                            note(ui, p, t!("settings.stopping_after_this_file"));
+                        } else if widgets::button(ui, p, None, t!("settings.cancel"), false)
+                            .on_hover_text(t!("settings.what_was_copied_so_far_is_removed_nothing"))
                             .clicked()
                             || ui.input(|i| i.key_pressed(egui::Key::Escape))
                         {
@@ -305,31 +328,36 @@ impl ArcticApp {
                         }
                     }
                     Dialog::Moved(to) => {
-                        title(ui, p, "Moved");
+                        title(ui, p, t!("settings.moved"));
                         ui.label(path_text(p, to));
                         note(
                             ui,
                             p,
-                            "Arctic uses the new folder from its next start, then removes the old copy. Until then it keeps using the old one.",
+                            t!("settings.arctic_uses_the_new_folder_from_its_next"),
                         );
                         ui.add_space(8.0);
                         widgets::row(ui, |ui| {
-                            if widgets::button(ui, p, None, "Restart now", true).clicked() {
+                            if widgets::button(ui, p, None, t!("settings.restart_now"), true)
+                                .clicked()
+                            {
                                 next = Some(None);
                                 self.restart_after_update(ui.ctx());
                             }
-                            if widgets::button(ui, p, None, "Later", false).clicked() {
+                            if widgets::button(ui, p, None, t!("settings.later"), false).clicked() {
                                 next = Some(None);
                             }
                         });
                     }
                     Dialog::Failed(e) => {
-                        title(ui, p, "The files couldn't be moved");
+                        title(ui, p, t!("settings.the_files_couldnt_be_moved"));
                         ui.label(RichText::new(e).color(p.error));
                         note(
                             ui,
                             p,
-                            format!("Nothing changed: Arctic still uses {}.", from.display()),
+                            tf!(
+                                "settings.nothing_changed_arctic_still_uses",
+                                from = from.display()
+                            ),
                         );
                         ui.add_space(8.0);
                         if widgets::button(ui, p, None, "OK", true).clicked() {
@@ -359,44 +387,46 @@ impl ArcticApp {
         let mut next = None;
         let default = location::default_root().ok();
         if let Some(problem) = &c.problem {
-            title(ui, p, "Can't use this folder");
+            title(ui, p, t!("settings.cant_use_this_folder"));
             ui.label(RichText::new(problem).color(p.error));
         } else {
             match c.target {
                 Target::Empty => {
-                    title(ui, p, "Move Arctic's files here?");
+                    title(ui, p, t!("settings.move_arctics_files_here"));
                     ui.label(path_text(p, &c.to));
                     note(
                         ui,
                         p,
-                        format!(
-                            "{} move from {}. Arctic restarts when it's done, then removes the old copy.",
-                            format_bytes(c.size),
-                            from.display()
+                        tf!(
+                            "settings.move_from_arctic_restarts_when_its_done_then",
+                            format_bytes = format_bytes(c.size),
+                            from = from.display()
                         ),
                     );
                     if game_running {
-                        ui.label(RichText::new("Close Minecraft first.").color(p.error));
+                        ui.label(
+                            RichText::new(t!("settings.close_minecraft_first")).color(p.error),
+                        );
                     }
                 }
                 Target::ArcticData => {
-                    title(ui, p, "This folder already has Arctic's files");
+                    title(ui, p, t!("settings.this_folder_already_has_arctics_files"));
                     ui.label(path_text(p, &c.to));
                     note(
                         ui,
                         p,
-                        format!(
-                            "Use them as they are? Your current files stay in {}.",
-                            from.display()
+                        tf!(
+                            "settings.use_them_as_they_are_your_current_files_stay",
+                            from = from.display()
                         ),
                     );
                 }
                 Target::Other => {
-                    title(ui, p, "This folder has other things in it");
+                    title(ui, p, t!("settings.this_folder_has_other_things_in_it"));
                     note(
                         ui,
                         p,
-                        "Arctic can keep its files in a folder of its own inside it:",
+                        t!("settings.arctic_can_keep_its_files_in_a_folder_of_its"),
                     );
                     ui.label(path_text(p, &c.to.join(OWN_FOLDER)));
                 }
@@ -407,7 +437,7 @@ impl ArcticApp {
             match (c.problem.is_some(), c.target) {
                 (false, Target::Empty) => {
                     let go = ui.add_enabled_ui(!game_running && default.is_some(), |ui| {
-                        widgets::button(ui, p, None, "Move files", true)
+                        widgets::button(ui, p, None, t!("settings.move_files"), true)
                     });
                     if go.inner.clicked()
                         && let Some(default) = default.clone()
@@ -428,7 +458,7 @@ impl ArcticApp {
                     }
                 }
                 (false, Target::ArcticData) => {
-                    if widgets::button(ui, p, None, "Use these files", true).clicked()
+                    if widgets::button(ui, p, None, t!("settings.use_these_files"), true).clicked()
                         && let Some(default) = &default
                     {
                         match location::adopt(default, &c.to) {
@@ -441,7 +471,8 @@ impl ArcticApp {
                     }
                 }
                 (false, Target::Other) => {
-                    if widgets::button(ui, p, None, "Use that folder", true).clicked() {
+                    if widgets::button(ui, p, None, t!("settings.use_that_folder"), true).clicked()
+                    {
                         self.tasks
                             .storage_check(from.to_path_buf(), c.to.join(OWN_FOLDER));
                         next = Some(None);
@@ -449,11 +480,11 @@ impl ArcticApp {
                 }
                 (true, _) => {}
             }
-            if widgets::button(ui, p, None, "Pick another", false).clicked() {
+            if widgets::button(ui, p, None, t!("settings.pick_another"), false).clicked() {
                 self.tasks.storage_pick(from.to_path_buf());
                 next = Some(None);
             }
-            if widgets::button(ui, p, None, "Cancel", false).clicked() {
+            if widgets::button(ui, p, None, t!("settings.cancel"), false).clicked() {
                 next = Some(None);
             }
         });
@@ -469,26 +500,46 @@ impl ArcticApp {
         ui.add_space(12.0);
         crate::theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new("Game folder").size(17.0).strong().color(p.text));
-            note(ui, p, "This instance's worlds, mods, resource packs, screenshots and options:");
+            ui.label(
+                RichText::new(t!("settings.game_folder"))
+                    .size(17.0)
+                    .strong()
+                    .color(p.text),
+            );
+            note(
+                ui,
+                p,
+                t!("settings.this_instances_worlds_mods_resource_packs"),
+            );
             ui.label(path_text(p, &folder));
             ui.add_space(4.0);
             widgets::row(ui, |ui| {
-                if widgets::button(ui, p, Some(Icon::Folder), "Open", false).clicked() {
+                if widgets::button(ui, p, Some(Icon::Folder), t!("settings.open"), false).clicked()
+                {
                     let _ = std::fs::create_dir_all(&folder);
                     if let Err(e) = open::that_detached(&folder) {
-                        self.toasts.push(Kind::Error, "Could not open folder", e.to_string());
+                        self.toasts.push(
+                            Kind::Error,
+                            t!("settings.could_not_open_folder"),
+                            e.to_string(),
+                        );
                     }
                 }
                 let change = ui.add_enabled_ui(!running, |ui| {
-                    widgets::button(ui, p, Some(Icon::Import), "Change…", false)
+                    widgets::button(ui, p, Some(Icon::Import), t!("settings.change"), false)
                 });
                 if change.inner.clicked() {
                     self.tasks.instance_folder_pick(id.clone());
                 }
                 if instance.game_folder.is_some() {
                     let back = ui.add_enabled_ui(!running, |ui| {
-                        widgets::button(ui, p, None, "Use the instance's own folder", false)
+                        widgets::button(
+                            ui,
+                            p,
+                            None,
+                            t!("settings.use_the_instances_own_folder"),
+                            false,
+                        )
                     });
                     if back.inner.clicked() {
                         let own = instance.default_game_dir(&self.dirs);
@@ -502,9 +553,17 @@ impl ArcticApp {
                 }
             });
             if running {
-                note(ui, p, "Close this instance to change its folder.");
+                note(
+                    ui,
+                    p,
+                    t!("settings.close_this_instance_to_change_its_folder"),
+                );
             } else {
-                note(ui, p, "Pick a folder on any drive, or an existing .minecraft-style folder to use as it is.");
+                note(
+                    ui,
+                    p,
+                    t!("settings.pick_a_folder_on_any_drive_or_an_existing"),
+                );
             }
         });
     }
@@ -525,41 +584,63 @@ impl ArcticApp {
             .unwrap_or_else(|| instance.default_game_dir(&self.dirs));
         let (empty, busy, back) = (dialog.empty, dialog.busy, dialog.folder.is_none());
         let mut choice: Option<Option<FolderChange>> = None;
-        let modal = Modal::new(Id::new("instance_folder")).frame(dialog_frame(p)).show(ctx, |ui| {
-            ui.set_width(DIALOG_WIDTH);
-            if busy {
-                title(ui, p, "Moving the instance's files…");
-                ui.label(path_text(p, &target));
-                ui.add(egui::ProgressBar::new(0.0).animate(true));
-                return;
-            }
-            title(ui, p, if back { "Use the instance's own folder?" } else { "Use this game folder?" });
-            ui.label(path_text(p, &target));
-            if empty {
-                note(ui, p, format!("Move this instance's worlds, mods and settings from {} there?", current.display()));
-            } else {
-                note(
+        let modal = Modal::new(Id::new("instance_folder"))
+            .frame(dialog_frame(p))
+            .show(ctx, |ui| {
+                ui.set_width(DIALOG_WIDTH);
+                if busy {
+                    title(ui, p, t!("settings.moving_the_instances_files"));
+                    ui.label(path_text(p, &target));
+                    ui.add(egui::ProgressBar::new(0.0).animate(true));
+                    return;
+                }
+                title(
                     ui,
                     p,
-                    format!(
-                        "It already has files. Use it as it is (an existing .minecraft, say)? This instance's current files stay in {}.",
-                        current.display()
-                    ),
+                    if back {
+                        t!("settings.use_the_instances_own_folder_2")
+                    } else {
+                        t!("settings.use_this_game_folder")
+                    },
                 );
-            }
-            ui.add_space(10.0);
-            widgets::row(ui, |ui| {
-                if empty && widgets::button(ui, p, None, "Move files there", true).clicked() {
-                    choice = Some(Some(FolderChange::MoveFiles));
+                ui.label(path_text(p, &target));
+                if empty {
+                    note(
+                        ui,
+                        p,
+                        tf!(
+                            "settings.move_this_instances_worlds_mods_and_settings",
+                            current = current.display()
+                        ),
+                    );
+                } else {
+                    note(
+                        ui,
+                        p,
+                        tf!(
+                            "settings.it_already_has_files_use_it_as_it_is_an",
+                            current = current.display()
+                        ),
+                    );
                 }
-                if widgets::button(ui, p, None, "Use it as it is", !empty).clicked() {
-                    choice = Some(Some(FolderChange::UseAsIs));
-                }
-                if widgets::button(ui, p, None, "Cancel", false).clicked() {
-                    choice = Some(None);
-                }
+                ui.add_space(10.0);
+                widgets::row(ui, |ui| {
+                    if empty
+                        && widgets::button(ui, p, None, t!("settings.move_files_there"), true)
+                            .clicked()
+                    {
+                        choice = Some(Some(FolderChange::MoveFiles));
+                    }
+                    if widgets::button(ui, p, None, t!("settings.use_it_as_it_is"), !empty)
+                        .clicked()
+                    {
+                        choice = Some(Some(FolderChange::UseAsIs));
+                    }
+                    if widgets::button(ui, p, None, t!("settings.cancel"), false).clicked() {
+                        choice = Some(None);
+                    }
+                });
             });
-        });
         if modal.should_close() && !busy {
             choice = Some(None);
         }

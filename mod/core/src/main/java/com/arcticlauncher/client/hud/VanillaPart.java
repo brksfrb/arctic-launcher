@@ -5,6 +5,7 @@ import com.arcticlauncher.client.gfx.Draw;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Style;
 
+import com.arcticlauncher.client.Lang;
 /**
  * A part of the game's own HUD (the scoreboard, the boss bar) that the HUD editor can move,
  * resize and turn off like a widget. The game still draws it: the version adapter reports where
@@ -93,7 +94,7 @@ final class VanillaPart extends HudWidget {
 		if (VanillaParts.BOSSBAR.equals(id)) {
 			// The game's own look: the name over a 182 x 5 bar, a dark tray with a one-pixel rim and the
 			// colour (pink here) filling it, lighter on top and darker below.
-			Draw.centered(g, "Boss bar", sampleW / 2, 0, 0xFFFFFFFF, true);
+			Draw.centered(g, Lang.t("hud.boss_bar"), sampleW / 2, 0, 0xFFFFFFFF, true);
 			g.fill(0, 9, sampleW, 14, 0xFF1B1B1B);
 			g.fill(1, 10, sampleW - 1, 13, 0xFF4A4A4A);
 			int fill = (sampleW - 2) * 2 / 3;
@@ -104,8 +105,8 @@ final class VanillaPart extends HudWidget {
 		}
 		g.fill(0, 0, sampleW, 10, 0x66000000);
 		g.fill(0, 10, sampleW, sampleH, 0x4D000000);
-		Draw.centered(g, "Scoreboard", sampleW / 2, 1, 0xFFFFFFFF, false);
-		String[] rows = {"Kills", "Coins", "Team"};
+		Draw.centered(g, Lang.t("hud.scoreboard"), sampleW / 2, 1, 0xFFFFFFFF, false);
+		String[] rows = {Lang.t("hud.kills"), Lang.t("hud.coins"), Lang.t("hud.team")};
 		for (int i = 0; i < rows.length; i++) {
 			int y = 11 + i * 9;
 			g.text(rows[i], 2, y, 0xFFAAAAAA, false);

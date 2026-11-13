@@ -9,7 +9,7 @@ use crate::motion::{TAB_TRANSITION, eased, format_bytes};
 use crate::theme;
 use crate::toasts::ToastAction;
 use crate::widgets;
-
+use crate::{t, tf};
 const NAV_WIDTH: f32 = 200.0;
 /// How far (px) a tab slides while fading in.
 const TAB_SLIDE: f32 = 14.0;
@@ -169,7 +169,7 @@ impl ArcticApp {
                 ToastAction::ChatRetry { friend, text } => self.chat_retry(friend, text),
                 ToastAction::OpenStorage => {
                     self.set_tab(Tab::Settings, now);
-                    crate::ui::settings::show_section("Storage");
+                    crate::ui::settings::show_section("settings.storage");
                 }
                 ToastAction::SignIn => self.sign_in_again(now),
             }
@@ -186,21 +186,26 @@ impl ArcticApp {
             UpdateState::Available { info, .. } => {
                 let info = info.clone();
                 let text = if info.required {
-                    RichText::new(format!(
-                        "Required update {} — install to keep playing.",
-                        info.version
+                    RichText::new(tf!(
+                        "nav.required_update_install_to_keep_playing",
+                        version = info.version
                     ))
                     .color(p.warn)
                 } else {
-                    RichText::new(format!("Arctic Launcher {} is available.", info.version))
-                        .color(p.accent)
+                    RichText::new(tf!(
+                        "nav.arctic_launcher_is_available",
+                        version = info.version
+                    ))
+                    .color(p.accent)
                 };
                 ui.label(text);
-                if widgets::button(ui, p, None, "Update", true).clicked() {
+                if widgets::button(ui, p, None, t!("nav.update"), true).clicked() {
                     self.start_update(info.clone());
                 }
-                ui.hyperlink_to("Release notes", &info.page_url);
-                if !info.required && crate::widgets::button(ui, p, None, "Later", false).clicked() {
+                ui.hyperlink_to(t!("nav.release_notes"), &info.page_url);
+                if !info.required
+                    && crate::widgets::button(ui, p, None, t!("nav.later"), false).clicked()
+                {
                     self.update = UpdateState::Available {
                         info,
                         dismissed: true,
@@ -213,19 +218,19 @@ impl ArcticApp {
                 } else {
                     0.0
                 };
-                ui.label(format!(
-                    "Downloading update… {} / {}",
-                    format_bytes(*done),
-                    format_bytes(*total)
+                ui.label(tf!(
+                    "nav.downloading_update",
+                    format_bytes = format_bytes(*done),
+                    format_bytes2 = format_bytes(*total)
                 ));
                 ui.add(egui::ProgressBar::new(fraction).desired_width(220.0));
             }
             UpdateState::Installed { .. } => {
                 ui.label(
-                    RichText::new("Update installed: it's used next time you open the launcher.")
+                    RichText::new(t!("nav.update_installed_its_used_next_time_you_open"))
                         .color(p.accent),
                 );
-                if widgets::button(ui, p, None, "Restart now", true).clicked() {
+                if widgets::button(ui, p, None, t!("nav.restart_now"), true).clicked() {
                     self.restart_after_update(ui.ctx());
                 }
             }
@@ -234,8 +239,8 @@ impl ArcticApp {
                 retry: Some(info),
             } => {
                 let info = info.clone();
-                ui.label(RichText::new(format!("Update failed: {error}")).color(p.error));
-                if crate::widgets::button(ui, p, None, "Retry", false).clicked() {
+                ui.label(RichText::new(tf!("nav.update_failed_2", error = error)).color(p.error));
+                if crate::widgets::button(ui, p, None, t!("nav.retry"), false).clicked() {
                     self.start_update(info);
                 }
             }
@@ -248,8 +253,8 @@ impl ArcticApp {
             // Keep the required flag so Play stays blocked on the old binary.
             self.toasts.push(
                 crate::toasts::Kind::Error,
-                "Could not restart",
-                format!("{e}. Please reopen the launcher."),
+                t!("nav.could_not_restart"),
+                tf!("nav.please_reopen_the_launcher", e = e),
             );
             return;
         }

@@ -11,7 +11,7 @@ use crate::art::icons::Icon;
 use crate::theme::Palette;
 use crate::toasts::Kind as Toast;
 use crate::widgets;
-
+use crate::{t, tf};
 #[derive(Default)]
 pub struct DefaultsUi {
     loaded: Option<Defaults>,
@@ -28,12 +28,9 @@ impl ArcticApp {
         let mut d = self.game_defaults.loaded.clone().unwrap_or_default();
         let before = d.clone();
         ui.label(
-            RichText::new(
-                "Every new instance starts with these. Pick the ones you always change; \
-                 the rest stay at Minecraft's defaults.",
-            )
-            .small()
-            .color(p.muted),
+            RichText::new(t!("play.every_new_instance_starts_with_these_pick"))
+                .small()
+                .color(p.muted),
         );
         ui.add_space(6.0);
         egui::Grid::new("game_defaults")
@@ -55,13 +52,13 @@ impl ArcticApp {
             ui.add_space(6.0);
             crate::widgets::row(ui, |ui| {
                 ui.label(
-                    RichText::new(format!("Plus {} more (keys, video, chat…)", extra.len()))
+                    RichText::new(tf!("play.plus_more_keys_video_chat", count = extra.len()))
                         .color(p.text),
                 );
                 let label = if self.game_defaults.show_all {
-                    "Hide"
+                    t!("play.hide")
                 } else {
-                    "Show"
+                    t!("play.show")
                 };
                 if widgets::button(ui, p, None, label, false).clicked() {
                     self.game_defaults.show_all = !self.game_defaults.show_all;
@@ -80,7 +77,7 @@ impl ArcticApp {
                                     ui,
                                     p,
                                     Icon::Close,
-                                    "Leave at the game's default",
+                                    t!("play.leave_at_the_games_default"),
                                 )
                                 .clicked()
                                 {
@@ -96,10 +93,11 @@ impl ArcticApp {
         if d != before {
             match d.save(&self.dirs) {
                 Ok(()) => self.game_defaults.loaded = Some(d),
-                Err(e) => {
-                    self.toasts
-                        .push(Toast::Error, "Couldn't save the defaults", e.to_string())
-                }
+                Err(e) => self.toasts.push(
+                    Toast::Error,
+                    t!("play.couldnt_save_the_defaults"),
+                    e.to_string(),
+                ),
             }
         }
     }
@@ -118,7 +116,7 @@ impl ArcticApp {
             .filter(|id| all.iter().any(|(i, _)| i == id))
             .unwrap_or_else(|| all[0].0.clone());
         crate::widgets::row(ui, |ui| {
-            ui.label(RichText::new("Instance").color(p.muted));
+            ui.label(RichText::new(t!("play.instance")).color(p.muted));
             let name = all
                 .iter()
                 .find(|(i, _)| *i == picked)
@@ -136,9 +134,15 @@ impl ArcticApp {
             let instance = self.instance_by_id(&picked).cloned();
             if let Some(instance) = instance {
                 let game_dir = instance.game_dir(&self.dirs);
-                if widgets::button(ui, p, Some(Icon::Import), "Copy its settings", false)
-                    .on_hover_text("Everything you set in that instance becomes the default")
-                    .clicked()
+                if widgets::button(
+                    ui,
+                    p,
+                    Some(Icon::Import),
+                    t!("play.copy_its_settings"),
+                    false,
+                )
+                .on_hover_text(t!("play.everything_you_set_in_that_instance_becomes"))
+                .clicked()
                 {
                     match Defaults::capture(&game_dir) {
                         Ok(c) => {
@@ -146,43 +150,56 @@ impl ArcticApp {
                             *d = c;
                             self.toasts.push(
                                 Toast::Success,
-                                format!("Copied {n} settings"),
-                                format!("From {}", instance.name),
+                                tf!("play.copied_settings", n_value = n),
+                                tf!("play.from", name = instance.name),
                             );
                         }
                         Err(_) => self.toasts.push(
                             Toast::Info,
-                            "Nothing to copy yet",
-                            "Play that instance once first.",
+                            t!("play.nothing_to_copy_yet"),
+                            t!("play.play_that_instance_once_first"),
                         ),
                     }
                 }
-                if widgets::button(ui, p, None, "Apply to it", false)
-                    .on_hover_text("Puts these settings into that instance now (the rest of its settings stay)")
+                if widgets::button(ui, p, None, t!("play.apply_to_it"), false)
+                    .on_hover_text(t!("play.puts_these_settings_into_that_instance_now"))
                     .clicked()
                 {
                     if self.runs.instance_active(&instance.id) {
-                        self.toasts.push(Toast::Info, "Close that game first", "It saves its own settings when it quits.");
+                        self.toasts.push(
+                            Toast::Info,
+                            t!("play.close_that_game_first"),
+                            t!("play.it_saves_its_own_settings_when_it_quits"),
+                        );
                     } else {
                         match d.apply_to(&game_dir, instance.version.as_deref()) {
-                            Ok(n) => self.toasts.push(Toast::Success, format!("Applied {n} settings"), format!("To {}", instance.name)),
-                            Err(e) => self.toasts.push(Toast::Error, "Couldn't apply them", e.to_string()),
+                            Ok(n) => self.toasts.push(
+                                Toast::Success,
+                                tf!("play.applied_settings", n_value = n),
+                                tf!("play.to", name = instance.name),
+                            ),
+                            Err(e) => self.toasts.push(
+                                Toast::Error,
+                                t!("play.couldnt_apply_them"),
+                                e.to_string(),
+                            ),
                         }
                     }
                 }
             }
         });
         crate::widgets::row(ui, |ui| {
-            if !d.is_empty() && widgets::button(ui, p, Some(Icon::Share), "Share", false).clicked()
+            if !d.is_empty()
+                && widgets::button(ui, p, Some(Icon::Share), t!("play.share"), false).clicked()
             {
                 self.open_share_defaults();
             }
-            if widgets::button(ui, p, Some(Icon::Import), "Use a code", false).clicked() {
+            if widgets::button(ui, p, Some(Icon::Import), t!("play.use_a_code"), false).clicked() {
                 self.open_share_import();
             }
             if !d.is_empty()
-                && widgets::button(ui, p, None, "Clear", false)
-                    .on_hover_text("New instances start with Minecraft's own defaults")
+                && widgets::button(ui, p, None, t!("play.clear"), false)
+                    .on_hover_text(t!("play.new_instances_start_with_minecrafts_own"))
                     .clicked()
             {
                 d.values.clear();
@@ -209,7 +226,7 @@ fn common_row(ui: &mut egui::Ui, p: &Palette, d: &mut Defaults, c: &game_default
     }
     let Some(value) = current.filter(|_| on) else {
         ui.label(
-            RichText::new(format!("game default ({})", c.kind.show(c.game_default)))
+            RichText::new(tf!("play.game_default", show = c.kind.show(c.game_default)))
                 .small()
                 .color(p.muted),
         );
@@ -220,7 +237,7 @@ fn common_row(ui: &mut egui::Ui, p: &Palette, d: &mut Defaults, c: &game_default
     let new = match c.kind {
         Kind::Toggle => {
             let mut b = value == "true";
-            let label = if b { "On" } else { "Off" };
+            let label = if b { "On" } else { t!("play.off") };
             ui.checkbox(&mut b, label);
             b.to_string()
         }
@@ -247,7 +264,7 @@ fn common_row(ui: &mut egui::Ui, p: &Palette, d: &mut Defaults, c: &game_default
             let mut n = num.round() as i64;
             ui.add(egui::Slider::new(&mut n, 0..=6).custom_formatter(|v, _| {
                 if v == 0.0 {
-                    "Auto".into()
+                    t!("play.auto").into()
                 } else {
                     format!("{v}")
                 }

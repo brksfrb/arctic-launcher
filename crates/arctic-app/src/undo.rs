@@ -11,7 +11,7 @@ use arctic_core::worlds::TrashedWorld;
 
 use crate::app::ArcticApp;
 use crate::toasts::Kind;
-
+use crate::{t, tf};
 /// What "Undo" on a toast puts back.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Undo {
@@ -56,11 +56,14 @@ impl ArcticApp {
                 trashed,
             } => {
                 match mods::restore(&index, &trashed) {
-                    Ok(()) => self.toasts.push(Kind::Success, "Mod put back", ""),
-                    Err(e) => {
-                        self.toasts
-                            .push(Kind::Error, "Couldn't put the mod back", e.to_string())
-                    }
+                    Ok(()) => self
+                        .toasts
+                        .push(Kind::Success, t!("tasks.mod_put_back"), ""),
+                    Err(e) => self.toasts.push(
+                        Kind::Error,
+                        t!("tasks.couldnt_put_the_mod_back"),
+                        e.to_string(),
+                    ),
                 }
                 self.refresh_mods(&instance_id);
             }
@@ -71,11 +74,14 @@ impl ArcticApp {
                 trashed,
             } => {
                 match packs::restore(kind, &game_dir, &trashed) {
-                    Ok(()) => self.toasts.push(Kind::Success, "Pack put back", ""),
-                    Err(e) => {
-                        self.toasts
-                            .push(Kind::Error, "Couldn't put the pack back", e.to_string())
-                    }
+                    Ok(()) => self
+                        .toasts
+                        .push(Kind::Success, t!("tasks.pack_put_back"), ""),
+                    Err(e) => self.toasts.push(
+                        Kind::Error,
+                        t!("tasks.couldnt_put_the_pack_back"),
+                        e.to_string(),
+                    ),
                 }
                 if let Some(instance) = self.instance_by_id(&instance_id).cloned() {
                     self.refresh_packs(&instance);
@@ -84,11 +90,14 @@ impl ArcticApp {
             Undo::Skin { name, variant, png } => {
                 let dir = self.skins_dir();
                 match self.skins.library.add(&dir, &name, &png, Some(variant)) {
-                    Ok(_) => self.toasts.push(Kind::Success, "Skin put back", ""),
-                    Err(e) => {
-                        self.toasts
-                            .push(Kind::Error, "Couldn't put the skin back", e.to_string())
-                    }
+                    Ok(_) => self
+                        .toasts
+                        .push(Kind::Success, t!("tasks.skin_put_back"), ""),
+                    Err(e) => self.toasts.push(
+                        Kind::Error,
+                        t!("tasks.couldnt_put_the_skin_back"),
+                        e.to_string(),
+                    ),
                 }
             }
             Undo::World {
@@ -108,11 +117,12 @@ impl ArcticApp {
                 match result {
                     Ok(_) => self
                         .toasts
-                        .push(Kind::Success, format!("{name} is back"), ""),
-                    Err(e) => {
-                        self.toasts
-                            .push(Kind::Error, "Couldn't put the server back", e.to_string())
-                    }
+                        .push(Kind::Success, tf!("tasks.is_back", name = name), ""),
+                    Err(e) => self.toasts.push(
+                        Kind::Error,
+                        t!("tasks.couldnt_put_the_server_back"),
+                        e.to_string(),
+                    ),
                 }
                 self.servers_changed();
             }

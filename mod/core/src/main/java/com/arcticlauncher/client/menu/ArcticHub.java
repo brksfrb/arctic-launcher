@@ -10,6 +10,7 @@ import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Page;
 import com.arcticlauncher.client.ui.Widget;
 
+import com.arcticlauncher.client.Lang;
 /**
  * What the one "Arctic" button opens (title screen, pause menu): Configure HUD as the big tile, then Mods,
  * Replays and Friends with a line about each, and Presets, Accounts and Menu Style as small icon tiles. Right
@@ -58,30 +59,30 @@ final class ArcticHub extends Page {
 		py = Math.max(24, height / 5);
 		int x = px + PAD;
 		int y = py + HEADER_H;
-		add(new Tile("hud", "Configure HUD", "Move, resize and style what is on screen", 0, true,
+		add(new Tile("hud", Lang.t("mods.configure_hud"), Lang.t("mods.move_resize_and_style_what_is_on_screen"), 0, true,
 				() -> ArcticClient.platform().openPage(new HudEditor()))).bounds(x, y, inner, HERO_H);
 		y += HERO_H + GAP;
 		int news = newFeatures();
-		String modsLine = news > 0 ? news + " new to try" : "Every feature and its settings";
+		String modsLine = news > 0 ? Lang.t("mods.new_to_try", news) : Lang.t("mods.every_feature_and_its_settings");
 		int half = (inner - GAP) / 2;
 		boolean replays = com.arcticlauncher.client.replay.Replays.canWatch();
-		add(new Tile("mods", "Mods", modsLine, news, false,
+		add(new Tile("mods", Lang.t("mods.mods"), modsLine, news, false,
 				() -> ArcticClient.platform().openPage(new ModsScreen()))).bounds(x, y, replays ? half : inner, TILE_H);
 		if (replays) {
-			add(new Tile("replay", "Replays", "Watch and export clips", 0, false,
+			add(new Tile("replay", Lang.t("mods.replays"), Lang.t("mods.watch_and_export_clips"), 0, false,
 					() -> ArcticClient.platform().openPage(Menus.page("replays")))).bounds(x + half + GAP, y, half, TILE_H);
 		}
 		y += TILE_H + GAP;
 		int chat = unreadChat();
-		add(new Tile("friends", "Friends", chat > 0 ? chat + " unread" : "Chat and play together", chat, false,
+		add(new Tile("friends", Lang.t("mods.friends"), chat > 0 ? Lang.t("mods.unread", chat) : Lang.t("mods.chat_and_play_together"), chat, false,
 				() -> ArcticClient.platform().openPage(Menus.page("friends")))).bounds(x, y, inner, TILE_H);
 		y += TILE_H + GAP;
 		int third = (inner - GAP * 2) / 3;
-		add(new Tile("palette", "Presets", null, 0, false,
+		add(new Tile("palette", Lang.t("mods.presets"), null, 0, false,
 				() -> ArcticClient.platform().openPage(new Presets()))).bounds(x, y, third, SMALL_H);
-		add(new Tile("account", "Accounts", null, 0, false,
+		add(new Tile("account", Lang.t("mods.accounts"), null, 0, false,
 				() -> ArcticClient.platform().openPage(Menus.page("account")))).bounds(x + third + GAP, y, third, SMALL_H);
-		add(new Tile("style", "Menu Style", null, 0, false,
+		add(new Tile("style", Lang.t("mods.menu_style"), null, 0, false,
 				() -> ArcticClient.platform().openPage(Menus.page("style")))).bounds(x + (third + GAP) * 2, y, inner - (third + GAP) * 2, SMALL_H);
 		y += SMALL_H + PAD;
 		bottom = y;

@@ -17,6 +17,7 @@ import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.client.util.Window;
 import org.lwjgl.opengl.GL11;
 
+import com.arcticlauncher.client.Lang;
 /**
  * The smooth font (Inter) on 1.8.9 - 1.12.2, which have no TrueType fonts: with Fancy on, Inter's
  * glyphs are drawn into one texture at the GUI scale (so each texel lands on one screen pixel),
@@ -372,7 +373,7 @@ public final class LegacySmoothFont {
 	private static Atlas make(int s, boolean aa) throws Exception {
 		Font font = font().deriveFont(SIZE * s);
 		FontRenderContext frc = new FontRenderContext(null, true, true);
-		java.awt.font.LineMetrics metrics = font.getLineMetrics("Agjpq[]|", frc);
+		java.awt.font.LineMetrics metrics = font.getLineMetrics("Agjpq[]|", frc); // i18n-ignore
 		linePixels = Math.max(9, Math.round(metrics.getHeight() / s));
 		List<Character> chars = new ArrayList<Character>();
 		List<Rectangle> boxes = new ArrayList<Rectangle>();

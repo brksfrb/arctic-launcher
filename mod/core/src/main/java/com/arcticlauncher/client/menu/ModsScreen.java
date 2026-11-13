@@ -13,6 +13,7 @@ import com.arcticlauncher.client.ui.Page;
 import com.arcticlauncher.client.ui.Scroll;
 import com.arcticlauncher.client.ui.TextField;
 
+import com.arcticlauncher.client.Lang;
 /**
  * The Mods screen: every Arctic feature as a card, with a search box and
  * category chips. Cards switch mods on and off and open their settings.
@@ -41,10 +42,10 @@ final class ModsScreen extends Page {
 	private static Mod.Category category = Mod.Category.ALL;
 	private static String query = "";
 	/** The HUD list's group chip (see ModCatalog.HUD_GROUPS). */
-	private static String hudGroup = "All";
+	private static String hudGroup = "mods.hud_group.all";
 	private static int scrollOffset;
 
-	private final TextField search = new TextField("Search mods", MAX_QUERY, TextField.ANY);
+	private final TextField search = new TextField(Lang.t("mods.search_mods"), MAX_QUERY, TextField.ANY);
 	/** Typing in the search box: rebuild the grid but keep typing. */
 	private boolean keepSearchFocus;
 	private Scroll scroll;
@@ -92,18 +93,18 @@ final class ModsScreen extends Page {
 		int styleX = hudX;
 		if (ArcticClient.platform().hasFeatures()) {
 			// The HUD layout, from anywhere (outside a world it shows sample values).
-			add(new Button("Edit HUD", () -> ArcticClient.platform().openPage(new HudEditor())))
+			add(new Button(Lang.t("mods.edit_hud"), () -> ArcticClient.platform().openPage(new HudEditor())))
 					.bounds(hudX, headerY, HUD_W, FIELD_H);
 			styleX = hudX - CHIP_GAP - STYLE_W;
 		}
 		if (styleX >= px + TabPage.PAD + TITLE_ROOM) {
-			add(new Button("Menu Style", () -> openMod(STYLE_ID))).bounds(styleX, headerY, STYLE_W, FIELD_H);
+			add(new Button(Lang.t("mods.menu_style"), () -> openMod(STYLE_ID))).bounds(styleX, headerY, STYLE_W, FIELD_H);
 			int accountsX = styleX - CHIP_GAP - ACCOUNTS_W;
 			if (accountsX >= px + TabPage.PAD + TITLE_ROOM) {
-				add(new Button("Accounts", () -> openMod(ACCOUNT_ID))).bounds(accountsX, headerY, ACCOUNTS_W, FIELD_H);
+				add(new Button(Lang.t("mods.accounts"), () -> openMod(ACCOUNT_ID))).bounds(accountsX, headerY, ACCOUNTS_W, FIELD_H);
 				int presetsX = accountsX - CHIP_GAP - 56;
 				if (presetsX >= px + TabPage.PAD + TITLE_ROOM && ArcticClient.platform().hasFeatures()) {
-					add(new Button("Presets", () -> ArcticClient.platform().openPage(new Presets()))).bounds(presetsX, headerY, 56, FIELD_H);
+					add(new Button(Lang.t("mods.presets"), () -> ArcticClient.platform().openPage(new Presets()))).bounds(presetsX, headerY, 56, FIELD_H);
 				}
 			}
 		}
@@ -117,13 +118,13 @@ final class ModsScreen extends Page {
 			if (cat == Mod.Category.GAMEPLAY) {
 				continue;
 			}
-			int cw = Math.max(34, 12 + chipWidth(cat.title));
+			int cw = Math.max(34, 12 + chipWidth(cat.title()));
 			// Too many for one row (a small window or a big GUI scale): the rest goes on the next.
 			if (cx > x && cx + cw > x + w) {
 				cx = x;
 				cy += CHIP_H + CHIP_GAP;
 			}
-			add(new Button(cat.title, () -> {
+			add(new Button(cat.title(), () -> {
 				category = cat;
 				scrollOffset = 0;
 				rebuild();
@@ -135,12 +136,12 @@ final class ModsScreen extends Page {
 			int gx = x;
 			int gy = cy + CHIP_H + 4;
 			for (final String group : ModCatalog.HUD_GROUPS) {
-				int gw = Math.max(34, 12 + chipWidth(group));
+				int gw = Math.max(34, 12 + chipWidth(Lang.t(group)));
 				if (gx > x && gx + gw > x + w) {
 					gx = x;
 					gy += CHIP_H + CHIP_GAP;
 				}
-				add(new Button(group, () -> {
+				add(new Button(Lang.t(group), () -> {
 					hudGroup = group;
 					scrollOffset = 0;
 					rebuild();
@@ -192,7 +193,7 @@ final class ModsScreen extends Page {
 			if (query.trim().isEmpty() && (styleButton && m.id.equals(STYLE_ID) || accountsButton && m.id.equals(ACCOUNT_ID))) {
 				continue;
 			}
-			if (category == Mod.Category.HUD && !"All".equals(hudGroup) && m.category == Mod.Category.HUD && !hudGroup.equals(m.group)) {
+			if (category == Mod.Category.HUD && !"mods.hud_group.all".equals(hudGroup) && m.category == Mod.Category.HUD && !hudGroup.equals(m.group)) {
 				continue;
 			}
 			if ((category == Mod.Category.ALL || m.category == category) && m.matches(query)) {
@@ -207,11 +208,11 @@ final class ModsScreen extends Page {
 		Skin.panel(g, s, px, py, px + pw, py + ph);
 		int x = px + TabPage.PAD;
 		g.texture("icon", x, py + (TabPage.HEADER - LOGO) / 2, LOGO, LOGO, 0, 0, 256, 256, 256, 256);
-		g.text("§lArctic", x + LOGO + 6, py + 10, s.text, false);
-		g.text("Mods", x + LOGO + 6, py + 22, s.muted, false);
+		g.text("§lArctic", x + LOGO + 6, py + 10, s.text, false); // i18n-ignore: the brand
+		g.text(Lang.t("mods.mods"), x + LOGO + 6, py + 22, s.muted, false);
 		g.fill(x, py + TabPage.HEADER, px + pw - TabPage.PAD, py + TabPage.HEADER + 1, s.border);
 		if (shown == 0) {
-			Draw.centered(g, "No mods match \"" + query + "\".", px + pw / 2, gridTop + 30, s.muted, false);
+			Draw.centered(g, Lang.t("mods.no_mods_match") + query + "\".", px + pw / 2, gridTop + 30, s.muted, false);
 		}
 	}
 

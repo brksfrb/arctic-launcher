@@ -85,7 +85,7 @@ public final class Hud {
 	 * can be switched without the Fancy setting changing), so measured widths and recorded drawings are made again.
 	 */
 	public static int fontKey(Gfx g) {
-		return g.textWidth("Wag a gaW") * 2 + (com.arcticlauncher.client.gfx.Draw.fancy ? 1 : 0);
+		return g.textWidth("Wag a gaW") * 2 + (com.arcticlauncher.client.gfx.Draw.fancy ? 1 : 0); // i18n-ignore: font measurement probe
 	}
 
 	/** Width and height (unscaled): worked out again only when what it shows, or its look, changed. */

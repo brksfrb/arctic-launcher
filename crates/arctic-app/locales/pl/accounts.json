@@ -1,0 +1,10 @@
+{
+  "accounts.accounts": "Konta",
+  "accounts.add_account": "Dodaj konto",
+  "accounts.click_an_account_to_play_as_it_sign_ins_stay": "Kliknij konto, aby na nim grać. Logowania zostają na tym komputerze, zaszyfrowane dla twojego użytkownika.",
+  "accounts.offline": "Offline",
+  "accounts.playing_as": "Grasz jako {username}",
+  "accounts.remove_account": "Usuń konto",
+  "accounts.sign_in_again": "Sign in again",
+  "accounts.signed_out": "Signed out"
+}

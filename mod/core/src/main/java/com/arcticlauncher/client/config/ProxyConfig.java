@@ -1,5 +1,7 @@
 package com.arcticlauncher.client.config;
 
+
+import com.arcticlauncher.client.Lang;
 /**
  * A SOCKS5 or HTTP proxy for server connections and Arctic's own web requests.
  * Set in the launcher (passed in the session file) or in game.
@@ -26,20 +28,20 @@ public final class ProxyConfig {
 	public String problem() {
 		String h = host == null ? "" : host.trim();
 		if (h.isEmpty()) {
-			return "Enter the proxy's address";
+			return Lang.t("hud.enter_the_proxys_address");
 		}
 		if (h.length() > MAX_HOST) {
-			return "The address is too long";
+			return Lang.t("hud.the_address_is_too_long");
 		}
 		for (int i = 0; i < h.length(); i++) {
 			char c = h.charAt(i);
 			boolean ok = c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '-' || c == ':';
 			if (!ok) {
-				return "That isn't a host name or IP address";
+				return Lang.t("hud.that_isnt_a_host_name_or_ip_address");
 			}
 		}
 		if (port <= 0 || port > MAX_PORT) {
-			return "Enter a port from 1 to 65535";
+			return Lang.t("hud.enter_a_port_from_1_to_65535");
 		}
 		return null;
 	}

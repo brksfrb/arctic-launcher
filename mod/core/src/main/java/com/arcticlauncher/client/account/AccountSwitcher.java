@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Switch accounts without restarting: asks the launcher that started the
  * game (over its local bridge) for the account list and for a fresh
@@ -94,9 +95,9 @@ public final class AccountSwitcher {
 				try {
 					JsonElement reply = GSON.fromJson(Http.getText(bridgeUrl + "/v1/accounts", secret), JsonElement.class);
 					accounts = parse(reply);
-					status = accounts.isEmpty() ? "The launcher has no accounts." : "";
+					status = accounts.isEmpty() ? Lang.t("social.the_launcher_has_no_accounts") : "";
 				} catch (Exception e) {
-					status = "Couldn't reach the launcher. Keep it open (or in the tray) to switch.";
+					status = Lang.t("social.couldnt_reach_the_launcher_keep_it_open_or");
 				} finally {
 					refreshing = false;
 				}
@@ -119,16 +120,16 @@ public final class AccountSwitcher {
 			return;
 		}
 		signingIn = true;
-		status = "Opening Microsoft sign-in in your browser...";
+		status = Lang.t("social.opening_microsoft_sign_in_in_your_browser");
 		background(new Runnable() {
 			@Override
 			public void run() {
 				try {
 					Http.send("POST", bridgeUrl + "/v1/accounts/add", secret, "{}");
-					status = "Finish signing in in your browser, then come back here.";
+					status = Lang.t("social.finish_signing_in_in_your_browser_then_come");
 					followSignIn();
 				} catch (Exception e) {
-					status = "Couldn't reach the launcher. Keep it open (or in the tray).";
+					status = Lang.t("social.couldnt_reach_the_launcher_keep_it_open_or_2");
 				} finally {
 					signingIn = false;
 				}
@@ -148,11 +149,11 @@ public final class AccountSwitcher {
 					JsonObject body = new JsonObject();
 					body.addProperty("name", name);
 					Http.send("POST", bridgeUrl + "/v1/accounts/offline", secret, body.toString());
-					status = "Added " + name + ".";
+					status = Lang.t("social.added") + name + ".";
 					lastRefresh = 0;
 					refresh();
 				} catch (Exception e) {
-					status = "Couldn't add it: a name is 1-16 letters, digits or _ (and the launcher must be open).";
+					status = Lang.t("social.couldnt_add_it_a_name_is_1_16_letters_digits");
 				}
 			}
 		});
@@ -173,17 +174,17 @@ public final class AccountSwitcher {
 			String state = text(o, "state");
 			if ("done".equals(state)) {
 				String name = text(o, "name");
-				status = "Added " + (name == null ? "the account" : name) + ". Click it to play as them.";
+				status = Lang.t("social.added") + (name == null ? Lang.t("social.the_account") : name) + Lang.t("social.click_it_to_play_as_them");
 				refreshNow();
 				return;
 			}
 			if ("failed".equals(state)) {
 				String why = text(o, "message");
-				status = "Sign-in didn't finish" + (why == null ? "." : ": " + why);
+				status = Lang.t("social.sign_in_didnt_finish") + (why == null ? "." : ": " + why);
 				return;
 			}
 		}
-		status = "Sign-in timed out. Try Add account again.";
+		status = Lang.t("social.sign_in_timed_out_try_add_account_again");
 	}
 
 	/** {@link #refresh()} on this thread. */
@@ -209,7 +210,7 @@ public final class AccountSwitcher {
 		if (platform.inWorld()) {
 			platform.runOnGameThread(platform::leaveWorld);
 		}
-		status = "Signing in as " + entry.name + "...";
+		status = Lang.t("social.signing_in_as") + entry.name + "...";
 		background(new Runnable() {
 			@Override
 			public void run() {
@@ -223,14 +224,14 @@ public final class AccountSwitcher {
 							break;
 						}
 						if (System.currentTimeMillis() > until) {
-							status = "Not confirmed in Arctic Launcher. Pick " + entry.name + " again to retry.";
+							status = Lang.t("social.not_confirmed_in_arctic_launcher_pick", entry.name);
 							return;
 						}
-						status = "Confirm the switch to " + entry.name + " in Arctic Launcher...";
+						status = Lang.t("social.confirm_the_switch_to", entry.name);
 					}
 					apply(reply, rejoin ? server : null);
 				} catch (Exception e) {
-					status = "Couldn't switch: " + e.getMessage();
+					status = Lang.t("social.couldnt_switch") + e.getMessage();
 				} finally {
 					busy = false;
 				}
@@ -271,7 +272,7 @@ public final class AccountSwitcher {
 			if (!validName(name) || uuid == null || token == null || token.isEmpty()) {
 				return false;
 			}
-			final String[] problem = {"timed out"};
+			final String[] problem = {Lang.t("social.timed_out")};
 			final java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
 			platform.runOnGameThread(new Runnable() {
 				@Override
@@ -305,7 +306,7 @@ public final class AccountSwitcher {
 		final boolean microsoft = "msa".equals(text(o, "user_type"));
 		final String arcticToken = text(o, "arctic_token");
 		if (!validName(name) || uuid == null || token == null || token.isEmpty()) {
-			status = "The launcher sent an unusable session.";
+			status = Lang.t("social.the_launcher_sent_an_unusable_session");
 			return;
 		}
 		platform.runOnGameThread(new Runnable() {
@@ -313,13 +314,13 @@ public final class AccountSwitcher {
 			public void run() {
 				String problem = platform.switchAccount(name, uuid, token, xuid, microsoft);
 				if (problem != null) {
-					status = "Couldn't switch: " + problem;
-					com.arcticlauncher.client.notice.Notices.post("Couldn't switch accounts", problem);
+					status = Lang.t("social.couldnt_switch") + problem;
+					com.arcticlauncher.client.notice.Notices.post(Lang.t("social.couldnt_switch_accounts"), problem);
 					return;
 				}
-				com.arcticlauncher.client.notice.Notices.post("Playing as " + name, rejoin != null ? "Joining " + rejoin + " again" : "");
+				com.arcticlauncher.client.notice.Notices.post(Lang.t("social.playing_as") + name, rejoin != null ? Lang.t("social.joining_again", rejoin) : "");
 				ArcticClient.looks().useSession(arcticToken);
-				status = "Playing as " + name + ".";
+				status = Lang.t("social.playing_as") + name + ".";
 				if (rejoin != null) {
 					platform.connectTo(rejoin);
 				}

@@ -13,20 +13,20 @@ use crate::tasks::Outcome;
 use crate::theme::Palette;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 impl ArcticApp {
     pub(crate) fn video_export_section(&mut self, ui: &mut egui::Ui, p: &Palette) {
         ui.label(
-            RichText::new(
-                "Replays are exported to video by FFmpeg. Arctic uses the one you pick here, \
-                 its own copy, or one found on your PATH.",
-            )
-            .small()
-            .color(p.muted),
+            RichText::new(t!("tasks.replays_are_exported_to_video_by_ffmpeg"))
+                .small()
+                .color(p.muted),
         );
         ui.add_space(6.0);
         if crate::video_encoder::available() {
-            ui.label(RichText::new("Video export: built into this Arctic build.").color(p.accent));
+            ui.label(
+                RichText::new(t!("tasks.video_export_built_into_this_arctic_build"))
+                    .color(p.accent),
+            );
             return;
         }
         let chosen = ffmpeg::chosen(&self.dirs);
@@ -34,7 +34,7 @@ impl ArcticApp {
         let (running, progress, error) = self.bridge.ffmpeg_download();
         match &found {
             Some(path) => {
-                ui.label(RichText::new("FFmpeg: ready").color(p.accent));
+                ui.label(RichText::new(t!("tasks.ffmpeg_ready")).color(p.accent));
                 ui.label(
                     RichText::new(path.display().to_string())
                         .small()
@@ -44,7 +44,7 @@ impl ArcticApp {
             None if running => {
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    ui.label(RichText::new("Downloading FFmpeg…").color(p.muted));
+                    ui.label(RichText::new(t!("tasks.downloading_ffmpeg")).color(p.muted));
                 });
                 ui.add(egui::ProgressBar::new(progress as f32).desired_width(320.0));
                 ui.ctx()
@@ -52,12 +52,12 @@ impl ArcticApp {
             }
             None => {
                 ui.label(
-                    RichText::new("FFmpeg: not found. Videos can't be exported yet.")
+                    RichText::new(t!("tasks.ffmpeg_not_found_videos_cant_be_exported_yet"))
                         .color(p.error),
                 );
                 if let Some(e) = &error {
                     ui.label(
-                        RichText::new(format!("The last download failed: {e}"))
+                        RichText::new(tf!("tasks.the_last_download_failed", e = e))
                             .small()
                             .color(p.error),
                     );
@@ -66,15 +66,17 @@ impl ArcticApp {
                     let hint = ffmpeg::install_hint();
                     ui.horizontal_wrapped(|ui| {
                         ui.label(
-                            RichText::new("Install it with your package manager:")
+                            RichText::new(t!("tasks.install_it_with_your_package_manager"))
                                 .small()
                                 .color(p.muted),
                         );
                         ui.label(RichText::new(hint).small().monospace().color(p.text));
-                        if widgets::icon_button(ui, p, Icon::Copy, "Copy command").clicked() {
+                        if widgets::icon_button(ui, p, Icon::Copy, t!("tasks.copy_command"))
+                            .clicked()
+                        {
                             ui.ctx()
                                 .copy_text(hint.split(" · ").next().unwrap_or(hint).to_owned());
-                            self.toasts.push(Kind::Info, "Command copied", "");
+                            self.toasts.push(Kind::Info, t!("tasks.command_copied"), "");
                         }
                     });
                 }
@@ -85,30 +87,37 @@ impl ArcticApp {
             if found.is_none()
                 && !running
                 && ffmpeg::can_download()
-                && widgets::button(ui, p, Some(Icon::Import), "Install FFmpeg", true)
-                    .on_hover_text(
-                        "Downloads gyan.dev's FFmpeg build, checked against its published SHA-256",
-                    )
+                && widgets::button(ui, p, Some(Icon::Import), t!("tasks.install_ffmpeg"), true)
+                    .on_hover_text(t!("tasks.downloads_gyan_devs_ffmpeg_build_checked"))
                     .clicked()
             {
                 self.bridge.start_ffmpeg_download();
             }
-            if widgets::button(ui, p, Some(Icon::Folder), "Choose ffmpeg…", found.is_none())
-                .on_hover_text("Point Arctic at an FFmpeg you already have")
-                .clicked()
+            if widgets::button(
+                ui,
+                p,
+                Some(Icon::Folder),
+                t!("tasks.choose_ffmpeg"),
+                found.is_none(),
+            )
+            .on_hover_text(t!("tasks.point_arctic_at_an_ffmpeg_you_already_have"))
+            .clicked()
             {
                 self.tasks.ffmpeg_pick();
             }
-            if chosen.is_some() && widgets::button(ui, p, None, "Forget my choice", false).clicked()
+            if chosen.is_some()
+                && widgets::button(ui, p, None, t!("tasks.forget_my_choice"), false).clicked()
             {
                 match ffmpeg::set_chosen(&self.dirs, None) {
-                    Ok(()) => {
+                    Ok(()) => self.toasts.push(
+                        Kind::Info,
+                        t!("tasks.arctic_looks_for_ffmpeg_itself_again"),
+                        "",
+                    ),
+                    Err(e) => {
                         self.toasts
-                            .push(Kind::Info, "Arctic looks for FFmpeg itself again", "")
+                            .push(Kind::Error, t!("tasks.couldnt_forget_it"), e.to_string())
                     }
-                    Err(e) => self
-                        .toasts
-                        .push(Kind::Error, "Couldn't forget it", e.to_string()),
                 }
             }
         });
@@ -120,15 +129,18 @@ impl ArcticApp {
             Ok(path) => match ffmpeg::set_chosen(&self.dirs, Some(&path)) {
                 Ok(()) => self.toasts.push(
                     Kind::Success,
-                    "FFmpeg ready",
-                    format!("Videos are exported with {}.", path.display()),
+                    t!("tasks.ffmpeg_ready_2"),
+                    tf!("tasks.videos_are_exported_with", path = path.display()),
                 ),
-                Err(e) => {
-                    self.toasts
-                        .push(Kind::Error, "Couldn't remember that FFmpeg", e.to_string())
-                }
+                Err(e) => self.toasts.push(
+                    Kind::Error,
+                    t!("tasks.couldnt_remember_that_ffmpeg"),
+                    e.to_string(),
+                ),
             },
-            Err(e) => self.toasts.push(Kind::Error, "That isn't FFmpeg", e),
+            Err(e) => self
+                .toasts
+                .push(Kind::Error, t!("tasks.that_isnt_ffmpeg"), e),
         }
     }
 }

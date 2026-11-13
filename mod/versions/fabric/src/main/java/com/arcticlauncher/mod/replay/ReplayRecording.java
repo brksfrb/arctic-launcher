@@ -15,6 +15,7 @@ import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.server.MinecraftServer;
 
+import com.arcticlauncher.client.Lang;
 /**
  * The recording side on this version: every connection that logs in
  * records what it receives, and each tick notes where you are and what
@@ -43,7 +44,7 @@ public final class ReplayRecording {
 			//#endif
 		} else {
 			SocketAddress address = connection.getRemoteAddress();
-			name = address instanceof InetSocketAddress ? ((InetSocketAddress) address).getHostString() : "Server";
+			name = address instanceof InetSocketAddress ? ((InetSocketAddress) address).getHostString() : Lang.t("platform.server");
 		}
 		return recorder.begin(name, singleplayer, ReplayCodec.protocolVersion(), ReplayCompat.versionName());
 	}
@@ -62,7 +63,7 @@ public final class ReplayRecording {
 			com.arcticlauncher.mod.ArcticMod.LOG.warn("replay: could not encode handover {} in phase {}; recording stopped",
 					ReplayCodec.name(packet), ReplayCodec.phaseName(protocol));
 			take.end();
-			com.arcticlauncher.client.notice.Notices.post("Replay", "Recording stopped because a protocol handover could not be saved.");
+			com.arcticlauncher.client.notice.Notices.post(Lang.t("platform.replay"), Lang.t("platform.recording_stopped_because_a_protocol"));
 			return;
 		}
 		for (byte[] bytes : encoded) {

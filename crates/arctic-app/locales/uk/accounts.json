@@ -1,0 +1,10 @@
+{
+  "accounts.accounts": "Облікові записи",
+  "accounts.add_account": "Додати обліковий запис",
+  "accounts.click_an_account_to_play_as_it_sign_ins_stay": "Натисни на обліковий запис, щоб грати від його імені. Дані входу лишаються на цьому ПК, зашифровані для твого користувача.",
+  "accounts.offline": "Офлайн",
+  "accounts.playing_as": "Ти граєш як {username}",
+  "accounts.remove_account": "Прибрати обліковий запис",
+  "accounts.sign_in_again": "Sign in again",
+  "accounts.signed_out": "Signed out"
+}

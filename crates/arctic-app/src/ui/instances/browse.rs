@@ -11,15 +11,15 @@ use crate::app::ArcticApp;
 use crate::art::icons::Icon;
 use crate::theme;
 use crate::widgets;
-
+use crate::{t, tf};
 const PAGE_SIZE: usize = 20;
 /// Seconds after the last keystroke before searching.
 const SEARCH_DELAY: f64 = 0.35;
 pub(super) const SORTS: [(SortBy, &str); 4] = [
-    (SortBy::Relevance, "Relevance"),
-    (SortBy::Downloads, "Most downloads"),
-    (SortBy::Updated, "Recently updated"),
-    (SortBy::Newest, "Newest"),
+    (SortBy::Relevance, "instances.sort_by.relevance"),
+    (SortBy::Downloads, "instances.sort_by.most_downloads"),
+    (SortBy::Updated, "instances.sort_by.recently_updated"),
+    (SortBy::Newest, "instances.sort_by.newest"),
 ];
 
 impl ArcticApp {
@@ -37,7 +37,7 @@ impl ArcticApp {
         crate::widgets::row(ui, |ui| {
             let field = ui.add(
                 widgets::text_field(&mut self.inst.search.text)
-                    .hint_text("Search mods on Modrinth")
+                    .hint_text(t!("instances.search_mods_on_modrinth"))
                     .desired_width(360.0),
             );
             let now = ui.input(|i| i.time);
@@ -59,7 +59,7 @@ impl ArcticApp {
             let before = self.inst.search.sort;
             sort_combo(ui, "mod_sort", &mut self.inst.search.sort);
             search |= self.inst.search.sort != before;
-            search |= widgets::button(ui, p, None, "Search", true).clicked();
+            search |= widgets::button(ui, p, None, t!("instances.search"), true).clicked();
         });
         if search {
             self.inst.search.typed_at = None;
@@ -67,10 +67,10 @@ impl ArcticApp {
         }
         ui.add_space(4.0);
         ui.label(
-            RichText::new(format!(
-                "Showing {} mods for Minecraft {}",
-                instance.loader.label(),
-                instance.version.as_deref().unwrap_or("?")
+            RichText::new(tf!(
+                "instances.showing_mods_for_minecraft",
+                label = instance.loader.label(),
+                unwrap_or = instance.version.as_deref().unwrap_or("?")
             ))
             .small()
             .color(p.muted),
@@ -105,16 +105,16 @@ impl ArcticApp {
             None => {
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    ui.label(RichText::new("Searching Modrinth…").color(p.muted));
+                    ui.label(RichText::new(t!("instances.searching_modrinth")).color(p.muted));
                 });
                 return;
             }
             Some(Err(e)) => {
-                ui.label(RichText::new(format!("Search failed: {e}")).color(p.error));
+                ui.label(RichText::new(tf!("instances.search_failed", e = e)).color(p.error));
                 return;
             }
             Some(Ok(page)) if page.hits.is_empty() => {
-                ui.label(RichText::new("No mods found.").color(p.muted));
+                ui.label(RichText::new(t!("instances.no_mods_found")).color(p.muted));
                 return;
             }
             Some(Ok(page)) => page.hits.clone(),
@@ -157,7 +157,7 @@ impl ArcticApp {
                 Some((progress.bytes_done as f32 / progress.bytes_total as f32).clamp(0.0, 1.0)),
             ),
             Some(progress) => (progress.stage.clone(), None),
-            None => ("Starting the download".to_owned(), None),
+            None => (t!("instances.starting_the_download").to_owned(), None),
         };
         let (rect, _) =
             ui.allocate_exact_size(egui::vec2(ui.available_width(), 20.0), egui::Sense::hover());
@@ -205,7 +205,7 @@ impl ArcticApp {
                 .scope(|ui| mod_icon(ui, self, hit.icon_url.as_deref()))
                 .response
                 .interact(egui::Sense::click())
-                .on_hover_text("Preview project")
+                .on_hover_text(t!("instances.preview_project"))
                 .clicked()
             {
                 self.open_project_preview(ui.ctx(), hit.clone(), None);
@@ -218,13 +218,13 @@ impl ArcticApp {
                             egui::Label::new(RichText::new(&hit.title).strong().color(p.text))
                                 .sense(egui::Sense::click()),
                         )
-                        .on_hover_text("Preview project")
+                        .on_hover_text(t!("instances.preview_project"))
                         .clicked()
                     {
                         self.open_project_preview(ui.ctx(), hit.clone(), None);
                     }
                     ui.label(
-                        RichText::new(format!("by {}", hit.author))
+                        RichText::new(tf!("common.by_author", author = hit.author))
                             .small()
                             .color(p.muted),
                     );
@@ -239,7 +239,7 @@ impl ArcticApp {
                     self.open_project_preview(ui.ctx(), hit.clone(), None);
                 }
                 ui.label(
-                    RichText::new(format!("{} downloads", compact(hit.downloads)))
+                    RichText::new(tf!("instances.downloads", compact = compact(hit.downloads)))
                         .small()
                         .color(p.muted),
                 );
@@ -247,10 +247,12 @@ impl ArcticApp {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let busy = self.inst.installing.contains(&hit.project_id);
                 if installed {
-                    ui.label(RichText::new("Installed").color(p.accent));
+                    ui.label(RichText::new(t!("instances.installed")).color(p.accent));
                 } else if busy {
                     ui.spinner();
-                } else if widgets::button(ui, p, Some(Icon::Plus), "Install", true).clicked() {
+                } else if widgets::button(ui, p, Some(Icon::Plus), t!("instances.install"), true)
+                    .clicked()
+                {
                     self.inst.installing.insert(hit.project_id.clone());
                     self.tasks
                         .mod_install(instance.clone(), hit.project_id.clone(), None);
@@ -270,7 +272,7 @@ pub(super) fn sort_combo(ui: &mut egui::Ui, id: &str, sort: &mut SortBy) {
             .selected_text(sort_label(*sort))
             .show_ui(ui, |ui| {
                 for (value, name) in SORTS {
-                    ui.selectable_value(sort, value, name);
+                    ui.selectable_value(sort, value, t!(name));
                 }
             });
     });
@@ -278,7 +280,7 @@ pub(super) fn sort_combo(ui: &mut egui::Ui, id: &str, sort: &mut SortBy) {
 
 /// Label for a sort order.
 pub(super) fn sort_label(sort: SortBy) -> &'static str {
-    SORTS.iter().find(|s| s.0 == sort).map_or("", |s| s.1)
+    SORTS.iter().find(|s| s.0 == sort).map_or("", |s| t!(s.1))
 }
 
 /// 1234567 → "1.2M".

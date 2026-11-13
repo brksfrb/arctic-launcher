@@ -8,6 +8,7 @@ import com.arcticlauncher.client.feature.SoundRules;
 import com.arcticlauncher.client.ui.Button;
 import com.arcticlauncher.client.ui.TextField;
 
+import com.arcticlauncher.client.Lang;
 /** The Sound Changer page: a piece of a sound's id and the volume it plays at. */
 final class SoundForms {
 	private static final int FIELD_H = 20;
@@ -19,9 +20,9 @@ final class SoundForms {
 
 	static void build(final Host host, Form f) {
 		final List<SoundRule> list = ArcticClient.config().soundRules;
-		f.section("Sounds");
-		f.note("Part of the sound's name, then its volume in percent (0 = silent). Names look like entity.player.hurt,");
-		f.note("block.grass.step, weather.rain, entity.experience_orb.pickup. The first rule that fits is used.");
+		f.section(Lang.t("mods.sounds"));
+		f.note(Lang.t("mods.part_of_the_sounds_name_then_its_volume_in"));
+		f.note(Lang.t("mods.block_grass_step_weather_rain_entity"));
 		f.gap(4);
 		for (final SoundRule r : list) {
 			int top = f.row(FIELD_H + GAP);
@@ -45,7 +46,7 @@ final class SoundForms {
 		}
 		if (list.size() < SoundRules.MAX) {
 			int top = f.row(FIELD_H + GAP);
-			f.put(new Button("Add a sound", () -> {
+			f.put(new Button(Lang.t("mods.add_a_sound"), () -> {
 				SoundRule r = new SoundRule();
 				r.percent = 0;
 				list.add(r);

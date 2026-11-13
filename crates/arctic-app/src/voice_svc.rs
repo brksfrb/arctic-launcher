@@ -17,7 +17,6 @@ use arctic_voice::engine::{Engine, PeerId};
 use arctic_voice::packet::Packet;
 use arctic_voice::spatial::Place;
 use arctic_voice::svc::{self, From, Hello, Incoming, Outgoing, Sound};
-
 /// Resend the handshake this often until the server answers.
 const RETRY: Duration = Duration::from_secs(1);
 /// How long a read waits (so the thread notices it should stop).
@@ -161,8 +160,8 @@ impl SvcSide {
     }
 
     fn open(&self, game: &GameSvc, engine: &Arc<Engine>) -> Result<Arc<Link>, String> {
-        let bytes = hex_decode(&game.secret).ok_or("bad secret")?;
-        let hello = Hello::parse(&bytes).ok_or("unreadable secret")?;
+        let bytes = hex_decode(&game.secret).ok_or("bad secret")?; // i18n-ignore
+        let hello = Hello::parse(&bytes).ok_or("unreadable secret")?; // i18n-ignore
         let (host, port) = hello.address(&game.host);
         let addr = (host.as_str(), port)
             .to_socket_addrs()
