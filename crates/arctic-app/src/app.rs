@@ -1536,7 +1536,8 @@ impl eframe::App for ArcticApp {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.cancel_login();
         if self.settings.exit_games_with_launcher {
-            for run in self.runs.active() {
+            for run in &mut self.runs.list {
+                run.force_close();
                 if let Some(game) = run.game() {
                     game.terminate();
                 }
