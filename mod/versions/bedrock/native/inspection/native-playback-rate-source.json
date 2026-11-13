@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "evidence": "Source reads/edits and cached installed native code decoded as data only; no builds, tests, syntax checks, helper/project/game execution, process inspection, clock commands or Bedrock launch",
+  "reference": {
+    "productVersion": "1.26.5203.0",
+    "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+    "routine": "Timer::advanceTime 0x47323b0..0x4732585; existing hook installation follows exact-image validation",
+    "multiplier": "Loads timer+0xc at 0x4732516 and 0x473253b. At 0x4732545..0x473254d it multiplies this field by the engine's seconds delta and TPS, then adds the retained timer+0x10 fraction. This routine contains no write to timer+0xc.",
+    "timeBookkeeping": "The original updates clock timestamps and smoothing before its tick calculation. Replacing the preferred argument with a playback rate would not implement the multiplier path.",
+    "limit": "0x4732569..0x4732575 caps an output count of 11 or more to 10 ticks; the new path preserves this native behavior and does not claim hitch/drop equivalence to Java"
+  },
+  "port": {
+    "request": "Schema-1 native clock op rate with finite multiplier 0..16, partial zero and expiring leaseMs 500..30000. realTimer optionally includes the separately bound timer. Other operations reject a rate field.",
+    "scopedApplication": "Before the original timer call, validate the existing live session/timer binding, active lease, no held export mode, finite native multiplier in 0..16 and inactive native stepping branch. Temporarily multiply the original game multiplier by the requested rate. Call the original once, check the selected multiplier, restore original bytes through a scope guard, then compare the restored bytes.",
+    "identity": "Application tags carry session, command sequence and rate bits. Only matching tags clear pending simulation/real-timer applications, including the aliased-timer case. Acknowledgement waits for every selected timer to apply and restore; it is not a completed-world-tick or presented-frame receipt.",
+    "release": "Resume clears both rate and held modes. Lease expiry, stale/rebound timer ownership, failed application or pending-command timeout releases control. A failed restoration poisons further control until a new binding/session; export preflight also rejects that flag.",
+    "exportSeparation": "Rate rejects held stepping; freeze rejects an active rate. Indexed export preflight requires playbackRate null. Existing exact tick/sample/renew commands retain no rate field and do not inherit normal-playback scaling.",
+    "transport": "NativeClockControl carries an optional rate; playback_clock_control is a convenience API. The existing native-clock CLI JSON path can submit and await rate commands. PlaybackClock additionally coordinates the CLI replay loop after a dispatch marker correlates one helper viewer with this native world; see replay-playback-clock-coordinator-source.json. No source edit starts a process or submits an operation.",
+    "fixtureMaintenance": "The existing Request fixture sets rate None; no new test or execution"
+  },
+  "remaining": [
+    "Runtime validation of launcher/CLI worker lifecycle, atomic transitions and measured helper/native clock alignment",
+    "Native engine tick-cap, animation, integrated-server and packet-simulation fidelity",
+    "Actual application/restoration and error-path validation against the installed client",
+    "Live native cosmetics, replay camera and deterministic video verification"
+  ],
+  "verified": {"built": false, "tested": false, "rateApplied": false, "restoration": false, "normalPlaybackSynchronized": false, "liveGame": false, "deterministicVideo": false, "fullParity": false}
+}

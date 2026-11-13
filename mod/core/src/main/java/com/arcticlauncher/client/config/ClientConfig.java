@@ -19,6 +19,8 @@ public final class ClientConfig {
 
 	/** Show Arctic looks (skins and capes) at all. */
 	public boolean showCosmetics = true;
+	/** Opt-in Bedrock body/cape/emote rendering while native parity remains unverified. */
+	public boolean bedrockNativeCosmetics;
 	/** Animated capes stay on their first frame on your screen (everyone's, not just yours). */
 	public boolean reduceCapeMotion;
 	/** Ids of animated preset capes you turned "Animate" off for (their still image is worn). */

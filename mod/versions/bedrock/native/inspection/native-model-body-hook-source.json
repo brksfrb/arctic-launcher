@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "purpose": "Exact-family seven-pointer body/cape/emote draw hook binding and caller-chain admission; source only",
+  "nativeEvidence": "static-body-model-layout-1.26.60.5.json",
+  "failedNormalizedMatcher": "static-body-model-entry-1.26.60.5.json",
+  "source": [
+    "../src/native_model_body_profile.rs",
+    "../src/native_body.rs",
+    "../src/native_scene_layout.rs",
+    "../src/world_hooks.rs",
+    "1.26.5203.0.json"
+  ],
+  "contract": {
+    "sevenNativePointerArgumentsAndVoidReturnPreserved": true,
+    "nativeOriginalInvokedExactlyOnce": true,
+    "firstArgumentNativeModelStrongBorrowSuppliedByCaller": true,
+    "fifthGeometrySixthTexturesSeventhMersStackPointersPreserved": true,
+    "exactBodyAndControllerFunctionsHashedBeforeHooks": true,
+    "rootDrawAndControllerCallsitesRechecked": true,
+    "callEdgesMustLieWithinTheirDeclaredFunctions": true,
+    "all26BodyPrefixBytesChecked": true,
+    "bodyBindingValidatedBeforeDependentHooks": true,
+    "bindingCachedBeforeHookPatching": true,
+    "actualEnablementRequiredForInstalledStatus": true,
+    "callbackForwardsWithoutObservationsDuringPartialEnablement": true,
+    "geometryNameHierarchyAndPartialUseSharedSceneFields": true,
+    "remainingReaderGuardsRemoved": false,
+    "sceneGpuLeaseCreated": false
+  },
+  "sourceImplemented": true,
+  "currentCandidateActivated": false,
+  "remainingReaderMigrationComplete": false,
+  "runtimeVerified": false,
+  "fullParity": false,
+  "remaining": [
+    "Current skin/equipment/expression reader migration",
+    "Native mesh/skin submission encoder migration",
+    "Actual native feature-phase/resource/descriptor ownership and insertion",
+    "Java-equivalent live material inputs",
+    "Deterministic replay rendering/video export",
+    "Runtime parity verification when authorized"
+  ],
+  "operations": {
+    "cachedBytesAndSourceReadAsData": true,
+    "gameCodeExecuted": false,
+    "processInspected": false,
+    "gameStarted": false,
+    "built": false,
+    "tested": false
+  }
+}

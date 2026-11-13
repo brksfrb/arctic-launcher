@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.5203.0",
+  "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "evidence": "Cached executable text/pdata decoded as data; current Rust sources read/edited only; no target code loaded/executed, compilation, tests, GPU or process operations",
+  "nativeRoutine": {
+    "range": ["0xdfa9ef0", "0xdfaa6de"],
+    "symbolName": "Unresolved; instruction behavior establishes framebuffer binding, not an SDK symbol",
+    "arguments": ["RCX native command context", "RDX renderer backend", "R8D requested framebuffer bits (low word used as handle)", "R9D flag bits (low byte retained)"],
+    "forwarding": "All four observed register arguments forwarded unchanged; no intended return use found at the three direct cached callers",
+    "directCallers": ["0xdfa1cb4", "0xdfab321", "0xdfb6922"],
+    "backendCaller": "0xdfab310 loads context from backend stack+80; 0xdfab317 loads renderer from saved RDX at stack+d8; Frame was saved from R8 at stack+168",
+    "defaultTarget": "Requested framebuffer low word ffff selects one RTV; native stores handle values at context+0/+8 and pointers to those values at +10/+18",
+    "registryTarget": "Renderer+c97690+handle*68 contains framebuffer entry; its byte+32 supplies RTV count",
+    "nativeApiCalls": [
+      {"vtableLoad":"0xdfaa26a", "slotBytes":"0x170", "dispatch":"0xdfaa284", "arguments":"context+30 list, count 1, context base RTV pointer, contiguous=true, context+8 DSV pointer"},
+      {"vtableLoad":"0xdfaa68f", "slotBytes":"0x170", "dispatch":"0xdfaa6a1", "arguments":"context+30 list, entry+32 count, context+10 RTV pointer, contiguous=true, context+18 DSV pointer"}
+    ],
+    "epilogue": "0xdfaa6a7 stores requested framebuffer low word at context+20; 0xdfaa6ac stores flag low byte at context+2c",
+    "contextQueueJoin": "The public list at context+30 matches the same offset used by the existing native used/free queue-context observer; this is structural correlation, not an exclusive resource lease"
+  },
+  "sourceObserver": {
+    "module": "native_framebuffer",
+    "install": "Pinned framebuffer routine hooked from render_bridge after full executable profile validation; entry/callsite/epilogue instruction guards also checked",
+    "mode": "Observe only while native body mode or explicit native probe is enabled",
+    "backendJoin": "native_batch retains the original backend renderer argument and returns a frame key only for that same renderer, with no context overflow and unchanged native frame stamp",
+    "nativeBindingCallback": "depth_tracker.bind calls the observer before forwarding the original public OMSetRenderTargets; private Arctic command scopes are excluded",
+    "bounds": "Eight nested requests, eight RTVs, fixed context/header copies; unsupported nested requests mask their parent",
+    "contiguousDescriptors": "Read one RTV base handle and query the actual live list's device for its RTV stride; never read a fictitious count-sized handle array for contiguous=true",
+    "checks": ["same actual list at context+30", "actual RTV/DSV argument pointers match context+10/+18", "count matches default/registry selection", "nonzero active handles", "one binding per routine invocation", "header/list/descriptor values remain unchanged", "native handle/flag epilogue matches request", "native frame and registry count remain stable"],
+    "noBinding": "A call that emits no public bind is counted separately; no cached previous bind is borrowed",
+    "output": "Bounded counters and throttled scalar samples at nativeFramebuffer status; no game addresses serialized",
+    "graphicsStateWrites": false,
+    "newQueueExecution": false,
+    "worldScopeAuthorization": false,
+    "exclusiveTargetLease": false
+  },
+  "rtvCopies": {
+    "implementation": "native_scene_target.copy_views called from existing CopyDescriptors/CopyDescriptorsSimple hooks under the observer's private-command exclusion",
+    "knownRanges": "Use actual device stride and the existing bounded descriptor-range expansion, including null sizes meaning one descriptor per range; snapshot source identities before writing destinations",
+    "bounds": "At most 256 copied descriptors and 4096 retained handle mappings; no GPU resources retained",
+    "unknownOrMalformed": "Invalidate mappings and pending target witnesses when a source/range is unknown, invalid or mismatched",
+    "knownCopies": "Preserve identity and existing issued-draw association rather than unconditionally erasing all mappings on every valid copy",
+    "status": "copiedViewDescriptors counts propagated metadata only, not GPU copies or rendered pixels"
+  },
+  "remaining": ["Complete resource/view/state mapping beyond the new transition-correlated texture-slot reader, including default swapchain and no-transition paths", "Obtain an exclusive synchronized native target lease or a correctly restored in-list insertion point", "Restore native graphics state for any borrowed-list insertion", "Join authoritative world scope, shader inputs and geometry groups", "Connect native draw/presentation and validate actual installed-game behavior"],
+  "verified": {"built":false, "tested":false, "hookExecuted":false, "nativeBindingObservedLive":false, "targetLeaseVerified":false, "gpuWorldRendered":false, "deterministicVideo":false, "fullParity":false}
+}

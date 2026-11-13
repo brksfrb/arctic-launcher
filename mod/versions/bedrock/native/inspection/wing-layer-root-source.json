@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "evidence": "Source reads, edits and manual review; cached Java class bytes decoded as data only. No Java loading, builds, tests, syntax checks, project/game/renderer/JNI/shader/GPU execution, process inspection, native commands or exports. Runtime parity remains unverified by user instruction.",
+  "reference": {
+    "java": "26.2",
+    "clientJarSha256": "40896ee9f1e2bec3c934daac7e93d41e9e3d9c2f8ae0ca366d52ffbfd1afa290",
+    "layer": "The complete WingsLayer.submit(HumanoidRenderState) selects its own adult/baby ElytraModel (0x2c..0x3f), pushes the entity pose (0x42), translates (0,0,0.125f) (0x45..0x4a) and passes that model/pose to EquipmentLayerRenderer.renderLayers (0x5f..0x70). It does not apply the parent player's BODY transform, copy its part pose or call translateAndRotate on it.",
+    "parts": "ElytraModel.createLayer adds left_wing then right_wing to the root PartDefinition (0x17..0x3b, 0x40..0x66). Their local offsets are (+5,0,0) and (-5,0,0), with one-pixel deformation, not a two-pixel local Z offset. PartDefinition's default HashMap bake and ModelPart child traversal are documented in player-part-traversal-source.json.",
+    "animation": "ElytraModel.setupAnim calls EntityModel.setupAnim, sets leftWing.y to 3 when crouching or 0 otherwise (0x09..0x16), copies elytraRotX/Y/Z and mirrors right Y/Z rotations. It uses independent wing-state inputs rather than the player model's emote-posed body matrix.",
+    "nativeObservation": "native_elytra.observe accepts only selected geometry.elytra with body/left_wing/right_wing and publishes completed bone-to-model matrices, including controller posture/positive scale. native_body's emote target path separately requires six-part standard skin geometry. Those copied independent wing matrices do not need a humanoid emote torso delta."
+  },
+  "port": {
+    "javaMotion": "JavaWingModel.layerRoot applies the literal layer translation before part transforms. AvatarRenderer begins the model with that same shifted root and calls emitLayer, whose parts use local Z=0. Standalone emit overloads still accept an entity root and apply the layer once. This preserves source staging/generic float grouping instead of folding the layer into each part pose.",
+    "order": "JavaWingModel snapshots the two default-map root entries into one immutable traversal used by base, explicit glint and native-pose fallback. It does not impose left-first insertion, matrix storage or sorted name order. Target-JVM traversal equivalence remains unverified.",
+    "glint": "Explicit glint uses the same layerRoot, local pose helper and child traversal as base. Deferred observed glint still copies actual base clips. Selection, shader/fog inputs, EQUAL depth and model-order observations are not invented or relaxed.",
+    "nativeFallback": "Completed native wing matrices now compose directly under the supplied entity root. The posedBody * inverse(recordedWingBody) product is removed. Humanoid torso/root emote movement no longer reparents this equipment model. Native controller/posture/scale and legacy box geometry remain; no Java offset is added to already-completed native poses.",
+    "availability": "Independent shared emission no longer needs a humanoid BODY matrix when its own Java motion or native wing pair is complete. WorldFrame replacement admission still requires its matching native wing observation, equipped item, complete native pose/scope/animation ownership, texture readiness and separate suppression receipt.",
+    "history": "WingHistory's torso reference remains serialized and validated under the same format/budgets. Avatar.wingReferenceBody remains legacy metadata rather than a parent transform. Recorded entity roots, wing samples, missing-track/gap behavior and all existing replacement/export gates remain; no viewer body/controller fallback is added.",
+    "paths": "Shared emission updates Raster3D and staged NativeAvatarGeometry. Java-motion model metadata carries the layer-translated root; native fallback metadata carries the entity root. Existing wire layouts, phase boundaries, budgets and lifecycle checks remain."
+  },
+  "compatibility": {
+    "wire": "No archive/ARCGEO version, JNI/native ABI, native offset, shader or runtime verification flag changes. Existing emit overloads remain; emitLayer is an internal already-layered entry point.",
+    "ownership": "An independent root does not supply a native target/resource lease, complete phase participants, authoritative Java material inputs or an installed-game insertion callsite.",
+    "limits": "Legacy native geometry/controllers still are not Java ElytraModel shape/animation equivalence. Default generic affine math lacks original matrix properties/rotation history. Baby/general equipment variants and full layer selection remain separate requirements. No tests were added or executed."
+  },
+  "remaining": [
+    "Layer-root/part-order/vertex/model-metadata/glint-depth comparisons under emote torso/root motion and body visibility changes.",
+    "Full controller/cape/emote/equipment/material fidelity, original matrix properties and replay camera/glint rebasing.",
+    "Actual owning native world insertion/resource/phase producer and complete foreign feature dispatch.",
+    "Build, installed-game rendering, replay/video comparisons and full 1:1 parity verification."
+  ],
+  "verified": {"built":false,"tested":false,"wingRootCompared":false,"wingOrderCompared":false,"emoteIndependenceCompared":false,"glintDepthCompared":false,"nativeReplacementCompared":false,"liveGame":false,"gpuRendering":false,"deterministicVideo":false,"fullParity":false}
+}

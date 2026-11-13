@@ -227,7 +227,7 @@ pub enum Event {
     PublicServers(Outcome<Vec<arctic_core::servers::public::PublicServer>>),
     ServerSubmitted(Outcome<arctic_core::servers::public::Submitted>),
     /// A Bedrock tab job (see `bedrock_tasks`).
-    Bedrock(crate::bedrock_tasks::BedrockEvent),
+    Bedrock(Box<crate::bedrock_tasks::BedrockEvent>),
     Screenshots(Vec<arctic_core::screenshots::Shot>),
     ScreenshotThumb(PathBuf, Outcome<Vec<u8>>),
     ScreenshotCopied(Outcome<()>),
@@ -276,6 +276,9 @@ pub struct StartAt {
 }
 
 impl Tasks {
+    pub(crate) fn repaint(&self) {
+        self.ctx.request_repaint();
+    }
     pub fn new(tx: Sender<Event>, ctx: egui::Context, dirs: DataDirs) -> Self {
         Self {
             tx,

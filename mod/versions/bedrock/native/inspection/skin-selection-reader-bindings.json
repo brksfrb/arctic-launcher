@@ -1,0 +1,204 @@
+{
+  "schema": 1,
+  "purpose": "Source bindings; selected only through an accepted full executable image and scene family",
+  "profiles": [
+    {
+      "productVersion": "1.26.5203.0",
+      "actorComponent": 624,
+      "layout": {
+        "componentParams": 136,
+        "componentFrame": 872,
+        "componentPairs": 896,
+        "pairStride": 40,
+        "controller": 0,
+        "controllerControl": 8,
+        "geometry": 16,
+        "geometryControl": 24,
+        "geometryHierarchy": 232
+      },
+      "functions": {
+        "root": {
+          "rva": 29581296,
+          "bytes": 7195,
+          "sha256": "918c355dd91fe382ef1cdf7eb7db26f79bda465f03b308eb291585e3dce77465"
+        },
+        "controller": {
+          "rva": 30113536,
+          "bytes": 5073,
+          "sha256": "cdd79ff23cb518410543d48a9f04126c379a3dc735e64166e41814c526ef99b6"
+        }
+      },
+      "sites": [
+        {
+          "role": "componentParams",
+          "function": "root",
+          "rva": 29581474,
+          "bytes": 10,
+          "hex": "4c89ff4881c788000000"
+        },
+        {
+          "role": "frameRead",
+          "function": "root",
+          "rva": 29582138,
+          "bytes": 14,
+          "hex": "498b8768030000418b8f5c030000"
+        },
+        {
+          "role": "pairBounds",
+          "function": "root",
+          "rva": 29583834,
+          "bytes": 21,
+          "hex": "488b8528010000488bb0800300004c8ba088030000"
+        },
+        {
+          "role": "pairAdvance",
+          "function": "root",
+          "rva": 29583872,
+          "bytes": 13,
+          "hex": "4883c6284c39e60f842c030000"
+        },
+        {
+          "role": "controllerBorrow",
+          "function": "root",
+          "rva": 29583892,
+          "bytes": 47,
+          "hex": "488b46084885c07413f0ff4008488b4608eb0b660f1f84000000000031c04c8b3e4c89bdb0000000488985b8000000"
+        },
+        {
+          "role": "geometryWeakBorrow",
+          "function": "root",
+          "rva": 29583949,
+          "bytes": 38,
+          "hex": "488b46184885c0741d488b4e1048898dc0000000488985c8000000f0ff400c4c8bbdb0000000"
+        },
+        {
+          "role": "geometryPromotion",
+          "function": "root",
+          "rva": 29584464,
+          "bytes": 43,
+          "hex": "85c074278d5001f00fb1510875f24c8b85c0000000488b85c80000004c894550488945584d85c0750beb18"
+        },
+        {
+          "role": "controllerDispatch",
+          "function": "root",
+          "rva": 29584516,
+          "bytes": 15,
+          "hex": "488b8db00000004889fae86d120800"
+        },
+        {
+          "role": "hierarchySelection",
+          "function": "controller",
+          "rva": 30115632,
+          "bytes": 29,
+          "hex": "498b7d108b83e800000083f8ff750e4889d9e83960f7ff8983e8000000"
+        },
+        {
+          "role": "bodyDispatch",
+          "function": "controller",
+          "rva": 30116617,
+          "bytes": 27,
+          "hex": "488b45f848894424204c8d85880000004c89ea4989d9e84cc4f8ff"
+        }
+      ]
+    },
+    {
+      "productVersion": "1.26.60.5",
+      "actorComponent": 656,
+      "layout": {
+        "componentParams": 136,
+        "componentFrame": 872,
+        "componentPairs": 896,
+        "pairStride": 40,
+        "controller": 0,
+        "controllerControl": 8,
+        "geometry": 16,
+        "geometryControl": 24,
+        "geometryHierarchy": 232
+      },
+      "functions": {
+        "root": {
+          "rva": 93016656,
+          "bytes": 6665,
+          "sha256": "2b1ed4a57a56f9c86f22e3ce269775592e49654cda13df1228140a179bd74f1f"
+        },
+        "controller": {
+          "rva": 112367264,
+          "bytes": 4856,
+          "sha256": "de4a5b510814066ff456382fe448857f3378be3e66a81452e3e9be20c5192a50"
+        }
+      },
+      "sites": [
+        {
+          "role": "componentParams",
+          "function": "root",
+          "rva": 93016834,
+          "bytes": 10,
+          "hex": "4c89e74881c788000000"
+        },
+        {
+          "role": "frameRead",
+          "function": "root",
+          "rva": 93017503,
+          "bytes": 8,
+          "hex": "498b842468030000"
+        },
+        {
+          "role": "pairBounds",
+          "function": "root",
+          "rva": 93019152,
+          "bytes": 21,
+          "hex": "488b8508010000488bb0800300004c8ba088030000"
+        },
+        {
+          "role": "pairAdvance",
+          "function": "root",
+          "rva": 93019200,
+          "bytes": 13,
+          "hex": "4883c6284c39e60f842c030000"
+        },
+        {
+          "role": "controllerBorrow",
+          "function": "root",
+          "rva": 93019220,
+          "bytes": 47,
+          "hex": "488b46084885c07413f0ff4008488b4608eb0b660f1f84000000000031c04c8b3e4c89bdc0000000488985c8000000"
+        },
+        {
+          "role": "geometryWeakBorrow",
+          "function": "root",
+          "rva": 93019277,
+          "bytes": 38,
+          "hex": "488b46184885c0741d488b4e1048898dd0000000488985d8000000f0ff400c4c8bbdc0000000"
+        },
+        {
+          "role": "geometryPromotion",
+          "function": "root",
+          "rva": 93019792,
+          "bytes": 37,
+          "hex": "85c074238d5001f00fb1510875f20f2885d00000004c8b85d00000000f2945504d85c0750b"
+        },
+        {
+          "role": "controllerDispatch",
+          "function": "root",
+          "rva": 93019840,
+          "bytes": 15,
+          "hex": "488b8dc00000004889fae8d1372701"
+        },
+        {
+          "role": "hierarchySelection",
+          "function": "controller",
+          "rva": 112369358,
+          "bytes": 31,
+          "hex": "498b7710418b85e800000083f8ff750f4c89e9e86a31d8fe418985e8000000"
+        },
+        {
+          "role": "bodyDispatch",
+          "function": "controller",
+          "rva": 112370305,
+          "bytes": 39,
+          "hex": "488d45d04889442430488d454048894424284c896c24204c8d45784c89fa4c8b4df8e8085f0500"
+        }
+      ]
+    }
+  ]
+}

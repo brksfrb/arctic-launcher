@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "evidence": "Source reads/edits and cached Java class data decoded only; no builds, tests, syntax checks, class loading, project/game execution or Bedrock operations",
+  "reference": {
+    "namespace": "Fabric ArcticMod.ID is arctic; GfxImpl.look(path) returns arctic:look/<path>",
+    "cuboid": "FabricPlatform.registerCosmetic registers cosmetic/<id> and optional cosmetic/<id>_glow",
+    "mesh": "FabricPlatform.registerMesh registers mesh/<id>_<image index> and shared mesh/white",
+    "white": "MeshModels.textureOf uses the shared white texture when no image exists; sheen also uses it",
+    "appearance": "FabricPlatform.registerTexture registers a static skin/cape at arctic:look/<hash>, or an animated cape's individual images at arctic:look/<hash>/<frame>",
+    "phase": "Cached SubmitNodeCollection separates translucentModels from translucentCustomGeometry. SimpleFeatureRenderPhase emits strictlyOrdered=false; dispatcher merges adjacent matching feature/strictness outputs and renderer inverts that into canReorder=true. See native-avatar-draw-order-source.json; the live ordered phase producer remains missing."
+  },
+  "port": {
+    "class": "JavaTextureId validates full ASCII namespace:path identifiers, at most 256 bytes",
+    "live": "BedrockPlatform registration supplies item IDs to the new cuboid/mesh factory overloads",
+    "replay": "ReplayAppearance supplies the archived Model.id, preserving registration identity despite content-addressed bitmap sharing",
+    "staging": "NativeAvatarGeometry stores a logicalTextureId independently of copied image index and pixels",
+    "aliasing": "Different identifiers may share copied pixels without becoming the same prepared identity. The same named texture reuses one frame binding; equivalent image snapshots are checked exactly before aliasing, and conflicting dimensions/pixels/implicit-white representation reject.",
+    "anonymous": "Legacy anonymous factory entry points retain unknown per-item identity; the statically registered shared white key remains known",
+    "ownership": "Identifiers are immutable owned data, not native pointers, texture-manager lookup requests, object IDs or scene ownership receipts",
+    "actorLayers": "Skin, bent-skin, cape and both wing geometry paths retain the selected Arctic registration ID through AvatarDrawTarget into staging. Legacy direct image field replacement cannot reuse a name bound to another image object.",
+    "selection": "WorldFrame uses the acknowledged texture selection, including the chosen animated frame. BedrockPlatform textureId follows the same active replay/retired replay/live owner precedence as texture; unknown higher-priority bindings do not borrow lower-priority names.",
+    "replayLayers": "Replay's shared library reconstructs names only from explicit Arctic look definitions. A single-frame cape's /0 replay alias maps to Java's bare hash; multi-frame aliases keep their frame suffix. Native-only captured assets remain unknown. Retired replay images retain their corresponding registration metadata until world reset.",
+    "animatedStrip": "The retained live animation strip is not itself a Fabric registration; only its individually selected frames receive names"
+  },
+  "wire": {
+    "magic": "ARCGEO07 when a supported Java factory reference is supplied; otherwise ARCGEO06 for layer eligibility, ARCGEO05 for logical texture identifiers, or the previous version selection",
+    "batchExtension": "After the optional pass-6 body overlay and before vertices, every v5 batch has strict u8 key presence; if 1, u32 ASCII byte length and namespace:path bytes",
+    "bound": "256 ASCII bytes per identifier, with every presence/length/data byte included in the existing 96 MiB frame bound",
+    "decoder": "V1-v4 retain unknown logical identity; v5 validates identifier grammar and one copied texture binding per identifier"
+  },
+  "ordering": {
+    "preparedIdentity": "The draw planner includes logical identifiers in its consistency check for adapter-provided prepared IDs; conflicting known IDs cannot collapse because their copied texture index is equal",
+    "notInferred": "JavaRenderType now ports the supported factory cache calls and carries owned reference IDs in ARCGEO07, separately from bitmap identity. PreparedRenderType equality IDs, group boundaries, sorting space and native insertion phase still require their owning producer; names alone do not establish them."
+  },
+  "remaining": [
+    "Logical identifiers for native-only actor skin/cape/wing sources require an authoritative source; copied content keys do not establish them",
+    "Remaining factory variants and complete phase/group construction; supported one-argument factory caches now have a source port",
+    "Authoritative native material/light/scene ownership and insertion caller",
+    "Runtime rendering, replay-camera and deterministic-video fidelity verification"
+  ],
+  "verified": {"built": false, "tested": false, "jniRoundTrip": false, "liveGame": false, "gpuRendering": false, "deterministicVideo": false, "fullParity": false}
+}

@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.60.5",
+  "reference": "Latite 9f746351 cached source patterns; see THIRD_PARTY.md",
+  "abiProven": false,
+  "layoutProven": false,
+  "engineCodeExecuted": false,
+  "profileActivated": false,
+  "patterns": {
+    "renderWorldCall": {
+      "count": 0,
+      "matches": []
+    },
+    "renderActorEntry": {
+      "count": 1,
+      "matches": [
+        {
+          "matchRva": "0x594be00",
+          "function": [
+            "0x594be00",
+            "0x594c2fa"
+          ]
+        }
+      ]
+    },
+    "levelConstructorVtables": {
+      "count": 1,
+      "matches": [
+        {
+          "matchRva": "0x6b892e6",
+          "function": [
+            "0x6b89270",
+            "0x6b8ab16"
+          ],
+          "firstVtable": "0xf2ce790"
+        }
+      ]
+    }
+  }
+}

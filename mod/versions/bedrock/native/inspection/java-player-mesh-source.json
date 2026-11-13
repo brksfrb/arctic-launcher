@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "evidence": "Source reads/edits and cached Java 26.2 class bytes decoded as data only; no class loading, builds, tests, syntax checks, project/game execution or Bedrock operations",
+  "reference": {
+    "classes": ["net/minecraft/client/model/HumanoidModel.createMesh", "net/minecraft/client/model/player/PlayerModel.createMesh"],
+    "wideRightArm": "Inherited (-3,-2,-2), size (4,12,4), base UV (40,16)",
+    "slimRightArm": "Replacement (-2,-2,-2), size (3,12,4), base UV (40,16)",
+    "leftArm": "Replacement (-1,-2,-2), width 3/4, sizeY/Z 12/4, base UV (32,48), no inherited mirror",
+    "leftLeg": "Replacement (-2,0,-2), size (4,12,4), base UV (16,48), no inherited mirror",
+    "outer": "Hat grows .5; jacket, sleeves and pants grow .25. Each is a ZERO-pose child with its own atlas region."
+  },
+  "port": {
+    "class": "JavaPlayerMesh",
+    "layout": "Prebuilt wide/slim local cubes using JavaModelBox's ModelPart face order, winding, signed normals and reversed max-Y UV layout",
+    "atlas": "Normalized 64x64 modern player skin atlas with independent left-side regions",
+    "emission": "Each non-bending part emits its base cube followed by its outer child into the existing sink; copied caller poses, tint and packed light remain in place",
+    "splitLimbs": "Arctic SkinLimbs remains the bent-emote geometry and retains the corrected later layer submission order",
+    "scope": "Shared emitter changes both software rendering and native geometry staging; no new suppression authority or GPU activation"
+  },
+  "remaining": [
+    "Untyped skin and ghost/outline/dissolve variants; native GENERAL batches remain rejected",
+    "Installed-game visibility capture; explicit masks now reach normal/bent geometry and replay records (skin-visibility-source.json)",
+    "Complete vanilla model traversal/group/sort fidelity",
+    "Native live phase insertion and runtime pixel/animation verification"
+  ],
+  "verified": {"built": false, "tested": false, "liveGame": false, "gpuRendering": false, "fullParity": false}
+}

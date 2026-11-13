@@ -1,0 +1,3 @@
+rootProject.name = 'arctic-bedrock'
+include ':core'
+project(':core').projectDir = file('../../core')

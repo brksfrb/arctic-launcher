@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "evidence": "Source reads and edits only; no builds, tests, syntax checks, project/game execution, game launch, attachment or process inspection",
+  "archive": {
+    "track": "bedrock_body_samples_v6 retains v4 light and v5 material fields, then appends visibility",
+    "magic": "0x415243424f440006; legacy v4/v5 remain readable with their original magics",
+    "encoding": "Existing body frame/actor layout, big endian DataOutput. Each actor appends a strict u8 presence flag and, when present, the exact packed-light int32 after its optional color.",
+    "input": "WorldFrame.Player.packedLight from the same observed actor/frame as its six-part pose, model root and skin color",
+    "bounds": "Existing 2 MiB inflated blocks, at most 64 frames and 128 actors; actor size estimate includes the maximum five additional bytes",
+    "oldVersions": "Mount recognizes body v1 through v6 as mutually exclusive tracks. V1-v3 retain unknown light; v4 adds light, v5 material and v6 visibility."
+  },
+  "sampling": {
+    "ownership": "BodySample copies preserve the nullable immutable integer; equality includes its exact value/availability",
+    "endpoints": "Exact recorded endpoint returns that endpoint's packed light",
+    "interior": "Retain a known packed light only when both endpoints have the same value; otherwise unknown. Never interpolate packed integers or infer a transition time.",
+    "gaps": "Existing body reader rejects interpolation across actor absence, discontinuous chunks, missed ticks and long pauses",
+    "playback": "WorldFrame uses the selected recorded actor/time BodySample; the viewer's live sample cannot fill absence",
+    "readiness": "Appearance capture requires a packed-light sample when body, cape or worn cosmetics require body references. V4 missing/changing-light samples also prevent new body plans via recordedPoseMissing."
+  },
+  "limitations": [
+    "A v4 track may contain unknown samples; format support does not prove captured lighting",
+    "No live Java-equivalent packed-light producer has been established",
+    "Recorded lightmap, fog/material inputs and actual native draw phase remain unfinished",
+    "Software lightmap/material stages and a bounded recorded-material track now have source ports, but live capture, changing-material reconstruction and generic camera rebasing are unfinished; packed light alone does not establish faithful exported pixels",
+    "Full native rendering and deterministic video fidelity remain unverified"
+  ],
+  "verified": {"built": false, "tested": false, "archiveRoundTrip": false, "liveGame": false, "gpuRendering": false, "deterministicVideo": false, "fullParity": false}
+}

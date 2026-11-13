@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.5203.0",
+  "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "evidence": "Offline cached-section disassembly, with actor-slot attribution corroborated by the cached public SDK; no game code executed",
+  "actorDimensionPointerOffset": "0x1c8",
+  "pointerAccessorRva": "0x24c8000",
+  "nameAccessorRva": "0x24c7c90",
+  "dimensionNameOffset": "0x48",
+  "idAccessorRva": "0x24c7cb0",
+  "dimensionIdOffset": "0x78",
+  "olderSdkNameOffsetNotUsed": "0x20",
+  "readerChecks": [
+    "executable hash and exact bytes of all three accessors before enabling",
+    "actor registry identity and level pointer remain unchanged",
+    "shared dimension pointer/control header remains unchanged",
+    "positive bounded shared/weak counts before and after copying",
+    "bounded SSO name header and integer ID remain unchanged",
+    "only matching Overworld/0, Nether/1, TheEnd/2 pairs",
+    "camera-local and rendered-local copies agree before publication"
+  ],
+  "unknownPolicy": "publish unknown; do not infer Overworld from a null-pointer getter's zero fallback",
+  "nativePointersPublished": false,
+  "nativeResourcesLeased": false,
+  "runtimeObserved": false,
+  "sourceBuilt": false,
+  "sourceTested": false,
+  "parityVerified": false
+}

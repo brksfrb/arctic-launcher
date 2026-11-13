@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "evidence": "Source reads, edits and manual review only. No builds, tests, syntax checks, project/helper/game/JNI/shader/GPU execution, process inspection, native control commands or exports. Runtime parity remains unverified by user instruction.",
+  "problem": "NativeExportClock.capture_frame previously used unconditional direct-camera set commands. A stale controller could replace another active override before a later fence detected different state, and NativeExportClock.resume only released its clock without clearing its successful direct-camera override.",
+  "contract": {
+    "field": "Optional expectedCamera on the existing schema-1 camera command: session, sequence, requestId (string or null) and active. It carries one prior identity, not a prior receipt or recursive history. Existing C entrypoint and engine offsets/ABI are unchanged.",
+    "idle": "Only set may acquire an idle expectation. Sequence zero requires a null request identity and no last acknowledgement. Nonzero idle acquisition requires the same last release identity, including an actually recorded null ID from a legacy manual release. A guarded command itself always needs a valid nonnull request ID.",
+    "active": "Replace/release requires the exact successful active acknowledgement: current session, sequence, requestId and active state. The previous consumer must have restored its camera component and kept the player pose unchanged. Pending commands, errors and restoration failure prevent the transition.",
+    "checks": "Native command admission and accept at the actual render-camera consumer compare expectedCamera while holding CONTROL. Existing freshness, session, increasing sequence, target bounds and queue admission still apply. Deferred mismatch records requestRejected without replacing the current owner's target, sequence, pending state or last receipt.",
+    "acknowledgement": "Successful set and release receipts echo expectedCamera. Core requires this exact echo plus the existing correlated session/sequence/requestId/op, restored component, active state and unchanged-player checks. Consumer failure receipts also retain the expectation for diagnostics.",
+    "compatibility": "Explicit manual camera_control may omit the optional field and keeps its legacy command behavior. Automatic direct export always uses the guarded APIs, and never retries unguarded. Older bundles lack the idle-acquisition capability/required fields and are rejected for that path. Capability names describe implemented source only; runtime verification remains false."
+  },
+  "core": {
+    "acquire": "camera_control_from_idle reads at most 16 KiB from the current loaded adapter's camera report, requiring a file younger than two seconds, matching fresh native binding/session, both hooks installed, no active target/queued/pending/error/restoration failure, a valid current idle identity and idleAcquisitionGuardImplemented. Native rechecks make report staleness insufficient to replace another camera.",
+    "followup": "camera_control_owned derives its expectation from an acknowledged active set receipt. The requested sequence must follow that receipt. New non-Windows stubs preserve cross-platform source coverage without adding process interaction there.",
+    "export": "NativeExportClock retains its successful direct-camera receipt immediately, before renewing its clock or waiting for capture fences. Later direct frames use that exact owner. Direct capture reserves a later release sequence before feeding packets/advancing ticks. Protocol capture refuses to run under a direct override retained by the same controller.",
+    "cleanup": "resume first attempts guarded release of a retained direct camera, then independently attempts the owned clock release even if camera cleanup fails. Each successful acknowledgement is cached separately. Repeated cleanup does not publish another successful release. The returned clock result includes the actual cameraRelease receipt when present; errors distinguish camera-only, clock-only and joint failure.",
+    "preserved": "The main protocol-camera export route, helper path/viewer revision ownership, packet/terrain barriers, exact frame clock, producer-frame camera-time fence, scoped component restoration and unchanged-player checks remain. No game launch or native command was performed while making these edits."
+  },
+  "remaining": [
+    "A camera command whose acknowledgement is lost after possible application still has uncertain caller ownership. Automatic direct targets now have independent bounded wall-time leases and exact consumer claims (replay-camera-lease-source.json); runtime expiry/restoration/reconciliation remains unverified. Cleanup does not guess identities or force-clear replacements.",
+    "Atomic helper/native camera handoff, complete camera modes, native consumer thread/reentry ownership and runtime acknowledgement/restoration/cancellation behavior.",
+    "Authoritative live native cosmetics insertion, resource/descriptor ownership, cape/emote/glint inputs and replay camera rebasing.",
+    "Build and ownership-race comparisons, installed-game rendering, deterministic replay/video export and full 1:1 parity verification."
+  ],
+  "verified": {"built":false,"tested":false,"ownershipRaceCompared":false,"cameraCleanupCompared":false,"consumerRestorationCompared":false,"liveGame":false,"gpuRendering":false,"deterministicVideo":false,"fullParity":false}
+}

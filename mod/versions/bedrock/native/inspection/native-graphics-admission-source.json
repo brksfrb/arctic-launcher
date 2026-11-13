@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "purpose": "Complete public D3D12 observer admission for native cosmetics recording",
+  "source": [
+    "../src/native_graphics_observer.rs",
+    "../src/depth_tracker.rs",
+    "../src/native_graphics_state.rs"
+  ],
+  "interface": "The state observers derive their targets from actual ID3D12GraphicsCommandList/ID3D12GraphicsCommandList4 API vtables. Root layouts come from the actual serialized CreateRootSignature argument through the public deserializer. These modules do not require a private game RVA or a guessed replacement function for the newer image.",
+  "change": "A list created/reset during installation could accumulate graphics history while only a subset of hooks was enabled. That history must not become a complete restorable state merely because installation subsequently succeeded.",
+  "contract": {
+    "publicSetterInstallationResultCached": true,
+    "allOriginalsPublishedBeforeAnySetterEnabled": true,
+    "publicSetterEnabledFlagPublishedOnlyAfterEveryEnableSucceeds": true,
+    "graphicsCallbacksInvalidateStateUntilCompleteObserverAdmission": true,
+    "allPreAdmissionListGraphicsHistoryInvalidatedUnderTrackerLock": true,
+    "completeReadinessPublishedUnderSameLockAfterAllObserversEnabled": true,
+    "invalidGraphicsHistoryRequiresARealSubsequentReset": true,
+    "graphicsSnapshotRequiresSuccessfulCompleteObserverInstallation": true,
+    "avatarPhaseGlintAndForeignAcknowledgmentEntriesRequireCompleteObservers": true,
+    "restorableCandidateStatusCannotCountPartialObserverHistory": true,
+    "opaqueBundleIndirectStateObjectInvalidationRetained": true,
+    "actualListIdentityAndObservedRootArgumentRequirementsRetained": true,
+    "sceneOrTargetLifetimeOwnershipCreated": false,
+    "nativeFeaturePhaseProducerCreated": false
+  },
+  "sourceImplemented": true,
+  "graphicsStatePublicApiIntegrationImplemented": true,
+  "runtimeVerified": false,
+  "fullParity": false,
+  "remaining": [
+    "Complete current scene, actor, terrain and material dependency migrations",
+    "Actual native cosmetics feature-phase producer, resource lifetime ownership and geometry insertion",
+    "Live rendering agreement and deterministic replay video export"
+  ],
+  "operations": {
+    "sourceReadAndEditedOnly": true,
+    "gameOpened": false,
+    "gameCodeExecuted": false,
+    "processInspected": false,
+    "buildExecuted": false,
+    "testsExecuted": false
+  }
+}

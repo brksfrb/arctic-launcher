@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "evidence": "Sources read/edited and cached shader resources read as ZIP data only. No compilation, syntax checks, tests, shader/GPU execution, game launch, attachment, process inspection or exports.",
+  "reference": {
+    "java": "26.2",
+    "clientJarSha256": "40896ee9f1e2bec3c934daac7e93d41e9e3d9c2f8ae0ca366d52ffbfd1afa290",
+    "vertex": "assets/minecraft/shaders/core/entity.vsh declares out vec4 overlayColor without flat/noperspective and assigns texelFetch(Sampler1, UV1, 0) in the vertex stage when NO_OVERLAY is absent.",
+    "fragment": "assets/minecraft/shaders/core/entity.fsh declares matching in vec4 overlayColor and mixes its interpolated RGB/alpha into texture times face color times ColorModulator, before lightmap multiplication and fog. The overlay mix preserves fragment alpha.",
+    "wing": "The selected armor-cutout wing pipeline defines NO_OVERLAY; no overlay mix applies to it. Glow bypasses the lightmap but retains overlay."
+  },
+  "change": {
+    "before": "Native pixel_main read the per-draw OverlayColor constant directly. Raster3D retained a selected skin-overlay array on each triangle and JavaEntityShader.fragment otherwise read its common immutable overlay directly. Both skipped the vertex-to-fragment varying path.",
+    "native": "avatar_entity.hlsl now copies the selected constant texel to Fragment.overlay (COLOR3) in vertex_main. The default smooth perspective interpolation supplies pixel_main, which mixes input.overlay rather than the uniform. This is a varying, not a flat/nointerpolation field.",
+    "softwareVertex": "Raster3D snapshots the common texel or independent skin texel per sink, appending RGBA at vertex-array offsets 19..22. Existing homogeneous clipping interpolates every attribute, including those four values.",
+    "softwareFragment": "The raster loop applies its perspective-correct barycentric weights to all four overlay components and passes that scratch array to JavaEntityShader.fragment. No per-triangle constant override remains. Interpolated values are not renormalized or clamped back to the source normalized-input range.",
+    "api": "JavaEntityShader.overlayColor returns a copy of the common input. Existing direct fragment overloads retain their explicit constant-input fallback; the full renderer uses the interpolated overload.",
+    "ordering": "Sample-alpha cutout still precedes vertex/modulator; overlay precedes lightmap, emissive bypass and fog. Wings omit overlay; glow keeps it. The selected texel and RGB-only mix remain unchanged.",
+    "compatibility": "No geometry packet, archive, 40-byte GPU vertex input, draw-constant layout or native ABI change. The selected texel remains supplied through the existing explicit material/batch input. Native shader-stage outputs and software internal vertex arrays change."
+  },
+  "limitations": [
+    "Even identical texels at a primitive's vertices do not establish bitwise equivalence with bypassing the interpolation stage. No GPU/software rounding or pixel equivalence is claimed.",
+    "This uses the existing selected texel input rather than porting an arbitrary overlay texture/UV1 producer or variable overlay coordinates within one batch.",
+    "Live Java-equivalent material/lighting/overlay/view input production, native world/resource ownership and insertion remain unfinished.",
+    "Ghost/outline/dissolve variants, complete emote/equipment rendering and deterministic replay/export parity remain incomplete and unverified."
+  ],
+  "verified": {"built":false,"tested":false,"shaderCompiled":false,"crossBackendPixelsCompared":false,"liveGame":false,"gpuRendering":false,"deterministicVideo":false,"fullParity":false}
+}

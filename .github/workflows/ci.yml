@@ -27,6 +27,21 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  bedrock-offline:
+    if: ${{ inputs.only == '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mod/versions/bedrock/offline/package-lock.json
+      - run: npm ci --ignore-scripts --omit=optional --no-audit --no-fund
+        working-directory: mod/versions/bedrock/offline
+      - run: npm test
+        working-directory: mod/versions/bedrock/offline
+
   check:
     # Not when a few mod targets are being checked by hand (the "only" input).
     if: ${{ inputs.only == '' }}

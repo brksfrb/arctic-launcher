@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "evidence": "Source reads/edits and cached shader/class ZIP entries read as data only; no classes loaded, builds, tests, syntax checks, shader/GPU execution, project/game execution or Bedrock operations",
+  "reference": {
+    "version": "26.2",
+    "shader": "assets/minecraft/shaders/core/lightmap.fsh",
+    "sha256": "182128e6aa43ec43b11148d3f3fefe18a93955b7524e4e7b9649003ef017a794",
+    "format": "Cached Lightmap constructor creates a 16x16 GpuFormat.RGBA8_UNORM texture"
+  },
+  "port": {
+    "class": "JavaLightmap",
+    "input": "Schema 1; six required finite factors, four required finite RGB vectors and explicit source-backend unormRounding policy",
+    "factors": ["skyFactor", "blockFactor", "nightVisionFactor", "darknessScale", "bossOverlayWorldDarkeningFactor", "brightnessFactor"],
+    "vectors": ["blockLightTint", "skyLightColor", "ambientColor", "nightVisionColor"],
+    "stages": ["Texel-centre block/sky levels", "level/(4-3*level) brightness", "Ambient/night-vision component maximum", "Sky contribution", "Parabolic block tint whitening and block contribution", "Boss darkening", "Darkness subtraction", "Clamp before maximum-component gamma curve", "Brightness mix", "Explicit RGBA8 conversion and normalized channel decode"],
+    "layout": "Owned 1024-float row-major 16x16 RGBA snapshot; X=block level, Y=sky level, alpha=1",
+    "quantization": "Caller must select nearest-even or nearest-up. Conversion clamps the final shader channel, scales its exact float value by 255 in double, then applies the selected tie rule. No backend rule is inferred.",
+    "integration": "JavaEntityShader.Inputs accepts exactly one of lightmap pixel array or lightmapState generator inputs; both/neither reject",
+    "replayAndNative": "Only resolved material pixels enter EntityMaterialHistory and ARCGEO02; generation is not repeated during playback. Existing archive/wire scalar counts and layouts remain unchanged.",
+    "ownership": "Scalars are copied and vectors cloned before generation; no random source, world lookup or clock is read"
+  },
+  "remaining": [
+    "Installed-game producer of Java-equivalent final lighting uniforms, including actual flicker/effect state",
+    "The literal shader's zero-maximum gamma division produces an unresolved nonfinite result; generated input rejects it and requires captured pixels",
+    "Actual source-backend UNORM conversion policy, fused/reassociated arithmetic and precision behavior remain unverified",
+    "Runtime lightmap/pixel comparisons, native phase integration and full replay/video parity"
+  ],
+  "verified": {"built": false, "tested": false, "generatedPixelsCompared": false, "liveGame": false, "gpuRendering": false, "deterministicVideo": false, "fullParity": false}
+}

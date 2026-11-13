@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.5203.0",
+  "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "evidence": "Static reads/disassembly of cached text/rdata/data/pdata and pinned public declarations; no live process access or game execution",
+  "sourcePorted": true,
+  "publicDeclarations": [
+    "https://github.com/LiteLDev/LeviLamina/blob/310bf95e173df01bc08a490dbdcb2e8dd0ae1de2/src/mc/deps/minecraft_renderer/renderer/MaterialPtr.h",
+    "https://github.com/LiteLDev/LeviLamina/blob/310bf95e173df01bc08a490dbdcb2e8dd0ae1de2/src-client/mc/deps/core/renderer/RenderMaterialInfo.h"
+  ],
+  "typeTrace": {
+    "materialLoaderLambdaTypeDescriptorRva": "0x11a36f20",
+    "typeNameRva": "0x11a36f30",
+    "typeNameContains": "RenderMaterialGroupLoader, shared_ptr<RenderMaterialInfo>, RenderMaterial and ResourcePackManager",
+    "typeGetterRva": "0x5a5b070",
+    "typeGetterTableEntryRva": "0xe954fa8",
+    "associatedLoaderCallbackRva": "0x5a5a9f0",
+    "callbackInfoAndMaterialReadRva": "0x5a5acb6"
+  },
+  "installedLayout": {
+    "infoHelperRva": "0x5a5b080",
+    "infoHelperEndRva": "0x5a5b266",
+    "mapSharedPairOffsets": [64, 72],
+    "infoNameOffset": 16,
+    "infoRenderMaterialPointerOffset": 64,
+    "infoBytes": 72,
+    "observedInPlaceControlBytes": 88,
+    "observedInPlaceInfoOffset": 16,
+    "arbitrarySharedAliasesForcedToInPlaceLayout": false
+  },
+  "reader": "After a guarded MaterialPtr pair and positive shared controls, copy only the 8-byte unique_ptr value at info+0x40; reject noncanonical nonzero values; recheck through the existing borrowed-endpoint guards",
+  "output": "Counts only: nonnull/null backing-pointer reference entries, distinct nonnull pointers and potentially drawable entries missing a backing pointer; no addresses or pointee contents serialized",
+  "capturePrerequisite": "Both native and host requireFrameInput matchers require the new observation, consistent count partitions and zero missing potentially drawable backing pointers",
+  "additionalMaximumBytes": 131072,
+  "additionalMaximumBlockReads": 16384,
+  "backingPointerStageMaximumGuardedBytes": 18253056,
+  "backingPointerStageMaximumBlockReads": 430080,
+  "currentBudgetExtension": "frame-material-shader-paths-source.json",
+  "maximumGuardedControlsUnchanged": 212992,
+  "sourceBuilt": false,
+  "sourceTested": false,
+  "liveLayoutVerified": false,
+  "materialPointeeRead": false,
+  "nativeLeaseAcquired": false,
+  "materialOwnershipObserved": false,
+  "shaderSelectionVerified": false,
+  "gpuUploadVerified": false,
+  "terrainReady": false,
+  "deterministicVideoVerified": false
+}

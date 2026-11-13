@@ -25,5 +25,12 @@
   "platform.replay": "Replay",
   "platform.replays": "리플레이",
   "platform.server": "서버",
-  "platform.videos_cant_be_made_while_vulkanmod_draws": "VulkanMod가 게임을 그리는 동안에는 동영상을 만들 수 없습니다: 만들려면 끄세요."
+  "platform.videos_cant_be_made_while_vulkanmod_draws": "VulkanMod가 게임을 그리는 동안에는 동영상을 만들 수 없습니다: 만들려면 끄세요.",
+  "platform.arctic_bedrock_native_preview_right_shift": "Arctic Bedrock native preview | Right Shift | Engine bindings pending",
+  "platform.bedrock_binding_pending": "Bedrock binding pending",
+  "platform.java_enchantment_component_projection": "Java enchantment component projection unavailable",
+  "platform.java_texture_identifier_changes_between": "Java texture identifier changes between image and implicit white",
+  "platform.java_texture_identifier_changes_between_2": "Java texture identifier changes between implicit white and image",
+  "platform.java_texture_identifier_changes_image": "Java texture identifier changes image dimensions within a frame",
+  "platform.java_texture_identifier_has_conflicting": "Java texture identifier has conflicting frame pixels"
 }

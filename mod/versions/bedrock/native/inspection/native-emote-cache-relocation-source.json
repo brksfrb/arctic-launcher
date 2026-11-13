@@ -1,0 +1,87 @@
+{
+  "schema": 1,
+  "purpose": "Native flat-cache matrix reallocation observer and owned historical-pose witness relocation; source-only implementation",
+  "nativeByteEvidence": "native-emote-cache-bindings-source.json",
+  "entry": {
+    "rva": "0x5907980",
+    "endRva": "0x5907e23",
+    "bytes": 1187,
+    "sha256": "9ed93449d4dac48f2b6caefd41fd2b838130d77e6e4a83974cb4448807573e88",
+    "callRva": "0x589fe96"
+  },
+  "source": [
+    "../src/native_emote_cache_relocation.rs",
+    "../src/native_emote_cache_profile.rs",
+    "../src/native_emote_cache.rs",
+    "../src/native_emote_cache_flat.rs",
+    "../src/native_emote_cache_history.rs",
+    "../src/world_hooks.rs"
+  ],
+  "nativeContract": {
+    "abi": "Two original pointer arguments and native pointer return, forwarded exactly once",
+    "requiresActualProducerReturn": "0x589fe9b",
+    "ownerValuesHeaderOffset": "0x138",
+    "keysAlreadyContainInsertedSlot": true,
+    "keyCountAtEntry": "old value count + 1",
+    "oldValuesMustBeAtCapacity": true,
+    "insertionPosition": "aligned existing values iterator, including end",
+    "keyOrdering": "unsigned hash, string bytes, group byte, palette byte",
+    "nativeCopy": "old prefix + exact 64-byte identity + old suffix",
+    "nativeReturn": "new begin + insertion index * 64",
+    "oldAllocationReadAfterOriginalReturns": false
+  },
+  "authority": {
+    "requiresApprovedExactImageAndFlatSceneFamily": true,
+    "requiresCompleteObserverEnablement": true,
+    "requiresActiveObservedTrueNativePredicate": true,
+    "rawPredicateBytePreserved": true,
+    "requiresCurrentProducerEventAndTicket": true,
+    "requiresCurrentActorScopeAndEpoch": true,
+    "requiresInsertedLogicalSlotToMatchProducer": true,
+    "currentThreadOnlyProducerAdmission": true,
+    "producerAndRelocationGuardsAreNotSendOrSync": true,
+    "nativeCacheOrGpuOwnershipLeaseCreated": false
+  },
+  "history": {
+    "witnessUpdateRequiresExistingSealedRecord": true,
+    "requiresSameOwnerEpochActorLogicalSlotOldMatrixIdentityAndNativeBits": true,
+    "recordVersionsRecheckedBeforeAnyWitnessUpdate": true,
+    "pendingOrConflictedRecordsIneligible": true,
+    "recordedNativeAndSuppliedMatricesModified": false,
+    "emoteClockModified": false,
+    "replayTimestampModified": false,
+    "serialOrFrameModified": false,
+    "foreignContextWriteRevokesSamePhysicalSlotHistory": true,
+    "unchangedSlotsFromOtherContextsMayRelocateWithoutMergingKeys": true,
+    "failedOrIncompleteRelocationRevokesOwnerEligibility": true,
+    "persistentHistoryContainsNativeAddresses": false
+  },
+  "bounds": {
+    "maximumFlatEntries": 1024,
+    "maximumInputSnapshotBytes": 131072,
+    "maximumRetainedBytesPerThread": 4194304,
+    "sharedWithProducerStorageJournal": true,
+    "completionCopiesAndTargetMetadataBudgetedBeforeNativeCall": true,
+    "repeatedGuardReadsAreAdditionalBoundedCopies": true
+  },
+  "remaining": [
+    "Clear/assignment and structural movement outside recognized producer scopes",
+    "Complete cache clear/assignment/structural mutation coverage",
+    "Current actor/component reader migration",
+    "Live scene/GPU ownership and cosmetics insertion",
+    "Deterministic replay rendering and video export",
+    "Runtime verification when authorized"
+  ],
+  "sourceHookImplemented": true,
+  "currentCandidateActivated": false,
+  "completeMutationCoverage": false,
+  "fullParity": false,
+  "operations": {
+    "cachedEvidenceReadAsData": true,
+    "engineCodeExecuted": false,
+    "processInspected": false,
+    "gameStarted": false,
+    "built": false,
+    "tested": false
+  }
+}

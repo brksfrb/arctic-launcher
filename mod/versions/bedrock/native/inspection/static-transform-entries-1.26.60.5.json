@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "oldProductVersion": "1.26.5203.0",
+  "newProductVersion": "1.26.60.5",
+  "requestedRoots": [
+    "0x1d5cf90",
+    "0x1c35ff0",
+    "0x558d300"
+  ],
+  "calleesOf": [],
+  "rootsOnly": true,
+  "oldTextSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "newTextSha256": "7ca5d1baef049979e9785d5bbafe7100a829e1107a3d374975962cc64ecc76fe",
+  "sourceReferencedFunctions": 3,
+  "probed": 3,
+  "truncated": false,
+  "counts": {
+    "changed_or_missing": 3
+  },
+  "method": "Full function instruction bytes with only external relative address operands masked; internal branches/member offsets/immediates retained",
+  "limitations": [
+    "Candidate identity is not semantic equivalence",
+    "External callees and referenced constants need independent joins",
+    "No ABI/layout/ownership/runtime or supported-profile promotion"
+  ],
+  "gameStartedByInspection": false,
+  "gameModuleLoadedByInspection": false,
+  "gameCodeExecuted": false,
+  "functions": [
+    {
+      "oldRva": "0x1c35ff0",
+      "oldBytes": 7195,
+      "references": [
+        {
+          "root": "0x1c35ff0"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 0,
+      "oldRawSha256": "918c355dd91fe382ef1cdf7eb7db26f79bda465f03b308eb291585e3dce77465",
+      "normalizedSha256": "b8ea3d220e50e2a4d64972b5d9ab2c3c1e62af0e6904adf94417cee475707c40",
+      "maskedBytes": 532,
+      "state": "changed_or_missing"
+    },
+    {
+      "oldRva": "0x1d5cf90",
+      "oldBytes": 2212,
+      "references": [
+        {
+          "root": "0x1d5cf90"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 0,
+      "oldRawSha256": "e16326d14da7f4301ac469ae4578dc8fdba1e79bfd58cad413f72880e97b4051",
+      "normalizedSha256": "81f322626a3539201d61c078ded7bb5b30f3d57450ae7c437fb8a0e686b32b06",
+      "maskedBytes": 140,
+      "state": "changed_or_missing"
+    },
+    {
+      "oldRva": "0x558d300",
+      "oldBytes": 4581,
+      "references": [
+        {
+          "root": "0x558d300"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 0,
+      "oldRawSha256": "8625ce761116472d56afaaeed60883b3f0df89c04e3039a6ff641180fdb95c8b",
+      "normalizedSha256": "bbf3e8ee0495fd7b1f5fe3f89717218e6e995fd90094e94677cbd78e2cc55474",
+      "maskedBytes": 394,
+      "state": "changed_or_missing"
+    }
+  ]
+}

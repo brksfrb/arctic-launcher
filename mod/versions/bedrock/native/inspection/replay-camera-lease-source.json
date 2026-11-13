@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "evidence": "Source reads, edits and manual review only. No builds, tests, syntax checks, project/helper/game/JNI/shader/GPU execution, process inspection, native commands or exports. Runtime parity remains unverified by user instruction.",
+  "problem": "Guarded export camera changes could lose their acknowledgement after native application, leaving the caller without an identity it could release. Direct camera targets previously had no expiry, so stopped workers also left their successful overrides active until an explicit command or world change.",
+  "contract": {
+    "request": "Optional leaseMs on schema-1 camera requests. Values are integral 500..30000 ms and only valid with a set target. A guarded set requires this bounded lease; explicit legacy manual commands may still omit it. Core automatic set requests use 30000 ms, including owned replacements, without changing public target layout, C ABI or engine offsets.",
+    "clock": "The deadline is native Instant wall time from actual command acceptance, independent of frozen game time, replay seek, partial tick or video frame rate. Each explicit set/replacement installs its own deadline. Reports, camera callbacks and frame capture never renew it.",
+    "expiry": "Worker service, camera status, command admission, consumer selection and capture observation all run the same locked expiry operation. Expiry clears the target/deadline and copied producer-frame camera summaries. It performs no engine-memory write. An expired target cannot supply a controlled-camera capture observation.",
+    "consumer": "Each actual controlled consumer claims one monotonic token and the accepted command sequence/request identity under CONTROL before leaving selection. Another callback cannot apply a target or reset its session until that scope releases the claim. Admission may queue an owned follow-up while a previous acknowledged scope runs; actual acceptance waits for the old claim to end. Selection is rechecked before patch application.",
+    "restoration": "A frame guard exists before fallible actor/patch observation. Early errors and completed frames release the exact token through the common Drop path, retaining scoped byte restoration, unchanged-player and matrix-consumption checks. Expiry during an active scope leaves consumerActive true until actual restoration. Worker expiry cannot declare that in-flight scope restored or force it off another thread.",
+    "observation": "A known completed restored scope may become an inactive lease_expired observation with expiryObservation=true under the same accepted command identity. Expiry during a scope publishes that observation only after actual restoration and unchanged-player checks; expiry before any patch can establish inactivity without creating a consumed-camera frame. A pending set that expires before acknowledgement goes to requestRejected. No release command acknowledgement, presented frame or native verification is synthesized.",
+    "failure": "Restoration/actor/matrix/patch failure remains an error and blocks known idle acquisition. Expiry does not erase that failure. A native consumer that never returns keeps its claim, so another owner cannot acquire based only on elapsed time. Actual engine concurrency/termination behavior remains unverified."
+  },
+  "core": {
+    "acquire": "Idle acquisition now requires boundedLeaseImplemented, consumerActive=false, no deadline/pending/queue/error/restoration failure and either an initial identity, actual release or confirmed inactive expiry observation. Older bundles are rejected without an unguarded retry.",
+    "acknowledgement": "Automatic set success additionally requires leaseMs=30000, leaseActive=true and leaseExpired=false alongside the existing exact ownership echo, correlated request identity and restored/unchanged-player checks.",
+    "cleanup": "For owned release only, a bounded fresh report may confirm the exact previous sequence/request identity already expired and inactive, with no active consumer or queued/pending work and a successful restoration observation. Core returns that real status plus releaseSkipped=owned_camera_lease_expired; it publishes no command. The export worker's existing separate camera release cache accepts that observation and still independently releases its clock.",
+    "lostAcknowledgement": "The caller still reports an uncertain/lost command acknowledgement rather than guessing its identity. The accepted native target's independent deadline now provides bounded removal of future override use, including when the caller cannot publish owned cleanup. An already-running engine scope must still return through restoration. This is recovery source logic, not proof of a completed export."
+  },
+  "compatibility": {
+    "wire": "Only the local optional camera JSON field/capability and diagnostic receipt/status fields change. Replay archives, ARCGEO, camera target units, engine hook locations and GPU/capture readiness gates are unchanged.",
+    "manual": "The existing explicit camera_control/CLI route remains unleased unless its native request explicitly includes a lease. Automatic direct export always requests the bounded lease. Protocol-camera export continues to use its existing viewer/path ownership route.",
+    "tests": "One existing Request test initializer gained lease_ms=None for the new optional field; no tests were added or executed. No build or syntax check was run."
+  },
+  "remaining": [
+    "Runtime expiry timing, paused/stalled renderer recovery, abandoned-command acknowledgement reconciliation and native consumer/thread/reentry/restoration comparisons.",
+    "Atomic helper/native camera handoff, full camera modes and recorded glint/fog/camera rebasing.",
+    "Authoritative live native cosmetics insertion/resource ownership, complete cape/emote/material fidelity and deterministic replay/video integration.",
+    "Build, installed-game rendering and export comparisons, and full 1:1 parity verification."
+  ],
+  "verified": {"built":false,"tested":false,"leaseExpiryCompared":false,"consumerClaimsCompared":false,"lostAcknowledgementRecovered":false,"restorationCompared":false,"liveGame":false,"gpuRendering":false,"deterministicVideo":false,"fullParity":false}
+}

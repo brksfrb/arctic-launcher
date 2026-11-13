@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "evidence": "Static edits and manual source/API-definition review only; no builds, syntax checks, tests, project/game execution, shader compilation, GPU/API execution, process inspection or Bedrock operations",
+  "sourcePort": {
+    "module": "native_avatar_record",
+    "entry": "Unsafe record(list,graphicsState,surfaceState,Arc<Geometry>,Cohort), exposed by depth_tracker.record_avatar under the actual state tracker lock",
+    "materialPreparation": "avatar_material.prepare_ordered owns bounded ranges and prepared binding facts while borrowing the exact immutable upload/constants/pipelines; public record_ordered uses the same preflight and recorder",
+    "nativeWorldJoin": "Actual graphics root CBV arguments 2/3 resolve through the enclosing native batch's packet map; the retained world's unique producer FrameKey must equal the current thread's guarded backend FrameKey",
+    "packetJoin": "Retained observation session/sequence and camera origin/projection match uploaded packet bits exactly; camera-relative space, dimensions and complete pipeline target convention must also match",
+    "cameraProducer": "Shared live_frame.packet_projection and world_hooks.native_session helpers preserve the original producer's float operation order/session format; draw_camera selects the exact bounded history scope without recent-world fallback",
+    "deviceJoin": "Direct list, pipeline and every uploaded vertex/index/texture/constant resource share the device; heap visibility includes the drawing node; the shader-visible SRV heap has the matching device/node/type",
+    "nativeOwnership": "Current bound view/resource/recorded-state metadata and actual viewport/scissor are rechecked through native_bound_surfaces; the unsafe Cohort must still establish native heap/resource/descriptor lifetime, winding and actual feature phase/order",
+    "beforeCommands": "Build group plan, preflight all materials/ranges, capture a complete live-list state snapshot, register geometry/snapshot/native-owner clones in native_draw_assets, then recheck world and state stamps before recording",
+    "recording": "Prepared indexed draws run on the engine list inside the private-command guard; no allocator/list reset, close, queue execution or private-list submission occurs",
+    "restoration": "Normal completion and Rust unwinding use the same restoration guard; heap arrays, root values and constants are fully owned/resolved at snapshot preparation, eliminating restore-time buffer construction and missing-value expectations",
+    "retention": "Native draw assets retain the geometry, pipelines/constants, restore snapshot, current Bound surface Arc and native owner through the existing non-replayability plus GPU-fence retirement path; early errors after registration leave bounded pins until reset/retirement",
+    "restoreBufferOwners": "Restore snapshots now also retain a complete observed committed-buffer owner cohort for non-null graphics root addresses and nonempty vertex/index views on an actual single-node list device, when resolvable. Unknown/placed buffers and mutable descriptor contents remain the unsafe native caller's responsibility; see native-restore-buffer-owners-source.json",
+    "restoreDescriptorSpans": "Restore snapshots now retain bounded declared graphics/compute descriptor slots resolved from actual root ranges and bound heap arguments. Their heap Arcs travel with the same existing retained snapshot, but slot coverage does not own/freeze descriptor contents or their resources; see native-descriptor-spans-source.json",
+    "restoreDescriptorObjects": "Public descriptor-write/copy provenance now lets those spans retain actual referenced objects and known committed allocation owners in the snapshot, with per-slot overlap/pending guards and pre-emission revision checks. Existing native draw-asset retention carries the cohort through retirement. Complete allocation/phase/descriptor-content ownership remains the unsafe caller's contract; see native-descriptor-resources-source.json",
+    "result": "Only a recorded asset generation/scope/sequence/range count; no GPU execution, presentation, body suppression or fidelity attestation",
+    "diagnostics": "nativeAvatarRecording exposes recording/restore-error counters and explicit missing caller/input-producer/unverified-rendering flags"
+  },
+  "transportCorrection": {
+    "file": "NativeGeometryPacket.java",
+    "problem": "WorldFrame.parse validates a six-value x/y/z/yaw/pitch/FOV camera, but the staging encoder required length three, rejecting valid live world frames",
+    "change": "Require the actual six-value world camera and serialize exactly its first three position doubles into the fixed 24-byte ARCGEO01 camera field",
+    "format": "ARCGEO01 remains unchanged; the existing Rust decoder already expects exactly three doubles",
+    "verification": "Source-layout comparison only; no packet encoder/decoder or tests were executed"
+  },
+  "limitations": [
+    "No game-facing insertion callsite invokes this transaction yet",
+    "No live producer supplies authoritative Java material/lightmap/fog/packed-light and feature-group inputs with native target/resource ownership",
+    "Actual single-RTV/depth binding and raster bounds now have source checks; physical GPU validation, native allocation/descriptor lifetime, winding and Java feature phase remain unproven caller contracts",
+    "The exact native live session/camera join does not replace the separate replay camera/clock/capture ownership protocol",
+    "Shader/general skin/glint/HDR variants, actual native drawing, replay/video comparisons and complete parity remain unfinished"
+  ],
+  "verified": {"built":false, "tested":false, "transactionExecuted":false, "nativeInsertionCallerImplemented":false, "liveInputsProducerImplemented":false, "stateRestorationVerified":false, "gpuWorldRendered":false, "deterministicVideo":false, "fullParity":false}
+}

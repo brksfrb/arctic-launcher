@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "evidence": "Source edits and manual source reading only; no build, test, syntax check, JNI/GPU/project execution, process inspection or Bedrock launch",
+  "sourcePort": {
+    "surfaceProducer": "depth_tracker.geometry_world joins the presenting queue's submitted depth scope, full native dimensions and observed reverse-Z under the submission gate; preserved-copy metadata requires its exact submitted generation and queue, while direct depth uses the existing complete eligible-state predicate",
+    "ambiguity": "Multiple preserved source/scope/convention candidates or multiple eligible direct surfaces are rejected; camera recency and scaled HUD dimensions never select a world",
+    "readbackSeparation": "Geometry selection reads metadata without copying/mapping terrain pixels or waiting on the GPU. Software terrain capture remains a separate operation and may fail without discarding a geometry request already selected",
+    "serializedClient": "NativeRender stores at most one owned request and actual device/direct-queue references. After normal frame processing imports textures and advances controllers, ClientVm.geometry_input produces the exact requested packet without a second controller tick",
+    "glint": "Selected packet glint requests the existing hash-verified Java artwork; asset availability does not infer selection, a feature phase or a shader profile",
+    "upload": "One asynchronous upload ticket at a time uses avatar_gpu_upload's existing bounded private-resource pool and upload fence; presentation polling is nonblocking. Pending tickets abandoned on disable/reset remain protected by that pool's retirement rules",
+    "completion": "Exact producer scope/session/sequence, native surface, camera and projection are checked before emission, before staging, after upload completion and when acquiring completed geometry; stale uploads are never relabelled with a newer frame",
+    "owners": "One completed upload is shared by Arc. Replacing the cache drops references outside its publication mutex. A native Geometry retains its own Arc through existing recording/fence owners",
+    "consumer": "Geometry.from_stream accepts only the specified world scope, size and pipeline depth convention, assembles explicit caller-owned preparation/pose inputs, and rechecks that the same completed upload remains published after preflight",
+    "missingInputs": "Packets without an explicit entity material cohort do not upload or draw; the reason reports missing Java lightmap/fog/material inputs. Empty geometry is not treated as a successful native draw",
+    "authority": "The stream observes the existing native cosmetics enable policy. It does not publish a body/cape/wing suppression receipt, native target lease, GPU draw, capture receipt or parity readiness"
+  },
+  "remaining": [
+    "Java-equivalent live entity material/lightmap/fog producer",
+    "Authoritative model view poses, feature preparation and complete native participant phases",
+    "Actual game-facing insertion caller with native target/descriptor content ownership",
+    "Live cosmetics and deterministic replay/export fidelity verification"
+  ],
+  "verified": {"built":false,"tested":false,"executed":false,"nativeInsertion":false,"nativeDrawing":false,"deterministicVideo":false,"fullParity":false}
+}

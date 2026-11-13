@@ -83,6 +83,7 @@ public final class Animation {
 	public final boolean looping;
 	private final Map<String, Track> rotations;
 	private final Map<String, Track> positions;
+	private volatile long retainedWeight;
 
 	private Animation(float length, boolean looping, Map<String, Track> rotations, Map<String, Track> positions) {
 		this.length = length;
@@ -124,13 +125,13 @@ public final class Animation {
 		return new Animation(length, looping, Collections.unmodifiableMap(rotations), Collections.unmodifiableMap(positions));
 	}
 
-	/** Rotation of {@code bone} in degrees at {@code t} seconds, or null if it isn't animated. */
+	/** Rotation of {@code bone} in degrees at {@code t} seconds, or null if it isn't animated. Do not modify the returned sample. */
 	public float[] rotation(String bone, float t) {
 		Track track = rotations.get(bone);
 		return track == null ? null : track.at(time(t));
 	}
 
-	/** Position offset of {@code bone} in pixels at {@code t} seconds, or null. */
+	/** Position offset of {@code bone} in pixels at {@code t} seconds, or null. Do not modify the returned sample. */
 	public float[] position(String bone, float t) {
 		Track track = positions.get(bone);
 		return track == null ? null : track.at(time(t));
@@ -159,6 +160,27 @@ public final class Animation {
 	/** Whether a one-shot animation is over at {@code t}. */
 	public boolean finished(float t) {
 		return !looping && t >= length;
+	}
+
+	/** Conservative weight for bounded holders of shared parsed animation data.
+	 * Tracks are immutable after parsing; count shared channels only once. */
+	public long retainedBytes() {
+		long cached = retainedWeight;
+		if (cached != 0) return cached;
+		long bytes = 128;
+		java.util.Set<Track> seen = Collections.newSetFromMap(new java.util.IdentityHashMap<Track, Boolean>());
+		for (Map<String, Track> channels : Arrays.asList(rotations, positions)) {
+			bytes += 128L + channels.size() * 96L;
+			for (Map.Entry<String, Track> entry : channels.entrySet()) {
+				bytes += 64L + entry.getKey().length() * 2L;
+				Track track = entry.getValue();
+				if (!seen.add(track)) continue;
+				bytes += 128L + track.times.length * 4L + track.modes.length * 4L + track.values.length * 8L;
+				for (float[] value : track.values) bytes += 32L + value.length * 4L;
+			}
+		}
+		retainedWeight = bytes;
+		return bytes;
 	}
 
 	private float time(float t) {

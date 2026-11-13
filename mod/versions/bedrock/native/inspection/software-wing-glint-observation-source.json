@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "evidence": "Current sources read/edited and manually reviewed only, using the previously decoded Java shader/phase/sort evidence. No build, test, syntax check, project/game/JNI/shader/GPU execution, process inspection or export. Runtime parity stays unverified by user instruction.",
+  "reference": {
+    "javaVersion": "26.2",
+    "evidenceLinks": ["native-armor-glint-source.json", "native-avatar-phase-recording-source.json", "java-model-submit-source.json", "replay-glint-input-source.json", "native-packet-glint-source.json"],
+    "phase": "Supported WingsLayer base order 0; first wing armorEntityGlint is order 1, translucentModels stage 7, before custom glow stage 8. Glint does not sort uploaded quads."
+  },
+  "shader": {
+    "observation": "JavaArmorGlint(GlintSample) requires active selection and copies textureMatrix16, fogPosition12, ColorModulator4, fogRanges4 and GlintAlpha. Unknown/inactive samples do not create shader uniforms. Existing explicit-clock construction remains available but is not used by this observation path.",
+    "texture": "Use the observed column-major texture matrix on (u,v,0,1), with no decomposition, wall-clock query, generated phase, matrix interpolation or option fallback.",
+    "fog": "Apply the observed row-major affine fog-position transform to emitted position before clipping, then compute spherical length and max(horizontal length,abs(y)). Interpolate those vertex distances through the existing clipping/perspective path. The older explicit-clock helper retains its identity-space fog convention.",
+    "fragment": "Existing linear-repeat armor artwork sampling, modulated alpha cutoff, fog/strength RGB fade, source-color-plus-one RGB blend, retained destination alpha, EQUAL depth and no depth writes remain. Vertex tint, actor opacity, normals, entity overlay/lightmap do not enter the glint fragment shader."
+  },
+  "integration": {
+    "entry": "WorldFrame.render passes the platform's verified local JavaReferenceAssets to Raster3D. AvatarRenderer already supplies explicit live or recorded-only samples inside wing model scopes before any sink. Native packet preparation remains a separate consumer of those samples.",
+    "scope": "Raster3D owns this software avatar collection only. Every model scope is bounded, finite-root checked and closed before finish. Known glint markers require wing sinks and cannot change after the first sink. Sinks cannot resume after another sink or outside their model, and incomplete model quads reject the frame. Rejection guards use IllegalArgumentException so NativeBridge's existing world-render rejection handler receives them.",
+    "availability": "Active selection requires verified armor artwork and an equipment camera; missing input throws instead of fabricating uniforms/artwork. Unknown selection stays distinct from explicit inactive. If any owned glint pass is active, another emitted wing model with unknown selection rejects the phase: sorting a known subset cannot prove the complete unstable order. All-unknown legacy rendering retains no glint pass and claims no observed absence or parity.",
+    "geometry": "While accepting each base wing vertex, retain its exact four clip coordinates and copy its original UV into the glint shader transform. Derive fog distances from that same emitted position. Clip the glint attributes before queueing with the same primitive order (0,1,2),(2,3,0), clip planes and position operations as the base. Do not re-emit meshes, resample animation, reapply skinning/poses or approximate a second depth surface.",
+    "models": "One deferred WingGlint per selected wing model, retaining both wings/parts and their original primitive order. Empty selected model scopes still participate in the model sort. Explicit inactive and unknown samples do not become selected models.",
+    "order": "After the existing ordinary blended draws, finish sorts the complete known selected owned wing sequence by its supplied view translations and emits each complete model before custom glow. JavaModelOrder independently ports (x*x+y*y)+z*z, descending Float.compare and the cached fastutil 8.5.18 unstable quicksort (selection below 16, median-of-nine above 128, equal-key partition/range swaps). No per-quad or stable-tie substitution.",
+    "budgets": "At most 2048 model scopes; additional clipped glint triangles count toward the existing 200000-triangle frame cap. Deferred geometry and uniforms are owned by that raster frame and cleared after finish. No archive/wire/native ABI, replacement receipt or suppression gate is changed."
+  },
+  "remaining": [
+    "Authoritative live producer of complete target-Java glint selection/transforms/options/fog/view poses. Installed native foil/enchantment flags alone are insufficient.",
+    "Native GPU insertion callsite, actual target/resource/descriptor lifetime owner and complete native foreign phase participant capture/dispatch; this software-owned sequence cannot stand in for that joint native phase.",
+    "Owned simple phases and checked-view whole-skin ordering are connected in source (software-simple-phase-source.json, software-model-phase-source.json). Native pose provenance, complete quad/model/raster equivalence, unsupported/general variants and full native/world phases remain unfinished or unverified.",
+    "Animated recorded-clock reconstruction beyond exact/stable GlintHistory samples, camera-editor transform rebasing, complete emote/cape/material fidelity and deterministic video export integration.",
+    "Build, source-sort comparison, image/depth/raster/blend equivalence, replay rendering, native execution and complete 1:1 parity verification."
+  ],
+  "verified": {"built":false,"tested":false,"sortCompared":false,"pixelsCompared":false,"depthEqualCompared":false,"replayRendered":false,"liveGame":false,"gpuRendering":false,"deterministicVideo":false,"fullParity":false}
+}

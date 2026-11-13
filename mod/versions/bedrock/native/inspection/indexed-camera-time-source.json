@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "evidence": "Current source reads, edits and manual review only. Existing pinned camera preRenderUpdate hook/clock mapping was reused without new game inspection. No builds, tests, syntax checks, project/game/JNI/shader/GPU execution, process inspection, clock commands or exports. Runtime parity remains unverified by user instruction.",
+  "problem": "The existing camera timing hook reports a global last output, while indexed export already joins a held clock, world layer and camera pose. A previous successful timing output cannot establish that this producer frame used the same acknowledged timing command.",
+  "producer": {
+    "clock": "native_clock.capture_renderer resolves the actual primary renderer binding and completed client tick, drops its binding lock, then uses the existing strict capture_sample checks for acknowledged command identity, held tick/partial, current rate, active lease, idle queues and matching real timer when required.",
+    "prepare": "Retain the current guarded render_bridge.FrameKey and optional fully acknowledged clock alongside the existing controlled camera delta preparation. The existing native write/original-call/output comparison strategy and pinned hook/profile are unchanged.",
+    "finish": "Admit a capture observation only when the native output matches expected f32 bits, the producer key stayed unchanged, the freeze generation matches and the same acknowledged clock remains current after the original native call. Keep renderer/camera/session/generation and exact output words privately.",
+    "cache": "At most eight producer frames. Identical observations may coexist; missing or conflicting observations make that key permanently ambiguous while retained. A later success cannot erase an earlier failure. Unprepared controlled callbacks invalidate their current producer key.",
+    "copy": "capture_sample requires that same current producer key, renderer, owned camera, session, freeze generation, clock identity and scaled render time. Read/recheck actual native outputs and then recheck the retained unambiguous observation, current clock and producer before returning an owned JSON copy.",
+    "world": "world_hook requests the copy only when its beginning/current producer keys agree, binds the returned copy to its world sequence and stores it in renderer timing. live_frame propagates cameraTime through captureControls; CaptureFrame copies those controls into metadata of the world layer actually included in returned pixels.",
+    "identity": "Internal FrameKey includes guarded address plus native frame number; only the number is serialized. Numeric keys/world sequences are correlation, not native GPU resource or descriptor ownership."
+  },
+  "receipt": {
+    "fields": "schema=1, session, worldSequence, producerFrame, clock (acknowledged command/freeze/tick/partial/rate/real-timer identity), freezeSequence, secondsScaled, expected[delta,current], observed[delta,current], outputMatched=true. Native simulation and deterministic-video verification remain false.",
+    "fence": "Optional ControlFence.requireCameraTime defaults false and is omitted when false in both core and native serialization. NativeExportClock enables it for indexed capture. Capture status advertises source support; the export worker rejects a bundle lacking that capability before waiting for a frame.",
+    "matching": "Both core observation admission and native capture admission require same session/world sequence, bounded producer number, matching freeze and held-clock identity, finite bounded two-float outputs, exact expected/observed f32 bits and scaled-current agreement. Require copied partial/rate bounds and exact float bits. The existing clock/camera/world-work/frame-input gates remain.",
+    "savedArtifacts": "Export receipt writing rechecks any requested camera timing fence through captured_tick_rate. Paired comparison also rechecks it for every timeline row and includes whether the requirement was enabled in stable timeline comparison. Native process/session/absolute scaled-time origins do not become cross-run equality assumptions.",
+    "compatibility": "Existing intents/archives/wire ABI remain unchanged. Older manifests without this optional fence retain their old interpretation and do not acquire camera timing proof. New requests with the flag require updated producers/readers.",
+    "metadataBudget": "FrameTag JSON admission increases from the old 4 KiB pose envelope to 64 KiB for bounded world-work/material and camera receipts. The separate controller report cap remains 256 KiB and command cap 16 KiB. Oversized metadata is still rejected; this is a source budget, not measured runtime memory or a proof that all future report combinations fit."
+  },
+  "relatedFix": "Software wing-glint/model scope rejections now use IllegalArgumentException, matching NativeBridge's existing world-render rejection handler instead of letting new IllegalStateException guards escape that handler.",
+  "remaining": [
+    "Build and real installed-game validation of hook call order, producer-frame identity, multiple views/repeated callbacks, strict ambiguity handling, capture settling, lease changes and report-size bounds.",
+    "Exact replay/native epoch alignment, clock-rate transitions and drift; a matched camera timing output does not establish all native animation, terrain, texture, simulation or integrated-server clocks.",
+    "Authoritative live native cosmetics inputs, actual native world insertion/resource ownership, complete capes/emotes/materials and camera-editor rebasing.",
+    "Real rendered replay and MP4 export comparisons. Full 1:1 feature parity and deterministic video remain incomplete and unverified."
+  ],
+  "verified": {"built":false,"tested":false,"nativeHookObserved":false,"producerFrameMatched":false,"cameraTimingMatchedInGame":false,"captureSettled":false,"exportExecuted":false,"pixelsCompared":false,"liveGame":false,"deterministicVideo":false,"fullParity":false}
+}

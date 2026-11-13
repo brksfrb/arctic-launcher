@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "evidence": "Source inspection of Cosmetics.Playing, AppearanceSnapshot, ReplayAppearance and EmotePrograms; no project classes or game executed",
+  "sourcePorted": true,
+  "capture": "Playing.sample reads the playback clock once and derives both float seconds and the pre-rounding double elapsedMillis from it; held poses keep their explicit seconds only",
+  "archive": "New unheld snapshots include optional elapsedMillis in the existing logical emote state; readers continue accepting older states without it",
+  "changeDetection": "Advancing seconds and elapsedMillis are excluded from the unheld appearance change key; the stable original start remains included",
+  "replay": "New states add replay elapsed milliseconds before dividing by 1000 and narrowing once to float seconds; legacy states retain the old float-seconds-offset formula",
+  "nativeCallback": "Published and buffered emote programs retain the optional millisecond phase and use the same evaluation as ReplayAppearance",
+  "validation": "Optional phases must be numeric, finite, nonnegative, at most 86400000 milliseconds, absent for held poses and consistent with the stored float seconds",
+  "resave": "Re-saved new snapshots advance both the millisecond and float phases; legacy states do not invent a millisecond phase",
+  "liveSecondsHotPathChanged": false,
+  "nativeEquipmentReadinessChanged": false,
+  "sourceBuilt": false,
+  "sourceTested": false,
+  "liveReplayPhaseAgreementVerified": false,
+  "nativeEmotePoseVerified": false,
+  "deterministicVideoVerified": false
+}

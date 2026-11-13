@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "javaVersion": "26.2",
+  "nativeProductVersion": "1.26.5203.0",
+  "evidence": "Cached Java class bytes decoded as data, existing pinned native finalizer trace and static source port; no project/game code executed",
+  "sourcePorted": true,
+  "remotePhaseExtension": "cape-previous-position-source.json",
+  "references": ["cape-physics-source.json", "native-movement-finalization-source.json", "native-movement-accumulator-source.json"],
+  "javaOrder": {
+    "AbstractClientPlayer.tick": "Invoke ClientAvatarState.tick(position,deltaMovement), then Player.tick",
+    "ClientAvatarState.tick": "Copy current walk distance to old walk distance, store previous-tick delta movement, then moveCloak using the supplied pre-Player.tick position",
+    "moveCloak": "Independent per-axis strict +/-10 snap or double 0.25 follower step with old/current cloak endpoints"
+  },
+  "nativeInput": {
+    "capture": "Before the original primary-client tick, within the existing local movement scope",
+    "feet": "Double widening of StateVector X/Z and AABBShapeComponent minimum Y; no eye/stance offset used as feet Y",
+    "initialCohort": "Actor position and bounds must exactly match direct component reads; actor/component/registry ownership and both position/bounds reads are rechecked before admitting the tracking scope",
+    "firstAndSubsequentMovementContinuity": "Existing finalized movement collector requires exact before/after StateVector continuity and a matching final local actor",
+    "ownedBatchAddition": "Three double pre-movement feet coordinates; no additional native pointer or handle",
+    "remoteActorsOrUnsupportedScopesSynthesized": false
+  },
+  "phaseApplication": {
+    "requires": ["same player-directory epoch, UUID and completed tick", "sequential existing cape simulation", "admitted nonempty ordered movement batch", "matching simulation start/end XZ and final actor position", "bitwise equality of all three captured pre-movement feet coordinates with the prior simulation position"],
+    "cloakInput": "Captured pre-movement feet",
+    "renderPositionEndpoints": "Actual previous/current completed-tick actor feet; no position endpoint is delayed or replaced by the cloak input",
+    "filterCalculationStage": "After original native tick returns, as before; the supplied position input phase changes, not native engine scheduling",
+    "oldCloakEndpoints": "Copied before one follower/snap step, exactly once per admitted simulation tick",
+    "walkIntegration": "Retain separate ordered float additions for each admitted movement increment",
+    "bobWingFlightInputsOrUpdateOrderChanged": false,
+    "missingHistoryOrFeetMismatch": "Existing completed-tick cloak input remains the fallback; matching XZ may still permit observed walk increments independently",
+    "gapWarmupAndDuplicateTickHandlingChanged": false,
+    "teleportTiming": "A position discontinuity committed during the tick no longer forces the matched pre-movement cloak input to use the destination in that same tick; normal axis snap applies when the destination becomes the next admitted pre-movement input"
+  },
+  "recording": {
+    "archiveLayoutChanged": false,
+    "existingCapeSnapshotPersistsResult": true,
+    "replayRecomputesLiveNativeFollower": false,
+    "fields": ["position", "oldPosition", "cloak", "oldCloak", "walk", "oldWalk"]
+  },
+  "status": "preMovementCloakBatches counts applications; preMovementCloakPhaseVerified remains false",
+  "remainingLimits": [
+    "Complete movement-route coverage, coalescing, worker execution and Java move-call equivalence are not established",
+    "A client-level tick boundary is not proven identical to each Java actor-tick boundary",
+    "Unobserved excursions returning to the same endpoint cannot be excluded by endpoint guards",
+    "Remote-player previous-copy phase is extended separately; unsupported samples retain completed-tick fallback",
+    "Native float coordinate quantization is retained; original Java double precision cannot be inferred",
+    "Native runtime integration, teleport rendering and replay round trips remain unverified"
+  ],
+  "sourceBuilt": false,
+  "sourceTested": false,
+  "syntaxChecked": false,
+  "gameStarted": false,
+  "nativeHookExecutedDuringThisChange": false,
+  "preMovementCloakPhaseVerified": false,
+  "archiveRoundTripVerified": false,
+  "capePhysicsParityVerified": false,
+  "deterministicVideoVerified": false,
+  "parityVerified": false
+}

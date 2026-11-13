@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "evidence": "Repository source reads and edits only; no builds, tests, syntax checks, UI interaction, helper/project/game execution, process inspection, clock commands or Bedrock launch",
+  "port": {
+    "entry": "Replay camera editor Synchronize game clock opens a worker-side loaded-bundle picker, then uses the shared PlaybackClock marker/session binding. Admission requires one initialized, caught-up helper viewer. Release game clock uses the owned worker release path.",
+    "serialization": "A playback job moves the one OfflineConnector and optional PlaybackClockLease out of UI state. Attach, periodic service, batched controls and release cannot overlap with another playback, appearance-recording or indexed-export job. Job UUID and edition must match before returning resources to UI state.",
+    "renewal": "The global background poll drains lifecycle events, then schedules owned service about once per second. Blocking helper/native calls run on Tasks workers. Failed/inactive leases do not automatically resubmit service jobs; the connection and any retained lease return for recovery.",
+    "controls": "Attached speed/pause controls use PlaybackClock.control. Other controls use the same serialized helper owner. Seek, reset, exact step and replay-file export release the native rate before forwarding. Batches are bounded to 32 controls. A release action alongside controls releases first; controls entered in the same UI frame as indexed export move to its worker before owned rate release, so a competing playback job cannot consume the export connection.",
+    "deferredFileExport": "A camera-export file selection can arrive while a clock job owns the helper. The UI queues up to 32 commands tagged with the current replay generation; after polling lifecycle events, commands for another generation are discarded with a visible retry message. Matching commands drain when the connection returns, through the clock worker when attached.",
+    "indexedExport": "ReplayVideoRequest moves the passive lease to the export worker. Owned release completes before file/encoder dialogs and before export_job.run may freeze simulation. Failure cleanup drops the core controller on the worker before returning the replay connection.",
+    "stopAndClose": "Stop during a clock job sets stop_after. Its matching result releases the returned clock and stops the helper on a worker. Close preparation similarly waits for pending work or schedules shutdown. The ordinary stop path also releases the clock before stopping the helper and reports combined cleanup errors.",
+    "drop": "PlaybackClockLease is a passive UI wrapper: its Drop schedules core-controller cleanup on a background thread. An unconsumed PlaybackClockResult schedules clock cleanup and helper shutdown together. Successful result take leaves the result empty; stale results cannot replace newer UI owners. Native lease expiry remains independent if the app disappears.",
+    "ui": "Pending work retains its local replay address and shows progress; local keyframe editing remains available while native/connection controls wait. Clock preview status and native playback fidelity remain explicitly unverified."
+  },
+  "remaining": [
+    "Build/type and runtime validation of UI task handoffs, close, cancellation and unconsumed-event cleanup",
+    "Atomic helper/native clock transitions, exact epoch alignment and real-frame drift",
+    "Native timer cap, loading/terrain, animation and integrated-server fidelity",
+    "Live native world cosmetics, full replay camera modes and deterministic video fidelity"
+  ],
+  "verified": {"built": false, "tested": false, "uiUsed": false, "leaseLifecycle": false, "nativePlaybackSynchronized": false, "liveGame": false, "deterministicVideo": false, "fullParity": false}
+}

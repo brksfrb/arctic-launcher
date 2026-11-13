@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "evidence": "Current source reads/edits only, based on the previously decoded cached Java model-sort/order evidence. No builds, tests, syntax checks, project/game execution, JNI/shader/GPU calls, process inspection or exports.",
+  "reference": {
+    "java": "26.2",
+    "modelSort": "TranslucentFeatureRenderPhase initializes indices for its complete original submission list, calculates model-pose distance, and calls IntArrays.unstableSort before delivering strictly ordered entries. Foreign participants therefore influence equal-key ordering; sorting only the owned subset is not generally equivalent.",
+    "evidenceLinks": ["java-model-submit-source.json", "native-avatar-phase-recording-source.json"]
+  },
+  "port": {
+    "input": "WingSchedule.new accepts the complete original order-1/model-phase-7 sequence as WingPhaseModel::Wing(actual ModelViewPose) or Foreign(opaque nonzero token, actual submitted view translation). Total participants are bounded to 2048. The owning producer must supply completeness and actual phase/pose/resource provenance; the schedule does not invent foreign participants.",
+    "validation": "Reject unknown/non-wing/unknown-eligibility owned model IDs, repeated or nonascending owned source IDs, zero/repeated foreign tokens, oversize phases and nonfinite owned/foreign poses. Foreign tokens occupy a separate opaque namespace and are never dereferenced as engine pointers.",
+    "sort": "Call shared model_order exactly once over every participant in original order, preserving Mth float grouping, Java comparison and fastutil unstable tie behavior. The owned subset is validated without independently sorting it.",
+    "output": "Coalesce adjacent owned selected models into WingRun steps and preserve every Foreign token as its own delivery boundary. Never reorder an owned run again or concatenate across a foreign boundary. wing_models flattening is used only for full resource preflight; the full recorder rejects schedules containing foreign steps.",
+    "owner": "GlintGeometry.from_joint binds that schedule to its actual uploaded base/pipeline/constants. from_owned remains an exclusive-owned-phase convenience and delegates through the same schedule construction.",
+    "cursor": "GlintCursor exposes the next step and drained bookkeeping, binds to the actual current graphics-state ListToken/world scope on its first successful delivery, and rejects moving to another recording lifetime or scope. record_glint_step records only the next owned run through existing state/surface/camera/device/retention preflight. Any inner step error poisons the cursor against retrying possibly partial commands.",
+    "foreign": "The actual native owner draws a scheduled foreign model outside the Arctic recording entry, tracker lock and private-command guard. acknowledge_glint_foreign checks expected token/order/phase/current world/list binding and advances bookkeeping only. It does not invoke, attest or prove the foreign draw or GPU completion. Wrong/repeated/out-of-order acknowledgement poisons the cursor.",
+    "trackedEntries": "Depth-tracker wrappers retain the existing open-list lock/private-reentry gates for each owned recording or acknowledgement. The lock/guard is released between deliveries so native foreign commands can update their normal graphics-state shadow.",
+    "assetRetention": "Multiple recordings on one exact unsubmitted ListToken can append their snapshots/resources/native owners to one native_draw_assets reservation/fence. Up to 4096 chunks per recording, within the existing 16 lifetime slots. Match canonical/raw list identity, typed lifetime token and device; reject removed devices and released/non-replayable/failed/pending/submitted/queued lifetime reuse. Fresh Reset tokens use a new reservation. Existing eligible reservations append without creating another fence; new fences allocate outside the pool lock, followed by a second locked admission check. Every chunk remains until existing replayability plus actual fence/device-removal retirement rules allow release.",
+    "generation": "Recordings sharing one reservation return the same asset generation. The reservation/retained counters describe lifetime owners; status separately reports live asset chunk count and its per-recording bound. No payload destructor is moved into retirement pool locks; collect still drops retired owners outside those locks.",
+    "compatibility": "No packet/archive/ABI change, no foreign GPU callback synthesized, no automatic native insertion and no replay clock/options fallback. Existing exclusive glint and phase-specific entity APIs remain."
+  },
+  "remaining": [
+    "Actual installed-game producer of the complete joint phase participants, original submission order, Java-equivalent poses, glint selection/uniforms and actual native foreign draw dispatch.",
+    "An owning native phase callsite, actual target/resource/descriptor lease and integration with native rendering/fence retirement. Supplied labels/tokens and cursor drained state are not proof of these.",
+    "Recorded clock reconstruction for changing glint and verified rendering of optional exact/stable observations. ARCGEO10 packet/profile preparation and software-owned phase consumption are in native-packet-glint-source.json and software-wing-glint-observation-source.json; the live insertion callsite and complete other feature/material variants remain missing.",
+    "Build/test/cross-language ordering comparison, native recording/restoration/retirement behavior, visual fidelity and full animation/replay/export parity verification."
+  ],
+  "verified": {"built":false,"tested":false,"crossLanguageSortCompared":false,"nativeForeignDelivered":false,"gpuRecorded":false,"stateRestored":false,"fenceRetired":false,"liveGame":false,"deterministicVideo":false,"fullParity":false}
+}

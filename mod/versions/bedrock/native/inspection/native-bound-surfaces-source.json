@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.5203.0",
+  "evidence": "Source edits and manual source/local API-definition review only; no builds, syntax checks, tests, project/game execution, shader compilation, GPU/API execution, process inspection or Bedrock operations",
+  "sourcePort": {
+    "module": "native_bound_surfaces",
+    "handoff": "After the existing pinned framebuffer routine's original call and header/frame/argument rechecks, a complete attachment sample may move to the actual list's tracked binding state",
+    "publicObjectLifetime": "The actual OMSetRenderTargets list argument is temporarily cloned through the framebuffer routine's completion; no guessed context pointer is invoked as a COM object and the binding shadow holds no owning list reference",
+    "bindingIdentity": "Every observed OM bind gets a fresh monotonic epoch; handoff requires that exact epoch plus the graphics observer's current private list-lifetime token",
+    "pair": "Exactly one color and one distinct depth object, complete role/view snapshots, whole-resource unsplit transition witnesses ending in RENDER_TARGET/DEPTH_WRITE, Texture2D single-array/single-mip views at mip/plane zero and writable DSV flags",
+    "stability": "Native registry/framebuffer/slot guards, actual immutable descriptions and the descriptor cohort are rechecked when the pair is consumed",
+    "resourceIdentity": "Canonical IUnknown identity is copied numerically from actual public resource arguments; only those real resource COM references are retained",
+    "committedAllocationOwners": "Actual successful public committed-creation receipts can now join a matching barrier resource/device/description and travel with the existing attachment witness/Bound Arc. Bound.committed_allocations returns both owners only for a still-valid complete pair. No owner is inferred from registry flags or an allocator-helper result; see native-committed-resources-source.json",
+    "shadowBudget": {"activeBindings":16, "queriedResourceAllocationBytes":268435456, "charging":"Both resources are queried with their actual device/heap creation mask; aliases across bindings are conservatively charged again; native_draw_assets pins are separately bounded by its transaction slots"},
+    "drawAssociation": "Only after forwarding an actual nonempty native DrawInstanced/DrawIndexedInstanced does the observer associate the current binding with the exact native batch/root-CBV world scope; private Arctic draws cannot supply this association",
+    "clears": "A clear of the bound resource or an unknown descriptor disarms the world association while retaining current binding metadata; known unrelated clear views leave it intact",
+    "invalidation": "New OM binding, relevant/unknown resource transitions or UAV barriers, aliasing/enhanced barriers, render-pass changes, bundles/indirect calls, reset, close or eviction discard the affected binding; descriptor mutations additionally fail capture by revision checks",
+    "crossBatch": "An unchanged binding can persist on an open native list; a new actual draw/batch/world join supplies its current scope rather than reusing the bind frame as a world identity",
+    "rasterBounds": "Public viewport and scissor setters copy the actual arguments; transaction validation requires one full matching viewport/scissor and depth range zero to one without changing those bindings",
+    "recordingIntegration": "native_avatar_record consumes the tracked surface shadow, verifies actual view formats/dimensions/samples/device/node and raster bounds, pins the Bound Arc before commands and rechecks the same current binding after preparation",
+    "entry": "Unsafe depth_tracker.record_avatar borrows the actual current graphics/surface shadows under their tracker lock; native feature-phase and input production remain separate",
+    "diagnostics": "Framebuffer handoff count plus bounded/scoped surface candidates and charged allocation bytes; candidates do not attest scene completeness, GPU execution or ownership"
+  },
+  "limitations": [
+    "No game-facing native feature-phase caller or authoritative live material/group producer invokes the recording entry yet",
+    "Single-RTV/writable whole-depth support covers the current material contract; MRT, arrays/mips/planes, read-only DSV variants, default swapchain and missing/deferred/no-transition states remain unresolved",
+    "Queried allocation accounting bounds shadow references, not all physical engine or transaction-pool memory",
+    "An observed committed-resource owner pins that committed storage lifetime, but does not pin placed/native allocator suballocations, prevent engine content reuse or own aliasing/versioning and shader-visible descriptor contents; Cohort still requires actual native ownership of those lifetimes",
+    "Supplied API descriptor metadata and recorded barrier states do not prove driver validation, actual queued state or final framebuffer contents",
+    "Post-draw scope association does not choose Java feature phase/order or prove the native scene is complete",
+    "Native drawing, complete cape/emote fidelity, deterministic replay/video comparisons and full feature parity remain unfinished"
+  ],
+  "verified": {"built":false, "tested":false, "handoffExecuted":false, "scopedBindingObservedLive":false, "surfaceViewMappingVerified":false, "queuedGpuStateVerified":false, "targetLeaseVerified":false, "gamePhaseCallerImplemented":false, "gpuWorldRendered":false, "deterministicVideo":false, "fullParity":false}
+}

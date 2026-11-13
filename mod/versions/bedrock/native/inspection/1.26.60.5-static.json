@@ -1,0 +1,902 @@
+{
+  "schema": 1,
+  "purpose": "Static installed-image discovery and binding migration evidence; deliberately not an installable hook profile",
+  "observedDate": "2026-10-30",
+  "productVersion": "1.26.60.5",
+  "fileVersion": "1.26.60.5",
+  "installedFileSize": 323819336,
+  "machine": 34404,
+  "timestamp": 1792515812,
+  "imageSize": 327397376,
+  "preferredBase": 5368709120,
+  "sections": {
+    "text": {
+      "rva": 4096,
+      "rawBytes": 250370560,
+      "virtualBytes": 250370518,
+      "sha256": "7ca5d1baef049979e9785d5bbafe7100a829e1107a3d374975962cc64ecc76fe"
+    },
+    "rdata": {
+      "rawBytes": 54792192,
+      "sha256": "acb23423e58c8e538cccc9042bf2e0ee61910b851da97a7025e1ba3999f3f49f"
+    },
+    "data": {
+      "rawBytes": 5687296,
+      "sha256": "144c4327c671f71f0453c64e134cddbf8d896248dfa27cc9830820c72f134332"
+    },
+    "pdata": {
+      "rawBytes": 11901952,
+      "sha256": "268e91d53ec8bf495c8f00fab4821860699e7ee2be0fc02e38bc1668defb1435"
+    }
+  },
+  "codeView": {
+    "pdb": "Minecraft.Windows.pdb",
+    "guid": "02446fc3-cb5d-9677-4c4c-44205044422e",
+    "age": 1,
+    "symbolKey": "02446FC3CB5D96774C4C44205044422E1",
+    "queriedUrl": "https://msdl.microsoft.com/download/symbols/Minecraft.Windows.pdb/02446FC3CB5D96774C4C44205044422E1/Minecraft.Windows.pdb",
+    "httpStatus": 404,
+    "scope": "Only this exact symbol-server path was checked; this is not a claim about every possible symbol source"
+  },
+  "legacyBindings": {
+    "productVersion": "1.26.5203.0",
+    "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+    "compatibleWithObservedImage": false,
+    "activeProfileChanged": false,
+    "guard": "world_hooks still rejects different image metadata/hash before installing its version-specific observer family"
+  },
+  "staticMigration": {
+    "functionEvidence": "static-function-map-1.26.60.5.json",
+    "method": "Full function instruction bytes with only external relative address operands masked; not semantic identity or ABI proof",
+    "referencedFunctionEntriesProbed": 90,
+    "uniqueNormalizedCandidates": 12,
+    "ambiguous": 1,
+    "changedOrMissing": 77,
+    "completeHookInventory": false,
+    "stringEvidence": "static-string-map-1.26.60.5.json",
+    "actorDispatcherCandidate": "0x594be00",
+    "actorDispatcherStringCandidates": 1,
+    "actorDifferenceEvidence": "static-actor-dispatch-diff-1.26.60.5.json",
+    "actorDispatcherInstructionCounts": [
+      305,
+      318
+    ],
+    "actorDispatcherCanonicalSequenceEqual": false,
+    "observedCandidateMemberChanges": [
+      [
+        "0x269",
+        "0x289"
+      ],
+      [
+        "0x174",
+        "0x19c"
+      ],
+      [
+        "0x228",
+        "0x250"
+      ],
+      [
+        "0x370",
+        "0x390"
+      ]
+    ],
+    "memberChangesMeaning": "These are offsets used in the candidate dispatcher, not a proved complete Actor layout and not a uniform offset delta",
+    "sceneEvidence": "static-scene-layout-1.26.60.5.json",
+    "worldCallerEvidence": "static-world-caller-map-1.26.60.5.json",
+    "signatureEvidence": "static-signature-map-1.26.60.5.json",
+    "coreEntryDifferenceEvidence": "static-core-entry-diff-1.26.60.5.json",
+    "worldRendererCandidate": "0x535f980",
+    "worldCallerCandidate": "0x4e0b490",
+    "worldCallSites": [
+      "0x4e0b730",
+      "0x4e0b87c"
+    ],
+    "levelTickCandidate": "0x6b8d550",
+    "levelVtableCandidate": "0xf2ce790",
+    "levelTickSlot": "0xcc0",
+    "levelVirtualNeighborsCompared": 21,
+    "platformGlobalCandidate": "0x128bef90",
+    "currentWorldAndTickEntryCandidatesLocated": true,
+    "currentWorldAndTickHooksPorted": false,
+    "observedSceneMemberCandidates": {
+      "levelRenderer.client": [
+        "0x408",
+        "0x418"
+      ],
+      "levelRenderer.playerOwner": [
+        "0x468",
+        "0x480"
+      ],
+      "levelRenderer.taskOwners": [
+        "0x3d8",
+        "0x3e8"
+      ],
+      "levelRenderer.gameRenderer": [
+        "0x3e8",
+        "0x3f8"
+      ],
+      "levelRenderer.level": [
+        "0x3f0",
+        "0x400"
+      ],
+      "playerRenderer.previousOrigin": [
+        "0x654",
+        "0x64c"
+      ],
+      "playerRenderer.origin": [
+        "0x660",
+        "0x658"
+      ],
+      "playerRenderer.links": [
+        "0x978",
+        "0x970"
+      ],
+      "playerRenderer.dimension": [
+        "0x990",
+        "0x988"
+      ],
+      "playerRenderer.levelRenderer": [
+        "0x9a0",
+        "0x998"
+      ]
+    },
+    "sceneVtableCandidates": {
+      "levelRenderer.vtable": "0xf2465c0",
+      "levelRenderer.appVtable": "0xf2466c0",
+      "playerRenderer.vtable": "0xf246fd0",
+      "playerRenderer.ownerVtable": "0xf247ae0"
+    },
+    "rendererConstructorCandidates": {
+      "levelRenderer": "0x53484d0",
+      "playerRenderer": "0x5386c00",
+      "cameraRendererBase": "0x53841d0"
+    },
+    "sceneMemberCandidateMeaning": "Paired accesses in the mapped world function and joined constructors; not a complete layout, ownership proof or uniform offset delta",
+    "sharedPinnedSceneLayoutSource": "../src/native_scene_layout.rs",
+    "sceneLayoutFamilyGuardAdded": true,
+    "clientEvidence": "static-client-layout-1.26.60.5.json",
+    "gameAndTimerEvidence": "static-game-timer-layout-1.26.60.5.json",
+    "renderContextEvidence": "static-render-context-layout-1.26.60.5.json",
+    "renderCurrentFrameCandidate": "0x53117b0",
+    "makeScreenContextCandidate": {
+      "rva": "0x5314b40",
+      "abi": "rendererScreenFloat",
+      "stackBytes": 376,
+      "worldReturnRva": "0x53119fc",
+      "sourceProfileBindingPorted": true,
+      "candidateActivated": false
+    },
+    "screenContextConstructorCandidate": "0x56ffc0",
+    "screenClockMemberCandidate": [
+      "0xb0",
+      "0xa8"
+    ],
+    "rendererMatrixWriterCandidate": "0x4e0d4b0",
+    "gameRendererMemberCandidates": {
+      "clock": [
+        "0x1f0",
+        "0x208"
+      ],
+      "clockScale": [
+        "0x200",
+        "0x218"
+      ],
+      "lastClock": [
+        "0x218",
+        "0x230"
+      ],
+      "tickCounter": [
+        "0x220",
+        "0x238"
+      ],
+      "screenContext": [
+        "0x270",
+        "0x288"
+      ],
+      "globalConstants": [
+        "0x290",
+        "0x2a8"
+      ],
+      "view": [
+        "0x388",
+        "0x3c0"
+      ],
+      "projection": [
+        "0x408",
+        "0x440"
+      ]
+    },
+    "gameRendererCompletedTickFieldResolved": false,
+    "gameRendererCounterFieldCandidateResolved": true,
+    "minecraftTimerEvidence": "static-minecraft-timer-layout-1.26.60.5.json",
+    "ecsCameraEvidence": "static-ecs-camera-layout-1.26.60.5.json",
+    "materialOwnerEvidence": "native-material-info-owner-source.json",
+    "concreteMaterialTableCandidate": {
+      "rva": "0xf2147e0",
+      "parseShaderRva": "0x4df5f50",
+      "shaderPathOffsets": [
+        "0xd0",
+        "0xf0",
+        "0x110"
+      ]
+    },
+    "materialInfoControlCandidate": {
+      "rva": "0xf24bb00",
+      "loaderRva": "0x5449be0",
+      "destroyRva": "0x544d230",
+      "deleteRva": "0x76900",
+      "deletingDestructorRva": "0x1210c0",
+      "allocationBytes": 88,
+      "objectOffset": "0x10",
+      "candidateActivated": false
+    },
+    "synchronousMaterialInfoOwnershipSourceImplemented": true,
+    "nestedRenderMaterialLifetimePinned": false,
+    "nativeSceneOwnershipLeaseImplemented": false,
+    "skinnedDescriptionEvidence": "static-skinned-description-layout-1.26.60.5.json",
+    "skinnedDescriptionCandidate": {
+      "rva": "0x668c750",
+      "abi": "skinnedDescription21",
+      "frameLayout": "compactRbpZero",
+      "witnessRva": "0x6b85a16",
+      "witnessKind": "call",
+      "sourceProfileBindingPorted": true,
+      "candidateActivated": false
+    },
+    "skinnedDescriptionMemberCandidates": {
+      "mesh": [
+        "0xb0",
+        "0xb0"
+      ],
+      "drawCount": [
+        "0xb8",
+        "0xb8"
+      ],
+      "currentBones": [
+        "0xc0",
+        "0xc0"
+      ],
+      "previousBones": [
+        "0xd0",
+        "0xd0"
+      ],
+      "material": [
+        "0x168",
+        "0x140"
+      ],
+      "color": [
+        "0x17c",
+        "0x154"
+      ],
+      "alpha": [
+        "0x188",
+        "0x160"
+      ],
+      "dithering": [
+        "0x1fe",
+        "0x1ce"
+      ]
+    },
+    "skinnedDescriptionBorrowedBoneSpanCandidate": {
+      "headerBytes": 16,
+      "countOffset": 0,
+      "pointerOffset": 8,
+      "matrixBytes": 64,
+      "copyRetainsNativeStorage": false
+    },
+    "paletteWriterEvidence": "static-palette-writer-layout-1.26.60.5.json",
+    "paletteWriterCandidate": {
+      "rva": "0x6b87e10",
+      "abi": "paletteWriter7",
+      "previousMatrixInput": "optionalMatrixReference",
+      "witnessRva": "0x589e7b7",
+      "witnessKind": "call",
+      "sourceProfileBindingPorted": true,
+      "candidateActivated": false
+    },
+    "paletteOwnerMemberCandidates": {
+      "current": [
+        "0x510",
+        "0x4e0"
+      ],
+      "previous": [
+        "0x528",
+        "0x4f8"
+      ],
+      "drawCount": [
+        "0x558",
+        "0x528"
+      ]
+    },
+    "paletteWriterPreviousInputSourcePorted": true,
+    "emoteCacheEvidence": "static-emote-cache-layout-1.26.60.5.json",
+    "emoteCacheStorageCandidate": {
+      "kind": "flatParallelVectors",
+      "keysOffset": "0x120",
+      "valuesOffset": "0x138",
+      "keyStride": 56,
+      "matrixStride": 64,
+      "keyGroupByte": 48,
+      "keyPaletteByte": 49,
+      "boundedSnapshotSourceImplemented": true,
+      "candidateActivated": false
+    },
+    "emoteCachePrepareCandidate": {
+      "rva": "0x589eb00",
+      "abi": "partParamsBonesKeyGeometryHistory6",
+      "storage": "flatParallelVectors",
+      "witnessRva": "0x589ed92",
+      "witnessKind": "call",
+      "predicateReturnRva": "0x589ed0b",
+      "writerReturnRva": "0x589ed3c",
+      "lookupReturnRvas": [],
+      "oldTripleLookupCallsPresent": false,
+      "sourcePointerProvenancePorted": true,
+      "sourceProfileBindingPorted": true,
+      "candidateActivated": false
+    },
+    "emoteCachePredicateCandidate": "0x589f280",
+    "emoteCacheProducerCandidate": "0x589f3f0",
+    "emoteCacheProducerBindingCandidate": {
+      "rva": "0x589f3f0",
+      "abi": "partParamsBonesKeyGeometry5",
+      "witnessRva": "0x58a0058",
+      "witnessKind": "call",
+      "sourceProfileBindingPorted": true,
+      "candidateActivated": false
+    },
+    "emoteCachePredicateBindingCandidate": {
+      "rva": "0x589f280",
+      "abi": "partParamsKeyByte3",
+      "witnessRva": "0x589f444",
+      "witnessKind": "call",
+      "sourceProfileBindingPorted": true,
+      "candidateActivated": false
+    },
+    "emoteCacheCurrentMutationAndLifetimeHooksMigrated": false,
+    "actorCacheLifetimeEvidence": "static-actor-cache-lifetime-1.26.60.5.json",
+    "actorDestructorCandidate": {
+      "rva": "0xb93420",
+      "abi": "actorDestructor1",
+      "ownerVtableRva": "0xf0a8d70",
+      "deletingDestructorRva": "0xcc2290",
+      "deletingDestructorSlot": 8,
+      "witnessRva": "0xcc229b",
+      "witnessKind": "call",
+      "sourceProfileBindingPorted": true,
+      "candidateActivated": false
+    },
+    "actorCacheDestructorCandidate": {
+      "rva": "0xb92330",
+      "abi": "actorCacheDestructor1",
+      "storage": "flatParallelVectors",
+      "ownerOffset": "0x120",
+      "witnessRva": "0xb932be",
+      "witnessKind": "call",
+      "sourceProfileBindingPorted": true,
+      "candidateActivated": false
+    },
+    "actorCacheOwnerMemberCandidates": {
+      "vtable": [
+        "0xe7caa50",
+        "0xf0a8d70"
+      ],
+      "cache": [
+        "0x118",
+        "0x120"
+      ],
+      "level": [
+        "0x1d8",
+        "0x200"
+      ],
+      "animationComponent": [
+        "0x270",
+        "0x290"
+      ]
+    },
+    "actorAndCacheDestructionInvalidationSourcePorted": true,
+    "cacheMutationSearchEvidence": "static-cache-owner-access-candidates-1.26.60.5.json",
+    "cacheMutationSearchComplete": false,
+    "emoteCacheGroupedInstallationSourceImplemented": true,
+    "emoteCacheBindingSourceEvidence": "native-emote-cache-bindings-source.json",
+    "emoteCacheEntryAndCallerProfileSourcePorted": true,
+    "emoteCacheMatrixReallocationCandidate": {
+      "rva": "0x5907980",
+      "witnessRva": "0x589fe96",
+      "witnessKind": "call",
+      "producerReturnRva": "0x589fe9b",
+      "abi": "vectorHeaderInsertionPointer2ReturnsPointer",
+      "ownerOffset": "0x138",
+      "matrixBytes": 64,
+      "stableKeyValueCountsGuaranteedAtEntry": false,
+      "hookImplemented": true,
+      "candidateActivated": false
+    },
+    "emoteCacheRelocationSourceEvidence": "native-emote-cache-relocation-source.json",
+    "emoteCacheMatrixCopyWitnessRebindingSourcePorted": true,
+    "emoteCacheCrossContextSlotWriteInvalidationSourcePorted": true,
+    "emoteCacheProducerStorageSourceEvidence": "native-emote-cache-producer-storage-source.json",
+    "emoteCacheProducerKeyMovementSourcePorted": true,
+    "emoteCacheProducerInPlaceMatrixInsertionSourcePorted": true,
+    "emoteCacheOutermostOwnerJournalSourcePorted": true,
+    "emoteCacheCompletedChildWriteRelocationSourcePorted": true,
+    "transformEntryComparisonEvidence": "static-transform-entries-1.26.60.5.json",
+    "transformComponentMigrationEvidence": "static-transform-component-layout-1.26.60.5.json",
+    "dataDrivenDrawCandidate": {
+      "rva": "0x58b5250",
+      "abi": "fivePointerVoid",
+      "stackBytes": 584,
+      "matrixStackLayout": "msvcDequeMatrix64Block1",
+      "observation": "drawEntry",
+      "rendererCallRva": "0x5986423",
+      "rendererRva": "0x5985040",
+      "rendererVtableRva": "0xf26a7f0",
+      "rendererSlot": 2,
+      "hookSourceImplemented": true,
+      "candidateActivated": false
+    },
+    "nativeDrawMatrixLayoutSourceEvidence": "static-native-draw-matrix-layout-1.26.60.5.json",
+    "nativeDrawJointMatrixSnapshotSourcePorted": true,
+    "skinnedMaterialReaderSourceEvidence": "native-skinned-material-reader-source.json",
+    "skinnedMaterialReaderIndependentPreflightSourcePorted": true,
+    "skinnedMaterialReaderCodeBindings": "skinned-material-reader-bindings.json",
+    "materialVariationLayoutEvidence": "static-material-variation-layout-1.26.60.5.json",
+    "skinnedMaterialVariationReaderSourcePorted": true,
+    "nativeDrawEntryObservationSourceEvidence": "native-transform-draw-entry-source.json",
+    "drawEntryObservationDoesNotRequireStandaloneGlobalHelper": true,
+    "nativeDrawFrameHandoffSourceEvidence": "native-transform-frame-handoff-source.json",
+    "nativeDrawFrameHandoffSourcePorted": true,
+    "nativeDrawBorrowObservationVersionSourcePorted": true,
+    "actorRootComponentReadsUseSharedSceneFamily": true,
+    "globalTransformStandaloneReplacementEstablished": false,
+    "skinnedMaterialConsumerEvidence": "static-skinned-material-consumer-layout-1.26.60.5.json",
+    "skinnedInsertCandidate": {
+      "rva": "0x6645ae0",
+      "abi": "frameBuilderVariant2",
+      "vtableRva": "0xf2bce70",
+      "vtableOffset": "0x3b8",
+      "candidateActivated": false
+    },
+    "skinnedMaterialCandidate": {
+      "rva": "0x66cfe00",
+      "abi": "skinnedMaterial5",
+      "stackBytes": 3640,
+      "inputLayout": "actorInputsPrefix184",
+      "witnessRva": "0x664abbc",
+      "witnessKind": "call",
+      "sourceProfileBindingPorted": true,
+      "candidateActivated": false
+    },
+    "skinnedMaterialPairedHookPreflightAndRollbackSourcePorted": true,
+    "palettePackEvidence": "static-palette-pack-layout-1.26.60.5.json",
+    "palettePackCandidate": {
+      "rva": "0x6697460",
+      "abi": "boneSpanOutput2",
+      "spanLayout": "countPointer",
+      "matrixBytes": 64,
+      "paddedMatrices": 8,
+      "securityCookieRva": "0x123080c0",
+      "witnessRva": "0x66d2577",
+      "witnessKind": "call",
+      "sourceProfileBindingPorted": true,
+      "candidateActivated": false
+    },
+    "cameraConsumerEvidence": "static-camera-consumer-layout-1.26.60.5.json",
+    "cameraConsumerCandidate": {
+      "rva": "0x53b3290",
+      "abi": "rendererCameraPartial",
+      "stackBytes": 232,
+      "witnessRva": "0x4e0b2ed",
+      "witnessKind": "call",
+      "partialFloatForwardingSourcePorted": true,
+      "candidateActivated": false
+    },
+    "cameraMatrixCandidate": {
+      "rva": "0xaa6820",
+      "abi": "threePointers",
+      "witnessRva": "0x53b3858",
+      "witnessKind": "call",
+      "candidateActivated": false
+    },
+    "cameraPreRenderCandidate": {
+      "rva": "0x53750c0",
+      "abi": "cameraScreenFrame",
+      "stackBytes": 248,
+      "witnessRva": "0x535e9e5",
+      "witnessKind": "call",
+      "frameTimePair": [
+        "0x400",
+        "0x3f8"
+      ],
+      "candidateActivated": false
+    },
+    "playerRendererCameraSourceCandidate": [
+      "0x1168",
+      "0x1160"
+    ],
+    "registryConstructionCandidate": {
+      "rva": "0x2b96390",
+      "idStoreRva": "0x2b9641d",
+      "registryOffset": "0x30",
+      "idOffset": "0x160"
+    },
+    "weakEntityCandidate": "0x2b96a10",
+    "actorTypeCandidate": "0xb9cab0",
+    "localPlayerOwnerCandidate": "0x6db0250",
+    "cameraUpdateCandidate": {
+      "rva": "0x6f313f0",
+      "abi": "cameraComponentModeActor",
+      "witnessRva": "0x6f31d18",
+      "witnessKind": "tailJump",
+      "sourceProfileBindingPorted": true,
+      "candidateActivated": false
+    },
+    "cameraIterateCandidate": {
+      "rva": "0x6f6c450",
+      "abi": "cameraIteratorComponent",
+      "witnessRva": "0x6f32377",
+      "witnessKind": "call",
+      "sourceProfileBindingPorted": true,
+      "candidateActivated": false
+    },
+    "cameraRegistryConstructionIdentitySourceGuard": true,
+    "minecraftVtableCandidate": "0xf0a8920",
+    "minecraftSimulationPauseGetterCandidate": {
+      "slot": 5,
+      "rva": "0xb85030"
+    },
+    "minecraftSessionPredicateCandidate": {
+      "slot": 6,
+      "rva": "0xb85050"
+    },
+    "rendererCounterProducerCandidate": "0x5315cc0",
+    "rendererCounterIncrementCandidate": "0x5316055",
+    "rendererCounterMeaning": "Observed renderer dispatch counter; equivalence to completed simulation ticks remains unproven",
+    "fmodThunkCandidate": {
+      "rva": "0xeec6880",
+      "iatRva": "0xf9a7e48",
+      "totalReturnRva": "0x5311dca",
+      "deltaReturnRva": "0x5311ded",
+      "worldReturnRva": "0x5311ef8",
+      "sourceProfileBindingPorted": true,
+      "candidateActivated": false
+    },
+    "shaderTimeCoverage": {
+      "locatedFrameRemainderCalls": 3,
+      "totalCallerSourceFilterPorted": true,
+      "deltaCallerSourceControlPorted": true,
+      "orderedFrameCallerScopePorted": true,
+      "conditionalWorldRemainderObservationPorted": true,
+      "recordedWorldAccumulatorPhaseApplied": false,
+      "deltaSourceEvidence": "native-shader-delta-source.json",
+      "clockObservationSourceEvidence": "native-shader-clock-observation-source.json",
+      "clockHistorySourceEvidence": "native-shader-clock-history-source.json",
+      "presentationClockEvidence": "static-presentation-clock-layout-1.26.60.5.json",
+      "presentationClockHelperCandidate": "0x72c030",
+      "presentationEpochCandidate": "0x128d1d30",
+      "presentationGuardCandidate": "0x128d1d38",
+      "presentationHistorySourceImplemented": true,
+      "nativeWorldCpuObservationSourceImplemented": true,
+      "clockObservationRuntimeVerified": false,
+      "deltaAndAccumulatedWorldTimeDeterministic": false,
+      "completeDeterministicCoverage": false
+    },
+    "gameConstructorCandidate": "0x82d820",
+    "gameVtableCandidate": "0xf091b70",
+    "gameRendererMemberCandidate": [
+      "0x1440",
+      "0x1628"
+    ],
+    "gameClientMapMemberCandidate": [
+      "0x970",
+      "0x9d0"
+    ],
+    "clientMapNodeClientCandidate": [
+      "0x30",
+      "0x38"
+    ],
+    "gameRendererGetterCandidate": "0x8ac4e0",
+    "gameClientLookupCandidate": "0x8bd280",
+    "timerAdvanceCandidate": {
+      "rva": "0x5a3b180",
+      "oldBytes": 475,
+      "candidateBytes": 535,
+      "oldAbi": "timerFloat",
+      "candidateAbi": "timerFloatSingleTick",
+      "directCallsLocated": 6,
+      "sourceForwardingPorted": true,
+      "candidateActivated": false,
+      "runtimeVerified": false
+    },
+    "clientConstructorCandidate": "0x65877f0",
+    "clientVtableCandidate": "0xf2b9330",
+    "clientMemberCandidates": {
+      "client.game": [
+        "0x1a8",
+        "0x1c8"
+      ],
+      "client.minecraft": [
+        "0x1b0",
+        "0x1d0"
+      ],
+      "client.levelRenderer": [
+        "0x1c0",
+        "0x1e0"
+      ],
+      "client.weakCameraReference": [
+        "0x218",
+        "0x238"
+      ],
+      "client.weakPlayerReference": [
+        "0x248",
+        "0x268"
+      ],
+      "minecraft.session": [
+        "0xc8",
+        "0xd0"
+      ],
+      "minecraft.simTimer": [
+        "0xe0",
+        "0xe8"
+      ],
+      "minecraft.realTimer": [
+        "0xe8",
+        "0xf0"
+      ]
+    },
+    "clientGetterCandidates": {
+      "localPlayer": {
+        "rva": "0x659e470",
+        "oldSlot": 31,
+        "candidateSlot": 30
+      },
+      "cameraWeakReference": {
+        "rva": "0x65a8c20",
+        "oldSlot": 43,
+        "candidateSlot": 42
+      },
+      "game": {
+        "rva": "0x65ab500",
+        "oldSlot": 79,
+        "candidateSlot": 77
+      },
+      "levelRenderer": {
+        "rva": "0x8ab680",
+        "oldSlot": 187,
+        "candidateSlot": 185
+      },
+      "minecraftLevel": {
+        "rva": "0x65b02f0",
+        "oldSlot": 168,
+        "candidateSlot": 166
+      }
+    },
+    "currentAbiAndLayoutsProven": false,
+    "candidateAddressesActivated": false,
+    "modelBodyDrawSourceEvidence": "native-model-body-hook-source.json",
+    "modelBodyDrawCandidate": {
+      "rva": "0x6b801b0",
+      "abi": "modelParamsMetadataControllerGeometryTexturesMers7",
+      "layout": "geometryGroups96Pairs16",
+      "stackBytes": 88,
+      "callerRva": "0x6b296a0",
+      "callRva": "0x6b2a2a3",
+      "rootDrawRva": "0x58b5250",
+      "rootCallRva": "0x58b5eca",
+      "hookSourceImplemented": true,
+      "remainingReaderMigrationComplete": false,
+      "candidateActivated": false
+    },
+    "skinSelectionReaderSourceEvidence": "native-skin-selection-reader-source.json",
+    "skinSelectionReaderCandidate": {
+      "bindings": "skin-selection-reader-bindings.json",
+      "instructionWindows": 10,
+      "selectedPairReaderSourceImplemented": true,
+      "fullSkinReaderMigrationComplete": false,
+      "candidateActivated": false
+    },
+    "equipmentFunctionComparison": "static-equipment-functions-1.26.60.5.json",
+    "hierarchyQueryReaderSourceEvidence": "native-hierarchy-query-reader-source.json",
+    "hierarchyQueryReaderCandidate": {
+      "rva": 32012608,
+      "bytes": 74,
+      "slotBytes": 64,
+      "vectorOffset": 920,
+      "elementBytes": 4,
+      "sourceImplemented": true,
+      "candidateActivated": false
+    },
+    "expressionObserverSourceEvidence": "native-expression-observer-source.json",
+    "expressionObserverCandidate": {
+      "setupRva": 93027008,
+      "evaluatorRva": 8833760,
+      "pinnedReturnRva": 93032309,
+      "parentRegister": "r12",
+      "boneRegister": "rsi",
+      "setupStackBytes": 456,
+      "sourceImplemented": true,
+      "candidateActivated": false
+    },
+    "constantExpressionReaderSourceEvidence": "native-constant-expression-reader-source.json",
+    "constantExpressionReaderCandidate": {
+      "tableRva": 253523072,
+      "cloneRva": 66477152,
+      "evalRva": 497008,
+      "sourceImplemented": true,
+      "candidateActivated": false
+    },
+    "attachmentReaderSourceEvidence": "native-attachment-reader-source.json",
+    "attachmentReaderCandidate": {
+      "drawWrapperRva": 93026432,
+      "drawRva": 93051600,
+      "childSharedGetterRva": 102281296,
+      "bodyReturnRva": 112370344,
+      "equipmentReturnRva": 93053355,
+      "sourceImplemented": true,
+      "candidateActivated": false
+    },
+    "encoderSubmitSourceEvidence": "native-encoder-submit-source.json",
+    "encoderSubmitCandidate": {
+      "rva": 197524288,
+      "nativeCallerRva": 90807264,
+      "nativeCallRva": 90807465,
+      "abi": "encoderViewProgramOcclusionDepthFlags6",
+      "itemsBase": 739072,
+      "itemsCount": 14440424,
+      "encoderSubmitted": 1676,
+      "itemStride": 128,
+      "sourceImplemented": true,
+      "candidateActivated": false
+    },
+    "producerFrameReaderSourceEvidence": "native-producer-frame-reader-source.json",
+    "producerFrameReaderCandidate": {
+      "contextGlobalRva": 313390920,
+      "contextEncoder": 81176,
+      "contextSubmit": 30396616,
+      "contextRender": 30396608,
+      "firstFrame": 81216,
+      "frameStride": 15157696,
+      "frameNumber": 15156952,
+      "frameStepRva": 197544960,
+      "swapRva": 197550560,
+      "sourceImplemented": true,
+      "candidateActivated": false
+    },
+    "viewReaderSourceEvidence": "native-view-reader-source.json",
+    "viewReaderCandidate": {
+      "observation": "frameSnapshots",
+      "setterRva": null,
+      "nativeWriterRva": 90892016,
+      "frameCopyRva": 197550560,
+      "frameBase": 768,
+      "recordCount": 256,
+      "recordStride": 320,
+      "rectangle": 16,
+      "view": 32,
+      "projection": 96,
+      "frameWidth": 14440456,
+      "frameHeight": 14440460,
+      "sourceImplemented": true,
+      "candidateActivated": false
+    },
+    "backendBatchSourceEvidence": "native-backend-batch-source.json",
+    "backendBatchCandidate": {
+      "submitRva": 243402016,
+      "callerRva": 243513232,
+      "submitAbi": "sixPointerVoid",
+      "stackBytes": 57912,
+      "resetRva": 243254304,
+      "resetAbi": "frame2",
+      "resetReturnRva": 243402316,
+      "fillRva": 243378384,
+      "resetInStack": 4256,
+      "viewInStack": 488,
+      "sourceImplemented": true,
+      "candidateActivated": false
+    },
+    "framebufferReaderSourceEvidence": "native-framebuffer-reader-source.json",
+    "framebufferReaderCandidate": {
+      "setterRva": 243399952,
+      "callRva": 243405192,
+      "abi": "contextRendererDwordHandleDwordFlag4",
+      "framebuffers": 13203096,
+      "textures": 12444024,
+      "stateCache": 83032,
+      "textureStride": 184,
+      "pageEntries": 4096,
+      "transitionRva": 243453280,
+      "textureEnsureRva": 243507120,
+      "cleanupRva": 243328656,
+      "overrideRva": 243355696,
+      "sourceImplemented": true,
+      "candidateActivated": false
+    },
+    "queueReaderSourceEvidence": "native-queue-reader-source.json",
+    "queueReaderCandidate": {
+      "consumerRva": 243366032,
+      "abi": "queueU64FenceU32TimeoutU8Return3",
+      "stackBytes": 2312,
+      "rendererQueue": 13406824,
+      "capacity": 272,
+      "fiveFunctionFamilyHashed": true,
+      "fiveNativeCallEdges": true,
+      "sourceImplemented": true,
+      "candidateActivated": false
+    },
+    "graphicsStateAdmissionSourceEvidence": "native-graphics-admission-source.json",
+    "graphicsStatePublicApiIntegrationImplemented": true,
+    "engineEntrySourceEvidence": "native-engine-entry-source.json",
+    "engineEntryCandidate": {
+      "worldRva": 87423360,
+      "actorRva": 93634048,
+      "tickRva": 112776528,
+      "worldAbi": "rendererScreenFrame3Void",
+      "actorAbi": "dispatcherContextActorTargetPositionRotationByte7Void",
+      "tickAbi": "level1Void",
+      "worldStackBytes": 504,
+      "actorFlagEntryOffset": 56,
+      "levelVtable": 254601104,
+      "tickSlot": 3264,
+      "sourceImplemented": true,
+      "candidateActivated": false,
+      "sceneDependenciesComplete": false
+    },
+    "liveClientReaderSourceEvidence": "native-live-client-reader-source.json",
+    "liveClientReaderCandidate": {
+      "layout": {
+        "gameVtable": 252255088,
+        "primaryClients": 2512,
+        "gameRenderer": 5672,
+        "mapHead": 0,
+        "mapCount": 8,
+        "nodeLeft": 0,
+        "nodeParent": 8,
+        "nodeNil": 25,
+        "nodeKey": 32,
+        "nodeClient": 56,
+        "clientVtable": 254513968,
+        "clientGame": 456,
+        "clientMinecraft": 464,
+        "clientLevelRenderer": 480,
+        "localPlayerGetterSlot": 30,
+        "localPlayerGetterRva": 106554480,
+        "cameraGetterSlot": 42,
+        "cameraGetterRva": 106597408,
+        "weakCameraReference": 568,
+        "weakPlayerReference": 616,
+        "minecraftVtable": 252348704,
+        "minecraftSession": 208,
+        "simulationTimer": 232,
+        "realTimer": 240,
+        "simulationPauseGetterSlot": 5,
+        "simulationPauseGetterRva": 12079152,
+        "sessionAccessSlot": 6,
+        "sessionAccessRva": 12079184,
+        "sessionReady": 40,
+        "sessionActiveOwner": 48,
+        "sessionActive": 0,
+        "sessionLevel": 64
+      },
+      "functionCount": 11,
+      "classRelationships": 3,
+      "methodRelationships": 7,
+      "sourceImplemented": true,
+      "candidateActivated": false,
+      "remainingSceneDependenciesComplete": false
+    }
+  },
+  "operations": {
+    "installedFileReadAsData": true,
+    "cachedCodeDecodedAsData": true,
+    "fileIdentityAndMtimeRecheckedDuringSectionCopy": true,
+    "gameStartedByInspection": false,
+    "gameModuleLoadedByInspection": false,
+    "processInspected": false,
+    "engineCodeExecuted": false,
+    "built": false,
+    "tested": false
+  },
+  "nativeWorldVerified": false,
+  "deterministicVideoVerified": false,
+  "fullParity": false
+}

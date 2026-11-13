@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "gameVersion": "1.26.5203.0",
+  "source": "installed Actor.material.bin, read as data",
+  "assetSha256": "8720b71a8e7b6c4d5e9c12b6a8293734919030559d1e3ca0ad452f532f3ae9e6",
+  "wrapper": {
+    "supportedMagic": ["VSH version 5", "FSH version 5"],
+    "uniformCount": "u16 little endian after the u32 input hash",
+    "uniformRecord": ["u8 name length", "ASCII name", "u8 type flags", "u8 array count", "u16 byte offset", "u16 register count"],
+    "shaderPayload": "u32 little endian byte length followed by exact DXBC bytes",
+    "typeKinds": {"0": "sampler", "2": "float4", "3": "float3x3", "4": "float4x4"},
+    "registerBytes": 16,
+    "zeroArrayCount": "one non-array value"
+  },
+  "exampleVertexShader": {
+    "wrapperOffset": 2214,
+    "bytecodeOffset": 2373,
+    "bytecodeBytes": 2976,
+    "sha256": "4b25f64ad71cdbf3270b60880edb7138c60f5a256dc3b02d747a0349252093b3",
+    "shaderModel": "vs_4_0",
+    "constantBufferRegister": 0,
+    "constantBufferBytes": 976,
+    "uniforms": [
+      {"name": "u_proj", "kind": 4, "arrayCount": 0, "offset": 0, "registers": 4},
+      {"name": "u_view", "kind": 4, "arrayCount": 0, "offset": 64, "registers": 4},
+      {"name": "FogControl", "kind": 2, "arrayCount": 0, "offset": 128, "registers": 1},
+      {"name": "OverlayColor", "kind": 2, "arrayCount": 0, "offset": 144, "registers": 1},
+      {"name": "u_model", "kind": 4, "arrayCount": 4, "offset": 160, "registers": 16},
+      {"name": "FogColor", "kind": 2, "arrayCount": 0, "offset": 416, "registers": 1},
+      {"name": "Bones", "kind": 4, "arrayCount": 8, "offset": 432, "registers": 32},
+      {"name": "SubPixelOffset", "kind": 2, "arrayCount": 0, "offset": 944, "registers": 1},
+      {"name": "TileLightColor", "kind": 2, "arrayCount": 0, "offset": 960, "registers": 1}
+    ],
+    "fogObservation": "The shader derives its fog alpha from projected Z and FogControl.xyz and forwards FogColor.rgb; projected coordinates and the material variant are required before applying this behavior elsewhere.",
+    "prefixCaptureBytes": 512,
+    "vectorsInsidePrefix": ["FogControl", "OverlayColor", "FogColor"],
+    "vectorsOutsidePrefix": ["SubPixelOffset", "TileLightColor"],
+    "namedVectorCaptureByteLimitPerStage": 512,
+    "exampleNamedVectorBytes": 80,
+    "namedVectorCaptureVerified": false,
+    "matrixMajorOrderVerified": false
+  },
+  "inspection": {"method": "file reads and OS D3DDisassemble only", "gameStarted": false, "projectCodeExecuted": false, "built": false, "tested": false},
+  "reflectionVerified": false,
+  "runtimeMaterialVerified": false,
+  "completeInputCoverageVerified": false,
+  "gpuExecutionVerified": false,
+  "javaParityVerified": false
+}

@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "evidence": "Source reads/edits and cached Java classes decoded as data only; no class loading, builds, tests, syntax checks, JNI/project/game execution, shader/GPU execution or Bedrock operations",
+  "reference": {
+    "version": "26.2",
+    "normal": "PlayerModel constructor selects RenderTypes.entityTranslucent; LivingEntityRenderer.getRenderType uses model.renderType for the visible-body branch",
+    "otherBranches": "LivingEntityRenderer separately selects entityTranslucentCullItemTarget for the translucent-invisible branch, outline for the outline branch, or no material",
+    "ghostSelection": "Cached LivingEntityRenderer.submit sets translucent-invisible when !isBodyVisible(state) && !state.isInvisibleToPlayer; getRenderType prioritizes this branch, then visible model.renderType, then appearsGlowing outline, then null. Entity invisibility alone cannot select it.",
+    "ghostTint": "LivingEntityRenderer.submit selects integer 654311423 (0x26ffffff) for the translucent-invisible branch and -1 (0xffffffff) otherwise, then calls ARGB.multiply with getModelTint(state) before submitModel. Neither a floating alpha of 0.15 nor native skin fade establishes this selected vertex color.",
+    "ghostTarget": "Cached RenderTypes.lambda$static$9 constructs entity_translucent_cull_item_target using ENTITY_TRANSLUCENT_CULL and explicitly OutputTarget.ITEM_ENTITY_TARGET, lightmap, overlay, sortOnUpload and AFFECTS_OUTLINE. It must not be aliased to the visible skin's main output target or an arbitrary same-size native render target.",
+    "ghostPipeline": "Cached RenderPipelines.<clinit> 007ed..00822 builds ENTITY_TRANSLUCENT_CULL from ENTITY_SNIPPET with ALPHA_CUTOUT float 0.1 and TRANSLUCENT color blending. ENTITY_SNIPPET 000d3..00106 supplies entity shaders, SAMPLER0_SAMPLER2, ENTITY vertices, QUADS and DepthStencilState.DEFAULT; cached DEFAULT 00000..0000b selects GREATER_THAN_OR_EQUAL and depth writes. Unlike the ordinary entityTranslucent pipeline, the cull builder does not disable culling or add PER_FACE_LIGHTING; the remaining builder cull default and separate item-entity target still need their own implementation/ownership join.",
+    "overlay": "entity.fsh applies the selected overlay texel before the lightmap; Arctic's custom cosmetic PoseXform uses NO_OVERLAY separately"
+  },
+  "input": {
+    "class": "Immutable JavaSkinMaterial with explicit entityTranslucent factory and copied normalized RGBA overlay",
+    "snapshot": "WorldFrame.Player.javaSkinMaterial: schema 1, kind entity-translucent, overlayColor four normalized floats; declared world coordinate space required",
+    "selection": "No material is inferred from image alpha or the cosmetic overlay. Missing selection retains GENERAL staging, which native material preparation still rejects.",
+    "scope": "Adapter-owned target-Java inputs; this field is not an installed-game capture or suppression receipt"
+  },
+  "rendering": {
+    "sharedEmitter": "Only normal JavaPlayerMesh parts use skinSink; bent SkinLimbs remain in the Arctic cosmetic pass after worn models",
+    "software": "Explicit JAVA_SKIN pass has .1 sampled-alpha cutout, per-face lighting, translucency and depth writes; its own overlay is emitted per vertex and survives homogeneous clipping and perspective interpolation (entity-overlay-varying-source.json)",
+    "native": "SkinTranslucent role shares the entity-translucent GPU state with cosmetic base, while retaining a separate semantic kind and per-batch selected texel emitted through the smooth shader overlay varying",
+    "constants": "Inputs.for_batch selects the skin overlay; frame-only skin preparation rejects. Constant preparation checks copied overlay bytes even for low-level explicit input, plus all copied shader/lightmap bytes when present.",
+    "sortIdentity": "The order planner permits the two entityTranslucent roles to share an adapter-proven prepared identity. It still requires caller-supplied object/equality/group IDs, matching texture and sorting; it does not infer them."
+  },
+  "wire": {
+    "magic": "ARCGEO03 base layout; ARCGEO04 adds skin visibility provenance and bent-skin role (skin-visibility-source.json)",
+    "pass": 6,
+    "header": "Same optional material flag and 1058-float cohort as ARCGEO02",
+    "batch": "Same 32-byte fixed batch header; pass 6 appends four normalized finite f32 overlay components before vertices, including for empty submits",
+    "compatibility": "Decoder retains ARCGEO01..04. Pass 6 requires v3+, and native preparation now requires v4 supplied-visibility knowledge for skin. Existing 96 MiB and topology bounds include the extension."
+  },
+  "replay": {
+    "track": "bedrock_body_samples_v6 appends visibility after the retained v5 material field",
+    "magic": "0x415243424f440006; legacy v5 retains 0x415243424f440005",
+    "actorExtension": "After the v4 optional packed light: u8 0 unknown or 1 entityTranslucent, followed for 1 by four normalized f32 overlay components",
+    "ownership": "BodySample retains immutable material selection; copying and equality preserve it",
+    "sampling": "Exact endpoints preserve selection. Interior samples preserve it only when both selections/overlays agree; changing or missing values remain unknown.",
+    "legacy": "V1-v4 retain unknown skin material; v5 retains its material without fabricated v6 visibility",
+    "playback": "Uses recorded selection rather than live viewer metadata; body appearance readiness requires a known selection, and missing v5 selections prevent new body plans"
+  },
+  "remaining": [
+    "Authoritative installed-game producer of equivalent skin material/overlay and common lighting inputs",
+    "Ghost/outline/dissolve variants and installed-game visibility capture; ghost selection additionally needs isInvisibleToPlayer, exact selected integer tint and the item/entity target and composition path, not just ActorFlags::Invisible",
+    "Native feature-group/phase production, scene ownership and insertion caller",
+    "Runtime shader, native animation, replay-camera and deterministic-video fidelity verification"
+  ],
+  "verified": {"built": false, "tested": false, "archiveRoundTrip": false, "jniRoundTrip": false, "liveGame": false, "gpuRendering": false, "deterministicVideo": false, "fullParity": false}
+}

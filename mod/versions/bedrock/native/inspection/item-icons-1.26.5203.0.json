@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.5203.0",
+  "inspectedAt": "2026-10-27",
+  "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "evidence": "Offline disassembly of existing cached executable sections, cross-checked with public declarations; no runtime validation",
+  "itemPrefix": {
+    "atlasStringOffset": "0x10",
+    "iconFrameOffset": "0x58",
+    "iconNameStringOffset": "0x68",
+    "alternateAtlasNameStringOffset": "0x88",
+    "alternateAtlasNameLengthOffset": "0x98",
+    "nameAnchors": ["0xd8", "0x100", "0x128"]
+  },
+  "baseIconGetter": {
+    "rva": "0x24c2530",
+    "vtableSlot": "0x75",
+    "componentGetterSlot": "0x18",
+    "humanoidArmorPredicateSlot": 10,
+    "requiredFalseNullGetterRva": "0x76c20",
+    "dispatchEvidenceRvas": ["0x24c257b", "0x24c259c", "0x24c26a7", "0x24c26b9"],
+    "staticBranchEvidenceRvas": ["0x24c2859", "0x24c2863", "0x24c28da", "0x24c28e7", "0x24c28eb", "0x24c2a39", "0x24c2a3d"],
+    "staticConditions": [
+      "Canonical Item identity and atlas.items string agree across stable copies",
+      "The copied Item vtable points to the pinned base selector",
+      "Component getter and humanoid-armor predicate both select the inspected constant-zero method",
+      "Alternate atlas-name length is zero",
+      "The ordinary icon-name string is nonempty and rechecked",
+      "Stored icon frame is an unsigned 16-bit index",
+      "Selector prologue, zero-getter bytes, Item prefix and weak holder remain consistent"
+    ],
+    "result": "Icon type 0 with the copied icon name and stored frame; stack and animation arguments are unused on this constrained path",
+    "policy": "Do not invoke a getter, infer a frame from item IDs/aux damage, clamp an out-of-range frame, select the first variant, or treat the raw icon name as a resolved choice"
+  },
+  "excludedBranches": {
+    "humanoidSelectorRva": "0x24c2090",
+    "armorTrimHelperRva": "0x519f1a0",
+    "exampleAnimatedSelectorRva": "0x267bb50",
+    "other": ["component-selected keys", "alternate atlas output", "raw UVs", "block type icons", "dyed/trimmed or item-specific overrides"]
+  },
+  "atlasReader": {
+    "maxVariants": 65536,
+    "knownFrame": "Select exactly that string-array element; reject if absent or if a single texture has a nonzero index",
+    "unknownFrame": "Only an explicit adapter key with one unambiguous texture is supported",
+    "unsupportedOverride": "Masks lower-priority definitions"
+  },
+  "gameStarted": false,
+  "portBuilt": false,
+  "testsRun": false,
+  "iconFrameLayoutVerified": false,
+  "nativeItemRenderingVerified": false
+}

@@ -25,5 +25,12 @@
   "platform.replay": "Replay",
   "platform.replays": "Repeticiones",
   "platform.server": "Servidor",
-  "platform.videos_cant_be_made_while_vulkanmod_draws": "No se pueden hacer vídeos mientras VulkanMod dibuja el juego: desactívalo para hacer uno."
+  "platform.videos_cant_be_made_while_vulkanmod_draws": "No se pueden hacer vídeos mientras VulkanMod dibuja el juego: desactívalo para hacer uno.",
+  "platform.arctic_bedrock_native_preview_right_shift": "Arctic Bedrock native preview | Right Shift | Engine bindings pending",
+  "platform.bedrock_binding_pending": "Bedrock binding pending",
+  "platform.java_enchantment_component_projection": "Java enchantment component projection unavailable",
+  "platform.java_texture_identifier_changes_between": "Java texture identifier changes between image and implicit white",
+  "platform.java_texture_identifier_changes_between_2": "Java texture identifier changes between implicit white and image",
+  "platform.java_texture_identifier_changes_image": "Java texture identifier changes image dimensions within a frame",
+  "platform.java_texture_identifier_has_conflicting": "Java texture identifier has conflicting frame pixels"
 }

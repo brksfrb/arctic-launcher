@@ -1,0 +1,115 @@
+{
+  "schema": 1,
+  "oldProductVersion": "1.26.5203.0",
+  "newProductVersion": "1.26.60.5",
+  "requestedRoots": [
+    "0x1c38a10",
+    "0x1c3ee90",
+    "0x1bc02e0",
+    "0x1c38c50",
+    "0x185cd0"
+  ],
+  "calleesOf": [],
+  "rootsOnly": true,
+  "oldTextSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "newTextSha256": "7ca5d1baef049979e9785d5bbafe7100a829e1107a3d374975962cc64ecc76fe",
+  "sourceReferencedFunctions": 5,
+  "probed": 5,
+  "truncated": false,
+  "counts": {
+    "changed_or_missing": 4,
+    "unique_normalized_candidate": 1
+  },
+  "method": "Full function instruction bytes with only external relative address operands masked; internal branches/member offsets/immediates retained",
+  "limitations": [
+    "Candidate identity is not semantic equivalence",
+    "External callees and referenced constants need independent joins",
+    "No ABI/layout/ownership/runtime or supported-profile promotion"
+  ],
+  "gameStartedByInspection": false,
+  "gameModuleLoadedByInspection": false,
+  "gameCodeExecuted": false,
+  "functions": [
+    {
+      "oldRva": "0x185cd0",
+      "oldBytes": 74,
+      "references": [
+        {
+          "root": "0x185cd0"
+        }
+      ],
+      "candidates": [
+        {
+          "rva": "0x1e87940",
+          "bytes": 74,
+          "rawSha256": "975a6dc1fabeb81f845a4c80367fb248445796755b2ce93c5e262662f829e199"
+        }
+      ],
+      "prefixMatches": 1,
+      "oldRawSha256": "9eb31898f865e72b2caddbbafc9c867be1f5626a8e4ce17279ebd3d24ac4103b",
+      "normalizedSha256": "9efe7476976bea108d3fabf52305c5bdb4bd3c53fe061aefd3ccc8fd169f04cf",
+      "maskedBytes": 4,
+      "state": "unique_normalized_candidate"
+    },
+    {
+      "oldRva": "0x1bc02e0",
+      "oldBytes": 776,
+      "references": [
+        {
+          "root": "0x1bc02e0"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 0,
+      "oldRawSha256": "759a272058c0ce6fa7e07ef62d98d0face2ba29c1ac823ca348a3332ee3e6925",
+      "normalizedSha256": "4145fbdf922275da38fb1f7a4d9134098e1e2f5742d02996012b7f54072cea0d",
+      "maskedBytes": 40,
+      "state": "changed_or_missing"
+    },
+    {
+      "oldRva": "0x1c38a10",
+      "oldBytes": 567,
+      "references": [
+        {
+          "root": "0x1c38a10"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 1,
+      "oldRawSha256": "a79070f8e40d6aa5bf15566218584a357b9212feb623612f036988e3ca223a28",
+      "normalizedSha256": "fe9218ba349c8979af532a0323eb413a57bb12efa5958b486e8e4d61d613f86c",
+      "maskedBytes": 60,
+      "state": "changed_or_missing"
+    },
+    {
+      "oldRva": "0x1c38c50",
+      "oldBytes": 7514,
+      "references": [
+        {
+          "root": "0x1c38c50"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 0,
+      "oldRawSha256": "00e06fc1c74e1e9033eafa76f410b50627edb704877ac204865fcee10a0ee008",
+      "normalizedSha256": "75cc6f5f5211a91ae79b63179a90e3bc5d33708eaf9ac41a0d58abd35daeb5e8",
+      "maskedBytes": 596,
+      "state": "changed_or_missing"
+    },
+    {
+      "oldRva": "0x1c3ee90",
+      "oldBytes": 2195,
+      "references": [
+        {
+          "root": "0x1c3ee90"
+        }
+      ],
+      "candidates": [],
+      "prefixMatches": 0,
+      "oldRawSha256": "94db5103cfd291f0a45cd88a909f6ed234f487a20d82b08a53879fca6a6f875a",
+      "normalizedSha256": "748c409e19467f80a16e8c9fa93b0f59747dc6611356329f8015c614c232522b",
+      "maskedBytes": 188,
+      "state": "changed_or_missing"
+    }
+  ]
+}

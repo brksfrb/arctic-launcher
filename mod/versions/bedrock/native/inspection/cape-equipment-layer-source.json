@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "javaVersion": "26.2",
+  "sourceClientJarSha256": "40896ee9f1e2bec3c934daac7e93d41e9e3d9c2f8ae0ca366d52ffbfd1afa290",
+  "evidence": "Static decoding of CapeLayer.hasLayer/submit and JOML Matrix4f.translateGeneric, plus repository source reads; no project or game classes executed",
+  "sourcePorted": true,
+  "input": "Optional javaCapeLayers per nonempty identified item: schema 1, reference java-26.2, nullable copied WINGS and HUMANOID hasLayer results",
+  "selection": "Empty chest is PLAIN; known WINGS=true is HIDDEN; WINGS=false with known HUMANOID chooses OFFSET or PLAIN; other combinations remain UNKNOWN",
+  "assetLookupContract": "CapeLayer.hasLayer resolves EQUIPPABLE, its optional asset ID and that selected equipment asset's nonempty layer list; item names, gliding and native armor occupancy do not establish these facts",
+  "offsetBlocks": [0, -0.05312500149011612, 0.06875000149011612],
+  "offsetStage": "Translate entity root before the posed BODY matrix, then apply JavaCapePose.local; root translation uses default non-FMA JOML translateGeneric grouping",
+  "archive": "Explicit nullable flags retained by the existing serializeNulls equipment capture; strict replay field/type validation, owned copying and known-input matching; older archives without the optional field remain readable",
+  "unknownRendering": "Legacy plain software pose retained for unknown facts; this supplies no native replacement authority or verification",
+  "nativeInputProducerAvailable": false,
+  "nativeEmptyChestGatesChanged": false,
+  "sourceBuilt": false,
+  "sourceTested": false,
+  "nativePoseStackPropertiesRecovered": false,
+  "armoredNativeCapeReplacementVerified": false,
+  "deterministicVideoVerified": false
+}

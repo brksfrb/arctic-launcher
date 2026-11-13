@@ -61,7 +61,12 @@ public final class MeshDraw {
 
 	/** The node matrices to draw with at the moment ({@code animate} off: the authored rest pose). */
 	public static float[][] pose(MeshModel mesh, boolean animate) {
-		return mesh.world(animate ? (System.currentTimeMillis() % 3_600_000L) / 1000f : -1f);
+		return poseAt(mesh, animate, (System.currentTimeMillis() % 3_600_000L) / 1000f);
+	}
+
+	/** Node transforms on the recording's clock rather than the wall clock. */
+	public static float[][] poseAt(MeshModel mesh, boolean animate, float seconds) {
+		return mesh.world(animate ? seconds : -1f);
 	}
 
 	/**
@@ -70,7 +75,11 @@ public final class MeshDraw {
 	 * material colors.
 	 */
 	public static void emit(MeshModel mesh, int primitive, Attach attach, boolean animate, Xform xf, int light, boolean glow) {
-		draw(mesh, primitive, attach, animate, xf, light, glow ? GLOW : BASE);
+		emitAt(mesh, primitive, attach, animate, xf, light, glow, (System.currentTimeMillis() % 3_600_000L) / 1000f);
+	}
+
+	public static void emitAt(MeshModel mesh, int primitive, Attach attach, boolean animate, Xform xf, int light, boolean glow, float seconds) {
+		draw(mesh, primitive, attach, animate, xf, light, glow ? GLOW : BASE, seconds);
 	}
 
 	/**
@@ -79,8 +88,12 @@ public final class MeshDraw {
 	 * nothing drawn) when the mesh has no sheen.
 	 */
 	public static void emitSheen(MeshModel mesh, int primitive, Attach attach, Xform xf) {
+		emitSheenAt(mesh, primitive, attach, xf, (System.currentTimeMillis() % 3_600_000L) / 1000f);
+	}
+
+	public static void emitSheenAt(MeshModel mesh, int primitive, Attach attach, Xform xf, float seconds) {
 		if (mesh.sheen != null) {
-			draw(mesh, primitive, attach, true, xf, Xform.FULL_BRIGHT, SHEEN);
+			draw(mesh, primitive, attach, true, xf, Xform.FULL_BRIGHT, SHEEN, seconds);
 		}
 	}
 
@@ -88,10 +101,10 @@ public final class MeshDraw {
 	private static final int GLOW = 1;
 	private static final int SHEEN = 2;
 
-	private static void draw(MeshModel mesh, int primitive, Attach attach, boolean animate, Xform xf, int light, int mode) {
+	private static void draw(MeshModel mesh, int primitive, Attach attach, boolean animate, Xform xf, int light, int mode, float clock) {
 		boolean glow = mode != BASE;
 		// Worked out when the triangles are drawn, so the idle animation runs on the frame being drawn.
-		float[][] world = pose(mesh, animate);
+		float[][] world = poseAt(mesh, animate, clock);
 		MeshModel.Primitive p = mesh.primitives.get(primitive);
 		float[] m = world[p.node];
 		MeshModel.Material material = p.material < 0 ? null : mesh.materials.get(p.material);
@@ -101,7 +114,6 @@ public final class MeshDraw {
 		float[] pos = new float[n * 3];
 		float[] nrm = new float[n * 3];
 		float[] bright = mode == SHEEN ? new float[n] : null;
-		float clock = (System.currentTimeMillis() % 3_600_000L) / 1000f;
 		for (int i = 0; i < n; i++) {
 			float x = p.positions[i * 3];
 			float y = p.positions[i * 3 + 1];

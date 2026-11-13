@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "evidence": "Cached class data inspected as bytes and source files read/edited only. No builds, tests, syntax checks, Java class loading, game execution, process inspection, GPU commands or exports.",
+  "reference": {
+    "java": "26.2",
+    "clientJarSha256": "40896ee9f1e2bec3c934daac7e93d41e9e3d9c2f8ae0ca366d52ffbfd1afa290",
+    "modelSubmit": "ModelFeatureRenderer$Submit.distanceToCameraSq obtains its submitted pose matrix and calls TranslucentSubmit.computeDistanceToCameraSq(Matrix4fc).",
+    "distance": "TranslucentSubmit reads m30/m31/m32. Mth.lengthSquared(FFF) evaluates (x*x+y*y)+z*z with float multiplies/adds. No double/FMA or actor-position reconstruction.",
+    "phaseSort": "TranslucentFeatureRenderPhase.sortIndices initializes 0..n-1 and calls IntArrays.unstableSort with Floats.compare(distances[b],distances[a]); sortInto emits each sorted submit with strictlyOrdered=true.",
+    "fastutil": "8.5.18 comparator IntArrays.unstableSort delegates to quickSort; selection sort for length<16, median-of-nine for length>128, median-of-three pivot, equal-key partitions, range swaps and recursive partitions. Stable ties are not substituted.",
+    "modelRouting": "SubmitNodeCollection routes regular hasBlending models to translucentModels (phase index 7), ordinary solid models to phase index 0. Custom translucent geometry uses a separate SimpleFeatureRenderPhase at index 8. Top-level numeric orders are ascending. Outline/crumbling variants have independent routing."
+  },
+  "port": {
+    "java": "AvatarDrawTarget.beginModel/endModel bracket a normal skin model, a cape model, or both wings as one submit. Individual parts keep their own transformed sinks. All-hidden skin still produces one empty batch for its submit boundary.",
+    "staging": "Builder forbids nesting, actor transitions/open models, custom geometry inside a model, nonfinite roots, incomplete quads and resuming a model sink after its close. Model IDs are frame-local positive increasing tokens with a 2048 admission bound. Copied translation is in the packet's existing position space.",
+    "wire": "ARCGEO08 extends each batch after render-reference metadata with strict presence u8, then if present model ID u16 and root x/y/z f32. One or fifteen bytes per batch are charged to the existing 96 MiB packet limit. Older versions decode with unknown model boundaries.",
+    "decode": "Reject wrong presence/role, zero/oversize/out-of-order/restarted IDs, changed actor/pass or bitwise translation within a model, and nonfinite copied translations. All usual geometry/texture/frame bounds remain.",
+    "nativePhase": "Phase.translucent_models accepts the exact frame, owning feature identity, and TranslucentModel inputs in original model order. Requires every staged SkinTranslucent model once with its original contiguous part indices, matching per-model render/prepared/consolidation/sort state, and finite explicit Java-equivalent view translations. Computes float model keys, ports the unstable sort, and emits strictly ordered PhaseOutput values for the existing dispatcher assembly.",
+    "planner": "Plan keeps every model's part batches together in original order and on one vertex builder, independently of whether separate models may consolidate. Rejects split/restarted/late-start models and changes to their builder inputs.",
+    "sortingDistinction": "The model sorter uses unstable whole-model distance ordering; the existing per-draw quad sorter uses stable centroid sorting with different JOML float grouping. They remain separate."
+  },
+  "limitations": [
+    "A Bedrock-emitted root in world/camera-relative space is not proven to be the Java model-submit view pose. No automatic conversion or sorting-pose equivalence is claimed; its owning producer remains missing.",
+    "This function orders the supported staged skin-model phase. Native ownership must join other participating submissions, numeric orders and phase drains; it is not a complete world phase producer.",
+    "The supported owned avatar collector now supplies its own SimpleFeatureRenderPhase HashMap traversal and retained history via ARCGEO09 (java-simple-phase-source.json). Captured Java game hashes, foreign world feature/history and optional debug shuffle remain unavailable; owned cape/wing ordering does not establish native phase ownership.",
+    "Prepared GPU equality, compatible light/material/target inputs, native world insertion and native resource lifetime ownership remain explicit independent requirements.",
+    "Outline, crumbling, ghost/alternate-target variants and complete world rendering/export parity remain unfinished."
+  ],
+  "verified": {"built":false,"tested":false,"crossLanguageSortCompared":false,"liveGame":false,"gpuRendering":false,"deterministicVideo":false,"fullParity":false}
+}

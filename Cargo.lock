@@ -344,6 +344,7 @@ dependencies = [
  "tray-icon",
  "uuid 1.26.1",
  "windows",
+ "windows-core",
  "windows-sys 0.61.2",
  "winresource",
 ]

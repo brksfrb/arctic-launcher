@@ -1,0 +1,539 @@
+{
+  "schema": 1,
+  "purpose": "Source port of the owned unscaled shader delta through exact frame caller roles; not runtime or deterministic export certification",
+  "source": "../src/native_render_clock.rs",
+  "bindingSource": "../src/world_hooks.rs",
+  "profile": "../inspection/1.26.5203.0.json",
+  "frames": {
+    "approvedLegacy": {
+      "frameRva": "0x47a8ca0",
+      "frameEndRva": "0x47ac05c",
+      "frameBytesSha256": "4fa16a34400131f61c91c065fda99fa50669e46bee4d4620df1eb64752577a7e",
+      "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+      "roles": [
+        {
+          "role": "total",
+          "callRva": "0x47a92f9",
+          "returnRva": "0x47a92fe",
+          "targetRva": "0xe5a6ab0",
+          "instructions": [
+            {
+              "rva": "0x47a92c7",
+              "bytes": "488d8d60330000",
+              "instruction": "lea rcx, [rbp + 0x3360]"
+            },
+            {
+              "rva": "0x47a92ce",
+              "bytes": "e85d3decfb",
+              "instruction": "call 0x66d030"
+            },
+            {
+              "rva": "0x47a92d3",
+              "bytes": "488bb560330000",
+              "instruction": "mov rsi, qword ptr [rbp + 0x3360]"
+            },
+            {
+              "rva": "0x47a92da",
+              "bytes": "0f57c0",
+              "instruction": "xorps xmm0, xmm0"
+            },
+            {
+              "rva": "0x47a92dd",
+              "bytes": "f2480f2ac6",
+              "instruction": "cvtsi2sd xmm0, rsi"
+            },
+            {
+              "rva": "0x47a92e2",
+              "bytes": "f20f103d2e02e409",
+              "instruction": "movsd xmm7, qword ptr [rip + 0x9e4022e]"
+            },
+            {
+              "rva": "0x47a92ea",
+              "bytes": "f20f5ec7",
+              "instruction": "divsd xmm0, xmm7"
+            },
+            {
+              "rva": "0x47a92ee",
+              "bytes": "f20f1035faa1130a",
+              "instruction": "movsd xmm6, qword ptr [rip + 0xa13a1fa]"
+            },
+            {
+              "rva": "0x47a92f6",
+              "bytes": "0f28ce",
+              "instruction": "movaps xmm1, xmm6"
+            },
+            {
+              "rva": "0x47a92f9",
+              "bytes": "e8b2d7df09",
+              "instruction": "call 0xe5a6ab0"
+            },
+            {
+              "rva": "0x47a92fe",
+              "bytes": "f2440f5ac0",
+              "instruction": "cvtsd2ss xmm8, xmm0"
+            },
+            {
+              "rva": "0x47a9303",
+              "bytes": "4889f0",
+              "instruction": "mov rax, rsi"
+            }
+          ]
+        },
+        {
+          "role": "delta",
+          "callRva": "0x47a931c",
+          "returnRva": "0x47a9321",
+          "targetRva": "0xe5a6ab0",
+          "instructions": [
+            {
+              "rva": "0x47a92f6",
+              "bytes": "0f28ce",
+              "instruction": "movaps xmm1, xmm6"
+            },
+            {
+              "rva": "0x47a92f9",
+              "bytes": "e8b2d7df09",
+              "instruction": "call 0xe5a6ab0"
+            },
+            {
+              "rva": "0x47a92fe",
+              "bytes": "f2440f5ac0",
+              "instruction": "cvtsd2ss xmm8, xmm0"
+            },
+            {
+              "rva": "0x47a9303",
+              "bytes": "4889f0",
+              "instruction": "mov rax, rsi"
+            },
+            {
+              "rva": "0x47a9306",
+              "bytes": "482b8740020000",
+              "instruction": "sub rax, qword ptr [rdi + 0x240]"
+            },
+            {
+              "rva": "0x47a930d",
+              "bytes": "0f57c0",
+              "instruction": "xorps xmm0, xmm0"
+            },
+            {
+              "rva": "0x47a9310",
+              "bytes": "f2480f2ac0",
+              "instruction": "cvtsi2sd xmm0, rax"
+            },
+            {
+              "rva": "0x47a9315",
+              "bytes": "f20f5ec7",
+              "instruction": "divsd xmm0, xmm7"
+            },
+            {
+              "rva": "0x47a9319",
+              "bytes": "0f28ce",
+              "instruction": "movaps xmm1, xmm6"
+            },
+            {
+              "rva": "0x47a931c",
+              "bytes": "e88fd7df09",
+              "instruction": "call 0xe5a6ab0"
+            },
+            {
+              "rva": "0x47a9321",
+              "bytes": "4889b740020000",
+              "instruction": "mov qword ptr [rdi + 0x240], rsi"
+            },
+            {
+              "rva": "0x47a9328",
+              "bytes": "4c8bb790020000",
+              "instruction": "mov r14, qword ptr [rdi + 0x290]"
+            }
+          ]
+        },
+        {
+          "role": "world",
+          "callRva": "0x47a94ed",
+          "returnRva": "0x47a94f2",
+          "targetRva": "0xe5a6ab0",
+          "instructions": [
+            {
+              "rva": "0x47a94c2",
+              "bytes": "4889c1",
+              "instruction": "mov rcx, rax"
+            },
+            {
+              "rva": "0x47a94c5",
+              "bytes": "4889d0",
+              "instruction": "mov rax, rdx"
+            },
+            {
+              "rva": "0x47a94c8",
+              "bytes": "ff15da25950a",
+              "instruction": "call qword ptr [rip + 0xa9525da]"
+            },
+            {
+              "rva": "0x47a94ce",
+              "bytes": "0f57c9",
+              "instruction": "xorps xmm1, xmm1"
+            },
+            {
+              "rva": "0x47a94d1",
+              "bytes": "f20f5ace",
+              "instruction": "cvtsd2ss xmm1, xmm6"
+            },
+            {
+              "rva": "0x47a94d5",
+              "bytes": "f30f59c1",
+              "instruction": "mulss xmm0, xmm1"
+            },
+            {
+              "rva": "0x47a94d9",
+              "bytes": "f30f5ac0",
+              "instruction": "cvtss2sd xmm0, xmm0"
+            },
+            {
+              "rva": "0x47a94dd",
+              "bytes": "f20f5887d0040000",
+              "instruction": "addsd xmm0, qword ptr [rdi + 0x4d0]"
+            },
+            {
+              "rva": "0x47a94e5",
+              "bytes": "f20f100d03a0130a",
+              "instruction": "movsd xmm1, qword ptr [rip + 0xa13a003]"
+            },
+            {
+              "rva": "0x47a94ed",
+              "bytes": "e8bed5df09",
+              "instruction": "call 0xe5a6ab0"
+            },
+            {
+              "rva": "0x47a94f2",
+              "bytes": "f20f1187d0040000",
+              "instruction": "movsd qword ptr [rdi + 0x4d0], xmm0"
+            },
+            {
+              "rva": "0x47a94fa",
+              "bytes": "4883bf5001000000",
+              "instruction": "cmp qword ptr [rdi + 0x150], 0"
+            }
+          ]
+        }
+      ],
+      "deltaToNativeWorld": [
+        {
+          "rva": "0x47a9343",
+          "bytes": "80bfc804000000",
+          "instruction": "cmp byte ptr [rdi + 0x4c8], 0"
+        },
+        {
+          "rva": "0x47a934a",
+          "bytes": "0f85aa010000",
+          "instruction": "jne 0x47a94fa"
+        },
+        {
+          "rva": "0x47a9350",
+          "bytes": "660f28f0",
+          "instruction": "movapd xmm6, xmm0"
+        },
+        {
+          "rva": "0x47a9354",
+          "bytes": "4883bf3801000000",
+          "instruction": "cmp qword ptr [rdi + 0x138], 0"
+        },
+        {
+          "rva": "0x47a935c",
+          "bytes": "753b",
+          "instruction": "jne 0x47a9399"
+        }
+      ],
+      "conditionalWorldSkip": [
+        {
+          "rva": "0x47a9343",
+          "bytes": "80bfc804000000",
+          "instruction": "cmp byte ptr [rdi + 0x4c8], 0"
+        },
+        {
+          "rva": "0x47a934a",
+          "bytes": "0f85aa010000",
+          "instruction": "jne 0x47a94fa"
+        }
+      ]
+    },
+    "inactiveCurrentCandidate": {
+      "frameRva": "0x53117b0",
+      "frameEndRva": "0x5313e98",
+      "frameBytesSha256": "6777ab808c27cfab22dfe01d8e6a83a6d4411d7f6186ceb6c98846df2bd14711",
+      "textSha256": "7ca5d1baef049979e9785d5bbafe7100a829e1107a3d374975962cc64ecc76fe",
+      "roles": [
+        {
+          "role": "total",
+          "callRva": "0x5311dc5",
+          "returnRva": "0x5311dca",
+          "targetRva": "0xeec6880",
+          "instructions": [
+            {
+              "rva": "0x5311d93",
+              "bytes": "488d8d88330000",
+              "instruction": "lea rcx, [rbp + 0x3388]"
+            },
+            {
+              "rva": "0x5311d9a",
+              "bytes": "e891a241fb",
+              "instruction": "call 0x72c030"
+            },
+            {
+              "rva": "0x5311d9f",
+              "bytes": "488bb588330000",
+              "instruction": "mov rsi, qword ptr [rbp + 0x3388]"
+            },
+            {
+              "rva": "0x5311da6",
+              "bytes": "0f57c0",
+              "instruction": "xorps xmm0, xmm0"
+            },
+            {
+              "rva": "0x5311da9",
+              "bytes": "f2480f2ac6",
+              "instruction": "cvtsi2sd xmm0, rsi"
+            },
+            {
+              "rva": "0x5311dae",
+              "bytes": "f20f103d5aa6c009",
+              "instruction": "movsd xmm7, qword ptr [rip + 0x9c0a65a]"
+            },
+            {
+              "rva": "0x5311db6",
+              "bytes": "f20f5ec7",
+              "instruction": "divsd xmm0, xmm7"
+            },
+            {
+              "rva": "0x5311dba",
+              "bytes": "f20f10359e3bf309",
+              "instruction": "movsd xmm6, qword ptr [rip + 0x9f33b9e]"
+            },
+            {
+              "rva": "0x5311dc2",
+              "bytes": "0f28ce",
+              "instruction": "movaps xmm1, xmm6"
+            },
+            {
+              "rva": "0x5311dc5",
+              "bytes": "e8b64abb09",
+              "instruction": "call 0xeec6880"
+            },
+            {
+              "rva": "0x5311dca",
+              "bytes": "f2440f5ac0",
+              "instruction": "cvtsd2ss xmm8, xmm0"
+            },
+            {
+              "rva": "0x5311dcf",
+              "bytes": "4889f0",
+              "instruction": "mov rax, rsi"
+            }
+          ]
+        },
+        {
+          "role": "delta",
+          "callRva": "0x5311de8",
+          "returnRva": "0x5311ded",
+          "targetRva": "0xeec6880",
+          "instructions": [
+            {
+              "rva": "0x5311dc2",
+              "bytes": "0f28ce",
+              "instruction": "movaps xmm1, xmm6"
+            },
+            {
+              "rva": "0x5311dc5",
+              "bytes": "e8b64abb09",
+              "instruction": "call 0xeec6880"
+            },
+            {
+              "rva": "0x5311dca",
+              "bytes": "f2440f5ac0",
+              "instruction": "cvtsd2ss xmm8, xmm0"
+            },
+            {
+              "rva": "0x5311dcf",
+              "bytes": "4889f0",
+              "instruction": "mov rax, rsi"
+            },
+            {
+              "rva": "0x5311dd2",
+              "bytes": "482b8758020000",
+              "instruction": "sub rax, qword ptr [rdi + 0x258]"
+            },
+            {
+              "rva": "0x5311dd9",
+              "bytes": "0f57c0",
+              "instruction": "xorps xmm0, xmm0"
+            },
+            {
+              "rva": "0x5311ddc",
+              "bytes": "f2480f2ac0",
+              "instruction": "cvtsi2sd xmm0, rax"
+            },
+            {
+              "rva": "0x5311de1",
+              "bytes": "f20f5ec7",
+              "instruction": "divsd xmm0, xmm7"
+            },
+            {
+              "rva": "0x5311de5",
+              "bytes": "0f28ce",
+              "instruction": "movaps xmm1, xmm6"
+            },
+            {
+              "rva": "0x5311de8",
+              "bytes": "e8934abb09",
+              "instruction": "call 0xeec6880"
+            },
+            {
+              "rva": "0x5311ded",
+              "bytes": "4889b758020000",
+              "instruction": "mov qword ptr [rdi + 0x258], rsi"
+            },
+            {
+              "rva": "0x5311df4",
+              "bytes": "4c8bbfa8020000",
+              "instruction": "mov r15, qword ptr [rdi + 0x2a8]"
+            }
+          ]
+        },
+        {
+          "role": "world",
+          "callRva": "0x5311ef3",
+          "returnRva": "0x5311ef8",
+          "targetRva": "0xeec6880",
+          "instructions": [
+            {
+              "rva": "0x5311eca",
+              "bytes": "4889d0",
+              "instruction": "mov rax, rdx"
+            },
+            {
+              "rva": "0x5311ecd",
+              "bytes": "ff159dd0680a",
+              "instruction": "call qword ptr [rip + 0xa68d09d]"
+            },
+            {
+              "rva": "0x5311ed3",
+              "bytes": "90",
+              "instruction": "nop"
+            },
+            {
+              "rva": "0x5311ed4",
+              "bytes": "0f57c9",
+              "instruction": "xorps xmm1, xmm1"
+            },
+            {
+              "rva": "0x5311ed7",
+              "bytes": "f20f5ace",
+              "instruction": "cvtsd2ss xmm1, xmm6"
+            },
+            {
+              "rva": "0x5311edb",
+              "bytes": "f30f59c1",
+              "instruction": "mulss xmm0, xmm1"
+            },
+            {
+              "rva": "0x5311edf",
+              "bytes": "f30f5ac0",
+              "instruction": "cvtss2sd xmm0, xmm0"
+            },
+            {
+              "rva": "0x5311ee3",
+              "bytes": "f20f588708050000",
+              "instruction": "addsd xmm0, qword ptr [rdi + 0x508]"
+            },
+            {
+              "rva": "0x5311eeb",
+              "bytes": "f20f100d6d3af309",
+              "instruction": "movsd xmm1, qword ptr [rip + 0x9f33a6d]"
+            },
+            {
+              "rva": "0x5311ef3",
+              "bytes": "e88849bb09",
+              "instruction": "call 0xeec6880"
+            },
+            {
+              "rva": "0x5311ef8",
+              "bytes": "f20f118708050000",
+              "instruction": "movsd qword ptr [rdi + 0x508], xmm0"
+            },
+            {
+              "rva": "0x5311f00",
+              "bytes": "488b8750010000",
+              "instruction": "mov rax, qword ptr [rdi + 0x150]"
+            }
+          ]
+        }
+      ],
+      "deltaToNativeWorld": [
+        {
+          "rva": "0x5311e0f",
+          "bytes": "80bf0005000000",
+          "instruction": "cmp byte ptr [rdi + 0x500], 0"
+        },
+        {
+          "rva": "0x5311e16",
+          "bytes": "0f85e4000000",
+          "instruction": "jne 0x5311f00"
+        },
+        {
+          "rva": "0x5311e1c",
+          "bytes": "660f28f0",
+          "instruction": "movapd xmm6, xmm0"
+        },
+        {
+          "rva": "0x5311e20",
+          "bytes": "488b8738010000",
+          "instruction": "mov rax, qword ptr [rdi + 0x138]"
+        },
+        {
+          "rva": "0x5311e27",
+          "bytes": "4885c0",
+          "instruction": "test rax, rax"
+        }
+      ],
+      "conditionalWorldSkip": [
+        {
+          "rva": "0x5311e0f",
+          "bytes": "80bf0005000000",
+          "instruction": "cmp byte ptr [rdi + 0x500], 0"
+        },
+        {
+          "rva": "0x5311e16",
+          "bytes": "0f85e4000000",
+          "instruction": "jne 0x5311f00"
+        }
+      ]
+    }
+  },
+  "sourceBehavior": [
+    "An exact world context starts a thread-local frame value containing renderer, clock generation, replay seconds, unscaled replay delta and next caller role",
+    "Only the three approved exact E8 return sites consume the frame state, in total/delta/world order",
+    "Every role rechecks the live controlled primary renderer, generation, replay timestamp and existing renderer timeline",
+    "The total role retains the existing native epoch mapping",
+    "The delta role substitutes the finite nonnegative unscaled replay delta; a held timestamp contributes zero",
+    "Native code retains double-to-float narrowing, multiplication, accumulator update, hour wrap and conditional skip",
+    "The conditional world role records the original remainder return and performs no world-phase override; its following store is not claimed observed",
+    "Recognized invalid/out-of-order roles clear authority; unrelated math calls retain their native result without consuming the frame state",
+    "A new world context or context output/return mismatch replaces or clears frame authority"
+  ],
+  "limits": [
+    "Current-build candidates are not enabled by this port",
+    "The initial native total/world shader phases are not yet selected from an archived replay clock track",
+    "Different fresh/reconstructed worlds are not proven to start at the same shader phase",
+    "Conditional world accumulation need not execute every frame",
+    "No GPU upload, full world shader coverage, native cosmetics insertion, complete replay scene or MP4 equivalence is proved"
+  ],
+  "sourceImplemented": true,
+  "buildsRun": false,
+  "testsRun": false,
+  "syntaxChecksRun": false,
+  "engineCodeExecuted": false,
+  "gameStarted": false,
+  "shaderDeltaRuntimeVerified": false,
+  "recordedWorldPhaseApplied": false,
+  "deterministicVideoReady": false,
+  "fullParity": false
+}

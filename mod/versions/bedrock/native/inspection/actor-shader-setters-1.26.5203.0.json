@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "productVersion": "1.26.5203.0",
+  "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "evidence": "Offline disassembly of previously cached text/rdata/data/pdata sections; no game process or project code executed",
+  "constant": {
+    "dataPointerOffset": "0x40",
+    "dirtyByteOffset": "0x31",
+    "setDirtyValue": 1,
+    "scalarWriteRva": "0x595aedf",
+    "scalarDirtyWriteRva": "0x595aee5",
+    "vectorWriteRva": "0x595ae9a",
+    "vectorDirtyWriteRva": "0x595aea4",
+    "paletteDirtyWriteRva": "0x12e9349"
+  },
+  "skinnedDescription": {
+    "constructorRva": "0x5e9e4e0",
+    "constructorCallRva": "0x12eabf6",
+    "consumerGlobalPointerRva": "0x11d1ec68",
+    "consumerGlobalReadRva": "0x12e96bb",
+    "consumerGlobalStoreRva": "0x7f09c5",
+    "receiverVtableLoadRva": "0x12eac78",
+    "consumerVtableOffset": "0x358",
+    "variantPointerOffset": 0,
+    "variantTagOffset": 8,
+    "variantTagValue": 7,
+    "variantTagWriteRva": "0x12eac71",
+    "guardDispatchCallRva": "0x12eac8c",
+    "consumerImplementationResolved": true,
+    "returnAbiResolved": true,
+    "resolvedConsumerRva": "0x5e4b240",
+    "resolutionEvidence": "skinned-material-consumer-1.26.5203.0.json"
+  },
+  "consumerServiceCreationTrace": {
+    "registrationFunctionRva": "0x7f0860",
+    "callers": [
+      {"functionRva": "0x7b87f0", "registrationCallRva": "0x7b898c", "ownedResultOffset": "0x888", "providerVtableSlot": "0x6b0", "providerDispatchRva": "0x7b88a6", "factoryVtableSlot": "0x38", "factoryDispatchRva": "0x7b891c"},
+      {"functionRva": "0x7c0f40", "registrationCallRva": "0x7c134c", "ownedResultOffset": "0x888", "providerVtableSlot": "0x6b0", "providerDispatchRva": "0x7c1260", "factoryVtableSlot": "0x38", "factoryDispatchRva": "0x7c12df"}
+    ],
+    "candidatePrimaryVtable": {
+      "rva": "0xe76e2d0",
+      "constructorStoreRva": "0x768e61",
+      "resetReferenceRva": "0x76f18c",
+      "slot6b0TargetRva": "0x82c2e0",
+      "getterBytes": "48 8b 81 28 07 00 00 c3",
+      "getterMemberOffset": "0x728",
+      "actualCallerReceiverVtableVerified": false,
+      "factoryImplementationResolved": false
+    },
+    "consumerImplementationResolved": true,
+    "returnAbiResolved": true,
+    "newConsumerHookInstalled": false,
+    "consumerHookImplementedInSource": true
+  },
+  "nativeShaderApplicationImplemented": true,
+  "nativeShaderApplicationBuilt": false,
+  "gpuSubmissionVerified": false,
+  "parityVerified": false
+}

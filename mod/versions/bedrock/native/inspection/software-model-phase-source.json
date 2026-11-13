@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "evidence": "Source reads, edits and manual review; cached Java/JOML class bytes decoded as data and the JOML archive hashed. No Java class loading, builds, tests, syntax checks, project/game/renderer/JNI/shader/GPU execution, process inspection or exports. Runtime parity remains unverified by user instruction.",
+  "reference": {
+    "javaVersion": "26.2",
+    "clientJarSha256": "40896ee9f1e2bec3c934daac7e93d41e9e3d9c2f8ae0ca366d52ffbfd1afa290",
+    "joml": "org.joml:joml:1.10.8",
+    "jomlJarSha256": "bf19510145178df82cd3bd37edd514c13f411531ec5545299fd3abcbc98fe7c2",
+    "affineTranslation": "Matrix4f.mulAffine(Matrix4fc,Matrix4f) computes m30/m31/m32 with three right-nested org.joml.Math.fma calls (0x16e..0x1be). Options initializes joml.useMathFma from a property defaulting to false at 0x5b..0x65; Runtime.HAS_Math_fma additionally requires that option. Math.fma(FFF) has the non-fused fmul/fadd fallback at 0x0d..0x12.",
+    "modelSort": "java-model-submit-source.json and JavaModelOrder: submitted view translation, float Mth squared length, descending Float.compare and the cached fastutil unstable quicksort. Whole model submissions, including empty models, are the sort participants.",
+    "strictGrouping": "RenderTypeFeatureRenderer$Group.getVertexBuilder reuses lastDraw only for the same lastRenderType reference with canConsolidateConsecutiveGeometry. getOrAddDraw searches older PreparedRenderType values only when canReorder and consolidation permit it. Strict model outputs do not allow that nonconsecutive lookup."
+  },
+  "camera": {
+    "capture": "ProjectionContext.equipment already validates the explicit finite affine view/raw projection pair against the actual combined world projection. After that successful check it now privately retains owned view and combined-projection copies. These fields are transient, so JSON cannot supply them or persist them as unchecked authority.",
+    "join": "WorldFrame.copyModelView takes the combined matrix actually cloned by Raster3D and requires exact current world/projection-cache agreement plus the existing camera-relative declaration. It returns another owned view copy. Changed/unvalidated projection context remains unknown.",
+    "root": "At beginModel, JavaModelView applies the checked view to the actual supplied row-major model-root translation, preserving the default non-fused JOML affine grouping. The three result floats are owned by that model scope. No actor-position distance, FOV inversion, camera-angle reconstruction, perspective divide or combined-matrix decomposition is substituted.",
+    "scope": "This is the software renderer's submitted root under its supplied checked native view. It is not a captured installed-Java pose, native GPU transform slice, native target lease or proof of Java/Bedrock model transform equivalence."
+  },
+  "software": {
+    "models": "The known owned skin stage collects all part/empty submissions for each original model scope before drawing any skin model. Every skin model needs a known view translation; missing/unvalidated/overflowed positions retain the older complete skin-stage renderer instead of sorting a known subset.",
+    "order": "Sort the complete selected skin model sequence once with JavaModelOrder. Preserve each model's part/primitive order while constructing draws. The shared normal-skin emitter now supplies the stock model's root-map traversal instead of SkinLimbs enum order (player-part-traversal-source.json). Empty models remain in unstable sorting and can affect consolidation boundaries even when they emit no triangles.",
+    "builders": "Reuse a skin prepared draw only for consecutive identical JavaRenderType references with the same actual software binding. An intervening different render reference remains a boundary, including an empty model. Compatible consecutive models may share their quad-sort builder; this is distinct from simply sorting every skin triangle globally.",
+    "quadKeys": "Checked resulting draws now request the projection-specific operator described in software-projection-quad-sort-source.json. Perspective uses origin-distance and orthographic uses negative centroid Z on original emitted positions. This is separate from whole-model sorting and does not establish Java-equivalent native vertex-space or GPU raster fidelity.",
+    "bindings": "Frame-local identity lookup requires each owned JavaRenderType reference to keep one actual image/pipeline/blend/emissive binding. A conflicting binding invalidates the known phase path and transfers to legacy rendering. Normal skin, base cosmetics and bent skin share their implemented entity-translucent pipeline; overlay/tint/light/fog differences are already vertex attributes. No equality is inferred from matching texture names or pixels.",
+    "lifecycle": "Existing world-frame sealing, one-use migration, bounded scope/submit/triangle admission, independent native/software collectors and cleanup remain. Frame binding lookup clears on success or legacy transfer. No mesh/animation is emitted again and no additional pixel copy is introduced."
+  },
+  "compatibility": {
+    "wire": "ARCGEO01..10, replay archives, native ABI and JNI signatures are unchanged. Native packet model translations remain in their declared packet space and are not relabeled as Java-equivalent view observations.",
+    "unknown": "Older providers or manually constructed unchecked camera contexts keep the older software skin rendering. Existing glint sampling still uses its separately supplied view translation; this new skin-root computation does not replace or invent glint inputs.",
+    "flags": "No runtime drawing/skin/model/camera/export/full-parity verification flag is enabled. The native Java-equivalent model-view producer and owning native insertion callsite remain missing."
+  },
+  "remaining": [
+    "Complete Java-equivalent native pose/preparation provenance, target/resource/descriptor ownership, native world insertion and complete foreign phase participants.",
+    "Java-equivalent per-draw vertex-space provenance, non-default math profiles, model transform/animation fidelity, unsupported material/outline/target variants and shader/raster equality. The supported software projection-key operator is now ported but unverified.",
+    "Authoritative live glint inputs, recorded clock reconstruction, camera-editor rebasing, complete capes/emotes and deterministic replay/video integration.",
+    "Build, matrix/sort/group comparison, actual installed-game rendered pixels and depth, replay/export comparisons and full 1:1 parity verification."
+  ],
+  "verified": {"built":false,"tested":false,"viewCompositionCompared":false,"modelSortCompared":false,"preparedGroupsCompared":false,"pixelsCompared":false,"replayRendered":false,"liveGame":false,"gpuRendering":false,"deterministicVideo":false,"fullParity":false}
+}

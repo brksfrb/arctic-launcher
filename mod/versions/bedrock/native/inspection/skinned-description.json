@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "version": "1.26.5203.0",
+  "textSha256": "6fa218d247874940235aacb8fd7e3bbf0e3d1e259630d7f83fcb536f06733aeb",
+  "probe": "early-initialization-2673150f2a094a059fd1e20292c3f50a",
+  "observation": {
+    "actorId": "3c027ff3-1512-3ca2-a031-32e307e5a328",
+    "alphaSuppressed": false,
+    "color": [
+      1.0,
+      1.0,
+      1.0,
+      0.6499999761581421
+    ],
+    "geometry": "default",
+    "nativeRootMatches": true,
+    "sourceColorMatches": true,
+    "vertices": 0,
+    "worldMatrix": [
+      0.037740737199783325,
+      -0.0,
+      0.04482035338878632,
+      -0.0,
+      -0.0,
+      -0.0585937462747097,
+      -0.0,
+      -0.0,
+      0.04482035338878632,
+      0.0,
+      -0.037740737199783325,
+      0.0,
+      0.0022125244140625,
+      -0.2064359188079834,
+      1.2824859619140625,
+      1.0
+    ],
+    "worldScope": 590
+  },
+  "constructorActorCalls": 2725,
+  "nativeRootMatches": 2725,
+  "bodyReplacementVerified": false
+}

@@ -1,0 +1,112 @@
+{
+  "schema": 1,
+  "profiles": [
+    {
+      "productVersion": "1.26.5203.0",
+      "observation": "setter8",
+      "layout": {
+        "frameBase": 768,
+        "count": 256,
+        "stride": 512,
+        "rectangle": 16,
+        "view": 32,
+        "projection": 96,
+        "matrixBytes": 64,
+        "contextViews": 32256128,
+        "frameWidth": 14489608,
+        "frameHeight": 14489612
+      },
+      "copyRva": 237623520,
+      "functions": {
+        "matrixWriter": {
+          "rva": 87234784,
+          "bytes": 232,
+          "sha256": "23406ef82db8328dd9f5928f24ed7f084ef511bebf719862930ef139a5138d11"
+        },
+        "frameCopy": {
+          "rva": 192055952,
+          "bytes": 6754,
+          "sha256": "51663993bcb4f476a55f7d6fd6037e206aa4534cd17105195af2b67c7e949e9c"
+        },
+        "setter": {
+          "rva": 192117936,
+          "bytes": 430,
+          "sha256": "fe6257c3e7ba8e84c3f751707b4c00e261e753b6dcaa9dd531d357e88b2177c1"
+        }
+      },
+      "edges": [
+        {
+          "from": "matrixWriter",
+          "siteRva": 87234983,
+          "to": "setter"
+        },
+        {
+          "from": "frameCopy",
+          "siteRva": 192057441,
+          "to": "copy"
+        }
+      ]
+    },
+    {
+      "productVersion": "1.26.60.5",
+      "observation": "frameSnapshots",
+      "layout": {
+        "frameBase": 768,
+        "count": 256,
+        "stride": 320,
+        "rectangle": 16,
+        "view": 32,
+        "projection": 96,
+        "matrixBytes": 64,
+        "contextViews": 32157824,
+        "frameWidth": 14440456,
+        "frameHeight": 14440460
+      },
+      "copyRva": 247256976,
+      "functions": {
+        "matrixWriter": {
+          "rva": 90892016,
+          "bytes": 291,
+          "sha256": "23366ef3fedf4dc4bc0c39ecfc527719e8aca5863243bfdb138851ad3802af50"
+        },
+        "frameCopy": {
+          "rva": 197550560,
+          "bytes": 6615,
+          "sha256": "1e5d902fd795d8317a5f0b0d7939f7d3216b9bf7833478ac2efceb30414f7cd1"
+        }
+      },
+      "edges": [
+        {
+          "from": "matrixWriter",
+          "siteRva": 90892164,
+          "to": "copy"
+        },
+        {
+          "from": "matrixWriter",
+          "siteRva": 90892189,
+          "to": "copy"
+        },
+        {
+          "from": "matrixWriter",
+          "siteRva": 90892214,
+          "to": "copy"
+        },
+        {
+          "from": "matrixWriter",
+          "siteRva": 90892239,
+          "to": "copy"
+        },
+        {
+          "from": "matrixWriter",
+          "siteRva": 90892264,
+          "to": "copy"
+        },
+        {
+          "from": "frameCopy",
+          "siteRva": 197552001,
+          "to": "copy"
+        }
+      ]
+    }
+  ]
+}

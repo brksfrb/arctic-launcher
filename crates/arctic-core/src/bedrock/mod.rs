@@ -11,14 +11,31 @@
 //! Bedrock is only on Windows here: elsewhere nothing is installed and the
 //! folders are empty.
 
+pub mod appearance;
+pub mod appearance_control;
 mod archive;
+#[cfg_attr(not(windows), allow(dead_code))]
+pub mod capture;
 pub mod client;
+pub mod export_clock;
+#[cfg_attr(not(windows), allow(dead_code))]
+pub mod export_feed;
+#[cfg_attr(not(windows), allow(dead_code))]
+pub mod export_identity;
+pub mod export_job;
+pub mod export_range;
 mod fe3;
+pub mod native;
+pub mod offline;
 #[cfg(windows)]
 mod package;
+pub mod packet;
 pub mod packs;
+pub mod playback_clock;
+pub mod recording;
 pub mod servers;
 pub mod versions;
+pub mod video_audit;
 pub mod worlds;
 
 use std::path::{Path, PathBuf};

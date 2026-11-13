@@ -351,6 +351,15 @@ public final class Looks {
 
 	/** Register a picture of Arctic's own (a chat screenshot…) as {@code look:<hash>}. */
 	public void registerOwn(String hash, byte[] png) {
+		final AppearanceAssets store=platform.appearanceAssets();
+		if(store!=null&&png!=null&&png.length<=4*1024*1024) {
+			final byte[] owned=png.clone();
+			worker.execute(()-> {
+				try {store.put("texture",hash,owned);} catch(java.io.IOException|IllegalArgumentException unavailable) {
+					platform.log(false,"Appearance cache: "+unavailable.getMessage());
+				}
+			});
+		}
 		platform.registerTexture(hash, png, false);
 	}
 
@@ -459,7 +468,11 @@ public final class Looks {
 	}
 
 	/** The player's Arctic look, or null. Queues lookups as needed. */
-	public Look lookFor(UUID player) {
+	public Look lookFor(UUID player) { return lookFor(player, true); }
+
+	Look lookForSnapshot(UUID player) { return lookFor(player, false); }
+
+	private Look lookFor(UUID player, boolean request) {
 		// Asked for every player every frame: the UUID's text only when someone is hidden.
 		if (!config.showCosmetics || !config.hiddenPlayers.isEmpty() && config.hiddenPlayers.contains(player.toString())) {
 			return null;
@@ -472,9 +485,9 @@ public final class Looks {
 		boolean mine = isMe(player);
 		long now = System.currentTimeMillis();
 		long ttl = !mine ? othersTtl(look) : now < menuOpenUntil ? OWN_TTL_OPEN_MS : OWN_TTL_MS;
-		if (look == null) {
+		if (request && look == null) {
 			want(player);
-		} else if (now - look.fetched > ttl) {
+		} else if (request && now - look.fetched > ttl) {
 			refresh(player);
 		}
 		// Hovering a cosmetic in the Looks menu: shown on you, only here.
@@ -702,6 +715,17 @@ public final class Looks {
 	 * animated capes" on, every animated cape stays on its first frame.
 	 */
 	public String frame(String hash) {
+		return frameAt(hash, System.currentTimeMillis());
+	}
+
+	int capeRateForSnapshot(String hash) {
+		Integer fps=hash==null?null:capeFps.get(hash);
+		return fps==null?DEFAULT_CAPE_FPS:fps;
+	}
+
+	/** The same cape frame on an explicit clock, for deterministic replay rendering. */
+	public String frameAt(String hash, long timeMillis) {
+		if (hash == null) return null;
 		Integer frames = ready.get(hash);
 		if (frames == null || frames < 2) {
 			return hash;
@@ -711,7 +735,7 @@ public final class Looks {
 		}
 		Integer fps = capeFps.get(hash);
 		long frameMs = 1000L / (fps == null ? DEFAULT_CAPE_FPS : fps);
-		long frame = (System.currentTimeMillis() / frameMs) % frames;
+		long frame = Math.floorMod(timeMillis / frameMs, frames.longValue());
 		return hash + "/" + frame;
 	}
 
@@ -747,7 +771,7 @@ public final class Looks {
 
 	private void loadTexture(final String hash) {
 		try {
-			byte[] png = Http.get(baseUrl + "/v1/textures/" + hash + ".png", null);
+			byte[] png = AppearanceAssets.fetch(platform,baseUrl,"texture",hash);
 			boolean cape = capes.contains(hash);
 			if (!fitsTexture(png, cape)) {
 				throw new java.io.IOException("not a " + (cape ? "cape" : "skin") + Lang.t("looks.sized_png")); // i18n-ignore: diagnostics, read by support
