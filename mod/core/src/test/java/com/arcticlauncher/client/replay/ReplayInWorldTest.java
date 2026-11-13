@@ -2,6 +2,7 @@ package com.arcticlauncher.client.replay;
 
 import static org.junit.jupiter.api.Assertions.*;
 import com.arcticlauncher.client.ArcticClient;
+import com.arcticlauncher.client.Lang;
 import com.arcticlauncher.client.Platform;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.notice.Notices;
@@ -11,6 +12,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -34,6 +37,8 @@ class ReplayInWorldTest {
 	}
 
 	private void run(boolean inWorld, boolean supported, boolean enabled, boolean expectStarted, String expectedNotice) throws Exception {
+		// These assertions use English prose, independent of which test initialized Lang first.
+		Lang.init(null, "en");
 		Recorder recorder = new Recorder(dir.toFile(), () -> 30, message -> {}, () -> (p, k) -> Category.ALWAYS, 1L << 20, 0, 10_000);
 		AtomicInteger begun = new AtomicInteger();
 		Field r = field(Replays.class, "recorder"), pl = field(Replays.class, "platform"), c = field(ArcticClient.class, "config");
@@ -58,6 +63,11 @@ class ReplayInWorldTest {
 			}
 		} finally {
 			if (recorder.current() != null) recorder.current().end();
+			// End queues filesystem cleanup and a save callback that posts to Notices.
+			// Drain both before restoring shared state or letting @TempDir delete the files.
+			CountDownLatch drained = new CountDownLatch(1);
+			recorder.afterWrites(drained::countDown);
+			assertTrue(drained.await(10, TimeUnit.SECONDS), "replay cleanup did not finish");
 			r.set(null, oldR); pl.set(null, oldP); c.set(null, oldC);
 			notices.clear(); notices.addAll(oldNotices);
 		}

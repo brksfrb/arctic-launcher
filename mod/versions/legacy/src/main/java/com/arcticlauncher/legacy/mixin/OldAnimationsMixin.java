@@ -3,7 +3,8 @@ package com.arcticlauncher.legacy.mixin;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
-import com.mojang.blaze3d.platform.GlStateManager;
+import com.arcticlauncher.client.items.OldItemTransforms;
+import com.arcticlauncher.legacy.LegacyOldItems;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.client.render.item.HeldItemRenderer;
@@ -58,28 +59,28 @@ abstract class OldAnimationsMixin {
 	}
 
 	// The five calls in renderArmHoldingItem, in order: no action, eat and drink, block, bow, not using anything.
-	@Redirect(method = "renderArmHoldingItem", at = @At(value = "INVOKE", target = OFFSET, ordinal = 0), require = 0)
+	@Redirect(method = "renderArmHoldingItem", at = @At(value = "INVOKE", target = OFFSET, ordinal = 0))
 	private void arctic$useNone(HeldItemRenderer self, float equip, float swing) {
 		arctic$offset(equip, swing, ArcticClient.config().oldUseSwing);
 	}
 
-	@Redirect(method = "renderArmHoldingItem", at = @At(value = "INVOKE", target = OFFSET, ordinal = 1), require = 0)
+	@Redirect(method = "renderArmHoldingItem", at = @At(value = "INVOKE", target = OFFSET, ordinal = 1))
 	private void arctic$useEat(HeldItemRenderer self, float equip, float swing) {
 		arctic$offset(equip, swing, ArcticClient.config().oldUseSwing);
 	}
 
-	@Redirect(method = "renderArmHoldingItem", at = @At(value = "INVOKE", target = OFFSET, ordinal = 2), require = 0)
+	@Redirect(method = "renderArmHoldingItem", at = @At(value = "INVOKE", target = OFFSET, ordinal = 2))
 	private void arctic$useBlock(HeldItemRenderer self, float equip, float swing) {
 		arctic$offset(equip, swing, ArcticClient.config().oldBlockHit);
 	}
 
-	@Redirect(method = "renderArmHoldingItem", at = @At(value = "INVOKE", target = OFFSET, ordinal = 3), require = 0)
+	@Redirect(method = "renderArmHoldingItem", at = @At(value = "INVOKE", target = OFFSET, ordinal = 3))
 	private void arctic$useBow(HeldItemRenderer self, float equip, float swing) {
 		arctic$offset(equip, swing, ArcticClient.config().oldUseSwing);
 	}
 
 	/** The bow: the game's, then its stretch (straight ahead) swapped for 1.7's (along the bow's own length). */
-	@Redirect(method = "renderArmHoldingItem", at = @At(value = "INVOKE", target = BOW), require = 0)
+	@Redirect(method = "renderArmHoldingItem", at = @At(value = "INVOKE", target = BOW))
 	private void arctic$bow(HeldItemRenderer self, float partial, AbstractClientPlayerEntity player) {
 		applyBowTransformation(partial, player);
 		ClientConfig config = ArcticClient.config();
@@ -92,14 +93,7 @@ abstract class OldAnimationsMixin {
 			drawn = 1f;
 		}
 		float stretch = 1f + drawn * 0.2f;
-		GlStateManager.scale(1f, 1f, 1f / stretch);
-		GlStateManager.rotate(-335f, 0f, 0f, 1f);
-		GlStateManager.rotate(-50f, 0f, 1f, 0f);
-		GlStateManager.translate(0f, 0.5f, 0f);
-		GlStateManager.scale(1f, 1f, stretch);
-		GlStateManager.translate(0f, -0.5f, 0f);
-		GlStateManager.rotate(50f, 0f, 1f, 0f);
-		GlStateManager.rotate(335f, 0f, 0f, 1f);
+		OldItemTransforms.bowStretch(LegacyOldItems.GL, stretch);
 	}
 }
 //#endif
