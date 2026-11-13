@@ -237,7 +237,7 @@ class GlassTilesTest {
 
 	@Test
 	void previewIsAFramedWallWhoseStreaksFollowTheLevel() {
-		for (int level : new int[]{0, 25, 100}) {
+		for (int level : new int[]{0, 25, 50, 75, 100}) {
 			int[] wall = GlassTiles.preview(3, level);
 			// Joined neighbours lose the shared border at every level; the outer frame stays.
 			for (int i = 0; i < 48; i++) assertTrue(wall[i] != 0 && wall[i * 48] != 0 && wall[47 * 48 + i] != 0 && wall[i * 48 + 47] != 0);
@@ -246,7 +246,12 @@ class GlassTilesTest {
 		// Inside the middle block (no frame left on any side) only the streaks differ with the level.
 		assertEquals(0, streaks(GlassTiles.preview(3, 0)));
 		assertEquals(5, streaks(GlassTiles.preview(3, 100)));
-		assertEquals(1, streaks(GlassTiles.preview(3, 25)));
+		for (int level : new int[]{25, 50, 75}) {
+			int[] wall = GlassTiles.preview(3, level), full = GlassTiles.preview(3, 100);
+			assertEquals(5, streaks(wall));
+			for (int y = 16; y < 32; y++) for (int x = 16; x < 32; x++)
+				assertEquals(lerp(0, full[y * 48 + x], level), wall[y * 48 + x]);
+		}
 	}
 
 	private static int streaks(int[] wall) {
@@ -269,12 +274,15 @@ class GlassTilesTest {
 		int[] glass = vanillaGlass();
 		assertEquals(5, GlassTiles.marks(glass, 16, 16, 16, 16));
 		assertArrayEquals(glass, GlassTiles.clarity(glass, 16, 16, 16, 16, 100));
-		int previous = 5;
+
 		for (int level = 100; level >= 0; level -= 5) {
 			int[] faded = GlassTiles.clarity(glass, 16, 16, 16, 16, level);
 			int marks = GlassTiles.marks(faded, 16, 16, 16, 16);
-			assertTrue(marks <= previous, "level " + level);
-			previous = marks;
+			assertEquals(level == 0 ? 0 : 5, marks, "level " + level);
+			for (int y = 0; y < 16; y++) for (int x = 0; x < 16; x++) {
+				int i = y * 16 + x;
+				assertEquals(x == 0 || y == 0 || x == 15 || y == 15 ? glass[i] : lerp(0, glass[i], level), faded[i]);
+			}
 			// Frame untouched at every level.
 			for (int i = 0; i < 16; i++) assertEquals(glass[i], faded[i]);
 			for (int i = 0; i < 16; i++) assertEquals(glass[15 * 16 + i], faded[15 * 16 + i]);
@@ -282,7 +290,7 @@ class GlassTilesTest {
 		int[] clear = GlassTiles.clarity(glass, 16, 16, 16, 16, 0);
 		assertEquals(0, GlassTiles.marks(clear, 16, 16, 16, 16));
 		for (int y = 1; y < 15; y++) for (int x = 1; x < 15; x++) assertEquals(0, clear[y * 16 + x]);
-		assertEquals(1, GlassTiles.marks(GlassTiles.clarity(glass, 16, 16, 16, 16, 25), 16, 16, 16, 16));
+		assertEquals(5, GlassTiles.marks(GlassTiles.clarity(glass, 16, 16, 16, 16, 25), 16, 16, 16, 16));
 		// A lone tile (no neighbours) is the faded texture itself.
 		assertArrayEquals(clear, GlassTiles.generate(clear, 16, 16, 16, 16, 0));
 	}
@@ -300,6 +308,52 @@ class GlassTilesTest {
 		assertArrayEquals(noisy, GlassTiles.clarity(noisy, 16, 16, 16, 16, 0));
 		int[] plain = new int[256];
 		assertArrayEquals(plain, GlassTiles.clarity(plain, 16, 16, 16, 16, 0));
+	}
+
+	private static int lerp(int open, int mark, int level) {
+		int result = 0;
+		for (int shift : new int[]{0, 8, 16, 24})
+			result |= ((((open >>> shift) & 255) * (100 - level) + ((mark >>> shift) & 255) * level + 50) / 100) << shift;
+		return result;
+	}
+
+	@Test void stainedSpritesFadeButTintedAndPaneTopsDoNot() {
+		for (String color : new String[]{"white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"}) {
+			assertTrue(GlassTiles.fades("minecraft:block/" + color + "_stained_glass"));
+			assertTrue(GlassTiles.fades("minecraft:blocks/glass_" + color));
+			assertFalse(GlassTiles.fades("minecraft:block/" + color + "_stained_glass_pane_top"));
+		}
+		assertTrue(GlassTiles.fades("minecraft:blocks/glass_silver"));
+		assertTrue(GlassTiles.fades("minecraft:block/glass"));
+		assertFalse(GlassTiles.fades("minecraft:block/tinted_glass"));
+		assertFalse(GlassTiles.fades("minecraft:block/glass_pane_top"));
+		assertFalse(GlassTiles.fades("other:block/blue_stained_glass"));
+	}
+
+	@Test void stainedAlphaAndColorFadeWithinEachFrame() {
+		int open = 0x66335599, mark = 0xaabbddff;
+		int[] stained = framed(16, 1);
+		for (int y = 1; y < 15; y++) for (int x = 1; x < 15; x++) stained[y * 16 + x] = open;
+		stained[3 * 16 + 4] = mark;
+		assertEquals(0x775577b3, GlassTiles.clarity(stained, 16, 16, 16, 16, 25)[3 * 16 + 4]);
+		assertEquals(0x887799cc, GlassTiles.clarity(stained, 16, 16, 16, 16, 50)[3 * 16 + 4]);
+		int[] animation = new int[512];
+		System.arraycopy(stained, 0, animation, 0, 256);
+		System.arraycopy(vanillaGlass(), 0, animation, 256, 256);
+		for (int level : new int[]{0, 25, 50, 75, 100}) {
+			int[] faded = GlassTiles.clarity(animation, 16, 32, 16, 16, level);
+			assertEquals(lerp(open, mark, level), faded[3 * 16 + 4]);
+			assertEquals(lerp(0, 0xffd0d0d0, level), faded[256 + 2 * 16 + 4]);
+			for (int i = 0; i < 256; i++) assertEquals(i == 52 ? lerp(open, mark, level) : stained[i], faded[i]);
+			if (level == 100) assertArrayEquals(animation, faded);
+		}
+	}
+
+	@Test void clarityLeavesDenseFramedArtworkAlone() {
+		// Even a framed texture is left intact if its interior is dense artwork.
+		int[] dense = framed(16, 1);
+		for (int y = 1; y < 15; y++) for (int x = 1; x < 15; x++) dense[y * 16 + x] = 0x66000000 | (x + y * 16) * 12345;
+		assertArrayEquals(dense, GlassTiles.clarity(dense, 16, 16, 16, 16, 0));
 	}
 
 	@Test

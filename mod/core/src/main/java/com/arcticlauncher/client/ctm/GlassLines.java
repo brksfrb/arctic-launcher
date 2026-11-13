@@ -4,9 +4,9 @@ import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
 
 /**
- * The "Lines in the glass" level and when to apply it: how much of the white streaks and flecks in the clear glass
- * texture stays (0 clear, 100 as vanilla). It is baked into the glass textures when the block atlas is stitched,
- * so a change needs the textures loaded again; that waits until the slider has rested. It applies with Connected
+ * The "Lines in the glass" level and when to apply it: how strongly every streak in clear and stained glass
+ * blocks and pane sides shows (0 frame only, 100 vanilla, in between uniformly fainter). It is baked into the
+ * glass textures when the block atlas is stitched, so a change needs the textures loaded again; that waits until the slider has rested. It applies with Connected
  * Glass on or off; only when Continuity owns glass (no glass textures of ours) is there nothing to reload.
  */
 public final class GlassLines {

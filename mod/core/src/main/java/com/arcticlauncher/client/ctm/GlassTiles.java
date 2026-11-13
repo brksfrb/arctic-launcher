@@ -60,6 +60,11 @@ public final class GlassTiles {
 		return id.startsWith("minecraft:") && id.substring(id.lastIndexOf('/') + 1).equals("glass") && !id.contains("tinted");
 	}
 
+	/** Clear and stained block sprites, also shared by pane sides; excludes tinted glass and pane tops. */
+	public static boolean fades(String id) {
+		return glass(id) && !paneEdge(id) && !id.endsWith("tinted_glass");
+	}
+
 	public static boolean paneEdge(String id) { return id.startsWith("minecraft:") && (id.contains("glass_pane_top") || id.endsWith("_stained_glass_pane_top")); }
 
 	public static String variant(String original, int tile) {
@@ -78,12 +83,9 @@ public final class GlassTiles {
 	}
 
 	/**
-	 * Clarity of the glass texture itself: keeps {@code lines} percent of the interior marks (the white streaks and
-	 * flecks inside the frame, in vanilla two diagonal runs) and clears the rest to the pane's open interior. 100
-	 * is the texture as shipped, 0 is one clear sheet inside its frame. Every animation frame is treated alone.
-	 * The marks that stay are spread by a fixed order, so a level always shows the same pixels. Coverage rather than
-	 * opacity, because plain glass is drawn without blending (a faint texel would be solid). A texture with no
-	 * detectable frame is returned as it is.
+	 * Uniformly fades every interior streak of clear or stained glass toward its open interior, including alpha.
+	 * 100 is the shipped texture; 0 is a clean sheet with only its frame. Every animation frame is treated alone.
+	 * Frameless textures and dense artwork are returned unchanged. Borders never fade.
 	 */
 	public static int[] clarity(int[] source, int imageWidth, int imageHeight, int frameWidth, int frameHeight, int lines) {
 		int[] out = source.clone();
@@ -105,19 +107,25 @@ public final class GlassTiles {
 				}
 				java.util.ArrayList<int[]> marks = new java.util.ArrayList<>();
 				for (int y = top; y < frameHeight - bottom; y++) for (int x = left; x < frameWidth - right; x++) {
-					if (source[(oy + y) * imageWidth + ox + x] != open) marks.add(new int[]{x, y, (x * 7 + y * 13 + x * y * 5) & 255});
+					if (source[(oy + y) * imageWidth + ox + x] != open) marks.add(new int[]{x, y});
 				}
 				// Marks beyond a quarter of the interior are artwork, not streaks: leave it alone.
 				if (marks.size() * 4 > (frameWidth - left - right) * (frameHeight - top - bottom)) continue;
-				marks.sort((a, b) -> a[2] != b[2] ? Integer.compare(a[2], b[2]) : a[1] != b[1] ? Integer.compare(a[1], b[1]) : Integer.compare(a[0], b[0]));
-				int keep = Math.round(marks.size() * lines / 100f);
-				for (int i = keep; i < marks.size(); i++) out[(oy + marks.get(i)[1]) * imageWidth + ox + marks.get(i)[0]] = open;
+				for (int[] mark : marks) {
+					int index = (oy + mark[1]) * imageWidth + ox + mark[0];
+					int pixel = source[index], faded = 0;
+					for (int shift = 0; shift < 32; shift += 8) {
+						int channel = (((open >>> shift) & 255) * (100 - lines) + ((pixel >>> shift) & 255) * lines + 50) / 100;
+						faded |= channel << shift;
+					}
+					out[index] = faded;
+				}
 			}
 		}
 		return out;
 	}
 
-	/** How many interior marks (see {@link #clarity}) a texture has, summed over its frames, for tests and logs. */
+	/** Counts pixels that 0% clarity would change, including faint marks, summed over the animation frames. */
 	public static int marks(int[] source, int imageWidth, int imageHeight, int frameWidth, int frameHeight) {
 		int total = 0;
 		int[] cleared = clarity(source, imageWidth, imageHeight, frameWidth, frameHeight, 0);

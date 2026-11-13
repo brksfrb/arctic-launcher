@@ -489,11 +489,11 @@ final class ModCatalog {
 				.toggle(() -> c.connectedGlass, on -> c.connectedGlass = on)
 				.settings((host, f) -> {
 					f.note("Connects matching glass and panes. Applies immediately. Continuity takes priority when installed.");
-					f.section("Clear glass");
+					f.section("Glass");
 					f.slider("Lines in the glass", () -> c.clearGlassLines, v -> c.clearGlassLines = (int) Math.round(v), 0, 100, 5, "%.0f%%");
 					f.glassPreview(() -> c.clearGlassLines);
-					f.note("How much of the white streaks and flecks in the glass texture stays. 0% is clear glass with only its frame, 100% is vanilla's streaks. About 25% by default.");
-					f.note("Works with Connected Glass on or off. Joined glass loses the border between blocks either way. Stained glass is left as it is.");
+					f.note("Fades the streaks in clear and stained glass blocks and panes. 0% is a clean sheet with only the frame, 100% is vanilla. In between, every streak is uniformly fainter. 25% by default.");
+					f.note("Works with Connected Glass on or off. Connected Glass removes shared borders when enabled. Tinted glass and pane tops stay unchanged. Resource-pack CTM and Continuity take priority.");
 					f.note("Applies a moment after you let go, without a restart.");
 				}));
 		out.add(new Mod("fullbright", "Fullbright", "See in the dark", "fullbright", Category.VISUAL, "gamma brightness night vision")
