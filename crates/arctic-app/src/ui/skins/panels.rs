@@ -509,6 +509,7 @@ impl ArcticApp {
         }
         ui.add_space(8.0);
         ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.y = widgets::GAP;
             if names.len() > 1
                 && widgets::button(ui, p, Some(Icon::Close), "Remove all", false).clicked()
             {
@@ -516,8 +517,7 @@ impl ArcticApp {
             }
             if let Some(key) = &current.skin_key
                 && let Some(png) = self.skin_png(key)
-                && ui
-                    .small_button("Save to library")
+                && widgets::button(ui, p, None, "Save to library", false)
                     .on_hover_text("Keep a copy of the skin you're wearing")
                     .clicked()
             {
@@ -528,8 +528,7 @@ impl ArcticApp {
                 let _ = self.add_skin(&name, &png, current.variant);
             }
             if self.can_change_minecraft_skin()
-                && ui
-                    .small_button("Reset Minecraft skin")
+                && widgets::button(ui, p, None, "Reset Minecraft skin", false)
                     .on_hover_text("Go back to the default Minecraft skin (seen by everyone)")
                     .clicked()
             {

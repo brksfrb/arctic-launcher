@@ -70,7 +70,7 @@ impl ArcticApp {
             });
         });
         ui.add_space(8.0);
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             ui.add(
                 widgets::text_field(&mut self.inst.mod_filter.1)
                     .hint_text("Search installed mods…")
@@ -84,7 +84,7 @@ impl ArcticApp {
         });
         ui.add_space(8.0);
         if let Some(error) = error {
-            ui.horizontal(|ui| {
+            crate::widgets::row(ui, |ui| {
                 ui.label(RichText::new(format!("Could not refresh mods: {error}")).color(p.error));
                 if widgets::button(ui, p, None, "Retry", false).clicked() {
                     self.refresh_mods(&instance.id);
@@ -171,7 +171,7 @@ impl ArcticApp {
                     });
                 }
                 UpdateState::Applying => {
-                    ui.horizontal(|ui| {
+                    crate::widgets::row(ui, |ui| {
                         ui.spinner();
                         ui.label(RichText::new("Updating mods…").color(p.muted));
                     });
@@ -185,7 +185,7 @@ impl ArcticApp {
                     }
                 }
                 UpdateState::Ready(list) if list.is_empty() => {
-                    ui.horizontal(|ui| {
+                    crate::widgets::row(ui, |ui| {
                         ui.label(RichText::new("All your mods are up to date.").color(p.text));
                         if widgets::button(ui, p, None, "Close", false).clicked() {
                             dismiss = true;
@@ -205,7 +205,7 @@ impl ArcticApp {
                     );
                     ui.add_space(4.0);
                     for update in list {
-                        ui.horizontal(|ui| {
+                        crate::widgets::row(ui, |ui| {
                             ui.label(RichText::new(&update.title).color(p.text));
                             ui.label(
                                 RichText::new(format!("{} → {}", update.current, update.latest))
@@ -215,7 +215,7 @@ impl ArcticApp {
                         });
                     }
                     ui.add_space(8.0);
-                    ui.horizontal(|ui| {
+                    crate::widgets::row(ui, |ui| {
                         if widgets::button(ui, p, Some(Icon::Import), "Update all", true).clicked()
                         {
                             apply = Some(list.iter().map(|u| u.project_id.clone()).collect());

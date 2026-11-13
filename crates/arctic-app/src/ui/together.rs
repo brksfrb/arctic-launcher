@@ -229,7 +229,7 @@ impl ArcticApp {
                     ],
                 );
                 let address = format!("localhost:{port}");
-                ui.horizontal(|ui| {
+                crate::widgets::row(ui, |ui| {
                     ui.label(RichText::new("Or Direct Connect to").color(p.muted));
                     ui.label(RichText::new(&address).monospace().color(p.accent));
                     if widgets::icon_button(ui, p, Icon::Copy, "Copy address").clicked() {
@@ -253,7 +253,7 @@ impl ArcticApp {
                 });
             }
             Session::Joining => {
-                ui.horizontal(|ui| {
+                crate::widgets::row(ui, |ui| {
                     ui.spinner();
                     ui.label(RichText::new("Connecting to your friend…").color(p.muted));
                 });

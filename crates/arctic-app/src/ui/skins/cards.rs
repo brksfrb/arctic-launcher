@@ -32,7 +32,7 @@ impl ArcticApp {
     /// A list's title, a line about it and (optionally) the search box.
     fn list_header(&mut self, ui: &mut egui::Ui, title: &str, about: &str, search: bool) {
         let p = self.palette();
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             ui.vertical(|ui| {
                 ui.label(RichText::new(title).size(20.0).strong().color(p.text));
                 ui.label(RichText::new(about).small().color(p.muted));
@@ -42,7 +42,7 @@ impl ArcticApp {
                     ui.add(
                         widgets::text_field(&mut self.skins.search)
                             .hint_text("Search")
-                            .desired_width(200.0),
+                            .desired_width(widgets::INPUT_WIDTH),
                     );
                 });
             }
@@ -371,12 +371,12 @@ impl ArcticApp {
         }
         section_label(ui, p, "OptiFine capes · from your accounts");
         let mut look_up = false;
-        ui.horizontal(|ui| {
+        widgets::row(ui, |ui| {
             let edit = ui.add(
-                egui::TextEdit::singleline(&mut self.skins.optifine_name)
+                widgets::text_field(&mut self.skins.optifine_name)
                     .hint_text("Look up another name…")
                     .char_limit(16)
-                    .desired_width(180.0),
+                    .desired_width(widgets::INPUT_WIDTH),
             );
             let enter = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             if widgets::button(ui, p, None, "Look up", false).clicked() || enter {

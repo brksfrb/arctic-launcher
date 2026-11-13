@@ -220,7 +220,7 @@ impl ArcticApp {
                         ui.painter().circle_filled(dot.center(), 6.0, rgb(profile.color));
                         match &mut renaming {
                             Some((id, text)) if *id == profile.id => {
-                                let r = ui.add(widgets::text_field(text).char_limit(32).desired_width(180.0));
+                                let r = ui.add(widgets::text_field(text).char_limit(32).desired_width(crate::widgets::INPUT_WIDTH));
                                 let done = crate::widgets::button(ui, p, None, "Save", false).clicked()
                                     || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
                                 if done {

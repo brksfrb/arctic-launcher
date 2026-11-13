@@ -96,7 +96,7 @@ impl ArcticApp {
             self.inst.packs.showing = Some(key);
             self.run_rp_search(instance);
         }
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             for kind in [PackKind::Resource, PackKind::Shader] {
                 if ui
                     .selectable_label(self.inst.packs.kind == kind, kind.label())

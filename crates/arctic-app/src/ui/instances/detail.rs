@@ -246,7 +246,7 @@ impl ArcticApp {
             ui.checkbox(&mut self.inst.dup_worlds, "Copy the worlds too (can be big)");
             ui.add_space(4.0);
             if self.inst.duplicating {
-                ui.horizontal(|ui| {
+                crate::widgets::row(ui, |ui| {
                     ui.spinner();
                     ui.label(RichText::new("Copying…").color(p.muted));
                 });

@@ -53,7 +53,7 @@ impl ArcticApp {
             .collect();
         if !extra.is_empty() {
             ui.add_space(6.0);
-            ui.horizontal(|ui| {
+            crate::widgets::row(ui, |ui| {
                 ui.label(
                     RichText::new(format!("Plus {} more (keys, video, chat…)", extra.len()))
                         .color(p.text),
@@ -63,7 +63,7 @@ impl ArcticApp {
                 } else {
                     "Show"
                 };
-                if ui.small_button(label).clicked() {
+                if widgets::button(ui, p, None, label, false).clicked() {
                     self.game_defaults.show_all = !self.game_defaults.show_all;
                 }
             });

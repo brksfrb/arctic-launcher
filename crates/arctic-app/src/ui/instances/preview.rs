@@ -221,7 +221,7 @@ impl ArcticApp {
             .frame(super::dialog_frame(p))
             .show(ctx, |ui| {
                 ui.set_width((ctx.content_rect().width() - 100.0).clamp(280.0, 900.0));
-                ui.horizontal(|ui| {
+                crate::widgets::row(ui, |ui| {
                     close |=
                         widgets::button(ui, p, Some(Icon::ChevronLeft), "Back to results", false)
                             .clicked();
@@ -317,7 +317,7 @@ impl ArcticApp {
                         }
                         Some(Err(error)) => {
                             ui.colored_label(p.error, error);
-                            if ui.button("Retry").clicked() {
+                            if widgets::button(ui, p, None, "Retry", false).clicked() {
                                 preview.receiver =
                                     fetch(preview.hit.project_id.clone(), ctx.clone());
                                 preview.detail = None;
@@ -374,7 +374,7 @@ impl ArcticApp {
                 .frame(super::dialog_frame(p))
                 .show(ctx, |ui| {
                     ui.set_width((ctx.content_rect().width() - 90.0).max(280.0));
-                    if ui.button("Back to preview · Esc").clicked() {
+                    if widgets::button(ui, p, None, "Back to preview · Esc", false).clicked() {
                         preview.enlarged = None;
                     }
                     self.preview_image(

@@ -5,6 +5,7 @@ use eframe::egui::{self, RichText};
 
 use crate::app::ArcticApp;
 use crate::theme::Palette;
+use crate::widgets;
 
 #[derive(Default)]
 pub struct VoiceSettingsUi {
@@ -56,7 +57,7 @@ impl ArcticApp {
                 let t = ((level + 70.0) / 50.0).clamp(0.0, 1.0);
                 ui.add(
                     egui::ProgressBar::new(t)
-                        .desired_width(220.0)
+                        .desired_width(widgets::INPUT_WIDTH)
                         .text("microphone"),
                 );
                 ui.ctx()
@@ -98,7 +99,7 @@ impl ArcticApp {
             &inputs,
         );
         device_combo(ui, "voice_output", "Output device", &mut v.output, &outputs);
-        if ui.small_button("Refresh devices").clicked() {
+        if widgets::button(ui, p, None, "Refresh devices", false).clicked() {
             self.voice_ui.devices = None;
         }
         let v = &mut self.settings.voice;
@@ -116,11 +117,11 @@ impl ArcticApp {
              using that mod hear you and you hear them. Not with \"Only friends\".",
         );
         if !v.muted.is_empty() {
-            ui.horizontal(|ui| {
+            crate::widgets::row(ui, |ui| {
                 ui.label(
                     RichText::new(format!("{} player(s) muted", v.muted.len())).color(p.muted),
                 );
-                if ui.small_button("Unmute all").clicked() {
+                if widgets::button(ui, p, None, "Unmute all", false).clicked() {
                     v.muted.clear();
                 }
             });

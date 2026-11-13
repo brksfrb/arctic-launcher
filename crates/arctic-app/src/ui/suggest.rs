@@ -90,7 +90,7 @@ impl ArcticApp {
                     .color(p.muted),
                 );
                 ui.add_space(6.0);
-                ui.horizontal(|ui| {
+                crate::widgets::row(ui, |ui| {
                     ui.label(
                         RichText::new("Need an answer sooner? Our Discord is quick to help.")
                             .small()

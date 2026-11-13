@@ -63,7 +63,7 @@ impl ArcticApp {
             self.run_gallery_search();
         }
         let mut search = false;
-        ui.horizontal(|ui| {
+        crate::widgets::row(ui, |ui| {
             let field = ui.add(
                 widgets::text_field(&mut self.skins.gallery.query)
                     .hint_text("Search skins or creators")

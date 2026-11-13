@@ -145,13 +145,22 @@ fn main() -> eframe::Result {
     if startup.hidden {
         window::started_hidden();
     }
+    // Debug builds: ARCTIC_DEVSHOT_SIZE=1280x720 sets the window size (alignment screenshots).
+    let size = std::env::var("ARCTIC_DEVSHOT_SIZE")
+        .ok()
+        .filter(|_| devshot::enabled())
+        .and_then(|v| {
+            let (w, h) = v.split_once('x')?;
+            Some([w.parse().ok()?, h.parse().ok()?])
+        })
+        .unwrap_or(DEFAULT_WINDOW);
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_visible(!startup.hidden)
             .with_title(arctic_core::APP_NAME)
             .with_app_id("com.arcticlauncher.ArcticLauncher")
             .with_icon(Arc::new(icon))
-            .with_inner_size(DEFAULT_WINDOW)
+            .with_inner_size(size)
             .with_min_inner_size(MIN_WINDOW),
         // The 3D skin and cosmetics previews draw with depth (ui/skins/gpu.rs).
         depth_buffer: 24,

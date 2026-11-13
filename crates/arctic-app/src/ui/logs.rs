@@ -141,7 +141,7 @@ impl ArcticApp {
                 );
                 ui.add_space(12.0);
                 if sending {
-                    ui.horizontal(|ui| {
+                    crate::widgets::row(ui, |ui| {
                         ui.spinner();
                         ui.label(RichText::new("Sending…").color(p.muted));
                     });
@@ -244,7 +244,7 @@ impl ArcticApp {
             ui.add(
                 widgets::text_field(&mut self.log_search)
                     .hint_text("Filter…")
-                    .desired_width(180.0),
+                    .desired_width(widgets::INPUT_WIDTH),
             );
             ui.checkbox(&mut self.log_follow, "Auto-scroll");
             ui.add_space(8.0);
