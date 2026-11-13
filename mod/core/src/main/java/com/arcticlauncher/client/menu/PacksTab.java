@@ -264,7 +264,7 @@ final class PacksTab implements MenuTab {
 		boolean changed = pending != null && !pending.equals(current);
 		y = groupBar(host, y);
 		int listBottom = bottom - (changed ? BTN_H + 8 : 0);
-		Scroll scroll = currentScroll = host.scroll(x, y, x + w, listBottom);
+		Scroll scroll = currentScroll = host.scroll(x, y, x + w, listBottom).step(PackRow.H + 2);
 		// On ones in your order first, then the rest.
 		List<PackInfo> ordered = new ArrayList<PackInfo>();
 		for (String id : wanted) {
@@ -372,7 +372,7 @@ final class PacksTab implements MenuTab {
 	private void shaders(final Host host, int y, int bottom) {
 		ShaderPacks shaders = ArcticClient.shaders();
 		y = groupBar(host, y);
-		Scroll scroll = currentScroll = host.scroll(x, y, x + w, bottom);
+		Scroll scroll = currentScroll = host.scroll(x, y, x + w, bottom).step(PackRow.H + 2);
 		String active = shaders.active();
 		List<java.io.File> files = new ArrayList<java.io.File>();
 		for (java.io.File candidate : shaders.installed()) {
@@ -428,7 +428,7 @@ final class PacksTab implements MenuTab {
 			}).selected(THIS_VERSION[k] == compatible)).bounds(x + i * (CHIP_W + GAP), y, CHIP_W, CHIP_H);
 		}
 		listTop = y + CHIP_H + GAP;
-		Scroll scroll = currentScroll = host.scroll(x, listTop, x + w, bottom);
+		Scroll scroll = currentScroll = host.scroll(x, listTop, x + w, bottom).step(PackRow.H + 2);
 		int ry = listTop;
 		if (expandedFilter != 0) {
 			final int filter = expandedFilter;

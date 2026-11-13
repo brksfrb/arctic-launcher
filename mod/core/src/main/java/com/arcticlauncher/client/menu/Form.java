@@ -36,7 +36,7 @@ final class Form {
 		// Room on the right for the scroll bar.
 		this.w = w - SCROLLBAR;
 		this.y = top;
-		this.scroll = host.scroll(x, top, x + w - SCROLLBAR + 2, bottom);
+		this.scroll = host.scroll(x, top, x + w - SCROLLBAR + 2, bottom).step(ROW);
 	}
 
 	Scroll scroll() {

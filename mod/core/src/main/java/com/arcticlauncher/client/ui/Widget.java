@@ -16,6 +16,7 @@ public abstract class Widget {
 	public boolean visible = true;
 	/** When set ({x0, y0, x1, y1}), drawn and clicked only inside it (a scrolling list). */
 	public int[] clip;
+	Scroll scroll;
 	/** Hover animation, 0..1. */
 	protected float hover;
 	private long lastFrame;

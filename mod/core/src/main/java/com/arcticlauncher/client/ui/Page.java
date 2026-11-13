@@ -8,6 +8,8 @@ import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Style;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * A full screen made of {@link Widget}s. Adapters show it inside a vanilla
@@ -169,6 +171,10 @@ public abstract class Page {
 			g.scale(OPEN_SCALE + (1f - OPEN_SCALE) * e);
 			g.translate(-cx, -cy);
 		}
+		Set<Scroll> scrolls = new HashSet<Scroll>();
+		for (Widget w : snapshot()) {
+			if (w.scroll != null && scrolls.add(w.scroll)) w.scroll.frame();
+		}
 		drawBehind(g, s, mx, my);
 		Gfx wg = widgetGfx(g);
 		for (Widget w : snapshot()) {
@@ -177,7 +183,10 @@ public abstract class Page {
 			}
 			if (w.clip != null) {
 				wg.scissor(w.clip[0], w.clip[1], w.clip[2], w.clip[3]);
+				wg.push();
+				if (w.scroll != null) wg.translate(0, -w.scroll.fraction());
 				w.render(wg, s, mx, my);
+				wg.pop();
 				wg.endScissor();
 			} else {
 				w.render(wg, s, mx, my);

@@ -151,7 +151,7 @@ final class ModsScreen extends Page {
 		}
 		gridTop = rowBottom + 8;
 		int bottom = py + ph - TabPage.PAD;
-		scroll = new Scroll(x, gridTop, x + w, bottom, scrollOffset);
+		scroll = new Scroll(x, gridTop, x + w, bottom, scrollOffset).step(CARD_H + GAP);
 		add(scroll.bar());
 		int cols = Math.max(1, (w - 6 + GAP) / (MIN_CARD_W + GAP));
 		int cardW = (w - 6 - (cols - 1) * GAP) / cols;

@@ -10,6 +10,7 @@ import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Button;
 import com.arcticlauncher.client.ui.Hints;
 import com.arcticlauncher.client.ui.Page;
+import com.arcticlauncher.client.ui.ScrollMotion;
 import com.arcticlauncher.client.ui.TextField;
 import java.util.HashMap;
 import java.util.List;
@@ -51,7 +52,7 @@ public final class ServersPage extends Page {
 	private int selected = -1;
 	/** The selected LAN world (its address), when one is. */
 	private String selectedLan;
-	private float scroll;
+	private final ScrollMotion motion = new ScrollMotion(ROW_H + ROW_GAP);
 	private Mode mode = Mode.LIST;
 	private TextField nameField;
 	private TextField addressField;
@@ -222,7 +223,7 @@ public final class ServersPage extends Page {
 			return;
 		}
 		discover = toDiscover;
-		scroll = 0;
+		motion.jump(0, maxScroll());
 		if (discover && publicList == null) {
 			loadPublic(false);
 		}
@@ -369,7 +370,7 @@ public final class ServersPage extends Page {
 
 	/** The index the dragged row would take if let go now. */
 	private int dropIndex() {
-		float top = (float) (mouseY - grabDy - listTop() + scroll);
+		float top = (float) (mouseY - grabDy - listTop() + motion.offset());
 		int index = Math.round(top / (ROW_H + ROW_GAP));
 		return Math.max(0, Math.min(entries.size() - 1, index));
 	}
@@ -395,9 +396,13 @@ public final class ServersPage extends Page {
 		return lanRows == 0 ? h : h + 14 + lanRows * (ROW_H + ROW_GAP);
 	}
 
+	private float maxScroll() {
+		float content = discover ? (publicList == null ? 0 : publicList.size() * (ROW_H + ROW_GAP)) : contentHeight();
+		return Math.max(0, content - (listBottom() - listTop() - (discover ? discoverNoteH : 0)));
+	}
+
 	private void clampScroll() {
-		float max = Math.max(0, contentHeight() - (listBottom() - listTop()));
-		scroll = Math.max(0, Math.min(max, scroll));
+		motion.clamp(maxScroll());
 	}
 
 	// ---- Drawing -------------------------------------------------------------------------
@@ -418,6 +423,7 @@ public final class ServersPage extends Page {
 		int left = listLeft();
 		int top = listTop();
 		int bottom = listBottom();
+		if (!discover) motion.frame(maxScroll());
 		if (discover) {
 			drawDiscover(g, s, left, top, bottom, mx, my);
 			return;
@@ -426,9 +432,9 @@ public final class ServersPage extends Page {
 			mouseY = my;
 			// Near an edge: the list scrolls so the row can go anywhere.
 			if (my < top + EDGE) {
-				scroll -= EDGE_SCROLL * dt;
+				motion.jump(motion.offset() - EDGE_SCROLL * dt, maxScroll());
 			} else if (my > bottom - EDGE) {
-				scroll += EDGE_SCROLL * dt;
+				motion.jump(motion.offset() + EDGE_SCROLL * dt, maxScroll());
 			}
 		}
 		clampScroll();
@@ -443,7 +449,7 @@ public final class ServersPage extends Page {
 			if (dragging && i == pressed) {
 				continue;
 			}
-			int ry = Math.round(top + y - scroll);
+			float ry = top + y - motion.offset();
 			if (ry + ROW_H < top - 4 || ry > bottom + 4) {
 				continue;
 			}
@@ -457,12 +463,16 @@ public final class ServersPage extends Page {
 		if (dragging && pressed >= 0 && pressed < entries.size()) {
 			// The row in your hand, a little lifted.
 			Servers.Entry e = entries.get(pressed);
-			int ry = (int) Math.round(mouseY - grabDy);
+			float screenY = (float) (mouseY - grabDy);
+			int ry = (int) Math.floor(screenY);
+			g.push();
+			g.translate(0, screenY - ry);
 			Draw.round(g, left + 2, ry + 3, left + LIST_W + 2, ry + ROW_H + 3, 4, 0x55000000);
 			playHint = false;
-			row(g, s, left, ry, e.name, e.address, true, true);
+			rowPixels(g, s, left, ry, screenY - ry, e.name, e.address, true, true);
 			playHint = true;
 			Draw.outline(g, left, ry, left + LIST_W, ry + ROW_H, 4, s.accent);
+			g.pop();
 		}
 		if (entries.isEmpty() && lan.worlds().isEmpty()) {
 			Draw.centered(g, "No servers yet: Add Server or Direct Connection", width / 2, (top + bottom) / 2 - 4, s.muted, false);
@@ -482,14 +492,14 @@ public final class ServersPage extends Page {
 		discoverNoteH = note.isEmpty() ? 0 : note.size() * 10 + 6;
 		int rowsBottom = bottom - discoverNoteH;
 		float max = list == null ? 0 : Math.max(0, list.size() * (ROW_H + ROW_GAP) - (rowsBottom - top));
-		scroll = Math.max(0, Math.min(max, scroll));
+		motion.frame(max);
 		Skin.panel(g, s, left - 4, top - 4, left + LIST_W + 4, bottom + 4);
 		if (list == null) {
 			Draw.centered(g, publicError != null ? publicError : "Loading…", width / 2, (top + rowsBottom) / 2 - 4, s.muted, false);
 		} else {
 			g.scissor(left - 3, top - 3, left + LIST_W + 3, rowsBottom + 3);
 			for (int i = 0; i < list.size(); i++) {
-				int ry = Math.round(top + slotTop(i) - scroll);
+				float ry = top + slotTop(i) - motion.offset();
 				if (ry + ROW_H < top - 4 || ry > rowsBottom + 4) {
 					continue;
 				}
@@ -511,10 +521,13 @@ public final class ServersPage extends Page {
 			return;
 		}
 		float y = entries.size() * (ROW_H + ROW_GAP);
-		g.text(tr("lanServer.title", "LAN World"), left + 2, Math.round(top + y - scroll + 2), s.muted, false);
+		g.push();
+		g.translate(0, top + y - motion.offset() + 2);
+		g.text(tr("lanServer.title", "LAN World"), left + 2, 0, s.muted, false);
+		g.pop();
 		y += 14;
 		for (LanScan.World w : worlds) {
-			int ry = Math.round(top + y - scroll);
+			float ry = top + y - motion.offset();
 			boolean over = mode == Mode.LIST && !dragging && mx >= left && mx < left + LIST_W && my >= ry && my < ry + ROW_H;
 			lanRow(g, s, left, ry, w, w.address.equals(selectedLan), over);
 			y += ROW_H + ROW_GAP;
@@ -534,7 +547,19 @@ public final class ServersPage extends Page {
 	private int tipX;
 	private int tipY;
 
-	private void row(Gfx g, Style s, int x, int y, String name, String address, boolean selectedRow, boolean over) {
+	private void row(Gfx g, Style s, int x, float screenY, String name, String address, boolean selectedRow, boolean over) {
+		int y = (int) Math.floor(screenY);
+		float rowShift = screenY - y;
+		g.push();
+		g.translate(0, rowShift);
+		try {
+			rowPixels(g, s, x, y, rowShift, name, address, selectedRow, over);
+		} finally {
+			g.pop();
+		}
+	}
+
+	private void rowPixels(Gfx g, Style s, int x, int y, float rowShift, String name, String address, boolean selectedRow, boolean over) {
 		background(g, s, x, y, selectedRow, over);
 		// Read once: a pinger thread may fill it in while the row is drawn.
 		Servers.Answer a = Servers.Answer.copy(servers.answer(address));
@@ -548,7 +573,7 @@ public final class ServersPage extends Page {
 		}
 		// As in the game's own list: over a row the icon dims and shows a play arrow; clicking the icon joins.
 		if (over && playHint) {
-			boolean onIcon = tipX >= ix && tipX < ix + ICON && tipY >= iy && tipY < iy + ICON;
+			boolean onIcon = tipX >= ix && tipX < ix + ICON && tipY >= iy + rowShift && tipY < iy + rowShift + ICON;
 			g.fill(ix, iy, ix + ICON, iy + ICON, onIcon ? 0xB0000000 : 0x78000000);
 			playArrow(g, ix + ICON / 2, iy + ICON / 2, onIcon ? 0xFFFFFFFF : 0xFFC8D2DC);
 		}
@@ -575,11 +600,11 @@ public final class ServersPage extends Page {
 		}
 		int column = Math.max(playersW, versionW) + 8;
 		g.text(Draw.fit(g, name, barsX - 8 - speedW - tx), tx, y + 4, s.text, false);
-		if (over && tipY >= y + 2 && tipY <= y + 13) {
+		if (over && tipY >= rowShift + y + 2 && tipY <= rowShift + y + 13) {
 			if (tipX >= barsX - 4 - speedW && tipX <= right) {
 				tip = speedTip(a, incompatible);
 			}
-		} else if (over && up && tipY > y + 13 && tipY <= y + 23 && tipX >= right - playersW && tipX <= right) {
+		} else if (over && up && tipY > rowShift + y + 13 && tipY <= rowShift + y + 23 && tipX >= right - playersW && tipX <= right) {
 			tip = playersTip(a);
 		}
 		if (a == null || !a.done()) {
@@ -636,9 +661,14 @@ public final class ServersPage extends Page {
 		return ((int) ((color >>> 24) * cover) << 24) | (color & 0xFFFFFF);
 	}
 
+	private float shownTop(int i) {
+		Float y = shownAt.get(entries.get(i));
+		return y == null ? slotTop(i) : y;
+	}
+
 	/** Whether the mouse is on the icon of a row (a click there joins at once). */
 	private boolean onRowIcon(double mx, double my, int row) {
-		float y = (float) (my - listTop() + scroll) - slotTop(row);
+		float y = (float) (my - listTop() + motion.offset()) - shownTop(row);
 		return mx >= listLeft() + 2 && mx < listLeft() + 2 + ICON && y >= 2 && y < 2 + ICON;
 	}
 
@@ -684,13 +714,17 @@ public final class ServersPage extends Page {
 		return lines;
 	}
 
-	private void lanRow(Gfx g, Style s, int x, int y, LanScan.World w, boolean selectedRow, boolean over) {
+	private void lanRow(Gfx g, Style s, int x, float screenY, LanScan.World w, boolean selectedRow, boolean over) {
+		int y = (int) Math.floor(screenY);
+		g.push();
+		g.translate(0, screenY - y);
 		background(g, s, x, y, selectedRow, over);
 		Draw.round(g, x + 2, y + 2, x + 2 + ICON, y + 2 + ICON, 3, s.field);
 		Draw.centered(g, "LAN", x + 2 + ICON / 2, y + 14, s.accent, false);
 		int tx = x + ICON + 8;
 		g.text(Draw.fit(g, w.motd, LIST_W - ICON - 14), tx, y + 4, s.text, false);
 		g.text(w.address, tx, y + 15, s.muted, false);
+		g.pop();
 	}
 
 	private void drawTip(Gfx g, Style s) {
@@ -742,9 +776,9 @@ public final class ServersPage extends Page {
 		if (mx < listLeft() || mx >= listLeft() + LIST_W || my < listTop() || my >= listBottom()) {
 			return -1;
 		}
-		float y = (float) (my - listTop() + scroll);
+		float y = (float) (my - listTop() + motion.offset());
 		for (int i = 0; i < entries.size(); i++) {
-			float top = slotTop(i);
+			float top = shownTop(i);
 			if (y >= top && y < top + ROW_H) {
 				return i;
 			}
@@ -757,7 +791,7 @@ public final class ServersPage extends Page {
 		if (mx < listLeft() || mx >= listLeft() + LIST_W || my < listTop() || my >= listBottom()) {
 			return null;
 		}
-		float y = (float) (my - listTop() + scroll) - entries.size() * (ROW_H + ROW_GAP) - 14;
+		float y = (float) (my - listTop() + motion.offset()) - entries.size() * (ROW_H + ROW_GAP) - 14;
 		List<LanScan.World> worlds = lan.worlds();
 		for (int i = 0; i < worlds.size(); i++) {
 			float top = i * (ROW_H + ROW_GAP);
@@ -800,7 +834,7 @@ public final class ServersPage extends Page {
 			pressed = row;
 			pressX = mx;
 			pressY = my;
-			grabDy = my - (listTop() + slotTop(row) - scroll);
+			grabDy = my - (listTop() + shownTop(row) - motion.offset());
 		}
 		return true;
 	}
@@ -811,8 +845,8 @@ public final class ServersPage extends Page {
 		if (list == null || mx < listLeft() || mx >= listLeft() + LIST_W || my < listTop() || my >= bottom) {
 			return false;
 		}
-		int row = (int) ((my - listTop() + scroll) / (ROW_H + ROW_GAP));
-		if (row < 0 || row >= list.size() || (my - listTop() + scroll) - slotTop(row) >= ROW_H) {
+		int row = (int) ((my - listTop() + motion.offset()) / (ROW_H + ROW_GAP));
+		if (row < 0 || row >= list.size() || (my - listTop() + motion.offset()) - slotTop(row) >= ROW_H) {
 			return false;
 		}
 		long now = System.nanoTime();
@@ -854,7 +888,7 @@ public final class ServersPage extends Page {
 					entries.add(to, moved);
 					selected = to;
 					// It settles into its new place from where it was let go.
-					shownAt.put(moved, (float) (mouseY - grabDy - listTop() + scroll));
+					shownAt.put(moved, (float) (mouseY - grabDy - listTop() + motion.offset()));
 				}
 				rebuild();
 			}
@@ -869,11 +903,7 @@ public final class ServersPage extends Page {
 		if (mode != Mode.LIST) {
 			return false;
 		}
-		scroll -= (float) amount * (ROW_H + ROW_GAP);
-		if (!discover) {
-			clampScroll();
-		}
-		return true;
+		return motion.wheel(amount, maxScroll());
 	}
 
 	@Override
