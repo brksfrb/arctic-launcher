@@ -5,6 +5,7 @@ import com.arcticlauncher.client.Keys;
 import com.arcticlauncher.client.config.HudSlot;
 import com.arcticlauncher.client.gfx.Draw;
 import com.arcticlauncher.client.gfx.DimGfx;
+import com.arcticlauncher.client.gfx.BrandMark;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.hud.Hud;
 import com.arcticlauncher.client.hud.HudWidget;
@@ -257,7 +258,7 @@ public final class HudEditor extends Page {
 
 	private void drawBar(Gfx g, Style s) {
 		Skin.panel(g, s, bx, by, bx + BAR_W, by + BAR_H);
-		g.texture("icon", bx + PAD, by + 6, 12, 12, 0, 0, 256, 256, 256, 256);
+		BrandMark.draw(g, bx + PAD, by + 6, 12);
 		g.text("§lArctic", bx + PAD + 16, by + 8, s.text, false); // i18n-ignore: the brand
 		String version = ArcticClient.platform().minecraftVersion();
 		g.text(version, bx + BAR_W - PAD - g.textWidth(version), by + 8, s.muted, false);
