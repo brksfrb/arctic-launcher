@@ -7,9 +7,13 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.imageio.ImageIO;
 
 /** Loads full-method OptiFine/MCPatcher glass tiles once per resource reload. */
@@ -17,7 +21,26 @@ public final class GlassPacks {
 	public interface Resources {
 		Collection<String> properties() throws IOException;
 		InputStream open(String name) throws IOException;
+		default String description() { return getClass().getName(); }
 	}
+	@FunctionalInterface
+	public interface Loader { GlassPacks load() throws IOException; }
+	private static final Logger LOGGER = Logger.getLogger(GlassPacks.class.getName());
+
+	/** Last boundary around adapter work called by the atlas hooks, on every version. */
+	public static GlassPacks safeLoad(String source, Loader loader) {
+		try { return loader.load(); }
+		catch (IOException | RuntimeException failure) {
+			warn(source, failure);
+			return EMPTY;
+		}
+	}
+
+	/** Log at the boundary that handles the failure; callers must not rethrow it. */
+	public static void warn(String source, Exception failure) {
+		LOGGER.log(Level.WARNING, "[Arctic CTM] Skipping " + source + "; using default glass where needed", failure);
+	}
+
 	private static final String[] COLORS = {"white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"};
 	private final Map<String, BufferedImage[]> tiles;
 	public static final GlassPacks EMPTY = new GlassPacks(Collections.emptyMap());
@@ -28,6 +51,8 @@ public final class GlassPacks {
 		try {
 			List<String> paths = new ArrayList<>(resources.properties());
 			for (String path : paths) {
+				List<String> matches;
+				BufferedImage[] images;
 				try (InputStream stream = resources.open(path)) {
 					Properties p = new Properties(); p.load(stream);
 					String method = p.getProperty("method", "ctm");
@@ -36,23 +61,32 @@ public final class GlassPacks {
 					// These predicates need world-dependent selection and must not become global rules.
 					if (p.containsKey("biomes") || p.containsKey("heights") || p.containsKey("minHeight") || p.containsKey("maxHeight") || p.containsKey("name")) continue;
 					if (!p.getProperty("faces", "all").equals("all")) continue;
-					List<String> matches = matches(p, path);
+					matches = matches(p, path);
 					if (matches.isEmpty()) continue;
 					List<String> names = expand(p.getProperty("tiles", compact ? "0-4" : "0-46"));
 					if (names.size() < (compact ? 5 : GlassTiles.COUNT)) continue;
-					BufferedImage[] images = new BufferedImage[compact ? names.size() : GlassTiles.COUNT];
-					boolean complete = true;
+					images = new BufferedImage[compact ? names.size() : GlassTiles.COUNT];
 					for (int i = 0; i < images.length; i++) {
-						try (InputStream png = resources.open(resolve(path, names.get(i)))) { images[i] = ImageIO.read(png); }
-						if (images[i] == null) { complete = false; break; }
+						String tile = resolve(path, names.get(i));
+						try (InputStream png = resources.open(tile)) {
+							images[i] = ImageIO.read(png);
+							if (images[i] == null) throw new IOException("Unsupported CTM image: " + tile);
+						} catch (IOException | RuntimeException failure) {
+							throw new IOException("CTM tile " + tile, failure);
+						}
 					}
-					if (complete && compact) images = compact(images, p);
-					if (complete) for (String match : matches) if (!tiles.containsKey(match)) tiles.put(match, images);
-				} catch (IOException | IllegalArgumentException ignored) {
-					// A malformed pack rule falls back to generated tiles, as a missing vanilla texture would.
+					if (compact) images = compact(images, p);
+				} catch (IOException | RuntimeException failure) {
+					// Report once for the rule, including the tile path when decoding failed.
+					warn(path + " in " + resources.description(), failure);
+					continue;
 				}
+				for (String match : matches) if (!tiles.containsKey(match)) tiles.put(match, images);
 			}
-		} catch (IOException ignored) { return EMPTY; }
+		} catch (IOException | RuntimeException failure) {
+			warn("resource enumeration in " + resources.description(), failure);
+			return EMPTY;
+		}
 		return new GlassPacks(tiles);
 	}
 
@@ -90,25 +124,35 @@ public final class GlassPacks {
 	/** Enumerate file-backed active packs; callers may resolve streams through the resource manager. */
 	public static Resources fileResources(final List<java.io.File> files) {
 		return new Resources() {
+			// One warning per bad pack per reload; later opens skip packs that could not be scanned.
+			private final Set<java.io.File> failed = new HashSet<>();
+			private void failed(java.io.File file, Exception failure) {
+				if (failed.add(file)) warn("pack " + file, failure);
+			}
+			@Override public String description() { return "file packs " + files; }
 			@Override public Collection<String> properties() throws IOException {
 				java.util.Set<String> result = new java.util.LinkedHashSet<>();
 				for (java.io.File file : files) {
-					List<String> paths = new ArrayList<>();
-					if (file.isDirectory()) {
-						try (java.util.stream.Stream<java.nio.file.Path> walk = java.nio.file.Files.walk(file.toPath())) {
-							walk.filter(java.nio.file.Files::isRegularFile).forEach(path -> paths.add(file.toPath().relativize(path).toString().replace('\\', '/')));
+					if (file == null || failed.contains(file)) continue;
+					try {
+						if (!file.exists()) continue;
+						List<String> paths = new ArrayList<>();
+						if (file.isDirectory()) {
+							try (java.util.stream.Stream<java.nio.file.Path> walk = java.nio.file.Files.walk(file.toPath())) {
+								walk.filter(java.nio.file.Files::isRegularFile).forEach(path -> paths.add(file.toPath().relativize(path).toString().replace('\\', '/')));
+							}
+						} else if (file.isFile()) {
+							try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(file)) {
+								java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zip.entries();
+								while (entries.hasMoreElements()) paths.add(entries.nextElement().getName());
+							}
 						}
-					} else if (file.isFile()) {
-						try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(file)) {
-							java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zip.entries();
-							while (entries.hasMoreElements()) paths.add(entries.nextElement().getName());
+						Collections.sort(paths);
+						for (String path : paths) if (path.startsWith("assets/") && path.endsWith(".properties") && (path.contains("/optifine/ctm/") || path.contains("/mcpatcher/ctm/"))) {
+							int slash = path.indexOf('/', 7);
+							if (slash > 7) result.add(path.substring(7, slash) + ":" + path.substring(slash + 1));
 						}
-					}
-					Collections.sort(paths);
-					for (String path : paths) if (path.startsWith("assets/") && path.endsWith(".properties") && (path.contains("/optifine/ctm/") || path.contains("/mcpatcher/ctm/"))) {
-						int slash = path.indexOf('/', 7);
-						result.add(path.substring(7, slash) + ":" + path.substring(slash + 1));
-					}
+					} catch (IOException | RuntimeException failure) { failed(file, failure); }
 				}
 				return result;
 			}
@@ -116,16 +160,25 @@ public final class GlassPacks {
 				String path = "assets/" + name.replace(':', '/');
 				if (path.contains("..")) throw new IOException("invalid resource path");
 				for (java.io.File file : files) {
-					if (file.isDirectory()) {
-						java.io.File resource = new java.io.File(file, path);
-						if (resource.isFile()) return new java.io.FileInputStream(resource);
-					} else if (file.isFile()) {
-						final java.util.zip.ZipFile zip = new java.util.zip.ZipFile(file);
-						java.util.zip.ZipEntry entry = zip.getEntry(path);
-						if (entry == null) { zip.close(); continue; }
-						return new java.io.FilterInputStream(zip.getInputStream(entry)) {
-							@Override public void close() throws IOException { try { super.close(); } finally { zip.close(); } }
-						};
+					if (file == null || failed.contains(file)) continue;
+					try {
+						if (!file.exists()) continue;
+						if (file.isDirectory()) {
+							java.io.File resource = new java.io.File(file, path);
+							if (resource.isFile()) return new java.io.FileInputStream(resource);
+						} else if (file.isFile()) {
+							final java.util.zip.ZipFile zip = new java.util.zip.ZipFile(file);
+							try {
+								java.util.zip.ZipEntry entry = zip.getEntry(path);
+								if (entry == null) { zip.close(); continue; }
+								return new java.io.FilterInputStream(zip.getInputStream(entry)) {
+									@Override public void close() throws IOException { try { super.close(); } finally { zip.close(); } }
+								};
+							} catch (IOException | RuntimeException failure) { zip.close(); throw failure; }
+						}
+					} catch (IOException | RuntimeException failure) {
+						// A bad entry must not hide the other rules in this same pack.
+						throw new IOException("CTM resource " + name + " in pack " + file, failure);
 					}
 				}
 				throw new java.io.FileNotFoundException(name);

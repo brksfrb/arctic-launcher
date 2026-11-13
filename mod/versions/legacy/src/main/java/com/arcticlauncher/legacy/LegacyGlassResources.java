@@ -25,12 +25,20 @@ public final class LegacyGlassResources {
 
 	public static GlassPacks load(ResourceManager manager) {
 		return GlassPacks.load(new GlassPacks.Resources() {
+			private final List<String> sources = new ArrayList<>();
+			@Override public String description() { return "legacy active packs " + sources; }
 			@Override public Collection<String> properties() throws IOException {
 				List<ResourcePack> packs = ((ActivePacks) manager).arctic$packs();
 				List<File> files = new ArrayList<>();
 				for (int i = packs.size() - 1; i >= 0; i--) {
 					ResourcePack pack = packs.get(i);
-					if (pack instanceof FilePack) files.add(((FilePack) pack).arctic$root());
+					sources.add(pack.getClass().getName());
+					if (pack instanceof FilePack) {
+						File root = ((FilePack) pack).arctic$root();
+						sources.add(String.valueOf(root));
+						// Built-in/mod pack subclasses can have no file backing them.
+						if (root != null && root.exists()) files.add(root);
+					}
 				}
 				Set<String> names = new LinkedHashSet<>(GlassPacks.fileResources(files).properties());
 				//#if FABRIC
