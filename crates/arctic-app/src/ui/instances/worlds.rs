@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 
 use arctic_core::instances::Instance;
-use arctic_core::launch::QuickPlay;
 use arctic_core::worlds::{self, Source, TrashedWorld, World};
 use eframe::egui::{self, CornerRadius, Id, Modal, RichText, Sense, vec2};
 
