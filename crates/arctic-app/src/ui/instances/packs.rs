@@ -123,7 +123,7 @@ impl ArcticApp {
         self.rp_results(ui, instance);
     }
 
-    fn refresh_packs(&mut self, instance: &Instance) {
+    pub(crate) fn refresh_packs(&mut self, instance: &Instance) {
         let game_dir = instance.game_dir(&self.dirs);
         self.inst.packs.installed = packs::list(self.inst.packs.kind, &game_dir);
         self.inst.packs.groups = PackGroups::load(&game_dir);
@@ -177,12 +177,24 @@ impl ArcticApp {
                     ui.label(RichText::new(&pack.file_name).color(p.text));
                     ui.label(RichText::new(size).small().color(p.muted));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if widgets::icon_button(ui, p, Icon::Trash, "Delete").clicked() {
-                            match packs::remove(kind, &game_dir, &pack.file_name) {
-                                Ok(()) => self.refresh_packs(instance),
+                        if widgets::icon_button(ui, p, Icon::Trash, "Remove (with Undo)").clicked()
+                        {
+                            match packs::trash(kind, &game_dir, &pack.file_name) {
+                                Ok(trashed) => {
+                                    self.toasts.push_undo(
+                                        format!("Removed {}", pack.file_name),
+                                        crate::undo::Undo::Pack {
+                                            instance_id: instance.id.clone(),
+                                            kind,
+                                            game_dir: game_dir.clone(),
+                                            trashed,
+                                        },
+                                    );
+                                    self.refresh_packs(instance);
+                                }
                                 Err(e) => self.toasts.push(
                                     Kind::Error,
-                                    "Couldn't delete it",
+                                    "Couldn't remove it",
                                     e.to_string(),
                                 ),
                             }

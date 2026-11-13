@@ -54,7 +54,11 @@ const DONE_PAGE: &str = concat!(
     "</main></body></html>"
 );
 
-pub(super) fn authorize(cfg: &MsaConfig, cancel: &AtomicBool) -> Result<MsaTokens> {
+pub(super) fn authorize(
+    cfg: &MsaConfig,
+    cancel: &AtomicBool,
+    opened: &dyn Fn(&str),
+) -> Result<MsaTokens> {
     let v4 = TcpListener::bind("127.0.0.1:0")
         .map_err(|e| Error::Auth(format!("cannot open loopback port: {e}")))?;
     let port = v4
@@ -82,6 +86,7 @@ pub(super) fn authorize(cfg: &MsaConfig, cancel: &AtomicBool) -> Result<MsaToken
         pkce_challenge(&verifier),
     );
     open::that_detached(&url).map_err(|e| Error::Auth(format!("could not open browser: {e}")))?;
+    opened(&url);
 
     let deadline = Instant::now() + LOGIN_TIMEOUT;
     loop {

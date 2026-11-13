@@ -39,6 +39,10 @@ pub struct MigrateUi {
     current: Option<(String, ProgressSnapshot)>,
     outcomes: Vec<Outcome>,
     total: usize,
+    /// Sizes are still being measured (the list is already up).
+    sizing: bool,
+    /// Set by Cancel while the copy runs.
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl ArcticApp {
@@ -52,8 +56,29 @@ impl ArcticApp {
             current: None,
             outcomes: Vec::new(),
             total: 0,
+            sizing: true,
+            cancel: Default::default(),
         });
         self.tasks.migrate_scan(None);
+    }
+
+    /// The sizes of the found instances, measured after the list went up.
+    pub(crate) fn on_migrate_sized(&mut self, sizes: HashMap<String, arctic_core::migrate::Sizes>) {
+        let Some(ui) = &mut self.migrate else {
+            return;
+        };
+        ui.sizing = false;
+        let Some(found) = &mut ui.found else {
+            return;
+        };
+        found.sizes.extend(sizes);
+        for f in &found.scan.instances {
+            if let Some(s) = found.sizes.get(&f.key()) {
+                ui.categories
+                    .entry(f.key())
+                    .or_insert_with(|| default_categories(s));
+            }
+        }
     }
 
     pub(crate) fn on_migrate_scanned(&mut self, from_folder: bool, result: ScanResult) {
@@ -70,20 +95,16 @@ impl ArcticApp {
             }
             _ => result,
         };
+        // Categories are picked once the sizes are known (on_migrate_sized), so an
+        // instance whose sizes are still being measured is not left with nothing chosen.
         for f in &merged.scan.instances {
-            let cats = merged.sizes.get(&f.key()).map(|s| {
-                Category::ALL
-                    .into_iter()
-                    // Screenshots are often large; opt in.
-                    .filter(|c| {
-                        *c != Category::Screenshots && s.counts.get(c).copied().unwrap_or(0) > 0
-                    })
-                    .collect()
-            });
-            ui.categories
-                .entry(f.key())
-                .or_insert_with(|| cats.unwrap_or_default());
+            if let Some(s) = merged.sizes.get(&f.key()) {
+                ui.categories
+                    .entry(f.key())
+                    .or_insert_with(|| default_categories(s));
+            }
         }
+        ui.sizing = true;
         for c in &merged.scan.clients {
             ui.huds.entry(c.key()).or_insert_with(|| HudChoice {
                 on: c.guesses().into_iter().collect(),
@@ -138,13 +159,33 @@ impl ArcticApp {
                 }
                 Stage::Choose => self.migrate_choose(ui, &mut ui_state),
                 Stage::Running => {
-                    migrate_progress(ui, p, &ui_state);
+                    if migrate_progress(ui, p, &ui_state) {
+                        ui_state
+                            .cancel
+                            .store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
                     false
                 }
-                Stage::Done => migrate_done(ui, p, &ui_state),
+                Stage::Done => {
+                    let (close, retry) = migrate_done(ui, p, &ui_state);
+                    if let Some(i) = retry
+                        && i < ui_state.outcomes.len()
+                        && let Some(job) = ui_state.outcomes[i].retry.take()
+                    {
+                        ui_state.outcomes.remove(i);
+                        ui_state.total = ui_state.outcomes.len() + 1;
+                        ui_state.current = None;
+                        ui_state.stage = Stage::Running;
+                        ui_state.cancel = Default::default();
+                        self.tasks
+                            .migrate_run(vec![job], Vec::new(), ui_state.cancel.clone());
+                    }
+                    close
+                }
             };
         });
-        let busy = matches!(ui_state.stage, Stage::Running | Stage::Scanning);
+        // The scan can be walked away from (its result is dropped); the copy has Cancel.
+        let busy = matches!(ui_state.stage, Stage::Running);
         if !(close || (modal.should_close() && !busy)) {
             self.migrate = Some(ui_state);
         }
@@ -271,7 +312,9 @@ impl ArcticApp {
         state.total = instances.len() + huds.len();
         state.outcomes.clear();
         state.stage = Stage::Running;
-        self.tasks.migrate_run(instances, huds);
+        state.cancel = Default::default();
+        self.tasks
+            .migrate_run(instances, huds, state.cancel.clone());
     }
 
     pub(crate) fn on_migrate_progress(&mut self, label: String, progress: ProgressSnapshot) {
@@ -344,6 +387,13 @@ fn instance_row(
         return;
     }
     ui.indent(key.clone(), |ui| {
+        if sizes.is_none() {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(RichText::new("Measuring…").small().color(p.muted));
+            });
+            return;
+        }
         let chosen = state.categories.entry(key.clone()).or_default();
         ui.horizontal_wrapped(|ui| {
             for c in Category::ALL {
@@ -481,7 +531,18 @@ fn chosen_bytes(f: &Found, sizes: Option<&arctic_core::migrate::Sizes>, state: &
         .sum()
 }
 
-fn migrate_progress(ui: &mut egui::Ui, p: &crate::theme::Palette, state: &MigrateUi) {
+/// Categories worth taking by default: the ones with something in them, except screenshots
+/// (often large; opt in).
+fn default_categories(s: &arctic_core::migrate::Sizes) -> HashSet<Category> {
+    Category::ALL
+        .into_iter()
+        .filter(|c| *c != Category::Screenshots && s.counts.get(c).copied().unwrap_or(0) > 0)
+        .collect()
+}
+
+/// Returns true when Cancel was clicked.
+fn migrate_progress(ui: &mut egui::Ui, p: &crate::theme::Palette, state: &MigrateUi) -> bool {
+    let cancelling = state.cancel.load(std::sync::atomic::Ordering::Relaxed);
     ui.label(
         RichText::new(format!("{} of {} done", state.outcomes.len(), state.total)).color(p.text),
     );
@@ -501,16 +562,41 @@ fn migrate_progress(ui: &mut egui::Ui, p: &crate::theme::Palette, state: &Migrat
             }
         });
     }
+    ui.add_space(8.0);
+    let mut cancel = false;
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        if cancelling {
+            ui.label(RichText::new("Stopping after this file…").color(p.muted));
+        } else if widgets::button(ui, p, None, "Cancel", false)
+            .on_hover_text("What was already copied stays; a half-copied instance is removed.")
+            .clicked()
+        {
+            cancel = true;
+        }
+    });
+    cancel
 }
 
-/// Returns true to close.
-fn migrate_done(ui: &mut egui::Ui, p: &crate::theme::Palette, state: &MigrateUi) -> bool {
+/// Returns (close, the failed outcome to try again).
+fn migrate_done(
+    ui: &mut egui::Ui,
+    p: &crate::theme::Palette,
+    state: &MigrateUi,
+) -> (bool, Option<usize>) {
+    let mut retry = None;
     egui::ScrollArea::vertical()
         .max_height(LIST_HEIGHT)
         .show(ui, |ui| {
-            for o in &state.outcomes {
+            for (i, o) in state.outcomes.iter().enumerate() {
                 let color = if o.ok { p.text } else { p.error };
-                ui.label(RichText::new(&o.title).strong().color(color));
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(&o.title).strong().color(color));
+                    if o.retry.is_some()
+                        && widgets::button(ui, p, None, "Try again", false).clicked()
+                    {
+                        retry = Some(i);
+                    }
+                });
                 for l in &o.lines {
                     ui.label(RichText::new(l).small().color(p.muted));
                 }
@@ -524,5 +610,22 @@ fn migrate_done(ui: &mut egui::Ui, p: &crate::theme::Palette, state: &MigrateUi)
             close = true;
         }
     });
-    close
+    (close, retry)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_categories_take_what_is_there_but_not_screenshots() {
+        let mut s = arctic_core::migrate::Sizes::default();
+        s.counts.insert(Category::Mods, 12);
+        s.counts.insert(Category::Worlds, 0);
+        s.counts.insert(Category::Screenshots, 300);
+        let chosen = default_categories(&s);
+        assert!(chosen.contains(&Category::Mods));
+        assert!(!chosen.contains(&Category::Worlds), "nothing there");
+        assert!(!chosen.contains(&Category::Screenshots), "opt in");
+    }
 }

@@ -25,6 +25,10 @@ pub enum Error {
     #[error("{0}")]
     NotConfigured(String),
 
+    /// The player cancelled (a launch while it downloaded).
+    #[error("cancelled")]
+    Cancelled,
+
     #[error("{0}")]
     Other(String),
 }
@@ -40,6 +44,44 @@ impl Error {
     /// Display text plus every `source()` that it does not already end with.
     pub fn chain(&self) -> String {
         error_chain(self)
+    }
+
+    /// A Microsoft sign-in that is no longer good (expired, revoked, or refused).
+    pub fn is_auth(&self) -> bool {
+        matches!(self, Self::Auth(_))
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        matches!(self, Self::Cancelled)
+    }
+
+    /// The error in plain words, with what to do about it, for a toast; the raw chain
+    /// (paths, URLs, status codes) belongs in the log.
+    pub fn plain(&self) -> String {
+        match self {
+            Self::Http(_) | Self::Checksum(_) => {
+                "Couldn't download the game files. Check your connection and press Play again."
+                    .into()
+            }
+            Self::Io { path, source } => {
+                let folder = match path.parent() {
+                    Some(parent) if !parent.as_os_str().is_empty() => parent,
+                    _ => path.as_path(),
+                };
+                let why = match source.kind() {
+                    std::io::ErrorKind::PermissionDenied => "Arctic isn't allowed to write there.",
+                    std::io::ErrorKind::NotFound => "The folder is missing.",
+                    _ => "Is the disk full or read-only?",
+                };
+                format!("Couldn't write to {}. {why}", folder.display())
+            }
+            Self::Json(_) => {
+                "A downloaded file was unreadable. Press Play to download it again.".into()
+            }
+            Self::Auth(_) => "Your Microsoft sign-in has expired. Sign in again to play.".into(),
+            Self::Cancelled => "Cancelled.".into(),
+            Self::NotConfigured(text) | Self::Other(text) => text.clone(),
+        }
     }
 }
 
@@ -125,6 +167,29 @@ mod tests {
         assert_eq!(
             error_chain(&Wrap),
             "network error: timeout: receive response"
+        );
+    }
+
+    #[test]
+    fn plain_text_names_the_folder_and_keeps_internals_for_the_log() {
+        let io = Error::io(
+            "/data/libraries/net/fabric.jar",
+            std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied"),
+        );
+        let plain = io.plain();
+        assert!(
+            plain.starts_with("Couldn't write to /data/libraries/net."),
+            "{plain}"
+        );
+        assert!(plain.contains("isn't allowed"), "{plain}");
+        assert!(!plain.contains("denied"), "the OS error stays in the chain");
+        let dl = Error::Checksum("https://piston-data.mojang.com/x.jar".into());
+        assert!(!dl.plain().contains("https://"));
+        assert!(dl.plain().contains("press Play again"));
+        assert!(Error::Auth("AADSTS70000: refresh token expired".into()).is_auth());
+        assert_eq!(
+            Error::Other("no such loader".into()).plain(),
+            "no such loader"
         );
     }
 

@@ -3,6 +3,8 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use arctic_core::ProgressInfo;
 use arctic_core::instances::Instance;
@@ -40,23 +42,34 @@ pub struct Outcome {
     pub title: String,
     pub ok: bool,
     pub lines: Vec<String>,
+    /// The job to run again, when it failed.
+    pub retry: Option<InstanceJob>,
 }
 
 impl Tasks {
-    /// Look for other launchers (or in `folder`).
+    /// Look for other launchers (or in `folder`). The list goes out as soon as it's known;
+    /// measuring every world and pack tree of every instance can take a while on a big
+    /// install, so the sizes follow in a second event.
     pub fn migrate_scan(&self, folder: Option<PathBuf>) {
         self.run(move |t| {
             let scan = match &folder {
                 Some(f) => migrate::scan_folder(f),
                 None => migrate::scan(),
             };
-            let sizes = scan
-                .instances
+            let instances = scan.instances.clone();
+            t.send(Event::MigrateScanned(
+                folder,
+                ScanResult {
+                    scan,
+                    sizes: HashMap::new(),
+                },
+            ));
+            let sizes = instances
                 .iter()
                 .map(Found::key)
-                .zip(migrate::measure_all(&scan.instances))
+                .zip(migrate::measure_all(&instances))
                 .collect();
-            t.send(Event::MigrateScanned(folder, ScanResult { scan, sizes }));
+            t.send(Event::MigrateSized(sizes));
         });
     }
 
@@ -73,11 +86,35 @@ impl Tasks {
         });
     }
 
-    /// Import the chosen items one after another.
-    pub fn migrate_run(&self, instances: Vec<InstanceJob>, huds: Vec<HudJob>) {
+    /// Import the chosen items one after another. `cancel` stops between files and items;
+    /// what was finished stays, a half-copied instance is removed.
+    pub fn migrate_run(
+        &self,
+        instances: Vec<InstanceJob>,
+        huds: Vec<HudJob>,
+        cancel: Arc<AtomicBool>,
+    ) {
         self.run(move |t| {
+            let flag = cancel.clone();
+            arctic_core::net::cancellable(cancel, || {
+                t.migrate_run_blocking(instances, huds, &flag)
+            });
+        });
+    }
+
+    fn migrate_run_blocking(
+        &self,
+        instances: Vec<InstanceJob>,
+        huds: Vec<HudJob>,
+        cancel: &AtomicBool,
+    ) {
+        let t = self;
+        {
             let dirs = t.dirs().clone();
             for job in instances {
+                if cancel.load(Ordering::Relaxed) {
+                    break;
+                }
                 let label = format!("{} · {}", job.found.launcher.name(), job.found.name);
                 // Tens of thousands of files: a few updates a second is plenty.
                 let last = std::sync::Mutex::new(None::<std::time::Instant>);
@@ -99,16 +136,31 @@ impl Tasks {
                             title: format!("{label} → {}", done.instance.name),
                             ok: true,
                             lines: summary(&done),
+                            retry: None,
                         },
-                        Err(e) => Outcome {
+                        Err(e) if e.is_cancelled() => Outcome {
                             title: label.clone(),
                             ok: false,
-                            lines: vec![e.to_string()],
+                            lines: vec!["Cancelled; nothing of it was kept.".into()],
+                            retry: Some(job.clone()),
                         },
+                        Err(e) => {
+                            // Paths and OS error codes go to the log; the row says it plainly.
+                            log::warn!("import of {label}: {}", e.chain());
+                            Outcome {
+                                title: label.clone(),
+                                ok: false,
+                                lines: vec![e.plain()],
+                                retry: Some(job.clone()),
+                            }
+                        }
                     };
                 t.send(Event::MigrateItemDone(outcome));
             }
             for job in huds {
+                if cancel.load(Ordering::Relaxed) {
+                    break;
+                }
                 let label = format!(
                     "{} HUD ({})",
                     job.client.launcher.name(),
@@ -123,12 +175,13 @@ impl Tasks {
                     ok: result.is_ok(),
                     lines: match result {
                         Ok(()) => job.client.notes.clone(),
-                        Err(e) => vec![e.to_string()],
+                        Err(e) => vec![e.plain()],
                     },
+                    retry: None,
                 }));
             }
             t.send(Event::MigrateFinished);
-        });
+        }
     }
 }
 
@@ -154,5 +207,6 @@ fn summary(done: &migrate::Imported) -> Vec<String> {
             .map(|m| format!("{m} doesn't run on this version: switched off")),
     );
     lines.extend(done.notes.iter().cloned());
+    lines.extend(migrate::skipped_note(&done.skipped));
     lines
 }

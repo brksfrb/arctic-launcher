@@ -39,6 +39,11 @@ pub(super) fn open_section(title: &'static str) {
     SCROLL_TO.with(|s| s.set(Some(title)));
 }
 
+/// Switch the Settings tab to the group holding `title` (for a toast's "Open … settings").
+pub(crate) fn show_section(title: &str) {
+    GROUP.with(|g| g.set(group_of(title)));
+}
+
 /// Which group a section belongs to.
 fn group_of(title: &str) -> usize {
     match title {
@@ -124,7 +129,7 @@ impl ArcticApp {
             }
             ui.checkbox(&mut s.intro, "Intro animation on start");
             ui.checkbox(&mut s.start_maximized, "Start the launcher maximized");
-            if cfg!(windows) {
+            if cfg!(any(windows, target_os = "linux")) {
                 ui.checkbox(&mut s.tray, "Keep Arctic in the system tray when closed")
                     .on_hover_text("Reopens instantly. Quit from the tray icon.");
             }
@@ -360,6 +365,7 @@ impl ArcticApp {
         });
 
         section(ui, p, "Storage", |ui| self.storage_section(ui, p));
+        section(ui, p, "Video export", |ui| self.video_export_section(ui, p));
 
         section(ui, p, "Share & back up", |ui| {
             ui.label(

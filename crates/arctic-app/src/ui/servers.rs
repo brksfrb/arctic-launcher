@@ -428,8 +428,9 @@ impl ArcticApp {
         let p = self.palette();
         let ping = self.servers.status.get(&server.address);
         let mut join = false;
-        // Where the Join button is: the row's pick-up layer must not lie over it.
-        let mut join_rect = None;
+        let mut remove = false;
+        // Where the Join and Remove buttons are: the row's pick-up layer must not lie over them.
+        let mut join_rect: Option<egui::Rect> = None;
         let row = crate::widgets::row(ui, |ui| {
             // Grip: a hint that the row can be picked up (anywhere on it).
             let (grip, _) = ui.allocate_exact_size(vec2(14.0, ICON), egui::Sense::hover());
@@ -501,9 +502,14 @@ impl ArcticApp {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let button = widgets::button(ui, p, Some(Icon::Play), "Join", false)
                     .on_hover_text(format!("Start {} and join", server.name));
-                join_rect = Some(button.rect);
                 if button.clicked() {
                     join = true;
+                }
+                let trash =
+                    widgets::icon_button(ui, p, Icon::Trash, "Remove from the list (with Undo)");
+                join_rect = Some(button.rect.union(trash.rect));
+                if trash.clicked() {
+                    remove = true;
                 }
                 ui.add_space(6.0);
                 self.server_state(ui, ping);
@@ -511,6 +517,9 @@ impl ArcticApp {
         });
         if join {
             self.join_server(&server.address);
+        }
+        if remove {
+            self.remove_server(server, index);
         }
         let rect = row.response.rect;
         if let Some(index) = index {
@@ -545,6 +554,34 @@ impl ArcticApp {
             }
         }
         rect
+    }
+
+    /// Take a server off the game's list, with Undo (which puts it back where it was).
+    fn remove_server(&mut self, server: &Server, index: Option<usize>) {
+        let game_dir = self.selected_instance().game_dir(&self.dirs);
+        let before = index.and_then(|i| {
+            self.servers
+                .list
+                .as_ref()
+                .and_then(|l| l.as_ref().ok())
+                .and_then(|l| l.get(i + 1))
+                .map(|next| next.address.clone())
+        });
+        match arctic_core::servers::remove(&game_dir, &server.address) {
+            Ok(_) => self.toasts.push_undo(
+                format!("Removed {}", server.name),
+                crate::undo::Undo::Server {
+                    game_dir,
+                    name: server.name.clone(),
+                    address: server.address.clone(),
+                    before,
+                },
+            ),
+            Err(e) => self
+                .toasts
+                .push(Kind::Error, "Couldn't remove the server", e.to_string()),
+        }
+        self.servers_changed();
     }
 
     /// Players and ping (or offline / pinging), right-aligned.

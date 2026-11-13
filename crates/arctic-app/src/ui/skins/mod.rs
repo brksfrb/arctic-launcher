@@ -165,7 +165,7 @@ pub struct SkinsUi {
 }
 
 impl ArcticApp {
-    fn skins_dir(&self) -> PathBuf {
+    pub(crate) fn skins_dir(&self) -> PathBuf {
         Library::dir(self.dirs.profile_root())
     }
 
@@ -731,14 +731,39 @@ impl ArcticApp {
         }
     }
 
+    /// Delete a library skin, keeping its bytes on the Undo toast for a few seconds.
     fn remove_skin(&mut self, id: &str) {
         let dir = self.skins_dir();
+        let entry = self
+            .skins
+            .library
+            .skins
+            .iter()
+            .find(|s| s.id == id)
+            .cloned();
+        let png = Library::read_png(&dir, id).ok();
         if let Err(e) = self.skins.library.remove(&dir, id) {
             self.toasts
                 .push(Kind::Error, "Could not delete skin", e.to_string());
+            return;
         }
         self.skins.textures.remove(&format!("lib:{id}"));
         self.skins.lib_hashes.remove(id);
+        match (entry, png) {
+            (Some(entry), Some(png)) => self.toasts.push_undo(
+                format!("Deleted {}", entry.name),
+                crate::undo::Undo::Skin {
+                    name: entry.name,
+                    variant: entry.variant,
+                    png,
+                },
+            ),
+            (Some(entry), None) => {
+                self.toasts
+                    .push(Kind::Success, format!("Deleted {}", entry.name), "")
+            }
+            (None, _) => {}
+        }
     }
 
     fn update_skin(&mut self, id: &str, change: impl FnOnce(&mut SkinEntry)) {

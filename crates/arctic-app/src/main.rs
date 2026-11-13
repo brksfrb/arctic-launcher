@@ -41,6 +41,7 @@ mod tray;
 mod tray_host;
 mod trim;
 mod ui;
+mod undo;
 mod video_encoder;
 mod voice;
 mod voice_svc;

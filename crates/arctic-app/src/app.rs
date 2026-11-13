@@ -101,6 +101,9 @@ pub enum AddAccount {
         cancel: Arc<AtomicBool>,
         device_code: Option<DeviceCode>,
         browser: bool,
+        /// The browser sign-in page, once opened (for "open again" and "copy link").
+        login_url: Option<String>,
+        started: std::time::Instant,
     },
     Failed(String),
 }
@@ -151,6 +154,8 @@ pub struct ArcticApp {
     pub(crate) bridge: crate::bridge_host::BridgeHost,
     /// The running sign-in was started from the game (it's told how it went).
     pub(crate) login_from_game: bool,
+    /// Accounts whose Microsoft session was refused at launch: they need a fresh sign-in.
+    pub(crate) signed_out: std::collections::HashSet<String>,
     pub(crate) voice: crate::voice::VoiceHub,
     pub(crate) voice_ui: crate::ui::VoiceSettingsUi,
     pub(crate) accounts: AccountStore,
@@ -337,6 +342,7 @@ impl ArcticApp {
             network: Default::default(),
             bridge,
             login_from_game: false,
+            signed_out: std::collections::HashSet::new(),
             voice,
             voice_ui: crate::ui::VoiceSettingsUi::default(),
             root,
@@ -379,6 +385,7 @@ impl ArcticApp {
         };
         app.apply_profile_data(data);
         app.maybe_start_onboarding(startup.launch.is_some());
+        app.warn_missing_storage();
         if let Some(query) = &startup.account {
             match app.accounts.find(query).map(|a| a.id.clone()) {
                 Some(id) => {
@@ -586,7 +593,17 @@ impl ArcticApp {
         );
         self.offer_profile_link(&account);
         self.accounts.upsert(account);
+        // A fresh sign-in for an account that was signed out: the same id comes back.
+        if let Some(active) = &self.accounts.active {
+            self.signed_out.remove(active);
+        }
         self.save_accounts();
+    }
+
+    /// "Sign in" on the signed-out toast or account card: the browser flow, on the Accounts tab.
+    pub(crate) fn sign_in_again(&mut self, now: f64) {
+        self.set_tab(Tab::Accounts, now);
+        self.start_login(true);
     }
 
     /// A required update blocks Play from the moment it is found until the
@@ -627,6 +644,8 @@ impl ArcticApp {
             cancel,
             device_code: None,
             browser,
+            login_url: None,
+            started: std::time::Instant::now(),
         };
     }
 
@@ -879,6 +898,11 @@ impl ArcticApp {
             copy,
             quick_play,
             bridge,
+            cancel: self
+                .runs
+                .get(id)
+                .and_then(crate::runs::Run::cancel_flag)
+                .unwrap_or_default(),
         };
         self.bridge.allow(&account.id);
         self.tasks
@@ -1108,6 +1132,7 @@ impl ArcticApp {
                 }
             }
             Event::AccountRefreshed(account) => {
+                self.signed_out.remove(&account.id);
                 self.accounts.upsert(account);
                 self.save_accounts();
             }
@@ -1134,6 +1159,17 @@ impl ArcticApp {
                 self.on_launched(id, result, ctx);
             }
             Event::Game(id, event) => self.on_game_event(id, event, ctx),
+            Event::LoginUrl(attempt, url) => {
+                if let AddAccount::Microsoft {
+                    attempt: current,
+                    login_url,
+                    ..
+                } = &mut self.add_account
+                    && *current == attempt
+                {
+                    *login_url = Some(url);
+                }
+            }
             Event::DeviceCode(attempt, code) => {
                 if let AddAccount::Microsoft {
                     attempt: current,
@@ -1157,6 +1193,9 @@ impl ArcticApp {
                 self.bridge.update(&self.accounts, &self.tasks);
             }
             Event::LoginFinished(_, Err(e)) => {
+                // The raw text (HTTP codes, Azure app-id notes) is for the log; the dialog
+                // turns it into plain words and a next step.
+                log::warn!("sign-in failed: {e}");
                 if std::mem::take(&mut self.login_from_game) {
                     self.bridge
                         .set_login_status("failed", None, Some(e.as_str()));
@@ -1193,10 +1232,12 @@ impl ArcticApp {
             Event::MigrateScanned(folder, result) => {
                 self.on_migrate_scanned(folder.is_some(), result)
             }
+            Event::MigrateSized(sizes) => self.on_migrate_sized(sizes),
+            Event::FfmpegPicked(result) => self.on_ffmpeg_picked(result),
             Event::MigrateProgress(label, p) => self.on_migrate_progress(label, p),
             Event::MigrateItemDone(outcome) => self.on_migrate_item(outcome),
             Event::MigrateFinished => self.on_migrate_finished(),
-            Event::Storage(e) => self.on_storage_event(e, ctx),
+            Event::Storage(e) => self.on_storage_event(e),
             Event::PackSearch(request, result) => self.on_pack_search(request, result),
             Event::PackInstalled(instance, project, result) => {
                 self.on_pack_installed(instance, project, result)

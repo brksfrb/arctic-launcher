@@ -104,6 +104,19 @@ pub struct Onboarding {
     others: Vec<&'static str>,
 }
 
+impl Onboarding {
+    /// What to do once setup ends. "Skip setup" on the Welcome screen means just that: it never
+    /// saw the question, so it must not land in the "Move to Arctic" wizard that `first`
+    /// defaults to when another launcher is on the PC.
+    fn first_play(&self) -> FirstPlay {
+        if self.step == Step::Welcome {
+            FirstPlay::Later
+        } else {
+            self.first
+        }
+    }
+}
+
 impl ArcticApp {
     /// Start setup for a profile that hasn't been through it.
     pub(crate) fn maybe_start_onboarding(&mut self, skip: bool) {
@@ -629,7 +642,9 @@ impl ArcticApp {
 
     fn finish_onboarding(&mut self, now: f64) {
         let onboarding = self.onboarding.take();
-        let first = onboarding.as_ref().map_or(FirstPlay::Later, |o| o.first);
+        let first = onboarding
+            .as_ref()
+            .map_or(FirstPlay::Later, Onboarding::first_play);
         // Skipping setup from the first screen makes no shortcut.
         let desktop_shortcut = onboarding
             .as_ref()
@@ -808,4 +823,39 @@ fn theme_tile(ui: &mut egui::Ui, p: &Palette, mode: ThemeMode, name: &str, selec
     response
         .on_hover_cursor(egui::CursorIcon::PointingHand)
         .clicked()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn onboarding(step: Step, first: FirstPlay) -> Onboarding {
+        Onboarding {
+            heard: None,
+            heard_other: String::new(),
+            desktop_shortcut: true,
+            step,
+            changed_at: 0.0,
+            total_mb: None,
+            first,
+            others: vec!["Prism Launcher"],
+        }
+    }
+
+    #[test]
+    fn skip_setup_does_not_open_the_migration_wizard() {
+        assert_eq!(
+            onboarding(Step::Welcome, FirstPlay::Move).first_play(),
+            FirstPlay::Later
+        );
+        assert_eq!(
+            onboarding(Step::Start, FirstPlay::Move).first_play(),
+            FirstPlay::Move,
+            "chosen on the Start step, it counts"
+        );
+        assert_eq!(
+            onboarding(Step::Heard, FirstPlay::Vanilla).first_play(),
+            FirstPlay::Vanilla
+        );
+    }
 }

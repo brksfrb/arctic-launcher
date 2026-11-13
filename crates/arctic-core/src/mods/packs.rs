@@ -182,6 +182,49 @@ pub fn remove(kind: PackKind, game_dir: &Path, file_name: &str) -> Result<()> {
     }
 }
 
+/// A pack moved to the trash, with what it takes to put it back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrashedPack {
+    pub file_name: String,
+    was_active: bool,
+    /// Where it waits: the game folder's `.trash/<packs folder>/`.
+    trashed_to: PathBuf,
+}
+
+/// Switch a pack off and move it to the game folder's `.trash` (outside the packs
+/// folder, so the game does not list it), so [`restore`] can undo it.
+pub fn trash(kind: PackKind, game_dir: &Path, file_name: &str) -> Result<TrashedPack> {
+    let path = pack_path(kind, game_dir, file_name)?;
+    let was_active = active_names(kind, game_dir).iter().any(|n| n == file_name);
+    set_active(kind, game_dir, file_name, false)?;
+    let trash = game_dir.join(".trash").join(kind.folder());
+    std::fs::create_dir_all(&trash).map_err(|e| Error::io(&trash, e))?;
+    let trashed_to = trash.join(file_name);
+    if trashed_to.is_dir() {
+        std::fs::remove_dir_all(&trashed_to).map_err(|e| Error::io(&trashed_to, e))?;
+    } else if trashed_to.exists() {
+        std::fs::remove_file(&trashed_to).map_err(|e| Error::io(&trashed_to, e))?;
+    }
+    std::fs::rename(&path, &trashed_to).map_err(|e| Error::io(&trashed_to, e))?;
+    Ok(TrashedPack {
+        file_name: file_name.to_owned(),
+        was_active,
+        trashed_to,
+    })
+}
+
+/// Undo [`trash`]: the pack comes back, switched on again if it was.
+pub fn restore(kind: PackKind, game_dir: &Path, trashed: &TrashedPack) -> Result<()> {
+    let folder = game_dir.join(kind.folder());
+    std::fs::create_dir_all(&folder).map_err(|e| Error::io(&folder, e))?;
+    let back = folder.join(&trashed.file_name);
+    std::fs::rename(&trashed.trashed_to, &back).map_err(|e| Error::io(&back, e))?;
+    if trashed.was_active {
+        set_active(kind, game_dir, &trashed.file_name, true)?;
+    }
+    Ok(())
+}
+
 /// Switch a pack on or off for the game. Resource packs stack (the newest
 /// one switched on wins); only one shader pack is used at a time.
 pub fn set_active(kind: PackKind, game_dir: &Path, file_name: &str, on: bool) -> Result<()> {
@@ -517,6 +560,24 @@ mod tests {
             std::fs::write(p, b"zip").unwrap();
         }
         dir
+    }
+
+    #[test]
+    fn a_trashed_pack_leaves_the_list_and_comes_back_active() {
+        let g = game();
+        set_active(PackKind::Resource, g.path(), "Faithful.zip", true).unwrap();
+        let trashed = trash(PackKind::Resource, g.path(), "Faithful.zip").unwrap();
+        let names: Vec<String> = list(PackKind::Resource, g.path())
+            .into_iter()
+            .map(|p| p.file_name)
+            .collect();
+        assert_eq!(names, ["Other.zip"], "the trash folder is not a pack");
+        assert!(!read(&g.path().join(OPTIONS)).contains("Faithful"));
+        assert!(g.path().join(".trash/resourcepacks/Faithful.zip").is_file());
+        restore(PackKind::Resource, g.path(), &trashed).unwrap();
+        let back = list(PackKind::Resource, g.path());
+        let faithful = back.iter().find(|p| p.file_name == "Faithful.zip").unwrap();
+        assert!(faithful.active, "switched on again");
     }
 
     #[test]

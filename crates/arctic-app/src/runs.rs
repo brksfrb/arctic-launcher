@@ -5,6 +5,8 @@
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Instant, SystemTime};
 
 use arctic_core::crash::{self, Diagnosis};
@@ -16,7 +18,7 @@ use eframe::egui;
 
 use crate::app::{ArcticApp, LogSource};
 use crate::motion::RateMeter;
-use crate::tasks::{Event, LaunchId, ProgressSnapshot, Tasks};
+use crate::tasks::{Event, LaunchFailure, LaunchId, ProgressSnapshot, Tasks};
 use crate::toasts::{Kind, ToastAction};
 
 /// Game log lines kept in memory per run (older ones are dropped).
@@ -28,6 +30,8 @@ pub enum RunState {
     Preparing {
         progress: ProgressSnapshot,
         meter: RateMeter,
+        /// Set by "Cancel launch": the downloads stop and the game is not started.
+        cancel: Arc<AtomicBool>,
     },
     /// Process started, waiting for the game window.
     Starting {
@@ -62,6 +66,10 @@ pub struct Run {
     crash_report: Option<crash::Report>,
     /// How Java was started (flags, classpath files), for the crash report.
     pub java: Option<String>,
+    /// The player pressed Force close: the exit that follows is not a crash.
+    killed: bool,
+    /// What the last exit was diagnosed as, shown on the Play tab after the toast is gone.
+    pub diagnosis: Option<Diagnosis>,
 }
 
 impl Run {
@@ -80,6 +88,44 @@ impl Run {
     pub fn clear_log(&mut self) {
         self.log.clear();
         self.log_rev += 1;
+    }
+
+    /// Force close: end the game and remember that the player asked for it, so the
+    /// exit code the kill produces (1 on Windows, 137 on Unix) is not read as a crash.
+    pub fn force_close(&mut self) {
+        if let Some(game) = self.game() {
+            game.kill();
+            self.killed = true;
+            self.push_log([LogLine {
+                level: Level::Info,
+                text: "──── Arctic: force closed by the player ────".into(),
+            }]);
+        }
+    }
+
+    /// The flag that stops this launch's downloads, while it is being prepared.
+    pub fn cancel_flag(&self) -> Option<Arc<AtomicBool>> {
+        match &self.state {
+            RunState::Preparing { cancel, .. } => Some(cancel.clone()),
+            _ => None,
+        }
+    }
+
+    /// "Cancel launch" while the game files download: the launch task notices and gives up.
+    pub fn cancel_launch(&mut self) {
+        if let RunState::Preparing { cancel, .. } = &self.state {
+            cancel.store(true, Ordering::Relaxed);
+            self.push_log([LogLine {
+                level: Level::Info,
+                text: "──── Arctic: launch cancelled by the player ────".into(),
+            }]);
+        }
+    }
+
+    /// The exit code to report: none at all after a Force close, which reads as
+    /// "was stopped" rather than "closed unexpectedly".
+    fn reported_exit_code(&self, code: Option<i32>) -> Option<i32> {
+        if self.killed { None } else { code }
     }
 
     pub fn push_log(&mut self, lines: impl IntoIterator<Item = LogLine>) {
@@ -335,6 +381,7 @@ impl Runs {
                     ..ProgressSnapshot::default()
                 },
                 meter: RateMeter::default(),
+                cancel: Arc::default(),
             },
             log: VecDeque::new(),
             log_rev: 0,
@@ -343,6 +390,8 @@ impl Runs {
             early: Vec::new(),
             crash_report: None,
             java: None,
+            killed: false,
+            diagnosis: None,
         });
         self.next_id
     }
@@ -406,7 +455,9 @@ impl ArcticApp {
         now: f64,
     ) {
         if let Some(Run {
-            state: RunState::Preparing { progress, meter },
+            state: RunState::Preparing {
+                progress, meter, ..
+            },
             ..
         }) = self.runs.get_mut(id)
         {
@@ -418,7 +469,7 @@ impl ArcticApp {
     pub(crate) fn on_launched(
         &mut self,
         id: LaunchId,
-        result: Result<GameHandle, String>,
+        result: Result<GameHandle, LaunchFailure>,
         ctx: &egui::Context,
     ) {
         if self.runs.get(id).is_none() {
@@ -440,14 +491,42 @@ impl ArcticApp {
                     self.on_game_event(id, event, ctx);
                 }
             }
-            Err(e) => {
+            Err(failure) if failure.cancelled => {
                 if let Some(run) = self.runs.get_mut(id) {
                     run.state = RunState::Ended;
+                    let title = run.title.clone();
+                    self.toasts
+                        .push(Kind::Info, format!("{title}: launch cancelled"), "");
                 }
-                // The same text as the toast, including every cause. This used to
-                // reach the screen and never `logs/launcher.log`.
-                log::error!("Launch failed: {e}");
-                self.toasts.push(Kind::Error, "Launch failed", e);
+            }
+            Err(failure) => {
+                // The whole cause chain goes to the launcher log and to the run's log, which
+                // the Logs tab is already showing; the toast says it in plain words.
+                log::error!("Launch failed: {}", failure.detail);
+                if let Some(run) = self.runs.get_mut(id) {
+                    run.state = RunState::Ended;
+                    run.push_log([LogLine {
+                        level: Level::Error,
+                        text: format!("──── Arctic: launch failed — {} ────", failure.detail),
+                    }]);
+                }
+                match failure.signed_out {
+                    Some((account_id, name)) => {
+                        self.signed_out.insert(account_id);
+                        self.toasts.push_with_action(
+                            Kind::Error,
+                            format!("Sign in to {name} again"),
+                            "Microsoft no longer accepts this sign-in. Signing in again fixes it.",
+                            Some(ToastAction::SignIn),
+                        );
+                    }
+                    None => self.toasts.push_with_action(
+                        Kind::Error,
+                        "Launch failed",
+                        failure.plain,
+                        Some(ToastAction::ShowLogs(id)),
+                    ),
+                }
             }
         }
     }
@@ -508,6 +587,7 @@ impl ArcticApp {
                 let Some(run) = self.runs.get_mut(id) else {
                     return;
                 };
+                let code = run.reported_exit_code(code);
                 let watchdog = run.shutdown_watchdog_fired();
                 let title = run.title.clone();
                 let instance_id = run.instance_id.clone();
@@ -549,6 +629,7 @@ impl ArcticApp {
                         .or_else(|| crash::silent_exit(&run.crash_text(), c)),
                     _ => None,
                 };
+                run.diagnosis = diagnosis.clone();
                 if let Some(d) = &diagnosis {
                     run.push_log([LogLine {
                         level: Level::Error,
@@ -871,6 +952,35 @@ mod tests {
             a,
             "an older copy still running counts"
         );
+    }
+
+    #[test]
+    fn cancel_launch_sets_the_flag_only_while_preparing() {
+        let mut runs = Runs::default();
+        let id = runs.start("x", "1.0", "X".into(), PathBuf::new());
+        let run = runs.get_mut(id).unwrap();
+        let flag = run.cancel_flag().expect("preparing");
+        assert!(!flag.load(Ordering::Relaxed));
+        run.cancel_launch();
+        assert!(flag.load(Ordering::Relaxed), "the launch task sees it");
+        assert!(run.log.iter().any(|l| l.text.contains("cancelled")));
+        run.state = RunState::Ended;
+        assert!(run.cancel_flag().is_none());
+        run.cancel_launch();
+    }
+
+    #[test]
+    fn a_force_close_is_not_a_crash() {
+        let mut runs = Runs::default();
+        let id = runs.start("x", "1.0", "X".into(), PathBuf::new());
+        let run = runs.get_mut(id).unwrap();
+        assert_eq!(run.reported_exit_code(Some(1)), Some(1));
+        run.force_close();
+        assert!(!run.killed, "nothing to kill while still preparing");
+        run.killed = true;
+        assert_eq!(run.reported_exit_code(Some(1)), None, "Windows kill");
+        assert_eq!(run.reported_exit_code(Some(137)), None, "Unix SIGKILL");
+        assert_eq!(run.reported_exit_code(Some(0)), None);
     }
 
     #[test]

@@ -56,6 +56,29 @@ pub type LaunchId = u64;
 
 pub(crate) type Outcome<T> = std::result::Result<T, String>;
 
+/// Why a launch did not get to a running game: plain words for the toast, the whole
+/// cause chain for the run's log, and which account must sign in again if that's it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LaunchFailure {
+    pub plain: String,
+    pub detail: String,
+    /// (account id, name) whose Microsoft session was refused.
+    pub signed_out: Option<(String, String)>,
+    /// The player pressed Cancel: not a failure to report.
+    pub cancelled: bool,
+}
+
+impl LaunchFailure {
+    pub fn new(e: &arctic_core::Error, account: (String, String)) -> Self {
+        Self {
+            plain: e.plain(),
+            detail: e.chain(),
+            signed_out: e.is_auth().then_some(account),
+            cancelled: e.is_cancelled(),
+        }
+    }
+}
+
 /// The most of a log that is sent to the staff (its end).
 const SENT_LOG_BYTES: usize = 300 * 1024;
 
@@ -80,10 +103,17 @@ pub enum Event {
     /// Game process started (window not necessarily up yet). Carries the
     /// version id that was actually launched.
     /// The game, its log file, its version and how Java was started.
-    Launched(LaunchId, Outcome<(GameHandle, PathBuf, String, String)>),
+    Launched(
+        LaunchId,
+        std::result::Result<(GameHandle, PathBuf, String, String), LaunchFailure>,
+    ),
     /// Sent from the game's watcher threads; may overtake `Launched`.
     Game(LaunchId, GameEvent),
     DeviceCode(LoginAttempt, DeviceCode),
+    /// The browser sign-in page was opened at this URL (to open again or copy).
+    LoginUrl(LoginAttempt, String),
+    /// An FFmpeg binary was picked in Settings and checked.
+    FfmpegPicked(Outcome<PathBuf>),
     LoginFinished(LoginAttempt, Outcome<Account>),
     Face(String, Face),
     UpdateChecked(Outcome<Option<UpdateInfo>>),
@@ -163,6 +193,8 @@ pub enum Event {
     LogSent(Outcome<String>),
     /// Other launchers looked through (the folder, if one was picked).
     MigrateScanned(Option<PathBuf>, crate::migrate_tasks::ScanResult),
+    /// The found instances' sizes, measured after the list was shown.
+    MigrateSized(std::collections::HashMap<String, arctic_core::migrate::Sizes>),
     MigrateProgress(String, ProgressSnapshot),
     MigrateItemDone(crate::migrate_tasks::Outcome),
     MigrateFinished,
@@ -239,6 +271,8 @@ pub struct StartAt {
     pub quick_play: Option<arctic_core::launch::QuickPlay>,
     /// This game's own bridge info (with its join token), instead of the launcher-wide one.
     pub bridge: Option<arctic_core::bridge::BridgeInfo>,
+    /// Set by "Cancel launch": every download stops and the game is not started.
+    pub cancel: Arc<AtomicBool>,
 }
 
 impl Tasks {
@@ -328,6 +362,22 @@ impl Tasks {
 
     /// After a file dialog returned nothing: tell the player when that is because the system has no
     /// file picker (Linux without a desktop portal, zenity or kdialog), not because they cancelled.
+    /// Settings → Video export → "Choose ffmpeg…": pick a file and make sure it is FFmpeg.
+    pub fn ffmpeg_pick(&self) {
+        self.run(|t| {
+            let picked = rfd::FileDialog::new()
+                .set_title("Where is ffmpeg?")
+                .pick_file();
+            t.note_if_picker_missing(&picked);
+            if let Some(path) = picked {
+                let result = arctic_core::ffmpeg::check(&path)
+                    .map(|()| path)
+                    .map_err(|e| e.to_string());
+                t.send(Event::FfmpegPicked(result));
+            }
+        });
+    }
+
     pub(crate) fn note_if_picker_missing<T>(&self, picked: &Option<T>) {
         if picked.is_none() && !file_picker_available() {
             self.send(Event::PickerMissing);
@@ -372,10 +422,16 @@ impl Tasks {
         start: StartAt,
     ) {
         self.run(move |t| {
-            let result = t.launch_blocking(id, &version, &instance, account, &settings, start);
+            let who = (account.id.clone(), account.username.clone());
+            // Every download below stops with Error::Cancelled once the flag is set.
+            let result = arctic_core::net::cancellable(start.cancel.clone(), || {
+                t.launch_blocking(id, &version, &instance, account, &settings, start)
+            });
             let result = result.map(|(game, log, java)| (game, log, version.id.clone(), java));
-            // The toast shows this string; it has to be the whole cause chain, not just Display.
-            t.send(Event::Launched(id, result.map_err(|e| e.chain())));
+            t.send(Event::Launched(
+                id,
+                result.map_err(|e| LaunchFailure::new(&e, who)),
+            ));
         });
     }
 
@@ -418,6 +474,8 @@ impl Tasks {
             quick_play: start.quick_play,
         };
         let plan = launch::prepare(&req, &progress)?;
+        // Cancelled during the last stage: don't start the game after all.
+        arctic_core::net::check_cancelled()?;
         let (tx, ctx) = (self.tx.clone(), self.ctx.clone());
         let game = launch::spawn(&plan, move |event| {
             let _ = tx.send(Event::Game(id, event));
@@ -456,8 +514,11 @@ impl Tasks {
 
     pub fn login_browser(&self, attempt: LoginAttempt, cancel: Arc<AtomicBool>) {
         self.run(move |t| {
-            let result = MsaConfig::load(&t.dirs)
-                .and_then(|cfg| microsoft::login_with_browser(&cfg, &cancel));
+            let result = MsaConfig::load(&t.dirs).and_then(|cfg| {
+                microsoft::login_with_browser(&cfg, &cancel, &|url| {
+                    t.send(Event::LoginUrl(attempt, url.to_owned()));
+                })
+            });
             t.send(Event::LoginFinished(
                 attempt,
                 result.map_err(|e| e.to_string()),

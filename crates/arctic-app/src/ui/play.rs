@@ -18,6 +18,8 @@ use crate::runs::{Run, RunState};
 use crate::widgets::{self, PlayState};
 
 const PLAY_SIZE: [f32; 2] = [300.0, 62.0];
+const VERSIONS_FAILED: &str = "Couldn't load the version list. Check your connection.";
+
 const PICKER_WIDTH: f32 = 340.0;
 
 /// Floored percent of one byte ratio. Never 100: a single stage's bytes being
@@ -143,9 +145,9 @@ impl ArcticApp {
                 }
                 if started
                     && widgets::icon_button(ui, p, Icon::Stop, "Force close this game").clicked()
-                    && let Some(game) = self.runs.get(id).and_then(Run::game)
+                    && let Some(run) = self.runs.get_mut(id)
                 {
-                    game.kill();
+                    run.force_close();
                 }
             });
         }
@@ -335,11 +337,9 @@ impl ArcticApp {
         let ManifestState::Ready(manifest) = &self.manifest else {
             match &self.manifest {
                 ManifestState::Failed(e) => {
-                    ui.label(RichText::new(format!("Could not load versions: {e}")).color(p.error));
-                    if crate::widgets::button(ui, p, None, "Retry", false).clicked() {
-                        self.manifest = ManifestState::Loading;
-                        self.tasks.load_manifest();
-                    }
+                    ui.label(RichText::new(VERSIONS_FAILED).color(p.error))
+                        .on_hover_text(e);
+                    self.retry_versions_button(ui);
                 }
                 _ => widgets::skeleton(ui, p, vec2(PICKER_WIDTH, 44.0), 1),
             }
@@ -628,11 +628,26 @@ impl ArcticApp {
         {
             let _ = open::that_detached(&log);
         }
-        if let Some(game) = self.selected_run().and_then(Run::game)
+        if let Some(id) = self
+            .selected_run()
+            .filter(|r| r.game().is_some())
+            .map(|r| r.id)
             && widgets::tile_button(ui, p, Icon::Stop, "Force close Minecraft", PLAY_SIZE[1])
                 .clicked()
+            && let Some(run) = self.runs.get_mut(id)
         {
-            game.kill();
+            run.force_close();
+        }
+        // While the game files download there is no process to close yet, but the launch
+        // can be given up.
+        if let Some(id) = self
+            .selected_run()
+            .filter(|r| matches!(r.state, RunState::Preparing { .. }))
+            .map(|r| r.id)
+            && widgets::tile_button(ui, p, Icon::Close, "Cancel launch", PLAY_SIZE[1]).clicked()
+            && let Some(run) = self.runs.get_mut(id)
+        {
+            run.cancel_launch();
         }
     }
 
@@ -641,17 +656,26 @@ impl ArcticApp {
             Some("A required launcher update must be installed first.")
         } else if self.accounts.active().is_none() {
             Some("Add an account to play.")
-        } else if !matches!(self.manifest, ManifestState::Ready(_)) {
-            Some("Loading versions…")
         } else {
-            None
+            manifest_reason(&self.manifest)
+        }
+    }
+
+    /// Load the version list again; drawn wherever its failure is reported.
+    fn retry_versions_button(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
+        if crate::widgets::button(ui, p, None, "Retry", false).clicked() {
+            self.manifest = ManifestState::Loading;
+            self.tasks.load_manifest();
         }
     }
 
     fn launch_status(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         let text = match self.selected_run().map(|r| &r.state) {
-            Some(RunState::Preparing { progress, meter }) if progress.bytes_total > 0 => {
+            Some(RunState::Preparing {
+                progress, meter, ..
+            }) if progress.bytes_total > 0 => {
                 let remaining = progress.bytes_total.saturating_sub(progress.bytes_done);
                 let mut parts = vec![
                     progress.stage.clone(),
@@ -681,7 +705,57 @@ impl ArcticApp {
                 None => "This version will be downloaded when you press Play.".into(),
             },
         };
-        ui.label(RichText::new(text).color(p.muted));
+        let failed =
+            self.selected_run().is_none() && matches!(self.manifest, ManifestState::Failed(_));
+        ui.horizontal(|ui| {
+            let label = ui.label(RichText::new(text).color(if failed { p.error } else { p.muted }));
+            if failed {
+                if let ManifestState::Failed(e) = &self.manifest {
+                    label.on_hover_text(e);
+                }
+                self.retry_versions_button(ui);
+            }
+        });
+        self.last_crash_row(ui);
+    }
+
+    /// What the last run of this instance crashed with, and its one-click fix or log:
+    /// the toast said so once, but it has gone by the time the player looks here.
+    fn last_crash_row(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette();
+        let instance_id = self.selected_instance().id.clone();
+        let Some((id, title, detail, fix)) = self
+            .runs
+            .for_instance(&instance_id)
+            .filter(|r| !r.is_active())
+            .and_then(|r| {
+                let d = r.diagnosis.as_ref()?;
+                Some((r.id, d.title.clone(), d.detail.clone(), d.fix.clone()))
+            })
+        else {
+            return;
+        };
+        ui.add_space(6.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new(format!("Last time: {title}.")).color(p.error));
+            ui.label(RichText::new(detail).small().color(p.muted));
+            match fix {
+                Some(fix) => {
+                    if ui.button("Fix it").clicked() {
+                        self.apply_crash_fix(&instance_id, &fix);
+                        if let Some(run) = self.runs.get_mut(id) {
+                            run.diagnosis = None;
+                        }
+                    }
+                }
+                None => {
+                    if ui.button("View logs").clicked() {
+                        let now = ui.input(|i| i.time);
+                        self.show_run_log(id, now);
+                    }
+                }
+            }
+        });
     }
 
     fn selected_installed(&self) -> bool {
@@ -689,5 +763,34 @@ impl ArcticApp {
             .last_version
             .as_ref()
             .is_some_and(|v| self.installed.contains(v))
+    }
+}
+
+/// Why Play is blocked by the version list, if it is. A failed load is told apart from one still
+/// going, so a custom instance (which has no version picker) is not left on "Loading versions…".
+fn manifest_reason(manifest: &ManifestState) -> Option<&'static str> {
+    match manifest {
+        ManifestState::Ready(_) => None,
+        ManifestState::Loading => Some("Loading versions…"),
+        ManifestState::Failed(_) => Some(VERSIONS_FAILED),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_failed_version_list_is_not_reported_as_loading() {
+        assert_eq!(
+            manifest_reason(&ManifestState::Loading),
+            Some("Loading versions…")
+        );
+        let failed = ManifestState::Failed("network error: timed out".into());
+        assert_eq!(manifest_reason(&failed), Some(VERSIONS_FAILED));
+        assert!(
+            !manifest_reason(&failed).unwrap().contains("network error"),
+            "the raw error stays in the tooltip"
+        );
     }
 }

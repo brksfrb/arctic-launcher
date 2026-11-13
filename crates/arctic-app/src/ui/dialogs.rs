@@ -46,13 +46,29 @@ impl ArcticApp {
                     AddAccount::Offline { .. } => self.offline_view(ui),
                     AddAccount::Microsoft { .. } => self.microsoft_view(ui),
                     AddAccount::Failed(e) => {
-                        let e = e.clone();
+                        let help = sign_in_help(e);
                         ui.label(RichText::new("Sign-in failed").strong().color(p.error));
-                        ui.label(RichText::new(e).color(p.muted));
+                        ui.label(RichText::new(help.text).color(p.muted));
                         ui.add_space(8.0);
-                        if widgets::button(ui, p, None, "Try again", true).clicked() {
-                            self.add_account = AddAccount::Choose;
-                        }
+                        widgets::row(ui, |ui| {
+                            if let Some((label, url)) = help.open
+                                && widgets::button(ui, p, Some(Icon::External), label, true)
+                                    .clicked()
+                            {
+                                ui.ctx().open_url(egui::OpenUrl::new_tab(url));
+                            }
+                            if widgets::button(ui, p, None, "Try again", help.open.is_none())
+                                .clicked()
+                            {
+                                self.add_account = AddAccount::Choose;
+                            }
+                            if help.other_account
+                                && widgets::button(ui, p, None, "Use a different account", false)
+                                    .clicked()
+                            {
+                                self.start_login(true);
+                            }
+                        });
                     }
                     AddAccount::Closed => {}
                 }
@@ -185,14 +201,68 @@ impl ArcticApp {
         let AddAccount::Microsoft {
             device_code,
             browser,
+            login_url,
+            started,
             ..
         } = &self.add_account
         else {
             return;
         };
         let (code, browser) = (device_code.clone(), *browser);
+        let (login_url, waited) = (login_url.clone(), started.elapsed());
         match (browser, code) {
-            (true, _) => waiting(ui, p, "Finish signing in in your browser…"),
+            (true, _) => {
+                waiting(ui, p, "Finish signing in in your browser…");
+                if waited > SLOW_SIGN_IN {
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new(
+                            "Taking a while? The sign-in page may have opened behind this window, \
+                             in another browser, or not at all.",
+                        )
+                        .small()
+                        .color(p.muted),
+                    );
+                    ui.ctx()
+                        .request_repaint_after(std::time::Duration::from_secs(1));
+                } else {
+                    ui.ctx().request_repaint_after(SLOW_SIGN_IN - waited);
+                }
+                ui.add_space(6.0);
+                widgets::row(ui, |ui| {
+                    let has_url = login_url.is_some();
+                    let open = ui
+                        .add_enabled_ui(has_url, |ui| {
+                            widgets::button(
+                                ui,
+                                p,
+                                Some(Icon::External),
+                                "Open the sign-in page again",
+                                false,
+                            )
+                        })
+                        .inner;
+                    if open.clicked()
+                        && let Some(url) = &login_url
+                    {
+                        ui.ctx().open_url(egui::OpenUrl::new_tab(url));
+                    }
+                    let copy = ui
+                        .add_enabled_ui(has_url, |ui| {
+                            widgets::icon_button(ui, p, Icon::Copy, "Copy link")
+                        })
+                        .inner;
+                    if copy.clicked()
+                        && let Some(url) = &login_url
+                    {
+                        ui.ctx().copy_text(url.clone());
+                        self.toasts.push(Kind::Info, "Link copied", "");
+                    }
+                    if widgets::button(ui, p, None, "Use a code instead", false).clicked() {
+                        self.start_login(false);
+                    }
+                });
+            }
             (false, None) => waiting(ui, p, "Getting a sign-in code…"),
             (false, Some(code)) => {
                 ui.label(
@@ -465,9 +535,122 @@ pub(super) fn option_tile(
             .clicked()
 }
 
+/// After this long in the browser flow the dialog says what might have gone wrong.
+const SLOW_SIGN_IN: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// What a failed sign-in should say and offer.
+#[derive(Debug, PartialEq, Eq)]
+struct SignInHelp {
+    text: String,
+    /// A page that fixes it: (button label, URL).
+    open: Option<(&'static str, &'static str)>,
+    /// Signing in with another Microsoft account would help.
+    other_account: bool,
+}
+
+/// The raw core error ("authentication failed: …", HTTP codes, developer notes) as a
+/// plain sentence with a next step. The raw text is in the launcher log.
+fn sign_in_help(raw: &str) -> SignInHelp {
+    let text = raw.strip_prefix("authentication failed: ").unwrap_or(raw);
+    let (text, open, other_account): (String, Option<(&str, &str)>, bool) = if text
+        .contains("no Xbox profile")
+    {
+        (
+                "This Microsoft account has no Xbox profile yet. Sign in once at xbox.com to create one, then try again."
+                    .into(),
+                Some(("Open xbox.com", "https://www.xbox.com/live")),
+                true,
+            )
+    } else if text.contains("child account") {
+        (
+                "This is a child account. An adult must add it to a Microsoft family before it can play."
+                    .into(),
+                Some(("Open Microsoft Family", "https://account.microsoft.com/family")),
+                true,
+            )
+    } else if text.contains("does not own Minecraft") {
+        (
+            "This account doesn't own Minecraft: Java Edition.".into(),
+            Some((
+                "Get Minecraft",
+                "https://www.minecraft.net/store/minecraft-java-bedrock-edition-pc",
+            )),
+            true,
+        )
+    } else if text.contains("rejected this app") {
+        (
+            "Microsoft sign-in isn't available in this build of Arctic Launcher.".into(),
+            None,
+            false,
+        )
+    } else if text.contains("not available in your country") || text.contains("adult verification")
+    {
+        (text.to_owned(), None, true)
+    } else if text.contains("(HTTP ")
+        || text.starts_with("network error")
+        || text.contains("timed out")
+        || text.contains("could not open")
+    {
+        (
+            "Microsoft's servers didn't answer. Check your connection and try again.".into(),
+            None,
+            false,
+        )
+    } else {
+        (text.to_owned(), None, false)
+    };
+    SignInHelp {
+        text,
+        open,
+        other_account,
+    }
+}
+
 fn waiting(ui: &mut egui::Ui, p: &Palette, text: &str) {
     ui.horizontal(|ui| {
         ui.spinner();
         ui.label(RichText::new(text).color(p.muted));
     });
+}
+
+#[cfg(test)]
+mod sign_in_help_tests {
+    use super::*;
+
+    #[test]
+    fn known_failures_get_plain_words_and_a_button() {
+        let h = sign_in_help(
+            "authentication failed: This Microsoft account has no Xbox profile. Sign in once at xbox.com to create one.",
+        );
+        assert!(!h.text.starts_with("authentication failed"));
+        assert_eq!(h.open.map(|(l, _)| l), Some("Open xbox.com"));
+        assert!(h.other_account);
+        let h = sign_in_help(
+            "authentication failed: This account does not own Minecraft: Java Edition.",
+        );
+        assert_eq!(h.open.map(|(l, _)| l), Some("Get Minecraft"));
+        let h = sign_in_help(
+            "authentication failed: Minecraft services rejected this app. New Azure app IDs must be approved by Mojang (see docs/microsoft-auth.md).",
+        );
+        assert!(!h.text.contains("docs/"), "developer notes stay in the log");
+        assert!(h.open.is_none());
+    }
+
+    #[test]
+    fn http_codes_become_a_connection_hint() {
+        let h = sign_in_help("authentication failed: Xbox Live sign-in failed (HTTP 503)");
+        assert!(h.text.contains("Check your connection"));
+        assert!(!h.text.contains("503"));
+        let h = sign_in_help("network error: timeout");
+        assert!(h.text.contains("Check your connection"));
+        let h = sign_in_help("authentication failed: timed out waiting for the browser login");
+        assert!(h.text.contains("Check your connection"));
+    }
+
+    #[test]
+    fn unknown_text_is_shown_as_is_without_the_prefix() {
+        let h = sign_in_help("authentication failed: something new");
+        assert_eq!(h.text, "something new");
+        assert!(h.open.is_none() && !h.other_account);
+    }
 }

@@ -43,6 +43,7 @@ mod quick_tips;
 mod settings;
 pub use quick_tips::QuickTips;
 mod storage;
+mod video_export;
 pub use storage::StorageUi;
 mod sharing;
 pub use sharing::ShareUi;

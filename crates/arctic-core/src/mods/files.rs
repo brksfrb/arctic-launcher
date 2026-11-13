@@ -126,6 +126,45 @@ pub(super) fn delete(mods_dir: &Path, file_name: &str) -> Result<()> {
     remove_if_present(&disabled_path(mods_dir, base))
 }
 
+/// Where removed mods wait for an Undo: beside the mods folder, never inside it, so
+/// no loader scans them. Returns (where it was, where it is now) for each form moved.
+pub(super) fn trash(mods_dir: &Path, file_name: &str) -> Result<Vec<(PathBuf, PathBuf)>> {
+    let base = base_name(file_name);
+    check_file_name(base)?;
+    let trash = trash_dir(mods_dir);
+    let mut moved = Vec::new();
+    for from in [enabled_path(mods_dir, base), disabled_path(mods_dir, base)] {
+        if !from.is_file() {
+            continue;
+        }
+        fs::create_dir_all(&trash).at(&trash)?;
+        let to = trash.join(from.file_name().unwrap_or_default());
+        remove_if_present(&to)?;
+        fs::rename(&from, &to).at(&to)?;
+        moved.push((from, to));
+    }
+    Ok(moved)
+}
+
+/// Put files moved by [`trash`] back where they were.
+pub(super) fn untrash(moved: &[(PathBuf, PathBuf)]) -> Result<()> {
+    for (from, to) in moved {
+        if let Some(parent) = from.parent() {
+            fs::create_dir_all(parent).at(parent)?;
+        }
+        fs::rename(to, from).at(from)?;
+    }
+    Ok(())
+}
+
+fn trash_dir(mods_dir: &Path) -> PathBuf {
+    mods_dir
+        .parent()
+        .unwrap_or(mods_dir)
+        .join(".trash")
+        .join("mods")
+}
+
 /// Delete only the `.disabled` form (after a fresh copy was installed).
 pub(super) fn delete_disabled_copy(mods_dir: &Path, file_name: &str) -> Result<()> {
     let base = base_name(file_name);

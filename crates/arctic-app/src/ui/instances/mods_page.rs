@@ -144,7 +144,7 @@ impl ArcticApp {
             visible_rows(ui, matches.len(), |ui, row| {
                 let file = matches[row];
                 ui.push_id((&instance.id, &file.file_name, file.enabled), |ui| {
-                    changed |= self.mod_row(ui, file, &mods_dir, &index);
+                    changed |= self.mod_row(ui, &instance.id, file, &mods_dir, &index);
                 });
             });
         });
@@ -312,6 +312,7 @@ impl ArcticApp {
     fn mod_row(
         &mut self,
         ui: &mut egui::Ui,
+        instance_id: &str,
         file: &ModFile,
         mods_dir: &std::path::Path,
         index: &std::path::Path,
@@ -345,9 +346,23 @@ impl ArcticApp {
                 },
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, p, Icon::Trash, "Remove").clicked() {
-                    match mods::remove(mods_dir, index, &file.file_name) {
-                        Ok(()) => changed = true,
+                if widgets::icon_button(ui, p, Icon::Trash, "Remove (with Undo)").clicked() {
+                    match mods::trash(mods_dir, index, &file.file_name) {
+                        Ok(trashed) => {
+                            changed = true;
+                            let shown = file
+                                .tracked
+                                .as_ref()
+                                .map_or(file.file_name.as_str(), |m| m.title.as_str());
+                            self.toasts.push_undo(
+                                format!("Removed {shown}"),
+                                crate::undo::Undo::Mod {
+                                    instance_id: instance_id.to_owned(),
+                                    index: index.to_owned(),
+                                    trashed,
+                                },
+                            );
+                        }
                         Err(e) => {
                             self.toasts
                                 .push(Kind::Error, "Could not remove mod", e.to_string())

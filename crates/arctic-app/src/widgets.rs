@@ -735,6 +735,66 @@ pub fn file_uri(path: &std::path::Path) -> String {
     }
 }
 
+/// How long a two-click confirm waits for its second click.
+const CONFIRM_SECS: f64 = 5.0;
+
+/// Is `key` the thing waiting for its second click right now?
+fn confirm_pending(pending: &Option<(String, f64)>, key: &str, now: f64) -> bool {
+    pending
+        .as_ref()
+        .is_some_and(|(k, since)| k == key && now - since < CONFIRM_SECS)
+}
+
+/// An icon button for something that cannot be undone (a friend removed, a request
+/// declined): the first click turns it into an `ask` button ("Remove?"), the second
+/// does it. Clicking anywhere else, or waiting a few seconds, puts the icon back.
+/// `pending` is shared by all such buttons on a page; `key` tells them apart.
+pub fn confirm_icon_button(
+    ui: &mut Ui,
+    p: &Palette,
+    icon: Icon,
+    tooltip: &str,
+    ask: &str,
+    pending: &mut Option<(String, f64)>,
+    key: &str,
+) -> bool {
+    let now = ui.input(|i| i.time);
+    if confirm_pending(pending, key, now) {
+        let response = button(ui, p, None, ask, true);
+        if response.clicked() {
+            *pending = None;
+            return true;
+        }
+        if ui.input(|i| i.pointer.any_pressed()) && !response.hovered() {
+            *pending = None;
+        }
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_secs(1));
+        return false;
+    }
+    if icon_button(ui, p, icon, tooltip).clicked() {
+        *pending = Some((key.to_owned(), now));
+    }
+    false
+}
+
+#[cfg(test)]
+mod confirm_tests {
+    use super::*;
+
+    #[test]
+    fn a_confirm_belongs_to_one_key_and_runs_out() {
+        let pending = Some(("alice".to_owned(), 10.0));
+        assert!(confirm_pending(&pending, "alice", 12.0));
+        assert!(
+            !confirm_pending(&pending, "bob", 12.0),
+            "another row's icon stays an icon"
+        );
+        assert!(!confirm_pending(&pending, "alice", 10.0 + CONFIRM_SECS));
+        assert!(!confirm_pending(&None, "alice", 12.0));
+    }
+}
+
 #[cfg(test)]
 mod file_uri_tests {
     #[cfg(windows)]

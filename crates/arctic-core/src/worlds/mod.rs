@@ -300,12 +300,73 @@ pub fn backup_before_version_change(game_dir: &Path, version: &str) -> usize {
     count
 }
 
-/// Move a world to `saves/.trash` (kept, not deleted).
-pub fn trash(world: &World, saves_dir: &Path) -> Result<()> {
+/// A world in `saves/.trash`, with what it takes to bring it back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrashedWorld {
+    /// The folder it had in `saves`.
+    pub folder: String,
+    /// Name shown in game (from its level.dat, or the folder).
+    pub name: String,
+    /// Where it waits now.
+    pub path: PathBuf,
+    /// Unix seconds when it was trashed.
+    pub trashed_at: Option<u64>,
+}
+
+/// Move a world to `saves/.trash` (kept, not deleted); [`restore`] brings it back.
+pub fn trash(world: &World, saves_dir: &Path) -> Result<TrashedWorld> {
     let trash = saves_dir.join(TRASH_DIR);
     fs::create_dir_all(&trash).at(&trash)?;
-    let to = trash.join(format!("{}-{}", world.folder, crate::auth::now_secs()));
-    fs::rename(&world.path, &to).at(&world.path)
+    let now = crate::auth::now_secs();
+    let to = trash.join(format!("{}-{now}", world.folder));
+    fs::rename(&world.path, &to).at(&world.path)?;
+    Ok(TrashedWorld {
+        folder: world.folder.clone(),
+        name: world.name.clone(),
+        path: to,
+        trashed_at: Some(now),
+    })
+}
+
+/// Worlds waiting in `saves/.trash`, newest first.
+pub fn trashed(saves_dir: &Path) -> Vec<TrashedWorld> {
+    let Ok(entries) = fs::read_dir(saves_dir.join(TRASH_DIR)) else {
+        return Vec::new();
+    };
+    let mut out: Vec<TrashedWorld> = entries
+        .flatten()
+        .filter(|e| e.path().join("level.dat").is_file())
+        .map(|e| {
+            let path = e.path();
+            let dir_name = e.file_name().to_string_lossy().into_owned();
+            // "<folder>-<unix secs>", as `trash` names them; anything else as is.
+            let (folder, trashed_at) = match dir_name.rsplit_once('-') {
+                Some((folder, secs)) if !folder.is_empty() && secs.parse::<u64>().is_ok() => {
+                    (folder.to_owned(), secs.parse().ok())
+                }
+                _ => (dir_name.clone(), None),
+            };
+            let name = read_world(&path).map_or_else(|| folder.clone(), |w| w.name);
+            TrashedWorld {
+                folder,
+                name,
+                path,
+                trashed_at,
+            }
+        })
+        .collect();
+    out.sort_by_key(|t| std::cmp::Reverse(t.trashed_at));
+    out
+}
+
+/// Bring a trashed world back into `saves`; returns its folder name, which gets a
+/// " (2)" if another world took the old one meanwhile.
+pub fn restore(trashed: &TrashedWorld, saves_dir: &Path) -> Result<String> {
+    fs::create_dir_all(saves_dir).at(saves_dir)?;
+    let folder = free_name(saves_dir, &trashed.folder);
+    let to = saves_dir.join(&folder);
+    fs::rename(&trashed.path, &to).at(&to)?;
+    Ok(folder)
 }
 
 #[cfg(test)]

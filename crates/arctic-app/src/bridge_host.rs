@@ -286,7 +286,7 @@ impl bridge::Accounts for AppAccounts {
         if !ffmpeg::can_download() {
             return serde_json::json!({
                 "state": "unavailable",
-                "error": "Install FFmpeg with your package manager, then try again."
+                "error": "Install FFmpeg with your package manager, or point Arctic at it in Settings → Video export, then try again."
             })
             .to_string();
         }
@@ -420,6 +420,24 @@ impl bridge::Accounts for AppAccounts {
 }
 
 impl BridgeHost {
+    /// For Settings → Video export: is the launcher's own download of FFmpeg running (and how
+    /// far), or did the last one fail?
+    pub fn ffmpeg_download(&self) -> (bool, f64, Option<String>) {
+        let shared = self.shared.lock().unwrap_or_else(PoisonError::into_inner);
+        let job = &shared.ffmpeg;
+        let progress = if job.total > 0 {
+            job.done as f64 / job.total as f64
+        } else {
+            0.0
+        };
+        (job.running, progress, job.error.clone())
+    }
+
+    /// For Settings → Video export: start the launcher's own download (Windows).
+    pub fn start_ffmpeg_download(&self) {
+        let _ = bridge::Accounts::capture_encoder(&AppAccounts(Arc::clone(&self.shared)), true);
+    }
+
     /// Start listening (a failure just means no in-game switching).
     pub fn start(tasks: &Tasks) -> Self {
         let shared = Arc::new(Mutex::new(Shared {

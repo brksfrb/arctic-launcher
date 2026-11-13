@@ -31,8 +31,72 @@ pub fn tool_path(dirs: &DataDirs) -> PathBuf {
     dirs.root().join("tools").join("ffmpeg").join(EXE)
 }
 
-/// FFmpeg to use: the launcher's copy, else one on the PATH.
+/// Where a binary the player picked in Settings is remembered.
+fn chosen_file(dirs: &DataDirs) -> PathBuf {
+    dirs.root().join("tools").join("ffmpeg").join("path.txt")
+}
+
+/// The FFmpeg the player picked in Settings, if any (and still there).
+pub fn chosen(dirs: &DataDirs) -> Option<PathBuf> {
+    let text = fs::read_to_string(chosen_file(dirs)).ok()?;
+    let path = PathBuf::from(text.trim());
+    (path.is_absolute() && path.is_file()).then_some(path)
+}
+
+/// Remember (or with `None` forget) the FFmpeg the player picked.
+pub fn set_chosen(dirs: &DataDirs, path: Option<&Path>) -> Result<()> {
+    let file = chosen_file(dirs);
+    match path {
+        Some(path) => {
+            if let Some(dir) = file.parent() {
+                fs::create_dir_all(dir).at(dir)?;
+            }
+            fs::write(&file, path.to_string_lossy().as_bytes()).at(&file)
+        }
+        None => match fs::remove_file(&file) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(Error::io(&file, e)),
+            _ => Ok(()),
+        },
+    }
+}
+
+/// Is this really FFmpeg? It answers `-version` with a line starting "ffmpeg version".
+pub fn check(path: &Path) -> Result<()> {
+    let output = std::process::Command::new(path)
+        .arg("-version")
+        .output()
+        .map_err(|e| Error::Other(format!("{} couldn't be run: {e}", path.display())))?;
+    if is_ffmpeg_version_output(&output.stdout) {
+        Ok(())
+    } else {
+        Err(Error::Other(format!(
+            "{} doesn't look like FFmpeg (it didn't answer `ffmpeg -version`)",
+            path.display()
+        )))
+    }
+}
+
+fn is_ffmpeg_version_output(stdout: &[u8]) -> bool {
+    String::from_utf8_lossy(stdout)
+        .lines()
+        .next()
+        .is_some_and(|l| l.starts_with("ffmpeg version"))
+}
+
+/// How to get FFmpeg where the launcher doesn't download it.
+pub fn install_hint() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "brew install ffmpeg"
+    } else {
+        "sudo apt install ffmpeg (Debian, Ubuntu) · sudo dnf install ffmpeg (Fedora) · sudo pacman -S ffmpeg (Arch)"
+    }
+}
+
+/// FFmpeg to use: the one the player picked, else the launcher's copy, else one on the PATH.
 pub fn find(dirs: &DataDirs) -> Option<PathBuf> {
+    if let Some(picked) = chosen(dirs) {
+        return Some(picked);
+    }
     let own = tool_path(dirs);
     if own.is_file() {
         return Some(own);
@@ -169,6 +233,33 @@ fn pick_exe(names: &[String]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_picked_binary_is_remembered_and_wins_over_the_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path().join("data"));
+        assert_eq!(chosen(&dirs), None);
+        let fake = dir.path().join("my-ffmpeg");
+        set_chosen(&dirs, Some(&fake)).unwrap();
+        assert_eq!(chosen(&dirs), None, "not there yet, so not offered");
+        fs::write(&fake, b"").unwrap();
+        assert_eq!(chosen(&dirs).as_deref(), Some(fake.as_path()));
+        assert_eq!(find(&dirs).as_deref(), Some(fake.as_path()));
+        set_chosen(&dirs, None).unwrap();
+        assert_eq!(chosen(&dirs), None);
+        set_chosen(&dirs, None).unwrap();
+    }
+
+    #[test]
+    fn only_a_real_ffmpeg_answers_version() {
+        assert!(is_ffmpeg_version_output(
+            b"ffmpeg version 7.1 Copyright (c) 2000-2024 the FFmpeg developers\nbuilt with gcc"
+        ));
+        assert!(!is_ffmpeg_version_output(b"usage: something else"));
+        assert!(!is_ffmpeg_version_output(b""));
+        let dir = tempfile::tempdir().unwrap();
+        assert!(check(&dir.path().join("missing")).is_err());
+    }
 
     #[test]
     fn versions_are_plain_numbers() {

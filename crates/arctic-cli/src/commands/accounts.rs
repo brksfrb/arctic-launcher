@@ -32,7 +32,7 @@ pub fn run(ctx: &Ctx, command: &AccountsCommand) -> Result<i32> {
             let cancel = AtomicBool::new(false);
             let account = if *browser {
                 eprintln!("Opening your browser to sign in…");
-                microsoft::login_with_browser(&cfg, &cancel)?
+                microsoft::login_with_browser(&cfg, &cancel, &|_| {})?
             } else {
                 let code = microsoft::start_device_code(&cfg)?;
                 ctx.out.emit(

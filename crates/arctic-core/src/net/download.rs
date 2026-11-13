@@ -1,10 +1,10 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::fs;
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use sha1::{Digest, Sha1};
@@ -20,7 +20,34 @@ pub const WORKERS: usize = 64;
 const GENTLE_WORKERS: usize = 6;
 const GENTLE_CONNECTIONS: usize = 2;
 
-static GENTLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static GENTLE: AtomicBool = AtomicBool::new(false);
+
+thread_local! {
+    /// The cancel flag of the work running on this thread (see [`cancellable`]).
+    static CANCEL: RefCell<Option<Arc<AtomicBool>>> = const { RefCell::new(None) };
+}
+
+/// Run `work` so that every download it starts on this thread (through however many
+/// layers: Java runtime, libraries, assets, loader installer) stops once `cancel` is set,
+/// with [`Error::Cancelled`]. Other threads are not affected.
+pub fn cancellable<T>(cancel: Arc<AtomicBool>, work: impl FnOnce() -> T) -> T {
+    let previous = CANCEL.with(|c| c.replace(Some(cancel)));
+    let out = work();
+    CANCEL.with(|c| *c.borrow_mut() = previous);
+    out
+}
+
+fn current_cancel() -> Option<Arc<AtomicBool>> {
+    CANCEL.with(|c| c.borrow().clone())
+}
+
+/// `Err(Cancelled)` if the work on this thread was cancelled: for a check between stages.
+pub fn check_cancelled() -> Result<()> {
+    match current_cancel() {
+        Some(flag) if flag.load(Ordering::Relaxed) => Err(Error::Cancelled),
+        _ => Ok(()),
+    }
+}
 
 /// Download gently (few connections, for a PC that can't take a burst) from now on.
 pub fn set_gentle(on: bool) {
@@ -123,9 +150,17 @@ struct Reporter<'a> {
     files_total: u64,
     bytes_done: AtomicU64,
     bytes_total: u64,
+    /// Set by the player to stop this whole download.
+    cancel: Option<Arc<AtomicBool>>,
 }
 
 impl Reporter<'_> {
+    fn cancelled(&self) -> bool {
+        self.cancel
+            .as_ref()
+            .is_some_and(|c| c.load(Ordering::Relaxed))
+    }
+
     fn add_bytes(&self, n: u64) {
         self.bytes_done.fetch_add(n, Ordering::Relaxed);
         self.report(false);
@@ -174,8 +209,12 @@ pub fn download_all(stage: &str, jobs: Vec<DownloadJob>, progress: Progress) -> 
         files_total: pending.len() as u64,
         bytes_done: AtomicU64::new(0),
         bytes_total: pending.iter().filter_map(DownloadJob::transfer_size).sum(),
+        cancel: current_cancel(),
     };
     reporter.report(true);
+    if reporter.cancelled() {
+        return Err(Error::Cancelled);
+    }
     if pending.is_empty() {
         return Ok(());
     }
@@ -190,6 +229,12 @@ pub fn download_all(stage: &str, jobs: Vec<DownloadJob>, progress: Progress) -> 
             scope.spawn(move || {
                 loop {
                     if first_error.lock().map(|e| e.is_some()).unwrap_or(true) {
+                        return;
+                    }
+                    if reporter.cancelled() {
+                        if let Ok(mut slot) = first_error.lock() {
+                            slot.get_or_insert(Error::Cancelled);
+                        }
                         return;
                     }
                     let Some(idx) = take(queue, worker < LARGE_FILE_WORKERS) else {
@@ -278,6 +323,7 @@ fn download_with_retry(job: &DownloadJob, reporter: &Reporter) -> Result<()> {
         };
         match result {
             Ok(()) => return Ok(()),
+            Err(_) if reporter.cancelled() => return Err(Error::Cancelled),
             Err(e) if attempt < ATTEMPTS => {
                 log::warn!("retrying {} (attempt {attempt}): {e}", job.url);
                 reporter.remove_bytes(transferred.get());
@@ -315,7 +361,11 @@ fn download_one(job: &DownloadJob, reporter: &Reporter, transferred: &Cell<u64>)
         transferred.set(transferred.get() + n);
         reporter.add_bytes(n);
     };
-    let mut input = Hashing::new(resp.body_mut().as_reader(), &on_bytes);
+    let body = Stoppable {
+        inner: resp.body_mut().as_reader(),
+        cancel: reporter.cancel.as_deref(),
+    };
+    let mut input = Hashing::new(body, &on_bytes);
     let mut output = Hashing::new(fs::File::create(&tmp).at(&tmp)?, &|_| {});
     let copied = match &job.lzma {
         Some(_) => {
@@ -446,6 +496,9 @@ fn download_segmented(
     let result = loop {
         if done == chunks.list.len() {
             break Ok(());
+        }
+        if reporter.cancelled() {
+            break Err(Segmented::Failed(Error::Cancelled));
         }
         match rx.recv_timeout(CHUNK_STALL / 4) {
             Ok(ChunkNews::Bytes(n)) => {
@@ -679,6 +732,22 @@ impl<'a, T> Hashing<'a, T> {
     }
 }
 
+/// A reader that stops (with an interrupted-style error) once the player cancels, so a
+/// stalled or huge transfer does not have to finish before the cancel is noticed.
+struct Stoppable<'a, T> {
+    inner: T,
+    cancel: Option<&'a AtomicBool>,
+}
+
+impl<T: Read> Read for Stoppable<'_, T> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+            return Err(std::io::Error::other("cancelled"));
+        }
+        self.inner.read(buf)
+    }
+}
+
 impl<T: Read> Read for Hashing<'_, T> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let n = self.inner.read(buf)?;
@@ -734,6 +803,29 @@ mod tests {
             size,
             lzma: None,
         }
+    }
+
+    #[test]
+    fn a_cancelled_scope_stops_downloads_on_its_thread_only() {
+        let flag = Arc::new(AtomicBool::new(true));
+        let dir = tempfile::tempdir().unwrap();
+        let jobs = vec![DownloadJob {
+            url: "http://127.0.0.1:9/never".into(),
+            ..job(dir.path().join("x.bin").to_str().unwrap(), Some(3))
+        }];
+        let result = cancellable(flag.clone(), || {
+            assert!(check_cancelled().is_err());
+            download_all("x", jobs.clone(), &|_| {})
+        });
+        assert!(matches!(result, Err(Error::Cancelled)), "{result:?}");
+        assert!(
+            check_cancelled().is_ok(),
+            "the scope ended with the closure"
+        );
+        assert!(current_cancel().is_none());
+        // An untouched flag changes nothing.
+        flag.store(false, Ordering::Relaxed);
+        assert!(cancellable(flag, || download_all("x", vec![], &|_| {})).is_ok());
     }
 
     #[test]

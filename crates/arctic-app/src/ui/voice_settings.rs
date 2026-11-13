@@ -30,7 +30,16 @@ impl ArcticApp {
         if !v.enabled {
             return;
         }
-        ui.label(RichText::new(self.voice.status()).small().color(p.accent));
+        if self.voice.room_failed() {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(self.voice.status()).small().color(p.error));
+                if crate::widgets::button(ui, p, None, "Retry", false).clicked() {
+                    self.voice.retry_room();
+                }
+            });
+        } else {
+            ui.label(RichText::new(self.voice.status()).small().color(p.accent));
+        }
         ui.add_space(4.0);
         let v = &mut self.settings.voice;
         crate::widgets::field_row(ui, |ui| {
