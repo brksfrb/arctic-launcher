@@ -165,6 +165,60 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
+        // Resolver conflicts must win over dependency and replacement hints, even in translated logs.
+        pattern: r"NEG_HARD_DEP \S+ \S+ \{breaks \S+ @",
+        explain: |_, text| {
+            let re = Regex::new(r"NEG_HARD_DEP (\S+) \S+ \{breaks (\S+) @")
+                .expect("resolver conflict pattern is valid");
+            let names = Regex::new(r"(?:Mod|mod) '([^']+)' \(([^)]+)\)")
+                .expect("mod display name pattern is valid");
+            let name = |id: &str| {
+                names
+                    .captures_iter(text)
+                    .find(|c| &c[2] == id)
+                    .map_or_else(|| id.to_owned(), |c| c[1].to_owned())
+            };
+            resolver_causes(text)
+                .find_map(|line| {
+                    re.captures(line).map(|c| {
+                        let first = name(&c[1]);
+                        let second = name(&c[2]);
+                        Diagnosis::new(
+                            format!("{first} and {second} don't work together"),
+                            format!("{first} doesn't work alongside {second}. Remove one of them."),
+                            vec![first, second],
+                        )
+                    })
+                })
+                .unwrap_or_else(Diagnosis::none)
+        },
+    },
+    Rule {
+        // Fabric: "- Mod 'X' (x) 1.0 is incompatible with any version of mod 'Y' (y), but a matching version is present"
+        pattern: r"Mod '([^']+)' \(([^)]+)\) \S+ is incompatible with [^']*'([^']+)'",
+        explain: |c, text| {
+            // Often the clash is only an old version of one of them, and the loader says which to update.
+            let hint = update_hint(text).map_or_else(String::new, |h| {
+                format!(" Fabric Loader suggests: {h}. Otherwise remove one of them.")
+            });
+            Diagnosis::new(
+                format!("{} and {} don't work together", &c[1], &c[3]),
+                if hint.is_empty() {
+                    format!(
+                        "{} doesn't work alongside {}. Remove one of them.",
+                        &c[1], &c[3]
+                    )
+                } else {
+                    format!(
+                        "{} doesn't work alongside this version of {}.{hint}",
+                        &c[1], &c[3]
+                    )
+                },
+                vec![c[1].to_owned(), c[3].to_owned()],
+            )
+        },
+    },
+    Rule {
         // Fabric's resolver also logs this in English whatever language the game runs in (the quoted
         // "Mod 'X' ... requires" lines above are translated, and then match nothing):
         //  "Reason: [HARD_DEP nuit_interop 1.0.0-beta.5 {depends nuit @ [1.0.0-beta.5]}, HARD_DEP macos_fix 1.16+1.21.11 {depends minecraft @ [<26.1]}]"
@@ -205,31 +259,6 @@ const RULES: &[Rule] = &[
                     &c[1], &c[3], &c[4], &c[6], &c[4], &c[1]
                 ),
                 vec![c[1].to_owned(), c[4].to_owned()],
-            )
-        },
-    },
-    Rule {
-        // Fabric: "- Mod 'X' (x) 1.0 is incompatible with any version of mod 'Y' (y), but a matching version is present"
-        pattern: r"Mod '([^']+)' \(([^)]+)\) \S+ is incompatible with [^']*'([^']+)'",
-        explain: |c, text| {
-            // Often the clash is only an old version of one of them, and the loader says which to update.
-            let hint = update_hint(text).map_or_else(String::new, |h| {
-                format!(" Fabric Loader suggests: {h}. Otherwise remove one of them.")
-            });
-            Diagnosis::new(
-                format!("{} and {} don't work together", &c[1], &c[3]),
-                if hint.is_empty() {
-                    format!(
-                        "{} doesn't work alongside {}. Remove one of them.",
-                        &c[1], &c[3]
-                    )
-                } else {
-                    format!(
-                        "{} doesn't work alongside this version of {}.{hint}",
-                        &c[1], &c[3]
-                    )
-                },
-                vec![c[1].to_owned(), c[3].to_owned()],
             )
         },
     },
@@ -538,12 +567,24 @@ fn compiled() -> &'static [Regex] {
 /// The largest amount of text looked at (the end of it, where crashes are).
 const MAX_TEXT: usize = 2 * 1024 * 1024;
 
-/// Real replacement versions from Fabric's resolver, excluding unbounded placeholders.
+/// Real replacement versions from Fabric's resolver, excluding bare-number placeholders.
 fn resolver_updates(text: &str) -> Vec<(String, String)> {
     let re = Regex::new(r"\[([^\s\[\]]+) [^\s\]]+\] -> add:(\S+) (\S+) (\S+)")
         .expect("resolver update pattern is valid");
     re.captures_iter(text)
-        .filter(|m| !(m[3].chars().all(|c| c.is_ascii_digit()) && m[4].contains("(-∞,∞)")))
+        .filter(|m| {
+            let version = &m[3];
+            let lower = m[4]
+                .trim_start_matches(['(', '['])
+                .split(',')
+                .next()
+                .unwrap_or_default();
+            // Fabric can suggest a bare number (e.g. "1") instead of a concrete version.
+            // Keep actual single-component versions, whose lower bound agrees with the hint.
+            !(version.chars().all(|c| c.is_ascii_digit())
+                && lower != version
+                && lower.chars().any(|c| !c.is_ascii_digit()))
+        })
         .map(|m| (m[1].to_owned(), m[3].to_owned()))
         .collect()
 }
@@ -576,6 +617,14 @@ pub fn silent_exit(text: &str, code: i32) -> Option<Diagnosis> {
     ))
 }
 
+/// The final Reason lists failed constraints; Immediate reason can also include satisfied ones.
+/// Keep standalone constraints usable when the final Reason wasn't captured in the log.
+fn resolver_causes(text: &str) -> impl Iterator<Item = &str> {
+    let has_reason = text.lines().any(|line| line.contains("Reason: ["));
+    text.lines()
+        .filter(move |line| !has_reason || !line.contains("Immediate reason: ["))
+}
+
 /// What Fabric's English resolver lines say is wrong with the mods (see the rule that calls this).
 fn resolution_log(text: &str) -> Diagnosis {
     let updates = resolver_updates(text);
@@ -586,7 +635,7 @@ fn resolution_log(text: &str) -> Diagnosis {
     if let Ok(re) =
         Regex::new(r"HARD_DEP(?:_NO_CANDIDATE)? (\S+) \S+ \{depends (\S+) @ ([^}\r\n]+)\}")
     {
-        for m in re.captures_iter(text) {
+        for m in resolver_causes(text).flat_map(|line| re.captures_iter(line)) {
             match &m[2] {
                 "minecraft" if !for_other_minecraft.contains(&m[1].to_owned()) => {
                     for_other_minecraft.push(m[1].to_owned());
@@ -1000,6 +1049,103 @@ USERNAME=someone
     const CONNECTOR_RESOLUTION: &str = "[FabricLoader/Resolution]: Immediate reason: [HARD_DEP_NO_CANDIDATE betterend 4.0.11 {depends bclib @ [3.0.x]}, ROOT_FORCELOAD_SINGLE betterend 4.0.11]
 [FabricLoader/Resolution]: Reason: [HARD_DEP betterend 4.0.11 {depends bclib @ [3.0.x]}]
 [FabricLoader/Resolution]: Fix: add [], remove [], replace [[betterend 4.0.11] -> add:betterend 1 ([(-∞,∞)])]";
+
+    // Report #279: Sodium breaks every VulkanMod version; Not Enough Vulkan's dependency is met.
+    const VULKAN_SODIUM_CONFLICT: &str = "[main/INFO] Immediate reason: [HARD_DEP not-enough-vulkan 1.6.2+mc1.21.11 {depends vulkanmod @ [>=0.6.3]}, NEG_HARD_DEP sodium 0.8.14+mc1.21.11 {breaks vulkanmod @ [*]}, ROOT_FORCELOAD_SINGLE not-enough-vulkan 1.6.2+mc1.21.11, ROOT_FORCELOAD_SINGLE sodium 0.8.14+mc1.21.11]
+[main/INFO] Reason: [NEG_HARD_DEP sodium 0.8.14+mc1.21.11 {breaks vulkanmod @ [*]}]
+[main/INFO] Fix: add [], remove [], replace [[sodium 0.8.14+mc1.21.11] -> add:sodium 1 ([[0.8.7-,∞)])]
+[main/ERROR] Incompatible mods found!
+    net.fabricmc.loader.impl.FormattedException: Some of your mods are incompatible with the game or each other!
+    A potential solution has been determined, this may resolve your problem:
+    \t - Replace mod 'Sodium' (sodium) 0.8.14+mc1.21.11 with version 0.8.7- or later that is compatible with:
+    \t\t - vulkanmod 0.6.8+1.21.11
+    More details:
+    \t - Mod 'Sodium' (sodium) 0.8.14+mc1.21.11 is incompatible with any version of mod 'VulkanMod' (vulkanmod), yet a conflicting version is present: 0.6.8+1.21.11!";
+
+    #[test]
+    fn sodium_and_vulkanmod_are_a_conflict_not_an_update() {
+        let english = VULKAN_SODIUM_CONFLICT.split_once("[main/ERROR]").unwrap().1;
+        let concrete_hint = VULKAN_SODIUM_CONFLICT.replace(
+            "add:sodium 1 ([[0.8.7-,∞)])",
+            "add:sodium 0.8.12 ([[0.8.12,∞)])",
+        );
+        for log in [VULKAN_SODIUM_CONFLICT, english, &concrete_hint] {
+            let d = diagnose(log).unwrap();
+            assert_eq!(d.title, "Sodium and VulkanMod don't work together");
+            assert_eq!(
+                d.detail,
+                "Sodium doesn't work alongside VulkanMod. Remove one of them."
+            );
+            assert_eq!(d.mods, ["Sodium", "VulkanMod"]);
+            assert!(!d.repair);
+            assert_eq!(d.fix, None);
+        }
+    }
+
+    #[test]
+    fn resolver_breaks_override_dependency_and_replacement_hints_without_english() {
+        let resolver = VULKAN_SODIUM_CONFLICT.split_once("[main/ERROR]").unwrap().0;
+        let reason = resolver.lines().nth(1).unwrap();
+        for log in [
+            resolver.to_owned(),
+            reason.to_owned(),
+            format!(
+                "{reason}\nFix: add [], remove [], replace [[sodium 0.8.14+mc1.21.11] -> add:sodium 0.8.12 ([[0.8.12,∞)])]"
+            ),
+        ] {
+            let d = diagnose(&log).unwrap();
+            assert_eq!(d.title, "sodium and vulkanmod don't work together");
+            assert_eq!(
+                d.detail,
+                "sodium doesn't work alongside vulkanmod. Remove one of them."
+            );
+            assert_eq!(d.mods, ["sodium", "vulkanmod"]);
+        }
+    }
+
+    #[test]
+    fn a_satisfied_dependency_in_the_immediate_reason_is_not_missing() {
+        let d = resolution_log(VULKAN_SODIUM_CONFLICT);
+        assert!(d.title.is_empty());
+        assert!(d.detail.is_empty());
+        assert!(d.mods.is_empty());
+
+        // Other failed constraints still matter; the satisfied dependency does not.
+        let log = VULKAN_SODIUM_CONFLICT
+            .split_once("[main/ERROR]")
+            .unwrap()
+            .0
+            .replace(
+                "Reason: [NEG_HARD_DEP sodium 0.8.14+mc1.21.11 {breaks vulkanmod @ [*]}]",
+                "Reason: [HARD_DEP example 1.0 {depends fabric-api @ [*]}]",
+            );
+        let d = diagnose(&log).unwrap();
+        assert_eq!(d.title, "A mod dependency is missing");
+        assert_eq!(d.mods, ["example", "fabric-api"]);
+        assert_eq!(
+            d.detail,
+            "example needs fabric-api (version [*]), which isn't installed."
+        );
+    }
+
+    #[test]
+    fn resolver_hints_ignore_single_numbers_with_a_different_specific_lower_bound() {
+        assert_eq!(update_hint(VULKAN_SODIUM_CONFLICT), None);
+        assert!(resolver_updates(VULKAN_SODIUM_CONFLICT).is_empty());
+        for range in [
+            "[[0.8.7-,∞)]",
+            "[[0.8.7-,0.8.14]]",
+            "[(-∞,0.8.14]]",
+            "[[1.0,∞)]",
+            "[[1-beta,∞)]",
+        ] {
+            let hint = format!("[[sodium 0.8.14] -> add:sodium 1 ({range})]");
+            assert_eq!(update_hint(&hint), None, "{hint}");
+        }
+        // Filtering a placeholder must leave concrete updates in the same Fix line intact.
+        let log = format!("{VULKAN_SODIUM_CONFLICT}\n[[other 0] -> add:other 1 ([[1,1]])]");
+        assert_eq!(update_hint(&log).as_deref(), Some("update other to 1"));
+    }
 
     #[test]
     fn split_packages_override_connector_resolver_hints() {
