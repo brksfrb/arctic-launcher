@@ -15,7 +15,7 @@ use crate::tasks::Retargeted;
 use crate::theme;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 /// Mods listed before the rest are folded away.
 const SHOWN_ROWS: usize = 12;
 
@@ -65,16 +65,17 @@ impl ArcticApp {
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.label(
-                RichText::new("Mod loader")
+                RichText::new(t!("instances.mod_loader"))
                     .size(17.0)
                     .strong()
                     .color(p.text),
             );
             ui.label(
-                RichText::new(format!(
-                    "{} {} on Minecraft {game}.",
-                    kind.label(),
-                    instance.loader.version().unwrap_or_default()
+                RichText::new(tf!(
+                    "instances.on_minecraft",
+                    label = kind.label(),
+                    version = instance.loader.version().unwrap_or_default(),
+                    game = game
                 ))
                 .color(p.muted),
             );
@@ -100,12 +101,14 @@ impl ArcticApp {
         let builds = match self.inst.loader_versions.get(&(kind, game.to_owned())) {
             Some(Load::Ready(list)) if !list.is_empty() => list.clone(),
             Some(Load::Failed(e)) => {
-                ui.label(RichText::new(format!("Couldn't list the builds: {e}")).color(p.error));
+                ui.label(
+                    RichText::new(tf!("instances.couldnt_list_the_builds", e = e)).color(p.error),
+                );
                 return;
             }
             Some(Load::Ready(_)) => return,
             _ => {
-                ui.label(RichText::new("Loading builds…").color(p.muted));
+                ui.label(RichText::new(t!("instances.loading_builds")).color(p.muted));
                 return;
             }
         };
@@ -114,7 +117,7 @@ impl ArcticApp {
             .data(|d| d.get_temp::<String>(egui::Id::new(id)))
             .unwrap_or_else(|| current.clone());
         widgets::row(ui, |ui| {
-            ui.label(format!("{} build", kind.label()));
+            ui.label(tf!("instances.build", label = kind.label()));
             egui::ComboBox::from_id_salt(id)
                 .width(220.0)
                 .height(320.0)
@@ -129,14 +132,16 @@ impl ArcticApp {
                         ui.selectable_value(&mut choice, v.id.clone(), label);
                     }
                 });
-            if choice != current && widgets::button(ui, p, None, "Use this build", true).clicked() {
+            if choice != current
+                && widgets::button(ui, p, None, t!("instances.use_this_build"), true).clicked()
+            {
                 let version = choice.clone();
                 self.update_instance(&instance.id, |i| {
                     i.loader = Loader::new(Some(kind), version);
                 });
                 self.toasts.push(
                     Kind::Success,
-                    format!("Now on {} {choice}", kind.label()),
+                    tf!("instances.now_on_3", label = kind.label(), choice = choice),
                     "",
                 );
             }
@@ -169,18 +174,19 @@ impl ArcticApp {
                 .into_iter()
                 .any(|k| matches!(self.inst.loader_games.get(&k), Some(Load::Loading)));
             let text = if waiting {
-                "Looking for other loaders…".to_owned()
+                t!("instances.looking_for_other_loaders").to_owned()
             } else {
-                format!("No other loader has a build for Minecraft {game}.")
+                tf!(
+                    "instances.no_other_loader_has_a_build_for_minecraft",
+                    game = game
+                )
             };
             ui.label(RichText::new(text).color(p.muted));
             return;
         }
         ui.label(
-            RichText::new(
-                "Switch to another loader. Mods are made for one loader, so each is looked up again; the ones without a version there are turned off, not deleted.",
-            )
-            .color(p.muted),
+            RichText::new(t!("instances.switch_to_another_loader_mods_are_made_for"))
+                .color(p.muted),
         );
         ui.add_space(4.0);
         let busy = state.applying || matches!(state.check, Some((_, Load::Loading)));
@@ -195,7 +201,7 @@ impl ArcticApp {
             if let Some(k) = state.picked
                 && !busy
                 && state.check.is_none()
-                && widgets::button(ui, p, None, "Check mods", true).clicked()
+                && widgets::button(ui, p, None, t!("instances.check_mods"), true).clicked()
             {
                 state.check = Some((k, Load::Loading));
                 self.tasks.loader_check(instance.clone(), k);
@@ -224,12 +230,17 @@ impl ArcticApp {
             Load::Loading => {
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    ui.label(RichText::new("Looking up the mods on Modrinth…").color(p.muted));
+                    ui.label(
+                        RichText::new(t!("instances.looking_up_the_mods_on_modrinth"))
+                            .color(p.muted),
+                    );
                 });
                 return;
             }
             Load::Failed(e) => {
-                ui.label(RichText::new(format!("Couldn't check the mods: {e}")).color(p.error));
+                ui.label(
+                    RichText::new(tf!("instances.couldnt_check_the_mods", e = e)).color(p.error),
+                );
                 return;
             }
             Load::Ready(checks) => checks.clone(),
@@ -238,18 +249,22 @@ impl ArcticApp {
         let ready = checks.iter().filter(|c| c.available.is_some()).count();
         let missing = checks.iter().filter(|c| c.missing()).count();
         ui.label(
-            RichText::new(format!(
-                "{ready} of {known} mods have a {} version for {game}.",
-                kind.label()
+            RichText::new(tf!(
+                "instances.of_mods_have_a_version_for_2",
+                ready = ready,
+                known = known,
+                label = kind.label(),
+                game = game
             ))
             .strong()
             .color(if missing == 0 { p.text } else { p.warn }),
         );
         if missing > 0 {
             ui.label(
-                RichText::new(format!(
-                    "{missing} will be turned off (not deleted): they don't have a {} version yet.",
-                    kind.label()
+                RichText::new(tf!(
+                    "instances.will_be_turned_off_not_deleted_they_dont_2",
+                    missing = missing,
+                    label = kind.label()
                 ))
                 .color(p.muted),
             );
@@ -263,20 +278,29 @@ impl ArcticApp {
         for c in &checks[..shown] {
             ui.horizontal_wrapped(|ui| {
                 let name = if c.dependency {
-                    format!("{} (needed by another mod)", c.title)
+                    tf!("instances.needed_by_another_mod", title = c.title)
                 } else {
                     c.title.clone()
                 };
                 ui.label(RichText::new(name).color(p.text));
                 let (text, color) = match (&c.project_id, &c.available) {
-                    (None, _) => ("not on Modrinth, kept as it is".to_owned(), p.muted),
+                    (None, _) => (
+                        t!("instances.not_on_modrinth_kept_as_it_is").to_owned(),
+                        p.muted,
+                    ),
                     (Some(_), Some(v)) => (format!("→ {v}"), p.accent),
-                    (Some(_), None) => ("no version yet, turned off".to_owned(), p.warn),
+                    (Some(_), None) => {
+                        (t!("instances.no_version_yet_turned_off").to_owned(), p.warn)
+                    }
                 };
                 ui.label(RichText::new(text).small().color(color));
             });
         }
-        if checks.len() > shown && ui.link(format!("Show all {} mods", checks.len())).clicked() {
+        if checks.len() > shown
+            && ui
+                .link(tf!("instances.show_all_mods", count = checks.len()))
+                .clicked()
+        {
             state.show_all = true;
         }
         ui.add_space(8.0);
@@ -288,19 +312,26 @@ impl ArcticApp {
                     .install_progress
                     .as_ref()
                     .map(|s| s.stage.clone())
-                    .unwrap_or_else(|| "Switching".to_owned());
+                    .unwrap_or_else(|| t!("instances.switching").to_owned());
                 ui.label(RichText::new(stage).color(p.muted));
             });
             return;
         }
         widgets::row(ui, |ui| {
-            if widgets::button(ui, p, None, &format!("Switch to {}", kind.label()), true).clicked()
+            if widgets::button(
+                ui,
+                p,
+                None,
+                &tf!("instances.switch_to", label = kind.label()),
+                true,
+            )
+            .clicked()
             {
                 state.applying = true;
                 self.tasks
                     .loader_switch(instance.clone(), kind, checks.clone());
             }
-            if widgets::button(ui, p, None, "Cancel", false).clicked() {
+            if widgets::button(ui, p, None, t!("instances.cancel"), false).clicked() {
                 state.check = None;
                 state.picked = None;
             }
@@ -348,19 +379,25 @@ impl ArcticApp {
                 self.update_instance(&instance, |i| {
                     i.loader = Loader::new(Some(loader), build);
                 });
-                let mut detail = format!("{} mods updated", done.updated);
+                let mut detail = tf!("instances.mods_updated", updated = done.updated);
                 if !done.disabled.is_empty() {
-                    detail.push_str(&format!(", turned off: {}", done.disabled.join(", ")));
+                    detail.push_str(&tf!(
+                        "instances.turned_off",
+                        join = done.disabled.join(", ")
+                    ));
                 }
                 if !done.failed.is_empty() {
                     detail.push_str(&format!(", couldn't download: {}", done.failed.join(", ")));
                 }
-                self.toasts
-                    .push(Kind::Success, format!("Now on {}", loader.label()), detail);
+                self.toasts.push(
+                    Kind::Success,
+                    tf!("instances.now_on_4", label = loader.label()),
+                    detail,
+                );
             }
             Err(e) => self
                 .toasts
-                .push(Kind::Error, "Could not change the loader", e),
+                .push(Kind::Error, t!("instances.could_not_change_the_loader"), e),
         }
         if self.inst.open.as_deref() == Some(instance.as_str()) {
             self.refresh_mods(&instance);

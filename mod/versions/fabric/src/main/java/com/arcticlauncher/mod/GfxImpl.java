@@ -14,6 +14,7 @@ import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.Identifier;
 
+import com.arcticlauncher.client.Lang;
 /** The core's drawing primitives on 26.3's GUI renderer. */
 public final class GfxImpl implements Gfx {
 	private static final Identifier ICON = Compat.id(ArcticMod.ID, "icon");
@@ -48,7 +49,7 @@ public final class GfxImpl implements Gfx {
 			iconLoaded = true;
 			try (InputStream in = GfxImpl.class.getResourceAsStream("/assets/arctic/icon.png")) {
 				NativeImage image = NativeImage.read(in);
-				Minecraft.getInstance().getTextureManager().register(ICON, Compat.texture("Arctic icon", image));
+				Minecraft.getInstance().getTextureManager().register(ICON, Compat.texture(Lang.t("platform.arctic_icon"), image));
 			} catch (Exception e) {
 				ArcticMod.LOG.warn("Arctic icon: {}", e.toString());
 			}

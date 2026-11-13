@@ -132,6 +132,8 @@ pub struct Settings {
     pub high_performance_gpu: bool,
     /// Proximity voice chat.
     pub voice: VoiceSettings,
+    /// The interface's language: a code like "tr", or "system" for the computer's.
+    pub language: String,
     /// What this profile's instances share (server list, client and game settings).
     pub shared: crate::shared::SharedSettings,
 }
@@ -342,6 +344,7 @@ impl Default for Settings {
             interface_size: 0,
             high_performance_gpu: true,
             voice: VoiceSettings::default(),
+            language: "system".to_owned(),
             shared: crate::shared::SharedSettings::default(),
         }
     }

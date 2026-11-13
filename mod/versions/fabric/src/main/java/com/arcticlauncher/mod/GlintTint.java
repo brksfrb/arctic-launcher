@@ -13,6 +13,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.TextureManager;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Glint Colorizer (1.13 and newer): the shimmer on enchanted items and armor is one texture. From 1.15 it is
  * already purple, so the game's copy is replaced by one in the player's color (the same pattern, its average the
@@ -83,7 +84,7 @@ public final class GlintTint {
 				}
 				found = true;
 				NativeImage image = NativeImage.read(new ByteArrayInputStream(want == 0 ? png : tinted(png, want)));
-				DynamicTexture texture = Compat.texture("Arctic glint", image);
+				DynamicTexture texture = Compat.texture("Arctic glint", image); // i18n-ignore: a texture label
 				textures.register(IDS[i], texture);
 				ours[i] = want == 0 ? null : texture;
 			} catch (Exception e) {

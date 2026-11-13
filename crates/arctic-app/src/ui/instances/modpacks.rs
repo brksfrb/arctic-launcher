@@ -12,7 +12,7 @@ use crate::art::icons::Icon;
 use crate::theme;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 const PAGE_SIZE: usize = 20;
 const SEARCH_DELAY: f64 = 0.35;
 /// Marks the shared search state as belonging to this page.
@@ -21,20 +21,39 @@ const SEARCH_OWNER: &str = "\0modpacks";
 impl ArcticApp {
     pub(super) fn modpacks_page(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        if widgets::button(ui, p, Some(Icon::ChevronLeft), "All instances", false).clicked() {
+        if widgets::button(
+            ui,
+            p,
+            Some(Icon::ChevronLeft),
+            t!("instances.all_instances"),
+            false,
+        )
+        .clicked()
+        {
             self.inst.modpacks_open = false;
             return;
         }
         ui.add_space(8.0);
         crate::widgets::row(ui, |ui| {
             ui.vertical(|ui| {
-                widgets::page_header(ui, p, "Modpacks", "Search modpacks on Modrinth");
+                widgets::page_header(
+                    ui,
+                    p,
+                    t!("instances.modpacks"),
+                    t!("instances.search_modpacks_on_modrinth"),
+                );
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                 let busy = self.inst.pack_installing.is_some();
                 let import = ui
                     .add_enabled_ui(!busy, |ui| {
-                        widgets::button(ui, p, Some(Icon::Folder), "Import .mrpack…", false)
+                        widgets::button(
+                            ui,
+                            p,
+                            Some(Icon::Folder),
+                            t!("instances.import_mrpack"),
+                            false,
+                        )
                     })
                     .inner;
                 if import.clicked() {
@@ -61,7 +80,7 @@ impl ArcticApp {
         crate::widgets::row(ui, |ui| {
             let field = ui.add(
                 widgets::text_field(&mut self.inst.search.text)
-                    .hint_text("Search modpacks on Modrinth")
+                    .hint_text(t!("instances.search_modpacks_on_modrinth"))
                     .desired_width(360.0),
             );
             let now = ui.input(|i| i.time);
@@ -82,7 +101,7 @@ impl ArcticApp {
             let before = self.inst.search.sort;
             super::browse::sort_combo(ui, "pack_sort", &mut self.inst.search.sort);
             search |= self.inst.search.sort != before;
-            search |= widgets::button(ui, p, None, "Search", true).clicked();
+            search |= widgets::button(ui, p, None, t!("instances.search"), true).clicked();
         });
         if search {
             self.inst.search.typed_at = None;
@@ -133,7 +152,7 @@ impl ArcticApp {
                     ui.label(RichText::new(&progress.stage).color(p.muted));
                 }
                 None => {
-                    ui.label(RichText::new("Installing modpack…").color(p.muted));
+                    ui.label(RichText::new(t!("instances.installing_modpack")).color(p.muted));
                 }
             }
         });
@@ -146,16 +165,16 @@ impl ArcticApp {
             None => {
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    ui.label(RichText::new("Searching Modrinth…").color(p.muted));
+                    ui.label(RichText::new(t!("instances.searching_modrinth")).color(p.muted));
                 });
                 return;
             }
             Some(Err(e)) => {
-                ui.label(RichText::new(format!("Search failed: {e}")).color(p.error));
+                ui.label(RichText::new(tf!("instances.search_failed", e = e)).color(p.error));
                 return;
             }
             Some(Ok(page)) if page.hits.is_empty() => {
-                ui.label(RichText::new("No modpacks found.").color(p.muted));
+                ui.label(RichText::new(t!("instances.no_modpacks_found")).color(p.muted));
                 return;
             }
             Some(Ok(page)) => page.hits.clone(),
@@ -181,16 +200,16 @@ impl ArcticApp {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(&hit.title).strong().color(p.text));
                     ui.label(
-                        RichText::new(format!("by {}", hit.author))
+                        RichText::new(tf!("common.by_author", author = hit.author))
                             .small()
                             .color(p.muted),
                     );
                 });
                 ui.label(RichText::new(&hit.description).color(p.muted));
                 ui.label(
-                    RichText::new(format!(
-                        "{} downloads",
-                        super::browse::compact(hit.downloads)
+                    RichText::new(tf!(
+                        "instances.downloads",
+                        compact = super::browse::compact(hit.downloads)
                     ))
                     .small()
                     .color(p.muted),
@@ -203,7 +222,7 @@ impl ArcticApp {
                 } else {
                     let install = ui
                         .add_enabled_ui(!busy, |ui| {
-                            widgets::button(ui, p, Some(Icon::Plus), "Install", true)
+                            widgets::button(ui, p, Some(Icon::Plus), t!("instances.install"), true)
                         })
                         .inner;
                     if install.clicked() {
@@ -213,7 +232,11 @@ impl ArcticApp {
                     }
                 }
                 let open = self.inst.pack_choosing.as_deref() == Some(hit.project_id.as_str());
-                let label = if open { "Hide versions" } else { "Versions" };
+                let label = if open {
+                    t!("instances.hide_versions")
+                } else {
+                    t!("instances.versions")
+                };
                 if widgets::button(ui, p, None, label, false).clicked() {
                     if open {
                         self.inst.pack_choosing = None;
@@ -243,13 +266,19 @@ impl ArcticApp {
                 return;
             }
             Some(Load::Failed(e)) => {
-                ui.label(RichText::new(format!("Could not load the versions: {e}")).color(p.error));
+                ui.label(
+                    RichText::new(tf!("instances.could_not_load_the_versions", e = e))
+                        .color(p.error),
+                );
                 return;
             }
             Some(Load::Ready(list)) => list.clone(),
         };
         if versions.is_empty() {
-            ui.label(RichText::new("This modpack has no installable versions.").color(p.muted));
+            ui.label(
+                RichText::new(t!("instances.this_modpack_has_no_installable_versions"))
+                    .color(p.muted),
+            );
             return;
         }
         let busy = self.inst.pack_installing.is_some();
@@ -274,7 +303,13 @@ impl ArcticApp {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             let install = ui
                                 .add_enabled_ui(!busy, |ui| {
-                                    widgets::button(ui, p, Some(Icon::Plus), "Install", false)
+                                    widgets::button(
+                                        ui,
+                                        p,
+                                        Some(Icon::Plus),
+                                        t!("instances.install"),
+                                        false,
+                                    )
                                 })
                                 .inner;
                             if install.clicked() {
@@ -302,7 +337,7 @@ impl ArcticApp {
                 self.reload_instances();
                 self.toasts.push(
                     Kind::Success,
-                    format!("Installed {}", instance.name),
+                    tf!("instances.installed_4", name = instance.name),
                     "Press Play when you're ready.",
                 );
                 self.inst.modpacks_open = false;
@@ -311,7 +346,7 @@ impl ArcticApp {
             Ok(None) => {}
             Err(e) => self
                 .toasts
-                .push(Kind::Error, "Could not install modpack", e),
+                .push(Kind::Error, t!("instances.could_not_install_modpack"), e),
         }
     }
 }

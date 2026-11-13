@@ -15,6 +15,7 @@ import com.arcticlauncher.client.ui.TextField;
 import com.arcticlauncher.client.waypoints.Waypoint;
 import com.arcticlauncher.client.waypoints.Waypoints;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Waypoints: add one where you stand, rename, recolor, show or hide, or
  * remove this world's; they show in the world (and on the Compass).
@@ -30,7 +31,7 @@ final class WaypointsTab implements MenuTab {
 	private static final int REMOVE_W = 18;
 	private static final int MAX_NAME = 24;
 
-	private final TextField newName = new TextField("Name (optional)", MAX_NAME, TextField.ANY);
+	private final TextField newName = new TextField(Lang.t("mods.name_optional"), MAX_NAME, TextField.ANY);
 	private int x;
 	private int w;
 	private int listTop;
@@ -39,12 +40,12 @@ final class WaypointsTab implements MenuTab {
 
 	@Override
 	public String title() {
-		return "Waypoints";
+		return Lang.t("mods.waypoints");
 	}
 
 	@Override
 	public String hint() {
-		return "Places in this world, shown where they are.";
+		return Lang.t("mods.places_in_this_world_shown_where_they_are");
 	}
 
 	@Override
@@ -62,22 +63,22 @@ final class WaypointsTab implements MenuTab {
 		inWorld = p.worldKey() != null;
 		Form f = new Form(host, x, top, w, bottom);
 		if (inWorld) {
-			f.section("Add one here");
+			f.section(Lang.t("mods.add_one_here"));
 			int row = f.row(ROW_H);
 			final Runnable add = () -> {
 				Waypoint made = waypoints.add(p, newName.text());
 				if (made == null) {
-					com.arcticlauncher.client.notice.Notices.post("Couldn't add it", "This world has " + Waypoints.MAX_PER_WORLD + " already.");
+					com.arcticlauncher.client.notice.Notices.post(Lang.t("mods.couldnt_add_it"), Lang.t("mods.this_world_has_already", Waypoints.MAX_PER_WORLD));
 				}
 				newName.text("");
 				host.rebuild();
 			};
 			newName.onEnter(add);
 			f.put(newName, f.x, row + (ROW_H - FIELD_H) / 2, f.w - ADD_W - GAP, FIELD_H);
-			f.put(new Button("Add here", add).primary(), f.x + f.w - ADD_W, row + (ROW_H - FIELD_H) / 2, ADD_W, FIELD_H);
+			f.put(new Button(Lang.t("mods.add_here"), add).primary(), f.x + f.w - ADD_W, row + (ROW_H - FIELD_H) / 2, ADD_W, FIELD_H);
 			List<Waypoint> here = waypoints.here(p);
 			none = here.isEmpty();
-			f.section("In this world (" + here.size() + ")");
+			f.section(Lang.t("mods.in_this_world") + here.size() + ")");
 			listTop = f.y();
 			double[] pos = p.position();
 			for (final Waypoint wp : here) {
@@ -87,14 +88,14 @@ final class WaypointsTab implements MenuTab {
 				f.gap(ROW_H);
 			}
 		}
-		f.section("Settings");
-		f.toggle("Show in the world", "Markers with the name and how far, where they are",
+		f.section(Lang.t("mods.settings"));
+		f.toggle(Lang.t("mods.show_in_the_world"), Lang.t("mods.markers_with_the_name_and_how_far_where_they"),
 				() -> c.waypointsInWorld, on -> c.waypointsInWorld = on);
-		f.key("Waypoint key", "Drops one where you stand, named by number",
+		f.key(Lang.t("mods.waypoint_key"), Lang.t("mods.drops_one_where_you_stand_named_by_number"),
 				Form.key(() -> c.waypointKey, k -> c.waypointKey = k));
-		f.toggle("Death waypoint", "A \"Death\" waypoint (and a pop-up) where you die",
+		f.toggle(Lang.t("mods.death_waypoint"), Lang.t("mods.a_death_waypoint_and_a_pop_up_where_you_die"),
 				() -> c.deathNotice, on -> c.deathNotice = on);
-		f.note("The Compass HUD widget shows them too.");
+		f.note(Lang.t("mods.the_compass_hud_widget_shows_them_too"));
 		f.done();
 	}
 
@@ -106,7 +107,7 @@ final class WaypointsTab implements MenuTab {
 			waypoints.save();
 			host.rebuild();
 		}), f.x + 2, row + (ROW_H - SWATCH) / 2, SWATCH, SWATCH);
-		final TextField name = new TextField("Name", MAX_NAME, TextField.ANY).text(wp.name);
+		final TextField name = new TextField(Lang.t("mods.name"), MAX_NAME, TextField.ANY).text(wp.name);
 		name.onChange(() -> {
 			if (!name.text().trim().isEmpty()) {
 				wp.name = name.text().trim();
@@ -121,7 +122,7 @@ final class WaypointsTab implements MenuTab {
 		int infoX = f.x + SWATCH + 8 + NAME_W + 8;
 		int infoW = f.w - (infoX - f.x) - SHOW_W - REMOVE_W - GAP * 2;
 		f.put(new Label(where, Label.Kind.MUTED), infoX, row, infoW, ROW_H);
-		f.put(new Button(wp.shown ? "Shown" : "Hidden", () -> {
+		f.put(new Button(wp.shown ? Lang.t("mods.shown") : Lang.t("mods.hidden"), () -> {
 			wp.shown = !wp.shown;
 			waypoints.save();
 			host.rebuild();
@@ -147,7 +148,7 @@ final class WaypointsTab implements MenuTab {
 			return;
 		}
 		if (none) {
-			g.text(Draw.fit(g, "None yet: name one and press Add here, or set the key below.", w), x + 4, listTop + 8, s.muted, false);
+			g.text(Draw.fit(g, Lang.t("mods.none_yet_name_one_and_press_add_here_or_set"), w), x + 4, listTop + 8, s.muted, false);
 		}
 	}
 

@@ -6,6 +6,7 @@ import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.hud.Hud;
 import com.arcticlauncher.client.style.Style;
 
+import com.arcticlauncher.client.Lang;
 /** A mod's settings; HUD widgets get a live preview beside them. */
 final class ModSettingsTab implements MenuTab {
 	private static final int PREVIEW_W = 150;
@@ -69,6 +70,6 @@ final class ModSettingsTab implements MenuTab {
 		} finally {
 			hud.inCard(false);
 		}
-		Draw.centered(g, "Preview", (x0 + x1) / 2, y1 + 4, s.muted, false);
+		Draw.centered(g, Lang.t("mods.preview"), (x0 + x1) / 2, y1 + 4, s.muted, false);
 	}
 }

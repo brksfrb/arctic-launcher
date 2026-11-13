@@ -12,6 +12,7 @@ import com.arcticlauncher.client.ui.Widget;
 import java.io.File;
 import java.util.List;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Esc while watching: the controls at the bottom (the world stays in view).
  * Click or drag the timeline to jump; pick the camera; build a camera path
@@ -72,40 +73,40 @@ public final class ReplayMenu extends Page {
 		int y = py + PAD + 12 + 14 + 2;
 		Row row = new Row(tx0, y, tx1 - tx0);
 		row.add("−5s", 30, () -> v.jump(-ReplayViewer.SHORT_JUMP));
-		row.add(v.paused() ? "Play" : "Pause", 44, () -> {
+		row.add(v.paused() ? Lang.t("replay.play") : Lang.t("replay.pause"), 44, () -> {
 			v.togglePause();
 			rebuild();
 		}).primary();
 		row.add("+5s", 30, () -> v.jump(ReplayViewer.SHORT_JUMP));
-		row.add("Slower", 44, v::slower);
-		row.add("Faster", 44, v::faster);
+		row.add(Lang.t("replay.slower"), 44, v::slower);
+		row.add(Lang.t("replay.faster"), 44, v::faster);
 		row.gap();
-		row.add("Free", 36, () -> mode(ReplayViewer.Mode.FREE)).selected(v.mode() == ReplayViewer.Mode.FREE);
-		row.add("First person", 70, () -> mode(ReplayViewer.Mode.FIRST_PERSON)).selected(v.mode() == ReplayViewer.Mode.FIRST_PERSON);
-		row.add("Follow…", 50, () -> {
+		row.add(Lang.t("replay.free"), 36, () -> mode(ReplayViewer.Mode.FREE)).selected(v.mode() == ReplayViewer.Mode.FREE);
+		row.add(Lang.t("replay.first_person"), 70, () -> mode(ReplayViewer.Mode.FIRST_PERSON)).selected(v.mode() == ReplayViewer.Mode.FIRST_PERSON);
+		row.add(Lang.t("replay.follow"), 50, () -> {
 			choosingPlayer = !choosingPlayer;
 			rebuild();
 		}).selected(v.mode() == ReplayViewer.Mode.FOLLOW || choosingPlayer);
 
 		y += ROW + GAP;
 		row = new Row(tx0, y, tx1 - tx0);
-		row.add("Keyframe", 56, () -> {
+		row.add(Lang.t("replay.keyframe"), 56, () -> {
 			v.addKeyframe();
 			rebuild();
 		});
-		row.add("Remove", 46, () -> {
+		row.add(Lang.t("replay.remove"), 46, () -> {
 			v.removeKeyframe();
 			rebuild();
 		}).enabled(!v.keyframes().isEmpty());
-		row.add("Play path", 56, () -> {
+		row.add(Lang.t("replay.play_path"), 56, () -> {
 			v.playPath();
 			close();
 		}).enabled(v.canPlayPath());
 		row.gap();
-		row.add("Export path", 66, () -> exportPath()).enabled(v.canPlayPath());
-		row.add("Export clip", 62, () -> exportClip()).enabled(!v.moments().isEmpty() || v.duration() > 0);
+		row.add(Lang.t("replay.export_path"), 66, () -> exportPath()).enabled(v.canPlayPath());
+		row.add(Lang.t("replay.export_clip"), 62, () -> exportClip()).enabled(!v.moments().isEmpty() || v.duration() > 0);
 		row.gap();
-		row.add("Leave", 44, () -> {
+		row.add(Lang.t("replay.leave_2"), 44, () -> {
 			close();
 			Replays.stopWatching();
 		});
@@ -134,7 +135,7 @@ public final class ReplayMenu extends Page {
 		}
 		if (players.isEmpty()) {
 			y -= ROW;
-			add(new Button("Nobody to follow here", () -> {})).enabled(false).bounds(x, y, FOLLOW_W, ROW - 2);
+			add(new Button(Lang.t("replay.nobody_to_follow_here"), () -> {})).enabled(false).bounds(x, y, FOLLOW_W, ROW - 2);
 		}
 	}
 
@@ -145,11 +146,11 @@ public final class ReplayMenu extends Page {
 		int y = py - 50;
 		String state = f.state();
 		if ("downloading".equals(state)) {
-			add(new Button("Downloading… " + Math.round(f.progress() * 100) + "%", () -> {})).enabled(false).bounds(x, y + 22, w, ROW);
+			add(new Button(Lang.t("replay.downloading") + Math.round(f.progress() * 100) + "%", () -> {})).enabled(false).bounds(x, y + 22, w, ROW);
 		} else if ("unavailable".equals(state)) {
-			add(new Button("Open Arctic Launcher to add FFmpeg", () -> {})).enabled(false).bounds(x, y + 22, w, ROW);
+			add(new Button(Lang.t("replay.open_arctic_launcher_to_add_ffmpeg"), () -> {})).enabled(false).bounds(x, y + 22, w, ROW);
 		} else {
-			add(new Button("Download FFmpeg (about 90 MB)", f::download)).primary().bounds(x, y + 22, w, ROW);
+			add(new Button(Lang.t("replay.download_ffmpeg_about_90_mb"), f::download)).primary().bounds(x, y + 22, w, ROW);
 		}
 	}
 
@@ -262,11 +263,11 @@ public final class ReplayMenu extends Page {
 		made[0] = new VideoExport(exe, out, from, to, FPS, () -> {
 			VideoExport j = made[0];
 			if (j.cancelled()) {
-				Notices.post("Export cancelled", out.getName());
+				Notices.post(Lang.t("replay.export_cancelled"), out.getName());
 			} else if (j.error() != null) {
-				Notices.post("Video not saved", j.error());
+				Notices.post(Lang.t("replay.video_not_saved"), j.error());
 			} else {
-				Notices.post("Video saved", out.getName() + " · in replay_videos");
+				Notices.post(Lang.t("replay.video_saved"), out.getName() + Lang.t("replay.in_replay_videos"));
 			}
 		});
 		return made[0];
@@ -289,7 +290,7 @@ public final class ReplayMenu extends Page {
 			int x = (width - w) / 2;
 			int y = py - 56;
 			Skin.panel(g, s, x, y, x + w, y + 48);
-			Draw.centered(g, "Video export uses FFmpeg (downloaded once).", width / 2, y + 7, s.text, false);
+			Draw.centered(g, Lang.t("replay.video_export_uses_ffmpeg_downloaded_once"), width / 2, y + 7, s.text, false);
 			String err = Replays.ffmpeg().error();
 			if (err != null) {
 				Draw.centered(g, Draw.fit(g, err, w - 10, x, y), width / 2, y + 44, 0xFFF87171, false);

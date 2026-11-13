@@ -16,7 +16,7 @@ public final class LightOverlay {
 	public static final int YELLOW = 1;
 	public static final int GREEN = 2;
 
-	public static final String[] STYLES = {"Squares", "Crosses", "Numbers"};
+	public static final String[] STYLES = {"mods.light_style.squares", "mods.light_style.crosses", "mods.light_style.numbers"};
 	public static final int SQUARES = 0;
 	public static final int CROSSES = 1;
 	public static final int NUMBERS = 2;

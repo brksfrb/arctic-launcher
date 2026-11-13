@@ -11,7 +11,7 @@ use arctic_core::bridge::{self, AccountEntry, BridgeInfo, SessionGrant};
 use arctic_core::cosmetics;
 
 use crate::tasks::Tasks;
-
+use crate::{t, tf};
 struct Shared {
     accounts: Vec<Account>,
     active: Option<String>,
@@ -324,7 +324,9 @@ impl bridge::Accounts for AppAccounts {
     fn icon(&self, url: &str) -> arctic_core::Result<Vec<u8>> {
         const SIZE: u32 = 64;
         if !url.starts_with("https://cdn.modrinth.com/") {
-            return Err(arctic_core::Error::Other("only Modrinth icons".into()));
+            return Err(arctic_core::Error::Other(
+                t!("tasks.only_modrinth_icons").into(),
+            ));
         }
         let tasks = self
             .0
@@ -334,7 +336,7 @@ impl bridge::Accounts for AppAccounts {
             .clone();
         let bytes = arctic_core::mods::icon(url, &tasks.dirs().cache().join("icons"))?;
         let img = image::load_from_memory(&bytes)
-            .map_err(|e| arctic_core::Error::Other(format!("unreadable icon: {e}")))?
+            .map_err(|e| arctic_core::Error::Other(tf!("tasks.unreadable_icon", e = e)))?
             .resize(SIZE, SIZE, image::imageops::FilterType::Triangle);
         let mut out = std::io::Cursor::new(Vec::new());
         img.write_to(&mut out, image::ImageFormat::Png)
@@ -359,7 +361,7 @@ impl bridge::Accounts for AppAccounts {
         // clipboard for a moment (clipboard history, chat apps): try again
         // for a little while before giving up.
         let img = retry(|| image::open(path).map(|i| i.to_rgba8()))
-            .map_err(|e| arctic_core::Error::Other(format!("couldn't read it: {e}")))?;
+            .map_err(|e| arctic_core::Error::Other(tf!("tasks.couldnt_read_it", e = e)))?;
         let (width, height) = img.dimensions();
         let bytes = img.into_raw();
         retry(|| {
@@ -389,7 +391,7 @@ impl bridge::Accounts for AppAccounts {
             .voice
             .clone();
         hub.map(|h| h.game_state(state))
-            .ok_or_else(|| arctic_core::Error::Other("voice chat isn't ready".into()))
+            .ok_or_else(|| arctic_core::Error::Other(t!("tasks.voice_chat_isnt_ready").into()))
     }
 
     fn join(&self, launch: &str) -> Option<String> {
@@ -401,7 +403,7 @@ impl bridge::Accounts for AppAccounts {
 
     fn together(&self, request: &[u8]) -> arctic_core::Result<String> {
         let body: TogetherBody = serde_json::from_slice(request)
-            .map_err(|_| arctic_core::Error::Other("bad request".into()))?;
+            .map_err(|_| arctic_core::Error::Other("bad request".into()))?; // i18n-ignore
         let mut shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         let wanted = match body.action.as_str() {
             "host" => Some(TogetherRequest::Host),
@@ -410,7 +412,7 @@ impl bridge::Accounts for AppAccounts {
             }
             "stop" => Some(TogetherRequest::Stop),
             "status" => None,
-            _ => return Err(arctic_core::Error::Other("unknown action".into())),
+            _ => return Err(arctic_core::Error::Other("unknown action".into())), // i18n-ignore
         };
         if wanted.is_some() {
             shared.together_request = wanted;

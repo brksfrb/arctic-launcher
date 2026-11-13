@@ -1,3 +1,4 @@
+// i18n-ignore-file: LWJGL 2 key names, not text people read.
 package com.arcticlauncher.legacy;
 
 import java.util.HashMap;
@@ -8,6 +9,7 @@ import net.minecraft.client.option.GameOptions;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Keys on old Minecraft (LWJGL 2): Arctic's settings name keys the modern
  * way ("key.keyboard.c", "key.mouse.left") so they carry across versions;
@@ -130,7 +132,7 @@ public final class LegacyKeys {
 	/** What the game calls the key ("C", "Button 4"). */
 	public static String label(String name) {
 		int code = code(name);
-		return code == 0 ? "None" : GameOptions.getFormattedNameForKeyCode(code);
+		return code == 0 ? Lang.t("platform.none") : GameOptions.getFormattedNameForKeyCode(code);
 	}
 
 	/** The core's key code for an LWJGL 2 key (the few it acts on). */

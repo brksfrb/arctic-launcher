@@ -11,6 +11,7 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Your skin library in Arctic Launcher, for picking a skin in the game. The
  * launcher wears it (the same as clicking it there), so it saves and shows
@@ -79,7 +80,7 @@ public final class LauncherSkins {
 				skins = parse(GSON.fromJson(Http.getText(bridgeUrl + "/v1/skins", secret), JsonElement.class));
 				problem = null;
 			} catch (Exception e) {
-				problem = "Couldn't reach Arctic Launcher";
+				problem = Lang.t("looks.couldnt_reach_arctic_launcher");
 				platform.log(false, "launcher skins: " + e);
 			} finally {
 				loaded = true;
@@ -105,7 +106,7 @@ public final class LauncherSkins {
 					ArcticClient.looks().refreshOwn();
 				}
 			} catch (Exception e) {
-				problem = "Couldn't change your skin";
+				problem = Lang.t("looks.couldnt_change_your_skin");
 				platform.log(false, "wear skin: " + e);
 			}
 		}, "arctic-skins");
@@ -138,7 +139,7 @@ public final class LauncherSkins {
 			ArcticClient.looks().registerOwn(texture, bytes);
 			String name = Looks.stringField(o, "name");
 			if (name == null || name.isEmpty()) {
-				name = "Skin";
+				name = Lang.t("looks.skin");
 			} else if (name.length() > MAX_NAME) {
 				name = name.substring(0, MAX_NAME);
 			}

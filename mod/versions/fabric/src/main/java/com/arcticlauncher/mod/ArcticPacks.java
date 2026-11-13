@@ -18,6 +18,7 @@ import net.minecraft.server.packs.repository.PackRepository;
 import net.minecraft.server.packs.repository.PackSource;
 import net.minecraft.server.packs.repository.RepositorySource;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Arctic's built-in resource packs, served from the mod jar. For now the
  * smooth font (Inter over Minecraft's pixel font); it also shows in the
@@ -35,7 +36,7 @@ public final class ArcticPacks implements RepositorySource {
 
 	@Override
 	public void loadPacks(Consumer<Pack> out) {
-		add(out, SMOOTH_FONT, "resourcepacks/smooth_font", "Arctic smooth font", new PackSelectionConfig(false, Pack.Position.TOP, false));
+		add(out, SMOOTH_FONT, "resourcepacks/smooth_font", Lang.t("platform.arctic_smooth_font"), new PackSelectionConfig(false, Pack.Position.TOP, false));
 		add(out, CLIENT, "resourcepacks/client", "Arctic Client", new PackSelectionConfig(true, Pack.Position.BOTTOM, true));
 	}
 

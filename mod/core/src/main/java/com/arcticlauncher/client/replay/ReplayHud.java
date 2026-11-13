@@ -6,6 +6,7 @@ import com.arcticlauncher.client.style.Skin;
 import com.arcticlauncher.client.style.Style;
 import java.util.List;
 
+import com.arcticlauncher.client.Lang;
 /**
  * What shows over a replay while you watch: the timeline with its moments
  * and keyframes, the clock, the speed and the camera, plus the controls.
@@ -19,7 +20,7 @@ public final class ReplayHud {
 	static final int KEYFRAME = 0xFF60A5FA;
 	/** While playing, the bar hides after this long without touching the controls. */
 	private static final double SHOW_SECONDS = 3;
-	private static final String HINT = "P pause  ·  ← → 5s  ·  ↑ ↓ speed  ·  V first person  ·  K keyframe  ·  Esc menu";
+	private static final String HINT = "replay.hud.hint";
 
 	private ReplayHud() {}
 
@@ -30,7 +31,7 @@ public final class ReplayHud {
 		}
 		String problem = v.takeProblem();
 		if (problem != null) {
-			com.arcticlauncher.client.notice.Notices.post("Replay", problem);
+			com.arcticlauncher.client.notice.Notices.post(Lang.t("replay.replay"), problem);
 		}
 		String status = v.status();
 		if (status != null) {
@@ -43,11 +44,12 @@ public final class ReplayHud {
 		int x1 = g.width() - MARGIN;
 		int y1 = g.height() - MARGIN;
 		bar(g, s, v, x0, y1 - BAR_H, x1, y1, -1);
-		int hw = g.textWidth(HINT) / 2 + 6;
+		String hint = Lang.t(HINT);
+		int hw = g.textWidth(hint) / 2 + 6;
 		int cx = g.width() / 2;
 		int hy = y1 - BAR_H - 16;
 		Draw.round(g, cx - hw, hy, cx + hw, hy + 12, 3, 0x90000000);
-		Draw.centered(g, HINT, cx, hy + 2, 0xFFD6DEE8, false);
+		Draw.centered(g, hint, cx, hy + 2, 0xFFD6DEE8, false);
 	}
 
 	/** The panel: clock, speed, camera, and the timeline (with {@code hoverMs} marked, -1 for none). */
@@ -107,11 +109,11 @@ public final class ReplayHud {
 	private static String cameraLabel(ReplayViewer v) {
 		switch (v.mode()) {
 			case FOLLOW:
-				return "Following " + (v.followName() == null ? "a player" : v.followName());
+				return Lang.t("replay.following") + (v.followName() == null ? "a player" : v.followName());
 			case FREE:
-				return "Free camera · " + Math.round(v.cameraSpeed()) + " blocks/s" + (v.fastJumps() ? "" : " · preparing jumps…");
+				return Lang.t("replay.free_camera") + Math.round(v.cameraSpeed()) + " blocks/s" + (v.fastJumps() ? "" : Lang.t("replay.preparing_jumps"));
 			default:
-				return v.mode().label;
+				return v.mode().label();
 		}
 	}
 

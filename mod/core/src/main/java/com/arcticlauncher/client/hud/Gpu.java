@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import com.arcticlauncher.client.Lang;
 /**
  * The graphics card's load and video memory. Java has no way to ask for these, so a background
  * thread reads them from the card's own tools, only while a widget asks for them:
@@ -150,8 +151,8 @@ final class Gpu {
 		if (!isWindows()) {
 			return false;
 		}
-		double[] engines = counterSum("\\GPU Engine(*engtype_3D)\\Utilization Percentage");
-		double[] memory = counterSum("\\GPU Adapter Memory(*)\\Dedicated Usage");
+		double[] engines = counterSum("\\GPU Engine(*engtype_3D)\\Utilization Percentage"); // i18n-ignore
+		double[] memory = counterSum("\\GPU Adapter Memory(*)\\Dedicated Usage"); // i18n-ignore
 		if (engines == null) {
 			return false;
 		}

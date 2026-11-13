@@ -18,6 +18,7 @@ import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 
+import com.arcticlauncher.client.Lang;
 /**
  * HUD layouts and crosshairs as share bundles, the same format the launcher
  * uses ({@code {"arctic_share":1,"kind":…,"data":…}}): as a short code on
@@ -218,9 +219,9 @@ public final class Shares {
 			set(config, e.getKey(), e.getValue());
 		}
 		if (all) {
-			return "Applied the client settings.";
+			return Lang.t("social.applied_the_client_settings");
 		}
-		return hud != null ? "Applied the HUD layout." : "Applied the crosshair.";
+		return hud != null ? Lang.t("social.applied_the_hud_layout") : Lang.t("social.applied_the_crosshair");
 	}
 
 	private static Map<String, HudSlot> hud(JsonElement el) throws ShareException {

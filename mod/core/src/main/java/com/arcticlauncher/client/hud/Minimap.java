@@ -10,6 +10,7 @@ import com.arcticlauncher.client.waypoints.Waypoint;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.arcticlauncher.client.Lang;
 /**
  * A map of the land around you ({@link MinimapView} draws it): north up or turning with you,
  * square or round; you as an arrow in the middle, other players as arrows, waypoints as dots,
@@ -22,7 +23,7 @@ final class Minimap extends HudWidget {
 	private final MinimapView view = new MinimapView();
 
 	Minimap() {
-		super("minimap", "Minimap", "The land around you, with other players and your waypoints", false, Column.RIGHT);
+		super("minimap", Lang.t("hud.minimap"), Lang.t("hud.the_land_around_you_with_other_players_and"), false, Column.RIGHT);
 	}
 
 	private static int size() {

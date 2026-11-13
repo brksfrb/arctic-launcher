@@ -12,6 +12,7 @@ import com.arcticlauncher.client.ui.Toggle;
 import com.arcticlauncher.client.ui.Widget;
 import java.util.List;
 
+import com.arcticlauncher.client.Lang;
 /**
  * The Account tab: switch accounts without restarting (through the
  * launcher), and the SOCKS5 proxy for server connections and Arctic's own
@@ -19,7 +20,7 @@ import java.util.List;
  * launcher's setting changes again).
  */
 final class AccountTab {
-	private static final String[] PAGES = {"Accounts", "Proxy"};
+	private static final String[] PAGES = {"social.account_tab.accounts", "social.account_tab.proxy"};
 	private static final int PAGE_BAR = 20;
 	private static final int ACCOUNT_ROW = 22;
 	private static final int ADD_W = 120;
@@ -59,7 +60,7 @@ final class AccountTab {
 		int pageW = (w - 4) / PAGES.length;
 		for (int i = 0; i < PAGES.length; i++) {
 			final int p = i;
-			host.add(new Button(PAGES[i], new Runnable() {
+			host.add(new Button(Lang.t(PAGES[i]), new Runnable() {
 				@Override
 				public void run() {
 					page = p;
@@ -102,7 +103,7 @@ final class AccountTab {
 					});
 			if (inWorld && !isCurrent) {
 				// Switching means leaving; ask once, then rejoin as the new account.
-				b.confirm("Click again: leave, switch, and rejoin");
+				b.confirm(Lang.t("social.click_again_leave_switch_and_rejoin"));
 			}
 			b.enabled = !isCurrent && !switcher.busy();
 			host.add(b).bounds(x, y, w, ACCOUNT_ROW - 4);
@@ -128,13 +129,13 @@ final class AccountTab {
 			next.enabled = accountPage < last;
 			host.add(prev).bounds(x, y, 40, ACCOUNT_ROW - 4);
 			host.add(next).bounds(x + w - 40, y, 40, ACCOUNT_ROW - 4);
-			pagerLabel = "Accounts " + (accountPage + 1) + " of " + pages;
+			pagerLabel = Lang.t("social.accounts", accountPage + 1, pages);
 			pagerY = y + 5;
 			y += ACCOUNT_ROW;
 		} else {
 			pagerLabel = null;
 		}
-		Button add = new Button(switcher.signingIn() ? "Signing in..." : "Add account", new Runnable() {
+		Button add = new Button(switcher.signingIn() ? Lang.t("social.signing_in") : Lang.t("social.add_account"), new Runnable() {
 			@Override
 			public void run() {
 				switcher.addAccount();
@@ -144,7 +145,7 @@ final class AccountTab {
 		host.add(add).bounds(x, y, Math.min(w, ADD_W), ACCOUNT_ROW - 4);
 		y += ACCOUNT_ROW;
 		// An offline account: just a name (the launcher keeps it).
-		final TextField offline = new TextField("Offline name", MAX_NAME, NAME_CHARS);
+		final TextField offline = new TextField(Lang.t("social.offline_name"), MAX_NAME, NAME_CHARS);
 		Runnable addOffline = new Runnable() {
 			@Override
 			public void run() {
@@ -159,7 +160,7 @@ final class AccountTab {
 		offline.onEnter(addOffline);
 		int fieldW = Math.max(60, Math.min(w, ADD_W + 60) - ADD_W - GAP);
 		host.add(offline).bounds(x, y, fieldW, FIELD_H);
-		host.add(new Button("Add offline", addOffline)).bounds(x + fieldW + GAP, y, ADD_W, FIELD_H);
+		host.add(new Button(Lang.t("social.add_offline"), addOffline)).bounds(x + fieldW + GAP, y, ADD_W, FIELD_H);
 		y += ACCOUNT_ROW;
 		notesY = y + 4;
 	}
@@ -169,7 +170,7 @@ final class AccountTab {
 			draft = ArcticClient.config().proxy.copy();
 		}
 		int y = top;
-		host.add(new Toggle("Use a proxy", "Servers and Arctic connect through it", new Toggle.Binding() {
+		host.add(new Toggle(Lang.t("social.use_a_proxy"), Lang.t("social.servers_and_arctic_connect_through_it"), new Toggle.Binding() {
 			@Override
 			public boolean get() {
 				return draft.enabled;
@@ -183,7 +184,7 @@ final class AccountTab {
 		})).bounds(x, y, w, ROW);
 		y += ROW + 6;
 		int typeW = (w - GAP) / 2;
-		host.add(new Button("SOCKS5", new Runnable() {
+		host.add(new Button("SOCKS5", new Runnable() { // i18n-ignore: a protocol name
 			@Override
 			public void run() {
 				draft.type = "socks5";
@@ -191,7 +192,7 @@ final class AccountTab {
 				host.rebuild();
 			}
 		}).selected(!draft.isHttp())).bounds(x, y, typeW, 20);
-		host.add(new Button("HTTP", new Runnable() {
+		host.add(new Button(Lang.t("social.http"), new Runnable() {
 			@Override
 			public void run() {
 				draft.type = "http";
@@ -201,11 +202,11 @@ final class AccountTab {
 		}).selected(draft.isHttp())).bounds(x + typeW + GAP, y, w - typeW - GAP, 20);
 		y += 20 + GAP;
 		int hostW = w - PORT_W - GAP;
-		final TextField address = new TextField("Address, like 127.0.0.1", MAX_HOST, TextField.ANY).text(draft.host);
-		final TextField port = new TextField("Port", MAX_PORT_DIGITS, TextField.DIGITS)
+		final TextField address = new TextField(Lang.t("social.address_like_127_0_0_1"), MAX_HOST, TextField.ANY).text(draft.host);
+		final TextField port = new TextField(Lang.t("social.port"), MAX_PORT_DIGITS, TextField.DIGITS)
 				.text(draft.port > 0 ? String.valueOf(draft.port) : "");
-		final TextField user = new TextField("User name (optional)", MAX_LOGIN, TextField.ANY).text(draft.username);
-		final TextField pass = new TextField("Password (optional)", MAX_LOGIN, TextField.ANY).password().text(draft.password);
+		final TextField user = new TextField(Lang.t("social.user_name_optional"), MAX_LOGIN, TextField.ANY).text(draft.username);
+		final TextField pass = new TextField(Lang.t("social.password_optional"), MAX_LOGIN, TextField.ANY).password().text(draft.password);
 		Runnable sync = new Runnable() {
 			@Override
 			public void run() {
@@ -227,14 +228,14 @@ final class AccountTab {
 		host.add(user).bounds(x, y, half, FIELD_H);
 		host.add(pass).bounds(x + half + GAP, y, w - half - GAP, FIELD_H);
 		y += FIELD_H + GAP + 2;
-		host.add(new Button("Save", new Runnable() {
+		host.add(new Button(Lang.t("social.save"), new Runnable() {
 			@Override
 			public void run() {
 				save();
 				host.rebuild();
 			}
 		}).primary()).bounds(x, y, 70, 20);
-		host.add(new Button("Undo", new Runnable() {
+		host.add(new Button(Lang.t("social.undo"), new Runnable() {
 			@Override
 			public void run() {
 				draft = ArcticClient.config().proxy.copy();
@@ -259,7 +260,7 @@ final class AccountTab {
 			return true;
 		}
 		java.util.UUID offline = java.util.UUID.nameUUIDFromBytes(
-				("OfflinePlayer:" + entry.name).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+				("OfflinePlayer:" + entry.name).getBytes(java.nio.charset.StandardCharsets.UTF_8)); // i18n-ignore
 		return id.equals(offline) != entry.microsoft;
 	}
 
@@ -274,7 +275,7 @@ final class AccountTab {
 	private void save() {
 		String problem = draft.enabled ? draft.problem() : null;
 		if (problem == null && draft.username.isEmpty() && !draft.password.isEmpty()) {
-			problem = "A password needs a user name too";
+			problem = Lang.t("social.a_password_needs_a_user_name_too");
 		}
 		if (problem != null) {
 			note = problem + ".";
@@ -287,9 +288,9 @@ final class AccountTab {
 		ArcticClient.proxyChanged();
 		noteIsProblem = false;
 		if (draft.enabled) {
-			note = "Saved. New connections go through the proxy.";
+			note = Lang.t("social.saved_new_connections_go_through_the_proxy");
 		} else {
-			note = wasOn ? "Proxy off. Restart Minecraft to reach servers by name again." : "Saved.";
+			note = wasOn ? Lang.t("social.proxy_off_restart_minecraft_to_reach_servers") : Lang.t("social.saved");
 		}
 	}
 
@@ -303,8 +304,8 @@ final class AccountTab {
 			g.text(Draw.fit(g, note, w, x, y), x, y, noteIsProblem ? WARN : s.accent, false);
 			y += 12;
 		}
-		g.text(Draw.fit(g, "Some servers block proxies and VPNs.", w, x, y), x, y, s.muted, false);
-		g.text(Draw.fit(g, "Minecraft's own login services switch at the next start.", w, x, y + 11), x, y + 11, s.muted, false);
+		g.text(Draw.fit(g, Lang.t("social.some_servers_block_proxies_and_vpns"), w, x, y), x, y, s.muted, false);
+		g.text(Draw.fit(g, Lang.t("social.minecrafts_own_login_services_switch_at_the"), w, x, y + 11), x, y + 11, s.muted, false);
 	}
 
 	private void drawAccounts(Gfx g, Style s, int x, int w) {
@@ -314,8 +315,8 @@ final class AccountTab {
 		}
 		int y = notesY;
 		if (switcher == null || !switcher.available()) {
-			g.text(Draw.fit(g, "Start the game from Arctic Launcher (and keep it open", w, x, y), x, y, s.muted, false);
-			g.text(Draw.fit(g, "or in the tray) to switch accounts here.", w, x, y + 11), x, y + 11, s.muted, false);
+			g.text(Draw.fit(g, Lang.t("social.start_the_game_from_arctic_launcher_and_keep"), w, x, y), x, y, s.muted, false);
+			g.text(Draw.fit(g, Lang.t("social.or_in_the_tray_to_switch_accounts_here"), w, x, y + 11), x, y + 11, s.muted, false);
 			return;
 		}
 		if (!switcher.status().isEmpty()) {
@@ -323,7 +324,7 @@ final class AccountTab {
 			y += 12;
 		}
 		if (ArcticClient.platform().inWorld()) {
-			g.text(Draw.fit(g, "Leave the world to switch accounts.", w, x, y), x, y, s.muted, false);
+			g.text(Draw.fit(g, Lang.t("social.leave_the_world_to_switch_accounts"), w, x, y), x, y, s.muted, false);
 		}
 	}
 }

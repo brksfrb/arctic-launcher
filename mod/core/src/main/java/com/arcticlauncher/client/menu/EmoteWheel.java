@@ -11,6 +11,7 @@ import com.arcticlauncher.client.ui.Page;
 import java.util.List;
 import java.util.UUID;
 
+import com.arcticlauncher.client.Lang;
 /**
  * The emote wheel (B by default): emotes around a circle, you in the middle
  * previewing the one pointed at. Held (the default): let go of the key to
@@ -98,7 +99,7 @@ public final class EmoteWheel extends Page {
 		List<Cosmetics.Emote> emotes = emotes();
 		Draw.disc(g, cx, cy, RADIUS + ITEM_R + 6, Draw.alpha(s.panel, 0.85f));
 		if (emotes.isEmpty()) {
-			Draw.centered(g, "No emotes yet", cx, cy - 4, s.muted, false);
+			Draw.centered(g, Lang.t("mods.no_emotes_yet"), cx, cy - 4, s.muted, false);
 			return;
 		}
 		int hovered = pointed(mx, my);
@@ -168,7 +169,7 @@ public final class EmoteWheel extends Page {
 			Draw.disc(g, left + i * DOT_GAP, y, DOT_R, i == page ? s.accent : s.muted);
 		}
 		int total = ArcticClient.looks().cosmetics().emotes().size();
-		Draw.centered(g, "Page " + (page + 1) + " of " + count + " (" + total + " emotes): scroll for more", cx, y - 12, s.text, true);
+		Draw.centered(g, Lang.t("mods.emote_page", page + 1, count, total), cx, y - 12, s.text, true);
 	}
 
 	@Override

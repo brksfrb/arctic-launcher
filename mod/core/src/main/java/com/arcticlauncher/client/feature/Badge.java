@@ -5,15 +5,16 @@ import com.arcticlauncher.client.Platform;
 import com.arcticlauncher.client.config.ClientConfig;
 import java.util.UUID;
 
+import com.arcticlauncher.client.Lang;
 /** Where the Arctic badge (the snowflake) shows, and for whom. */
 public final class Badge {
 	/** {@link ClientConfig#badgeWhere}: the player list and name tags. */
 	public static final int BOTH = 0;
 	public static final int TAB_ONLY = 1;
 	public static final int TAGS_ONLY = 2;
-	public static final String[] WHERE = {"Player list and name tags", "Player list only", "Name tags only"};
+	public static final String[] WHERE = {"mods.badge_where.player_list_and_name_tags", "mods.badge_where.player_list_only", "mods.badge_where.name_tags_only"};
 
-	/** A shipped style. IDs are the stable looks API values, never list positions. */
+	/** A shipped style. IDs are the stable looks API values, never list positions; the label is a text key. */
 	public static final class Style {
 		public final int id;
 		public final String label;
@@ -31,9 +32,9 @@ public final class Badge {
 	}
 
 	public static final java.util.List<Style> STYLES = java.util.Collections.unmodifiableList(java.util.Arrays.asList(
-			new Style(0, "Arctic logo", "badge", "badge", true),
-			new Style(1, "Ice tile", "badge_ice_tile", "badge_ice_tile", true),
-			new Style(2, "Line tile", "badge_line_tile", "badge_line_tile", true)));
+			new Style(0, "hud.arctic_logo", "badge", "badge", true),
+			new Style(1, "hud.ice_tile", "badge_ice_tile", "badge_ice_tile", true),
+			new Style(2, "hud.line_tile", "badge_line_tile", "badge_line_tile", true)));
 	public static final int SIZE = 8;
 	public static final int TAB_SIZE = 9;
 	public static final int TEXTURE_SIZE = 256;

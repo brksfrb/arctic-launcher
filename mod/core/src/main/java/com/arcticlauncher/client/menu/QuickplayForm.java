@@ -5,6 +5,7 @@ import com.arcticlauncher.client.Platform;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.feature.Quickplay;
 
+import com.arcticlauncher.client.Lang;
 /** The Quickplay page: a game group, a game, and Join. */
 final class QuickplayForm {
 	private static int group;
@@ -14,18 +15,18 @@ final class QuickplayForm {
 
 	static void build(final Host host, Form f) {
 		final ClientConfig c = ArcticClient.config();
-		f.section("Pick a game");
-		f.note("Sends the server's own /play command (made for Hypixel; other servers may not know them).");
-		f.cycle("Group", Quickplay.GROUPS, () -> group, i -> {
+		f.section(Lang.t("mods.pick_a_game"));
+		f.note(Lang.t("mods.sends_the_servers_own_play_command_made_for"));
+		f.cycle(Lang.t("mods.group"), Lang.all(Quickplay.GROUPS), () -> group, i -> {
 			group = i;
 			game = 0;
 			host.rebuild();
 		});
-		f.cycle("Game", Quickplay.games(group), () -> game, i -> game = i);
-		f.action("Join", "Play", () -> send(Quickplay.command(group, game)));
+		f.cycle(Lang.t("mods.game"), Quickplay.games(group), () -> game, i -> game = i);
+		f.action(Lang.t("mods.join"), Lang.t("mods.play"), () -> send(Quickplay.command(group, game)));
 		if (c.quickplayLast != null && !c.quickplayLast.isEmpty()) {
-			f.action("Last game", "Again", () -> send(c.quickplayLast));
-			f.note("Last: " + c.quickplayLast);
+			f.action(Lang.t("mods.last_game"), Lang.t("mods.again"), () -> send(c.quickplayLast));
+			f.note(Lang.t("mods.last") + c.quickplayLast);
 		}
 	}
 

@@ -88,6 +88,13 @@ jobs:
           ARCTIC_HELLO_DIR: ${{ runner.temp }}/hello
         run: cargo test -p arctic-core --locked named_runtime_without_system_dlls_starts_java -- --ignored --nocapture
 
+  # Every text the launcher and the Arctic Client show is localized, every language complete.
+  i18n:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: python3 tools/i18n_check.py
+
   # The in-game client: its shared core's tests, then every Minecraft target compiled and
   # its mixin hooks checked against that version's game jar (no game is started).
   mod-core:

@@ -6,6 +6,7 @@ import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.gfx.Gfx;
 import java.util.Locale;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Search in chests and the inventory: Ctrl+F opens a search line over any container screen, the items
  * whose names contain what you type stay bright and the rest are dimmed. Only the screen's own
@@ -164,19 +165,19 @@ public final class InventorySearch {
 		if (!c.containerSearch || !active && lower.isEmpty()) {
 			return;
 		}
-		String shown = "Search: " + text + (active && System.currentTimeMillis() / 500 % 2 == 0 ? "_" : "");
+		String shown = Lang.t("hud.search") + text + (active && System.currentTimeMillis() / 500 % 2 == 0 ? "_" : "");
 		int w = Math.max(120, g.textWidth(shown) + 14);
 		int x = (g.width() - w) / 2;
 		g.fill(x - 1, 5, x + w + 1, 21, active ? 0xFF5CE1E6 : 0xFF555555);
 		g.fill(x, 6, x + w, 20, 0xE0101820);
 		if (selectedAll && active) {
 			// Everything selected: a highlight behind the typed text.
-			int from = x + 7 + g.textWidth("Search: ");
+			int from = x + 7 + g.textWidth(Lang.t("hud.search"));
 			g.fill(from - 1, 8, from + g.textWidth(text) + 1, 18, 0xA05CE1E6);
 		}
 		g.text(shown, x + 7, 9, 0xFFFFFFFF, true);
 		if (!active) {
-			g.text("Ctrl+F to edit", x + w + 6, 9, 0xFFAAAAAA, true);
+			g.text(Lang.t("hud.ctrl_f_to_edit"), x + w + 6, 9, 0xFFAAAAAA, true);
 		}
 	}
 }

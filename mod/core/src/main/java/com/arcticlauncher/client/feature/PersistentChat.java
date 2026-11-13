@@ -27,6 +27,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Instance-local chat archive that keeps everything.
  *
@@ -139,7 +140,7 @@ public final class PersistentChat {
 		}
 		replay(messages, view);
 		if (!messages.isEmpty()) {
-			replay(Collections.singletonList(new Entry(0, null, "§8──────── previous session ────────", true)), view);
+			replay(Collections.singletonList(new Entry(0, null, Lang.t("hud.8_previous_session"), true)), view);
 		}
 		restoreNanos = System.nanoTime() - began;
 	}
@@ -193,7 +194,7 @@ public final class PersistentChat {
 			List<Entry> page = withDays(chatCursor.older(room));
 			loaded += page.size();
 			if (loaded >= maxLoaded && chatCursor.more()) {
-				page.add(0, new Entry(0, null, "§8── earlier chat is saved in chat-history/, not loaded here ──", true));
+				page.add(0, new Entry(0, null, Lang.t("hud.8_earlier_chat_is_saved_in_chat_history_not"), true));
 			}
 			return page;
 		} catch (Exception e) {
@@ -696,7 +697,7 @@ public final class PersistentChat {
 
 	private static String month(long time) {
 		SimpleDateFormat f = new SimpleDateFormat("yyyy-MM", java.util.Locale.ROOT);
-		f.setTimeZone(TimeZone.getTimeZone("UTC"));
+		f.setTimeZone(TimeZone.getTimeZone(Lang.t("hud.utc")));
 		return f.format(new Date(time));
 	}
 }

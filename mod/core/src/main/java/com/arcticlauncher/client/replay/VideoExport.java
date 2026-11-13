@@ -12,6 +12,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Turns a stretch of a replay into an MP4: the game draws each frame at an
  * exact time step, and the frames stream into FFmpeg on a background thread
@@ -133,7 +134,7 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 			copy.flip();
 			while (!cancelled && failed == null && !frames.offer(copy, 100, TimeUnit.MILLISECONDS)) { /* bounded backpressure */ }
 		} catch (IOException e) {
-			failed = "The video encoder didn't start: " + e.getMessage();
+			failed = Lang.t("replay.the_video_encoder_didnt_start") + e.getMessage();
 			closeAudio();
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
@@ -223,7 +224,7 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 			}
 		} catch (IOException e) {
 			if (!cancelled && failed == null) {
-				failed = "The video encoder stopped: " + e.getMessage();
+				failed = Lang.t("replay.the_video_encoder_stopped") + e.getMessage();
 			}
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
@@ -243,7 +244,7 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 			for (long i = 0; i < total && !cancelled; i++) out.write(mix.block(audioFrames(i)));
 		} catch (IOException e) {
 			if (!cancelled && failed == null) {
-				failed = "Game audio could not be exported: " + e.getMessage();
+				failed = Lang.t("replay.game_audio_could_not_be_exported") + e.getMessage();
 				process.destroy();
 			}
 		}
@@ -257,13 +258,13 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 	private void complete() {
 		try {
 			if (!process.waitFor(30, TimeUnit.SECONDS)) {
-				failed = "The video encoder timed out.";
+				failed = Lang.t("replay.the_video_encoder_timed_out");
 				process.destroyForcibly();
 			}
 			int code = process.waitFor();
 			if (audioWriter != null) audioWriter.join(2000);
 			if (code != 0 && !cancelled && failed == null) {
-				failed = "The video encoder failed (code " + code + ")";
+				failed = Lang.t("replay.the_video_encoder_failed_code") + code + ")";
 			}
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
@@ -284,7 +285,7 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 		if (process == null) {
 			done = true;
 			if (failed == null && !cancelled) {
-				failed = "Nothing was recorded.";
+				failed = Lang.t("replay.nothing_was_recorded");
 			}
 			if (onDone != null) {
 				onDone.run();
@@ -301,7 +302,7 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 				}
 			}
 			if (!done) {
-				if (delivered < requested) failed = "A replay frame could not be captured.";
+				if (delivered < requested) failed = Lang.t("replay.a_replay_frame_could_not_be_captured");
 				delivered = requested;
 			}
 		}, "arctic-video-wait");

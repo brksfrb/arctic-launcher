@@ -6,10 +6,11 @@
 //! single-instance listener, and ends. Open, Play, or a second start brings the real launcher back
 //! (`--replace`, which takes over from this process) and ends this one too.
 
+#[cfg(windows)]
+use crate::t;
 use std::sync::mpsc::Receiver;
 #[cfg(windows)]
 use std::time::Duration;
-
 /// Starts the process that only keeps the tray icon.
 pub const FLAG: &str = "--tray-host";
 
@@ -63,9 +64,9 @@ pub fn run(dirs: &arctic_core::storage::DataDirs, forwarded: Receiver<Vec<String
             open_launcher(&args);
         }
     });
-    let open = MenuItem::new("Open Arctic Launcher", true, None);
-    let play = MenuItem::new("Play", true, None);
-    let quit = MenuItem::new("Quit", true, None);
+    let open = MenuItem::new(t!("nav.open_arctic_launcher"), true, None);
+    let play = MenuItem::new(t!("nav.play"), true, None);
+    let quit = MenuItem::new(t!("nav.quit"), true, None);
     let menu = Menu::new();
     let built = menu.append_items(&[&open, &play, &PredefinedMenuItem::separator(), &quit]);
     let icon = Icon::from_rgba(

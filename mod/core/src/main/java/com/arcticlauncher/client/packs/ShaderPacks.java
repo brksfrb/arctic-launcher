@@ -13,9 +13,10 @@ import java.util.Optional;
 
 import com.arcticlauncher.client.Platform;
 
+import com.arcticlauncher.client.Lang;
 /** Optional Iris integration. The client still works when no shader loader is installed. */
 public final class ShaderPacks {
-	public static final String NEEDS_IRIS = "Enable shader support in the launcher, then restart Minecraft to use shaders.";
+	public static final String NEEDS_IRIS = "looks.shaders.needs_iris";
 	private final Platform platform;
 	private final Class<?> iris;
 	private volatile boolean changing;
@@ -103,14 +104,14 @@ public final class ShaderPacks {
 	/** Switch packs through Iris on the render thread; null turns shaders off. */
 	public void select(final String name) {
 		if (!available()) {
-			status = NEEDS_IRIS;
+			status = Lang.t(NEEDS_IRIS);
 			return;
 		}
 		if (changing) {
 			return;
 		}
 		changing = true;
-		status = name == null ? "Turning shaders off…" : "Loading " + name + "…";
+		status = name == null ? Lang.t("looks.turning_shaders_off") : Lang.t("looks.loading_2") + name + "…";
 		platform.runOnGameThread(() -> {
 			Object config = null;
 			String previous = null;
@@ -128,7 +129,7 @@ public final class ShaderPacks {
 				if (name != null && !((Optional<?>) iris.getMethod("getCurrentPack").invoke(null)).isPresent()) {
 					throw new IOException("Iris couldn't load this pack; check its compatibility");
 				}
-				status = name == null ? "Shaders are off." : name + " is on.";
+				status = name == null ? Lang.t("looks.shaders_are_off") : name + Lang.t("looks.is_on");
 			} catch (ReflectiveOperationException | IOException | RuntimeException e) {
 				if (config != null) {
 					try {
@@ -139,7 +140,7 @@ public final class ShaderPacks {
 					}
 				}
 				Throwable cause = e instanceof InvocationTargetException ? e.getCause() : e;
-				status = "Couldn't change shaders: " + (cause == null ? e : cause).getMessage();
+				status = Lang.t("looks.couldnt_change_shaders") + (cause == null ? e : cause).getMessage();
 			} finally {
 				changing = false;
 			}

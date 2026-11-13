@@ -15,7 +15,7 @@ import com.arcticlauncher.client.config.ClientConfig;
  * find you or your lobby. Only your screen changes; others see you as usual.
  */
 public final class Streamer {
-	public static final String HIDDEN_SERVER = "hidden server";
+	public static final String HIDDEN_SERVER = "hud.streamer.hidden_server";
 	/** Recomputed at most this often (names rarely change). */
 	private static final long REFRESH_MS = 1000;
 
@@ -48,7 +48,7 @@ public final class Streamer {
 			}
 			String server = p == null ? null : p.server();
 			if (server != null && server.length() >= 4 && !"Singleplayer".equals(server)) {
-				list.add(new String[] {server.toLowerCase(Locale.ROOT), HIDDEN_SERVER});
+				list.add(new String[] {server.toLowerCase(Locale.ROOT), com.arcticlauncher.client.Lang.t(HIDDEN_SERVER)});
 			}
 			list.sort((a, b) -> b[0].length() - a[0].length());
 			pairs = list.toArray(new String[0][]);

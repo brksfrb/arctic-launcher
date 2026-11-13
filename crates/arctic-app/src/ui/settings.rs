@@ -11,20 +11,26 @@ use crate::art::icons::{self, Icon};
 use crate::art::lerp_color;
 use crate::theme::{self, Palette};
 use crate::widgets;
+use crate::{t, tf};
 
 const MAX_MEMORY_SLIDER_MB: u32 = 32 * 1024;
 const MEMORY_STEP_MB: f64 = 512.0;
 const MAX_RESOLUTION: u32 = 7680;
 const RESOLUTIONS: [(u32, u32); 4] = [(854, 480), (1280, 720), (1600, 900), (1920, 1080)];
 const THEMES: [(ThemeMode, &str); 4] = [
-    (ThemeMode::Default, "Aurora"),
-    (ThemeMode::Glass, "Glass"),
-    (ThemeMode::Dark, "Dark"),
-    (ThemeMode::Light, "Light"),
+    (ThemeMode::Default, "settings.theme.aurora"),
+    (ThemeMode::Glass, "settings.theme.glass"),
+    (ThemeMode::Dark, "settings.theme.dark"),
+    (ThemeMode::Light, "settings.theme.light"),
 ];
 
-/// The groups of the Settings page: one is shown at a time (picked with the chips at the top).
-const GROUPS: [&str; 4] = ["General", "Game", "Network & voice", "Data"];
+/// The groups of the Settings page (text keys): one is shown at a time (picked with the chips at the top).
+const GROUPS: [&str; 4] = [
+    "settings.group.general",
+    "settings.group.game",
+    "settings.group.network_voice",
+    "settings.group.data",
+];
 
 thread_local! {
     /// A pending section or control to reveal.
@@ -42,13 +48,13 @@ pub(super) fn open_section(title: &'static str) {
 /// Which group a section belongs to.
 fn group_of(title: &str) -> usize {
     match title {
-        "Freeze animated capes and cosmetics"
-        | "Appearance"
-        | "Arctic Client"
-        | "Launching"
-        | "Updates" => 0,
-        "Memory" | "Versions" | "Game window" | "Java" => 1,
-        "Network" | "Voice chat" => 2,
+        "settings.freeze_animated_capes_and_cosmetics"
+        | "settings.appearance"
+        | "settings.arctic_client"
+        | "settings.launching"
+        | "settings.updates" => 0,
+        "settings.memory" | "settings.versions" | "settings.game_window" | "settings.java" => 1,
+        "settings.network" | "settings.voice_chat" => 2,
         _ => 3,
     }
 }
@@ -56,11 +62,16 @@ fn group_of(title: &str) -> usize {
 impl ArcticApp {
     pub(crate) fn settings_tab(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        widgets::page_header(ui, p, "Settings", "Changes are saved automatically.");
+        widgets::page_header(
+            ui,
+            p,
+            t!("settings.settings"),
+            t!("settings.changes_are_saved_automatically"),
+        );
         let mut group = GROUP.with(|g| g.get());
         ui.horizontal(|ui| {
             for (i, name) in GROUPS.iter().enumerate() {
-                if ui.selectable_label(group == i, *name).clicked() {
+                if ui.selectable_label(group == i, t!(name)).clicked() {
                     group = i;
                 }
             }
@@ -74,28 +85,40 @@ impl ArcticApp {
         let software_gl = self.software_gl;
         let s = &mut self.settings;
 
-        section(ui, p, "Appearance", |ui| {
+        section(ui, p, "settings.appearance", |ui| {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 12.0;
                 for (mode, name) in THEMES {
-                    if theme_tile(ui, theme::palette(mode), name, s.theme == mode) {
+                    if theme_tile(ui, theme::palette(mode), t!(name), s.theme == mode) {
                         s.theme = mode;
                     }
                 }
             });
             ui.add_space(6.0);
             crate::zoom::size_row(ui, &mut s.interface_size);
+            language_row(ui, &mut s.language);
+            language_row(ui, &mut s.language);
             widgets::field_row(ui, |ui| {
                 use arctic_core::settings::Backdrop;
-                ui.label("Background");
-                ui.selectable_value(&mut s.backdrop, Backdrop::Scenery, "Arctic scenery");
-                ui.selectable_value(&mut s.backdrop, Backdrop::Picture, "Your screenshot")
-                    .on_hover_text("Your newest screenshot, or the version's title screen");
+                ui.label(t!("settings.background"));
+                ui.selectable_value(
+                    &mut s.backdrop,
+                    Backdrop::Scenery,
+                    t!("settings.arctic_scenery"),
+                );
+                ui.selectable_value(
+                    &mut s.backdrop,
+                    Backdrop::Picture,
+                    t!("settings.your_screenshot"),
+                )
+                .on_hover_text(t!("settings.your_newest_screenshot_or_the_versions_title"));
                 if ui
-                    .selectable_label(s.backdrop == Backdrop::Custom, "Your picture…")
+                    .selectable_label(s.backdrop == Backdrop::Custom, t!("settings.your_picture"))
                     .on_hover_text(match &s.custom_backdrop {
-                        Some(path) => format!("Choose another picture. Now: {}", path.display()),
-                        None => "Choose a picture of your own".to_owned(),
+                        Some(path) => {
+                            tf!("settings.choose_another_picture_now", path = path.display())
+                        }
+                        None => t!("settings.choose_a_picture_of_your_own").to_owned(),
                     })
                     .clicked()
                 {
@@ -105,113 +128,123 @@ impl ArcticApp {
                     }
                 }
             });
-            ui.checkbox(&mut s.animations, "Animated background")
-                .on_hover_text("Aurora, snowfall and shooting stars. Pauses while you play.");
+            ui.checkbox(&mut s.animations, t!("settings.animated_background"))
+                .on_hover_text(t!("settings.aurora_snowfall_and_shooting_stars_pauses"));
             if software_gl {
                 ui.label(
-                    RichText::new(
-                        "Off for now: your graphics driver draws in software (no GPU), where this slows the whole PC down. The glass blur is off too.",
-                    )
-                    .small()
-                    .color(p.warn),
+                    RichText::new(t!("settings.off_for_now_your_graphics_driver_draws_in"))
+                        .small()
+                        .color(p.warn),
                 );
             }
-            let freeze = ui.checkbox(&mut s.reduce_cape_motion, "Freeze animated capes and cosmetics")
-                .on_hover_text("Animated capes and sculpted cosmetics stand still here. Only your own view changes; what you and others wear stays as chosen.");
-            if SCROLL_TO.with(|s| s.get()) == Some("Freeze animated capes and cosmetics") {
+            let freeze = ui
+                .checkbox(
+                    &mut s.reduce_cape_motion,
+                    t!("settings.freeze_animated_capes_and_cosmetics"),
+                )
+                .on_hover_text(t!("settings.animated_capes_and_sculpted_cosmetics_stand"));
+            if SCROLL_TO.with(|s| s.get()) == Some("settings.freeze_animated_capes_and_cosmetics") {
                 freeze.scroll_to_me(Some(egui::Align::Center));
                 SCROLL_TO.with(|s| s.set(None));
             }
-            ui.checkbox(&mut s.intro, "Intro animation on start");
-            ui.checkbox(&mut s.start_maximized, "Start the launcher maximized");
+            ui.checkbox(&mut s.intro, t!("settings.intro_animation_on_start"));
+            ui.checkbox(
+                &mut s.start_maximized,
+                t!("settings.start_the_launcher_maximized"),
+            );
             if cfg!(windows) {
-                ui.checkbox(&mut s.tray, "Keep Arctic in the system tray when closed")
-                    .on_hover_text("Reopens instantly. Quit from the tray icon.");
+                ui.checkbox(
+                    &mut s.tray,
+                    t!("settings.keep_arctic_in_the_system_tray_when_closed"),
+                )
+                .on_hover_text(t!("settings.reopens_instantly_quit_from_the_tray_icon"));
             }
             ui.checkbox(
                 &mut s.exit_games_with_launcher,
-                "Close Minecraft when Arctic quits",
+                t!("settings.close_minecraft_when_arctic_quits"),
             )
-            .on_hover_text("Off: games keep running after the launcher closes.");
+            .on_hover_text(t!("settings.off_games_keep_running_after_the_launcher"));
             ui.checkbox(
                 &mut s.confirm_join_launch,
-                "Ask before launching Minecraft to join a server",
+                t!("settings.ask_before_launching_minecraft_to_join_a"),
             )
-            .on_hover_text("Join on a server asks first when no game is running.");
-            ui.checkbox(&mut s.show_sponsor, "Show supporter mentions")
-                .on_hover_text(
-                    "\"Supported by Flash Hosting\" in the sidebar, About and Play together.",
-                );
-            ui.checkbox(&mut s.quick_tips, "Show quick tips")
-                .on_hover_text("A tip about one of Arctic's features in the sidebar, a new one every 5 minutes.");
+            .on_hover_text(t!("settings.join_on_a_server_asks_first_when_no_game_is"));
+            ui.checkbox(&mut s.show_sponsor, t!("settings.show_supporter_mentions"))
+                .on_hover_text(t!("settings.supported_by_flash_hosting_in_the_sidebar"));
+            ui.checkbox(&mut s.quick_tips, t!("settings.show_quick_tips"))
+                .on_hover_text(t!("settings.a_tip_about_one_of_arctics_features_in_the"));
         });
 
-        section(ui, p, "Arctic Client", |ui| {
+        section(ui, p, "settings.arctic_client", |ui| {
             ui.label(
-                RichText::new(
-                    "How Minecraft's menus look in game. Press Right Shift in game for HUD widgets and capes.",
-                )
-                .small()
-                .color(p.muted),
+                RichText::new(t!("settings.how_minecrafts_menus_look_in_game_press"))
+                    .small()
+                    .color(p.muted),
             );
             ui.add_space(4.0);
-            ui.checkbox(&mut s.play_with_client, "Play with Arctic Client")
-                .on_hover_text(
-                    "On: games start with the Arctic Client (HUD, zoom, cosmetics, replays and more). Off: no game does, whatever its own switch says; the mod is taken out of the instance's mods folder.",
-                );
+            ui.checkbox(
+                &mut s.play_with_client,
+                t!("settings.play_with_arctic_client"),
+            )
+            .on_hover_text(t!("settings.on_games_start_with_the_arctic_client_hud"));
             ui.add_space(4.0);
             ui.add_enabled_ui(s.play_with_client, |ui| {
                 super::client_style::picker(ui, p, s, super::client_style::SETTINGS_TILE_WIDTH);
                 ui.add_space(6.0);
                 super::client_style::fancy_toggle(ui, s);
             });
-            ui.checkbox(&mut performance, "Boost FPS with performance mods")
-                .on_hover_text(
-                    "Vanilla: adds Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, Particle Core, BadOptimizations, ModernFix and Polarium. Other instances have their own switch.",
-                );
+            ui.checkbox(
+                &mut performance,
+                t!("settings.boost_fps_with_performance_mods"),
+            )
+            .on_hover_text(t!("settings.vanilla_adds_sodium_lithium_ferritecore_2"));
         });
 
-        section(ui, p, "Launching", |ui| {
-            ui.checkbox(&mut s.gentle_launch, "Gentle launch")
-                .on_hover_text(
-                    "Downloads a few files at a time and starts the game at low priority, so a \
-                     computer that freezes under load stays usable. Starting takes longer.",
-                );
+        section(ui, p, "settings.launching", |ui| {
+            ui.checkbox(&mut s.gentle_launch, t!("settings.gentle_launch"))
+                .on_hover_text(t!("settings.downloads_a_few_files_at_a_time_and_starts"));
         });
 
-        section(ui, p, "Memory", |ui| {
+        section(ui, p, "settings.memory", |ui| {
             memory_slider(
                 ui,
-                "Maximum",
+                t!("settings.maximum"),
                 &mut s.max_memory_mb,
                 MIN_MEMORY_MB,
                 MAX_MEMORY_SLIDER_MB,
             );
             let max = s.max_memory_mb;
-            memory_slider(ui, "Minimum", &mut s.min_memory_mb, MIN_MEMORY_MB, max);
+            memory_slider(
+                ui,
+                t!("settings.minimum"),
+                &mut s.min_memory_mb,
+                MIN_MEMORY_MB,
+                max,
+            );
             ui.label(
-                RichText::new(
-                    "4 GB suits vanilla. Giving Java more than it needs can cause stutter.",
-                )
-                .small()
-                .color(p.muted),
+                RichText::new(t!("settings.4_gb_suits_vanilla_giving_java_more_than_it"))
+                    .small()
+                    .color(p.muted),
             );
         });
 
-        section(ui, p, "Versions", |ui| {
-            ui.checkbox(&mut s.show_snapshots, "Show snapshots")
-                .on_hover_text("Weekly development builds. They can break worlds; back up first.");
-            ui.checkbox(&mut s.show_old_versions, "Show old alpha and beta versions");
+        section(ui, p, "settings.versions", |ui| {
+            ui.checkbox(&mut s.show_snapshots, t!("settings.show_snapshots"))
+                .on_hover_text(t!("settings.weekly_development_builds_they_can_break"));
+            ui.checkbox(
+                &mut s.show_old_versions,
+                t!("settings.show_old_alpha_and_beta_versions"),
+            );
         });
 
-        section(ui, p, "Game window", |ui| {
+        section(ui, p, "settings.game_window", |ui| {
             widgets::field_row(ui, |ui| {
-                ui.label("Resolution");
+                ui.label(t!("settings.resolution"));
                 ui.add(egui::DragValue::new(&mut s.window_width).range(320..=MAX_RESOLUTION));
                 ui.label("×");
                 ui.add(egui::DragValue::new(&mut s.window_height).range(240..=MAX_RESOLUTION));
                 egui::ComboBox::from_id_salt("res_presets")
-                    .selected_text("Presets")
+                    .selected_text(t!("settings.presets"))
                     .show_ui(ui, |ui| {
                         for (w, h) in RESOLUTIONS {
                             if ui.selectable_label(false, format!("{w} × {h}")).clicked() {
@@ -220,109 +253,148 @@ impl ArcticApp {
                         }
                     });
             });
-            ui.checkbox(&mut s.fullscreen, "Start in fullscreen");
+            ui.checkbox(&mut s.fullscreen, t!("settings.start_in_fullscreen"));
             ui.add_enabled(
                 !s.fullscreen,
-                egui::Checkbox::new(&mut s.game_maximized, "Start the game maximized"),
+                egui::Checkbox::new(
+                    &mut s.game_maximized,
+                    t!("settings.start_the_game_maximized"),
+                ),
             )
-            .on_hover_text(
-                "The game window fills the screen, with the taskbar and title bar still there.",
-            );
+            .on_hover_text(t!("settings.the_game_window_fills_the_screen_with_the"));
             // macOS already runs OpenGL games on the gaming card.
             if !cfg!(target_os = "macos") {
-                ui.checkbox(&mut s.high_performance_gpu, "Use the gaming graphics card")
-                    .on_hover_text(
-                        "Laptops with two graphics cards: Minecraft runs on the fast one instead of the built-in one. A choice you made yourself (Windows' graphics settings, or PRIME variables on Linux) is kept.",
-                    );
+                ui.checkbox(
+                    &mut s.high_performance_gpu,
+                    t!("settings.use_the_gaming_graphics_card"),
+                )
+                .on_hover_text(t!("settings.laptops_with_two_graphics_cards_minecraft"));
             }
             widgets::field_row(ui, |ui| {
-                ui.label("When the game starts");
+                ui.label(t!("settings.when_the_game_starts"));
                 ui.selectable_value(
                     &mut s.on_game_start,
                     GameStartAction::KeepOpen,
-                    "Keep launcher open",
+                    t!("settings.keep_launcher_open"),
                 );
                 ui.selectable_value(
                     &mut s.on_game_start,
                     GameStartAction::Minimize,
-                    "Minimize launcher",
+                    t!("settings.minimize_launcher"),
                 );
             });
             ui.checkbox(
                 &mut s.discord_presence,
-                "Show what you're playing on Discord",
+                t!("settings.show_what_youre_playing_on_discord"),
             );
             let presence_on = s.discord_presence;
             ui.add_enabled_ui(presence_on, |ui| {
                 ui.indent("discord_show_server", |ui| {
-                    ui.checkbox(&mut s.discord_show_server, "Show server in Discord status")
-                        .on_hover_text(crate::discord::SHOW_SERVER_TIP)
-                        .on_disabled_hover_text(
-                            "Turn on \"Show what you're playing on Discord\" first.",
-                        );
+                    ui.checkbox(
+                        &mut s.discord_show_server,
+                        t!("settings.show_server_in_discord_status"),
+                    )
+                    .on_hover_text(t!(crate::discord::SHOW_SERVER_TIP))
+                    .on_disabled_hover_text(t!(
+                        "settings.turn_on_show_what_youre_playing_on_discord"
+                    ));
                 });
             });
             widgets::field_row(ui, |ui| {
-                ui.label("Crash reports")
-                    .on_hover_text("When the game crashes, Arctic can send its log so the crash can be fixed. Your name, folders and sign-in details are taken out first.");
-                ui.selectable_value(&mut s.crash_reports, CrashReports::Ask, "Ask me");
-                ui.selectable_value(&mut s.crash_reports, CrashReports::Always, "Always send");
-                ui.selectable_value(&mut s.crash_reports, CrashReports::Never, "Never");
+                ui.label(t!("settings.crash_reports"))
+                    .on_hover_text(t!("settings.when_the_game_crashes_arctic_can_send_its"));
+                ui.selectable_value(
+                    &mut s.crash_reports,
+                    CrashReports::Ask,
+                    t!("settings.ask_me"),
+                );
+                ui.selectable_value(
+                    &mut s.crash_reports,
+                    CrashReports::Always,
+                    t!("settings.always_send"),
+                );
+                ui.selectable_value(
+                    &mut s.crash_reports,
+                    CrashReports::Never,
+                    t!("settings.never"),
+                );
             });
             widgets::field_row(ui, |ui| {
-                ui.label("Contact for crashes")
-                    .on_hover_text("Optional. Sent with a crash report so we can write back to you: a Discord name or an e-mail address. Leave it empty to stay anonymous.");
+                ui.label(t!("settings.contact_for_crashes"))
+                    .on_hover_text(t!("settings.optional_sent_with_a_crash_report_so_we_can"));
                 ui.add(
                     egui::TextEdit::singleline(&mut s.crash_contact)
-                        .hint_text("Discord name or e-mail (optional)")
+                        .hint_text(t!("settings.discord_name_or_e_mail_optional"))
                         .char_limit(80)
                         .desired_width(240.0),
                 );
             });
         });
 
-        section(ui, p, "Java", |ui| {
+        section(ui, p, "settings.java", |ui| {
             ui.label(
-                RichText::new("Arctic downloads the right Java for each version automatically.")
+                RichText::new(t!("settings.arctic_downloads_the_right_java_for_each"))
                     .small()
                     .color(p.muted),
             );
             widgets::field_row(ui, |ui| {
-                ui.label("Extra JVM arguments");
+                ui.label(t!("settings.extra_jvm_arguments"));
                 ui.add(widgets::text_field(&mut s.extra_jvm_args).desired_width(320.0));
             });
             java_override(ui, p, s);
         });
 
-        section(ui, p, "Updates", |ui| {
+        section(ui, p, "settings.updates", |ui| {
             if arctic_core::update::managed_by_flatpak() {
-                ui.label("Updates are managed by your Linux software manager.");
-                ui.checkbox(&mut s.show_release_notes, "Show what's new after updating");
+                ui.label(t!("settings.updates_are_managed_by_your_linux_software"));
+                ui.checkbox(
+                    &mut s.show_release_notes,
+                    t!("settings.show_whats_new_after_updating"),
+                );
                 return;
             }
             widgets::field_row(ui, |ui| {
-                ui.label("Channel");
-                ui.selectable_value(&mut s.update_channel, UpdateChannel::Stable, "Stable");
-                ui.selectable_value(&mut s.update_channel, UpdateChannel::Beta, "Beta");
-            });
-            ui.checkbox(&mut s.check_updates_on_start, "Check for updates on start")
-                .on_hover_text("A few seconds after the launcher opens, so it starts fast");
-            ui.checkbox(&mut s.auto_install_updates, "Install updates automatically")
-                .on_hover_text(
-                    "New versions download by themselves and are used the next time you open the launcher.",
+                ui.label(t!("settings.channel"));
+                ui.selectable_value(
+                    &mut s.update_channel,
+                    UpdateChannel::Stable,
+                    t!("settings.stable"),
                 );
+                ui.selectable_value(
+                    &mut s.update_channel,
+                    UpdateChannel::Beta,
+                    t!("settings.beta"),
+                );
+            });
+            ui.checkbox(
+                &mut s.check_updates_on_start,
+                t!("settings.check_for_updates_on_start"),
+            )
+            .on_hover_text(t!("settings.a_few_seconds_after_the_launcher_opens_so_it"));
+            ui.checkbox(
+                &mut s.auto_install_updates,
+                t!("settings.install_updates_automatically"),
+            )
+            .on_hover_text(t!("settings.new_versions_download_by_themselves_and_are"));
             ui.checkbox(
                 &mut s.restart_hidden_for_updates,
-                "Restart by itself when waiting in the tray",
+                t!("settings.restart_by_itself_when_waiting_in_the_tray"),
             )
-            .on_hover_text(
-                "On by default: restart into an installed update while hidden in the tray with no game running. Off: use the update next time you open the launcher, or choose Restart now here.",
-            );
-            ui.checkbox(&mut s.show_release_notes, "Show what's new after updating")
-                .on_hover_text("After an update, a popup lists what's new and what's fixed");
+            .on_hover_text(t!("settings.on_by_default_restart_into_an_installed"));
+            ui.checkbox(
+                &mut s.show_release_notes,
+                t!("settings.show_whats_new_after_updating"),
+            )
+            .on_hover_text(t!("settings.after_an_update_a_popup_lists_whats_new_and"));
             if update_installed {
-                restart_update =
-                    widgets::button(ui, p, None, "Update installed - Restart now", false).clicked();
+                restart_update = widgets::button(
+                    ui,
+                    p,
+                    None,
+                    t!("settings.update_installed_restart_now"),
+                    false,
+                )
+                .clicked();
             }
         });
 
@@ -330,55 +402,67 @@ impl ArcticApp {
             self.restart_after_update(ui.ctx());
         }
 
-        section(ui, p, "Network", |ui| self.network_section(ui, p));
+        section(ui, p, "settings.network", |ui| self.network_section(ui, p));
 
-        section(ui, p, "Voice chat", |ui| self.voice_section(ui, p));
+        section(ui, p, "settings.voice_chat", |ui| self.voice_section(ui, p));
 
-        section(ui, p, "Shared between instances", |ui| {
+        section(ui, p, "settings.shared_between_instances", |ui| {
             ui.label(
-                RichText::new(
-                    "Kept the same in every instance of this profile: whatever you changed last is used everywhere, from the next start.",
-                )
-                .small()
-                .color(p.muted),
+                RichText::new(t!("settings.kept_the_same_in_every_instance_of_this"))
+                    .small()
+                    .color(p.muted),
             );
             ui.add_space(4.0);
             let shared = &mut self.settings.shared;
-            ui.checkbox(&mut shared.servers, "Server list");
+            ui.checkbox(&mut shared.servers, t!("settings.server_list"));
             ui.checkbox(
                 &mut shared.client,
-                "Arctic Client settings (HUD, crosshair, keys, waypoints)",
+                t!("settings.arctic_client_settings_hud_crosshair_keys"),
             );
             ui.checkbox(
                 &mut shared.game,
-                "Minecraft settings (keys, video, sound, FOV)",
+                t!("settings.minecraft_settings_keys_video_sound_fov"),
             );
         });
 
-        section(ui, p, "Game settings for new instances", |ui| {
+        section(ui, p, "settings.game_settings_for_new_instances", |ui| {
             self.game_defaults_section(ui, p)
         });
 
-        section(ui, p, "Storage", |ui| self.storage_section(ui, p));
+        section(ui, p, "settings.storage", |ui| self.storage_section(ui, p));
 
-        section(ui, p, "Share & back up", |ui| {
+        section(ui, p, "settings.share_back_up", |ui| {
             ui.label(
-                RichText::new(
-                    "Your settings, instances (as mod lists) and HUD setups, as a code, text or file. Accounts and passwords are never included.",
-                )
-                .small()
-                .color(p.muted),
+                RichText::new(t!("settings.your_settings_instances_as_mod_lists_and_hud"))
+                    .small()
+                    .color(p.muted),
             );
             ui.add_space(4.0);
             crate::widgets::row(ui, |ui| {
-                if widgets::button(ui, p, Some(Icon::Share), "Export profile", false).clicked() {
+                if widgets::button(
+                    ui,
+                    p,
+                    Some(Icon::Share),
+                    t!("settings.export_profile"),
+                    false,
+                )
+                .clicked()
+                {
                     self.open_share(None);
                 }
-                if widgets::button(ui, p, Some(Icon::Import), "Import", false).clicked() {
+                if widgets::button(ui, p, Some(Icon::Import), t!("settings.import"), false)
+                    .clicked()
+                {
                     self.open_share_import();
                 }
-                if widgets::button(ui, p, Some(Icon::Layers), "From another launcher", false)
-                    .clicked()
+                if widgets::button(
+                    ui,
+                    p,
+                    Some(Icon::Layers),
+                    t!("settings.from_another_launcher"),
+                    false,
+                )
+                .clicked()
                 {
                     self.open_migrate();
                 }
@@ -386,30 +470,30 @@ impl ArcticApp {
         });
 
         crate::widgets::row(ui, |ui| {
-            if widgets::button(ui, p, None, "Run setup again", false)
-                .on_hover_text("The first-run walkthrough, starting from your current choices")
+            if widgets::button(ui, p, None, t!("settings.run_setup_again"), false)
+                .on_hover_text(t!("settings.the_first_run_walkthrough_starting_from_your"))
                 .clicked()
             {
                 self.start_onboarding();
             }
-            if widgets::button(ui, p, None, "Desktop shortcut", false)
-                .on_hover_text("Puts an Arctic Launcher shortcut on your desktop")
+            if widgets::button(ui, p, None, t!("settings.desktop_shortcut"), false)
+                .on_hover_text(t!("settings.puts_an_arctic_launcher_shortcut_on_your"))
                 .clicked()
             {
                 match crate::desktop_shortcut::create() {
                     Ok(path) => self.toasts.push(
                         crate::toasts::Kind::Success,
-                        "Desktop shortcut made",
+                        t!("settings.desktop_shortcut_made"),
                         path.display().to_string(),
                     ),
                     Err(e) => self.toasts.push(
                         crate::toasts::Kind::Error,
-                        "Couldn't make the shortcut",
+                        t!("settings.couldnt_make_the_shortcut"),
                         e,
                     ),
                 }
             }
-            if widgets::button(ui, p, None, "Restore defaults", false).clicked() {
+            if widgets::button(ui, p, None, t!("settings.restore_defaults"), false).clicked() {
                 self.settings = Settings {
                     last_version: self.settings.last_version.clone(),
                     version_view: self.settings.version_view,
@@ -431,13 +515,61 @@ impl ArcticApp {
     }
 }
 
-fn section(ui: &mut egui::Ui, p: &Palette, title: &str, body: impl FnOnce(&mut egui::Ui)) {
+/// The language picker: "System (its name)" and every language by its own name. A pick
+/// applies at once.
+fn language_row(ui: &mut egui::Ui, language: &mut String) {
+    use crate::i18n::{self, LANGUAGES, SYSTEM};
+    widgets::field_row(ui, |ui| {
+        ui.label(t!("common.language"));
+        let system_label = tf!(
+            "common.language.system",
+            name = i18n::name_of(i18n::system_language())
+        );
+        let shown = if language.as_str() == SYSTEM {
+            system_label.clone()
+        } else {
+            i18n::name_of(language).to_owned()
+        };
+        let before = language.clone();
+        // Every language is listed in its own script, so its font has to be there before the
+        // list is drawn (not only once it's picked).
+        for entry in LANGUAGES {
+            crate::fonts::ensure_for(ui.ctx(), entry.name);
+        }
+        // As tall as the row, so the label beside it sits on the same center line.
+        ui.spacing_mut().interact_size.y = widgets::FIELD_HEIGHT;
+        egui::ComboBox::from_id_salt("language")
+            .selected_text(shown)
+            .show_ui(ui, |ui| {
+                if ui
+                    .selectable_label(language.as_str() == SYSTEM, system_label)
+                    .clicked()
+                {
+                    *language = SYSTEM.to_owned();
+                }
+                for entry in LANGUAGES {
+                    if ui
+                        .selectable_label(language.as_str() == entry.code, entry.name)
+                        .clicked()
+                    {
+                        *language = entry.code.to_owned();
+                    }
+                }
+            });
+        if *language != before {
+            i18n::set_language(language);
+            i18n::ensure_fonts(ui.ctx());
+        }
+    });
+}
+
+fn section(ui: &mut egui::Ui, p: &Palette, title: &'static str, body: impl FnOnce(&mut egui::Ui)) {
     if group_of(title) != GROUP.with(|g| g.get()) {
         return;
     }
     let response = theme::card(p).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        ui.label(RichText::new(title).size(17.0).strong().color(p.text));
+        ui.label(RichText::new(t!(title)).size(17.0).strong().color(p.text));
         ui.add_space(6.0);
         body(ui);
     });
@@ -540,7 +672,7 @@ fn theme_tile(ui: &mut egui::Ui, tp: &Palette, name: &str, selected: bool) -> bo
 fn java_override(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) {
     let mut enabled = s.java_override.is_some();
     if ui
-        .checkbox(&mut enabled, "Use a custom Java executable")
+        .checkbox(&mut enabled, t!("settings.use_a_custom_java_executable"))
         .changed()
     {
         s.java_override = enabled.then(PathBuf::new);
@@ -548,7 +680,7 @@ fn java_override(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) {
     if let Some(path) = &mut s.java_override {
         let mut text = path.display().to_string();
         widgets::field_row(ui, |ui| {
-            ui.label("Path to javaw.exe");
+            ui.label(t!("settings.path_to_javaw_exe"));
             if ui
                 .add(widgets::text_field(&mut text).desired_width(320.0))
                 .changed()
@@ -558,7 +690,8 @@ fn java_override(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) {
         });
         if !path.as_os_str().is_empty() && !path.is_file() {
             ui.label(
-                RichText::new("File not found; the managed runtime will be used.").color(p.warn),
+                RichText::new(t!("settings.file_not_found_the_managed_runtime_will_be"))
+                    .color(p.warn),
             );
         }
     }
@@ -571,11 +704,11 @@ mod tests {
     #[test]
     fn quick_tip_settings_select_the_containing_group_and_request_scroll() {
         for (section, group) in [
-            ("Storage", 3),
-            ("Appearance", 0),
-            ("Arctic Client", 0),
-            ("Voice chat", 2),
-            ("Freeze animated capes and cosmetics", 0),
+            ("settings.storage", 3),
+            ("settings.appearance", 0),
+            ("settings.arctic_client", 0),
+            ("settings.voice_chat", 2),
+            ("settings.freeze_animated_capes_and_cosmetics", 0),
         ] {
             GROUP.with(|g| g.set(1));
             open_section(section);

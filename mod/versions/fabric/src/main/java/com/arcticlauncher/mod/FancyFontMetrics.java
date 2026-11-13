@@ -5,6 +5,7 @@ import java.awt.font.FontRenderContext;
 import java.awt.font.LineMetrics;
 import java.io.InputStream;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Inter's line box, measured from the font file (ascent, descent and leading) at the same em the
  * chat font is drawn at. Chat used to space lines by a hardcoded 9 while the letters are this tall.
@@ -31,7 +32,7 @@ public final class FancyFontMetrics {
 				return 9;
 			}
 			Font font = Font.createFont(Font.TRUETYPE_FONT, in).deriveFont(EM);
-			LineMetrics metrics = font.getLineMetrics("Agjpq[]|", new FontRenderContext(null, true, true));
+			LineMetrics metrics = font.getLineMetrics("Agjpq[]|", new FontRenderContext(null, true, true)); // i18n-ignore
 			return Math.max(9, Math.round(metrics.getHeight()));
 		} catch (Exception e) {
 			return 9;

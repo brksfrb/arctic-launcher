@@ -1,5 +1,7 @@
 package com.arcticlauncher.client.feature;
 
+import com.arcticlauncher.client.Lang;
+
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.gfx.Gfx;
 import java.util.ArrayList;
@@ -69,7 +71,7 @@ public final class EmojiPicker {
 		for (Cell cell : CELLS) {
 			if (!group.equals(cell.emote.group)) {
 				group = cell.emote.group;
-				g.text(group, PAD, cell.y - HEADING + 3, 0xFFCEDDE5, false);
+				g.text(Lang.t(group), PAD, cell.y - HEADING + 3, 0xFFCEDDE5, false);
 			}
 			int x = cell.x, y = cell.y;
 			if (inside(localX, localY, x, y, CELL, CELL)) {

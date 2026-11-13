@@ -5,6 +5,7 @@ import com.arcticlauncher.client.config.HudSlot;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Style;
 
+import com.arcticlauncher.client.Lang;
 /**
  * A label and a value in a box: "FPS: 144", "144 FPS" or "[FPS: 144]", as
  * the player set it, or an icon in place of the label (the mod's icon for it, or the item it is about).
@@ -107,7 +108,7 @@ public abstract class TextWidget extends HudWidget {
 		String sample = sample();
 		java.util.List<String> out = new java.util.ArrayList<String>();
 		if (hasIcon()) {
-			out.add("Icon");
+			out.add(Lang.t("hud.icon"));
 		}
 		out.add(label + ": " + sample);
 		out.add(sample + " " + label);

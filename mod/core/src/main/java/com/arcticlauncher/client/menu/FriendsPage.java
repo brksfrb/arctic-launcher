@@ -3,6 +3,7 @@ package com.arcticlauncher.client.menu;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Style;
 
+import com.arcticlauncher.client.Lang;
 /** Friends as a page: who's online and where, chat, screenshots, voice, duels. */
 final class FriendsPage implements MenuTab {
 	private final FriendsTab friends = new FriendsTab();
@@ -12,12 +13,12 @@ final class FriendsPage implements MenuTab {
 
 	@Override
 	public String title() {
-		return "Friends";
+		return Lang.t("social.friends");
 	}
 
 	@Override
 	public String hint() {
-		return "Who's online and where; chat and send screenshots.";
+		return Lang.t("social.whos_online_and_where_chat_and_send");
 	}
 
 	@Override

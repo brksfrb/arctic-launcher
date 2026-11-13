@@ -51,7 +51,7 @@ public final class Style {
 		hud = b.hud;
 	}
 
-	public static final Style ARCTIC = new Builder("arctic", "Arctic", "Deep night blue with ice accents.")
+	public static final Style ARCTIC = new Builder("arctic", "Arctic", "mods.style.arctic.description") // i18n-ignore
 			.accent(0xFF7DD3FC, 0xFF06223A)
 			.sky(0xFF070E1C, 0xFF142845, 0x6038E1C8)
 			.mountains(0xFF1B3354, 0xFF0C182B)
@@ -59,7 +59,7 @@ public final class Style {
 			.ink(0xFFEAF4FF, 0xFF8FA6BF, 0x900A1422)
 			.build();
 
-	public static final Style AURORA = new Builder("aurora", "Aurora", "Violet sky with northern-light greens.")
+	public static final Style AURORA = new Builder("aurora", "Aurora", "mods.style.aurora.description") // i18n-ignore
 			.accent(0xFF86EFAC, 0xFF0B2A18)
 			.sky(0xFF0B0A1C, 0xFF231A45, 0x5886EFAC)
 			.mountains(0xFF2A2350, 0xFF151130)
@@ -67,7 +67,7 @@ public final class Style {
 			.ink(0xFFF1EEFF, 0xFFA69CC8, 0x900E0B20)
 			.build();
 
-	public static final Style CLASSIC = new Builder("classic", "Classic", "Plain black and white, no colors.")
+	public static final Style CLASSIC = new Builder("classic", "Classic", "mods.style.classic.description") // i18n-ignore
 			.accent(0xFFE8E8E8, 0xFF000000)
 			.sky(0xFF000000, 0xFF121212, 0x00FFFFFF)
 			.mountains(0xFF1C1C1C, 0xFF0A0A0A)
@@ -75,7 +75,7 @@ public final class Style {
 			.ink(0xFFF2F2F2, 0xFF9A9A9A, 0x90000000)
 			.build();
 
-	public static final Style VANILLA = new Builder("vanilla", "Vanilla", "Minecraft's own menus, plus the Arctic HUD.")
+	public static final Style VANILLA = new Builder("vanilla", "Vanilla", "mods.style.vanilla.description") // i18n-ignore
 			.restyles(false)
 			.accent(0xFFFFFFFF, 0xFF202020)
 			.sky(0xFF101010, 0xFF2A2A2A, 0x00FFFFFF)

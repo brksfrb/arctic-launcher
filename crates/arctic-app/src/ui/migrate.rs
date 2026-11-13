@@ -12,7 +12,7 @@ use crate::migrate_tasks::{HudJob, InstanceJob, Outcome, ScanResult};
 use crate::tasks::ProgressSnapshot;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 const WIDTH: f32 = 620.0;
 const LIST_HEIGHT: f32 = 380.0;
 const MB: f64 = 1024.0 * 1024.0;
@@ -119,31 +119,41 @@ impl ArcticApp {
         };
         let p = self.palette();
         let mut close = false;
-        let modal = Modal::new(Id::new("migrate")).frame(super::instances::dialog_frame(p)).show(ctx, |ui| {
-            ui.set_width(WIDTH);
-            widgets::lift_controls(ui, p);
-            ui.label(RichText::new("Move to Arctic").size(22.0).strong().color(p.text));
-            ui.label(
-                RichText::new("Copies instances, mods, worlds and settings from other launchers. The originals stay as they are; accounts never come along.")
-                    .color(p.muted),
-            );
-            ui.add_space(8.0);
-            close = match ui_state.stage {
-                Stage::Scanning => {
-                    ui.horizontal(|ui| {
-                        ui.spinner();
-                        ui.label(RichText::new("Looking for other launchers…").color(p.muted));
-                    });
-                    false
-                }
-                Stage::Choose => self.migrate_choose(ui, &mut ui_state),
-                Stage::Running => {
-                    migrate_progress(ui, p, &ui_state);
-                    false
-                }
-                Stage::Done => migrate_done(ui, p, &ui_state),
-            };
-        });
+        let modal = Modal::new(Id::new("migrate"))
+            .frame(super::instances::dialog_frame(p))
+            .show(ctx, |ui| {
+                ui.set_width(WIDTH);
+                widgets::lift_controls(ui, p);
+                ui.label(
+                    RichText::new(t!("settings.move_to_arctic"))
+                        .size(22.0)
+                        .strong()
+                        .color(p.text),
+                );
+                ui.label(
+                    RichText::new(t!("settings.copies_instances_mods_worlds_and_settings"))
+                        .color(p.muted),
+                );
+                ui.add_space(8.0);
+                close = match ui_state.stage {
+                    Stage::Scanning => {
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            ui.label(
+                                RichText::new(t!("settings.looking_for_other_launchers"))
+                                    .color(p.muted),
+                            );
+                        });
+                        false
+                    }
+                    Stage::Choose => self.migrate_choose(ui, &mut ui_state),
+                    Stage::Running => {
+                        migrate_progress(ui, p, &ui_state);
+                        false
+                    }
+                    Stage::Done => migrate_done(ui, p, &ui_state),
+                };
+            });
         let busy = matches!(ui_state.stage, Stage::Running | Stage::Scanning);
         if !(close || (modal.should_close() && !busy)) {
             self.migrate = Some(ui_state);
@@ -162,37 +172,55 @@ impl ArcticApp {
                 .iter()
                 .map(|i| (i.id.clone(), i.name.clone())),
         );
-        egui::ScrollArea::vertical().max_height(LIST_HEIGHT).show(ui, |ui| {
-            let mut launchers: Vec<Launcher> = Vec::new();
-            for f in &found.scan.instances {
-                if !launchers.contains(&f.launcher) {
-                    launchers.push(f.launcher);
+        egui::ScrollArea::vertical()
+            .max_height(LIST_HEIGHT)
+            .show(ui, |ui| {
+                let mut launchers: Vec<Launcher> = Vec::new();
+                for f in &found.scan.instances {
+                    if !launchers.contains(&f.launcher) {
+                        launchers.push(f.launcher);
+                    }
                 }
-            }
-            for launcher in launchers {
-                ui.add_space(6.0);
-                ui.label(RichText::new(launcher.name()).strong().color(p.text));
-                for f in found.scan.instances.iter().filter(|f| f.launcher == launcher) {
-                    instance_row(ui, p, f, found.sizes.get(&f.key()), state);
+                for launcher in launchers {
+                    ui.add_space(6.0);
+                    ui.label(RichText::new(launcher.name()).strong().color(p.text));
+                    for f in found
+                        .scan
+                        .instances
+                        .iter()
+                        .filter(|f| f.launcher == launcher)
+                    {
+                        instance_row(ui, p, f, found.sizes.get(&f.key()), state);
+                    }
                 }
-            }
-            if !found.scan.clients.is_empty() {
-                ui.add_space(10.0);
-                ui.label(RichText::new("HUD layouts and keys").strong().color(p.text));
-                for c in &found.scan.clients {
-                    hud_row(ui, p, c, state, &targets);
+                if !found.scan.clients.is_empty() {
+                    ui.add_space(10.0);
+                    ui.label(
+                        RichText::new(t!("settings.hud_layouts_and_keys"))
+                            .strong()
+                            .color(p.text),
+                    );
+                    for c in &found.scan.clients {
+                        hud_row(ui, p, c, state, &targets);
+                    }
                 }
-            }
-            if !found.scan.seen.is_empty() {
-                ui.add_space(10.0);
-                for (launcher, why) in &found.scan.seen {
-                    ui.label(RichText::new(format!("{}: {why}", launcher.name())).small().color(p.muted));
+                if !found.scan.seen.is_empty() {
+                    ui.add_space(10.0);
+                    for (launcher, why) in &found.scan.seen {
+                        ui.label(
+                            RichText::new(format!("{}: {why}", launcher.name()))
+                                .small()
+                                .color(p.muted),
+                        );
+                    }
                 }
-            }
-            if found.scan.instances.is_empty() && found.scan.clients.is_empty() {
-                ui.label(RichText::new("Nothing found. If your launcher keeps instances somewhere else, choose that folder.").color(p.muted));
-            }
-        });
+                if found.scan.instances.is_empty() && found.scan.clients.is_empty() {
+                    ui.label(
+                        RichText::new(t!("settings.nothing_found_if_your_launcher_keeps"))
+                            .color(p.muted),
+                    );
+                }
+            });
         ui.add_space(10.0);
         let bytes: u64 = found
             .scan
@@ -204,17 +232,24 @@ impl ArcticApp {
         let count = state.picked.len();
         let mut close = false;
         crate::widgets::row(ui, |ui| {
-            if widgets::button(ui, p, Some(Icon::Folder), "Choose folder…", false)
-                .on_hover_text(
-                    "A launcher's instances folder (portable MultiMC, moved CurseForge folder…)",
-                )
-                .clicked()
+            if widgets::button(
+                ui,
+                p,
+                Some(Icon::Folder),
+                t!("settings.choose_folder"),
+                false,
+            )
+            .on_hover_text(t!("settings.a_launchers_instances_folder_portable"))
+            .clicked()
             {
                 self.tasks.migrate_pick_folder();
             }
             ui.label(
-                RichText::new(format!("{:.1} GB to copy", bytes as f64 / MB / 1024.0))
-                    .color(p.muted),
+                RichText::new(tf!(
+                    "settings.gb_to_copy",
+                    value = format!("{:.1}", bytes as f64 / MB / 1024.0)
+                ))
+                .color(p.muted),
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let go = ui
@@ -223,7 +258,7 @@ impl ArcticApp {
                             ui,
                             p,
                             Some(Icon::Import),
-                            &format!("Bring over {count}"),
+                            &tf!("settings.bring_over", count = count),
                             true,
                         )
                     })
@@ -231,7 +266,7 @@ impl ArcticApp {
                 if go.clicked() {
                     self.start_migrate(state, &found);
                 }
-                if widgets::button(ui, p, None, "Cancel", false).clicked() {
+                if widgets::button(ui, p, None, t!("settings.cancel"), false).clicked() {
                     close = true;
                 }
             });
@@ -296,12 +331,18 @@ impl ArcticApp {
             ui.current = None;
             let failed = ui.outcomes.iter().filter(|o| !o.ok).count();
             let (kind, title) = if failed == 0 {
-                (Kind::Success, "Everything came over".to_owned())
+                (
+                    Kind::Success,
+                    t!("settings.everything_came_over").to_owned(),
+                )
             } else {
-                (Kind::Error, format!("{failed} couldn't come over"))
+                (
+                    Kind::Error,
+                    tf!("settings.couldnt_come_over", failed = failed),
+                )
             };
             self.toasts
-                .push(kind, title, "See the details in the window.");
+                .push(kind, title, t!("settings.see_the_details_in_the_window"));
         }
     }
 }
@@ -315,15 +356,18 @@ fn instance_row(
 ) {
     let key = f.key();
     let mut on = state.picked.contains(&key);
-    let loader = f.loader.as_ref().map_or("Vanilla".to_owned(), |l| {
-        format!(
-            "{} {}",
-            l.kind.label(),
-            l.version.as_deref().unwrap_or("(newest)")
-        )
-    });
+    let loader = f
+        .loader
+        .as_ref()
+        .map_or(t!("settings.vanilla").to_owned(), |l| {
+            format!(
+                "{} {}",
+                l.kind.label(),
+                l.version.as_deref().unwrap_or("(newest)")
+            )
+        });
     let what = if f.into_vanilla {
-        "into your Vanilla instance".to_owned()
+        t!("settings.into_your_vanilla_instance").to_owned()
     } else {
         format!("{} · {loader}", f.game_version)
     };
@@ -368,10 +412,10 @@ fn instance_row(
         if let Some(s) = sizes {
             if !s.turned_off.is_empty() {
                 ui.label(
-                    RichText::new(format!(
-                        "{} mods don't run on {} and come switched off",
-                        s.turned_off.len(),
-                        f.game_version
+                    RichText::new(tf!(
+                        "settings.mods_dont_run_on_and_come_switched_off",
+                        count = s.turned_off.len(),
+                        game_version = f.game_version
                     ))
                     .small()
                     .color(p.muted),
@@ -379,9 +423,9 @@ fn instance_row(
             }
             if !s.other_loader.is_empty() {
                 ui.label(
-                    RichText::new(format!(
-                        "{} mods in this shared folder are for another loader and stay behind",
-                        s.other_loader.len()
+                    RichText::new(tf!(
+                        "settings.mods_in_this_shared_folder_are_for_another",
+                        count = s.other_loader.len()
                     ))
                     .small()
                     .color(p.muted),
@@ -417,7 +461,7 @@ fn hud_row(
         }
         let widgets_on = c.settings.widgets_on().unwrap_or(0);
         ui.label(
-            RichText::new(format!("{widgets_on} widgets on"))
+            RichText::new(tf!("settings.widgets_on", widgets_on = widgets_on))
                 .small()
                 .color(p.muted),
         );
@@ -432,9 +476,9 @@ fn hud_row(
         let current = targets
             .iter()
             .find(|(id, _)| *id == choice.target)
-            .map_or("Vanilla", |(_, n)| n.as_str());
+            .map_or(t!("settings.vanilla"), |(_, n)| n.as_str());
         ui.horizontal(|ui| {
-            ui.label("Apply to");
+            ui.label(t!("settings.apply_to"));
             widgets::modal_combo(("hud_target", &key))
                 .selected_text(current)
                 .show_ui(ui, |ui| {
@@ -445,9 +489,9 @@ fn hud_row(
         });
         if !c.unsure.is_empty() {
             ui.label(
-                RichText::new(format!(
-                    "{} doesn't save whether these are on; tick the ones you use:",
-                    c.launcher.name()
+                RichText::new(tf!(
+                    "settings.doesnt_save_whether_these_are_on_tick_the",
+                    name = c.launcher.name()
                 ))
                 .small()
                 .color(p.muted),
@@ -483,7 +527,12 @@ fn chosen_bytes(f: &Found, sizes: Option<&arctic_core::migrate::Sizes>, state: &
 
 fn migrate_progress(ui: &mut egui::Ui, p: &crate::theme::Palette, state: &MigrateUi) {
     ui.label(
-        RichText::new(format!("{} of {} done", state.outcomes.len(), state.total)).color(p.text),
+        RichText::new(tf!(
+            "settings.of_done",
+            count = state.outcomes.len(),
+            total = state.total
+        ))
+        .color(p.text),
     );
     if let Some((label, s)) = &state.current {
         ui.label(RichText::new(label).small().color(p.muted));
@@ -520,7 +569,7 @@ fn migrate_done(ui: &mut egui::Ui, p: &crate::theme::Palette, state: &MigrateUi)
     ui.add_space(8.0);
     let mut close = false;
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        if widgets::button(ui, p, None, "Done", true).clicked() {
+        if widgets::button(ui, p, None, t!("settings.done"), true).clicked() {
             close = true;
         }
     });

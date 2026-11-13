@@ -9,6 +9,7 @@ import java.net.PasswordAuthentication;
 import java.net.UnknownHostException;
 import java.util.regex.Pattern;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Which connections go through the user's proxy: every server except this
  * PC and the local network (a proxy can't reach those). Server names stay
@@ -77,7 +78,7 @@ public final class ProxyRoutes {
 			long started = System.nanoTime();
 			cached = lookupSrv(key);
 			SRV.put(key, cached);
-			note("proxy: looked up " + key + "'s server record in " + (System.nanoTime() - started) / 1_000_000L + " ms"
+			note("proxy: looked up " + key + "'s server record in " + (System.nanoTime() - started) / 1_000_000L + " ms" // i18n-ignore
 					+ (cached == NO_SRV ? " (none)" : " (" + cached[0] + ":" + cached[1] + ")"));
 		}
 		return cached == NO_SRV ? null : cached.clone();

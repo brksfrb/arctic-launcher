@@ -1,0 +1,84 @@
+# Literals tools/i18n_check.py never flags: names and technical words that are the same in
+# every language. One regular expression per line, matched against the whole literal.
+# Brands and product names
+Arctic( Launcher| Client| Launcher contributors)?
+Minecraft( Launcher)?
+Microsoft
+Mojang
+Xbox( Live)?
+Modrinth( App)?
+CurseForge
+ATLauncher
+GDLauncher
+TLauncher
+MultiMC
+Prism( Launcher)?
+Lunar( Client)?
+Badlion( Client)?
+Feather( Client)?
+LabyMod
+Fabric
+Quilt
+Forge
+NeoForge
+OptiFine
+Sodium
+Lithium
+Iris
+Discord
+GitHub
+Flash Hosting
+Java
+Windows
+Linux
+Flatpak
+macOS
+Segoe UI
+Noto Sans.*
+DejaVu Sans.*
+Microsoft YaHei
+Malgun Gothic
+Ubuntu
+Hack
+# Technical
+Bearer .*
+Basic .*
+Mozilla/.*
+Content-Type
+User-Agent
+Authorization
+Accept(-\w+)?
+If-None-Match
+ETag
+(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)
+UTF-8
+SHA-?1
+SHA-?256
+MD5
+JSON
+PNG
+JPEG
+WebP
+GIF
+H\.264
+ZGC
+G1
+LWJGL.*
+OpenGL
+Vulkan
+DirectX
+LAN
+UUID
+# Minecraft's own names that aren't translated
+Singleplayer
+Steve
+Alex
+Overworld
+Nether
+The End
+# Abbreviations every language uses as they are
+FPS|CPS|TPS|LMB|RMB|XYZ|HUD|UUID|PvP
+# Format, protocol and model names
+VEC|SCALAR|TLS|SRV|MCPR|REGISTER
+# Roman numerals (effect levels)
+I{1,3}|IV|VI{0,3}|IX|X
