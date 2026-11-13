@@ -83,13 +83,13 @@ public final class GfxImpl implements Gfx {
 
 	private static final java.util.Map<String, Identifier> BRANDS = new java.util.HashMap<String, Identifier>();
 
-	private static Identifier dynamic(String name) {
+	public static Identifier dynamic(String name) {
 		Identifier id = Compat.id(ArcticMod.ID, "dyn/" + name);
 		if (!name.startsWith("brand-")) return id;
 		if (BRANDS.containsKey(name)) return BRANDS.get(name);
 		boolean smooth = name.startsWith("brand-smooth-");
-		int size = BrandMark.clampSize(Integer.parseInt(name.substring(smooth ? 13 : 6)));
-		int[] pixels = BrandMark.raster(size);
+		int size = BrandMark.textureSize(name);
+		int[] pixels = BrandMark.textureRaster(name);
 		NativeImage image = new NativeImage(size, size, false);
 		for (int y = 0; y < size; y++) for (int x = 0; x < size; x++) {
 			int color = pixels[y * size + x];

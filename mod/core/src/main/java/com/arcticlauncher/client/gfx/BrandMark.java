@@ -28,6 +28,55 @@ public final class BrandMark {
 	}
 
 	private BrandMark() {}
+	private static final Map<Integer, int[]> ROLE_RASTERS = new ConcurrentHashMap<Integer, int[]>();
+	public static int[] raster(int size, String role) {
+		final int n = clampSize(size), index = com.arcticlauncher.client.feature.Badge.roleIndex(role);
+		if (index == 0) return raster(n);
+		return ROLE_RASTERS.computeIfAbsent(n * 8 + index, key -> tint(n, index));
+	}
+	private static int[] tint(int n, int index) {
+		int[] source = raster(n), out = new int[source.length];
+		int rgb = com.arcticlauncher.client.feature.Badge.COLORS[index];
+		int radius = Math.max(1, n / 32);
+		// Summed alpha keeps the soft halo linear in the raster area at every scale.
+		int stride = n + 1;
+		int[] sums = new int[stride * stride];
+		for (int y = 0; y < n; y++) for (int x = 0; x < n; x++) {
+			sums[(y + 1) * stride + x + 1] = (source[y * n + x] >>> 24)
+					+ sums[y * stride + x + 1] + sums[(y + 1) * stride + x] - sums[y * stride + x];
+		}
+		for (int y = 0; y < n; y++) for (int x = 0; x < n; x++) {
+			float dx = (x + .5f) / n - .5f, dy = (y + .5f) / n - .5f;
+			float t = Math.min(1, (float)Math.sqrt(dx * dx + dy * dy) / .46f);
+			int alpha = source[y * n + x] >>> 24;
+			int left = Math.max(0, x - radius), right = Math.min(n, x + radius + 1);
+			int top = Math.max(0, y - radius), bottom = Math.min(n, y + radius + 1);
+			float glow = (sums[bottom * stride + right] - sums[top * stride + right]
+					- sums[bottom * stride + left] + sums[top * stride + left])
+					/ (float)((2 * radius + 1) * (2 * radius + 1)) * .18f;
+			int a = alpha + Math.round(glow * (1 - alpha / 255f));
+			int color = 0;
+			for (int shift = 0; shift <= 16; shift += 8) {
+				int edge = (rgb >> shift) & 255;
+				int body = Math.round(250 + (edge - 250) * t);
+				int channel = a == 0 ? edge : Math.round((body * alpha + edge * (a - alpha)) / (float)a);
+				color |= channel << shift;
+			}
+			out[y * n + x] = a << 24 | color;
+		}
+		return out;
+	}
+	public static String roleTexture(int size, String role) {
+		return "dyn:brand-role-" + clampSize(size) + "-" + com.arcticlauncher.client.feature.Badge.roleIndex(role);
+	}
+	public static int textureSize(String name) {
+		return clampSize(Integer.parseInt(name.startsWith("brand-role-") ? name.split("-")[2]
+				: name.substring(name.startsWith("brand-smooth-") ? 13 : 6)));
+	}
+	public static int[] textureRaster(String name) {
+		int size = textureSize(name);
+		return name.startsWith("brand-role-") ? raster(size, com.arcticlauncher.client.feature.Badge.ROLES[Integer.parseInt(name.split("-")[3])]) : raster(size);
+	}
 
 	public static int clampSize(int size) {
 		return Math.max(1, Math.min(MAX_SIZE, size));

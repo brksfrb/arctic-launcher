@@ -569,9 +569,9 @@ public final class Compat {
 		if (net.minecraft.client.Minecraft.getInstance().options.forceUnicodeFont) {
 			return literal("");
 		}
-		return literal("\u00a7r" + (char) (com.arcticlauncher.client.feature.Badge.GLYPH_BASE + style + (tab ? 0x10 : 0)) + com.arcticlauncher.client.feature.Badge.GLYPH_GAP + "\u00a7r");
+		return literal("\u00a7r" + com.arcticlauncher.client.feature.Badge.glyph(style, com.arcticlauncher.client.feature.Badge.role(wearer), tab) + com.arcticlauncher.client.feature.Badge.GLYPH_GAP + "\u00a7r");
 		//#else
-		net.minecraft.network.chat.MutableComponent badge = literal("\uE000 ").withStyle(badgeStyle(style, tab));
+		net.minecraft.network.chat.MutableComponent badge = literal((style == 0 && com.arcticlauncher.client.feature.Badge.roleIndex(com.arcticlauncher.client.feature.Badge.role(wearer)) > 0 ? String.valueOf(com.arcticlauncher.client.feature.Badge.glyph(style, com.arcticlauncher.client.feature.Badge.role(wearer), tab)) : "\uE000") + " ").withStyle(badgeStyle(style, tab));
 		return badge;
 		//#endif
 	}

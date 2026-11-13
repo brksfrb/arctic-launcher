@@ -30,15 +30,15 @@ abstract class SmoothFontManagerMixin {
 		//#if MC >= 26.1
 		boolean isDefault = "minecraft".equals(id.getNamespace()) && "default".equals(id.getPath());
 		return original.call(id, isDefault ? com.arcticlauncher.mod.EmoteFont.prepend(providers,
-				p -> new GlyphProvider.Conditional(p, FontOption.Filter.ALWAYS_PASS)) : providers, options);
+				p -> new GlyphProvider.Conditional(p, FontOption.Filter.ALWAYS_PASS)) : com.arcticlauncher.mod.EmoteFont.isBadge(id) ? com.arcticlauncher.mod.EmoteFont.badges(providers) : providers, options);
 		//#else
-		return original.call(id, SmoothFont.isDefault(id) ? SmoothFont.withInter(providers) : providers, options);
+		return original.call(id, SmoothFont.isDefault(id) ? SmoothFont.withInter(providers) : com.arcticlauncher.mod.EmoteFont.isBadge(id) ? com.arcticlauncher.mod.EmoteFont.badges(providers) : providers, options);
 		//#endif
 	}
 	//#else
 	@WrapMethod(method = "createFontSet")
 	private FontSet arctic$inter(ResourceLocation id, List<GlyphProvider.Conditional> providers, Set<FontOption> options, Operation<FontSet> original) {
-		return original.call(id, SmoothFont.isDefault(id) ? SmoothFont.withInter(providers) : providers, options);
+		return original.call(id, SmoothFont.isDefault(id) ? SmoothFont.withInter(providers) : com.arcticlauncher.mod.EmoteFont.isBadge(id) ? com.arcticlauncher.mod.EmoteFont.badges(providers) : providers, options);
 	}
 	//#endif
 }

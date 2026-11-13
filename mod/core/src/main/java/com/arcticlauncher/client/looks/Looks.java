@@ -490,7 +490,7 @@ public final class Looks {
 		if (previewCape) {
 			return look == null ? new Look(null, false, capeTrying,
 					java.util.Collections.<String>emptyList(), true, now)
-					: new Look(look.skin, look.slim, capeTrying, look.cosmetics, look.arctic, look.fetched, look.fits, look.badgeStyle);
+					: new Look(look.skin, look.slim, capeTrying, look.cosmetics, look.arctic, look.fetched, look.fits, look.badgeStyle, look.badgeRole);
 		}
 		return look == null || look.isEmpty() ? null : look;
 	}
@@ -512,7 +512,7 @@ public final class Looks {
 		}
 		return look == null
 				? new Look(null, false, hash, java.util.Collections.<String>emptyList(), false, System.currentTimeMillis())
-				: new Look(look.skin, look.slim, hash, look.cosmetics, look.arctic, look.fetched, look.fits, look.badgeStyle);
+				: new Look(look.skin, look.slim, hash, look.cosmetics, look.arctic, look.fetched, look.fits, look.badgeStyle, look.badgeRole);
 	}
 
 	/** A cape from somewhere other than Arctic's server (OptiFine's): registered, never downloaded from the server. */
@@ -538,6 +538,13 @@ public final class Looks {
 	}
 
 	/** Badges share the looks cache but refresh promptly when another wearer changes their choice. */
+	public String badgeRole(UUID player) {
+		if (player == null) return null;
+		Look look = players.get(player);
+		if (look == null || System.currentTimeMillis() - look.fetched > TimeUnit.SECONDS.toMillis(20)) pending.add(player);
+		return look == null ? null : look.badgeRole;
+	}
+
 	public int badgeStyle(UUID player) {
 		if (player == null) return 0;
 		Look look = players.get(player);
@@ -638,7 +645,7 @@ public final class Looks {
 		UUID me = platform.playerId();
 		long now = System.currentTimeMillis();
 		players.put(me, mine == null ? new Look(null, false, null, ids, true, now)
-				: new Look(mine.skin, mine.slim, mine.cape, ids, mine.arctic, now, mine.fits, mine.badgeStyle));
+				: new Look(mine.skin, mine.slim, mine.cape, ids, mine.arctic, now, mine.fits, mine.badgeStyle, mine.badgeRole));
 		version.incrementAndGet();
 		if (busy) {
 			nextCosmetics = ids;
@@ -817,7 +824,7 @@ public final class Looks {
 		Look old = players.get(player);
 		Long seen = arcticSeen.get(player);
 		if (old != null && old.arctic && seen != null && now - seen < ARCTIC_GRACE_MS) {
-			return new Look(old.skin, old.slim, old.cape, old.cosmetics, true, now, old.fits, old.badgeStyle);
+			return new Look(old.skin, old.slim, old.cape, old.cosmetics, true, now, old.fits, old.badgeStyle, old.badgeRole);
 		}
 		arcticSeen.remove(player);
 		return fresh;
@@ -837,7 +844,7 @@ public final class Looks {
 		JsonElement arctic = o.get("arctic");
 		boolean onArctic = arctic != null && arctic.isJsonPrimitive() && arctic.getAsJsonPrimitive().isBoolean() && arctic.getAsBoolean();
 		return new Look(skin, "slim".equals(stringField(o, "model")), cape, Cosmetics.worn(o.get("cosmetics")), onArctic, now,
-				Fit.parse(o.get("fit")), parseBadgeStyle(o.get("badge_style")));
+				Fit.parse(o.get("fit")), parseBadgeStyle(o.get("badge_style")), stringField(o, "badge_role"));
 	}
 
 	/** Only integer JSON numbers are styles: strings, fractions and huge numbers use the default. */

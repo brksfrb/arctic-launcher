@@ -36,7 +36,7 @@ abstract class TextRendererMixin {
 	private void arctic$badge(String text, float x, float y, int color, boolean shadow, CallbackInfoReturnable<Integer> cir) {
 		if (!Badge.marked(text)) return;
 		boolean tab = Badge.markedTab(text);
-		com.arcticlauncher.legacy.LegacyHooks.drawBadge(x, y, color, shadow, Badge.markedStyle(text), tab);
+		com.arcticlauncher.legacy.LegacyHooks.drawBadge(x, y, color, shadow, Badge.markedStyle(text), tab, Badge.markedRole(text));
 		cir.setReturnValue(((TextRenderer) (Object) this).draw(Badge.unmark(text), x + Badge.advance(tab), y, color, shadow));
 	}
 }
