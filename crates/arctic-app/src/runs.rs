@@ -62,6 +62,8 @@ pub struct Run {
     crash_report: Option<crash::Report>,
     /// How Java was started (flags, classpath files), for the crash report.
     pub java: Option<String>,
+    /// The player requested a stop; the resulting exit is not a crash.
+    killed: bool,
 }
 
 impl Run {
@@ -80,6 +82,21 @@ impl Run {
     pub fn clear_log(&mut self) {
         self.log.clear();
         self.log_rev += 1;
+    }
+
+    /// End the game and remember the player's intent before handling its exit.
+    pub fn force_close(&mut self) {
+        if let Some(game) = self.game() {
+            game.kill();
+            self.killed = true;
+        }
+    }
+
+    /// Windows kills exit with 1, Unix kills with 137. Both mean "was stopped"
+    /// when requested by the launcher, including requests seen only by the watcher.
+    fn reported_exit_code(&mut self, code: Option<i32>, killed: bool) -> Option<i32> {
+        self.killed |= killed;
+        if self.killed { None } else { code }
     }
 
     pub fn push_log(&mut self, lines: impl IntoIterator<Item = LogLine>) {
@@ -430,6 +447,7 @@ impl Runs {
             early: Vec::new(),
             crash_report: None,
             java: None,
+            killed: false,
         });
         self.next_id
     }
@@ -568,7 +586,8 @@ impl ArcticApp {
                 }
                 run.push_log(lines);
             }
-            GameEvent::Exited { code } => {
+            GameEvent::Exited { code, killed } => {
+                let code = run.reported_exit_code(code, killed);
                 run.state = RunState::Ended;
                 self.bridge.forget_launch(id);
                 // What the game changed goes to the profile's other instances.
@@ -823,6 +842,57 @@ impl Tasks {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn a_force_close_is_not_a_crash() {
+        let mut runs = Runs::default();
+        let id = runs.start("x", "1.0", "X".into(), PathBuf::new());
+        let run = runs.get_mut(id).unwrap();
+        run.force_close();
+        assert!(!run.killed, "nothing to kill while still preparing");
+        // Crash-like output must not override an intentional stop.
+        run.push_log([LogLine {
+            level: Level::Error,
+            text: "java.lang.OutOfMemoryError: Java heap space".into(),
+        }]);
+        // The UI remembers its request even before the watcher sees it.
+        run.killed = true;
+        for code in [Some(1), Some(137), Some(0), None] {
+            let reported = run.reported_exit_code(code, false);
+            assert_eq!(reported, None, "a requested stop: {code:?}");
+            assert!(run.exit_diagnosis(reported, false).is_none());
+        }
+    }
+
+    #[test]
+    fn a_watcher_force_close_is_not_a_crash() {
+        let mut runs = Runs::default();
+        let id = runs.start("x", "1.0", "X".into(), PathBuf::new());
+        let run = runs.get_mut(id).unwrap();
+        // A direct handle kill or launcher shutdown bypassed Run::force_close.
+        let code = run.reported_exit_code(Some(1), true);
+        assert_eq!(code, None);
+        assert!(run.killed);
+        assert!(run.exit_diagnosis(code, false).is_none());
+    }
+
+    #[test]
+    fn a_nonzero_exit_without_force_close_is_still_a_crash() {
+        let mut runs = Runs::default();
+        let id = runs.start("x", "1.0", "X".into(), PathBuf::new());
+        let run = runs.get_mut(id).unwrap();
+        run.push_log([LogLine {
+            level: Level::Error,
+            text: "java.lang.OutOfMemoryError: Java heap space".into(),
+        }]);
+        for code in [1, 137] {
+            let reported = run.reported_exit_code(Some(code), false);
+            assert_eq!(reported, Some(code));
+            assert!(run.exit_diagnosis(reported, false).is_some());
+        }
+        assert!(run.exit_diagnosis(Some(0), false).is_none());
+        assert!(run.exit_diagnosis(Some(1), true).is_none());
+    }
 
     #[test]
     fn mixin_sidecar_survives_log_eviction_and_ignores_previous_runs() {
