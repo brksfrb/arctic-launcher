@@ -86,6 +86,11 @@ public final class DimGfx implements Gfx {
 	}
 
 	@Override
+	public void rotate(float degrees) {
+		g.rotate(degrees);
+	}
+
+	@Override
 	public void scissor(int x0, int y0, int x1, int y1) {
 		g.scissor(x0, y0, x1, y1);
 	}
