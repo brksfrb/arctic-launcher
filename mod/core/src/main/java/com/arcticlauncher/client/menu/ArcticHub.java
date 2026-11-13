@@ -3,6 +3,7 @@ package com.arcticlauncher.client.menu;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.Keys;
 import com.arcticlauncher.client.gfx.Draw;
+import com.arcticlauncher.client.gfx.BrandMark;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.social.Social;
 import com.arcticlauncher.client.style.Skin;
@@ -96,7 +97,7 @@ final class ArcticHub extends Page {
 	@Override
 	protected void drawBehind(Gfx g, Style s, int mx, int my) {
 		Skin.panel(g, s, px, py, px + PANEL_W, bottom);
-		g.texture("icon", px + PAD, py + 6, 14, 14, 0, 0, 256, 256, 256, 256);
+		BrandMark.draw(g, px + PAD, py + 6, 14);
 		g.text("Arctic", px + PAD + 19, py + 10, s.text, false);
 		String version = ArcticClient.platform().minecraftVersion();
 		if (version != null) {
