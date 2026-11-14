@@ -66,7 +66,7 @@ final class ModCatalog {
 		widgets("mods.hud_group.world", "coords", "direction", "speed", "biome", "light", "chunk", "day", "worldtime", "clock", "date", "compass",
 				"minimap", "death", "stopwatch", "aimed", "horse");
 		widgets("mods.hud_group.pvp", "cooldowns");
-		for (String id : new String[] {"combatfx", "slotlocks", "invsearch", "invsort", "pickupfeed", "rangeindicator", "shulkerpeek", "particles", "helditem", "palette",
+		for (String id : new String[] {"combatfx", "slotlocks", "invsearch", "invsort", "pickupfeed", "rangeindicator", "shulkerpeek", "particles", "blockentities", "helditem", "palette",
 				"portalscreens", "tnttimer", "ownnametag", "ofcapes", "nohurtcam", "tabping", "badgetags", "hud.cpu", "hud.syscpu", "hud.sysram", "hud.alloc",
 				"hud.gpu", "hud.vram", "hud.frametime", "hud.lows", "hud.blocking", "hud.falldamage", "hud.pearl"}) {
 			NEW_IDS.add(id);
@@ -420,6 +420,17 @@ final class ModCatalog {
 						f.toggle(Lang.t(com.arcticlauncher.client.feature.ParticleKinds.LABELS[k]), "",
 								() -> (c.particleOff & bit) == 0, on -> c.particleOff = on ? c.particleOff & ~bit : c.particleOff | bit);
 					}
+				}));
+		out.add(new Mod("blockentities", Lang.t("mods.block_entity_culling"), Lang.t("mods.chests_signs_and_banners_out_of_view"), "shulkerpeek",
+				Category.VISUAL, "chests signs banners hoppers shulker fps performance culling lag base storage")
+				.toggle(() -> c.blockEntityCulling, on -> c.blockEntityCulling = on)
+				.settings((host, f) -> {
+					f.section(Lang.t("mods.distance"));
+					f.stepper(Lang.t("mods.draw_distance_blocks"), () -> c.blockEntityDistance,
+							v -> c.blockEntityDistance = (int) v, 16, com.arcticlauncher.client.feature.BlockEntityCulling.GAME_DISTANCE, 8, "%.0f");
+					f.note(Lang.t("mods.64_is_the_games_own_distance_lower"));
+					f.section(Lang.t("mods.how_it_works"));
+					f.note(Lang.t("mods.only_what_is_off_screen_is_skipped"));
 				}));
 		out.add(new Mod("helditem", Lang.t("mods.held_item"), Lang.t("mods.move_and_resize_your_hands_and_the_item_you"), "helditem",
 				Category.VISUAL, "hand item position size view model offset")

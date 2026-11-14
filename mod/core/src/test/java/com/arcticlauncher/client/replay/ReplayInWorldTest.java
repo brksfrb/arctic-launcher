@@ -11,11 +11,15 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /** Recording asked for inside a world that was never buffered (Replay off at the join, or on since). */
 class ReplayInWorldTest {
+	/** The expected texts are English: load it here rather than rely on another test class running first. */
+	@BeforeAll static void english() { com.arcticlauncher.client.Lang.init(null, "en"); }
+
 	@TempDir Path dir;
 
 	private static Platform platform(boolean inWorld, Recorder recorder, AtomicInteger begun, boolean supported) {

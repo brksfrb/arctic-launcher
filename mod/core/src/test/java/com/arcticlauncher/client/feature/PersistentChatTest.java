@@ -12,10 +12,14 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class PersistentChatTest {
+	/** The expected texts are English: load it here rather than rely on another test class running first. */
+	@BeforeAll static void english() { com.arcticlauncher.client.Lang.init(null, "en"); }
+
 	@TempDir Path dir;
 	private Field configField;
 	private Field platformField;

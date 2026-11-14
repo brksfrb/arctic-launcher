@@ -347,6 +347,10 @@ public final class ClientConfig {
 	public int particleAmount = 50;
 	/** Particle kinds switched off (bit per {@code ParticleKinds.LABELS} entry). */
 	public int particleOff;
+	/** Chests, signs and the like outside the view aren't drawn (see {@code BlockEntityCulling}). */
+	public boolean blockEntityCulling = true;
+	/** How far away (blocks) they are still drawn; {@code BlockEntityCulling.GAME_DISTANCE} is the game's own. */
+	public int blockEntityDistance = 64;
 	/** Ctrl+K opens the command palette (mods, servers, friends). */
 	public boolean commandPalette = true;
 	/** Saturation (the hidden part of hunger) drawn on the hunger bar. */

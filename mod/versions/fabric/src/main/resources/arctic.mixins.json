@@ -64,6 +64,9 @@
 <% } %>		"ServerTimeMixin",
 		"ChatPlaceholderMixin",
 		"MinecraftTickMixin",
+		"BlockEntityCullMixin",
+		"BlockEntityCullLevelMixin",<% if (blockEntityFrustum) { %>
+		"BlockEntityFrustumMixin",<% } %>
 		"GlassModelMixin",<% if (ctmPackOrder) { %>
 		"GlassPackOrderMixin",<% } %>
 		"GlassBakedQuadMixin",<% if (ctmQuadAccess) { %>
