@@ -108,6 +108,32 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
+        // JVM entry points: this fails before the loader can report an uncaught exception.
+        pattern: r"(?:Could not find or load main class|ClassNotFoundException:) (net\.fabricmc\.loader\.(?:impl\.)?launch\.knot\.KnotClient|org\.quiltmc\.loader\.impl\.launch\.knot\.KnotClient|cpw\.mods\.bootstraplauncher\.BootstrapLauncher|cpw\.mods\.modlauncher\.Launcher|net\.minecraft\.launchwrapper\.Launch)(?:\s|$)",
+        explain: |c, _| {
+            let loader = if c[1].starts_with("net.fabricmc.") {
+                "Fabric"
+            } else if c[1].starts_with("org.quiltmc.") {
+                "Quilt"
+            } else if c[1].starts_with("net.minecraft.launchwrapper.") {
+                "Forge"
+            } else {
+                "Forge/NeoForge"
+            };
+            Diagnosis {
+                repair: true,
+                ..Diagnosis::new(
+                    format!("A game file was damaged (the {loader} loader)"),
+                    format!(
+                        "Java couldn't load the {loader} loader's main class ({}). Arctic will repair it on the next Play.",
+                        &c[1]
+                    ),
+                    Vec::new(),
+                )
+            }
+        },
+    },
+    Rule {
         pattern: r"(?is)SDL3\.dll.{0,1500}(?:error code\s*=\s*1114|DLL init.*failed)",
         explain: |_, _| {
             Diagnosis::new(
@@ -921,6 +947,8 @@ fn diagnose_match(text: &str) -> Option<(Diagnosis, String)> {
             let matched = c.get(0)?;
             if (rule.pattern.contains("NoSuchMethodError")
                 || rule.pattern.contains("ClassNotFoundException"))
+                // The JVM's missing entry point is fatal without an exception block.
+                && !rule.pattern.contains("Could not find or load main class")
                 && !fatal_linkage(text, matched.start())
             {
                 continue;
@@ -1862,6 +1890,35 @@ USERNAME=someone
             title("java.lang.OutOfMemoryError: Java heap space"),
             "Minecraft ran out of memory"
         );
+    }
+
+    #[test]
+    fn missing_loader_entrypoints_request_repair_before_the_loader_starts() {
+        for (class, loader) in [
+            ("net.fabricmc.loader.launch.knot.KnotClient", "Fabric"),
+            ("org.quiltmc.loader.impl.launch.knot.KnotClient", "Quilt"),
+            (
+                "cpw.mods.bootstraplauncher.BootstrapLauncher",
+                "Forge/NeoForge",
+            ),
+            ("cpw.mods.modlauncher.Launcher", "Forge/NeoForge"),
+            ("net.minecraft.launchwrapper.Launch", "Forge"),
+        ] {
+            for prefix in [
+                "Error: Could not find or load main class",
+                "java.lang.ClassNotFoundException:",
+            ] {
+                let diagnosis = diagnose(&format!("{prefix} {class}\n(exit code 1)")).unwrap();
+                assert_eq!(
+                    diagnosis.title,
+                    format!("A game file was damaged (the {loader} loader)")
+                );
+                assert!(diagnosis.repair);
+            }
+        }
+        // A malformed Java argument or a mod's missing class is not evidence of a damaged loader.
+        assert!(diagnose("Error: Could not find or load main class Forge").is_none());
+        assert!(diagnose("Error: Could not find or load main class com.example.Mod").is_none());
     }
 
     #[test]
