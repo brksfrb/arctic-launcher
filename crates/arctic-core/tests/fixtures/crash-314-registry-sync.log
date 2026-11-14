@@ -1,0 +1,70 @@
+[19:51:17] [main/ERROR] Mixin config fabric-item-group-api-v1.mixins.json does not specify "minVersion" property
+
+---- crash report ----
+---- Minecraft Crash Report ----
+// Embeddium instance tainted by mods: [sodiumoptionsapi, oculus]
+// Please do not reach out for Embeddium support without removing these mods first.
+// -------
+// I bet Cylons wouldn't have this problem.
+
+Time: 2026-11-14 19:51:46
+Description: Initializing game
+
+java.lang.RuntimeException: One of more entry values did not copy to the correct id. Check log for details!
+	at net.minecraftforge.registries.ForgeRegistry.sync(ForgeRegistry.java:625) ~[forge-1.20.1-47.4.20-universal.jar%23751!/:?] {re:mixin,re:classloading,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.forge_registry_alloc.ForgeRegistryMixin,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.fast_registry_validation.ForgeRegistryMixin,pl:mixin:APP:puzzleslib.forge.mixins.json:accessor.ForgeRegistryForgeAccessor,pl:mixin:A}
+	at net.minecraftforge.registries.GameData.loadRegistry(GameData.java:571) ~[forge-1.20.1-47.4.20-universal.jar%23751!/:?] {re:mixin,re:classloading,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.object_holder_cleanup.GameDataMixin,pl:mixin:APP:modernfix-modernfix.mixins.json:core.GameDataMixin,pl:mixin:APP:supermartijn642corelib.mixins.json:GameDataMixin,pl:mixin:APP:kiwi.mixins.json:GameDataMixin,pl:mixin:A}
+	at net.minecraftforge.registries.GameData.revertTo(GameData.java:285) ~[forge-1.20.1-47.4.20-universal.jar%23751!/:?] {re:mixin,re:classloading,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.object_holder_cleanup.GameDataMixin,pl:mixin:APP:modernfix-modernfix.mixins.json:core.GameDataMixin,pl:mixin:APP:supermartijn642corelib.mixins.json:GameDataMixin,pl:mixin:APP:kiwi.mixins.json:GameDataMixin,pl:mixin:A}
+	at net.minecraftforge.registries.GameData.postRegisterEvents(GameData.java:345) ~[forge-1.20.1-47.4.20-universal.jar%23751!/:?] {re:mixin,re:classloading,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.object_holder_cleanup.GameDataMixin,pl:mixin:APP:modernfix-modernfix.mixins.json:core.GameDataMixin,pl:mixin:APP:supermartijn642corelib.mixins.json:GameDataMixin,pl:mixin:APP:kiwi.mixins.json:GameDataMixin,pl:mixin:A}
+	at net.minecraftforge.common.ForgeStatesProvider.lambda$new$4(ForgeStatesProvider.java:25) ~[forge-1.20.1-47.4.20-universal.jar%23751!/:?] {re:classloading}
+	at net.minecraftforge.fml.ModLoader.handleInlineTransition(ModLoader.java:217) ~[fmlcore-1.20.1-47.4.20.jar%23747!/:?] {}
+	at net.minecraftforge.fml.ModLoader.lambda$dispatchAndHandleError$19(ModLoader.java:209) ~[fmlcore-1.20.1-47.4.20.jar%23747!/:?] {}
+	at java.util.Optional.ifPresent(Optional.java:178) ~[?:?] {re:mixin}
+	at net.minecraftforge.fml.ModLoader.dispatchAndHandleError(ModLoader.java:209) ~[fmlcore-1.20.1-47.4.20.jar%23747!/:?] {}
+	at net.minecraftforge.fml.ModLoader.lambda$gatherAndInitializeMods$13(ModLoader.java:183) ~[fmlcore-1.20.1-47.4.20.jar%23747!/:?] {}
+	at java.lang.Iterable.forEach(Iterable.java:75) ~[?:?] {re:mixin}
+	at net.minecraftforge.fml.ModLoader.gatherAndInitializeMods(ModLoader.java:183) ~[fmlcore-1.20.1-47.4.20.jar%23747!/:?] {}
+	at net.minecraftforge.client.loading.ClientModLoader.lambda$begin$1(ClientModLoader.java:66) ~[forge-1.20.1-47.4.20-universal.jar%23751!/:?] {re:classloading}
+	at net.minecraftforge.client.loading.ClientModLoader.lambda$createRunnableWithCatch$4(ClientModLoader.java:86) ~[forge-1.20.1-47.4.20-universal.jar%23751!/:?] {re:classloading}
+	at net.minecraftforge.client.loading.ClientModLoader.begin(ClientModLoader.java:66) ~[forge-1.20.1-47.4.20-universal.jar%23751!/:?] {re:classloading}
+	at net.minecraft.client.Minecraft.<init>(Minecraft.java:459) ~[client-1.20.1-20230612.114412-srg.jar%23746!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:A}
+	at net.minecraft.client.main.Main.main(Main.java:182) ~[1.20.1-forge-47.4.20.jar:?] {re:mixin,re:classloading,pl:mixin:APP:euphoria_patcher.mixins.json:EuphoriaPatcherMixin,pl:mixin:A}
+	at jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[?:?] {}
+	at jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77) ~[?:?] {}
+	at jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) ~[?:?] {}
+	at java.lang.reflect.Method.invoke(Method.java:569) ~[?:?] {re:mixin}
+	at net.minecraftforge.fml.loading.targets.CommonLaunchHandler.runTarget(CommonLaunchHandler.java:111) ~[fmlloader-1.20.1-47.4.20.jar:?] {}
+	at net.minecraftforge.fml.loading.targets.CommonLaunchHandler.clientService(CommonLaunchHandler.java:99) ~[fmlloader-1.20.1-47.4.20.jar:?] {}
+	at net.minecraftforge.fml.loading.targets.CommonClientLaunchHandler.lambda$makeService$0(CommonClientLaunchHandler.java:25) ~[fmlloader-1.20.1-47.4.20.jar:?] {}
+	at cpw.mods.modlauncher.LaunchServiceHandlerDecorator.launch(LaunchServiceHandlerDecorator.java:30) ~[modlauncher-10.0.9.jar:?] {}
+	at cpw.mods.modlauncher.LaunchServiceHandler.launch(LaunchServiceHandler.java:53) ~[modlauncher-10.0.9.jar:?] {}
+	at cpw.mods.modlauncher.LaunchServiceHandler.launch(LaunchServiceHandler.java:71) ~[modlauncher-10.0.9.jar:?] {}
+	at cpw.mods.modlauncher.Launcher.run(Launcher.java:108) ~[modlauncher-10.0.9.jar:?] {}
+	at cpw.mods.modlauncher.Launcher.main(Launcher.java:78) ~[modlauncher-10.0.9.jar:?] {}
+	at cpw.mods.modlauncher.BootstrapLaunchConsumer.accept(BootstrapLaunchConsumer.java:26) ~[modlauncher-10.0.9.jar:?] {}
+	at cpw.mods.modlauncher.BootstrapLaunchConsumer.accept(BootstrapLaunchConsumer.java:23) ~[modlauncher-10.0.9.jar:?] {}
+	at cpw.mods.bootstraplauncher.BootstrapLauncher.main(BootstrapLauncher.java:141) ~[bootstraplauncher-1.1.2.jar:?] {}
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Render thread
+Suspected Mods: NONE
+Stacktrace:
+	at net.minecraftforge.registries.ForgeRegistry.sync(ForgeRegistry.java:625) ~[forge-1.20.1-47.4.20-universal.jar%23751!/:?] {re:mixin,re:classloading,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.forge_registry_alloc.ForgeRegistryMixin,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.fast_registry_validation.ForgeRegistryMixin,pl:mixin:APP:puzzleslib.forge.mixins.json:accessor.ForgeRegistryForgeAccessor,pl:mixin:A}
+	at net.minecraftforge.registries.GameData.loadRegistry(GameData.java:571) ~[forge-1.20.1-47.4.20-universal.jar%23751!/:?] {re:mixin,re:classloading,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.object_holder_cleanup.GameDataMixin,pl:mixin:APP:modernfix-modernfix.mixins.json:core.GameDataMixin,pl:mixin:APP:supermartijn642corelib.mixins.json:GameDataMixin,pl:mixin:APP:kiwi.mixins.json:GameDataMixin,pl:mixin:A}
+	at net.minecraftforge.registries.GameData.revertTo(GameData.java:285) ~[forge-1.20.1-47.4.20-universal.jar%23751!/:?] {re:mixin,re:classloading,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.object_holder_cleanup.GameDataMixin,pl:mixin:APP:modernfix-modernfix.mixins.json:core.GameDataMixin,pl:mixin:APP:supermartijn642corelib.mixins.json:GameDataMixin,pl:mixin:APP:kiwi.mixins.json:GameDataMixin,pl:mixin:A}
+	at net.minecraftforge.registries.GameData.postRegisterEvents(GameData.java:345) ~[forge-1.20.1-47.4.20-universal.jar%23751!/:?] {re:mixin,re:classloading,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.object_holder_cleanup.GameDataMixin,pl:mixin:APP:modernfix-modernfix.mixins.json:core.GameDataMixin,pl:mixin:APP:supermartijn642corelib.mixins.json:GameDataMixin,pl:mixin:APP:kiwi.mixins.json:GameDataMixin,pl:mixin:A}
+	at net.minecraftforge.common.ForgeStatesProvider.lambda$new$4(ForgeStatesProvider.java:25) ~[forge-1.20.1-47.4.20-universal.jar%23751!/:?] {re:classloading}
+	at net.minecraftforge.fml.ModLoader.handleInlineTransition(ModLoader.java:217) ~[fmlcore-1.20.1-47.4.20.jar%23747!/:?] {}
+	at net.minecraftforge.fml.ModLoader.lambda$dispatchAndHandleError$19(ModLoader.java:209) ~[fmlcore-1.20.1-47.4.20.jar%23747!/:?] {}
+	at java.util.Optional.ifPresent(Optional.java:178) ~[?:?] {re:mixin}
+	at net.minecraftforge.fml.ModLoader.dispatchAndHandleError(ModLoader.java:209) ~[fmlcore-1.20.1-47.4.20.jar%23747!/:?] {}
+	at net.minecraftforge.fml.ModLoader.lambda$gatherAndInitializeMods$13(ModLoader.java:183) ~[fmlcore-1.20.1-47.4.20.jar%23747!/:?] {}
+	at java.lang.Iterable.forEach(Iterable.java:75) ~[?:?] {re:mixin}
+	at net.minecraftforge.fml.ModLoader.gatherAndInitializeMods(ModLoader.java:183) ~[fmlcore-1.20.1-47.4.20.jar%23747!/:?] {}
+	at net.minecraftforge.client.loading.ClientModLoader.lambda$begin$1(ClientModLoader.java:66) ~[forge-1.20.1-47.4.20-universal.jar%23751!/:?] {re:classloading}
+	at net.minecraftforge.client.loading.ClientModLoader.lambda$createRunnableWithCatch$4(ClientModLoader.java:86) ~[forge-1.20.1-47.4.20-universal.jar%23751!/:?] {re:classloading}
+	at net.minecraftforge.client.loading.ClientModLoader.begin(ClientModLoader.java:66) ~[forge-1.20.1-47.4.20-universal.jar%23751!/:?] {re:classloading}
+	at net.minecraft.client.Minecraft.<init>(Minecraft.java:459) ~[client-1.20.1-20230612.114412-srg.jar%23746!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:A}

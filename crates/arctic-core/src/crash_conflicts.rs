@@ -283,16 +283,44 @@ pub fn find_conflicts(mods: &[InstalledMod]) -> Vec<Conflict> {
 /// The mod whose mixin config failed to apply, as the log names it: (config file, mod id when the
 /// log says so).
 fn mixin_failure(text: &str) -> Option<(String, Option<String>)> {
+    let line = mixin_failure_line(text)?;
+    let config = Regex::new(r"([\w\-.]+\.mixins\.json)").ok()?;
+    let owner = Regex::new(r"(?:from mod|apply for mod) ([\w\-]+)").ok()?;
+    Some((
+        config.captures(line)?[1].to_owned(),
+        owner.captures(line).map(|o| o[1].to_lowercase()),
+    ))
+}
+
+/// The actual failure record, rather than the first unrelated mention of a config file.
+pub(crate) fn mixin_failure_line(text: &str) -> Option<&str> {
     let gate = Regex::new(
         r"MixinPreProcessorStandard|MixinApplicatorStandard|Critical injection failure|InvalidInjectionException|InvalidMixinException|MixinApplyError|MixinTransformerError|@Mixin target \S+ was not found|Mixin apply for mod|InjectionError",
     )
     .ok()?;
+    let text = if let Some(stack) = crate::crash::crash_exception(text) {
+        // A handled startup mixin failure cannot explain an unrelated fatal exception.
+        // Forge's {re:mixin, pl:mixin:APP:...} metadata merely lists applied mixins.
+        let mixin_crash = stack.lines().any(|line| {
+            let line = line.trim_start();
+            if line.starts_with("at ") {
+                let frame = line.split('(').next().unwrap_or(line);
+                frame.contains("org.spongepowered.asm.mixin.")
+                    || frame.contains("getPostMixinClassByteArray")
+            } else {
+                gate.is_match(line) || line.contains("Mixin transformation of ")
+            }
+        });
+        if !mixin_crash {
+            return None;
+        }
+        stack
+    } else {
+        text
+    };
     let config = Regex::new(r"([\w\-.]+\.mixins\.json)").ok()?;
-    let owner = Regex::new(r"(?:from mod|apply for mod) ([\w\-]+)").ok()?;
-    text.lines().filter(|l| gate.is_match(l)).find_map(|l| {
-        let cfg = config.captures(l)?[1].to_owned();
-        Some((cfg, owner.captures(l).map(|o| o[1].to_lowercase())))
-    })
+    text.lines()
+        .find(|line| gate.is_match(line) && config.is_match(line))
 }
 
 /// Which installed mod owns mixin config `config`: the log's own answer, else the jar that lists
@@ -475,6 +503,9 @@ fn clash_mattered(text: &str, c: &Conflict, mods: &[InstalledMod]) -> bool {
 /// owned by a clashing mod gets the clash explanation; other clashes require evidence from the
 /// run before they can explain an otherwise unknown crash.
 pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Option<Diagnosis> {
+    if let Some((registry, _)) = crate::crash::registry_sync_diagnosis(text) {
+        return Some(registry);
+    }
     let from_log;
     let mods = if mods.is_empty() {
         from_log = from_crash_report(text);
@@ -513,6 +544,7 @@ pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Opt
 
 /// Legacy Mixin can fail while resolving an invocation owner before injection begins.
 pub(crate) fn preprocessing_class_failure(text: &str) -> bool {
+    let text = crate::crash::crash_exception(text).unwrap_or(text);
     text.contains("ClassNotFoundException")
         && [
             "MixinTransformerError",
@@ -627,6 +659,50 @@ mod tests {
     /// Crash report #267 (Minecraft 1.21.1): Noisium and its fork Noisiumed both installed; the
     /// fork's Lithium compat mixin could not find its target. Trimmed, with the personal parts out.
     const REPORT_267: &str = include_str!("../tests/fixtures/crash-267-noisiumed.log");
+
+    #[test]
+    fn registry_crash_314_outranks_handled_mixins_and_installed_clashes() {
+        let report = include_str!("../tests/fixtures/crash-314-registry-sync.log");
+        // The full latest.log is unavailable. Simulate the suspected handled startup line;
+        // the uploaded report itself contains only the minVersion warning and applied mixins.
+        let text = format!(
+            "InvalidMixinException: @Mixin target optional.Class was not found alltheleaks.mixins.json:OptionalMixin\n{report}"
+        );
+        let mods = vec![
+            InstalledMod {
+                id: "alltheleaks".into(),
+                name: "All The Leaks".into(),
+                mixins: vec!["alltheleaks.mixins.json".into()],
+                ..InstalledMod::default()
+            },
+            InstalledMod {
+                id: "alltheleaks".into(),
+                name: "All The Leaks".into(),
+                ..InstalledMod::default()
+            },
+        ];
+        assert!(mixin_failure(&text).is_none());
+        assert!(diagnose_mixin(&text, &mods).is_none());
+        for base in [None, crate::crash::diagnose(&text)] {
+            let d = refine(base, &text, &mods).unwrap();
+            assert_eq!(d.title, "Forge registry IDs did not sync");
+            assert!(d.mods.is_empty());
+            assert!(d.fix.is_none());
+        }
+    }
+
+    #[test]
+    fn config_only_mixin_errors_cannot_explain_an_unrelated_crash_report() {
+        let text = "InvalidMixinException: @Mixin target optional.Class was not found alltheleaks.mixins.json:OptionalMixin\n\
+            MixinTransformerError\nClassNotFoundException: optional.Class\n\
+            ---- Minecraft Crash Report ----\nDescription: Initializing game\n\n\
+            java.lang.IllegalStateException: An unrelated fatal error\n\
+            \tat net.minecraft.client.Minecraft.start(Minecraft.java:459) {re:mixin,pl:mixin:APP:modernfix.mixins.json:StartupMixin}\n\n\
+            -- System Details --\n";
+        assert!(mixin_failure(text).is_none());
+        assert!(crate::crash::diagnose(text).is_none());
+        assert!(refine(None, text, &[]).is_none());
+    }
 
     fn duplicate_mods() -> Vec<InstalledMod> {
         ["1.0.0", "1.2.0"]

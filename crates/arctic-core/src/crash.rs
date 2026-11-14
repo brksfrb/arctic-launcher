@@ -802,6 +802,73 @@ pub fn diagnose(text: &str) -> Option<Diagnosis> {
     diagnose_match(text).map(|(diagnosis, _)| diagnosis)
 }
 
+/// The report's primary exception and cause chain, before the detailed walkthrough/inventory.
+pub(crate) fn crash_exception(text: &str) -> Option<&str> {
+    let start = text.rfind("---- Minecraft Crash Report ----")?;
+    let report = &text[start..];
+    static EXCEPTION: OnceLock<Regex> = OnceLock::new();
+    let exception =
+        EXCEPTION.get_or_init(|| Regex::new(r"(?m)^[\w.$]+(?:Exception|Error)(?::|\r?$)").unwrap());
+    let start = exception.find(report)?.start();
+    let stack = &report[start..];
+    let end = stack
+        .find("\n\n")
+        .into_iter()
+        .chain(stack.find("\r\n\r\n"))
+        .min()
+        .unwrap_or(stack.len());
+    Some(&stack[..end])
+}
+
+/// Forge reports the failed entries separately from the exception. Only those explicit
+/// registry records can identify affected namespaces; applied mixins do not identify a culprit.
+pub(crate) fn registry_sync_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+    let stack = crash_exception(text).unwrap_or(text);
+    if !stack.lines().any(|line| {
+        line.trim_start()
+            .starts_with("at net.minecraftforge.registries.ForgeRegistry.sync(")
+    }) {
+        return None;
+    }
+    static FAILURE: OnceLock<Regex> = OnceLock::new();
+    let failure = FAILURE.get_or_init(|| {
+        Regex::new(r"(?i)(?:did not copy to (?:the )?(?:correct|expected) id|\bids?\b.*(?:mismatch|do not match|did not match|out of sync)|mismatch.*registry.*\bids?\b|registry.*sync.*fail)").unwrap()
+    });
+    let matched = stack.lines().find(|line| {
+        (line.contains("Exception:") || line.contains("Error:")) && failure.is_match(line)
+    })?;
+    static ENTRY: OnceLock<Regex> = OnceLock::new();
+    let entry = ENTRY.get_or_init(|| Regex::new(r"\bName: ([a-z0-9_.-]+):[a-z0-9_./-]+").unwrap());
+    let evidence = registry_failure_evidence(text);
+    let mut mods = Vec::new();
+    for line in evidence.lines().filter(|line| registry_id_error(line)) {
+        if let Some(c) = entry.captures(line) {
+            let id = c[1].to_owned();
+            if id != "minecraft" && id != "forge" && !mods.contains(&id) {
+                mods.push(id);
+            }
+        }
+    }
+    let affected = if mods.is_empty() {
+        "The available log does not identify the affected mod entries.".to_owned()
+    } else {
+        format!(
+            "Forge names entries in these mod namespaces: {}. Another mod may have replaced those entries.",
+            mods.join(", ")
+        )
+    };
+    Some((
+        Diagnosis::new(
+            "Forge registry IDs did not sync",
+            format!(
+                "A mod's registry entries did not get the expected IDs while Forge synchronized registries. This indicates a mod conflict in the pack. {affected} Update the pack, or send this report to the pack author."
+            ),
+            mods,
+        ),
+        head_of(matched.trim_end(), 2048).to_owned(),
+    ))
+}
+
 /// Linkage errors in ordinary log records are often optional integrations failing safely.
 /// Restrict them to a crash document or an uncaught/fatal exception block with no later progress.
 fn fatal_linkage(text: &str, at: usize) -> bool {
@@ -909,6 +976,10 @@ fn diagnose_match(text: &str) -> Option<(Diagnosis, String)> {
         .unwrap_or(0);
     let text = &text[start..];
 
+    if let Some(registry) = registry_sync_diagnosis(text) {
+        return Some(registry);
+    }
+
     for (rule, re) in RULES.iter().zip(compiled()) {
         for c in re.captures_iter(text) {
             let matched = c.get(0)?;
@@ -920,6 +991,11 @@ fn diagnose_match(text: &str) -> Option<(Diagnosis, String)> {
             }
             let diagnosis = (rule.explain)(&c, text);
             if !diagnosis.title.is_empty() {
+                if rule.pattern == r"[\w\-.]+\.mixins\.json"
+                    && let Some(line) = crate::crash_conflicts::mixin_failure_line(text)
+                {
+                    return Some((diagnosis, head_of(line, 2048).to_owned()));
+                }
                 let start = text[..matched.start()].rfind('\n').map_or(0, |n| n + 1);
                 let end = text[matched.start()..]
                     .find('\n')
@@ -1021,6 +1097,8 @@ const REPORT_LOG_LINES: usize = 150;
 /// stay under what the server keeps (48 KB).
 const REPORT_LOG_BYTES: usize = 8 * 1024;
 const REPORT_CRASH_BYTES: usize = 16 * 1024;
+/// Latest registry warnings/errors, reserved ahead of verbose log tails and crash inventories.
+const REPORT_REGISTRY_BYTES: usize = 6 * 1024;
 /// How Java was started: its flags and the classpath's file names.
 const REPORT_JAVA_BYTES: usize = 5 * 1024;
 /// The launcher's own log (sign-in failures, downloads, launch steps): its last lines.
@@ -1061,6 +1139,11 @@ impl Report {
                 diagnosis.title,
                 scrub(&matched, &Own::this_pc())
             ));
+        }
+        let registry = registry_failure_evidence(&all);
+        if !registry.is_empty() {
+            priority.push_str("\n---- registry failure context ----\n");
+            priority.push_str(&scrub(&registry, &Own::this_pc()));
         }
         if !mods.is_empty() {
             priority.push_str(&mod_inventory_section(&mods));
@@ -1111,6 +1194,7 @@ impl Report {
             text.push_str(head_of(report, REPORT_CRASH_BYTES));
         }
         let title = exit_title(title, &all, java.unwrap_or(""));
+        let title = registry_sync_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
         let title = native_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
         let title = if crash_report.is_none()
             && (title.is_empty()
@@ -1259,6 +1343,45 @@ fn mixin_failure_evidence(output: &str) -> String {
         .into_iter()
         .filter(|block| seen.insert(block.clone()))
         .collect()
+}
+
+fn registry_id_error(line: &str) -> bool {
+    static MISMATCH: OnceLock<Regex> = OnceLock::new();
+    MISMATCH
+        .get_or_init(|| {
+            Regex::new(r"(?i)did not get ID it asked for|override did not have an associated owner|\bids?\b.*(?:mismatch|do not match|did not match|out of sync)|mismatch.*\bids?\b|expected.*(?:got|actual)").unwrap()
+        })
+        .is_match(line)
+}
+
+/// Select recent registry records from the full latest.log before its ordinary tail is taken.
+/// Deduplicated lines stay within a fixed byte budget; unusually long records are clipped.
+pub fn registry_failure_evidence(output: &str) -> String {
+    let mut selected = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut bytes = 0;
+    for line in output.lines().rev() {
+        let warning = line.contains("/WARN]") || line.contains("/ERROR]");
+        if !warning
+            || !(line.contains("net.minecraftforge.registries")
+                || (line.contains("Registry") && registry_id_error(line)))
+            || !seen.insert(line)
+        {
+            continue;
+        }
+        let line = head_of(line, 2048);
+        if bytes + line.len() + 1 > REPORT_REGISTRY_BYTES {
+            break;
+        }
+        bytes += line.len() + 1;
+        selected.push(line);
+    }
+    selected.reverse();
+    let mut out = selected.join("\n");
+    if !out.is_empty() {
+        out.push('\n');
+    }
+    out
 }
 
 /// Compact only launch lines, before taking the byte tail. Java's separate summary stays intact.
@@ -1513,6 +1636,104 @@ pub fn scrub(text: &str, own: &Own) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const REPORT_314: &str = include_str!("../tests/fixtures/crash-314-registry-sync.log");
+
+    #[test]
+    fn report_314_diagnoses_registry_sync_without_guessing_a_mod() {
+        for report in [REPORT_314.to_owned(), REPORT_314.replace('\n', "\r\n")] {
+            let (d, matched) = diagnose_match(&report).unwrap();
+            assert_eq!(d.title, "Forge registry IDs did not sync");
+            assert!(d.detail.contains("expected IDs"));
+            assert!(d.detail.contains("mod conflict in the pack"));
+            assert!(d.detail.contains("pack author"));
+            assert!(d.mods.is_empty());
+            assert!(!d.repair);
+            assert!(d.fix.is_none());
+            assert!(matched.starts_with("java.lang.RuntimeException:"));
+            assert!(matched.contains("did not copy to the correct id"));
+            assert!(!matched.contains("minVersion"));
+        }
+        for message in [
+            "One or more entry values did not copy to the correct ID. Check log for details!",
+            "Registry ID mismatch while syncing",
+            "Mismatched registry IDs",
+            "Registry synchronization failed",
+            "Registry IDs do not match",
+        ] {
+            let changed = REPORT_314.replace(
+                "One of more entry values did not copy to the correct id. Check log for details!",
+                message,
+            );
+            assert_eq!(
+                diagnose(&changed).unwrap().title,
+                "Forge registry IDs did not sync"
+            );
+        }
+        let other = REPORT_314.replace("ForgeRegistry.sync(", "AnotherClass.sync(");
+        assert!(registry_sync_diagnosis(&other).is_none());
+    }
+
+    #[test]
+    fn registry_diagnosis_names_only_entries_from_explicit_registry_errors() {
+        let errors = "[Render thread/WARN] [net.minecraftforge.registries.ForgeRegistry/REGISTRIES]: Registry minecraft:item: Object did not get ID it asked for. Name: example:widget Expected: 24 Got: 25\n\
+            [Render thread/ERROR] [net.minecraftforge.registries.ForgeRegistry/REGISTRIES]: Registry minecraft:block: Override did not have an associated owner object. Name: another:stone Value: example.Object\n\
+            [Render thread/WARN] [net.minecraftforge.registries.ForgeRegistry/REGISTRIES]: Registry custom:registry: Object did not get ID it asked for. Name: minecraft:stone Expected: 1 Got: 2\n\
+            [main/INFO] Registry minecraft:item: Object did not get ID it asked for. Name: ignored:entry Expected: 1 Got: 2\n\
+            [main/ERROR] An unrelated mod error. Name: unrelated:entry\n";
+        let d = diagnose(&format!("{errors}{errors}\n{REPORT_314}")).unwrap();
+        assert_eq!(d.mods, ["example", "another"]);
+        assert!(d.detail.contains("Another mod may have replaced"));
+        assert!(d.fix.is_none());
+        assert!(!d.detail.contains("modernfix"));
+        assert!(!d.detail.contains("alltheleaks"));
+    }
+
+    #[test]
+    fn registry_evidence_survives_noise_and_upload_limits_and_is_scrubbed() {
+        let error = "[Render thread/WARN] [net.minecraftforge.registries.ForgeRegistry/REGISTRIES]: Registry minecraft:item: Object did not get ID it asked for. Name: example:widget Expected: 24 Got: 25 contact user@example.com";
+        let noise = "noise\n".repeat(4000);
+        let verbose = "verbose".repeat(4000);
+        let report = Report::build(
+            "1.20.1",
+            "Forge",
+            "alltheleaks failed to change the game",
+            &[&noise, error, error, &noise],
+            &[&verbose],
+            Some(REPORT_314),
+            Some(&verbose),
+        );
+        assert_eq!(report.title, "Forge registry IDs did not sync");
+        assert!(report.log.contains("---- registry failure context ----"));
+        assert_eq!(report.log.matches("Name: example:widget").count(), 1);
+        assert!(report.log.contains("Expected: 24 Got: 25"));
+        assert!(!report.log.contains("user@example.com"));
+        assert!(report.log.contains("matched: java.lang.RuntimeException:"));
+        assert!(report.log.len() < 48 * 1024);
+
+        let many = (0..200).map(|id| format!(
+            "[Render thread/ERROR] Registry minecraft:item ID mismatch Name: example:item_{id} Expected: 1 Got: 2 {}\n", "é".repeat(40)
+        )).collect::<String>();
+        let evidence = registry_failure_evidence(&many);
+        assert!(evidence.len() <= REPORT_REGISTRY_BYTES);
+        assert!(evidence.contains("example:item_199"));
+        assert!(!evidence.contains("example:item_0 "));
+        assert!(evidence.ends_with('\n'));
+        let long = format!("{error}{}", "é".repeat(10_000));
+        assert!(registry_failure_evidence(&long).len() <= REPORT_REGISTRY_BYTES);
+        assert!(
+            registry_failure_evidence("[main/INFO] Registry IDs remapped successfully").is_empty()
+        );
+    }
+
+    #[test]
+    fn mixin_matched_line_is_the_failure_not_a_config_warning() {
+        let warning = REPORT_314.lines().next().unwrap();
+        let failure =
+            "InjectionError: Critical injection failure in realaddon.mixins.json:AddonMixin";
+        let (_, matched) = diagnose_match(&format!("{warning}\n{failure}")).unwrap();
+        assert_eq!(matched, failure);
+    }
 
     #[test]
     fn logged_linkage_error_does_not_mask_memory_hang() {
