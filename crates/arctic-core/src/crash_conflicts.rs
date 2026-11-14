@@ -284,7 +284,7 @@ pub fn find_conflicts(mods: &[InstalledMod]) -> Vec<Conflict> {
 /// log says so).
 fn mixin_failure(text: &str) -> Option<(String, Option<String>)> {
     let gate = Regex::new(
-        r"Critical injection failure|InvalidInjectionException|InvalidMixinException|MixinApplyError|MixinTransformerError|@Mixin target \S+ was not found|Mixin apply for mod|InjectionError",
+        r"MixinPreProcessorStandard|MixinApplicatorStandard|Critical injection failure|InvalidInjectionException|InvalidMixinException|MixinApplyError|MixinTransformerError|@Mixin target \S+ was not found|Mixin apply for mod|InjectionError",
     )
     .ok()?;
     let config = Regex::new(r"([\w\-.]+\.mixins\.json)").ok()?;
@@ -511,6 +511,18 @@ pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Opt
     diagnose_mixin(text, mods)
 }
 
+/// Legacy Mixin can fail while resolving an invocation owner before injection begins.
+pub(crate) fn preprocessing_class_failure(text: &str) -> bool {
+    text.contains("ClassNotFoundException")
+        && [
+            "MixinTransformerError",
+            "MixinPreProcessorStandard",
+            "MixinApplicatorStandard",
+        ]
+        .iter()
+        .any(|marker| text.contains(marker))
+}
+
 /// Attribute config-only failures to installed metadata, or to the config stem as a fallback.
 pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagnosis> {
     let (config, said) = mixin_failure(text)?;
@@ -522,9 +534,15 @@ pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagno
     let name = owner.map_or(id.as_str(), |m| m.name.as_str());
     Some(Diagnosis::new(
         format!("{name} failed to change the game"),
-        format!(
-            "{name}'s mixin doesn't fit this version of Minecraft or a mod it changes. Update {name} (or the mod it's an addon for), or remove {name}."
-        ),
+        if preprocessing_class_failure(text) {
+            format!(
+                "{name}'s mixin failed to apply while resolving a class. Update {name}, or report this crash to its author."
+            )
+        } else {
+            format!(
+                "{name}'s mixin doesn't fit this version of Minecraft or a mod it changes. Update {name} (or the mod it's an addon for), or remove {name}."
+            )
+        },
         vec![id],
     ))
 }

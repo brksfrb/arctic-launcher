@@ -15,7 +15,8 @@ abstract class GlassLegacyImageMixin {
 	@ModifyVariable(method = "method_7009", at = @At("HEAD"), argsOnly = true)
 	private BufferedImage[] arctic$images(BufferedImage[] images) {
 		if (!name.startsWith("arctic:ctm/")) return images;
-		BufferedImage[] result = images.clone();
+		// Mixin 0.7 resolves invocation owners as classes; an array clone owner is not loadable.
+		BufferedImage[] result = java.util.Arrays.copyOf(images, images.length);
 		for (int i = 0; i < result.length; i++) if (result[i] != null) result[i] = arctic$generate(result[i]);
 		return result;
 	}

@@ -336,6 +336,22 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
+        pattern: r"MixinTransformerError|MixinPreProcessorStandard|MixinApplicatorStandard",
+        explain: |_, text| {
+            if crate::crash_conflicts::preprocessing_class_failure(text) {
+                crate::crash_conflicts::diagnose_mixin(text, &[]).unwrap_or_else(|| {
+                    Diagnosis::new(
+                        "A mod's mixin failed to apply",
+                        "A mod's mixin failed while resolving a class. Update your mods, or report this crash to the mod author.",
+                        Vec::new(),
+                    )
+                })
+            } else {
+                Diagnosis::none()
+            }
+        },
+    },
+    Rule {
         pattern: r"class file version (\d+)\.\d+\).*?class file versions up to (\d+)\.\d+",
         explain: |c, _| {
             let java = |v: &str| v.parse::<u32>().map_or(0, |v| v.saturating_sub(44));
@@ -2193,6 +2209,29 @@ Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 (
         at TRANSFORMER/superbwarfare@0.8.8/example.LivingEventHandler.onExplosionDetonate(LivingEventHandler.java:42)
 Stacktrace:
     at example.Other.frame(Other.java:1)";
+
+    #[test]
+    fn forge_304_array_owner_is_a_mixin_failure() {
+        let text = "java.lang.NoClassDefFoundError: net/minecraft/client/renderer/texture/TextureAtlasSprite
+    at TextureMap.<init>(TextureMap.java:64)
+Caused by: org.spongepowered.asm.mixin.transformer.throwables.MixinTransformerError: An unexpected critical error was encountered
+Caused by: java.lang.RuntimeException: java.lang.ClassNotFoundException: [Ljava.awt.image.BufferedImage;
+    at org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.transformMethod(MixinPreProcessorStandard.java:682)
+    at org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.transform(MixinPreProcessorStandard.java:670)
+    at org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.attach(MixinPreProcessorStandard.java:267)
+    at org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.createContextFor(MixinPreProcessorStandard.java:241)
+    at org.spongepowered.asm.mixin.transformer.MixinInfo.createContextFor(MixinInfo.java:1144)
+    at org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.apply(MixinApplicatorStandard.java:267)";
+        let diagnosis = diagnose(text).unwrap();
+        assert_eq!(diagnosis.title, "A mod's mixin failed to apply");
+        assert!(diagnosis.mods.is_empty());
+        let named = format!(
+            "{text}\nMixinTransformerError: arctic-legacy.mixins.json:GlassLegacyImageMixin from mod arctic"
+        );
+        let diagnosis = diagnose(&named).unwrap();
+        assert!(diagnosis.title.contains("arctic"));
+        assert!(diagnosis.detail.contains("mixin failed to apply"));
+    }
 
     #[test]
     fn forge_295_mixin_owner_wins_over_triggering_mods() {
