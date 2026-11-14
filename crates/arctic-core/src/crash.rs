@@ -786,7 +786,70 @@ fn fatal_linkage(text: &str, at: usize) -> bool {
             && !freeze_evidence(text))
 }
 
+pub(crate) fn native_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+    if text.contains("---- Minecraft Crash Report ----")
+        || text.contains("---- crash report ----\n")
+        || text.contains("A fatal error has been detected by the Java Runtime Environment")
+    {
+        return None;
+    }
+    static EXIT: OnceLock<Regex> = OnceLock::new();
+    let re = EXIT.get_or_init(|| Regex::new(r"(?i)exit code -?\d+ \(0x([0-9a-f]{8})").unwrap());
+    let matched = re.captures_iter(text).find(|c| {
+        u32::from_str_radix(&c[1], 16).is_ok_and(|n| crate::native_crash::is_native(n as i32))
+    })?;
+    let fault = text
+        .lines()
+        .find_map(|line| line.strip_prefix("[Arctic diagnostics] native fault: module="));
+    let module = fault.map(|s| s.split(';').next().unwrap_or(s));
+    let mut title = module.map_or_else(
+        || "Minecraft crashed in native code".to_owned(),
+        |m| format!("Minecraft crashed in native code ({m})"),
+    );
+    let owner = fault.and_then(|f| f.split("; bundled mod=").nth(1));
+    if let Some(owner) = owner {
+        title.push_str(&format!(" — {owner}"));
+    }
+    let advice = match module.map(str::to_ascii_lowercase) {
+        Some(m)
+            if m.starts_with("nvoglv")
+                || m.starts_with("atio6axx")
+                || (m.starts_with("ig") && m.contains("icd")) =>
+        {
+            "The faulting module is a graphics driver. Update your graphics driver and try without shaders."
+        }
+        Some(m) if m == "jvm.dll" => {
+            "The faulting module is the Java runtime. Try repairing or updating Java."
+        }
+        Some(_) => {
+            "Windows identified the faulting native library. If it is bundled with a mod, update that mod or try without it. The faulting module alone does not prove the root cause."
+        }
+        None => {
+            "The cause is unknown. The native exit code and game logs were captured, but no matching Windows faulting module was available. A driver, overlay, mod native library, or Java runtime may be involved."
+        }
+    };
+    let owner_advice = owner
+        .map(|o| format!("The DLL is bundled with {o}; update that mod or try without it. "))
+        .unwrap_or_default();
+    Some((
+        Diagnosis::new(
+            title,
+            format!(
+                "{owner_advice}{advice} No Java fatal-error log or Minecraft crash report was found; fail-fast exits can prevent Java from writing one."
+            ),
+            Vec::new(),
+        ),
+        fault.map_or_else(
+            || matched[0].to_owned(),
+            |f| format!("[Arctic diagnostics] native fault: module={f}"),
+        ),
+    ))
+}
+
 fn diagnose_match(text: &str) -> Option<(Diagnosis, String)> {
+    if let Some(native) = native_diagnosis(text) {
+        return Some(native);
+    }
     let start = text.len().saturating_sub(MAX_TEXT);
     let start = (start..text.len())
         .find(|&i| text.is_char_boundary(i))
@@ -995,6 +1058,7 @@ impl Report {
             text.push_str(head_of(report, REPORT_CRASH_BYTES));
         }
         let title = exit_title(title, &all, java.unwrap_or(""));
+        let title = native_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
         let title = if crash_report.is_none()
             && (title.is_empty()
                 || title == "unknown"
@@ -2297,5 +2361,80 @@ Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 (
         assert!(report.log.contains("---- launcher log ----"));
         assert!(report.log.contains("---- crash report ----"));
         assert!(report.log.contains("---- java ----"));
+    }
+}
+
+#[cfg(test)]
+mod native_tests {
+    use super::*;
+    #[test]
+    fn report_300_native_exit_outranks_resource_pack_and_logged_linkage() {
+        let text = include_str!("../tests/fixtures/crash-300-failfast.log");
+        assert!(!text.contains("NoSuchMethodError"));
+        // Independently verify the stacked linkage fix, without native-exit precedence.
+        let without_exit = text
+            .lines()
+            .filter(|l| !l.contains("exit code"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            diagnose(&without_exit).is_none_or(|d| d.title != "A mod is for a different version")
+        );
+        let d = diagnose(text).unwrap();
+        assert_eq!(d.title, "Minecraft crashed in native code");
+        assert!(d.detail.contains("unknown"));
+        let noisy =
+            format!("[main/ERROR] java.lang.NoSuchMethodError: optional.Integration\n{text}");
+        assert_eq!(diagnose(&noisy).unwrap().title, d.title);
+        let report = Report::build(
+            "1.21.11",
+            "Fabric",
+            "A mod is for a different version",
+            &[text],
+            &[],
+            None,
+            None,
+        );
+        assert_eq!(report.title, d.title);
+        assert!(report.log.contains("matched:"));
+    }
+    #[test]
+    fn native_modules_and_existing_crash_documents() {
+        for code in [0xC0000005u32, 0xC0000409, 0xC0000374, 0xC000001D] {
+            let text = format!("exit code {} (0x{code:08X})", code as i32);
+            assert!(diagnose(&text).unwrap().title.contains("native code"));
+            for (module, advice) in [
+                ("nvoglv64.dll", "graphics driver"),
+                ("atio6axx.dll", "graphics driver"),
+                ("ig9icd64.dll", "graphics driver"),
+                ("jvm.dll", "Java runtime"),
+                ("mod-native.dll", "mod"),
+            ] {
+                let text = format!(
+                    "{text}\n[Arctic diagnostics] native fault: module={module}; version=1; exception=0xc0000409; offset=0x123"
+                );
+                let d = diagnose(&text).unwrap();
+                assert!(d.title.contains(module));
+                assert!(d.detail.contains(advice));
+                let r = Report::build("1", "Fabric", "unknown", &[&text], &[], None, None);
+                assert!(r.log.contains("---- diagnostics ----"));
+                assert!(r.log.contains("offset=0x123"));
+                assert!(
+                    native_diagnosis(&format!(
+                        "{text}\nA fatal error has been detected by the Java Runtime Environment"
+                    ))
+                    .is_none()
+                );
+                assert!(
+                    native_diagnosis(&format!("{text}\n---- Minecraft Crash Report ----"))
+                        .is_none()
+                );
+            }
+        }
+        let owned = "exit code -1073740791 (0xC0000409)\n[Arctic diagnostics] native fault: module=mod-native.dll; version=1; exception=0xc0000409; offset=0x123; bundled mod=voicechat";
+        let d = diagnose(owned).unwrap();
+        assert!(d.title.contains("voicechat"));
+        assert!(d.detail.contains("bundled with voicechat"));
+        assert!(native_diagnosis("exit code 1 (0x00000001)").is_none());
     }
 }

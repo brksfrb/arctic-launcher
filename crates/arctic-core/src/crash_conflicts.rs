@@ -450,6 +450,9 @@ pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Opt
 
 /// `crash::diagnose` plus the clash check against the mods in `mods_dir`.
 pub fn diagnose_in(text: &str, mods_dir: &Path) -> Option<Diagnosis> {
+    if let Some((native, _)) = crate::crash::native_diagnosis(text) {
+        return Some(native);
+    }
     refine(crate::crash::diagnose(text), text, &scan(mods_dir))
 }
 
