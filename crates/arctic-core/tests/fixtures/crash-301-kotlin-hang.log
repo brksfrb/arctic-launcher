@@ -1,0 +1,35 @@
+Report 301, trimmed and anonymized. Launcher 0.6.2, Windows, Fabric 1.21.11 / 0.19.5.
+Two fabric-language-kotlin jars were present in the mods folder, but the loader selected one.
+No crash report, hs_err, or freeze snapshot was written. Exit after 51 s; cause unknown.
+
+---- mods folder (reconstructed test jars; only one copy appears in the loader inventory) ----
+fabric-language-kotlin-1.13.9+kotlin.2.3.10.jar
+fabric-language-kotlin-1.14.2+kotlin.2.4.21.jar
+
+---- initial output ----
+[14:53:29] [main/INFO] Loading Minecraft 1.21.11 with Fabric Loader 0.19.5
+[14:53:30] [main/INFO] Loading 142 mods:
+	- fabric-language-kotlin 1.14.2+kotlin.2.4.21
+	- malilib 0.27.16
+	- sodium 0.8.14-beta.2+mc1.21.11
+
+---- final output ----
+[14:53:58] [Render thread/INFO]: Arctic Client ready: style arctic, looks from https://cosmetics.arcticlauncher.com
+[14:54:00] [Render thread/INFO]: Initializing mods (entrypoint yumi:init)...
+[14:54:05] [Render thread/INFO]: Backend library: LWJGL version 3.3.3-snapshot
+[14:54:06] [Render thread/INFO]: Initializing ImmediatelyFast 1.14.3+1.21.11 on Intel(R) HD Graphics 4000 (Intel) with OpenGL 3.3.0 - Build 10.18.10.5161
+[14:54:06] [Render thread/INFO]: OpenGL Vendor: Intel
+[14:54:06] [Render thread/INFO]: OpenGL Renderer: Intel(R) HD Graphics 4000
+[14:54:06] [Render thread/INFO]: OpenGL Version: 3.3.0 - Build 10.18.10.5161
+[14:54:06] [Render thread/ERROR]: Couldn't load file/absolutely no firework particles.zip pack metadata: Pack declares support for version newer than 64, but is missing mandatory fields min_format and max_format
+[14:54:08] [Render thread/INFO]: Reloading ResourceManager: arctic_client, vanilla, fabric-language-kotlin, malilib, sodium, essential
+[14:54:09] [Render thread/INFO]: i18nLang#load: File: '/assets/malilib/lang/en_us.json' has been loaded successfully
+[14:54:09] [Render thread/WARN]: i18nOptionManager#buildLanguageOptions(malilib): Detected [12] available options.
+
+---- launcher log ----
+[ 2168.26s] [INFO] 1 mod clashes in pvp-map
+
+---- java ----
+Java java-runtime-delta, flags: -Xms512M -Xmx2048M
+(exit code -805306369 (0xCFFFFFFF; undocumented Windows exit code; hang termination or native failure, not enough evidence to distinguish))
+run: ended after 51 s; 189 lines printed; logs/latest.log: 26216 bytes; crash report or hs_err: none
