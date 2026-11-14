@@ -18,10 +18,24 @@ abstract class BlockEntityCullMixin {
 	@Inject(method = "tryExtractRenderState", at = @At("HEAD"), cancellable = true)
 	private void arctic$cull(BlockEntity entity, float partialTick, net.minecraft.client.renderer.feature.ModelFeatureRenderer.CrumblingOverlay crumbling,
 			boolean global, org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<Object> cir) {
+		//#if MC == 26.2
+		// A chest drawn on the GPU needs no render state (GpuChests): shut ones are already in their section's instances.
+		if (com.arcticlauncher.mod.GpuChests.capture(entity, partialTick, crumbling, global)) {
+			cir.setReturnValue(null);
+			return;
+		}
+		//#endif
 		if (BlockEntityCull.skip(entity)) {
 			cir.setReturnValue(null);
 		}
 	}
+
+	//#if MC == 26.2
+	@Inject(method = "onResourceManagerReload", at = @At("RETURN"))
+	private void arctic$reloadChests(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+		com.arcticlauncher.mod.GpuChests.reload();
+	}
+	//#endif
 	//#elif MC >= 1.21.9
 	@Inject(method = "tryExtractRenderState", at = @At("HEAD"), cancellable = true)
 	private void arctic$cull(BlockEntity entity, float partialTick, net.minecraft.client.renderer.feature.ModelFeatureRenderer.CrumblingOverlay crumbling,

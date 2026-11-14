@@ -429,6 +429,9 @@ final class ModCatalog {
 					f.stepper(Lang.t("mods.draw_distance_blocks"), () -> c.blockEntityDistance,
 							v -> c.blockEntityDistance = (int) v, 16, com.arcticlauncher.client.feature.BlockEntityCulling.GAME_DISTANCE, 8, "%.0f");
 					f.note(Lang.t("mods.64_is_the_games_own_distance_lower"));
+					f.section(Lang.t("mods.chests"));
+					f.toggle(Lang.t("mods.draw_chests_on_the_gpu"), Lang.t("mods.shut_chests_are_kept_on_the_gpu"), () -> c.chestInstancing,
+							on -> c.chestInstancing = on);
 					f.section(Lang.t("mods.how_it_works"));
 					f.note(Lang.t("mods.only_what_is_off_screen_is_skipped"));
 				}));

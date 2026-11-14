@@ -22,11 +22,17 @@ abstract class BlockEntityCullLevelMixin {
 	@Inject(method = "extract", at = @At("HEAD"))
 	private void arctic$beginBlockEntities(CallbackInfo ci) {
 		BlockEntityCulling.begin();
+		//#if MC == 26.2
+		com.arcticlauncher.mod.GpuChests.begin();
+		//#endif
 	}
 
 	@Inject(method = "extract", at = @At("RETURN"))
 	private void arctic$endBlockEntities(CallbackInfo ci) {
 		BlockEntityCulling.end();
+		//#if MC == 26.2
+		com.arcticlauncher.mod.GpuChests.end();
+		//#endif
 	}
 	//#elif MC >= 26.1
 	@Inject(method = "extractLevel", at = @At("HEAD"))

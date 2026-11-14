@@ -417,6 +417,8 @@ processResources {
 			inventoryHotbarScroll: !atLeast('1.21.2'),
 			// Block entity culling: 1.15+ take the frame's frustum from the entity test (before, the block entity pass is given one).
 			blockEntityFrustum: atLeast('1.15'),
+			// Chests drawn on the GPU as instances: 26.2 only for now.
+			gpuChests: mc == '26.2',
 	]
 	inputs.properties props
 	filesMatching(['fabric.mod.json', 'arctic.mixins.json']) {

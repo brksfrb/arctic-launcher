@@ -351,6 +351,8 @@ public final class ClientConfig {
 	public boolean blockEntityCulling = true;
 	/** How far away (blocks) they are still drawn; {@code BlockEntityCulling.GAME_DISTANCE} is the game's own. */
 	public int blockEntityDistance = 64;
+	/** Chests are drawn on the GPU as instances, shut ones from data kept per section (see {@code ChestInstancing}; 26.2). */
+	public boolean chestInstancing = true;
 	/** Ctrl+K opens the command palette (mods, servers, friends). */
 	public boolean commandPalette = true;
 	/** Saturation (the hidden part of hunger) drawn on the hunger bar. */
