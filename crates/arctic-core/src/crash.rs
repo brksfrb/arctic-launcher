@@ -2221,6 +2221,69 @@ Stacktrace:
     /// the config rule already names particle_core (the #64 fix), but misses the Sodium clash.
     const REPORT_310: &str = include_str!("../tests/fixtures/crash-310-particle-core.log");
 
+    /// Fabric crash #315 identifies the constant injector displaced by Cursed Craft,
+    /// while Lithium also targets the class and AppleSkin appears in the inventory.
+    const REPORT_315: &str = include_str!("../tests/fixtures/crash-315-carpet.log");
+
+    #[test]
+    fn report_315_names_carpet_without_blaming_appleskin_or_lithium() {
+        for text in [REPORT_315.to_owned(), REPORT_315.replace('\n', "\r\n")] {
+            let d = diagnose(&text).unwrap();
+            assert_eq!(d.title, "Carpet clashes with Cursed Craft");
+            assert_eq!(d.mods, ["carpet", "cursed_craft"]);
+            assert!(d.detail.contains("Update or remove Carpet"));
+            assert!(!d.detail.to_lowercase().contains("appleskin"));
+            assert!(!d.detail.to_lowercase().contains("lithium"));
+            assert!(!d.repair);
+            assert!(d.fix.is_none());
+        }
+    }
+
+    #[test]
+    fn constant_clash_requires_the_failed_injector_and_both_context_entries() {
+        for text in [
+            REPORT_315.replace("@ModifyConstant conflict.", "Unrelated warning."),
+            REPORT_315.replace("::pushLimit(I)I with priority", "::other(I)I with priority"),
+            REPORT_315.replace(
+                "already redirected by cursed_craft.mixins.json:InfPiston",
+                "already redirected by lithium.mixins.json:OtherMixin",
+            ),
+            REPORT_315.replace(
+                "ca.maximilian.cursed_craft.mixin.InfPiston",
+                "ca.maximilian.cursed_craft.mixin.OtherMixin",
+            ),
+            REPORT_315.replace("failure end", ""),
+        ] {
+            let d = diagnose(&text).unwrap();
+            assert_eq!(d.mods, ["carpet"]);
+            assert_eq!(d.title, "carpet failed to change the game");
+        }
+    }
+
+    #[test]
+    fn fabric_injection_owner_is_independent_of_injector_wording() {
+        for injector in [
+            "Constant modifier method",
+            "Redirector",
+            "Callback method",
+            "Variable modifier method",
+            "Argument modifier method",
+            "Multi-argument modifier method",
+            "@ModifyVariable",
+            "@ModifyArg",
+            "Unknown injector",
+        ] {
+            for exception in ["InjectionError:", "InvalidInjectionException:"] {
+                let text = REPORT_315
+                    .replace("Constant modifier method", injector)
+                    .replace("InjectionError:", exception);
+                let d = diagnose(&text).unwrap();
+                assert_eq!(d.mods, ["carpet", "cursed_craft"], "{exception} {injector}");
+                assert_eq!(d.title, "Carpet clashes with Cursed Craft");
+            }
+        }
+    }
+
     #[test]
     fn report_310_names_particle_core_and_sodium_without_blaming_necronomicon() {
         for text in [REPORT_310.to_owned(), REPORT_310.replace('\n', "\r\n")] {
