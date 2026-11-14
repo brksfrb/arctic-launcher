@@ -99,6 +99,8 @@ pub fn spawn(
     };
     let mut exe = game_exe(plan);
     let started = std::time::Instant::now();
+    #[cfg(windows)]
+    let launched_at = std::time::SystemTime::now();
     let mut child = match start(&exe) {
         Ok(child) => child,
         // The branded copy would not start: run the runtime's own Java.
@@ -199,6 +201,8 @@ pub fn spawn(
                 }
             }
         };
+        #[cfg(windows)]
+        let exited_at = std::time::SystemTime::now();
         drain_readers([out_reader, err_reader].into_iter().flatten().collect());
         killed |= kill.load(Ordering::Relaxed);
         if let Some(c) = code {
@@ -212,6 +216,32 @@ pub fn spawn(
                 level: super::logparse::Level::Info,
                 text: summary,
             }]));
+        }
+        #[cfg(windows)]
+        if !killed && code.is_some_and(crate::native_crash::is_native) {
+            let fresh = |dir: &std::path::Path, prefix: &str| {
+                std::fs::read_dir(dir)
+                    .ok()
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .any(|e| {
+                        e.file_name().to_string_lossy().starts_with(prefix)
+                            && e.metadata()
+                                .and_then(|m| m.modified())
+                                .is_ok_and(|t| t >= launched_at)
+                    })
+            };
+            if !fresh(&game_dir, "hs_err_pid") && !fresh(&game_dir.join("crash-reports"), "crash-")
+            {
+                let evidence =
+                    crate::native_crash::collect(child.id(), exited_at, &game_dir.join("mods"));
+                writeln!(log.lock().unwrap(), "{evidence}").ok();
+                on_event(GameEvent::Output(vec![LogLine {
+                    level: super::logparse::Level::Info,
+                    text: evidence,
+                }]));
+            }
         }
         if !killed && code.is_some_and(|c| c != 0) && started.elapsed() < Duration::from_secs(5) {
             let probe = runtime_probe(&exe);
