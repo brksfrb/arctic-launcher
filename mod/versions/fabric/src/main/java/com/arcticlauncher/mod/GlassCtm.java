@@ -242,10 +242,9 @@ public final class GlassCtm {
 
 	/** Called while models bake, after their atlas is stitched. Selection never allocates. */
 	public static Variants prepare(BakedQuad quad) {
-		// The base constructor runs before these subclasses replace the glass UVs.
-		//#if MC < 1.15
-		if (quad instanceof net.minecraft.client.renderer.block.model.BreakingQuad) return null;
-		//#endif
+		// Called from the base constructor: subclass getters may read uninitialized
+		// fields, and damage overlays have not replaced their UVs yet.
+		if (quad.getClass() != BakedQuad.class) return null;
 		if (!available() || sprites.isEmpty()) return null;
 		//#if MC >= 26.1
 		TextureAtlasSprite sprite = quad.materialInfo().sprite();

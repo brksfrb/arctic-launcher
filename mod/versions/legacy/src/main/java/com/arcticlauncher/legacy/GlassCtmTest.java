@@ -85,6 +85,19 @@ final class GlassCtmTest {
 		//#endif
 		net.minecraft.client.render.model.BakedQuad glass = original.get(0);
 		check(((GlassQuad) (Object) glass).arctic$ctm() != null, "glass has variants");
+		//#if MC < 1.9
+		// Like Forge's UnpackedBakedQuad: its vertex storage is assigned after super().
+		net.minecraft.client.render.model.BakedQuad unpacked = new net.minecraft.client.render.model.BakedQuad(
+				glass.getVertexData(), glass.getColorIndex(), glass.getFace()) {
+			private final int[] unpackedData = glass.getVertexData();
+			@Override public int[] getVertexData() {
+				if (unpackedData == null) throw new NullPointerException("subclass vertex data not initialized");
+				return unpackedData;
+			}
+		};
+		check(((GlassQuad) (Object) unpacked).arctic$ctm() == null, "unpacked constructor has no variants");
+		check(LegacyGlassCtm.prepare(unpacked) == null, "explicit unpacked prepare has no variants");
+		//#endif
 		net.minecraft.client.render.model.BakedQuad damage = new net.minecraft.client.render.model.TexturedBakedQuad(glass, model.getParticleSprite());
 		check(((GlassQuad) (Object) damage).arctic$ctm() == null, "damage constructor has no variants");
 		check(LegacyGlassCtm.prepare(damage) == null, "explicit damage prepare has no variants");
