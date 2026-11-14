@@ -705,7 +705,7 @@ impl ArcticApp {
                 let mut detail = t!("tasks.the_game_froze_with_memory_pressure").to_string();
                 if d.detail.contains("Arctic capped the memory") {
                     detail.push(' ');
-                    detail.push_str(&t!("tasks.arctic_capped_the_memory"));
+                    detail.push_str(t!("tasks.arctic_capped_the_memory"));
                 }
                 (
                     t!("tasks.minecraft_ran_out_of_memory_and_froze").into(),
