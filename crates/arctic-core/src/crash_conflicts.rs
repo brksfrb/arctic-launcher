@@ -432,19 +432,34 @@ pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Opt
         }
     }
     if base.is_some() {
-        return base;
+        // Refine only our config-based rule; preserve higher-priority and Fabric diagnoses.
+        return if base == diagnose_mixin(text, &[]) {
+            diagnose_mixin(text, mods).or(base)
+        } else {
+            base
+        };
     }
     if let Some(c) = conflicts.first() {
         return Some(explain(c, mods, failed, failed.is_some()));
     }
-    let f = failed?;
+    diagnose_mixin(text, mods)
+}
+
+/// Attribute config-only failures to installed metadata, or to the config stem as a fallback.
+pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagnosis> {
+    let (config, said) = mixin_failure(text)?;
+    let owner = owner_of(&config, said.as_deref(), mods);
+    let id = owner.map_or_else(
+        || said.unwrap_or_else(|| config.trim_end_matches(".mixins.json").to_owned()),
+        |m| m.id.clone(),
+    );
+    let name = owner.map_or(id.as_str(), |m| m.name.as_str());
     Some(Diagnosis::new(
-        format!("{} failed to change the game", f.name),
+        format!("{name} failed to change the game"),
         format!(
-            "{}'s changes to the game could not be applied: it is probably made for another Minecraft version or clashes with another mod. Update or remove it.",
-            f.name
+            "{name}'s mixin doesn't fit this version of Minecraft or a mod it changes. Update {name} (or the mod it's an addon for), or remove {name}."
         ),
-        vec![f.id.clone()],
+        vec![id],
     ))
 }
 
@@ -495,9 +510,10 @@ mod tests {
     #[test]
     fn report_267_names_the_fork_clash_from_the_log_alone() {
         let text = REPORT_267;
-        // The old rules had nothing to say about this one.
-        assert!(crate::crash::diagnose(text).is_none());
-        let d = refine(None, text, &[]).unwrap();
+        // The config-only rule identifies the failed mod; refinement still explains its clash.
+        let base = crate::crash::diagnose(text).unwrap();
+        assert_eq!(base.mods, ["noisiumed"]);
+        let d = refine(Some(base), text, &[]).unwrap();
         assert_eq!(d.title, "Noisium and Noisiumed are both installed");
         assert!(d.detail.starts_with(
             "Noisium and Noisiumed are both installed. Noisiumed is a fork of Noisium, so they clash. Keep one of them."
@@ -544,6 +560,23 @@ mod tests {
         assert_eq!(d.title, "Fancy failed to change the game");
         assert_eq!(d.mods, vec!["fancy"]);
         assert_eq!(d.fix, None);
+    }
+
+    #[test]
+    fn forge_config_owner_metadata_refines_the_base_diagnosis() {
+        let text = "InjectionError: Critical injection failure in superbaddon.mixins.json:CustomExplosionMixin\nSuspected Mods: LesRaisins Tactical Equipments (lrtactical), Version: 0.4.4";
+        let mods = vec![InstalledMod {
+            id: "actual_addon_id".into(),
+            name: "Superb Addon".into(),
+            mixins: vec!["superbaddon.mixins.json".into()],
+            ..InstalledMod::default()
+        }];
+        let d = refine(crate::crash::diagnose(text), text, &mods).unwrap();
+        assert_eq!(d.mods, ["actual_addon_id"]);
+        assert_eq!(d.title, "Superb Addon failed to change the game");
+        assert!(d.detail.contains("Update Superb Addon"));
+        let d = refine(crate::crash::diagnose(text), text, &[]).unwrap();
+        assert_eq!(d.mods, ["superbaddon"]);
     }
 
     #[test]
