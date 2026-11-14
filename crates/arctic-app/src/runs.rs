@@ -211,17 +211,11 @@ impl Run {
 
     fn exit_diagnosis(&self, code: Option<i32>, shutdown_watchdog: bool) -> Option<Diagnosis> {
         let code = code.filter(|c| *c != 0 && !shutdown_watchdog)?;
-        let text = format!(
-            "{}\n(exit code {})",
-            self.crash_text(),
-            crash::exit_description(code)
-        );
-        if let Some(specific) =
-            arctic_core::crash_conflicts::diagnose_in(&text, &self.game_dir.join("mods"))
-        {
-            return Some(specific);
-        }
-        crash::silent_exit(&self.crash_text(), code)
+        arctic_core::crash_conflicts::diagnose_exit_in(
+            &self.crash_text(),
+            code,
+            &self.game_dir.join("mods"),
+        )
     }
 
     /// The end of the game's log and the crash report it wrote, as one text.
@@ -707,6 +701,10 @@ impl ArcticApp {
                     detail.push(' ');
                     detail.push_str(t!("tasks.arctic_capped_the_memory"));
                 }
+                if let Some((_, hint)) = d.detail.split_once("\n\n") {
+                    detail.push_str("\n\n");
+                    detail.push_str(hint);
+                }
                 (
                     t!("tasks.minecraft_ran_out_of_memory_and_froze").into(),
                     detail,
@@ -983,6 +981,61 @@ mod tests {
     }
 
     const UNFINISHED_FREEZE: &str = "Arctic: game froze for 3.1s, mostly in org.lwjgl.vulkan.VK10.vkQueuePresentKHR(Native Method) [not in a world (menu/loading) - may be normal]\nstarted: 2026-11-13 12:00:00.000\nduration: 3.12s (still frozen when written)\nsamples: 3 client-thread stacks\n== Distinct client-thread stacks (count of samples) ==\n[3x] stack 1\n    at org.lwjgl.vulkan.VK10.vkQueuePresentKHR(Native Method)\n    at example.Game.render(Game.java:42)\n== All other threads (captured once, at the first sample) ==\nthread \"worker\" WAITING\n";
+
+    #[test]
+    fn report_301_keeps_the_unknown_exit_title_in_the_uploaded_report() {
+        use std::io::Write;
+
+        let dir = tempfile::tempdir().unwrap();
+        let mods = dir.path().join("mods");
+        std::fs::create_dir(&mods).unwrap();
+        for version in ["1.13.9+kotlin.2.3.10", "1.14.2+kotlin.2.4.21"] {
+            let file = mods.join(format!("fabric-language-kotlin-{version}.jar"));
+            let mut jar = zip::ZipWriter::new(std::fs::File::create(file).unwrap());
+            jar.start_file("fabric.mod.json", zip::write::SimpleFileOptions::default())
+                .unwrap();
+            write!(jar, r#"{{"id":"fabric-language-kotlin","name":"Fabric Language Kotlin","version":"{version}"}}"#).unwrap();
+            jar.finish().unwrap();
+        }
+        let mut runs = Runs::default();
+        let id = runs.start("pvp-map", "1.21.11", "Pvp map".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(51);
+        run.java = Some("Java java-runtime-delta -Xmx2048M".into());
+        run.push_log(
+            include_str!("../../arctic-core/tests/fixtures/crash-301-kotlin-hang.log")
+                .lines()
+                .map(|line| LogLine {
+                    level: Level::Info,
+                    text: line.into(),
+                }),
+        );
+        let diagnosis = run.exit_diagnosis(Some(-805306369), false).unwrap();
+        assert_eq!(
+            diagnosis.title,
+            "Game exited with code -805306369 (0xCFFFFFFF)"
+        );
+        assert!(diagnosis.detail.contains("possible mods-folder clash"));
+        assert!(diagnosis.fix.is_none());
+        let report = run.crash_report(&diagnosis.title, Some(-805306369));
+        assert_eq!(
+            report.title,
+            "Game exited with code -805306369 (0xCFFFFFFF)"
+        );
+        assert!(!report.title.contains("installed twice"));
+        assert!(!report.title.contains("resource-pack"));
+        assert!(run.exit_diagnosis(Some(0), false).is_none());
+        assert!(run.exit_diagnosis(Some(-805306369), true).is_none());
+
+        run.push_log([LogLine {
+            level: Level::Error,
+            text: "Hang at exit: client hung for 12s; no recovery recorded\nheap: 2000 MB used of 2048 MB max at start".into(),
+        }]);
+        let diagnosis = run.exit_diagnosis(Some(-805306369), false).unwrap();
+        assert_eq!(diagnosis.title, "Minecraft ran out of memory and froze");
+        let (_, localized_detail) = ArcticApp::localized_diagnosis(&diagnosis);
+        assert!(localized_detail.contains("possible mods-folder clash"));
+    }
 
     #[test]
     fn logged_version_error_then_memory_hang_is_not_a_version_crash() {
