@@ -25,7 +25,7 @@
   <a href="https://github.com/brksfrb/arctic-launcher/releases/latest"><b>Download</b></a> ·
   <a href="https://arcticlauncher.com">Website</a> ·
   <a href="docs/cli.md">Command line</a> ·
-  <a href="mailto:support@arcticlauncher.com">Support</a>
+  <a href="https://arcticlauncher.com/support">Support</a>
 </p>
 
 <p align="center">
@@ -130,17 +130,12 @@ The skin gallery is skins other players shared. Search by name or creator, wear 
    [latest release](https://github.com/brksfrb/arctic-launcher/releases/latest).
 2. Run it. There is no installer; put it wherever you like.
 
-Windows may show a SmartScreen prompt for new apps. Choose **More info → Run anyway**.
-
 ### macOS
 
 1. Download **`arctic-launcher-macos.zip`** from the
    [latest release](https://github.com/brksfrb/arctic-launcher/releases/latest) and unzip it.
 2. Move **Arctic Launcher** to Applications and open it. It runs on Apple Silicon and Intel
    Macs.
-
-The app isn't notarized by Apple yet, so the first time macOS asks: right-click the app,
-choose **Open**, then **Open** again.
 
 ### Linux
 
