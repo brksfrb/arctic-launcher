@@ -320,12 +320,19 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
+        // Fabric's root injection failure owns the blame, ahead of outer Mixin errors.
+        pattern: r"(?:InjectionError|InvalidInjectionException):[^\r\n]*from mod [\w\-]+",
+        explain: |_, text| {
+            crate::crash_conflicts::diagnose_mixin(text, &[]).unwrap_or_else(Diagnosis::none)
+        },
+    },
+    Rule {
         // Fabric: "Mixin apply for mod sodium failed sodium.mixins.json:..."
         pattern: r"Mixin apply for mod ([\w\-]+) failed",
         explain: |c, text| broken_mod(&c[1], text),
     },
     Rule {
-        pattern: r"Mixin \[[^\]]+\] from mod ([\w\-]+)",
+        pattern: r"Mixin \[[^\]\r\n]+\] from mod ([\w\-]+)",
         explain: |c, text| broken_mod(&c[1], text),
     },
     Rule {
@@ -2210,6 +2217,87 @@ Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 (
 Stacktrace:
     at example.Other.frame(Other.java:1)";
 
+    /// Real Fabric 1.20.1 crash #310, trimmed without changing the failure lines. At b7fe0d52
+    /// the config rule already names particle_core (the #64 fix), but misses the Sodium clash.
+    const REPORT_310: &str = include_str!("../tests/fixtures/crash-310-particle-core.log");
+
+    #[test]
+    fn report_310_names_particle_core_and_sodium_without_blaming_necronomicon() {
+        for text in [REPORT_310.to_owned(), REPORT_310.replace('\n', "\r\n")] {
+            let d = diagnose(&text).unwrap();
+            assert_eq!(d.title, "Particle Core clashes with Sodium");
+            assert_eq!(d.mods, ["particle_core", "sodium"]);
+            assert!(d.detail.contains("Update or remove Particle Core"));
+            assert!(d.detail.contains("compatibility with Sodium"));
+            assert!(!d.detail.to_lowercase().contains("necronomicon"));
+            assert!(!d.repair);
+            assert!(d.fix.is_none());
+        }
+    }
+
+    #[test]
+    fn fabric_root_injection_owner_wins_over_outer_mixin_blame() {
+        for outer in [
+            "Mixin apply for mod necronomicon failed necronomicon.mixins.json:OuterMixin",
+            "Mixin [necronomicon.mixins.json:OuterMixin] from mod necronomicon failed",
+            "Caused by: InvalidInjectionException: invalid necronomicon.mixins.json:OuterMixin from mod necronomicon",
+        ] {
+            for exception in ["InjectionError:", "InvalidInjectionException:"] {
+                let text = format!("{outer}\n{REPORT_310}").replace("InjectionError:", exception);
+                let d = diagnose(&text).unwrap();
+                assert_eq!(d.mods, ["particle_core", "sodium"], "{outer}");
+                assert_eq!(d.title, "Particle Core clashes with Sodium");
+            }
+        }
+    }
+
+    #[test]
+    fn fabric_mixin_clash_requires_missing_targets_and_matching_context() {
+        for text in [
+            REPORT_310.replace("Scanned 0 target(s)", "Scanned 1 target(s)"),
+            REPORT_310.replace("class=net.minecraft.class_3940;", "class=net.minecraft.Other;"),
+            REPORT_310.replace("me.fzzyhmstrs.particle_core.mixins.BillboardParticleVertexMixin", "me.fzzyhmstrs.particle_core.mixins.OtherMixin"),
+            REPORT_310.replace("sodium.mixins.json:me.jellysquid.mods.sodium.mixin.features.render.particle.BillboardParticleMixin", "particle_core.mixins.json:OtherMixin"),
+            REPORT_310.replace("failure end", ""),
+            REPORT_310.replace("selected target mixin count=2", "selected target mixin count=3\nthird.mixins.json:ThirdMixin"),
+            REPORT_310.split_once("---- crash report ----").unwrap().1.to_owned(),
+        ] {
+            let d = diagnose(&text).unwrap();
+            assert_eq!(d.mods, ["particle_core"]);
+            assert_eq!(d.title, "particle_core failed to change the game");
+        }
+        let missing = REPORT_310.replace(
+            "Scanned 0 target(s)",
+            "could not find any targets matching 'method_3074'",
+        );
+        assert_eq!(
+            diagnose(&missing).unwrap().mods,
+            ["particle_core", "sodium"]
+        );
+    }
+
+    #[test]
+    fn fabric_mixin_context_is_scoped_to_one_failure_in_both_log_formats() {
+        let (before, context) = REPORT_310.split_once("failure begin").unwrap();
+        let (context, after) = context.split_once("failure end").unwrap();
+        let prefixed = context
+            .lines()
+            .map(|l| format!("[Arctic mixin] {l}\n"))
+            .collect::<String>();
+        let text = format!(
+            "{before}[Arctic mixin] failure begin\n{prefixed}[Arctic mixin] failure end{after}"
+        );
+        assert_eq!(diagnose(&text).unwrap().mods, ["particle_core", "sodium"]);
+
+        // Do not borrow Sodium from a separate failure on the same class.
+        let split = context.replace("sodium.mixins.json:", "failure end\nfailure begin\nclass=net.minecraft.class_3940; thread=Render thread\ntargeting mixins (config:class; includes failing mixin):\nsodium.mixins.json:");
+        let text = format!("{before}failure begin\n{split}failure end{after}");
+        assert_eq!(diagnose(&text).unwrap().mods, ["particle_core"]);
+
+        let text = format!("failure begin\nincomplete context\nfailure end\n{REPORT_310}");
+        assert_eq!(diagnose(&text).unwrap().mods, ["particle_core", "sodium"]);
+    }
+
     #[test]
     fn forge_304_array_owner_is_a_mixin_failure() {
         let text = "java.lang.NoClassDefFoundError: net/minecraft/client/renderer/texture/TextureAtlasSprite
@@ -2258,6 +2346,9 @@ Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Crit
             assert_eq!(diagnose(failure).unwrap().mods, ["superbaddon"]);
         }
         assert!(diagnose("Loaded superbaddon.mixins.json successfully").is_none());
+        assert!(
+            diagnose("Mixin [ordinary log message\ncontinued] from mod necronomicon").is_none()
+        );
     }
 
     #[test]

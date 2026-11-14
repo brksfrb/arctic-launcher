@@ -280,19 +280,32 @@ pub fn find_conflicts(mods: &[InstalledMod]) -> Vec<Conflict> {
     out
 }
 
-/// The mod whose mixin config failed to apply, as the log names it: (config file, mod id when the
-/// log says so).
-fn mixin_failure(text: &str) -> Option<(String, Option<String>)> {
+struct MixinFailure<'a> {
+    config: &'a str,
+    owner: Option<String>,
+    line: &'a str,
+}
+
+/// Prefer the explicit owner in the deepest injection error over outer transformation failures.
+fn mixin_failure(text: &str) -> Option<MixinFailure<'_>> {
     let gate = Regex::new(
         r"MixinPreProcessorStandard|MixinApplicatorStandard|Critical injection failure|InvalidInjectionException|InvalidMixinException|MixinApplyError|MixinTransformerError|@Mixin target \S+ was not found|Mixin apply for mod|InjectionError",
     )
     .ok()?;
     let config = Regex::new(r"([\w\-.]+\.mixins\.json)").ok()?;
     let owner = Regex::new(r"(?:from mod|apply for mod) ([\w\-]+)").ok()?;
-    text.lines().filter(|l| gate.is_match(l)).find_map(|l| {
-        let cfg = config.captures(l)?[1].to_owned();
-        Some((cfg, owner.captures(l).map(|o| o[1].to_lowercase())))
-    })
+    let injection = Regex::new(r"(?:InjectionError|InvalidInjectionException):").ok()?;
+    text.lines()
+        .rev()
+        .filter(|l| injection.is_match(l) && owner.is_match(l))
+        .chain(text.lines().filter(|l| gate.is_match(l)))
+        .find_map(|line| {
+            Some(MixinFailure {
+                config: config.captures(line)?.get(1)?.as_str(),
+                owner: owner.captures(line).map(|o| o[1].to_lowercase()),
+                line,
+            })
+        })
 }
 
 /// Which installed mod owns mixin config `config`: the log's own answer, else the jar that lists
@@ -303,8 +316,11 @@ fn owner_of<'a>(
     mods: &'a [InstalledMod],
 ) -> Option<&'a InstalledMod> {
     let by_id = |id: &str| mods.iter().find(|m| m.id.eq_ignore_ascii_case(id));
-    said.and_then(by_id)
-        .or_else(|| mods.iter().find(|m| m.mixins.iter().any(|c| c == config)))
+    if let Some(id) = said {
+        return by_id(id);
+    }
+    mods.iter()
+        .find(|m| m.mixins.iter().any(|c| c == config))
         .or_else(|| {
             let stem = config.to_lowercase();
             mods.iter()
@@ -486,7 +502,7 @@ pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Opt
     let failure = mixin_failure(text);
     let failed = failure
         .as_ref()
-        .and_then(|(cfg, said)| owner_of(cfg, said.as_deref(), mods));
+        .and_then(|f| owner_of(f.config, f.owner.as_deref(), mods));
     if let Some(f) = failed {
         let involved = conflicts.iter().find(|c| {
             mods[c.a].id.eq_ignore_ascii_case(&f.id) || mods[c.b].id.eq_ignore_ascii_case(&f.id)
@@ -523,15 +539,122 @@ pub(crate) fn preprocessing_class_failure(text: &str) -> bool {
         .any(|marker| text.contains(marker))
 }
 
-/// Attribute config-only failures to installed metadata, or to the config stem as a fallback.
+/// Another mod targeting the same failed class can explain a missing injection target. Match
+/// the failing mixin itself within one complete agent block; inventories and other failures
+/// must not contribute a second mod.
+fn mixin_competitor(
+    text: &str,
+    failure: &MixinFailure<'_>,
+    id: &str,
+    mods: &[InstalledMod],
+) -> Option<String> {
+    let missing = Regex::new(r"Scanned 0 target\(s\)|(?i:target[^\r\n]*?(?:not found|was not found)|could not find any targets)").ok()?;
+    if !missing.is_match(failure.line) {
+        return None;
+    }
+    let entry = Regex::new(r"^([\w\-.]+\.mixins\.json):([\w.$]+)$").ok()?;
+    let failed_entry = Regex::new(r"([\w\-.]+\.mixins\.json):([\w.$]+)").ok()?;
+    let failed_mixin = failed_entry.captures(failure.line)?.get(2)?.as_str();
+    let target = Regex::new(r"Mixin transformation of ([\w.$]+) failed").ok()?;
+    let before = &text[..text.rfind(failure.line)?];
+    let target = target.captures_iter(before).last().map(|c| c[1].to_owned());
+    for block in text.split("failure begin").skip(1) {
+        let Some((block, _)) = block.split_once("failure end") else {
+            continue;
+        };
+        let lines: Vec<_> = block
+            .lines()
+            .map(|l| l.trim().strip_prefix("[Arctic mixin] ").unwrap_or(l.trim()))
+            .collect();
+        let Some(class) = lines.iter().find_map(|l| l.strip_prefix("class=")) else {
+            continue;
+        };
+        let class = class.split(';').next().unwrap_or(class);
+        if target.as_ref().is_some_and(|t| t != class) {
+            continue;
+        }
+        let Some(start) = lines
+            .iter()
+            .position(|l| l.starts_with("targeting mixins ("))
+        else {
+            continue;
+        };
+        let entries: Vec<_> = lines[start + 1..]
+            .iter()
+            .filter_map(|l| entry.captures(l))
+            .collect();
+        if !entries.iter().any(|c| {
+            &c[1] == failure.config
+                && (&c[2] == failed_mixin
+                    || c[2]
+                        .strip_suffix(failed_mixin)
+                        .is_some_and(|p| p.ends_with('.')))
+        }) {
+            continue;
+        }
+        let mut others = Vec::new();
+        for c in entries {
+            // The failed config's explicit owner also applies to its context entry.
+            if &c[1] == failure.config {
+                continue;
+            }
+            let other = owner_of(&c[1], None, mods).map_or_else(
+                || c[1].trim_end_matches(".mixins.json").to_owned(),
+                |m| m.id.clone(),
+            );
+            if !other.eq_ignore_ascii_case(id) && !others.contains(&other) {
+                others.push(other);
+            }
+        }
+        // With several other owners, the context cannot identify a particular pair.
+        if others.len() == 1 {
+            return others.pop();
+        }
+    }
+    None
+}
+
+/// Attribute failures to their explicit owner, then installed metadata, then the config stem.
 pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagnosis> {
-    let (config, said) = mixin_failure(text)?;
-    let owner = owner_of(&config, said.as_deref(), mods);
+    let failure = mixin_failure(text)?;
+    let owner = owner_of(failure.config, failure.owner.as_deref(), mods);
     let id = owner.map_or_else(
-        || said.unwrap_or_else(|| config.trim_end_matches(".mixins.json").to_owned()),
+        || {
+            failure
+                .owner
+                .clone()
+                .unwrap_or_else(|| failure.config.trim_end_matches(".mixins.json").to_owned())
+        },
         |m| m.id.clone(),
     );
     let name = owner.map_or(id.as_str(), |m| m.name.as_str());
+    if let Some(other) = mixin_competitor(text, &failure, &id, mods) {
+        let display = |id: &str| {
+            mods.iter()
+                .find(|m| m.id.eq_ignore_ascii_case(id))
+                .map_or_else(
+                    || match id {
+                        "particle_core" => "Particle Core".to_owned(),
+                        "sodium" => "Sodium".to_owned(),
+                        _ => id.to_owned(),
+                    },
+                    |m| m.name.clone(),
+                )
+        };
+        let (name, other_name) = (display(&id), display(&other));
+        let reason = if id == "particle_core" && other == "sodium" {
+            " Sodium replaces the particle rendering code that Particle Core tries to change."
+        } else {
+            ""
+        };
+        return Some(Diagnosis::new(
+            format!("{name} clashes with {other_name}"),
+            format!(
+                "{name}'s mixin could not find its injection target. {name} and {other_name} both change the same game class, indicating a compatibility clash.{reason} Update or remove {name}, or check its compatibility with {other_name}."
+            ),
+            vec![id, other],
+        ));
+    }
     Some(Diagnosis::new(
         format!("{name} failed to change the game"),
         if preprocessing_class_failure(text) {
@@ -907,6 +1030,51 @@ mod tests {
         assert!(d.detail.contains("Update Superb Addon"));
         let d = refine(crate::crash::diagnose(text), text, &[]).unwrap();
         assert_eq!(d.mods, ["superbaddon"]);
+    }
+
+    #[test]
+    fn fabric_explicit_owner_cannot_be_overridden_by_config_metadata() {
+        let text = include_str!("../tests/fixtures/crash-310-particle-core.log");
+        let mut mods = vec![InstalledMod {
+            id: "necronomicon".into(),
+            name: "Necronomicon".into(),
+            mixins: vec!["particle_core.mixins.json".into()],
+            ..InstalledMod::default()
+        }];
+        // The explicit particle_core owner remains authoritative even if it is missing
+        // from the scanned inventory and another mod claims its config.
+        let d = refine(crate::crash::diagnose(text), text, &mods).unwrap();
+        assert_eq!(d.mods, ["particle_core", "sodium"]);
+        assert_eq!(d.title, "Particle Core clashes with Sodium");
+
+        mods.extend([
+            InstalledMod {
+                id: "particle_core".into(),
+                name: "Particle Core".into(),
+                mixins: vec!["particle_core.mixins.json".into()],
+                ..InstalledMod::default()
+            },
+            InstalledMod {
+                id: "sodium".into(),
+                name: "Sodium".into(),
+                mixins: vec!["sodium.mixins.json".into()],
+                ..InstalledMod::default()
+            },
+        ]);
+        let d = refine(crate::crash::diagnose(text), text, &mods).unwrap();
+        assert_eq!(d.title, "Particle Core clashes with Sodium");
+        assert_eq!(d.mods, ["particle_core", "sodium"]);
+        assert!(d.fix.is_none());
+    }
+
+    #[test]
+    fn report_310_exit_diagnosis_keeps_the_particle_core_sodium_clash() {
+        let dir = tempfile::tempdir().unwrap();
+        let text = include_str!("../tests/fixtures/crash-310-particle-core.log");
+        let d = diagnose_exit_in(text, -1, dir.path()).unwrap();
+        assert_eq!(d.title, "Particle Core clashes with Sodium");
+        assert_eq!(d.mods, ["particle_core", "sodium"]);
+        assert!(d.detail.contains("Update or remove Particle Core"));
     }
 
     #[test]
