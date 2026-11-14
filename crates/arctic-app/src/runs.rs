@@ -745,7 +745,7 @@ impl ArcticApp {
                 let fix = diagnosis.as_ref().and_then(|d| d.fix.clone());
                 let (heading, body) = match diagnosis {
                     Some(d) => {
-                        let (title2, body) = localized_diagnosis(&d);
+                        let (title2, body) = Self::localized_diagnosis(&d);
                         (tf!("tasks.crashed", title = title, title2 = title2), body)
                     }
                     None => (
