@@ -25,6 +25,7 @@ pub mod launch;
 pub mod loaders;
 pub mod migrate;
 pub mod mods;
+mod native_crash;
 pub mod net;
 pub mod offline_keys;
 pub mod playtime;

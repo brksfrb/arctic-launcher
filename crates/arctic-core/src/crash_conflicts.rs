@@ -465,6 +465,9 @@ pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagno
 
 /// `crash::diagnose` plus the clash check against the mods in `mods_dir`.
 pub fn diagnose_in(text: &str, mods_dir: &Path) -> Option<Diagnosis> {
+    if let Some((native, _)) = crate::crash::native_diagnosis(text) {
+        return Some(native);
+    }
     refine(crate::crash::diagnose(text), text, &scan(mods_dir))
 }
 
