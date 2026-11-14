@@ -746,16 +746,143 @@ fn resolution_log(text: &str) -> Diagnosis {
 
 /// Explain a crash from the game log and/or crash report text.
 pub fn diagnose(text: &str) -> Option<Diagnosis> {
+    diagnose_match(text).map(|(diagnosis, _)| diagnosis)
+}
+
+/// Linkage errors in ordinary log records are often optional integrations failing safely.
+/// Restrict them to a crash document or an uncaught/fatal exception block with no later progress.
+fn fatal_linkage(text: &str, at: usize) -> bool {
+    let before = &text[..at];
+    if before.contains("---- Minecraft Crash Report ----")
+        || before.contains("---- crash report ----\n")
+        || before.contains("A fatal error has been detected by the Java Runtime Environment")
+    {
+        return true;
+    }
+    let start = before.rfind("\n[").map_or(0, |n| n + 1);
+    let context = before[start..].to_lowercase();
+    let explicit = context.contains("exception in thread")
+        || context.contains("uncaught exception")
+        || context.contains("/fatal]")
+        || context.contains("encountered an unexpected exception")
+        || context.contains("reported exception thrown");
+    let later_progress = text[at..]
+        .lines()
+        .skip(1)
+        .any(|line| line.contains("/INFO]") || line.contains("/WARN]") || line.contains("/ERROR]"));
+    (explicit && !later_progress)
+        || (text.trim_start().starts_with("java.lang.")
+            && !text.contains("/INFO]")
+            && !text.contains("/WARN]")
+            && !text.contains("/ERROR]")
+            && text.lines().skip(1).all(|line| {
+                let line = line.trim();
+                line.is_empty()
+                    || line.starts_with("at ")
+                    || line.starts_with("Caused by:")
+                    || line.starts_with("Suppressed:")
+                    || line.starts_with("... ")
+            })
+            && !freeze_evidence(text))
+}
+
+fn diagnose_match(text: &str) -> Option<(Diagnosis, String)> {
     let start = text.len().saturating_sub(MAX_TEXT);
     let start = (start..text.len())
         .find(|&i| text.is_char_boundary(i))
         .unwrap_or(0);
     let text = &text[start..];
-    RULES
-        .iter()
-        .zip(compiled())
-        .filter_map(|(rule, re)| re.captures(text).map(|c| (rule.explain)(&c, text)))
-        .find(|d| !d.title.is_empty())
+
+    for (rule, re) in RULES.iter().zip(compiled()) {
+        for c in re.captures_iter(text) {
+            let matched = c.get(0)?;
+            if (rule.pattern.contains("NoSuchMethodError")
+                || rule.pattern.contains("ClassNotFoundException"))
+                && !fatal_linkage(text, matched.start())
+            {
+                continue;
+            }
+            let diagnosis = (rule.explain)(&c, text);
+            if !diagnosis.title.is_empty() {
+                let start = text[..matched.start()].rfind('\n').map_or(0, |n| n + 1);
+                let end = text[matched.start()..]
+                    .find('\n')
+                    .map_or(text.len(), |n| matched.start() + n);
+                return Some((diagnosis, head_of(&text[start..end], 2048).to_owned()));
+            }
+        }
+    }
+    hang_diagnosis(text)
+}
+
+fn hang_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+    if !freeze_evidence(text)
+        || text.contains("---- Minecraft Crash Report ----")
+        || text.contains("---- crash report ----\n")
+        || text.contains("A fatal error has been detected by the Java Runtime Environment")
+    {
+        return None;
+    }
+    // A fatal exception takes precedence even if none of the specific rules knows its cause.
+    let exceptions = Regex::new(r"(?:[\w]+\.)+[\w$]+(?:Exception|Error)").unwrap();
+    if exceptions
+        .find_iter(text)
+        .any(|m| fatal_linkage(text, m.start()))
+    {
+        return None;
+    }
+    let heap =
+        Regex::new(r"heap: (\d+) MB used of (\d+) MB max(?: at start, (\d+) MB at end)?").unwrap();
+    let gc = Regex::new(r"gc during freeze: (\d+) collections, (\d+) ms").unwrap();
+    let memory = heap
+        .captures_iter(text)
+        .find(|c| {
+            let used = c[1]
+                .parse::<u64>()
+                .unwrap_or(0)
+                .max(c.get(3).and_then(|m| m.as_str().parse().ok()).unwrap_or(0));
+            let max = c[2].parse::<u64>().unwrap_or(0);
+            max > 0 && used * 100 >= max * 90
+        })
+        .or_else(|| {
+            gc.captures_iter(text).find(|c| {
+                c[1].parse::<u64>().unwrap_or(0) >= 10 && c[2].parse::<u64>().unwrap_or(0) >= 1000
+            })
+        });
+    let summary = text
+        .lines()
+        .rev()
+        .find(|l| l.contains("Hang at exit:"))
+        .or_else(|| {
+            text.lines().rev().find(|l| {
+                l.contains("(still frozen when written)")
+                    || l.contains("[Arctic diagnostics] hang begin")
+                    || l.contains("0xCFFFFFFF")
+            })
+        })
+        .unwrap_or("The run contains an unrecovered watchdog freeze.");
+    if let Some(memory) = memory {
+        let cap = if text.contains("is more than this computer can spare: using") {
+            " Arctic capped the memory because this computer could not spare the requested amount."
+        } else {
+            ""
+        };
+        Some((
+            Diagnosis::new(
+                "Minecraft ran out of memory and froze",
+                format!(
+                    "The game froze with memory pressure. Give it more memory if the PC has enough available; otherwise use fewer or lighter mods.{cap}"
+                ),
+                Vec::new(),
+            ),
+            format!("{summary}\nmatched: {}", &memory[0]),
+        ))
+    } else {
+        Some((
+            Diagnosis::new("The game froze and was closed", summary, Vec::new()),
+            summary.to_owned(),
+        ))
+    }
 }
 
 /// A crash as it's sent: the log's end and the crash report, with anything
@@ -803,6 +930,22 @@ impl Report {
         let mods = compact_mod_inventory(&all, crash_report.unwrap_or(""));
         let mixin = mixin_failure_evidence(&all);
         let mut priority = String::new();
+        let diagnosis_text = format!(
+            "{all}\n{}\n{}\n{}",
+            crash_report
+                .map(|r| format!("---- crash report ----\n{r}"))
+                .unwrap_or_default(),
+            launcher_lines.join("\n"),
+            java.unwrap_or("")
+        );
+        // Keep the exact triggering line even when it falls outside the uploaded log tail.
+        if let Some((diagnosis, matched)) = diagnose_match(&diagnosis_text) {
+            priority.push_str(&format!(
+                "\n---- diagnosis ----\n{}\nmatched: {}\n",
+                diagnosis.title,
+                scrub(&matched, &Own::this_pc())
+            ));
+        }
         if !mods.is_empty() {
             priority.push_str(&mod_inventory_section(&mods));
         }
@@ -852,26 +995,23 @@ impl Report {
             text.push_str(head_of(report, REPORT_CRASH_BYTES));
         }
         let title = exit_title(title, &all, java.unwrap_or(""));
+        let title = if crash_report.is_none()
+            && (title.is_empty()
+                || title == "unknown"
+                || title.starts_with("Game exited with code")
+                || title == "The game froze and was closed")
+        {
+            hang_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title)
+        } else {
+            title
+        };
         Self {
             launcher: env!("CARGO_PKG_VERSION").to_owned(),
             game: game.to_owned(),
             loader: loader.to_owned(),
             os: std::env::consts::OS.to_owned(),
             title: scrub(
-                if crash_report.is_none()
-                    && diagnose(&all).is_none()
-                    && (title.is_empty()
-                        || title.starts_with("Game exited with code")
-                        || title.starts_with("The game stopped before")
-                        || title == "unknown"
-                        || title == "The game froze and was closed")
-                    && freeze_evidence(&all)
-                {
-                    "The game froze and was closed"
-                } else if orderly_shutdown(&all)
-                    && crash_report.is_none()
-                    && diagnose(&all).is_none()
-                {
+                if orderly_shutdown(&all) && crash_report.is_none() && diagnose(&all).is_none() {
                     "Non-crash: Minecraft stopped normally"
                 } else {
                     &title
@@ -1017,8 +1157,21 @@ fn compact_launch(line: &str) -> String {
     .into_owned()
 }
 
-/// Only an unrecovered client watchdog stall is evidence of a hang.
+/// An unrecovered watchdog stall, or Windows hang termination with a fresh freeze snapshot.
 pub fn freeze_evidence(text: &str) -> bool {
+    if text.contains("0xCFFFFFFF") && text.contains("---- logs/arctic-freezes/") {
+        return true;
+    }
+    let snapshot = text
+        .rsplit("---- logs/arctic-freezes/")
+        .next()
+        .unwrap_or(text);
+    if snapshot.contains("duration:") && snapshot.contains("(still frozen when written)") {
+        return true;
+    }
+    if text.contains("Hang at exit:") && text.contains("no recovery recorded") {
+        return true;
+    }
     text.rfind("[Arctic diagnostics] hang begin")
         .is_some_and(|hang| {
             text.rfind("[Arctic diagnostics] hang recovered")
@@ -1243,6 +1396,62 @@ pub fn scrub(text: &str, own: &Own) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn logged_linkage_error_does_not_mask_memory_hang() {
+        let text = "[main/WARN] Optional integration failed\njava.lang.NoSuchMethodError: example.optional()\n[Render thread/INFO] Starting JEI took 21.01 seconds\n---- logs/arctic-freezes/freeze-now.txt ----\nduration: 20.34s (still frozen when written)\nheap: 3868 MB used of 4100 MB max at start\nHang at exit: client hung; no recovery recorded.\nmemory setting 5120 MB is more than this computer can spare: using 4100 MB";
+        let d = diagnose(text).unwrap();
+        assert_eq!(d.title, "Minecraft ran out of memory and froze");
+        assert!(d.detail.contains("capped"));
+        assert!(d.detail.contains("fewer or lighter mods"));
+        let report = Report::build("1.21.1", "Fabric", &d.title, &[text], &[], None, None);
+        assert!(report.log.contains("matched: heap: 3868 MB"));
+    }
+
+    #[test]
+    fn hang_signals_require_current_evidence_and_detect_gc_pressure() {
+        let gc = "---- logs/arctic-freezes/freeze-now.txt ----\nduration: 9.97s\ngc during freeze: 16 collections, 1562 ms\n(exit code -805306369 (0xCFFFFFFF))";
+        assert_eq!(
+            diagnose(gc).unwrap().title,
+            "Minecraft ran out of memory and froze"
+        );
+        assert!(diagnose("exit code -805306369 (0xCFFFFFFF)").is_none());
+        assert!(diagnose("---- logs/arctic-freezes/freeze-old.txt ----\nduration: 3.0s\nheap: 4000 MB used of 4100 MB max at start").is_none());
+        let recovered = "---- logs/arctic-freezes/freeze-old.txt ----\nduration: 3.0s (still frozen when written)\n---- logs/arctic-freezes/freeze-new.txt ----\nduration: 4.0s";
+        assert!(diagnose(recovered).is_none());
+        let fatal = "[Render thread/ERROR] Uncaught exception in thread main\njava.lang.IllegalStateException: broken\n---- logs/arctic-freezes/freeze-now.txt ----\nduration: 20.34s (still frozen when written)";
+        assert!(diagnose(fatal).is_none());
+    }
+
+    #[test]
+    fn fatal_linkage_errors_keep_version_diagnosis_and_trigger() {
+        for text in [
+            "[main/INFO] Starting\nException in thread \"main\" java.lang.NoSuchMethodError: example.missing()",
+            "[main/ERROR] Uncaught exception in thread \"main\"\njava.lang.NoSuchMethodError: example.missing()",
+            "---- Minecraft Crash Report ----\njava.lang.NoSuchMethodError: example.missing()",
+            "[Render thread/FATAL] Encountered an unexpected exception\njava.lang.NoSuchMethodError: example.missing()",
+        ] {
+            let d = diagnose(text).unwrap();
+            assert_eq!(d.title, "A mod is for a different version");
+            let noise = "\tat example.LongStack.frame(LongStack.java:1)\n".repeat(300);
+            let report = Report::build("1.21.1", "", &d.title, &[text, &noise], &[], None, None);
+            assert!(report.log.contains("matched: "));
+            assert!(
+                report
+                    .log
+                    .contains("java.lang.NoSuchMethodError: example.missing()")
+            );
+        }
+        assert!(
+            diagnose(
+                "[main/ERROR] Caught java.lang.NoSuchMethodError: optional\n[main/INFO] Loaded"
+            )
+            .is_none()
+        );
+        assert!(
+            diagnose("[main/WARN] java.lang.NoClassDefFoundError: org/lwjgl/Optional").is_none()
+        );
+    }
 
     #[test]
     #[ignore = "requires offline client logs from the diagnostics proof runs"]

@@ -204,34 +204,22 @@ impl Run {
     }
 
     /// Why the game crashed, from its log and the crash report it wrote.
+    #[cfg(test)]
     fn diagnose(&self) -> Option<Diagnosis> {
         arctic_core::crash_conflicts::diagnose_in(&self.crash_text(), &self.game_dir.join("mods"))
     }
 
     fn exit_diagnosis(&self, code: Option<i32>, shutdown_watchdog: bool) -> Option<Diagnosis> {
         let code = code.filter(|c| *c != 0 && !shutdown_watchdog)?;
-        if let Some(specific) = self.diagnose() {
-            return Some(specific);
-        }
-        if newest_crash_report(&self.game_dir, self.started).is_none()
-            && newest_hs_err(&self.game_dir, self.started).is_none()
+        let text = format!(
+            "{}\n(exit code {})",
+            self.crash_text(),
+            crash::exit_description(code)
+        );
+        if let Some(specific) =
+            arctic_core::crash_conflicts::diagnose_in(&text, &self.game_dir.join("mods"))
         {
-            let freezes = fresh_freeze_files(&self.game_dir, self.started);
-            let hang_at_exit = freezes.first().and_then(|text| freeze_at_exit(text));
-            let froze = crash::freeze_evidence(
-                &fresh_hang_dump(&self.game_dir, self.started).unwrap_or_else(|| self.crash_text()),
-            );
-            if hang_at_exit.is_some() || froze {
-                return Some(Diagnosis {
-                    title: t!("tasks.the_game_froze_and_was_closed").into(),
-                    detail: hang_at_exit.unwrap_or_else(|| {
-                        t!("tasks.the_run_contains_evidence_of_a_freeze_any").into()
-                    }),
-                    mods: Vec::new(),
-                    repair: false,
-                    fix: None,
-                });
-            }
+            return Some(specific);
         }
         crash::silent_exit(&self.crash_text(), code)
     }
@@ -256,6 +244,24 @@ impl Run {
         if !own_log.is_empty() {
             text.push('\n');
             text.push_str(&own_log.join("\n"));
+        }
+        if let Some(hang) = fresh_hang_dump(&self.game_dir, self.started) {
+            text.push_str(&format!("\n{hang}"));
+        }
+        let freezes = fresh_freeze_files(&self.game_dir, self.started);
+        for freeze in freezes.iter().rev() {
+            text.push_str(&format!("\n{freeze}"));
+        }
+        if let Some(summary) = freezes.first().and_then(|f| freeze_at_exit(f)) {
+            text.push_str(&format!("\n{summary}"));
+        }
+        if let Some((_, launcher)) = crate::logbook::snapshot_if_changed(0) {
+            for line in launcher.iter().filter(|l| {
+                l.text
+                    .contains("is more than this computer can spare: using")
+            }) {
+                text.push_str(&format!("\n{}", line.text));
+            }
         }
         text
     }
@@ -952,6 +958,34 @@ mod tests {
     const UNFINISHED_FREEZE: &str = "Arctic: game froze for 3.1s, mostly in org.lwjgl.vulkan.VK10.vkQueuePresentKHR(Native Method) [not in a world (menu/loading) - may be normal]\nstarted: 2026-11-13 12:00:00.000\nduration: 3.12s (still frozen when written)\nsamples: 3 client-thread stacks\n== Distinct client-thread stacks (count of samples) ==\n[3x] stack 1\n    at org.lwjgl.vulkan.VK10.vkQueuePresentKHR(Native Method)\n    at example.Game.render(Game.java:42)\n== All other threads (captured once, at the first sample) ==\nthread \"worker\" WAITING\n";
 
     #[test]
+    fn logged_version_error_then_memory_hang_is_not_a_version_crash() {
+        let dir = tempfile::tempdir().unwrap();
+        let freezes = dir.path().join("logs/arctic-freezes");
+        std::fs::create_dir_all(&freezes).unwrap();
+        std::fs::write(
+            freezes.join("freeze-now.txt"),
+            format!("{UNFINISHED_FREEZE}\nheap: 3868 MB used of 4100 MB max at start\n"),
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("logs/latest.log"),
+            "[main/ERROR] Optional integration failed\njava.lang.NoSuchMethodError: optional.mod()\n[Render thread/INFO] JEI finished").unwrap();
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.21.1", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        run.java = Some("Java 21 -Xmx4100M".into());
+        let diagnosis = run.exit_diagnosis(Some(-805306369), false).unwrap();
+        assert_eq!(diagnosis.title, "Minecraft ran out of memory and froze");
+        let report = run.crash_report(&diagnosis.title, Some(-805306369));
+        assert_eq!(report.title, diagnosis.title);
+        assert!(report.log.contains("matched: heap: 3868 MB"));
+        run.force_close();
+        run.killed = true;
+        let code = run.reported_exit_code(Some(-805306369), true);
+        assert!(run.exit_diagnosis(code, false).is_none());
+    }
+
+    #[test]
     fn windows_kill_with_an_unfinished_freeze_reports_the_hang_at_exit() {
         let dir = tempfile::tempdir().unwrap();
         let freezes = dir.path().join("logs/arctic-freezes");
@@ -1038,13 +1072,18 @@ mod tests {
         );
         run.clear_log();
 
-        // The same file is finished on recovery; it is no longer evidence of a hang at exit.
+        // A finished snapshot alone does not prove an ongoing stall, but together with the
+        // Windows hang termination code it still explains why this run ended.
         std::fs::write(
             freezes.join("freeze-20261113-120000.txt"),
             UNFINISHED_FREEZE.replace(" (still frozen when written)", ""),
         )
         .unwrap();
-        assert!(run.exit_diagnosis(Some(-805306369), false).is_none());
+        assert_eq!(
+            run.exit_diagnosis(Some(-805306369), false).unwrap().title,
+            "The game froze and was closed"
+        );
+        assert!(run.exit_diagnosis(Some(1), false).is_none());
         assert!(
             !run.crash_report("", Some(-805306369))
                 .log
