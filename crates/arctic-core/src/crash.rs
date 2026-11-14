@@ -329,6 +329,13 @@ const RULES: &[Rule] = &[
         explain: |c, text| broken_mod(&c[1], text),
     },
     Rule {
+        // Forge/NeoForge and generic Mixin failures often name only the config.
+        pattern: r"[\w\-.]+\.mixins\.json",
+        explain: |_, text| {
+            crate::crash_conflicts::diagnose_mixin(text, &[]).unwrap_or_else(Diagnosis::none)
+        },
+    },
+    Rule {
         pattern: r"class file version (\d+)\.\d+\).*?class file versions up to (\d+)\.\d+",
         explain: |c, _| {
             let java = |v: &str| v.parse::<u32>().map_or(0, |v| v.saturating_sub(44));
@@ -453,15 +460,45 @@ const RULES: &[Rule] = &[
     },
     Rule {
         // Fabric/Forge crash reports name suspects.
-        pattern: r"Suspected Mods?:\s*([^\n]+)",
-        explain: |c, _| {
-            let mods: Vec<String> = c[1]
-                .split(',')
-                .map(|m| m.trim().to_owned())
-                .filter(|m| {
-                    !m.is_empty() && !m.eq_ignore_ascii_case("none") && !m.contains("Unknown")
-                })
-                .collect();
+        pattern: r"Suspected Mods?:([^\r\n]*)",
+        explain: |c, text| {
+            let mut mods = Vec::new();
+            let first = c.get(1).expect("suspected mods capture");
+            for (index, line) in std::iter::once(first.as_str())
+                .chain(
+                    text[c.get(0).expect("suspected mods match").end()..]
+                        .lines()
+                        .skip(1),
+                )
+                .enumerate()
+            {
+                let entry = line.trim();
+                // The header may be empty; subsequent blank lines end the list.
+                if (index != 0 && (entry.is_empty() || !line.starts_with(char::is_whitespace)))
+                    || entry.starts_with("Stacktrace:")
+                {
+                    break;
+                }
+                if entry.starts_with("at ") {
+                    continue;
+                }
+                // Forge entries include ", Version: ..."; that comma isn't a separator.
+                let entries: Vec<&str> = if entry.contains(", Version:") {
+                    vec![entry]
+                } else {
+                    entry.split(',').collect()
+                };
+                for name in entries {
+                    let name = name.trim();
+                    if !name.is_empty()
+                        && !name.eq_ignore_ascii_case("none")
+                        && !name.contains("Unknown")
+                        && !mods.iter().any(|m| m == name)
+                    {
+                        mods.push(name.to_owned());
+                    }
+                }
+            }
             if mods.is_empty() {
                 return Diagnosis::none();
             }
@@ -1874,6 +1911,63 @@ Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 (
             diagnose(r"[main/INFO]: Found graphics adapter: AdapterInfo{vendor=NVIDIA, openglIcdFilePath='C:\Windows\System32\nvoglv64.dll'}")
                 .is_none()
         );
+    }
+
+    const FORGE_SUSPECTS_295: &str = "Suspected Mods:
+    LesRaisins Tactical Equipments (lrtactical), Version: 0.4.4
+        at TRANSFORMER/lrtactical@0.4.4/example.Grenade.explode(Grenade.java:42)
+    Superb Warfare (superbwarfare), Version: 0.8.8
+        at TRANSFORMER/superbwarfare@0.8.8/example.LivingEventHandler.onExplosionDetonate(LivingEventHandler.java:42)
+Stacktrace:
+    at example.Other.frame(Other.java:1)";
+
+    #[test]
+    fn forge_295_mixin_owner_wins_over_triggering_mods() {
+        let failure = "org.spongepowered.asm.mixin.transformer.throwables.MixinTransformerError
+Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Critical injection failure: Redirector superbaddon$modifyExplosionKnockbackForce(Lnet/minecraft/world/entity/LivingEntity;D)D in superbaddon.mixins.json:CustomExplosionMixin failed injection check, (0/1) succeeded. Scanned 1 target(s). Using refmap superbaddon.refmap.json";
+        let d = diagnose(&format!("{FORGE_SUSPECTS_295}\n{failure}")).unwrap();
+        assert_eq!(d.mods, ["superbaddon"]);
+        assert_eq!(d.title, "superbaddon failed to change the game");
+        assert!(d.detail.contains("mixin doesn't fit"));
+        assert!(
+            d.detail.contains(
+                "Update superbaddon (or the mod it's an addon for), or remove superbaddon"
+            )
+        );
+    }
+
+    #[test]
+    fn generic_mixin_exception_shapes_identify_the_config_owner() {
+        for failure in [
+            "InvalidInjectionException: target not found superbaddon.mixins.json:CustomExplosionMixin",
+            "InvalidMixinException: invalid superbaddon.mixins.json:CustomExplosionMixin",
+            "@Mixin target net.minecraft.Foo was not found superbaddon.mixins.json:FooMixin",
+        ] {
+            assert_eq!(diagnose(failure).unwrap().mods, ["superbaddon"]);
+        }
+        assert!(diagnose("Loaded superbaddon.mixins.json successfully").is_none());
+    }
+
+    #[test]
+    fn forge_295_suspected_mods_include_every_entry_and_keep_versions() {
+        for report in [
+            FORGE_SUSPECTS_295.to_owned(),
+            FORGE_SUSPECTS_295.replace('\n', "\r\n"),
+        ] {
+            let d = diagnose(&report).unwrap();
+            assert_eq!(
+                d.mods,
+                [
+                    "LesRaisins Tactical Equipments (lrtactical), Version: 0.4.4",
+                    "Superb Warfare (superbwarfare), Version: 0.8.8",
+                ]
+            );
+        }
+        let d =
+            diagnose("Suspected Mod: First (first)\n    Second (second)\n\n    Unrelated (other)")
+                .unwrap();
+        assert_eq!(d.mods, ["First (first)", "Second (second)"]);
+        assert!(diagnose("Suspected Mods: None\n\n    Unrelated (other)").is_none());
     }
 
     #[test]
