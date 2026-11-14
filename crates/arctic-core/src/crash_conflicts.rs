@@ -798,14 +798,16 @@ mod tests {
         assert!(d.fix.is_none());
 
         // A silent start and a known native exit also retain their normal explanations.
+        // After #65, NTSTATUS exits are diagnosed as a native crash, not a hex-code title.
         let d = diagnose_exit_in("", 1, dir.path()).unwrap();
         assert!(
             d.title
                 .starts_with("The game stopped before it wrote anything")
         );
         let d = diagnose_exit_in(text, 0xC0000005_u32 as i32, dir.path()).unwrap();
-        assert!(d.title.contains("0xC0000005"));
-        assert!(d.detail.contains("STATUS_ACCESS_VIOLATION"));
+        assert_eq!(d.title, "Minecraft crashed in native code");
+        assert!(d.detail.contains("possible mods-folder clash"));
+        assert!(!d.title.contains("installed twice"));
 
         let d = diagnose_exit_in(
             "Mod 'ModernFix' (modernfix) 5.2 requires version 0.16.10 or later of mod 'Fabric Loader' (fabricloader), but only the wrong version is present: 0.15.11!",
