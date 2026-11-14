@@ -697,6 +697,33 @@ impl ArcticApp {
         }
     }
 
+    /// Player-facing text for a diagnosis. Crash reports keep the English title from core
+    /// so uploaded groups stay stable; the toast is translated.
+    fn localized_diagnosis(d: &Diagnosis) -> (String, String) {
+        match d.title.as_str() {
+            "Minecraft ran out of memory and froze" => {
+                let mut detail = t!("tasks.the_game_froze_with_memory_pressure").to_string();
+                if d.detail.contains("Arctic capped the memory") {
+                    detail.push(' ');
+                    detail.push_str(&t!("tasks.arctic_capped_the_memory"));
+                }
+                (
+                    t!("tasks.minecraft_ran_out_of_memory_and_froze").into(),
+                    detail,
+                )
+            }
+            "The game froze and was closed" => {
+                let detail = if d.detail == "The run contains an unrecovered watchdog freeze." {
+                    t!("tasks.the_run_contains_an_unrecovered_watchdog_freeze").into()
+                } else {
+                    d.detail.clone()
+                };
+                (t!("tasks.the_game_froze_and_was_closed").into(), detail)
+            }
+            _ => (d.title.clone(), d.detail.clone()),
+        }
+    }
+
     fn report_exit(
         &mut self,
         id: LaunchId,
@@ -717,10 +744,13 @@ impl ArcticApp {
                 // A crash the launcher can fix gets a "Fix it" button instead of the logs one.
                 let fix = diagnosis.as_ref().and_then(|d| d.fix.clone());
                 let (heading, body) = match diagnosis {
-                    Some(d) => (
-                        tf!("tasks.crashed", title = title, title2 = d.title),
-                        d.detail,
-                    ),
+                    Some(d) => {
+                        let (title2, body) = localized_diagnosis(&d);
+                        (
+                            tf!("tasks.crashed", title = title, title2 = title2),
+                            body,
+                        )
+                    }
                     None => (
                         tf!("tasks.closed_unexpectedly", title = title),
                         tf!("tasks.exit_code", c = c),
