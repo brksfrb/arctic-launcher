@@ -746,10 +746,7 @@ impl ArcticApp {
                 let (heading, body) = match diagnosis {
                     Some(d) => {
                         let (title2, body) = localized_diagnosis(&d);
-                        (
-                            tf!("tasks.crashed", title = title, title2 = title2),
-                            body,
-                        )
+                        (tf!("tasks.crashed", title = title, title2 = title2), body)
                     }
                     None => (
                         tf!("tasks.closed_unexpectedly", title = title),
