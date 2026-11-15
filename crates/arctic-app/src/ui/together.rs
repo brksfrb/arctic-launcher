@@ -40,6 +40,10 @@ pub struct TogetherUi {
 }
 
 impl TogetherUi {
+    pub(crate) fn invite_sharing_failed(&mut self) {
+        self.error = Some(t!("social.sharing_failed").into());
+    }
+
     /// The invite code while hosting.
     pub(crate) fn hosting_code(&self) -> Option<String> {
         match &self.session {
@@ -60,8 +64,7 @@ impl ArcticApp {
             }
             Some(TogetherRequest::Join(code)) => {
                 self.stop_together();
-                self.together.code_input = code;
-                self.start_joining();
+                self.join_friend_invite("together", &code);
             }
             Some(TogetherRequest::Stop) => self.stop_together(),
             _ => {}
@@ -463,5 +466,21 @@ fn steps(ui: &mut egui::Ui, p: &Palette, lines: &[&str]) {
             ui.label(RichText::new(format!("{}.", i + 1)).color(p.accent));
             ui.label(RichText::new(*line).color(p.text));
         });
+    }
+}
+
+#[cfg(test)]
+mod invite_tests {
+    use super::*;
+
+    #[test]
+    fn invite_start_failure_replaces_diagnostics_with_plain_words() {
+        let mut together = TogetherUi {
+            error: Some("network error: os error 101".into()),
+            ..TogetherUi::default()
+        };
+        together.invite_sharing_failed();
+        assert_eq!(together.error.as_deref(), Some(t!("social.sharing_failed")));
+        assert!(!together.error.unwrap().contains("101"));
     }
 }

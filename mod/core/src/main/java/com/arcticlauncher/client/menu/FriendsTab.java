@@ -102,17 +102,10 @@ final class FriendsTab {
 			y += ROW;
 		}
 		for (final JsonObject inv : social.invites()) {
-			final String target = inv.get("target").getAsString();
-			final String kind = inv.get("kind").getAsString();
-			final boolean server = "server".equals(kind);
-			if (server) {
-				host.add(new Button(Lang.t("social.join"), () -> join(social, target)).primary()).bounds(x + w - 90, y, 52, BTN_H);
-			} else if ("together".equals(kind) && duel != null) {
-				host.add(new Button(Lang.t("social.join"), () -> {
-					social.dismissInvite(inv.get("id").getAsString());
-					duel.join(target);
-				}).primary()).bounds(x + w - 90, y, 52, BTN_H);
-			}
+			host.add(new Button(Lang.t("social.join"), () -> {
+				social.joinInvite(inv);
+				host.rebuild();
+			}).primary()).bounds(x + w - 90, y, 52, BTN_H);
 			host.add(new Button("×", () -> {
 				social.dismissInvite(inv.get("id").getAsString());
 				host.rebuild();
@@ -254,7 +247,7 @@ final class FriendsTab {
 		}
 		for (JsonObject inv : social.invites()) {
 			String from = inv.getAsJsonObject("from").get("name").getAsString();
-			String what = "together".equals(inv.get("kind").getAsString()) ? Lang.t("social.a_duel_or_their_world") : inv.get("target").getAsString();
+			String what = "together".equals(inv.get("kind").getAsString()) ? Lang.t("social.their_world") : inv.get("target").getAsString();
 			g.text(Draw.fit(g, Lang.t("social.invited_you_to", from, what), w - 96, x, y + 4), x, y + 4, s.accent, false);
 			y += ROW;
 		}
@@ -350,6 +343,9 @@ final class FriendsTab {
 			return "";
 		}
 		StringBuilder b = new StringBuilder().append(chatWith).append(social.available()).append(social.invites().size());
+		for (JsonObject invite : social.invites()) {
+			b.append('|').append(invite);
+		}
 		VoiceLink voice = ArcticClient.voice();
 		b.append(voiceOpen).append(voice != null && voice.active());
 		Duel duel = ArcticClient.duel();
@@ -360,7 +356,7 @@ final class FriendsTab {
 			}
 		}
 		for (Social.Friend f : social.friends()) {
-			b.append('|').append(f.id).append(f.online).append(f.inGame).append(f.server).append(f.unread);
+			b.append('|').append(f.id).append(f.online).append(f.inGame).append(f.server).append(f.unread).append(f.takesInvites);
 		}
 		b.append('|').append(social.lastScreenshot());
 		return b.toString();

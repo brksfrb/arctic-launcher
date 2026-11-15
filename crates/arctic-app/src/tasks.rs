@@ -182,6 +182,12 @@ pub enum Event {
     Friends(Outcome<crate::friend_tasks::FriendsView>),
     /// A friends action finished (what to say, or empty).
     FriendDone(Outcome<String>),
+    FriendInvited(
+        String,
+        String,
+        arctic_core::friends::InviteTo,
+        Outcome<String>,
+    ),
     /// (friend profile, conversation)
     ChatHistory(String, Outcome<Vec<arctic_core::friends::Message>>),
     ChatSent(Outcome<arctic_core::friends::Message>),

@@ -1224,6 +1224,9 @@ impl ArcticApp {
             }
             Event::Friends(result) => self.on_friends(result),
             Event::FriendDone(result) => self.on_friend_done(result),
+            Event::FriendInvited(account, friend, to, result) => {
+                self.on_friend_invited(account, friend, to, result)
+            }
             #[cfg(feature = "offline-accounts")]
             Event::RecoveryCode(result) => self.on_recovery_code(result),
             Event::ChatHistory(friend, result) => self.on_chat_history(friend, result),

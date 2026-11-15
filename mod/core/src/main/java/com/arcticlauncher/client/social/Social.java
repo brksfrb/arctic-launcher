@@ -92,6 +92,9 @@ public final class Social {
 	});
 
 	private volatile List<Friend> friends = Collections.emptyList();
+	private final Set<String> dismissedInvites = new HashSet<String>();
+	private final Map<String, String> sentInvites = new HashMap<String, String>();
+	private final Map<String, Long> inviteSentAt = new HashMap<String, Long>();
 	private final Set<String> seenInvites = new HashSet<String>();
 	private final List<JsonObject> invites = new ArrayList<JsonObject>();
 	private final Map<String, List<Message>> chats = new HashMap<String, List<Message>>();
@@ -219,6 +222,16 @@ public final class Social {
 
 	/** Invite a friend: kind "server" (an address) or "together" (a play-together code). */
 	public void inviteTo(final String friendId, final String friendName, final String kind, final String target) {
+		final String destination = kind + ":" + target;
+		synchronized (this) {
+			Long sent = inviteSentAt.get(friendId);
+			if (destination.equals(sentInvites.get(friendId)) && sent != null
+					&& System.currentTimeMillis() - sent < 10000) {
+				return;
+			}
+			sentInvites.put(friendId, destination);
+			inviteSentAt.put(friendId, System.currentTimeMillis());
+		}
 		worker.execute(() -> {
 			try {
 				JsonObject body = new JsonObject();
@@ -228,7 +241,13 @@ public final class Social {
 				Http.send("POST", base() + "/v1/invites", token(), body.toString());
 				status = Lang.t("social.invited") + friendName + ".";
 			} catch (Exception e) {
-				status = Lang.t("social.not_invited") + e.getMessage();
+				synchronized (this) {
+					if (destination.equals(sentInvites.get(friendId))) {
+						sentInvites.remove(friendId);
+						inviteSentAt.remove(friendId);
+					}
+				}
+				status = Lang.t("social.invite_send_failed");
 			}
 		});
 	}
@@ -238,8 +257,35 @@ public final class Social {
 		return platform.connectTo(server);
 	}
 
+	/** One action for the notice and Friends tab. A vanished invite cannot be joined. */
+	public void joinInvite(JsonObject invite) {
+		com.arcticlauncher.client.together.Duel together = com.arcticlauncher.client.ArcticClient.duel();
+		joinInvite(invite, code -> together != null && together.join(code), this::join);
+	}
+
+	boolean joinInvite(JsonObject invite, java.util.function.Predicate<String> together,
+			java.util.function.Predicate<String> server) {
+		InviteTarget target = InviteTarget.parse(invite);
+		String id = str(invite, "id");
+		boolean current;
+		synchronized (this) {
+			current = invites.stream().anyMatch(o -> id.equals(str(o, "id")));
+		}
+		if (!current || target == null) {
+			Notices.post(Lang.t("social.invite_unavailable"), Lang.t("social.ask_for_another_invite"));
+			return false;
+		}
+		if (!target.join(together, server)) {
+			Notices.post(Lang.t("social.couldnt_join_invite"), Lang.t("social.try_join_in_launcher"));
+			return false;
+		}
+		dismissInvite(id);
+		return true;
+	}
+
 	public void dismissInvite(final String id) {
 		synchronized (this) {
+			dismissedInvites.add(id);
 			invites.removeIf(o -> id.equals(str(o, "id")));
 		}
 		worker.execute(() -> {
@@ -293,24 +339,39 @@ public final class Social {
 	}
 
 	private void pollFriends() throws Exception {
-		JsonObject o = gson.fromJson(Http.getText(base() + "/v1/friends", token()), JsonObject.class);
+		updateFriends(gson.fromJson(Http.getText(base() + "/v1/friends", token()), JsonObject.class));
+	}
+
+	void updateFriends(JsonObject o) {
 		List<Friend> list = new ArrayList<Friend>();
 		for (JsonElement e : arr(o, "friends")) {
 			list.add(new Friend(e.getAsJsonObject()));
 		}
 		friends = list;
+		List<JsonObject> fresh = new ArrayList<JsonObject>();
 		synchronized (this) {
 			invites.clear();
+			Set<String> currentIds = new HashSet<String>();
 			for (JsonElement e : arr(o, "invites")) {
 				JsonObject inv = e.getAsJsonObject();
-				invites.add(inv);
 				String id = str(inv, "id");
+				currentIds.add(id);
+				if (dismissedInvites.contains(id) || InviteTarget.parse(inv) == null) {
+					continue;
+				}
+				invites.add(inv);
 				if (seenInvites.add(id)) {
-					String from = str(inv.getAsJsonObject("from"), "name");
-					String what = "together".equals(str(inv, "kind")) ? Lang.t("social.their_world") : str(inv, "target");
-					Notices.post(from + Lang.t("social.invited_you"), Lang.t("social.to_join", what));
+					fresh.add(inv);
 				}
 			}
+			seenInvites.retainAll(currentIds);
+			dismissedInvites.retainAll(currentIds);
+		}
+		for (final JsonObject inv : fresh) {
+			String from = str(inv.getAsJsonObject("from"), "name");
+			String what = "together".equals(str(inv, "kind")) ? Lang.t("social.their_world") : str(inv, "target");
+			Notices.post(Lang.t("social.invited_you_to", from, what), Lang.t("social.click_join_invite"),
+					null, 0, 0, Lang.t("social.join"), () -> joinInvite(inv));
 		}
 	}
 

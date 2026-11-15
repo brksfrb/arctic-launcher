@@ -2,7 +2,8 @@
 //! friends may see), friend requests, invites and the friend list with
 //! who's online and where, a Join button and invites.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant};
 
 use arctic_core::friends::{Friend, InviteTo, Overview, Profile, Settings};
 use arctic_core::launch::QuickPlay;
@@ -21,6 +22,7 @@ use crate::{t, tf};
 const REFRESH_OPEN: f64 = 20.0;
 const REFRESH_AWAY: f64 = 90.0;
 const DOT: f32 = 5.0;
+const INVITE_FEEDBACK: Duration = Duration::from_secs(10);
 
 #[derive(Default)]
 pub struct FriendsUi {
@@ -33,6 +35,7 @@ pub struct FriendsUi {
     refreshed_at: Option<f64>,
     /// Invites already announced with a toast.
     seen_invites: HashSet<String>,
+    invites: InviteFlow,
     settings_open: bool,
     name_edit: String,
     /// Where the player's own game went (for "Invite to my server").
@@ -41,6 +44,101 @@ pub struct FriendsUi {
     #[cfg(feature = "offline-accounts")]
     recovery_code: Option<String>,
     restore_code: String,
+}
+
+/// Per-friend progress, scoped to the current account and invite destination.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum InviteProgress {
+    Starting,
+    Sending(InviteTo),
+    Sent(InviteTo, Instant),
+}
+
+#[derive(Default)]
+struct InviteFlow(HashMap<String, InviteProgress>);
+
+#[derive(Debug, PartialEq, Eq)]
+enum InviteStep {
+    StartSharing,
+    Send(InviteTo),
+}
+
+impl InviteFlow {
+    fn begin(&mut self, friend: &Friend, target: Option<InviteTo>) -> Option<InviteStep> {
+        if !friend.online || !friend.takes_invites || self.0.contains_key(&friend.id) {
+            return None;
+        }
+        let (progress, step) = match target {
+            Some(to) => (InviteProgress::Sending(to.clone()), InviteStep::Send(to)),
+            None => (InviteProgress::Starting, InviteStep::StartSharing),
+        };
+        self.0.insert(friend.id.clone(), progress);
+        Some(step)
+    }
+
+    /// A code becoming ready releases each queued invite once. A stopped or failed
+    /// share drops the queue so retrying cannot send an old invite later.
+    fn advance(
+        &mut self,
+        target: Option<InviteTo>,
+        starting: bool,
+    ) -> (Vec<(String, InviteTo)>, bool) {
+        let mut send = Vec::new();
+        let mut failed = false;
+        self.0.retain(|id, progress| match progress {
+            InviteProgress::Starting => {
+                if let Some(to @ InviteTo::Together(_)) = &target {
+                    send.push((id.clone(), to.clone()));
+                    *progress = InviteProgress::Sending(to.clone());
+                    true
+                } else {
+                    failed |= !starting;
+                    starting
+                }
+            }
+            InviteProgress::Sending(_) => true,
+            InviteProgress::Sent(to, sent) => {
+                target.as_ref() == Some(to) && sent.elapsed() < INVITE_FEEDBACK
+            }
+        });
+        (send, failed)
+    }
+
+    fn complete(
+        &mut self,
+        friend: &str,
+        to: &InviteTo,
+        result: &Outcome<String>,
+    ) -> Option<&'static str> {
+        if self.0.get(friend) == Some(&InviteProgress::Sending(to.clone())) {
+            if result.is_ok() {
+                self.0.insert(
+                    friend.to_owned(),
+                    InviteProgress::Sent(to.clone(), Instant::now()),
+                );
+            } else {
+                self.0.remove(friend);
+                return Some(t!("social.invite_send_failed"));
+            }
+        }
+        None
+    }
+
+    fn button(&self, friend: &Friend) -> Option<(&'static str, bool, Option<String>)> {
+        if !friend.online {
+            return None;
+        }
+        let progress = self.0.get(&friend.id);
+        let label = match progress {
+            Some(InviteProgress::Starting) => t!("social.starting"),
+            Some(InviteProgress::Sending(_)) => t!("social.sending_invite"),
+            Some(InviteProgress::Sent(_, _)) => t!("social.invited"),
+            None => t!("social.invite"),
+        };
+        let hint =
+            (!friend.takes_invites).then(|| tf!("social.invites_turned_off", name = friend.name));
+        Some((label, friend.takes_invites && progress.is_none(), hint))
+    }
 }
 
 impl ArcticApp {
@@ -55,7 +153,10 @@ impl ArcticApp {
             f.view = None;
             f.refreshed_at = None;
             f.seen_invites.clear();
+            f.invites = InviteFlow::default();
         }
+        self.advance_friend_invites();
+        let f = &mut self.friends;
         let every = if page_open {
             REFRESH_OPEN
         } else {
@@ -70,6 +171,11 @@ impl ArcticApp {
     }
 
     fn friend_act(&mut self, action: FriendAction) {
+        if let FriendAction::Dismiss(id) = &action
+            && let Some(Ok((_, overview))) = &mut self.friends.view
+        {
+            overview.invites.retain(|invite| &invite.id != id);
+        }
         if let Some(account) = self.accounts.active().cloned() {
             self.friends.busy = true;
             self.tasks.friends_action(account, action);
@@ -547,13 +653,7 @@ impl ArcticApp {
                     }
                     if widgets::button(ui, p, Some(Icon::Play), t!("social.join"), true).clicked() {
                         act = Some(FriendAction::Dismiss(invite.id.clone()));
-                        match invite.kind.as_str() {
-                            "together" => {
-                                self.together.code_input = invite.target.clone();
-                                self.start_joining();
-                            }
-                            _ => self.launch_into(QuickPlay::Server(invite.target.clone())),
-                        }
+                        self.join_friend_invite(&invite.kind, &invite.target);
                     }
                 });
             });
@@ -642,20 +742,19 @@ impl ArcticApp {
                 if widgets::button(ui, p, None, &chat, f.unread > 0).clicked() {
                     self.open_chat(f.id.clone(), f.name.clone());
                 }
-                if f.takes_invites
-                    && let Some(to) = invite_to.clone()
-                {
-                    let tip = match &to {
-                        InviteTo::Server(s) => tf!("social.invite_to", s = s),
-                        InviteTo::Together(_) => {
-                            t!("social.invite_to_your_shared_world").to_owned()
-                        }
-                    };
-                    if widgets::button(ui, p, None, t!("social.invite"), false)
-                        .on_hover_text(tip)
+                if let Some((label, enabled, hint)) = self.friends.invites.button(f) {
+                    let tip = hint.unwrap_or_else(|| match &invite_to {
+                        Some(InviteTo::Server(s)) => tf!("social.invite_to", s = s),
+                        _ => t!("social.invite_to_your_shared_world").to_owned(),
+                    });
+                    if ui
+                        .add_enabled_ui(enabled, |ui| widgets::button(ui, p, None, label, false))
+                        .inner
+                        .on_disabled_hover_text(&tip)
+                        .on_hover_text(&tip)
                         .clicked()
                     {
-                        act = Some(FriendAction::Invite(f.id.clone(), to));
+                        self.invite_friend(f);
                     }
                 }
                 if f.online
@@ -683,6 +782,71 @@ impl ArcticApp {
         });
         if let Some(a) = act {
             self.friend_act(a);
+        }
+    }
+
+    fn invite_friend(&mut self, friend: &Friend) {
+        let target = self.invite_target();
+        match self.friends.invites.begin(friend, target) {
+            Some(InviteStep::Send(to)) => self.send_friend_invite(friend.id.clone(), to),
+            Some(InviteStep::StartSharing) => {
+                if self.together.session != super::together::Session::Starting {
+                    self.start_hosting();
+                }
+                self.advance_friend_invites();
+            }
+            None => {}
+        }
+    }
+
+    fn send_friend_invite(&self, friend: String, to: InviteTo) {
+        if let Some(account) = self.accounts.active().cloned() {
+            self.tasks
+                .friends_action(account, FriendAction::Invite(friend, to));
+        }
+    }
+
+    fn advance_friend_invites(&mut self) {
+        let target = self.invite_target();
+        let starting = self.together.session == super::together::Session::Starting;
+        let (send, failed) = self.friends.invites.advance(target, starting);
+        for (friend, to) in send {
+            self.send_friend_invite(friend, to);
+        }
+        if failed {
+            self.together.invite_sharing_failed();
+            self.toasts.push(
+                Kind::Error,
+                t!("social.invite_not_sent"),
+                t!("social.sharing_failed"),
+            );
+        }
+    }
+
+    pub(crate) fn on_friend_invited(
+        &mut self,
+        account: String,
+        friend: String,
+        to: InviteTo,
+        result: Outcome<String>,
+    ) {
+        if self.accounts.active().map(|a| &a.id) != Some(&account) {
+            return;
+        }
+        if let Some(error) = self.friends.invites.complete(&friend, &to, &result) {
+            self.toasts
+                .push(Kind::Error, t!("social.invite_not_sent"), error);
+        }
+    }
+
+    pub(crate) fn join_friend_invite(&mut self, kind: &str, target: &str) {
+        match kind {
+            "together" => {
+                self.together.code_input = target.to_owned();
+                self.start_joining();
+            }
+            "server" => self.launch_into(QuickPlay::Server(target.to_owned())),
+            _ => {}
         }
     }
 
@@ -734,7 +898,7 @@ impl ArcticApp {
                 self.toasts.push_with_action(
                     Kind::Info,
                     tf!("social.invited_you", name = invite.from.name),
-                    format!("to {what}"),
+                    tf!("social.invite_destination", what = what),
                     Some(ToastAction::OpenFriends),
                 );
             }
@@ -749,5 +913,125 @@ impl ArcticApp {
             Ok(msg) => self.toasts.push(Kind::Success, msg, ""),
             Err(e) => self.toasts.push(Kind::Error, t!("social.friends"), e),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn friend(online: bool, takes_invites: bool) -> Friend {
+        Friend {
+            id: "friend".into(),
+            name: "Alex".into(),
+            accounts: vec![],
+            online,
+            in_game: false,
+            server: None,
+            takes_invites,
+            verified: false,
+            unread: 0,
+        }
+    }
+
+    #[test]
+    fn invite_button_online_privacy_and_offline() {
+        let mut flow = InviteFlow::default();
+        assert_eq!(
+            flow.button(&friend(true, true)),
+            Some((t!("social.invite"), true, None))
+        );
+        assert_eq!(
+            flow.button(&friend(true, false)),
+            Some((
+                t!("social.invite"),
+                false,
+                Some(tf!("social.invites_turned_off", name = "Alex"))
+            ))
+        );
+        assert!(flow.button(&friend(false, true)).is_none());
+        assert!(flow.begin(&friend(false, true), None).is_none());
+        assert!(flow.begin(&friend(true, false), None).is_none());
+    }
+
+    #[test]
+    fn already_sharing_or_on_server_sends_without_starting() {
+        for target in [
+            InviteTo::Together("code".into()),
+            InviteTo::Server("example.org".into()),
+        ] {
+            let mut flow = InviteFlow::default();
+            let f = friend(true, true);
+            assert_eq!(
+                flow.begin(&f, Some(target.clone())),
+                Some(InviteStep::Send(target.clone()))
+            );
+            assert_eq!(flow.button(&f).unwrap().0, t!("social.sending_invite"));
+            assert!(!flow.button(&f).unwrap().1);
+            assert!(flow.begin(&f, Some(target.clone())).is_none());
+            flow.complete(&f.id, &target, &Ok(String::new()));
+            assert_eq!(flow.button(&f).unwrap().0, t!("social.invited"));
+            assert!(!flow.button(&f).unwrap().1);
+            flow.advance(None, false);
+            assert!(flow.button(&f).unwrap().1);
+        }
+    }
+
+    #[test]
+    fn sent_feedback_expires_so_a_friend_can_be_invited_again() {
+        let mut flow = InviteFlow::default();
+        let f = friend(true, true);
+        let to = InviteTo::Server("example.org".into());
+        flow.0.insert(
+            f.id.clone(),
+            InviteProgress::Sent(to.clone(), Instant::now() - INVITE_FEEDBACK),
+        );
+        flow.advance(Some(to.clone()), false);
+        assert_eq!(flow.begin(&f, Some(to.clone())), Some(InviteStep::Send(to)));
+    }
+
+    #[test]
+    fn one_click_starts_then_sends_once_when_code_is_ready() {
+        let mut flow = InviteFlow::default();
+        let f = friend(true, true);
+        assert_eq!(flow.begin(&f, None), Some(InviteStep::StartSharing));
+        assert_eq!(flow.button(&f).unwrap().0, t!("social.starting"));
+        assert!(!flow.button(&f).unwrap().1);
+        assert!(flow.begin(&f, None).is_none());
+        assert_eq!(flow.advance(None, true), (vec![], false));
+        assert_eq!(
+            flow.advance(Some(InviteTo::Server("new.example.org".into())), true),
+            (vec![], false)
+        );
+        let to = InviteTo::Together("ready-code".into());
+        assert_eq!(
+            flow.advance(Some(to.clone()), false),
+            (vec![(f.id.clone(), to.clone())], false)
+        );
+        assert_eq!(flow.advance(Some(to.clone()), false), (vec![], false));
+        flow.complete(&f.id, &to, &Ok(String::new()));
+        assert_eq!(flow.button(&f).unwrap().0, t!("social.invited"));
+    }
+
+    #[test]
+    fn failed_start_and_failed_send_allow_retry_without_late_invites() {
+        let mut flow = InviteFlow::default();
+        let f = friend(true, true);
+        flow.begin(&f, None);
+        assert_eq!(flow.advance(None, false), (vec![], true));
+        let to = InviteTo::Together("late-code".into());
+        assert_eq!(flow.advance(Some(to.clone()), false), (vec![], false));
+        assert!(flow.button(&f).unwrap().1);
+        flow.begin(&f, Some(to.clone()));
+        flow.complete(
+            &f.id,
+            &InviteTo::Together("old-code".into()),
+            &Ok(String::new()),
+        );
+        assert_eq!(flow.button(&f).unwrap().0, t!("social.sending_invite"));
+        let error = flow.complete(&f.id, &to, &Err("http 403: invites_disabled".into()));
+        assert_eq!(error, Some(t!("social.invite_send_failed")));
+        assert!(!error.unwrap().contains("403"));
+        assert!(flow.button(&f).unwrap().1);
     }
 }

@@ -65,15 +65,15 @@ public final class Duel {
 	}
 
 	/** Join a friend's duel (their play-together code). */
-	public void join(String code) {
+	public boolean join(String code) {
 		if (!link.available()) {
-			Notices.post(Lang.t("social.joining_needs_arctic_launcher"), Lang.t("social.start_the_game_from_arctic_launcher_to_join"));
-			return;
+			return false;
 		}
 		link.join(code);
 		stage = Stage.JOINING;
 		polls = 0;
-		Notices.post(Lang.t("social.joining_the_duel"), Lang.t("social.connecting_to_your_friend"));
+		Notices.post(Lang.t("social.joining_friend"), Lang.t("social.connecting_to_your_friend"));
+		return true;
 	}
 
 	public boolean hosting() {
@@ -141,10 +141,13 @@ public final class Duel {
 			case JOINING:
 				link.refresh();
 				if ("joined".equals(link.stateName()) && link.port() > 0) {
-					stage = Stage.NONE;
-					platform.connectTo("localhost:" + link.port());
+					if (!platform.connectTo("localhost:" + link.port())) {
+						fail(Lang.t("social.try_join_in_launcher"));
+					} else {
+						stage = Stage.NONE;
+					}
 				} else if (link.error() != null || ++polls > MAX_POLLS) {
-					fail(link.error() != null ? link.error() : "Couldn't reach your friend's duel.");
+					fail(Lang.t("social.try_join_in_launcher"));
 				}
 				break;
 			default:
@@ -165,9 +168,10 @@ public final class Duel {
 	}
 
 	private void fail(String why) {
+		boolean joining = stage == Stage.JOINING;
 		stage = Stage.NONE;
 		platform.log(true, "Duel not started: " + why);
-		Notices.post(Lang.t("social.duel_not_started"), why);
+		Notices.post(Lang.t(joining ? "social.couldnt_join_invite" : "social.duel_not_started"), why);
 	}
 
 	/** Duel rules: no mobs, noon, keep the arena clean. */
