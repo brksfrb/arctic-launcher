@@ -1013,6 +1013,19 @@ fn diagnose_match(text: &str) -> Option<(Diagnosis, String)> {
         return Some(registry);
     }
 
+    static ONECONFIG_FAILURE: OnceLock<Regex> = OnceLock::new();
+    let oneconfig_failure = ONECONFIG_FAILURE.get_or_init(|| Regex::new(r"(?im)^.*(?:OneConfig[^\r\n]*failed to download|(?:failed to download)[^\r\n]*(?:OneConfig|polyfrost)).*$").unwrap());
+    if let Some(matched) = oneconfig_failure.find(text) {
+        return Some((
+            Diagnosis::new(
+                "Patcher couldn't download OneConfig (network)",
+                "Patcher needs OneConfig from Polyfrost's servers. Arctic will retry preparing it on the next launch and skip its auto-installed Patcher if the download fails. Check your connection, or turn Patcher off in instance settings.",
+                vec!["Patcher".into(), "OneConfig".into()],
+            ),
+            head_of(matched.as_str(), 2048).to_owned(),
+        ));
+    }
+
     for (rule, re) in RULES.iter().zip(compiled()) {
         for c in re.captures_iter(text) {
             let matched = c.get(0)?;
@@ -1867,6 +1880,17 @@ mod tests {
             "InjectionError: Critical injection failure in realaddon.mixins.json:AddonMixin";
         let (_, matched) = diagnose_match(&format!("{warning}\n{failure}")).unwrap();
         assert_eq!(matched, failure);
+    }
+
+    #[test]
+    fn oneconfig_download_failure_317() {
+        let text = include_str!("../tests/fixtures/crash-317-oneconfig.log");
+        let (d, matched) = diagnose_match(text).unwrap();
+        assert_eq!(d.title, "Patcher couldn't download OneConfig (network)");
+        assert!(d.detail.contains("Arctic will retry"));
+        assert!(matched.contains("failed to download"));
+        assert!(diagnose("OneConfig loaded successfully\nexit code 1").is_none());
+        assert!(diagnose("Unrelated mod failed to download texture").is_none());
     }
 
     #[test]
