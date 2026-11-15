@@ -127,6 +127,12 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public String screenClassName() {
+		Screen screen = mc().currentScreen;
+		return screen == null ? "none" : screen.getClass().getName();
+	}
+
+	@Override
 	public boolean atTitleScreen() {
 		Screen screen = mc().currentScreen;
 		return !inWorld() && (screen instanceof TitleScreen || (screen instanceof LegacyPageScreen

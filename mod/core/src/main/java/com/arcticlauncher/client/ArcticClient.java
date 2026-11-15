@@ -400,7 +400,8 @@ public final class ArcticClient {
 			// The widgets' names were worked out in the old language.
 			hud = new Hud(config);
 		}
-		FreezeWatchdog.state(platform == null || platform.windowFocused(), platform != null && platform.inWorld());
+		FreezeWatchdog.state(platform == null || platform.windowFocused(), platform != null && platform.inWorld(),
+				platform == null ? "unknown" : platform.screenClassName());
 		com.arcticlauncher.client.feature.DynamicFps.tick(platform, screenOpen);
 		com.arcticlauncher.client.replay.Replays.tick(screenOpen);
 		// Gameplay ticks are skipped outside a world and while watching a replay.

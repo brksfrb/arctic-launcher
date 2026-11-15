@@ -279,7 +279,7 @@ fn fresh_diagnostic_sidecar(
     std::fs::read_to_string(path).ok()
 }
 
-/// The newest short-freeze files this run wrote. Two 3 KB heads leave room for the hang-at-exit
+/// The newest short-freeze files this run wrote. Two 3 KB snapshots leave room for the hang-at-exit
 /// summary in the report's 8 KB log tail; the full files remain in `logs/arctic-freezes/`.
 fn fresh_freeze_files(game_dir: &std::path::Path, since: SystemTime) -> Vec<String> {
     let Ok(entries) = std::fs::read_dir(game_dir.join("logs").join("arctic-freezes")) else {
@@ -308,19 +308,53 @@ fn fresh_freeze_files(game_dir: &std::path::Path, since: SystemTime) -> Vec<Stri
         .filter_map(|(_, path)| {
             let text = std::fs::read_to_string(&path).ok()?;
             let name = path.file_name()?.to_string_lossy().into_owned();
-            let mut head: String = text.lines().take(120).collect::<Vec<_>>().join("\n");
-            if head.len() > 3 * 1024 {
-                let mut end = 3 * 1024;
-                while !head.is_char_boundary(end) {
-                    end -= 1;
-                }
-                head.truncate(end);
-                // i18n-ignore: crash-report diagnostic, not UI text
-                head.push_str("\n[snapshot truncated; full file saved locally]");
-            }
+            let head = freeze_snapshot(&text);
             Some(format!("---- logs/arctic-freezes/{name} ----\n{head}"))
         })
         .collect()
+}
+
+/// Keep the header and lock/deadlock evidence before spending bytes on sampled stacks.
+/// An unusually large owner stack can itself exceed the budget; its lock and cycle edges come first.
+fn freeze_snapshot(text: &str) -> String {
+    const LIMIT: usize = 3 * 1024;
+    // i18n-ignore: crash-report diagnostic, not UI text
+    const TRUNCATED: &str = "\n[snapshot truncated; full file saved locally]";
+    if text.len() <= LIMIT {
+        return text.to_owned();
+    }
+    let budget = LIMIT - TRUNCATED.len();
+    let header_end = text.find("\n== ").unwrap_or(text.len());
+    let (header, body) = text.split_at(header_end);
+    let blocked_start = body.find("\n== Blocked on ==");
+    let mut snapshot = String::with_capacity(LIMIT);
+    if let Some(start) = blocked_start {
+        let end = body[start + 1..]
+            .find("\n== ")
+            .map_or(body.len(), |offset| start + 1 + offset);
+        // Keep both in full whenever they fit; reserve lock evidence for oversized headers/stacks.
+        let header_limit = if header.len() + end - start <= budget {
+            budget
+        } else {
+            budget.min(1024)
+        };
+        append_snapshot_part(&mut snapshot, header, header_limit);
+        append_snapshot_part(&mut snapshot, &body[start..end], budget);
+        append_snapshot_part(&mut snapshot, &body[..start], budget);
+        append_snapshot_part(&mut snapshot, &body[end..], budget);
+    } else {
+        append_snapshot_part(&mut snapshot, text, budget);
+    }
+    snapshot.push_str(TRUNCATED);
+    snapshot
+}
+
+fn append_snapshot_part(snapshot: &mut String, part: &str, limit: usize) {
+    let mut end = part.len().min(limit.saturating_sub(snapshot.len()));
+    while !part.is_char_boundary(end) {
+        end -= 1;
+    }
+    snapshot.push_str(&part[..end]);
 }
 
 /// An unfinished snapshot is a lower bound on the hang, not its final duration.
@@ -1025,6 +1059,40 @@ mod tests {
         assert!(fresh_freeze_files(dir.path(), after).is_empty());
     }
 
+    #[test]
+    fn freeze_snapshot_prioritizes_lock_owner_and_deadlocks_over_sampled_stacks() {
+        let header = "Arctic: game froze for 27.0s\nduration: 27.00s (still frozen when written)\ncontext: screen: example.OptionsScreen\n";
+        let blocked = "\n== Blocked on ==\n  Waiting on paulscode.sound.SoundSystem@1234\n  Owner \"Sound worker\" id=42 state=BLOCKED\n  Deadlocks: cycle(s) detected\n    client id=1 -> owner id=42\n    Sound worker id=42 -> owner id=1\n  Owner stack (full, with locked monitors):\n    at example.SoundWorker.run(SoundWorker.java:123)\n      - locked paulscode.sound.SoundSystem@1234\n";
+        // Even an older/relocated section beyond the old 120-line and 3 KB limits survives.
+        let text = format!(
+            "{header}\n== Distinct client-thread stacks ==\n{}{blocked}\n== All other threads ==\n{}",
+            "    at example.Game.render(Game.java:42)\n".repeat(200),
+            "é".repeat(5000)
+        );
+        let snapshot = freeze_snapshot(&text);
+        assert!(snapshot.starts_with(header));
+        assert!(snapshot.contains(blocked));
+        assert!(snapshot.find("== Blocked on ==") < snapshot.find("== Distinct"));
+        assert!(snapshot.contains("snapshot truncated"));
+        assert!(snapshot.len() <= 3 * 1024);
+        assert_eq!(freeze_snapshot(header), header);
+        let verbose_header = format!("{header}{}", "header detail\n".repeat(80));
+        let snapshot = freeze_snapshot(&text.replacen(header, &verbose_header, 1));
+        assert!(snapshot.starts_with(&verbose_header));
+        assert!(snapshot.contains(blocked));
+
+        // Bound oversized owner stacks and cut only at UTF-8 boundaries, including old files.
+        for text in [
+            format!("{header}{blocked}{}", "é".repeat(5000)),
+            "é".repeat(5000),
+            format!("{header}{}", "extra header detail\n".repeat(200)),
+        ] {
+            let snapshot = freeze_snapshot(&text);
+            assert!(snapshot.len() <= 3 * 1024);
+            assert!(snapshot.ends_with("[snapshot truncated; full file saved locally]"));
+        }
+    }
+
     const UNFINISHED_FREEZE: &str = "Arctic: game froze for 3.1s, mostly in org.lwjgl.vulkan.VK10.vkQueuePresentKHR(Native Method) [not in a world (menu/loading) - may be normal]\nstarted: 2026-11-13 12:00:00.000\nduration: 3.12s (still frozen when written)\nsamples: 3 client-thread stacks\n== Distinct client-thread stacks (count of samples) ==\n[3x] stack 1\n    at org.lwjgl.vulkan.VK10.vkQueuePresentKHR(Native Method)\n    at example.Game.render(Game.java:42)\n== All other threads (captured once, at the first sample) ==\nthread \"worker\" WAITING\n";
 
     #[test]
@@ -1148,8 +1216,14 @@ mod tests {
 
         // Two large snapshots and a verbose on-disk log must retain the fatal stack and summary
         // within Report's byte limit, including when truncation lands inside a UTF-8 character.
+        let lock_evidence = "\n== Blocked on ==\n  Waiting on paulscode.sound.SoundSystem@1234\n  Owner \"Sound worker\" id=42 state=WAITING\n  Deadlocks: none detected\n  Owner stack:\n    at example.SoundWorker.run(SoundWorker.java:123)\n";
+        let with_lock = UNFINISHED_FREEZE.replacen(
+            "\n== Distinct",
+            &format!("{lock_evidence}\n== Distinct"),
+            1,
+        );
         let large_snapshot = format!(
-            "{UNFINISHED_FREEZE}{}",
+            "{with_lock}{}",
             format!("extra snapshot detail: {}\n", "é".repeat(2000)).repeat(120)
         );
         let old = freezes.join("freeze-20261113-115930.txt");
@@ -1185,6 +1259,12 @@ mod tests {
                 .contains("at example.Game.render(Game.java:42)")
         );
         assert!(large_report.log.contains("snapshot truncated"));
+        assert!(large_report.log.contains(lock_evidence));
+        assert!(
+            large_report
+                .log
+                .contains("duration: 3.12s (still frozen when written)")
+        );
 
         // A specific error still takes priority over the freeze evidence.
         run.push_log([LogLine {
