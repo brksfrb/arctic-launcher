@@ -87,9 +87,13 @@ public final class ServersFile {
 		}
 		Tag list = root.get("servers");
 		if (list != null && list.type == LIST) {
+			java.util.Set<String> seen = new java.util.HashSet<String>();
 			for (Tag t : ((TagList) list.value).items) {
 				if (t.type == COMPOUND) {
-					servers.add((Map<String, Tag>) t.value);
+					Map<String, Tag> server = (Map<String, Tag>) t.value;
+					Tag hidden = server.get("hidden");
+					boolean invisible = hidden != null && hidden.type == BYTE && (Byte) hidden.value != 0;
+					if (invisible || seen.add(normalizeAddress(string(server, "ip")))) servers.add(server);
 				}
 			}
 		}
@@ -119,9 +123,11 @@ public final class ServersFile {
 
 	private List<Integer> shown() {
 		List<Integer> out = new ArrayList<Integer>();
+		java.util.Set<String> seen = new java.util.HashSet<String>();
 		for (int i = 0; i < servers.size(); i++) {
 			Tag hidden = servers.get(i).get("hidden");
-			if (hidden == null || hidden.type != BYTE || (Byte) hidden.value == 0) {
+			if ((hidden == null || hidden.type != BYTE || (Byte) hidden.value == 0)
+					&& seen.add(normalizeAddress(string(servers.get(i), "ip")))) {
 				out.add(i);
 			}
 		}
@@ -174,7 +180,30 @@ public final class ServersFile {
 		servers.add(at, moving);
 	}
 
+	/** Address identity without DNS: case, trailing DNS dot and explicit default port don't distinguish rows. */
+	public static String normalizeAddress(String address) {
+		String a = address.trim().toLowerCase(java.util.Locale.ROOT);
+		String host = a;
+		String port = "25565";
+		if (a.startsWith("[")) {
+			int end = a.indexOf(']');
+			if (end > 0) {
+				host = a.substring(1, end);
+				if (a.length() > end + 1 && a.charAt(end + 1) == ':') port = a.substring(end + 2);
+			}
+		} else if (a.indexOf(':') > 0 && a.indexOf(':') == a.lastIndexOf(':')) {
+			host = a.substring(0, a.indexOf(':'));
+			port = a.substring(a.indexOf(':') + 1);
+		}
+		while (host.endsWith(".")) host = host.substring(0, host.length() - 1);
+		try { port = Integer.toString(Integer.parseInt(port)); } catch (NumberFormatException ignored) { }
+		return "[" + host + "]:" + port;
+	}
+
 	public void add(String name, String address) {
+		for (Map<String, Tag> existing : servers) {
+			if (normalizeAddress(string(existing, "ip")).equals(normalizeAddress(address))) return;
+		}
 		Map<String, Tag> s = new LinkedHashMap<String, Tag>();
 		s.put("ip", new Tag(STRING, address));
 		s.put("name", new Tag(STRING, name));
@@ -192,7 +221,12 @@ public final class ServersFile {
 	}
 
 	public void remove(int index) {
-		servers.remove((int) shown().get(index));
+		String address = normalizeAddress(address(index));
+		for (int i = servers.size() - 1; i >= 0; i--) {
+			Tag hidden = servers.get(i).get("hidden");
+			if ((hidden == null || hidden.type != BYTE || (Byte) hidden.value == 0)
+					&& normalizeAddress(string(servers.get(i), "ip")).equals(address)) servers.remove(i);
+		}
 	}
 
 	private static String string(Map<String, Tag> s, String key) {

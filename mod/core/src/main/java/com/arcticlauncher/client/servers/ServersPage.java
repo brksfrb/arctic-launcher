@@ -278,7 +278,8 @@ public final class ServersPage extends Page {
 		}
 		addressField = add(new TextField(tr("addServer.enterIp", Lang.t("servers.server_address")), 256, TextField.ANY));
 		int copyW = 44;
-		addressField.bounds(x, y, w - copyW - GAP, BUTTON_H);
+		int addW = direct ? 76 : 0;
+		addressField.bounds(x, y, w - copyW - GAP - (direct ? addW + GAP : 0), BUTTON_H);
 		addressField.onEnter(this::submit);
 		add(new Button(Lang.t("servers.copy"), () -> {
 			String a = addressField.text().trim();
@@ -286,6 +287,16 @@ public final class ServersPage extends Page {
 				platform.setClipboard(a);
 			}
 		})).bounds(x + w - copyW, y, copyW, BUTTON_H);
+		if (direct) {
+			add(new Button(Lang.t("servers.add_to_list"), () -> {
+				String address = addressField.text().trim();
+				if (!address.isEmpty() && servers.add(address, address)) {
+					reload();
+					servers.ping(address);
+					open(Mode.LIST);
+				}
+			})).bounds(x + w - copyW - GAP - addW, y, addW, BUTTON_H);
+		}
 		if (editing != null) {
 			addressField.text(editing.address);
 		} else if (direct && ArcticClient.config().lastDirect != null) {

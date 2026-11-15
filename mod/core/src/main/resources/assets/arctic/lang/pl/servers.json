@@ -1,4 +1,5 @@
 {
+  "servers.add_to_list": "Dodaj do listy",
   "servers.add_server": "Dodaj serwer",
   "servers.add_to_my_servers": "Dodaj do moich serwerów",
   "servers.and_more": "... i jeszcze {0}",
