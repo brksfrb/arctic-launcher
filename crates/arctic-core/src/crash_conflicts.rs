@@ -308,6 +308,11 @@ fn mixin_failure(text: &str) -> Option<MixinFailure<'_>> {
         })
 }
 
+/// Evidence must come from the failure, not an earlier inventory or unreadable refmap warning.
+pub(crate) fn mixin_failure_line(text: &str) -> Option<&str> {
+    mixin_failure(text).map(|f| f.line)
+}
+
 /// Which installed mod owns mixin config `config`: the log's own answer, else the jar that lists
 /// the config, else the mod whose id starts the config's name ("noisiumed-common.mixins.json").
 fn owner_of<'a>(
@@ -508,7 +513,10 @@ pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Opt
             mods[c.a].id.eq_ignore_ascii_case(&f.id) || mods[c.b].id.eq_ignore_ascii_case(&f.id)
         });
         if let Some(c) = involved {
-            return Some(explain(c, mods, Some(f), true));
+            let clash = failure
+                .as_ref()
+                .and_then(|failure| redirect_clash(text, failure, mods));
+            return Some(clash.unwrap_or_else(|| explain(c, mods, Some(f), true)));
         }
     }
     if base.is_some() {
@@ -639,6 +647,62 @@ fn mixin_competitor(
     None
 }
 
+/// A skipped required redirect is direct evidence of a clash. Require the same config, mixin,
+/// handler signature and explicit owner, before the failure; other warnings are incidental.
+fn redirect_clash(
+    text: &str,
+    failure: &MixinFailure<'_>,
+    mods: &[InstalledMod],
+) -> Option<Diagnosis> {
+    let failed = Regex::new(
+        r"(?:InjectionError|InvalidInjectionException):[^\r\n]*?Redirector (\S+) in ([\w\-.]+\.mixins\.json):([\w.$]+)",
+    )
+    .ok()?
+    .captures(failure.line)?;
+    let conflict = Regex::new(
+        r"@Redirect conflict\. Skipping ([\w\-.]+\.mixins\.json):([\w.$]+) from mod ([\w\-]+)->@Redirect::(\S+) with priority -?\d+, already redirected by ([\w\-.]+\.mixins\.json):([\w.$]+) from mod ([\w\-]+)->@Redirect::(\S+)",
+    )
+    .ok()?;
+    let before = &text[..text.rfind(failure.line)?];
+    let c = before.lines().rev().find_map(|line| {
+        let c = conflict.captures(line)?;
+        (&c[1] == failure.config
+            && c[1] == failed[2]
+            && c[2] == failed[3]
+            && c[4] == failed[1]
+            && failure.owner.as_ref().is_none_or(|o| o == &c[3])
+            && !c[3].eq_ignore_ascii_case(&c[7]))
+        .then_some(c)
+    })?;
+    let id = c[3].to_lowercase();
+    let other = c[7].to_lowercase();
+    let display = |id: &str| {
+        if id.eq_ignore_ascii_case("arctic") {
+            "Arctic Client".to_owned()
+        } else {
+            mods.iter()
+                .find(|m| m.id.eq_ignore_ascii_case(id))
+                .map_or_else(|| id.to_owned(), |m| m.name.clone())
+        }
+    };
+    let (name, other_name) = (display(&id), display(&other));
+    let title = if other == "arctic" {
+        format!("Arctic Client conflict with {name}")
+    } else if id == "arctic" {
+        format!("Arctic Client conflict with {other_name}")
+    } else {
+        format!("{name} clashes with {other_name}")
+    };
+    Some(Diagnosis::new(
+        title,
+        format!(
+            "{name}'s required redirect {} in {}:{} was skipped because {other_name}'s redirect {} in {}:{} already took the same call. This conflict crashed the game. Update {name} and {other_name}, or report this compatibility issue to their authors.",
+            &c[4], &c[1], &c[2], &c[8], &c[5], &c[6]
+        ),
+        vec![id.to_owned(), other],
+    ))
+}
+
 /// Attribute failures to their explicit owner, then installed metadata, then the config stem.
 pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagnosis> {
     let failure = mixin_failure(text)?;
@@ -653,6 +717,9 @@ pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagno
         |m| m.id.clone(),
     );
     let name = owner.map_or(id.as_str(), |m| m.name.as_str());
+    if let Some(clash) = redirect_clash(text, &failure, mods) {
+        return Some(clash);
+    }
     if let Some(other) = mixin_competitor(text, &failure, &id, mods) {
         let display = |id: &str| {
             mods.iter()
@@ -1143,6 +1210,33 @@ mod tests {
         assert_eq!(d.title, "Particle Core clashes with Sodium");
         assert_eq!(d.mods, ["particle_core", "sodium"]);
         assert!(d.detail.contains("Update or remove Particle Core"));
+    }
+
+    #[test]
+    fn report_323_clash_uses_explicit_owners_and_installed_display_names() {
+        let text = include_str!("../tests/fixtures/crash-323-title-redirect.log");
+        let mods = vec![
+            InstalledMod {
+                id: "mod_id".into(),
+                name: "Space Background".into(),
+                // Even a declared conflict must not displace the actual redirect clash.
+                breaks: vec![("porting_lib_base".into(), vec!["*".into()])],
+                ..InstalledMod::default()
+            },
+            InstalledMod {
+                id: "porting_lib_base".into(),
+                mixins: vec!["swgc.mixins.json".into()],
+                ..InstalledMod::default()
+            },
+        ];
+        let d = refine(crate::crash::diagnose(text), text, &mods).unwrap();
+        assert_eq!(d.title, "Arctic Client conflict with Space Background");
+        assert_eq!(d.mods, ["mod_id", "arctic"]);
+        assert!(d.fix.is_none());
+        let dir = tempfile::tempdir().unwrap();
+        let d = diagnose_exit_in(text, -1, dir.path()).unwrap();
+        assert_eq!(d.title, "Arctic Client conflict with mod_id");
+        assert_eq!(d.mods, ["mod_id", "arctic"]);
     }
 
     #[test]

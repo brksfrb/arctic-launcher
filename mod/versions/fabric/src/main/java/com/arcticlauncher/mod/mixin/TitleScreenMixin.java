@@ -10,7 +10,8 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
 import com.arcticlauncher.client.gfx.Backdrop;
 import com.llamalad7.mixinextras.sugar.Local;
 import net.minecraft.client.renderer.PanoramaRenderer;
-import org.spongepowered.asm.mixin.injection.Redirect;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 //#endif
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
@@ -139,38 +140,38 @@ abstract class TitleScreenMixin extends Screen {
 
 	//#if MC < 1.20.6
 	// Before 1.20.6 there's no generic Screen.renderPanorama hook (see ScreenMixin):
-	// only the title screen draws one, directly, so redirect that call instead.
+	// only the title screen draws one, directly. Wrap the call so other mods can hook it too.
 	//#if MC < 1.14
 	// 1.13's panorama has no fade: its draw call takes only the partial tick (and is unnamed).
-	@Redirect(method = "extractRenderState",
+	@WrapOperation(method = "extractRenderState",
 			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/PanoramaRenderer;method_19176(F)V"))
-	private void arctic$backdrop(PanoramaRenderer panorama, float partialTick) {
+	private void arctic$backdrop(PanoramaRenderer panorama, float partialTick, Operation<Void> original) {
 		GfxImpl gfx = GfxImpl.of(new com.mojang.blaze3d.vertex.PoseStack());
 		if (ArcticClient.restyles()) {
 			Backdrop.render(gfx, ArcticClient.style());
 		} else {
-			panorama.method_19176(partialTick);
+			original.call(panorama, partialTick);
 		}
 	}
 	//#else
-	@Redirect(method = "extractRenderState",
+	@WrapOperation(method = "extractRenderState",
 			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/PanoramaRenderer;render(FF)V"))
 	//#if MC >= 1.20
-	private void arctic$backdrop(PanoramaRenderer panorama, float partialTick, float alpha,
+	private void arctic$backdrop(PanoramaRenderer panorama, float partialTick, float alpha, Operation<Void> original,
 			@Local(argsOnly = true) GuiGraphicsExtractor g) {
 		GfxImpl gfx = new GfxImpl(g);
 	//#elif MC >= 1.16
-	private void arctic$backdrop(PanoramaRenderer panorama, float partialTick, float alpha,
+	private void arctic$backdrop(PanoramaRenderer panorama, float partialTick, float alpha, Operation<Void> original,
 			@Local(argsOnly = true) com.mojang.blaze3d.vertex.PoseStack pose) {
 		GfxImpl gfx = GfxImpl.of(pose);
 	//#else
-	private void arctic$backdrop(PanoramaRenderer panorama, float partialTick, float alpha) {
+	private void arctic$backdrop(PanoramaRenderer panorama, float partialTick, float alpha, Operation<Void> original) {
 		GfxImpl gfx = GfxImpl.of(new com.mojang.blaze3d.vertex.PoseStack());
 	//#endif
 		if (ArcticClient.restyles()) {
 			Backdrop.render(gfx, ArcticClient.style());
 		} else {
-			panorama.render(partialTick, alpha);
+			original.call(panorama, partialTick, alpha);
 		}
 	}
 	//#endif

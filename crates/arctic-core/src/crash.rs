@@ -955,6 +955,12 @@ fn diagnose_match(text: &str) -> Option<(Diagnosis, String)> {
             }
             let diagnosis = (rule.explain)(&c, text);
             if !diagnosis.title.is_empty() {
+                // The generic config rule can first match an unrelated refmap warning or
+                // inventory. Its explanation selects the actual failure; use that as evidence.
+                if rule.pattern == r"[\w\-.]+\.mixins\.json" {
+                    let line = crate::crash_conflicts::mixin_failure_line(text)?;
+                    return Some((diagnosis, head_of(line, 2048).to_owned()));
+                }
                 let start = text[..matched.start()].rfind('\n').map_or(0, |n| n + 1);
                 let end = text[matched.start()..]
                     .find('\n')
@@ -2353,6 +2359,72 @@ Stacktrace:
             assert!(!d.repair);
             assert!(d.fix.is_none());
         }
+    }
+
+    const REPORT_323: &str = include_str!("../tests/fixtures/crash-323-title-redirect.log");
+
+    #[test]
+    fn report_323_names_the_arctic_redirect_clash() {
+        for text in [REPORT_323.to_owned(), REPORT_323.replace('\n', "\r\n")] {
+            let (d, matched) = diagnose_match(&text).unwrap();
+            assert_eq!(d.title, "Arctic Client conflict with mod_id");
+            assert_eq!(d.mods, ["mod_id", "arctic"]);
+            assert!(d.detail.contains("renderSpace"));
+            assert!(d.detail.contains("arctic$backdrop"));
+            assert!(!matched.contains("could not be read"));
+            assert!(matched.contains("InjectionError"));
+            assert!(d.fix.is_none());
+            assert!(!d.repair);
+        }
+    }
+
+    #[test]
+    fn redirect_clash_requires_the_same_failing_redirect_and_an_earlier_warning() {
+        let (before, failure) = REPORT_323
+            .split_once("Caused by: org.spongepowered")
+            .unwrap();
+        for before in [
+            before.replace("swgc.mixins.json", "other.mixins.json"),
+            before.replace("MixinTitleScreen", "OtherMixin"),
+            before.replace("from mod mod_id", "from mod other"),
+            before.replace("renderSpace", "otherHandler"),
+            before.replace("class_766;FF", "class_766;F"),
+            before.replace("@Redirect conflict", "@ModifyConstant conflict"),
+            before.replace("from mod arctic", "from mod mod_id"),
+            String::new(),
+        ] {
+            let text = format!("{before}Caused by: org.spongepowered{failure}");
+            let d = diagnose(&text).unwrap();
+            assert_eq!(d.title, "mod_id failed to change the game");
+            assert_eq!(d.mods, ["mod_id"]);
+        }
+        let late = format!("Caused by: org.spongepowered{failure}\n{before}");
+        assert_eq!(title(&late), "mod_id failed to change the game");
+        assert!(diagnose(before).is_none());
+    }
+
+    #[test]
+    fn redirect_clashes_name_both_mods_when_neither_is_arctic() {
+        let d = diagnose(&REPORT_323.replace("arctic", "scenery")).unwrap();
+        assert_eq!(d.title, "mod_id clashes with scenery");
+        assert_eq!(d.mods, ["mod_id", "scenery"]);
+    }
+
+    #[test]
+    fn unreadable_refmap_is_never_the_matched_mixin_evidence() {
+        // Without an explicit failure owner, the generic config rule matches first.
+        let text = REPORT_323.replace(" from mod mod_id failed", " failed");
+        let (d, matched) = diagnose_match(&text).unwrap();
+        assert_eq!(d.title, "Arctic Client conflict with mod_id");
+        assert!(matched.contains("InjectionError"));
+        assert!(!matched.contains("could not be read"));
+        let warning = REPORT_323.lines().next().unwrap();
+        assert!(diagnose(warning).is_none());
+        let text =
+            format!("{warning}\nInvalidMixinException: invalid broken.mixins.json:BrokenMixin");
+        let (d, matched) = diagnose_match(&text).unwrap();
+        assert_eq!(d.mods, ["broken"]);
+        assert!(matched.starts_with("InvalidMixinException:"));
     }
 
     #[test]
