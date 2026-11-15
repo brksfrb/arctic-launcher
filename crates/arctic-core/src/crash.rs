@@ -1068,6 +1068,52 @@ const REPORT_JAVA_BYTES: usize = 5 * 1024;
 const REPORT_LAUNCHER_LINES: usize = 80;
 const REPORT_LAUNCHER_BYTES: usize = 6 * 1024;
 
+/// Select fatal evidence before ordinary log warnings. A crash document is authoritative;
+/// without one, require an exception followed by a Java stack frame in the same log record.
+fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a str> {
+    static EXCEPTION: OnceLock<Regex> = OnceLock::new();
+    let exception = EXCEPTION
+        .get_or_init(|| Regex::new(r"(?:[\w$]+\.)*[\w$]*(?:Exception|Error)(?::|\s*$)").unwrap());
+    let select = |text: &'a str, report: bool| {
+        let mut warning = false;
+        let mut lines = text.lines();
+        while let Some(line) = lines.next() {
+            if line.starts_with('[') {
+                warning = line.contains("/WARN]") || line.contains("/INFO]");
+            }
+            if warning || line.contains("pack.mcmeta") || line.contains("pack metadata") {
+                continue;
+            }
+            let Some(found) = exception.find(line) else {
+                continue;
+            };
+            // A report's first bare exception is its main exception, before its cause chain.
+            if report && found.start() == 0 {
+                return Some(line.trim());
+            }
+            if !report
+                && lines
+                    .clone()
+                    .take_while(|l| !l.starts_with('['))
+                    .any(|l| l.trim_start().starts_with("at "))
+            {
+                return Some(line[found.start()..].trim());
+            }
+        }
+        None
+    };
+    if let Some(report) = crash_report {
+        let report = report
+            .split("---- Minecraft Crash Report ----")
+            .last()
+            .unwrap_or(report);
+        if let Some(error) = select(report, true) {
+            return Some(error);
+        }
+    }
+    select(log, false)
+}
+
 impl Report {
     /// `lines` is the game's log, `launcher_lines` the launcher's own log, `crash_report` the file
     /// Minecraft wrote (if it did), `java` how Java was started (see `LaunchPlan::java_summary`).
@@ -1087,6 +1133,14 @@ impl Report {
         let mods = compact_mod_inventory(&all, crash_report.unwrap_or(""));
         let mixin = mixin_failure_evidence(&all);
         let mut priority = String::new();
+        // Put the fatal exception before the log tail so summary consumers cannot pick an
+        // earlier handled metadata warning. Keep the original warnings in the log for context.
+        if let Some(error) = first_error(&all, crash_report) {
+            priority.push_str(&format!(
+                "\n---- first error ----\n{}\n",
+                scrub(head_of(error, 2048), &Own::this_pc())
+            ));
+        }
         let diagnosis_text = format!(
             "{all}\n{}\n{}\n{}",
             crash_report
@@ -1553,6 +1607,50 @@ pub fn scrub(text: &str, own: &Own) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn first_error_prefers_crash_report_over_pack_metadata_warnings() {
+        let log = include_str!("../tests/fixtures/crash-325-pack-warning.log");
+        let report = include_str!("../tests/fixtures/crash-330-main-exception.log");
+        let expected = "java.lang.IllegalStateException: Failed to initialize renderer";
+        assert_eq!(first_error(log, Some(report)), Some(expected));
+        let uploaded = Report::build("1.21", "fabric", "unknown", &[log], &[], Some(report), None);
+        assert!(
+            uploaded
+                .log
+                .starts_with(&format!("\n---- first error ----\n{expected}\n"))
+        );
+        assert!(uploaded.log.contains("pack.mcmeta"));
+        assert_eq!(
+            first_error(
+                &format!(
+                    "{log}\n[Render thread/ERROR] Uncaught exception\n{expected}\n\tat example.Game.render(Game.java:42)"
+                ),
+                None
+            ),
+            Some(expected)
+        );
+        let earlier = format!(
+            "[main/ERROR] java.lang.RuntimeException: handled\n\tat example.Optional.load(Optional.java:1)\n{log}"
+        );
+        assert_eq!(first_error(&earlier, Some(report)), Some(expected));
+        assert_eq!(first_error("java.lang.Exception: no stack", None), None);
+        assert_eq!(
+            first_error(
+                "java.lang.Error: fatal\n\tat example.Game.run(Game.java:1)",
+                None
+            ),
+            Some("java.lang.Error: fatal")
+        );
+        assert_eq!(first_error(log, None), None);
+        assert_eq!(
+            first_error(
+                log,
+                Some("---- Minecraft Crash Report ----\nDescription: Unknown")
+            ),
+            None
+        );
+    }
+
     use super::*;
 
     #[test]
