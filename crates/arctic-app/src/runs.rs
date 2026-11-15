@@ -359,7 +359,8 @@ fn freeze_at_exit(text: &str) -> Option<String> {
 /// Lines of `logs/latest.log` that are looked at.
 const LATEST_LOG_LINES: usize = 120;
 
-/// The end of the game's own log file, when this run wrote it (a stale one from an earlier run isn't).
+/// Recent registry errors plus the end of this run's own log. Forge's detailed ID warnings
+/// precede its crash report/mod inventory, often falling outside the ordinary 120-line tail.
 fn latest_log_tail(game_dir: &std::path::Path, since: SystemTime) -> Vec<String> {
     let path = game_dir.join("logs").join("latest.log");
     let fresh = std::fs::metadata(&path)
@@ -374,7 +375,12 @@ fn latest_log_tail(game_dir: &std::path::Path, since: SystemTime) -> Vec<String>
     let text = String::from_utf8_lossy(&bytes);
     let lines: Vec<&str> = text.lines().collect();
     let skip = lines.len().saturating_sub(LATEST_LOG_LINES);
-    lines[skip..].iter().map(|l| (*l).to_owned()).collect()
+    let registry = crash::registry_failure_evidence(&lines[..skip].join("\n"));
+    registry
+        .lines()
+        .chain(lines[skip..].iter().copied())
+        .map(str::to_owned)
+        .collect()
 }
 
 /// The file Java writes when it dies (`hs_err_pid<number>.log`, in the game's folder), if this run made one.
@@ -873,6 +879,45 @@ impl Tasks {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn registry_warnings_before_latest_log_tail_reach_diagnosis_and_upload() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("logs")).unwrap();
+        std::fs::create_dir_all(dir.path().join("crash-reports")).unwrap();
+        let error = "[Render thread/WARN] [net.minecraftforge.registries.ForgeRegistry/REGISTRIES]: Registry minecraft:item: Object did not get ID it asked for. Name: example:widget Expected: 24 Got: 25";
+        let log = format!(
+            "{}\n{error}\n{}",
+            "startup noise\n".repeat(200),
+            "mod inventory line\n".repeat(500)
+        );
+        std::fs::write(dir.path().join("logs/latest.log"), log).unwrap();
+        let written = include_str!("../../arctic-core/tests/fixtures/crash-314-registry-sync.log");
+        std::fs::write(dir.path().join("crash-reports/crash.txt"), written).unwrap();
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.20.1", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        let tail = latest_log_tail(dir.path(), run.started);
+        assert!(tail.iter().any(|line| line == error));
+        assert_eq!(tail.len(), LATEST_LOG_LINES + 1);
+        let diagnosis = run.exit_diagnosis(Some(-1), false).unwrap();
+        assert_eq!(diagnosis.title, "Forge registry IDs did not sync");
+        assert_eq!(diagnosis.mods, ["example"]);
+        let report = run.crash_report(&diagnosis.title, Some(-1));
+        assert!(report.log.contains("---- registry failure context ----"));
+        assert!(
+            report
+                .log
+                .contains("Name: example:widget Expected: 24 Got: 25")
+        );
+        assert!(report.log.contains("matched: java.lang.RuntimeException:"));
+        assert!(report.log.len() < 48 * 1024);
+        // An old latest.log must not contribute attribution or evidence to the next run.
+        assert!(
+            latest_log_tail(dir.path(), SystemTime::now() + Duration::from_secs(60)).is_empty()
+        );
+    }
 
     #[test]
     fn a_force_close_is_not_a_crash() {
