@@ -97,7 +97,6 @@ impl ArcticApp {
             ui.add_space(6.0);
             crate::zoom::size_row(ui, &mut s.interface_size);
             language_row(ui, &mut s.language);
-            language_row(ui, &mut s.language);
             widgets::field_row(ui, |ui| {
                 use arctic_core::settings::Backdrop;
                 ui.label(t!("settings.background"));
