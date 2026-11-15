@@ -230,8 +230,10 @@ public final class LegacyGlassCtm {
 
 	/** Called while models bake, after their atlas is stitched. Selection never allocates. */
 	public static Variants prepare(BakedQuad quad) {
-		// The base constructor runs before these subclasses replace the glass UVs.
-		if (quad instanceof net.minecraft.client.render.model.TexturedBakedQuad) return null;
+		// Called from BakedQuad's constructor, before subclass fields are initialized.
+		// Forge's UnpackedBakedQuad overrides getVertexData(); even reading its UVs here
+		// would crash. Leave all subclass quads (including damage overlays) unchanged.
+		if (quad.getClass() != BakedQuad.class) return null;
 		if (!available() || sprites.isEmpty()) return null;
 		Sprite sprite = spriteOf(quad);
 		Sprite[] tiles = sprites.get(sprite);

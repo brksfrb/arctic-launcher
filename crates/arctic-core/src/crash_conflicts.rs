@@ -280,20 +280,14 @@ pub fn find_conflicts(mods: &[InstalledMod]) -> Vec<Conflict> {
     out
 }
 
-/// The mod whose mixin config failed to apply, as the log names it: (config file, mod id when the
-/// log says so).
-fn mixin_failure(text: &str) -> Option<(String, Option<String>)> {
-    let line = mixin_failure_line(text)?;
-    let config = Regex::new(r"([\w\-.]+\.mixins\.json)").ok()?;
-    let owner = Regex::new(r"(?:from mod|apply for mod) ([\w\-]+)").ok()?;
-    Some((
-        config.captures(line)?[1].to_owned(),
-        owner.captures(line).map(|o| o[1].to_lowercase()),
-    ))
+struct MixinFailure<'a> {
+    config: &'a str,
+    owner: Option<String>,
+    line: &'a str,
 }
 
-/// The actual failure record, rather than the first unrelated mention of a config file.
-pub(crate) fn mixin_failure_line(text: &str) -> Option<&str> {
+/// Prefer the explicit owner in the deepest injection error over outer transformation failures.
+fn mixin_failure(text: &str) -> Option<MixinFailure<'_>> {
     let gate = Regex::new(
         r"MixinPreProcessorStandard|MixinApplicatorStandard|Critical injection failure|InvalidInjectionException|InvalidMixinException|MixinApplyError|MixinTransformerError|@Mixin target \S+ was not found|Mixin apply for mod|InjectionError",
     )
@@ -319,8 +313,24 @@ pub(crate) fn mixin_failure_line(text: &str) -> Option<&str> {
         text
     };
     let config = Regex::new(r"([\w\-.]+\.mixins\.json)").ok()?;
+    let owner = Regex::new(r"(?:from mod|apply for mod) ([\w\-]+)").ok()?;
+    let injection = Regex::new(r"(?:InjectionError|InvalidInjectionException):").ok()?;
     text.lines()
-        .find(|line| gate.is_match(line) && config.is_match(line))
+        .rev()
+        .filter(|l| injection.is_match(l) && owner.is_match(l))
+        .chain(text.lines().filter(|l| gate.is_match(l)))
+        .find_map(|line| {
+            Some(MixinFailure {
+                config: config.captures(line)?.get(1)?.as_str(),
+                owner: owner.captures(line).map(|o| o[1].to_lowercase()),
+                line,
+            })
+        })
+}
+
+/// Evidence must come from the failure, not an earlier inventory or unreadable refmap warning.
+pub(crate) fn mixin_failure_line(text: &str) -> Option<&str> {
+    mixin_failure(text).map(|f| f.line)
 }
 
 /// Which installed mod owns mixin config `config`: the log's own answer, else the jar that lists
@@ -331,8 +341,11 @@ fn owner_of<'a>(
     mods: &'a [InstalledMod],
 ) -> Option<&'a InstalledMod> {
     let by_id = |id: &str| mods.iter().find(|m| m.id.eq_ignore_ascii_case(id));
-    said.and_then(by_id)
-        .or_else(|| mods.iter().find(|m| m.mixins.iter().any(|c| c == config)))
+    if let Some(id) = said {
+        return by_id(id);
+    }
+    mods.iter()
+        .find(|m| m.mixins.iter().any(|c| c == config))
         .or_else(|| {
             let stem = config.to_lowercase();
             mods.iter()
@@ -517,13 +530,16 @@ pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Opt
     let failure = mixin_failure(text);
     let failed = failure
         .as_ref()
-        .and_then(|(cfg, said)| owner_of(cfg, said.as_deref(), mods));
+        .and_then(|f| owner_of(f.config, f.owner.as_deref(), mods));
     if let Some(f) = failed {
         let involved = conflicts.iter().find(|c| {
             mods[c.a].id.eq_ignore_ascii_case(&f.id) || mods[c.b].id.eq_ignore_ascii_case(&f.id)
         });
         if let Some(c) = involved {
-            return Some(explain(c, mods, Some(f), true));
+            let clash = failure
+                .as_ref()
+                .and_then(|failure| redirect_clash(text, failure, mods));
+            return Some(clash.unwrap_or_else(|| explain(c, mods, Some(f), true)));
         }
     }
     if base.is_some() {
@@ -555,15 +571,208 @@ pub(crate) fn preprocessing_class_failure(text: &str) -> bool {
         .any(|marker| text.contains(marker))
 }
 
-/// Attribute config-only failures to installed metadata, or to the config stem as a fallback.
+/// Another mod targeting the same failed class can explain a missing injection target. Match
+/// the failing mixin itself within one complete agent block; inventories and other failures
+/// must not contribute a second mod.
+fn mixin_competitor(
+    text: &str,
+    failure: &MixinFailure<'_>,
+    id: &str,
+    mods: &[InstalledMod],
+) -> Option<String> {
+    let missing = Regex::new(r"Scanned 0 target\(s\)|(?i:target[^\r\n]*?(?:not found|was not found)|could not find any targets)").ok()?;
+    if !missing.is_match(failure.line) {
+        return None;
+    }
+    let entry = Regex::new(r"^([\w\-.]+\.mixins\.json):([\w.$]+)$").ok()?;
+    let failed_entry = Regex::new(r"([\w\-.]+\.mixins\.json):([\w.$]+)").ok()?;
+    let failed_mixin = failed_entry.captures(failure.line)?.get(2)?.as_str();
+    let target = Regex::new(r"Mixin transformation of ([\w.$]+) failed").ok()?;
+    let before = &text[..text.rfind(failure.line)?];
+    let target = target.captures_iter(before).last().map(|c| c[1].to_owned());
+    let conflict = Regex::new(
+        r"@(?:ModifyConstant|Redirect) conflict\. Skipping ([\w\-.]+\.mixins\.json):([\w.$]+) from mod ([\w-]+)->@\w+::([^ ]+) with priority \d+, already redirected by ([\w\-.]+\.mixins\.json):([\w.$]+) from mod ([\w-]+)->",
+    ).ok()?;
+    for block in text.split("failure begin").skip(1) {
+        let Some((block, _)) = block.split_once("failure end") else {
+            continue;
+        };
+        let lines: Vec<_> = block
+            .lines()
+            .map(|l| l.trim().strip_prefix("[Arctic mixin] ").unwrap_or(l.trim()))
+            .collect();
+        let Some(class) = lines.iter().find_map(|l| l.strip_prefix("class=")) else {
+            continue;
+        };
+        let class = class.split(';').next().unwrap_or(class);
+        if target.as_ref().is_some_and(|t| t != class) {
+            continue;
+        }
+        let Some(start) = lines
+            .iter()
+            .position(|l| l.starts_with("targeting mixins ("))
+        else {
+            continue;
+        };
+        let entries: Vec<_> = lines[start + 1..]
+            .iter()
+            .filter_map(|l| entry.captures(l))
+            .collect();
+        if !entries.iter().any(|c| {
+            &c[1] == failure.config
+                && (&c[2] == failed_mixin
+                    || c[2]
+                        .strip_suffix(failed_mixin)
+                        .is_some_and(|p| p.ends_with('.')))
+        }) {
+            continue;
+        }
+        // An explicit injector conflict identifies the competing mixin even when
+        // several unrelated mods also target this class. Tie both sides to this
+        // block and the failed injector instead of trusting an inventory name.
+        for c in conflict.captures_iter(before) {
+            let matches_entry = |config: &str, mixin: &str| {
+                entries.iter().any(|e| {
+                    &e[1] == config
+                        && (&e[2] == mixin
+                            || e[2].strip_suffix(mixin).is_some_and(|p| p.ends_with('.')))
+                })
+            };
+            if &c[1] == failure.config
+                && &c[2] == failed_mixin
+                && c[3].eq_ignore_ascii_case(id)
+                && failure.line.contains(&c[4])
+                && !c[7].eq_ignore_ascii_case(id)
+                && matches_entry(&c[1], &c[2])
+                && matches_entry(&c[5], &c[6])
+            {
+                return Some(c[7].to_lowercase());
+            }
+        }
+        let mut others = Vec::new();
+        for c in entries {
+            // The failed config's explicit owner also applies to its context entry.
+            if &c[1] == failure.config {
+                continue;
+            }
+            let other = owner_of(&c[1], None, mods).map_or_else(
+                || c[1].trim_end_matches(".mixins.json").to_owned(),
+                |m| m.id.clone(),
+            );
+            if !other.eq_ignore_ascii_case(id) && !others.contains(&other) {
+                others.push(other);
+            }
+        }
+        // With several other owners, the context cannot identify a particular pair.
+        if others.len() == 1 {
+            return others.pop();
+        }
+    }
+    None
+}
+
+/// A skipped required redirect is direct evidence of a clash. Require the same config, mixin,
+/// handler signature and explicit owner, before the failure; other warnings are incidental.
+fn redirect_clash(
+    text: &str,
+    failure: &MixinFailure<'_>,
+    mods: &[InstalledMod],
+) -> Option<Diagnosis> {
+    let failed = Regex::new(
+        r"(?:InjectionError|InvalidInjectionException):[^\r\n]*?Redirector (\S+) in ([\w\-.]+\.mixins\.json):([\w.$]+)",
+    )
+    .ok()?
+    .captures(failure.line)?;
+    let conflict = Regex::new(
+        r"@Redirect conflict\. Skipping ([\w\-.]+\.mixins\.json):([\w.$]+) from mod ([\w\-]+)->@Redirect::(\S+) with priority -?\d+, already redirected by ([\w\-.]+\.mixins\.json):([\w.$]+) from mod ([\w\-]+)->@Redirect::(\S+)",
+    )
+    .ok()?;
+    let before = &text[..text.rfind(failure.line)?];
+    let c = before.lines().rev().find_map(|line| {
+        let c = conflict.captures(line)?;
+        (&c[1] == failure.config
+            && c[1] == failed[2]
+            && c[2] == failed[3]
+            && c[4] == failed[1]
+            && failure.owner.as_ref().is_none_or(|o| o == &c[3])
+            && !c[3].eq_ignore_ascii_case(&c[7]))
+        .then_some(c)
+    })?;
+    let id = c[3].to_lowercase();
+    let other = c[7].to_lowercase();
+    let display = |id: &str| {
+        if id.eq_ignore_ascii_case("arctic") {
+            "Arctic Client".to_owned()
+        } else {
+            mods.iter()
+                .find(|m| m.id.eq_ignore_ascii_case(id))
+                .map_or_else(|| id.to_owned(), |m| m.name.clone())
+        }
+    };
+    let (name, other_name) = (display(&id), display(&other));
+    let title = if other == "arctic" {
+        format!("Arctic Client conflict with {name}")
+    } else if id == "arctic" {
+        format!("Arctic Client conflict with {other_name}")
+    } else {
+        format!("{name} clashes with {other_name}")
+    };
+    Some(Diagnosis::new(
+        title,
+        format!(
+            "{name}'s required redirect {} in {}:{} was skipped because {other_name}'s redirect {} in {}:{} already took the same call. This conflict crashed the game. Update {name} and {other_name}, or report this compatibility issue to their authors.",
+            &c[4], &c[1], &c[2], &c[8], &c[5], &c[6]
+        ),
+        vec![id.to_owned(), other],
+    ))
+}
+
+/// Attribute failures to their explicit owner, then installed metadata, then the config stem.
 pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagnosis> {
-    let (config, said) = mixin_failure(text)?;
-    let owner = owner_of(&config, said.as_deref(), mods);
+    let failure = mixin_failure(text)?;
+    let owner = owner_of(failure.config, failure.owner.as_deref(), mods);
     let id = owner.map_or_else(
-        || said.unwrap_or_else(|| config.trim_end_matches(".mixins.json").to_owned()),
+        || {
+            failure
+                .owner
+                .clone()
+                .unwrap_or_else(|| failure.config.trim_end_matches(".mixins.json").to_owned())
+        },
         |m| m.id.clone(),
     );
     let name = owner.map_or(id.as_str(), |m| m.name.as_str());
+    if let Some(clash) = redirect_clash(text, &failure, mods) {
+        return Some(clash);
+    }
+    if let Some(other) = mixin_competitor(text, &failure, &id, mods) {
+        let display = |id: &str| {
+            mods.iter()
+                .find(|m| m.id.eq_ignore_ascii_case(id))
+                .map_or_else(
+                    || match id {
+                        "particle_core" => "Particle Core".to_owned(),
+                        "sodium" => "Sodium".to_owned(),
+                        "carpet" => "Carpet".to_owned(),
+                        "cursed_craft" => "Cursed Craft".to_owned(),
+                        _ => id.to_owned(),
+                    },
+                    |m| m.name.clone(),
+                )
+        };
+        let (name, other_name) = (display(&id), display(&other));
+        let reason = if id == "particle_core" && other == "sodium" {
+            " Sodium replaces the particle rendering code that Particle Core tries to change."
+        } else {
+            ""
+        };
+        return Some(Diagnosis::new(
+            format!("{name} clashes with {other_name}"),
+            format!(
+                "{name}'s mixin could not find its injection target. {name} and {other_name} both change the same game class, indicating a compatibility clash.{reason} Update or remove {name}, or check its compatibility with {other_name}."
+            ),
+            vec![id, other],
+        ));
+    }
     Some(Diagnosis::new(
         format!("{name} failed to change the game"),
         if preprocessing_class_failure(text) {
@@ -983,6 +1192,119 @@ mod tests {
         assert!(d.detail.contains("Update Superb Addon"));
         let d = refine(crate::crash::diagnose(text), text, &[]).unwrap();
         assert_eq!(d.mods, ["superbaddon"]);
+    }
+
+    #[test]
+    fn fabric_explicit_owner_cannot_be_overridden_by_config_metadata() {
+        let text = include_str!("../tests/fixtures/crash-310-particle-core.log");
+        let mut mods = vec![InstalledMod {
+            id: "necronomicon".into(),
+            name: "Necronomicon".into(),
+            mixins: vec!["particle_core.mixins.json".into()],
+            ..InstalledMod::default()
+        }];
+        // The explicit particle_core owner remains authoritative even if it is missing
+        // from the scanned inventory and another mod claims its config.
+        let d = refine(crate::crash::diagnose(text), text, &mods).unwrap();
+        assert_eq!(d.mods, ["particle_core", "sodium"]);
+        assert_eq!(d.title, "Particle Core clashes with Sodium");
+
+        mods.extend([
+            InstalledMod {
+                id: "particle_core".into(),
+                name: "Particle Core".into(),
+                mixins: vec!["particle_core.mixins.json".into()],
+                ..InstalledMod::default()
+            },
+            InstalledMod {
+                id: "sodium".into(),
+                name: "Sodium".into(),
+                mixins: vec!["sodium.mixins.json".into()],
+                ..InstalledMod::default()
+            },
+        ]);
+        let d = refine(crate::crash::diagnose(text), text, &mods).unwrap();
+        assert_eq!(d.title, "Particle Core clashes with Sodium");
+        assert_eq!(d.mods, ["particle_core", "sodium"]);
+        assert!(d.fix.is_none());
+    }
+
+    #[test]
+    fn report_315_keeps_carpet_owner_with_appleskin_first_in_the_inventory() {
+        let text = include_str!("../tests/fixtures/crash-315-carpet.log");
+        let mods: Vec<_> = [
+            ("appleskin", "AppleSkin"),
+            ("carpet", "Carpet"),
+            ("cursed_craft", "Cursed Craft"),
+            ("lithium", "Lithium"),
+        ]
+        .into_iter()
+        .map(|(id, name)| InstalledMod {
+            id: id.into(),
+            name: name.into(),
+            mixins: vec![format!("{id}.mixins.json")],
+            ..InstalledMod::default()
+        })
+        .collect();
+        let d = refine(crate::crash::diagnose(text), text, &mods).unwrap();
+        assert_eq!(d.title, "Carpet clashes with Cursed Craft");
+        assert_eq!(d.mods, ["carpet", "cursed_craft"]);
+        assert!(d.detail.contains("Update or remove Carpet"));
+        assert!(d.fix.is_none());
+
+        let dir = tempfile::tempdir().unwrap();
+        for m in &mods {
+            jar(
+                dir.path(),
+                &format!("{}.jar", m.id),
+                &serde_json::json!({
+                    "id": m.id,
+                    "name": m.name,
+                    "version": "1.0.0",
+                    "mixins": m.mixins,
+                })
+                .to_string(),
+            );
+        }
+        assert_eq!(diagnose_in(text, dir.path()).unwrap(), d);
+        assert_eq!(diagnose_exit_in(text, -1, dir.path()).unwrap(), d);
+    }
+
+    #[test]
+    fn report_310_exit_diagnosis_keeps_the_particle_core_sodium_clash() {
+        let dir = tempfile::tempdir().unwrap();
+        let text = include_str!("../tests/fixtures/crash-310-particle-core.log");
+        let d = diagnose_exit_in(text, -1, dir.path()).unwrap();
+        assert_eq!(d.title, "Particle Core clashes with Sodium");
+        assert_eq!(d.mods, ["particle_core", "sodium"]);
+        assert!(d.detail.contains("Update or remove Particle Core"));
+    }
+
+    #[test]
+    fn report_323_clash_uses_explicit_owners_and_installed_display_names() {
+        let text = include_str!("../tests/fixtures/crash-323-title-redirect.log");
+        let mods = vec![
+            InstalledMod {
+                id: "mod_id".into(),
+                name: "Space Background".into(),
+                // Even a declared conflict must not displace the actual redirect clash.
+                breaks: vec![("porting_lib_base".into(), vec!["*".into()])],
+                ..InstalledMod::default()
+            },
+            InstalledMod {
+                id: "porting_lib_base".into(),
+                mixins: vec!["swgc.mixins.json".into()],
+                ..InstalledMod::default()
+            },
+        ];
+        let d = refine(crate::crash::diagnose(text), text, &mods).unwrap();
+        assert_eq!(d.title, "Arctic Client conflict with Space Background");
+        assert_eq!(d.mods, ["mod_id", "arctic"]);
+        assert!(d.fix.is_none());
+        let dir = tempfile::tempdir().unwrap();
+        let d = diagnose_exit_in(text, -1, dir.path()).unwrap();
+        assert_eq!(d.title, "Arctic Client conflict with mod_id");
+        assert_eq!(d.mods, ["mod_id", "arctic"]);
     }
 
     #[test]
