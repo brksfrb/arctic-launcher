@@ -558,6 +558,9 @@ fn mixin_competitor(
     let target = Regex::new(r"Mixin transformation of ([\w.$]+) failed").ok()?;
     let before = &text[..text.rfind(failure.line)?];
     let target = target.captures_iter(before).last().map(|c| c[1].to_owned());
+    let conflict = Regex::new(
+        r"@(?:ModifyConstant|Redirect) conflict\. Skipping ([\w\-.]+\.mixins\.json):([\w.$]+) from mod ([\w-]+)->@\w+::([^ ]+) with priority \d+, already redirected by ([\w\-.]+\.mixins\.json):([\w.$]+) from mod ([\w-]+)->",
+    ).ok()?;
     for block in text.split("failure begin").skip(1) {
         let Some((block, _)) = block.split_once("failure end") else {
             continue;
@@ -591,6 +594,28 @@ fn mixin_competitor(
                         .is_some_and(|p| p.ends_with('.')))
         }) {
             continue;
+        }
+        // An explicit injector conflict identifies the competing mixin even when
+        // several unrelated mods also target this class. Tie both sides to this
+        // block and the failed injector instead of trusting an inventory name.
+        for c in conflict.captures_iter(before) {
+            let matches_entry = |config: &str, mixin: &str| {
+                entries.iter().any(|e| {
+                    &e[1] == config
+                        && (&e[2] == mixin
+                            || e[2].strip_suffix(mixin).is_some_and(|p| p.ends_with('.')))
+                })
+            };
+            if &c[1] == failure.config
+                && &c[2] == failed_mixin
+                && c[3].eq_ignore_ascii_case(id)
+                && failure.line.contains(&c[4])
+                && !c[7].eq_ignore_ascii_case(id)
+                && matches_entry(&c[1], &c[2])
+                && matches_entry(&c[5], &c[6])
+            {
+                return Some(c[7].to_lowercase());
+            }
         }
         let mut others = Vec::new();
         for c in entries {
@@ -636,6 +661,8 @@ pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagno
                     || match id {
                         "particle_core" => "Particle Core".to_owned(),
                         "sodium" => "Sodium".to_owned(),
+                        "carpet" => "Carpet".to_owned(),
+                        "cursed_craft" => "Cursed Craft".to_owned(),
                         _ => id.to_owned(),
                     },
                     |m| m.name.clone(),
@@ -1065,6 +1092,47 @@ mod tests {
         assert_eq!(d.title, "Particle Core clashes with Sodium");
         assert_eq!(d.mods, ["particle_core", "sodium"]);
         assert!(d.fix.is_none());
+    }
+
+    #[test]
+    fn report_315_keeps_carpet_owner_with_appleskin_first_in_the_inventory() {
+        let text = include_str!("../tests/fixtures/crash-315-carpet.log");
+        let mods: Vec<_> = [
+            ("appleskin", "AppleSkin"),
+            ("carpet", "Carpet"),
+            ("cursed_craft", "Cursed Craft"),
+            ("lithium", "Lithium"),
+        ]
+        .into_iter()
+        .map(|(id, name)| InstalledMod {
+            id: id.into(),
+            name: name.into(),
+            mixins: vec![format!("{id}.mixins.json")],
+            ..InstalledMod::default()
+        })
+        .collect();
+        let d = refine(crate::crash::diagnose(text), text, &mods).unwrap();
+        assert_eq!(d.title, "Carpet clashes with Cursed Craft");
+        assert_eq!(d.mods, ["carpet", "cursed_craft"]);
+        assert!(d.detail.contains("Update or remove Carpet"));
+        assert!(d.fix.is_none());
+
+        let dir = tempfile::tempdir().unwrap();
+        for m in &mods {
+            jar(
+                dir.path(),
+                &format!("{}.jar", m.id),
+                &serde_json::json!({
+                    "id": m.id,
+                    "name": m.name,
+                    "version": "1.0.0",
+                    "mixins": m.mixins,
+                })
+                .to_string(),
+            );
+        }
+        assert_eq!(diagnose_in(text, dir.path()).unwrap(), d);
+        assert_eq!(diagnose_exit_in(text, -1, dir.path()).unwrap(), d);
     }
 
     #[test]
