@@ -4,6 +4,9 @@ import java.io.File;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryUsage;
+import java.lang.management.MonitorInfo;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.text.SimpleDateFormat;
@@ -40,6 +43,7 @@ public final class FreezeWatchdog {
 
 	private static volatile boolean focused = true;
 	private static volatile boolean inWorld;
+	private static volatile String screenClass = "unknown";
 	private static volatile boolean started;
 	private static volatile java.util.function.Consumer<String> logger;
 	private static volatile boolean devDone;
@@ -64,9 +68,10 @@ public final class FreezeWatchdog {
 	}
 
 	/** Per tick on the client thread: what a freeze right now would be happening during. */
-	public static void state(boolean windowFocused, boolean world) {
+	public static void state(boolean windowFocused, boolean world, String screen) {
 		focused = windowFocused;
 		inWorld = world;
+		screenClass = screen;
 	}
 
 	/** One-line summaries go here (the game log). */
@@ -141,6 +146,7 @@ public final class FreezeWatchdog {
 			f.wallStart = System.currentTimeMillis() - (System.nanoTime() - beat) / 1_000_000L;
 			f.focused = focused;
 			f.inWorld = inWorld;
+			f.screenClass = screenClass;
 			f.gcBefore = gc();
 			f.heapBefore = heap();
 			f.activity = activity();
@@ -158,7 +164,13 @@ public final class FreezeWatchdog {
 					long before = System.nanoTime();
 					StackTraceElement[] stack = client.getStackTrace();
 					long took = System.nanoTime() - before;
-					f.add(stack, client.getState());
+					Thread.State state = client.getState();
+					f.add(stack, state);
+					if (all || state == Thread.State.BLOCKED || state == Thread.State.WAITING
+							|| state == Thread.State.TIMED_WAITING) {
+						String blocked = blockedOn(client.getId());
+						if (!blocked.isEmpty()) f.blocked = blocked;
+					}
 					if (took > f.maxSampleNanos) f.maxSampleNanos = took;
 					if (lastSample != 0 && before - lastSample > f.maxGapNanos) f.maxGapNanos = before - lastSample;
 					lastSample = before;
@@ -256,13 +268,131 @@ public final class FreezeWatchdog {
 		return sb.toString();
 	}
 
+	/** Best effort: unsupported management features must never prevent the freeze file. */
+	static String blockedOn(long clientId) {
+		try {
+			return blockedOn(ManagementFactory.getThreadMXBean(), clientId);
+		} catch (Throwable unavailable) {
+			return "  Lock diagnostics unavailable: " + unavailable.getClass().getSimpleName() + '\n'; // i18n-ignore: diagnostics
+		}
+	}
+
+	static String blockedOn(ThreadMXBean bean, long clientId) {
+		StringBuilder sb = new StringBuilder();
+		ThreadInfo owner = null;
+		try {
+			ThreadInfo client = threadInfo(bean, new long[] {clientId}, sb)[0];
+			if (client == null) {
+				sb.append("  Client thread exited before lock capture.\n"); // i18n-ignore: diagnostics
+			} else {
+				sb.append("  Client "); // i18n-ignore: diagnostics
+				threadLabel(sb, client);
+				if (client.getLockInfo() != null) {
+					sb.append("  Waiting on ").append(client.getLockInfo()).append('\n'); // i18n-ignore: diagnostics
+					if (client.getLockOwnerId() >= 0) {
+						try {
+							owner = threadInfo(bean, new long[] {client.getLockOwnerId()}, sb)[0];
+						} catch (Throwable ignored) { }
+						sb.append("  Owner \"").append(client.getLockOwnerName()).append("\" id=") // i18n-ignore: diagnostics
+								.append(client.getLockOwnerId());
+						sb.append(" state=").append(owner == null ? "unavailable (exited or access denied)" : owner.getThreadState()).append('\n'); // i18n-ignore: diagnostics
+					} else {
+						sb.append("  Owner unavailable (unowned wait/park or JVM did not report one).\n"); // i18n-ignore: diagnostics
+					}
+				} else {
+					sb.append("  No waited-on lock reported by JVM.\n"); // i18n-ignore: diagnostics
+				}
+			}
+		} catch (Throwable unavailable) {
+			sb.append("  Lock diagnostics unavailable: ").append(unavailable.getClass().getSimpleName()).append('\n'); // i18n-ignore: diagnostics
+		}
+		// Keep cycle edges ahead of potentially long stacks for bounded upload snapshots.
+		// Try this independently even when the client/owner information was denied or disappeared.
+		deadlocks(sb, bean);
+		if (owner != null) {
+			sb.append("  Owner stack (full, with locked monitors when supported):\n"); // i18n-ignore: diagnostics
+			try {
+				threadStack(sb, owner);
+			} catch (Throwable unavailable) {
+				sb.append("  Owner stack unavailable: ").append(unavailable.getClass().getSimpleName()).append('\n'); // i18n-ignore: diagnostics
+			}
+		}
+		return sb.toString();
+	}
+
+	private static ThreadInfo[] threadInfo(ThreadMXBean bean, long[] ids, StringBuilder sb) {
+		try {
+			// The array overload is available on Java 8, unlike newer depth-limited overloads.
+			boolean monitors = bean.isObjectMonitorUsageSupported();
+			boolean synchronizers = bean.isSynchronizerUsageSupported();
+			if (!monitors || !synchronizers) {
+				sb.append("  JVM lock detail support: monitors=").append(monitors).append(", synchronizers=").append(synchronizers).append('\n'); // i18n-ignore: diagnostics
+			}
+			return bean.getThreadInfo(ids, monitors, synchronizers);
+		} catch (Throwable unsupported) {
+			sb.append("  Locked monitor/synchronizer details unavailable; using basic thread info.\n"); // i18n-ignore: diagnostics
+			return bean.getThreadInfo(ids, Integer.MAX_VALUE);
+		}
+	}
+
+	private static void deadlocks(StringBuilder sb, ThreadMXBean bean) {
+		long[] ids;
+		boolean monitorsOnly = false;
+		try {
+			try {
+				ids = bean.findDeadlockedThreads();
+			} catch (Throwable unsupported) {
+				monitorsOnly = true;
+				ids = bean.findMonitorDeadlockedThreads();
+			}
+			sb.append(monitorsOnly ? "  Deadlocks (monitors only): " : "  Deadlocks: "); // i18n-ignore: diagnostics
+			if (ids == null || ids.length == 0) {
+				sb.append("none detected\n"); // i18n-ignore: diagnostics
+				return;
+			}
+			sb.append("cycle(s) detected\n"); // i18n-ignore: diagnostics
+			ThreadInfo[] threads = threadInfo(bean, ids, sb);
+			for (ThreadInfo t : threads) {
+				if (t == null) continue;
+				sb.append("    ");
+				threadLabel(sb, t);
+				sb.append("      waits on ").append(t.getLockInfo()).append(" -> owner \"") // i18n-ignore: diagnostics
+						.append(t.getLockOwnerName()).append("\" id=").append(t.getLockOwnerId()).append('\n');
+			}
+		} catch (Throwable unavailable) {
+			sb.append("  Deadlock detection unavailable: ").append(unavailable.getClass().getSimpleName()).append('\n'); // i18n-ignore: diagnostics
+		}
+	}
+
+	private static void threadLabel(StringBuilder sb, ThreadInfo t) {
+		sb.append('"').append(t.getThreadName()).append("\" id=").append(t.getThreadId())
+				.append(" state=").append(t.getThreadState()).append('\n');
+	}
+
+	private static void threadStack(StringBuilder sb, ThreadInfo t) {
+		StackTraceElement[] stack = t.getStackTrace();
+		MonitorInfo[] monitors = t.getLockedMonitors();
+		for (int i = 0; i < stack.length; i++) {
+			sb.append("    at ").append(stack[i]).append('\n');
+			for (MonitorInfo m : monitors) {
+				if (m.getLockedStackDepth() == i) sb.append("      - locked ").append(m).append('\n'); // i18n-ignore: diagnostics
+			}
+		}
+		for (MonitorInfo m : monitors) {
+			if (m.getLockedStackDepth() < 0) sb.append("      - locked (location unavailable) ").append(m).append('\n'); // i18n-ignore: diagnostics
+		}
+		for (java.lang.management.LockInfo lock : t.getLockedSynchronizers()) {
+			sb.append("      - locked synchronizer ").append(lock).append('\n'); // i18n-ignore: diagnostics
+		}
+	}
+
 	/** One freeze: its samples, deduplicated. */
 	static final class Freeze {
 		long beat, end, wallStart;
 		boolean focused, inWorld;
 		long[] gcBefore, gcAfter;
 		MemoryUsage heapBefore, heapAfter;
-		String activity = "", others = "", name = "";
+		String activity = "", others = "", name = "", blocked = "", screenClass = "unknown";
 		int samples;
 		long maxSampleNanos, maxGapNanos;
 		final Map<String, Integer> stacks = new LinkedHashMap<String, Integer>();
@@ -341,7 +471,8 @@ public final class FreezeWatchdog {
 			sb.append(String.format(l, "started: %s%n", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(new Date(wallStart))));
 			sb.append(String.format(l, "duration: %.2fs%s%n", seconds(now), complete ? "" : " (still frozen when written)")); // i18n-ignore
 			sb.append("context: window ").append(focused ? "focused" : "NOT focused/minimized").append(", ") // i18n-ignore
-					.append(inWorld ? "in a world" : "no world (menu/loading screen)").append('\n'); // i18n-ignore
+					.append(inWorld ? "in a world" : "no world (menu/loading screen)") // i18n-ignore: diagnostics
+					.append(", screen: ").append(screenClass).append('\n'); // i18n-ignore
 			sb.append("samples: ").append(samples).append(" client-thread stacks, one per ~500 ms; thread state at last sample ").append(lastState).append('\n'); // i18n-ignore
 			sb.append(String.format(l, "sampler: slowest getStackTrace %.0f ms, largest gap between samples %.0f ms%s%n", maxSampleNanos / 1e6, maxGapNanos / 1e6, // i18n-ignore
 					maxSampleNanos > 400_000_000L || maxGapNanos > 900_000_000L ? "  <- the whole JVM stalled (GC / safepoint / OS)" : "")); // i18n-ignore
@@ -353,6 +484,7 @@ public final class FreezeWatchdog {
 				if (heapAfter != null) sb.append(String.format(l, ", %d MB at end", heapAfter.getUsed() >> 20)); // i18n-ignore
 				sb.append('\n');
 			}
+			sb.append("\n== Blocked on ==\n").append(blocked); // i18n-ignore: diagnostics
 			sb.append("\n== Where the time went (frames present in the most samples) ==\n");
 			List<Map.Entry<String, Integer>> top = sorted(frames);
 			// Same share of samples: the frame closest to the top of the stack (where the time is spent) first.
