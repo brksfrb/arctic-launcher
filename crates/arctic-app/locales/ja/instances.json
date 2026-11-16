@@ -354,5 +354,14 @@
   "instances.favorite_world": "お気に入りに追加",
   "instances.unfavorite_world": "お気に入りから削除",
   "instances.favorite_world_cannot_delete": "お気に入りのワールドは削除できません。先にお気に入りから削除してください。",
-  "instances.could_not_save_favorite": "お気に入りを保存できませんでした"
+  "instances.could_not_save_favorite": "お気に入りを保存できませんでした",
+  "instances.view_mods": "Modを表示",
+  "instances.mods_in_pack": "{name} のMod",
+  "instances.reading_the_modpack": "Modパックを読み込み中…",
+  "instances.could_not_read_the_modpack": "Modパックを読み込めませんでした: {e}",
+  "instances.try_again": "再試行",
+  "instances.pack_counts": "Mod {mods} 個 · 設定ファイル {configs} 個 · リソースパック {resource_packs} 個 · シェーダーパック {shader_packs} 個",
+  "instances.this_modpack_lists_no_mods": "このModパックにはModが含まれていません。",
+  "instances.client_only": "クライアント専用",
+  "instances.server_only": "サーバー専用"
 }

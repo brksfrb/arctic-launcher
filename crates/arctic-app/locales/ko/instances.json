@@ -354,5 +354,14 @@
   "instances.favorite_world": "즐겨찾기에 추가",
   "instances.unfavorite_world": "즐겨찾기에서 제거",
   "instances.favorite_world_cannot_delete": "즐겨찾기한 월드는 삭제할 수 없습니다. 먼저 즐겨찾기에서 제거하세요.",
-  "instances.could_not_save_favorite": "즐겨찾기를 저장할 수 없습니다"
+  "instances.could_not_save_favorite": "즐겨찾기를 저장할 수 없습니다",
+  "instances.view_mods": "모드 보기",
+  "instances.mods_in_pack": "{name}의 모드",
+  "instances.reading_the_modpack": "모드팩을 읽는 중…",
+  "instances.could_not_read_the_modpack": "모드팩을 읽을 수 없습니다: {e}",
+  "instances.try_again": "다시 시도",
+  "instances.pack_counts": "모드 {mods}개 · 설정 파일 {configs}개 · 리소스 팩 {resource_packs}개 · 셰이더 팩 {shader_packs}개",
+  "instances.this_modpack_lists_no_mods": "이 모드팩에는 모드가 없습니다.",
+  "instances.client_only": "클라이언트 전용",
+  "instances.server_only": "서버 전용"
 }

@@ -354,5 +354,14 @@
   "instances.favorite_world": "Add to favorites",
   "instances.unfavorite_world": "Remove from favorites",
   "instances.favorite_world_cannot_delete": "Favorite worlds can't be deleted. Remove it from favorites first.",
-  "instances.could_not_save_favorite": "Could not save the favorite"
+  "instances.could_not_save_favorite": "Could not save the favorite",
+  "instances.view_mods": "View mods",
+  "instances.mods_in_pack": "Mods in {name}",
+  "instances.reading_the_modpack": "Reading the modpack…",
+  "instances.could_not_read_the_modpack": "Could not read the modpack: {e}",
+  "instances.try_again": "Try again",
+  "instances.pack_counts": "{mods} mods · {configs} config files · {resource_packs} resource packs · {shader_packs} shader packs",
+  "instances.this_modpack_lists_no_mods": "This modpack lists no mods.",
+  "instances.client_only": "client only",
+  "instances.server_only": "server only"
 }

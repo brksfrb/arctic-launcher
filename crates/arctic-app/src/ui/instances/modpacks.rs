@@ -72,6 +72,7 @@ impl ArcticApp {
         ui.add_space(8.0);
         self.pack_install_progress(ui);
         self.pack_results(ui);
+        self.pack_preview_dialog(ui.ctx());
     }
 
     fn pack_search_bar(&mut self, ui: &mut egui::Ui) {
@@ -231,6 +232,9 @@ impl ArcticApp {
                         self.tasks.install_modpack(hit.project_id.clone(), None);
                     }
                 }
+                if widgets::button(ui, p, None, t!("instances.view_mods"), false).clicked() {
+                    self.open_pack_preview(&hit.project_id, &hit.title, None);
+                }
                 let open = self.inst.pack_choosing.as_deref() == Some(hit.project_id.as_str());
                 let label = if open {
                     t!("instances.hide_versions")
@@ -253,12 +257,12 @@ impl ArcticApp {
             });
         });
         if self.inst.pack_choosing.as_deref() == Some(hit.project_id.as_str()) {
-            self.pack_version_list(ui, &hit.project_id);
+            self.pack_version_list(ui, &hit.project_id, &hit.title);
         }
     }
 
     /// The versions of one modpack, each with its Minecraft version and loader and an Install button.
-    fn pack_version_list(&mut self, ui: &mut egui::Ui, project_id: &str) {
+    fn pack_version_list(&mut self, ui: &mut egui::Ui, project_id: &str, title: &str) {
         let p = self.palette();
         let versions = match self.inst.pack_versions.get(project_id) {
             None | Some(Load::Loading) => {
@@ -283,6 +287,7 @@ impl ArcticApp {
         }
         let busy = self.inst.pack_installing.is_some();
         let mut chosen = None;
+        let mut viewed = None;
         egui::ScrollArea::vertical()
             .id_salt("pack_versions")
             .max_height(240.0)
@@ -315,10 +320,18 @@ impl ArcticApp {
                             if install.clicked() {
                                 chosen = Some(v.id.clone());
                             }
+                            if widgets::button(ui, p, None, t!("instances.view_mods"), false)
+                                .clicked()
+                            {
+                                viewed = Some(v.id.clone());
+                            }
                         });
                     });
                 }
             });
+        if let Some(version_id) = viewed {
+            self.open_pack_preview(project_id, title, Some(version_id));
+        }
         if let Some(version_id) = chosen {
             self.inst.pack_installing = Some(project_id.to_owned());
             self.inst.install_progress = None;

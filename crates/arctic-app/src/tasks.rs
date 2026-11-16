@@ -98,6 +98,11 @@ pub enum Event {
     LoaderGames(LoaderKind, Outcome<Vec<String>>),
     /// The versions of a modpack project (project id, result).
     PackVersions(String, Outcome<Vec<mods::modpack::PackVersion>>),
+    /// What a modpack version contains (version id, result).
+    PackPreview(
+        String,
+        Outcome<std::sync::Arc<mods::pack_preview::PackPreview>>,
+    ),
     /// Loader versions for (loader, Minecraft version).
     LoaderVersions(LoaderKind, String, Outcome<Vec<LoaderVersion>>),
     /// Mod search results for request id.
@@ -524,6 +529,16 @@ impl Tasks {
         self.run(move |t| {
             let result = mods::modpack::pack_versions(&project_id).map_err(|e| e.to_string());
             t.send(Event::PackVersions(project_id, result));
+        });
+    }
+
+    /// Read what a modpack version contains, without installing it.
+    pub fn pack_preview(&self, version_id: String) {
+        self.run(move |t| {
+            let result = mods::pack_preview::preview(&t.dirs, &version_id)
+                .map(std::sync::Arc::new)
+                .map_err(|e| e.to_string());
+            t.send(Event::PackPreview(version_id, result));
         });
     }
 

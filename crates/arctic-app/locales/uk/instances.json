@@ -358,5 +358,14 @@
   "instances.favorite_world": "Додати до обраного",
   "instances.unfavorite_world": "Прибрати з обраного",
   "instances.favorite_world_cannot_delete": "Обрані світи не можна видалити. Спершу приберіть світ з обраного.",
-  "instances.could_not_save_favorite": "Не вдалося зберегти обране"
+  "instances.could_not_save_favorite": "Не вдалося зберегти обране",
+  "instances.view_mods": "Переглянути моди",
+  "instances.mods_in_pack": "Моди в {name}",
+  "instances.reading_the_modpack": "Читання збірки…",
+  "instances.could_not_read_the_modpack": "Не вдалося прочитати збірку: {e}",
+  "instances.try_again": "Повторити",
+  "instances.pack_counts": "Модів: {mods} · файлів налаштувань: {configs} · наборів ресурсів: {resource_packs} · наборів шейдерів: {shader_packs}",
+  "instances.this_modpack_lists_no_mods": "У цій збірці немає модів.",
+  "instances.client_only": "лише клієнт",
+  "instances.server_only": "лише сервер"
 }

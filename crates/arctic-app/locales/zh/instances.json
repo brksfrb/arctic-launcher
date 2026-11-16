@@ -354,5 +354,14 @@
   "instances.favorite_world": "添加到收藏",
   "instances.unfavorite_world": "从收藏中移除",
   "instances.favorite_world_cannot_delete": "收藏的世界无法删除。请先取消收藏。",
-  "instances.could_not_save_favorite": "无法保存收藏"
+  "instances.could_not_save_favorite": "无法保存收藏",
+  "instances.view_mods": "查看模组",
+  "instances.mods_in_pack": "{name} 中的模组",
+  "instances.reading_the_modpack": "正在读取整合包…",
+  "instances.could_not_read_the_modpack": "无法读取整合包：{e}",
+  "instances.try_again": "重试",
+  "instances.pack_counts": "{mods} 个模组 · {configs} 个配置文件 · {resource_packs} 个资源包 · {shader_packs} 个光影包",
+  "instances.this_modpack_lists_no_mods": "此整合包没有列出任何模组。",
+  "instances.client_only": "仅客户端",
+  "instances.server_only": "仅服务端"
 }

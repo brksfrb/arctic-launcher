@@ -139,6 +139,11 @@ pub(super) struct Project {
     pub title: String,
     #[serde(default)]
     pub icon_url: Option<String>,
+    /// "required", "optional", "unsupported" or "unknown".
+    #[serde(default)]
+    pub client_side: String,
+    #[serde(default)]
+    pub server_side: String,
 }
 
 impl Version {

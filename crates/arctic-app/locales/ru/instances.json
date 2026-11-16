@@ -358,5 +358,14 @@
   "instances.favorite_world": "Добавить в избранное",
   "instances.unfavorite_world": "Убрать из избранного",
   "instances.favorite_world_cannot_delete": "Избранные миры нельзя удалить. Сначала уберите мир из избранного.",
-  "instances.could_not_save_favorite": "Не удалось сохранить избранное"
+  "instances.could_not_save_favorite": "Не удалось сохранить избранное",
+  "instances.view_mods": "Показать моды",
+  "instances.mods_in_pack": "Моды в {name}",
+  "instances.reading_the_modpack": "Чтение сборки…",
+  "instances.could_not_read_the_modpack": "Не удалось прочитать сборку: {e}",
+  "instances.try_again": "Повторить",
+  "instances.pack_counts": "Модов: {mods} · файлов настроек: {configs} · наборов ресурсов: {resource_packs} · наборов шейдеров: {shader_packs}",
+  "instances.this_modpack_lists_no_mods": "В этой сборке нет модов.",
+  "instances.client_only": "только клиент",
+  "instances.server_only": "только сервер"
 }

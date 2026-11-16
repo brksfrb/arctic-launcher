@@ -286,7 +286,7 @@ pub fn download_jobs(index: &PackIndex, game_dir: &Path) -> Result<Vec<DownloadJ
 }
 
 /// Only https downloads from the hosts the pack format allows.
-fn check_url(url: &str) -> Result<()> {
+pub(super) fn check_url(url: &str) -> Result<()> {
     let host = url
         .strip_prefix("https://")
         .and_then(|rest| rest.split(['/', '?', '#']).next())
@@ -341,7 +341,7 @@ fn extract_overrides(
     Ok(())
 }
 
-fn sanitize(name: &str) -> String {
+pub(super) fn sanitize(name: &str) -> String {
     name.chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || ".-_".contains(c) {

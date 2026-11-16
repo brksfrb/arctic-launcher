@@ -14,6 +14,7 @@ pub mod modpack;
 mod modrinth;
 mod oneconfig;
 pub mod pack_groups;
+pub mod pack_preview;
 pub mod packs;
 pub mod performance;
 pub mod polarium;

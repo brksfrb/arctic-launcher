@@ -354,5 +354,14 @@
   "instances.favorite_world": "Toevoegen aan favorieten",
   "instances.unfavorite_world": "Verwijderen uit favorieten",
   "instances.favorite_world_cannot_delete": "Favoriete werelden kunnen niet worden verwijderd. Verwijder hem eerst uit de favorieten.",
-  "instances.could_not_save_favorite": "Favoriet kon niet worden opgeslagen"
+  "instances.could_not_save_favorite": "Favoriet kon niet worden opgeslagen",
+  "instances.view_mods": "Mods bekijken",
+  "instances.mods_in_pack": "Mods in {name}",
+  "instances.reading_the_modpack": "Modpack wordt gelezen…",
+  "instances.could_not_read_the_modpack": "Modpack kon niet worden gelezen: {e}",
+  "instances.try_again": "Opnieuw proberen",
+  "instances.pack_counts": "{mods} mods · {configs} configuratiebestanden · {resource_packs} resourcepacks · {shader_packs} shaderpacks",
+  "instances.this_modpack_lists_no_mods": "Dit modpack bevat geen mods.",
+  "instances.client_only": "alleen client",
+  "instances.server_only": "alleen server"
 }

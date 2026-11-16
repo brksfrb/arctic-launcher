@@ -358,5 +358,14 @@
   "instances.favorite_world": "Dodaj do ulubionych",
   "instances.unfavorite_world": "Usuń z ulubionych",
   "instances.favorite_world_cannot_delete": "Ulubionych światów nie można usunąć. Najpierw usuń go z ulubionych.",
-  "instances.could_not_save_favorite": "Nie udało się zapisać ulubionego"
+  "instances.could_not_save_favorite": "Nie udało się zapisać ulubionego",
+  "instances.view_mods": "Pokaż mody",
+  "instances.mods_in_pack": "Mody w {name}",
+  "instances.reading_the_modpack": "Wczytywanie paczki modów…",
+  "instances.could_not_read_the_modpack": "Nie udało się wczytać paczki modów: {e}",
+  "instances.try_again": "Spróbuj ponownie",
+  "instances.pack_counts": "Mody: {mods} · pliki konfiguracji: {configs} · paczki zasobów: {resource_packs} · paczki shaderów: {shader_packs}",
+  "instances.this_modpack_lists_no_mods": "Ta paczka modów nie zawiera żadnych modów.",
+  "instances.client_only": "tylko klient",
+  "instances.server_only": "tylko serwer"
 }

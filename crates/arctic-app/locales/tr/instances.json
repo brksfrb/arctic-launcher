@@ -354,5 +354,14 @@
   "instances.favorite_world": "Favorilere ekle",
   "instances.unfavorite_world": "Favorilerden çıkar",
   "instances.favorite_world_cannot_delete": "Favori dünyalar silinemez. Önce favorilerden çıkarın.",
-  "instances.could_not_save_favorite": "Favori kaydedilemedi"
+  "instances.could_not_save_favorite": "Favori kaydedilemedi",
+  "instances.view_mods": "Modları gör",
+  "instances.mods_in_pack": "{name} içindeki modlar",
+  "instances.reading_the_modpack": "Mod paketi okunuyor…",
+  "instances.could_not_read_the_modpack": "Mod paketi okunamadı: {e}",
+  "instances.try_again": "Tekrar dene",
+  "instances.pack_counts": "{mods} mod · {configs} yapılandırma dosyası · {resource_packs} kaynak paketi · {shader_packs} gölgelendirici paketi",
+  "instances.this_modpack_lists_no_mods": "Bu mod paketinde mod listelenmemiş.",
+  "instances.client_only": "yalnızca istemci",
+  "instances.server_only": "yalnızca sunucu"
 }

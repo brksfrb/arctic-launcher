@@ -1191,6 +1191,7 @@ impl ArcticApp {
             }
             e @ (Event::LoaderGames(..)
             | Event::PackVersions(..)
+            | Event::PackPreview(..)
             | Event::LoaderVersions(..)
             | Event::ModSearch(..)
             | Event::ModsScanned(..)

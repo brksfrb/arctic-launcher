@@ -9,6 +9,7 @@ mod icon_picker;
 mod loader_switch;
 mod modpacks;
 mod mods_page;
+mod pack_preview;
 mod packs;
 mod preview;
 mod replays;
@@ -158,6 +159,11 @@ pub struct InstancesUi {
     pub pack_choosing: Option<String>,
     /// Versions of the modpacks looked at, by project id.
     pub pack_versions: HashMap<String, Load<Vec<arctic_core::mods::modpack::PackVersion>>>,
+    /// The "View mods" dialog of a modpack.
+    pub pack_preview: Option<pack_preview::PreviewUi>,
+    /// What modpack versions contain, by version id (kept for the session).
+    pub pack_previews:
+        HashMap<String, Load<std::sync::Arc<arctic_core::mods::pack_preview::PackPreview>>>,
     /// Resource packs and shaders page.
     pub packs: packs::PacksUi,
     /// Moving the open instance to another Minecraft version.
@@ -170,6 +176,9 @@ impl InstancesUi {
     /// Dismiss the innermost open view before leaving the Instances tab.
     pub(crate) fn go_back(&mut self) -> bool {
         if self.preview.take().is_some() {
+            return true;
+        }
+        if self.pack_preview.take().is_some() {
             return true;
         }
         if self.modpacks_open {
@@ -501,6 +510,13 @@ impl ArcticApp {
                     Err(e) => Load::Failed(e),
                 };
                 self.inst.pack_versions.insert(project, state);
+            }
+            Event::PackPreview(version, result) => {
+                let state = match result {
+                    Ok(preview) => Load::Ready(preview),
+                    Err(e) => Load::Failed(e),
+                };
+                self.inst.pack_previews.insert(version, state);
             }
             Event::LoaderVersions(kind, game, result) => {
                 let state = match result {
