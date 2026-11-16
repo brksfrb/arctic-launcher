@@ -129,6 +129,7 @@ pub fn load_version(
             sha1: Some(entry.sha1.clone()),
             size: None,
             lzma: None,
+            md5: None,
         };
         download_all("Version metadata", vec![job], progress)?;
     }

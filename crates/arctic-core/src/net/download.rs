@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+use md5::Md5;
 use sha1::{Digest, Sha1};
 
 use crate::error::IoContext;
@@ -75,13 +76,13 @@ pub(crate) fn connect_timeout(url: &str) -> Option<Duration> {
 }
 
 /// How often and how long to wait between attempts at one URL.
-struct Policy {
-    attempts: u32,
-    delays: Vec<Duration>,
+pub(crate) struct Policy {
+    pub(crate) attempts: u32,
+    pub(crate) delays: Vec<Duration>,
 }
 
 impl Policy {
-    fn for_url(url: &str) -> Self {
+    pub(crate) fn for_url(url: &str) -> Self {
         if is_loader_host(url) {
             Self {
                 attempts: 3,
@@ -101,19 +102,15 @@ pub(crate) fn is_not_found(e: &Error) -> bool {
     matches!(e, Error::Http(m) if m.contains("404"))
 }
 
-/// The mirror URL for a Forge maven file, if `job` may be fetched from there: the bytes must be
-/// verifiable by a known hash, except for the installer jar itself (logged when accepted).
-fn mirror_for(job: &DownloadJob) -> Option<String> {
-    let path = job.url.strip_prefix(FORGE_MAVEN)?;
-    if job.sha1.is_none() && !path.ends_with("-installer.jar") {
+/// The mirror URL for a Forge maven file, if `job` may be fetched from there. Nothing from the
+/// mirror is accepted unless its bytes are checked against a hash that did not come from the
+/// mirror, so a job without one never goes there (the installer jar included).
+pub(crate) fn mirror_for(job: &DownloadJob) -> Option<String> {
+    if job.sha1.is_none() && job.md5.is_none() {
         return None;
     }
+    let path = job.url.strip_prefix(FORGE_MAVEN)?;
     Some(format!("{FORGE_MIRROR}{path}"))
-}
-/// Whether a 404 from the Forge maven may fall back to the mirror: only for hash-verified
-/// files, never for the installer jar.
-fn mirror_on_404(job: &DownloadJob) -> bool {
-    job.sha1.is_some() && !job.url.ends_with("-installer.jar")
 }
 
 /// Body timeout = base + size / slowest acceptable speed. The speed is per file, and up to
@@ -150,6 +147,9 @@ pub struct DownloadJob {
     pub url: String,
     pub dest: PathBuf,
     pub sha1: Option<String>,
+    /// MD5 of the final file, for the one source that publishes only that (Forge's meta.json).
+    /// Unlike `sha1` it is not checked for segmented or compressed jobs.
+    pub md5: Option<String>,
     pub size: Option<u64>,
     /// Fetch this LZMA stream instead of `url` and decompress on the fly.
     pub lzma: Option<Compressed>,
@@ -328,26 +328,77 @@ fn download_with_retry(job: &DownloadJob, reporter: &Reporter) -> Result<()> {
     download_with_mirror(job, reporter, mirror_for(job), &Policy::for_url(&job.url))
 }
 
+/// Download one file, falling back to `mirror` (only ever used for hash-verified jobs).
+pub(crate) fn download_single(
+    job: &DownloadJob,
+    mirror: Option<String>,
+    policy: &Policy,
+    progress: Progress,
+) -> Result<()> {
+    let reporter = Reporter {
+        stage: "Downloading installer",
+        progress,
+        start: Instant::now(),
+        last_ms: AtomicU64::new(0),
+        files_done: AtomicU64::new(0),
+        files_total: 1,
+        bytes_done: AtomicU64::new(0),
+        bytes_total: job.transfer_size().unwrap_or(0),
+    };
+    reporter.report(true);
+    download_with_mirror(job, &reporter, mirror, policy)?;
+    reporter.file_done();
+    Ok(())
+}
+
+/// GET a small text file (a checksum, a metadata document) with the same retries and backoff as
+/// a download from that host. A 404 is final and comes back as `Ok(None)`.
+pub(crate) fn fetch_text(url: &str, limit: u64, policy: &Policy) -> Result<Option<String>> {
+    let mut attempt = 1;
+    loop {
+        let result = super::agent()
+            .get(url)
+            .config()
+            .timeout_connect(connect_timeout(url))
+            .timeout_global(Some(Duration::from_secs(60)))
+            .build()
+            .call()
+            .map_err(Error::from)
+            .and_then(|mut resp| {
+                resp.body_mut()
+                    .with_config()
+                    .limit(limit)
+                    .read_to_string()
+                    .map_err(Error::from)
+            });
+        match result {
+            Ok(text) => return Ok(Some(text)),
+            Err(e) if is_not_found(&e) => return Ok(None),
+            Err(e) if attempt < policy.attempts => {
+                log::warn!("retrying {url} (attempt {attempt}): {e}");
+                let delay = policy.delays.get(attempt as usize - 1);
+                std::thread::sleep(delay.or(policy.delays.last()).copied().unwrap_or_default());
+                attempt += 1;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
 fn download_with_mirror(
     job: &DownloadJob,
     reporter: &Reporter,
     mirror: Option<String>,
     policy: &Policy,
 ) -> Result<()> {
-    let err = match retry_job(job, reporter, policy) {
-        // A 404 only goes to the mirror when the mirror's bytes can be checked against a known
-        // hash (the installer jar keeps the stricter rule: no mirror on 404).
-        Err(e) if !is_not_found(&e) || mirror_on_404(job) => e,
-        done => return done,
+    let Err(err) = retry_job(job, reporter, policy) else {
+        return Ok(());
     };
-    let Some(url) = mirror else { return Err(err) };
+    // Defence in depth: `mirror_for` already refuses unhashed jobs.
+    let Some(url) = mirror.filter(|_| job.sha1.is_some() || job.md5.is_some()) else {
+        return Err(err);
+    };
     log::warn!("{} failed ({err}); trying mirror {url}", job.url);
-    if job.sha1.is_none() {
-        log::warn!(
-            "no checksum for {}: accepting the mirror's copy unverified",
-            job.url
-        );
-    }
     let from_mirror = DownloadJob { url, ..job.clone() };
     retry_job(&from_mirror, reporter, policy).map_err(|mirror_err| {
         log::warn!("mirror failed too: {mirror_err}");
@@ -416,7 +467,8 @@ fn download_one(job: &DownloadJob, reporter: &Reporter, transferred: &Cell<u64>)
         reporter.add_bytes(n);
     };
     let mut input = Hashing::new(resp.body_mut().as_reader(), &on_bytes);
-    let mut output = Hashing::new(fs::File::create(&tmp).at(&tmp)?, &|_| {});
+    let mut output =
+        Hashing::new(fs::File::create(&tmp).at(&tmp)?, &|_| {}).with_md5(job.md5.is_some());
     let copied = match &job.lzma {
         Some(_) => {
             let mut buffered = BufReader::with_capacity(BUF_SIZE, &mut input);
@@ -440,7 +492,7 @@ fn download_one(job: &DownloadJob, reporter: &Reporter, transferred: &Cell<u64>)
 /// [`CHUNK_SIZE`], fetched by [`CONNECTIONS`] connections taking turns.
 fn segments(job: &DownloadJob) -> Option<Vec<(u64, u64)>> {
     let size = job.size.filter(|s| *s >= SEGMENT_MIN_SIZE)?;
-    if job.lzma.is_some() {
+    if job.lzma.is_some() || job.md5.is_some() {
         return None;
     }
     Some(
@@ -732,7 +784,12 @@ fn verify<R, W>(job: &DownloadJob, input: &Hashing<R>, output: &Hashing<W>) -> R
         && job
             .sha1
             .as_deref()
-            .is_none_or(|want| want.eq_ignore_ascii_case(&output.hex_digest()));
+            .is_none_or(|want| want.eq_ignore_ascii_case(&output.hex_digest()))
+        && job.md5.as_deref().is_none_or(|want| {
+            output
+                .md5_digest()
+                .is_some_and(|got| want.eq_ignore_ascii_case(&got))
+        });
     if compressed_ok && raw_ok {
         Ok(())
     } else {
@@ -755,6 +812,7 @@ fn copy(input: &mut impl Read, output: &mut impl Write) -> std::io::Result<()> {
 struct Hashing<'a, T> {
     inner: T,
     hasher: Sha1,
+    md5: Option<Md5>,
     count: u64,
     on_bytes: &'a dyn Fn(u64),
 }
@@ -764,6 +822,7 @@ impl<'a, T> Hashing<'a, T> {
         Self {
             inner,
             hasher: Sha1::new(),
+            md5: None,
             count: 0,
             on_bytes,
         }
@@ -773,8 +832,21 @@ impl<'a, T> Hashing<'a, T> {
         hex::encode(self.hasher.clone().finalize())
     }
 
+    /// Also compute the MD5 (for jobs that carry one).
+    fn with_md5(mut self, on: bool) -> Self {
+        self.md5 = on.then(Md5::new);
+        self
+    }
+
+    fn md5_digest(&self) -> Option<String> {
+        self.md5.as_ref().map(|m| hex::encode(m.clone().finalize()))
+    }
+
     fn record(&mut self, bytes: &[u8]) {
         self.hasher.update(bytes);
+        if let Some(m) = &mut self.md5 {
+            m.update(bytes);
+        }
         self.count += bytes.len() as u64;
         (self.on_bytes)(bytes.len() as u64);
     }
@@ -834,6 +906,7 @@ mod tests {
             sha1: None,
             size,
             lzma: None,
+            md5: None,
         }
     }
 
@@ -1012,6 +1085,7 @@ mod tests {
                 sha1: Some(sha1),
                 size: Some(size as u64),
                 lzma: None,
+                md5: None,
             }],
             &|_| {},
         )
@@ -1158,31 +1232,48 @@ mod tests {
     }
 
     #[test]
-    fn not_found_installer_is_never_mirrored() {
+    fn not_found_installer_is_mirrored_only_with_a_hash() {
         let (base, _) = serve(vec![404], b"");
         let (mirror, mirror_hits) = serve(vec![200], b"jar");
         let sha = sha1_bytes(b"jar");
-        let (res, _) = fetch(
-            &format!("{base}/forge-1-installer.jar"),
-            Some(format!("{mirror}/forge-1-installer.jar")),
-            Some(&sha),
-        );
+        let url = format!("{base}/forge-1-installer.jar");
+        let mirror_url = format!("{mirror}/forge-1-installer.jar");
+        let (res, _) = fetch(&url, Some(mirror_url.clone()), None);
         assert!(is_not_found(&res.unwrap_err()));
         assert_eq!(mirror_hits.load(Ordering::SeqCst), 0);
+        let (res, dest) = fetch(&url, Some(mirror_url), Some(&sha));
+        res.unwrap();
+        assert_eq!(fs::read(dest).unwrap(), b"jar");
+        assert_eq!(mirror_hits.load(Ordering::SeqCst), 1);
     }
 
     #[test]
     fn mirror_used_after_primary_keeps_failing() {
         let (base, hits) = serve(vec![500], b"");
         let (mirror, _) = serve(vec![200], b"jar");
+        let sha = sha1_bytes(b"jar");
+        let (res, dest) = fetch(
+            &format!("{base}/a.jar"),
+            Some(format!("{mirror}/a.jar")),
+            Some(&sha),
+        );
+        res.unwrap();
+        assert_eq!(hits.load(Ordering::SeqCst), 3);
+        assert_eq!(fs::read(dest).unwrap(), b"jar");
+    }
+
+    #[test]
+    fn mirror_never_used_without_a_hash() {
+        let (base, _) = serve(vec![500], b"");
+        let (mirror, mirror_hits) = serve(vec![200], b"jar");
         let (res, dest) = fetch(
             &format!("{base}/a.jar"),
             Some(format!("{mirror}/a.jar")),
             None,
         );
-        res.unwrap();
-        assert_eq!(hits.load(Ordering::SeqCst), 3);
-        assert_eq!(fs::read(dest).unwrap(), b"jar");
+        assert!(res.is_err());
+        assert_eq!(mirror_hits.load(Ordering::SeqCst), 0);
+        assert!(!dest.exists());
     }
 
     #[test]
@@ -1201,7 +1292,7 @@ mod tests {
     }
 
     #[test]
-    fn mirror_only_for_verifiable_or_installer_files() {
+    fn mirror_only_for_verifiable_files() {
         let job = |url: &str, sha1: Option<&str>| DownloadJob {
             url: url.into(),
             sha1: sha1.map(String::from),
@@ -1216,7 +1307,8 @@ mod tests {
                 .unwrap()
                 .starts_with(FORGE_MIRROR)
         );
-        assert!(mirror_for(&job(installer, None)).is_some());
+        assert_eq!(mirror_for(&job(installer, None)), None);
+        assert!(mirror_for(&job(installer, Some("ab"))).is_some());
         assert_eq!(
             mirror_for(&job("https://libraries.minecraft.net/a.jar", Some("ab"))),
             None

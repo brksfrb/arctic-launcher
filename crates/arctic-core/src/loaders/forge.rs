@@ -209,6 +209,7 @@ fn library_jobs(dirs: &DataDirs, libs: &[Library]) -> Vec<DownloadJob> {
                 sha1: a.sha1.clone(),
                 size: a.size,
                 lzma: None,
+                md5: None,
             })
         })
         .collect()

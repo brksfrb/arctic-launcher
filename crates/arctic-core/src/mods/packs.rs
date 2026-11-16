@@ -138,6 +138,7 @@ pub fn install(
             sha1: file.hashes.sha1.clone(),
             size: file.size,
             lzma: None,
+            md5: None,
         }],
         progress,
     )?;

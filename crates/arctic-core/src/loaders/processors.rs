@@ -258,6 +258,7 @@ fn mappings_job(vanilla: &Value, side: &str, dest: &Path) -> Option<DownloadJob>
         size: m.get("size").and_then(Value::as_u64),
         dest: dest.to_path_buf(),
         lzma: None,
+        md5: None,
     })
 }
 

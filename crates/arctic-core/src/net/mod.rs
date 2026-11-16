@@ -4,7 +4,9 @@ mod download;
 mod resolver;
 
 pub use download::{Compressed, DownloadJob, download_all, set_gentle, sha1_file};
-pub(crate) use download::{body_timeout, connect_timeout, is_not_found};
+pub(crate) use download::{
+    Policy, body_timeout, download_single, fetch_text, is_not_found, mirror_for,
+};
 
 use std::sync::{PoisonError, RwLock};
 use std::time::Duration;
