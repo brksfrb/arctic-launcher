@@ -95,6 +95,7 @@ impl ArcticApp {
             offset,
             limit: PAGE_SIZE,
             project_type: arctic_core::mods::ProjectType::Mod,
+            ..SearchQuery::default()
         };
         self.tasks.mod_search(search.request, query);
     }

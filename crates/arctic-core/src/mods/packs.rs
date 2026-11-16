@@ -24,10 +24,7 @@ pub enum PackKind {
 
 impl PackKind {
     pub fn folder(self) -> &'static str {
-        match self {
-            PackKind::Resource => "resourcepacks",
-            PackKind::Shader => "shaderpacks",
-        }
+        self.project_type().folder().unwrap_or("resourcepacks")
     }
 
     pub fn label(self) -> &'static str {
@@ -46,7 +43,7 @@ impl PackKind {
     }
 
     /// Modrinth's "loaders" for this kind of file.
-    fn loaders(self) -> &'static [&'static str] {
+    pub(super) fn loaders(self) -> &'static [&'static str] {
         match self {
             PackKind::Resource => &["minecraft"],
             // Iris reads OptiFine-format shader packs too.

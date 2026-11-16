@@ -28,6 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         offset: 0,
         limit: 5,
         project_type: arctic_core::mods::ProjectType::Mod,
+        ..SearchQuery::default()
     })?;
     println!("search: {} total hits", page.total);
     for hit in &page.hits {

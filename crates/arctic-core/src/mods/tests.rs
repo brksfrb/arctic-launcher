@@ -105,6 +105,7 @@ fn search_url_encodes_query_facets_and_clamps_limit() {
         offset: 40,
         limit: 500,
         project_type: super::ProjectType::Mod,
+        ..SearchQuery::default()
     };
     let url = modrinth::search_url(&q);
     let facets = encode(r#"[["project_type:mod"],["versions:1.21.4"],["categories:fabric"]]"#);
@@ -340,4 +341,36 @@ fn project_preview_accepts_projects_without_gallery_and_optional_captions() {
     assert!(project.gallery[0].title.is_none());
     assert_eq!(project.loaders, ["iris"]);
     assert_eq!(project.game_versions, ["1.21.1"]);
+}
+
+#[test]
+fn discovery_facets_combine_filters_and_follow_sort() {
+    use super::{Environment, ProjectType};
+    let q = SearchQuery {
+        game_version: "1.21.1".into(),
+        project_type: ProjectType::Shader,
+        strict_version: true,
+        loaders: vec!["iris".into(), " ".into()],
+        categories: vec!["realistic".into(), "".into(), "cartoon".into()],
+        environment: Some(Environment::Client),
+        sort: SortBy::Follows,
+        ..SearchQuery::default()
+    };
+    let url = modrinth::search_url(&q);
+    let facets = encode(
+        r#"[["project_type:shader"],["versions:1.21.1"],["categories:iris"],["categories:realistic"],["categories:cartoon"],["client_side:required","client_side:optional"]]"#,
+    );
+    assert!(url.contains(&format!("facets={facets}")), "{url}");
+    assert!(url.contains("&index=follows&"), "{url}");
+    // Packs and shaders ignore the game version unless the filter is explicit.
+    let loose = modrinth::search_facets(&SearchQuery {
+        game_version: "1.21.1".into(),
+        project_type: ProjectType::ResourcePack,
+        environment: Some(Environment::Server),
+        ..SearchQuery::default()
+    });
+    assert_eq!(
+        loose,
+        r#"[["project_type:resourcepack"],["server_side:required","server_side:optional"]]"#
+    );
 }

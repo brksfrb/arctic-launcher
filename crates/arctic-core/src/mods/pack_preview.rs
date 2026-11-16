@@ -49,6 +49,10 @@ pub struct PreviewMod {
     pub side: Side,
     /// Modrinth project, if the file is on Modrinth.
     pub project_id: Option<String>,
+    /// The project's short summary ("" when unknown).
+    pub description: String,
+    /// Names of the projects this mod requires, sorted.
+    pub requires: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -204,6 +208,29 @@ fn project_side(p: &Project) -> Side {
     side_of(&p.client_side, &p.server_side).unwrap_or(Side::Both)
 }
 
+/// Project ids a version lists as required.
+fn required_projects(version: &Version) -> impl Iterator<Item = &str> {
+    version
+        .dependencies
+        .iter()
+        .filter(|d| d.dependency_type == "required")
+        .filter_map(|d| d.project_id.as_deref())
+}
+
+/// Titles of the required dependencies of `version` that Modrinth told us about.
+fn requires_of(version: Option<&Version>, projects: &HashMap<String, Project>) -> Vec<String> {
+    let mut names: Vec<String> = version
+        .into_iter()
+        .flat_map(required_projects)
+        .filter_map(|id| projects.get(id))
+        .map(|p| p.title.clone())
+        .filter(|t| !t.is_empty())
+        .collect();
+    names.sort_by_key(|n| n.to_lowercase());
+    names.dedup();
+    names
+}
+
 fn file_title(file_name: &str) -> String {
     file_name
         .strip_suffix(".jar")
@@ -243,6 +270,8 @@ fn assemble(
                 .or_else(|| project.map(project_side))
                 .unwrap_or(Side::Both),
             project_id: version.map(|v| v.project_id.clone()),
+            description: project.map(|p| p.description.clone()).unwrap_or_default(),
+            requires: requires_of(version, projects),
         });
     }
     for (project_id, number) in deps {
@@ -259,6 +288,8 @@ fn assemble(
             version: number.clone(),
             side: project.map_or(Side::Both, project_side),
             project_id: Some(project_id.clone()),
+            description: project.map(|p| p.description.clone()).unwrap_or_default(),
+            requires: Vec::new(),
         });
     }
     out.sort_by_key(|m| m.name.to_lowercase());
@@ -498,6 +529,7 @@ pub fn preview(dirs: &DataDirs, version_id: &str) -> Result<PackPreview> {
         .values()
         .map(|v| v.project_id.as_str())
         .chain(deps.iter().map(|(p, _)| p.as_str()))
+        .chain(found.values().flat_map(required_projects))
         .collect();
     project_ids.sort_unstable();
     project_ids.dedup();
@@ -765,5 +797,41 @@ mod tests {
         let mystery = mods.iter().find(|m| m.name == "mystery-1.0").unwrap();
         assert_eq!(mystery.project_id, None);
         assert_eq!(mystery.version, "");
+    }
+
+    #[test]
+    fn mods_carry_their_summary_and_required_dependencies() {
+        let index_mods = vec![IndexMod {
+            file_name: "sodium.jar".into(),
+            sha1: Some("aaa".into()),
+            side: None,
+        }];
+        let sodium: Version = serde_json::from_value(serde_json::json!({
+            "id": "v1", "project_id": "P1", "version_number": "0.6.0",
+            "dependencies": [
+                {"project_id": "P9", "dependency_type": "required"},
+                {"project_id": "P8", "dependency_type": "optional"},
+                {"project_id": "P7", "dependency_type": "required"},
+                {"project_id": "P6", "dependency_type": "required"}
+            ]
+        }))
+        .unwrap();
+        let found: HashMap<String, Version> = [("aaa".to_owned(), sodium)].into();
+        let with_summary: Project = serde_json::from_value(serde_json::json!({
+            "id": "P1", "title": "Sodium", "description": "Fast renderer"
+        }))
+        .unwrap();
+        let projects: HashMap<String, Project> = [
+            ("P1".to_owned(), with_summary),
+            ("P9".to_owned(), project("P9", "Fabric API", None)),
+            ("P8".to_owned(), project("P8", "Optional Thing", None)),
+            ("P7".to_owned(), project("P7", "Another", None)),
+        ]
+        .into();
+        let mods = assemble(&index_mods, &found, &[], &projects);
+        assert_eq!(mods.len(), 1);
+        assert_eq!(mods[0].description, "Fast renderer");
+        // Required only, by title; P6 is unknown to Modrinth's answer and left out.
+        assert_eq!(mods[0].requires, ["Another", "Fabric API"]);
     }
 }

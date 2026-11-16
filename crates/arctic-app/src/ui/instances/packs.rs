@@ -336,6 +336,7 @@ impl ArcticApp {
             offset: 0,
             limit: PAGE_SIZE,
             project_type: packs.kind.project_type(),
+            ..SearchQuery::default()
         };
         self.tasks.pack_search(packs.request, query);
     }

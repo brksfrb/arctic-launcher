@@ -6,6 +6,7 @@
 //! too (untracked). Disabled mods are renamed to `*.jar.disabled`, which is
 //! what loaders ignore.
 
+pub mod discovery;
 mod exact;
 mod files;
 mod identify;
@@ -54,6 +55,7 @@ pub enum SortBy {
     Downloads,
     Updated,
     Newest,
+    Follows,
 }
 
 /// What kind of Modrinth project to search for.
@@ -67,6 +69,17 @@ pub enum ProjectType {
 }
 
 impl ProjectType {
+    /// The game-folder directory this kind of project installs into (`None`: a modpack
+    /// becomes an instance of its own instead).
+    pub fn folder(self) -> Option<&'static str> {
+        match self {
+            ProjectType::Mod => Some("mods"),
+            ProjectType::ResourcePack => Some("resourcepacks"),
+            ProjectType::Shader => Some("shaderpacks"),
+            ProjectType::Modpack => None,
+        }
+    }
+
     pub fn id(self) -> &'static str {
         match self {
             ProjectType::Mod => "mod",
@@ -86,6 +99,21 @@ pub struct SearchQuery {
     pub offset: usize,
     pub limit: usize,
     pub project_type: ProjectType,
+    /// Categories the project must carry (all of them), as Modrinth names them.
+    pub categories: Vec<String>,
+    /// Loader ids (any of them). Added to `loader`'s own facet when both are set.
+    pub loaders: Vec<String>,
+    /// Which side the content must run on.
+    pub environment: Option<Environment>,
+    /// Filter packs and shaders by `game_version` too (mods and modpacks always are).
+    pub strict_version: bool,
+}
+
+/// Where content runs, for the discovery filter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Environment {
+    Client,
+    Server,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,6 +124,7 @@ pub struct ProjectHit {
     pub description: String,
     pub author: String,
     pub downloads: u64,
+    pub follows: u64,
     pub icon_url: Option<String>,
     pub categories: Vec<String>,
     /// Minecraft versions tagged on the project's files.
@@ -125,10 +154,21 @@ pub struct ProjectDetail {
     pub title: String,
     #[serde(default)]
     pub body: String,
+    /// The short summary.
+    #[serde(default)]
+    pub description: String,
     #[serde(default)]
     pub downloads: u64,
     #[serde(default)]
+    pub followers: u64,
+    #[serde(default)]
     pub icon_url: Option<String>,
+    #[serde(default)]
+    pub categories: Vec<String>,
+    #[serde(default)]
+    pub client_side: String,
+    #[serde(default)]
+    pub server_side: String,
     #[serde(default)]
     pub game_versions: Vec<String>,
     #[serde(default)]
