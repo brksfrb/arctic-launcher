@@ -9,7 +9,7 @@ use zip::ZipArchive;
 
 use super::forge_meta::InstallerSource;
 use crate::error::IoContext;
-use crate::net::{DownloadJob, agent, download_all};
+use crate::net::{DownloadJob, agent, connect_timeout, download_all};
 use crate::storage::DataDirs;
 use crate::{Error, Progress, Result};
 
@@ -103,7 +103,14 @@ pub fn fetch(dirs: &DataDirs, source: &InstallerSource, progress: Progress) -> R
 
 /// The `.sha1` Maven publishes next to a file, when available.
 fn remote_sha1(url: &str) -> Option<String> {
-    let mut resp = agent().get(&format!("{url}.sha1")).call().ok()?;
+    let url = format!("{url}.sha1");
+    let mut resp = agent()
+        .get(&url)
+        .config()
+        .timeout_connect(connect_timeout(&url))
+        .build()
+        .call()
+        .ok()?;
     let text = resp
         .body_mut()
         .with_config()
