@@ -822,8 +822,21 @@ impl Tasks {
         });
     }
 
+    /// Load Arctic's native adapter into Bedrock. Only called after the user
+    /// picked native mode and accepted the injection warning. Uses the bundle
+    /// shipped next to the launcher when there is one, else asks for a folder.
     pub fn bedrock_native_client(&self, edition: Edition) {
         self.run(move |t| {
+            if let Some(payload) = bedrock::native::shipped_payload() {
+                let quiet = |_: arctic_core::ProgressInfo| {};
+                let result = bedrock::native::prepare_shipped(t.dirs(), edition, &payload, &quiet)
+                    .and_then(|bundle| bedrock::native::launch(edition, &bundle))
+                    .map(|()| t!("bedrock.native_preview_is_rendering_right_shift").to_owned())
+                    .map_err(|e| e.to_string());
+                t.bedrock(BedrockEvent::Done(result));
+                t.bedrock_scan(edition);
+                return;
+            }
             let picked = rfd::FileDialog::new()
                 .set_title(t!("bedrock.choose_the_built_arctic_bedrock_native"))
                 .pick_folder();

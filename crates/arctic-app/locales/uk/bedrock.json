@@ -344,5 +344,11 @@
   "bedrock.press_play_hint": "Press Play to start it.",
   "bedrock.seconds_suffix": " seconds",
   "bedrock.fps_suffix": " FPS",
-  "bedrock.ms_suffix": " ms"
+  "bedrock.ms_suffix": " ms",
+  "bedrock.native_warning_title": "Завантажити нативний клієнт Arctic у Minecraft?",
+  "bedrock.native_warning_inject": "Буде завантажено експериментальну DLL Arctic у запущений процес Minecraft для Windows (впровадження DLL). Це відбувається лише за вашим вибором.",
+  "bedrock.native_warning_antivirus": "Антивірус може позначити або заблокувати завантажувач, бо впровадження в іншу програму схоже на поведінку шкідливого ПЗ.",
+  "bedrock.native_warning_servers": "Багатокористувацькі сервери та Realms можуть вважати його читерським клієнтом і вигнати чи забанити вас.",
+  "bedrock.native_warning_offline": "Використовуйте його лише офлайн або в одиночних світах.",
+  "bedrock.native_warning_accept": "Зрозуміло, завантажити"
 }

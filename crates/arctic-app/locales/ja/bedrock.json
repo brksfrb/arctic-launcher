@@ -344,5 +344,11 @@
   "bedrock.press_play_hint": "Press Play to start it.",
   "bedrock.seconds_suffix": " seconds",
   "bedrock.fps_suffix": " FPS",
-  "bedrock.ms_suffix": " ms"
+  "bedrock.ms_suffix": " ms",
+  "bedrock.native_warning_title": "Arctic のネイティブクライアントを Minecraft に読み込みますか？",
+  "bedrock.native_warning_inject": "実行中の Minecraft for Windows のプロセスに Arctic の実験的な DLL を読み込みます（DLL インジェクション）。これはあなたが選んだときだけ行われます。",
+  "bedrock.native_warning_antivirus": "他のプログラムへの注入はマルウェアの挙動に似ているため、ウイルス対策ソフトがローダーを検出またはブロックすることがあります。",
+  "bedrock.native_warning_servers": "マルチプレイサーバーや Realms はチートクライアントとみなし、キックや BAN をすることがあります。",
+  "bedrock.native_warning_offline": "オフラインまたはシングルプレイのワールドでのみ使用してください。",
+  "bedrock.native_warning_accept": "理解しました、読み込む"
 }

@@ -344,5 +344,11 @@
   "bedrock.press_play_hint": "Press Play to start it.",
   "bedrock.seconds_suffix": " seconds",
   "bedrock.fps_suffix": " FPS",
-  "bedrock.ms_suffix": " ms"
+  "bedrock.ms_suffix": " ms",
+  "bedrock.native_warning_title": "要将 Arctic 原生客户端加载到 Minecraft 中吗？",
+  "bedrock.native_warning_inject": "这会把 Arctic 的实验性 DLL 加载到正在运行的 Minecraft for Windows 进程中（DLL 注入）。只有在你选择时才会进行。",
+  "bedrock.native_warning_antivirus": "由于向其他程序注入代码的行为与恶意软件相似，杀毒软件可能会报毒或拦截加载器。",
+  "bedrock.native_warning_servers": "多人服务器和 Realms 可能会将其视为外挂客户端，并将你踢出或封禁。",
+  "bedrock.native_warning_offline": "请仅在离线或单人世界中使用。",
+  "bedrock.native_warning_accept": "我已了解，加载"
 }

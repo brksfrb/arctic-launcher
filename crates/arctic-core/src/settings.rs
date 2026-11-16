@@ -62,6 +62,9 @@ pub struct Settings {
     /// The third-party client loaded into Bedrock when it is started from the launcher (`latite`,
     /// `flarial`), or none.
     pub bedrock_client: Option<String>,
+    /// The user accepted the warning shown before Arctic's native Bedrock
+    /// adapter is first loaded into the game.
+    pub bedrock_native_warning_accepted: bool,
     /// Animated backdrop (aurora, snow, shooting stars).
     pub animations: bool,
     /// Animated capes stand still on their first frame in the launcher (a
@@ -313,6 +316,7 @@ impl Default for Settings {
             launcher_version_seen: String::new(),
             show_release_notes: true,
             bedrock_client: None,
+            bedrock_native_warning_accepted: false,
             animations: true,
             reduce_cape_motion: false,
             lock_preview_rotation: false,

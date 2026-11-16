@@ -1084,6 +1084,91 @@ pub fn validate_bundle(bundle: &Path) -> Result<PathBuf> {
     Ok(bundle)
 }
 
+/// Folder next to the launcher executable that holds a prebuilt native bundle
+/// (`arctic_bedrock.dll`, `arctic-bedrock-loader.exe`, `arctic-bedrock.jar`).
+/// Test builds ship it there; release builds don't, and fall back to asking for a folder.
+pub const PAYLOAD_DIR: &str = "bedrock-native";
+const PAYLOAD_FILES: [&str; 3] = [
+    "arctic_bedrock.dll",
+    "arctic-bedrock-loader.exe",
+    "arctic-bedrock.jar",
+];
+/// Managed Java runtime the native adapter starts inside the game (it needs
+/// `bin/server/jvm.dll`, which Mojang's Windows runtimes include).
+pub const JAVA_COMPONENT: &str = "java-runtime-delta";
+
+/// The prebuilt bundle shipped next to the launcher, if there is a complete one.
+pub fn shipped_payload() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?.join(PAYLOAD_DIR);
+    PAYLOAD_FILES
+        .iter()
+        .all(|name| dir.join(name).is_file())
+        .then_some(dir)
+}
+
+/// Copy a shipped payload into the launcher's writable data folder (the DLL
+/// writes its log and ready marker beside itself) and write its config.
+/// Unchanged files are left alone, so a copy the running game still has
+/// loaded is not touched.
+pub fn install_payload(
+    payload: &Path,
+    dest: &Path,
+    java_home: &Path,
+    game_version: &str,
+) -> Result<PathBuf> {
+    std::fs::create_dir_all(dest).at(dest)?;
+    for name in PAYLOAD_FILES {
+        let from = payload.join(name);
+        let to = dest.join(name);
+        let bytes = std::fs::read(&from).at(&from)?;
+        if std::fs::read(&to).is_ok_and(|current| current == bytes) {
+            continue;
+        }
+        std::fs::write(&to, &bytes).map_err(|e| {
+            Error::Other(format!(
+                "couldn't update {} (close Minecraft if it is still running): {e}",
+                to.display()
+            ))
+        })?;
+    }
+    let config_dir = dest.join("config");
+    std::fs::create_dir_all(&config_dir).at(&config_dir)?;
+    let config = serde_json::json!({
+        "java_home": java_home,
+        "config_dir": config_dir,
+        "game_version": game_version,
+        "offline_name": "ArcticGuest",
+        "renderer": "dx12",
+    });
+    let path = dest.join("arctic-bedrock.json");
+    std::fs::write(&path, serde_json::to_vec_pretty(&config)?).at(&path)?;
+    validate_bundle(dest)
+}
+
+/// Make the shipped payload ready to load into `edition`: install the Java
+/// runtime it needs and write a bundle under the launcher's data folder.
+pub fn prepare_shipped(
+    dirs: &crate::storage::DataDirs,
+    edition: Edition,
+    payload: &Path,
+    progress: crate::Progress,
+) -> Result<PathBuf> {
+    let installed = super::find(edition)
+        .ok_or_else(|| Error::Other(format!("{} isn't installed", edition.name())))?;
+    let java = crate::java::ensure_runtime(dirs, JAVA_COMPONENT, progress)?;
+    let java_home = java
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| Error::Other(format!("unexpected Java path {}", java.display())))?;
+    install_payload(
+        payload,
+        &dirs.root().join(PAYLOAD_DIR),
+        java_home,
+        &installed.version,
+    )
+}
+
 /// Start Bedrock and attach only to the selected edition's process. Success
 /// requires a first-render handshake from the native DLL.
 pub fn launch(edition: Edition, bundle: &Path) -> Result<()> {
@@ -1306,6 +1391,37 @@ pub fn record_video_with_encoder(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_shipped_payload_becomes_a_valid_bundle_and_keeps_unchanged_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let payload = dir.path().join("payload");
+        std::fs::create_dir_all(&payload).unwrap();
+        for name in PAYLOAD_FILES {
+            std::fs::write(payload.join(name), name).unwrap();
+        }
+        let java = dir.path().join("java");
+        std::fs::create_dir_all(java.join("bin/server")).unwrap();
+        std::fs::write(java.join("bin/server/jvm.dll"), []).unwrap();
+        let dest = dir.path().join("bundle");
+        let bundle = install_payload(&payload, &dest, &java, "1.26.52.3").unwrap();
+        let config: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(bundle.join("arctic-bedrock.json")).unwrap())
+                .unwrap();
+        assert_eq!(config["game_version"], "1.26.52.3");
+        assert_eq!(config["renderer"], "dx12");
+        let dll = dest.join("arctic_bedrock.dll");
+        let modified = std::fs::metadata(&dll).unwrap().modified().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        install_payload(&payload, &dest, &java, "1.26.52.3").unwrap();
+        assert_eq!(
+            std::fs::metadata(&dll).unwrap().modified().unwrap(),
+            modified
+        );
+        std::fs::write(payload.join("arctic_bedrock.dll"), "new").unwrap();
+        install_payload(&payload, &dest, &java, "1.26.52.3").unwrap();
+        assert_eq!(std::fs::read(&dll).unwrap(), b"new");
+    }
 
     #[test]
     fn refuses_an_incomplete_bundle_before_launching_the_game() {

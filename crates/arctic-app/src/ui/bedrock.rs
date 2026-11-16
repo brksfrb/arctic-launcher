@@ -171,6 +171,8 @@ pub struct BedrockUi {
     offline_stopping: bool,
     offline_session: Option<bedrock::offline::OfflineConnector>,
     offline_message: String,
+    /// The injection warning is open (native mode was picked, not yet accepted).
+    native_warning: bool,
 }
 impl BedrockUi {
     pub(crate) fn background_active(&self) -> bool {
@@ -319,6 +321,7 @@ impl ArcticApp {
             Section::Offline => self.bedrock_offline(ui),
         }
         self.bedrock_confirm(ui.ctx());
+        self.bedrock_native_warning(ui.ctx());
     }
 
     pub(crate) fn bedrock_poll_offline(&mut self) {
@@ -1305,8 +1308,12 @@ impl ArcticApp {
             )
             .clicked()
             {
-                self.bedrock.busy = true;
-                self.tasks.bedrock_native_client(self.bedrock.edition);
+                if self.settings.bedrock_native_warning_accepted {
+                    self.bedrock.busy = true;
+                    self.tasks.bedrock_native_client(self.bedrock.edition);
+                } else {
+                    self.bedrock.native_warning = true;
+                }
             }
             ui.add_space(12.0);
             ui.label(RichText::new(t!("bedrock.record_mp4_2")).strong());
@@ -1715,6 +1722,58 @@ impl ArcticApp {
         });
         if let Some(version) = install {
             self.bedrock.confirm = Some(version);
+        }
+    }
+
+    /// Shown before Arctic's native adapter is loaded into the game for the first time.
+    fn bedrock_native_warning(&mut self, ctx: &egui::Context) {
+        if !self.bedrock.native_warning {
+            return;
+        }
+        let p = self.palette();
+        let mut close = false;
+        let mut go = false;
+        let modal = Modal::new(Id::new("bedrock_native_warning")).show(ctx, |ui| {
+            ui.set_width(440.0);
+            ui.label(
+                RichText::new(t!("bedrock.native_warning_title"))
+                    .size(18.0)
+                    .strong()
+                    .color(p.text),
+            );
+            ui.add_space(6.0);
+            for line in [
+                t!("bedrock.native_warning_inject"),
+                t!("bedrock.native_warning_antivirus"),
+                t!("bedrock.native_warning_servers"),
+                t!("bedrock.native_warning_offline"),
+            ] {
+                ui.label(RichText::new(line).color(p.muted));
+                ui.add_space(4.0);
+            }
+            ui.add_space(8.0);
+            widgets::row(ui, |ui| {
+                if widgets::button(ui, p, None, t!("bedrock.native_warning_accept"), true).clicked()
+                {
+                    go = true;
+                }
+                if widgets::button(ui, p, None, t!("bedrock.cancel"), false).clicked() {
+                    close = true;
+                }
+            });
+        });
+        if modal.should_close() {
+            close = true;
+        }
+        if go {
+            self.settings.bedrock_native_warning_accepted = true;
+            self.persist_settings();
+            self.bedrock.busy = true;
+            self.tasks.bedrock_native_client(self.bedrock.edition);
+            close = true;
+        }
+        if close {
+            self.bedrock.native_warning = false;
         }
     }
 

@@ -344,5 +344,11 @@
   "bedrock.press_play_hint": "Press Play to start it.",
   "bedrock.seconds_suffix": " seconds",
   "bedrock.fps_suffix": " FPS",
-  "bedrock.ms_suffix": " ms"
+  "bedrock.ms_suffix": " ms",
+  "bedrock.native_warning_title": "Carregar o cliente nativo do Arctic no Minecraft?",
+  "bedrock.native_warning_inject": "Isto carrega a DLL experimental do Arctic no processo do Minecraft para Windows em execução (injeção de DLL). Só acontece quando você escolhe.",
+  "bedrock.native_warning_antivirus": "O antivírus pode sinalizar ou bloquear o carregador, porque injetar em outro programa se parece com o que um malware faz.",
+  "bedrock.native_warning_servers": "Servidores multijogador e Realms podem tratá-lo como cliente hack e expulsar ou banir você.",
+  "bedrock.native_warning_offline": "Use apenas offline ou em mundos de um jogador.",
+  "bedrock.native_warning_accept": "Entendi, carregar"
 }

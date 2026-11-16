@@ -344,5 +344,11 @@
   "bedrock.press_play_hint": "Press Play to start it.",
   "bedrock.seconds_suffix": " seconds",
   "bedrock.fps_suffix": " FPS",
-  "bedrock.ms_suffix": " ms"
+  "bedrock.ms_suffix": " ms",
+  "bedrock.native_warning_title": "Arctics nativen Client in Minecraft laden?",
+  "bedrock.native_warning_inject": "Dies lädt Arctics experimentelle DLL in den laufenden Minecraft-für-Windows-Prozess (DLL-Injection). Das passiert nur, wenn du es auswählst.",
+  "bedrock.native_warning_antivirus": "Antivirenprogramme können den Loader melden oder blockieren, weil das Einschleusen in ein anderes Programm wie Schadsoftware aussieht.",
+  "bedrock.native_warning_servers": "Multiplayer-Server und Realms können ihn als Hack-Client werten und dich kicken oder bannen.",
+  "bedrock.native_warning_offline": "Nutze ihn nur offline oder in Einzelspielerwelten.",
+  "bedrock.native_warning_accept": "Verstanden, laden"
 }

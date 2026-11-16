@@ -1,5 +1,20 @@
 # Bedrock adapter
 
+## Shipping the native bundle with a launcher build
+
+A launcher finds a prebuilt bundle in a `bedrock-native` folder next to its
+executable (`arctic_bedrock.dll`, `arctic-bedrock-loader.exe`,
+`arctic-bedrock.jar`). On **Load a native client bundle…** it then shows a
+one-time warning (DLL injection, antivirus, server bans; offline/singleplayer
+only), copies the bundle to `<data>/bedrock-native`, installs Mojang's
+`java-runtime-delta` for `bin/server/jvm.dll`, writes `arctic-bedrock.json` for
+the installed game version and loads it. Without that folder it asks for a
+built bundle directory as before. Nothing injects unless the user picks this.
+
+The DLL and loader cross-build from Linux with
+`cargo xwin build --release --locked --target x86_64-pc-windows-msvc --lib --bins`
+in `native/`; the jar with `mod/gradlew -p mod/versions/bedrock :test :bundle`.
+
 This directory contains two separate implementations:
 
 - `offline/`: a protocol connector for servers that accept unsigned Bedrock players.
