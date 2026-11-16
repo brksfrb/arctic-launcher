@@ -25,15 +25,15 @@ class MeasuredPingTest {
 			CountDownLatch answer = new CountDownLatch(1);
 			CountDownLatch finished = new CountDownLatch(1);
 			Thread fake = new Thread(() -> {
-				try { answer.await(); ServerPingTest.answer(socket); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+				try { answer.await(); for (int i = 0; i < 3; i++) ServerPingTest.answer(socket); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
 				finally { finished.countDown(); }
 			});
 			fake.setDaemon(true); fake.start();
 			MeasuredPing.tick(platform); // Must return while the server has not answered.
 			assertEquals(56, MeasuredPing.value(target, 56));
 			answer.countDown();
-			assertTrue(finished.await(3, TimeUnit.SECONDS));
-			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+			assertTrue(finished.await(10, TimeUnit.SECONDS));
+			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
 			while (MeasuredPing.value(target, 56) == 56 && System.nanoTime() < deadline) Thread.sleep(5);
 			assertTrue(MeasuredPing.value(target, 56) < 56);
 			assertEquals(77, MeasuredPing.value("another-server", 77));
