@@ -357,5 +357,6 @@
   "instances.world_restored": "Відновлено: {name}",
   "instances.favorite_world": "Додати до обраного",
   "instances.unfavorite_world": "Прибрати з обраного",
+  "instances.favorite_world_cannot_delete": "Обрані світи не можна видалити. Спершу приберіть світ з обраного.",
   "instances.could_not_save_favorite": "Не вдалося зберегти обране"
 }

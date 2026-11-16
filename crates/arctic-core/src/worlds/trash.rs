@@ -58,6 +58,22 @@ pub fn trash(world: &World, saves: &Path, instance: &str) -> Result<()> {
     trash_at(world, saves, instance, crate::auth::now_secs())
 }
 
+/// Like [`trash`], but refuses a starred world: unstar it first.
+pub fn trash_unless_favorite(
+    world: &World,
+    saves: &Path,
+    instance: &str,
+    favorites: &super::Favorites,
+) -> Result<()> {
+    if favorites.contains(&world.folder) {
+        return Err(Error::Other(format!(
+            "\"{}\" is a favorite; remove it from favorites before deleting it",
+            world.name
+        )));
+    }
+    trash(world, saves, instance)
+}
+
 pub(super) fn trash_at(world: &World, saves: &Path, instance: &str, now: u64) -> Result<()> {
     let root = trash_dir(saves);
     fs::create_dir_all(&root).at(&root)?;

@@ -353,5 +353,6 @@
   "instances.world_restored": "{name} hersteld",
   "instances.favorite_world": "Toevoegen aan favorieten",
   "instances.unfavorite_world": "Verwijderen uit favorieten",
+  "instances.favorite_world_cannot_delete": "Favoriete werelden kunnen niet worden verwijderd. Verwijder hem eerst uit de favorieten.",
   "instances.could_not_save_favorite": "Favoriet kon niet worden opgeslagen"
 }

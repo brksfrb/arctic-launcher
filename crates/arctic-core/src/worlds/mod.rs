@@ -16,6 +16,7 @@ pub use favorites::{Favorites, favorites_file, sort_favorites_first};
 pub use sources::{Source, sources};
 pub use trash::{
     TRASH_KEEP_DAYS, Trashed, delete_forever, list_trash, purge_expired, restore, trash,
+    trash_unless_favorite,
 };
 
 use crate::error::IoContext;

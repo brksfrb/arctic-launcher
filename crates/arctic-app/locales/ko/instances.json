@@ -353,5 +353,6 @@
   "instances.world_restored": "{name} 복원됨",
   "instances.favorite_world": "즐겨찾기에 추가",
   "instances.unfavorite_world": "즐겨찾기에서 제거",
+  "instances.favorite_world_cannot_delete": "즐겨찾기한 월드는 삭제할 수 없습니다. 먼저 즐겨찾기에서 제거하세요.",
   "instances.could_not_save_favorite": "즐겨찾기를 저장할 수 없습니다"
 }

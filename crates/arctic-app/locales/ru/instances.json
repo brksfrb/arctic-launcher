@@ -357,5 +357,6 @@
   "instances.world_restored": "Восстановлено: {name}",
   "instances.favorite_world": "Добавить в избранное",
   "instances.unfavorite_world": "Убрать из избранного",
+  "instances.favorite_world_cannot_delete": "Избранные миры нельзя удалить. Сначала уберите мир из избранного.",
   "instances.could_not_save_favorite": "Не удалось сохранить избранное"
 }

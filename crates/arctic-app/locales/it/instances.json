@@ -353,5 +353,6 @@
   "instances.world_restored": "{name} ripristinato",
   "instances.favorite_world": "Aggiungi ai preferiti",
   "instances.unfavorite_world": "Rimuovi dai preferiti",
+  "instances.favorite_world_cannot_delete": "I mondi preferiti non possono essere eliminati. Rimuovilo prima dai preferiti.",
   "instances.could_not_save_favorite": "Impossibile salvare il preferito"
 }

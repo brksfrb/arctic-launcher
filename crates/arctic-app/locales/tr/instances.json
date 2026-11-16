@@ -353,5 +353,6 @@
   "instances.world_restored": "{name} geri yüklendi",
   "instances.favorite_world": "Favorilere ekle",
   "instances.unfavorite_world": "Favorilerden çıkar",
+  "instances.favorite_world_cannot_delete": "Favori dünyalar silinemez. Önce favorilerden çıkarın.",
   "instances.could_not_save_favorite": "Favori kaydedilemedi"
 }

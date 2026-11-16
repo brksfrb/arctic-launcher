@@ -353,5 +353,6 @@
   "instances.world_restored": "已恢复 {name}",
   "instances.favorite_world": "添加到收藏",
   "instances.unfavorite_world": "从收藏中移除",
+  "instances.favorite_world_cannot_delete": "收藏的世界无法删除。请先取消收藏。",
   "instances.could_not_save_favorite": "无法保存收藏"
 }

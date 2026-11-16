@@ -353,5 +353,6 @@
   "instances.world_restored": "{name} を復元しました",
   "instances.favorite_world": "お気に入りに追加",
   "instances.unfavorite_world": "お気に入りから削除",
+  "instances.favorite_world_cannot_delete": "お気に入りのワールドは削除できません。先にお気に入りから削除してください。",
   "instances.could_not_save_favorite": "お気に入りを保存できませんでした"
 }

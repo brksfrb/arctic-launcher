@@ -261,3 +261,20 @@ fn favorites_persist_and_sort_first() {
     assert!(!fav.toggle("b (2)", &file).unwrap());
     assert!(Favorites::load(&file).is_empty());
 }
+
+#[test]
+fn a_favorite_world_cannot_be_trashed_until_unstarred() {
+    let saves = tempfile::tempdir().unwrap();
+    make_world(saves.path(), "Keep", "Keep");
+    let file = saves.path().join("fav.json");
+    let mut favs = Favorites::load(&file);
+    favs.toggle("Keep", &file).unwrap();
+    let world = find(saves.path(), "Keep");
+    assert!(trash_unless_favorite(&world, saves.path(), "x", &favs).is_err());
+    assert!(saves.path().join("Keep").is_dir());
+    assert!(list_trash(saves.path()).is_empty());
+    favs.toggle("Keep", &file).unwrap();
+    trash_unless_favorite(&world, saves.path(), "x", &favs).unwrap();
+    assert!(!saves.path().join("Keep").exists());
+    assert_eq!(list_trash(saves.path()).len(), 1);
+}

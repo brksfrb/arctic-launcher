@@ -54,7 +54,10 @@ pub fn run(ctx: &Ctx, command: &WorldsCommand) -> Result<i32> {
         }
         WorldsCommand::Remove { world, .. } => {
             let found = find(&saves, world)?;
-            worlds::trash(&found, &saves, &instance.id)?;
+            let favorites = worlds::Favorites::load(&worlds::favorites_file(
+                &ctx.dirs.instance_dir(&instance.id),
+            ));
+            worlds::trash_unless_favorite(&found, &saves, &instance.id, &favorites)?;
             ctx.out
                 .emit(json!({"event": "removed", "folder": found.folder}), || {
                     format!(

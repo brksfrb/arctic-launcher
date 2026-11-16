@@ -353,5 +353,6 @@
   "instances.world_restored": "Restored {name}",
   "instances.favorite_world": "Add to favorites",
   "instances.unfavorite_world": "Remove from favorites",
+  "instances.favorite_world_cannot_delete": "Favorite worlds can't be deleted. Remove it from favorites first.",
   "instances.could_not_save_favorite": "Could not save the favorite"
 }

@@ -166,10 +166,31 @@ impl ArcticApp {
                 ui.label(RichText::new(detail).small().color(p.muted));
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, p, Icon::Trash, t!("instances.move_to_trash")).clicked()
-                {
+                let locked = self.inst.world_favorites.contains(&world.folder);
+                let clicked = if locked {
+                    ui.add_enabled_ui(false, |ui| {
+                        widgets::icon_button(
+                            ui,
+                            p,
+                            Icon::Trash,
+                            t!("instances.favorite_world_cannot_delete"),
+                        )
+                    })
+                    .inner
+                    .on_disabled_hover_text(t!("instances.favorite_world_cannot_delete"))
+                    .clicked()
+                } else {
+                    widgets::icon_button(ui, p, Icon::Trash, t!("instances.move_to_trash"))
+                        .clicked()
+                };
+                if clicked && !locked {
                     let saves = instance.game_dir(&self.dirs).join("saves");
-                    match worlds::trash(world, &saves, &instance.id) {
+                    match worlds::trash_unless_favorite(
+                        world,
+                        &saves,
+                        &instance.id,
+                        &self.inst.world_favorites,
+                    ) {
                         Ok(()) => self.toasts.push(
                             Kind::Info,
                             tf!("instances.moved_to_trash", name = world.name),

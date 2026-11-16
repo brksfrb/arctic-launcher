@@ -357,5 +357,6 @@
   "instances.world_restored": "Przywrócono: {name}",
   "instances.favorite_world": "Dodaj do ulubionych",
   "instances.unfavorite_world": "Usuń z ulubionych",
+  "instances.favorite_world_cannot_delete": "Ulubionych światów nie można usunąć. Najpierw usuń go z ulubionych.",
   "instances.could_not_save_favorite": "Nie udało się zapisać ulubionego"
 }
