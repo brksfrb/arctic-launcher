@@ -118,6 +118,60 @@ final class LegacyTextures {
 		}
 	}
 
+	/**
+	 * An image's pixels as a texture holds them (ARGB, row by row), read out of the image on the thread that
+	 * decoded it: reading them pixel by pixel is the slow part of making a texture, and the render thread then
+	 * only uploads them (what {@code new NativeImageBackedTexture(image)} does, in two halves).
+	 */
+	static final class Pixels {
+		final int width;
+		final int height;
+		final int[] argb;
+
+		Pixels(int width, int height, int[] argb) {
+			this.width = width;
+			this.height = height;
+			this.argb = argb;
+		}
+
+		/** Rows {@code from} to {@code from + rows} (a frame of an animated cape). */
+		Pixels rows(int from, int rows) {
+			int[] part = new int[width * rows];
+			System.arraycopy(argb, from * width, part, 0, part.length);
+			return new Pixels(width, rows, part);
+		}
+	}
+
+	/** The image's pixels (null for no image); any thread. */
+	static Pixels pixels(BufferedImage image) {
+		if (image == null) {
+			return null;
+		}
+		int w = image.getWidth();
+		int h = image.getHeight();
+		int[] argb = new int[w * h];
+		image.getRGB(0, 0, w, h, argb, 0, w);
+		return new Pixels(w, h, argb);
+	}
+
+	/** Upload pixels read with {@link #pixels} as the texture {@code id} (render thread). */
+	static boolean register(Identifier id, Pixels pixels) {
+		if (pixels == null) {
+			return false;
+		}
+		try {
+			NativeImageBackedTexture texture = new NativeImageBackedTexture(pixels.width, pixels.height);
+			System.arraycopy(pixels.argb, 0, texture.getPixels(), 0, pixels.argb.length);
+			texture.upload();
+			MinecraftClient.getInstance().getTextureManager().loadTexture(id, texture);
+			LOADED.add(id);
+			return true;
+		} catch (Exception e) {
+			ArcticLegacy.LOG.warn("Arctic texture {}: {}", id, e.toString());
+			return false;
+		}
+	}
+
 	static BufferedImage decode(byte[] png) {
 		try {
 			return ImageIO.read(new ByteArrayInputStream(png));
