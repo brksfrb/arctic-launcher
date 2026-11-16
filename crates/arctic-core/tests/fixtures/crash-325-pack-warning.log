@@ -1,0 +1,4 @@
+[Render thread/WARN] Failed to parse pack.mcmeta: broken resource pack metadata
+com.google.gson.JsonSyntaxException: Invalid pack metadata
+\tat example.Pack.read(Pack.java:12)
+[Render thread/INFO] Loaded resources

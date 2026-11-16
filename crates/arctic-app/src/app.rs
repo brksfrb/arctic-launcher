@@ -1551,7 +1551,8 @@ impl eframe::App for ArcticApp {
         self.bedrock.close_recording(&self.tasks);
         self.cancel_login();
         if self.settings.exit_games_with_launcher {
-            for run in self.runs.active() {
+            for run in &mut self.runs.list {
+                run.force_close();
                 if let Some(game) = run.game() {
                     game.terminate();
                 }

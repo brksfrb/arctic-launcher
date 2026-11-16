@@ -361,19 +361,7 @@ public final class LegacyHooks {
 
 	/** The ping number in the player list, in the place of the ping bars; false when the latency is unknown. */
 	public static boolean drawTabPing(int width, int x, int y, int ms) {
-		if (ms < 0) {
-			return false;
-		}
-		String text = String.valueOf(ms);
-		int color = ms < 80 ? 0xFF55FF55 : ms < 160 ? 0xFFFFFF55 : 0xFFFF5555;
-		float scale = 0.8f;
-		LegacyGfx g = new LegacyGfx();
-		g.push();
-		g.translate(x + width - 1 - g.textWidth(text) * scale, y + 1.5f);
-		g.scale(scale);
-		g.text(text, 0, 0, color, true);
-		g.pop();
-		return true;
+		return com.arcticlauncher.client.ui.TabPing.draw(new LegacyGfx(), width, x, y, ms);
 	}
 
 	/** Pop-ups on the screens that cover the game; in the game the HUD shows them. */

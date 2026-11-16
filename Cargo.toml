@@ -5,7 +5,7 @@ members = ["crates/arctic-core", "crates/arctic-ping", "crates/arctic-voice", "c
 exclude = ["mod/versions/bedrock/native"]
 
 [workspace.package]
-version = "0.6.1"
+version = "0.6.3"
 edition = "2024"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/brksfrb/arctic-launcher"

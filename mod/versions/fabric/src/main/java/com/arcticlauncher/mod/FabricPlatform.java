@@ -128,6 +128,12 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public String screenClassName() {
+		Screen screen = Compat.screen();
+		return screen == null ? "none" : screen.getClass().getName();
+	}
+
+	@Override
 	public boolean atTitleScreen() {
 		// The title exists underneath the initial asynchronous resource reload. Opening a
 		// launcher replay there can render a world before entity renderers are installed.

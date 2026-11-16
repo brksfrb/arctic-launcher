@@ -12,10 +12,13 @@ public final class GlassResources {
 	private GlassResources() {}
 	public interface ActivePacks { List<String> arctic$packNames(); }
 	public static void reload(ResourceManager manager) {
-		if (!GlassCtm.available()) return;
-		packs = GlassPacks.load(new GlassPacks.Resources() {
+		packs = GlassPacks.safeLoad("atlas resource packs", () -> GlassCtm.available() ? load(manager) : GlassPacks.EMPTY);
+	}
+	private static GlassPacks load(ResourceManager manager) {
+		return GlassPacks.load(new GlassPacks.Resources() {
+			private final List<String> order = new ArrayList<>();
+			@Override public String description() { return "active packs " + order; }
 			@Override public Collection<String> properties() throws IOException {
-				List<String> order = new ArrayList<>();
 				//#if MC < 1.16
 				order.addAll(((ActivePacks) manager).arctic$packNames());
 				//#elif MC < 1.19.3
@@ -37,11 +40,17 @@ public final class GlassResources {
 				ids.addAll(manager.listResources("mcpatcher/ctm", name -> name.endsWith(".properties")));
 				// Resolve ownership once and close the streams opened by the old API.
 				java.util.Map<Identifier, Integer> priorities = new java.util.HashMap<>();
+				List<Identifier> readable = new ArrayList<>();
 				for (Identifier id : ids) {
 					try (net.minecraft.server.packs.resources.Resource resource = manager.getResource(id)) {
 						priorities.put(id, -order.indexOf(resource.getSourceName()));
+					} catch (IOException | RuntimeException failure) {
+						GlassPacks.warn(id + " in " + description(), failure);
+						continue;
 					}
+					readable.add(id);
 				}
+				ids = readable;
 				ids.sort(java.util.Comparator.comparingInt((Identifier id) -> priorities.get(id)).thenComparing(Identifier::toString));
 				List<String> names = new ArrayList<>();
 				for (Identifier id : ids) names.add(id.toString());

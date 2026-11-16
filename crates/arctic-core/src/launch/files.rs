@@ -28,6 +28,8 @@ pub struct Libraries {
     pub jobs: Vec<DownloadJob>,
     /// Small loader dependencies checked even without a previous crash report.
     pub bootstrap: Vec<DownloadJob>,
+    /// Downloadable library that supplies the profile's Java entry point, and its class entry.
+    pub main_class: Option<(PathBuf, String)>,
 }
 
 /// Work out which library files apply on this platform.
@@ -46,16 +48,24 @@ pub fn resolve_libraries(dirs: &DataDirs, version: &VersionJson, env: &RuleEnv) 
             out.classpath.push(job.dest.clone());
             // Locally generated files (no URL) are on the classpath only.
             if !job.url.is_empty() {
-                if job.sha1.is_some()
-                    && [
-                        "net.fabricmc:",
-                        "net.legacyfabric:",
-                        "org.quiltmc:",
-                        "org.ow2.asm:",
-                        "org.spongepowered:",
-                    ]
-                    .iter()
-                    .any(|prefix| lib.name.starts_with(prefix))
+                let entrypoint = supplies_main_class(&lib.name, &version.main_class);
+                if entrypoint {
+                    out.main_class = Some((
+                        job.dest.clone(),
+                        format!("{}.class", version.main_class.replace('.', "/")),
+                    ));
+                }
+                if entrypoint
+                    || (job.sha1.is_some()
+                        && [
+                            "net.fabricmc:",
+                            "net.legacyfabric:",
+                            "org.quiltmc:",
+                            "org.ow2.asm:",
+                            "org.spongepowered:",
+                        ]
+                        .iter()
+                        .any(|prefix| lib.name.starts_with(prefix)))
                 {
                     out.bootstrap.push(job.clone());
                 }
@@ -75,6 +85,52 @@ pub fn resolve_libraries(dirs: &DataDirs, version: &VersionJson, env: &RuleEnv) 
         }
     }
     out
+}
+
+/// Identify the entry-point artifact without opening every jar on the classpath.
+fn supplies_main_class(library: &str, main_class: &str) -> bool {
+    [
+        ("net.fabricmc:fabric-loader:", "net.fabricmc.loader."),
+        ("net.legacyfabric:fabric-loader:", "net.fabricmc.loader."),
+        ("org.quiltmc:quilt-loader:", "org.quiltmc.loader."),
+        ("cpw.mods:bootstraplauncher:", "cpw.mods.bootstraplauncher."),
+        ("cpw.mods:modlauncher:", "cpw.mods.modlauncher."),
+        ("net.neoforged:modlauncher:", "cpw.mods.modlauncher."),
+        (
+            "net.minecraft:launchwrapper:",
+            "net.minecraft.launchwrapper.",
+        ),
+    ]
+    .iter()
+    .any(|(artifact, package)| library.starts_with(artifact) && main_class.starts_with(package))
+}
+
+/// Read only the ZIP directory and the main class, including its CRC, not the entire loader.
+fn jar_has_main_class(path: &Path, entry: &str) -> bool {
+    let Ok(file) = fs::File::open(path) else {
+        return false;
+    };
+    let Ok(mut jar) = zip::ZipArchive::new(file) else {
+        return false;
+    };
+    let Ok(mut class) = jar.by_name(entry) else {
+        return false;
+    };
+    class.is_file() && class.size() > 0 && std::io::copy(&mut class, &mut std::io::sink()).is_ok()
+}
+
+/// Also reject an invalid replacement from a Maven server that supplies no checksum.
+pub(super) fn verify_main_class(main_class: Option<&(PathBuf, String)>) -> Result<()> {
+    if let Some((path, entry)) = main_class
+        && !jar_has_main_class(path, entry)
+    {
+        fs::remove_file(path).at(path)?;
+        return Err(Error::Other(format!(
+            "The loader jar {} does not contain a readable {entry}. Arctic will download it again on the next Play.",
+            path.display()
+        )));
+    }
+    Ok(())
 }
 
 /// Asked for after a crash that points at a damaged game file (see `crash::Diagnosis::repair`).
@@ -110,7 +166,12 @@ impl LibraryRepair {
         Ok(Self { mark, request })
     }
 
-    pub(super) fn check(&self, jobs: &[DownloadJob], bootstrap: &[DownloadJob]) -> Result<()> {
+    pub(super) fn check(
+        &self,
+        jobs: &[DownloadJob],
+        bootstrap: &[DownloadJob],
+        main_class: Option<&(PathBuf, String)>,
+    ) -> Result<()> {
         // Older launchers sometimes failed to request repair. Always check the small loader
         // dependencies, especially Mixin, so the next Play can recover without another crash.
         let selected = if self.request.is_some() {
@@ -140,6 +201,12 @@ impl LibraryRepair {
                 if have.eq_ignore_ascii_case(want) {
                     continue;
                 }
+            } else if self.request.is_none()
+                && let Some((path, entry)) = main_class
+                && job.dest == *path
+                && jar_has_main_class(path, entry)
+            {
+                continue;
             }
             // A repair also refreshes downloadable libraries whose metadata has no checksum.
             // A failed removal must stop preparation instead of reusing the broken file.
@@ -532,6 +599,60 @@ mod tests {
     }
 
     #[test]
+    fn entrypoint_libraries_are_checked_even_without_checksums() {
+        let dirs = DataDirs::new("root");
+        for (library, main_class) in [
+            (
+                "net.fabricmc:fabric-loader:0.20.1",
+                "net.fabricmc.loader.impl.launch.knot.KnotClient",
+            ),
+            (
+                "net.legacyfabric:fabric-loader:0.18.0",
+                "net.fabricmc.loader.launch.knot.KnotClient",
+            ),
+            (
+                "org.quiltmc:quilt-loader:0.29.1",
+                "org.quiltmc.loader.impl.launch.knot.KnotClient",
+            ),
+            (
+                "cpw.mods:bootstraplauncher:2.0.2",
+                "cpw.mods.bootstraplauncher.BootstrapLauncher",
+            ),
+            (
+                "cpw.mods:modlauncher:10.0.9",
+                "cpw.mods.modlauncher.Launcher",
+            ),
+            (
+                "net.neoforged:modlauncher:11.0.5",
+                "cpw.mods.modlauncher.Launcher",
+            ),
+            (
+                "net.minecraft:launchwrapper:1.12",
+                "net.minecraft.launchwrapper.Launch",
+            ),
+        ] {
+            let version: VersionJson = serde_json::from_value(serde_json::json!({
+                "id": "loader", "mainClass": main_class,
+                "libraries": [
+                    {"name": library, "url": "https://example.invalid/"},
+                    {"name": "example:unrelated:1", "url": "https://example.invalid/"}
+                ]
+            }))
+            .unwrap();
+            let libs = resolve_libraries(&dirs, &version, &env());
+            assert_eq!(libs.bootstrap.len(), 1, "{library}");
+            assert!(libs.bootstrap[0].sha1.is_none());
+            assert_eq!(
+                libs.main_class,
+                Some((
+                    dirs.libraries().join(maven_path(library).unwrap()),
+                    format!("{}.class", main_class.replace('.', "/")),
+                ))
+            );
+        }
+    }
+
+    #[test]
     fn maven_style_natives_resolve() {
         let dirs = DataDirs::new("root");
         let v: VersionJson = serde_json::from_str(
@@ -604,16 +725,16 @@ mod tests {
         // Not asked: nothing is hashed or removed.
         LibraryRepair::new(&dirs)
             .unwrap()
-            .check(&jobs, &[])
+            .check(&jobs, &[], None)
             .unwrap();
         assert!(bad.is_file());
         request_repair(&dirs);
         // Versions before request IDs used an empty marker.
         fs::write(dirs.cache().join(REPAIR_MARK), b"").unwrap();
         let repair = LibraryRepair::new(&dirs).unwrap();
-        repair.check(&jobs[..1], &[]).unwrap();
+        repair.check(&jobs[..1], &[], None).unwrap();
         assert!(dirs.cache().join(REPAIR_MARK).is_file());
-        repair.check(&jobs, &[]).unwrap();
+        repair.check(&jobs, &[], None).unwrap();
         assert!(good.is_file());
         assert!(!bad.is_file(), "same size, wrong contents: fetched again");
         repair.finish();
@@ -621,7 +742,7 @@ mod tests {
         std::fs::write(&bad, b"wrong").unwrap();
         LibraryRepair::new(&dirs)
             .unwrap()
-            .check(&jobs, &[])
+            .check(&jobs, &[], None)
             .unwrap();
         assert!(bad.is_file());
     }
@@ -663,7 +784,7 @@ mod tests {
         request_repair(&dirs);
         LibraryRepair::new(&dirs)
             .unwrap()
-            .check(&jobs, &[])
+            .check(&jobs, &[], None)
             .unwrap();
         assert!(!jobs[0].dest.exists());
         assert_eq!(fs::read(&jobs[1].dest).unwrap(), b"broken");
@@ -684,7 +805,7 @@ mod tests {
         };
         request_repair(&dirs);
         let repair = LibraryRepair::new(&dirs).unwrap();
-        assert!(repair.check(&[job], &[]).is_err());
+        assert!(repair.check(&[job], &[], None).is_err());
         drop(repair);
         assert!(dirs.cache().join(REPAIR_MARK).is_file());
     }

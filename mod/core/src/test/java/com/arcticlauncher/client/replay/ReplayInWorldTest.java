@@ -2,6 +2,7 @@ package com.arcticlauncher.client.replay;
 
 import static org.junit.jupiter.api.Assertions.*;
 import com.arcticlauncher.client.ArcticClient;
+import com.arcticlauncher.client.Lang;
 import com.arcticlauncher.client.Platform;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.notice.Notices;
@@ -10,6 +11,8 @@ import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -48,7 +51,7 @@ class ReplayInWorldTest {
 			assertNull(recorder.current(), "nothing was buffering at the join");
 			Replays.toggleRecording();
 			assertEquals(expectStarted, Replays.recording());
-			if (expectedNotice != null) assertEquals(expectedNotice, text(notices.get(notices.size() - 1)));
+			if (expectedNotice != null) assertEquals(Lang.t(expectedNotice), text(notices.get(notices.size() - 1)));
 			if (expectStarted) {
 				assertNotNull(recorder.current());
 				assertEquals(1, begun.get());
@@ -58,19 +61,26 @@ class ReplayInWorldTest {
 			}
 		} finally {
 			if (recorder.current() != null) recorder.current().end();
-			r.set(null, oldR); pl.set(null, oldP); c.set(null, oldC);
-			notices.clear(); notices.addAll(oldNotices);
+			// end() queues cleanup; drain writer, compaction and save work before @TempDir deletes files.
+			CountDownLatch done = new CountDownLatch(1);
+			recorder.afterWrites(done::countDown);
+			try {
+				assertTrue(done.await(10, TimeUnit.SECONDS), "recorder cleanup stalled");
+			} finally {
+				r.set(null, oldR); pl.set(null, oldP); c.set(null, oldC);
+				notices.clear(); notices.addAll(oldNotices);
+			}
 		}
 	}
 
 	@Test void startsAnInWorldBufferWhenNoneExists() throws Exception { run(true, true, true, true, null); }
 	@Test void saysRejoinWhenTheVersionCannotSnapshot() throws Exception {
-		run(true, false, true, false, "This version can't record a world you were already in. Rejoin it, then record.");
+		run(true, false, true, false, "replay.this_version_cant_record_a_world_you_were");
 	}
 	@Test void saysReplayIsOffWhenDisabled() throws Exception {
-		run(true, true, false, false, "Replay is off. Turn it on in the Replays tab.");
+		run(true, true, false, false, "replay.replay_is_off_turn_it_on_in_the_replays_tab");
 	}
-	@Test void saysJoinWhenNotInAWorld() throws Exception { run(false, true, true, false, "Join a world first."); }
+	@Test void saysJoinWhenNotInAWorld() throws Exception { run(false, true, true, false, "replay.join_a_world_first"); }
 
 	private static String text(Object notice) throws Exception { return (String) field(notice.getClass(), "body").get(notice); }
 	private static Field field(Class<?> type, String name) throws Exception {

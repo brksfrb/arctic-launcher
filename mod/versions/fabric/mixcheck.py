@@ -9,7 +9,8 @@ Prints, per version, every hooked method, accessor, INVOKE target and
 @Shadow member that doesn't exist, and every INVOKE target the hooked method
 never calls: each of those crashes the game at startup (or silently does
 nothing). Mixins a version leaves out of arctic.mixins.json are skipped when
-the expanded config is available. Exit code 1 if anything is wrong.
+the expanded config is available. Also rejects instance handlers at constructor
+HEAD, which runs before super(). Exit code 1 if anything is wrong.
 """
 import glob
 import json
@@ -26,6 +27,32 @@ LOOM = os.path.join(GRADLE_HOME, "caches/fabric-loom/minecraftMaven/net/minecraf
 # Methods a mixin target inherits from classes it doesn't declare; javap -p on
 # the target alone can't see them, so only these are looked up the hierarchy.
 MAX_SUPERS = 6
+INJECTIONS = re.compile(r"@(?:Inject|Redirect|ModifyArg|ModifyArgs|ModifyVariable|ModifyConstant|WrapOperation|WrapWithCondition|ModifyExpressionValue)\((.*?)\)\n\s*(?://[^\n]*\n\s*)*(?:private|public|protected)([^{;]*)", re.S)
+
+
+def constructor_head_problems(src):
+    """Constructor HEAD is before super(): invoking an instance handler is illegal.
+
+    Run on preprocessed sources so inactive version branches don't cause failures.
+    This is a source guard, not a substitute for applying mixins in a real client.
+    """
+    consts = dict(re.findall(r'String (\w+) = "([^"]+)"', src))
+    problems = []
+    for ann in INJECTIONS.finditer(src):
+        annotation, handler = ann.groups()
+        method = re.search(r'method\s*=\s*("[^"]+"|\{[^}]+\}|\w+)', annotation)
+        if not method:
+            continue
+        selectors = re.findall(r'"([^"]+)"', method.group(1)) or [consts.get(method.group(1), "")]
+        if not any(s.split("(")[0] == "<init>" for s in selectors):
+            continue
+        if not re.search(r'@At\(\s*(?:value\s*=\s*)?"HEAD"', annotation):
+            continue
+        declaration = handler.split("(", 1)[0]
+        if not re.search(r"\bstatic\b", declaration):
+            name = declaration.split()[-1]
+            problems.append(f"{name}: handler at <init> HEAD must be static (before super())")
+    return problems
 
 
 def jar_for(version):
@@ -160,6 +187,7 @@ def check(version):
             continue
         if listed is not None and f[:-5] not in listed:
             continue
+        problems.extend(f"{f}: {p}" for p in constructor_head_problems(src))
         imports = dict((i.group(2), i.group(1) + "." + i.group(2))
                        for i in re.finditer(r"import ((?:net\.minecraft|com\.mojang)[\w.]*)\.(\w+);", src))
         target = m.group(1)
@@ -203,7 +231,7 @@ def check(version):
                 problems.append(f"{f}: target class missing {owner}")
             elif not jar.has_member(owner_cls, name):
                 problems.append(f"{f}: field target {owner}.{name} missing")
-        for ann in re.finditer(r"@(?:Inject|Redirect|ModifyArg|ModifyArgs|ModifyVariable|WrapOperation|WrapWithCondition|ModifyExpressionValue)\((.*?)\)\n\s*(?://[^\n]*\n\s*)*(?:private|public|protected)([^{;]*)", src, re.S):
+        for ann in INJECTIONS.finditer(src):
             a = ann.group(1)
             mm = re.search(r'method\s*=\s*(?:"([^"]+)"|(\w+))', a)
             # @Local(argsOnly = true) needs the hooked method to take an argument of that type.

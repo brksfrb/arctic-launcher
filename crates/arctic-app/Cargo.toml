@@ -36,6 +36,7 @@ pulldown-cmark = { version = "0.13", default-features = false }
 [dev-dependencies]
 aes-gcm = "0.10.3"
 tempfile = "3.27.0"
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 [features]
 default = ["offline-accounts"]

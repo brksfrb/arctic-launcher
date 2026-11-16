@@ -280,19 +280,57 @@ pub fn find_conflicts(mods: &[InstalledMod]) -> Vec<Conflict> {
     out
 }
 
-/// The mod whose mixin config failed to apply, as the log names it: (config file, mod id when the
-/// log says so).
-fn mixin_failure(text: &str) -> Option<(String, Option<String>)> {
+struct MixinFailure<'a> {
+    config: &'a str,
+    owner: Option<String>,
+    line: &'a str,
+}
+
+/// Prefer the explicit owner in the deepest injection error over outer transformation failures.
+fn mixin_failure(text: &str) -> Option<MixinFailure<'_>> {
     let gate = Regex::new(
-        r"Critical injection failure|InvalidInjectionException|InvalidMixinException|MixinApplyError|MixinTransformerError|@Mixin target \S+ was not found|Mixin apply for mod|InjectionError",
+        r"MixinPreProcessorStandard|MixinApplicatorStandard|Critical injection failure|InvalidInjectionException|InvalidMixinException|MixinApplyError|MixinTransformerError|@Mixin target \S+ was not found|Mixin apply for mod|InjectionError",
     )
     .ok()?;
+    let text = if let Some(stack) = crate::crash::crash_exception(text) {
+        // A handled startup mixin failure cannot explain an unrelated fatal exception.
+        // Forge's {re:mixin, pl:mixin:APP:...} metadata merely lists applied mixins.
+        let mixin_crash = stack.lines().any(|line| {
+            let line = line.trim_start();
+            if line.starts_with("at ") {
+                let frame = line.split('(').next().unwrap_or(line);
+                frame.contains("org.spongepowered.asm.mixin.")
+                    || frame.contains("getPostMixinClassByteArray")
+            } else {
+                gate.is_match(line) || line.contains("Mixin transformation of ")
+            }
+        });
+        if !mixin_crash {
+            return None;
+        }
+        stack
+    } else {
+        text
+    };
     let config = Regex::new(r"([\w\-.]+\.mixins\.json)").ok()?;
     let owner = Regex::new(r"(?:from mod|apply for mod) ([\w\-]+)").ok()?;
-    text.lines().filter(|l| gate.is_match(l)).find_map(|l| {
-        let cfg = config.captures(l)?[1].to_owned();
-        Some((cfg, owner.captures(l).map(|o| o[1].to_lowercase())))
-    })
+    let injection = Regex::new(r"(?:InjectionError|InvalidInjectionException):").ok()?;
+    text.lines()
+        .rev()
+        .filter(|l| injection.is_match(l) && owner.is_match(l))
+        .chain(text.lines().filter(|l| gate.is_match(l)))
+        .find_map(|line| {
+            Some(MixinFailure {
+                config: config.captures(line)?.get(1)?.as_str(),
+                owner: owner.captures(line).map(|o| o[1].to_lowercase()),
+                line,
+            })
+        })
+}
+
+/// Evidence must come from the failure, not an earlier inventory or unreadable refmap warning.
+pub(crate) fn mixin_failure_line(text: &str) -> Option<&str> {
+    mixin_failure(text).map(|f| f.line)
 }
 
 /// Which installed mod owns mixin config `config`: the log's own answer, else the jar that lists
@@ -303,8 +341,11 @@ fn owner_of<'a>(
     mods: &'a [InstalledMod],
 ) -> Option<&'a InstalledMod> {
     let by_id = |id: &str| mods.iter().find(|m| m.id.eq_ignore_ascii_case(id));
-    said.and_then(by_id)
-        .or_else(|| mods.iter().find(|m| m.mixins.iter().any(|c| c == config)))
+    if let Some(id) = said {
+        return by_id(id);
+    }
+    mods.iter()
+        .find(|m| m.mixins.iter().any(|c| c == config))
         .or_else(|| {
             let stem = config.to_lowercase();
             mods.iter()
@@ -407,10 +448,77 @@ fn or_file(m: &InstalledMod) -> String {
     }
 }
 
-/// `base` (what the log rules found) improved with what the installed mods say: a mixin failure in
-/// a mod that clashes with another gets the clash as its explanation; a crash with no other
-/// explanation gets the clash, or at least the mod whose mixin failed.
+/// Whether the run implicates this pair, rather than merely listing an installed mod.
+/// An incomplete log is not proof of an early failure: require a mod-loading message before
+/// using that fallback, and stop using it once the game reaches its entrypoints or renderer.
+fn clash_mattered(text: &str, c: &Conflict, mods: &[InstalledMod]) -> bool {
+    let named = [&mods[c.a], &mods[c.b]].map(|m| {
+        let names = [&m.id, &m.name, &m.file]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .map(|s| regex::escape(s))
+            .collect::<Vec<_>>()
+            .join("|");
+        Regex::new(&format!(r"(?i)(?:^|[^\w-])(?:{names})(?:$|[^\w-])"))
+            .expect("escaped mod names are valid")
+    });
+    let duplicate = Regex::new(
+        r"(?i)duplicate mods?|duplicatemodsfoundexception|duplicate versions for mod id|found a duplicate mod",
+    )
+    .expect("duplicate mod pattern is valid");
+    let rejection = Regex::new(
+        r"(?i)duplicate mods?|duplicatemodsfoundexception|duplicate versions for mod id|found a duplicate mod|incompatible mods? (?:found|set)|mod resolution encountered an incompatible mod set|mod '.+' .+ is incompatible with|NEG_HARD_DEP .+\{breaks ",
+    )
+    .expect("loader rejection pattern is valid");
+    let progressed = Regex::new(
+        r"(?i)Reloading ResourceManager|Initializing mods \(entrypoint|entrypoints? (?:ran|running)|Backend library:|LWJGL (?:Version|version):|OpenGL (?:Vendor|Renderer|Version):|OpenAL initialized|Setting user:|Created: .*texture|Sound engine started|Starting integrated minecraft server|Connecting to ",
+    )
+    .expect("game progress pattern is valid");
+    let lines: Vec<_> = text.lines().collect();
+    for (i, line) in lines.iter().enumerate() {
+        // Fabric/Quilt and Forge/NeoForge can put the ids/files on subsequent lines.
+        // Don't borrow a name from a later successful mod inventory or game log record.
+        if rejection.is_match(line)
+            && (duplicate.is_match(line) == (c.why == Why::SameId))
+            && !lines[i + 1..].iter().any(|l| progressed.is_match(l))
+        {
+            let context = std::iter::once(*line)
+                .chain(lines[i + 1..].iter().take(12).copied().take_while(|l| {
+                    !l.trim().is_empty() && !l.contains("/INFO]") && !l.starts_with("----")
+                }))
+                .collect::<Vec<_>>()
+                .join("\n");
+            // For incompatible pairs, both sides must be named. A rejection involving one
+            // of them and some third mod does not establish that this pair caused the exit.
+            if named.iter().all(|n| n.is_match(&context)) {
+                return true;
+            }
+        }
+        let line = line.trim_start();
+        if (line.starts_with("at ")
+            || line.starts_with("Caused by:")
+            || line.starts_with("Suspected Mod")
+            || line.starts_with("-- MOD ")
+            || line.starts_with("Failure message:")
+            || line.starts_with("Mod File:"))
+            && named.iter().any(|n| n.is_match(line))
+        {
+            return true;
+        }
+    }
+    let loading =
+        Regex::new(r"(?i)Loading \d+ mods|Loading mods|Discovering mods|Scanning mod files")
+            .expect("mod loading pattern is valid");
+    !rejection.is_match(text) && loading.is_match(text) && !progressed.is_match(text)
+}
+
+/// `base` (what the log rules found) improved with what the installed mods say. A failed mixin
+/// owned by a clashing mod gets the clash explanation; other clashes require evidence from the
+/// run before they can explain an otherwise unknown crash.
 pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Option<Diagnosis> {
+    if let Some((registry, _)) = crate::crash::registry_sync_diagnosis(text) {
+        return Some(registry);
+    }
     let from_log;
     let mods = if mods.is_empty() {
         from_log = from_crash_report(text);
@@ -422,35 +530,304 @@ pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Opt
     let failure = mixin_failure(text);
     let failed = failure
         .as_ref()
-        .and_then(|(cfg, said)| owner_of(cfg, said.as_deref(), mods));
+        .and_then(|f| owner_of(f.config, f.owner.as_deref(), mods));
     if let Some(f) = failed {
         let involved = conflicts.iter().find(|c| {
             mods[c.a].id.eq_ignore_ascii_case(&f.id) || mods[c.b].id.eq_ignore_ascii_case(&f.id)
         });
         if let Some(c) = involved {
-            return Some(explain(c, mods, Some(f), true));
+            let clash = failure
+                .as_ref()
+                .and_then(|failure| redirect_clash(text, failure, mods));
+            return Some(clash.unwrap_or_else(|| explain(c, mods, Some(f), true)));
         }
     }
     if base.is_some() {
-        return base;
+        // Refine only our config-based rule; preserve higher-priority and Fabric diagnoses.
+        return if base == diagnose_mixin(text, &[]) {
+            diagnose_mixin(text, mods).or(base)
+        } else {
+            base
+        };
     }
-    if let Some(c) = conflicts.first() {
-        return Some(explain(c, mods, failed, failed.is_some()));
+    if failed.is_none()
+        && let Some(c) = conflicts.iter().find(|c| clash_mattered(text, c, mods))
+    {
+        return Some(explain(c, mods, None, false));
     }
-    let f = failed?;
+    diagnose_mixin(text, mods)
+}
+
+/// Legacy Mixin can fail while resolving an invocation owner before injection begins.
+pub(crate) fn preprocessing_class_failure(text: &str) -> bool {
+    let text = crate::crash::crash_exception(text).unwrap_or(text);
+    text.contains("ClassNotFoundException")
+        && [
+            "MixinTransformerError",
+            "MixinPreProcessorStandard",
+            "MixinApplicatorStandard",
+        ]
+        .iter()
+        .any(|marker| text.contains(marker))
+}
+
+/// Another mod targeting the same failed class can explain a missing injection target. Match
+/// the failing mixin itself within one complete agent block; inventories and other failures
+/// must not contribute a second mod.
+fn mixin_competitor(
+    text: &str,
+    failure: &MixinFailure<'_>,
+    id: &str,
+    mods: &[InstalledMod],
+) -> Option<String> {
+    let missing = Regex::new(r"Scanned 0 target\(s\)|(?i:target[^\r\n]*?(?:not found|was not found)|could not find any targets)").ok()?;
+    if !missing.is_match(failure.line) {
+        return None;
+    }
+    let entry = Regex::new(r"^([\w\-.]+\.mixins\.json):([\w.$]+)$").ok()?;
+    let failed_entry = Regex::new(r"([\w\-.]+\.mixins\.json):([\w.$]+)").ok()?;
+    let failed_mixin = failed_entry.captures(failure.line)?.get(2)?.as_str();
+    let target = Regex::new(r"Mixin transformation of ([\w.$]+) failed").ok()?;
+    let before = &text[..text.rfind(failure.line)?];
+    let target = target.captures_iter(before).last().map(|c| c[1].to_owned());
+    let conflict = Regex::new(
+        r"@(?:ModifyConstant|Redirect) conflict\. Skipping ([\w\-.]+\.mixins\.json):([\w.$]+) from mod ([\w-]+)->@\w+::([^ ]+) with priority \d+, already redirected by ([\w\-.]+\.mixins\.json):([\w.$]+) from mod ([\w-]+)->",
+    ).ok()?;
+    for block in text.split("failure begin").skip(1) {
+        let Some((block, _)) = block.split_once("failure end") else {
+            continue;
+        };
+        let lines: Vec<_> = block
+            .lines()
+            .map(|l| l.trim().strip_prefix("[Arctic mixin] ").unwrap_or(l.trim()))
+            .collect();
+        let Some(class) = lines.iter().find_map(|l| l.strip_prefix("class=")) else {
+            continue;
+        };
+        let class = class.split(';').next().unwrap_or(class);
+        if target.as_ref().is_some_and(|t| t != class) {
+            continue;
+        }
+        let Some(start) = lines
+            .iter()
+            .position(|l| l.starts_with("targeting mixins ("))
+        else {
+            continue;
+        };
+        let entries: Vec<_> = lines[start + 1..]
+            .iter()
+            .filter_map(|l| entry.captures(l))
+            .collect();
+        if !entries.iter().any(|c| {
+            &c[1] == failure.config
+                && (&c[2] == failed_mixin
+                    || c[2]
+                        .strip_suffix(failed_mixin)
+                        .is_some_and(|p| p.ends_with('.')))
+        }) {
+            continue;
+        }
+        // An explicit injector conflict identifies the competing mixin even when
+        // several unrelated mods also target this class. Tie both sides to this
+        // block and the failed injector instead of trusting an inventory name.
+        for c in conflict.captures_iter(before) {
+            let matches_entry = |config: &str, mixin: &str| {
+                entries.iter().any(|e| {
+                    &e[1] == config
+                        && (&e[2] == mixin
+                            || e[2].strip_suffix(mixin).is_some_and(|p| p.ends_with('.')))
+                })
+            };
+            if &c[1] == failure.config
+                && &c[2] == failed_mixin
+                && c[3].eq_ignore_ascii_case(id)
+                && failure.line.contains(&c[4])
+                && !c[7].eq_ignore_ascii_case(id)
+                && matches_entry(&c[1], &c[2])
+                && matches_entry(&c[5], &c[6])
+            {
+                return Some(c[7].to_lowercase());
+            }
+        }
+        let mut others = Vec::new();
+        for c in entries {
+            // The failed config's explicit owner also applies to its context entry.
+            if &c[1] == failure.config {
+                continue;
+            }
+            let other = owner_of(&c[1], None, mods).map_or_else(
+                || c[1].trim_end_matches(".mixins.json").to_owned(),
+                |m| m.id.clone(),
+            );
+            if !other.eq_ignore_ascii_case(id) && !others.contains(&other) {
+                others.push(other);
+            }
+        }
+        // With several other owners, the context cannot identify a particular pair.
+        if others.len() == 1 {
+            return others.pop();
+        }
+    }
+    None
+}
+
+/// A skipped required redirect is direct evidence of a clash. Require the same config, mixin,
+/// handler signature and explicit owner, before the failure; other warnings are incidental.
+fn redirect_clash(
+    text: &str,
+    failure: &MixinFailure<'_>,
+    mods: &[InstalledMod],
+) -> Option<Diagnosis> {
+    let failed = Regex::new(
+        r"(?:InjectionError|InvalidInjectionException):[^\r\n]*?Redirector (\S+) in ([\w\-.]+\.mixins\.json):([\w.$]+)",
+    )
+    .ok()?
+    .captures(failure.line)?;
+    let conflict = Regex::new(
+        r"@Redirect conflict\. Skipping ([\w\-.]+\.mixins\.json):([\w.$]+) from mod ([\w\-]+)->@Redirect::(\S+) with priority -?\d+, already redirected by ([\w\-.]+\.mixins\.json):([\w.$]+) from mod ([\w\-]+)->@Redirect::(\S+)",
+    )
+    .ok()?;
+    let before = &text[..text.rfind(failure.line)?];
+    let c = before.lines().rev().find_map(|line| {
+        let c = conflict.captures(line)?;
+        (&c[1] == failure.config
+            && c[1] == failed[2]
+            && c[2] == failed[3]
+            && c[4] == failed[1]
+            && failure.owner.as_ref().is_none_or(|o| o == &c[3])
+            && !c[3].eq_ignore_ascii_case(&c[7]))
+        .then_some(c)
+    })?;
+    let id = c[3].to_lowercase();
+    let other = c[7].to_lowercase();
+    let display = |id: &str| {
+        if id.eq_ignore_ascii_case("arctic") {
+            "Arctic Client".to_owned()
+        } else {
+            mods.iter()
+                .find(|m| m.id.eq_ignore_ascii_case(id))
+                .map_or_else(|| id.to_owned(), |m| m.name.clone())
+        }
+    };
+    let (name, other_name) = (display(&id), display(&other));
+    let title = if other == "arctic" {
+        format!("Arctic Client conflict with {name}")
+    } else if id == "arctic" {
+        format!("Arctic Client conflict with {other_name}")
+    } else {
+        format!("{name} clashes with {other_name}")
+    };
     Some(Diagnosis::new(
-        format!("{} failed to change the game", f.name),
+        title,
         format!(
-            "{}'s changes to the game could not be applied: it is probably made for another Minecraft version or clashes with another mod. Update or remove it.",
-            f.name
+            "{name}'s required redirect {} in {}:{} was skipped because {other_name}'s redirect {} in {}:{} already took the same call. This conflict crashed the game. Update {name} and {other_name}, or report this compatibility issue to their authors.",
+            &c[4], &c[1], &c[2], &c[8], &c[5], &c[6]
         ),
-        vec![f.id.clone()],
+        vec![id.to_owned(), other],
+    ))
+}
+
+/// Attribute failures to their explicit owner, then installed metadata, then the config stem.
+pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagnosis> {
+    let failure = mixin_failure(text)?;
+    let owner = owner_of(failure.config, failure.owner.as_deref(), mods);
+    let id = owner.map_or_else(
+        || {
+            failure
+                .owner
+                .clone()
+                .unwrap_or_else(|| failure.config.trim_end_matches(".mixins.json").to_owned())
+        },
+        |m| m.id.clone(),
+    );
+    let name = owner.map_or(id.as_str(), |m| m.name.as_str());
+    if let Some(clash) = redirect_clash(text, &failure, mods) {
+        return Some(clash);
+    }
+    if let Some(other) = mixin_competitor(text, &failure, &id, mods) {
+        let display = |id: &str| {
+            mods.iter()
+                .find(|m| m.id.eq_ignore_ascii_case(id))
+                .map_or_else(
+                    || match id {
+                        "particle_core" => "Particle Core".to_owned(),
+                        "sodium" => "Sodium".to_owned(),
+                        "carpet" => "Carpet".to_owned(),
+                        "cursed_craft" => "Cursed Craft".to_owned(),
+                        _ => id.to_owned(),
+                    },
+                    |m| m.name.clone(),
+                )
+        };
+        let (name, other_name) = (display(&id), display(&other));
+        let reason = if id == "particle_core" && other == "sodium" {
+            " Sodium replaces the particle rendering code that Particle Core tries to change."
+        } else {
+            ""
+        };
+        return Some(Diagnosis::new(
+            format!("{name} clashes with {other_name}"),
+            format!(
+                "{name}'s mixin could not find its injection target. {name} and {other_name} both change the same game class, indicating a compatibility clash.{reason} Update or remove {name}, or check its compatibility with {other_name}."
+            ),
+            vec![id, other],
+        ));
+    }
+    Some(Diagnosis::new(
+        format!("{name} failed to change the game"),
+        if preprocessing_class_failure(text) {
+            format!(
+                "{name}'s mixin failed to apply while resolving a class. Update {name}, or report this crash to its author."
+            )
+        } else {
+            format!(
+                "{name}'s mixin doesn't fit this version of Minecraft or a mod it changes. Update {name} (or the mod it's an addon for), or remove {name}."
+            )
+        },
+        vec![id],
     ))
 }
 
 /// `crash::diagnose` plus the clash check against the mods in `mods_dir`.
 pub fn diagnose_in(text: &str, mods_dir: &Path) -> Option<Diagnosis> {
+    if let Some((native, _)) = crate::crash::native_diagnosis(text) {
+        return Some(native);
+    }
     refine(crate::crash::diagnose(text), text, &scan(mods_dir))
+}
+
+/// The exit diagnosis, with incidental folder clashes kept as advice in the details. The UI has
+/// one fix action, so don't replace the actual cause's action with an unrelated DisableMods fix.
+pub fn diagnose_exit_in(text: &str, code: i32, mods_dir: &Path) -> Option<Diagnosis> {
+    let mods = scan(mods_dir);
+    let with_exit = format!(
+        "{text}\n(exit code {})",
+        crate::crash::exit_description(code)
+    );
+    let diagnosis = refine(crate::crash::diagnose(&with_exit), &with_exit, &mods)
+        .or_else(|| crate::crash::silent_exit(text, code));
+    let conflicts = find_conflicts(&mods);
+    let Some(c) = conflicts.first() else {
+        return diagnosis;
+    };
+    let clash = explain(c, &mods, None, false);
+    let mut diagnosis = diagnosis.unwrap_or_else(|| {
+        Diagnosis::new(
+            format!("Game exited with code {code} (0x{:08X})", code as u32),
+            format!(
+                "The game stopped with exit {}. The logs do not identify the cause.",
+                crate::crash::exit_description(code)
+            ),
+            Vec::new(),
+        )
+    });
+    if diagnosis.title != clash.title {
+        diagnosis.detail.push_str(&format!(
+            "\n\nAlso found a possible mods-folder clash: {}. This alone does not establish why the game stopped. Review {} and {} in the instance's Mods page.",
+            clash.title, or_file(&mods[c.a]), or_file(&mods[c.b])
+        ));
+    }
+    Some(diagnosis)
 }
 
 #[cfg(test)]
@@ -493,11 +870,265 @@ mod tests {
     const REPORT_267: &str = include_str!("../tests/fixtures/crash-267-noisiumed.log");
 
     #[test]
+    fn registry_crash_314_outranks_handled_mixins_and_installed_clashes() {
+        let report = include_str!("../tests/fixtures/crash-314-registry-sync.log");
+        // The full latest.log is unavailable. Simulate the suspected handled startup line;
+        // the uploaded report itself contains only the minVersion warning and applied mixins.
+        let text = format!(
+            "InvalidMixinException: @Mixin target optional.Class was not found alltheleaks.mixins.json:OptionalMixin\n{report}"
+        );
+        let mods = vec![
+            InstalledMod {
+                id: "alltheleaks".into(),
+                name: "All The Leaks".into(),
+                mixins: vec!["alltheleaks.mixins.json".into()],
+                ..InstalledMod::default()
+            },
+            InstalledMod {
+                id: "alltheleaks".into(),
+                name: "All The Leaks".into(),
+                ..InstalledMod::default()
+            },
+        ];
+        assert!(mixin_failure(&text).is_none());
+        assert!(diagnose_mixin(&text, &mods).is_none());
+        for base in [None, crate::crash::diagnose(&text)] {
+            let d = refine(base, &text, &mods).unwrap();
+            assert_eq!(d.title, "Forge registry IDs did not sync");
+            assert!(d.mods.is_empty());
+            assert!(d.fix.is_none());
+        }
+    }
+
+    #[test]
+    fn config_only_mixin_errors_cannot_explain_an_unrelated_crash_report() {
+        let text = "InvalidMixinException: @Mixin target optional.Class was not found alltheleaks.mixins.json:OptionalMixin\n\
+            MixinTransformerError\nClassNotFoundException: optional.Class\n\
+            ---- Minecraft Crash Report ----\nDescription: Initializing game\n\n\
+            java.lang.IllegalStateException: An unrelated fatal error\n\
+            \tat net.minecraft.client.Minecraft.start(Minecraft.java:459) {re:mixin,pl:mixin:APP:modernfix.mixins.json:StartupMixin}\n\n\
+            -- System Details --\n";
+        assert!(mixin_failure(text).is_none());
+        assert!(crate::crash::diagnose(text).is_none());
+        assert!(refine(None, text, &[]).is_none());
+    }
+
+    fn duplicate_mods() -> Vec<InstalledMod> {
+        ["1.0.0", "1.2.0"]
+            .into_iter()
+            .map(|version| InstalledMod {
+                id: "foo".into(),
+                name: "Foo".into(),
+                file: format!("foo-{version}.jar"),
+                version: version.into(),
+                ..InstalledMod::default()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn loader_rejection_implicates_the_named_clash() {
+        let mods = duplicate_mods();
+        let c = &find_conflicts(&mods)[0];
+        for text in [
+            "net.fabricmc.loader.impl.discovery.ModResolutionException: Duplicate versions for mod ID 'foo': [1.0.0, 1.2.0]",
+            "org.quiltmc.loader.api.ModResolutionException: Incompatible mod set!\n - Duplicate mod foo",
+            "net.minecraftforge.fml.common.DuplicateModsFoundException\nMod ID: 'foo' from mod files: foo-1.0.0.jar, foo-1.2.0.jar",
+            "[main/ERROR] [net.neoforged.fml.loading.UniqueModListBuilder/LOADING]: Found duplicate mods:\n\tMod ID: 'foo' from mod files: foo-1.0.0.jar, foo-1.2.0.jar",
+        ] {
+            assert!(clash_mattered(text, c, &mods), "{text}");
+            assert_eq!(
+                refine(None, text, &mods).unwrap().title,
+                "Foo is installed twice"
+            );
+        }
+        assert!(!clash_mattered(
+            "Loading 10 mods\nDuplicate versions for mod ID 'other': [1, 2]",
+            c,
+            &mods
+        ));
+        assert!(!clash_mattered(
+            "Incompatible mods found!\n - Mod 'Foo' (foo) 1.0.0 is incompatible with any version of mod 'Bar' (bar), but a matching version is present!",
+            c,
+            &mods,
+        ));
+    }
+
+    #[test]
+    fn crash_blame_implicates_the_clash_but_an_inventory_does_not() {
+        let mods = duplicate_mods();
+        let c = &find_conflicts(&mods)[0];
+        for text in [
+            "---- Minecraft Crash Report ----\nSuspected Mods: Foo (foo)",
+            "java.lang.RuntimeException: boom\n\tat knot//example.foo.Client.init(Client.java:42)",
+            "---- Minecraft Crash Report ----\nMod File: foo-1.0.0.jar\nFailure message: Failed to initialize",
+        ] {
+            assert!(clash_mattered(text, c, &mods), "{text}");
+        }
+        for text in [
+            "java.lang.RuntimeException: boom",
+            "---- Minecraft Crash Report ----\n\tFabric Mods:\n\t\tfoo: Foo 1.2.0",
+            "Reloading ResourceManager: vanilla, foo\n\tat example.foobar.Client.init(Client.java:42)",
+            "Duplicate versions for mod ID 'other': [1, 2]\n[main/INFO] Loading 10 mods:\n - foo 1.2.0\nReloading ResourceManager: foo",
+            "Duplicate versions for mod ID 'foo': [1, 2]\nReloading ResourceManager: foo",
+        ] {
+            assert!(!clash_mattered(text, c, &mods), "{text}");
+            assert!(refine(None, text, &mods).is_none(), "{text}");
+        }
+    }
+
+    #[test]
+    fn early_loading_requires_positive_evidence_and_no_later_progress() {
+        let mods = duplicate_mods();
+        let c = &find_conflicts(&mods)[0];
+        let loading = "[main/INFO] Loading 10 mods:\n - foo 1.2.0";
+        assert!(clash_mattered(loading, c, &mods));
+        for progress in [
+            "Initializing mods (entrypoint yumi:init)...",
+            "Backend library: LWJGL version 3.3.3",
+            "OpenGL Renderer: Intel(R) HD Graphics 4000",
+            "Reloading ResourceManager: vanilla, foo",
+        ] {
+            let text = format!("{loading}\n{progress}");
+            assert!(!clash_mattered(&text, c, &mods), "{text}");
+            assert!(refine(None, &text, &mods).is_none());
+        }
+        assert!(!clash_mattered("", c, &mods));
+    }
+
+    #[test]
+    fn an_unrelated_failed_mixin_does_not_blame_a_folder_clash() {
+        let mut mods = duplicate_mods();
+        mods.push(InstalledMod {
+            id: "bar".into(),
+            name: "Bar".into(),
+            ..InstalledMod::default()
+        });
+        let text = "Loading 10 mods\nInvalidInjectionException: Critical injection failure in bar.mixins.json:XMixin from mod bar failed";
+        let d = refine(None, text, &mods).unwrap();
+        assert_eq!(d.title, "Bar failed to change the game");
+        assert!(d.fix.is_none());
+    }
+
+    #[test]
+    fn fork_pairs_and_declared_breaks_also_need_evidence() {
+        for (a, b, breaks) in [
+            ("noisium", "noisiumed", Vec::new()),
+            ("alpha", "beta", vec![("beta".into(), vec!["*".into()])]),
+        ] {
+            let mods = vec![
+                InstalledMod {
+                    id: a.into(),
+                    name: a.into(),
+                    version: "1.0.0".into(),
+                    breaks,
+                    ..InstalledMod::default()
+                },
+                InstalledMod {
+                    id: b.into(),
+                    name: b.into(),
+                    version: "1.0.0".into(),
+                    ..InstalledMod::default()
+                },
+            ];
+            assert_eq!(find_conflicts(&mods).len(), 1);
+            let conflicts = find_conflicts(&mods);
+            let c = &conflicts[0];
+            assert!(clash_mattered(
+                &format!("Incompatible mods found!\n - {a} conflicts with {b}"),
+                c,
+                &mods,
+            ));
+            assert!(!clash_mattered(
+                &format!("Incompatible mods found!\n - {a} conflicts with other"),
+                c,
+                &mods,
+            ));
+            assert!(!clash_mattered(
+                &format!("Duplicate versions for mod ID '{a}': [1, 2]"),
+                c,
+                &mods,
+            ));
+            let text = format!(
+                "Loading 142 mods:\n - {a}\n - {b}\nReloading ResourceManager: vanilla, {a}, {b}"
+            );
+            assert!(refine(None, &text, &mods).is_none());
+        }
+    }
+
+    #[test]
+    fn report_301_keeps_the_exit_diagnosis_despite_two_kotlin_jars() {
+        let dir = tempfile::tempdir().unwrap();
+        for version in ["1.13.9+kotlin.2.3.10", "1.14.2+kotlin.2.4.21"] {
+            jar(
+                dir.path(),
+                &format!("fabric-language-kotlin-{version}.jar"),
+                &format!(
+                    r#"{{"id":"fabric-language-kotlin","name":"Fabric Language Kotlin","version":"{version}"}}"#
+                ),
+            );
+        }
+        let text = include_str!("../tests/fixtures/crash-301-kotlin-hang.log");
+        assert_eq!(find_conflicts(&scan(dir.path())).len(), 1);
+        assert!(diagnose_in(text, dir.path()).is_none());
+        let d = diagnose_exit_in(text, -805306369, dir.path()).unwrap();
+        assert_eq!(d.title, "Game exited with code -805306369 (0xCFFFFFFF)");
+        assert_ne!(d.title, "Fabric Language Kotlin is installed twice");
+        assert!(!d.title.contains("resource-pack"));
+        assert!(d.detail.contains("hang termination or native failure"));
+        assert!(
+            d.detail
+                .contains("Also found a possible mods-folder clash:")
+        );
+        assert!(
+            d.detail
+                .contains("fabric-language-kotlin-1.13.9+kotlin.2.3.10.jar")
+        );
+        assert!(
+            d.detail
+                .contains("fabric-language-kotlin-1.14.2+kotlin.2.4.21.jar")
+        );
+        assert!(d.fix.is_none());
+
+        // A fresh freeze snapshot establishes a hang; the incidental duplicate still stays advice.
+        let frozen = format!("{text}\nHang at exit: client hung for 12s; no recovery recorded");
+        let d = diagnose_exit_in(&frozen, -805306369, dir.path()).unwrap();
+        assert_eq!(d.title, "The game froze and was closed");
+        assert!(
+            d.detail
+                .contains("Also found a possible mods-folder clash:")
+        );
+        assert!(d.fix.is_none());
+
+        // A silent start and a known native exit also retain their normal explanations.
+        // After #65, NTSTATUS exits are diagnosed as a native crash, not a hex-code title.
+        let d = diagnose_exit_in("", 1, dir.path()).unwrap();
+        assert!(
+            d.title
+                .starts_with("The game stopped before it wrote anything")
+        );
+        let d = diagnose_exit_in(text, 0xC0000005_u32 as i32, dir.path()).unwrap();
+        assert_eq!(d.title, "Minecraft crashed in native code");
+        assert!(d.detail.contains("possible mods-folder clash"));
+        assert!(!d.title.contains("installed twice"));
+
+        let d = diagnose_exit_in(
+            "Mod 'ModernFix' (modernfix) 5.2 requires version 0.16.10 or later of mod 'Fabric Loader' (fabricloader), but only the wrong version is present: 0.15.11!",
+            1,
+            dir.path(),
+        ).unwrap();
+        assert_eq!(d.title, "Fabric Loader is too old for these mods");
+        assert_eq!(d.fix, Some(Fix::UpdateLoader));
+        assert!(d.detail.contains("possible mods-folder clash"));
+    }
+
+    #[test]
     fn report_267_names_the_fork_clash_from_the_log_alone() {
         let text = REPORT_267;
-        // The old rules had nothing to say about this one.
-        assert!(crate::crash::diagnose(text).is_none());
-        let d = refine(None, text, &[]).unwrap();
+        // The config-only rule identifies the failed mod; refinement still explains its clash.
+        let base = crate::crash::diagnose(text).unwrap();
+        assert_eq!(base.mods, ["noisiumed"]);
+        let d = refine(Some(base), text, &[]).unwrap();
         assert_eq!(d.title, "Noisium and Noisiumed are both installed");
         assert!(d.detail.starts_with(
             "Noisium and Noisiumed are both installed. Noisiumed is a fork of Noisium, so they clash. Keep one of them."
@@ -547,6 +1178,136 @@ mod tests {
     }
 
     #[test]
+    fn forge_config_owner_metadata_refines_the_base_diagnosis() {
+        let text = "InjectionError: Critical injection failure in superbaddon.mixins.json:CustomExplosionMixin\nSuspected Mods: LesRaisins Tactical Equipments (lrtactical), Version: 0.4.4";
+        let mods = vec![InstalledMod {
+            id: "actual_addon_id".into(),
+            name: "Superb Addon".into(),
+            mixins: vec!["superbaddon.mixins.json".into()],
+            ..InstalledMod::default()
+        }];
+        let d = refine(crate::crash::diagnose(text), text, &mods).unwrap();
+        assert_eq!(d.mods, ["actual_addon_id"]);
+        assert_eq!(d.title, "Superb Addon failed to change the game");
+        assert!(d.detail.contains("Update Superb Addon"));
+        let d = refine(crate::crash::diagnose(text), text, &[]).unwrap();
+        assert_eq!(d.mods, ["superbaddon"]);
+    }
+
+    #[test]
+    fn fabric_explicit_owner_cannot_be_overridden_by_config_metadata() {
+        let text = include_str!("../tests/fixtures/crash-310-particle-core.log");
+        let mut mods = vec![InstalledMod {
+            id: "necronomicon".into(),
+            name: "Necronomicon".into(),
+            mixins: vec!["particle_core.mixins.json".into()],
+            ..InstalledMod::default()
+        }];
+        // The explicit particle_core owner remains authoritative even if it is missing
+        // from the scanned inventory and another mod claims its config.
+        let d = refine(crate::crash::diagnose(text), text, &mods).unwrap();
+        assert_eq!(d.mods, ["particle_core", "sodium"]);
+        assert_eq!(d.title, "Particle Core clashes with Sodium");
+
+        mods.extend([
+            InstalledMod {
+                id: "particle_core".into(),
+                name: "Particle Core".into(),
+                mixins: vec!["particle_core.mixins.json".into()],
+                ..InstalledMod::default()
+            },
+            InstalledMod {
+                id: "sodium".into(),
+                name: "Sodium".into(),
+                mixins: vec!["sodium.mixins.json".into()],
+                ..InstalledMod::default()
+            },
+        ]);
+        let d = refine(crate::crash::diagnose(text), text, &mods).unwrap();
+        assert_eq!(d.title, "Particle Core clashes with Sodium");
+        assert_eq!(d.mods, ["particle_core", "sodium"]);
+        assert!(d.fix.is_none());
+    }
+
+    #[test]
+    fn report_315_keeps_carpet_owner_with_appleskin_first_in_the_inventory() {
+        let text = include_str!("../tests/fixtures/crash-315-carpet.log");
+        let mods: Vec<_> = [
+            ("appleskin", "AppleSkin"),
+            ("carpet", "Carpet"),
+            ("cursed_craft", "Cursed Craft"),
+            ("lithium", "Lithium"),
+        ]
+        .into_iter()
+        .map(|(id, name)| InstalledMod {
+            id: id.into(),
+            name: name.into(),
+            mixins: vec![format!("{id}.mixins.json")],
+            ..InstalledMod::default()
+        })
+        .collect();
+        let d = refine(crate::crash::diagnose(text), text, &mods).unwrap();
+        assert_eq!(d.title, "Carpet clashes with Cursed Craft");
+        assert_eq!(d.mods, ["carpet", "cursed_craft"]);
+        assert!(d.detail.contains("Update or remove Carpet"));
+        assert!(d.fix.is_none());
+
+        let dir = tempfile::tempdir().unwrap();
+        for m in &mods {
+            jar(
+                dir.path(),
+                &format!("{}.jar", m.id),
+                &serde_json::json!({
+                    "id": m.id,
+                    "name": m.name,
+                    "version": "1.0.0",
+                    "mixins": m.mixins,
+                })
+                .to_string(),
+            );
+        }
+        assert_eq!(diagnose_in(text, dir.path()).unwrap(), d);
+        assert_eq!(diagnose_exit_in(text, -1, dir.path()).unwrap(), d);
+    }
+
+    #[test]
+    fn report_310_exit_diagnosis_keeps_the_particle_core_sodium_clash() {
+        let dir = tempfile::tempdir().unwrap();
+        let text = include_str!("../tests/fixtures/crash-310-particle-core.log");
+        let d = diagnose_exit_in(text, -1, dir.path()).unwrap();
+        assert_eq!(d.title, "Particle Core clashes with Sodium");
+        assert_eq!(d.mods, ["particle_core", "sodium"]);
+        assert!(d.detail.contains("Update or remove Particle Core"));
+    }
+
+    #[test]
+    fn report_323_clash_uses_explicit_owners_and_installed_display_names() {
+        let text = include_str!("../tests/fixtures/crash-323-title-redirect.log");
+        let mods = vec![
+            InstalledMod {
+                id: "mod_id".into(),
+                name: "Space Background".into(),
+                // Even a declared conflict must not displace the actual redirect clash.
+                breaks: vec![("porting_lib_base".into(), vec!["*".into()])],
+                ..InstalledMod::default()
+            },
+            InstalledMod {
+                id: "porting_lib_base".into(),
+                mixins: vec!["swgc.mixins.json".into()],
+                ..InstalledMod::default()
+            },
+        ];
+        let d = refine(crate::crash::diagnose(text), text, &mods).unwrap();
+        assert_eq!(d.title, "Arctic Client conflict with Space Background");
+        assert_eq!(d.mods, ["mod_id", "arctic"]);
+        assert!(d.fix.is_none());
+        let dir = tempfile::tempdir().unwrap();
+        let d = diagnose_exit_in(text, -1, dir.path()).unwrap();
+        assert_eq!(d.title, "Arctic Client conflict with mod_id");
+        assert_eq!(d.mods, ["mod_id", "arctic"]);
+    }
+
+    #[test]
     fn the_same_mod_twice_switches_off_the_older_copy_by_file() {
         let dir = tmp("dupe");
         jar(
@@ -564,7 +1325,7 @@ mod tests {
             "bar.jar",
             r#"{"id":"bar","name":"Bar","version":"1.0.0"}"#,
         );
-        let d = diagnose_in("java.lang.RuntimeException: boom", &dir).unwrap();
+        let d = diagnose_in("net.fabricmc.loader.impl.discovery.ModResolutionException: Duplicate versions for mod ID 'foo': [1.0.0, 1.2.0]", &dir).unwrap();
         assert_eq!(d.title, "Foo is installed twice");
         assert_eq!(d.fix, Some(Fix::DisableMods(vec!["foo-1.0.jar".into()])));
         assert_eq!(
@@ -587,7 +1348,8 @@ mod tests {
             "b.jar",
             r#"{"id":"beta","name":"Beta","version":"1.5.0"}"#,
         );
-        let d = diagnose_in("java.lang.RuntimeException: boom", &dir).unwrap();
+        let rejected = "[main/ERROR]: Incompatible mods found!\n - alpha conflicts with beta";
+        let d = diagnose_in(rejected, &dir).unwrap();
         assert_eq!(d.title, "Alpha and Beta can't be used together");
         assert_eq!(d.fix, Some(Fix::DisableMods(vec!["alpha".into()])));
         // A newer Beta is fine, and Gamma 2.0 is outside "1.x".
@@ -607,7 +1369,11 @@ mod tests {
             "c.jar",
             r#"{"id":"gamma","name":"Gamma","version":"1.4.2"}"#,
         );
-        let d = diagnose_in("java.lang.RuntimeException: boom", &dir).unwrap();
+        let d = diagnose_in(
+            "[main/ERROR]: Incompatible mods found!\n - alpha conflicts with gamma",
+            &dir,
+        )
+        .unwrap();
         assert_eq!(d.title, "Alpha and Gamma can't be used together");
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -71,24 +71,26 @@ public class Resource implements AutoCloseable {
  public Resource(byte[] b,String p){bytes=b;owner=p;}
  public String getSourceName(){return owner;} public String sourcePackId(){return owner;}
  public java.io.InputStream getInputStream(){return new java.io.ByteArrayInputStream(bytes);}
- public java.io.InputStream open(){return getInputStream();} public void close(){closed++;}
+ public java.io.InputStream open(){return getInputStream();} public void close() throws java.io.IOException {closed++;}
 }""")
         listing = ("java.util.Map<Identifier,Resource> listResources(String p, java.util.function.Predicate<Identifier> filter){\n"
-                   "java.util.Map<Identifier,Resource> out=new java.util.HashMap<>(); for(Identifier id:data.keySet()) if(id.getPath().startsWith(p) && filter.test(id)) out.put(id,getResource(id)); return out;}") if modern else (
+                   "if(failListing)throw new IllegalStateException(\"broken listing\"); java.util.Map<Identifier,Resource> out=new java.util.HashMap<>(); for(Identifier id:data.keySet()) if(id.getPath().startsWith(p) && filter.test(id)) out.put(id,getResource(id)); return out;}") if modern else (
                    "java.util.Collection<Identifier> listResources(String p, java.util.function.Predicate<String> filter){\n"
-                   "java.util.List<Identifier> out=new java.util.ArrayList<>(); for(Identifier id:data.keySet()) if(id.getPath().startsWith(p) && filter.test(id.getPath())) out.add(id); return out;}")
+                   "if(failListing)throw new IllegalStateException(\"broken listing\"); java.util.List<Identifier> out=new java.util.ArrayList<>(); for(Identifier id:data.keySet()) if(id.getPath().startsWith(p) && filter.test(id.getPath())) out.add(id); return out;}")
         write("net/minecraft/server/packs/resources/ResourceManager.java", """package net.minecraft.server.packs.resources;
 import java.util.*; import net.minecraft.resources.Identifier;
 public class ResourceManager implements com.arcticlauncher.mod.GlassResources.ActivePacks {
  public final Map<Identifier,byte[]> data=new HashMap<>(); public final Map<Identifier,String> owners=new HashMap<>();
+ public boolean failListing; public final Set<Identifier> broken=new HashSet<>();
  public List<String> arctic$packNames(){return Arrays.asList("base","server");}
  public static class Pack { final String name; Pack(String n){name=n;} public String getName(){return name;} public String packId(){return name;} }
  public java.util.stream.Stream<Pack> listPacks(){return arctic$packNames().stream().map(Pack::new);}
- public Resource getResource(Identifier id){return new Resource(data.get(id),owners.get(id));}
+ public Resource getResource(Identifier id){if(broken.contains(id))throw new IllegalStateException("broken rule"); return new Resource(data.get(id),owners.get(id));}
  public Resource getResourceOrThrow(Identifier id){return getResource(id);}
  public """ + listing + "\n}")
         write("TestPriority.java", """
 import com.arcticlauncher.mod.GlassResources;
+import com.arcticlauncher.client.ctm.GlassPacks;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.*;
 public class TestPriority {
@@ -110,12 +112,20 @@ public class TestPriority {
   GlassResources.reload(m);
   if(GlassResources.packs.tile("minecraft:glass",0).getRGB(0,0)!=0xff445566)throw new AssertionError("filename tie break");
   if(Boolean.parseBoolean(args[0]) && Resource.closed!=5)throw new AssertionError("unclosed ownership streams: "+Resource.closed);
+  if(Boolean.parseBoolean(args[0])){
+   m.broken.add(new Identifier("minecraft:mcpatcher/ctm/a-server/rule.properties"));
+   GlassResources.reload(m);
+   if(GlassResources.packs.tile("minecraft:glass",0).getRGB(0,0)!=0xffabcdef)throw new AssertionError("bad ownership lookup hid valid rule");
+  }
+  m.failListing=true;
+  GlassResources.reload(m);
+  if(GlassResources.packs!=GlassPacks.EMPTY)throw new AssertionError("listing failure retained stale tiles");
  }
 }
 """)
         subprocess.run(["javac", "--release", "8", "-Xlint:-options", "-d", str(root / "classes"), *map(str, root.rglob("*.java"))], check=True)
         subprocess.run(["java", "-cp", str(root / "classes"), "TestPriority", str(not modern).lower()], check=True)
-        print(f"PASS {'.'.join(map(str, version))}: pack priority, filename tie break, ownership stream closure", flush=True)
+        print(f"PASS {'.'.join(map(str, version))}: pack priority, stream closure, bad rule isolation, reload fallback", flush=True)
 
 
 if __name__ == "__main__":

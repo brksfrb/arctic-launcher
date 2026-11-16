@@ -836,6 +836,7 @@ fn token_for_locked(dirs: &DataDirs, base: &str, account: &Account) -> Result<St
 /// system's machine id changed) reads as empty, and the server refuses an empty key as
 /// "invalid name or key" for good; a new key at least gets a clear answer (the name is claimed:
 /// use the recovery code) instead.
+#[cfg(any(feature = "offline-accounts", test))]
 fn usable_key(dirs: &DataDirs, uuid: &str, name: &str, entry: &mut Credential) -> Result<String> {
     let fine = |k: &str| (32..=128).contains(&k.len()) && k.bytes().all(|b| b.is_ascii_hexdigit());
     if let Some(key) = entry.key.clone().filter(|k| fine(k)) {
@@ -876,9 +877,11 @@ fn usable_key(dirs: &DataDirs, uuid: &str, name: &str, entry: &mut Credential) -
 }
 
 /// The most keys tried for one sign-in.
+#[cfg(any(feature = "offline-accounts", test))]
 const MAX_KEY_TRIES: usize = 8;
 
 /// The key for `uuid` in a credentials file's text (readable, or the older encrypted kind).
+#[cfg(any(feature = "offline-accounts", test))]
 fn key_in_credentials(text: &str, uuid: &str) -> Option<String> {
     serde_json::from_str::<Credentials>(text)
         .ok()?
@@ -890,6 +893,7 @@ fn key_in_credentials(text: &str, uuid: &str) -> Option<String> {
 /// Every offline key this PC may have held for `uuid` besides `first`: the ledgers' history, then every
 /// `cosmetics.json` and ledger (backups and set-aside copies too) in the data folder and in every
 /// profile, including removed ones. A key counts as lost only when none of these works.
+#[cfg(any(feature = "offline-accounts", test))]
 fn other_keys(dirs: &DataDirs, uuid: &str, first: &str) -> Vec<String> {
     let fine = |k: &str| (32..=128).contains(&k.len()) && k.bytes().all(|b| b.is_ascii_hexdigit());
     let mut found = crate::offline_keys::history(dirs, uuid);
@@ -911,6 +915,7 @@ fn other_keys(dirs: &DataDirs, uuid: &str, first: &str) -> Vec<String> {
 }
 
 /// The server says this name is held by another key (so another key may still be right).
+#[cfg(any(feature = "offline-accounts", test))]
 fn wrong_key(error: &Error) -> bool {
     let text = error.to_string();
     text.contains("used by another") || text.contains("invalid name or key")

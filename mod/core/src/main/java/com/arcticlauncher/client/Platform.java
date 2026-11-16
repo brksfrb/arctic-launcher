@@ -59,6 +59,9 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return true;
 	}
 
+	/** Current screen class for freeze diagnostics; called on the client thread. */
+	default String screenClassName() { return "unknown"; }
+
 	/**
 	 * Recording was asked for inside a world that isn't being buffered: start a buffer now that opens
 	 * with the world as it is. False when this version can't (the caller says to rejoin).
