@@ -63,7 +63,7 @@ public final class ReplayRecording {
 			com.arcticlauncher.mod.ArcticMod.LOG.warn("replay: could not encode handover {} in phase {}; recording stopped",
 					ReplayCodec.name(packet), ReplayCodec.phaseName(protocol));
 			take.end();
-			com.arcticlauncher.client.notice.Notices.post("Replay", "Recording stopped because a protocol handover could not be saved.");
+			com.arcticlauncher.client.notice.Notices.post(com.arcticlauncher.client.Lang.t("replay.replay"), com.arcticlauncher.client.Lang.t("replay.recording_stopped_because_a_protocol_handover_could_not_be_saved"));
 			return;
 		}
 		for (byte[] bytes : encoded) {

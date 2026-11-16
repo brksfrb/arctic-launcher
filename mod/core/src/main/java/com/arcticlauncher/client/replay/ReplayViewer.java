@@ -279,7 +279,7 @@ public final class ReplayViewer {
 				platform.log(true, "replay: packet " + i + " failed: " + e + where + "; cause=" + e.getCause() + "; " + evidence());
 			}
 			if (e instanceof ReplayBackend.ProtocolFailure || consecutivePacketFailures >= MAX_PACKET_FAILURES) {
-				stopPacketFeeding("Replay playback stopped because its packets could not be read. Try another recording.");
+				stopPacketFeeding(Lang.t("replay.replay_playback_stopped_because_its_packets_could_not_be_read_try_another_recording"));
 			}
 			return;
 		}

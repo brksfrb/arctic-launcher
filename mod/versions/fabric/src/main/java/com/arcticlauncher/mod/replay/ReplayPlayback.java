@@ -191,7 +191,7 @@ public final class ReplayPlayback implements ReplayBackend {
 		try {
 			ReplayCodec.beforeHandle(channel, packet);
 		} catch (RuntimeException e) {
-			throw new ReplayBackend.ProtocolFailure("Replay protocol barrier failed (" + ReplayCodec.context(protocol, bytes) + ")", e);
+			throw new ReplayBackend.ProtocolFailure("Replay protocol barrier failed (" + ReplayCodec.context(protocol, bytes) + ")", e); // i18n-ignore: internal log/exception text, never shown
 		}
 		if (PacketSorter.dropped(name) || (jumping && PacketSorter.category(name) == Category.TRANSIENT)) {
 			return;
@@ -202,7 +202,7 @@ public final class ReplayPlayback implements ReplayBackend {
 		}
 		PacketListener listener = connection.getPacketListener();
 		if (listener == null) {
-			throw new ReplayBackend.ProtocolFailure("Replay has no packet listener (" + ReplayCodec.context(protocol, bytes) + ")", null);
+			throw new ReplayBackend.ProtocolFailure("Replay has no packet listener (" + ReplayCodec.context(protocol, bytes) + ")", null); // i18n-ignore: internal log/exception text, never shown
 		}
 		try {
 			((Packet) packet).handle(listener);
@@ -213,10 +213,10 @@ public final class ReplayPlayback implements ReplayBackend {
 			// Queued for the game thread by the game itself, except a handover: feeding the
 			// next phase before that handler runs would lose it.
 			if (!ReplayCodec.changesPhase(name)) return;
-			throw new ReplayBackend.ProtocolFailure("Replay packet handler left the game thread (" + ReplayCodec.context(protocol, bytes) + ")", e);
+			throw new ReplayBackend.ProtocolFailure("Replay packet handler left the game thread (" + ReplayCodec.context(protocol, bytes) + ")", e); // i18n-ignore: internal log/exception text, never shown
 		} catch (RuntimeException e) {
 			if (ReplayCodec.changesPhase(name)) {
-				throw new ReplayBackend.ProtocolFailure("Replay protocol handover failed (" + ReplayCodec.context(protocol, bytes) + "): " + e, e);
+				throw new ReplayBackend.ProtocolFailure("Replay protocol handover failed (" + ReplayCodec.context(protocol, bytes) + "): " + e, e); // i18n-ignore: internal log/exception text, never shown
 			}
 			throw new IllegalStateException("replay handler " + ReplayCodec.context(protocol, bytes) + " " + name, e);
 		}
