@@ -210,7 +210,9 @@ public final class ReplayPlayback implements ReplayBackend {
 			applied++;
 			if (ReplayCodec.changesPhase(name)) lastSwitch = name + " after " + applied + " packets, now " + ReplayCodec.phaseName(phase);
 		} catch (RunningOnDifferentThreadException e) {
-			// Feeding the next phase before this handler runs would lose the handover.
+			// Queued for the game thread by the game itself, except a handover: feeding the
+			// next phase before that handler runs would lose it.
+			if (!ReplayCodec.changesPhase(name)) return;
 			throw new ReplayBackend.ProtocolFailure("Replay packet handler left the game thread (" + ReplayCodec.context(protocol, bytes) + ")", e);
 		} catch (RuntimeException e) {
 			if (ReplayCodec.changesPhase(name)) {

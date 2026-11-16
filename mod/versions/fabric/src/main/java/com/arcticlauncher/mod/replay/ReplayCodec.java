@@ -315,7 +315,6 @@ public final class ReplayCodec {
 	@SuppressWarnings("rawtypes")
 	public static Packet<?> decode(Object protocol, ByteBuffer bytes) {
 		ByteBuf buf = Unpooled.wrappedBuffer(bytes);
-		try {
 		//#if MC >= 1.20.5
 		return (Packet<?>) ((ProtocolInfo) protocol).codec().decode(buf);
 		//#else
@@ -339,9 +338,6 @@ public final class ReplayCodec {
 		}
 		//#endif
 		//#endif
-		} finally {
-			buf.release();
-		}
 	}
 }
 //#endif

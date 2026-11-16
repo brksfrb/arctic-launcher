@@ -54,6 +54,7 @@ public final class ReplayViewer {
 	private final Runnable onKeyframesChanged;
 	private final FreeCamera free = new FreeCamera();
 	private int consecutivePacketFailures;
+	private int loggedFailures;
 	private boolean placed;
 	private double time;
 	private int cursor;
@@ -268,7 +269,7 @@ public final class ReplayViewer {
 			failure = e.getMessage();
 			platform.log(true, "replay: packet " + i + " left playback unusable, stopping: " + e.getMessage());
 		} catch (RuntimeException e) {
-			if (++consecutivePacketFailures == 1) {
+			if (++consecutivePacketFailures == 1 && loggedFailures++ < 5) {
 				// Where it failed too: a bare NullPointerException says nothing on its own.
 				StackTraceElement[] at = e.getStackTrace();
 				StringBuilder where = new StringBuilder();
