@@ -1,6 +1,6 @@
 //! Polarium (Arctic's own entity-rendering performance mod) is part of the
 //! Performance switch: its jars come with the launcher (mod/dist/polarium,
-//! built from Polarium perf/chests-coexist at bc514e7da82dc1ab63dfaa40677f59db69a6c02f) rather than from
+//! built from Polarium perf/chests-coexist at c850fac41a00ab38acd4f1a2b1830f6f301fb0e1) rather than from
 //! Modrinth, and are kept in sync in each instance's mods folder like the
 //! Arctic Client. An instance that has Polarium already (the player's own
 //! copy) is left with that one.
