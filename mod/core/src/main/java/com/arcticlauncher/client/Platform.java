@@ -78,6 +78,16 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return null;
 	}
 
+	/** The version of a loaded mod by its id, or null when no such mod is loaded. */
+	default String loadedModVersion(String id) {
+		return null;
+	}
+
+	/** The mod loader the game runs on: {@code fabric}, {@code quilt} or {@code forge}. */
+	default String loaderId() {
+		return "fabric";
+	}
+
 	/** World time in ticks (day = time / 24000), or -1 outside a world. */
 	long dayTime();
 

@@ -15,6 +15,8 @@ public final class ServerMenus {
 	// Only the latest disconnect is kept (its page refers back to the screen, so a weak map would never let go).
 	private static Screen disconnectedScreen;
 	private static com.arcticlauncher.client.servers.DisconnectedPage disconnectedPage;
+	/** What is shown for that disconnect: the page above, or the missing-mods page in its place. */
+	private static com.arcticlauncher.client.ui.Page disconnectedShown;
 	/** The player picked the game's own server list: its disconnect screen stays the game's too. */
 	private static boolean vanillaList;
 	private ServerMenus() {}
@@ -64,12 +66,18 @@ public final class ServerMenus {
 			// whose auto-reconnect countdown would start over.
 			com.arcticlauncher.client.servers.DisconnectedPage page = disconnectedScreen == original ? disconnectedPage : null;
 			if (page == null) {
+				String reason = DisconnectText.reason(original);
 				page = new com.arcticlauncher.client.servers.DisconnectedPage(
-						Compat.titleOf(original).getString(), DisconnectText.reason(original));
+						Compat.titleOf(original).getString(), reason);
 				disconnectedScreen = original;
 				disconnectedPage = page;
+				// Refused for mods: the missing-mods page instead (it keeps the disconnect page one click away).
+				disconnectedShown = ArcticClient.disconnectPage(page, reason);
+				if (disconnectedShown != page) {
+					page.cancelReconnect();
+				}
 			}
-			ArcticClient.platform().openPage(page);
+			ArcticClient.platform().openPage(disconnectedShown);
 		} else {
 			vanillaList = false;
 			ArcticClient.platform().openPage(new ServersPage(vanilla));

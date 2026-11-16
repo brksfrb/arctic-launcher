@@ -310,6 +310,19 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public String loadedModVersion(String id) {
+		return FabricLoader.getInstance().getModContainer(id)
+				.map(c -> c.getMetadata().getVersion().getFriendlyString())
+				.orElse(null);
+	}
+
+	@Override
+	public String loaderId() {
+		// On Forge the loader calls are answered by the Forge shim (ForgeFabricLoader).
+		return FabricLoader.getInstance().getClass().getName().contains("Forge") ? "forge" : "fabric";
+	}
+
+	@Override
 	public String connectingServer() {
 		MinecraftClient mc = mc();
 		return mc.isInSingleplayer() || mc.getCurrentServerEntry() == null ? null : mc.getCurrentServerEntry().address;

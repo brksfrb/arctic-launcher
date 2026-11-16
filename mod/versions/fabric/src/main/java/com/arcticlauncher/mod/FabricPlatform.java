@@ -311,6 +311,18 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public String loadedModVersion(String id) {
+		return FabricLoader.getInstance().getModContainer(id)
+				.map(c -> c.getMetadata().getVersion().getFriendlyString())
+				.orElse(null);
+	}
+
+	@Override
+	public String loaderId() {
+		return FabricLoader.getInstance().isModLoaded("quilt_loader") ? "quilt" : "fabric";
+	}
+
+	@Override
 	public String connectingServer() {
 		Minecraft mc = mc();
 		return mc.hasSingleplayerServer() || mc.getCurrentServer() == null ? null : mc.getCurrentServer().ip;
