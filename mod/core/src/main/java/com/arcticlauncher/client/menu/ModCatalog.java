@@ -574,6 +574,16 @@ final class ModCatalog {
 		if (p.outlineTweaks()) {
 			out.add(new Mod("outline", Lang.t("mods.block_outline"), Lang.t("mods.the_outline_on_the_block_you_look_at"), "outline", Category.VISUAL, "selection")
 					.toggle(() -> c.outlineColor != 0, on -> {
+		if (p.menuBlurWorks()) {
+			out.add(new Mod("menublur", Lang.t("mods.menu_blur"), Lang.t("mods.blur_the_world_behind_menus_the_inventory_and_the"), "motionblur",
+					Category.VISUAL, "background blur menu inventory pause screen frosted glass gui")
+					.toggle(() -> c.menuBlur, on -> c.menuBlur = on)
+					.settings((host, f) -> {
+						f.section(Lang.t("mods.blur"));
+						f.slider(Lang.t("mods.strength"), () -> c.menuBlurStrength, v -> c.menuBlurStrength = (int) v, 0, com.arcticlauncher.client.feature.MenuBlur.MAX, 1, "%.0f");
+						f.note(Lang.t("mods.the_game_has_its_own_blur_setting_in_video"));
+					}));
+		}
 						if (on) {
 							c.outlineColor = c.outlineColorOff != 0 ? c.outlineColorOff : OUTLINE_COLORS[0];
 							c.outlineWidth = c.outlineWidthOff > 0 ? c.outlineWidthOff : WIDTH_VALUES[1];

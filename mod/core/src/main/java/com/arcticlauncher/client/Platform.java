@@ -560,6 +560,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
+	/** The game blurs the world behind menus (1.20.5 and newer), so Menu Blur can set its strength. */
+	default boolean menuBlurWorks() {
+		return false;
+	}
+
 	/** Send a chat message, or a command when it starts with "/". */
 	default void sendChat(String text) {}
 

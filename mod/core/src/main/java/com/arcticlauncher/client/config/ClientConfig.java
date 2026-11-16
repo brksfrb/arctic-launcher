@@ -122,6 +122,9 @@ public final class ClientConfig {
 	public boolean clearWeather;
 	/** Motion blur, and how strong (1 low to 4 max). */
 	public boolean motionBlur;
+	/** Menu Blur: blur the world behind menus with this strength (0 to 10) instead of the game's own setting. */
+	public boolean menuBlur;
+	public int menuBlurStrength = 5;
 	public int motionBlurStrength = 2;
 	/** How strong the blur is, 0 to 100 (the camera blur; the strength above is for the blend used under VulkanMod). */
 	public int motionBlurAmount = 35;

@@ -1523,6 +1523,15 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean menuBlurWorks() {
+		//#if MC >= 1.20.5
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	@Override
 	public void sendChat(String text) {
 		WorldStats.sendChat(text);
 	}
