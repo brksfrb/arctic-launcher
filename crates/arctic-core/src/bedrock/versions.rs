@@ -440,6 +440,7 @@ fn install_legacy(
                     sha1: None,
                     size: None,
                     lzma: None,
+                    md5: None,
                 }],
                 progress,
             );
