@@ -98,7 +98,7 @@ public final class LegacyPlatform implements Platform {
 			return -1;
 		}
 		PlayerListEntry entry = mc.getNetworkHandler().getPlayerListEntry(mc.player.getUuid());
-		return entry == null ? -1 : entry.getLatency();
+		return com.arcticlauncher.client.net.MeasuredPing.value(server(), entry == null ? -1 : entry.getLatency());
 	}
 
 	@Override
@@ -107,6 +107,8 @@ public final class LegacyPlatform implements Platform {
 		if (mc.getNetworkHandler() == null || mc.isInSingleplayer()) {
 			return -1;
 		}
+		// Our own entry: the measured round trip, as the ping widget shows.
+		if (mc.player != null && player.equals(mc.player.getUuid())) return ping();
 		PlayerListEntry entry = mc.getNetworkHandler().getPlayerListEntry(player);
 		return entry == null ? -1 : entry.getLatency();
 	}

@@ -82,6 +82,7 @@ pub fn spawn(
     plan: &LaunchPlan,
     on_event: impl Fn(GameEvent) + Send + Sync + 'static,
 ) -> Result<GameHandle> {
+    let spawn_started = std::time::Instant::now();
     log::info!("launching: {}", plan.redacted_command());
     rotate_game_log(&plan.log_file);
     let log = Arc::new(Mutex::new(File::create(&plan.log_file).at(&plan.log_file)?));
@@ -130,6 +131,11 @@ pub fn spawn(
             return Err(crate::Error::io(&plan.java, e));
         }
     };
+    log::info!(
+        "[startup] Java process started in {} ms (pid {})",
+        spawn_started.elapsed().as_millis(),
+        child.id()
+    );
     let launch_context = format!(
         "[Arctic diagnostics] runtime: agent={}; executable={}; high_performance_gpu={}",
         plan.args
