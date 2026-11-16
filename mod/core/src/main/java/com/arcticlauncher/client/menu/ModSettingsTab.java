@@ -41,6 +41,10 @@ final class ModSettingsTab implements MenuTab {
 		if (mod.settings != null) {
 			mod.settings.build(host, f);
 		}
+		if (mod.widget != null) {
+			f.action(Lang.t("mods.edit_hud"), Lang.t("mods.edit_hud"),
+					() -> ArcticClient.platform().openPage(new HudEditor()));
+		}
 		f.done();
 	}
 

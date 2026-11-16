@@ -144,10 +144,11 @@ class BadgeLooksTest {
 	void lookupCarriesTwoWearersChoicesAndSavingPreservesTheCurrentLook() throws Exception {
 		HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 		AtomicReference<JsonObject> written = new AtomicReference<>();
+		java.util.concurrent.atomic.AtomicInteger storedBadge = new java.util.concurrent.atomic.AtomicInteger(1);
 		java.util.concurrent.atomic.AtomicBoolean acceptsBadge = new java.util.concurrent.atomic.AtomicBoolean(true);
 		String hash = new String(new char[40]).replace('\0', 'a');
 		server.createContext("/v1/players", ex -> {
-			String reply = "{\"" + Looks.compact(A) + "\":{\"badge_style\":1,\"arctic\":true},\""
+			String reply = "{\"" + Looks.compact(A) + "\":{\"badge_style\":" + storedBadge.get() + ",\"arctic\":true},\""
 					+ Looks.compact(B) + "\":{\"badge_style\":2,\"arctic\":true}}";
 			byte[] bytes = reply.getBytes(StandardCharsets.UTF_8);
 			ex.sendResponseHeaders(200, bytes.length); ex.getResponseBody().write(bytes); ex.close();
@@ -160,7 +161,10 @@ class BadgeLooksTest {
 				while ((n = ex.getRequestBody().read(buffer)) != -1) out.write(buffer, 0, n);
 				JsonObject body = new JsonParser().parse(new String(out.toByteArray(), StandardCharsets.UTF_8)).getAsJsonObject();
 				written.set(body);
-				if (acceptsBadge.get()) response = response.replace("\"badge_style\":0", "\"badge_style\":" + body.get("badge_style"));
+				if (acceptsBadge.get()) {
+					storedBadge.set(body.get("badge_style").getAsInt());
+					response = response.replace("\"badge_style\":0", "\"badge_style\":" + storedBadge.get());
+				}
 			}
 			byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
 			ex.sendResponseHeaders(200, bytes.length); ex.getResponseBody().write(bytes); ex.close();
@@ -189,9 +193,10 @@ class BadgeLooksTest {
 			acceptsBadge.set(false);
 			looks.wearBadgeStyle(1);
 			until = System.nanoTime() + 5_000_000_000L;
-			while (looks.busy() && System.nanoTime() < until) Thread.sleep(10);
+			String failure = com.arcticlauncher.client.Lang.t("looks.couldnt_save_your_badge_try_again");
+			while ((looks.busy() || !failure.equals(looks.status())) && System.nanoTime() < until) Thread.sleep(10);
 			assertFalse(looks.busy());
-			assertTrue(looks.status().startsWith("Couldn't save"));
+			assertEquals(failure, looks.status());
 			assertEquals(2, looks.myLook().badgeStyle);
 		} finally { close(looks); server.stop(0); }
 	}

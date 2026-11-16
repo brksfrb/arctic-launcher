@@ -12,6 +12,11 @@ public interface Gfx {
 
 	int height();
 
+	/** Consecutive fills with one color; adapters may submit their quads together. */
+	default void beginFills(int color) {}
+
+	default void endFills() {}
+
 	void fill(int x0, int y0, int x1, int y1, int color);
 
 	void gradient(int x0, int y0, int x1, int y1, int top, int bottom);

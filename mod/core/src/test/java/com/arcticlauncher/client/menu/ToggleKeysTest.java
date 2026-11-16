@@ -37,6 +37,8 @@ class ToggleKeysTest {
 				(proxy, method, args) -> {
 					switch (method.getName()) {
 						case "hasFeatures":
+						case "movesVanillaParts":
+						case "scoreboardTweaks":
 							return true;
 						case "isKeyDown":
 							return held.contains(args[0]);
@@ -57,6 +59,19 @@ class ToggleKeysTest {
 		field("platform").set(null, previousPlatform);
 		field("config").set(null, previousConfig);
 		field("hud").set(null, previousHud);
+	}
+
+	@Test
+	void mergedHudCardKeepsItsOriginalToggleBinding() {
+		Mod scoreboard = mod("scoreboard");
+		assertEquals("hud.scoreboard", scoreboard.hudControls.id);
+		ToggleKeys.set(scoreboard.hudControls, "key.keyboard.h");
+		boolean before = scoreboard.hudControls.on();
+		ToggleKeys.tick(platform, c, false);
+		held.add("key.keyboard.h");
+		ToggleKeys.tick(platform, c, false);
+		assertEquals(!before, scoreboard.hudControls.on());
+		assertEquals(!before, ArcticClient.hud().slot(scoreboard.widget).enabled);
 	}
 
 	@Test

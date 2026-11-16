@@ -3,8 +3,8 @@
 mod download;
 mod resolver;
 
-pub(crate) use download::body_timeout;
 pub use download::{Compressed, DownloadJob, download_all, set_gentle, sha1_file};
+pub(crate) use download::{body_timeout, connect_timeout, is_not_found};
 
 use std::sync::{PoisonError, RwLock};
 use std::time::Duration;
