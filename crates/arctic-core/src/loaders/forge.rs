@@ -20,7 +20,7 @@ use super::installer::{self, Installer};
 use super::legacy_forge;
 use super::processors::{self, Context, Processor, lib_path, resolve_data_value};
 use super::util::{load_saved_profile, parse_profile, save_profile};
-use crate::net::{DownloadJob, download_all};
+use crate::net::{DownloadJob, download_all, is_not_found};
 use crate::storage::{DataDirs, load_json, save_json};
 use crate::versions::{Library, VersionJson, maven_path, merge};
 use crate::{Error, Progress, Result};
@@ -87,9 +87,13 @@ pub fn install(
             }
         }
     }
-    Err(Error::Other(format!(
-        "the installer could not be downloaded (is this version available?): {last_err}"
-    )))
+    Err(Error::Other(if is_not_found(&last_err) {
+        format!("the installer could not be downloaded (is this version available?): {last_err}")
+    } else {
+        format!(
+            "Forge's download server is not responding right now. Try again in a few minutes. ({last_err})"
+        )
+    }))
 }
 
 fn install_from(
