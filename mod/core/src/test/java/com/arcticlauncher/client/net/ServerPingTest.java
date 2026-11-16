@@ -66,8 +66,18 @@ class ServerPingTest {
 		}
 	}
 
+	@Test void rejectsMismatchedPong() throws Exception {
+		try (ServerSocket server = new ServerSocket(0)) {
+			Thread fake = new Thread(() -> answer(server, true));
+			fake.setDaemon(true); fake.start();
+			assertEquals(-1, ServerPing.ping("127.0.0.1:" + server.getLocalPort(), 754).ping);
+		}
+	}
+
 	/** A server that answers one status request and its ping. */
-	private static void answer(ServerSocket server) {
+	static void answer(ServerSocket server) { answer(server, false); }
+
+	private static void answer(ServerSocket server, boolean corrupt) {
 		try (Socket c = server.accept()) {
 			DataInputStream in = new DataInputStream(c.getInputStream());
 			DataOutputStream out = new DataOutputStream(c.getOutputStream());
@@ -85,6 +95,7 @@ class ServerPingTest {
 			int len = ServerPing.readVarInt(in);
 			byte[] ping = new byte[len];
 			in.readFully(ping);
+			if (corrupt) ping[ping.length - 1] ^= 1;
 			ServerPing.writeVarInt(out, len);
 			out.write(ping);
 			out.flush();

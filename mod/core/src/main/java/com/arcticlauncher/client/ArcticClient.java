@@ -54,9 +54,18 @@ public final class ArcticClient {
 	private static com.arcticlauncher.client.looks.LauncherSkins launcherSkins;
 
 	public static void init(Platform p) {
+		StartupTiming timing = new StartupTiming(p);
 		CrashDiagnostics.start();
-		com.arcticlauncher.client.looks.OsTrust.installDefault();
+		// Certificate parsing is independent of local settings and HUD construction.
+		java.util.concurrent.CompletableFuture<Void> trust = new java.util.concurrent.CompletableFuture<>();
+		Thread trustWorker = new Thread(() -> {
+			try { com.arcticlauncher.client.looks.OsTrust.installDefault(); trust.complete(null); }
+			catch (Throwable failure) { trust.completeExceptionally(failure); }
+		}, "Arctic system certificates");
+		trustWorker.setDaemon(true);
+		trustWorker.start();
 		platform = p;
+		timing.step("diagnostics + trust worker");
 		FreezeWatchdog.logTo(new java.util.function.Consumer<String>() {
 			public void accept(String line) {
 				p.log(true, line);
@@ -71,8 +80,13 @@ public final class ArcticClient {
 		applyLauncherStyle(session);
 		applyLauncherProxy(session);
 		waypoints = com.arcticlauncher.client.waypoints.Waypoints.load(p.configDir());
+		timing.step("session + language + settings");
 		hud = new Hud(config);
 		features = new Features(p, config);
+		timing.step("HUD + features");
+		// Finish before starting any network service, preserving the default trust setup.
+		trust.join();
+		timing.step("trust wait");
 		looks = new Looks(p, config, serverUrl(session), session.token);
 		looks.shareServer(session.shareServer);
 		looks.start();
@@ -82,6 +96,7 @@ public final class ArcticClient {
 		launcherSkins = new com.arcticlauncher.client.looks.LauncherSkins(p, session.bridgePort, session.bridgeSecret);
 		voice = new com.arcticlauncher.client.voice.VoiceLink(p, session.bridgePort, session.bridgeSecret);
 		voice.start();
+		timing.step("looks + social + voice");
 		packs = new com.arcticlauncher.client.packs.PackBrowser(p, p.configDir());
 		shaders = new com.arcticlauncher.client.packs.ShaderPacks(p);
 		shaderBrowser = new com.arcticlauncher.client.packs.PackBrowser(p, p.configDir(),
@@ -104,6 +119,8 @@ public final class ArcticClient {
 		if (session.replayFile != null && replayAge >= 0 && replayAge < DUEL_REQUEST_SECONDS) {
 			com.arcticlauncher.client.replay.Replays.watchWhenReady(new java.io.File(session.replayFile));
 		}
+		timing.step("packs + replay + bridge");
+		timing.done();
 		p.log(false, "Arctic Client ready: style " + config.style + ", looks from " + looks.baseUrl());
 	}
 
@@ -402,6 +419,7 @@ public final class ArcticClient {
 		}
 		FreezeWatchdog.state(platform == null || platform.windowFocused(), platform != null && platform.inWorld(),
 				platform == null ? "unknown" : platform.screenClassName());
+		if (platform != null) com.arcticlauncher.client.net.MeasuredPing.tick(platform);
 		com.arcticlauncher.client.feature.DynamicFps.tick(platform, screenOpen);
 		com.arcticlauncher.client.replay.Replays.tick(screenOpen);
 		// Gameplay ticks are skipped outside a world and while watching a replay.

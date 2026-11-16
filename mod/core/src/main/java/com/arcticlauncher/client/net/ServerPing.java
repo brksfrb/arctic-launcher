@@ -86,10 +86,11 @@ public final class ServerPing {
 			p.writeLong(sent);
 			packet(out, ps.toByteArray());
 			try {
-				readPacket(in);
+				DataInputStream pong = new DataInputStream(new java.io.ByteArrayInputStream(readPacket(in)));
+				if (readVarInt(pong) != 1 || pong.readLong() != sent || pong.available() != 0) throw new IOException("invalid status pong");
 				status.ping = (System.nanoTime() - sent) / 1_000_000L;
 			} catch (IOException e) {
-				// Some servers close after the status: the time to the status is close enough.
+				// Some servers close after status or return an invalid pong: no valid RTT.
 				status.ping = -1;
 			}
 			return status;

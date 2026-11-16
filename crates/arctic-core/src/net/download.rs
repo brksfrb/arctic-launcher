@@ -164,7 +164,14 @@ impl Reporter<'_> {
 /// Download every job that is not already present, `WORKERS` at a time.
 /// Returns the first error encountered (remaining jobs are abandoned).
 pub fn download_all(stage: &str, jobs: Vec<DownloadJob>, progress: Progress) -> Result<()> {
+    let checks_started = Instant::now();
+    let count = jobs.len();
     let pending = pending_jobs(jobs);
+    log::info!(
+        "[startup] {stage}: checked {count} files in {} ms, {} downloads needed",
+        checks_started.elapsed().as_millis(),
+        pending.len()
+    );
     let reporter = Reporter {
         stage,
         progress,
@@ -247,10 +254,34 @@ fn take(queue: &Mutex<(usize, usize)>, large: bool) -> Option<usize> {
 /// download (e.g. the client jar) from finishing last on its own.
 fn pending_jobs(jobs: Vec<DownloadJob>) -> Vec<DownloadJob> {
     let mut seen = HashSet::new();
-    let mut pending: Vec<DownloadJob> = jobs
+    let unique: Vec<_> = jobs
         .into_iter()
-        .filter(|j| seen.insert(j.dest.clone()) && !j.is_satisfied())
+        .filter(|j| seen.insert(j.dest.clone()))
         .collect();
+    // Bound disk metadata concurrency independently of the much larger network pool.
+    // Small queues avoid thread creation altogether.
+    let mut pending: Vec<DownloadJob> = if unique.len() < 128 {
+        unique.into_iter().filter(|j| !j.is_satisfied()).collect()
+    } else {
+        std::thread::scope(|scope| {
+            let chunk = unique.len().div_ceil(4);
+            let handles: Vec<_> = unique
+                .chunks(chunk)
+                .map(|jobs| {
+                    scope.spawn(move || {
+                        jobs.iter()
+                            .filter(|j| !j.is_satisfied())
+                            .cloned()
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .flat_map(|h| h.join().expect("file check worker panicked"))
+                .collect()
+        })
+    };
     pending.sort_by_key(|j| std::cmp::Reverse(j.transfer_size().unwrap_or(0)));
     pending
 }
@@ -782,6 +813,28 @@ mod tests {
             order,
             ["missing/b", "missing/a", "missing/c"].map(PathBuf::from)
         );
+    }
+
+    #[test]
+    fn parallel_checks_keep_missing_and_truncated_files_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut jobs = Vec::new();
+        for i in 0..256 {
+            let dest = dir.path().join(i.to_string());
+            if i % 3 != 0 {
+                fs::write(&dest, if i % 3 == 1 { &b"ok"[..] } else { &b"x"[..] }).unwrap();
+            }
+            let entry = DownloadJob {
+                dest,
+                ..job("", Some(2))
+            };
+            jobs.extend([entry.clone(), entry]);
+        }
+        let pending = pending_jobs(jobs);
+        assert_eq!(pending.len(), 171);
+        let unique: HashSet<_> = pending.iter().map(|j| j.dest.clone()).collect();
+        assert_eq!(unique.len(), pending.len());
+        assert!(pending.iter().all(|j| !j.is_satisfied()));
     }
 
     #[test]
