@@ -347,5 +347,16 @@
   "instances.yes_delete": "Да, удалить",
   "instances.yes_remove": "Да, убрать",
   "instances.you_get_a_code_to_put_in_your_servers_motd": "Вы получите код для MOTD сервера, подтверждающий, что он ваш. Затем он ждёт быстрой проверки перед появлением в списке.",
-  "instances.your_server_list_hud_and_arctic_client": "Список серверов, настройки HUD и Arctic Client, а также клавиши, FOV и видеонастройки Minecraft одинаковы во всех сборках, которые их делят, поэтому новая ощущается как уже настроенная."
+  "instances.your_server_list_hud_and_arctic_client": "Список серверов, настройки HUD и Arctic Client, а также клавиши, FOV и видеонастройки Minecraft одинаковы во всех сборках, которые их делят, поэтому новая ощущается как уже настроенная.",
+  "instances.world_trash": "Корзина ({count})",
+  "instances.world_trash_hint": "Удалённые миры хранятся {days} дн., затем удаляются навсегда.",
+  "instances.world_trash_kept": "Хранится {days} дн. Откройте корзину, чтобы восстановить.",
+  "instances.world_trash_note": "Удалённые миры хранятся здесь {days} дн., затем удаляются навсегда.",
+  "instances.back_to_worlds": "Назад к мирам",
+  "instances.world_delete_sure": "Это нельзя отменить. Уверены?",
+  "instances.world_restored": "Восстановлено: {name}",
+  "instances.favorite_world": "Добавить в избранное",
+  "instances.unfavorite_world": "Убрать из избранного",
+  "instances.favorite_world_cannot_delete": "Избранные миры нельзя удалить. Сначала уберите мир из избранного.",
+  "instances.could_not_save_favorite": "Не удалось сохранить избранное"
 }
