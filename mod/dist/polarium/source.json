@@ -1,12 +1,12 @@
 {
   "repository": "https://github.com/brksfrb/polarium",
-  "branch": "perf/regress",
-  "commit": "1a92f2b7b08853f619a8c8a861147b44e721f8e4",
+  "branch": "perf/chests-coexist",
+  "commit": "bc514e7da82dc1ab63dfaa40677f59db69a6c02f",
   "jars": {
     "1.21.11": "a1f4fcf2d4fc519a18985c70098a6d744d4a74c18ba2dc10bd007242d9a0796a",
     "26.1.2": "f950a0ea83af70a75c4f5422c9e9332b2e99b3c5fd0eb7b8e43d4adcbb3c6366",
-    "26.2": "9acf46ce12363b2bde4ae570b73493313c6cd33192fb345d5e16a73dcc09adc3",
-    "26.3": "e42095a43eed968c5de19d0477ca14b91c9210f60e9dd0a9e47981b165f2e8c5",
+    "26.2": "121edc7826e5cf54a295da5738affd26dd572ff4f9f9f7cdbc60bf8d24d503f3",
+    "26.3": "7694f9a28856ace0130314c4713feab557974460ad866c8da46d28137510942e",
     "1.8.9": "0adf5bc86ccc101f7dbc72dc609fe6eef0da764859fadaa42c27efd24ae56cea"
   }
 }
