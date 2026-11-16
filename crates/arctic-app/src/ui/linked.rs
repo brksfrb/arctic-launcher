@@ -669,18 +669,18 @@ impl ArcticApp {
                     }
                 }
                 ui.add_space(12.0);
-                widgets::row(ui, |ui| {
+                if state.as_ref().is_none_or(LinkState::is_owner) {
                     ui.label(
                         RichText::new(t!("instances.link.no_account_needed"))
                             .small()
                             .color(p.muted),
                     );
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if widgets::button(ui, p, None, t!("instances.link.done"), false).clicked()
-                        {
-                            close = true;
-                        }
-                    });
+                    ui.add_space(6.0);
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if widgets::button(ui, p, None, t!("instances.link.done"), false).clicked() {
+                        close = true;
+                    }
                 });
             });
         if rebuild && let Some(i) = instance {
@@ -1145,12 +1145,11 @@ fn diff_list(ui: &mut egui::Ui, p: &Palette, diff: &mut Diff, enabled: bool) {
             ui.add_enabled_ui(enabled, |ui| {
                 if let Some(t) = diff.target.as_mut() {
                     section(ui, p, t!("instances.link.minecraft"));
-                    let from = format!(
-                        "{} {}",
-                        t.change.from_loader.label(),
-                        t.change.from_version.as_deref().unwrap_or("?")
+                    let from = target_label(
+                        &t.change.from_loader,
+                        t.change.from_version.as_deref().unwrap_or("?"),
                     );
-                    let to = format!("{} {}", t.change.to_loader.label(), t.change.to_version);
+                    let to = target_label(&t.change.to_loader, &t.change.to_version);
                     item(
                         ui,
                         p,
@@ -1229,6 +1228,14 @@ fn diff_list(ui: &mut egui::Ui, p: &Palette, diff: &mut Diff, enabled: bool) {
                 .small()
                 .color(p.warn),
         );
+    }
+}
+
+/// "Fabric 0.17.2 · 1.21.11" (the loader's own version too: it can change alone).
+fn target_label(loader: &arctic_core::instances::Loader, game: &str) -> String {
+    match loader.version() {
+        Some(v) => format!("{} {v} · {game}", loader.label()),
+        None => format!("{} · {game}", loader.label()),
     }
 }
 

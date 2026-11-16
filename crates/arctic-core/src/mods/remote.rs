@@ -113,28 +113,28 @@ pub fn project_titles(ids: &[&str]) -> std::collections::HashMap<String, (String
 }
 
 /// A mod a server named (its mod id, as in `fabric.mod.json` or `mods.toml`) as a Modrinth
-/// project: tried as a slug, the way most mods are published. `version_hint` (the version the
-/// server runs) picks the version whose number holds it when there is one; otherwise the
-/// newest that fits. `None` when Modrinth has no such project or no version of it fits.
+/// project: tried as a slug (and with `_` as `-`), the way most mods are published.
+/// `version_hint` (the version the server runs) picks the version whose
+/// number holds it when there is one; otherwise the newest that fits. `None` when Modrinth
+/// has no such project or no version of it fits this game version and loader.
 pub fn find_for_mod_id(
     mod_id: &str,
     version_hint: Option<&str>,
     game_version: &str,
     loader: LoaderKind,
 ) -> Result<Option<(String, RemoteFile)>> {
+    #[derive(serde::Deserialize)]
+    struct Found {
+        id: String,
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        project_type: String,
+    }
     let id =
         clean_mod_id(mod_id).ok_or_else(|| Error::Other(format!("{mod_id:?} is not a mod id")))?;
-    let slugs = slug_guesses(&id);
-    for slug in &slugs {
-        #[derive(serde::Deserialize)]
-        struct Found {
-            id: String,
-            #[serde(default)]
-            title: String,
-            #[serde(default)]
-            project_type: String,
-        }
-        let url = format!("{}/project/{}", modrinth::API, modrinth::encode(slug));
+    for slug in slug_guesses(&id) {
+        let url = format!("{}/project/{}", modrinth::API, modrinth::encode(&slug));
         let project: Found = match modrinth::get_api(&url, &format!("project {slug}")) {
             Ok(p) => p,
             Err(Error::Other(msg)) if msg.contains("not found") => continue,
@@ -143,27 +143,36 @@ pub fn find_for_mod_id(
         if project.project_type != "mod" && !project.project_type.is_empty() {
             continue;
         }
-        let loaders = modrinth::compatible_loaders(loader, game_version);
-        let versions = modrinth::project_versions(&project.id, &loaders, game_version)?;
-        let picked = pick_with_hint(&versions, version_hint)
-            .or_else(|| modrinth::pick_version(&versions, &loaders, game_version));
-        let Some(file) = picked
-            .map(to_remote)
-            .and_then(|v| v.files.into_iter().next())
-        else {
-            continue;
-        };
-        if files::check_file_name(&file.file_name).is_err() {
-            continue;
+        if let Some(file) = fitting_file(&project.id, version_hint, game_version, loader)? {
+            return Ok(Some((title_or(&project.title, &id), file)));
         }
-        let title = if project.title.trim().is_empty() {
-            id.clone()
-        } else {
-            project.title
-        };
-        return Ok(Some((title, file)));
     }
     Ok(None)
+}
+
+fn title_or(title: &str, id: &str) -> String {
+    if title.trim().is_empty() {
+        id.to_owned()
+    } else {
+        title.to_owned()
+    }
+}
+
+/// The file of the project's version for this game and loader (the hinted one if any).
+fn fitting_file(
+    project: &str,
+    version_hint: Option<&str>,
+    game_version: &str,
+    loader: LoaderKind,
+) -> Result<Option<RemoteFile>> {
+    let loaders = modrinth::compatible_loaders(loader, game_version);
+    let versions = modrinth::project_versions(project, &loaders, game_version)?;
+    let picked = pick_with_hint(&versions, version_hint)
+        .or_else(|| modrinth::pick_version(&versions, &loaders, game_version));
+    Ok(picked
+        .map(to_remote)
+        .and_then(|v| v.files.into_iter().next())
+        .filter(|f| files::check_file_name(&f.file_name).is_ok()))
 }
 
 /// A version whose number holds the server's version (`0.5.1` in `mc1.21-0.5.1`).

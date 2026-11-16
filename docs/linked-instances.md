@@ -245,10 +245,17 @@ Mod ids already loaded in the game are marked as installed (with their version w
 one that differs: "mismatched").
 
 **Install with Arctic Launcher** sends the list over the launcher bridge; the launcher looks each id
-up on Modrinth (as a project slug, for the instance's version and loader), shows the same diff
-screen (adds only) and, once approved, downloads and hash-checks the files. The game then offers
-**Restart and rejoin**: it quits, and the launcher starts the instance again straight into the
-server (Quick Play).
+up on Modrinth as a project slug (also with `_` as `-`), takes the version the server named when
+one matches, else the newest for the instance's version and loader, shows the same diff screen
+(adds only) and, once approved, downloads the files and checks them against Modrinth's SHA-1 and
+SHA-512. The game then offers **Restart and rejoin**: it quits, and the launcher starts the
+instance again straight into the server (Quick Play).
+
+Limits: ids that aren't the project's slug (`farmersdelight` for `farmers-delight`) are reported
+as not on Modrinth, as are mods only published elsewhere; a mod that is installed in another
+version is shown as mismatched but not replaced from the game (a linked instance from the server's
+owner is the way to match versions exactly); a server that needs another loader can't be fixed by
+adding mods.
 
 ### Bridge endpoints
 
@@ -278,3 +285,17 @@ the per-launch token from the game's session file, which tells the launcher whic
 
 `POST /v1/missing-mods/{launch}/restart` → `{}`: the launcher relaunches this instance into
 `server` once the game has quit; the game quits right after.
+
+## Testing
+
+- `cargo test -p arctic-core linked` covers the manifest build (local jars and personal files left
+  out), the allow-list (traversal, absolute paths, links, personal names), the diff, applying all
+  or nothing (a bad hash, a failed download, a failure at every step of the swap, a failed commit:
+  the instance is byte-for-byte as before), unlink, and the whole share → join → publish → review
+  → take → stop sharing flow against an in-process fake of the server API above.
+- `cargo test -p arctic-core linked -- --ignored` also runs it with real Modrinth downloads (a mod
+  shared and installed into a friend's copy, and missing mods found by their ids).
+- `mod/gradlew -p mod/core test --tests '*MissingModsTest*'`: reading refusals (Fabric registry
+  sync, FML rejections, NeoForge/Forge, lists, generic) and the bridge messages.
+- By hand, until the server has the endpoints: point the launcher at a server that has them with
+  `ARCTIC_COSMETICS_URL=<base>` (the fake in `linked/tests.rs` shows the exact behaviour).

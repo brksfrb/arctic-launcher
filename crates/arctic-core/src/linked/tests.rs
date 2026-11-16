@@ -897,3 +897,308 @@ fn an_owner_key_is_kept_encrypted() {
     assert_eq!(load(&dirs, "x").unwrap(), state);
     assert!(state.is_owner() && !state.has_update());
 }
+
+// ------------------------------------------------- against a fake server
+
+/// The link endpoints of docs/linked-instances.md, in memory, on a local port.
+mod fake_server {
+    use std::collections::HashMap;
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::net::TcpListener;
+    use std::sync::{Arc, Mutex};
+
+    use serde_json::{Value, json};
+
+    struct Link {
+        key: String,
+        revision: u64,
+        manifest: Value,
+    }
+
+    pub fn start() -> String {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let links: Arc<Mutex<HashMap<String, Link>>> = Arc::default();
+        std::thread::spawn(move || {
+            for (n, stream) in listener.incoming().flatten().enumerate() {
+                let links = Arc::clone(&links);
+                std::thread::spawn(move || {
+                    let mut reader = BufReader::new(stream.try_clone().unwrap());
+                    let mut line = String::new();
+                    reader.read_line(&mut line).unwrap();
+                    let mut parts = line.split_whitespace();
+                    let method = parts.next().unwrap_or_default().to_owned();
+                    let path = parts.next().unwrap_or_default().to_owned();
+                    let (mut length, mut key) = (0usize, String::new());
+                    loop {
+                        line.clear();
+                        reader.read_line(&mut line).unwrap();
+                        let h = line.trim_end();
+                        if h.is_empty() {
+                            break;
+                        }
+                        let (name, value) = h.split_once(':').unwrap();
+                        if name.eq_ignore_ascii_case("content-length") {
+                            length = value.trim().parse().unwrap();
+                        } else if name.eq_ignore_ascii_case("x-arctic-link-key") {
+                            key = value.trim().to_owned();
+                        }
+                    }
+                    let mut body = vec![0u8; length];
+                    reader.read_exact(&mut body).unwrap();
+                    let body: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
+                    let (status, answer) = answer(&links, n, &method, &path, &key, &body);
+                    let text = answer.to_string();
+                    let mut out = stream;
+                    write!(
+                        out,
+                        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{text}",
+                        text.len()
+                    )
+                    .unwrap();
+                });
+            }
+        });
+        format!("http://127.0.0.1:{port}")
+    }
+
+    fn answer(
+        links: &Mutex<HashMap<String, Link>>,
+        n: usize,
+        method: &str,
+        path: &str,
+        key: &str,
+        body: &Value,
+    ) -> (&'static str, Value) {
+        let mut links = links.lock().unwrap();
+        let rest = path.strip_prefix("/v1/links").unwrap_or("");
+        let gone = ("404 Not Found", json!({"error": "no such link"}));
+        let parts: Vec<&str> = rest.trim_start_matches('/').split('/').collect();
+        match (method, &parts[..]) {
+            ("POST", [""]) => {
+                // Eight letters of the share alphabet, one code per request.
+                let alphabet = b"abcdefghjkmnpqrstuvwxyz23456789";
+                let code: String = (0..8)
+                    .map(|i| char::from(alphabet[(n / alphabet.len().pow(i)) % alphabet.len()]))
+                    .collect();
+                let key = "owner-key-".to_owned() + &"x".repeat(32);
+                links.insert(
+                    code.clone(),
+                    Link {
+                        key: key.clone(),
+                        revision: 1,
+                        manifest: body["manifest"].clone(),
+                    },
+                );
+                (
+                    "201 Created",
+                    json!({"code": code, "key": key, "revision": 1}),
+                )
+            }
+            ("PUT", [code]) => match links.get_mut(*code) {
+                None => gone,
+                Some(l) if l.key != key => ("403 Forbidden", json!({"error": "wrong key"})),
+                Some(l) if body["base_revision"].as_u64() != Some(l.revision) => {
+                    ("409 Conflict", json!({"error": "moved on"}))
+                }
+                Some(l) => {
+                    l.revision += 1;
+                    l.manifest = body["manifest"].clone();
+                    ("200 OK", json!({"revision": l.revision}))
+                }
+            },
+            ("GET", [code, "head"]) => match links.get(*code) {
+                None => gone,
+                Some(l) => ("200 OK", json!({"revision": l.revision, "updated": 1})),
+            },
+            ("GET", [code]) => match links.get(*code) {
+                None => gone,
+                Some(l) => (
+                    "200 OK",
+                    json!({"code": code, "revision": l.revision, "updated": 1, "manifest": l.manifest}),
+                ),
+            },
+            ("DELETE", [code]) => match links.get(*code) {
+                None => gone,
+                Some(l) if l.key != key => ("403 Forbidden", json!({"error": "wrong key"})),
+                Some(_) => {
+                    links.remove(*code);
+                    ("204 No Content", json!({}))
+                }
+            },
+            _ => ("404 Not Found", json!({"error": "no route"})),
+        }
+    }
+}
+
+fn data_dirs() -> (tempfile::TempDir, crate::storage::DataDirs) {
+    let dir = tempfile::tempdir().unwrap();
+    let dirs = crate::storage::DataDirs::new(dir.path());
+    (dir, dirs)
+}
+
+fn new_loader() -> Loader {
+    // New enough for any Arctic Client: nothing is asked of the network about it.
+    Loader::Fabric {
+        version: "9.9.9".into(),
+    }
+}
+
+#[test]
+fn share_follow_update_and_stop_against_the_api() {
+    let base = fake_server::start();
+    let noop = |_: crate::ProgressInfo| {};
+
+    // The owner shares an instance with one config file and a personal one.
+    let (_a, owner_dirs) = data_dirs();
+    let owner = crate::instances::create(&owner_dirs, "Our SMP", "1.21.11", new_loader()).unwrap();
+    let owner_game = owner.game_dir(&owner_dirs);
+    std::fs::create_dir_all(owner_game.join("config")).unwrap();
+    std::fs::write(owner_game.join("config/a.json"), "{\"v\":1}").unwrap();
+    std::fs::write(owner_game.join("config/arctic.json"), "{\"proxy\":\"x\"}").unwrap();
+    std::fs::write(owner_game.join("options.txt"), "fov:90").unwrap();
+    let (state, built) = share(&owner_dirs, &base, None, &owner, true).unwrap();
+    assert!(state.is_owner());
+    assert_eq!(built.manifest.configs.len(), 1);
+    let code = state.code.clone();
+
+    // A friend previews it by code: everything is offered, nothing is made yet.
+    let (_b, friend_dirs) = data_dirs();
+    let (fetched, diff) = preview(&base, &crate::sharing::codes::pretty(&code)).unwrap();
+    assert_eq!(diff.configs.len(), 1);
+    assert!(
+        crate::instances::list_custom(&friend_dirs)
+            .unwrap()
+            .is_empty()
+    );
+    let (copy, report) = follow(&friend_dirs, &code, &fetched, &diff, &noop).unwrap();
+    assert_eq!(report.configs, 1);
+    let copy_game = copy.game_dir(&friend_dirs);
+    assert_eq!(
+        std::fs::read_to_string(copy_game.join("config/a.json")).unwrap(),
+        "{\"v\":1}"
+    );
+    assert!(!copy_game.join("config/arctic.json").exists());
+    assert!(!copy_game.join("options.txt").exists());
+    let copy_state = load(&friend_dirs, &copy.id).unwrap();
+    assert!(!copy_state.is_owner() && !copy_state.has_update());
+
+    // The owner changes a config and publishes; the friend sees a pending update.
+    std::fs::write(owner_game.join("config/a.json"), "{\"v\":2}").unwrap();
+    std::fs::write(owner_game.join("config/b.toml"), "b = 1").unwrap();
+    let (state, _) = publish(&owner_dirs, &base, &owner, true).unwrap();
+    assert_eq!(state.revision, 2);
+    let checked = check(&friend_dirs, &base, &copy.id).unwrap();
+    assert!(checked.has_update() && checked.reminds());
+
+    // Reviewed and partly taken: the change, not the new file.
+    let copy = crate::instances::find(&friend_dirs, &copy.id).unwrap();
+    let (fetched, mut diff) = review(&friend_dirs, &base, &copy).unwrap();
+    assert_eq!(diff.configs.len(), 2);
+    for c in &mut diff.configs {
+        c.accept = matches!(c.change, ConfigChange::Change(_));
+    }
+    take(&friend_dirs, &copy, &fetched, &diff, &noop).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(copy_game.join("config/a.json")).unwrap(),
+        "{\"v\":2}"
+    );
+    assert!(!copy_game.join("config/b.toml").exists());
+    let after = load(&friend_dirs, &copy.id).unwrap();
+    assert_eq!(after.revision, 2);
+    assert!(!after.has_update());
+    // What was left unticked is offered again next time.
+    let (_, again) = review(&friend_dirs, &base, &copy).unwrap();
+    assert_eq!(again.configs.len(), 1);
+
+    // Publishing from a stale revision is refused; stopping makes the code stop working.
+    let mut stale = load(&owner_dirs, &owner.id).unwrap();
+    stale.revision = 1;
+    save(&owner_dirs, &owner.id, &stale).unwrap();
+    let err = publish(&owner_dirs, &base, &owner, true).unwrap_err();
+    assert!(err.to_string().contains("changed elsewhere"), "{err}");
+    stop_sharing(&owner_dirs, &base, &owner.id).unwrap();
+    assert!(load(&owner_dirs, &owner.id).is_none());
+    assert!(check(&friend_dirs, &base, &copy.id).unwrap().gone);
+    assert!(preview(&base, &code).is_err());
+
+    // Unlinked, the copy keeps its files.
+    unlink(&friend_dirs, &copy.id).unwrap();
+    assert!(copy_game.join("config/a.json").exists());
+}
+
+/// Real Modrinth: the owner installs a mod, a friend's copy downloads the very same file.
+/// `cargo test -p arctic-core linked -- --ignored`
+#[test]
+#[ignore = "needs the network (Modrinth)"]
+fn a_modrinth_mod_reaches_the_copy_hash_checked() {
+    let base = fake_server::start();
+    let noop = |_: crate::ProgressInfo| {};
+    let (_a, owner_dirs) = data_dirs();
+    let owner = crate::instances::create(&owner_dirs, "Mods", "1.21.11", new_loader()).unwrap();
+    let owner_game = owner.game_dir(&owner_dirs);
+    crate::mods::install(
+        "lithium",
+        "1.21.11",
+        crate::loaders::LoaderKind::Fabric,
+        &owner_game.join("mods"),
+        &crate::mods::index_path(&owner_dirs.instance_dir(&owner.id)),
+        &noop,
+    )
+    .unwrap();
+    std::fs::write(owner_game.join("mods/handmade.jar"), b"not from modrinth").unwrap();
+    let (state, built) = share(&owner_dirs, &base, None, &owner, false).unwrap();
+    assert_eq!(built.manifest.mods.len(), 1, "{:?}", built.manifest.mods);
+    assert!(
+        built
+            .left_out
+            .iter()
+            .any(|l| l.name == "handmade.jar" && l.reason == LeftOutReason::NotFromModrinth)
+    );
+
+    let (_b, friend_dirs) = data_dirs();
+    let (fetched, diff) = preview(&base, &state.code).unwrap();
+    let (copy, report) = follow(&friend_dirs, &state.code, &fetched, &diff, &noop).unwrap();
+    assert_eq!(report.added, 1);
+    let m = &built.manifest.mods[0];
+    let file = copy.game_dir(&friend_dirs).join("mods").join(&m.file);
+    let (_, sha512, _) = manifest::hash_file(&file).unwrap();
+    assert_eq!(sha512, m.sha512);
+    assert!(
+        !copy
+            .game_dir(&friend_dirs)
+            .join("mods/handmade.jar")
+            .exists()
+    );
+}
+
+/// Real Modrinth: mod ids as a server names them are found and installed, adds only.
+#[test]
+#[ignore = "needs the network (Modrinth)"]
+fn missing_mods_are_found_by_their_ids() {
+    let noop = |_: crate::ProgressInfo| {};
+    let (_a, dirs) = data_dirs();
+    let inst = crate::instances::create(&dirs, "Server", "1.21.11", new_loader()).unwrap();
+    let wanted = [
+        WantedMod {
+            id: "sodium".into(),
+            version: None,
+        },
+        WantedMod {
+            id: "cloth_config".into(),
+            version: None,
+        },
+        WantedMod {
+            id: "no_such_mod_zzqx".into(),
+            version: None,
+        },
+    ];
+    let found = find_missing(&dirs, &inst, &wanted).unwrap();
+    assert_eq!(found.not_found, ["no_such_mod_zzqx"]);
+    let diff = found.diff.unwrap();
+    assert_eq!(diff.mods.len(), 2, "{:?}", diff.mods);
+    let report = install_missing(&dirs, &inst, &diff, &noop).unwrap();
+    assert_eq!(report.added, 2);
+    let again = find_missing(&dirs, &inst, &wanted[..1]).unwrap();
+    assert!(again.diff.is_none() && again.installed.len() == 1);
+}
