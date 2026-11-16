@@ -343,5 +343,15 @@
   "instances.yes_delete": "Oui, supprimer",
   "instances.yes_remove": "Oui, retirer",
   "instances.you_get_a_code_to_put_in_your_servers_motd": "Tu reçois un code à mettre dans le MOTD de ton serveur, qui prouve qu'il est à toi. Il attend ensuite une rapide vérification avant d'apparaître.",
-  "instances.your_server_list_hud_and_arctic_client": "Ta liste de serveurs, tes paramètres de HUD et d'Arctic Client, ainsi que les touches, le FOV et les réglages vidéo de Minecraft sont identiques dans chaque instance qui les partage, pour qu'une nouvelle ressemble à celle déjà configurée."
+  "instances.your_server_list_hud_and_arctic_client": "Ta liste de serveurs, tes paramètres de HUD et d'Arctic Client, ainsi que les touches, le FOV et les réglages vidéo de Minecraft sont identiques dans chaque instance qui les partage, pour qu'une nouvelle ressemble à celle déjà configurée.",
+  "instances.world_trash": "Corbeille ({count})",
+  "instances.world_trash_hint": "Les mondes supprimés sont conservés {days} jours, puis supprimés définitivement.",
+  "instances.world_trash_kept": "Conservé {days} jours. Ouvrez la corbeille pour le restaurer.",
+  "instances.world_trash_note": "Les mondes supprimés restent ici {days} jours, puis sont supprimés définitivement.",
+  "instances.back_to_worlds": "Retour aux mondes",
+  "instances.world_delete_sure": "Cette action est irréversible. Sûr ?",
+  "instances.world_restored": "{name} restauré",
+  "instances.favorite_world": "Ajouter aux favoris",
+  "instances.unfavorite_world": "Retirer des favoris",
+  "instances.could_not_save_favorite": "Impossible d'enregistrer le favori"
 }

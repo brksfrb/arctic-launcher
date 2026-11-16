@@ -54,10 +54,14 @@ pub fn run(ctx: &Ctx, command: &WorldsCommand) -> Result<i32> {
         }
         WorldsCommand::Remove { world, .. } => {
             let found = find(&saves, world)?;
-            worlds::trash(&found, &saves)?;
+            worlds::trash(&found, &saves, &instance.id)?;
             ctx.out
                 .emit(json!({"event": "removed", "folder": found.folder}), || {
-                    format!("Moved \"{}\" to saves/.trash", found.name)
+                    format!(
+                        "Moved \"{}\" to the world trash (kept {} days)",
+                        found.name,
+                        worlds::TRASH_KEEP_DAYS
+                    )
                 });
         }
     }

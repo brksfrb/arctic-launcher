@@ -35,6 +35,10 @@ impl ArcticApp {
                 Vec::new()
             }
         };
+        if self.inst.worlds_trash_open {
+            self.world_trash_view(ui, instance, &saves);
+            return;
+        }
         crate::widgets::row(ui, |ui| {
             ui.label(RichText::new(tf!("instances.worlds_2", count = list.len())).color(p.muted));
             if self.inst.worlds_busy {
@@ -56,6 +60,24 @@ impl ArcticApp {
                 {
                     let _ = std::fs::create_dir_all(&saves);
                     let _ = open::that_detached(&saves);
+                }
+                let trashed = worlds::list_trash(&saves).len();
+                if widgets::button(
+                    ui,
+                    p,
+                    Some(Icon::Trash),
+                    &tf!("instances.world_trash", count = trashed),
+                    false,
+                )
+                .on_hover_text(tf!(
+                    "instances.world_trash_hint",
+                    days = worlds::TRASH_KEEP_DAYS
+                ))
+                .clicked()
+                {
+                    self.inst.worlds_trash = worlds::list_trash(&saves);
+                    self.inst.worlds_trash_confirm = None;
+                    self.inst.worlds_trash_open = true;
                 }
             });
         });
@@ -111,6 +133,28 @@ impl ArcticApp {
                     icons::draw(ui.painter(), Icon::Layers, rect.shrink(12.0), p.muted);
                 }
             }
+            let starred = self.inst.world_favorites.contains(&world.folder);
+            let star = if starred {
+                Icon::StarFilled
+            } else {
+                Icon::Star
+            };
+            let tip = if starred {
+                t!("instances.unfavorite_world")
+            } else {
+                t!("instances.favorite_world")
+            };
+            if widgets::icon_button(ui, p, star, tip).clicked() {
+                let file = self.favorites_file(instance);
+                if let Err(e) = self.inst.world_favorites.toggle(&world.folder, &file) {
+                    self.toasts.push(
+                        Kind::Error,
+                        t!("instances.could_not_save_favorite"),
+                        e.to_string(),
+                    );
+                }
+                self.refresh_worlds(instance);
+            }
             ui.vertical(|ui| {
                 ui.label(RichText::new(&world.name).strong().color(p.text));
                 let detail = format!(
@@ -125,11 +169,11 @@ impl ArcticApp {
                 if widgets::icon_button(ui, p, Icon::Trash, t!("instances.move_to_trash")).clicked()
                 {
                     let saves = instance.game_dir(&self.dirs).join("saves");
-                    match worlds::trash(world, &saves) {
+                    match worlds::trash(world, &saves, &instance.id) {
                         Ok(()) => self.toasts.push(
                             Kind::Info,
                             tf!("instances.moved_to_trash", name = world.name),
-                            "saves/.trash",
+                            tf!("instances.world_trash_kept", days = worlds::TRASH_KEEP_DAYS),
                         ),
                         Err(e) => self.toasts.push(
                             Kind::Error,
@@ -172,7 +216,143 @@ impl ArcticApp {
 
     pub(super) fn refresh_worlds(&mut self, instance: &Instance) {
         let saves = instance.game_dir(&self.dirs).join("saves");
-        self.inst.worlds = Some((instance.id.clone(), worlds::list(&saves)));
+        let mut list = worlds::list(&saves);
+        self.inst.world_favorites = worlds::Favorites::load(&self.favorites_file(instance));
+        worlds::sort_favorites_first(&mut list, &self.inst.world_favorites);
+        self.inst.worlds = Some((instance.id.clone(), list));
+    }
+
+    fn favorites_file(&self, instance: &Instance) -> PathBuf {
+        worlds::favorites_file(&self.dirs.instance_dir(&instance.id))
+    }
+
+    /// The world trash: restore or delete for good (after asking).
+    fn world_trash_view(
+        &mut self,
+        ui: &mut egui::Ui,
+        instance: &Instance,
+        saves: &std::path::Path,
+    ) {
+        let p = self.palette();
+        let list = self.inst.worlds_trash.clone();
+        let confirm = self.inst.worlds_trash_confirm.clone();
+        let mut restore = None;
+        let mut delete = None;
+        crate::widgets::row(ui, |ui| {
+            ui.label(
+                RichText::new(tf!(
+                    "instances.world_trash_note",
+                    days = worlds::TRASH_KEEP_DAYS
+                ))
+                .color(p.muted),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if widgets::button(ui, p, None, t!("instances.back_to_worlds"), false).clicked() {
+                    self.inst.worlds_trash_open = false;
+                    self.inst.worlds_trash_confirm = None;
+                }
+            });
+        });
+        ui.add_space(8.0);
+        theme::card(p).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            if list.is_empty() {
+                ui.label(RichText::new(t!("instances.nothing_here")).color(p.muted));
+            }
+            for item in &list {
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.label(RichText::new(&item.name).strong().color(p.text));
+                        let when = if item.deleted_at == 0 {
+                            t!("instances.removed").to_owned()
+                        } else {
+                            let at = std::time::UNIX_EPOCH
+                                + std::time::Duration::from_secs(item.deleted_at);
+                            tf!("instances.removed_2", value = ago(Some(at)))
+                        };
+                        ui.label(
+                            RichText::new(format!(
+                                "{} · {} · {}",
+                                item.folder,
+                                when,
+                                format_bytes(item.size)
+                            ))
+                            .small()
+                            .color(p.muted),
+                        );
+                    });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if confirm.as_ref() == Some(&item.dir) {
+                            if widgets::button(
+                                ui,
+                                p,
+                                Some(Icon::Trash),
+                                t!("instances.yes_delete"),
+                                true,
+                            )
+                            .clicked()
+                            {
+                                delete = Some(item.clone());
+                            }
+                            ui.label(
+                                RichText::new(t!("instances.world_delete_sure")).color(p.error),
+                            );
+                        } else {
+                            if widgets::icon_button(
+                                ui,
+                                p,
+                                Icon::Trash,
+                                t!("instances.delete_for_good"),
+                            )
+                            .clicked()
+                            {
+                                self.inst.worlds_trash_confirm = Some(item.dir.clone());
+                            }
+                            if widgets::button(ui, p, None, t!("instances.restore"), false)
+                                .clicked()
+                            {
+                                restore = Some(item.clone());
+                            }
+                        }
+                    });
+                });
+                ui.add_space(4.0);
+            }
+        });
+        if let Some(item) = restore {
+            match worlds::restore(&item, saves) {
+                Ok(folder) => {
+                    let file = self.favorites_file(instance);
+                    let _ = self
+                        .inst
+                        .world_favorites
+                        .rename(&item.folder, &folder, &file);
+                    self.toasts.push(
+                        Kind::Success,
+                        tf!("instances.world_restored", name = item.name),
+                        folder,
+                    );
+                }
+                Err(e) => self.toasts.push(
+                    Kind::Error,
+                    t!("instances.could_not_restore_it"),
+                    e.to_string(),
+                ),
+            }
+            self.inst.worlds_trash = worlds::list_trash(saves);
+            self.refresh_worlds(instance);
+        }
+        if let Some(item) = delete {
+            if let Err(e) = worlds::delete_forever(&item, saves) {
+                self.toasts.push(
+                    Kind::Error,
+                    t!("instances.could_not_delete_it"),
+                    e.to_string(),
+                );
+            }
+            self.inst.worlds_trash_confirm = None;
+            self.inst.worlds_trash = worlds::list_trash(saves);
+        }
     }
 
     fn open_import(&mut self, instance: &Instance) {

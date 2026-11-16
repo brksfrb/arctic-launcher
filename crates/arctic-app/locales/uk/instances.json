@@ -347,5 +347,15 @@
   "instances.yes_delete": "Так, видалити",
   "instances.yes_remove": "Так, прибрати",
   "instances.you_get_a_code_to_put_in_your_servers_motd": "Ти отримаєш код для MOTD сервера, що підтверджує, що він твій. Потім він чекає швидкої перевірки перед появою у списку.",
-  "instances.your_server_list_hud_and_arctic_client": "Список серверів, налаштування HUD та Arctic Client, а також клавіші, FOV і відеоналаштування Minecraft однакові в усіх збірках, що їх ділять, тож нова відчувається як уже налаштована."
+  "instances.your_server_list_hud_and_arctic_client": "Список серверів, налаштування HUD та Arctic Client, а також клавіші, FOV і відеоналаштування Minecraft однакові в усіх збірках, що їх ділять, тож нова відчувається як уже налаштована.",
+  "instances.world_trash": "Кошик ({count})",
+  "instances.world_trash_hint": "Видалені світи зберігаються {days} дн., потім видаляються назавжди.",
+  "instances.world_trash_kept": "Зберігається {days} дн. Відкрийте кошик, щоб відновити.",
+  "instances.world_trash_note": "Видалені світи зберігаються тут {days} дн., потім видаляються назавжди.",
+  "instances.back_to_worlds": "Назад до світів",
+  "instances.world_delete_sure": "Це не можна скасувати. Впевнені?",
+  "instances.world_restored": "Відновлено: {name}",
+  "instances.favorite_world": "Додати до обраного",
+  "instances.unfavorite_world": "Прибрати з обраного",
+  "instances.could_not_save_favorite": "Не вдалося зберегти обране"
 }

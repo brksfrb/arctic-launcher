@@ -343,5 +343,15 @@
   "instances.yes_delete": "Ja, löschen",
   "instances.yes_remove": "Ja, entfernen",
   "instances.you_get_a_code_to_put_in_your_servers_motd": "Du bekommst einen Code für die MOTD deines Servers, der beweist, dass er dir gehört. Dann wartet er auf eine kurze Prüfung, bevor er erscheint.",
-  "instances.your_server_list_hud_and_arctic_client": "Deine Serverliste, HUD- und Arctic-Client-Einstellungen sowie Minecrafts Tasten, FOV und Grafikeinstellungen sind in jeder Instanz gleich, die sie teilt, sodass sich eine neue wie die bereits eingerichtete anfühlt."
+  "instances.your_server_list_hud_and_arctic_client": "Deine Serverliste, HUD- und Arctic-Client-Einstellungen sowie Minecrafts Tasten, FOV und Grafikeinstellungen sind in jeder Instanz gleich, die sie teilt, sodass sich eine neue wie die bereits eingerichtete anfühlt.",
+  "instances.world_trash": "Papierkorb ({count})",
+  "instances.world_trash_hint": "Gelöschte Welten werden {days} Tage aufbewahrt und danach endgültig entfernt.",
+  "instances.world_trash_kept": "{days} Tage aufbewahrt. Zum Wiederherstellen den Papierkorb öffnen.",
+  "instances.world_trash_note": "Gelöschte Welten bleiben hier {days} Tage und werden danach endgültig entfernt.",
+  "instances.back_to_worlds": "Zurück zu den Welten",
+  "instances.world_delete_sure": "Das lässt sich nicht rückgängig machen. Sicher?",
+  "instances.world_restored": "{name} wiederhergestellt",
+  "instances.favorite_world": "Zu Favoriten hinzufügen",
+  "instances.unfavorite_world": "Aus Favoriten entfernen",
+  "instances.could_not_save_favorite": "Favorit konnte nicht gespeichert werden"
 }

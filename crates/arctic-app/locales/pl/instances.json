@@ -347,5 +347,15 @@
   "instances.yes_delete": "Tak, usuń",
   "instances.yes_remove": "Tak, usuń",
   "instances.you_get_a_code_to_put_in_your_servers_motd": "Dostajesz kod do wstawienia w MOTD serwera, który potwierdza, że jest twój. Potem czeka na krótką weryfikację, zanim się pojawi.",
-  "instances.your_server_list_hud_and_arctic_client": "Lista serwerów, ustawienia HUD i Arctic Client oraz klawisze, FOV i ustawienia wideo Minecrafta są takie same w każdej instancji, która je dzieli, więc nowa wygląda jak ta już skonfigurowana."
+  "instances.your_server_list_hud_and_arctic_client": "Lista serwerów, ustawienia HUD i Arctic Client oraz klawisze, FOV i ustawienia wideo Minecrafta są takie same w każdej instancji, która je dzieli, więc nowa wygląda jak ta już skonfigurowana.",
+  "instances.world_trash": "Kosz ({count})",
+  "instances.world_trash_hint": "Usunięte światy są przechowywane przez {days} dni, a potem trwale usuwane.",
+  "instances.world_trash_kept": "Przechowywany przez {days} dni. Otwórz kosz, aby go przywrócić.",
+  "instances.world_trash_note": "Usunięte światy są tu przechowywane przez {days} dni, a potem trwale usuwane.",
+  "instances.back_to_worlds": "Wróć do światów",
+  "instances.world_delete_sure": "Tego nie można cofnąć. Na pewno?",
+  "instances.world_restored": "Przywrócono: {name}",
+  "instances.favorite_world": "Dodaj do ulubionych",
+  "instances.unfavorite_world": "Usuń z ulubionych",
+  "instances.could_not_save_favorite": "Nie udało się zapisać ulubionego"
 }

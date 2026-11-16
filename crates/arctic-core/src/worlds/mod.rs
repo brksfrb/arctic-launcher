@@ -2,22 +2,27 @@
 //! from other launchers, instances or .zip files, back them up and remove
 //! them (to a trash folder, never deleted outright).
 
+mod favorites;
 mod nbt;
 mod sources;
+mod trash;
 
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+pub use favorites::{Favorites, favorites_file, sort_favorites_first};
 pub use sources::{Source, sources};
+pub use trash::{
+    TRASH_KEEP_DAYS, Trashed, delete_forever, list_trash, purge_expired, restore, trash,
+};
 
 use crate::error::IoContext;
 use crate::{Error, Result};
 
 /// Folder inside the instance directory for world backups.
 pub const BACKUPS_DIR: &str = "backups";
-const TRASH_DIR: &str = ".trash";
 /// Refuse to unpack archives larger than this (a zip bomb guard).
 const MAX_UNPACKED_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 
@@ -41,7 +46,7 @@ pub fn list(saves_dir: &Path) -> Vec<World> {
     };
     let mut worlds: Vec<World> = entries
         .flatten()
-        .filter(|e| e.file_name().to_string_lossy() != TRASH_DIR)
+        .filter(|e| e.file_name().to_string_lossy() != trash::TRASH_DIR)
         .filter_map(|e| read_world(&e.path()))
         .collect();
     worlds.sort_by_key(|w| std::cmp::Reverse(w.last_played));
@@ -298,14 +303,6 @@ pub fn backup_before_version_change(game_dir: &Path, version: &str) -> usize {
         });
     }
     count
-}
-
-/// Move a world to `saves/.trash` (kept, not deleted).
-pub fn trash(world: &World, saves_dir: &Path) -> Result<()> {
-    let trash = saves_dir.join(TRASH_DIR);
-    fs::create_dir_all(&trash).at(&trash)?;
-    let to = trash.join(format!("{}-{}", world.folder, crate::auth::now_secs()));
-    fs::rename(&world.path, &to).at(&world.path)
 }
 
 #[cfg(test)]
