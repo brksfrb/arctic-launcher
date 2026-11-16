@@ -110,6 +110,12 @@ fn mirror_for(job: &DownloadJob) -> Option<String> {
     }
     Some(format!("{FORGE_MIRROR}{path}"))
 }
+/// Whether a 404 from the Forge maven may fall back to the mirror: only for hash-verified
+/// files, never for the installer jar.
+fn mirror_on_404(job: &DownloadJob) -> bool {
+    job.sha1.is_some() && !job.url.ends_with("-installer.jar")
+}
+
 /// Body timeout = base + size / slowest acceptable speed. The speed is per file, and up to
 /// [`WORKERS`] files share the connection: on a modest line each gets a few dozen KB/s, so the
 /// bar is low enough that only a connection that has really stalled gives up (a 100 KB/s bar
@@ -329,7 +335,9 @@ fn download_with_mirror(
     policy: &Policy,
 ) -> Result<()> {
     let err = match retry_job(job, reporter, policy) {
-        Err(e) if !is_not_found(&e) => e,
+        // A 404 only goes to the mirror when the mirror's bytes can be checked against a known
+        // hash (the installer jar keeps the stricter rule: no mirror on 404).
+        Err(e) if !is_not_found(&e) || mirror_on_404(job) => e,
         done => return done,
     };
     let Some(url) = mirror else { return Err(err) };
@@ -1065,6 +1073,10 @@ mod tests {
         (base, hits)
     }
 
+    fn sha1_bytes(b: &[u8]) -> String {
+        Sha1::digest(b).iter().map(|x| format!("{x:02x}")).collect()
+    }
+
     fn fetch(url: &str, mirror: Option<String>, sha1: Option<&str>) -> (Result<()>, PathBuf) {
         let dir = tempfile::tempdir().unwrap().keep();
         let job = DownloadJob {
@@ -1112,6 +1124,50 @@ mod tests {
         );
         assert!(is_not_found(&res.unwrap_err()));
         assert_eq!(hits.load(Ordering::SeqCst), 1);
+        assert_eq!(mirror_hits.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn not_found_falls_back_to_mirror_when_hash_matches() {
+        let (base, hits) = serve(vec![404], b"");
+        let (mirror, mirror_hits) = serve(vec![200], b"jar");
+        let sha = sha1_bytes(b"jar");
+        let (res, dest) = fetch(
+            &format!("{base}/a.jar"),
+            Some(format!("{mirror}/a.jar")),
+            Some(&sha),
+        );
+        res.unwrap();
+        assert_eq!(fs::read(dest).unwrap(), b"jar");
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+        assert_eq!(mirror_hits.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn not_found_with_bad_mirror_hash_keeps_not_found_error() {
+        let (base, _) = serve(vec![404], b"");
+        let (mirror, _) = serve(vec![200], b"jar");
+        let bad = "0".repeat(40);
+        let (res, dest) = fetch(
+            &format!("{base}/a.jar"),
+            Some(format!("{mirror}/a.jar")),
+            Some(&bad),
+        );
+        assert!(is_not_found(&res.unwrap_err()));
+        assert!(!dest.exists());
+    }
+
+    #[test]
+    fn not_found_installer_is_never_mirrored() {
+        let (base, _) = serve(vec![404], b"");
+        let (mirror, mirror_hits) = serve(vec![200], b"jar");
+        let sha = sha1_bytes(b"jar");
+        let (res, _) = fetch(
+            &format!("{base}/forge-1-installer.jar"),
+            Some(format!("{mirror}/forge-1-installer.jar")),
+            Some(&sha),
+        );
+        assert!(is_not_found(&res.unwrap_err()));
         assert_eq!(mirror_hits.load(Ordering::SeqCst), 0);
     }
 
