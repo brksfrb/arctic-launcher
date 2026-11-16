@@ -1591,7 +1591,7 @@ fn first_exceptions(text: &str) -> String {
             let t = l.trim_start();
             if t.starts_with("at ") {
                 frames += 1;
-                if frames > FIRST_EXCEPTION_FRAMES {
+                if frames > FIRST_EXCEPTION_FRAMES || causes > FIRST_EXCEPTION_CAUSES {
                     continue;
                 }
             } else if t.starts_with("Caused by:") {
@@ -1607,6 +1607,10 @@ fn first_exceptions(text: &str) -> String {
             entry.push('\n');
         }
         if out.len() + entry.len() > FIRST_EXCEPTIONS_BYTES {
+            // A single oversized first entry is cut rather than dropped.
+            if out.is_empty() {
+                out.push_str(head_of(&entry, FIRST_EXCEPTIONS_BYTES));
+            }
             break;
         }
         out.push_str(&entry);
