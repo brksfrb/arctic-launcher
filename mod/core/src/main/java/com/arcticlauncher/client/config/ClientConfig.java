@@ -92,6 +92,8 @@ public final class ClientConfig {
 	public String streamerName = Lang.t("hud.streamer");
 	/** Switches streamer mode. */
 	public String streamerKey = "key.keyboard.unknown";
+	/** Clear chat: empties the chat on screen (unbound by default; the saved history stays). */
+	public String clearChatKey = "key.keyboard.unknown";
 	/** Drops a waypoint where you stand. */
 	public String waypointKey = "key.keyboard.unknown";
 	/** Starts, stops and clears the stopwatch widget. */
@@ -538,6 +540,9 @@ public final class ClientConfig {
 		}
 		if (streamerKey == null) {
 			streamerKey = "key.keyboard.unknown";
+		if (clearChatKey == null) {
+			clearChatKey = "key.keyboard.unknown";
+		}
 		}
 		if (voiceKey == null) {
 			voiceKey = "key.keyboard.v";

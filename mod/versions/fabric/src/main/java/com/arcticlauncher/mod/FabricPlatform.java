@@ -1532,6 +1532,16 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public void clearChat() {
+		//#if MC >= 26.2
+		final net.minecraft.client.gui.components.ChatComponent chat = mc().gui.hud.getChat();
+		//#else
+		final net.minecraft.client.gui.components.ChatComponent chat = mc().gui.getChat();
+		//#endif
+		com.arcticlauncher.client.feature.ChatClear.run(() -> chat.clearMessages(false));
+	}
+
+	@Override
 	public void sendChat(String text) {
 		WorldStats.sendChat(text);
 	}

@@ -565,6 +565,9 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
+	/** Empty the chat on screen (the sent-message list and the saved history stay), even while "keep chat when leaving" is on. */
+	default void clearChat() {}
+
 	/** Send a chat message, or a command when it starts with "/". */
 	default void sendChat(String text) {}
 

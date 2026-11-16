@@ -71,6 +71,9 @@ public final class ToggleKeys {
 		if (key.equals(c.streamerKey)) {
 			return "Streamer Mode (Arctic)";
 		}
+		if (key.equals(c.clearChatKey)) {
+			return "Clear chat (Arctic)";
+		}
 		return ArcticClient.platform().keyUsedBy(key);
 	}
 

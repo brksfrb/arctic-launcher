@@ -737,7 +737,7 @@ final class ModCatalog {
 
 	private static void chat(List<Mod> out, final ClientConfig c) {
 		out.add(new Mod("chat", Lang.t("mods.chat"), Lang.t("mods.timestamps_stacked_lines_mentions"), "chat", Category.CHAT,
-				"timestamp stack mention ping copy clipboard")
+				"timestamp stack mention ping copy clipboard clear chat key wipe empty")
 				.settings((host, f) -> {
 					f.section(Lang.t("mods.chat"));
 					f.toggle(Lang.t("mods.copy_chat_messages"), Lang.t("mods.click_the_timestamp_or_copy_shift_right"), () -> c.chatCopy, on -> c.chatCopy = on);
@@ -774,6 +774,8 @@ final class ModCatalog {
 						int removed = saved == null ? 0 : saved.clear();
 						com.arcticlauncher.client.notice.Notices.post(Lang.t("mods.saved_chat_cleared"), removed == 0 ? Lang.t("mods.nothing_was_saved") : Lang.t("mods.deleted_the_saved_chat_and_sent_history"));
 					});
+					f.key(Lang.t("mods.clear_chat_key"), Lang.t("mods.empties_the_chat_on_screen_the_saved_history_stays"),
+							Form.key(() -> c.clearChatKey, k -> c.clearChatKey = k));
 					f.toggle(Lang.t("mods.keep_chat_when_leaving"), Lang.t("mods.the_lines_stay_when_you_disconnect_or_change"), () -> c.chatKeep,
 							on -> c.chatKeep = on);
 					f.section(Lang.t("mods.mute"));

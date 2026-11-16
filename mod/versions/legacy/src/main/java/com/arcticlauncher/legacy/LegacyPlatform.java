@@ -1264,6 +1264,16 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public void clearChat() {
+		final net.minecraft.client.gui.hud.ChatHud chat = mc().inGameHud.getChatHud();
+		//#if MC >= 1.11
+		com.arcticlauncher.client.feature.ChatClear.run(() -> chat.clear(false));
+		//#else
+		com.arcticlauncher.client.feature.ChatClear.run(() -> chat.clear());
+		//#endif
+	}
+
+	@Override
 	public void sendChat(String text) {
 		if (mc().player != null && text != null && !text.isEmpty()) {
 			mc().player.sendChatMessage(text);
