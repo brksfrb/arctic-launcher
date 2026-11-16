@@ -560,6 +560,24 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
+	/** The game blurs the world behind menus (1.20.5 and newer), so Menu Blur can set its strength. */
+	default boolean menuBlurWorks() {
+		return false;
+	}
+
+	/** {@link #enchantments} can read enchantments on this version. */
+	default boolean enchantInfoWorks() {
+		return false;
+	}
+
+	/** The enchantments of an item stack as "Sharpness V, Unbreaking III" (books too), or null when it has none. Game thread. */
+	default String enchantments(Object stack) {
+		return null;
+	}
+
+	/** Empty the chat on screen (the sent-message list and the saved history stay), even while "keep chat when leaving" is on. */
+	default void clearChat() {}
+
 	/** Send a chat message, or a command when it starts with "/". */
 	default void sendChat(String text) {}
 

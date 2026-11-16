@@ -1526,6 +1526,35 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean menuBlurWorks() {
+		//#if MC >= 1.20.5
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	@Override
+	public boolean enchantInfoWorks() {
+		return EnchantInfo.WORKS;
+	}
+
+	@Override
+	public String enchantments(Object stack) {
+		return EnchantInfo.summary(stack);
+	}
+
+	@Override
+	public void clearChat() {
+		//#if MC >= 26.2
+		final net.minecraft.client.gui.components.ChatComponent chat = mc().gui.hud.getChat();
+		//#else
+		final net.minecraft.client.gui.components.ChatComponent chat = mc().gui.getChat();
+		//#endif
+		com.arcticlauncher.client.feature.ChatClear.run(() -> chat.clearMessages(false));
+	}
+
+	@Override
 	public void sendChat(String text) {
 		WorldStats.sendChat(text);
 	}

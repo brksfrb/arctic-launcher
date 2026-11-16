@@ -863,7 +863,7 @@ public final class LegacyPlatform implements Platform {
 				continue;
 			}
 			String name = it.getCustomName();
-			String key = System.identityHashCode(it.getItem()) + ":" + it.getDamage() + ":" + name;
+			String key = System.identityHashCode(it.getItem()) + ":" + it.getDamage() + ":" + name + (it.hasEnchantments() ? "+" : "");
 			Object[] row = kinds.get(key);
 			if (row == null) {
 				kinds.put(key, new Object[] {key, it.copy(), name, count(it)});
@@ -1261,6 +1261,55 @@ public final class LegacyPlatform implements Platform {
 	@Override
 	public Object connectionKey() {
 		return mc().getNetworkHandler();
+	}
+
+	@Override
+	public boolean enchantInfoWorks() {
+		return true;
+	}
+
+	@Override
+	public String enchantments(Object stack) {
+		if (!(stack instanceof ItemStack)) {
+			return null;
+		}
+		ItemStack it = (ItemStack) stack;
+		StringBuilder out = new StringBuilder();
+		addEnchants(out, it.getEnchantments());
+		if (it.getItem() instanceof net.minecraft.item.EnchantedBookItem) {
+			addEnchants(out, ((net.minecraft.item.EnchantedBookItem) it.getItem()).getEnchantmentNbt(it));
+		}
+		return out.length() == 0 ? null : out.toString();
+	}
+
+	private static void addEnchants(StringBuilder out, net.minecraft.nbt.NbtList list) {
+		if (list == null) {
+			return;
+		}
+		for (int i = 0; i < list.size(); i++) {
+			net.minecraft.nbt.NbtCompound tag = list.getCompound(i);
+			//#if MC >= 1.9
+			net.minecraft.enchantment.Enchantment e = net.minecraft.enchantment.Enchantment.byIndex(tag.getShort("id"));
+			//#else
+			net.minecraft.enchantment.Enchantment e = net.minecraft.enchantment.Enchantment.byRawId(tag.getShort("id"));
+			//#endif
+			if (e != null) {
+				if (out.length() > 0) {
+					out.append(", ");
+				}
+				out.append(e.getTranslatedName(tag.getShort("lvl")));
+			}
+		}
+	}
+
+	@Override
+	public void clearChat() {
+		final net.minecraft.client.gui.hud.ChatHud chat = mc().inGameHud.getChatHud();
+		//#if MC >= 1.11
+		com.arcticlauncher.client.feature.ChatClear.run(() -> chat.clear(false));
+		//#else
+		com.arcticlauncher.client.feature.ChatClear.run(() -> chat.clear());
+		//#endif
 	}
 
 	@Override

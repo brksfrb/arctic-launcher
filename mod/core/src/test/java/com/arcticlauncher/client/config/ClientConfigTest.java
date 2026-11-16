@@ -130,4 +130,22 @@ class ClientConfigTest {
 		assertEquals(null, c.save());
 		assertEquals("key.keyboard.j", ClientConfig.load(dir.toFile()).toggleKeys.get("connected-glass"));
 	}
+
+	@Test
+	void cheapWinsSettingsDefaultAndSurviveAnOldFile() throws Exception {
+		ClientConfig old = load("{\"clearChatKey\":null}");
+		assertEquals("key.keyboard.unknown", old.clearChatKey);
+		assertFalse(old.menuBlur);
+		assertTrue(old.pickupEnchants);
+		old.clearChatKey = "key.keyboard.k";
+		old.menuBlur = true;
+		old.menuBlurStrength = 8;
+		old.pickupEnchants = false;
+		assertEquals(null, old.save());
+		ClientConfig back = ClientConfig.load(dir.toFile());
+		assertEquals("key.keyboard.k", back.clearChatKey);
+		assertTrue(back.menuBlur);
+		assertEquals(8, back.menuBlurStrength);
+		assertFalse(back.pickupEnchants);
+	}
 }
