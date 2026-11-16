@@ -49,6 +49,73 @@ const LARGE_FILE_WORKERS: usize = 8;
 const BUF_SIZE: usize = 64 * 1024;
 const ATTEMPTS: u32 = 5;
 const RETRY_BACKOFF: Duration = Duration::from_millis(400);
+/// Loader hosts (Forge/NeoForge maven and the Forge mirror) can take 15 s just to accept a
+/// connection, so they get a longer connect timeout and fewer, slower retries.
+const LOADER_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+const LOADER_BACKOFF: [Duration; 2] = [Duration::from_secs(2), Duration::from_secs(5)];
+const FORGE_MAVEN: &str = "https://maven.minecraftforge.net/";
+/// Mirror of the Forge maven, tried only after the primary failed.
+const FORGE_MIRROR: &str = "https://bmclapi2.bangbang93.com/maven/";
+
+fn is_loader_host(url: &str) -> bool {
+    let host = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let host = host.split('/').next().unwrap_or_default();
+    ["minecraftforge.net", "neoforged.net", "bangbang93.com"]
+        .iter()
+        .any(|h| host.ends_with(h))
+}
+
+/// Connect timeout for a request to `url`.
+pub(crate) fn connect_timeout(url: &str) -> Option<Duration> {
+    Some(if is_loader_host(url) {
+        LOADER_CONNECT_TIMEOUT
+    } else {
+        super::CONNECT_TIMEOUT
+    })
+}
+
+/// How often and how long to wait between attempts at one URL.
+struct Policy {
+    attempts: u32,
+    delays: Vec<Duration>,
+}
+
+impl Policy {
+    fn for_url(url: &str) -> Self {
+        if is_loader_host(url) {
+            Self {
+                attempts: 3,
+                delays: LOADER_BACKOFF.to_vec(),
+            }
+        } else {
+            Self {
+                attempts: ATTEMPTS,
+                delays: (1..ATTEMPTS).map(|n| RETRY_BACKOFF * n).collect(),
+            }
+        }
+    }
+}
+
+/// A missing file stays missing; retrying only delays the error.
+pub(crate) fn is_not_found(e: &Error) -> bool {
+    matches!(e, Error::Http(m) if m.contains("404"))
+}
+
+/// The mirror URL for a Forge maven file, if `job` may be fetched from there: the bytes must be
+/// verifiable by a known hash, except for the installer jar itself (logged when accepted).
+fn mirror_for(job: &DownloadJob) -> Option<String> {
+    let path = job.url.strip_prefix(FORGE_MAVEN)?;
+    if job.sha1.is_none() && !path.ends_with("-installer.jar") {
+        return None;
+    }
+    Some(format!("{FORGE_MIRROR}{path}"))
+}
+/// Whether a 404 from the Forge maven may fall back to the mirror: only for hash-verified
+/// files, never for the installer jar.
+fn mirror_on_404(job: &DownloadJob) -> bool {
+    job.sha1.is_some() && !job.url.ends_with("-installer.jar")
+}
+
 /// Body timeout = base + size / slowest acceptable speed. The speed is per file, and up to
 /// [`WORKERS`] files share the connection: on a modest line each gets a few dozen KB/s, so the
 /// bar is low enough that only a connection that has really stalled gives up (a 100 KB/s bar
@@ -287,8 +354,39 @@ fn pending_jobs(jobs: Vec<DownloadJob>) -> Vec<DownloadJob> {
 }
 
 /// Network hiccups (a stalled connection, a reset, a corrupted transfer)
-/// shouldn't fail a whole launch: retry each file a few times.
+/// shouldn't fail a whole launch: retry each file a few times, then try the mirror.
 fn download_with_retry(job: &DownloadJob, reporter: &Reporter) -> Result<()> {
+    download_with_mirror(job, reporter, mirror_for(job), &Policy::for_url(&job.url))
+}
+
+fn download_with_mirror(
+    job: &DownloadJob,
+    reporter: &Reporter,
+    mirror: Option<String>,
+    policy: &Policy,
+) -> Result<()> {
+    let err = match retry_job(job, reporter, policy) {
+        // A 404 only goes to the mirror when the mirror's bytes can be checked against a known
+        // hash (the installer jar keeps the stricter rule: no mirror on 404).
+        Err(e) if !is_not_found(&e) || mirror_on_404(job) => e,
+        done => return done,
+    };
+    let Some(url) = mirror else { return Err(err) };
+    log::warn!("{} failed ({err}); trying mirror {url}", job.url);
+    if job.sha1.is_none() {
+        log::warn!(
+            "no checksum for {}: accepting the mirror's copy unverified",
+            job.url
+        );
+    }
+    let from_mirror = DownloadJob { url, ..job.clone() };
+    retry_job(&from_mirror, reporter, policy).map_err(|mirror_err| {
+        log::warn!("mirror failed too: {mirror_err}");
+        err
+    })
+}
+
+fn retry_job(job: &DownloadJob, reporter: &Reporter, policy: &Policy) -> Result<()> {
     let mut attempt = 1;
     let mut segmented = segments(job).is_some();
     loop {
@@ -309,10 +407,11 @@ fn download_with_retry(job: &DownloadJob, reporter: &Reporter) -> Result<()> {
         };
         match result {
             Ok(()) => return Ok(()),
-            Err(e) if attempt < ATTEMPTS => {
+            Err(e) if attempt < policy.attempts && !is_not_found(&e) => {
                 log::warn!("retrying {} (attempt {attempt}): {e}", job.url);
                 reporter.remove_bytes(transferred.get());
-                std::thread::sleep(RETRY_BACKOFF * attempt);
+                let delay = policy.delays.get(attempt as usize - 1);
+                std::thread::sleep(delay.or(policy.delays.last()).copied().unwrap_or_default());
                 attempt += 1;
             }
             Err(e) => return Err(e),
@@ -339,6 +438,7 @@ fn download_one(job: &DownloadJob, reporter: &Reporter, transferred: &Cell<u64>)
     let mut resp = super::agent()
         .get(url)
         .config()
+        .timeout_connect(connect_timeout(url))
         .timeout_recv_body(Some(body_timeout(job.transfer_size())))
         .build()
         .call()?;
@@ -594,6 +694,7 @@ fn fetch_once(
         .get(&job.url)
         .header("Range", &format!("bytes={}-{}", chunk.start, chunk.end - 1))
         .config()
+        .timeout_connect(connect_timeout(&job.url))
         .timeout_recv_body(Some(chunk_timeout(len)))
         .build()
         .call()
@@ -998,5 +1099,196 @@ mod tests {
         };
         assert!(download_all("x", vec![], &cb).is_ok());
         assert_eq!(calls.load(Ordering::Relaxed), 1);
+    }
+    /// Local HTTP server: answers each request with the next status from `script`
+    /// (`200` serves `body`, repeating the last entry); returns its base URL and hit counter.
+    fn serve(script: Vec<u16>, body: &'static [u8]) -> (String, std::sync::Arc<AtomicU64>) {
+        use std::io::Write as _;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let hits = std::sync::Arc::new(AtomicU64::new(0));
+        let counter = hits.clone();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let n = counter.fetch_add(1, Ordering::SeqCst) as usize;
+                let status = script[n.min(script.len() - 1)];
+                let mut buf = [0u8; 4096];
+                let _ = std::io::Read::read(&mut stream, &mut buf);
+                let body = if status == 200 { body } else { b"" };
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 {status} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = stream.write_all(body);
+            }
+        });
+        (base, hits)
+    }
+
+    fn sha1_bytes(b: &[u8]) -> String {
+        Sha1::digest(b).iter().map(|x| format!("{x:02x}")).collect()
+    }
+
+    fn fetch(url: &str, mirror: Option<String>, sha1: Option<&str>) -> (Result<()>, PathBuf) {
+        let dir = tempfile::tempdir().unwrap().keep();
+        let job = DownloadJob {
+            url: url.to_string(),
+            dest: dir.join("f.jar"),
+            sha1: sha1.map(String::from),
+            ..job("", None)
+        };
+        let progress = |_: crate::ProgressInfo<'_>| {};
+        let reporter = Reporter {
+            stage: "t",
+            progress: &progress,
+            start: Instant::now(),
+            last_ms: AtomicU64::new(0),
+            files_done: AtomicU64::new(0),
+            files_total: 1,
+            bytes_done: AtomicU64::new(0),
+            bytes_total: 0,
+        };
+        let policy = Policy {
+            attempts: 3,
+            delays: vec![Duration::from_millis(5)],
+        };
+        let dest = job.dest.clone();
+        (download_with_mirror(&job, &reporter, mirror, &policy), dest)
+    }
+
+    #[test]
+    fn retries_server_errors_then_succeeds() {
+        let (base, hits) = serve(vec![503, 502, 200], b"jar");
+        let (res, dest) = fetch(&format!("{base}/a.jar"), None, None);
+        res.unwrap();
+        assert_eq!(fs::read(dest).unwrap(), b"jar");
+        assert_eq!(hits.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn not_found_is_not_retried_or_mirrored() {
+        let (base, hits) = serve(vec![404], b"");
+        let (mirror, mirror_hits) = serve(vec![200], b"jar");
+        let (res, _) = fetch(
+            &format!("{base}/a.jar"),
+            Some(format!("{mirror}/a.jar")),
+            None,
+        );
+        assert!(is_not_found(&res.unwrap_err()));
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+        assert_eq!(mirror_hits.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn not_found_falls_back_to_mirror_when_hash_matches() {
+        let (base, hits) = serve(vec![404], b"");
+        let (mirror, mirror_hits) = serve(vec![200], b"jar");
+        let sha = sha1_bytes(b"jar");
+        let (res, dest) = fetch(
+            &format!("{base}/a.jar"),
+            Some(format!("{mirror}/a.jar")),
+            Some(&sha),
+        );
+        res.unwrap();
+        assert_eq!(fs::read(dest).unwrap(), b"jar");
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+        assert_eq!(mirror_hits.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn not_found_with_bad_mirror_hash_keeps_not_found_error() {
+        let (base, _) = serve(vec![404], b"");
+        let (mirror, _) = serve(vec![200], b"jar");
+        let bad = "0".repeat(40);
+        let (res, dest) = fetch(
+            &format!("{base}/a.jar"),
+            Some(format!("{mirror}/a.jar")),
+            Some(&bad),
+        );
+        assert!(is_not_found(&res.unwrap_err()));
+        assert!(!dest.exists());
+    }
+
+    #[test]
+    fn not_found_installer_is_never_mirrored() {
+        let (base, _) = serve(vec![404], b"");
+        let (mirror, mirror_hits) = serve(vec![200], b"jar");
+        let sha = sha1_bytes(b"jar");
+        let (res, _) = fetch(
+            &format!("{base}/forge-1-installer.jar"),
+            Some(format!("{mirror}/forge-1-installer.jar")),
+            Some(&sha),
+        );
+        assert!(is_not_found(&res.unwrap_err()));
+        assert_eq!(mirror_hits.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn mirror_used_after_primary_keeps_failing() {
+        let (base, hits) = serve(vec![500], b"");
+        let (mirror, _) = serve(vec![200], b"jar");
+        let (res, dest) = fetch(
+            &format!("{base}/a.jar"),
+            Some(format!("{mirror}/a.jar")),
+            None,
+        );
+        res.unwrap();
+        assert_eq!(hits.load(Ordering::SeqCst), 3);
+        assert_eq!(fs::read(dest).unwrap(), b"jar");
+    }
+
+    #[test]
+    fn mirror_copy_must_match_known_hash() {
+        let (base, _) = serve(vec![500], b"");
+        let (mirror, _) = serve(vec![200], b"jar");
+        let bad = "0".repeat(40);
+        let (res, dest) = fetch(
+            &format!("{base}/a.jar"),
+            Some(format!("{mirror}/a.jar")),
+            Some(&bad),
+        );
+        // The primary's error is reported, and nothing unverified is left behind.
+        assert!(matches!(res, Err(Error::Http(_))));
+        assert!(!dest.exists());
+    }
+
+    #[test]
+    fn mirror_only_for_verifiable_or_installer_files() {
+        let job = |url: &str, sha1: Option<&str>| DownloadJob {
+            url: url.into(),
+            sha1: sha1.map(String::from),
+            ..job("", None)
+        };
+        let lib = "https://maven.minecraftforge.net/net/minecraftforge/x/1/x-1.jar";
+        let installer =
+            "https://maven.minecraftforge.net/net/minecraftforge/forge/1/forge-1-installer.jar";
+        assert_eq!(mirror_for(&job(lib, None)), None);
+        assert!(
+            mirror_for(&job(lib, Some("ab")))
+                .unwrap()
+                .starts_with(FORGE_MIRROR)
+        );
+        assert!(mirror_for(&job(installer, None)).is_some());
+        assert_eq!(
+            mirror_for(&job("https://libraries.minecraft.net/a.jar", Some("ab"))),
+            None
+        );
+    }
+
+    #[test]
+    fn loader_hosts_get_longer_connect_timeout() {
+        assert_eq!(
+            connect_timeout("https://maven.minecraftforge.net/x"),
+            Some(LOADER_CONNECT_TIMEOUT)
+        );
+        assert_ne!(
+            connect_timeout("https://piston-data.mojang.com/x"),
+            Some(LOADER_CONNECT_TIMEOUT)
+        );
+        assert_ne!(
+            connect_timeout("https://evil.test/maven.minecraftforge.net/"),
+            Some(LOADER_CONNECT_TIMEOUT)
+        );
     }
 }

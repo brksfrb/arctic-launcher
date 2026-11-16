@@ -104,13 +104,31 @@ public final class PersistentChat {
 		return ArcticClient.config() != null && ArcticClient.config().chatPersistent;
 	}
 
-	/** Called once the chat HUD is usable, before new lines are added. */
-	public synchronized void restore(View view) {
-		if (restored || !enabled()) {
-			return;
-		}
-		restored = true;
-		long began = System.nanoTime();
+	/** The start pages, read ahead of {@link #restore} (null: not read yet). */
+	private List<String> startSent;
+	private List<Entry> startMessages;
+
+	/**
+	 * Read the start pages from disk now, on a background thread (at startup): the first frame in a world
+	 * then only hands them to the chat instead of also waiting on the disk. The same lines either way.
+	 */
+	public void readAhead() {
+		Thread t = new Thread(new Runnable() {
+			@Override
+			public void run() {
+				synchronized (PersistentChat.this) {
+					if (!restored && startMessages == null && enabled()) {
+						readStart();
+					}
+				}
+			}
+		}, "arctic-chat-history-read");
+		t.setDaemon(true);
+		t.start();
+	}
+
+	/** The disk half of {@link #restore}: the last sent lines and the last page of chat. */
+	private void readStart() {
 		try {
 			migrateLegacy();
 		} catch (Exception e) {
@@ -130,6 +148,24 @@ public final class PersistentChat {
 		} catch (Exception e) {
 			log("Could not read chat history: " + e);
 		}
+		startSent = sent;
+		startMessages = messages;
+	}
+
+	/** Called once the chat HUD is usable, before new lines are added. */
+	public synchronized void restore(View view) {
+		if (restored || !enabled()) {
+			return;
+		}
+		restored = true;
+		long began = System.nanoTime();
+		if (startMessages == null) {
+			readStart();
+		}
+		List<String> sent = startSent;
+		List<Entry> messages = startMessages;
+		startSent = null;
+		startMessages = null;
 		restoring = true;
 		try {
 			for (String text : sent) {

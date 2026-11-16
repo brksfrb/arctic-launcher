@@ -25,6 +25,8 @@ public abstract class TextWidget extends HudWidget {
 	private final String label;
 	/** The icon for this widget (a name in the mod's icons), or null for none. */
 	private String iconName;
+	private boolean defaultIconLooked;
+	private String defaultIcon;
 	/** Items whose picture stands for this widget (the first the game has), or null. */
 	private String[] iconItems;
 	/** Starts with the icon instead of the label. */
@@ -40,13 +42,19 @@ public abstract class TextWidget extends HudWidget {
 	private String[] current;
 	private long currentFrame = -1;
 	private boolean currentPreview;
-	private HudSlot currentLook;
+	private long currentLook;
+	private String currentValue;
+	private String currentContent;
 	/** The text last measured, and its parts' widths (measured again only when it changes). */
 	private String[] measuredParts;
 	private int partWidth0;
 	private int partWidth1;
 	/** The font the widths were measured in (smooth or the game's). */
 	private boolean measuredFancy;
+	private float measuredScale;
+	private String ownText;
+	private String[] ownTokens;
+	private boolean[] ownAccent;
 
 	protected TextWidget(String id, String label, String description, boolean onByDefault) {
 		super(id, label, description, onByDefault, Column.LEFT);
@@ -58,6 +66,7 @@ public abstract class TextWidget extends HudWidget {
 	/** The mod's icon {@code name} stands for this widget (an icon the sheet has); {@code first}: it is shown from the start. */
 	public TextWidget icon(String name, boolean first) {
 		this.iconName = name;
+		current = null;
 		this.iconByDefault = first;
 		return this;
 	}
@@ -65,6 +74,7 @@ public abstract class TextWidget extends HudWidget {
 	/** An item's picture stands for this widget: the first of these the game has. Shown from the start. */
 	public TextWidget itemIcon(String... items) {
 		this.iconItems = items;
+		current = null;
 		this.iconByDefault = true;
 		return this;
 	}
@@ -72,6 +82,7 @@ public abstract class TextWidget extends HudWidget {
 	/** The widget's value carries its own labels: it is drawn without a label. */
 	public TextWidget ownLabels() {
 		this.ownLabels = true;
+		current = null;
 		return this;
 	}
 
@@ -80,7 +91,11 @@ public abstract class TextWidget extends HudWidget {
 		if (iconName != null) {
 			return iconName;
 		}
-		return TextWidget.class.getResource("/assets/arctic/icons/" + id + ".png") != null ? id : null;
+		if (!defaultIconLooked) {
+			defaultIcon = TextWidget.class.getResource("/assets/arctic/icons/" + id + ".png") != null ? id : null;
+			defaultIconLooked = true;
+		}
+		return defaultIcon;
 	}
 
 	/** The widget has a label to pick a format for (not where the value carries its own labels). */
@@ -148,11 +163,17 @@ public abstract class TextWidget extends HudWidget {
 
 	/** This HUD draw's text: the value is asked for once per draw. */
 	private String[] current(boolean preview) {
-		if (current == null || currentFrame != Hud.frame() || currentPreview != preview || currentLook != look) {
-			current = parts(value(preview));
+		long signature = ((long) look.labelMode << 1) | (look.brackets ? 1 : 0);
+		if (current == null || currentFrame != Hud.frame() || currentPreview != preview || currentLook != signature) {
+			String value = value(preview);
+			if (current == null || !value.equals(currentValue) || currentLook != signature) {
+				current = parts(value);
+				currentValue = value;
+				currentContent = current[0] + '\u0001' + current[1] + '\u0001' + current[2];
+			}
 			currentFrame = Hud.frame();
 			currentPreview = preview;
-			currentLook = look;
+			currentLook = signature;
 		}
 		return current;
 	}
@@ -162,15 +183,15 @@ public abstract class TextWidget extends HudWidget {
 		if (look.chroma) {
 			return null;
 		}
-		String[] p = current(preview);
-		return p[0] + '' + p[1] + '' + p[2];
+		current(preview);
+		return currentContent;
 	}
 
 	/** This draw's text, measured (only the parts that changed since the last measuring). */
 	private String[] measured(Gfx g, boolean preview) {
 		String[] p = current(preview);
 		boolean fancy = com.arcticlauncher.client.gfx.Draw.fancy;
-		boolean fontChanged = measuredFancy != fancy;
+		boolean fontChanged = measuredFancy != fancy || measuredScale != g.pixelScale();
 		if (measuredParts == null || fontChanged || !p[0].equals(measuredParts[0])) {
 			partWidth0 = g.textWidth(p[0]);
 		}
@@ -179,6 +200,7 @@ public abstract class TextWidget extends HudWidget {
 		}
 		measuredParts = p;
 		measuredFancy = fancy;
+		measuredScale = g.pixelScale();
 		return p;
 	}
 
@@ -246,28 +268,37 @@ public abstract class TextWidget extends HudWidget {
 			drawOwnLabels(g, p[1], x, y);
 			return;
 		}
-		g.text(p[0], x, y, first, shadow());
-		g.text(p[1], x + partWidth0, y, second, shadow());
+		if (!p[0].isEmpty()) g.text(p[0], x, y, first, shadow());
+		if (!p[1].isEmpty()) g.text(p[1], x + partWidth0, y, second, shadow());
 	}
 
 	/** A value with its own labels ("X: 4  Y: 70  Z: 3"): each word ending in a colon is a label, in the accent colour. */
 	private void drawOwnLabels(Gfx g, String text, int x, int y) {
+		if (!text.equals(ownText)) {
+			java.util.List<String> tokens = new java.util.ArrayList<String>();
+			java.util.List<Boolean> accents = new java.util.ArrayList<Boolean>();
+			int i = 0;
+			while (i < text.length()) {
+				int word = i;
+				while (word < text.length() && text.charAt(word) != ' ') word++;
+				int end = word;
+				while (end < text.length() && text.charAt(end) == ' ') end++;
+				tokens.add(text.substring(i, end));
+				accents.add(word > i && text.charAt(word - 1) == ':');
+				i = end;
+			}
+			ownTokens = tokens.toArray(new String[tokens.size()]);
+			ownAccent = new boolean[ownTokens.length];
+			for (int j = 0; j < ownTokens.length; j++) {
+				ownAccent[j] = accents.get(j);
+			}
+			ownText = text;
+		}
 		int at = x;
-		int i = 0;
-		while (i < text.length()) {
-			int word = i;
-			while (word < text.length() && text.charAt(word) != ' ') {
-				word++;
-			}
-			int end = word;
-			while (end < text.length() && text.charAt(end) == ' ') {
-				end++;
-			}
-			String token = text.substring(i, end);
-			boolean label = word > i && text.charAt(word - 1) == ':';
-			g.text(token, at, y, label ? accent() : text(), shadow());
-			at += g.textWidth(token);
-			i = end;
+		for (int i = 0; i < ownTokens.length; i++) {
+			g.text(ownTokens[i], at, y, ownAccent[i] ? accent() : text(), shadow());
+			// Keep using the current font widths after a resource-pack reload, as before.
+			at += g.textWidth(ownTokens[i]);
 		}
 	}
 }

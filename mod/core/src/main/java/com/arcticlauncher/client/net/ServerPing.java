@@ -47,6 +47,21 @@ public final class ServerPing {
 
 	/** Ask {@code address} ("host", "host:port" or "[v6]:port"); {@code protocol} is the game's. */
 	public static Status ping(String address, int protocol) throws IOException {
+		Status status = pingOnce(address, protocol);
+		// Servers commonly close after one pong. Use fresh status connections for the samples;
+		// retain the first status even if a subsequent sample is refused or rate limited.
+		for (int i = 1; i < 3; i++) {
+			try {
+				long sample = pingOnce(address, protocol).ping;
+				if (sample >= 0 && (status.ping < 0 || sample < status.ping)) status.ping = sample;
+			} catch (IOException ignored) {
+				break;
+			}
+		}
+		return status;
+	}
+
+	private static Status pingOnce(String address, int protocol) throws IOException {
 		String[] hostPort = resolve(address);
 		String host = hostPort[0];
 		int port = Integer.parseInt(hostPort[1]);
@@ -86,11 +101,11 @@ public final class ServerPing {
 			p.writeLong(sent);
 			packet(out, ps.toByteArray());
 			try {
-				DataInputStream pong = new DataInputStream(new java.io.ByteArrayInputStream(readPacket(in)));
-				if (readVarInt(pong) != 1 || pong.readLong() != sent || pong.available() != 0) throw new IOException("invalid status pong");
+				byte[] pong = readPacket(in);
+				if (!java.util.Arrays.equals(pong, ps.toByteArray())) throw new IOException("invalid pong");
 				status.ping = (System.nanoTime() - sent) / 1_000_000L;
 			} catch (IOException e) {
-				// Some servers close after status or return an invalid pong: no valid RTT.
+				// A missing or invalid pong has no measured latency.
 				status.ping = -1;
 			}
 			return status;

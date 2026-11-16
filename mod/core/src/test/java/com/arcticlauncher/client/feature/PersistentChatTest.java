@@ -24,6 +24,8 @@ class PersistentChatTest {
 	private ClientConfig config;
 
 	@BeforeEach void setup() throws Exception {
+		// The chat's own markers ("previous session", ...) are Arctic text: English, as in the game.
+		com.arcticlauncher.client.Lang.init(null, "en");
 		configField = ArcticClient.class.getDeclaredField("config");
 		platformField = ArcticClient.class.getDeclaredField("platform");
 		configField.setAccessible(true);
@@ -325,5 +327,30 @@ class PersistentChatTest {
 		assertTrue(page.get(0).separator && page.get(0).text.contains("not loaded"));
 		assertTrue(b.olderMessages(300).isEmpty());
 		assertTrue(texts(page).size() <= 150);
+	}
+	@Test void readingAheadRestoresTheSameLines() throws Exception {
+		PersistentChat first = open();
+		first.restore(new View());
+		for (int i = 0; i < 40; i++) first.message("line " + i);
+		first.sent("/one");
+		first.sent("/two");
+		first.flush();
+		View direct = new View();
+		open().restore(direct);
+		PersistentChat ahead = open();
+		ahead.readAhead();
+		// The read runs on its own thread; restore waits for it (or reads itself if it hasn't started).
+		View early = new View();
+		ahead.restore(early);
+		assertEquals(direct.messages, early.messages);
+		assertEquals(direct.sent, early.sent);
+		assertEquals(40, real(early.messages).size());
+		// Read ahead, but off by the time the chat is shown: nothing restored.
+		config.chatPersistent = false;
+		PersistentChat off = open();
+		off.readAhead();
+		View none = new View();
+		off.restore(none);
+		assertTrue(none.messages.isEmpty());
 	}
 }

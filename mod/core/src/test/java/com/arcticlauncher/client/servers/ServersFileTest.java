@@ -19,6 +19,32 @@ class ServersFileTest {
 	@TempDir
 	Path dir;
 
+	@Test
+	void normalizedDuplicatesKeepOneRowAndDoNotChangeEditIndices() throws Exception {
+		File f = dir.resolve("duplicates.dat").toFile();
+		try (DataOutputStream out = new DataOutputStream(new FileOutputStream(f))) {
+			out.writeByte(10); out.writeUTF("");
+			out.writeByte(9); out.writeUTF("servers"); out.writeByte(10); out.writeInt(3);
+			server(out, "Saved", "EU.MINEMEN.CLUB", false, true);
+			server(out, "Partner", " eu.minemen.club.:25565 ", false, false);
+			server(out, "Other", "localhost:25566", false, false);
+			out.writeByte(0);
+		}
+		ServersFile list = new ServersFile(f).load();
+		assertEquals(2, list.size());
+		assertEquals("Saved", list.name(0));
+		list.edit(1, "Edited", "localhost:25567");
+		list.add("Duplicate", "eu.minemen.club:25565");
+		list.save();
+		list.load();
+		assertEquals(2, list.size());
+		assertEquals("Edited", list.name(1));
+		list.remove(0);
+		assertEquals(1, list.size());
+		assertEquals("Edited", list.name(0));
+		assertEquals(ServersFile.normalizeAddress("[::1]:25565"), ServersFile.normalizeAddress("::1"));
+	}
+
 	/** A servers.dat as the game writes it: three servers, the middle one hidden, an extra tag. */
 	private File gameFile() throws Exception {
 		File f = dir.resolve("servers.dat").toFile();

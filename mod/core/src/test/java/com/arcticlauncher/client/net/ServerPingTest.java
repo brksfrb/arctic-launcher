@@ -56,13 +56,32 @@ class ServerPingTest {
 	@Test
 	void pingsAServerOverTheStatusProtocol() throws Exception {
 		try (ServerSocket server = new ServerSocket(0)) {
-			Thread fake = new Thread(() -> answer(server));
+			Thread fake = new Thread(() -> {
+				answer(server);
+				try { server.close(); } catch (java.io.IOException ignored) { }
+			});
 			fake.setDaemon(true);
 			fake.start();
 			ServerPing.Status s = ServerPing.ping("127.0.0.1:" + server.getLocalPort(), 776);
 			assertEquals("§fA test server", s.motd);
 			assertEquals(3, s.online);
-			assertTrue(s.ping >= 0, "ping " + s.ping);
+			assertTrue(s.ping >= 0 && s.ping < 300, "status delay must not count: " + s.ping);
+		}
+	}
+
+	@Test
+	void choosesLowestValidRoundTripAndRejectsWrongEcho() throws Exception {
+		try (ServerSocket server = new ServerSocket(0)) {
+			Thread fake = new Thread(() -> {
+				answer(server, 120, false);
+				answer(server, 25, false);
+				answer(server, 0, true);
+			});
+			fake.setDaemon(true);
+			fake.start();
+			ServerPing.Status status = ServerPing.ping("127.0.0.1:" + server.getLocalPort(), 47);
+			assertTrue(status.ping >= 20 && status.ping < 110, "lowest valid RTT: " + status.ping);
+			fake.join(5000);
 		}
 	}
 
@@ -75,14 +94,21 @@ class ServerPingTest {
 	}
 
 	/** A server that answers one status request and its ping. */
-	static void answer(ServerSocket server) { answer(server, false); }
+	static void answer(ServerSocket server) {
+		answer(server, 0, false);
+	}
 
 	private static void answer(ServerSocket server, boolean corrupt) {
+		answer(server, 0, corrupt);
+	}
+
+	private static void answer(ServerSocket server, int delay, boolean invalid) {
 		try (Socket c = server.accept()) {
 			DataInputStream in = new DataInputStream(c.getInputStream());
 			DataOutputStream out = new DataOutputStream(c.getOutputStream());
 			skipPacket(in);
 			skipPacket(in);
+			Thread.sleep(500);
 			byte[] json = "{\"description\":{\"text\":\"A test server\",\"color\":\"white\"},\"players\":{\"online\":3,\"max\":20}}"
 					.getBytes(StandardCharsets.UTF_8);
 			ByteArrayOutputStream body = new ByteArrayOutputStream();
@@ -95,7 +121,8 @@ class ServerPingTest {
 			int len = ServerPing.readVarInt(in);
 			byte[] ping = new byte[len];
 			in.readFully(ping);
-			if (corrupt) ping[ping.length - 1] ^= 1;
+			Thread.sleep(delay);
+			if (invalid) ping[1] ^= 1;
 			ServerPing.writeVarInt(out, len);
 			out.write(ping);
 			out.flush();

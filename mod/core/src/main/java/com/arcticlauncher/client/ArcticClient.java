@@ -77,6 +77,7 @@ public final class ArcticClient {
 		Lang.init(p, session.language);
 		config = ClientConfig.load(p.configDir());
 		persistentChat = new com.arcticlauncher.client.feature.PersistentChat(p.configDir());
+		persistentChat.readAhead();
 		applyLauncherStyle(session);
 		applyLauncherProxy(session);
 		waypoints = com.arcticlauncher.client.waypoints.Waypoints.load(p.configDir());
@@ -87,6 +88,8 @@ public final class ArcticClient {
 		// Finish before starting any network service, preserving the default trust setup.
 		trust.join();
 		timing.step("trust wait"); // i18n-ignore: startup log label
+		// Cosmetic files and textures named by their SHA-1 are kept between sessions (in the instance's .arctic folder).
+		com.arcticlauncher.client.looks.AssetCache.init(new java.io.File(p.configDir().getAbsoluteFile().getParentFile(), ".arctic/cache/looks"));
 		looks = new Looks(p, config, serverUrl(session), session.token);
 		looks.shareServer(session.shareServer);
 		looks.start();
