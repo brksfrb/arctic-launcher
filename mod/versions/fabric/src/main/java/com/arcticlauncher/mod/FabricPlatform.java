@@ -1532,6 +1532,16 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean enchantInfoWorks() {
+		return EnchantInfo.WORKS;
+	}
+
+	@Override
+	public String enchantments(Object stack) {
+		return EnchantInfo.summary(stack);
+	}
+
+	@Override
 	public void clearChat() {
 		//#if MC >= 26.2
 		final net.minecraft.client.gui.components.ChatComponent chat = mc().gui.hud.getChat();

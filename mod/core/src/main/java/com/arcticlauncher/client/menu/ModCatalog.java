@@ -323,8 +323,16 @@ final class ModCatalog {
 				Category.GAMEPLAY, "reach range crosshair hit attack distance pvp")
 				.toggle(() -> c.rangeIndicator, on -> c.rangeIndicator = on));
 		out.add(new Mod("pickupfeed", Lang.t("mods.pickup_display"), Lang.t("mods.items_you_pick_up_are_listed_at_the_right_of"), "items",
-				Category.GAMEPLAY, "pickup picked up item loot feed hud collect")
-				.toggle(() -> c.pickupFeed, on -> c.pickupFeed = on));
+				Category.GAMEPLAY, "pickup picked up item loot feed hud collect enchant enchantment enchanted book info")
+				.toggle(() -> c.pickupFeed, on -> c.pickupFeed = on)
+				.settings((host, f) -> {
+					if (p.enchantInfoWorks()) {
+						f.toggle(Lang.t("mods.show_enchantments"), Lang.t("mods.a_small_line_with_the_enchantments_of_an_item_you"), () -> c.pickupEnchants,
+								on -> c.pickupEnchants = on);
+					} else {
+						f.note(Lang.t("mods.enchantments_are_not_shown_on_this_version"));
+					}
+				}));
 		out.add(new Mod("hitboxes", Lang.t("mods.hitboxes"), Lang.t("mods.every_players_and_mobs_hitbox_as_a_box_like"), "hitboxes",
 				Category.GAMEPLAY, "hitbox combat box f3 reach")
 				.toggle(() -> c.hitboxes, on -> c.hitboxes = on));
@@ -566,14 +574,6 @@ final class ModCatalog {
 						f.note(Lang.t("mods.the_hud_and_menus_stay_sharp"));
 					}));
 		}
-		if (p.itemPhysicsWorks()) {
-			out.add(new Mod("itemphysics", Lang.t("mods.item_physics"), Lang.t("mods.dropped_items_lie_flat_and_tumble_as_they"), "itemphysics",
-					Category.VISUAL, "drops ground realistic")
-					.toggle(() -> c.itemPhysics, on -> c.itemPhysics = on));
-		}
-		if (p.outlineTweaks()) {
-			out.add(new Mod("outline", Lang.t("mods.block_outline"), Lang.t("mods.the_outline_on_the_block_you_look_at"), "outline", Category.VISUAL, "selection")
-					.toggle(() -> c.outlineColor != 0, on -> {
 		if (p.menuBlurWorks()) {
 			out.add(new Mod("menublur", Lang.t("mods.menu_blur"), Lang.t("mods.blur_the_world_behind_menus_the_inventory_and_the"), "motionblur",
 					Category.VISUAL, "background blur menu inventory pause screen frosted glass gui")
@@ -584,6 +584,14 @@ final class ModCatalog {
 						f.note(Lang.t("mods.the_game_has_its_own_blur_setting_in_video"));
 					}));
 		}
+		if (p.itemPhysicsWorks()) {
+			out.add(new Mod("itemphysics", Lang.t("mods.item_physics"), Lang.t("mods.dropped_items_lie_flat_and_tumble_as_they"), "itemphysics",
+					Category.VISUAL, "drops ground realistic")
+					.toggle(() -> c.itemPhysics, on -> c.itemPhysics = on));
+		}
+		if (p.outlineTweaks()) {
+			out.add(new Mod("outline", Lang.t("mods.block_outline"), Lang.t("mods.the_outline_on_the_block_you_look_at"), "outline", Category.VISUAL, "selection")
+					.toggle(() -> c.outlineColor != 0, on -> {
 						if (on) {
 							c.outlineColor = c.outlineColorOff != 0 ? c.outlineColorOff : OUTLINE_COLORS[0];
 							c.outlineWidth = c.outlineWidthOff > 0 ? c.outlineWidthOff : WIDTH_VALUES[1];
@@ -766,6 +774,8 @@ final class ModCatalog {
 					f.section(Lang.t("mods.show"));
 					f.toggle(Lang.t("mods.hide_the_chat"), Lang.t("mods.no_chat_lines_on_screen_you_can_still_type"), () -> c.chatOff,
 							on -> c.chatOff = on);
+					f.key(Lang.t("mods.clear_chat_key"), Lang.t("mods.empties_the_chat_on_screen_the_saved_history_stays"),
+							Form.key(() -> c.clearChatKey, k -> c.clearChatKey = k));
 					f.section(Lang.t("mods.keep"));
 					f.toggle(Lang.t("mods.save_chat_across_restarts"), Lang.t("mods.keep_all_messages_and_sent_history_in_this"), () -> c.chatPersistent,
 							on -> c.chatPersistent = on);
@@ -774,8 +784,6 @@ final class ModCatalog {
 						int removed = saved == null ? 0 : saved.clear();
 						com.arcticlauncher.client.notice.Notices.post(Lang.t("mods.saved_chat_cleared"), removed == 0 ? Lang.t("mods.nothing_was_saved") : Lang.t("mods.deleted_the_saved_chat_and_sent_history"));
 					});
-					f.key(Lang.t("mods.clear_chat_key"), Lang.t("mods.empties_the_chat_on_screen_the_saved_history_stays"),
-							Form.key(() -> c.clearChatKey, k -> c.clearChatKey = k));
 					f.toggle(Lang.t("mods.keep_chat_when_leaving"), Lang.t("mods.the_lines_stay_when_you_disconnect_or_change"), () -> c.chatKeep,
 							on -> c.chatKeep = on);
 					f.section(Lang.t("mods.mute"));

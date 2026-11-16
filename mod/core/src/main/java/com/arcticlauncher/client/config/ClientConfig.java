@@ -122,11 +122,11 @@ public final class ClientConfig {
 	public boolean oldItemPosition;
 	public boolean oldThirdPerson;
 	public boolean clearWeather;
-	/** Motion blur, and how strong (1 low to 4 max). */
-	public boolean motionBlur;
 	/** Menu Blur: blur the world behind menus with this strength (0 to 10) instead of the game's own setting. */
 	public boolean menuBlur;
 	public int menuBlurStrength = 5;
+	/** Motion blur, and how strong (1 low to 4 max). */
+	public boolean motionBlur;
 	public int motionBlurStrength = 2;
 	/** How strong the blur is, 0 to 100 (the camera blur; the strength above is for the blend used under VulkanMod). */
 	public int motionBlurAmount = 35;
@@ -262,6 +262,8 @@ public final class ClientConfig {
 	public boolean rangeIndicator;
 	/** Items you pick up are listed on the HUD for a moment. */
 	public boolean pickupFeed;
+	/** The pickup list adds a small line with the item's enchantments. */
+	public boolean pickupEnchants = true;
 	/** A key in an inventory sorts the container under the mouse. */
 	public boolean inventorySort;
 	/** The game key name that sorts ("key.keyboard.r"). */
@@ -538,11 +540,11 @@ public final class ClientConfig {
 		if (emoteKey == null) {
 			emoteKey = "key.keyboard.b";
 		}
-		if (streamerKey == null) {
-			streamerKey = "key.keyboard.unknown";
 		if (clearChatKey == null) {
 			clearChatKey = "key.keyboard.unknown";
 		}
+		if (streamerKey == null) {
+			streamerKey = "key.keyboard.unknown";
 		}
 		if (voiceKey == null) {
 			voiceKey = "key.keyboard.v";

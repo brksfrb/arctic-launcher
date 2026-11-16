@@ -863,7 +863,7 @@ public final class LegacyPlatform implements Platform {
 				continue;
 			}
 			String name = it.getCustomName();
-			String key = System.identityHashCode(it.getItem()) + ":" + it.getDamage() + ":" + name;
+			String key = System.identityHashCode(it.getItem()) + ":" + it.getDamage() + ":" + name + (it.hasEnchantments() ? "+" : "");
 			Object[] row = kinds.get(key);
 			if (row == null) {
 				kinds.put(key, new Object[] {key, it.copy(), name, count(it)});
@@ -1262,6 +1262,51 @@ public final class LegacyPlatform implements Platform {
 	public Object connectionKey() {
 		return mc().getNetworkHandler();
 	}
+
+	@Override
+	public boolean enchantInfoWorks() {
+		//#if MC >= 1.9
+		return false;
+		//#else
+		return true;
+		//#endif
+	}
+
+	@Override
+	public String enchantments(Object stack) {
+		//#if MC >= 1.9
+		return null;
+		//#else
+		if (!(stack instanceof ItemStack)) {
+			return null;
+		}
+		ItemStack it = (ItemStack) stack;
+		StringBuilder out = new StringBuilder();
+		addEnchants(out, it.getEnchantments());
+		if (it.getItem() instanceof net.minecraft.item.EnchantedBookItem) {
+			addEnchants(out, ((net.minecraft.item.EnchantedBookItem) it.getItem()).getEnchantmentNbt(it));
+		}
+		return out.length() == 0 ? null : out.toString();
+		//#endif
+	}
+
+	//#if MC < 1.9
+	private static void addEnchants(StringBuilder out, net.minecraft.nbt.NbtList list) {
+		if (list == null) {
+			return;
+		}
+		for (int i = 0; i < list.size(); i++) {
+			net.minecraft.nbt.NbtCompound tag = list.getCompound(i);
+			net.minecraft.enchantment.Enchantment e = net.minecraft.enchantment.Enchantment.byRawId(tag.getShort("id"));
+			if (e != null) {
+				if (out.length() > 0) {
+					out.append(", ");
+				}
+				out.append(e.getTranslatedName(tag.getShort("lvl")));
+			}
+		}
+	}
+	//#endif
 
 	@Override
 	public void clearChat() {

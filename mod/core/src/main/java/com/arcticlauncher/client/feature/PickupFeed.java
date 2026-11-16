@@ -24,6 +24,9 @@ public final class PickupFeed {
 	/** Ticks to just look after joining or closing a screen, before telling pickups apart. */
 	private static final int SETTLE_TICKS = 20;
 	private static final int ROW_H = 18;
+	/** The extra line under a row's name, for enchanted items. */
+	private static final int EXTRA_H = 10;
+	static final int MAX_EXTRA = 44;
 
 	private final List<Row> rows = new ArrayList<Row>();
 	private Map<String, Integer> before;
@@ -33,11 +36,14 @@ public final class PickupFeed {
 		final String key;
 		final Object stack;
 		final String name;
+		/** The enchantments line (read once when the row is made), or null. */
+		final String extra;
 		int count;
 		long at;
 
-		Row(String key, Object stack, String name, int count, long at) {
+		Row(String key, Object stack, String name, String extra, int count, long at) {
 			this.key = key;
+			this.extra = extra;
 			this.stack = stack;
 			this.name = name;
 			this.count = count;
@@ -84,10 +90,20 @@ public final class PickupFeed {
 				return;
 			}
 		}
-		rows.add(0, new Row(key, stack, name, count, time));
+		Platform platform = ArcticClient.platform();
+		String extra = ArcticClient.config().pickupEnchants && platform.enchantInfoWorks() ? shorten(platform.enchantments(stack)) : null;
+		rows.add(0, new Row(key, stack, name, extra, count, time));
 		while (rows.size() > MAX_ROWS) {
 			rows.remove(rows.size() - 1);
 		}
+	}
+
+	/** At most {@link #MAX_EXTRA} characters, cut with an ellipsis; null stays null. */
+	static String shorten(String text) {
+		if (text == null || text.length() <= MAX_EXTRA) {
+			return text;
+		}
+		return text.substring(0, MAX_EXTRA - 1) + "\u2026";
 	}
 
 	/** Draw the rows, newest on top, above the hotbar at the right edge. */
@@ -107,13 +123,19 @@ public final class PickupFeed {
 			float fade = age < SHOW_MS - FADE_MS ? 1f : (SHOW_MS - age) / (float) FADE_MS;
 			int alpha = Math.max(0, Math.min(255, Math.round(fade * 255)));
 			String text = "+" + row.count + " " + row.name;
-			int w = g.textWidth(text) + 28;
+			int h = row.extra == null ? ROW_H : ROW_H + EXTRA_H;
+			int w = Math.max(g.textWidth(text), row.extra == null ? 0 : g.textWidth(row.extra)) + 28;
 			int x1 = g.width() - 4;
 			int x0 = x1 - w;
-			Draw.round(g, x0, y - ROW_H, x1, y, 4, (alpha * 3 / 4) << 24 | (s.panel & 0xFFFFFF));
-			g.item(row.stack, x0 + 3, y - ROW_H + 1);
-			g.text(text, x0 + 24, y - ROW_H + 5, alpha << 24 | (s.text & 0xFFFFFF), false);
-			y -= ROW_H + 2;
+			Draw.round(g, x0, y - h, x1, y, 4, (alpha * 3 / 4) << 24 | (s.panel & 0xFFFFFF));
+			g.item(row.stack, x0 + 3, y - h + 1);
+			if (row.extra == null) {
+				g.text(text, x0 + 24, y - h + 5, alpha << 24 | (s.text & 0xFFFFFF), false);
+			} else {
+				g.text(text, x0 + 24, y - h + 3, alpha << 24 | (s.text & 0xFFFFFF), false);
+				g.text(row.extra, x0 + 24, y - h + 14, alpha << 24 | (s.muted & 0xFFFFFF), false);
+			}
+			y -= h + 2;
 		}
 	}
 }
