@@ -179,7 +179,28 @@ final class ModCatalog {
 						}
 					});
 			m.widget = w;
-			out.add(m);
+			Mod feature = null;
+			for (Mod existing : out) {
+				// Merge semantic pairs by stable ids so the card set is the same in every locale.
+				if (("scoreboard".equals(w.id) && "scoreboard".equals(existing.id))
+						|| ("held".equals(w.id) && "helditem".equals(existing.id) && p.hasScreenHooks())) feature = existing;
+			}
+			if (feature == null) {
+				out.add(m);
+			} else {
+				final Mod.Settings appearance = feature.settings;
+				final Mod.Settings hudSettings = m.settings;
+				feature.widget = w;
+				feature.hudControls = m;
+				feature.keywords += " " + m.name + " " + m.description + " " + m.keywords;
+				feature.settings((host, f) -> {
+					if (appearance != null) appearance.build(host, f);
+					f.section(w.name);
+					f.toggle(Lang.t("mods.show"), w.description, () -> slot.enabled, on -> slot.enabled = on);
+					f.key(Lang.t("mods.toggle_key"), w.description, Form.key(() -> ToggleKeys.get(m), key -> ToggleKeys.set(m, key)));
+					hudSettings.build(host, f);
+				});
+			}
 		}
 		for (Mod m : out) {
 			Category moved = REGROUP.get(m.id);
@@ -201,6 +222,16 @@ final class ModCatalog {
 			}
 		}
 		return out;
+	}
+
+	/** Includes the original HUD toggle ids without adding duplicate visible cards. */
+	static List<Mod> withToggleAliases() {
+		List<Mod> cards = all();
+		List<Mod> controls = new ArrayList<Mod>(cards);
+		for (Mod card : cards) {
+			if (card.hudControls != null) controls.add(card.hudControls);
+		}
+		return controls;
 	}
 
 	private static void gameplay(List<Mod> out, final ClientConfig c, Platform p) {

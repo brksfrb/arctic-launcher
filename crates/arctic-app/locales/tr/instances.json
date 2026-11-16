@@ -343,5 +343,16 @@
   "instances.yes_delete": "Evet, sil",
   "instances.yes_remove": "Evet, kaldır",
   "instances.you_get_a_code_to_put_in_your_servers_motd": "Sunucunun MOTD'sine koyman için senin olduğunu kanıtlayan bir kod alırsın. Sonra görünmeden önce kısa bir incelemeyi bekler.",
-  "instances.your_server_list_hud_and_arctic_client": "Sunucu listen, HUD ve Arctic Client ayarların ile Minecraft'ın tuş, FOV ve görüntü ayarları, bunları paylaşan her örnekte aynıdır; yeni bir örnek zaten kurduğun gibi hissettirir."
+  "instances.your_server_list_hud_and_arctic_client": "Sunucu listen, HUD ve Arctic Client ayarların ile Minecraft'ın tuş, FOV ve görüntü ayarları, bunları paylaşan her örnekte aynıdır; yeni bir örnek zaten kurduğun gibi hissettirir.",
+  "instances.world_trash": "Çöp kutusu ({count})",
+  "instances.world_trash_hint": "Silinen dünyalar {days} gün saklanır, sonra kalıcı olarak silinir.",
+  "instances.world_trash_kept": "{days} gün saklanır. Geri yüklemek için çöp kutusunu açın.",
+  "instances.world_trash_note": "Silinen dünyalar burada {days} gün kalır, sonra kalıcı olarak silinir.",
+  "instances.back_to_worlds": "Dünyalara dön",
+  "instances.world_delete_sure": "Bu geri alınamaz. Emin misiniz?",
+  "instances.world_restored": "{name} geri yüklendi",
+  "instances.favorite_world": "Favorilere ekle",
+  "instances.unfavorite_world": "Favorilerden çıkar",
+  "instances.favorite_world_cannot_delete": "Favori dünyalar silinemez. Önce favorilerden çıkarın.",
+  "instances.could_not_save_favorite": "Favori kaydedilemedi"
 }

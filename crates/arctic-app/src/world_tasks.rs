@@ -6,6 +6,26 @@ use arctic_core::worlds::{self, World};
 
 use crate::tasks::{Event, Tasks};
 use crate::{t, tf};
+impl crate::app::ArcticApp {
+    /// Delete trashed worlds older than 14 days in every instance, in the background.
+    pub(crate) fn purge_world_trash(&mut self) {
+        self.world_purge_at = std::time::Instant::now();
+        let dirs = self.dirs.clone();
+        let mut all = vec![self.instance.clone()];
+        all.extend(self.custom_instances.iter().cloned());
+        std::thread::spawn(move || {
+            let now = arctic_core::auth::now_secs();
+            for instance in all {
+                let saves = instance.game_dir(&dirs).join("saves");
+                let n = worlds::purge_expired(&saves, now);
+                if n > 0 {
+                    log::info!("purged {n} old world(s) from {}", saves.display());
+                }
+            }
+        });
+    }
+}
+
 impl Tasks {
     /// Copy world folders into `saves`.
     pub fn import_worlds(&self, instance_id: String, worlds: Vec<PathBuf>, saves: PathBuf) {

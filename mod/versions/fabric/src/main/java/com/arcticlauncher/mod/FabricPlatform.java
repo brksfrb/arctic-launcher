@@ -765,15 +765,18 @@ final class FabricPlatform implements Platform {
 		}
 		List<NativeImage> parts = splitFrames(image, frames);
 		image.close();
-		com.arcticlauncher.client.gfx.RenderWork.post(() -> {
-			boolean ok = true;
-			for (int i = 0; i < parts.size(); i++) {
-				ok &= register(hash + "/" + i, parts.get(i));
-			}
-			if (ok) {
-				ArcticClient.looks().textureReady(hash, parts.size());
-			}
-		});
+		// One upload per job (frame), so a long animated cape is spread over frames like everything else;
+		// it shows once the last frame is up, as before.
+		boolean[] ok = {true};
+		for (int i = 0; i < parts.size(); i++) {
+			int frame = i;
+			com.arcticlauncher.client.gfx.RenderWork.post(() -> {
+				ok[0] &= register(hash + "/" + frame, parts.get(frame));
+				if (frame == parts.size() - 1 && ok[0]) {
+					ArcticClient.looks().textureReady(hash, parts.size());
+				}
+			});
+		}
 	}
 
 	/** Upload on the render thread; a failure is logged, never thrown into the game loop. */

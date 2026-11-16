@@ -343,5 +343,16 @@
   "instances.yes_delete": "Ja, verwijderen",
   "instances.yes_remove": "Ja, verwijderen",
   "instances.you_get_a_code_to_put_in_your_servers_motd": "Je krijgt een code om in de MOTD van je server te zetten, als bewijs dat hij van jou is. Daarna wacht hij op een korte controle voordat hij verschijnt.",
-  "instances.your_server_list_hud_and_arctic_client": "Je serverlijst, HUD- en Arctic Client-instellingen, en de toetsen, FOV en video-instellingen van Minecraft zijn hetzelfde in elke instantie die ze deelt, zodat een nieuwe aanvoelt als de instantie die je al hebt ingesteld."
+  "instances.your_server_list_hud_and_arctic_client": "Je serverlijst, HUD- en Arctic Client-instellingen, en de toetsen, FOV en video-instellingen van Minecraft zijn hetzelfde in elke instantie die ze deelt, zodat een nieuwe aanvoelt als de instantie die je al hebt ingesteld.",
+  "instances.world_trash": "Prullenbak ({count})",
+  "instances.world_trash_hint": "Verwijderde werelden worden {days} dagen bewaard en daarna definitief verwijderd.",
+  "instances.world_trash_kept": "{days} dagen bewaard. Open de prullenbak om te herstellen.",
+  "instances.world_trash_note": "Verwijderde werelden blijven hier {days} dagen staan en worden daarna definitief verwijderd.",
+  "instances.back_to_worlds": "Terug naar werelden",
+  "instances.world_delete_sure": "Dit kan niet ongedaan worden gemaakt. Zeker?",
+  "instances.world_restored": "{name} hersteld",
+  "instances.favorite_world": "Toevoegen aan favorieten",
+  "instances.unfavorite_world": "Verwijderen uit favorieten",
+  "instances.favorite_world_cannot_delete": "Favoriete werelden kunnen niet worden verwijderd. Verwijder hem eerst uit de favorieten.",
+  "instances.could_not_save_favorite": "Favoriet kon niet worden opgeslagen"
 }

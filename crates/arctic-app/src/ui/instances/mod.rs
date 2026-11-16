@@ -139,6 +139,12 @@ pub struct InstancesUi {
     /// Worlds of the open instance.
     pub worlds: Option<(String, Vec<arctic_core::worlds::World>)>,
     pub worlds_busy: bool,
+    /// Starred worlds of the open instance.
+    pub world_favorites: arctic_core::worlds::Favorites,
+    /// The Worlds page shows the world trash, with what's in it and the one asked "delete for good?".
+    pub worlds_trash_open: bool,
+    pub worlds_trash: Vec<arctic_core::worlds::Trashed>,
+    pub worlds_trash_confirm: Option<std::path::PathBuf>,
     /// Replays of the open instance.
     pub replays: Option<(String, Vec<arctic_core::replays::Replay>)>,
     pub import: Option<worlds::ImportDialog>,
@@ -430,6 +436,8 @@ impl ArcticApp {
             InstancePage::Worlds
         };
         self.inst.worlds = None;
+        self.inst.worlds_trash_open = false;
+        self.inst.worlds_trash_confirm = None;
         self.inst.import = None;
         self.inst.confirm_delete = false;
         self.inst.rename = None;

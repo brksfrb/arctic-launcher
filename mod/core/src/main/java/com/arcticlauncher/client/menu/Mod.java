@@ -56,7 +56,7 @@ final class Mod {
 	/** For HUD widgets: which group of the HUD list it is in (see ModCatalog.HUD_GROUPS). */
 	String group = "mods.hud_group.info";
 	/** Extra words the search matches. */
-	final String keywords;
+	String keywords;
 	private BooleanSupplier on;
 	private Consumer<Boolean> set;
 	Settings settings;
@@ -66,6 +66,8 @@ final class Mod {
 	boolean ownToggleKey;
 	/** For HUD widgets: the widget (its page shows a live preview). */
 	HudWidget widget;
+	/** The HUD controls merged into this card, retaining their saved toggle binding. */
+	Mod hudControls;
 
 	Mod(String id, String name, String description, String icon, Category category, String keywords) {
 		this.id = id;

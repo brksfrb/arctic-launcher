@@ -57,7 +57,7 @@ public final class ToggleKeys {
 		ClientConfig c = ArcticClient.config();
 		for (Map.Entry<String, String> e : c.toggleKeys.entrySet()) {
 			if (!e.getKey().equals(mod.id) && key.equals(e.getValue())) {
-				for (Mod other : ModCatalog.all()) {
+				for (Mod other : ModCatalog.withToggleAliases()) {
 					if (other.id.equals(e.getKey())) {
 						return other.name + " (Arctic)";
 					}
@@ -81,7 +81,7 @@ public final class ToggleKeys {
 		stale = false;
 		java.util.List<Mod> found = new java.util.ArrayList<Mod>();
 		java.util.List<String> names = new java.util.ArrayList<String>();
-		for (Mod m : ModCatalog.all()) {
+		for (Mod m : ModCatalog.withToggleAliases()) {
 			String key = c.toggleKeys.get(m.id);
 			if (m.hasSwitch() && bound(key)) {
 				found.add(m);

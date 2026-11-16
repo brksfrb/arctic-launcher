@@ -343,5 +343,16 @@
   "instances.yes_delete": "예, 삭제",
   "instances.yes_remove": "예, 제거",
   "instances.you_get_a_code_to_put_in_your_servers_motd": "서버의 MOTD에 넣을 코드를 받아 소유를 증명합니다. 그 뒤 표시되기 전에 간단한 검토를 기다립니다.",
-  "instances.your_server_list_hud_and_arctic_client": "서버 목록, HUD와 Arctic 클라이언트 설정, 그리고 Minecraft의 키, FOV, 비디오 설정은 이를 공유하는 모든 인스턴스에서 동일하므로, 새 인스턴스도 이미 설정해 둔 것처럼 느껴집니다."
+  "instances.your_server_list_hud_and_arctic_client": "서버 목록, HUD와 Arctic 클라이언트 설정, 그리고 Minecraft의 키, FOV, 비디오 설정은 이를 공유하는 모든 인스턴스에서 동일하므로, 새 인스턴스도 이미 설정해 둔 것처럼 느껴집니다.",
+  "instances.world_trash": "휴지통 ({count})",
+  "instances.world_trash_hint": "삭제한 월드는 {days}일 동안 보관된 후 완전히 삭제됩니다.",
+  "instances.world_trash_kept": "{days}일 동안 보관됩니다. 복원하려면 휴지통을 여세요.",
+  "instances.world_trash_note": "삭제한 월드는 여기에 {days}일 동안 보관된 후 완전히 삭제됩니다.",
+  "instances.back_to_worlds": "월드로 돌아가기",
+  "instances.world_delete_sure": "되돌릴 수 없습니다. 계속할까요?",
+  "instances.world_restored": "{name} 복원됨",
+  "instances.favorite_world": "즐겨찾기에 추가",
+  "instances.unfavorite_world": "즐겨찾기에서 제거",
+  "instances.favorite_world_cannot_delete": "즐겨찾기한 월드는 삭제할 수 없습니다. 먼저 즐겨찾기에서 제거하세요.",
+  "instances.could_not_save_favorite": "즐겨찾기를 저장할 수 없습니다"
 }
