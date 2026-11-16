@@ -357,12 +357,8 @@ final class ModCatalog {
 				Category.GAMEPLAY, "pickup picked up item loot feed hud collect enchant enchantment enchanted book info")
 				.toggle(() -> c.pickupFeed, on -> c.pickupFeed = on)
 				.settings((host, f) -> {
-					if (p.enchantInfoWorks()) {
-						f.toggle(Lang.t("mods.show_enchantments"), Lang.t("mods.a_small_line_with_the_enchantments_of_an_item_you"), () -> c.pickupEnchants,
-								on -> c.pickupEnchants = on);
-					} else {
-						f.note(Lang.t("mods.enchantments_are_not_shown_on_this_version"));
-					}
+					f.toggle(Lang.t("mods.show_enchantments"), Lang.t("mods.a_small_line_with_the_enchantments_of_an_item_you"), () -> c.pickupEnchants,
+							on -> c.pickupEnchants = on);
 				}));
 		out.add(new Mod("hitboxes", Lang.t("mods.hitboxes"), Lang.t("mods.every_players_and_mobs_hitbox_as_a_box_like"), "hitboxes",
 				Category.GAMEPLAY, "hitbox combat box f3 reach")
@@ -605,16 +601,18 @@ final class ModCatalog {
 						f.note(Lang.t("mods.the_hud_and_menus_stay_sharp"));
 					}));
 		}
-		if (p.menuBlurWorks()) {
-			out.add(new Mod("menublur", Lang.t("mods.menu_blur"), Lang.t("mods.blur_the_world_behind_menus_the_inventory_and_the"), "motionblur",
-					Category.VISUAL, "background blur menu inventory pause screen frosted glass gui")
-					.toggle(() -> c.menuBlur, on -> c.menuBlur = on)
-					.settings((host, f) -> {
-						f.section(Lang.t("mods.blur"));
-						f.slider(Lang.t("mods.strength"), () -> c.menuBlurStrength, v -> c.menuBlurStrength = (int) v, 0, com.arcticlauncher.client.feature.MenuBlur.MAX, 1, "%.0f");
+		out.add(new Mod("menublur", Lang.t("mods.menu_blur"), Lang.t("mods.blur_the_world_behind_menus_the_inventory_and_the"), "motionblur",
+				Category.VISUAL, "background blur menu inventory pause screen frosted glass gui")
+				.toggle(() -> c.menuBlur, on -> c.menuBlur = on)
+				.settings((host, f) -> {
+					f.section(Lang.t("mods.blur"));
+					f.slider(Lang.t("mods.strength"), () -> c.menuBlurStrength, v -> c.menuBlurStrength = (int) v, 0, com.arcticlauncher.client.feature.MenuBlur.MAX, 1, "%.0f");
+					if (p.menuBlurWorks()) {
 						f.note(Lang.t("mods.the_game_has_its_own_blur_setting_in_video"));
-					}));
-		}
+					} else {
+						f.note(Lang.t("mods.this_version_has_no_menu_blur_so_the_world_behind"));
+					}
+				}));
 		if (p.itemPhysicsWorks()) {
 			out.add(new Mod("itemphysics", Lang.t("mods.item_physics"), Lang.t("mods.dropped_items_lie_flat_and_tumble_as_they"), "itemphysics",
 					Category.VISUAL, "drops ground realistic")

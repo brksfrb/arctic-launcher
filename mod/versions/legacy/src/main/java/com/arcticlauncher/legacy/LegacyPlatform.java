@@ -1265,18 +1265,11 @@ public final class LegacyPlatform implements Platform {
 
 	@Override
 	public boolean enchantInfoWorks() {
-		//#if MC >= 1.9
-		return false;
-		//#else
 		return true;
-		//#endif
 	}
 
 	@Override
 	public String enchantments(Object stack) {
-		//#if MC >= 1.9
-		return null;
-		//#else
 		if (!(stack instanceof ItemStack)) {
 			return null;
 		}
@@ -1287,17 +1280,19 @@ public final class LegacyPlatform implements Platform {
 			addEnchants(out, ((net.minecraft.item.EnchantedBookItem) it.getItem()).getEnchantmentNbt(it));
 		}
 		return out.length() == 0 ? null : out.toString();
-		//#endif
 	}
 
-	//#if MC < 1.9
 	private static void addEnchants(StringBuilder out, net.minecraft.nbt.NbtList list) {
 		if (list == null) {
 			return;
 		}
 		for (int i = 0; i < list.size(); i++) {
 			net.minecraft.nbt.NbtCompound tag = list.getCompound(i);
+			//#if MC >= 1.9
+			net.minecraft.enchantment.Enchantment e = net.minecraft.enchantment.Enchantment.byIndex(tag.getShort("id"));
+			//#else
 			net.minecraft.enchantment.Enchantment e = net.minecraft.enchantment.Enchantment.byRawId(tag.getShort("id"));
+			//#endif
 			if (e != null) {
 				if (out.length() > 0) {
 					out.append(", ");
@@ -1306,7 +1301,6 @@ public final class LegacyPlatform implements Platform {
 			}
 		}
 	}
-	//#endif
 
 	@Override
 	public void clearChat() {
