@@ -144,6 +144,7 @@ impl ArcticApp {
         self.suggest_dialog(&ctx);
         self.import_worlds_dialog(&ctx);
         self.share_dialogs(&ctx);
+        self.linked_dialogs(&ctx);
         self.migrate_dialog(&ctx);
         self.storage_dialog(&ctx);
         self.whats_new_dialog(&ctx);

@@ -870,3 +870,27 @@ fn a_fresh_copy_takes_everything() {
     assert!(!apply::needs_game_closed(&diff::additions(m.mods.clone())));
     assert!(apply::needs_game_closed(&d));
 }
+
+#[test]
+fn an_owner_key_is_kept_encrypted() {
+    let dir = tempfile::tempdir().unwrap();
+    let dirs = crate::storage::DataDirs::new(dir.path());
+    let state = LinkState {
+        code: "abcdefgh".into(),
+        role: Role::Owner {
+            key: "k".repeat(43),
+            include_configs: false,
+        },
+        revision: 1,
+        manifest: None,
+        latest: 1,
+        dismissed: 0,
+        gone: false,
+    };
+    save(&dirs, "x", &state).unwrap();
+    let text = std::fs::read_to_string(dirs.instance_dir("x").join("link.json")).unwrap();
+    assert!(!text.contains(&"k".repeat(43)), "the key isn't stored in plain text");
+    assert!(text.contains("\"role\": \"owner\""));
+    assert_eq!(load(&dirs, "x").unwrap(), state);
+    assert!(state.is_owner() && !state.has_update());
+}

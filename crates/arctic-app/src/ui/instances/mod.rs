@@ -337,6 +337,18 @@ impl ArcticApp {
                 {
                     self.open_migrate();
                 }
+                if widgets::button(
+                    ui,
+                    p,
+                    Some(Icon::Friends),
+                    t!("instances.link.join_with_code"),
+                    false,
+                )
+                .on_hover_text(t!("instances.link.join_hint"))
+                .clicked()
+                {
+                    self.open_link_join();
+                }
                 if widgets::button(ui, p, Some(Icon::Import), t!("instances.import"), false)
                     .on_hover_text(t!("instances.add_an_instance_hud_layout_or_crosshair"))
                     .clicked()
@@ -413,6 +425,15 @@ impl ArcticApp {
             p.muted,
             text_w,
         );
+        if let Some((tag, news)) = self.link_tag(&instance.id) {
+            ui.painter().text(
+                egui::pos2(rect.right() - 12.0, rect.top() + 80.0),
+                Align2::RIGHT_CENTER,
+                tag,
+                FontId::proportional(11.0),
+                if news { p.accent } else { p.muted },
+            );
+        }
         if selected {
             ui.painter().text(
                 egui::pos2(text_x, rect.top() + 80.0),

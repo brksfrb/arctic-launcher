@@ -208,6 +208,7 @@ pub struct ArcticApp {
     pub(crate) onboarding: Option<crate::ui::Onboarding>,
     pub(crate) together: crate::ui::TogetherUi,
     pub(crate) sharing: crate::ui::ShareUi,
+    pub(crate) linked: crate::ui::LinkedUi,
     pub(crate) shots: crate::ui::ScreenshotsUi,
     pub(crate) servers: crate::ui::ServersUi,
     pub(crate) bedrock: crate::ui::BedrockUi,
@@ -309,6 +310,7 @@ impl ArcticApp {
             onboarding: None,
             together: crate::ui::TogetherUi::default(),
             sharing: crate::ui::ShareUi::default(),
+            linked: crate::ui::LinkedUi::default(),
             shots: crate::ui::ScreenshotsUi::default(),
             servers: crate::ui::ServersUi::default(),
             bedrock: crate::ui::BedrockUi::default(),
@@ -1278,6 +1280,7 @@ impl ArcticApp {
             Event::ShareProgress(p) => self.sharing.progress = Some(p),
             Event::ShareImported(result) => self.on_share_imported(result, now),
             Event::ShareModsLookedUp(id, result) => self.on_share_mods_looked_up(&id, result),
+            Event::Linked(e) => self.on_link_event(e),
             e @ (Event::SkinAccount(..)
             | Event::PlayerSkin(..)
             | Event::SkinFile(..)
@@ -1432,6 +1435,7 @@ impl eframe::App for ArcticApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
         }
         self.window_and_tray(ctx, frame);
+        self.linked_tick();
         if self.world_purge_at.elapsed() >= WORLD_PURGE_EVERY {
             self.purge_world_trash();
         }

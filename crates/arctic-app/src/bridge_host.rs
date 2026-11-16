@@ -33,7 +33,32 @@ struct Shared {
     asks_made: u64,
     /// Running games by their launch token: what to tell each to join.
     games: HashMap<String, GameLink>,
+    /// Mods a server refused a game for, waiting for the app to look them up (run, request).
+    missing_request: Option<(u64, MissingRequest)>,
+    /// How each game's missing-mods install is going (JSON, by run).
+    missing_state: HashMap<u64, String>,
+    /// Games that quit to be started again straight into a server (run → address).
+    relaunch: HashMap<u64, String>,
 }
+
+/// The game's report of a join refused for missing mods (see docs/linked-instances.md).
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct MissingRequest {
+    #[serde(default)]
+    launch: String,
+    #[serde(default)]
+    pub server: String,
+    #[serde(default)]
+    pub mods: Vec<arctic_core::linked::WantedMod>,
+    /// The loader the server said it needs, if it named one.
+    #[serde(default)]
+    pub loader: Option<String>,
+    #[serde(default)]
+    pub reason: String,
+}
+
+/// Mods a game can ask about at once.
+const MAX_MISSING: usize = 64;
 
 /// How one launched game reaches the launcher for joins.
 struct GameLink {
@@ -401,6 +426,56 @@ impl bridge::Accounts for AppAccounts {
         game.join.take()
     }
 
+    fn missing_mods(&self, request: &[u8]) -> arctic_core::Result<String> {
+        let mut body: MissingRequest = serde_json::from_slice(request)
+            .map_err(|_| arctic_core::Error::Other("bad request".into()))?; // i18n-ignore
+        body.mods.truncate(MAX_MISSING);
+        body.reason = body.reason.chars().take(2000).collect();
+        body.server = body.server.trim().chars().take(255).collect();
+        let mut shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let run = shared
+            .games
+            .get(&body.launch)
+            .map(|g| g.run)
+            .ok_or_else(|| arctic_core::Error::Other("unknown game".into()))?; // i18n-ignore
+        let state = serde_json::json!({ "state": "looking" }).to_string();
+        shared.missing_state.insert(run, state.clone());
+        shared.missing_request = Some((run, body));
+        // The question is asked in the launcher, which is usually behind the game.
+        crate::window::show();
+        shared.tasks.wake();
+        Ok(state)
+    }
+
+    fn missing_mods_state(&self, launch: &str) -> Option<String> {
+        let shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let run = shared.games.get(launch)?.run;
+        Some(
+            shared
+                .missing_state
+                .get(&run)
+                .cloned()
+                .unwrap_or_else(|| r#"{"state":"idle"}"#.to_owned()),
+        )
+    }
+
+    fn missing_mods_restart(&self, launch: &str) -> arctic_core::Result<()> {
+        let mut shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let run = shared
+            .games
+            .get(launch)
+            .map(|g| g.run)
+            .ok_or_else(|| arctic_core::Error::Other("unknown game".into()))?; // i18n-ignore
+        let server = shared
+            .missing_state
+            .get(&run)
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+            .and_then(|v| v.get("server").and_then(|s| s.as_str()).map(str::to_owned))
+            .ok_or_else(|| arctic_core::Error::Other("nothing to rejoin".into()))?; // i18n-ignore
+        shared.relaunch.insert(run, server);
+        Ok(())
+    }
+
     fn together(&self, request: &[u8]) -> arctic_core::Result<String> {
         let body: TogetherBody = serde_json::from_slice(request)
             .map_err(|_| arctic_core::Error::Other("bad request".into()))?; // i18n-ignore
@@ -437,6 +512,9 @@ impl BridgeHost {
             switch_ask: None,
             asks_made: 0,
             games: HashMap::new(),
+            missing_request: None,
+            missing_state: HashMap::new(),
+            relaunch: HashMap::new(),
         }));
         let info = bridge::start(AppAccounts(Arc::clone(&shared)))
             .inspect_err(|e| log::warn!("account switcher bridge: {e}"))
@@ -530,6 +608,48 @@ impl BridgeHost {
         shared.switch_ask = None;
         shared.allowed.insert(id.clone());
         always.then_some(id)
+    }
+
+    /// A game's missing-mods report, once (run, request).
+    pub fn take_missing_request(&self) -> Option<(u64, MissingRequest)> {
+        self.shared
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .missing_request
+            .take()
+    }
+
+    /// Tell the game of `run` how its missing-mods install goes: `state` is one of `looking`,
+    /// `review`, `installing`, `installed`, `declined`, `failed`. `server` is kept for the
+    /// rejoin.
+    pub fn set_missing_state(
+        &self,
+        run: u64,
+        state: &str,
+        server: &str,
+        installed: usize,
+        not_found: &[String],
+        message: Option<&str>,
+    ) {
+        let json = serde_json::json!({
+            "state": state,
+            "server": server,
+            "installed": installed,
+            "not_found": not_found,
+            "message": message,
+        });
+        self.shared
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .missing_state
+            .insert(run, json.to_string());
+    }
+
+    /// The server to start `run`'s instance into again, once, if its game asked to rejoin.
+    pub fn take_relaunch(&self, run: u64) -> Option<String> {
+        let mut shared = self.shared.lock().unwrap_or_else(PoisonError::into_inner);
+        shared.missing_state.remove(&run);
+        shared.relaunch.remove(&run)
     }
 
     /// A play-together request from the game, once.

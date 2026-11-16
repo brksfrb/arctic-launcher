@@ -75,6 +75,13 @@ impl ArcticApp {
                         self.set_tab(Tab::Play, now);
                         self.launch_selected();
                     }
+                    if !instance.is_default()
+                        && widgets::button(ui, p, None, t!("instances.link.share_link"), false)
+                            .on_hover_text(t!("instances.link.share_link_hint"))
+                            .clicked()
+                    {
+                        self.open_link(id);
+                    }
                     if widgets::icon_button(
                         ui,
                         p,
@@ -100,6 +107,7 @@ impl ArcticApp {
                 });
             });
         });
+        self.link_bar(ui, id);
         ui.add_space(12.0);
         let modded = instance.loader.kind().is_some();
         ui.horizontal(|ui| {

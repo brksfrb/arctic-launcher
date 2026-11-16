@@ -134,6 +134,26 @@ pub trait Accounts: Send + Sync + 'static {
         None
     }
 
+    /// A server refused the game for missing mods (JSON body, see docs/linked-instances.md):
+    /// the launcher looks them up and asks the player. Answers the state (JSON).
+    fn missing_mods(&self, _request: &[u8]) -> Result<String> {
+        Err(crate::Error::Other(
+            "installing mods needs Arctic Launcher".into(),
+        ))
+    }
+
+    /// How the missing-mods install of the game with this launch token is going (JSON).
+    fn missing_mods_state(&self, _launch: &str) -> Option<String> {
+        None
+    }
+
+    /// The game is about to quit: start it again straight into the server afterwards.
+    fn missing_mods_restart(&self, _launch: &str) -> Result<()> {
+        Err(crate::Error::Other(
+            "restarting needs Arctic Launcher".into(),
+        ))
+    }
+
     /// Play together from the game: `{"action": "host" | "join" | "stop" |
     /// "status", "code": …}`; the answer is the current state.
     fn together(&self, _request: &[u8]) -> Result<String> {
@@ -344,6 +364,25 @@ fn respond(request: &Request, accounts: &dyn Accounts) -> (&'static str, String)
             };
             ("200 OK", body.to_string())
         }
+        ("POST", "/v1/missing-mods") => match accounts.missing_mods(&request.body) {
+            Ok(reply) => ("200 OK", reply),
+            Err(e) => error("400 Bad Request", &e.to_string()),
+        },
+        ("POST", path) if path.starts_with("/v1/missing-mods/") && path.ends_with("/restart") => {
+            let launch = path
+                .trim_start_matches("/v1/missing-mods/")
+                .trim_end_matches("/restart");
+            match accounts.missing_mods_restart(launch) {
+                Ok(()) => ("200 OK", "{}".to_owned()),
+                Err(e) => error("404 Not Found", &e.to_string()),
+            }
+        }
+        ("GET", path) if path.starts_with("/v1/missing-mods/") => {
+            match accounts.missing_mods_state(path.trim_start_matches("/v1/missing-mods/")) {
+                Some(state) => ("200 OK", state),
+                None => error("404 Not Found", "no such game"),
+            }
+        }
         ("POST", "/v1/together") => match accounts.together(&request.body) {
             Ok(reply) => ("200 OK", reply),
             Err(e) => error("501 Not Implemented", &e.to_string()),
@@ -486,6 +525,51 @@ mod tests {
         assert!(encoder.starts_with("HTTP/1.1 200") && encoder.contains("\"builtin\":false"));
         assert!(call(&info, "POST", "/v1/ffmpeg/capture", &info.secret).contains("downloading"));
         assert!(call(&info, "GET", "/v1/ffmpeg/capture", "wrong").starts_with("HTTP/1.1 401"));
+    }
+
+    #[test]
+    fn missing_mods_routes_reach_the_launcher() {
+        struct Missing;
+        impl Accounts for Missing {
+            fn list(&self) -> Vec<AccountEntry> {
+                Vec::new()
+            }
+            fn session(&self, _id: &str) -> Result<SessionGrant> {
+                Err(Error::Other("no".into()))
+            }
+            fn missing_mods_state(&self, launch: &str) -> Option<String> {
+                (launch == "mine").then(|| r#"{"state":"review"}"#.to_owned())
+            }
+            fn missing_mods_restart(&self, launch: &str) -> Result<()> {
+                if launch == "mine" {
+                    Ok(())
+                } else {
+                    Err(Error::Other("no such game".into()))
+                }
+            }
+        }
+        let info = start(Missing).unwrap();
+        let state = call(&info, "GET", "/v1/missing-mods/mine", &info.secret);
+        assert!(state.starts_with("HTTP/1.1 200") && state.ends_with(r#"{"state":"review"}"#));
+        assert!(
+            call(&info, "GET", "/v1/missing-mods/theirs", &info.secret).starts_with("HTTP/1.1 404")
+        );
+        assert!(call(&info, "GET", "/v1/missing-mods/mine", "wrong").starts_with("HTTP/1.1 401"));
+        assert!(
+            call(&info, "POST", "/v1/missing-mods/mine/restart", &info.secret)
+                .starts_with("HTTP/1.1 200")
+        );
+        assert!(
+            call(
+                &info,
+                "POST",
+                "/v1/missing-mods/theirs/restart",
+                &info.secret
+            )
+            .starts_with("HTTP/1.1 404")
+        );
+        // Without a launcher behind it, a request is refused, not lost.
+        assert!(call(&info, "POST", "/v1/missing-mods", &info.secret).starts_with("HTTP/1.1 400"));
     }
 
     #[test]

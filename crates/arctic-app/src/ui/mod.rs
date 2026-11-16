@@ -46,6 +46,8 @@ mod storage;
 pub use storage::StorageUi;
 mod sharing;
 pub use sharing::ShareUi;
+mod linked;
+pub use linked::LinkedUi;
 mod skins;
 mod sponsor;
 pub use skins::SkinsUi;
