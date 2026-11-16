@@ -1,6 +1,6 @@
 //! Polarium (Arctic's own entity-rendering performance mod) is part of the
 //! Performance switch: its jars come with the launcher (mod/dist/polarium,
-//! copied from the Polarium repository's releases) rather than from
+//! built from Polarium perf/regress at 1a92f2b7b08853f619a8c8a861147b44e721f8e4) rather than from
 //! Modrinth, and are kept in sync in each instance's mods folder like the
 //! Arctic Client. An instance that has Polarium already (the player's own
 //! copy) is left with that one.
@@ -32,6 +32,10 @@ const JARS: &[(&str, &[u8])] = &[
     (
         "26.1.2",
         include_bytes!("../../../../mod/dist/polarium/polarium-26.1.2.jar"),
+    ),
+    (
+        "1.21.11",
+        include_bytes!("../../../../mod/dist/polarium/polarium-1.21.11.jar"),
     ),
     // Legacy Fabric (Fabric Loader on 1.8.9).
     (
@@ -160,7 +164,7 @@ mod tests {
         // The same folder played on 26.1 (no build): the 26.2 jar must go, or Fabric refuses to start.
         sync(&mods, "26.1", true).unwrap();
         assert!(!installed(&mods));
-        sync(&mods, "1.21.11", true).unwrap();
+        sync(&mods, "1.21.10", true).unwrap();
         assert!(!installed(&mods));
     }
 
@@ -168,8 +172,12 @@ mod tests {
     fn added_for_a_covered_version_and_taken_out_when_off() {
         let dir = tempfile::tempdir().unwrap();
         let mods = dir.path().join("mods");
-        sync(&mods, "26.2", true).unwrap();
+        sync(&mods, "1.21.11", true).unwrap();
         assert!(installed(&mods));
+        assert_eq!(
+            fs::read(mods.join(FILE_NAME)).unwrap(),
+            jar_for("1.21.11").unwrap()
+        );
         assert_eq!(
             crate::migrate::detect::mod_identity(&mods.join(FILE_NAME)).map(|(id, _)| id),
             Some(MOD_ID.to_owned())
@@ -179,10 +187,33 @@ mod tests {
     }
 
     #[test]
+    fn minecraft_1_21_11_bundle_contains_the_instanced_chest_adapter() {
+        let mut jar =
+            zip::ZipArchive::new(std::io::Cursor::new(jar_for("1.21.11").unwrap())).unwrap();
+        let mut manifest = String::new();
+        jar.by_name("fabric.mod.json")
+            .unwrap()
+            .read_to_string(&mut manifest)
+            .unwrap();
+        let metadata: serde_json::Value = serde_json::from_str(&manifest).unwrap();
+        assert!(
+            metadata["depends"]["minecraft"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v == "1.21.11")
+        );
+        assert!(
+            jar.by_name("com/arcticlauncher/polarium/gpu/OlderGpuChests.class")
+                .is_ok()
+        );
+    }
+
+    #[test]
     fn not_added_for_a_version_without_a_build() {
         let dir = tempfile::tempdir().unwrap();
         let mods = dir.path().join("mods");
-        sync(&mods, "1.21.11", true).unwrap();
+        sync(&mods, "1.21.10", true).unwrap();
         assert!(!installed(&mods));
     }
 
