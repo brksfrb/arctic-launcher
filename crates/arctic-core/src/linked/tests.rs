@@ -889,7 +889,10 @@ fn an_owner_key_is_kept_encrypted() {
     };
     save(&dirs, "x", &state).unwrap();
     let text = std::fs::read_to_string(dirs.instance_dir("x").join("link.json")).unwrap();
-    assert!(!text.contains(&"k".repeat(43)), "the key isn't stored in plain text");
+    assert!(
+        !text.contains(&"k".repeat(43)),
+        "the key isn't stored in plain text"
+    );
     assert!(text.contains("\"role\": \"owner\""));
     assert_eq!(load(&dirs, "x").unwrap(), state);
     assert!(state.is_owner() && !state.has_update());
