@@ -183,7 +183,7 @@ final class ModCatalog {
 			for (Mod existing : out) {
 				// Merge semantic pairs by stable ids so the card set is the same in every locale.
 				if (("scoreboard".equals(w.id) && "scoreboard".equals(existing.id))
-						|| ("held".equals(w.id) && "helditem".equals(existing.id))) feature = existing;
+						|| ("held".equals(w.id) && "helditem".equals(existing.id) && p.hasScreenHooks())) feature = existing;
 			}
 			if (feature == null) {
 				out.add(m);

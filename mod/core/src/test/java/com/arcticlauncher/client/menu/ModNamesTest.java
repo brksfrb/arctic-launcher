@@ -61,6 +61,42 @@ class ModNamesTest {
 		}
 	}
 
+	@Test
+	void heldItemHudCardSurvivesWhenScreenHooksAreMissing() throws Exception {
+		Field platform = field("platform"), config = field("config"), hud = field("hud");
+		Object oldP = platform.get(null), oldC = config.get(null), oldH = hud.get(null);
+		String oldLanguage = Lang.code();
+		try {
+			Lang.init(null, "en");
+			for (boolean hooks : new boolean[] {false, true}) {
+				platform.set(null, Proxy.newProxyInstance(Platform.class.getClassLoader(), new Class<?>[] {Platform.class},
+						(proxy, method, args) -> {
+							if (method.getReturnType() != boolean.class) return null;
+							if (method.getName().equals("hasScreenHooks")) return hooks;
+							return true;
+						}));
+				ClientConfig c = new ClientConfig();
+				config.set(null, c);
+				hud.set(null, new Hud(c));
+				java.util.List<Mod> cards = ModCatalog.all();
+				boolean feature = cards.stream().anyMatch(m -> m.id.equals("helditem"));
+				Mod held = cards.stream().filter(m -> m.id.equals("hud.held")).findFirst().orElse(null);
+				if (hooks) {
+					assertTrue(feature && held == null, "merged card expected with hooks");
+					assertNotNull(cards.stream().filter(m -> m.id.equals("helditem")).findFirst().get().widget);
+				} else {
+					assertTrue(!feature, "helditem must be dropped without hooks");
+					assertNotNull(held, "Held Item HUD card must remain without hooks");
+				}
+			}
+		} finally {
+			platform.set(null, oldP);
+			config.set(null, oldC);
+			hud.set(null, oldH);
+			Lang.init((Platform) oldP, oldLanguage);
+		}
+	}
+
 	private static Field field(String name) throws Exception {
 		Field f = ArcticClient.class.getDeclaredField(name);
 		f.setAccessible(true);

@@ -263,10 +263,11 @@ public final class ServersPage extends Page {
 
 	/** Add, edit or direct connect: a small form over the list. */
 	private void buildForm() {
-		int w = 240;
+		boolean direct = mode == Mode.DIRECT;
+		// Direct mode adds a button: wide enough for the longest locale ("Zur Liste hinzufügen") and still room for the address.
+		int w = direct ? 340 : 240;
 		int x = width / 2 - w / 2;
 		int y = height / 2 - 40;
-		boolean direct = mode == Mode.DIRECT;
 		Servers.Entry editing = mode == Mode.EDIT && selected >= 0 ? entries.get(selected) : null;
 		if (!direct) {
 			nameField = add(new TextField(tr("addServer.enterName", Lang.t("servers.server_name_2")), 64, TextField.ANY));
@@ -278,7 +279,7 @@ public final class ServersPage extends Page {
 		}
 		addressField = add(new TextField(tr("addServer.enterIp", Lang.t("servers.server_address")), 256, TextField.ANY));
 		int copyW = 44;
-		int addW = direct ? 76 : 0;
+		int addW = direct ? 120 : 0;
 		addressField.bounds(x, y, w - copyW - GAP - (direct ? addW + GAP : 0), BUTTON_H);
 		addressField.onEnter(this::submit);
 		add(new Button(Lang.t("servers.copy"), () -> {
