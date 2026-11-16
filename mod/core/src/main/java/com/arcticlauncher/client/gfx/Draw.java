@@ -34,11 +34,16 @@ public final class Draw {
 		}
 		int[] in = corner(radius, x1 - x0, y1 - y0);
 		int r = in.length;
-		for (int i = 0; i < r; i++) {
-			g.fill(x0 + in[i], y0 + i, x1 - in[i], y0 + i + 1, color);
-			g.fill(x0 + in[i], y1 - i - 1, x1 - in[i], y1 - i, color);
+		g.beginFills(color);
+		try {
+			for (int i = 0; i < r; i++) {
+				g.fill(x0 + in[i], y0 + i, x1 - in[i], y0 + i + 1, color);
+				g.fill(x0 + in[i], y1 - i - 1, x1 - in[i], y1 - i, color);
+			}
+			g.fill(x0, y0 + r, x1, y1 - r, color);
+		} finally {
+			g.endFills();
 		}
-		g.fill(x0, y0 + r, x1, y1 - r, color);
 	}
 
 	/** One-pixel outline following {@link #round}'s shape. */
@@ -50,23 +55,28 @@ public final class Draw {
 		int[] in = corner(radius, x1 - x0, y1 - y0);
 		int r = in.length;
 		int top = r == 0 ? 0 : in[0];
-		g.fill(x0 + top, y0, x1 - top, y0 + 1, color);
-		g.fill(x0 + top, y1 - 1, x1 - top, y1, color);
-		for (int i = 1; i <= r; i++) {
-			int inset = i < r ? in[i] : 0;
-			int span = Math.max(1, in[i - 1] - inset);
-			edgeRow(g, x0, x1, inset, span, y0 + i, color);
-			edgeRow(g, x0, x1, inset, span, y1 - i - 1, color);
-		}
-		int from = y0 + r + 1;
-		int to = y1 - r - 1;
-		if (r == 0) {
-			from = y0 + 1;
-			to = y1 - 1;
-		}
-		if (to > from) {
-			g.fill(x0, from, x0 + 1, to, color);
-			g.fill(x1 - 1, from, x1, to, color);
+		g.beginFills(color);
+		try {
+			g.fill(x0 + top, y0, x1 - top, y0 + 1, color);
+			g.fill(x0 + top, y1 - 1, x1 - top, y1, color);
+			for (int i = 1; i <= r; i++) {
+				int inset = i < r ? in[i] : 0;
+				int span = Math.max(1, in[i - 1] - inset);
+				edgeRow(g, x0, x1, inset, span, y0 + i, color);
+				edgeRow(g, x0, x1, inset, span, y1 - i - 1, color);
+			}
+			int from = y0 + r + 1;
+			int to = y1 - r - 1;
+			if (r == 0) {
+				from = y0 + 1;
+				to = y1 - 1;
+			}
+			if (to > from) {
+				g.fill(x0, from, x0 + 1, to, color);
+				g.fill(x1 - 1, from, x1, to, color);
+			}
+		} finally {
+			g.endFills();
 		}
 	}
 
@@ -81,12 +91,17 @@ public final class Draw {
 			Smooth.disc(g, cx, cy, radius, color);
 			return;
 		}
-		for (int dy = -radius; dy < radius; dy++) {
-			double yc = dy + 0.5;
-			int half = (int) Math.round(Math.sqrt(Math.max(0, radius * radius - yc * yc)));
-			if (half > 0) {
-				g.fill(cx - half, cy + dy, cx + half, cy + dy + 1, color);
+		g.beginFills(color);
+		try {
+			for (int dy = -radius; dy < radius; dy++) {
+				double yc = dy + 0.5;
+				int half = (int) Math.round(Math.sqrt(Math.max(0, radius * radius - yc * yc)));
+				if (half > 0) {
+					g.fill(cx - half, cy + dy, cx + half, cy + dy + 1, color);
+				}
 			}
+		} finally {
+			g.endFills();
 		}
 	}
 
