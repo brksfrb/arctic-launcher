@@ -8,7 +8,8 @@ use std::{
 };
 
 use arctic_core::instances::Instance;
-use arctic_core::mods::{self, ProjectDetail, ProjectHit, packs::PackKind};
+use arctic_core::mods::discovery::{ShaderRequirement, VersionInfo};
+use arctic_core::mods::{self, ProjectDetail, ProjectHit, ProjectType, packs::PackKind};
 use eframe::egui::{self, RichText};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use egui_commonmark_backend::pulldown::parser_options;
@@ -18,13 +19,20 @@ use super::{IconState, browse::compact, mods_page::mod_icon};
 use crate::{app::ArcticApp, art::icons::Icon, widgets};
 use crate::{t, tf};
 type DetailResult = Result<ProjectDetail, String>;
+type VersionsResult = Result<Vec<VersionInfo>, String>;
+/// Versions listed on a project page; the rest are on Modrinth.
+const VERSIONS_SHOWN: usize = 30;
 
 pub struct Preview {
     instance_id: String,
     hit: ProjectHit,
     kind: Option<PackKind>,
+    /// A modpack: installs as an instance of its own.
+    modpack: bool,
     receiver: Receiver<DetailResult>,
     detail: Option<DetailResult>,
+    versions_rx: Receiver<VersionsResult>,
+    versions: Option<VersionsResult>,
     markdown: CommonMarkCache,
     enlarged: Option<String>,
     context: egui::Context,
@@ -62,6 +70,16 @@ impl Preview {
     fn for_instance(self, instance_id: &str) -> Option<Self> {
         (self.instance_id == instance_id).then_some(self)
     }
+}
+
+fn fetch_versions(id: String, ctx: egui::Context) -> Receiver<VersionsResult> {
+    let (send, receive) = mpsc::channel();
+    std::thread::spawn(move || {
+        let result = mods::discovery::project_version_list(&id).map_err(|e| e.to_string());
+        let _ = send.send(result);
+        ctx.request_repaint();
+    });
+    receive
 }
 
 fn fetch(id: String, ctx: egui::Context) -> Receiver<DetailResult> {
@@ -142,9 +160,24 @@ impl ArcticApp {
         let Some(instance_id) = self.inst.open.clone() else {
             return;
         };
+        self.open_project_preview_in(ctx, instance_id, hit, kind, false);
+    }
+
+    /// The project page, installing into `instance_id` (`modpack`: as a new instance instead).
+    pub(super) fn open_project_preview_in(
+        &mut self,
+        ctx: &egui::Context,
+        instance_id: String,
+        hit: ProjectHit,
+        kind: Option<PackKind>,
+        modpack: bool,
+    ) {
         self.inst.preview = Some(Preview {
             instance_id,
             receiver: fetch(hit.project_id.clone(), ctx.clone()),
+            versions_rx: fetch_versions(hit.project_id.clone(), ctx.clone()),
+            versions: None,
+            modpack,
             hit,
             kind,
             detail: None,
@@ -214,6 +247,18 @@ impl ArcticApp {
                 Err(mpsc::TryRecvError::Empty) => {}
             }
         }
+        if preview.versions.is_none() {
+            match preview.versions_rx.try_recv() {
+                Ok(result) => preview.versions = Some(result),
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    preview.versions = Some(Err(t!(
+                        "instances.project_request_stopped_please_retry"
+                    )
+                    .into()))
+                }
+                Err(mpsc::TryRecvError::Empty) => {}
+            }
+        }
         let p = self.palette();
         let escape = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
         let mut close = escape && preview.enlarged.is_none();
@@ -260,6 +305,19 @@ impl ArcticApp {
                             "instances.downloads_2",
                             value = compact(detail.map_or(preview.hit.downloads, |d| d.downloads))
                         ));
+                        ui.label(
+                            RichText::new(tf!(
+                                "instances.hub.follows",
+                                compact =
+                                    compact(detail.map_or(preview.hit.follows, |d| d.followers))
+                            ))
+                            .color(p.muted),
+                        );
+                        if preview.kind == Some(PackKind::Shader)
+                            && let Some(note) = self.shader_note(instance)
+                        {
+                            ui.label(RichText::new(note).small().color(p.accent));
+                        }
                         if preview.kind.is_some()
                             && preview.hit.is_incompatible(&self.pack_game(instance))
                         {
@@ -270,11 +328,19 @@ impl ArcticApp {
                                 ));
                         }
                     });
-                    let busy = match preview.kind {
-                        Some(_) => self.inst.packs.installing.contains(&preview.hit.project_id),
-                        None => self.inst.installing.contains(&preview.hit.project_id),
+                    let busy = if preview.modpack {
+                        self.inst.pack_installing.is_some()
+                    } else {
+                        match preview.kind {
+                            Some(_) => self.inst.packs.installing.contains(&preview.hit.project_id),
+                            None => self.inst.installing.contains(&preview.hit.project_id),
+                        }
                     };
+                    let vanilla_mods = !preview.modpack
+                        && preview.kind.is_none()
+                        && instance.loader.kind().is_none();
                     let installed = preview.kind.is_none()
+                        && !preview.modpack
                         && self
                             .inst
                             .mod_scans
@@ -292,34 +358,55 @@ impl ArcticApp {
                     } else if busy {
                         ui.spinner();
                         ui.label(t!("instances.installing"));
-                    } else if widgets::button(
-                        ui,
-                        p,
-                        Some(Icon::Plus),
-                        t!("instances.install"),
-                        true,
-                    )
-                    .clicked()
-                    {
-                        if let Some(kind) = preview.kind {
-                            self.inst
-                                .packs
-                                .installing
-                                .insert(preview.hit.project_id.clone());
-                            self.tasks.pack_install(
-                                instance.clone(),
-                                kind,
-                                preview.hit.project_id.clone(),
-                                self.pack_game(instance),
-                            );
+                    } else {
+                        let button = ui
+                            .add_enabled_ui(!vanilla_mods, |ui| {
+                                widgets::button(
+                                    ui,
+                                    p,
+                                    Some(Icon::Plus),
+                                    t!("instances.install"),
+                                    true,
+                                )
+                            })
+                            .inner;
+                        let clicked = if vanilla_mods {
+                            button.on_disabled_hover_text(t!("instances.hub.vanilla_has_no_mods"));
+                            false
                         } else {
-                            self.inst.installing.insert(preview.hit.project_id.clone());
-                            self.tasks.mod_install(
-                                instance.clone(),
-                                preview.hit.project_id.clone(),
-                                None,
-                            );
+                            button.clicked()
+                        };
+                        if clicked {
+                            if preview.modpack {
+                                self.inst.pack_installing = Some(preview.hit.project_id.clone());
+                                self.inst.install_progress = None;
+                                self.tasks
+                                    .install_modpack(preview.hit.project_id.clone(), None);
+                            } else if let Some(kind) = preview.kind {
+                                self.inst
+                                    .packs
+                                    .installing
+                                    .insert(preview.hit.project_id.clone());
+                                self.tasks.pack_install(
+                                    instance.clone(),
+                                    kind,
+                                    preview.hit.project_id.clone(),
+                                    self.pack_game(instance),
+                                );
+                            } else {
+                                self.inst.installing.insert(preview.hit.project_id.clone());
+                                self.tasks.mod_install(
+                                    instance.clone(),
+                                    preview.hit.project_id.clone(),
+                                    None,
+                                );
+                            }
                         }
+                    }
+                    if preview.modpack
+                        && widgets::button(ui, p, None, t!("instances.view_mods"), false).clicked()
+                    {
+                        self.open_pack_preview(&preview.hit.project_id, &preview.hit.title, None);
                     }
                 });
                 ui.separator();
@@ -374,6 +461,19 @@ impl ArcticApp {
                             ui.label(detail.game_versions.join(", "));
                             ui.label(RichText::new(t!("instances.loaders_platforms")).strong());
                             ui.label(detail.loaders.join(", "));
+                            if !detail.categories.is_empty() {
+                                ui.label(RichText::new(t!("instances.hub.categories")).strong());
+                                ui.label(
+                                    detail
+                                        .categories
+                                        .iter()
+                                        .map(|c| mods::discovery::pretty_name(c))
+                                        .collect::<Vec<_>>()
+                                        .join(", "),
+                                );
+                            }
+                            ui.separator();
+                            self.project_version_list(ui, &preview, instance);
                             ui.separator();
                             ui.heading(t!("instances.about_this_project"));
                             let prepared_html = Arc::clone(&preview.html);
@@ -409,6 +509,104 @@ impl ArcticApp {
         }
         if !close {
             self.inst.preview = Some(preview);
+        }
+    }
+
+    /// The project's versions, newest first, those that fit the target instance marked.
+    fn project_version_list(&mut self, ui: &mut egui::Ui, preview: &Preview, instance: &Instance) {
+        let p = self.palette();
+        ui.label(RichText::new(t!("instances.hub.versions")).strong());
+        let versions = match &preview.versions {
+            None => {
+                ui.spinner();
+                return;
+            }
+            Some(Err(e)) => {
+                ui.colored_label(p.error, e);
+                return;
+            }
+            Some(Ok(v)) if v.is_empty() => {
+                ui.label(RichText::new(t!("instances.hub.no_versions")).color(p.muted));
+                return;
+            }
+            Some(Ok(v)) => v,
+        };
+        let kind = match (preview.modpack, preview.kind) {
+            (true, _) => ProjectType::Modpack,
+            (_, Some(PackKind::Resource)) => ProjectType::ResourcePack,
+            (_, Some(PackKind::Shader)) => ProjectType::Shader,
+            _ => ProjectType::Mod,
+        };
+        let (loader, game) = if preview.modpack {
+            (None, String::new())
+        } else {
+            (instance.loader.kind(), self.pack_game(instance))
+        };
+        let busy = self.inst.pack_installing.is_some();
+        let mut chosen = None;
+        for v in versions.iter().take(VERSIONS_SHOWN) {
+            let fits = !preview.modpack && v.fits(kind, loader, &game);
+            ui.horizontal(|ui| {
+                if fits {
+                    ui.label(RichText::new("✔").color(p.accent))
+                        .on_hover_text(tf!("instances.hub.fits", name = instance.name));
+                }
+                ui.label(RichText::new(&v.number).strong().color(p.text));
+                let mut parts = vec![
+                    v.version_type.clone(),
+                    v.game_versions
+                        .iter()
+                        .take(3)
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                        + if v.game_versions.len() > 3 { "…" } else { "" },
+                    v.loaders.join(", "),
+                    v.date.chars().take(10).collect(),
+                ];
+                if kind == ProjectType::Shader {
+                    match v.shader_requirement() {
+                        Some(ShaderRequirement::Iris) => parts.push("Iris".into()),
+                        Some(ShaderRequirement::OptiFineFormat) => parts.push("OptiFine".into()),
+                        None => {}
+                    }
+                }
+                ui.label(RichText::new(parts.join(" · ")).small().color(p.muted));
+                if preview.modpack {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let install = ui
+                            .add_enabled_ui(!busy, |ui| {
+                                widgets::button(
+                                    ui,
+                                    p,
+                                    Some(Icon::Plus),
+                                    t!("instances.install"),
+                                    false,
+                                )
+                            })
+                            .inner;
+                        if install.clicked() {
+                            chosen = Some(v.id.clone());
+                        }
+                    });
+                }
+            });
+        }
+        if versions.len() > VERSIONS_SHOWN {
+            ui.label(
+                RichText::new(tf!(
+                    "instances.hub.more_versions",
+                    n = versions.len() - VERSIONS_SHOWN
+                ))
+                .small()
+                .color(p.muted),
+            );
+        }
+        if let Some(version_id) = chosen {
+            self.inst.pack_installing = Some(preview.hit.project_id.clone());
+            self.inst.install_progress = None;
+            self.tasks
+                .install_modpack(preview.hit.project_id.clone(), Some(version_id));
         }
     }
 
@@ -475,6 +673,9 @@ mod tests {
                 game_versions: vec![],
             },
             kind: None,
+            modpack: false,
+            versions_rx: mpsc::channel().1,
+            versions: None,
             receiver,
             detail: None,
             markdown: CommonMarkCache::default(),

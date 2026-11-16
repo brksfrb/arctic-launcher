@@ -20,6 +20,9 @@ pub struct DevShot {
     requested: bool,
     /// `ARCTIC_DEVSHOT_INSTANCE`: open this instance's page first.
     pub open_instance: Option<String>,
+    /// `ARCTIC_DEVSHOT_HUB`: open the Discover content page on this section (0 mods, 1 resource
+    /// packs, 2 shaders, 3 modpacks).
+    pub open_hub: Option<usize>,
     /// `ARCTIC_DEVSHOT_TAB`: open this tab first (its position in the sidebar, from 0).
     pub open_tab: Option<usize>,
     /// `ARCTIC_DEVSHOT_JOIN`: start the selected instance into this server.
@@ -51,6 +54,9 @@ impl DevShot {
             delay,
             requested: false,
             open_instance: std::env::var("ARCTIC_DEVSHOT_INSTANCE").ok(),
+            open_hub: std::env::var("ARCTIC_DEVSHOT_HUB")
+                .ok()
+                .and_then(|v| v.parse().ok()),
             open_tab: std::env::var("ARCTIC_DEVSHOT_TAB")
                 .ok()
                 .and_then(|v| v.parse().ok()),

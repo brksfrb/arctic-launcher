@@ -10,7 +10,8 @@ use crate::art::icons::Icon;
 use crate::widgets;
 use crate::{t, tf};
 
-const ROW: f32 = 44.0;
+/// Name and version, the summary, and what it requires: three lines.
+const ROW: f32 = 64.0;
 
 /// The open "View mods" dialog.
 #[derive(Debug, Clone)]
@@ -216,6 +217,30 @@ impl ArcticApp {
                                     .join(" · ");
                                 if !detail.is_empty() {
                                     ui.label(RichText::new(detail).small().color(p.muted));
+                                }
+                                if !m.description.is_empty() {
+                                    ui.add(
+                                        egui::Label::new(
+                                            RichText::new(&m.description).small().color(p.muted),
+                                        )
+                                        .truncate(),
+                                    )
+                                    .on_hover_text(&m.description);
+                                }
+                                if !m.requires.is_empty() {
+                                    let requires = m.requires.join(", ");
+                                    ui.add(
+                                        egui::Label::new(
+                                            RichText::new(tf!(
+                                                "instances.requires",
+                                                names = requires
+                                            ))
+                                            .small()
+                                            .color(p.accent),
+                                        )
+                                        .truncate(),
+                                    )
+                                    .on_hover_text(requires);
                                 }
                             });
                         });

@@ -5,6 +5,7 @@ mod browse;
 mod clashes;
 mod create;
 mod detail;
+mod hub;
 mod icon_picker;
 mod loader_switch;
 mod modpacks;
@@ -26,6 +27,7 @@ use eframe::egui::{self, Align2, FontId, RichText, vec2};
 
 pub use create::CreateForm;
 pub(crate) use detail::dialog_frame;
+pub(crate) use hub::Section;
 
 use crate::app::ArcticApp;
 use crate::art::icons::Icon;
@@ -166,6 +168,8 @@ pub struct InstancesUi {
         HashMap<String, Load<std::sync::Arc<arctic_core::mods::pack_preview::PackPreview>>>,
     /// Resource packs and shaders page.
     pub packs: packs::PacksUi,
+    /// The discovery page.
+    pub hub: hub::HubUi,
     /// Moving the open instance to another Minecraft version.
     pub retarget: Option<retarget::RetargetUi>,
     /// Moving the open instance to another mod loader.
@@ -268,7 +272,7 @@ impl ArcticApp {
         {
             self.inst.pack_installing = Some(String::new());
             self.tasks.install_modpack_file(Some(path));
-            self.inst.modpacks_open = true;
+            self.open_hub(hub::Section::Modpacks);
         }
     }
 
@@ -301,7 +305,7 @@ impl ArcticApp {
                     )
                     .clicked()
                     {
-                        self.inst.modpacks_open = true;
+                        self.open_hub(hub::Section::Modpacks);
                     }
                 });
             });
@@ -332,7 +336,13 @@ impl ArcticApp {
                 if widgets::button(ui, p, Some(Icon::Layers), t!("instances.modpacks"), false)
                     .clicked()
                 {
-                    self.inst.modpacks_open = true;
+                    self.open_hub(hub::Section::Modpacks);
+                }
+                if widgets::button(ui, p, Some(Icon::Layers), t!("instances.hub.title"), false)
+                    .on_hover_text(t!("instances.hub.subtitle"))
+                    .clicked()
+                {
+                    self.open_hub(hub::Section::Mods);
                 }
                 if widgets::button(
                     ui,
@@ -526,6 +536,7 @@ impl ArcticApp {
                 self.inst.loader_versions.insert((kind, game), state);
                 self.create_form_defaults();
             }
+            Event::HubTags(result) => self.on_hub_tags(result),
             Event::ModSearch(request, result) => {
                 if let Ok(page) = &result {
                     for hit in &page.hits {

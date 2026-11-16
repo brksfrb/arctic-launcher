@@ -1194,6 +1194,7 @@ impl ArcticApp {
             | Event::PackPreview(..)
             | Event::LoaderVersions(..)
             | Event::ModSearch(..)
+            | Event::HubTags(..)
             | Event::ModsScanned(..)
             | Event::ModProgress(..)
             | Event::ModInstalled(..)
@@ -1517,6 +1518,15 @@ impl eframe::App for ArcticApp {
             .and_then(|i| Tab::ALL.get(i).copied())
         {
             self.set_tab(tab, 0.0);
+        }
+        if let Some(section) = self
+            .devshot
+            .open_hub
+            .take()
+            .and_then(|i| crate::ui::Section::ALL.get(i).copied())
+        {
+            self.set_tab(Tab::Instances, 0.0);
+            self.open_hub(section);
         }
         if let Some(id) = self.devshot.open_instance.take() {
             self.set_tab(Tab::Instances, 0.0);

@@ -107,6 +107,8 @@ pub enum Event {
     LoaderVersions(LoaderKind, String, Outcome<Vec<LoaderVersion>>),
     /// Mod search results for request id.
     ModSearch(u64, Outcome<SearchPage>),
+    /// The filter lists of the discovery page.
+    HubTags(Outcome<mods::discovery::Tags>),
     /// Installed mod scan (instance, request, changed snapshot).
     ModsScanned(String, u64, Outcome<Option<crate::mod_tasks::ModSnapshot>>),
     ModProgress(ProgressSnapshot),
@@ -489,6 +491,14 @@ impl Tasks {
         self.run(move |t| {
             let result = loaders::loader_versions(kind, &game).map_err(|e| e.to_string());
             t.send(Event::LoaderVersions(kind, game, result));
+        });
+    }
+
+    /// Categories, game versions and loaders for the discovery filters.
+    pub fn hub_tags(&self) {
+        self.run(move |t| {
+            let result = mods::discovery::tags().map_err(|e| e.to_string());
+            t.send(Event::HubTags(result));
         });
     }
 
