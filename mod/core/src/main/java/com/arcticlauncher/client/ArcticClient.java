@@ -65,7 +65,7 @@ public final class ArcticClient {
 		trustWorker.setDaemon(true);
 		trustWorker.start();
 		platform = p;
-		timing.step("diagnostics + trust worker");
+		timing.step("diagnostics + trust worker"); // i18n-ignore: startup log label
 		FreezeWatchdog.logTo(new java.util.function.Consumer<String>() {
 			public void accept(String line) {
 				p.log(true, line);
@@ -80,13 +80,13 @@ public final class ArcticClient {
 		applyLauncherStyle(session);
 		applyLauncherProxy(session);
 		waypoints = com.arcticlauncher.client.waypoints.Waypoints.load(p.configDir());
-		timing.step("session + language + settings");
+		timing.step("session + language + settings"); // i18n-ignore: startup log label
 		hud = new Hud(config);
 		features = new Features(p, config);
-		timing.step("HUD + features");
+		timing.step("HUD + features"); // i18n-ignore: startup log label
 		// Finish before starting any network service, preserving the default trust setup.
 		trust.join();
-		timing.step("trust wait");
+		timing.step("trust wait"); // i18n-ignore: startup log label
 		looks = new Looks(p, config, serverUrl(session), session.token);
 		looks.shareServer(session.shareServer);
 		looks.start();
@@ -96,7 +96,7 @@ public final class ArcticClient {
 		launcherSkins = new com.arcticlauncher.client.looks.LauncherSkins(p, session.bridgePort, session.bridgeSecret);
 		voice = new com.arcticlauncher.client.voice.VoiceLink(p, session.bridgePort, session.bridgeSecret);
 		voice.start();
-		timing.step("looks + social + voice");
+		timing.step("looks + social + voice"); // i18n-ignore: startup log label
 		packs = new com.arcticlauncher.client.packs.PackBrowser(p, p.configDir());
 		shaders = new com.arcticlauncher.client.packs.ShaderPacks(p);
 		shaderBrowser = new com.arcticlauncher.client.packs.PackBrowser(p, p.configDir(),
@@ -119,7 +119,7 @@ public final class ArcticClient {
 		if (session.replayFile != null && replayAge >= 0 && replayAge < DUEL_REQUEST_SECONDS) {
 			com.arcticlauncher.client.replay.Replays.watchWhenReady(new java.io.File(session.replayFile));
 		}
-		timing.step("packs + replay + bridge");
+		timing.step("packs + replay + bridge"); // i18n-ignore: startup log label
 		timing.done();
 		p.log(false, "Arctic Client ready: style " + config.style + ", looks from " + looks.baseUrl());
 	}
