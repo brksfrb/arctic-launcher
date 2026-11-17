@@ -397,5 +397,6 @@
   "instances.hub.other_game": "Other version",
   "instances.hub.other_game_needs_confirm": "Packs tagged for another Minecraft version install only after you confirm.",
   "instances.hub.other_game_warning": "Tagged for Minecraft {versions}, not {game}. It may look wrong or not load.",
-  "instances.hub.install_anyway": "Install anyway"
+  "instances.hub.install_anyway": "Install anyway",
+  "instances.load_more_failed": "Couldn't load more results: {e}"
 }

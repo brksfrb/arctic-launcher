@@ -244,6 +244,7 @@ impl ArcticApp {
         search.request += 1;
         search.loading = true;
         search.more_from = offset;
+        search.more_failed = None;
         if offset == 0 {
             search.results = None;
         }
@@ -505,6 +506,9 @@ impl ArcticApp {
             }
             Some(Err(e)) => {
                 ui.label(RichText::new(tf!("instances.search_failed", e = e)).color(p.error));
+                if ui.button(t!("instances.retry")).clicked() {
+                    self.run_hub_search(0);
+                }
                 return;
             }
             Some(Ok(page)) if page.hits.is_empty() => {

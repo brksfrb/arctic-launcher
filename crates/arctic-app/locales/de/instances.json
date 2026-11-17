@@ -397,5 +397,6 @@
   "instances.hub.other_game": "Andere Version",
   "instances.hub.other_game_needs_confirm": "Pakete für eine andere Minecraft-Version werden erst nach deiner Bestätigung installiert.",
   "instances.hub.other_game_warning": "Für Minecraft {versions} markiert, nicht {game}. Es könnte falsch aussehen oder nicht laden.",
-  "instances.hub.install_anyway": "Trotzdem installieren"
+  "instances.hub.install_anyway": "Trotzdem installieren",
+  "instances.load_more_failed": "Weitere Ergebnisse konnten nicht geladen werden: {e}"
 }

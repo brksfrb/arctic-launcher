@@ -75,6 +75,9 @@ pub struct SearchState {
     /// Where the page being fetched starts (0: a new search, which replaces the results; more:
     /// the next page, added to them).
     pub more_from: usize,
+    /// Why the last next page failed; it's asked for again only on Retry, so a rate limit
+    /// isn't hit again every frame.
+    pub more_failed: Option<String>,
     /// Instance the results were fetched for.
     pub instance: Option<String>,
     /// When the search text last changed (search runs shortly after typing stops).
@@ -88,12 +91,17 @@ pub(super) fn more_on_scroll(
     p: &crate::theme::Palette,
     search: &SearchState,
 ) -> Option<usize> {
-    let Some(Ok(page)) = &search.results else {
-        return None;
-    };
-    let shown = page.hits.len();
-    if shown == 0 || shown >= page.total {
-        return None;
+    let shown = more_to_load(search)?;
+    if let Some(e) = &search.more_failed {
+        let retry = ui
+            .horizontal_wrapped(|ui| {
+                ui.label(
+                    egui::RichText::new(tf!("instances.load_more_failed", e = e)).color(p.error),
+                );
+                ui.button(t!("instances.retry")).clicked()
+            })
+            .inner;
+        return next_page(search, shown, false, retry);
     }
     let end = ui
         .horizontal(|ui| {
@@ -101,7 +109,27 @@ pub(super) fn more_on_scroll(
             ui.label(egui::RichText::new(t!("instances.loading_more")).color(p.muted));
         })
         .response;
-    (!search.loading && ui.is_rect_visible(end.rect)).then_some(shown)
+    next_page(search, shown, ui.is_rect_visible(end.rect), false)
+}
+
+/// How many results are shown, when there are more to load.
+fn more_to_load(search: &SearchState) -> Option<usize> {
+    let Some(Ok(page)) = &search.results else {
+        return None;
+    };
+    let shown = page.hits.len();
+    (shown > 0 && shown < page.total).then_some(shown)
+}
+
+/// Whether to ask for the page after `shown`: when the list end comes into view, or after a
+/// failed page only when the player presses Retry.
+fn next_page(search: &SearchState, shown: usize, end_visible: bool, retry: bool) -> Option<usize> {
+    let wanted = if search.more_failed.is_some() {
+        retry
+    } else {
+        end_visible
+    };
+    (wanted && !search.loading).then_some(shown)
 }
 
 /// Stable, unique egui texture URI for a remote icon URL.
@@ -577,8 +605,11 @@ impl ArcticApp {
                             }
                             shown.total = page.total;
                         }
-                        // A next page that failed leaves what's shown; it's tried again on scrolling.
-                        (true, Some(Ok(_)), Err(e)) => log::warn!("loading more results: {e}"),
+                        // A next page that failed leaves what's shown, with a Retry under it.
+                        (true, Some(Ok(_)), Err(e)) => {
+                            log::warn!("loading more results: {e}");
+                            search.more_failed = Some(e);
+                        }
                         (_, results, result) => *results = Some(result),
                     }
                 }
@@ -676,5 +707,63 @@ impl ArcticApp {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arctic_core::mods::ProjectHit;
+
+    fn hit(id: &str) -> ProjectHit {
+        ProjectHit {
+            project_id: id.into(),
+            slug: id.into(),
+            title: id.into(),
+            description: String::new(),
+            author: String::new(),
+            downloads: 0,
+            follows: 0,
+            icon_url: None,
+            categories: vec![],
+            game_versions: vec![],
+        }
+    }
+
+    fn showing(shown: usize, total: usize) -> SearchState {
+        SearchState {
+            results: Some(Ok(SearchPage {
+                hits: (0..shown).map(|i| hit(&i.to_string())).collect(),
+                total,
+            })),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn next_page_starts_after_the_shown_results_only_when_there_are_more() {
+        assert_eq!(more_to_load(&showing(20, 45)), Some(20));
+        assert_eq!(more_to_load(&showing(45, 45)), None);
+        assert_eq!(more_to_load(&showing(0, 0)), None);
+        assert_eq!(more_to_load(&SearchState::default()), None);
+        let failed = SearchState {
+            results: Some(Err("rate limit".into())),
+            ..Default::default()
+        };
+        assert_eq!(more_to_load(&failed), None);
+    }
+
+    #[test]
+    fn next_page_loads_on_scroll_but_a_failed_page_waits_for_retry() {
+        let mut search = showing(20, 45);
+        assert_eq!(next_page(&search, 20, true, false), Some(20));
+        assert_eq!(next_page(&search, 20, false, false), None);
+        search.loading = true;
+        assert_eq!(next_page(&search, 20, true, false), None);
+        search.loading = false;
+        // After a failure (a 429, say) a visible list end doesn't ask again every frame.
+        search.more_failed = Some("Modrinth rate limit reached".into());
+        assert_eq!(next_page(&search, 20, true, false), None);
+        assert_eq!(next_page(&search, 20, false, true), Some(20));
     }
 }

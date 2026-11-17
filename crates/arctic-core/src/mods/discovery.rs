@@ -242,6 +242,24 @@ mod tests {
     }
 
     #[test]
+    fn version_list_entries_keep_what_the_picker_shows() {
+        let version: Version = serde_json::from_value(serde_json::json!({
+            "id": "abc", "project_id": "P", "version_number": "2.1.0", "name": "Two one",
+            "version_type": "beta", "date_published": "2025-01-02T03:04:05Z",
+            "downloads": 42, "game_versions": ["1.21.4"], "loaders": ["fabric", "quilt"],
+            "files": []
+        }))
+        .unwrap();
+        let v = VersionInfo::from(&version);
+        assert_eq!((v.id.as_str(), v.number.as_str()), ("abc", "2.1.0"));
+        assert_eq!((v.version_type.as_str(), v.downloads), ("beta", 42));
+        assert_eq!(v.date, "2025-01-02T03:04:05Z");
+        assert_eq!(v.game_versions, ["1.21.4"]);
+        assert_eq!(v.loaders, ["fabric", "quilt"]);
+        assert!(v.fits(ProjectType::Mod, Some(LoaderKind::Quilt), "1.21.4"));
+    }
+
+    #[test]
     fn install_dir_routes_by_project_type() {
         let game = Path::new("/g");
         assert_eq!(install_dir(ProjectType::Mod, game), Some(game.join("mods")));

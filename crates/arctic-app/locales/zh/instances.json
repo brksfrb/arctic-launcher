@@ -397,5 +397,6 @@
   "instances.hub.other_game": "其他版本",
   "instances.hub.other_game_needs_confirm": "标记为其他 Minecraft 版本的包需要你确认后才会安装。",
   "instances.hub.other_game_warning": "标记为 Minecraft {versions}，而非 {game}。可能显示异常或无法加载。",
-  "instances.hub.install_anyway": "仍然安装"
+  "instances.hub.install_anyway": "仍然安装",
+  "instances.load_more_failed": "无法加载更多结果：{e}"
 }

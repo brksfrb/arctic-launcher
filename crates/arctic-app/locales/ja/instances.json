@@ -397,5 +397,6 @@
   "instances.hub.other_game": "別バージョン",
   "instances.hub.other_game_needs_confirm": "別の Minecraft バージョン向けのパックは、確認後にのみインストールされます。",
   "instances.hub.other_game_warning": "Minecraft {versions} 向けで、{game} 向けではありません。表示が崩れたり読み込めない場合があります。",
-  "instances.hub.install_anyway": "それでもインストール"
+  "instances.hub.install_anyway": "それでもインストール",
+  "instances.load_more_failed": "これ以上の結果を読み込めませんでした: {e}"
 }

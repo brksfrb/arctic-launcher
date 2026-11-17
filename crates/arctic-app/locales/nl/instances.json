@@ -397,5 +397,6 @@
   "instances.hub.other_game": "Andere versie",
   "instances.hub.other_game_needs_confirm": "Packs voor een andere Minecraft-versie worden pas na je bevestiging geïnstalleerd.",
   "instances.hub.other_game_warning": "Gemarkeerd voor Minecraft {versions}, niet {game}. Het kan er verkeerd uitzien of niet laden.",
-  "instances.hub.install_anyway": "Toch installeren"
+  "instances.hub.install_anyway": "Toch installeren",
+  "instances.load_more_failed": "Kon niet meer resultaten laden: {e}"
 }

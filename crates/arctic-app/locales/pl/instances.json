@@ -401,5 +401,6 @@
   "instances.hub.other_game": "Inna wersja",
   "instances.hub.other_game_needs_confirm": "Paczki oznaczone dla innej wersji Minecrafta instalują się dopiero po potwierdzeniu.",
   "instances.hub.other_game_warning": "Oznaczone dla Minecrafta {versions}, nie {game}. Może źle wyglądać lub się nie wczytać.",
-  "instances.hub.install_anyway": "Zainstaluj mimo to"
+  "instances.hub.install_anyway": "Zainstaluj mimo to",
+  "instances.load_more_failed": "Nie udało się wczytać więcej wyników: {e}"
 }

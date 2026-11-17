@@ -397,5 +397,6 @@
   "instances.hub.other_game": "Başka sürüm",
   "instances.hub.other_game_needs_confirm": "Başka bir Minecraft sürümü için etiketlenen paketler yalnızca onayınızdan sonra yüklenir.",
   "instances.hub.other_game_warning": "Minecraft {versions} için etiketli, {game} için değil. Yanlış görünebilir veya yüklenmeyebilir.",
-  "instances.hub.install_anyway": "Yine de yükle"
+  "instances.hub.install_anyway": "Yine de yükle",
+  "instances.load_more_failed": "Daha fazla sonuç yüklenemedi: {e}"
 }

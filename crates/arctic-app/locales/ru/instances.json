@@ -401,5 +401,6 @@
   "instances.hub.other_game": "Другая версия",
   "instances.hub.other_game_needs_confirm": "Пакеты для другой версии Minecraft устанавливаются только после подтверждения.",
   "instances.hub.other_game_warning": "Отмечено для Minecraft {versions}, а не {game}. Может выглядеть неправильно или не загрузиться.",
-  "instances.hub.install_anyway": "Всё равно установить"
+  "instances.hub.install_anyway": "Всё равно установить",
+  "instances.load_more_failed": "Не удалось загрузить больше результатов: {e}"
 }

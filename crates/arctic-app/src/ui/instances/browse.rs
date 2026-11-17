@@ -85,6 +85,7 @@ impl ArcticApp {
         search.request += 1;
         search.loading = true;
         search.more_from = offset;
+        search.more_failed = None;
         if offset == 0 {
             search.results = None;
         }
