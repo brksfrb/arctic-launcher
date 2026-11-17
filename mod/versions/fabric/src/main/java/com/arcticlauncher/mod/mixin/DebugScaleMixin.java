@@ -57,6 +57,27 @@ abstract class DebugScaleMixin {
 	//#endif
 		arctic$finish(new GfxImpl(g));
 	}
+	//#elif NEOFORGE && MC >= 1.20.5 && MC < 1.21
+	// NeoForge 1.20.6 hands each column its lines.
+	@Inject(method = "drawGameInformation", at = @At("HEAD"), require = 0)
+	private void arctic$leftStart(GuiGraphicsExtractor g, List<String> lines, CallbackInfo ci) {
+		arctic$begin(new GfxImpl(g), true);
+	}
+
+	@Inject(method = "drawGameInformation", at = @At("RETURN"), require = 0)
+	private void arctic$leftEnd(GuiGraphicsExtractor g, List<String> lines, CallbackInfo ci) {
+		arctic$finish(new GfxImpl(g));
+	}
+
+	@Inject(method = "drawSystemInformation", at = @At("HEAD"), require = 0)
+	private void arctic$rightStart(GuiGraphicsExtractor g, List<String> lines, CallbackInfo ci) {
+		arctic$begin(new GfxImpl(g), false);
+	}
+
+	@Inject(method = "drawSystemInformation", at = @At("RETURN"), require = 0)
+	private void arctic$rightEnd(GuiGraphicsExtractor g, List<String> lines, CallbackInfo ci) {
+		arctic$finish(new GfxImpl(g));
+	}
 	//#elif MC >= 1.20
 	@Inject(method = "drawGameInformation", at = @At("HEAD"), require = 0)
 	private void arctic$leftStart(GuiGraphicsExtractor g, CallbackInfo ci) {

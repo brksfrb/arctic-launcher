@@ -68,6 +68,21 @@ def neoforge_build(version):
         return next((t.get("neoforge") for t in json.load(f) if t["build"] == version), None)
 
 
+def split_args(text):
+    """A parameter list split at its top-level commas (generic types keep theirs)."""
+    out, depth, start = [], 0, 0
+    for i, ch in enumerate(text):
+        if ch == "<":
+            depth += 1
+        elif ch == ">":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            out.append(text[start:i].strip())
+            start = i + 1
+    last = text[start:].strip()
+    return out + [last] if last else out
+
+
 def jar_for(version):
     game = neoforge(version)
     if game:
@@ -271,6 +286,17 @@ def check(version):
                           for p in re.findall(r"\n  [^\n]*[ .]" + re.escape(hooked) + r"\(([^)]*)\)", jar.members(c))]
                 if params and not any(re.search(r"(^|[.$ ,])" + re.escape(simple) + r"($|[ ,])", p) for p in params):
                     problems.append(f"{f}: {hooked} takes no {simple} argument (@Local argsOnly)")
+            # @Inject: the handler takes all of the hooked method's arguments before its CallbackInfo, or
+            # none. NeoForge adds arguments to some methods it patches (checked for NeoForge jars only).
+            hooked = (mm.group(1) or consts.get(mm.group(2), "?")) if mm else ""
+            if neoforge(version) and ann.group(0).startswith("@Inject(") and hooked and not hooked.startswith(("/", "<")) and "(" not in hooked:
+                handler = ann.group(2)
+                args = split_args(handler[handler.find("(") + 1:handler.rfind(")")])
+                before = next((i for i, arg in enumerate(args) if "CallbackInfo" in arg), None)
+                counts = {len(split_args(p)) for c in jar.hierarchy(cls)
+                          for p in re.findall(r"\n  [^\n]*[ .]" + re.escape(hooked) + r"\(([^)]*)\)", jar.members(c))}
+                if before and counts and before not in counts:
+                    problems.append(f"{f}: {hooked} takes {' or '.join(map(str, sorted(counts)))} argument(s), the handler {before}")
             tm = re.search(r'value\s*=\s*"INVOKE"[^)]*?target\s*=\s*(?:"([^"]+)"|(\w+))', a, re.S)
             if not mm or not tm:
                 continue
