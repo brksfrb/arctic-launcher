@@ -885,9 +885,11 @@ final class FabricPlatform implements Platform {
 			return null;
 		}
 		float t = mc.getFrameTime();
+		// Arctic's 1.13.2 mapping has the entity's yRot and xRot swapped (yRot holds the pitch: seen in game,
+		// looking west at pitch 28 read yRot 28, xRot 90), so the yaw is xRot here.
 		double[] out = {view.xo + (view.x - view.xo) * t, view.yo + (view.y - view.yo) * t + view.getEyeHeight(),
-				view.zo + (view.z - view.zo) * t, view.yRotO + (view.yRot - view.yRotO) * t,
-				view.xRotO + (view.xRot - view.xRotO) * t, 0};
+				view.zo + (view.z - view.zo) * t, view.xRotO + (view.xRot - view.xRotO) * t,
+				view.yRotO + (view.yRot - view.yRotO) * t, 0};
 		//#else
 		//#if MC >= 26.2
 		net.minecraft.client.Camera cam = mc.gameRenderer.mainCamera();
@@ -1445,19 +1447,13 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public boolean lightOverlayWorks() {
-		//#if MC >= 1.21.11 && MC < 26.1
 		return true;
-		//#else
-		return false;
-		//#endif
 	}
 
-	//#if MC >= 1.21.11 && MC < 26.1
 	@Override
 	public com.arcticlauncher.client.feature.LightOverlay.Probe lightProbe() {
 		return LightOverlayDraw.probe();
 	}
-	//#endif
 
 	@Override
 	public boolean itemPhysicsWorks() {
