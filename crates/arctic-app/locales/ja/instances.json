@@ -294,6 +294,7 @@
   "instances.starting_the_download": "ダウンロードを開始しています",
   "instances.submit_for_review": "レビューに提出",
   "instances.submit_it_for_a_short_review_once_its": "短いレビューに提出してください。承認されると全員に表示されます。",
+  "instances.servers_are_reviewed_before_theyre_listed": "サーバーは掲載前に審査されます。承認されるには、サーバーがオンラインで、実際にプレイできる状態（まだ構築中ではない）であり、詐欺や他のサーバーのコピーではなく、Minecraft のルールに従っている必要があります。クラック版（cracked）サーバーや小規模なサーバーも歓迎します。",
   "instances.submitted_it_waits_for_a_quick_review_before": "提出しました。表示される前に簡単なレビューを待ちます。",
   "instances.supported_minecraft_versions": "対応する Minecraft のバージョン",
   "instances.surprise_me": "おまかせ",

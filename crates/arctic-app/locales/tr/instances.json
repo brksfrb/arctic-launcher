@@ -294,6 +294,7 @@
   "instances.starting_the_download": "İndirme başlıyor",
   "instances.submit_for_review": "İncelemeye gönder",
   "instances.submit_it_for_a_short_review_once_its": "Kısa bir inceleme için gönder. Onaylandığında herkese görünür.",
+  "instances.servers_are_reviewed_before_theyre_listed": "Sunucular listelenmeden önce incelenir. Onaylanmak için bir sunucunun çevrimiçi olması, gerçekten oynanabilir olması (hâlâ yapım aşamasında olmaması), dolandırıcılık ya da başka bir sunucunun kopyası olmaması ve Minecraft kurallarına uyması gerekir. Cracked sunucular ve küçük sunucular da kabul edilir.",
   "instances.submitted_it_waits_for_a_quick_review_before": "Gönderildi. Görünmeden önce kısa bir incelemeyi bekliyor.",
   "instances.supported_minecraft_versions": "Desteklenen Minecraft sürümleri",
   "instances.surprise_me": "Şaşırt beni",

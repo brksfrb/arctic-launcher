@@ -294,6 +294,7 @@
   "instances.starting_the_download": "Download wird gestartet",
   "instances.submit_for_review": "Zur Prüfung einreichen",
   "instances.submit_it_for_a_short_review_once_its": "Reich es für eine kurze Prüfung ein. Sobald es freigegeben ist, sehen es alle.",
+  "instances.servers_are_reviewed_before_theyre_listed": "Server werden geprüft, bevor sie gelistet werden. Um freigegeben zu werden, muss ein Server online und wirklich spielbar sein (nicht noch im Aufbau), darf kein Betrug und keine Kopie eines anderen Servers sein und muss sich an die Regeln von Minecraft halten. Cracked-Server und kleine Server sind willkommen.",
   "instances.submitted_it_waits_for_a_quick_review_before": "Eingereicht. Es wartet auf eine kurze Prüfung, bevor es erscheint.",
   "instances.supported_minecraft_versions": "Unterstützte Minecraft-Versionen",
   "instances.surprise_me": "Überrasch mich",

@@ -294,6 +294,7 @@
   "instances.starting_the_download": "다운로드 시작 중",
   "instances.submit_for_review": "검토 요청",
   "instances.submit_it_for_a_short_review_once_its": "짧은 검토를 요청하세요. 승인되면 모두에게 보입니다.",
+  "instances.servers_are_reviewed_before_theyre_listed": "서버는 목록에 오르기 전에 검토됩니다. 승인되려면 서버가 온라인 상태여야 하고, 실제로 플레이할 수 있어야 하며(아직 제작 중이 아니어야 함), 사기이거나 다른 서버의 복제본이 아니어야 하고, Minecraft의 규칙을 따라야 합니다. 크랙(cracked) 서버와 소규모 서버도 환영합니다.",
   "instances.submitted_it_waits_for_a_quick_review_before": "제출했습니다. 보이기 전에 간단한 검토를 기다립니다.",
   "instances.supported_minecraft_versions": "지원하는 Minecraft 버전",
   "instances.surprise_me": "아무거나",

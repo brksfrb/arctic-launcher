@@ -294,6 +294,7 @@
   "instances.starting_the_download": "正在开始下载",
   "instances.submit_for_review": "提交审核",
   "instances.submit_it_for_a_short_review_once_its": "提交进行简短审核。通过后所有人都能看到。",
+  "instances.servers_are_reviewed_before_theyre_listed": "服务器在列出之前会经过审核。要获得批准，服务器必须在线、真正可玩（而不是仍在搭建中）、不是骗局或其他服务器的复制品，并且遵守 Minecraft 的规则。欢迎盗版（cracked）服务器和小型服务器。",
   "instances.submitted_it_waits_for_a_quick_review_before": "已提交。审核通过后才会显示。",
   "instances.supported_minecraft_versions": "支持的 Minecraft 版本",
   "instances.surprise_me": "给我惊喜",

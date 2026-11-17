@@ -419,6 +419,14 @@ impl ArcticApp {
         ui.label(
             RichText::new(t!("instances.submit_it_for_a_short_review_once_its")).color(p.muted),
         );
+        ui.add_space(6.0);
+        ui.add(
+            egui::Label::new(
+                RichText::new(t!("instances.servers_are_reviewed_before_theyre_listed"))
+                    .color(p.muted),
+            )
+            .wrap(),
+        );
         ui.add_space(4.0);
         ui.label(RichText::new(t!(ABUSE)).small().color(p.muted));
         ui.add_space(10.0);

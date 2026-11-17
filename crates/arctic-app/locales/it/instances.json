@@ -294,6 +294,7 @@
   "instances.starting_the_download": "Avvio del download",
   "instances.submit_for_review": "Invia per la revisione",
   "instances.submit_it_for_a_short_review_once_its": "Invialo per una breve revisione. Una volta approvato, lo vedranno tutti.",
+  "instances.servers_are_reviewed_before_theyre_listed": "I server vengono controllati prima di essere elencati. Per essere approvato, un server deve essere online, davvero giocabile (non ancora in costruzione), non essere una truffa né una copia di un altro server e rispettare le regole di Minecraft. I server cracked e i server piccoli sono i benvenuti.",
   "instances.submitted_it_waits_for_a_quick_review_before": "Inviato. Attende una breve revisione prima di comparire.",
   "instances.supported_minecraft_versions": "Versioni di Minecraft supportate",
   "instances.surprise_me": "Sorprendimi",
