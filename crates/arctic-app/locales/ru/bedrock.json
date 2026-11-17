@@ -345,10 +345,7 @@
   "bedrock.seconds_suffix": " seconds",
   "bedrock.fps_suffix": " FPS",
   "bedrock.ms_suffix": " ms",
-  "bedrock.native_warning_title": "Загрузить нативный клиент Arctic в Minecraft?",
-  "bedrock.native_warning_inject": "Будет загружена экспериментальная DLL Arctic в запущенный процесс Minecraft для Windows (внедрение DLL). Это происходит только по вашему выбору.",
-  "bedrock.native_warning_antivirus": "Антивирус может пометить или заблокировать загрузчик, потому что внедрение в другую программу похоже на поведение вредоносного ПО.",
-  "bedrock.native_warning_servers": "Многопользовательские серверы и Realms могут счесть его читерским клиентом и кикнуть или забанить вас.",
-  "bedrock.native_warning_offline": "Используйте его только офлайн или в одиночных мирах.",
-  "bedrock.native_warning_accept": "Понятно, загрузить"
+  "bedrock.native_warning_title": "Прежде чем продолжить",
+  "bedrock.native_warning_notice": "Использовать нативный клиент Arctic необязательно. На большинстве серверов с ним нет проблем, но серверы со строгим античитом могут кикнуть или забанить вас. Проверьте их правила, прежде чем продолжить.",
+  "bedrock.native_warning_accept": "Продолжить"
 }

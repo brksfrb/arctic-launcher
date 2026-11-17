@@ -1742,15 +1742,7 @@ impl ArcticApp {
                     .color(p.text),
             );
             ui.add_space(6.0);
-            for line in [
-                t!("bedrock.native_warning_inject"),
-                t!("bedrock.native_warning_antivirus"),
-                t!("bedrock.native_warning_servers"),
-                t!("bedrock.native_warning_offline"),
-            ] {
-                ui.label(RichText::new(line).color(p.muted));
-                ui.add_space(4.0);
-            }
+            ui.label(RichText::new(t!("bedrock.native_warning_notice")).color(p.muted));
             ui.add_space(8.0);
             widgets::row(ui, |ui| {
                 if widgets::button(ui, p, None, t!("bedrock.native_warning_accept"), true).clicked()

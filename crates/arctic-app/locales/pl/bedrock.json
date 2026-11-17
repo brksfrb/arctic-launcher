@@ -345,10 +345,7 @@
   "bedrock.seconds_suffix": " seconds",
   "bedrock.fps_suffix": " FPS",
   "bedrock.ms_suffix": " ms",
-  "bedrock.native_warning_title": "Wczytać natywnego klienta Arctic do Minecrafta?",
-  "bedrock.native_warning_inject": "To wczytuje eksperymentalną bibliotekę DLL Arctic do uruchomionego procesu Minecraft dla Windows (wstrzykiwanie DLL). Dzieje się to tylko wtedy, gdy to wybierzesz.",
-  "bedrock.native_warning_antivirus": "Antywirus może oznaczyć lub zablokować loader, ponieważ wstrzykiwanie do innego programu przypomina działanie złośliwego oprogramowania.",
-  "bedrock.native_warning_servers": "Serwery wieloosobowe i Realms mogą uznać go za klienta z cheatami i wyrzucić lub zbanować cię.",
-  "bedrock.native_warning_offline": "Używaj go tylko offline lub w światach jednoosobowych.",
-  "bedrock.native_warning_accept": "Rozumiem, wczytaj"
+  "bedrock.native_warning_title": "Zanim przejdziesz dalej",
+  "bedrock.native_warning_notice": "Korzystanie z natywnego klienta Arctic jest opcjonalne. Na większości serwerów nie stanowi to problemu, ale serwery z rygorystycznym systemem antycheat mogą cię wyrzucić lub zbanować. Sprawdź ich zasady, zanim przejdziesz dalej.",
+  "bedrock.native_warning_accept": "Kontynuuj"
 }

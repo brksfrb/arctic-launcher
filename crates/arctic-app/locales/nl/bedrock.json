@@ -345,10 +345,7 @@
   "bedrock.seconds_suffix": " seconds",
   "bedrock.fps_suffix": " FPS",
   "bedrock.ms_suffix": " ms",
-  "bedrock.native_warning_title": "De native client van Arctic in Minecraft laden?",
-  "bedrock.native_warning_inject": "Dit laadt de experimentele DLL van Arctic in het actieve Minecraft voor Windows-proces (DLL-injectie). Dit gebeurt alleen als jij ervoor kiest.",
-  "bedrock.native_warning_antivirus": "Antivirussoftware kan de loader markeren of blokkeren, omdat injecteren in een ander programma lijkt op wat malware doet.",
-  "bedrock.native_warning_servers": "Multiplayerservers en Realms kunnen het als hackclient zien en je kicken of bannen.",
-  "bedrock.native_warning_offline": "Gebruik het alleen offline of in singleplayerwerelden.",
-  "bedrock.native_warning_accept": "Begrepen, laden"
+  "bedrock.native_warning_title": "Voordat je verdergaat",
+  "bedrock.native_warning_notice": "Het gebruik van de native client van Arctic is optioneel. De meeste servers vinden het prima, maar servers met strenge anticheat kunnen je kicken of bannen. Controleer hun regels voordat je verdergaat.",
+  "bedrock.native_warning_accept": "Doorgaan"
 }

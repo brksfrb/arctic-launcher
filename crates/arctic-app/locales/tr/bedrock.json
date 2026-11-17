@@ -345,10 +345,7 @@
   "bedrock.seconds_suffix": " seconds",
   "bedrock.fps_suffix": " FPS",
   "bedrock.ms_suffix": " ms",
-  "bedrock.native_warning_title": "Arctic'in yerel istemcisi Minecraft'a yüklensin mi?",
-  "bedrock.native_warning_inject": "Bu, Arctic'in deneysel DLL'sini çalışan Windows için Minecraft işlemine yükler (DLL enjeksiyonu). Yalnızca sen seçtiğinde olur.",
-  "bedrock.native_warning_antivirus": "Başka bir programa enjekte etmek zararlı yazılımlara benzediği için antivirüs yükleyiciyi işaretleyebilir veya engelleyebilir.",
-  "bedrock.native_warning_servers": "Çok oyunculu sunucular ve Realms bunu hileli istemci sayıp seni atabilir veya yasaklayabilir.",
-  "bedrock.native_warning_offline": "Yalnızca çevrimdışı veya tek oyunculu dünyalarda kullan.",
-  "bedrock.native_warning_accept": "Anladım, yükle"
+  "bedrock.native_warning_title": "Devam etmeden önce",
+  "bedrock.native_warning_notice": "Arctic'in yerel istemcisini kullanmak isteğe bağlıdır. Çoğu sunucuda sorun olmaz, ancak sıkı hile koruması olan sunucular seni atabilir veya yasaklayabilir. Devam etmeden önce sunucu kurallarını kontrol et.",
+  "bedrock.native_warning_accept": "Devam et"
 }
