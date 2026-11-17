@@ -80,7 +80,7 @@ public final class GameInfo {
 		return rows;
 	}
 
-	/** {name, left, max, slot} for worn and held items that wear out. */
+	/** {name, left, max, slot, tier} for worn and held items that wear out. */
 	public static List<Object[]> durability() {
 		LocalPlayer p = player();
 		if (p == null) {
@@ -92,7 +92,8 @@ public final class GameInfo {
 			ItemStack stack = p.getItemBySlot(slot);
 			if (!stack.isEmpty() && stack.isDamageableItem()) {
 				rows.add(new Object[] {stack.getHoverName().getString(), stack.getMaxDamage() - stack.getDamageValue(),
-						stack.getMaxDamage(), slot.getName()});
+						stack.getMaxDamage(), slot.getName(),
+						com.arcticlauncher.client.feature.DurabilityWatch.tierOf(BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath())});
 			}
 		}
 		return rows;
