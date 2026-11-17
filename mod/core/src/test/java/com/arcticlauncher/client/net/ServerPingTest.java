@@ -85,9 +85,21 @@ class ServerPingTest {
 		}
 	}
 
+	@Test void rejectsMismatchedPong() throws Exception {
+		try (ServerSocket server = new ServerSocket(0)) {
+			Thread fake = new Thread(() -> answer(server, true));
+			fake.setDaemon(true); fake.start();
+			assertEquals(-1, ServerPing.ping("127.0.0.1:" + server.getLocalPort(), 754).ping);
+		}
+	}
+
 	/** A server that answers one status request and its ping. */
-	private static void answer(ServerSocket server) {
+	static void answer(ServerSocket server) {
 		answer(server, 0, false);
+	}
+
+	private static void answer(ServerSocket server, boolean corrupt) {
+		answer(server, 0, corrupt);
 	}
 
 	private static void answer(ServerSocket server, int delay, boolean invalid) {

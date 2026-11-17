@@ -27,6 +27,9 @@ public final class LegacyGlassCtm {
 	private LegacyGlassCtm() {}
 
 	public static boolean available() { return !CONTINUITY; }
+	private static volatile int atlasTileCount = GlassTiles.COUNT;
+	public static int tileCount() { return atlasTileCount; }
+	public static void reloading() { lastEnabled = enabled(); atlasTileCount = lastEnabled ? GlassTiles.COUNT : 1; }
 	public static boolean enabled() { return available() && (ArcticClient.config() == null || ArcticClient.config().connectedGlass); }
 
 	public static void tick() {
@@ -35,6 +38,8 @@ public final class LegacyGlassCtm {
 		boolean on = enabled();
 		if (lastEnabled != on) {
 			lastEnabled = on;
+			// An atlas stitched with Connected Glass off holds only the unjoined tile: enabling it needs the tiles.
+			if (on && tileCount() < GlassTiles.COUNT) { MinecraftClient.getInstance().reloadResources(); return; }
 			if (MinecraftClient.getInstance().world == null) return;
 			MinecraftClient.getInstance().worldRenderer.reload();
 		}
@@ -50,12 +55,13 @@ public final class LegacyGlassCtm {
 			Sprite[] variants = new Sprite[GlassTiles.COUNT];
 			boolean complete = true;
 			for (int i = 0; i < variants.length; i++) {
-				variants[i] = names.get(GlassTiles.variant(e.getKey(), i));
+				variants[i] = names.get(GlassTiles.variant(e.getKey(), i < tileCount() ? i : 0));
 				complete &= variants[i] != null;
 			}
 			if (complete) found.put(e.getValue(), variants);
 		}
 		sprites = found;
+		ArcticLegacy.LOG.info("[startup] CTM atlas bound: {} source sprites, {} tiles per face", found.size(), tileCount());
 	}
 
 	public static void begin(BlockView world, BlockState block, BlockPos pos) {

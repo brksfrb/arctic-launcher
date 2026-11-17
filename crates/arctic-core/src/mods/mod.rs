@@ -584,6 +584,7 @@ fn prepare_one(
         sha1: file.hashes.sha1.clone(),
         size: file.size,
         lzma: None,
+        md5: None,
     };
     Ok((entry, job))
 }

@@ -388,8 +388,15 @@ impl Tasks {
         settings: Settings,
         start: StartAt,
     ) {
+        let play_started = std::time::Instant::now();
         self.run(move |t| {
             let result = t.launch_blocking(id, &version, &instance, account, &settings, start);
+            if result.is_ok() {
+                log::info!(
+                    "[startup] Play to Java process: {} ms",
+                    play_started.elapsed().as_millis()
+                );
+            }
             let result = result.map(|(game, log, java)| (game, log, version.id.clone(), java));
             // The toast shows this string; it has to be the whole cause chain, not just Display.
             t.send(Event::Launched(id, result.map_err(|e| e.chain())));

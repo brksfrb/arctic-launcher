@@ -52,7 +52,7 @@ public final class GlassTiles {
 		int slash = s.lastIndexOf('/');
 		if (slash >= 0) s = s.substring(slash + 1);
 		return s.equals("glass") || s.equals("tinted_glass") || s.endsWith("_stained_glass")
-				|| s.startsWith("glass_") && !s.contains("pane");
+				|| s.startsWith("glass_") && ("|white|orange|magenta|light_blue|yellow|lime|pink|gray|silver|light_gray|cyan|purple|blue|brown|green|red|black|").contains("|" + s.substring(6) + "|");
 	}
 
 	/** Plain (clear) glass: the block's own sprite, which its pane shares on every version. */

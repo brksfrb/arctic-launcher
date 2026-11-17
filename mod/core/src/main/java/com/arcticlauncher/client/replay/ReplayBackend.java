@@ -13,6 +13,13 @@ import com.arcticlauncher.client.Lang;
  * camera, the timeline) is the core's. Game thread unless noted.
  */
 public interface ReplayBackend {
+	/** A protocol handover failed: later packets cannot safely be delivered. */
+	final class ProtocolFailure extends RuntimeException {
+		private static final long serialVersionUID = 1L;
+
+		public ProtocolFailure(String message, Throwable cause) { super(message, cause); }
+	}
+
 	/** Sorts recorded packets into {@link Category categories}; used on a background thread. */
 	interface Classifier {
 		/** The category of {@code packet} (its id, then its body); may put a key in {@code key[0]}. */
@@ -56,6 +63,9 @@ public interface ReplayBackend {
 			super(message);
 		}
 	}
+
+	/** Where the packet stream stands (protocol phase, last phase switch), for failure logs; may be empty. */
+	default String diagnostics() { return ""; }
 
 	/** Hand one recorded packet to the game; {@code jumping}: nobody sees it, skip what only shows. */
 	void apply(ByteBuffer packet, boolean jumping);

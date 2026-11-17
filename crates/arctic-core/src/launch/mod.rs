@@ -410,6 +410,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         Ok(false) => {}
         Err(e) => log::warn!("default game settings: {e}"),
     }
+    timer.step("default settings");
     // What the profile's instances share: the newest copies, into this one.
     if let Err(e) = crate::shared::sync(
         dirs,
@@ -421,6 +422,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
     if let Err(e) = crate::game_defaults::skip_multiplayer_warning(&game_dir) {
         log::warn!("multiplayer warning: {e}");
     }
+    timer.step("shared files sync");
     let java_override = req
         .instance
         .java_path
@@ -551,13 +553,14 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         let _ = finished.recv_timeout(SESSION_WAIT);
     }
     timer.step("game files + arctic session");
-    timer.done();
     if proxy.active().is_some() {
         let hosts = game_dir.join(crate::proxy::HOSTS_FILE);
         std::fs::write(&hosts, proxy.hosts_file()).map_err(|e| crate::Error::io(&hosts, e))?;
     }
     let plan = plan(req, &installation);
     repair.finish();
+    timer.step("JVM arguments + startup cache");
+    timer.done();
     Ok(plan)
 }
 

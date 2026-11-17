@@ -364,6 +364,16 @@ pub fn core_text(english: &str) -> String {
     }
 }
 
+/// An error from arctic-core as shown: the CurseForge refusal in the player's language, any
+/// other text as it came.
+pub fn core_error(message: &str) -> String {
+    if message == arctic_core::curseforge::MESSAGE {
+        text("instances.curseforge_not_supported").to_owned()
+    } else {
+        message.to_owned()
+    }
+}
+
 /// Text for a key: `t!("settings.title")`. Returns `&'static str`, so it goes wherever a
 /// string literal went.
 #[macro_export]

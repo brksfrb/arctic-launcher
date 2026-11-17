@@ -15,6 +15,13 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GlassTilesTest {
+	@org.junit.jupiter.api.Test void bottlesAndPaneEdgesAreNotGlassFaces() {
+		org.junit.jupiter.api.Assertions.assertFalse(GlassTiles.glass("minecraft:item/glass_bottle"));
+		org.junit.jupiter.api.Assertions.assertFalse(GlassTiles.glass("minecraft:blocks/glass_pane_top"));
+		org.junit.jupiter.api.Assertions.assertTrue(GlassTiles.glass("minecraft:blocks/glass_silver"));
+		org.junit.jupiter.api.Assertions.assertTrue(GlassTiles.glass("minecraft:block/blue_stained_glass"));
+	}
+
 	@Test void tileRangesAreBoundedAndCannotOverflow() {
 		for (String range : Arrays.asList("2147483647-2147483647", "0-2147483647", "4097-4097", "5-4"))
 			assertThrows(IllegalArgumentException.class, () -> GlassPacks.expand(range));

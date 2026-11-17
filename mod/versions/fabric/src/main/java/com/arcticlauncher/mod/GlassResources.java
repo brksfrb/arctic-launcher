@@ -12,7 +12,10 @@ public final class GlassResources {
 	private GlassResources() {}
 	public interface ActivePacks { List<String> arctic$packNames(); }
 	public static void reload(ResourceManager manager) {
+		long start = System.nanoTime();
+		GlassCtm.reloading();
 		packs = GlassPacks.safeLoad("atlas resource packs", () -> GlassCtm.available() ? load(manager) : GlassPacks.EMPTY);
+		ArcticMod.LOG.info("[startup] CTM pack rules: {} ms; tiles per glass {}", (System.nanoTime() - start) / 1_000_000, GlassCtm.tileCount());
 	}
 	private static GlassPacks load(ResourceManager manager) {
 		return GlassPacks.load(new GlassPacks.Resources() {

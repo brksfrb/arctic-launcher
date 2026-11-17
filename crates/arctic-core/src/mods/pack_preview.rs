@@ -488,6 +488,7 @@ pub fn preview(dirs: &DataDirs, version_id: &str) -> Result<PackPreview> {
                     sha1: file.hashes.sha1.clone(),
                     size: file.size,
                     lzma: None,
+                    md5: None,
                 }],
                 &|_| {},
             )?;

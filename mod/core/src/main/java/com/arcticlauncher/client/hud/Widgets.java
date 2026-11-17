@@ -5,9 +5,7 @@ import com.arcticlauncher.client.LocalClock;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.Keys;
 import com.arcticlauncher.client.Platform;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
@@ -53,9 +51,13 @@ final class Widgets {
 	static List<HudWidget> all(final Cps cps) {
 		List<HudWidget> all = new ArrayList<HudWidget>();
 		all.add(new TextWidget("fps", "FPS", Lang.t("hud.frames_per_second"), true) {
+			private int last;
+			private String shown;
 			@Override
 			protected String value(boolean preview) {
-				return String.valueOf(platform().fps());
+				int fps = platform().fps();
+				if (shown == null || last != fps) { last = fps; shown = String.valueOf(fps); }
+				return shown;
 			}
 		});
 		all.add(new Watermark());
@@ -66,13 +68,16 @@ final class Widgets {
 			}
 		});
 		all.add(new TextWidget("ping", Lang.t("hud.ping"), Lang.t("hud.latency_to_the_server"), true) {
+			private int last;
+			private String shown;
 			@Override
 			protected String value(boolean preview) {
 				int ms = platform().ping();
 				if (ms < 0) {
 					return preview ? "24 ms" : "--";
 				}
-				return ms + " ms";
+				if (shown == null || last != ms) { last = ms; shown = ms + " ms"; }
+				return shown;
 			}
 		});
 		all.add(coords());
@@ -193,11 +198,11 @@ final class Widgets {
 			}
 		});
 		all.add(new TextWidget("date", Lang.t("hud.date"), Lang.t("hud.todays_date"), false) {
-			private final SimpleDateFormat format = LocalClock.formatter("EEE d MMM", Locale.ENGLISH);
+			private final LocalClock.Display clock = new LocalClock.Display(LocalClock.formatter("EEE d MMM", Locale.ENGLISH), 86400000L);
 
 			@Override
 			protected String value(boolean preview) {
-				return format.format(new Date());
+				return clock.at(System.currentTimeMillis());
 			}
 		});
 		all.add(new TextWidget("entities", Lang.t("hud.entities"), Lang.t("hud.entities_the_world_has_loaded_around_you"), false) {
@@ -324,11 +329,11 @@ final class Widgets {
 
 	private static HudWidget clock() {
 		return new TextWidget("clock", Lang.t("hud.time"), Lang.t("hud.your_local_time"), false) {
-			private final SimpleDateFormat format = LocalClock.formatter("HH:mm");
+			private final LocalClock.Display clock = new LocalClock.Display(LocalClock.formatter("HH:mm"), 60000L);
 
 			@Override
 			protected String value(boolean preview) {
-				return format.format(new Date());
+				return clock.at(System.currentTimeMillis());
 			}
 		};
 	}

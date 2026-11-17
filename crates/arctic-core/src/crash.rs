@@ -1255,10 +1255,19 @@ impl Report {
             priority.push_str("\n---- mixin failure context ----\n");
             priority.push_str(&scrub(&mixin, &Own::this_pc()));
         }
+        let early = first_exceptions(&all);
+        if !early.is_empty() {
+            priority.push_str("\n---- first exceptions ----\n");
+            priority.push_str(&scrub(&early, &Own::this_pc()));
+        }
         let remaining = (47 * 1024usize).saturating_sub(priority.len() + 512);
         let skip = lines.len().saturating_sub(REPORT_LOG_LINES);
         let tail = lines[skip..].join("\n");
-        let mut text = tail_of(&tail, REPORT_LOG_BYTES).to_owned();
+        // The first-exceptions section takes its room out of the tail.
+        let tail_bytes = REPORT_LOG_BYTES
+            .saturating_sub(early.len())
+            .max(REPORT_LOG_BYTES / 4);
+        let mut text = tail_of(&tail, tail_bytes).to_owned();
         text.push_str("\n\n---- initial output ----\n");
         text.push_str(head_of(&all, 2 * 1024));
         let launcher_compact = launcher_lines
@@ -1532,6 +1541,84 @@ pub fn orderly_shutdown(text: &str) -> bool {
         && text.contains("[Arctic diagnostics] exit caller vanilla")
         && !text.contains("[Arctic diagnostics] exit caller other")
         && !freeze_evidence(text)
+}
+
+/// Most of the first-exceptions section (bytes), and how many distinct entries it keeps.
+const FIRST_EXCEPTIONS_BYTES: usize = 8 * 1024;
+const FIRST_EXCEPTIONS: usize = 3;
+/// Stack frames kept per exception in a cause chain, and chain links kept per entry.
+const FIRST_EXCEPTION_FRAMES: usize = 25;
+const FIRST_EXCEPTION_CAUSES: usize = 6;
+
+/// The first distinct ERROR/FATAL log entries that carry a stack trace, from the whole log, so a
+/// root cause that scrolled out of the tail (e.g. a join-time NPE that later leaves `player`
+/// null) is still reported. Repeats of the same trace are kept once.
+fn first_exceptions(text: &str) -> String {
+    let mut seen: Vec<String> = Vec::new();
+    let mut out = String::new();
+    let mut lines = text.lines().peekable();
+    while let Some(line) = lines.next() {
+        if !(line.starts_with('[') && (line.contains("/ERROR]") || line.contains("/FATAL]"))) {
+            continue;
+        }
+        let mut body = Vec::new();
+        while let Some(next) = lines.next_if(|l| !l.starts_with('[')) {
+            body.push(next);
+        }
+        if !body.iter().any(|l| l.trim_start().starts_with("at ")) {
+            continue;
+        }
+        let message = line.split_once("]: ").map_or(line, |(_, m)| m);
+        let frames: Vec<&str> = body
+            .iter()
+            .copied()
+            .filter(|l| l.trim_start().starts_with("at "))
+            .take(4)
+            .collect();
+        let key = format!(
+            "{message}\n{}\n{}",
+            body.first().copied().unwrap_or(""),
+            frames.join("\n")
+        );
+        if seen.contains(&key) {
+            continue;
+        }
+        seen.push(key);
+        let mut entry = String::from(line);
+        entry.push('\n');
+        let (mut frames, mut causes) = (0, 0);
+        for l in body {
+            let t = l.trim_start();
+            if t.starts_with("at ") {
+                frames += 1;
+                if frames > FIRST_EXCEPTION_FRAMES || causes > FIRST_EXCEPTION_CAUSES {
+                    continue;
+                }
+            } else if t.starts_with("Caused by:") {
+                frames = 0;
+                causes += 1;
+                if causes > FIRST_EXCEPTION_CAUSES {
+                    continue;
+                }
+            } else if t.starts_with("...") || causes > FIRST_EXCEPTION_CAUSES {
+                continue;
+            }
+            entry.push_str(head_of(l, 512));
+            entry.push('\n');
+        }
+        if out.len() + entry.len() > FIRST_EXCEPTIONS_BYTES {
+            // A single oversized first entry is cut rather than dropped.
+            if out.is_empty() {
+                out.push_str(head_of(&entry, FIRST_EXCEPTIONS_BYTES));
+            }
+            break;
+        }
+        out.push_str(&entry);
+        if seen.len() >= FIRST_EXCEPTIONS {
+            break;
+        }
+    }
+    out
 }
 
 /// Preserve the latest dump and exit trace even when they are outside the log tail.
@@ -3096,6 +3183,43 @@ Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Crit
         // Cut off mid-line (the report keeps a bounded tail): still nothing of the token.
         let cut = scrub(&format!("(Session ID is token:{jwt}"), &own);
         assert_eq!(cut, "(Session ID is <hidden>)");
+    }
+
+    #[test]
+    fn early_join_exception_survives_the_tail_once_and_report_fits() {
+        let npe = "java.lang.NullPointerException: Cannot invoke \"Object.x()\"\n\tat net.minecraft.class_634.method_11109(class_634.java:1)\n\tat net.minecraft.class_634.method_11154(class_634.java:2)";
+        let mut log = vec![
+            "[12:00:01] [main/INFO]: Starting".to_owned(),
+            "[12:00:02] [Render thread/ERROR]: Error on GameJoin".to_owned(),
+            "java.lang.NullPointerException: join".to_owned(),
+            "\tat com.example.mixin.JoinMixin.onJoin(JoinMixin.java:42)".to_owned(),
+            "\tat net.minecraft.class_634.method_11120(class_634.java:9)".to_owned(),
+            "Caused by: java.lang.IllegalStateException: boom".to_owned(),
+            "\tat com.example.Deep.run(Deep.java:3)".to_owned(),
+        ];
+        for i in 0..400 {
+            log.push(format!(
+                "[12:01:{:02}] [Render thread/INFO]: <Bob> {}",
+                i % 60,
+                "spam ".repeat(40)
+            ));
+            log.push("[12:01:00] [Render thread/ERROR]: Error executing task on Client".to_owned());
+            log.extend(npe.lines().map(str::to_owned));
+        }
+        let lines: Vec<&str> = log.iter().map(String::as_str).collect();
+        let all = lines.join("\n");
+        assert!(all.len() > REPORT_LOG_BYTES * 4);
+        let report = Report::build("1.16.5", "fabric", "", &lines, &[], None, None);
+        let section = first_exceptions(&all);
+        assert!(report.log.contains(&section));
+        assert!(section.contains("JoinMixin.onJoin(JoinMixin.java:42)"));
+        assert!(section.contains("Caused by: java.lang.IllegalStateException"));
+        assert_eq!(section.matches("Error executing task on Client").count(), 1);
+        assert!(report.log.len() <= 48 * 1024);
+        assert_eq!(
+            first_exceptions(&all).matches("Error on GameJoin").count(),
+            1
+        );
     }
 
     #[test]

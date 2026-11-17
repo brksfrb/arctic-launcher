@@ -57,6 +57,15 @@ public final class ReplayRecording {
 			return;
 		}
 		List<byte[]> encoded = ReplayCodec.encode(protocol, packet);
+		if (encoded.isEmpty() && ReplayCodec.changesPhase(ReplayCodec.name(packet))) {
+			// Omitting a boundary makes every later packet belong to the wrong phase.
+			// End at the last valid packet instead of silently saving a corrupt stream.
+			com.arcticlauncher.mod.ArcticMod.LOG.warn("replay: could not encode handover {} in phase {}; recording stopped",
+					ReplayCodec.name(packet), ReplayCodec.phaseName(protocol));
+			take.end();
+			com.arcticlauncher.client.notice.Notices.post(com.arcticlauncher.client.Lang.t("replay.replay"), com.arcticlauncher.client.Lang.t("replay.recording_stopped_because_a_protocol_handover_could_not_be_saved"));
+			return;
+		}
 		for (byte[] bytes : encoded) {
 			take.packet(bytes);
 		}

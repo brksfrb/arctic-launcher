@@ -26,13 +26,13 @@ abstract class GlassStitchMixin {
 	private void arctic$packs(CallbackInfoReturnable<?> cir, @com.llamalad7.mixinextras.sugar.Local(argsOnly = true) ResourceManager manager) { if (location.equals(net.minecraft.client.renderer.texture.TextureAtlas.LOCATION_BLOCKS)) GlassResources.reload(manager); }
 	@ModifyVariable(method = "stitch", at = @At("HEAD"), argsOnly = true)
 	private List<SpriteContents> arctic$tiles(List<SpriteContents> original) {
-		if (!GlassCtm.available()) return original;
+		if (!GlassCtm.available() || !location.equals(net.minecraft.client.renderer.texture.TextureAtlas.LOCATION_BLOCKS)) return original;
 		List<SpriteContents> expanded = new ArrayList<>(original);
 		for (SpriteContents sprite : original) {
 			String name = sprite.name().toString();
 			if (!GlassTiles.glass(name)) continue;
 			GlassSpriteSource source = (GlassSpriteSource) sprite;
-			for (int tile = 0; tile < GlassTiles.COUNT; tile++) {
+			for (int tile = 0; tile < GlassCtm.tileCount(); tile++) {
 				expanded.add(source.arctic$variant(GlassImages.id(GlassTiles.variant(name, tile)), GlassImages.generate(source.arctic$image(), sprite.width(), sprite.height(), tile, name)));
 			}
 		}

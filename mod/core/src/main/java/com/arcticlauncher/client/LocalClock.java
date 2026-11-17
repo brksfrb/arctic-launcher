@@ -23,6 +23,31 @@ public final class LocalClock {
 		return format;
 	}
 
+	/** Render-thread formatter whose text only changes at a local minute/day boundary. */
+	public static final class Display {
+		private final SimpleDateFormat format;
+		private final long unit;
+		private final java.util.Date date = new java.util.Date(0);
+		private long bucket;
+		private String text;
+
+		public Display(SimpleDateFormat format, long unit) {
+			if (unit <= 0) throw new IllegalArgumentException("clock display unit");
+			this.format = format;
+			this.unit = unit;
+		}
+
+		public String at(long now) {
+			long next = Math.floorDiv(now + format.getTimeZone().getOffset(now), unit);
+			if (text == null || next != bucket) {
+				date.setTime(now);
+				text = format.format(date);
+				bucket = next;
+			}
+			return text;
+		}
+	}
+
 	private static TimeZone zone() {
 		String supplied = System.getProperty(OFFSET_PROPERTY);
 		if (supplied != null) {

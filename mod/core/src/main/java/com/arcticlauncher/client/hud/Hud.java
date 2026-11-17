@@ -37,6 +37,7 @@ public final class Hud {
 	/** The last layout, and what it was worked out from (screen size; each widget's slot and size). */
 	private Map<HudWidget, int[]> lastLayout;
 	private long[] lastLayoutFrom = new long[0];
+	private long[] layoutScratch = new long[0];
 	private List<Map.Entry<HudWidget, int[]>> lastSorted;
 	private Map<HudWidget, int[]> lastSortedFrom;
 
@@ -222,7 +223,10 @@ public final class Hud {
 		frame++;
 		FrameStats.tick();
 		// Worked out again only when the screen, a widget's slot or a widget's size changed.
-		long[] from = new long[2 + widgets.size() * 4];
+		int size = 2 + widgets.size() * 4;
+		if (layoutScratch.length != size) layoutScratch = new long[size];
+		long[] from = layoutScratch;
+		java.util.Arrays.fill(from, 0);
 		from[0] = g.width();
 		from[1] = g.height();
 		int f = 2;
@@ -243,6 +247,7 @@ public final class Hud {
 		if (lastLayout != null && java.util.Arrays.equals(from, lastLayoutFrom)) {
 			return lastLayout;
 		}
+		layoutScratch = lastLayoutFrom;
 		lastLayoutFrom = from;
 		lastLayout = workOutLayout(g);
 		return lastLayout;
@@ -451,6 +456,7 @@ public final class Hud {
 		k.drawnFancy = fancy;
 		k.drawnScale = g.pixelScale();
 		k.drawnStyle = s;
-		k.drawnRect = rect.clone();
+		if (k.drawnRect == null) k.drawnRect = new int[4];
+		System.arraycopy(rect, 0, k.drawnRect, 0, 4);
 	}
 }
