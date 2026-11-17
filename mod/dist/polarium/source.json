@@ -1,0 +1,12 @@
+{
+  "repository": "https://github.com/brksfrb/polarium",
+  "branch": "perf/chests-v2",
+  "commit": "ecd7cd128285624a45fca45d0a7e8ee72a78a968",
+  "jars": {
+    "1.21.11": "a1f4fcf2d4fc519a18985c70098a6d744d4a74c18ba2dc10bd007242d9a0796a",
+    "26.1.2": "f950a0ea83af70a75c4f5422c9e9332b2e99b3c5fd0eb7b8e43d4adcbb3c6366",
+    "26.2": "a048344c2f2b3bd80a4f111e32f36ee2a028f46f418fb48efab2a6adde4ee50d",
+    "26.3": "fa804133ccad0fa1ebc80314942058ff91a54b233847779f91a1efeace39e2f6",
+    "1.8.9": "0adf5bc86ccc101f7dbc72dc609fe6eef0da764859fadaa42c27efd24ae56cea"
+  }
+}
