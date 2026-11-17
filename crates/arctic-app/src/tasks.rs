@@ -23,6 +23,16 @@ use arctic_core::update::{self, UpdateChannel, UpdateInfo};
 use arctic_core::versions::{VersionEntry, VersionManifest};
 use arctic_core::{ProgressInfo, Result};
 use eframe::egui;
+/// Translate compatibility failures from the exact-version install paths.
+pub(crate) fn content_install_error(error: arctic_core::Error) -> String {
+    match error {
+        arctic_core::Error::IncompatibleContentVersion => {
+            t!("instances.hub.incompatible_blocked").into()
+        }
+        other => other.to_string(),
+    }
+}
+
 /// Owned copy of a core `ProgressInfo`, sendable to the UI thread.
 #[derive(Debug, Clone, Default)]
 pub struct ProgressSnapshot {
@@ -736,6 +746,20 @@ impl Tasks {
     /// Install a mod (and what it needs); `replacing` (an older copy's file) is switched off
     /// once it's in.
     pub fn mod_install(&self, instance: Instance, project_id: String, replacing: Option<String>) {
+        self.mod_install_selected(instance, project_id, replacing, None);
+    }
+
+    pub fn mod_install_version(&self, instance: Instance, project_id: String, version_id: String) {
+        self.mod_install_selected(instance, project_id, None, Some(version_id));
+    }
+
+    fn mod_install_selected(
+        &self,
+        instance: Instance,
+        project_id: String,
+        replacing: Option<String>,
+        version_id: Option<String>,
+    ) {
         self.run(move |t| {
             let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
             let game = instance.version.clone().unwrap_or_default();
@@ -743,8 +767,13 @@ impl Tasks {
                 Some(loader) => {
                     let dir = t.dirs.instance_dir(&instance.id);
                     let mods_dir = instance.game_dir(&t.dirs).join("mods");
-                    let result = mods::install(
-                        &project_id,
+                    let install = if version_id.is_some() {
+                        mods::install_version
+                    } else {
+                        mods::install
+                    };
+                    let result = install(
+                        version_id.as_deref().unwrap_or(&project_id),
                         &game,
                         loader,
                         &mods_dir,
@@ -758,7 +787,7 @@ impl Tasks {
                     {
                         log::warn!("could not turn off {old}: {e}");
                     }
-                    result.map_err(|e| e.to_string())
+                    result.map_err(content_install_error)
                 }
                 None => Err(t!("tasks.vanilla_instances_cant_load_mods").to_owned()),
             };

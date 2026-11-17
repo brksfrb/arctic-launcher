@@ -385,9 +385,15 @@
   "instances.hub.shaders_switched_on": "Bu örnek için gölgelendiriciler açılır.",
   "instances.hub.versions": "Sürümler",
   "instances.hub.no_versions": "Bu projede listelenmiş sürüm yok.",
-  "instances.hub.more_versions": "…ve Modrinth'te {n} tane daha",
   "instances.hub.fits": "{name} ile uyumlu",
   "instances.hub.categories": "Kategoriler",
   "instances.requires": "Gerektirir: {names}",
-  "instances.sort_by.most_follows": "En çok takip edilen"
+  "instances.sort_by.most_follows": "En çok takip edilen",
+  "instances.hub.version_target": "{name} örneğine yükle · Minecraft {game}",
+  "instances.hub.incompatible_blocked": "Uyumsuz sürümler bu örneğe yüklenemez.",
+  "instances.hub.show_more_versions": "Daha fazla sürüm göster",
+  "instances.hub.other_game": "Başka sürüm",
+  "instances.hub.other_game_needs_confirm": "Başka bir Minecraft sürümü için etiketlenen paketler yalnızca onayınızdan sonra yüklenir.",
+  "instances.hub.other_game_warning": "Minecraft {versions} için etiketli, {game} için değil. Yanlış görünebilir veya yüklenmeyebilir.",
+  "instances.hub.install_anyway": "Yine de yükle"
 }

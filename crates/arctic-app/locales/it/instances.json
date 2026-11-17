@@ -385,9 +385,15 @@
   "instances.hub.shaders_switched_on": "Gli shader sono attivi per questa istanza.",
   "instances.hub.versions": "Versioni",
   "instances.hub.no_versions": "Questo progetto non elenca versioni.",
-  "instances.hub.more_versions": "…e altri {n} su Modrinth",
   "instances.hub.fits": "Compatibile con {name}",
   "instances.hub.categories": "Categorie",
   "instances.requires": "Richiede: {names}",
-  "instances.sort_by.most_follows": "Più seguiti"
+  "instances.sort_by.most_follows": "Più seguiti",
+  "instances.hub.version_target": "Installa in {name} · Minecraft {game}",
+  "instances.hub.incompatible_blocked": "Le versioni incompatibili non possono essere installate in questa istanza.",
+  "instances.hub.show_more_versions": "Mostra altre versioni",
+  "instances.hub.other_game": "Altra versione",
+  "instances.hub.other_game_needs_confirm": "I pacchetti per un'altra versione di Minecraft si installano solo dopo la tua conferma.",
+  "instances.hub.other_game_warning": "Indicato per Minecraft {versions}, non {game}. Potrebbe apparire male o non caricarsi.",
+  "instances.hub.install_anyway": "Installa comunque"
 }

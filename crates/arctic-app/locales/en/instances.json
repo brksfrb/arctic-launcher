@@ -385,9 +385,15 @@
   "instances.hub.shaders_switched_on": "Shaders are switched on for this instance.",
   "instances.hub.versions": "Versions",
   "instances.hub.no_versions": "This project lists no versions.",
-  "instances.hub.more_versions": "…and {n} more on Modrinth",
   "instances.hub.fits": "Fits {name}",
   "instances.hub.categories": "Categories",
   "instances.requires": "Requires: {names}",
-  "instances.sort_by.most_follows": "Most followed"
+  "instances.sort_by.most_follows": "Most followed",
+  "instances.hub.version_target": "Install into {name} · Minecraft {game}",
+  "instances.hub.incompatible_blocked": "Incompatible versions cannot be installed into this instance.",
+  "instances.hub.show_more_versions": "Show more versions",
+  "instances.hub.other_game": "Other version",
+  "instances.hub.other_game_needs_confirm": "Packs tagged for another Minecraft version install only after you confirm.",
+  "instances.hub.other_game_warning": "Tagged for Minecraft {versions}, not {game}. It may look wrong or not load.",
+  "instances.hub.install_anyway": "Install anyway"
 }

@@ -385,9 +385,15 @@
   "instances.hub.shaders_switched_on": "将为此实例启用光影。",
   "instances.hub.versions": "版本",
   "instances.hub.no_versions": "此项目没有版本列表。",
-  "instances.hub.more_versions": "…Modrinth 上还有 {n} 个",
   "instances.hub.fits": "适用于 {name}",
   "instances.hub.categories": "分类",
   "instances.requires": "需要：{names}",
-  "instances.sort_by.most_follows": "关注最多"
+  "instances.sort_by.most_follows": "关注最多",
+  "instances.hub.version_target": "安装到 {name} · Minecraft {game}",
+  "instances.hub.incompatible_blocked": "无法将不兼容的版本安装到此实例。",
+  "instances.hub.show_more_versions": "显示更多版本",
+  "instances.hub.other_game": "其他版本",
+  "instances.hub.other_game_needs_confirm": "标记为其他 Minecraft 版本的包需要你确认后才会安装。",
+  "instances.hub.other_game_warning": "标记为 Minecraft {versions}，而非 {game}。可能显示异常或无法加载。",
+  "instances.hub.install_anyway": "仍然安装"
 }

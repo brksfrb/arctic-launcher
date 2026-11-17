@@ -385,9 +385,15 @@
   "instances.hub.shaders_switched_on": "このインスタンスではシェーダーが有効になります。",
   "instances.hub.versions": "バージョン",
   "instances.hub.no_versions": "このプロジェクトにはバージョンの一覧がありません。",
-  "instances.hub.more_versions": "…ほか Modrinth に {n} 件",
   "instances.hub.fits": "{name} に対応",
   "instances.hub.categories": "カテゴリ",
   "instances.requires": "必要: {names}",
-  "instances.sort_by.most_follows": "フォロー数順"
+  "instances.sort_by.most_follows": "フォロー数順",
+  "instances.hub.version_target": "{name} にインストール · Minecraft {game}",
+  "instances.hub.incompatible_blocked": "互換性のないバージョンはこのインスタンスにインストールできません。",
+  "instances.hub.show_more_versions": "さらにバージョンを表示",
+  "instances.hub.other_game": "別バージョン",
+  "instances.hub.other_game_needs_confirm": "別の Minecraft バージョン向けのパックは、確認後にのみインストールされます。",
+  "instances.hub.other_game_warning": "Minecraft {versions} 向けで、{game} 向けではありません。表示が崩れたり読み込めない場合があります。",
+  "instances.hub.install_anyway": "それでもインストール"
 }

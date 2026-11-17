@@ -166,5 +166,6 @@
   "tasks.you_can_turn_this_question_back_on_in": "설정에서 이 질문을 다시 켤 수 있습니다.",
   "tasks.youll_see_it_next_time_you_play": "다음에 플레이할 때 보게 됩니다.",
   "tasks.your_discord_account": "내 Discord 계정",
-  "tasks.your_profile_and_friends_are_here_now": "프로필과 친구가 이제 여기에 있습니다"
+  "tasks.your_profile_and_friends_are_here_now": "프로필과 친구가 이제 여기에 있습니다",
+  "tasks.chosen_file_is_tagged_for_another": "선택한 파일은 다른 Minecraft 버전용입니다."
 }

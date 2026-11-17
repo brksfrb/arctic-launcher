@@ -389,9 +389,15 @@
   "instances.hub.shaders_switched_on": "Для цього екземпляра вмикаються шейдери.",
   "instances.hub.versions": "Версії",
   "instances.hub.no_versions": "У проєкту немає списку версій.",
-  "instances.hub.more_versions": "…і ще {n} на Modrinth",
   "instances.hub.fits": "Підходить для {name}",
   "instances.hub.categories": "Категорії",
   "instances.requires": "Потребує: {names}",
-  "instances.sort_by.most_follows": "Найбільше підписників"
+  "instances.sort_by.most_follows": "Найбільше підписників",
+  "instances.hub.version_target": "Установити в {name} · Minecraft {game}",
+  "instances.hub.incompatible_blocked": "Несумісні версії не можна встановити в цей екземпляр.",
+  "instances.hub.show_more_versions": "Показати більше версій",
+  "instances.hub.other_game": "Інша версія",
+  "instances.hub.other_game_needs_confirm": "Пакети для іншої версії Minecraft встановлюються лише після підтвердження.",
+  "instances.hub.other_game_warning": "Позначено для Minecraft {versions}, а не {game}. Може виглядати неправильно або не завантажитися.",
+  "instances.hub.install_anyway": "Усе одно встановити"
 }

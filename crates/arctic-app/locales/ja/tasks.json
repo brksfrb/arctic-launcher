@@ -166,5 +166,6 @@
   "tasks.you_can_turn_this_question_back_on_in": "この質問は設定で再びオンにできます。",
   "tasks.youll_see_it_next_time_you_play": "次回のプレイ時に表示されます。",
   "tasks.your_discord_account": "あなたの Discord アカウント",
-  "tasks.your_profile_and_friends_are_here_now": "プロファイルとフレンドがここに移りました"
+  "tasks.your_profile_and_friends_are_here_now": "プロファイルとフレンドがここに移りました",
+  "tasks.chosen_file_is_tagged_for_another": "選択したファイルは別の Minecraft バージョン向けです。"
 }
