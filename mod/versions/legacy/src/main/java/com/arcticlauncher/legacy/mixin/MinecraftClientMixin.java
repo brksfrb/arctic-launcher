@@ -29,6 +29,28 @@ abstract class MinecraftClientMixin {
 		com.arcticlauncher.legacy.ServerMenus.tick();
 	}
 
+	/** Durability Protect: no attack, mining or use click with a tool or weapon at or below the warning level. */
+	@Inject(method = "doAttack", at = @At("HEAD"), cancellable = true)
+	private void arctic$durabilityAttack(CallbackInfo ci) {
+		if (com.arcticlauncher.client.feature.DurabilityWatch.useBlocked()) {
+			ci.cancel();
+		}
+	}
+
+	@Inject(method = "handleBlockBreaking", at = @At("HEAD"), cancellable = true)
+	private void arctic$durabilityMine(boolean breaking, CallbackInfo ci) {
+		if (com.arcticlauncher.client.feature.DurabilityWatch.useBlocked()) {
+			ci.cancel();
+		}
+	}
+
+	@Inject(method = "doUse", at = @At("HEAD"), cancellable = true)
+	private void arctic$durabilityUse(CallbackInfo ci) {
+		if (com.arcticlauncher.client.feature.DurabilityWatch.useBlocked()) {
+			ci.cancel();
+		}
+	}
+
 	@Inject(method = "setScreen", at = @At("HEAD"), cancellable = true)
 	private void arctic$serverMenus(Screen screen, CallbackInfo ci) {
 		if (com.arcticlauncher.legacy.ServerMenus.intercept(screen)) {
