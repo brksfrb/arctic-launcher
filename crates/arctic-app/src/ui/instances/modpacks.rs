@@ -344,9 +344,11 @@ impl ArcticApp {
                 self.open_instance(&instance.id);
             }
             Ok(None) => {}
-            Err(e) => self
-                .toasts
-                .push(Kind::Error, t!("instances.could_not_install_modpack"), e),
+            Err(e) => self.toasts.push(
+                Kind::Error,
+                t!("instances.could_not_install_modpack"),
+                crate::i18n::core_error(&e),
+            ),
         }
     }
 }

@@ -65,6 +65,7 @@ impl ArcticApp {
             (Some(mut old), true) => {
                 old.scan.instances.extend(result.scan.instances);
                 old.scan.seen.extend(result.scan.seen);
+                old.scan.curseforge_blocked |= result.scan.curseforge_blocked;
                 old.sizes.extend(result.sizes);
                 old
             }
@@ -203,6 +204,12 @@ impl ArcticApp {
                     for c in &found.scan.clients {
                         hud_row(ui, p, c, state, &targets);
                     }
+                }
+                if found.scan.curseforge_blocked {
+                    ui.add_space(10.0);
+                    ui.label(
+                        RichText::new(t!("instances.curseforge_not_supported")).color(p.muted),
+                    );
                 }
                 if !found.scan.seen.is_empty() {
                     ui.add_space(10.0);

@@ -123,6 +123,12 @@ fn list(ctx: &Ctx, scan: &Scan) -> Result<i32> {
             },
         );
     }
+    if scan.curseforge_blocked {
+        ctx.out.emit(
+            json!({"launcher": "curseforge", "note": arctic_core::curseforge::MESSAGE}),
+            || arctic_core::curseforge::MESSAGE.to_owned(),
+        );
+    }
     for (launcher, why) in &scan.seen {
         ctx.out
             .emit(json!({"launcher": launcher.id(), "note": why}), || {
