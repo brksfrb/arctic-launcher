@@ -1136,6 +1136,9 @@ pub struct Report {
     pub os: String,
     pub title: String,
     pub log: String,
+    /// Installed and currently free physical memory in MiB, if they could be read.
+    pub ram_total_mb: Option<u64>,
+    pub ram_free_mb: Option<u64>,
     /// How the player can be reached (their own words, optional); filled in by the app when it sends.
     pub contact: String,
 }
@@ -1260,6 +1263,9 @@ impl Report {
             priority.push_str("\n---- first exceptions ----\n");
             priority.push_str(&scrub(&early, &Own::this_pc()));
         }
+        let ram_total_mb = crate::system::total_memory_mb();
+        let ram_free_mb = crate::system::free_memory_mb();
+        priority.push_str(&memory_section(ram_total_mb, ram_free_mb));
         let remaining = (47 * 1024usize).saturating_sub(priority.len() + 512);
         let skip = lines.len().saturating_sub(REPORT_LOG_LINES);
         let tail = lines[skip..].join("\n");
@@ -1341,9 +1347,21 @@ impl Report {
                 47 * 1024,
             )
             .to_owned(),
+            ram_total_mb,
+            ram_free_mb,
             contact: String::new(),
         }
     }
+}
+
+/// "---- memory ----\n16384 MB total, 4096 MB free\n", with "unknown" for what couldn't be read.
+fn memory_section(total_mb: Option<u64>, free_mb: Option<u64>) -> String {
+    let mb = |v: Option<u64>| v.map_or_else(|| "unknown".to_owned(), |v| format!("{v} MB"));
+    format!(
+        "\n---- memory ----\n{} total, {} free\n",
+        mb(total_mb),
+        mb(free_mb)
+    )
 }
 
 /// Resolve inventory from the untrimmed Fabric report, or its startup list when Minecraft
@@ -1978,6 +1996,34 @@ mod tests {
         assert!(matched.contains("failed to download"));
         assert!(diagnose("OneConfig loaded successfully\nexit code 1").is_none());
         assert!(diagnose("Unrelated mod failed to download texture").is_none());
+    }
+
+    #[test]
+    fn built_report_carries_installed_and_free_memory() {
+        let noise = "noise\n".repeat(4000);
+        let report = Report::build("1.21.1", "Fabric", "unknown", &[&noise], &[], None, None);
+        assert!(report.log.contains("---- memory ----\n"));
+        if let (Some(total), Some(free)) = (report.ram_total_mb, report.ram_free_mb) {
+            assert!(
+                report
+                    .log
+                    .contains(&format!("{total} MB total, {free} MB free\n"))
+            );
+            assert!(free <= total);
+        }
+        assert!(report.log.len() <= 48 * 1024);
+    }
+
+    #[test]
+    fn memory_section_marks_unreadable_values() {
+        assert_eq!(
+            memory_section(Some(16384), Some(4096)),
+            "\n---- memory ----\n16384 MB total, 4096 MB free\n"
+        );
+        assert_eq!(
+            memory_section(None, None),
+            "\n---- memory ----\nunknown total, unknown free\n"
+        );
     }
 
     #[test]
