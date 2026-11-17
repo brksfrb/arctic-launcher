@@ -18,6 +18,7 @@
   "tasks.choose_a_skin": "Escolha uma skin",
   "tasks.choose_a_world_archive": "Escolha um arquivo de mundo",
   "tasks.choose_an_account_to_play": "Escolha uma conta para jogar",
+  "tasks.chosen_file_is_tagged_for_another": "O arquivo escolhido está marcado para outra versão do Minecraft.",
   "tasks.close_minecraft_before_switching_profiles": "Feche o Minecraft antes de trocar de perfil.",
   "tasks.closed": "{title} fechou",
   "tasks.closed_unexpectedly": "{title} fechou inesperadamente",
@@ -42,6 +43,7 @@
   "tasks.exit_code": "Código de saída {c}.",
   "tasks.files_copied": "{files} arquivos copiados",
   "tasks.files_were_already_there_yours_were_kept": "{kept} arquivos já estavam lá; os seus foram mantidos",
+  "tasks.finding_a_version": "A procurar uma versão",
   "tasks.finish_adding_the_account_first": "Termine de adicionar a conta primeiro.",
   "tasks.finish_the_discord_login_in_your_browser": "Conclua o login do Discord no navegador",
   "tasks.folder_with_instances": "Pasta com instâncias",
@@ -166,6 +168,5 @@
   "tasks.you_can_turn_this_question_back_on_in": "Você pode reativar esta pergunta em Configurações.",
   "tasks.youll_see_it_next_time_you_play": "Você vai ver na próxima vez que jogar.",
   "tasks.your_discord_account": "sua conta do Discord",
-  "tasks.your_profile_and_friends_are_here_now": "Seu perfil e seus amigos agora estão aqui",
-  "tasks.chosen_file_is_tagged_for_another": "O arquivo escolhido está marcado para outra versão do Minecraft."
+  "tasks.your_profile_and_friends_are_here_now": "Seu perfil e seus amigos agora estão aqui"
 }
