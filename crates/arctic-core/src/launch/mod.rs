@@ -471,13 +471,13 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 kind,
                 loaders::LoaderKind::Fabric | loaders::LoaderKind::Quilt
             ) {
-                // An older Fabric Loader than the mod needs would stop the
-                // game at startup: play without the Arctic Client then.
-                let fits = kind != loaders::LoaderKind::Fabric
-                    || arctic_mod::loader_fits(&vanilla.id, loader_version);
+                // Quilt provides its own Fabric compatibility version, not its loader version.
+                let fits =
+                    arctic_mod_fits(dirs, &vanilla.id, kind, loader_version, &profile, progress)?;
                 if req.instance.arctic_mod && !fits {
                     log::warn!(
-                        "Fabric Loader {loader_version} is too old for the Arctic Client on {}; starting without it",
+                        "{} Loader {loader_version} cannot provide the Fabric Loader version needed by the Arctic Client on {}; starting without it",
+                        kind.label(),
                         vanilla.id
                     );
                 }
@@ -519,7 +519,8 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                     log::warn!("couldn't cut Fabric API down: {e}");
                 }
                 timer.step("performance mods");
-                share_session = req.instance.arctic_mod && arctic_mod::supports(&vanilla.id);
+                share_session =
+                    req.instance.arctic_mod && fits && arctic_mod::supports(&vanilla.id);
             } else if kind == loaders::LoaderKind::Forge {
                 // Forge instances: the Arctic Client's Forge build, where there is one (1.8.9).
                 arctic_mod::sync_forge(
@@ -595,6 +596,34 @@ impl StepTimer {
             self.steps.join(", ")
         );
     }
+}
+
+/// Imports and shares keep the chosen Quilt loader; check its actual compatibility at launch.
+fn arctic_mod_fits(
+    dirs: &DataDirs,
+    game: &str,
+    kind: loaders::LoaderKind,
+    loader_version: &str,
+    profile: &VersionJson,
+    progress: Progress,
+) -> Result<bool> {
+    if kind != loaders::LoaderKind::Quilt {
+        return Ok(arctic_mod::loader_fits(game, loader_version));
+    }
+    if arctic_mod::min_loader(game).is_none() {
+        return Ok(true);
+    }
+    let libs = files::resolve_libraries(dirs, profile, &RuleEnv::for_version(profile));
+    let Some((jar, _)) = libs.main_class else {
+        return Ok(false);
+    };
+    let jobs = libs
+        .jobs
+        .into_iter()
+        .filter(|job| job.dest == jar)
+        .collect();
+    download_all("Checking Quilt compatibility", jobs, progress)?;
+    Ok(arctic_mod::quilt_loader_fits(game, &jar))
 }
 
 /// The loader to launch with. Vanilla instances run on Fabric, invisible
@@ -1034,6 +1063,71 @@ fn placeholders(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quilt_client_fit_reads_the_selected_jar_and_removes_an_incompatible_client() {
+        use loaders::LoaderKind;
+        use std::io::Write;
+
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        let game = "1.21.11";
+        assert_eq!(arctic_mod::min_loader(game).as_deref(), Some("0.19.5"));
+        // https://github.com/QuiltMC/quilt-loader/blob/0.30.0-beta.3/src/main/resources/quilt.mod.json
+        let metadata = include_str!("../../tests/fixtures/quilt-loader-0.30.0-beta.3.mod.json");
+        let profile: VersionJson = serde_json::from_value(serde_json::json!({
+            "id": "quilt-loader-0.30.0-beta.3-1.21.11",
+            "mainClass": "org.quiltmc.loader.impl.launch.knot.KnotClient",
+            "libraries": [{"name": "org.quiltmc:quilt-loader:0.30.0-beta.3", "url": "https://example.invalid/"}]
+        })).unwrap();
+        let jar = dirs
+            .libraries()
+            .join(crate::versions::maven_path("org.quiltmc:quilt-loader:0.30.0-beta.3").unwrap());
+        fs::create_dir_all(jar.parent().unwrap()).unwrap();
+        let mods = dir.path().join("mods");
+        for (metadata, expected) in [
+            (metadata.to_owned(), false),
+            // Synthetic future compatibility declaration; Quilt's version stays unchanged.
+            (metadata.replace("0.18.4", "0.19.5"), true),
+            (metadata.replace("fabricloader", "other"), false),
+            ("{}".to_owned(), false),
+            ("broken metadata".to_owned(), false),
+        ] {
+            let mut zip = zip::ZipWriter::new(fs::File::create(&jar).unwrap());
+            zip.start_file("quilt.mod.json", zip::write::SimpleFileOptions::default())
+                .unwrap();
+            zip.write_all(metadata.as_bytes()).unwrap();
+            zip.finish().unwrap();
+            let fits = arctic_mod_fits(
+                &dirs,
+                game,
+                LoaderKind::Quilt,
+                "0.30.0-beta.3",
+                &profile,
+                &|_| {},
+            )
+            .unwrap();
+            assert_eq!(fits, expected);
+            arctic_mod::sync(&mods, game, true).unwrap();
+            assert!(mods.join(arctic_mod::FILE_NAME).exists());
+            arctic_mod::sync(&mods, game, fits).unwrap();
+            assert_eq!(mods.join(arctic_mod::FILE_NAME).exists(), expected);
+        }
+        assert!(
+            !arctic_mod_fits(&dirs, game, LoaderKind::Fabric, "0.18.4", &profile, &|_| {}).unwrap()
+        );
+        assert!(
+            arctic_mod_fits(&dirs, game, LoaderKind::Fabric, "0.19.5", &profile, &|_| {}).unwrap()
+        );
+        assert!(arctic_mod::quilt_loader_fits(
+            "unsupported-game",
+            Path::new("missing.jar")
+        ));
+        assert!(!arctic_mod::quilt_loader_fits(
+            game,
+            Path::new("missing.jar")
+        ));
+    }
 
     #[test]
     fn quick_play_uses_the_versions_own_flags() {
