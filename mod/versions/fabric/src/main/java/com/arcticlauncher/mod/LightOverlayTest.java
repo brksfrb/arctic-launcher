@@ -56,26 +56,39 @@ final class LightOverlayTest {
 		at(36, () -> WorldTest.shot("cave-no-safe"));
 		at(37, () -> { ArcticClient.config().lightShowSafe = true; ArcticClient.config().lightStyle = 2; });
 		at(42, () -> WorldTest.shot("cave-numbers"));
-		at(43, () -> { ArcticClient.config().lightStyle = 0; hud(false); com.arcticlauncher.client.menu.Menus.open("lightoverlay"); });
-		at(48, () -> WorldTest.shot("settings"));
-		at(49, () -> { Compat.setScreen(null); command("tp @s -2.5 220 20 180 28"); hud(true); });
+		// Numbers read from any side: the lit area seen from the east (looking west).
+		at(43, () -> command("tp @s 12.5 220 20 90 28"));
+		at(47, () -> {
+			double[] cam = ArcticClient.platform().camera();
+			ArcticMod.LOG.info("lightoverlay-east camera={} position={}", cam == null ? null : java.util.Arrays.toString(cam),
+					java.util.Arrays.toString(ArcticClient.platform().position()));
+			WorldTest.shot("lit-numbers-east");
+		});
+		// A torch placed in the dark cave flips the markers around it to green within a moment.
+		at(48, () -> { ArcticClient.config().lightStyle = 0; command("tp @s 92.5 220 -10 22 25"); });
+		at(53, () -> WorldTest.shot("cave-before-torch"));
+		at(54, () -> command("setblock 88 220 2 minecraft:torch"));
+		at(55, () -> WorldTest.shot("cave-torch-1s"));
+		at(57, () -> { ArcticClient.config().lightStyle = 0; hud(false); com.arcticlauncher.client.menu.Menus.open("lightoverlay"); });
+		at(62, () -> WorldTest.shot("settings"));
+		at(63, () -> { Compat.setScreen(null); command("tp @s -2.5 220 20 180 28"); hud(true); });
 		if (Boolean.getBoolean("arctic.lo.fps")) {
-			at(60, () -> ArcticClient.config().lightOverlay = false);
+			at(74, () -> ArcticClient.config().lightOverlay = false);
 			for (int i = 0; i < 12; i++) {
-				at(62 + i, () -> FPS.add(-Minecraft.getInstance().getFps()));
+				at(76 + i, () -> FPS.add(-Compat.fps()));
 			}
-			at(75, () -> ArcticClient.config().lightOverlay = true);
+			at(89, () -> ArcticClient.config().lightOverlay = true);
 			for (int i = 0; i < 12; i++) {
-				at(78 + i, () -> FPS.add(Minecraft.getInstance().getFps()));
+				at(92 + i, () -> FPS.add(Compat.fps()));
 			}
-			at(92, () -> {
+			at(106, () -> {
 				double off = 0, on = 0; int no = 0, nn = 0;
 				for (int f : FPS) { if (f < 0) { off += -f; no++; } else { on += f; nn++; } }
 				ArcticMod.LOG.info("lightoverlay-fps off={} on={} (samples {}/{}) raw={} status={} vertices={}", no == 0 ? 0 : off / no, nn == 0 ? 0 : on / nn, no, nn, FPS, ArcticClient.lightOverlay().status(), ArcticClient.lightOverlay().mesh().vertices);
 			});
-			at(94, () -> Minecraft.getInstance().stop());
+			at(108, () -> Minecraft.getInstance().stop());
 		} else {
-			at(55, () -> Minecraft.getInstance().stop());
+			at(66, () -> Minecraft.getInstance().stop());
 		}
 	}
 }

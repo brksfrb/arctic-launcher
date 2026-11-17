@@ -11,11 +11,24 @@ final class LightOverlayTest {
 	private static final java.util.List<Integer> FPS = new java.util.concurrent.CopyOnWriteArrayList<Integer>();
 	private LightOverlayTest() {}
 	static void start() {
+		if (Boolean.getBoolean("arctic.lo.server")) {
+			// On a local server (you're op there): the same scene once you're in its world.
+			TIMER.schedule(() -> run(LightOverlayTest::awaitWorld), 10, TimeUnit.SECONDS);
+			return;
+		}
 		TIMER.schedule(() -> run(() -> LegacyWorldTest.createTestWorld(LightOverlayTest::scene)), 10, TimeUnit.SECONDS);
 	}
 	private static void run(Runnable r) { LegacyHooks.onNextFrame(r); }
 	private static void command(String s) { LegacyWorldTest.command(s); }
 	private static void at(int seconds, Runnable r) { TIMER.schedule(() -> run(r), seconds, TimeUnit.SECONDS); }
+	private static void awaitWorld() {
+		MinecraftClient mc = MinecraftClient.getInstance();
+		if (mc.world != null && mc.player != null && mc.currentScreen == null) {
+			TIMER.schedule(() -> run(LightOverlayTest::scene), 6, TimeUnit.SECONDS);
+		} else {
+			TIMER.schedule(() -> run(LightOverlayTest::awaitWorld), 1, TimeUnit.SECONDS);
+		}
+	}
 	private static void scene() {
 		command("tp @p 0.5 220 -7 0 0");
 		TIMER.schedule(() -> run(LightOverlayTest::build), 7, TimeUnit.SECONDS);
@@ -51,27 +64,35 @@ final class LightOverlayTest {
 		at(36, () -> LegacyWorldTest.shot("cave-no-safe"));
 		at(37, () -> { ArcticClient.config().lightShowSafe = true; ArcticClient.config().lightStyle = 2; });
 		at(42, () -> LegacyWorldTest.shot("cave-numbers"));
-		at(43, () -> { ArcticClient.config().lightStyle = 0; MinecraftClient.getInstance().options.hudHidden = false;
+		// Numbers read from any side: the lit area seen from the east (looking west).
+		at(43, () -> command("tp @p 12.5 220 20 90 28"));
+		at(47, () -> LegacyWorldTest.shot("lit-numbers-east"));
+		// A torch placed in the dark cave flips the markers around it to green within a moment.
+		at(48, () -> { ArcticClient.config().lightStyle = 0; command("tp @p 92.5 220 -10 22 25"); });
+		at(53, () -> LegacyWorldTest.shot("cave-before-torch"));
+		at(54, () -> command("setblock 88 220 2 minecraft:torch"));
+		at(55, () -> LegacyWorldTest.shot("cave-torch-1s"));
+		at(57, () -> { ArcticClient.config().lightStyle = 0; MinecraftClient.getInstance().options.hudHidden = false;
 			com.arcticlauncher.client.menu.Menus.open("lightoverlay"); });
-		at(48, () -> LegacyWorldTest.shot("settings"));
-		at(49, () -> { MinecraftClient.getInstance().setScreen(null); command("tp @p -2.5 220 20 180 28"); MinecraftClient.getInstance().options.hudHidden = true; });
+		at(62, () -> LegacyWorldTest.shot("settings"));
+		at(63, () -> { MinecraftClient.getInstance().setScreen(null); command("tp @p -2.5 220 20 180 28"); MinecraftClient.getInstance().options.hudHidden = true; });
 		if (Boolean.getBoolean("arctic.lo.fps")) {
-			at(60, () -> ArcticClient.config().lightOverlay = false);
+			at(74, () -> ArcticClient.config().lightOverlay = false);
 			for (int i = 0; i < 12; i++) {
-				at(62 + i, () -> FPS.add(-MinecraftClient.getCurrentFps()));
+				at(76 + i, () -> FPS.add(-MinecraftClient.getCurrentFps()));
 			}
-			at(75, () -> ArcticClient.config().lightOverlay = true);
+			at(89, () -> ArcticClient.config().lightOverlay = true);
 			for (int i = 0; i < 12; i++) {
-				at(78 + i, () -> FPS.add(MinecraftClient.getCurrentFps()));
+				at(92 + i, () -> FPS.add(MinecraftClient.getCurrentFps()));
 			}
-			at(92, () -> {
+			at(106, () -> {
 				double off = 0, on = 0; int no = 0, nn = 0;
 				for (int f : FPS) { if (f < 0) { off += -f; no++; } else { on += f; nn++; } }
 				ArcticLegacy.LOG.info("lightoverlay-fps off={} on={} (samples {}/{}) raw={} status={} vertices={}", no == 0 ? 0 : off / no, nn == 0 ? 0 : on / nn, no, nn, FPS, ArcticClient.lightOverlay().status(), ArcticClient.lightOverlay().mesh().vertices);
 			});
-			at(94, () -> MinecraftClient.getInstance().scheduleStop());
+			at(108, () -> MinecraftClient.getInstance().scheduleStop());
 		} else {
-			at(55, () -> MinecraftClient.getInstance().scheduleStop());
+			at(66, () -> MinecraftClient.getInstance().scheduleStop());
 		}
 	}
 }
