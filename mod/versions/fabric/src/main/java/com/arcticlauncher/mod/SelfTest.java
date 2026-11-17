@@ -66,6 +66,10 @@ final class SelfTest {
 			StampWidthTest.start();
 			return;
 		}
+		if ("friendsvc".equals(System.getProperty("arctic.selftest"))) {
+			FriendsVcTest.start();
+			return;
+		}
 		if ("freezechat".equals(System.getProperty("arctic.selftest"))) {
 			FreezeChatTest.start();
 			return;

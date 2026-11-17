@@ -55,6 +55,10 @@ final class LegacySelfTest {
 			LegacyStampWidthTest.start();
 			return;
 		}
+		if ("friendsvc".equals(mode)) {
+			LegacyFriendsVcTest.start();
+			return;
+		}
 		if ("freezechat".equals(mode)) {
 			LegacyFreezeChatTest.start();
 			return;

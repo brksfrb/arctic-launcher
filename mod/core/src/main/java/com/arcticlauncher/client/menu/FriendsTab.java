@@ -27,6 +27,9 @@ final class FriendsTab {
 	private static final int OFFLINE = 0xFF64748B;
 	private static final int THUMB_W = 96;
 	private static final int LINE = 10;
+	/** The status line under the panel's content: 8 px of text and a gap above it. */
+	private static final int STATUS_H = 12;
+	private int statusY;
 
 	/** The friend whose chat is open (null = the list); kept while the game runs. */
 	private static String chatWith;
@@ -44,7 +47,9 @@ final class FriendsTab {
 
 	void build(final Host host, int x, int top, int w, int bottomY) {
 		final Social social = ArcticClient.social();
-		bottom = bottomY;
+		// Leave the last line for the status text, with the panel's own padding under it.
+		bottom = bottomY - STATUS_H;
+		statusY = bottomY - 8;
 		if (social == null || !social.available()) {
 			return;
 		}
@@ -82,6 +87,9 @@ final class FriendsTab {
 						}
 					});
 			host.add(key).bounds(x + w - 70, y, 70, BTN_H);
+			host.add(new com.arcticlauncher.client.ui.Toggle(Lang.t("social.voice_chat"), voice.statusText(),
+					Form.binding(voice::enabled, voice::setEnabled)))
+					.bounds(x, y - 3, w - (voice.active() ? 156 : 76), ROW);
 			host.listenKeys(key);
 			y += ROW;
 		}
@@ -220,7 +228,7 @@ final class FriendsTab {
 			return;
 		}
 		if (!social.status().isEmpty()) {
-			g.text(Draw.fit(g, social.status(), w, x, bottom + 4), x, bottom + 4, s.accent, false);
+			g.text(Draw.fit(g, social.status(), w, x, statusY), x, statusY, s.accent, false);
 		}
 		if (chatWith != null) {
 			drawChat(g, s, social, x, top + BTN_H + 6, w);
@@ -233,10 +241,6 @@ final class FriendsTab {
 		}
 		int y = top;
 		if (voice != null && voice.available()) {
-			String state = !voice.enabled() ? Lang.t("social.voice_chat_off_turn_it_on_in_arctic_launcher")
-					: !voice.active() ? Lang.t("social.voice_chat_on_starts_on_a_server")
-					: voice.listenOnly() ? Lang.t("social.voice_chat_listening_only_microphone_blocked") : Lang.t("social.voice_chat_on_push_to_talk");
-			g.text(Draw.fit(g, state, w - (voice.active() ? 156 : 80), x, y + 4), x, y + 4, voice.active() ? s.accent : s.muted, false);
 			y += ROW;
 		}
 		Duel duel = ArcticClient.duel();
@@ -348,6 +352,9 @@ final class FriendsTab {
 		}
 		VoiceLink voice = ArcticClient.voice();
 		b.append(voiceOpen).append(voice != null && voice.active());
+		if (voice != null) {
+			b.append(voice.statusText());
+		}
 		Duel duel = ArcticClient.duel();
 		b.append(duel != null && duel.hosting());
 		if (voice != null) {

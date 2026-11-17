@@ -1469,6 +1469,10 @@ impl eframe::App for ArcticApp {
             self.settings.voice.muted = muted;
             self.persist_settings();
         }
+        if let Some(on) = self.voice.take_enabled() {
+            self.settings.voice.enabled = on;
+            self.persist_settings();
+        }
         self.voice
             .update(&self.dirs, &self.settings.voice, self.accounts.active());
         self.voice.tick();
