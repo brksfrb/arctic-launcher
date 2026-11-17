@@ -105,6 +105,7 @@
 		"ServerListPingerProxyMixin",
 <% if (!forge) { %>		"ServerAddressMixin",
 <% } %>		"LoginSessionMixin",
+		"OfflineJoinMixin",
 		"ScoreboardRemoveMixin",
 		"ClientPlayerSwingMixin",
 		"ServerPingPoolMixin",
