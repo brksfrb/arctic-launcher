@@ -100,7 +100,11 @@ impl Tasks {
                     let result = t
                         .friend_action_blocking(account.clone(), &action)
                         .map_err(|e| e.to_string());
-                    t.send(Event::FriendDone(result));
+                    if let FriendAction::Invite(friend, to) = action {
+                        t.send(Event::FriendInvited(account.id.clone(), friend, to, result));
+                    } else {
+                        t.send(Event::FriendDone(result));
+                    }
                 }
             }
             t.friends_refresh(account);
