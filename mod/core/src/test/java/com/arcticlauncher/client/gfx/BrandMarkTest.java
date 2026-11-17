@@ -12,7 +12,7 @@ class BrandMarkTest {
 	@Test
 	void rolesKeepGradientAndCacheBySizeAndRole() {
 		String[] roles = {"founder", "dev", "admin", "mod", "beta"};
-		int[] colors = {0xFFC93C, 0x3CE0FF, 0xFF5A5A, 0x5AE07A, 0xB07CFF};
+		int[] colors = {0xE8B42A, 0x00BCE0, 0xFF5A5A, 0x5AE07A, 0xB07CFF};
 		for (int i = 0; i < roles.length; i++) {
 			assertEquals(colors[i], com.arcticlauncher.client.feature.Badge.COLORS[i + 1]);
 			int[] pixels = BrandMark.raster(64, roles[i]);
