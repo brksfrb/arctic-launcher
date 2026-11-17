@@ -800,6 +800,13 @@ final class ModCatalog {
 	private static void social(List<Mod> out, ClientConfig c) {
 		out.add(new Mod("friends", Lang.t("mods.friends"), Lang.t("mods.whos_online_chat_screenshots_voice"), "friends", Category.SOCIAL, "voice duel invite")
 				.page(FriendsPage::new));
+		out.add(new Mod("voice", Lang.t("social.voice_chat"), Lang.t("social.voice_mod_description"), "friends", Category.SOCIAL, "voice mic microphone talk proximity push to talk")
+				.toggle(() -> ArcticClient.voice() != null && ArcticClient.voice().enabled(), on -> {
+					if (ArcticClient.voice() != null) {
+						ArcticClient.voice().setEnabled(on);
+					}
+				})
+				.settings(ChatForms::voice));
 		out.add(new Mod("account", Lang.t("mods.account"), Lang.t("mods.switch_accounts_or_use_a_proxy"), "account", Category.CLIENT, "proxy login") // i18n-ignore
 				.page(AccountPage::new));
 		out.add(new Mod("lookscheck", Lang.t("mods.cosmetics_check"), Lang.t("mods.why_cant_others_see_my_look_what_this_game"), "looks", Category.CLIENT,

@@ -66,6 +66,9 @@ struct GameState {
     /// Mute or unmute this player (their UUID), picked in game.
     #[serde(default)]
     mute: Option<String>,
+    /// Turn voice chat on or off, picked in game.
+    #[serde(default)]
+    enable: Option<bool>,
     /// Simple Voice Chat's secret, on servers that run it.
     #[serde(default)]
     svc: Option<GameSvc>,
@@ -94,6 +97,8 @@ struct State {
     status: String,
     /// The game changed who's muted; the launcher saves it.
     muted_changed: bool,
+    /// The game switched voice chat on or off; the launcher saves it.
+    enabled_changed: bool,
     /// Voice failed to start; don't try again before this.
     retry_at: Option<Instant>,
 }
@@ -159,6 +164,7 @@ impl VoiceHub {
                 place: None,
                 status: String::new(),
                 muted_changed: false,
+                enabled_changed: false,
                 retry_at: None,
             })),
         }
@@ -179,6 +185,9 @@ impl VoiceHub {
         if st.muted_changed {
             // The game's choice wins until the launcher has taken it.
             settings.muted = st.settings.muted.clone();
+        }
+        if st.enabled_changed {
+            settings.enabled = st.settings.enabled;
         }
         let settings = &settings;
         if st.settings != *settings {
@@ -201,6 +210,16 @@ impl VoiceHub {
         }
         st.muted_changed = false;
         Some(st.settings.muted.clone())
+    }
+
+    /// Whether voice chat is on, when the game changed it since last asked.
+    pub fn take_enabled(&self) -> Option<bool> {
+        let mut st = lock(&self.state);
+        if !st.enabled_changed {
+            return None;
+        }
+        st.enabled_changed = false;
+        Some(st.settings.enabled)
     }
 
     /// Stop if the game hasn't reported in a while (call now and then).
@@ -285,6 +304,18 @@ impl VoiceHub {
         if let Some(uuid) = game.mute.as_deref() {
             toggle_mute(&mut st.settings.muted, uuid);
             st.muted_changed = true;
+        }
+        if let Some(on) = game.enable
+            && st.settings.enabled != on
+        {
+            st.settings.enabled = on;
+            st.enabled_changed = true;
+            st.retry_at = None;
+            st.status.clear();
+            if !on {
+                // Off means off now, not at the next frame.
+                self.stop(&mut st);
+            }
         }
         let server = game.server.filter(|s| !s.is_empty());
         let (Some(server), Some(me), true) = (server, game.me.as_ref(), st.settings.enabled) else {
@@ -518,6 +549,31 @@ mod tests {
         assert_eq!(muted, vec!["0f0e0d0c0b0a49088706050403020100".to_string()]);
         toggle_mute(&mut muted, "0f0e0d0c0b0a49088706050403020100");
         assert!(muted.is_empty());
+    }
+
+    #[test]
+    fn game_can_switch_voice_on_and_off() {
+        let dir = std::env::temp_dir().join(format!("arctic-voice-enable-{}", std::process::id()));
+        let hub = VoiceHub::new(DataDirs::new(&dir), VoiceSettings::default());
+        let reply: serde_json::Value =
+            serde_json::from_str(&hub.game_state(br#"{"enable":true}"#)).unwrap();
+        assert_eq!(reply["enabled"], true);
+        assert_eq!(hub.take_enabled(), Some(true));
+        assert_eq!(hub.take_enabled(), None);
+        // The launcher's own (stale) copy doesn't undo it before it's taken.
+        hub.game_state(br#"{"enable":false}"#);
+        hub.update(
+            &DataDirs::new(&dir),
+            &VoiceSettings {
+                enabled: true,
+                ..VoiceSettings::default()
+            },
+            None,
+        );
+        assert!(!lock(&hub.state).settings.enabled);
+        assert_eq!(hub.take_enabled(), Some(false));
+        let reply: serde_json::Value = serde_json::from_str(&hub.game_state(br"{}")).unwrap();
+        assert_eq!(reply["enabled"], false);
     }
 
     #[test]
