@@ -538,6 +538,15 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	}
 
 	/**
+	 * While you ride a mount that makes the game hide your hunger bar (any living mount; survival or adventure
+	 * only): {the mount's max health, 1 when the game also swaps the XP bar for the jump bar (else 0), XP progress
+	 * 0 to 1, XP level}. Null when not riding such a mount, or this version doesn't tell.
+	 */
+	default float[] mountedBars() {
+		return null;
+	}
+
+	/**
 	 * The food in your hand (main hand, else off hand) as {hunger it gives, saturation it adds}, or null when it
 	 * isn't food or this version doesn't tell (Saturation Bar flashes what eating it would do).
 	 */

@@ -141,6 +141,16 @@ final class WorldStats {
 		return p != null && !p.isCreative() && !p.isSpectator() && !(p.getVehicle() instanceof net.minecraft.world.entity.LivingEntity);
 	}
 
+	/** See Platform.mountedBars: {mount max health, jump bar 0/1, xp progress, xp level}, or null. */
+	static float[] mountedBars() {
+		LocalPlayer p = Minecraft.getInstance().player;
+		if (p == null || p.isCreative() || p.isSpectator() || !(p.getVehicle() instanceof net.minecraft.world.entity.LivingEntity)) {
+			return null;
+		}
+		net.minecraft.world.entity.LivingEntity mount = (net.minecraft.world.entity.LivingEntity) p.getVehicle();
+		return new float[] {mount.getMaxHealth(), HorseInfo.hasJumpBar(mount) ? 1f : 0f, p.experienceProgress, p.experienceLevel};
+	}
+
 	static float[] food() {
 		LocalPlayer p = Minecraft.getInstance().player;
 		if (p == null) {
