@@ -142,6 +142,26 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean boatLookWorks() {
+		// 1.8.9 has no limit on a rider's head turn.
+		//#if MC >= 1.9
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	@Override
+	public boolean ridingBoat() {
+		//#if MC >= 1.9
+		ClientPlayerEntity p = mc().player;
+		return p != null && p.getVehicle() instanceof net.minecraft.entity.vehicle.BoatEntity;
+		//#else
+		return false;
+		//#endif
+	}
+
+	@Override
 	public double[] position() {
 		ClientPlayerEntity p = mc().player;
 		return p == null ? null : new double[] {p.x, p.y, p.z, p.yaw, p.pitch};

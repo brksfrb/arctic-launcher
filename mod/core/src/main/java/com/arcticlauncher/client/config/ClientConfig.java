@@ -53,6 +53,8 @@ public final class ClientConfig {
 	public boolean fullbrightSkipLight;
 	public boolean zoomEnabled = true;
 	public boolean freelookEnabled = true;
+	/** Look all the way round from a boat (camera only; the angles sent to the server stay vanilla). Off by default. */
+	public boolean boatFreeLook;
 	public String zoomKey = "key.keyboard.c";
 	/** OptiFine-style smooth (cinematic) camera while zoomed. */
 	public boolean zoomSmoothCamera = true;
