@@ -254,6 +254,23 @@ impl ArcticApp {
                     })
                 })
         });
+        // CurseForge packs and app instances are refused, not ignored.
+        let refused = ui.input(|i| {
+            i.raw.dropped_files.iter().any(|f| {
+                let p = f.path();
+                arctic_core::curseforge::is_curseforge_instance(p)
+                    || (p.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"))
+                        && arctic_core::curseforge::is_curseforge_pack(p))
+            })
+        });
+        if refused {
+            self.toasts.push(
+                Kind::Error,
+                t!("instances.could_not_install_modpack"),
+                t!("instances.curseforge_not_supported"),
+            );
+            return;
+        }
         if let Some(path) = dropped
             && self.inst.pack_installing.is_none()
         {

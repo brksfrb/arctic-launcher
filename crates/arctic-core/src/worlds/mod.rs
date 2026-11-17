@@ -159,6 +159,7 @@ fn copy_dir(from: &Path, to: &Path) -> Result<()> {
 /// Unpack a world from a .zip (with `level.dat` at the root or one folder
 /// down) into `saves_dir`; returns the new folder name.
 pub fn import_zip(zip_path: &Path, saves_dir: &Path) -> Result<String> {
+    crate::curseforge::check_file(zip_path)?;
     let file = fs::File::open(zip_path).at(zip_path)?;
     let mut zip =
         zip::ZipArchive::new(file).map_err(|e| Error::Other(format!("not a zip file: {e}")))?;

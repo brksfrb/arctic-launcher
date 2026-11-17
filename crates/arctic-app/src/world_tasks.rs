@@ -61,7 +61,7 @@ impl Tasks {
                 None => Ok(t!("tasks.no_file_chosen").to_owned()),
                 Some(zip) => worlds::import_zip(&zip, &saves)
                     .map(|name| tf!("tasks.imported", name = name))
-                    .map_err(|e| e.to_string()),
+                    .map_err(|e| crate::i18n::core_error(&e.to_string())),
             };
             t.send(Event::WorldsDone(instance_id, result));
         });
