@@ -459,6 +459,8 @@ pub fn send_crash_report(base: &str, report: &crate::crash::Report) -> Result<()
             "title": report.title,
             "contact": report.contact,
             "log": report.log,
+            "ram_total_mb": report.ram_total_mb,
+            "ram_free_mb": report.ram_free_mb,
         }))?;
     let status = resp.status().as_u16();
     if (200..300).contains(&status) {
