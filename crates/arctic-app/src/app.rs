@@ -838,6 +838,11 @@ impl ArcticApp {
         let Some(account) = self.accounts.active().cloned() else {
             return;
         };
+        // A dead Microsoft login: ask for the sign-in instead of failing in the launch.
+        if account.needs_relogin() {
+            self.start_login(true);
+            return;
+        }
         let copy = self
             .runs
             .active()
@@ -1133,6 +1138,11 @@ impl ArcticApp {
             Event::AccountRefreshed(account) => {
                 self.accounts.upsert(account);
                 self.save_accounts();
+            }
+            Event::AccountRetired(id) => {
+                if self.accounts.retire(&id) {
+                    self.save_accounts();
+                }
             }
             Event::Launched(id, result) => {
                 let result = result.map(|(game, _log_file, version, java)| {

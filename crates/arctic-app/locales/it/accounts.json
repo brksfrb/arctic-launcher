@@ -2,7 +2,9 @@
   "accounts.accounts": "Account",
   "accounts.add_account": "Aggiungi account",
   "accounts.click_an_account_to_play_as_it_sign_ins_stay": "Clicca un account per giocare con quello. Gli accessi restano su questo PC, cifrati per il tuo utente.",
+  "accounts.microsoft_login_expired": "Il tuo accesso Microsoft è scaduto. Accedi di nuovo per giocare.",
   "accounts.offline": "Offline",
   "accounts.playing_as": "Stai giocando come {username}",
-  "accounts.remove_account": "Rimuovi account"
+  "accounts.remove_account": "Rimuovi account",
+  "accounts.sign_in_again": "Accedi di nuovo"
 }

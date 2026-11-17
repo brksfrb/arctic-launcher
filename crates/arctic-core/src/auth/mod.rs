@@ -14,9 +14,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use crate::Result;
 use crate::secret::Secret;
 use crate::storage::{DataDirs, load_json, save_json};
+use crate::{Error, Result};
 
 /// Refresh Minecraft tokens this long before they actually expire.
 const REFRESH_MARGIN_SECS: u64 = 5 * 60;
@@ -49,6 +49,10 @@ pub struct MicrosoftSession {
     /// Unix seconds when `access_token` expires.
     pub expires_at: u64,
     pub xuid: Option<String>,
+    /// Microsoft refused the refresh token for good: only a new sign-in helps.
+    /// The dead token is cleared, so it is never sent again.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub relogin: bool,
 }
 
 /// Everything the launch pipeline needs to know about the player.
@@ -75,12 +79,29 @@ impl Account {
         }
     }
 
-    /// True when a Microsoft token is expired or about to expire.
+    /// True when a Microsoft token is expired or about to expire (and can still be refreshed).
     pub fn needs_refresh(&self, now: u64) -> bool {
         match &self.kind {
             #[cfg(any(feature = "offline-accounts", test))]
             AccountKind::Offline => false,
-            AccountKind::Microsoft(s) => now + REFRESH_MARGIN_SECS >= s.expires_at,
+            AccountKind::Microsoft(s) => !s.relogin && now + REFRESH_MARGIN_SECS >= s.expires_at,
+        }
+    }
+
+    /// True when the Microsoft login is dead and the player has to sign in again.
+    pub fn needs_relogin(&self) -> bool {
+        match &self.kind {
+            #[cfg(any(feature = "offline-accounts", test))]
+            AccountKind::Offline => false,
+            AccountKind::Microsoft(s) => s.relogin,
+        }
+    }
+
+    /// Mark the Microsoft login as dead and drop its refresh token.
+    pub fn retire(&mut self) {
+        if let AccountKind::Microsoft(s) = &mut self.kind {
+            s.relogin = true;
+            s.refresh_token = Secret::default();
         }
     }
 
@@ -199,6 +220,18 @@ impl AccountStore {
             })
     }
 
+    /// Mark an account's Microsoft login as dead (see [`Account::retire`]).
+    /// False when there is no such account.
+    pub fn retire(&mut self, id: &str) -> bool {
+        match self.accounts.iter_mut().find(|a| a.id == id) {
+            Some(account) => {
+                account.retire();
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn set_active(&mut self, id: &str) -> bool {
         let exists = self.accounts.iter().any(|a| a.id == id);
         if exists {
@@ -212,11 +245,26 @@ impl AccountStore {
 /// session when it is (about to be) expired. The bool says whether it
 /// changed (and should be saved).
 pub fn ensure_fresh(dirs: &DataDirs, account: &Account) -> Result<(Account, bool)> {
+    if account.needs_relogin() {
+        return Err(Error::ReauthRequired);
+    }
     if !account.needs_refresh(now_secs()) {
         return Ok((account.clone(), false));
     }
     let cfg = microsoft::MsaConfig::load(dirs)?;
-    Ok((microsoft::refresh(&cfg, account)?, true))
+    match microsoft::refresh(&cfg, account) {
+        Ok(fresh) => Ok((fresh, true)),
+        Err(e) => {
+            // Keep the dead login from being sent again on the next run.
+            if e.is_reauth_required() {
+                let mut store = AccountStore::load(dirs)?;
+                if store.retire(&account.id) {
+                    store.save(dirs)?;
+                }
+            }
+            Err(e)
+        }
+    }
 }
 
 pub fn now_secs() -> u64 {
@@ -244,6 +292,7 @@ mod tests {
                 access_token: Secret::new("a"),
                 expires_at,
                 xuid: None,
+                relogin: false,
             }),
         }
     }
@@ -324,6 +373,46 @@ mod tests {
         assert!(acc.needs_refresh(1_000 - 60));
         assert!(!acc.needs_refresh(0));
         assert!(!offline::create("Alex").unwrap().needs_refresh(u64::MAX / 2));
+    }
+
+    #[test]
+    fn retired_login_is_not_refreshed_and_survives_a_save() {
+        let mut account = ms("u", 1_000);
+        assert!(!account.needs_relogin());
+        account.retire();
+        assert!(account.needs_relogin());
+        assert!(!account.needs_refresh(u64::MAX / 2));
+        let AccountKind::Microsoft(s) = &account.kind else {
+            unreachable!()
+        };
+        assert!(s.refresh_token.is_empty());
+        let json = serde_json::to_string(&account).unwrap();
+        let back: Account = serde_json::from_str(&json).unwrap();
+        assert!(back.needs_relogin() && !back.needs_refresh(u64::MAX / 2));
+        // Files from before the flag still load.
+        let healthy = serde_json::to_string(&ms("u", 1_000)).unwrap();
+        assert!(!healthy.contains("relogin"));
+        assert!(
+            !serde_json::from_str::<Account>(&healthy)
+                .unwrap()
+                .needs_relogin()
+        );
+    }
+
+    #[test]
+    fn signing_in_again_replaces_the_retired_login() {
+        let mut store = AccountStore::default();
+        let old = ms("u1", 10);
+        let id = old.id.clone();
+        store.upsert(old);
+        assert!(store.retire(&id));
+        assert!(!store.retire("nobody"));
+        assert!(store.accounts[0].needs_relogin());
+        store.upsert(ms("u1", 99_999_999_999));
+        assert_eq!(store.accounts.len(), 1);
+        assert_eq!(store.accounts[0].id, id);
+        assert!(!store.accounts[0].needs_relogin());
+        assert!(!store.accounts[0].needs_refresh(now_secs()));
     }
 
     #[test]

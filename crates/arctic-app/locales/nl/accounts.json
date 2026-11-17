@@ -2,7 +2,9 @@
   "accounts.accounts": "Accounts",
   "accounts.add_account": "Account toevoegen",
   "accounts.click_an_account_to_play_as_it_sign_ins_stay": "Klik op een account om ermee te spelen. Aanmeldingen blijven op deze pc, versleuteld voor jouw gebruiker.",
+  "accounts.microsoft_login_expired": "Je Microsoft-login is verlopen. Log opnieuw in om te spelen.",
   "accounts.offline": "Offline",
   "accounts.playing_as": "Speelt als {username}",
-  "accounts.remove_account": "Account verwijderen"
+  "accounts.remove_account": "Account verwijderen",
+  "accounts.sign_in_again": "Opnieuw inloggen"
 }
