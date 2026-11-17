@@ -73,7 +73,7 @@ impl Tasks {
         // A chosen version is checked before Iris is added for it.
         let selected = match chosen {
             Some((id, allow_other_game)) => {
-                progress(ProgressInfo::stage("Finding a version"));
+                progress(ProgressInfo::stage(t!("tasks.finding_a_version")));
                 Some(packs::selected_version(kind, id, game, allow_other_game)?)
             }
             None => None,
