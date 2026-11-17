@@ -294,6 +294,7 @@
   "instances.starting_the_download": "Начинаем загрузку",
   "instances.submit_for_review": "Отправить на проверку",
   "instances.submit_it_for_a_short_review_once_its": "Отправь на короткую проверку. После одобрения он появится у всех.",
+  "instances.servers_are_reviewed_before_theyre_listed": "Серверы проверяются до добавления в список. Чтобы получить одобрение, сервер должен работать, быть действительно пригодным для игры (а не находиться ещё в разработке), не быть мошенничеством или копией другого сервера и соблюдать правила Minecraft. Cracked-серверы и маленькие серверы приветствуются.",
   "instances.submitted_it_waits_for_a_quick_review_before": "Отправлено. Ждёт быстрой проверки, прежде чем появится.",
   "instances.supported_minecraft_versions": "Поддерживаемые версии Minecraft",
   "instances.surprise_me": "Удиви меня",
