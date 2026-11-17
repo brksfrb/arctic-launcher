@@ -374,3 +374,29 @@ fn discovery_facets_combine_filters_and_follow_sort() {
         r#"[["project_type:resourcepack"],["server_side:required","server_side:optional"]]"#
     );
 }
+
+#[test]
+fn selected_mod_plan_targets_only_the_chosen_instance_and_replaces_newer_version() {
+    let dir = tempfile::tempdir().unwrap();
+    let selected = dir.path().join("selected").join("mods");
+    let other = dir.path().join("other").join("mods");
+    fs::create_dir_all(&selected).unwrap();
+    fs::create_dir_all(&other).unwrap();
+    let version: Version = serde_json::from_value(json!({
+        "id": "older", "project_id": "A", "version_number": "1.0",
+        "files": [{"url": "https://cdn/older.jar", "filename": "older.jar", "primary": true}]
+    }))
+    .unwrap();
+    let (entry, job) = prepare_one(&version, false, &selected).unwrap();
+    assert_eq!(entry.version_id, "older");
+    assert_eq!(job.dest, selected.join("older.jar"));
+    fs::write(selected.join("newer.jar"), b"newer").unwrap();
+    fs::write(other.join("newer.jar"), b"unrelated").unwrap();
+    fs::write(&job.dest, b"older").unwrap();
+    let current = ModIndex::default().with(tracked("A", "newer.jar"));
+    let updated = record(&current, &[entry], &selected).unwrap();
+    assert_eq!(updated.mods[0].version_id, "older");
+    assert!(!selected.join("newer.jar").exists());
+    assert!(selected.join("older.jar").is_file());
+    assert_eq!(fs::read(other.join("newer.jar")).unwrap(), b"unrelated");
+}

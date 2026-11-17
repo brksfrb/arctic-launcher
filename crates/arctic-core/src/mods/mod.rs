@@ -259,6 +259,47 @@ pub fn install(
     index: &Path,
     progress: Progress,
 ) -> Result<Vec<InstalledMod>> {
+    install_selected(
+        project_id,
+        None,
+        game_version,
+        loader,
+        mods_dir,
+        index,
+        progress,
+    )
+}
+
+/// Install this exact mod version, retaining normal dependency resolution and replacement.
+/// Incompatible roots are rejected before downloading anything.
+pub fn install_version(
+    version_id: &str,
+    game_version: &str,
+    loader: LoaderKind,
+    mods_dir: &Path,
+    index: &Path,
+    progress: Progress,
+) -> Result<Vec<InstalledMod>> {
+    install_selected(
+        "",
+        Some(version_id),
+        game_version,
+        loader,
+        mods_dir,
+        index,
+        progress,
+    )
+}
+
+fn install_selected(
+    project_id: &str,
+    version_id: Option<&str>,
+    game_version: &str,
+    loader: LoaderKind,
+    mods_dir: &Path,
+    index: &Path,
+    progress: Progress,
+) -> Result<Vec<InstalledMod>> {
     progress(ProgressInfo::stage("Resolving dependencies"));
     let loaders = modrinth::compatible_loaders(loader, game_version);
     let target = Target {
@@ -272,7 +313,10 @@ pub fn install(
         loaders: &loaders,
         game_version,
     };
-    let plan = resolve::resolve(project_id, target, &installed, &source)?;
+    let plan = match version_id {
+        Some(id) => resolve::resolve_version(id, target, &installed, &source)?,
+        None => resolve::resolve(project_id, target, &installed, &source)?,
+    };
     let (mods, jobs) = prepare(&plan, mods_dir)?;
     let mods = with_project_info(mods);
 
