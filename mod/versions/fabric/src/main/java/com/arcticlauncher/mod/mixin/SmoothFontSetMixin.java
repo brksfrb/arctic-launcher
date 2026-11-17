@@ -27,12 +27,12 @@ abstract class SmoothFontSetMixin {
 	//#if MC >= 1.20.5
 	@ModifyVariable(method = "reload(Ljava/util/List;Ljava/util/Set;)V", at = @At("HEAD"), argsOnly = true)
 	private List<GlyphProvider.Conditional> arctic$inter(List<GlyphProvider.Conditional> providers) {
-		return SmoothFont.isDefault(name) ? SmoothFont.withInter(providers) : providers;
+		return SmoothFont.isDefault(name) ? SmoothFont.withInter(providers) : com.arcticlauncher.mod.EmoteFont.isBadge(name) ? com.arcticlauncher.mod.EmoteFont.badges(providers) : providers;
 	}
 	//#else
 	@ModifyVariable(method = "reload(Ljava/util/List;)V", at = @At("HEAD"), argsOnly = true)
 	private List<GlyphProvider> arctic$inter(List<GlyphProvider> providers) {
-		return SmoothFont.isDefault(name) ? SmoothFont.withInter(providers) : providers;
+		return SmoothFont.isDefault(name) ? SmoothFont.withInter(providers) : com.arcticlauncher.mod.EmoteFont.isBadge(name) ? com.arcticlauncher.mod.EmoteFont.badges(providers) : providers;
 	}
 	//#endif
 

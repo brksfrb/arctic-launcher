@@ -21,6 +21,10 @@ abstract class EmoteGlyphMixin {
 			char cp,
 			//#endif
 			CallbackInfoReturnable<BakedGlyph> cir) {
+		if (com.arcticlauncher.client.feature.Badge.roleGlyph(cp)) {
+			cir.setReturnValue(EmoteFont.badge(cp));
+			return;
+		}
 		EmoteAtlas.Emote emote = EmoteAtlas.glyph(cp);
 		if (emote != null) cir.setReturnValue(EmoteFont.baked(emote));
 	}
