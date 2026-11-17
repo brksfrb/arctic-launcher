@@ -81,8 +81,8 @@ final class LegacyCosmetics {
 
 	/** Upload a cuboid cosmetic's textures and bake its quads (the core calls from a worker thread). */
 	static void register(final String id, final Geometry geometry, final Animation idle, byte[] png, byte[] glowPng) {
-		final BufferedImage image = LegacyTextures.decode(png);
-		final BufferedImage glowImage = glowPng == null ? null : LegacyTextures.decode(glowPng);
+		final LegacyTextures.Pixels image = LegacyTextures.pixels(LegacyTextures.decode(png));
+		final LegacyTextures.Pixels glowImage = glowPng == null ? null : LegacyTextures.pixels(LegacyTextures.decode(glowPng));
 		if (image == null) {
 			return;
 		}
@@ -112,9 +112,9 @@ final class LegacyCosmetics {
 
 	/** Upload a sculpted cosmetic's images and group its primitives. */
 	static void register(final String id, final MeshModel mesh) {
-		final BufferedImage[] images = new BufferedImage[mesh.images.size()];
+		final LegacyTextures.Pixels[] images = new LegacyTextures.Pixels[mesh.images.size()];
 		for (int i = 0; i < images.length; i++) {
-			images[i] = LegacyTextures.decode(mesh.images.get(i));
+			images[i] = LegacyTextures.pixels(LegacyTextures.decode(mesh.images.get(i)));
 			if (images[i] == null) {
 				ArcticLegacy.LOG.warn("cosmetic {} (mesh): image {} can't be read", id, i);
 				return;

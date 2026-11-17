@@ -64,7 +64,8 @@
 <% } %>		"ServerTimeMixin",
 		"ChatPlaceholderMixin",
 		"MinecraftTickMixin",
-		"GlassModelMixin",<% if (ctmPackOrder) { %>
+<% if (badgeSpaces) { %>		"BadgeSpaceMixin",
+<% } %>		"GlassModelMixin",<% if (ctmPackOrder) { %>
 		"GlassPackOrderMixin",<% } %>
 		"GlassBakedQuadMixin",<% if (ctmQuadAccess) { %>
 		"GlassQuadAccess",<% } %>
@@ -77,9 +78,7 @@
 		"GlassContentsMixin",
 		"GlassStitchMixin",<% } else { %>
 		"GlassOldAtlasMixin",
-		"GlassOldImageMixin",<% if (ctmInfo) { %>
-		"GlassInfoAccess",<% } %><% if (ctmSpriteAccess) { %>
-		"GlassOldSpriteAccess",<% } %><% } %>
+		"GlassOldImageMixin",<% } %>
 		"ServerMenuScreenMixin",<% if (postBlur) { %>
 		"MotionBlurPostMixin",
 		"EffectsPackMixin",<% } %><% if (oldMotionBlur) { %>
@@ -104,14 +103,14 @@
 		"ScaledFontTextureMixin",<% } %><% if (gpuFontTexture && !scaledFont) { %>
 		"FontTextureMixin",<% } %><% if (textShader) { %>
 		"TextShaderMixin",<% } %><% if (textShaderOld) { %>
-		"TextShaderOldMixin",<% } %><% if (startup) { %>
+		"TextShaderOldMixin",<% } %><% if (startupTiming) { %>
 		"MainStartMixin",
 		"MinecraftReadyMixin",
 		"FirstScreenMixin",
 		"BootstrapMarkMixin",
 		"WindowMarkMixin",
+		"OverlayDoneMixin",<% } %><% if (startup) { %>
 		"CrashReportPreloadMixin",
-		"OverlayDoneMixin",
 		"LoadingFadeMixin",<% } %>
 		"WindowMaximizeMixin",
 		"WindowTitleMixin",

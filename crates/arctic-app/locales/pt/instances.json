@@ -343,5 +343,16 @@
   "instances.yes_delete": "Sim, excluir",
   "instances.yes_remove": "Sim, remover",
   "instances.you_get_a_code_to_put_in_your_servers_motd": "Você recebe um código para colocar no MOTD do seu servidor, provando que ele é seu. Depois ele aguarda uma revisão rápida antes de aparecer.",
-  "instances.your_server_list_hud_and_arctic_client": "Sua lista de servidores, as configurações de HUD e do Arctic Client, e as teclas, FOV e configurações de vídeo do Minecraft são iguais em todas as instâncias que as compartilham, então uma nova parece a que você já configurou."
+  "instances.your_server_list_hud_and_arctic_client": "Sua lista de servidores, as configurações de HUD e do Arctic Client, e as teclas, FOV e configurações de vídeo do Minecraft são iguais em todas as instâncias que as compartilham, então uma nova parece a que você já configurou.",
+  "instances.world_trash": "Lixeira ({count})",
+  "instances.world_trash_hint": "Os mundos excluídos ficam guardados por {days} dias e depois são removidos de vez.",
+  "instances.world_trash_kept": "Guardado por {days} dias. Abra a lixeira para restaurar.",
+  "instances.world_trash_note": "Os mundos excluídos ficam aqui por {days} dias e depois são removidos de vez.",
+  "instances.back_to_worlds": "Voltar aos mundos",
+  "instances.world_delete_sure": "Isto não pode ser desfeito. Tem certeza?",
+  "instances.world_restored": "{name} restaurado",
+  "instances.favorite_world": "Adicionar aos favoritos",
+  "instances.unfavorite_world": "Remover dos favoritos",
+  "instances.favorite_world_cannot_delete": "Mundos favoritos não podem ser excluídos. Remova-o primeiro dos favoritos.",
+  "instances.could_not_save_favorite": "Não foi possível salvar o favorito"
 }

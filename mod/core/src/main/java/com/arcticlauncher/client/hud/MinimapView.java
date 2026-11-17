@@ -1,5 +1,6 @@
 package com.arcticlauncher.client.hud;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -59,6 +60,12 @@ final class MinimapView {
 			this.color = color;
 			this.big = big;
 		}
+
+		/** Drawn exactly the same (the same bits, so NaN yaws match). */
+		boolean sameAs(Marker o) {
+			return Double.doubleToLongBits(x) == Double.doubleToLongBits(o.x) && Double.doubleToLongBits(z) == Double.doubleToLongBits(o.z)
+					&& Double.doubleToLongBits(yaw) == Double.doubleToLongBits(o.yaw) && color == o.color && big == o.big;
+		}
 	}
 
 	private final int[] grid = new int[GRID * GRID];
@@ -68,6 +75,35 @@ final class MinimapView {
 	private long stripeAt;
 	final int[] pixels = new int[PICTURE * PICTURE];
 	private final int[] strip = new int[GRID * STRIPE];
+	/** Bumped whenever {@link #grid} (or where it lies) changes, so the land picture knows when to be drawn again. */
+	private int gridVersion;
+	/**
+	 * The land part of the picture (no markers), kept with what it was drawn from: standing still (or only
+	 * others moving) the land is copied instead of sampled again for every pixel, every frame.
+	 */
+	private final int[] land = new int[PICTURE * PICTURE];
+	private boolean landValid;
+	private double landX;
+	private double landZ;
+	private double landYaw;
+	private double landBlocks;
+	private boolean landRotate;
+	private boolean landRound;
+	private int landVersion;
+	/** Each pixel's offset from the middle, in pixels (the same for rows and columns). */
+	private static final double[] OFFSET = offsets();
+	/** Per column (x) and per row (y): offset × direction, worked out once per drawing. */
+	private final double[] colX = new double[PICTURE];
+	private final double[] colZ = new double[PICTURE];
+
+	private static double[] offsets() {
+		double[] o = new double[PICTURE];
+		double half = PICTURE / 2.0;
+		for (int i = 0; i < PICTURE; i++) {
+			o[i] = i + 0.5 - half;
+		}
+		return o;
+	}
 
 	/** Keep the grid around (px, pz) and fresh. Game thread. */
 	void update(Columns columns, double px, double pz, long now) {
@@ -79,6 +115,7 @@ final class MinimapView {
 			if (!columns.read(gridX0, gridZ0, GRID, GRID, grid)) {
 				gridX0 = Integer.MIN_VALUE;
 			}
+			gridVersion++;
 			stripeAt = now;
 			return;
 		}
@@ -88,15 +125,27 @@ final class MinimapView {
 		if (now - stripeAt >= STRIPE_NANOS) {
 			stripeAt = now;
 			int rows = Math.min(STRIPE, GRID - nextStripe);
-			if (columns.read(gridX0, gridZ0 + nextStripe, GRID, rows, strip)) {
+			if (columns.read(gridX0, gridZ0 + nextStripe, GRID, rows, strip) && !sameRows(strip, nextStripe * GRID, rows * GRID)) {
 				System.arraycopy(strip, 0, grid, nextStripe * GRID, rows * GRID);
+				gridVersion++;
 			}
 			nextStripe = (nextStripe + rows) % GRID;
 		}
 	}
 
+	/** Does the grid already hold these colors from {@code at}? */
+	private boolean sameRows(int[] fresh, int at, int count) {
+		for (int k = 0; k < count; k++) {
+			if (grid[at + k] != fresh[k]) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	/** Move the grid to start at (x0, z0): what overlaps is kept, the rest read. */
 	private void shift(Columns columns, int x0, int z0) {
+		gridVersion++;
 		int dx = x0 - gridX0;
 		int dz = z0 - gridZ0;
 		if (Math.abs(dx) >= GRID || Math.abs(dz) >= GRID) {
@@ -166,20 +215,28 @@ final class MinimapView {
 			right = new double[] {-up[1], up[0]};
 		}
 		double half = PICTURE / 2.0;
-		for (int j = 0; j < PICTURE; j++) {
-			double oy = (j + 0.5 - half) * perPixel;
-			for (int i = 0; i < PICTURE; i++) {
-				double ox = (i + 0.5 - half) * perPixel;
-				double wx = px + ox * right[0] - oy * up[0];
-				double wz = pz + ox * right[1] - oy * up[1];
-				int c = colorAt((int) Math.floor(wx), (int) Math.floor(wz));
-				int color = c == 0 ? UNLOADED : c;
-				if (round) {
-					color = ROUND_ALPHA[j * PICTURE + i] | (color & 0xFFFFFF);
-				}
-				pixels[j * PICTURE + i] = color;
-			}
+		// The land only depends on where you are, the zoom, the shape, the grid, and (turning) your yaw.
+		boolean sameLand = landValid && px == landX && pz == landZ && blocks == landBlocks && rotate == landRotate
+				&& round == landRound && gridVersion == landVersion && (!rotate || yaw == landYaw);
+		// Nothing at all changed (you and everyone on the map standing still): the picture is already right.
+		if (sameLand && yaw == pictureYaw && arrowColor == pictureArrow && sameMarkers(markers)) {
+			return;
 		}
+		pictureYaw = yaw;
+		pictureArrow = arrowColor;
+		pictureMarkers = new ArrayList<Marker>(markers);
+		if (!sameLand) {
+			land(px, pz, perPixel, right, up, round);
+			landValid = true;
+			landX = px;
+			landZ = pz;
+			landYaw = yaw;
+			landBlocks = blocks;
+			landRotate = rotate;
+			landRound = round;
+			landVersion = gridVersion;
+		}
+		System.arraycopy(land, 0, pixels, 0, land.length);
 		double limit = half - 6;
 		for (Marker m : markers) {
 			double dx = (m.x - px) / perPixel;
@@ -202,6 +259,71 @@ final class MinimapView {
 			}
 		}
 		arrow(half, half, rotate ? 0 : screenAngle(yaw, false, 0), 11, arrowColor);
+	}
+
+	/**
+	 * Sample the grid for every pixel of the land picture. The same arithmetic as one formula per pixel
+	 * ({@code px + ox * right.x - oy * up.x}, floored), with the per-column and per-row products worked out
+	 * once and the floor done without Math.floor (a slow call on Java 8): the same pixels, bit for bit.
+	 */
+	private void land(double px, double pz, double perPixel, double[] right, double[] up, boolean round) {
+		double r0 = right[0];
+		double r1 = right[1];
+		for (int i = 0; i < PICTURE; i++) {
+			double ox = OFFSET[i] * perPixel;
+			colX[i] = ox * r0;
+			colZ[i] = ox * r1;
+		}
+		boolean empty = gridX0 == Integer.MIN_VALUE;
+		int x0 = gridX0;
+		int z0 = gridZ0;
+		for (int j = 0; j < PICTURE; j++) {
+			double oy = OFFSET[j] * perPixel;
+			double rowX = oy * up[0];
+			double rowZ = oy * up[1];
+			int row = j * PICTURE;
+			for (int i = 0; i < PICTURE; i++) {
+				double wx = px + colX[i] - rowX;
+				double wz = pz + colZ[i] - rowZ;
+				int c = 0;
+				if (!empty) {
+					int gx = floor(wx) - x0;
+					int gz = floor(wz) - z0;
+					if (gx >= 0 && gz >= 0 && gx < GRID && gz < GRID) {
+						c = grid[gz * GRID + gx];
+					}
+				}
+				int color = c == 0 ? UNLOADED : c;
+				if (round) {
+					color = ROUND_ALPHA[row + i] | (color & 0xFFFFFF);
+				}
+				land[row + i] = color;
+			}
+		}
+	}
+
+	/** (int) Math.floor(v), for the block coordinates a map can show. */
+	static int floor(double v) {
+		int t = (int) v;
+		return v < t && t != Integer.MIN_VALUE ? t - 1 : t;
+	}
+
+	/** What the picture in {@link #pixels} was last drawn with, beyond the land (null: not drawn). */
+	private List<Marker> pictureMarkers;
+	private double pictureYaw = Double.NaN;
+	private int pictureArrow;
+
+	private boolean sameMarkers(List<Marker> markers) {
+		List<Marker> last = pictureMarkers;
+		if (last == null || last.size() != markers.size()) {
+			return false;
+		}
+		for (int i = 0; i < last.size(); i++) {
+			if (!last.get(i).sameAs(markers.get(i))) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/** Which way a yaw points on the picture (radians, 0 = up, clockwise). */
@@ -244,7 +366,19 @@ final class MinimapView {
 		int y0 = (int) Math.floor(min(ys) - OUTLINE - 1);
 		int y1 = (int) Math.ceil(max(ys) + OUTLINE + 1);
 		for (int y = Math.max(0, y0); y < Math.min(PICTURE, y1); y++) {
-			for (int x = Math.max(0, x0); x < Math.min(PICTURE, x1); x++) {
+			int from = Math.max(0, x0);
+			int to = Math.min(PICTURE, x1);
+			if (cullRows) {
+				// Only where the dart comes within reach of this row: a pixel further than OUTLINE + SAMPLE_REACH
+				// from it is skipped below anyway (its middle is outside by more than that), so it isn't looked at.
+				double[] span = rowSpan(xs, ys, y + 0.5 - REACH, y + 0.5 + REACH);
+				if (span == null) {
+					continue;
+				}
+				from = Math.max(from, (int) Math.floor(span[0] - REACH - 0.5));
+				to = Math.min(to, (int) Math.ceil(span[1] + REACH - 0.5) + 1);
+			}
+			for (int x = from; x < to; x++) {
 				// Four samples per pixel for the edges. The middle tells for most pixels: its samples are
 				// within SAMPLE_REACH of it, so further in or out than that they all agree.
 				double middle = distanceInside(xs, ys, x + 0.5, y + 0.5);
@@ -274,6 +408,52 @@ final class MinimapView {
 				}
 			}
 		}
+	}
+
+	/** Off only in tests, to compare with every pixel of the box looked at. */
+	static boolean cullRows = true;
+	/** How far from the dart a pixel's middle can be and still be touched, with a margin for rounding. */
+	private static final double REACH = OUTLINE + SAMPLE_REACH + 0.01;
+	private final double[] span = new double[2];
+
+	/** The x range of the polygon's part between heights lo and hi, or null when it has none there. */
+	private double[] rowSpan(double[] xs, double[] ys, double lo, double hi) {
+		double min = Double.MAX_VALUE;
+		double max = -Double.MAX_VALUE;
+		int n = xs.length;
+		for (int i = 0, j = n - 1; i < n; j = i++) {
+			double ax = xs[j];
+			double ay = ys[j];
+			double bx = xs[i];
+			double by = ys[i];
+			double t0;
+			double t1;
+			if (ay == by) {
+				if (ay < lo || ay > hi) {
+					continue;
+				}
+				t0 = 0;
+				t1 = 1;
+			} else {
+				double ta = (lo - ay) / (by - ay);
+				double tb = (hi - ay) / (by - ay);
+				t0 = Math.max(0, Math.min(ta, tb));
+				t1 = Math.min(1, Math.max(ta, tb));
+				if (t0 > t1) {
+					continue;
+				}
+			}
+			double xa = ax + (bx - ax) * t0;
+			double xb = ax + (bx - ax) * t1;
+			min = Math.min(min, Math.min(xa, xb));
+			max = Math.max(max, Math.max(xa, xb));
+		}
+		if (min > max) {
+			return null;
+		}
+		span[0] = min;
+		span[1] = max;
+		return span;
 	}
 
 	/** How far (pixels) a point is inside a convex-or-dart polygon: negative outside. */

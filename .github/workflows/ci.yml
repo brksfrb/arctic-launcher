@@ -112,6 +112,7 @@ jobs:
           GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: gradle-v2
       - name: Live video integration tools
         run: bash .github/scripts/apt-install.sh --no-recommends ffmpeg
+      - run: python3 -m unittest discover -s mod/tools -p 'test_mixin*.py'
       - run: chmod +x mod/gradlew && mod/gradlew -p mod/core test
 
   mod-targets:

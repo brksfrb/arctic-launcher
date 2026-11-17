@@ -1,0 +1,265 @@
+---- full mod list (id version) ----
+amethyst_equipment 1.1.2
+appleskin 3.0.8+mc1.21.11
+architectury 19.0.1
+arctic 1.0.0
+armorisbetter 1.0.0
+badoptimizations 2.4.1
+better-enchant-commands 1.1.0
+betterenchantcommand 1.1.0
+bleedingslash 1.0.0
+blue_endless_jankson 1.2.3
+carpet 1.4.194+v251223
+cloth-basic-math 0.6.1
+cloth-config 21.11.153
+collective 8.32
+com_akuleshov7_ktoml-core-jvm 0.7.1
+com_moandjiezana_toml_toml4j 0.7.2
+com_twelvemonkeys_common_common-image 3.12.0
+com_twelvemonkeys_common_common-io 3.12.0
+com_twelvemonkeys_common_common-lang 3.12.0
+com_twelvemonkeys_imageio_imageio-core 3.12.0
+com_twelvemonkeys_imageio_imageio-metadata 3.12.0
+com_twelvemonkeys_imageio_imageio-webp 3.12.0
+conditional-mixin 0.6.3
+craftingg 1.3.3.6
+craftingg-api 1.0.3
+crosshairindicator 1.0.3
+cursed_craft 2.3
+customrecipe 1.5.1+1.21.11
+entityculling 1.10.5
+fabric-api 0.141.6+1.21.11
+fabric-api-base 1.0.5+4ebb5c083e
+fabric-api-lookup-api-v1 1.6.114+20dc27073e
+fabric-biome-api-v1 17.1.1+4fc5413f3e
+fabric-block-api-v1 1.1.10+4ebb5c083e
+fabric-block-view-api-v2 1.0.39+4ebb5c083e
+fabric-command-api-v2 2.4.7+6b42a6003e
+fabric-content-registries-v0 10.2.14+4fc5413f3e
+fabric-convention-tags-v1 2.1.55+7f945d5b3e
+fabric-convention-tags-v2 2.17.3+8ef948ba3e
+fabric-crash-report-info-v1 0.3.23+4ebb5c083e
+fabric-data-attachment-api-v1 1.8.48+eed0806f3e
+fabric-data-generation-api-v1 23.5.0+88d7da613e
+fabric-dimensions-v1 4.0.28+4fc5413f3e
+fabric-entity-events-v1 3.1.1+1d0ab4303e
+fabric-events-interaction-v0 4.1.1+3b89ecf63e
+fabric-game-rule-api-v1 2.0.3+4fc5413f3e
+fabric-item-api-v1 11.6.0+67f17bb43e
+fabric-item-group-api-v1 4.2.36+4fc5413f3e
+fabric-key-binding-api-v1 1.1.7+4fc5413f3e
+fabric-language-kotlin 1.14.2+kotlin.2.4.21
+fabric-lifecycle-events-v1 2.6.15+4ebb5c083e
+fabric-loot-api-v2 3.0.73+3f89f5a53e
+fabric-loot-api-v3 2.0.20+78c8b4663e
+fabric-message-api-v1 6.1.12+4ebb5c083e
+fabric-model-loading-api-v1 6.0.15+4fc5413f3e
+fabric-networking-api-v1 5.1.6+6b6d71a53e
+fabric-object-builder-api-v1 21.1.40+4fc5413f3e
+fabric-particles-v1 4.2.12+4fc5413f3e
+fabric-permissions-api-v0 0.6.1
+fabric-recipe-api-v1 8.2.4+4ebb5c083e
+fabric-registry-sync-v0 6.2.6+1718722b3e
+fabric-renderer-api-v1 8.0.3+f4ffd2e53e
+fabric-renderer-indigo 5.0.3+f4ffd2e53e
+fabric-rendering-fluids-v1 3.1.43+4ebb5c083e
+fabric-rendering-v1 16.2.10+0290ad933e
+fabric-resource-conditions-api-v1 5.0.35+4fc5413f3e
+fabric-resource-loader-v0 3.3.4+4fc5413f3e
+fabric-resource-loader-v1 1.0.10+78c8b4663e
+fabric-screen-api-v1 3.1.7+4ebb5c083e
+fabric-screen-handler-api-v1 1.3.162+4fc5413f3e
+fabric-serialization-api-v1 1.0.5+4ebb5c083e
+fabric-sound-api-v1 1.0.51+4fc5413f3e
+fabric-tag-api-v1 1.3.0+88d7da613e
+fabric-transfer-api-v1 6.0.25+4fc5413f3e
+fabric-transitive-access-wideners-v1 7.1.0+014c8cec3e
+fabricloader 0.20.1
+ferritecore 8.2.0
+fpsdisplay 1.2.0
+fullbrightnesstoggle 4.5
+fzzy_config 0.7.7+1.21.11
+godset 1.1.0
+heart-displacement 1.0.0
+immediatelyfast 1.14.2+1.21.11
+instantshield 1.0.0
+java 21
+liquidportals 1.0.0
+lithium 0.21.4+mc1.21.11
+macestun 1.0.0
+mc-worlds 1.8.0+1.21.11
+minecraft 1.21.11
+mixinextras 0.5.5
+mixinsquared 0.2.0
+modmenu 17.0.1
+more_spear_enchantments 1.1.1
+moreculling 1.6.2
+mousetweaks 2.30
+mr_breach_density 1.1
+mr_dirt_togod 1.1.1
+mr_extra_enchantments 2.1.3
+mr_gun_core 1-V1.0.15-data+resource
+mr_health_indicator 4
+mr_modern_guns 1.9.3
+mr_no_lungecooldown 1
+mr_poisoning_enchantment 1-v1.0.4
+mr_silvers_datapacktagslibrary 1.12
+mr_silvers_dynamic_durations_lib 1-ddl
+mr_silvers_effects_library 2.10
+mr_silvers_way_toomanymaces 1.29
+mr_stackable_totems 1-v1.2.0
+net_lenni0451_reflect 1.6.1+curseforge
+net_peanuuutz_tomlkt_tomlkt-jvm 0.3.7
+noslime 1.0.4
+noslime-legacy 1.0.4
+notenoughanimations 1.12.4
+only-elytra-hitbox 1.0.0
+org_jetbrains_kotlin_kotlin-reflect 2.4.21
+org_jetbrains_kotlin_kotlin-stdlib 2.4.21
+org_jetbrains_kotlin_kotlin-stdlib-jdk7 2.4.21
+org_jetbrains_kotlin_kotlin-stdlib-jdk8 2.4.21
+org_jetbrains_kotlinx_atomicfu-jvm 0.33.0
+org_jetbrains_kotlinx_kotlinx-coroutines-core-jvm 1.11.0
+org_jetbrains_kotlinx_kotlinx-coroutines-jdk8 1.11.0
+org_jetbrains_kotlinx_kotlinx-datetime-jvm 0.8.0
+org_jetbrains_kotlinx_kotlinx-io-bytestring-jvm 0.9.1
+org_jetbrains_kotlinx_kotlinx-io-core-jvm 0.9.1
+org_jetbrains_kotlinx_kotlinx-serialization-cbor-jvm 1.11.0
+org_jetbrains_kotlinx_kotlinx-serialization-core-jvm 1.11.0
+org_jetbrains_kotlinx_kotlinx-serialization-json-jvm 1.11.0
+org_quiltmc_parsers_gson 0.2.1
+org_quiltmc_parsers_json 0.2.1
+particle_core 0.3.2+1.21.11
+placeholder-api 2.8.2+1.21.10
+rainbowsandstuffmod 1.3.0-1.21.10
+reeses-sodium-options 2.2.0+mc1.21.11
+simple-armor-hud 1.21.11-1.7.0
+sodium 0.8.12+mc1.21.11
+sodium-extra 0.8.3+mc1.21.11
+stackplus 3.1.2
+stargate 1.7.0+1.21.11
+strengthspears 1.0.0
+tool_trims 3.0.7
+totem-of-infinity 1.5.0
+totemcounter 1.11.2+mc1.21.11
+transition 1.0.21
+trender 1.0.15
+ukulib 1.10.2+1.21.11
+usefulspear 1.0.0
+weaponsexpanded 1.9.3.1
+worldportal 0.0.10+1.21.11
+xaerolib 1.1.15
+xaeroworldmap 1.41.2
+yet_another_config_lib_v3 3.8.2+1.21.11-fabric
+zoomify 2.15.2+1.21.11
+
+---- mixin failure context ----
+agent installed; cache=off; preloader requested=true; replay requested=false
+failure begin
+class=net.minecraft.class_2674; thread=Render thread; role=main
+cache lookup=miss; input=live pre-mixin bytes; cache=off
+agent lock=1; preloader started=true; setup replay succeeded=false; replay plugin calls attempted=0; completed=0; shouldApply decisions attempted=0; completed=0; replay reason=
+error=org.spongepowered.asm.mixin.transformer.throwables.MixinTransformerError: An unexpected critical error was encountered
+pre-mixin methods (name+descriptor):
+<init>(Lnet/minecraft/class_1937;Lnet/minecraft/class_2338;Lnet/minecraft/class_2350;Z)V
+method_11537()Z
+method_23367(Lnet/minecraft/class_2680;)Z
+method_23675(Lnet/minecraft/class_2680;Lnet/minecraft/class_2680;)Z
+method_11540(Lnet/minecraft/class_2338;Lnet/minecraft/class_2350;)Z
+method_11539(II)V
+method_11538(Lnet/minecraft/class_2338;)Z
+method_35299()Lnet/minecraft/class_2350;
+method_11541()Ljava/util/List;
+method_11536()Ljava/util/List;
+targeting mixins (config:class; includes failing mixin):
+selected target mixin count=4
+carpet.mixins.json:carpet.mixins.PistonStructureResolver_customStickyMixin
+carpet.mixins.json:carpet.mixins.PistonStructureResolver_pushLimitMixin
+cursed_craft.mixins.json:ca.maximilian.cursed_craft.mixin.InfPiston
+lithium.mixins.json:net.caffeinemc.mods.lithium.mixin.alloc.enum_values.piston_handler.PistonStructureResolverMixin
+failure end
+
+[19:01:03] [Render thread/WARN]: @ModifyConstant conflict. Skipping carpet.mixins.json:PistonStructureResolver_pushLimitMixin from mod carpet->@ModifyConstant::pushLimit(I)I with priority 420, already redirected by cursed_craft.mixins.json:InfPiston from mod cursed_craft->@ModifyConstant::changeConstant(I)I with priority 1000
+[19:01:03] [Render thread/WARN]: @ModifyConstant conflict. Skipping carpet.mixins.json:PistonStructureResolver_pushLimitMixin from mod carpet->@ModifyConstant::pushLimit(I)I with priority 420, already redirected by cursed_craft.mixins.json:InfPiston from mod cursed_craft->@ModifyConstant::changeConstant(I)I with priority 1000
+[19:01:03] [Render thread/WARN]: @ModifyConstant conflict. Skipping carpet.mixins.json:PistonStructureResolver_pushLimitMixin from mod carpet->@ModifyConstant::pushLimit(I)I with priority 420, already redirected by cursed_craft.mixins.json:InfPiston from mod cursed_craft->@ModifyConstant::changeConstant(I)I with priority 1000
+
+---- initial output ----
+[19:00:23] [main/INFO] Loading Minecraft 1.21.11 with Fabric Loader 0.20.1
+[19:00:24] [main/INFO] Loading 153 mods:
+	- amethyst_equipment 1.1.2
+	- appleskin 3.0.8+mc1.21.11
+	- architectury 19.0.1
+	- arctic 1.0.0
+	- armorisbetter 1.0.0
+	- badoptimizations 2.4.1
+	- better-enchant-commands 1.1.0
+	- betterenchantcommand 1.1.0
+	- bleedingslash 1.0.0
+	- carpet 1.4.194+v251223
+
+---- crash report ----
+---- Minecraft Crash Report ----
+// You're mean.
+
+Time: 2026-11-14 19:01:04
+Description: Lithium Class Analysis
+
+java.lang.RuntimeException: Mixin transformation of net.minecraft.class_2674 failed
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.getPostMixinClassByteArray$arctic(KnotClassDelegate.java:441)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.getPostMixinClassByteArray(KnotClassDelegate.java)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.tryLoadClass(KnotClassDelegate.java:337)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.loadClass$arctic(KnotClassDelegate.java:232)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.loadClass(KnotClassDelegate.java)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassLoader.loadClass(KnotClassLoader.java:119)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:526)
+	at java.base/java.lang.Class.getDeclaredMethods0(Native Method)
+	at java.base/java.lang.Class.privateGetDeclaredMethods(Class.java:3578)
+	at java.base/java.lang.Class.getDeclaredMethod(Class.java:2846)
+	at knot//net.caffeinemc.mods.lithium.common.reflection.ReflectionUtil.hasMethodOverride(ReflectionUtil.java:23)
+	at knot//net.caffeinemc.mods.lithium.common.reflection.ReflectionUtil.isBlockStateEntityTouchable(ReflectionUtil.java:61)
+	at knot//net.caffeinemc.mods.lithium.common.block.BlockStateFlags$6.test(BlockStateFlags.java:97)
+	at knot//net.caffeinemc.mods.lithium.common.block.BlockStateFlags$6.test(BlockStateFlags.java:94)
+	at knot//net.minecraft.class_4970$class_4971.lithium$initializeFlags(class_4970.java:4940)
+	at knot//net.caffeinemc.mods.lithium.common.initialization.BlockInfoInitializer.initializeBlockInfo(BlockInfoInitializer.java:24)
+	at knot//net.minecraft.class_9895.handler$dhp000$lithium$initializeBlockInfo(class_9895.java:1024)
+	at knot//net.minecraft.class_9895.method_61754(class_9895.java:48)
+	at knot//net.minecraft.class_9895.method_61753(class_9895.java:44)
+	at knot//net.minecraft.server.MinecraftServer.<init>(MinecraftServer.java:340)
+	at knot//net.minecraft.class_1132.<init>(class_1132.java:66)
+	at knot//net.minecraft.class_310.method_29603(class_310.java:2166)
+	at knot//net.minecraft.server.MinecraftServer.method_29740(MinecraftServer.java:308)
+	at knot//net.minecraft.class_310.method_29610(class_310.java:2166)
+	at knot//net.minecraft.class_7196.method_57773(class_7196.java:411)
+	at knot//net.minecraft.class_7196.method_57776(class_7196.java:406)
+	at knot//net.minecraft.class_7196.method_57777(class_7196.java:373)
+	at java.base/java.util.concurrent.CompletableFuture$UniAccept.tryFire(CompletableFuture.java:718)
+	at java.base/java.util.concurrent.CompletableFuture$Completion.run(CompletableFuture.java:482)
+	at knot//net.minecraft.class_1255.method_18859(class_1255.java:169)
+	at knot//net.minecraft.class_4093.method_18859(class_4093.java:23)
+	at knot//net.minecraft.class_1255.method_16075(class_1255.java:143)
+	at knot//net.minecraft.class_1255.method_5383(class_1255.java:124)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1339)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:517)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+Caused by: org.spongepowered.asm.mixin.transformer.throwables.MixinTransformerError: An unexpected critical error was encountered
+	at org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:380)
+	at org.spongepowered.asm.mixin.transformer.MixinTransformer.transformClass(MixinTransformer.java:237)
+	at org.spongepowered.asm.mixin.transformer.MixinTransformer.transformClassBytes(MixinTransformer.java:202)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.arctic$transformWithDiagnostics(KnotClassDelegate.java)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.getPostMixinClassByteArray$arctic(KnotClassDelegate.java:436)
+	... 38 more
+Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Critical injection failure: Constant modifier method pushLimit(I)I in carpet.mixins.json:PistonStructureResolver_pushLimitMixin from mod carpet failed injection check, (0/1) succeeded. Scanned 0 target(s). No refMap loaded.
+	at org.spongepowered.asm.mixin.injection.struct.InjectionInfo.postInject(InjectionInfo.java:526)
+	at org.spongepowered.asm.mixin.transformer.MixinTargetContext.applyInjections(MixinTargetContext.java:1482)
+	at org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.applyInjections(MixinApplicatorStandard.java:832)
+	at org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.lambda$runApplicatorPass$7(MixinApplicatorStandard.java:362)
+	at org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.processMixins(MixinApplicatorStandard.java:381)
+	at org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.runApplicatorPass(MixinApplicatorStandard.java:360)
+	at org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.apply(MixinApplicatorStandard.java:240)
+	at org.spongepowered.asm.mixin.transformer.TargetClassContext.apply(TargetClassContext.java:437)
+	at org.spongepowered.asm.mixin.transformer.TargetClassContext.applyMixins(TargetClassContext.java:418)
+	at org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:351)
+	... 42 more

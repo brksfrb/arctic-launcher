@@ -295,7 +295,7 @@ fn install_with_repair(
     let mut jobs = libs.jobs;
     jobs.push(client);
     // After a crash that pointed at a damaged file: each library and the client checked in full.
-    repair.check(&jobs, &libs.bootstrap)?;
+    repair.check(&jobs, &libs.bootstrap, libs.main_class.as_ref())?;
     jobs.extend(logging.iter().map(|(job, _)| job.clone()));
     jobs.extend(runtime.iter().flat_map(|r| r.jobs.iter().cloned()));
     let assets_fresh = files::assets_verified_recently(dirs, &assets.index_name);
@@ -303,6 +303,7 @@ fn install_with_repair(
         jobs.extend(assets.jobs.iter().cloned());
     }
     download_all("Downloading game files", jobs, progress)?;
+    files::verify_main_class(libs.main_class.as_ref())?;
     if !assets_fresh {
         finish_assets_later(dirs, assets.index_name.clone(), assets.later.clone());
     }
@@ -409,6 +410,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         Ok(false) => {}
         Err(e) => log::warn!("default game settings: {e}"),
     }
+    timer.step("default settings");
     // What the profile's instances share: the newest copies, into this one.
     if let Err(e) = crate::shared::sync(
         dirs,
@@ -420,6 +422,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
     if let Err(e) = crate::game_defaults::skip_multiplayer_warning(&game_dir) {
         log::warn!("multiplayer warning: {e}");
     }
+    timer.step("shared files sync");
     let java_override = req
         .instance
         .java_path
@@ -550,13 +553,14 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         let _ = finished.recv_timeout(SESSION_WAIT);
     }
     timer.step("game files + arctic session");
-    timer.done();
     if proxy.active().is_some() {
         let hosts = game_dir.join(crate::proxy::HOSTS_FILE);
         std::fs::write(&hosts, proxy.hosts_file()).map_err(|e| crate::Error::io(&hosts, e))?;
     }
     let plan = plan(req, &installation);
     repair.finish();
+    timer.step("JVM arguments + startup cache");
+    timer.done();
     Ok(plan)
 }
 

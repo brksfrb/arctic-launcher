@@ -39,15 +39,9 @@ abstract class PlayerTabOverlayMixin {
 			// Unknown: the game's own icon says so.
 			return;
 		}
-		String text = String.valueOf(ms);
-		int color = ms < 80 ? 0xFF55FF55 : ms < 160 ? 0xFFFFFF55 : 0xFFFF5555;
-		float scale = 0.8f;
-		g.push();
-		g.translate(x + width - 1 - g.textWidth(text) * scale, y + 1.5f);
-		g.scale(scale);
-		g.text(text, 0, 0, color, true);
-		g.pop();
-		ci.cancel();
+		if (com.arcticlauncher.client.ui.TabPing.draw(g, width, x, y, ms)) {
+			ci.cancel();
+		}
 	}
 	//#endif
 

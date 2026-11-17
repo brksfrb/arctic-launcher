@@ -151,6 +151,7 @@ pub fn sync_forge(
     let mods_dir = game_dir.join("mods");
     let index = forge_index_path(game_dir);
     let ours = ModIndex::load(&index)?;
+    restore_offline_patcher(game_dir, &ours)?;
     if !enabled || !forge_supported(game_version) {
         if ours.mods.is_empty() {
             return Ok(());
@@ -183,20 +184,68 @@ pub fn sync_forge(
         wanted.push(*project);
     }
     if !wanted.is_empty() {
-        let (_, failed) = super::install_many(
+        // A failed EntityCulling install must not bypass OneConfig preparation for
+        // an already-installed Patcher (the caller otherwise logs and launches).
+        match super::install_many(
             &wanted,
             game_version,
             LoaderKind::Forge,
             &mods_dir,
             &index,
             progress,
-        )?;
-        for (id, e) in failed {
-            log::info!("{id} skipped for {game_version}: {e}");
+        ) {
+            Ok((_, failed)) => {
+                for (id, e) in failed {
+                    log::info!("{id} skipped for {game_version}: {e}");
+                }
+            }
+            Err(e) => log::warn!("Forge performance mod installation failed: {e}"),
         }
     }
     if ForgeIndex(&index).has(PATCHER) {
+        prepare_patcher(game_dir, || super::oneconfig::prepare(game_dir))?;
         tame_patcher(game_dir);
+    }
+    Ok(())
+}
+
+// Keep a skipped jar outside mods, separately from the player's .disabled choice.
+fn offline_patcher(game_dir: &Path, file: &str) -> PathBuf {
+    game_dir.join("arctic-patcher-offline").join(file)
+}
+
+fn restore_offline_patcher(game_dir: &Path, index: &ModIndex) -> Result<()> {
+    use crate::error::IoContext;
+    if let Some(m) = index.by_project(PATCHER) {
+        super::files::check_file_name(&m.file_name)?;
+        let parked = offline_patcher(game_dir, &m.file_name);
+        let mods = game_dir.join("mods");
+        if parked.is_file() && !super::files::exists(&mods, &m.file_name) {
+            std::fs::create_dir_all(&mods).at(&mods)?;
+            std::fs::rename(&parked, mods.join(&m.file_name)).at(&parked)?;
+        }
+    }
+    Ok(())
+}
+
+fn prepare_patcher(game_dir: &Path, fetch: impl FnOnce() -> Result<()>) -> Result<()> {
+    use crate::error::IoContext;
+    let index = ModIndex::load(&forge_index_path(game_dir))?;
+    let Some(m) = index.by_project(PATCHER) else {
+        return Ok(());
+    };
+    super::files::check_file_name(&m.file_name)?;
+    let jar = game_dir.join("mods").join(&m.file_name);
+    if !jar.is_file() {
+        return Ok(()); // Respect a Patcher the player disabled.
+    }
+    if let Err(e) = fetch() {
+        let parked = offline_patcher(game_dir, &m.file_name);
+        std::fs::create_dir_all(parked.parent().unwrap()).at(&parked)?;
+        std::fs::rename(&jar, &parked).at(&jar)?;
+        log::warn!(
+            "Patcher: OneConfig preparation failed ({e}); launching without Arctic's Patcher this run; will retry next launch"
+        );
     }
     Ok(())
 }
@@ -655,6 +704,43 @@ mod tests {
             icon_url: None,
             dependency: false,
         }
+    }
+
+    #[test]
+    fn offline_patcher_is_skipped_then_retried_without_touching_player_mods() {
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        let mods = game.join("mods");
+        std::fs::create_dir_all(&mods).unwrap();
+        for file in ["patcher.jar", "my-patcher.jar", "entityculling.jar"] {
+            std::fs::write(mods.join(file), file.as_bytes()).unwrap();
+        }
+        let mut patcher = tracked("patcher.jar");
+        patcher.project_id = PATCHER.into();
+        let index = ModIndex::default().with(patcher);
+        index.save(&forge_index_path(game)).unwrap();
+        prepare_patcher(game, || Err(crate::Error::Http("mock timeout".into()))).unwrap();
+        assert!(!mods.join("patcher.jar").exists());
+        assert!(offline_patcher(game, "patcher.jar").is_file());
+        assert!(mods.join("my-patcher.jar").is_file());
+        assert!(mods.join("entityculling.jar").is_file());
+        assert_eq!(ModIndex::load(&forge_index_path(game)).unwrap(), index);
+        restore_offline_patcher(game, &index).unwrap();
+        let mut retried = false;
+        prepare_patcher(game, || {
+            retried = true;
+            Ok(())
+        })
+        .unwrap();
+        assert!(retried);
+        assert!(mods.join("patcher.jar").is_file());
+        assert!(!offline_patcher(game, "patcher.jar").exists());
+        super::super::files::set_enabled(&mods, "patcher.jar", false).unwrap();
+        prepare_patcher(game, || panic!("respect player's disabled mod")).unwrap();
+        assert!(mods.join("patcher.jar.disabled").is_file());
+        ModIndex::default().save(&forge_index_path(game)).unwrap();
+        prepare_patcher(game, || panic!("never prepare a player-owned Patcher")).unwrap();
+        assert!(mods.join("my-patcher.jar").is_file());
     }
 
     #[test]

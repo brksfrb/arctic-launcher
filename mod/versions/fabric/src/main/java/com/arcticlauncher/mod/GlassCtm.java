@@ -30,10 +30,14 @@ public final class GlassCtm {
 	private static final boolean CONTINUITY = FabricLoader.getInstance().isModLoaded("continuity");
 	private static volatile Map<TextureAtlasSprite, TextureAtlasSprite[]> sprites = new IdentityHashMap<>();
 	private static boolean lastEnabled = true;
+	private static volatile int atlasTileCount = GlassTiles.COUNT;
 	private static final ThreadLocal<Context> LOCAL = ThreadLocal.withInitial(Context::new);
 	private GlassCtm() {}
 
 	public static boolean available() { return !CONTINUITY; }
+	public static int tileCount() { return atlasTileCount; }
+	public static void reloading() { lastEnabled = enabled(); atlasTileCount = lastEnabled ? GlassTiles.COUNT : 1; }
+
 	public static boolean enabled() { return available() && (ArcticClient.config() == null || ArcticClient.config().connectedGlass); }
 
 	public static void tick() {
@@ -50,6 +54,15 @@ public final class GlassCtm {
 		boolean on = enabled();
 		if (lastEnabled != on) {
 			lastEnabled = on;
+			// An atlas stitched with Connected Glass off holds only the unjoined tile: enabling it needs the tiles.
+			if (on && tileCount() < GlassTiles.COUNT) {
+				//#if MC >= 1.14
+				Minecraft.getInstance().reloadResourcePacks();
+				//#else
+				Minecraft.getInstance().reloadResources();
+				//#endif
+				return;
+			}
 			if (Minecraft.getInstance().level == null) return;
 			//#if MC >= 26.2
 			Minecraft.getInstance().levelExtractor.allChanged();
@@ -69,12 +82,13 @@ public final class GlassCtm {
 			TextureAtlasSprite[] variants = new TextureAtlasSprite[GlassTiles.COUNT];
 			boolean complete = true;
 			for (int i = 0; i < variants.length; i++) {
-				variants[i] = names.get(GlassTiles.variant(e.getKey(), i));
+				variants[i] = names.get(GlassTiles.variant(e.getKey(), i < tileCount() ? i : 0));
 				complete &= variants[i] != null;
 			}
 			if (complete) found.put(e.getValue(), variants);
 		}
 		sprites = found;
+		ArcticMod.LOG.info("[startup] CTM atlas bound: {} source sprites, {} tiles per face", found.size(), tileCount());
 	}
 
 	//#if MC >= 1.15
@@ -242,10 +256,9 @@ public final class GlassCtm {
 
 	/** Called while models bake, after their atlas is stitched. Selection never allocates. */
 	public static Variants prepare(BakedQuad quad) {
-		// The base constructor runs before these subclasses replace the glass UVs.
-		//#if MC < 1.15
-		if (quad instanceof net.minecraft.client.renderer.block.model.BreakingQuad) return null;
-		//#endif
+		// Called from the base constructor: subclass getters may read uninitialized
+		// fields, and damage overlays have not replaced their UVs yet.
+		if (quad.getClass() != BakedQuad.class) return null;
 		if (!available() || sprites.isEmpty()) return null;
 		//#if MC >= 26.1
 		TextureAtlasSprite sprite = quad.materialInfo().sprite();

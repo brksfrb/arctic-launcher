@@ -12,6 +12,7 @@ mod identify;
 mod index;
 pub mod modpack;
 mod modrinth;
+mod oneconfig;
 pub mod pack_groups;
 pub mod packs;
 pub mod performance;
@@ -498,6 +499,7 @@ fn prepare_one(
         sha1: file.hashes.sha1.clone(),
         size: file.size,
         lzma: None,
+        md5: None,
     };
     Ok((entry, job))
 }

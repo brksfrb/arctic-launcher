@@ -343,5 +343,16 @@
   "instances.yes_delete": "是，删除",
   "instances.yes_remove": "是，移除",
   "instances.you_get_a_code_to_put_in_your_servers_motd": "你会得到一段代码，放进服务器的 MOTD 以证明它属于你。之后它会等待快速审核再显示出来。",
-  "instances.your_server_list_hud_and_arctic_client": "服务器列表、HUD 和 Arctic 客户端设置，以及 Minecraft 的按键、视野和视频设置，在共享它们的每个实例中保持一致，这样新实例用起来就像你已经设置好的那个。"
+  "instances.your_server_list_hud_and_arctic_client": "服务器列表、HUD 和 Arctic 客户端设置，以及 Minecraft 的按键、视野和视频设置，在共享它们的每个实例中保持一致，这样新实例用起来就像你已经设置好的那个。",
+  "instances.world_trash": "回收站 ({count})",
+  "instances.world_trash_hint": "删除的世界会保留 {days} 天，之后将被永久删除。",
+  "instances.world_trash_kept": "保留 {days} 天。打开回收站即可恢复。",
+  "instances.world_trash_note": "删除的世界会在此保留 {days} 天，之后将被永久删除。",
+  "instances.back_to_worlds": "返回世界列表",
+  "instances.world_delete_sure": "此操作无法撤销。确定吗？",
+  "instances.world_restored": "已恢复 {name}",
+  "instances.favorite_world": "添加到收藏",
+  "instances.unfavorite_world": "从收藏中移除",
+  "instances.favorite_world_cannot_delete": "收藏的世界无法删除。请先取消收藏。",
+  "instances.could_not_save_favorite": "无法保存收藏"
 }

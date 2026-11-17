@@ -6,6 +6,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
+/// How often worlds older than 14 days are purged from the world trash (also once at start).
+const WORLD_PURGE_EVERY: Duration = Duration::from_secs(3600);
+
 use arctic_core::auth::avatar::{self, Face};
 use arctic_core::auth::microsoft::{DeviceCode, MsaConfig};
 use arctic_core::auth::{Account, AccountStore};
@@ -245,6 +248,8 @@ pub struct ArcticApp {
     /// Launch requested on the command line, run once versions are loaded.
     pending_launch: Option<String>,
     login_attempts: LoginAttempt,
+    /// When the world trash was last purged of worlds older than 14 days.
+    pub(crate) world_purge_at: std::time::Instant,
 }
 
 impl ArcticApp {
@@ -378,8 +383,10 @@ impl ArcticApp {
             minimized_for_game: false,
             play_burst: None,
             login_attempts: 0,
+            world_purge_at: std::time::Instant::now(),
         };
         app.apply_profile_data(data);
+        app.purge_world_trash();
         app.maybe_start_onboarding(startup.launch.is_some());
         if let Some(query) = &startup.account {
             match app.accounts.find(query).map(|a| a.id.clone()) {
@@ -1425,6 +1432,10 @@ impl eframe::App for ArcticApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
         }
         self.window_and_tray(ctx, frame);
+        if self.world_purge_at.elapsed() >= WORLD_PURGE_EVERY {
+            self.purge_world_trash();
+        }
+        ctx.request_repaint_after(WORLD_PURGE_EVERY.saturating_sub(self.world_purge_at.elapsed()));
         crate::auto_update::sync(
             self.settings.auto_install_updates,
             self.settings.restart_hidden_for_updates,
@@ -1536,7 +1547,8 @@ impl eframe::App for ArcticApp {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.cancel_login();
         if self.settings.exit_games_with_launcher {
-            for run in self.runs.active() {
+            for run in &mut self.runs.list {
+                run.force_close();
                 if let Some(game) = run.game() {
                     game.terminate();
                 }

@@ -3,8 +3,6 @@ package com.arcticlauncher.mod.mixin;
 import com.arcticlauncher.client.ctm.GlassTiles;
 import com.arcticlauncher.mod.GlassCtm;
 import com.arcticlauncher.mod.GlassImages;
-import java.util.ArrayList;
-import java.util.Collection;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.resources.Identifier;
@@ -17,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Final;
 import java.util.Set;
+import java.util.ArrayList;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 //#endif
 @Mixin(TextureAtlas.class)
@@ -30,34 +29,50 @@ abstract class GlassOldAtlasMixin {
 		if (glass) GlassCtm.bind(sprites);
 	}
 	//#endif
+	//#if MC >= 1.15
+	/** Only the block atlas has glass (particles, paintings and the rest are atlases too). */
+	private boolean arctic$blocks() { return ((TextureAtlas) (Object) this).location().equals(TextureAtlas.LOCATION_BLOCKS); }
+	//#elif MC >= 1.14
+	@org.spongepowered.asm.mixin.Shadow @org.spongepowered.asm.mixin.Final private String path;
+	/** 1.14 names atlases by folder: the block atlas is "textures" (particles "textures/particle", ...). */
+	private boolean arctic$blocks() { return "textures".equals(path); }
+	//#endif
 	//#if MC >= 1.14
 	@Inject(method = "prepareToStitch", at = @At("HEAD"))
-	private void arctic$packs(CallbackInfoReturnable<?> cir, @com.llamalad7.mixinextras.sugar.Local(argsOnly = true) net.minecraft.server.packs.resources.ResourceManager manager) { com.arcticlauncher.mod.GlassResources.reload(manager); }
+	private void arctic$packs(CallbackInfoReturnable<?> cir, @com.llamalad7.mixinextras.sugar.Local(argsOnly = true) net.minecraft.server.packs.resources.ResourceManager manager) { if (arctic$blocks()) com.arcticlauncher.mod.GlassResources.reload(manager); }
 	//#endif
 	@ModifyVariable(method = "getResourceLocation", at = @At("HEAD"), argsOnly = true)
 	private Identifier arctic$source(Identifier name) { return GlassImages.id(GlassTiles.original(name.toString())); }
+	//#if MC >= 1.14
+	// Register in the input stream, before vanilla, Fabric and ModernFix take their
+	// early-stage snapshots. Adding sprite infos at RETURN is too late for those loaders.
 	//#if MC >= 1.15
-	@Inject(method = "getBasicSpriteInfos", at = @At("RETURN"), cancellable = true)
-	private void arctic$tiles(CallbackInfoReturnable<Collection<TextureAtlasSprite.Info>> cir) {
-		if (!GlassCtm.available()) return;
-		Collection<TextureAtlasSprite.Info> expanded = new ArrayList<>(cir.getReturnValue());
-		for (TextureAtlasSprite.Info info : cir.getReturnValue()) {
-			if (!GlassTiles.glass(info.name().toString())) continue;
-			for (int i = 0; i < GlassTiles.COUNT; i++) expanded.add(new TextureAtlasSprite.Info(GlassImages.id(GlassTiles.variant(info.name().toString(), i)), info.width(), info.height(), ((GlassInfoAccess) (Object) info).arctic$metadata()));
-		}
-		cir.setReturnValue(expanded);
+	@ModifyVariable(method = "prepareToStitch", at = @At("HEAD"), argsOnly = true)
+	private java.util.stream.Stream<Identifier> arctic$register(java.util.stream.Stream<Identifier> original) {
+		if (!GlassCtm.available() || !arctic$blocks()) return original;
+		return original.flatMap(name -> {
+			if (!GlassTiles.glass(name.toString())) return java.util.stream.Stream.of(name);
+			return java.util.stream.Stream.concat(java.util.stream.Stream.of(name),
+				java.util.stream.IntStream.range(0, GlassCtm.tileCount()).mapToObj(i -> GlassImages.id(GlassTiles.variant(name.toString(), i))));
+		});
 	}
-	//#elif MC >= 1.14
-	@Inject(method = "getBasicSpriteInfos", at = @At("RETURN"), cancellable = true)
-	private void arctic$tiles(CallbackInfoReturnable<Collection<TextureAtlasSprite>> cir) {
-		if (!GlassCtm.available()) return;
-		Collection<TextureAtlasSprite> expanded = new ArrayList<>(cir.getReturnValue());
-		for (TextureAtlasSprite sprite : cir.getReturnValue()) {
-			if (!GlassTiles.glass(sprite.getName().toString())) continue;
-			for (int i = 0; i < GlassTiles.COUNT; i++) expanded.add(GlassOldSpriteAccess.arctic$new(GlassImages.id(GlassTiles.variant(sprite.getName().toString(), i)), sprite.getWidth(), sprite.getHeight()));
-		}
-		cir.setReturnValue(expanded);
+	//#else
+	// 1.14 takes the sprite names as an Iterable.
+	@ModifyVariable(method = "prepareToStitch", at = @At("HEAD"), argsOnly = true)
+	private Iterable<Identifier> arctic$register(Iterable<Identifier> original) {
+		if (!GlassCtm.available() || !arctic$blocks()) return original;
+		// Lazy, like the stream above: the tile count is set by the pack reload injected at the same HEAD.
+		return () -> {
+			java.util.List<Identifier> names = new java.util.ArrayList<>();
+			for (Identifier name : original) {
+				names.add(name);
+				if (!GlassTiles.glass(name.toString())) continue;
+				for (int i = 0; i < GlassCtm.tileCount(); i++) names.add(GlassImages.id(GlassTiles.variant(name.toString(), i)));
+			}
+			return names.iterator();
+		};
 	}
+	//#endif
 	//#else
 	@Shadow @Final private Set<Identifier> sprites;
 	@Inject(method = "reload", at = @At("HEAD"))
@@ -66,7 +81,7 @@ abstract class GlassOldAtlasMixin {
 		if (!GlassCtm.available()) return;
 		for (Identifier name : new ArrayList<>(sprites)) {
 			if (!GlassTiles.glass(name.toString())) continue;
-			for (int i = 0; i < GlassTiles.COUNT; i++) sprites.add(GlassImages.id(GlassTiles.variant(name.toString(), i)));
+			for (int i = 0; i < GlassCtm.tileCount(); i++) sprites.add(GlassImages.id(GlassTiles.variant(name.toString(), i)));
 		}
 	}
 	//#endif

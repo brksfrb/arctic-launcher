@@ -1,4 +1,5 @@
 {
+  "servers.add_to_list": "목록에 추가",
   "servers.add_server": "서버 추가",
   "servers.add_to_my_servers": "내 서버에 추가",
   "servers.and_more": "... 외 {0}명",

@@ -754,7 +754,7 @@ public final class Looks {
 
 	private void loadTexture(final String hash) {
 		try {
-			byte[] png = Http.get(baseUrl + "/v1/textures/" + hash + ".png", null);
+			byte[] png = AssetCache.get(hash, () -> Http.get(baseUrl + "/v1/textures/" + hash + ".png", null));
 			boolean cape = capes.contains(hash);
 			if (!fitsTexture(png, cape)) {
 				throw new java.io.IOException("not a " + (cape ? "cape" : "skin") + Lang.t("looks.sized_png")); // i18n-ignore: diagnostics, read by support

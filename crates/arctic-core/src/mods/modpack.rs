@@ -189,6 +189,7 @@ pub fn install_version(
             sha1,
             size,
             lzma: None,
+            md5: None,
         }],
         progress,
     )?;
@@ -280,6 +281,7 @@ pub fn download_jobs(index: &PackIndex, game_dir: &Path) -> Result<Vec<DownloadJ
             sha1: file.hashes.get("sha1").cloned(),
             size: file.file_size,
             lzma: None,
+            md5: None,
         });
     }
     Ok(jobs)

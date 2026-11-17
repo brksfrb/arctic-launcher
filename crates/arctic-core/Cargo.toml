@@ -71,3 +71,7 @@ required-features = ["offline-accounts"]
 [[example]]
 name = "loader_smoke"
 required-features = ["offline-accounts"]
+
+[[example]]
+name = "startup_bench"
+required-features = ["offline-accounts"]
