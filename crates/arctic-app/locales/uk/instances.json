@@ -306,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "Такого файлу немає; буде використано керовану Java.",
   "instances.that_instance_is_gone": "Цієї збірки більше немає.",
   "instances.the_arctic_client_is_off_for_every_instance": "Arctic Client вимкнено для всіх збірок",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client працює на збірках Vanilla, Fabric і Quilt, а також на Forge 1.8.9. На цьому завантажувачі чи версії поки ні: створи збірку Vanilla або Fabric тієї ж версії, щоб грати з ним.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client працює на збірках Vanilla, Fabric і Quilt, неофіційно на NeoForge, а також на Forge 1.8.9. На цьому завантажувачі чи версії поки ні: створи збірку Vanilla або Fabric тієї ж версії, щоб грати з ним.",
   "instances.the_default_instance_plays_whichever_release": "Типова збірка запускає версію, вибрану на вкладці «Грати».",
   "instances.the_folder_worlds_and_mods_included_is_moved": "Тека (зі світами та модами) переміститься до instances/.trash, а не видалиться.",
   "instances.the_game_would_stop_while_loading_fix_them": "Гра зупиниться під час завантаження {name}. Виправ тут або грай усе одно.",
@@ -360,5 +360,8 @@
   "instances.favorite_world": "Додати до обраного",
   "instances.unfavorite_world": "Прибрати з обраного",
   "instances.favorite_world_cannot_delete": "Обрані світи не можна видалити. Спершу приберіть світ з обраного.",
-  "instances.could_not_save_favorite": "Не вдалося зберегти обране"
+  "instances.could_not_save_favorite": "Не вдалося зберегти обране",
+  "instances.unofficial_on_neoforge_fabric_is_recommended": "На NeoForge — неофіційно. Радимо Fabric.",
+  "instances.the_arctic_client_on_neoforge_is_unofficial": "Arctic Client на NeoForge — неофіційний. Офіційно підтримується гра з ним на Fabric.",
+  "instances.needs_neoforge_or_newer": "Потрібен NeoForge {version} або новіший: обери новішу збірку в розділі «Завантажувач модів»."
 }

@@ -306,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "O dosya yok; yönetilen Java kullanılacak.",
   "instances.that_instance_is_gone": "O kurulum artık yok.",
   "instances.the_arctic_client_is_off_for_every_instance": "Arctic Client tüm kurulumlar için kapalı",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client; Vanilla, Fabric ve Quilt örneklerinde ve Forge 1.8.9'da çalışır. Bu yükleyici ya da sürümde henüz yok: onunla oynamak için aynı sürümde bir Vanilla veya Fabric örneği oluştur.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client; Vanilla, Fabric ve Quilt örneklerinde, resmî olmayan şekilde NeoForge'da ve Forge 1.8.9'da çalışır. Bu yükleyici ya da sürümde henüz yok: onunla oynamak için aynı sürümde bir Vanilla veya Fabric örneği oluştur.",
   "instances.the_default_instance_plays_whichever_release": "Varsayılan örnek, Oyna sekmesinde seçtiğin sürümü oynatır.",
   "instances.the_folder_worlds_and_mods_included_is_moved": "Klasör (dünyalar ve modlar dahil) instances/.trash içine taşınır, silinmez.",
   "instances.the_game_would_stop_while_loading_fix_them": "Oyun {name} yüklenirken duracaktı. Burada düzelt ya da yine de oyna.",
@@ -356,5 +356,8 @@
   "instances.favorite_world": "Favorilere ekle",
   "instances.unfavorite_world": "Favorilerden çıkar",
   "instances.favorite_world_cannot_delete": "Favori dünyalar silinemez. Önce favorilerden çıkarın.",
-  "instances.could_not_save_favorite": "Favori kaydedilemedi"
+  "instances.could_not_save_favorite": "Favori kaydedilemedi",
+  "instances.unofficial_on_neoforge_fabric_is_recommended": "NeoForge'da resmî değil. Fabric'i öneririz.",
+  "instances.the_arctic_client_on_neoforge_is_unofficial": "Arctic Client'ın NeoForge sürümü resmî değil. Resmî olarak desteklenen yol Fabric.",
+  "instances.needs_neoforge_or_newer": "NeoForge {version} ya da daha yenisi gerekiyor: Mod yükleyici bölümünden daha yeni bir sürüm seç."
 }

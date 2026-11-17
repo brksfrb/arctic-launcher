@@ -420,7 +420,7 @@ impl ArcticApp {
         });
     }
 
-    /// Toggle for Arctic's companion mod (Fabric and Quilt only).
+    /// Toggle for Arctic's companion mod (Fabric and Quilt; unofficially NeoForge and Forge 1.8.9).
     fn arctic_mod_card(&mut self, ui: &mut egui::Ui, instance: &Instance) {
         use arctic_core::arctic_mod;
         use arctic_core::loaders::LoaderKind;
@@ -452,8 +452,10 @@ impl ArcticApp {
                 .as_deref()
                 .or(self.settings.last_version.as_deref())
                 .is_some_and(arctic_mod::supports_forge);
-        if !fabric_like && !forge_like && !vanilla {
-            // NeoForge, and Forge versions without a build: say why there's no switch, instead of leaving it a mystery.
+        // NeoForge: the client's unofficial NeoForge build (Fabric is recommended).
+        let neoforge = matches!(instance.loader.kind(), Some(LoaderKind::NeoForge));
+        if !fabric_like && !forge_like && !neoforge && !vanilla {
+            // Forge versions without a build: say why there's no switch, instead of leaving it a mystery.
             ui.add_space(12.0);
             theme::card(p).show(ui, |ui| {
                 ui.set_width(ui.available_width());
@@ -478,10 +480,21 @@ impl ArcticApp {
         let supported = version.as_deref().is_some_and(|v| {
             if forge_like {
                 arctic_mod::supports_forge(v)
+            } else if neoforge {
+                arctic_mod::supports_neoforge(v)
             } else {
                 arctic_mod::supports(v)
             }
         });
+        // A NeoForge build older than the one the client was checked against starts without it.
+        let needs_neoforge = version
+            .as_deref()
+            .filter(|v| {
+                neoforge
+                    && supported
+                    && !arctic_mod::neoforge_fits(v, instance.loader.version().unwrap_or_default())
+            })
+            .and_then(arctic_mod::min_neoforge);
         let (title, about, toggle) = if vanilla {
             (
                 "Arctic Client",
@@ -509,10 +522,18 @@ impl ArcticApp {
                     self.client_off_confirm = Some(id);
                 }
             }
+            if neoforge {
+                neoforge_notice(ui, p);
+            }
             if !supported {
                 ui.label(
                     RichText::new(t!("instances.not_available_for_this_minecraft_version_yet"))
                         .color(p.muted),
+                );
+            } else if let Some(min) = needs_neoforge {
+                ui.label(
+                    RichText::new(tf!("instances.needs_neoforge_or_newer", version = min))
+                        .color(p.warn),
                 );
             }
         });
@@ -733,4 +754,13 @@ impl ArcticApp {
             ),
         }
     }
+}
+
+/// The Arctic Client on NeoForge is unofficial: said wherever a player picks or looks at it there.
+pub(super) fn neoforge_notice(ui: &mut egui::Ui, p: &Palette) {
+    ui.label(
+        RichText::new(t!("instances.the_arctic_client_on_neoforge_is_unofficial"))
+            .small()
+            .color(p.warn),
+    );
 }

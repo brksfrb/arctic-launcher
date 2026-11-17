@@ -306,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "Ten plik nie istnieje; zostanie użyta zarządzana Java.",
   "instances.that_instance_is_gone": "Tej instancji już nie ma.",
   "instances.the_arctic_client_is_off_for_every_instance": "Arctic Client jest wyłączony we wszystkich instancjach",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client działa na instancjach Vanilla, Fabric i Quilt oraz na Forge 1.8.9. Na tym loaderze lub wersji jeszcze nie: utwórz instancję Vanilla lub Fabric tej samej wersji, aby z niego korzystać.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client działa na instancjach Vanilla, Fabric i Quilt, nieoficjalnie na NeoForge oraz na Forge 1.8.9. Na tym loaderze lub wersji jeszcze nie: utwórz instancję Vanilla lub Fabric tej samej wersji, aby z niego korzystać.",
   "instances.the_default_instance_plays_whichever_release": "Domyślna instancja uruchamia wersję wybraną w zakładce Graj.",
   "instances.the_folder_worlds_and_mods_included_is_moved": "Folder (ze światami i modami) trafia do instances/.trash, nie jest kasowany.",
   "instances.the_game_would_stop_while_loading_fix_them": "Gra zatrzymałaby się przy wczytywaniu {name}. Napraw to tutaj albo graj mimo to.",
@@ -360,5 +360,8 @@
   "instances.favorite_world": "Dodaj do ulubionych",
   "instances.unfavorite_world": "Usuń z ulubionych",
   "instances.favorite_world_cannot_delete": "Ulubionych światów nie można usunąć. Najpierw usuń go z ulubionych.",
-  "instances.could_not_save_favorite": "Nie udało się zapisać ulubionego"
+  "instances.could_not_save_favorite": "Nie udało się zapisać ulubionego",
+  "instances.unofficial_on_neoforge_fabric_is_recommended": "Na NeoForge nieoficjalnie. Polecamy Fabric.",
+  "instances.the_arctic_client_on_neoforge_is_unofficial": "Arctic Client na NeoForge jest nieoficjalny. Oficjalnie wspieramy grę z nim na Fabric.",
+  "instances.needs_neoforge_or_newer": "Wymaga NeoForge {version} lub nowszego: wybierz nowszą wersję w sekcji Loader modów."
 }

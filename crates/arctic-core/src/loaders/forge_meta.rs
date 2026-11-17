@@ -19,6 +19,11 @@ const FORGE_MAVEN: &str = "https://maven.minecraftforge.net/net/minecraftforge/f
 const NEOFORGE_VERSIONS: &str =
     "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
 const NEOFORGE_MAVEN: &str = "https://maven.neoforged.net/releases/net/neoforged/neoforge";
+/// Minecraft 1.20.1's NeoForge: a fork of Forge 47, versioned `1.20.1-47.1.x` and
+/// published as `net.neoforged:forge`.
+const NEOFORGE_FORK_VERSIONS: &str =
+    "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/forge";
+const NEOFORGE_FORK_MAVEN: &str = "https://maven.neoforged.net/releases/net/neoforged/forge";
 
 /// Oldest Minecraft version whose Forge installer we support.
 pub const OLDEST_FORGE_GAME: &str = "1.7.10";
@@ -155,9 +160,32 @@ pub fn neoforge_loader_versions(game: &str) -> Result<Vec<LoaderVersion>> {
 }
 
 fn fetch_neoforge() -> Result<Vec<String>> {
-    get_json::<MavenVersions>(NEOFORGE_VERSIONS)
+    let mut versions = get_json::<MavenVersions>(NEOFORGE_VERSIONS)
         .map(|m| m.versions)
-        .map_err(|e| list_error("NeoForge", &e))
+        .map_err(|e| list_error("NeoForge", &e))?;
+    match get_json::<MavenVersions>(NEOFORGE_FORK_VERSIONS) {
+        Ok(fork) => versions.extend(neoforge_fork_builds(fork.versions)),
+        Err(e) => log::warn!("NeoForge for 1.20.1: {e}"),
+    }
+    Ok(versions)
+}
+
+/// 1.20.1's fork builds to offer. Its early builds have the names (and profile ids) of Forge's
+/// own 47.1 builds: only the ones after those.
+fn neoforge_fork_builds(list: Vec<String>) -> impl Iterator<Item = String> {
+    list.into_iter().filter(|v| {
+        v.strip_prefix("1.20.1-47.1.")
+            .and_then(|build| build.parse::<u32>().ok())
+            .is_some_and(|build| build > FORGE_47_1_LAST)
+    })
+}
+
+/// The last of Forge's own 1.20.1-47.1 builds (Forge went on with 47.2).
+const FORGE_47_1_LAST: u32 = 47;
+
+/// A build of 1.20.1's NeoForge (`1.20.1-47.1.106`).
+fn is_neoforge_fork(version: &str) -> bool {
+    version.starts_with("1.20.1-")
 }
 
 fn neoforge_versions_for(list: &[String], game: &str) -> Vec<LoaderVersion> {
@@ -182,6 +210,10 @@ fn neoforge_versions_for(list: &[String], game: &str) -> Vec<LoaderVersion> {
 ///   `26.1.0.0-alpha.3+snapshot-1` → `26.1-snapshot-1`
 /// - `0.25w14craftmine.3-beta` → `25w14craftmine` (April Fools builds)
 pub fn neoforge_minecraft_version(version: &str) -> Option<String> {
+    // - `1.20.1-47.1.106` → `1.20.1` (1.20.1's fork of Forge)
+    if is_neoforge_fork(version) {
+        return Some("1.20.1".to_owned());
+    }
     let (core, pre) = match version.split_once('-') {
         Some((core, pre)) => (core, Some(pre)),
         None => (version, None),
@@ -213,6 +245,15 @@ pub fn neoforge_minecraft_version(version: &str) -> Option<String> {
 }
 
 pub fn neoforge_installer(loader_version: &str) -> InstallerSource {
+    if is_neoforge_fork(loader_version) {
+        // Named like Forge's; "neoforge-" keeps its cache file apart from a Forge installer.
+        return InstallerSource {
+            url: format!(
+                "{NEOFORGE_FORK_MAVEN}/{loader_version}/forge-{loader_version}-installer.jar"
+            ),
+            file_name: format!("neoforge-{loader_version}-installer.jar"),
+        };
+    }
     let file_name = format!("neoforge-{loader_version}-installer.jar");
     InstallerSource {
         url: format!("{NEOFORGE_MAVEN}/{loader_version}/{file_name}"),
@@ -300,6 +341,7 @@ mod tests {
             ("26.1.0.0-alpha.15+pre-3", Some("26.1-pre-3")),
             ("26.1.0.0-alpha.1+snapshot-1", Some("26.1-snapshot-1")),
             ("0.25w14craftmine.3-beta", Some("25w14craftmine")),
+            ("1.20.1-47.1.106", Some("1.20.1")),
             ("garbage", None),
             ("1.2", None),
         ];
@@ -323,6 +365,32 @@ mod tests {
         assert_eq!(
             neoforge_installer("21.1.251").url,
             "https://maven.neoforged.net/releases/net/neoforged/neoforge/21.1.251/neoforge-21.1.251-installer.jar"
+        );
+    }
+
+    #[test]
+    fn neoforge_for_1_20_1_is_the_forge_fork() {
+        let fork = [
+            "1.20.1-47.1.5",
+            "1.20.1-47.1.47",
+            "1.20.1-47.1.106",
+            "47.1.82",
+        ];
+        let offered: Vec<String> =
+            neoforge_fork_builds(fork.iter().map(|v| v.to_string()).collect()).collect();
+        assert_eq!(offered, ["1.20.1-47.1.106"]);
+        assert_eq!(
+            neoforge_versions_for(&offered, "1.20.1")[0].id,
+            "1.20.1-47.1.106"
+        );
+        let installer = neoforge_installer("1.20.1-47.1.106");
+        assert_eq!(
+            installer.url,
+            "https://maven.neoforged.net/releases/net/neoforged/forge/1.20.1-47.1.106/forge-1.20.1-47.1.106-installer.jar"
+        );
+        assert_eq!(
+            installer.file_name,
+            "neoforge-1.20.1-47.1.106-installer.jar"
         );
     }
 }

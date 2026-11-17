@@ -1,6 +1,7 @@
 //! Embeds the Arctic Client: `mod/dist/arctic-client.pack` holds a jar for
 //! every build target in `mod/targets.json` (see `mod/build.py`), and each
-//! target is looked up by every Minecraft version it covers.
+//! target is looked up by every Minecraft version it covers. Targets with a
+//! `neoforge` version also have a NeoForge jar, packed as `neoforge-<build>`.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -41,9 +42,37 @@ fn main() {
         }
     }
     code.push_str("];\n");
+    code.push_str(
+        "/// (Minecraft version, NeoForge build target) for every version the NeoForge client covers.\n\
+         const NEOFORGE_COVERS: &[(&str, &str)] = &[\n",
+    );
+    for target in targets.as_array().expect("a list of targets") {
+        if target.get("neoforge").is_none() {
+            continue;
+        }
+        let build = format!(
+            "neoforge-{}",
+            target["build"].as_str().expect("build version")
+        );
+        if !packed.iter().any(|(b, _)| *b == build) {
+            assert!(
+                !release,
+                "Arctic Client {build} isn't in {} (run python mod/build.py)",
+                pack_path.display()
+            );
+            println!("cargo:warning=skipping Arctic Client {build}: it isn't packed");
+            continue;
+        }
+        for covered in target["covers"].as_array().expect("covers") {
+            let covered = covered.as_str().expect("version");
+            writeln!(code, "    ({covered:?}, {build:?}),").unwrap();
+        }
+    }
+    code.push_str("];\n");
     // Read once here, so a launch needn't unpack anything to check the loader.
     code.push_str(
-        "/// (build target, oldest Fabric Loader its fabric.mod.json accepts).\n\
+        "/// (build target, oldest Fabric Loader its fabric.mod.json accepts, or oldest NeoForge\n\
+         /// its mods.toml accepts).\n\
          const MIN_LOADER: &[(&str, &str)] = &[\n",
     );
     for (build, loader) in &packed {
@@ -75,7 +104,8 @@ fn fnv1a(bytes: &[u8]) -> u64 {
 }
 
 /// The build targets inside the pack (none if there's no pack yet), each with
-/// the oldest Fabric Loader its `fabric.mod.json` asks for.
+/// the oldest Fabric Loader its `fabric.mod.json` asks for (NeoForge jars: the
+/// oldest NeoForge their `mods.toml` asks for).
 fn packed_builds(path: &Path) -> Vec<(String, Option<String>)> {
     let Ok(bytes) = std::fs::read(path) else {
         return Vec::new();
@@ -103,19 +133,41 @@ fn packed_builds(path: &Path) -> Vec<(String, Option<String>)> {
     };
     jars.iter()
         .map(|(build, entries)| {
-            let loader = entries
-                .as_array()
-                .into_iter()
-                .flatten()
-                .find(|e| e[0] == "fabric.mod.json")
-                .and_then(|e| e[1].as_u64())
-                .and_then(|n| serde_json::from_slice::<serde_json::Value>(file(n as usize)).ok())
+            let entry = |name: &str| {
+                entries
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|e| e[0] == name)
+                    .and_then(|e| e[1].as_u64())
+                    .map(|n| file(n as usize))
+            };
+            let fabric = entry("fabric.mod.json")
+                .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(bytes).ok())
                 .and_then(|json| {
                     json.pointer("/depends/fabricloader")
                         .and_then(|v| v.as_str())
                         .map(|r| r.trim_start_matches(">=").trim().to_owned())
                 });
-            (build.clone(), loader)
+            let neoforge = entry("META-INF/neoforge.mods.toml")
+                .or_else(|| entry("META-INF/mods.toml"))
+                .and_then(|bytes| neoforge_min(&String::from_utf8_lossy(bytes)));
+            (build.clone(), fabric.or(neoforge))
         })
         .collect()
+}
+
+/// The lower bound of the NeoForge (Forge, on 1.20.1) dependency in a `mods.toml`:
+/// `versionRange = "[21.1.267,)"` after `modId = "neoforge"`.
+fn neoforge_min(toml: &str) -> Option<String> {
+    let mut loader = false;
+    for line in toml.lines().map(str::trim) {
+        if line.starts_with("modId") {
+            loader = line.ends_with("\"neoforge\"") || line.ends_with("\"forge\"");
+        } else if loader && line.starts_with("versionRange") {
+            let range = line.split('"').nth(1)?;
+            return Some(range.trim_start_matches('[').split(',').next()?.to_owned());
+        }
+    }
+    None
 }
