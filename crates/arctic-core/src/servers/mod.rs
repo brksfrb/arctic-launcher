@@ -47,6 +47,7 @@ pub fn list(game_dir: &Path) -> Result<Vec<Server>> {
     let Some(entries) = root.get("servers").and_then(nbt::Tag::as_list) else {
         return Ok(Vec::new());
     };
+    let mut seen = std::collections::HashSet::new();
     Ok(entries
         .iter()
         .filter(|e| e.get("hidden").and_then(nbt::Tag::as_byte) != Some(1))
@@ -71,7 +72,19 @@ pub fn list(game_dir: &Path) -> Result<Vec<Server>> {
                 icon,
             })
         })
+        .filter(|server| seen.insert(normalized_address(&server.address)))
         .collect())
+}
+
+/// Address identity without DNS or SRV lookups.
+fn normalized_address(text: &str) -> String {
+    match Address::parse(text) {
+        Some(mut address) => {
+            address.host = address.host.trim_end_matches('.').to_owned();
+            address.display()
+        }
+        None => text.trim().to_ascii_lowercase(),
+    }
 }
 
 /// One server list made from several `servers.dat` files: every server
@@ -101,7 +114,7 @@ pub fn merge_files(sources: &[std::path::PathBuf], into: &Path) -> Result<usize>
             let known = merged.iter().any(|e| {
                 e.get("ip")
                     .and_then(nbt::Tag::as_str)
-                    .is_some_and(|other| other.trim().eq_ignore_ascii_case(ip))
+                    .is_some_and(|other| normalized_address(other) == normalized_address(ip))
             });
             if !ip.is_empty() && !known {
                 merged.push(entry.clone());
@@ -193,7 +206,7 @@ pub fn add(game_dir: &Path, name: &str, address: &str) -> Result<bool> {
     let same = |e: &nbt::Tag| {
         e.get("ip")
             .and_then(nbt::Tag::as_str)
-            .is_some_and(|ip| ip.trim().eq_ignore_ascii_case(address))
+            .is_some_and(|ip| normalized_address(ip) == normalized_address(address))
     };
     if servers.iter().any(same) {
         return Ok(false);
@@ -280,6 +293,7 @@ mod tests {
             dir.path().join(SERVERS_FILE),
             nbt::fake_servers_dat(&[
                 ("Hypixel", "mc.hypixel.net", false),
+                ("Featured", " MC.HYPIXEL.NET.:25565 ", false),
                 ("", "play.example.net:25570", false),
                 ("Direct", "10.0.0.2", true),
             ]),
@@ -313,7 +327,7 @@ mod tests {
         )
         .unwrap();
         assert!(add(dir.path(), "Cube", "play.cubecraft.net").unwrap());
-        assert!(!add(dir.path(), "Again", "MC.hypixel.net").unwrap());
+        assert!(!add(dir.path(), "Again", "MC.hypixel.net.:25565").unwrap());
         assert!(add(dir.path(), "x", "host:0").is_err());
         let names: Vec<String> = list(dir.path())
             .unwrap()

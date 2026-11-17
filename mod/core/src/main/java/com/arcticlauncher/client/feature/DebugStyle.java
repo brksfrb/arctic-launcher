@@ -10,13 +10,13 @@ import java.util.List;
  */
 public final class DebugStyle {
 	/** The names of the colors to pick (same order as {@link #CODES}). */
-	public static final String[] COLORS = {"White", "Gray", "Aqua", "Green", "Yellow", "Gold", "Red", "Light purple"};
+	public static final String[] COLORS = {"mods.debug_color.white", "mods.debug_color.gray", "mods.debug_color.aqua", "mods.debug_color.green", "mods.debug_color.yellow", "mods.debug_color.gold", "mods.debug_color.red", "mods.debug_color.light_purple"};
 	private static final char[] CODES = {'f', '7', 'b', 'a', 'e', '6', 'c', 'd'};
 	/** A label is short: a longer text before a colon is a sentence, not a label. */
 	private static final int MAX_LABEL = 26;
 	private static final char SECTION = '§';
 
-	/** A group of F3 lines that can be hidden: its name, and what its lines start with. */
+	/** A group of F3 lines that can be hidden: its name (a text key), and what its lines start with. */
 	public static final class Group {
 		public final String label;
 		private final String[] starts;
@@ -41,22 +41,22 @@ public final class DebugStyle {
 
 	/** The groups of lines, in the order the menu lists them (the hidden ones are kept as bits of {@code debugHidden}). */
 	public static final Group[] GROUPS = {
-			new Group("Version", "Minecraft "),
-			new Group("FPS", FPS),
-			new Group("Coordinates", "XYZ:", "Block:", "Chunk:", "Chunk Relative", "Chunk Coordinates", "Section-relative"),
-			new Group("Facing", "Facing:", "Rotation:"),
-			new Group("Light", "Client Light", "Server Light", "Light:", "Light (Server)", "CH ", "SH ", "Highest Block"),
-			new Group("Biome and difficulty", "Biome:", "Local Difficulty", "Days Played"),
-			new Group("Entities and particles", "E:", "P:", "Entities", "Monsters:", "Creatures:", "Ambient:", "Water Creatures:",
-					"Water Ambient:", "Misc:", "Particles:", "Axolotls:"),
-			new Group("Chunks", "C:", "Chunk Culling", "Chunk Sections", "Pending Chunks", "Pending Uploads", "Available Buffers",
-					"Client Chunk Cache", "Loaded Chunks", "Forceloaded", "Spawn Chunks", "Server Chunks"),
-			new Group("Sounds", "Sounds:", "Ambient Sounds"),
-			new Group("Server and network", "Integrated server", "Packets", "Server:"),
-			new Group("System", "Java:", "Java Version", "Mem:", "Memory", "Allocated:", "Allocation rate", "Off-Heap", "CPU:",
-					"Display:", "GPU", "OpenGL", "Vulkan", "NVIDIA", "AMD", "Intel", "GL_"),
-			new Group("Targeted block", "Targeted Block", "Targeted Fluid", "Targeted Entity", "minecraft:", "#minecraft:"),
-			new Group("Help", "Debug charts", "For help", "To edit:", "Pie Graph", "FPS / TPS"),
+			new Group("mods.f3_group.version", "Minecraft "), // i18n-ignore: F3 line prefixes
+			new Group("FPS", FPS), // i18n-ignore: F3 line prefixes
+			new Group("mods.f3_group.coordinates", "XYZ:", "Block:", "Chunk:", "Chunk Relative", "Chunk Coordinates", "Section-relative"), // i18n-ignore: F3 line prefixes
+			new Group("mods.f3_group.facing", "Facing:", "Rotation:"), // i18n-ignore: F3 line prefixes
+			new Group("mods.f3_group.light", "Client Light", "Server Light", "Light:", "Light (Server)", "CH ", "SH ", "Highest Block"), // i18n-ignore: F3 line prefixes
+			new Group("mods.f3_group.biome_and_difficulty", "Biome:", "Local Difficulty", "Days Played"), // i18n-ignore: F3 line prefixes
+			new Group("mods.f3_group.entities_and_particles", "E:", "P:", "Entities", "Monsters:", "Creatures:", "Ambient:", "Water Creatures:", // i18n-ignore: F3 line prefixes
+					"Water Ambient:", "Misc:", "Particles:", "Axolotls:"), // i18n-ignore: F3 line prefixes
+			new Group("mods.f3_group.chunks", "C:", "Chunk Culling", "Chunk Sections", "Pending Chunks", "Pending Uploads", "Available Buffers", // i18n-ignore: F3 line prefixes
+					"Client Chunk Cache", "Loaded Chunks", "Forceloaded", "Spawn Chunks", "Server Chunks"), // i18n-ignore: F3 line prefixes
+			new Group("mods.f3_group.sounds", "Sounds:", "Ambient Sounds"), // i18n-ignore: F3 line prefixes
+			new Group("mods.f3_group.server_and_network", "Integrated server", "Packets", "Server:"), // i18n-ignore: F3 line prefixes
+			new Group("mods.f3_group.system", "Java:", "Java Version", "Mem:", "Memory", "Allocated:", "Allocation rate", "Off-Heap", "CPU:", // i18n-ignore: F3 line prefixes
+					"Display:", "GPU", "OpenGL", "Vulkan", "NVIDIA", "AMD", "Intel", "GL_"), // i18n-ignore: F3 line prefixes
+			new Group("mods.f3_group.targeted_block", "Targeted Block", "Targeted Fluid", "Targeted Entity", "minecraft:", "#minecraft:"), // i18n-ignore: F3 line prefixes
+			new Group("mods.f3_group.help", "Debug charts", "For help", "To edit:", "Pie Graph", "FPS / TPS"), // i18n-ignore: F3 line prefixes
 	};
 
 	private DebugStyle() {}

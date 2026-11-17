@@ -22,6 +22,15 @@ public final class SeekPlan {
 
 	/** Removal lists are sparse: one packet may remove several entities. */
 	static int[] plan(byte[] category, long[] key, int from, int to, java.util.Map<Integer, int[]> removals) {
+		return plan(category, key, from, to, removals, java.util.Collections.<Integer, long[]>emptyMap());
+	}
+
+	/** {@code bulks}: the chunks each CHUNK_BULK packet loads (sparse, like removals). */
+	static int[] plan(byte[] category, long[] key, int from, int to, java.util.Map<Integer, int[]> removals,
+			java.util.Map<Integer, long[]> bulks) {
+		// From an empty world, unloading a chunk that was never loaded does nothing (1.8 sessions
+		// leave one behind for every chunk the player ever walked past).
+		boolean[] pointless = from == 0 ? pointlessUnloads(category, key, to, bulks) : null;
 		int[] out = new int[Math.max(16, (to - from) / 8)];
 		int n = 0;
 		LongSet chunksLater = new LongSet();
@@ -45,8 +54,23 @@ public final class SeekPlan {
 					break;
 				case Category.CHUNK:
 				case Category.UNLOAD:
-					keep = !respawnLater && chunksLater.add(k);
+					keep = !respawnLater && chunksLater.add(k) && (pointless == null || !pointless[i]);
 					break;
+				case Category.CHUNK_BULK: {
+					// Needed while any of its chunks isn't replaced later; unknown contents are kept.
+					long[] chunks = bulks.get(i);
+					if (chunks == null) {
+						keep = !respawnLater;
+						break;
+					}
+					keep = false;
+					for (long chunk : chunks) {
+						if (chunksLater.add(chunk) && !respawnLater) {
+							keep = true;
+						}
+					}
+					break;
+				}
 				case Category.BLOCK:
 					keep = !respawnLater && !chunksLater.contains(k);
 					break;
@@ -93,6 +117,40 @@ public final class SeekPlan {
 			ordered[i] = out[n - 1 - i];
 		}
 		return ordered;
+	}
+
+	/** Unloads in {@code [0, to)} of chunks not loaded since the start or the last respawn. */
+	private static boolean[] pointlessUnloads(byte[] category, long[] key, int to, java.util.Map<Integer, long[]> bulks) {
+		boolean[] out = null;
+		LongSet loaded = new LongSet();
+		boolean unknownBulk = false;
+		for (int i = 0; i < to; i++) {
+			switch (category[i]) {
+				case Category.RESPAWN:
+					loaded = new LongSet();
+					unknownBulk = false;
+					break;
+				case Category.CHUNK:
+					loaded.add(key[i]);
+					break;
+				case Category.CHUNK_BULK: {
+					long[] chunks = bulks.get(i);
+					if (chunks == null) unknownBulk = true;
+					else for (long c : chunks) loaded.add(c);
+					break;
+				}
+				case Category.UNLOAD:
+					// Never cleared on unload: a chunk loaded once keeps its unloads (harmless if repeated).
+					if (!unknownBulk && !loaded.contains(key[i])) {
+						if (out == null) out = new boolean[to];
+						out[i] = true;
+					}
+					break;
+				default:
+					break;
+			}
+		}
+		return out;
 	}
 
 	/** An open-addressing set of longs (no boxing: plans scan a million packets). */

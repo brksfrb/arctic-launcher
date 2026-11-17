@@ -15,9 +15,13 @@ abstract class LivingEntitySwingMixin {
 	@Inject(method = "swing(Lnet/minecraft/world/InteractionHand;Lnet/minecraft/world/item/component/SwingAnimation;Z)Z", at = @At("HEAD"))
 	private void arctic$swing(net.minecraft.world.InteractionHand hand, net.minecraft.world.item.component.SwingAnimation animation,
 			boolean send, org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<Boolean> cir) {
-	//#else
+	//#elif MC >= 1.15
 	@Inject(method = "swing(Lnet/minecraft/world/InteractionHand;Z)V", at = @At("HEAD"))
 	private void arctic$swing(net.minecraft.world.InteractionHand hand, boolean send,
+			org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+	//#else
+	@Inject(method = "swing(Lnet/minecraft/world/InteractionHand;)V", at = @At("HEAD"))
+	private void arctic$swing(net.minecraft.world.InteractionHand hand,
 			org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
 	//#endif
 		if ((Object) this instanceof LocalPlayer) {

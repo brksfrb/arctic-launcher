@@ -10,7 +10,7 @@ use crate::tasks::Outcome;
 use crate::theme;
 use crate::toasts::{Kind, ToastAction};
 use crate::widgets;
-
+use crate::{t, tf};
 /// Seconds between checks for new messages: on the Friends page, and elsewhere.
 const POLL_OPEN: f64 = 4.0;
 const POLL_AWAY: f64 = 20.0;
@@ -53,7 +53,7 @@ fn picture(
         }
         Some(Picture::Failed) => {
             ui.label(
-                RichText::new("(screenshot unavailable)")
+                RichText::new(t!("social.screenshot_unavailable"))
                     .small()
                     .color(p.muted),
             );
@@ -170,14 +170,19 @@ impl ArcticApp {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new(format!("Chat with {name}"))
+                    RichText::new(tf!("social.chat_with", name = name))
                         .size(16.0)
                         .strong()
                         .color(p.text),
                 );
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if widgets::icon_button(ui, p, crate::art::icons::Icon::Close, "Close chat")
-                        .clicked()
+                    if widgets::icon_button(
+                        ui,
+                        p,
+                        crate::art::icons::Icon::Close,
+                        t!("social.close_chat"),
+                    )
+                    .clicked()
                     {
                         self.chat.open = None;
                     }
@@ -196,7 +201,7 @@ impl ArcticApp {
                     if self.chat.loading {
                         ui.spinner();
                     } else if self.chat.messages.is_empty() {
-                        ui.label(RichText::new("No messages yet. Say hi!").color(p.muted));
+                        ui.label(RichText::new(t!("social.no_messages_yet_say_hi")).color(p.muted));
                     }
                     for m in &self.chat.messages {
                         let mine = m.from != friend;
@@ -250,21 +255,28 @@ impl ArcticApp {
                 self.screenshot_picker(ui, &friend);
             }
             crate::widgets::row(ui, |ui| {
-                if widgets::icon_button(ui, p, crate::art::icons::Icon::Image, "Send a screenshot")
-                    .clicked()
+                if widgets::icon_button(
+                    ui,
+                    p,
+                    crate::art::icons::Icon::Image,
+                    t!("social.send_a_screenshot"),
+                )
+                .clicked()
                 {
                     self.chat.picking = !self.chat.picking;
                 }
                 let field = ui.add(
                     widgets::text_field(&mut self.chat.draft)
-                        .hint_text(format!("Message {name}"))
+                        .hint_text(tf!("social.message", name = name))
                         .char_limit(500)
                         .desired_width(ui.available_width() - 90.0),
                 );
                 let enter = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                 let ready = !self.chat.draft.trim().is_empty() && !self.chat.sending;
                 let send = ui
-                    .add_enabled_ui(ready, |ui| widgets::button(ui, p, None, "Send", true))
+                    .add_enabled_ui(ready, |ui| {
+                        widgets::button(ui, p, None, t!("social.send"), true)
+                    })
                     .inner
                     .clicked();
                 if (send || enter) && ready {
@@ -301,7 +313,7 @@ impl ArcticApp {
         };
         if shots.is_empty() {
             ui.label(
-                RichText::new("No screenshots yet (F2 in game).")
+                RichText::new(t!("social.no_screenshots_yet_f2_in_game"))
                     .small()
                     .color(p.muted),
             );
@@ -314,7 +326,7 @@ impl ArcticApp {
                 ui.horizontal(|ui| {
                     for shot in &shots {
                         let r = self.shot_thumb(ui, shot, vec2(PICKER_W, PICKER_H));
-                        if r.on_hover_text("Send this").clicked() {
+                        if r.on_hover_text(t!("social.send_this")).clicked() {
                             chosen = Some(shot.path.clone());
                         }
                     }
@@ -387,7 +399,9 @@ impl ArcticApp {
                 }
                 self.chat.messages = list;
             }
-            Err(e) => self.toasts.push(Kind::Error, "Couldn't load the chat", e),
+            Err(e) => self
+                .toasts
+                .push(Kind::Error, t!("social.couldnt_load_the_chat"), e),
         }
     }
 
@@ -399,7 +413,9 @@ impl ArcticApp {
                     self.chat.messages.push(m);
                 }
             }
-            Err(e) => self.toasts.push(Kind::Error, "Message not sent", e),
+            Err(e) => self
+                .toasts
+                .push(Kind::Error, t!("social.message_not_sent"), e),
         }
     }
 
@@ -424,7 +440,7 @@ impl ArcticApp {
             } else {
                 let name = self
                     .friend_name(&m.from)
-                    .unwrap_or_else(|| "A friend".into());
+                    .unwrap_or_else(|| t!("social.a_friend").into());
                 self.toasts.push_with_action(
                     Kind::Info,
                     name,

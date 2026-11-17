@@ -5,6 +5,26 @@ use std::path::PathBuf;
 use arctic_core::worlds::{self, World};
 
 use crate::tasks::{Event, Tasks};
+use crate::{t, tf};
+impl crate::app::ArcticApp {
+    /// Delete trashed worlds older than 14 days in every instance, in the background.
+    pub(crate) fn purge_world_trash(&mut self) {
+        self.world_purge_at = std::time::Instant::now();
+        let dirs = self.dirs.clone();
+        let mut all = vec![self.instance.clone()];
+        all.extend(self.custom_instances.iter().cloned());
+        std::thread::spawn(move || {
+            let now = arctic_core::auth::now_secs();
+            for instance in all {
+                let saves = instance.game_dir(&dirs).join("saves");
+                let n = worlds::purge_expired(&saves, now);
+                if n > 0 {
+                    log::info!("purged {n} old world(s) from {}", saves.display());
+                }
+            }
+        });
+    }
+}
 
 impl Tasks {
     /// Copy world folders into `saves`.
@@ -21,8 +41,8 @@ impl Tasks {
             let result = match (imported, error) {
                 (0, Some(e)) => Err(e),
                 (n, _) => Ok(match n {
-                    1 => "Imported 1 world".to_owned(),
-                    n => format!("Imported {n} worlds"),
+                    1 => t!("tasks.imported_1_world").to_owned(),
+                    n => tf!("tasks.imported_worlds", n_value = n),
                 }),
             };
             t.send(Event::WorldsDone(instance_id, result));
@@ -33,15 +53,15 @@ impl Tasks {
     pub fn import_world_zip(&self, instance_id: String, saves: PathBuf) {
         self.run(move |t| {
             let picked = rfd::FileDialog::new()
-                .set_title("Choose a world archive")
-                .add_filter("World archive", &["zip"])
+                .set_title(t!("tasks.choose_a_world_archive"))
+                .add_filter(t!("tasks.world_archive"), &["zip"])
                 .pick_file();
             t.note_if_picker_missing(&picked);
             let result = match picked {
-                None => Ok("No file chosen".to_owned()),
+                None => Ok(t!("tasks.no_file_chosen").to_owned()),
                 Some(zip) => worlds::import_zip(&zip, &saves)
-                    .map(|name| format!("Imported {name}"))
-                    .map_err(|e| e.to_string()),
+                    .map(|name| tf!("tasks.imported", name = name))
+                    .map_err(|e| crate::i18n::core_error(&e.to_string())),
             };
             t.send(Event::WorldsDone(instance_id, result));
         });
@@ -53,10 +73,11 @@ impl Tasks {
             let result = worlds::backup(&world, &backups)
                 .map(|path| {
                     let _ = open::that_detached(&backups);
-                    format!(
-                        "Backed up {} to {}",
-                        world.name,
-                        path.file_name()
+                    tf!(
+                        "tasks.backed_up_to",
+                        name = world.name,
+                        value = path
+                            .file_name()
                             .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
                     )
                 })

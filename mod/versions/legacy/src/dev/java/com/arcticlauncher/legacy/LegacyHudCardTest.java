@@ -49,10 +49,31 @@ final class LegacyHudCardTest {
 
 	private static void phase1(HudEditor editor) {
 		later(2, () -> {
-			LegacyWorldTest.shot("hudcard-1-before");
-			log("card at " + bx(editor) + "," + by(editor) + " widget rect " + java.util.Arrays.toString(rect(editor)));
+			LegacyWorldTest.shot("hudcard-0-nudged");
+			int[] r = rect(editor);
+			int cx = (size(editor, "width") - 300) / 2;
+			int cy = (size(editor, "height") - 74) / 2;
+			boolean overlap = overlaps(editor, r);
+			boolean unsaved = ArcticClient.config().hudCardDx == 0 && ArcticClient.config().hudCardDy == 0;
+			boolean movedAway = bx(editor) != cx || by(editor) != cy;
+			log("nudge: centered at " + cx + "," + cy + " card at " + bx(editor) + "," + by(editor) + " widget rect " + java.util.Arrays.toString(r)
+					+ " overlap=" + overlap + " cfg dx/dy=" + ArcticClient.config().hudCardDx + "," + ArcticClient.config().hudCardDy
+					+ " -> " + (!overlap && unsaved && movedAway ? "NUDGE OK" : "NUDGE FAILED"));
 		});
 		later(3, () -> {
+			// Put the card back over the widget by hand, to grab the widget from under it.
+			int[] r = rect(editor);
+			int tx = r[0] + r[2] / 2 - 60;
+			int ty = r[1] + r[3] / 2 - 45;
+			int hx = bx(editor) + 150;
+			int hy = by(editor) + 10;
+			editor.mouseClicked(hx, hy, 0);
+			editor.mouseDragged(tx + 150, ty + 10, 0);
+			editor.mouseReleased(tx + 150, ty + 10, 0);
+			log("card over widget: card at " + bx(editor) + "," + by(editor) + " widget rect " + java.util.Arrays.toString(r) + " overlap=" + overlaps(editor, r));
+		});
+		later(4, () -> LegacyWorldTest.shot("hudcard-1-before"));
+		later(5, () -> {
 			int[] r = rect(editor);
 			HudSlot slot = ArcticClient.hud().slot(fps());
 			log("widget slot before: placed=" + slot.placed + " dx=" + slot.dx + " dy=" + slot.dy);
@@ -62,34 +83,44 @@ final class LegacyHudCardTest {
 			editor.mouseDragged(x + 6, y + 6, 0);
 			editor.mouseDragged(x + 12, y + 8, 0);
 		});
-		later(5, () -> LegacyWorldTest.shot("hudcard-2-dimmed-while-dragging"));
-		later(6, () -> {
+		later(7, () -> LegacyWorldTest.shot("hudcard-2-dimmed-while-dragging"));
+		later(8, () -> {
 			int[] r = rect(editor);
 			double x = r[0] + r[2] / 2.0;
 			double y = r[1] + r[3] / 2.0;
 			editor.mouseDragged(x + 230, y + 130, 0);
 		});
-		later(7, () -> {
+		later(9, () -> {
 			editor.mouseReleased(0, 0, 0);
 			HudSlot slot = ArcticClient.hud().slot(fps());
 			log("widget slot after: dx=" + slot.dx + " dy=" + slot.dy + " -> " + (slot.dx != 0 || slot.dy != 0 ? "GRAB OK" : "GRAB FAILED"));
 		});
-		later(8, () -> LegacyWorldTest.shot("hudcard-3-widget-moved"));
-		later(9, () -> {
+		later(10, () -> LegacyWorldTest.shot("hudcard-3-widget-moved"));
+		later(11, () -> {
 			int hx = bx(editor) + 150;
 			int hy = by(editor) + 10;
+			int cx = (size(editor, "width") - 300) / 2;
+			int cy = (size(editor, "height") - 74) / 2;
+			// To a fixed spot up and left of the middle.
+			int tx = cx - 170;
+			int ty = cy - 60;
 			editor.mouseClicked(hx, hy, 0);
-			editor.mouseDragged(hx - 140, hy - 20, 0);
-			editor.mouseDragged(hx - 300, hy + 100, 0);
-			editor.mouseReleased(hx - 300, hy + 100, 0);
+			editor.mouseDragged(hx - 40, hy + 20, 0);
+			editor.mouseDragged(tx + 150, ty + 10, 0);
+			editor.mouseReleased(tx + 150, ty + 10, 0);
 			log("card moved to dx=" + ArcticClient.config().hudCardDx + " dy=" + ArcticClient.config().hudCardDy + " bx=" + bx(editor) + " by=" + by(editor));
 		});
-		later(10, () -> LegacyWorldTest.shot("hudcard-4-card-moved"));
-		later(11, () -> {
-			// The card's buttons still work where no widget is under them.
+		later(12, () -> LegacyWorldTest.shot("hudcard-4-card-moved"));
+		later(13, () -> {
 			log("DONE phase 1");
 			MinecraftClient.getInstance().scheduleStop();
 		});
+	}
+
+	private static boolean overlaps(HudEditor e, int[] r) {
+		int x = bx(e);
+		int y = by(e);
+		return r[0] < x + 300 && r[0] + r[2] > x && r[1] < y + 74 && r[1] + r[3] > y;
 	}
 
 	private static void phase2(HudEditor editor) {
@@ -128,6 +159,16 @@ final class LegacyHudCardTest {
 
 	private static int by(HudEditor e) {
 		return field(e, "by");
+	}
+
+	private static int size(HudEditor e, String name) {
+		try {
+			java.lang.reflect.Field f = com.arcticlauncher.client.ui.Page.class.getDeclaredField(name);
+			f.setAccessible(true);
+			return f.getInt(e);
+		} catch (ReflectiveOperationException ex) {
+			throw new IllegalStateException(ex);
+		}
 	}
 
 	private static int field(HudEditor e, String name) {

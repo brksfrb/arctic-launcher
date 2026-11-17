@@ -14,6 +14,8 @@ public final class ArcticLegacy implements ClientModInitializer {
 	public void onInitializeClient() {
 		ArcticClient.init(PLATFORM);
 		com.arcticlauncher.client.replay.Replays.backend(com.arcticlauncher.legacy.replay.LegacyReplayPlayback.INSTANCE);
+		//#if DEV_SCENES
 		LegacySelfTest.maybeStart();
+		//#endif
 	}
 }

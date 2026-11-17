@@ -1,0 +1,6 @@
+[main/INFO] [OneConfigLoader]: Downloading new version of OneConfig...
+java.net.SocketTimeoutException: Read timed out
+    at cc.polyfrost.oneconfig.loader.OneConfigLoaderBase.downloadFile(OneConfigLoaderBase.java:150)
+OneConfig has failed to download!
+Please join our discord server at https://polyfrost.org/discord
+Game exited with code 1

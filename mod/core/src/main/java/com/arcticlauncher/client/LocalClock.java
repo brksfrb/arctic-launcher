@@ -23,6 +23,31 @@ public final class LocalClock {
 		return format;
 	}
 
+	/** Render-thread formatter whose text only changes at a local minute/day boundary. */
+	public static final class Display {
+		private final SimpleDateFormat format;
+		private final long unit;
+		private final java.util.Date date = new java.util.Date(0);
+		private long bucket;
+		private String text;
+
+		public Display(SimpleDateFormat format, long unit) {
+			if (unit <= 0) throw new IllegalArgumentException("clock display unit");
+			this.format = format;
+			this.unit = unit;
+		}
+
+		public String at(long now) {
+			long next = Math.floorDiv(now + format.getTimeZone().getOffset(now), unit);
+			if (text == null || next != bucket) {
+				date.setTime(now);
+				text = format.format(date);
+				bucket = next;
+			}
+			return text;
+		}
+	}
+
 	private static TimeZone zone() {
 		String supplied = System.getProperty(OFFSET_PROPERTY);
 		if (supplied != null) {
@@ -30,7 +55,7 @@ public final class LocalClock {
 				int seconds = Integer.parseInt(supplied);
 				if (seconds >= -18 * 3600 && seconds <= 18 * 3600) {
 					// SimpleTimeZone has a fixed raw offset and no tzdb/DST rules.
-					return new SimpleTimeZone(seconds * 1000, "Arctic OS local offset");
+					return new SimpleTimeZone(seconds * 1000, "Arctic OS local offset"); // i18n-ignore
 				}
 			} catch (NumberFormatException ignored) {}
 		}

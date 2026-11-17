@@ -98,7 +98,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("window ready after {:.1?}", spawned_at.elapsed());
                     break;
                 }
-                Ok(GameEvent::Exited { code }) => {
+                Ok(GameEvent::Exited { code, .. }) => {
                     println!("game exited early with {code:?}");
                     return Ok(());
                 }
@@ -112,7 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::thread::sleep(Duration::from_secs(5));
         game.kill();
         while let Ok(event) = rx.recv_timeout(Duration::from_secs(10)) {
-            if let GameEvent::Exited { code } = event {
+            if let GameEvent::Exited { code, .. } = event {
                 println!("stopped (exit {code:?})");
                 break;
             }

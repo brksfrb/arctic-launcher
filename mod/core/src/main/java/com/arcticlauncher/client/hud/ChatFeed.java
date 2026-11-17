@@ -10,6 +10,7 @@ import com.arcticlauncher.client.style.Style;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.arcticlauncher.client.Lang;
 /**
  * A second chat on screen: the newest lines that match one of your saved filters (a name from
  * Chat history, say "Trades" with the words "buy, sell"), always visible, whatever else is
@@ -29,7 +30,7 @@ final class ChatFeed extends HudWidget {
 	private String seenFilter = "";
 
 	ChatFeed() {
-		super("chatfeed", "Filtered chat", "A second chat: the newest lines that match a saved filter", false, Column.LEFT);
+		super("chatfeed", Lang.t("hud.filtered_chat"), Lang.t("hud.a_second_chat_the_newest_lines_that_match_a"), false, Column.LEFT);
 	}
 
 	private static ChatFilter filter() {
@@ -84,12 +85,12 @@ final class ChatFeed extends HudWidget {
 			if (!preview) {
 				return;
 			}
-			rows.add("Pick a filter in Chat history");
+			rows.add(Lang.t("hud.pick_a_filter_in_chat_history"));
 		} else if (shown.isEmpty()) {
 			if (!preview) {
 				return;
 			}
-			rows.add("Lines that match \"" + filter().name + "\" show here");
+			rows.add(Lang.t("hud.lines_that_match_show_here", filter().name));
 		} else {
 			// Newest at the bottom, like a chat.
 			for (int i = shown.size() - 1; i >= 0; i--) {

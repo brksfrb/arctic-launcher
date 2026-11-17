@@ -39,15 +39,9 @@ abstract class PlayerTabOverlayMixin {
 			// Unknown: the game's own icon says so.
 			return;
 		}
-		String text = String.valueOf(ms);
-		int color = ms < 80 ? 0xFF55FF55 : ms < 160 ? 0xFFFFFF55 : 0xFFFF5555;
-		float scale = 0.8f;
-		g.push();
-		g.translate(x + width - 1 - g.textWidth(text) * scale, y + 1.5f);
-		g.scale(scale);
-		g.text(text, 0, 0, color, true);
-		g.pop();
-		ci.cancel();
+		if (com.arcticlauncher.client.ui.TabPing.draw(g, width, x, y, ms)) {
+			ci.cancel();
+		}
 	}
 	//#endif
 
@@ -77,16 +71,8 @@ abstract class PlayerTabOverlayMixin {
 			}
 		}
 		//#endif
-		// Before 1.16 text had no fonts, so there's no badge glyph to show.
-		if (Compat.BADGES && com.arcticlauncher.client.feature.Badge.show(true, Compat.profileId(info.getProfile()))) {
-			Component badge = Compat.arcticBadge();
-			// A 1px space from the badge font: a normal space leaves too wide a gap.
-			//#if MC >= 1.16
-			Component gap = com.arcticlauncher.mod.Compat.literal(" ").withStyle(badge.getStyle());
-			//#else
-			Component gap = com.arcticlauncher.mod.Compat.literal(" ");
-			//#endif
-			cir.setReturnValue(com.arcticlauncher.mod.Compat.empty().append(badge).append(gap).append(cir.getReturnValue()));
+		if (com.arcticlauncher.client.feature.Badge.show(true, Compat.profileId(info.getProfile()))) {
+			cir.setReturnValue(Compat.empty().append(Compat.arcticBadgeWithGap(Compat.profileId(info.getProfile()), true)).append(cir.getReturnValue()));
 		}
 	}
 }

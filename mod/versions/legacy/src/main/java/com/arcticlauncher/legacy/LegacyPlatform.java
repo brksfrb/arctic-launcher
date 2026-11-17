@@ -42,6 +42,7 @@ import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.LightType;
 
+import com.arcticlauncher.client.Lang;
 /** {@link Platform} for old Minecraft (1.8.9) on Legacy Fabric. */
 public final class LegacyPlatform implements Platform {
 	private static final int TICKS_PER_SECOND = 20;
@@ -97,7 +98,7 @@ public final class LegacyPlatform implements Platform {
 			return -1;
 		}
 		PlayerListEntry entry = mc.getNetworkHandler().getPlayerListEntry(mc.player.getUuid());
-		return entry == null ? -1 : entry.getLatency();
+		return com.arcticlauncher.client.net.MeasuredPing.value(server(), entry == null ? -1 : entry.getLatency());
 	}
 
 	@Override
@@ -106,8 +107,15 @@ public final class LegacyPlatform implements Platform {
 		if (mc.getNetworkHandler() == null || mc.isInSingleplayer()) {
 			return -1;
 		}
+		// Our own entry: the measured round trip, as the ping widget shows.
+		if (mc.player != null && player.equals(mc.player.getUuid())) return ping();
 		PlayerListEntry entry = mc.getNetworkHandler().getPlayerListEntry(player);
 		return entry == null ? -1 : entry.getLatency();
+	}
+
+	@Override
+	public boolean beginReplayInWorld() {
+		return com.arcticlauncher.legacy.replay.LegacyReplayRecording.beginInWorld();
 	}
 
 	@Override
@@ -118,6 +126,12 @@ public final class LegacyPlatform implements Platform {
 	@Override
 	public boolean windowFocused() {
 		return org.lwjgl.opengl.Display.isActive();
+	}
+
+	@Override
+	public String screenClassName() {
+		Screen screen = mc().currentScreen;
+		return screen == null ? "none" : screen.getClass().getName();
 	}
 
 	@Override
@@ -336,6 +350,20 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public String keyUsedBy(String key) {
+		int code = LegacyKeys.code(key);
+		if (code == 0) {
+			return null;
+		}
+		for (KeyBinding k : mc().options.allKeys) {
+			if (k.getCode() == code && !"of.key.zoom".equals(k.getTranslationKey())) {
+				return net.minecraft.client.resource.language.I18n.translate(k.getTranslationKey());
+			}
+		}
+		return null;
+	}
+
+	@Override
 	public void setThirdPerson(boolean on) {
 		GameOptions options = mc().options;
 		if (on) {
@@ -533,6 +561,22 @@ public final class LegacyPlatform implements Platform {
 	public boolean chunkBordersWorks() {
 		return true;
 	}
+
+	@Override
+	public boolean lightOverlayWorks() {
+		//#if MC < 1.9
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	//#if MC < 1.9
+	@Override
+	public com.arcticlauncher.client.feature.LightOverlay.Probe lightProbe() {
+		return LegacyLightOverlay.probe();
+	}
+	//#endif
 
 	@Override
 	public boolean itemPhysicsWorks() {
@@ -1154,6 +1198,20 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public java.util.Collection<UUID> onlinePlayerIds() {
+		if (mc().getNetworkHandler() == null) {
+			return java.util.Collections.emptyList();
+		}
+		List<UUID> ids = new ArrayList<UUID>();
+		for (PlayerListEntry entry : mc().getNetworkHandler().getPlayerList()) {
+			if (entry.getProfile() != null && entry.getProfile().getId() != null) {
+				ids.add(entry.getProfile().getId());
+			}
+		}
+		return ids;
+	}
+
+	@Override
 	public int playerCount() {
 		return mc().getNetworkHandler() == null ? -1 : mc().getNetworkHandler().getPlayerList().size();
 	}
@@ -1329,16 +1387,16 @@ public final class LegacyPlatform implements Platform {
 			return null;
 		}
 		int size = com.arcticlauncher.client.feature.ContainerPeek.slotsFor(id.getPath());
-		net.minecraft.nbt.NbtCompound tag = stack.getNbt().getCompound("BlockEntityTag");
+		net.minecraft.nbt.NbtCompound tag = stack.getNbt().getCompound("BlockEntityTag"); // i18n-ignore
 		if (!tag.contains("Items", 9)) {
 			return null;
 		}
-		net.minecraft.nbt.NbtList list = tag.getList("Items", 10);
+		net.minecraft.nbt.NbtList list = tag.getList("Items", 10); // i18n-ignore: an NBT tag
 		Object[] out = new Object[size];
 		boolean any = false;
 		for (int i = 0; i < list.size(); i++) {
 			net.minecraft.nbt.NbtCompound entry = list.getCompound(i);
-			int slot = entry.getByte("Slot") & 255;
+			int slot = entry.getByte("Slot") & 255; // i18n-ignore: an NBT tag
 			ItemStack item = new ItemStack(entry);
 			if (slot < out.length && present(item)) {
 				out[slot] = item;
@@ -1477,7 +1535,7 @@ public final class LegacyPlatform implements Platform {
 
 	// ---- Duels --------------------------------------------------------------------------
 
-	private static final String DUEL_PREFIX = "Arctic Duel ";
+	private static final String DUEL_PREFIX = "Arctic Duel "; // i18n-ignore // i18n-ignore
 
 	@Override
 	public boolean canDuel() {
@@ -1495,7 +1553,7 @@ public final class LegacyPlatform implements Platform {
 		LegacyHooks.onNextFrame(() -> {
 			MinecraftClient mc = mc();
 			leave(mc);
-			LegacyWorldTest.deleteWorlds(new File(mc.runDirectory, "saves"), DUEL_PREFIX);
+			WorldCleanup.deleteWorlds(new File(mc.runDirectory, "saves"), DUEL_PREFIX);
 			String name = DUEL_PREFIX + com.arcticlauncher.client.LocalClock.formatter("MM-dd HH.mm").format(new java.util.Date());
 			//#if MC >= 1.10
 			net.minecraft.world.level.LevelInfo info = new net.minecraft.world.level.LevelInfo(System.currentTimeMillis(),
@@ -1647,33 +1705,45 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public String gameLanguage() {
+		return mc().options.language;
+	}
+
+	@Override
 	public void joinServer(String serverId) throws Exception {
 		mc().getSessionService().joinServer(mc().getSession().getProfile(), mc().getSession().getAccessToken(), serverId);
 	}
 
 	@Override
 	public void registerTexture(String hash, byte[] png, boolean cape) {
-		BufferedImage image = LegacyTextures.decode(png);
-		if (image == null) {
+		// Decoded and read out here (a download thread); the render thread only uploads.
+		LegacyTextures.Pixels pixels = LegacyTextures.pixels(LegacyTextures.decode(png));
+		if (pixels == null) {
 			return;
 		}
-		int frames = cape ? Looks.capeFrames(image.getWidth(), image.getHeight()) : 1;
-		com.arcticlauncher.client.gfx.RenderWork.post(() -> {
-			if (frames < 2) {
-				if (LegacyTextures.register(LegacyTextures.look(hash), image)) {
+		int frames = cape ? Looks.capeFrames(pixels.width, pixels.height) : 1;
+		if (frames < 2) {
+			com.arcticlauncher.client.gfx.RenderWork.post(() -> {
+				if (LegacyTextures.register(LegacyTextures.look(hash), pixels)) {
 					ArcticClient.looks().textureReady(hash, 1);
 				}
-				return;
-			}
-			int h = image.getHeight() / frames;
-			boolean ok = true;
-			for (int f = 0; f < frames; f++) {
-				ok &= LegacyTextures.register(LegacyTextures.look(hash + "/" + f), image.getSubimage(0, f * h, image.getWidth(), h));
-			}
-			if (ok) {
-				ArcticClient.looks().textureReady(hash, frames);
-			}
-		});
+			});
+			return;
+		}
+		// An animated cape: one upload per job (frame), so a long cape is spread over frames like
+		// everything else; it shows once the last frame is up, as before.
+		int h = pixels.height / frames;
+		boolean[] ok = {true};
+		for (int f = 0; f < frames; f++) {
+			int frame = f;
+			LegacyTextures.Pixels part = pixels.rows(f * h, h);
+			com.arcticlauncher.client.gfx.RenderWork.post(() -> {
+				ok[0] &= LegacyTextures.register(LegacyTextures.look(hash + "/" + frame), part);
+				if (frame == frames - 1 && ok[0]) {
+					ArcticClient.looks().textureReady(hash, frames);
+				}
+			});
+		}
 	}
 
 	@Override

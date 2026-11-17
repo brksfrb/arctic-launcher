@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.arcticlauncher.client.Lang;
 /**
  * What Mixin's setup (reading every mixin and its targets, about a second of a start) does that the game
  * needs once the classes are read back from the {@link MixinCache}: it asks each mod's Mixin plugin
@@ -31,6 +32,11 @@ public final class MixinReplay {
 	public static volatile String why = "";
 	/** What the last successful replay did, for the startup line. */
 	public static volatile String did = "";
+	/** Includes partially completed replays, which can also have changed plugin state. */
+	public static volatile int callsAttempted;
+	public static volatile int callsCompleted;
+	public static volatile int decisionsAttempted;
+	public static volatile int decisionsCompleted;
 	private static Path file;
 	private static boolean recording;
 	private static final Map<Object, List<String[]>> APPLIES = new java.util.IdentityHashMap<>();
@@ -152,7 +158,7 @@ public final class MixinReplay {
 					case "T" -> current.targets.add(part[1]);
 					case "A" -> current.applies.add(new String[] {part[1], part[2]});
 					default -> {
-						why = "unreadable record";
+						why = "unreadable record"; // i18n-ignore
 						return false;
 					}
 				}
@@ -167,7 +173,7 @@ public final class MixinReplay {
 				live.add(config);
 			}
 			if (live.size() != records.size()) {
-				why = "config count " + live.size() + " vs " + records.size();
+				why = "config count " + live.size() + " vs " + records.size(); // i18n-ignore
 				return false;
 			}
 			Set<String> all = new HashSet<>();
@@ -181,7 +187,9 @@ public final class MixinReplay {
 					Object mixinConfig = config.getClass().getMethod("getConfig").invoke(config);
 					Method onSelect = mixinConfig.getClass().getDeclaredMethod("onSelect");
 					onSelect.setAccessible(true);
+					callsAttempted++;
 					onSelect.invoke(mixinConfig);
+					callsCompleted++;
 					selects++;
 				}
 			}
@@ -207,10 +215,16 @@ public final class MixinReplay {
 				Method apply = handle.getClass().getDeclaredMethod("shouldApplyMixin", String.class, String.class);
 				apply.setAccessible(true);
 				for (String[] pair : record.applies) {
+					callsAttempted++;
+					decisionsAttempted++;
 					apply.invoke(handle, pair[0], pair[1]);
+					decisionsCompleted++;
+					callsCompleted++;
 					applied++;
 				}
+				callsAttempted++;
 				mixins.invoke(handle);
+				callsCompleted++;
 			}
 			for (Object config : live) {
 				Object handle = handleOf(config);
@@ -225,10 +239,12 @@ public final class MixinReplay {
 				}
 				Record record = records.get((String) config.getClass().getMethod("getName").invoke(config));
 				Method accept = Class.forName("org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin").getMethod("acceptTargets", Set.class, Set.class);
+				callsAttempted++;
 				accept.invoke(plugin, new HashSet<>(record.targets), everything);
+				callsCompleted++;
 				accepted++;
 			}
-			did = live.size() + " configs, " + selects + " selected, " + nullHandles + " without plugin handle, " + unavailable + " without plugin, " + applied + " shouldApply calls, " + accepted + " acceptTargets calls";
+			did = live.size() + " configs, " + selects + " selected, " + nullHandles + " without plugin handle, " + unavailable + " without plugin, " + applied + " shouldApply calls, " + accepted + " acceptTargets calls"; // i18n-ignore
 			return true;
 		} catch (ReflectiveOperationException | java.io.IOException | RuntimeException e) {
 			Throwable cause = e.getCause() != null ? e.getCause() : e;

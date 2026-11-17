@@ -7,6 +7,7 @@ import java.util.function.Supplier;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.hud.HudWidget;
 
+import com.arcticlauncher.client.Lang;
 /**
  * One card on the Mods screen: a feature with an icon, an on/off switch
  * (when it has one) and settings, either a form ({@link #settings}) or a
@@ -15,24 +16,29 @@ import com.arcticlauncher.client.hud.HudWidget;
 final class Mod {
 	/** The Mods screen's filter chips. */
 	enum Category {
-		ALL("All"),
+		ALL("mods.all"),
 		HUD("HUD"),
-		COMBAT("Combat"),
-		INVENTORY("Inventory"),
-		MOVEMENT("Movement"),
-		TOOLS("Tools"),
-		VISUAL("Visual"),
-		CHAT("Chat"),
-		PLAYERS("Players"),
-		SOCIAL("Social"),
-		CLIENT("Client"),
+		COMBAT("mods.combat"),
+		INVENTORY("mods.inventory"),
+		MOVEMENT("mods.movement"),
+		TOOLS("mods.tools"),
+		VISUAL("mods.visual"),
+		CHAT("mods.chat"),
+		PLAYERS("mods.players"),
+		SOCIAL("mods.social"),
+		CLIENT("mods.client"),
 		/** The old catch-all: every mod has been moved out of it (no chip). */
-		GAMEPLAY("Gameplay");
+		GAMEPLAY("mods.gameplay");
 
-		final String title;
+		/** The chip's text key (or a name that stays as it is). */
+		private final String key;
 
-		Category(String title) {
-			this.title = title;
+		Category(String key) {
+			this.key = key;
+		}
+
+		String title() {
+			return Lang.t(key);
 		}
 	}
 
@@ -48,16 +54,20 @@ final class Mod {
 	final String icon;
 	Category category;
 	/** For HUD widgets: which group of the HUD list it is in (see ModCatalog.HUD_GROUPS). */
-	String group = "Info";
+	String group = "mods.hud_group.info";
 	/** Extra words the search matches. */
-	final String keywords;
+	String keywords;
 	private BooleanSupplier on;
 	private Consumer<Boolean> set;
 	Settings settings;
 	/** A whole tab of its own instead of a settings form. */
 	Supplier<MenuTab> page;
+	/** It has a key of its own that switches it (so its page doesn't get the generic Toggle key row). */
+	boolean ownToggleKey;
 	/** For HUD widgets: the widget (its page shows a live preview). */
 	HudWidget widget;
+	/** The HUD controls merged into this card, retaining their saved toggle binding. */
+	Mod hudControls;
 
 	Mod(String id, String name, String description, String icon, Category category, String keywords) {
 		this.id = id;
@@ -72,6 +82,11 @@ final class Mod {
 	Mod toggle(BooleanSupplier get, Consumer<Boolean> set) {
 		this.on = get;
 		this.set = set;
+		return this;
+	}
+
+	Mod ownToggleKey() {
+		this.ownToggleKey = true;
 		return this;
 	}
 

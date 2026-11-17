@@ -35,6 +35,11 @@ public final class Category {
 	public static final byte ENTITY_HEAD = 12;
 	/** An entity's absolute velocity (key: its id). */
 	public static final byte ENTITY_MOTION = 13;
+	/**
+	 * Many whole chunks in one packet (1.8's map_chunk_bulk; chunk keys supplied separately by
+	 * the classifier). Without its list it is kept like {@link #ALWAYS}.
+	 */
+	public static final byte CHUNK_BULK = 14;
 
 	private Category() {}
 

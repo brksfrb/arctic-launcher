@@ -14,6 +14,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Players' PvP tiers (from a public tier list) shown by their names: "HT3 | Steve".
  * Looked up once per player in the background and kept for a while; nothing is
@@ -34,10 +35,15 @@ public final class Tiers {
 			this.titles = titles;
 		}
 
+		/** The list's name, in the player's language. */
+		public String label() {
+			return Lang.t(name);
+		}
+
 		public String title(String mode) {
 			for (int i = 0; i < modes.length; i++) {
 				if (modes[i].equals(mode)) {
-					return titles[i];
+					return Lang.t(titles[i]);
 				}
 			}
 			return mode;
@@ -46,14 +52,14 @@ public final class Tiers {
 
 	/** MCTiers moved to PvPTiers; SubTiers has the other modes (bed, trident, ...). */
 	public static final Source[] SOURCES = {
-			new Source("PvPTiers", "https://pvptiers.com/api/profile/",
+			new Source("social.pvptiers", "https://pvptiers.com/api/profile/",
 					new String[] {"sword", "axe", "uhc", "pot", "neth_pot", "smp", "crystal", "mace", "elytra"},
-					new String[] {"Sword", "Axe", "UHC", "Pot", "Neth Pot", "SMP", "Crystal", "Mace", "Elytra"}),
-			new Source("SubTiers", "https://subtiers.net/api/v2/profile/",
+					new String[] {"social.sword", "social.axe", "UHC", "social.pot", "social.neth_pot", "SMP", "social.crystal", "social.mace", "social.elytra"}), // i18n-ignore: mode names
+			new Source("social.subtiers", "https://subtiers.net/api/v2/profile/",
 					new String[] {"bed", "trident", "minecart", "creeper", "dia_smp", "dia_crystal", "elytra", "manhunt",
 							"og_vanilla", "speed", "bow", "debuff"},
-					new String[] {"Bed", "Trident", "Minecart", "Creeper", "Dia SMP", "Dia Vanilla", "Elytra", "Manhunt",
-							"OG Vanilla", "Speed", "Bow", "Debuff"}),
+					new String[] {"social.bed", "social.trident", "social.minecart", "social.creeper", "social.dia_smp", "social.dia_vanilla", "social.elytra", "social.manhunt",
+							"social.og_vanilla", "social.speed", "social.bow", "social.debuff"}),
 	};
 
 	/** What goes by a name: the tier (colored) and, for someone's best, its mode. */

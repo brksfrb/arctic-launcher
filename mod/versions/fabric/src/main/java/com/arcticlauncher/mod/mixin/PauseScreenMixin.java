@@ -31,7 +31,11 @@ abstract class PauseScreenMixin extends Screen {
 	}
 	//#endif
 
+	//#if MC >= 1.14
 	@Inject(method = "init", at = @At("TAIL"))
+	//#else
+	@Inject(method = "method_1044", at = @At("TAIL"))
+	//#endif
 	private void arctic$button(CallbackInfo ci) {
 		//#if MC >= 1.20.2
 		if (((PauseScreen) (Object) this).showsPauseMenu()) {

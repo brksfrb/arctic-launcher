@@ -12,6 +12,11 @@ public interface Gfx {
 
 	int height();
 
+	/** Consecutive fills with one color; adapters may submit their quads together. */
+	default void beginFills(int color) {}
+
+	default void endFills() {}
+
 	void fill(int x0, int y0, int x1, int y1, int color);
 
 	void gradient(int x0, int y0, int x1, int y1, int top, int bottom);
@@ -52,6 +57,9 @@ public interface Gfx {
 	void translate(float x, float y);
 
 	void scale(float s);
+
+	/** Turn everything drawn from now on (until {@link #pop}) clockwise about the origin, by this many degrees. */
+	void rotate(float degrees);
 
 	void scissor(int x0, int y0, int x1, int y1);
 

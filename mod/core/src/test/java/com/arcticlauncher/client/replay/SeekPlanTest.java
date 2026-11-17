@@ -135,4 +135,25 @@ class SeekPlanTest {
 		long[] keys = {7, 7, 7, 7, 7, 7, 7, 8, 8};
 		assertArrayEquals(new int[] {0, 3, 4, 5, 6, 7, 8}, plan(cats, keys));
 	}
+
+	@Test
+	void aChunkBulkGoesOnceEveryChunkInItArrivesAgainOrUnloads() {
+		java.util.Map<Integer, long[]> bulks = new java.util.HashMap<>();
+		byte[] cats = {Category.CHUNK_BULK, Category.CHUNK_BULK, Category.BLOCK, Category.CHUNK, Category.UNLOAD, Category.CHUNK_BULK};
+		long[] keys = {0, 0, A, A, B, 0};
+		bulks.put(0, new long[] {A, B});
+		bulks.put(1, new long[] {A, Category.chunk(2, 0)});
+		// 5: no list (unknown layout): kept, like before.
+		int[] plan = SeekPlan.plan(cats, keys, 0, cats.length, java.util.Collections.emptyMap(), bulks);
+		assertArrayEquals(new int[] {1, 3, 4, 5}, plan);
+	}
+
+	@Test
+	void chunkBulksBeforeARespawnAreLeftOut() {
+		java.util.Map<Integer, long[]> bulks = new java.util.HashMap<>();
+		byte[] cats = {Category.CHUNK_BULK, Category.CHUNK_BULK, Category.RESPAWN, Category.CHUNK_BULK};
+		bulks.put(0, new long[] {A});
+		bulks.put(3, new long[] {B});
+		assertArrayEquals(new int[] {2, 3}, SeekPlan.plan(cats, new long[4], 0, 4, java.util.Collections.emptyMap(), bulks));
+	}
 }

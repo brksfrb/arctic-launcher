@@ -105,9 +105,16 @@ public abstract class HudWidget {
 		float p = v * (1 - s);
 		float q = v * (1 - f * s);
 		float t = v * (1 - (1 - f) * s);
-		float[][] rgb = {{v, t, p}, {q, v, p}, {p, v, t}, {p, q, v}, {t, p, v}, {v, p, q}};
-		float[] c = rgb[i];
-		return (Math.round(c[0] * 255) << 16) | (Math.round(c[1] * 255) << 8) | Math.round(c[2] * 255);
+		float red, green, blue;
+		switch (i) {
+			case 0: red = v; green = t; blue = p; break;
+			case 1: red = q; green = v; blue = p; break;
+			case 2: red = p; green = v; blue = t; break;
+			case 3: red = p; green = q; blue = v; break;
+			case 4: red = t; green = p; blue = v; break;
+			default: red = v; green = p; blue = q; break;
+		}
+		return (Math.round(red * 255) << 16) | (Math.round(green * 255) << 8) | Math.round(blue * 255);
 	}
 
 	/**

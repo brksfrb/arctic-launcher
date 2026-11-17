@@ -11,7 +11,7 @@ import com.arcticlauncher.client.gfx.Gfx;
  */
 public final class CombatFx {
 	/** Names of the sound choices (0 is off); the platform plays them by number. */
-	public static final String[] SOUNDS = {"Off", "Ding", "Orb", "Level up"};
+	public static final String[] SOUNDS = {"mods.combat_sound.off", "mods.combat_sound.ding", "mods.combat_sound.orb", "mods.combat_sound.level_up"};
 	/** The marker colors to pick from. */
 	public static final int[] MARKER_COLORS = {0xFFFFFFFF, 0xFFFFD84D, 0xFF5CE1E6, 0xFF86EFAC, 0xFFFF6767};
 

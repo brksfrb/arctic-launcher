@@ -129,7 +129,7 @@ public final class Cosmetics {
 	}
 
 	private static ScheduledThreadPoolExecutor newDownloads() {
-		ScheduledThreadPoolExecutor pool = new ScheduledThreadPoolExecutor(2, new ThreadFactory() {
+		ScheduledThreadPoolExecutor pool = new ScheduledThreadPoolExecutor(4, new ThreadFactory() {
 			@Override
 			public Thread newThread(Runnable r) {
 				Thread t = new Thread(r, "arctic-cosmetics");
@@ -167,6 +167,48 @@ public final class Cosmetics {
 				emote.requested = false;
 			}
 		}, LOAD_RETRY_MS * emote.attempts, TimeUnit.MILLISECONDS);
+	}
+
+	/** The catalog has loaded (once). */
+	public boolean loaded() {
+		return catalogAt > 0;
+	}
+
+	/** The catalog is asked for now, not when a cosmetic is first drawn (a player list has arrived). */
+	public void prefetch() {
+		askCatalog();
+	}
+
+	/** Ids worn by players seen so far: their files load as soon as the catalog is there, drawn or not. */
+	private final java.util.Set<String> wanted = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+
+	public void preload(List<String> ids) {
+		boolean added = false;
+		for (String id : ids) {
+			added |= wanted.add(id);
+		}
+		if (added) {
+			if (catalogAt > 0) {
+				loadWanted();
+			} else {
+				askCatalog();
+			}
+		}
+	}
+
+	private void loadWanted() {
+		for (String id : wanted) {
+			Item item = null;
+			for (Item i : items) {
+				if (i.id.equals(id)) {
+					item = i;
+					break;
+				}
+			}
+			if (item != null) {
+				drawable(id);
+			}
+		}
 	}
 
 	public List<Item> items() {
@@ -437,6 +479,7 @@ public final class Cosmetics {
 		emotes = Collections.unmodifiableList(keepLoadedEmotes(moves));
 		catalogAt = System.currentTimeMillis();
 		platform.log(false, "Arctic cosmetics: " + found.size() + " items, " + moves.size() + " emotes");
+		loadWanted();
 	}
 
 	/** Items already loaded stay (their model is baked); only new or changed ones load. */
@@ -475,7 +518,7 @@ public final class Cosmetics {
 	private boolean load(Item item) {
 		if (item.mesh != null) {
 			try {
-				item.meshModel = MeshModel.parse(Http.get(baseUrl + "/v1/assets/" + item.mesh, null));
+				item.meshModel = MeshModel.parse(AssetCache.get(item.mesh, () -> Http.get(baseUrl + "/v1/assets/" + item.mesh, null)));
 				platform.registerMesh(item.id, item.meshModel);
 				return true;
 			} catch (Exception | StackOverflowError e) {
@@ -490,12 +533,17 @@ public final class Cosmetics {
 			return true;
 		}
 		try {
-			item.geometry = Geometry.parse(json(item.model));
-			if (item.animation != null) {
-				item.idle = Animation.parse(json(item.animation));
+			// The model, its idle animation and the pictures are asked for together, not one after the other.
+			java.util.concurrent.Future<JsonElement> modelFile = FETCH.submit(() -> json(item.model));
+			java.util.concurrent.Future<JsonElement> idleFile = item.animation == null ? null : FETCH.submit(() -> json(item.animation));
+			java.util.concurrent.Future<byte[]> pngFile = FETCH.submit(() -> texture(item.texture));
+			java.util.concurrent.Future<byte[]> glowFile = item.glow == null ? null : FETCH.submit(() -> texture(item.glow));
+			item.geometry = Geometry.parse(await(modelFile));
+			if (idleFile != null) {
+				item.idle = Animation.parse(await(idleFile));
 			}
-			byte[] png = texture(item.texture);
-			byte[] glow = item.glow == null ? null : texture(item.glow);
+			byte[] png = await(pngFile);
+			byte[] glow = glowFile == null ? null : await(glowFile);
 			platform.registerCosmetic(item.id, item.geometry, png, glow);
 			return true;
 		} catch (Exception | StackOverflowError e) {
@@ -504,9 +552,34 @@ public final class Cosmetics {
 		}
 	}
 
+	/** Requests inside one item's load (the item itself runs on {@link #downloads}). */
+	private static final java.util.concurrent.ExecutorService FETCH = java.util.concurrent.Executors.newCachedThreadPool(new ThreadFactory() {
+		@Override
+		public Thread newThread(Runnable r) {
+			Thread t = new Thread(r, "arctic-cosmetics-fetch");
+			t.setDaemon(true);
+			return t;
+		}
+	});
+
+	private static <T> T await(java.util.concurrent.Future<T> file) throws Exception {
+		try {
+			return file.get();
+		} catch (java.util.concurrent.ExecutionException e) {
+			Throwable cause = e.getCause();
+			if (cause instanceof Exception) {
+				throw (Exception) cause;
+			}
+			if (cause instanceof Error) {
+				throw (Error) cause;
+			}
+			throw e;
+		}
+	}
+
 	/** A cosmetic texture by hash; it must be a PNG within the size limit. */
 	private byte[] texture(String hash) throws Exception {
-		byte[] png = Http.get(baseUrl + "/v1/textures/" + hash + ".png", null);
+		byte[] png = AssetCache.get(hash, () -> Http.get(baseUrl + "/v1/textures/" + hash + ".png", null));
 		int[] size = Looks.pngSize(png);
 		if (size == null || size[0] > Geometry.MAX_TEXTURE_SIDE || size[1] > Geometry.MAX_TEXTURE_SIDE) {
 			throw new IllegalArgumentException("texture isn't a small PNG");
@@ -515,7 +588,7 @@ public final class Cosmetics {
 	}
 
 	private JsonElement json(String hash) throws Exception {
-		byte[] bytes = Http.get(baseUrl + "/v1/assets/" + hash, null);
+		byte[] bytes = AssetCache.get(hash, () -> Http.get(baseUrl + "/v1/assets/" + hash, null));
 		return GSON.fromJson(new String(bytes, StandardCharsets.UTF_8), JsonElement.class);
 	}
 

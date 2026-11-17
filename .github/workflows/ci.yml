@@ -88,6 +88,13 @@ jobs:
           ARCTIC_HELLO_DIR: ${{ runner.temp }}/hello
         run: cargo test -p arctic-core --locked named_runtime_without_system_dlls_starts_java -- --ignored --nocapture
 
+  # Every text the launcher and the Arctic Client show is localized, every language complete.
+  i18n:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: python3 tools/i18n_check.py
+
   # The in-game client: its shared core's tests, then every Minecraft target compiled and
   # its mixin hooks checked against that version's game jar (no game is started).
   mod-core:
@@ -105,6 +112,7 @@ jobs:
           GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: gradle-v2
       - name: Live video integration tools
         run: bash .github/scripts/apt-install.sh --no-recommends ffmpeg
+      - run: python3 -m unittest discover -s mod/tools -p 'test_mixin*.py'
       - run: chmod +x mod/gradlew && mod/gradlew -p mod/core test
 
   mod-targets:
@@ -135,9 +143,26 @@ jobs:
         env:
           # v2: abandon a cache poisoned by a flaky run (missing gson/kotlin-metadata jars)
           GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: gradle-v2
-      - run: chmod +x mod/gradlew && python3 mod/check.py ${{ matrix.version }}
+      - name: Compile and check mod hooks
+        shell: bash
+        run: |
+          chmod +x mod/gradlew
+          status=0
+          python3 mod/check.py ${{ matrix.version }} 2>&1 | tee "$RUNNER_TEMP/mod-check.log" || status=$?
+          if [ "$status" != 0 ]; then
+            python3 - <<'PYTHON'
+          import os
+          from pathlib import Path
+          tail = Path(os.environ["RUNNER_TEMP"]).joinpath("mod-check.log").read_text(errors="replace")[-7000:]
+          tail = tail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print("::error title=Mod check failure::" + tail)
+          PYTHON
+          fi
+          exit "$status"
         env:
-          ARCTIC_GRADLE_FLAGS: ${{ inputs.gradle }}
+          # This target's restored cache contains false "missing artifact" entries for
+          # published Maven Central jars. Refresh metadata instead of trusting those misses.
+          ARCTIC_GRADLE_FLAGS: ${{ matrix.version == '1.8.9' && '--refresh-dependencies' || '' }} ${{ inputs.gradle }}
       - name: Probe a game class
         if: ${{ always() && inputs.probe != '' }}
         env:

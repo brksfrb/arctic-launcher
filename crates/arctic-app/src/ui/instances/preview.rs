@@ -16,7 +16,7 @@ use pulldown_cmark::{Event, Parser, Tag};
 
 use super::{IconState, browse::compact, mods_page::mod_icon};
 use crate::{app::ArcticApp, art::icons::Icon, widgets};
-
+use crate::{t, tf};
 type DetailResult = Result<ProjectDetail, String>;
 
 pub struct Preview {
@@ -178,6 +178,7 @@ impl ArcticApp {
                         downloads: 0,
                         icon_url: None,
                         categories: vec![],
+                        game_versions: vec![],
                     },
                     std::env::var("ARCTIC_DEVSHOT_KIND")
                         .ok()
@@ -205,7 +206,9 @@ impl ArcticApp {
                     preview.detail = Some(result);
                 }
                 Err(mpsc::TryRecvError::Disconnected) => {
-                    preview.detail = Some(Err("Project request stopped. Please retry.".into()))
+                    preview.detail = Some(Err(
+                        t!("instances.project_request_stopped_please_retry").into()
+                    ))
                 }
                 Err(mpsc::TryRecvError::Empty) => {}
             }
@@ -221,11 +224,16 @@ impl ArcticApp {
             .show(ctx, |ui| {
                 ui.set_width((ctx.content_rect().width() - 100.0).clamp(280.0, 900.0));
                 ui.horizontal(|ui| {
-                    close |=
-                        widgets::button(ui, p, Some(Icon::ChevronLeft), "Back to results", false)
-                            .clicked();
+                    close |= widgets::button(
+                        ui,
+                        p,
+                        Some(Icon::ChevronLeft),
+                        t!("instances.back_to_results"),
+                        false,
+                    )
+                    .clicked();
                     ui.label(
-                        RichText::new("Project preview · Esc to close")
+                        RichText::new(t!("instances.project_preview_esc_to_close"))
                             .small()
                             .color(p.muted),
                     );
@@ -244,12 +252,22 @@ impl ArcticApp {
                         ui.set_max_width((ui.available_width() - 120.0).max(100.0));
                         ui.heading(title);
                         ui.label(
-                            RichText::new(format!("by {}", preview.hit.author)).color(p.muted),
+                            RichText::new(tf!("common.by_author", author = preview.hit.author))
+                                .color(p.muted),
                         );
-                        ui.label(format!(
-                            "{} downloads",
-                            compact(detail.map_or(preview.hit.downloads, |d| d.downloads))
+                        ui.label(tf!(
+                            "instances.downloads_2",
+                            value = compact(detail.map_or(preview.hit.downloads, |d| d.downloads))
                         ));
+                        if preview.kind.is_some()
+                            && preview.hit.is_incompatible(&self.pack_game(instance))
+                        {
+                            ui.label(RichText::new(t!("instances.incompatible")).color(p.error))
+                                .on_hover_text(tf!(
+                                    "instances.no_file_is_tagged_for_minecraft_you_can_2",
+                                    pack_game = self.pack_game(instance)
+                                ));
+                        }
                     });
                     let busy = match preview.kind {
                         Some(_) => self.inst.packs.installing.contains(&preview.hit.project_id),
@@ -269,11 +287,19 @@ impl ArcticApp {
                                 })
                             });
                     if installed {
-                        ui.label(RichText::new("Installed").color(p.accent));
+                        ui.label(RichText::new(t!("instances.installed")).color(p.accent));
                     } else if busy {
                         ui.spinner();
-                        ui.label("Installing…");
-                    } else if widgets::button(ui, p, Some(Icon::Plus), "Install", true).clicked() {
+                        ui.label(t!("instances.installing"));
+                    } else if widgets::button(
+                        ui,
+                        p,
+                        Some(Icon::Plus),
+                        t!("instances.install"),
+                        true,
+                    )
+                    .clicked()
+                    {
                         if let Some(kind) = preview.kind {
                             self.inst
                                 .packs
@@ -303,22 +329,24 @@ impl ArcticApp {
                     .show(ui, |ui| match &preview.detail {
                         None => {
                             ui.spinner();
-                            ui.label("Loading project from Modrinth…");
+                            ui.label(t!("instances.loading_project_from_modrinth"));
                         }
                         Some(Err(error)) => {
                             ui.colored_label(p.error, error);
-                            if ui.button("Retry").clicked() {
+                            if ui.button(t!("instances.retry")).clicked() {
                                 preview.receiver =
                                     fetch(preview.hit.project_id.clone(), ctx.clone());
                                 preview.detail = None;
                             }
                         }
                         Some(Ok(detail)) => {
-                            ui.label(RichText::new("Gallery").strong());
+                            ui.label(RichText::new(t!("instances.gallery")).strong());
                             if detail.gallery.is_empty() {
                                 ui.label(
-                                    RichText::new("This project has no gallery screenshots yet.")
-                                        .color(p.muted),
+                                    RichText::new(t!(
+                                        "instances.this_project_has_no_gallery_screenshots_yet"
+                                    ))
+                                    .color(p.muted),
                                 );
                             }
                             for image in &detail.gallery {
@@ -338,12 +366,15 @@ impl ArcticApp {
                                 ui.add_space(8.0);
                             }
                             ui.separator();
-                            ui.label(RichText::new("Supported Minecraft versions").strong());
+                            ui.label(
+                                RichText::new(t!("instances.supported_minecraft_versions"))
+                                    .strong(),
+                            );
                             ui.label(detail.game_versions.join(", "));
-                            ui.label(RichText::new("Loaders / platforms").strong());
+                            ui.label(RichText::new(t!("instances.loaders_platforms")).strong());
                             ui.label(detail.loaders.join(", "));
                             ui.separator();
-                            ui.heading("About this project");
+                            ui.heading(t!("instances.about_this_project"));
                             let prepared_html = Arc::clone(&preview.html);
                             let render_html = move |ui: &mut egui::Ui, html: &str| {
                                 ui.label(
@@ -364,7 +395,7 @@ impl ArcticApp {
                 .frame(super::dialog_frame(p))
                 .show(ctx, |ui| {
                     ui.set_width((ctx.content_rect().width() - 90.0).max(280.0));
-                    if ui.button("Back to preview · Esc").clicked() {
+                    if ui.button(t!("instances.back_to_preview_esc")).clicked() {
                         preview.enlarged = None;
                     }
                     self.preview_image(
@@ -405,7 +436,7 @@ impl ArcticApp {
                         .corner_radius(8)
                         .sense(egui::Sense::click()),
                 )
-                .on_hover_text("Click to enlarge"),
+                .on_hover_text(t!("instances.click_to_enlarge")),
             Some(IconState::Failed) => {
                 ui.put(rect, egui::Label::new("Screenshot unavailable"));
                 response
@@ -439,6 +470,7 @@ mod tests {
                 downloads: 0,
                 icon_url: None,
                 categories: vec![],
+                game_versions: vec![],
             },
             kind: None,
             receiver,

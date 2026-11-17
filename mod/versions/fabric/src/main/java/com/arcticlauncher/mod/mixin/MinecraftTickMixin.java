@@ -14,6 +14,7 @@ abstract class MinecraftTickMixin {
 	@Inject(method = "tick", at = @At("HEAD"))
 	private void arctic$tick(CallbackInfo ci) {
 		ArcticClient.tick(Compat.screen() != null);
+		com.arcticlauncher.mod.GlassCtm.tick();
 		com.arcticlauncher.mod.ServerMenus.tick();
 		com.arcticlauncher.mod.HitboxSync.tick();
 		com.arcticlauncher.mod.ChunkBorderSync.tick();

@@ -23,7 +23,7 @@ class ReplaysLifecycleTest {
 		Platform platform = (Platform) Proxy.newProxyInstance(Platform.class.getClassLoader(), new Class<?>[] {Platform.class},
 				(proxy, method, args) -> method.getName().equals("atTitleScreen") ? atTitle.get()
 						: method.getName().equals("inWorld") ? inWorld.get() : false);
-		ClientConfig config = new ClientConfig(); config.replayAutoExport = false;
+		ClientConfig config = new ClientConfig(); config.replayAutoExport = false; config.replayEnabled = true;
 		Recorder recorder = new Recorder(dir.toFile(), () -> 30, message -> {}, () -> (p, k) -> Category.ALWAYS, 1L << 20, 0, 10_000);
 		Field p = field(Replays.class, "platform"), r = field(Replays.class, "recorder"), c = field(ArcticClient.class, "config"), w = field(Replays.class, "worldTake");
 		Object oldP = p.get(null), oldR = r.get(null), oldC = c.get(null), oldW = w.get(null);

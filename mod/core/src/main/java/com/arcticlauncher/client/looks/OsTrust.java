@@ -17,6 +17,7 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
+import com.arcticlauncher.client.Lang;
 /**
  * HTTPS that trusts what the operating system trusts, as well as Java's own
  * list. Old Minecraft runs on a 2015 Java that doesn't know today's
@@ -83,7 +84,7 @@ public final class OsTrust {
 		String os = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT);
 		try {
 			if (os.contains("win")) {
-				KeyStore store = KeyStore.getInstance("Windows-ROOT");
+				KeyStore store = KeyStore.getInstance(Lang.t("looks.windows_root"));
 				store.load(null, null);
 				return store;
 			}

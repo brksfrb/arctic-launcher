@@ -13,6 +13,7 @@ import com.arcticlauncher.client.ui.TextField;
 import com.arcticlauncher.client.voice.VoiceLink;
 import com.google.gson.JsonObject;
 
+import com.arcticlauncher.client.Lang;
 /**
  * The Friends tab: invites, friends with who's online and where (Join,
  * Invite, Chat), and a chat with one friend (messages, screenshots, and
@@ -59,7 +60,7 @@ final class FriendsTab {
 		voiceOpen = false;
 		int y = top;
 		if (voice != null && voice.active()) {
-			host.add(new Button("Players (" + voice.members().size() + ")", () -> {
+			host.add(new Button(Lang.t("social.players") + voice.members().size() + ")", () -> {
 				voiceOpen = true;
 				scroll = 0;
 				host.rebuild();
@@ -89,13 +90,13 @@ final class FriendsTab {
 		if (duel != null && duel.available()) {
 			duelY = y;
 			if (duel.hosting()) {
-				host.add(new Button("New round", duel::newRound).primary()).bounds(x + w - 80, y, 80, BTN_H);
+				host.add(new Button(Lang.t("social.new_round"), duel::newRound).primary()).bounds(x + w - 80, y, 80, BTN_H);
 			} else {
-				host.add(new Button("Kit: " + Duel.KITS[kit][1], () -> {
+				host.add(new Button(Lang.t("social.kit") + Lang.t(Duel.KITS[kit][1]), () -> {
 					kit = (kit + 1) % Duel.KITS.length;
 					host.rebuild();
 				})).bounds(x + w - 170, y, 84, BTN_H);
-				host.add(new Button("Start a duel", () -> duel.start(Duel.KITS[kit][0], null, null)).primary())
+				host.add(new Button(Lang.t("social.start_a_duel"), () -> duel.start(Duel.KITS[kit][0], null, null)).primary())
 						.bounds(x + w - 82, y, 82, BTN_H);
 			}
 			y += ROW;
@@ -105,9 +106,9 @@ final class FriendsTab {
 			final String kind = inv.get("kind").getAsString();
 			final boolean server = "server".equals(kind);
 			if (server) {
-				host.add(new Button("Join", () -> join(social, target)).primary()).bounds(x + w - 90, y, 52, BTN_H);
+				host.add(new Button(Lang.t("social.join"), () -> join(social, target)).primary()).bounds(x + w - 90, y, 52, BTN_H);
 			} else if ("together".equals(kind) && duel != null) {
-				host.add(new Button("Join", () -> {
+				host.add(new Button(Lang.t("social.join"), () -> {
 					social.dismissInvite(inv.get("id").getAsString());
 					duel.join(target);
 				}).primary()).bounds(x + w - 90, y, 52, BTN_H);
@@ -127,7 +128,7 @@ final class FriendsTab {
 		for (int i = scroll; i < friends.size() && i < scroll + rows; i++) {
 			final Social.Friend f = friends.get(i);
 			int bx = x + w;
-			String chat = f.unread > 0 ? "Chat (" + f.unread + ")" : "Chat";
+			String chat = f.unread > 0 ? Lang.t("social.chat") + f.unread + ")" : Lang.t("social.chat_2");
 			bx -= 58;
 			host.add(new Button(chat, () -> {
 				chatWith = f.id;
@@ -137,15 +138,15 @@ final class FriendsTab {
 			}).selected(f.unread > 0)).bounds(bx, y + 2, 56, BTN_H);
 			if (f.server != null) {
 				bx -= 44;
-				host.add(new Button("Join", () -> join(social, f.server))).bounds(bx, y + 2, 42, BTN_H);
+				host.add(new Button(Lang.t("social.join"), () -> join(social, f.server))).bounds(bx, y + 2, 42, BTN_H);
 			}
 			if (onServer && f.takesInvites) {
 				bx -= 48;
-				host.add(new Button("Invite", () -> social.invite(f, here))).bounds(bx, y + 2, 46, BTN_H);
+				host.add(new Button(Lang.t("social.invite"), () -> social.invite(f, here))).bounds(bx, y + 2, 46, BTN_H);
 			}
 			if (duel != null && duel.available() && f.takesInvites && !duel.hosting()) {
 				bx -= 44;
-				host.add(new Button("Duel", () -> duel.start(Duel.KITS[kit][0], f.id, f.name))).bounds(bx, y + 2, 42, BTN_H);
+				host.add(new Button(Lang.t("social.duel"), () -> duel.start(Duel.KITS[kit][0], f.id, f.name))).bounds(bx, y + 2, 42, BTN_H);
 			}
 			y += ROW;
 		}
@@ -153,18 +154,18 @@ final class FriendsTab {
 	}
 
 	private void buildChat(final Host host, final Social social, int x, int top, int w) {
-		host.add(new Button("‹ Friends", () -> {
+		host.add(new Button(Lang.t("social.friends_2"), () -> {
 			chatWith = null;
 			social.openChat(null);
 			host.rebuild();
 		})).bounds(x, top, 64, BTN_H);
 		final java.io.File shot = social.lastScreenshot();
 		if (shot != null) {
-			host.add(new Button("Send last screenshot", () -> social.sendScreenshot(chatWith, shot)))
+			host.add(new Button(Lang.t("social.send_last_screenshot"), () -> social.sendScreenshot(chatWith, shot)))
 					.bounds(x + w - 120, top, 120, BTN_H);
 		}
 		int fieldY = bottom - 18;
-		message = new TextField("Message " + chatName, 500, TextField.ANY);
+		message = new TextField(Lang.t("social.message_2") + chatName, 500, TextField.ANY);
 		final Runnable send = () -> {
 			String text = message.text().trim();
 			if (!text.isEmpty()) {
@@ -174,11 +175,11 @@ final class FriendsTab {
 		};
 		message.onEnter(send);
 		host.add(message).bounds(x, fieldY, w - 50, 18);
-		host.add(new Button("Send", send).primary()).bounds(x + w - 46, fieldY, 46, 18);
+		host.add(new Button(Lang.t("social.send"), send).primary()).bounds(x + w - 46, fieldY, 46, 18);
 	}
 
 	private void buildVoice(final Host host, final VoiceLink voice, int x, int top, int w) {
-		host.add(new Button("‹ Friends", () -> {
+		host.add(new Button(Lang.t("social.friends_2"), () -> {
 			voiceOpen = false;
 			scroll = 0;
 			host.rebuild();
@@ -190,7 +191,7 @@ final class FriendsTab {
 		int y = listTop;
 		for (int i = scroll; i < list.size() && i < scroll + rows; i++) {
 			final VoiceLink.Member m = list.get(i);
-			host.add(new Button(m.muted ? "Unmute" : "Mute", () -> {
+			host.add(new Button(m.muted ? Lang.t("social.unmute") : Lang.t("social.mute"), () -> {
 				voice.toggleMute(m.uuid);
 			}).selected(m.muted)).bounds(x + w - 58, y + 2, 56, BTN_H);
 			y += ROW;
@@ -215,14 +216,14 @@ final class FriendsTab {
 
 	private static void join(Social social, String server) {
 		if (!social.join(server)) {
-			com.arcticlauncher.client.notice.Notices.post("Join from the multiplayer list", server);
+			com.arcticlauncher.client.notice.Notices.post(Lang.t("social.join_from_the_multiplayer_list"), server);
 		}
 	}
 
 	void draw(Gfx g, Style s, int x, int top, int w) {
 		Social social = ArcticClient.social();
 		if (social == null || !social.available()) {
-			g.text(Draw.fit(g, "Start the game from Arctic Launcher to see your friends here.", w, x, top), x, top, s.muted, false);
+			g.text(Draw.fit(g, Lang.t("social.start_the_game_from_arctic_launcher_to_see"), w, x, top), x, top, s.muted, false);
 			return;
 		}
 		if (!social.status().isEmpty()) {
@@ -239,27 +240,27 @@ final class FriendsTab {
 		}
 		int y = top;
 		if (voice != null && voice.available()) {
-			String state = !voice.enabled() ? "Voice chat: off (turn it on in Arctic Launcher → Settings)"
-					: !voice.active() ? "Voice chat: on (starts on a server)"
-					: voice.listenOnly() ? "Voice chat: listening only (microphone blocked)" : "Voice chat: on · push to talk";
+			String state = !voice.enabled() ? Lang.t("social.voice_chat_off_turn_it_on_in_arctic_launcher")
+					: !voice.active() ? Lang.t("social.voice_chat_on_starts_on_a_server")
+					: voice.listenOnly() ? Lang.t("social.voice_chat_listening_only_microphone_blocked") : Lang.t("social.voice_chat_on_push_to_talk");
 			g.text(Draw.fit(g, state, w - (voice.active() ? 156 : 80), x, y + 4), x, y + 4, voice.active() ? s.accent : s.muted, false);
 			y += ROW;
 		}
 		Duel duel = ArcticClient.duel();
 		if (duelY >= 0 && duel != null) {
-			String line = duel.hosting() && duel.code() != null ? "Duel code: " + duel.code() : "Duel a friend: a flat arena with a kit";
+			String line = duel.hosting() && duel.code() != null ? Lang.t("social.duel_code") + duel.code() : Lang.t("social.duel_a_friend_a_flat_arena_with_a_kit");
 			g.text(Draw.fit(g, line, w - 180, x, duelY + 4), x, duelY + 4, duel.hosting() ? s.accent : s.muted, false);
 			y += ROW;
 		}
 		for (JsonObject inv : social.invites()) {
 			String from = inv.getAsJsonObject("from").get("name").getAsString();
-			String what = "together".equals(inv.get("kind").getAsString()) ? "a duel (or their world)" : inv.get("target").getAsString();
-			g.text(Draw.fit(g, from + " invited you to " + what, w - 96, x, y + 4), x, y + 4, s.accent, false);
+			String what = "together".equals(inv.get("kind").getAsString()) ? Lang.t("social.a_duel_or_their_world") : inv.get("target").getAsString();
+			g.text(Draw.fit(g, Lang.t("social.invited_you_to", from, what), w - 96, x, y + 4), x, y + 4, s.accent, false);
 			y += ROW;
 		}
 		List<Social.Friend> friends = social.friends();
 		if (friends.isEmpty()) {
-			g.text(Draw.fit(g, "No friends yet: add them in Arctic Launcher → Friends.", w, x, y + 4), x, y + 4, s.muted, false);
+			g.text(Draw.fit(g, Lang.t("social.no_friends_yet_add_them_in_arctic_launcher"), w, x, y + 4), x, y + 4, s.muted, false);
 			return;
 		}
 		int rows = Math.max(1, (bottom - listTop) / ROW);
@@ -267,7 +268,7 @@ final class FriendsTab {
 			Social.Friend f = friends.get(i);
 			int color = f.inGame ? ONLINE : f.online ? s.accent : OFFLINE;
 			Draw.round(g, x, y + 7, x + DOT * 2, y + 7 + DOT * 2, DOT, color);
-			String status = f.server != null ? "on " + f.server : f.inGame ? "in game" : f.online ? "online" : "offline";
+			String status = f.server != null ? Lang.t("social.on_server", f.server) : f.inGame ? Lang.t("social.in_game") : f.online ? Lang.t("social.online_now") : Lang.t("social.offline_now");
 			int room = w - (duel != null && duel.available() ? 200 : 160);
 			g.text(Draw.fit(g, f.name, room, x + 10, y + 2), x + 10, y + 2, s.text, false);
 			g.text(Draw.fit(g, status, room, x + 10, y + 11), x + 10, y + 11, s.muted, false);
@@ -277,11 +278,11 @@ final class FriendsTab {
 
 	/** Players in voice on this server, with who's talking and who's muted. */
 	private void drawVoice(Gfx g, Style s, VoiceLink voice, int x, int top, int w) {
-		String title = voice.simpleVoiceChat() ? "Voice chat on this server (+ Simple Voice Chat)" : "Voice chat on this server";
+		String title = voice.simpleVoiceChat() ? Lang.t("social.voice_chat_on_this_server_simple_voice_chat") : Lang.t("social.voice_chat_on_this_server");
 		g.text(Draw.fit(g, title, w - 74, x + 70, top + 4), x + 70, top + 4, s.text, false);
 		List<VoiceLink.Member> list = voice.members();
 		if (list.isEmpty()) {
-			g.text(Draw.fit(g, "Nobody else here uses Arctic voice yet.", w, x, listTop + 4), x, listTop + 4, s.muted, false);
+			g.text(Draw.fit(g, Lang.t("social.nobody_else_here_uses_arctic_voice_yet"), w, x, listTop + 4), x, listTop + 4, s.muted, false);
 			return;
 		}
 		int rows = Math.max(1, (bottom - listTop) / ROW);
@@ -294,7 +295,7 @@ final class FriendsTab {
 			if (m.friend) {
 				status += " · friend";
 			} else if (m.svc) {
-				status += " · Simple Voice Chat";
+				status += Lang.t("social.simple_voice_chat");
 			}
 			int room = w - 80;
 			g.text(Draw.fit(g, m.name, room, x + 10, y + 2), x + 10, y + 2, s.text, false);
@@ -305,7 +306,7 @@ final class FriendsTab {
 
 	/** Messages bottom-up above the field; screenshots as small pictures. */
 	private void drawChat(Gfx g, Style s, Social social, int x, int top, int w) {
-		g.text(Draw.fit(g, "Chat with " + chatName, w - 190, x + 70, top - BTN_H - 2), x + 70, top - BTN_H - 2, s.text, false);
+		g.text(Draw.fit(g, Lang.t("social.chat_with") + chatName, w - 190, x + 70, top - BTN_H - 2), x + 70, top - BTN_H - 2, s.text, false);
 		List<Social.Message> list = social.chat(chatWith);
 		int y = bottom - 22;
 		for (int i = list.size() - 1; i >= 0 && y > top; i--) {
@@ -338,7 +339,7 @@ final class FriendsTab {
 			y -= 4;
 		}
 		if (list.isEmpty()) {
-			g.text("No messages yet. Say hi!", x, bottom - 34, s.muted, false);
+			g.text(Lang.t("social.no_messages_yet_say_hi"), x, bottom - 34, s.muted, false);
 		}
 	}
 

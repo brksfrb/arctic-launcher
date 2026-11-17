@@ -4,6 +4,7 @@ import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.Keys;
 import com.arcticlauncher.client.config.HudSlot;
 import com.arcticlauncher.client.gfx.Draw;
+import com.arcticlauncher.client.gfx.BrandMark;
 import com.arcticlauncher.client.gfx.DimGfx;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.hud.Hud;
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Right Shift in a world: your HUD, live and movable. Drag a widget to move
  * it (it snaps to edges and to other widgets), drag its bottom-right corner
@@ -45,7 +47,7 @@ public final class HudEditor extends Page {
 	private static final int HINT_PAD = 8;
 	private static final float SCALE_SNAP = 0.05f;
 	private static final String[][] SHORTCUTS = {
-			{"Waypoints", "waypoints"}, {"Replays", "replays"}, {"Packs", "packs"}, {"Friends", "friends"},
+			{"mods.waypoints", "waypoints"}, {"mods.replays", "replays"}, {"mods.packs", "packs"}, {"mods.friends", "friends"},
 	};
 
 	private int bx;
@@ -83,6 +85,13 @@ public final class HudEditor extends Page {
 	/** The real mouse (the card's widgets are shown a faraway one while a HUD widget has it). */
 	private int realX;
 	private int realY;
+	/**
+	 * Where the card was moved this time so it doesn't open on top of a widget (only when it was
+	 * never moved by hand); not saved. Worked out once per screen size.
+	 */
+	private int nudgeX;
+	private int nudgeY;
+	private int nudgedFor = -1;
 
 	private final List<Button> barButtons = new ArrayList<Button>();
 	private Map<HudWidget, int[]> rects = new java.util.HashMap<HudWidget, int[]>();
@@ -107,10 +116,11 @@ public final class HudEditor extends Page {
 	@Override
 	protected void build() {
 		com.arcticlauncher.client.config.ClientConfig cfg = ArcticClient.config();
-		bx = clamp((width - BAR_W) / 2 + cfg.hudCardDx, width - BAR_W);
-		by = clamp((height - BAR_H) / 2 + cfg.hudCardDy, height - BAR_H);
+		boolean untouched = cfg.hudCardDx == 0 && cfg.hudCardDy == 0;
+		bx = clamp((width - BAR_W) / 2 + (untouched ? nudgeX : cfg.hudCardDx), width - BAR_W);
+		by = clamp((height - BAR_H) / 2 + (untouched ? nudgeY : cfg.hudCardDy), height - BAR_H);
 		barButtons.clear();
-		Button mods = new Button("Mods", Menus::mods).primary();
+		Button mods = new Button(Lang.t("mods.mods"), Menus::mods).primary();
 		add(mods).bounds(bx + PAD, by + 22, BAR_W - PAD * 2, MODS_H);
 		barButtons.add(mods);
 		java.util.List<String[]> shortcuts = new java.util.ArrayList<String[]>();
@@ -124,7 +134,7 @@ public final class HudEditor extends Page {
 		int sw = (BAR_W - PAD * 2 - GAP * (n - 1)) / n;
 		for (int i = 0; i < n; i++) {
 			final String id = shortcuts.get(i)[1];
-			Button b = new Button(shortcuts.get(i)[0], () -> Menus.open(id, this));
+			Button b = new Button(Lang.t(shortcuts.get(i)[0]), () -> Menus.open(id, this));
 			add(b).bounds(bx + PAD + i * (sw + GAP), by + 22 + MODS_H + GAP, sw, SMALL_H);
 			barButtons.add(b);
 		}
@@ -139,6 +149,10 @@ public final class HudEditor extends Page {
 	}
 
 	private void setCard(int x, int y) {
+		// Placed by hand (or put back): no nudging it again while the editor is open.
+		nudgeX = 0;
+		nudgeY = 0;
+		nudgedFor = width * 31 + height;
 		bx = clamp(x, width - BAR_W);
 		by = clamp(y, height - BAR_H);
 		com.arcticlauncher.client.config.ClientConfig cfg = ArcticClient.config();
@@ -147,24 +161,86 @@ public final class HudEditor extends Page {
 		rebuild();
 	}
 
+	/**
+	 * A card never moved by hand that opens over a widget moves to the nearest place clear of
+	 * all of them: straight up or down first, then sideways. Not saved: it's not the player's move.
+	 */
+	private void nudge() {
+		int key = width * 31 + height;
+		if (nudgedFor == key || rects.isEmpty() || busy()) {
+			return;
+		}
+		nudgedFor = key;
+		com.arcticlauncher.client.config.ClientConfig cfg = ArcticClient.config();
+		int cx = (width - BAR_W) / 2;
+		int cy = (height - BAR_H) / 2;
+		int nx = 0;
+		int ny = 0;
+		if (cfg.hudCardDx == 0 && cfg.hudCardDy == 0 && covers(cx, cy)) {
+			int[] free = nearestFree(cx, cy);
+			if (free != null) {
+				nx = free[0] - cx;
+				ny = free[1] - cy;
+			}
+		}
+		if (nx != nudgeX || ny != nudgeY) {
+			nudgeX = nx;
+			nudgeY = ny;
+			rebuild();
+		}
+	}
+
+	private int[] nearestFree(int cx, int cy) {
+		int maxY = Math.max(0, height - BAR_H);
+		int maxX = Math.max(0, width - BAR_W);
+		for (int d = 1; d <= Math.max(maxY, 0); d++) {
+			if (cy - d >= 0 && !covers(cx, cy - d)) {
+				return new int[] {cx, cy - d};
+			}
+			if (cy + d <= maxY && !covers(cx, cy + d)) {
+				return new int[] {cx, cy + d};
+			}
+		}
+		for (int d = 1; d <= maxX; d++) {
+			if (cx - d >= 0 && !covers(cx - d, cy)) {
+				return new int[] {cx - d, cy};
+			}
+			if (cx + d <= maxX && !covers(cx + d, cy)) {
+				return new int[] {cx + d, cy};
+			}
+		}
+		return null;
+	}
+
+	/** Whether the card at (x, y) would overlap any placed widget (with its highlight). */
+	private boolean covers(int x, int y) {
+		int o = HIGHLIGHT + 1;
+		for (int[] r : rects.values()) {
+			if (r[0] - o < x + BAR_W && r[0] + r[2] + o > x && r[1] - o < y + BAR_H && r[1] + r[3] + o > y) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** Right-click on a widget: its settings, or take it off. */
 	private void buildMenu() {
 		final HudWidget w = menuFor;
 		int x = Math.min(menuX, width - MENU_W - 2);
 		int y = Math.min(menuY, height - 42);
 		if (w == null) {
-			add(new Button("Reset card", () -> {
+			add(new Button(Lang.t("mods.reset_card"), () -> {
 				cardMenu = false;
 				setCard((width - BAR_W) / 2, (height - BAR_H) / 2);
 				ArcticClient.saveConfig();
 			})).bounds(x, y, MENU_W, 18);
 			return;
 		}
-		add(new Button("Settings", () -> {
+		add(new Button(Lang.t("mods.settings"), () -> {
 			menuFor = null;
 			Menus.open("hud." + w.id, this);
 		})).bounds(x, y, MENU_W, 18);
-		add(new Button("Remove", () -> {
+		add(new Button(Lang.t("mods.remove"), () -> {
 			hide(w);
 			menuFor = null;
 			rebuild();
@@ -222,6 +298,7 @@ public final class HudEditor extends Page {
 			resize(g, hud);
 		}
 		rects = hud.layout(g);
+		nudge();
 		for (Map.Entry<HudWidget, int[]> e : hud.sorted(rects)) {
 			HudWidget w = e.getKey();
 			int[] r = e.getValue();
@@ -242,7 +319,7 @@ public final class HudEditor extends Page {
 		}
 		snapper.draw(g, s, width, height);
 		drawBar(shown < 0.99f ? new DimGfx(g, shown) : g, s);
-		String help = "Drag to move  ·  drag the corner (or scroll) to resize  ·  right-click for settings";
+		String help = Lang.t("mods.drag_to_move_drag_the_corner_or_scroll_to");
 		int hw = g.textWidth(help) / 2 + HINT_PAD;
 		// Under the menu bar: at the bottom it would sit on the hotbar.
 		int hy = by + BAR_H + 10;
@@ -256,8 +333,8 @@ public final class HudEditor extends Page {
 
 	private void drawBar(Gfx g, Style s) {
 		Skin.panel(g, s, bx, by, bx + BAR_W, by + BAR_H);
-		g.texture("icon", bx + PAD, by + 6, 12, 12, 0, 0, 256, 256, 256, 256);
-		g.text("§lArctic", bx + PAD + 16, by + 8, s.text, false);
+		BrandMark.draw(g, bx + PAD, by + 6, 12);
+		g.text("§lArctic", bx + PAD + 16, by + 8, s.text, false); // i18n-ignore: the brand
 		String version = ArcticClient.platform().minecraftVersion();
 		g.text(version, bx + BAR_W - PAD - g.textWidth(version), by + 8, s.muted, false);
 	}

@@ -42,10 +42,10 @@ fn reads_each_instance_format() {
         &json!({"components": [{"uid": "net.minecraft", "version": "1.21.4"}, {"uid": "net.fabricmc.fabric-loader", "version": "0.16.10"}]}).to_string(),
     );
     std::fs::create_dir_all(r.join("prism/.minecraft")).unwrap();
-    // CurseForge
+    // CurseForge: refused, the rest still read
     write(
         &r.join("cf/minecraftinstance.json"),
-        &json!({"name": "Big Pack", "gameVersion": "1.20.1", "baseModLoader": {"name": "forge-47.2.0"}, "isMemoryOverride": true, "allocatedMemory": 8192}).to_string(),
+        &json!({"name": "Big Pack", "gameVersion": "1.20.1", "baseModLoader": {"name": "forge-47.2.0"}}).to_string(),
     );
     // ATLauncher
     write(
@@ -76,12 +76,8 @@ fn reads_each_instance_format() {
     );
     assert_eq!(prism.memory_mb, Some(6144));
     assert!(prism.game_dir.ends_with(".minecraft"));
-    let cf = by("Big Pack");
-    assert_eq!(
-        cf.loader.as_ref().unwrap().version.as_deref(),
-        Some("47.2.0")
-    );
-    assert_eq!(cf.memory_mb, Some(8192));
+    assert!(scan.curseforge_blocked);
+    assert!(scan.instances.iter().all(|f| f.name != "Big Pack"));
     let atl = by("Neo");
     assert_eq!(atl.loader.as_ref().unwrap().kind, LoaderKind::NeoForge);
     assert!(atl.disabled_mods_dir.is_some());

@@ -13,6 +13,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import javax.imageio.ImageIO;
 
+import com.arcticlauncher.client.Lang;
 /**
  * OptiFine's capes without OptiFine: OptiFine players' capes are public (one PNG per player name on its cape
  * server), so a player with no Arctic cape and none of Mojang's can still show theirs. Names are asked one
@@ -65,7 +66,7 @@ final class OptifineCapes {
 					try {
 						load(name);
 					} catch (Throwable t) {
-						looks.survive(t, "optifine cape " + name);
+						looks.survive(t, "optifine cape " + name); // i18n-ignore
 					}
 				}
 			});
@@ -101,7 +102,7 @@ final class OptifineCapes {
 				found.put(name, "");
 				return;
 			}
-			looks.log("optifine cape " + name + ": " + e);
+			looks.log("optifine cape " + name + ": " + e); // i18n-ignore
 			worker.schedule(new Runnable() {
 				@Override
 				public void run() {
@@ -116,7 +117,7 @@ final class OptifineCapes {
 		// The size is read from the header first: nothing bigger than a cape is ever decoded.
 		int[] size = Looks.pngSize(png);
 		if (size == null || size[0] > MAX_WIDTH || size[1] > MAX_WIDTH) {
-			throw new java.io.IOException("not a cape-sized PNG");
+			throw new java.io.IOException("not a cape-sized PNG"); // i18n-ignore
 		}
 		int scale = size[0] / OWN_W;
 		if (scale < 1 || size[0] != OWN_W * scale || size[1] != OWN_H * scale) {

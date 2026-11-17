@@ -12,6 +12,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
+import com.arcticlauncher.client.Lang;
 /**
  * One-click setups: which HUD widgets and features are on. A preset switches its own list on and every other HUD
  * widget off; features it does not name keep the player's choice.
@@ -34,13 +35,13 @@ final class Presets extends Page {
 	}
 
 	private static final Preset[] ALL = {
-			new Preset("PvP", "FPS, ping, CPS, keys, armor, effects, pearl cooldown and block; hit markers, kill sounds, TNT timer.",
+			new Preset("PvP", "mods.fps_ping_cps_keys_armor_effects_pearl",
 					"hud.fps", "hud.ping", "hud.cps", "hud.keystrokes", "hud.armor", "hud.effects", "hud.pearl", "hud.blocking",
 					"combatfx", "tnttimer", "durability"),
-			new Preset("Minimal", "Just the FPS counter, nothing else on the HUD.", "hud.fps"),
-			new Preset("Performance check", "FPS, frame time, 1% lows, CPU, GPU and memory, to see where the time goes.",
+			new Preset("mods.minimal", "mods.just_the_fps_counter_nothing_else_on_the_hud", "hud.fps"),
+			new Preset("mods.performance_check", "mods.fps_frame_time_1_lows_cpu_gpu_and_memory_to",
 					"hud.fps", "hud.frametime", "hud.lows", "hud.cpu", "hud.gpu", "hud.sysram", "hud.vram"),
-			new Preset("Explorer", "Coordinates, direction, biome, light, time and the compass.",
+			new Preset("mods.explorer", "mods.coordinates_direction_biome_light_time_and",
 					"hud.fps", "hud.coords", "hud.direction", "hud.biome", "hud.light", "hud.clock", "hud.compass", "waypoints"),
 	};
 
@@ -53,10 +54,10 @@ final class Presets extends Page {
 		py = Math.max(24, height / 6);
 		int y = py + 34;
 		for (final Preset preset : ALL) {
-			add(new Button("Use", () -> apply(preset))).bounds(px + PANEL_W - PAD - 54, y + 12, 54, 20);
+			add(new Button(Lang.t("mods.use"), () -> apply(preset))).bounds(px + PANEL_W - PAD - 54, y + 12, 54, 20);
 			y += ROW;
 		}
-		add(new Button("Close", this::close)).bounds(px + PANEL_W - PAD - 54, y + 6, 54, 20);
+		add(new Button(Lang.t("mods.close"), this::close)).bounds(px + PANEL_W - PAD - 54, y + 6, 54, 20);
 	}
 
 	private static void apply(Preset preset) {
@@ -68,7 +69,7 @@ final class Presets extends Page {
 			}
 		}
 		ArcticClient.saveConfig();
-		Notices.post("Preset: " + preset.name, "Your HUD and features are set. Edit any of it in the Mods menu.");
+		Notices.post(Lang.t("mods.preset") + Lang.t(preset.name), Lang.t("mods.your_hud_and_features_are_set_edit_any_of_it"));
 	}
 
 	@Override
@@ -79,11 +80,11 @@ final class Presets extends Page {
 	@Override
 	protected void drawBehind(Gfx g, Style s, int mx, int my) {
 		Skin.panel(g, s, px, py, px + PANEL_W, py + 34 + ROW * ALL.length + 40);
-		g.text("Presets", px + PAD, py + 12, s.text, false);
+		g.text(Lang.t("mods.presets"), px + PAD, py + 12, s.text, false);
 		int y = py + 34;
 		for (Preset preset : ALL) {
-			g.text(preset.name, px + PAD, y + 6, s.text, false);
-			g.text(Draw.fit(g, preset.about, PANEL_W - PAD * 2 - 64), px + PAD, y + 20, s.muted, false);
+			g.text(Lang.t(preset.name), px + PAD, y + 6, s.text, false);
+			g.text(Draw.fit(g, Lang.t(preset.about), PANEL_W - PAD * 2 - 64), px + PAD, y + 20, s.muted, false);
 			y += ROW;
 		}
 	}

@@ -7,6 +7,7 @@ import com.arcticlauncher.client.gfx.Draw;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Style;
 
+import com.arcticlauncher.client.Lang;
 /**
  * WASD, the mouse buttons with clicks per second, and the space bar. A key
  * turns white the moment it's pressed and fades back when let go.
@@ -29,7 +30,7 @@ final class Keystrokes extends HudWidget {
 	private long lastFrame;
 
 	Keystrokes(Cps cps) {
-		super("keystrokes", "Keystrokes", "Movement keys and mouse buttons", true, Column.RIGHT);
+		super("keystrokes", Lang.t("hud.keystrokes"), Lang.t("hud.movement_keys_and_mouse_buttons"), true, Column.RIGHT);
 		this.cps = cps;
 	}
 

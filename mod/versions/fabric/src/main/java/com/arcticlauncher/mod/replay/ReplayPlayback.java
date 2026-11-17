@@ -43,6 +43,7 @@ import net.minecraft.world.entity.Pose;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Plays a replay back on this version: a connection that goes nowhere,
  * fed the recorded packets. You watch as a spectator camera with its own id
@@ -54,7 +55,7 @@ public final class ReplayPlayback implements ReplayBackend {
 	/** The camera's entity id (no server uses it). */
 	static final int CAMERA_ID = -1_789_435;
 	private static final GameProfile CAMERA = new GameProfile(
-			UUID.nameUUIDFromBytes("arctic:replay-camera".getBytes(StandardCharsets.UTF_8)), "Replay");
+			UUID.nameUUIDFromBytes("arctic:replay-camera".getBytes(StandardCharsets.UTF_8)), "Replay"); // i18n-ignore: a game profile name
 	/** A new target for the body at most this often (ms of replay): like a server's updates. */
 	private static final int BODY_STEP_MS = 50;
 	/** Further than this between two samples is a jump, not a move. */
@@ -66,7 +67,10 @@ public final class ReplayPlayback implements ReplayBackend {
 
 	private Connection connection;
 	private EmbeddedChannel channel;
-	/** Before 1.20.5: the phase the next packet is read in (later the connection knows). */
+	/** Packets handed to the game on this connection, and the last phase switch among them. */
+	private int applied;
+	private String lastSwitch = "none";
+	/** The last successfully installed playback protocol, independent of a failed listener handover. */
 	private Object phase;
 	/** The recording player's entity id in this login (-1 until the login). */
 	private int selfId = -1;
@@ -95,7 +99,7 @@ public final class ReplayPlayback implements ReplayBackend {
 	public String start(ReplayData data) {
 		Minecraft mc = Minecraft.getInstance();
 		if (mc.level != null) {
-			ReplayCompat.disconnect(ReplayCompat.message("Opening replay…"));
+			ReplayCompat.disconnect(ReplayCompat.message(Lang.t("platform.opening_replay")));
 		}
 		return connect(mc);
 	}
@@ -146,14 +150,16 @@ public final class ReplayPlayback implements ReplayBackend {
 			ReplayView.fov = 0;
 			Connection conn = new Connection(PacketFlow.CLIENTBOUND);
 			((ReplayConnection) conn).arctic$markReplay();
-			channel = new EmbeddedChannel(conn);
+			channel = ReplayTransport.open(conn);
 			connection = conn;
 			ClientHandshakePacketListenerImpl login = ReplayCompat.loginListener(conn);
 			phase = ReplayCodec.loginProtocol();
+			applied = 0;
+			lastSwitch = "none";
 			ReplayCompat.startLogin(conn, login);
 			return null;
 		} catch (RuntimeException e) {
-			return "Couldn't start the replay: " + e;
+			return Lang.t("platform.couldnt_start_the_replay") + e;
 		}
 	}
 
@@ -163,7 +169,7 @@ public final class ReplayPlayback implements ReplayBackend {
 			((ReplayConnection) connection).arctic$retire();
 		}
 		if (channel != null) {
-			channel.close();
+			channel.finishAndReleaseAll();
 		}
 	}
 
@@ -174,16 +180,19 @@ public final class ReplayPlayback implements ReplayBackend {
 			return;
 		}
 		drainOutgoing();
-		Object protocol = phase != null ? phase : ((ReplayConnection) connection).arctic$inbound();
-		if (protocol == null) {
-			return;
+		Object protocol = phase;
+		Packet<?> packet;
+		try {
+			packet = ReplayCodec.decode(protocol, bytes);
+		} catch (RuntimeException e) {
+			throw new IllegalStateException("replay decode " + ReplayCodec.context(protocol, bytes), e);
 		}
-		Packet<?> packet = ReplayCodec.decode(protocol, bytes);
-		if (phase != null) {
-			phase = ReplayCodec.next(phase, packet);
-		}
-		ReplayCodec.beforeHandle(channel, packet);
 		String name = ReplayCodec.name(packet);
+		try {
+			ReplayCodec.beforeHandle(channel, packet);
+		} catch (RuntimeException e) {
+			throw new ReplayBackend.ProtocolFailure("Replay protocol barrier failed (" + ReplayCodec.context(protocol, bytes) + ")", e); // i18n-ignore: internal log/exception text, never shown
+		}
 		if (PacketSorter.dropped(name) || (jumping && PacketSorter.category(name) == Category.TRANSIENT)) {
 			return;
 		}
@@ -193,13 +202,29 @@ public final class ReplayPlayback implements ReplayBackend {
 		}
 		PacketListener listener = connection.getPacketListener();
 		if (listener == null) {
-			return;
+			throw new ReplayBackend.ProtocolFailure("Replay has no packet listener (" + ReplayCodec.context(protocol, bytes) + ")", null); // i18n-ignore: internal log/exception text, never shown
 		}
 		try {
 			((Packet) packet).handle(listener);
-		} catch (RunningOnDifferentThreadException ignored) {
-			// Queued for the game thread by the game itself.
+			phase = ReplayCodec.afterHandle(protocol, packet, ((ReplayConnection) connection).arctic$inbound());
+			applied++;
+			if (ReplayCodec.changesPhase(name)) lastSwitch = name + " after " + applied + " packets, now " + ReplayCodec.phaseName(phase);
+		} catch (RunningOnDifferentThreadException e) {
+			// Queued for the game thread by the game itself, except a handover: feeding the
+			// next phase before that handler runs would lose it.
+			if (!ReplayCodec.changesPhase(name)) return;
+			throw new ReplayBackend.ProtocolFailure("Replay packet handler left the game thread (" + ReplayCodec.context(protocol, bytes) + ")", e); // i18n-ignore: internal log/exception text, never shown
+		} catch (RuntimeException e) {
+			if (ReplayCodec.changesPhase(name)) {
+				throw new ReplayBackend.ProtocolFailure("Replay protocol handover failed (" + ReplayCodec.context(protocol, bytes) + "): " + e, e); // i18n-ignore: internal log/exception text, never shown
+			}
+			throw new IllegalStateException("replay handler " + ReplayCodec.context(protocol, bytes) + " " + name, e);
 		}
+	}
+
+	@Override
+	public String diagnostics() {
+		return "phase=" + ReplayCodec.phaseName(phase) + " lastSwitch=" + lastSwitch + " applied=" + applied;
 	}
 
 	/** Whatever the game "sent" to the replay: nobody's listening. */
@@ -323,7 +348,7 @@ public final class ReplayPlayback implements ReplayBackend {
 			return;
 		}
 		if (body == null || ReplayCompat.level(body) != level || com.arcticlauncher.mod.Compat.removed(body) || bodyHidden) {
-			GameProfile profile = new GameProfile(uuid != null ? uuid : UUID.randomUUID(), name != null ? name : "Player");
+			GameProfile profile = new GameProfile(uuid != null ? uuid : UUID.randomUUID(), name != null ? name : "Player"); // i18n-ignore: a game profile name
 			//#if MC >= 1.19 && MC < 1.19.3
 			body = new RemotePlayer(level, profile, null);
 			//#else
@@ -503,7 +528,7 @@ public final class ReplayPlayback implements ReplayBackend {
 		//#if MC < 26.3
 		// Frames are read back with OpenGL, which VulkanMod doesn't draw with.
 		if (com.arcticlauncher.mod.VulkanCompat.ACTIVE) {
-			return "Videos can't be made while VulkanMod draws the game: turn it off to make one.";
+			return Lang.t("platform.videos_cant_be_made_while_vulkanmod_draws");
 		}
 		//#endif
 		return null;

@@ -12,6 +12,7 @@ mod identify;
 mod index;
 pub mod modpack;
 mod modrinth;
+mod oneconfig;
 pub mod pack_groups;
 pub mod packs;
 pub mod performance;
@@ -96,6 +97,17 @@ pub struct ProjectHit {
     pub downloads: u64,
     pub icon_url: Option<String>,
     pub categories: Vec<String>,
+    /// Minecraft versions tagged on the project's files.
+    pub game_versions: Vec<String>,
+}
+
+impl ProjectHit {
+    /// Unknown version tags do not imply incompatibility.
+    pub fn is_incompatible(&self, game_version: &str) -> bool {
+        !game_version.trim().is_empty()
+            && !self.game_versions.is_empty()
+            && !self.game_versions.iter().any(|v| v == game_version)
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -184,8 +196,8 @@ pub struct ModFile {
 /// Search Modrinth for mods.
 ///
 /// `limit` is clamped to 1..=100 (0 means the default of 20). An empty
-/// `game_version` searches all versions; `loader` filters by loader (Quilt
-/// also matches Fabric mods).
+/// `game_version` searches all versions; packs always search all versions.
+/// `loader` filters by loader (Quilt also matches Fabric mods).
 pub fn search(query: &SearchQuery) -> Result<SearchPage> {
     modrinth::search(query)
 }
@@ -487,6 +499,7 @@ fn prepare_one(
         sha1: file.hashes.sha1.clone(),
         size: file.size,
         lzma: None,
+        md5: None,
     };
     Ok((entry, job))
 }

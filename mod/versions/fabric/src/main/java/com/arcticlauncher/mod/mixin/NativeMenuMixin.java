@@ -19,7 +19,11 @@ abstract class NativeMenuMixin extends Screen {
 	//#else
 	private NativeMenuMixin() { super(); }
 	//#endif
+	//#if MC >= 1.14
 	@Inject(method = "init", at = @At("TAIL"))
+	//#else
+	@Inject(method = "method_1044", at = @At("TAIL"))
+	//#endif
 	private void arctic$actions(CallbackInfo ci) {
 		ArcticButton.addActions((Screen) (Object) this, button -> addRenderableWidget(button));
 	}

@@ -30,6 +30,29 @@ class ClientConfigTest {
 	}
 
 	@Test
+	void replayAndReplayVideoStartOffForNewConfigs() throws Exception {
+		ClientConfig fresh = new ClientConfig();
+		assertFalse(fresh.replayEnabled);
+		assertFalse(fresh.replayVideoEnabled);
+		ClientConfig loaded = ClientConfig.load(dir.toFile());
+		assertFalse(loaded.replayEnabled);
+		assertFalse(loaded.replayVideoEnabled);
+		ClientConfig missing = load("{}");
+		assertFalse(missing.replayEnabled);
+		assertFalse(missing.replayVideoEnabled);
+	}
+
+	@Test
+	void savedReplayChoicesAreKept() throws Exception {
+		ClientConfig on = load("{\"replayEnabled\":true,\"replayVideoEnabled\":true}");
+		assertTrue(on.replayEnabled);
+		assertTrue(on.replayVideoEnabled);
+		ClientConfig mixed = load("{\"replayEnabled\":true,\"replayVideoEnabled\":false}");
+		assertTrue(mixed.replayEnabled);
+		assertFalse(mixed.replayVideoEnabled);
+	}
+
+	@Test
 	void aNewConfigStartsWithTheTileOff() {
 		ClientConfig c = ClientConfig.load(dir.toFile());
 		assertFalse(c.combatFeedback);
@@ -120,4 +143,14 @@ class ClientConfigTest {
 		}
 	}
 
+
+	@Test
+	void toggleKeysLoadEmptyFromAnOldFileAndPersist() throws Exception {
+		assertTrue(load("{}").toggleKeys.isEmpty());
+		assertTrue(load("{\"toggleKeys\":null}").toggleKeys.isEmpty());
+		ClientConfig c = load("{}");
+		c.toggleKeys.put("connected-glass", "key.keyboard.j");
+		assertEquals(null, c.save());
+		assertEquals("key.keyboard.j", ClientConfig.load(dir.toFile()).toggleKeys.get("connected-glass"));
+	}
 }

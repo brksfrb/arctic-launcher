@@ -12,7 +12,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /** The Arctic badge (drawn over a blank mark, see TextRendererMixin) before the names of players who are on Arctic too, and their PvP tier. */
 @Mixin(PlayerListHud.class)
 abstract class PlayerListHudMixin {
-	private static final String BADGE = com.arcticlauncher.client.feature.Badge.MARK;
 
 	@Inject(method = "getPlayerName", at = @At("RETURN"), cancellable = true)
 	private void arctic$badge(PlayerListEntry entry, CallbackInfoReturnable<String> cir) {
@@ -28,7 +27,7 @@ abstract class PlayerListHudMixin {
 					+ com.arcticlauncher.client.feature.TabGlow.after());
 		}
 		if (com.arcticlauncher.client.feature.Badge.show(true, entry.getProfile().getId())) {
-			cir.setReturnValue(BADGE + cir.getReturnValue());
+			cir.setReturnValue(com.arcticlauncher.client.feature.Badge.mark(true, entry.getProfile().getId()) + cir.getReturnValue());
 		}
 	}
 

@@ -61,10 +61,12 @@ fn seal_failed(reason: String) {
 }
 
 /// Something that must be saved can't be (the data folder isn't writable): shown in the UI.
+#[cfg(any(feature = "offline-accounts", test))]
 pub(crate) fn key_unsaved(reason: String) {
     *slot(&KEY_PROBLEM) = Some(reason);
 }
 
+#[cfg(any(feature = "offline-accounts", test))]
 pub(crate) fn key_saved() {
     *slot(&KEY_PROBLEM) = None;
 }

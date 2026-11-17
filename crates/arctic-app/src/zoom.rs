@@ -4,8 +4,8 @@
 //! out for. "Auto" scales down (never below 80%) until the screen is at least [`ROOM`] points;
 //! a size picked in Settings is used as it is.
 
+use crate::t;
 use eframe::egui;
-
 /// The room the layout is made for (points across, points down).
 const ROOM: egui::Vec2 = egui::vec2(1600.0, 900.0);
 /// Auto never makes the interface smaller than this.
@@ -15,7 +15,7 @@ const STEP: f32 = 0.005;
 
 /// The choices: 0 is Auto, the rest percent.
 pub const SIZES: [(u16, &str); 7] = [
-    (0, "Auto"),
+    (0, "nav.interface_size_auto"),
     (80, "80%"),
     (90, "90%"),
     (100, "100%"),
@@ -72,12 +72,10 @@ fn auto_zoom(points: egui::Vec2) -> f32 {
 /// The size picker, for Settings and the first start.
 pub fn size_row(ui: &mut egui::Ui, size: &mut u16) {
     crate::widgets::field_row(ui, |ui| {
-        ui.label("Interface size").on_hover_text(
-            "Auto makes the launcher a little smaller on small or highly scaled screens (a laptop at 150%). \
-             The sizes are on top of your system's display scaling.",
-        );
+        ui.label(t!("nav.interface_size"))
+            .on_hover_text(t!("nav.auto_makes_the_launcher_a_little_smaller_on"));
         for (value, name) in SIZES {
-            ui.selectable_value(size, value, name);
+            ui.selectable_value(size, value, if value == 0 { t!(name) } else { name });
         }
     });
 }

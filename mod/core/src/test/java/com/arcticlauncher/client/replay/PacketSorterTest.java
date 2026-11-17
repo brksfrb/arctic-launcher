@@ -143,4 +143,27 @@ class PacketSorterTest {
 		assertNull(s.removedEntities(ByteBuffer.wrap(new byte[] {0, 1, (byte) 0xff, (byte) 0xff, (byte) 0xff, (byte) 0xff, 0x7f})));
 		assertNull(s.removedEntities(packet(2, "7")));
 	}
+
+	@Test
+	void readsTheChunksOfAnOldChunkBulk() {
+		PacketSorter s = new PacketSorter(new String[][] {{"game_profile"}, {}, {"login", "map_chunk_bulk", "level_chunk"}}, false, false, true);
+		ByteBuffer bulk = ByteBuffer.allocate(64);
+		bulk.put((byte) 1).put((byte) 1).put((byte) 2).putInt(3).putInt(-4).putShort((short) 0xFF).putInt(5).putInt(6).putShort((short) 1);
+		bulk.put(new byte[] {9, 9, 9}).flip();
+		s.classify(packet(0), new long[1]); // Logged in.
+		assertEquals(Category.CHUNK_BULK, s.classify(bulk, new long[1]));
+		assertArrayEquals(new long[] {Category.chunk(3, -4), Category.chunk(5, 6)}, s.bulkChunks(bulk));
+		// A body too short for its count isn't trusted.
+		assertNull(s.bulkChunks(ByteBuffer.wrap(new byte[] {1, 1, 5, 0, 0, 0, 1})));
+		assertNull(s.bulkChunks(packet(0)));
+		// 1.8 unloads a chunk with an empty full-chunk level_chunk.
+		ByteBuffer unload = ByteBuffer.allocate(13);
+		unload.put((byte) 2).putInt(3).putInt(-4).put((byte) 1).putShort((short) 0).put((byte) 0).flip();
+		long[] key = new long[1];
+		assertEquals(Category.UNLOAD, s.classify(unload, key));
+		assertEquals(Category.chunk(3, -4), key[0]);
+		ByteBuffer load = ByteBuffer.allocate(13);
+		load.put((byte) 2).putInt(3).putInt(-4).put((byte) 1).putShort((short) 1).put((byte) 0).flip();
+		assertEquals(Category.CHUNK, s.classify(load, key));
+	}
 }

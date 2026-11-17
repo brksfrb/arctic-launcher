@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import com.arcticlauncher.client.Lang;
 /**
  * The classes as Fabric hands them to the JVM (read, rewritten by Fabric and by every Mixin),
  * kept on disk between starts. Reading ~600 mixin targets and applying the mixins to some ten
@@ -144,7 +145,7 @@ public final class MixinCache {
 				return null;
 			}
 			replayed = true;
-			System.out.println("[Arctic startup] Mixin setup replayed: " + MixinReplay.did);
+			System.out.println("[Arctic startup] Mixin setup replayed: " + MixinReplay.did); // i18n-ignore
 		}
 		if (entries == null) {
 			return null;
@@ -209,7 +210,7 @@ public final class MixinCache {
 
 	/** How many classes this start read back and how many it had to produce, for the startup line. */
 	public static String stats() {
-		return index == null ? (recorded == null ? "off" : "recording") : hits + " read back, " + misses + " produced" + (replayed ? ", Mixin setup replayed (" + MixinReplay.did + "), first misses " + firstMisses + "" : (MixinReplay.why.isEmpty() ? "" : ", no replay: " + MixinReplay.why));
+		return index == null ? (recorded == null ? "off" : "recording") : hits + " read back, " + misses + " produced" + (replayed ? ", Mixin setup replayed (" + MixinReplay.did + "), first misses " + firstMisses + "" : (MixinReplay.why.isEmpty() ? "" : ", no replay: " + MixinReplay.why)); // i18n-ignore
 	}
 
 	/** What Fabric produced for this class; kept for the pack when this start is recording. */

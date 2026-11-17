@@ -26,6 +26,16 @@ public final class DimGfx implements Gfx {
 	}
 
 	@Override
+	public void beginFills(int color) {
+		g.beginFills(Draw.alpha(color, a));
+	}
+
+	@Override
+	public void endFills() {
+		g.endFills();
+	}
+
+	@Override
 	public void fill(int x0, int y0, int x1, int y1, int color) {
 		g.fill(x0, y0, x1, y1, Draw.alpha(color, a));
 	}
@@ -56,6 +66,11 @@ public final class DimGfx implements Gfx {
 	}
 
 	@Override
+	public void itemIcon(Object stack, int x, int y) {
+		g.itemIcon(stack, x, y);
+	}
+
+	@Override
 	public void sprite(Object sprite, int x, int y, int w, int h) {
 		g.sprite(sprite, x, y, w, h);
 	}
@@ -83,6 +98,16 @@ public final class DimGfx implements Gfx {
 	@Override
 	public void scale(float s) {
 		g.scale(s);
+	}
+
+	@Override
+	public void rotate(float degrees) {
+		g.rotate(degrees);
+	}
+
+	@Override
+	public void newLayer() {
+		g.newLayer();
 	}
 
 	@Override

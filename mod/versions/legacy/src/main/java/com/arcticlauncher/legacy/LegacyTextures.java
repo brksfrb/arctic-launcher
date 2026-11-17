@@ -1,5 +1,7 @@
 package com.arcticlauncher.legacy;
 
+import com.arcticlauncher.client.gfx.BrandMark;
+
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -48,7 +50,21 @@ final class LegacyTextures {
 			return asset(key.substring(6));
 		}
 		if (key.startsWith("dyn:")) {
-			return dyn(key.substring(4));
+			String name = key.substring(4);
+			Identifier id = dyn(name);
+			if (name.startsWith("brand-") && !LOADED.contains(id)) {
+				boolean smooth = name.startsWith("brand-smooth-");
+				int size = BrandMark.clampSize(Integer.parseInt(name.substring(smooth ? 13 : 6)));
+				BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+				image.setRGB(0, 0, size, size, BrandMark.raster(size), 0, size);
+				if (!register(id, image)) return null;
+				if (smooth) {
+					MinecraftClient.getInstance().getTextureManager().bindTexture(id);
+					org.lwjgl.opengl.GL11.glTexParameteri(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_MIN_FILTER, org.lwjgl.opengl.GL11.GL_LINEAR);
+					org.lwjgl.opengl.GL11.glTexParameteri(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_MAG_FILTER, org.lwjgl.opengl.GL11.GL_LINEAR);
+				}
+			}
+			return id;
 		}
 		if (!iconLoaded) {
 			iconLoaded = true;
@@ -65,6 +81,12 @@ final class LegacyTextures {
 		upload(id, "/assets/arctic/" + name + ".png");
 		// A file that failed to load draws nothing, not Minecraft's purple missing texture.
 		Identifier result = LOADED.contains(id) ? id : null;
+		if (result != null && name.startsWith("icon-")) {
+			// The spinning snowflake is drawn turned: filter it linearly (the default is nearest).
+			MinecraftClient.getInstance().getTextureManager().bindTexture(id);
+			org.lwjgl.opengl.GL11.glTexParameteri(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_MIN_FILTER, org.lwjgl.opengl.GL11.GL_LINEAR);
+			org.lwjgl.opengl.GL11.glTexParameteri(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_MAG_FILTER, org.lwjgl.opengl.GL11.GL_LINEAR);
+		}
 		ASSETS.put(name, result);
 		return result;
 	}
@@ -88,6 +110,60 @@ final class LegacyTextures {
 		}
 		try {
 			MinecraftClient.getInstance().getTextureManager().loadTexture(id, new NativeImageBackedTexture(image));
+			LOADED.add(id);
+			return true;
+		} catch (Exception e) {
+			ArcticLegacy.LOG.warn("Arctic texture {}: {}", id, e.toString());
+			return false;
+		}
+	}
+
+	/**
+	 * An image's pixels as a texture holds them (ARGB, row by row), read out of the image on the thread that
+	 * decoded it: reading them pixel by pixel is the slow part of making a texture, and the render thread then
+	 * only uploads them (what {@code new NativeImageBackedTexture(image)} does, in two halves).
+	 */
+	static final class Pixels {
+		final int width;
+		final int height;
+		final int[] argb;
+
+		Pixels(int width, int height, int[] argb) {
+			this.width = width;
+			this.height = height;
+			this.argb = argb;
+		}
+
+		/** Rows {@code from} to {@code from + rows} (a frame of an animated cape). */
+		Pixels rows(int from, int rows) {
+			int[] part = new int[width * rows];
+			System.arraycopy(argb, from * width, part, 0, part.length);
+			return new Pixels(width, rows, part);
+		}
+	}
+
+	/** The image's pixels (null for no image); any thread. */
+	static Pixels pixels(BufferedImage image) {
+		if (image == null) {
+			return null;
+		}
+		int w = image.getWidth();
+		int h = image.getHeight();
+		int[] argb = new int[w * h];
+		image.getRGB(0, 0, w, h, argb, 0, w);
+		return new Pixels(w, h, argb);
+	}
+
+	/** Upload pixels read with {@link #pixels} as the texture {@code id} (render thread). */
+	static boolean register(Identifier id, Pixels pixels) {
+		if (pixels == null) {
+			return false;
+		}
+		try {
+			NativeImageBackedTexture texture = new NativeImageBackedTexture(pixels.width, pixels.height);
+			System.arraycopy(pixels.argb, 0, texture.getPixels(), 0, pixels.argb.length);
+			texture.upload();
+			MinecraftClient.getInstance().getTextureManager().loadTexture(id, texture);
 			LOADED.add(id);
 			return true;
 		} catch (Exception e) {

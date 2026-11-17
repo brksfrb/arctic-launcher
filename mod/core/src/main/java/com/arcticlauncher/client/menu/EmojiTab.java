@@ -2,76 +2,38 @@ package com.arcticlauncher.client.menu;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
-import com.arcticlauncher.client.feature.Emoji;
+import com.arcticlauncher.client.feature.EmoteAtlas;
+import com.arcticlauncher.client.gfx.Gfx;
+import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Button;
-import java.util.Map;
 
-/**
- * Symbols for chat: click one to copy it (paste into chat with Ctrl+V), or type its
- * shortcode (":heart:") and it's swapped when you send.
- */
+import com.arcticlauncher.client.Lang;
+/** The same approved pictures as chat; copying preserves the readable shortcode. */
 final class EmojiTab implements MenuTab {
-	private static final int CELL = 22;
-	private static final int GAP = 3;
-
-	@Override
-	public String title() {
-		return "Emoji and symbols";
-	}
-
-	@Override
-	public String hint() {
-		return "Click to copy, or type :heart: in chat.";
-	}
-
-	@Override
+	public String title() { return Lang.t("mods.chat_emotes"); }
+	public String hint() { return Lang.t("mods.click_a_picture_to_copy_its_shortcode_then"); }
 	public void build(Host host, int x, int top, int w, int bottom) {
 		final ClientConfig c = ArcticClient.config();
 		Form f = new Form(host, x, top, w, bottom);
-		f.section("Typing");
-		f.toggle("Chat button", "A smiley at the end of the chat line opens a box of symbols", () -> c.emojiButton,
-				on -> c.emojiButton = on);
-		f.toggle("Shortcodes", "Type :heart: or :star: and it sends the symbol", () -> c.chatEmoji, on -> c.chatEmoji = on);
-		StringBuilder sample = new StringBuilder();
-		int n = 0;
-		for (Map.Entry<String, String> e : Emoji.codes().entrySet()) {
-			if (n++ >= 8) {
-				break;
-			}
-			sample.append(':').append(e.getKey()).append(": ");
-		}
-		f.note("Some: " + sample.toString().trim());
-		f.note("The full list is below, under each symbol's group.");
-		int perRow = Math.max(1, f.w / (CELL + GAP));
-		for (Map.Entry<String, String> group : Emoji.groups().entrySet()) {
-			f.section(group.getKey());
-			String[] symbols = group.getValue().split(" ");
-			int row = 0;
-			int topY = 0;
-			for (int i = 0; i < symbols.length; i++) {
-				if (i % perRow == 0) {
-					topY = f.row(CELL + GAP);
-					row++;
+		f.section(Lang.t("mods.typing"));
+		f.toggle(Lang.t("mods.chat_button"), Lang.t("mods.the_button_opens_the_picture_picker"), () -> c.emojiButton, on -> c.emojiButton = on);
+		f.toggle(Lang.t("mods.chat_emotes"), Lang.t("mods.show_pictures_for_shortcodes_send_readable"), () -> c.chatEmoji, on -> c.chatEmoji = on);
+		f.note(Lang.t("mods.twemoji_by_twitter_cc_by_4_0_arctic_mark_and"));
+		int perRow = Math.max(1, f.w / 25), column = 0, y = 0;
+		String group = "";
+		for (final EmoteAtlas.Emote emote : EmoteAtlas.all()) {
+			if (!group.equals(emote.group)) { f.section(Lang.t(emote.group)); column = 0; group = emote.group; }
+			if (column == 0) y = f.row(25);
+			f.put(new Button("", () -> {
+				ArcticClient.platform().setClipboard(emote.shortcode());
+				com.arcticlauncher.client.notice.Notices.post(Lang.t("mods.copied") + emote.shortcode(), Lang.t("mods.paste_into_chat_with_ctrl_v"));
+			}) {
+				@Override protected void draw(Gfx g, Style s, int mx, int my, float dt) {
+					super.draw(g, s, mx, my, dt);
+					emote.draw(g, x + 2, y + 2, 18);
 				}
-				final String symbol = symbols[i];
-				f.put(new Button(symbol, () -> {
-					ArcticClient.platform().setClipboard(symbol);
-					com.arcticlauncher.client.notice.Notices.post("Copied " + symbol, "Paste it into chat with Ctrl+V");
-				}), f.x + (i % perRow) * (CELL + GAP), topY, CELL, CELL);
-			}
-		}
-		f.section("Shortcodes");
-		StringBuilder line = new StringBuilder();
-		for (Map.Entry<String, String> e : Emoji.codes().entrySet()) {
-			String item = ":" + e.getKey() + ": " + e.getValue() + "   ";
-			if (line.length() + item.length() > 52) {
-				f.note(line.toString().trim());
-				line.setLength(0);
-			}
-			line.append(item);
-		}
-		if (line.length() > 0) {
-			f.note(line.toString().trim());
+			}, f.x + column * 25, y, 22, 22);
+			column = (column + 1) % perRow;
 		}
 		f.done();
 	}

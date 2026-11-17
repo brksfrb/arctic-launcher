@@ -340,6 +340,9 @@ def main():
         for ic in sorted(set(class_names) | set(entries)):
             out_lines.append(f"c	{ic}	{class_names.get(ic, ic)}")
             for (kind, inter_name, idesc), named in sorted(entries[ic].items()):
+                # AutoCloseable's method name belongs to the JDK, which is never remapped.
+                if kind == "m" and inter_name == "close" and idesc == "()V":
+                    named = "close"
                 out_lines.append(f"	{kind}	{idesc}	{inter_name}	{named}")
         return out_lines
 

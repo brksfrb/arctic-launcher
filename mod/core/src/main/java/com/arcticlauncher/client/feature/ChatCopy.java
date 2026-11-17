@@ -3,6 +3,7 @@ package com.arcticlauncher.client.feature;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.notice.Notices;
 
+import com.arcticlauncher.client.Lang;
 /** Source-message metadata carried by the styles of every wrapped chat fragment. */
 public final class ChatCopy {
 	public interface Tagged {
@@ -49,7 +50,7 @@ public final class ChatCopy {
 		long now = System.currentTimeMillis();
 		if (now - copiedNoticeAt >= 1000) {
 			copiedNoticeAt = now;
-			Notices.post("Copied", "Chat message copied to clipboard");
+			Notices.post(Lang.t("hud.copied"), Lang.t("hud.chat_message_copied_to_clipboard"));
 		}
 		return true;
 	}

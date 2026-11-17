@@ -3,6 +3,7 @@ package com.arcticlauncher.client.together;
 import com.arcticlauncher.client.Platform;
 import com.arcticlauncher.client.notice.Notices;
 
+import com.arcticlauncher.client.Lang;
 /**
  * While Arctic Launcher is hosting (play together), the singleplayer world you're in opens to LAN
  * by itself, so there's no Esc, Open to LAN, Start LAN World to go through (and the launcher hears
@@ -46,7 +47,7 @@ public final class LanAuto {
 			return;
 		}
 		if (platform.openToLanPlain()) {
-			Notices.post("World open to friends", "Your world is open to LAN for the friends you invited");
+			Notices.post(Lang.t("social.world_open_to_friends"), Lang.t("social.your_world_is_open_to_lan_for_the_friends"));
 		}
 	}
 }
