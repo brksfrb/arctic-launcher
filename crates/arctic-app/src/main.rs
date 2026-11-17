@@ -16,6 +16,7 @@ mod gallery_tasks;
 mod glass;
 mod i18n;
 mod icon_raster;
+mod link_tasks;
 mod logbook;
 mod memstats;
 mod migrate_tasks;

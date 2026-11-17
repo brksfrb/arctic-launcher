@@ -22,6 +22,7 @@ pub mod gpu_preference;
 pub mod instances;
 pub mod java;
 pub mod launch;
+pub mod linked;
 pub mod loaders;
 pub mod migrate;
 pub mod mods;

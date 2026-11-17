@@ -37,6 +37,7 @@ public final class ArcticClient {
 	private static com.arcticlauncher.client.together.Duel duel;
 	private static com.arcticlauncher.client.together.LanAuto lanAuto;
 	private static com.arcticlauncher.client.servers.LauncherJoin launcherJoin;
+	private static com.arcticlauncher.client.servers.MissingModsLink missingModsLink;
 	private static com.arcticlauncher.client.packs.PackIcons packIcons;
 	private static com.arcticlauncher.client.feature.ScreenshotCopy screenshotCopy;
 	private static com.arcticlauncher.client.packs.PackBrowser packs;
@@ -111,6 +112,7 @@ public final class ArcticClient {
 				new com.arcticlauncher.client.together.TogetherLink(session.bridgePort, session.bridgeSecret);
 		launcherJoin = new com.arcticlauncher.client.servers.LauncherJoin(session.bridgePort, session.bridgeSecret, session.launchToken);
 		launcherJoin.start();
+		missingModsLink = new com.arcticlauncher.client.servers.MissingModsLink(session.bridgePort, session.bridgeSecret, session.launchToken);
 		duel = new com.arcticlauncher.client.together.Duel(p, together, social);
 		lanAuto = new com.arcticlauncher.client.together.LanAuto(p, together);
 		// Asked for in the launcher just now (not on a later restart).
@@ -161,6 +163,23 @@ public final class ArcticClient {
 			return override;
 		}
 		return session.url != null ? session.url : DEFAULT_SERVER;
+	}
+
+	/** The missing-mods install through the launcher (null before init). */
+	public static com.arcticlauncher.client.servers.MissingModsLink missingModsLink() {
+		return missingModsLink;
+	}
+
+	/**
+	 * The page for a disconnect: Arctic's missing-mods page when the server refused the join for mods,
+	 * else the disconnect page itself.
+	 */
+	public static Page disconnectPage(com.arcticlauncher.client.servers.DisconnectedPage page, String reason) {
+		com.arcticlauncher.client.servers.MissingMods.Info info = com.arcticlauncher.client.servers.MissingMods.parse(reason);
+		if (!info.aboutMods) {
+			return page;
+		}
+		return new com.arcticlauncher.client.servers.MissingModsPage(info, reason, page.address(), page);
 	}
 
 	public static Platform platform() {

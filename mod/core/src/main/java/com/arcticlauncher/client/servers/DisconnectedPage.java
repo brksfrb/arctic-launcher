@@ -154,6 +154,8 @@ public final class DisconnectedPage extends Page {
 	}
 
 	public boolean canReconnect() { return address != null; }
+	/** The server to reconnect to, or null. */
+	public String address() { return address; }
 	public void cancelReconnect() { cancelled = true; }
 	/** Whole seconds left, rounded up (0 once it's time). */
 	public long secondsLeft() { return Math.max(0, (millisLeft() + 999) / 1000); }

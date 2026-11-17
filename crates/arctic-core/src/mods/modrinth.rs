@@ -120,6 +120,8 @@ pub(super) struct VersionFile {
 pub(super) struct FileHashes {
     #[serde(default)]
     pub sha1: Option<String>,
+    #[serde(default)]
+    pub sha512: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -56,7 +56,13 @@ public final class ServerMenus {
 		};
 		if (original instanceof DisconnectedScreen) {
 			String[] text = LegacyDisconnectText.read(original);
-			ArcticClient.platform().openPage(new com.arcticlauncher.client.servers.DisconnectedPage(text[0], text[1]));
+			com.arcticlauncher.client.servers.DisconnectedPage page = new com.arcticlauncher.client.servers.DisconnectedPage(text[0], text[1]);
+			// Refused for mods (FML's "Mod rejections", say): the missing-mods page instead.
+			com.arcticlauncher.client.ui.Page shown = ArcticClient.disconnectPage(page, text[1]);
+			if (shown != page) {
+				page.cancelReconnect();
+			}
+			ArcticClient.platform().openPage(shown);
 		} else {
 			vanillaList = false;
 			ArcticClient.platform().openPage(new ServersPage(vanilla));

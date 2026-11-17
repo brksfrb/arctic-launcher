@@ -17,6 +17,7 @@ pub mod pack_groups;
 pub mod packs;
 pub mod performance;
 pub mod polarium;
+pub mod remote;
 mod resolve;
 pub mod retarget;
 pub mod slim_api;

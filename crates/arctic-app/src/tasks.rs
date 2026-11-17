@@ -219,6 +219,8 @@ pub enum Event {
     ShareModsLookedUp(String, Outcome<usize>),
     /// Play-together session update.
     Share(arctic_share::SessionId, arctic_share::ShareEvent),
+    /// A linked-instance job (see `link_tasks`).
+    Linked(crate::link_tasks::LinkEvent),
 }
 
 /// Handle used by the UI to start background jobs.

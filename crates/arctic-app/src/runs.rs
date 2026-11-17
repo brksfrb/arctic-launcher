@@ -630,6 +630,10 @@ impl ArcticApp {
                 let code = run.reported_exit_code(code, killed);
                 run.state = RunState::Ended;
                 self.bridge.forget_launch(id);
+                // A game that quit to rejoin its server after installing mods starts again.
+                if let Some(address) = self.bridge.take_relaunch(id) {
+                    self.linked.rejoin_after(run.instance_id.clone(), address);
+                }
                 // What the game changed goes to the profile's other instances.
                 let (dirs, shared) = (self.dirs.clone(), self.settings.shared);
                 std::thread::spawn(move || {
