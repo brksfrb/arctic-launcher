@@ -56,6 +56,30 @@ class BadgeLooksTest {
 	}
 
 	@Test
+	void roleJsonAndLegacyMarksAreAllowlisted() throws Exception {
+		Looks looks = new Looks(platform(), new ClientConfig(), "http://127.0.0.1:1", "fixture");
+		try {
+			for (String role : new String[] {"founder", "dev", "admin", "mod", "beta"}) {
+				Look look = looks.parseLook(new JsonParser().parse("{\"badge_role\":\"" + role + "\",\"badge_style\":2}"), 1);
+				assertEquals(role, look.badgeRole);
+				assertEquals(2, look.badgeStyle);
+				for (boolean tab : new boolean[] {false, true}) {
+					String mark = Badge.mark(tab, 2, role);
+					assertTrue(Badge.marked(mark));
+					assertEquals(2, Badge.markedStyle(mark));
+					assertEquals(role, Badge.markedRole(mark));
+					assertEquals(tab, Badge.markedTab(mark));
+					assertTrue(Badge.roleGlyph(Badge.glyph(0, role, tab)));
+					assertEquals(role, Badge.glyphRole(Badge.glyph(0, role, tab)));
+				}
+			}
+			for (String json : new String[] {"{}", "{\"badge_role\":null}", "{\"badge_role\":\"owner\"}", "{\"badge_role\":12}"}) {
+				assertNull(looks.parseLook(new JsonParser().parse(json), 1).badgeRole);
+			}
+		} finally { close(looks); }
+	}
+
+	@Test
 	void aFailedLookupKeepsTheBadgeAlreadyShownAndRetriesSoon() throws Exception {
 		java.util.concurrent.atomic.AtomicInteger status = new java.util.concurrent.atomic.AtomicInteger(200);
 		HttpServer server = players(() -> "{\"" + Looks.compact(B) + "\":{\"badge_style\":1,\"arctic\":true}}", status::get);

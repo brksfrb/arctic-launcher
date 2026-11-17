@@ -48,7 +48,7 @@ public final class NameTagDecor {
 			return name;
 		}
 		String made = (tag == null ? "" : tag.tier + "\u0001" + tag.mode + "\u0001" + tag.rgb) + "\u0002" + (ping == null ? "" : ping)
-				+ "\u0002" + (badge ? "b" + Badge.style(id) : "");
+				+ "\u0002" + (badge ? "b" + Badge.style(id) + Badge.role(id) : "");
 		Kept kept = KEPT.get(id);
 		if (kept != null && kept.name == name && kept.made.equals(made)) {
 			return kept.text;

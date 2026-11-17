@@ -54,9 +54,9 @@ final class LegacyTextures {
 			Identifier id = dyn(name);
 			if (name.startsWith("brand-") && !LOADED.contains(id)) {
 				boolean smooth = name.startsWith("brand-smooth-");
-				int size = BrandMark.clampSize(Integer.parseInt(name.substring(smooth ? 13 : 6)));
+				int size = BrandMark.textureSize(name);
 				BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
-				image.setRGB(0, 0, size, size, BrandMark.raster(size), 0, size);
+				image.setRGB(0, 0, size, size, BrandMark.textureRaster(name), 0, size);
 				if (!register(id, image)) return null;
 				if (smooth) {
 					MinecraftClient.getInstance().getTextureManager().bindTexture(id);
