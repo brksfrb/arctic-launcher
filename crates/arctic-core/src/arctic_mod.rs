@@ -293,6 +293,29 @@ pub fn loader_fits(game_version: &str, loader_version: &str) -> bool {
     min_loader(game_version).is_none_or(|min| at_least(loader_version, &min))
 }
 
+/// Quilt's version is independent of the Fabric Loader version it provides.
+/// Read the selected jar's declaration instead of guessing from its version number.
+pub fn quilt_loader_fits(game_version: &str, loader_jar: &Path) -> bool {
+    if min_loader(game_version).is_none() {
+        return true;
+    }
+    let provided = || -> Option<String> {
+        let mut jar = zip::ZipArchive::new(fs::File::open(loader_jar).ok()?).ok()?;
+        let metadata: serde_json::Value =
+            serde_json::from_reader(jar.by_name("quilt.mod.json").ok()?).ok()?;
+        metadata
+            .pointer("/quilt_loader/provides")?
+            .as_array()?
+            .iter()
+            .find(|p| p.get("id").and_then(|id| id.as_str()) == Some("fabricloader"))?
+            .get("version")?
+            .as_str()
+            .map(str::to_owned)
+    };
+    // Unknown compatibility must not install a mod that could prevent the game from starting.
+    provided().is_some_and(|version| loader_fits(game_version, &version))
+}
+
 /// `a >= b`, comparing the numbers in the versions (`0.19.10` > `0.19.5`).
 pub fn at_least(a: &str, b: &str) -> bool {
     let nums = |s: &str| -> Vec<u64> {
