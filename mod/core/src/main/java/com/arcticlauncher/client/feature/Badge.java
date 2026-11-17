@@ -37,7 +37,7 @@ public final class Badge {
 			new Style(2, "hud.line_tile", "badge_line_tile", "badge_line_tile", true)));
 	/** Wire roles are allowlisted; never use server text directly as an asset path. */
 	public static final String[] ROLES = {"", "founder", "dev", "admin", "mod", "beta"};
-	public static final int[] COLORS = {0x2EB1EC, 0xD99A0B, 0x00BCE0, 0xFF5A5A, 0x5AE07A, 0xB07CFF};
+	public static final int[] COLORS = {0x2EB1EC, 0xD99A0B, 0x00B3A0, 0xFF5A5A, 0x5AE07A, 0xB07CFF};
 	public static int roleIndex(String role) {
 		for (int i = 1; i < ROLES.length; i++) if (ROLES[i].equals(role)) return i;
 		return 0;
