@@ -166,5 +166,6 @@
   "tasks.you_can_turn_this_question_back_on_in": "你可以在设置中重新开启这个问题。",
   "tasks.youll_see_it_next_time_you_play": "下次游戏时就会看到。",
   "tasks.your_discord_account": "你的 Discord 账户",
-  "tasks.your_profile_and_friends_are_here_now": "你的配置文件和好友现在都在这里了"
+  "tasks.your_profile_and_friends_are_here_now": "你的配置文件和好友现在都在这里了",
+  "tasks.chosen_file_is_tagged_for_another": "所选文件标记为其他 Minecraft 版本。"
 }

@@ -7,7 +7,7 @@
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
-use super::{ProjectHit, ProjectType, SearchPage, SearchQuery, SortBy};
+use super::{Environment, ProjectHit, ProjectType, SearchPage, SearchQuery, SortBy};
 use crate::loaders::LoaderKind;
 use crate::net::{agent, read_json_any_status};
 use crate::{Error, Result};
@@ -52,6 +52,8 @@ pub(super) struct SearchHit {
     #[serde(default)]
     pub downloads: u64,
     #[serde(default)]
+    pub follows: u64,
+    #[serde(default)]
     pub icon_url: Option<String>,
     #[serde(default)]
     pub categories: Vec<String>,
@@ -77,6 +79,7 @@ impl SearchHit {
             description: self.description,
             author: self.author,
             downloads: self.downloads,
+            follows: self.follows,
             icon_url: non_empty(self.icon_url),
             categories: self.categories,
             game_versions: self.game_versions,
@@ -88,6 +91,10 @@ impl SearchHit {
 pub(super) struct Version {
     pub id: String,
     pub project_id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub downloads: u64,
     #[serde(default)]
     pub version_number: String,
     #[serde(default)]
@@ -137,8 +144,16 @@ pub(super) struct Project {
     pub id: String,
     #[serde(default)]
     pub title: String,
+    /// The short summary.
+    #[serde(default)]
+    pub description: String,
     #[serde(default)]
     pub icon_url: Option<String>,
+    /// "required", "optional", "unsupported" or "unknown".
+    #[serde(default)]
+    pub client_side: String,
+    #[serde(default)]
+    pub server_side: String,
 }
 
 impl Version {
@@ -228,13 +243,15 @@ fn sort_index(sort: SortBy) -> &'static str {
         SortBy::Downloads => "downloads",
         SortBy::Updated => "updated",
         SortBy::Newest => "newest",
+        SortBy::Follows => "follows",
     }
 }
 
-fn search_facets(query: &SearchQuery) -> String {
+pub(super) fn search_facets(query: &SearchQuery) -> String {
     let kind = query.project_type.id();
     let mut facets = vec![vec![format!("project_type:{kind}")]];
-    if matches!(query.project_type, ProjectType::Mod | ProjectType::Modpack)
+    if (matches!(query.project_type, ProjectType::Mod | ProjectType::Modpack)
+        || query.strict_version)
         && !query.game_version.trim().is_empty()
     {
         facets.push(vec![format!("versions:{}", query.game_version.trim())]);
@@ -245,6 +262,33 @@ fn search_facets(query: &SearchQuery) -> String {
             .map(|l| format!("categories:{l}"))
             .collect();
         facets.push(any_of);
+    }
+    let loaders: Vec<String> = query
+        .loaders
+        .iter()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .map(|l| format!("categories:{l}"))
+        .collect();
+    if !loaders.is_empty() {
+        facets.push(loaders);
+    }
+    // Each category is its own group, so they all have to match.
+    for category in query.categories.iter().map(|c| c.trim()) {
+        if !category.is_empty() {
+            facets.push(vec![format!("categories:{category}")]);
+        }
+    }
+    match query.environment {
+        Some(Environment::Client) => facets.push(vec![
+            "client_side:required".into(),
+            "client_side:optional".into(),
+        ]),
+        Some(Environment::Server) => facets.push(vec![
+            "server_side:required".into(),
+            "server_side:optional".into(),
+        ]),
+        None => {}
     }
     serde_json::Value::from(facets).to_string()
 }

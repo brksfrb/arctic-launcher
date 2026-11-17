@@ -15,9 +15,10 @@ use crate::{t, tf};
 const PAGE_SIZE: usize = 20;
 /// Seconds after the last keystroke before searching.
 const SEARCH_DELAY: f64 = 0.35;
-pub(super) const SORTS: [(SortBy, &str); 4] = [
+pub(super) const SORTS: [(SortBy, &str); 5] = [
     (SortBy::Relevance, "instances.sort_by.relevance"),
     (SortBy::Downloads, "instances.sort_by.most_downloads"),
+    (SortBy::Follows, "instances.sort_by.most_follows"),
     (SortBy::Updated, "instances.sort_by.recently_updated"),
     (SortBy::Newest, "instances.sort_by.newest"),
 ];
@@ -84,6 +85,7 @@ impl ArcticApp {
         search.request += 1;
         search.loading = true;
         search.more_from = offset;
+        search.more_failed = None;
         if offset == 0 {
             search.results = None;
         }
@@ -95,6 +97,7 @@ impl ArcticApp {
             offset,
             limit: PAGE_SIZE,
             project_type: arctic_core::mods::ProjectType::Mod,
+            ..SearchQuery::default()
         };
         self.tasks.mod_search(search.request, query);
     }
@@ -146,7 +149,7 @@ impl ArcticApp {
 
     /// What is being downloaded, as a bar over the whole width, right above the search field: the stage at
     /// the left, the share done at the right. Shown whatever the results below are (or aren't).
-    fn install_bar(&mut self, ui: &mut egui::Ui) {
+    pub(super) fn install_bar(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         if self.inst.installing.is_empty() && self.inst.install_progress.is_none() {
             return;

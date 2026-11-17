@@ -25,6 +25,9 @@ pub enum Error {
     #[error("{0}")]
     NotConfigured(String),
 
+    #[error("Selected version is incompatible with this instance")]
+    IncompatibleContentVersion,
+
     #[error("{0}")]
     Other(String),
 }
