@@ -23,6 +23,15 @@ final class HorseInfo {
 		return true;
 	}
 
+	/** The game swaps the XP bar for the jump bar on this mount (horse, donkey, mule, camel; not strider or pig). */
+	static boolean hasJumpBar(Entity mount) {
+		//#if MC >= 1.13
+		return mount instanceof AbstractHorse;
+		//#else
+		return false;
+		//#endif
+	}
+
 	/** {speed in blocks per second, jump height in blocks, health, max health}, or null. */
 	static float[] stats() {
 		//#if MC >= 1.13
