@@ -5,6 +5,7 @@
 //! background threads.
 
 pub mod args;
+pub mod cds;
 pub mod files;
 mod game_window;
 mod language;
@@ -908,9 +909,28 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
         resolution: (settings.window_width, settings.window_height),
         game_extra,
     };
+    let mut args = args::build(&inst.version, &env, &vars, &opts);
+    // Experiment (ARCTIC_EXPERIMENT_APPCDS=1, off by default): reuse the last start's class archive.
+    if let Some(java) = inst
+        .version
+        .java_version
+        .as_ref()
+        .filter(|_| cds::enabled())
+    {
+        let loader = format!("{:?}", req.instance.loader.kind());
+        let extra = cds::flags(&cds::Launch {
+            game_dir: &inst.game_dir,
+            game_version: &req.version.id,
+            loader: &loader,
+            java: &inst.java,
+            java_major: java.major_version,
+            args: &args,
+        });
+        args.splice(0..0, extra);
+    }
     LaunchPlan {
         java: inst.java.clone(),
-        args: args::build(&inst.version, &env, &vars, &opts),
+        args,
         game_dir: inst.game_dir.clone(),
         log_file: req.dirs.logs().join(match req.copy {
             0 => format!("game-{}.log", req.instance.id),
