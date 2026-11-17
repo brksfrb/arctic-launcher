@@ -4,15 +4,13 @@
 
 use std::collections::HashSet;
 
-#[cfg(feature = "offline-accounts")]
-use arctic_core::Error;
-use arctic_core::Result;
 use arctic_core::auth::microsoft::{self, MsaConfig};
 use arctic_core::auth::{Account, AccountKind, now_secs};
 use arctic_core::cosmetic_models;
 use arctic_core::cosmetics::{self, CapeChoice, Look, NewLook, Preset, Texture};
 use arctic_core::skins::Variant;
 use arctic_core::skins::api::{self, Profile};
+use arctic_core::{Error, Result};
 
 use crate::tasks::{Event, Tasks};
 use crate::{t, tf};
@@ -113,15 +111,39 @@ impl Tasks {
         })
     }
 
-    /// The account refreshed if needed (Microsoft tokens expire).
+    /// The account refreshed if needed (Microsoft tokens expire). A failed refresh is not
+    /// tried again right away: chat and friends ask every few seconds.
     pub(crate) fn fresh_account(&self, account: Account) -> Result<Account> {
-        if account.needs_refresh(now_secs()) {
-            let cfg = MsaConfig::load(self.dirs())?;
-            let fresh = microsoft::refresh(&cfg, &account)?;
-            self.send(Event::AccountRefreshed(fresh.clone()));
-            Ok(fresh)
-        } else {
-            Ok(account)
+        if account.needs_relogin() {
+            return Err(Error::ReauthRequired);
+        }
+        if !account.needs_refresh(now_secs()) {
+            return Ok(account);
+        }
+        if let Some(message) = refresh_cooldown::wait(&account.id) {
+            return Err(Error::Auth(message));
+        }
+        self.refresh_account(&account)
+    }
+
+    /// Refresh `account` now (Play asks even while a background refresh is cooling down),
+    /// telling the app what came of it.
+    pub(crate) fn refresh_account(&self, account: &Account) -> Result<Account> {
+        let cfg = MsaConfig::load(self.dirs())?;
+        match microsoft::refresh(&cfg, account) {
+            Ok(fresh) => {
+                refresh_cooldown::forget(&account.id);
+                self.send(Event::AccountRefreshed(fresh.clone()));
+                Ok(fresh)
+            }
+            Err(e) if e.is_reauth_required() => {
+                self.send(Event::AccountRetired(account.id.clone()));
+                Err(e)
+            }
+            Err(e) => {
+                refresh_cooldown::remember(&account.id, &e.to_string());
+                Err(e)
+            }
         }
     }
 
@@ -372,4 +394,71 @@ pub(crate) fn cached(
         let _ = std::fs::write(&path, &bytes);
     }
     Some(bytes)
+}
+
+/// How long a failed refresh is not tried again, per account. Same steps as the Arctic sign-in.
+mod refresh_cooldown {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
+    use std::time::{Duration, Instant};
+
+    const RETRY_AFTER_SECS: [u64; 4] = [15, 30, 60, 60];
+
+    type Failures = HashMap<String, (Instant, usize, String)>;
+
+    fn failures() -> MutexGuard<'static, Failures> {
+        static FAILURES: OnceLock<Mutex<Failures>> = OnceLock::new();
+        FAILURES
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn wait_at(failures: &Failures, id: &str, now: Instant) -> Option<String> {
+        let (at, count, message) = failures.get(id)?;
+        let wait =
+            Duration::from_secs(RETRY_AFTER_SECS[(count - 1).min(RETRY_AFTER_SECS.len() - 1)]);
+        (now.saturating_duration_since(*at) < wait).then(|| message.clone())
+    }
+
+    /// The earlier failure's message while it's too soon to try again.
+    pub fn wait(id: &str) -> Option<String> {
+        wait_at(&failures(), id, Instant::now())
+    }
+
+    pub fn remember(id: &str, message: &str) {
+        let mut failures = failures();
+        let count = failures.get(id).map_or(0, |(_, n, _)| *n) + 1;
+        failures.insert(id.to_owned(), (Instant::now(), count, message.to_owned()));
+    }
+
+    pub fn forget(id: &str) {
+        failures().remove(id);
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn backs_off_then_clears() {
+            let id = "cooldown-test";
+            assert_eq!(wait(id), None);
+            remember(id, "busy");
+            assert_eq!(wait(id).as_deref(), Some("busy"));
+            // Later failures wait longer: 15 s, then 30 s.
+            let now = Instant::now();
+            assert_eq!(
+                wait_at(&failures(), id, now + Duration::from_secs(16)),
+                None
+            );
+            remember(id, "busy");
+            let f = failures();
+            assert!(wait_at(&f, id, now + Duration::from_secs(16)).is_some());
+            assert!(wait_at(&f, id, now + Duration::from_secs(31)).is_none());
+            drop(f);
+            forget(id);
+            assert_eq!(wait(id), None);
+        }
+    }
 }

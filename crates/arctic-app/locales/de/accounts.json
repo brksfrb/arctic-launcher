@@ -2,7 +2,9 @@
   "accounts.accounts": "Konten",
   "accounts.add_account": "Konto hinzufügen",
   "accounts.click_an_account_to_play_as_it_sign_ins_stay": "Klicke ein Konto an, um damit zu spielen. Anmeldungen bleiben auf diesem PC, verschlüsselt für dein Benutzerkonto.",
+  "accounts.microsoft_login_expired": "Deine Microsoft-Anmeldung ist abgelaufen. Melde dich erneut an, um zu spielen.",
   "accounts.offline": "Offline",
   "accounts.playing_as": "Spielt als {username}",
-  "accounts.remove_account": "Konto entfernen"
+  "accounts.remove_account": "Konto entfernen",
+  "accounts.sign_in_again": "Erneut anmelden"
 }
