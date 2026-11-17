@@ -79,6 +79,35 @@ fn post_token_form(url: &str, form: &[(&str, &str)]) -> Result<TokenResponse> {
     read_json_any_status(&mut resp)
 }
 
+/// Codes (in `error` or `error_description`) after which the refresh token is dead for good.
+const REAUTH_CODES: [&str; 5] = [
+    "invalid_grant",
+    "interaction_required",
+    "AADSTS70000",
+    "AADSTS50173",
+    "AADSTS70008",
+];
+
+/// True when Microsoft refused a refresh token for good, so only a new sign-in helps.
+/// Pending, throttled and server-side errors are not.
+pub(super) fn is_reauth_error(error: &str, description: Option<&str>) -> bool {
+    let has = |text: &str| {
+        let text = text.to_ascii_lowercase();
+        REAUTH_CODES
+            .iter()
+            .any(|code| text.contains(&code.to_ascii_lowercase()))
+    };
+    has(error) || description.is_some_and(has)
+}
+
+fn refresh_error(error: &str, description: Option<String>) -> Error {
+    if is_reauth_error(error, description.as_deref()) {
+        Error::ReauthRequired
+    } else {
+        oauth_error(error, description)
+    }
+}
+
 fn oauth_error(error: &str, description: Option<String>) -> Error {
     Error::Auth(description.unwrap_or_else(|| error.to_owned()))
 }
@@ -163,7 +192,7 @@ pub(super) fn refresh(cfg: &MsaConfig, refresh_token: &str) -> Result<MsaTokens>
         TokenResponse::Err {
             error,
             error_description,
-        } => Err(oauth_error(&error, error_description)),
+        } => Err(refresh_error(&error, error_description)),
     }
 }
 
@@ -195,6 +224,50 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(ok, TokenResponse::Ok(t) if t.refresh_token.as_deref() == Some("r")));
+    }
+
+    fn reauth(body: &str) -> bool {
+        match serde_json::from_str::<TokenResponse>(body).unwrap() {
+            TokenResponse::Err {
+                error,
+                error_description,
+            } => is_reauth_error(&error, error_description.as_deref()),
+            TokenResponse::Ok(_) => false,
+        }
+    }
+
+    #[test]
+    fn dead_refresh_tokens_need_a_new_sign_in() {
+        assert!(reauth(
+            r#"{"error":"invalid_grant","error_description":"AADSTS70000: The user could not be authenticated."}"#
+        ));
+        assert!(reauth(r#"{"error":"invalid_grant"}"#));
+        assert!(reauth(r#"{"error":"interaction_required"}"#));
+        // Code only in the description.
+        assert!(reauth(
+            r#"{"error":"server_error","error_description":"AADSTS50173: The provided grant has expired"}"#
+        ));
+        assert!(reauth(
+            r#"{"error":"x","error_description":"aadsts70008: The provided authorization code or refresh token has expired"}"#
+        ));
+        assert!(matches!(
+            refresh_error("invalid_grant", Some("AADSTS70000".into())),
+            Error::ReauthRequired
+        ));
+    }
+
+    #[test]
+    fn transient_refresh_errors_are_not_fatal() {
+        assert!(!reauth(
+            r#"{"error":"authorization_pending","error_description":"AADSTS70016: pending"}"#
+        ));
+        assert!(!reauth(
+            r#"{"error":"temporarily_unavailable","error_description":"AADSTS90033: busy"}"#
+        ));
+        assert!(!reauth(r#"{"error":"slow_down"}"#));
+        assert!(!refresh_error("temporarily_unavailable", None).is_reauth_required());
+        assert!(!Error::Http("503 Service Unavailable".into()).is_reauth_required());
+        assert!(!Error::Auth("AADSTS500011".into()).is_reauth_required());
     }
 
     #[test]

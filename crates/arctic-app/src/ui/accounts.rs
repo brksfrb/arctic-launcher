@@ -66,15 +66,16 @@ impl ArcticApp {
             font.clone(),
             p.text,
         );
-        let (badge, color) = if account.is_microsoft() {
-            ("Microsoft", p.accent)
+        let relogin = account.needs_relogin();
+        let (badge, color, badge_width) = if relogin {
+            (t!("accounts.sign_in_again"), p.error, 108.0)
+        } else if account.is_microsoft() {
+            ("Microsoft", p.accent, 74.0)
         } else {
-            (t!("accounts.offline"), p.muted)
+            (t!("accounts.offline"), p.muted, 56.0)
         };
-        let badge_rect = egui::Rect::from_min_size(
-            rect.left_top() + vec2(90.0, 48.0),
-            vec2(if account.is_microsoft() { 74.0 } else { 56.0 }, 20.0),
-        );
+        let badge_rect =
+            egui::Rect::from_min_size(rect.left_top() + vec2(90.0, 48.0), vec2(badge_width, 20.0));
         painter.rect_filled(
             badge_rect,
             CornerRadius::same(255),
@@ -126,6 +127,13 @@ impl ArcticApp {
             .clicked()
         {
             self.remove_confirm = Some(account.id.clone());
+        } else if relogin {
+            if response
+                .on_hover_text(t!("accounts.microsoft_login_expired"))
+                .clicked()
+            {
+                self.start_login(true);
+            }
         } else if response.clicked() && !active {
             self.accounts.set_active(&account.id);
             self.save_accounts();

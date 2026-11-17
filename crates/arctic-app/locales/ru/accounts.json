@@ -2,7 +2,9 @@
   "accounts.accounts": "Аккаунты",
   "accounts.add_account": "Добавить аккаунт",
   "accounts.click_an_account_to_play_as_it_sign_ins_stay": "Нажми на аккаунт, чтобы играть под ним. Данные входа остаются на этом ПК, зашифрованные для твоего пользователя.",
+  "accounts.microsoft_login_expired": "Вход в Microsoft устарел. Войдите снова, чтобы играть.",
   "accounts.offline": "Офлайн",
   "accounts.playing_as": "Вы играете как {username}",
-  "accounts.remove_account": "Убрать аккаунт"
+  "accounts.remove_account": "Убрать аккаунт",
+  "accounts.sign_in_again": "Войти снова"
 }

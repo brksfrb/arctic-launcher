@@ -22,6 +22,10 @@ pub enum Error {
     #[error("authentication failed: {0}")]
     Auth(String),
 
+    /// The Microsoft login is dead (refresh token refused): only a new sign-in fixes it.
+    #[error("your Microsoft login expired, sign in again")]
+    ReauthRequired,
+
     #[error("{0}")]
     NotConfigured(String),
 
@@ -38,6 +42,11 @@ impl Error {
             path: path.into(),
             source,
         }
+    }
+
+    /// True when the Microsoft login can't be refreshed any more and the player must sign in again.
+    pub fn is_reauth_required(&self) -> bool {
+        matches!(self, Self::ReauthRequired)
     }
 
     /// Display text plus every `source()` that it does not already end with.

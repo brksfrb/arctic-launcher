@@ -21,7 +21,7 @@ use arctic_core::settings::Settings;
 use arctic_core::storage::DataDirs;
 use arctic_core::update::{self, UpdateChannel, UpdateInfo};
 use arctic_core::versions::{VersionEntry, VersionManifest};
-use arctic_core::{ProgressInfo, Result};
+use arctic_core::{Error, ProgressInfo, Result};
 use eframe::egui;
 /// Translate compatibility failures from the exact-version install paths.
 pub(crate) fn content_install_error(error: arctic_core::Error) -> String {
@@ -87,6 +87,8 @@ pub enum Event {
     LaunchProgress(LaunchId, ProgressSnapshot),
     UpdateProgress(ProgressSnapshot),
     AccountRefreshed(Account),
+    /// The refresh token is dead for good: the account (by local id) needs a new sign-in.
+    AccountRetired(String),
     /// Game process started (window not necessarily up yet). Carries the
     /// version id that was actually launched.
     /// The game, its log file, its version and how Java was started.
@@ -405,7 +407,14 @@ impl Tasks {
             }
             let result = result.map(|(game, log, java)| (game, log, version.id.clone(), java));
             // The toast shows this string; it has to be the whole cause chain, not just Display.
-            t.send(Event::Launched(id, result.map_err(|e| e.chain())));
+            let result = result.map_err(|e| {
+                if e.is_reauth_required() {
+                    t!("accounts.microsoft_login_expired").to_owned()
+                } else {
+                    e.chain()
+                }
+            });
+            t.send(Event::Launched(id, result));
         });
     }
 
@@ -428,12 +437,11 @@ impl Tasks {
             snapshot.percent = Some(percent);
             self.send(Event::LaunchProgress(id, snapshot));
         };
-        let account = if account.needs_refresh(now_secs()) {
+        let account = if account.needs_relogin() {
+            return Err(Error::ReauthRequired);
+        } else if account.needs_refresh(now_secs()) {
             progress(ProgressInfo::stage(t!("tasks.refreshing_microsoft_login")));
-            let cfg = MsaConfig::load(&self.dirs)?;
-            let fresh = microsoft::refresh(&cfg, &account)?;
-            self.send(Event::AccountRefreshed(fresh.clone()));
-            fresh
+            self.refresh_account(&account)?
         } else {
             account
         };
