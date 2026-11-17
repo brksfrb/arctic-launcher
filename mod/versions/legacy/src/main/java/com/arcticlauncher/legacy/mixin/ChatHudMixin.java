@@ -54,7 +54,7 @@ abstract class ChatHudMixin {
 		try {
 			history.restore(new com.arcticlauncher.client.feature.PersistentChat.View() {
 				public void message(String text, long time) {
-					chat.addMessage(new net.minecraft.text.LiteralText(text));
+					chat.addMessage(new net.minecraft.text.LiteralText(com.arcticlauncher.client.feature.ChatArchiveText.toLegacy(text)));
 				}
 				public void sent(String text) {
 					chat.getMessageHistory().add(text);
@@ -86,7 +86,7 @@ abstract class ChatHudMixin {
 			// Added the usual way, each at the front (oldest first), then the block moves to the far end.
 			history.replay(page, new com.arcticlauncher.client.feature.PersistentChat.View() {
 				public void message(String text, long time) {
-					chat.addMessage(new net.minecraft.text.LiteralText(text));
+					chat.addMessage(new net.minecraft.text.LiteralText(com.arcticlauncher.client.feature.ChatArchiveText.toLegacy(text)));
 				}
 				public void sent(String text) {}
 			});
@@ -205,7 +205,7 @@ abstract class ChatHudMixin {
 				return LegacyHooks.restoredChat(message, ArcticClient.persistentChat().restoringTime());
 			}
 			if (!ArcticClient.chatHidden(message.asUnformattedString())) {
-				ArcticClient.persistentChat().message(message.asFormattedString());
+				ArcticClient.persistentChat().message(com.arcticlauncher.client.feature.ChatArchiveText.toLegacy(message.asFormattedString()));
 			}
 		}
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
