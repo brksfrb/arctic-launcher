@@ -1,10 +1,8 @@
 package com.arcticlauncher.legacy;
 
-//#if MC < 1.9
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.feature.LightOverlay;
-import com.mojang.blaze3d.platform.GlStateManager;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.mob.MobEntity;
@@ -14,7 +12,7 @@ import net.minecraft.world.World;
 import org.lwjgl.opengl.GL11;
 
 /**
- * Light Overlay on 1.8.9: the world's light and the game's own spawn rule for the scan, and the finished mesh drawn
+ * Light Overlay on 1.8.9 - 1.12.2 (and Forge 1.8.9): the world's light and the game's own spawn rule for the scan, and the finished mesh drawn
  * as one cached display list (rebuilt only when the scan's result changes), in the world after the terrain.
  */
 public final class LegacyLightOverlay {
@@ -93,28 +91,35 @@ public final class LegacyLightOverlay {
 		double camX = eye.prevTickX + (eye.x - eye.prevTickX) * tickDelta;
 		double camY = eye.prevTickY + (eye.y - eye.prevTickY) * tickDelta;
 		double camZ = eye.prevTickZ + (eye.z - eye.prevTickZ) * tickDelta;
-		GlStateManager.pushMatrix();
+		// Raw GL inside the attribute stack: everything changed is put back, so the game's cached GL state stays true.
+		GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT | GL11.GL_POLYGON_BIT
+				| GL11.GL_CURRENT_BIT | GL11.GL_LIGHTING_BIT | GL11.GL_FOG_BIT);
+		GL11.glPushMatrix();
 		GL11.glTranslated(mesh.originX - camX, mesh.originY - camY, mesh.originZ - camZ);
-		GlStateManager.disableTexture();
-		GlStateManager.disableLighting();
-		GlStateManager.disableCull();
-		boolean fog = GL11.glIsEnabled(GL11.GL_FOG);
-		GlStateManager.disableFog();
-		GlStateManager.enableBlend();
-		GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-		GlStateManager.depthMask(false);
+		GL11.glDisable(GL11.GL_TEXTURE_2D);
+		GL11.glDisable(GL11.GL_LIGHTING);
+		GL11.glDisable(GL11.GL_FOG);
+		GL11.glDisable(GL11.GL_CULL_FACE);
+		GL11.glDisable(GL11.GL_ALPHA_TEST);
+		GL11.glShadeModel(GL11.GL_FLAT);
+		GL11.glEnable(GL11.GL_DEPTH_TEST);
+		GL11.glDepthFunc(GL11.GL_LEQUAL);
+		GL11.glDepthMask(false);
+		GL11.glEnable(GL11.GL_BLEND);
+		GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 		GL11.glEnable(GL11.GL_POLYGON_OFFSET_FILL);
 		GL11.glPolygonOffset(-1f, -2f);
 		GL11.glCallList(list);
-		GL11.glDisable(GL11.GL_POLYGON_OFFSET_FILL);
-		GlStateManager.depthMask(true);
-		GL11.glColor4f(1f, 1f, 1f, 1f);
-		GlStateManager.enableCull();
-		GlStateManager.enableTexture();
-		if (fog) {
-			GlStateManager.enableFog();
+		GL11.glPopMatrix();
+		GL11.glPopAttrib();
+	}
+
+	/** A block changed in the client's world: a placed torch is rescanned at once. */
+	public static void blockChanged(BlockPos pos) {
+		ClientConfig c = ArcticClient.config();
+		if (c != null && c.lightOverlay) {
+			ArcticClient.lightOverlay().blockChanged(pos.getX(), pos.getY(), pos.getZ());
 		}
-		GlStateManager.popMatrix();
 	}
 
 	private static void compile(LightOverlay.Mesh mesh) {
@@ -131,4 +136,3 @@ public final class LegacyLightOverlay {
 		listVersion = mesh.version;
 	}
 }
-//#endif

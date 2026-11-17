@@ -376,8 +376,14 @@ public final class ClientConfig {
 	public int lightStyle;
 	/** Also mark the safe (green) blocks. */
 	public boolean lightShowSafe = true;
-	/** Key that switches the overlay on and off. */
-	public String lightKey = "key.keyboard.unknown";
+	/** Key that switches the overlay on and off (F7, like Lighty). */
+	public String lightKey = LIGHT_KEY;
+	/**
+	 * The one-time move to "Light" = light on the ground: anyone who had the Light readout on gets the ground overlay
+	 * turned on (and the F7 key if they had none). Done once, so turning it off later stays off.
+	 */
+	public boolean lightMigrated;
+	public static final String LIGHT_KEY = "key.keyboard.f7";
 	/** Mob Size: creatures other than players drawn at this scale (0.25 to 3). */
 	public boolean mobSize;
 	/** Fog: stretch (1 to 10 times) or remove the fog. */
@@ -514,7 +520,10 @@ public final class ClientConfig {
 			waypointKey = "key.keyboard.unknown";
 		}
 		if (lightKey == null) {
-			lightKey = "key.keyboard.unknown";
+			lightKey = LIGHT_KEY;
+		}
+		if (!lightMigrated) {
+			migrateLight();
 		}
 		lightRange = Math.max(4, Math.min(32, lightRange));
 		lightStyle = Math.max(0, Math.min(2, lightStyle));
@@ -584,6 +593,18 @@ public final class ClientConfig {
 		if (combatFeedback == null) {
 			combatFeedback = hitMarker || hitSound > 0 || killSound > 0 || lowHealthWarning;
 		}
+	}
+
+	/** See {@link #lightMigrated}. */
+	void migrateLight() {
+		HudSlot readout = hud == null ? null : hud.get("light");
+		if (readout != null && readout.enabled) {
+			lightOverlay = true;
+		}
+		if ("key.keyboard.unknown".equals(lightKey)) {
+			lightKey = LIGHT_KEY;
+		}
+		lightMigrated = true;
 	}
 
 	/**

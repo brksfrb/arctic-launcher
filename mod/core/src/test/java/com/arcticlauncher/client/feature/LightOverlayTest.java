@@ -74,4 +74,178 @@ class LightOverlayTest {
 			}
 		}
 	}
+
+	/** Where each lit pixel of a number lands, as a set of rounded corner points. */
+	private static java.util.Set<String> corners(LightOverlay.Mesh m) {
+		java.util.Set<String> out = new java.util.TreeSet<String>();
+		for (int i = 0; i < m.vertices; i++) {
+			out.add(Math.round(m.pos[i * 3] * 100) + "," + Math.round(m.pos[i * 3 + 2] * 100));
+		}
+		return out;
+	}
+
+	@Test
+	void numbersTurnToReadFromWhereYouLook() {
+		LightOverlay.Mesh north = new LightOverlay.Mesh();
+		LightOverlay.Mesh south = new LightOverlay.Mesh();
+		LightOverlay.Mesh east = new LightOverlay.Mesh();
+		LightOverlay.Mesh west = new LightOverlay.Mesh();
+		LightOverlay.Cells c = cells(0, 0, 0, LightOverlay.RED, 7);
+		LightOverlay.build(c, LightOverlay.NUMBERS, LightOverlay.NORTH, north);
+		LightOverlay.build(c, LightOverlay.NUMBERS, LightOverlay.SOUTH, south);
+		LightOverlay.build(c, LightOverlay.NUMBERS, LightOverlay.EAST, east);
+		LightOverlay.build(c, LightOverlay.NUMBERS, LightOverlay.WEST, west);
+		// The old (north only) layout is kept looking north.
+		LightOverlay.Mesh old = new LightOverlay.Mesh();
+		LightOverlay.build(c, LightOverlay.NUMBERS, old);
+		assertEquals(corners(old), corners(north));
+		// Looking south it's the north one turned half round (x and z mirrored about the block's middle).
+		java.util.Set<String> turned = new java.util.TreeSet<String>();
+		for (int i = 0; i < north.vertices; i++) {
+			turned.add(Math.round((1 - north.pos[i * 3]) * 100) + "," + Math.round((1 - north.pos[i * 3 + 2]) * 100));
+		}
+		assertEquals(turned, corners(south));
+		// A 7's top bar is at the far edge from you: north (-z) looking north, +x looking east, -x looking west.
+		assertTrue(minZ(north) < 0.4f && maxZ(north) > 0.6f);
+		assertEquals(north.vertices, east.vertices);
+		assertTrue(farthest(east, 1, 0) > farthest(east, -1, 0), "the 7's bar lies east, away from you, looking east");
+		assertTrue(farthest(west, -1, 0) > farthest(west, 1, 0), "the 7's bar lies west looking west");
+		assertTrue(farthest(north, 0, -1) > farthest(north, 0, 1), "the 7's bar lies north looking north");
+		for (LightOverlay.Mesh m : new LightOverlay.Mesh[] {north, south, east, west}) {
+			for (int i = 0; i < m.vertices; i++) {
+				assertTrue(m.pos[i * 3] >= 0f && m.pos[i * 3] <= 1f && m.pos[i * 3 + 2] >= 0f && m.pos[i * 3 + 2] <= 1f);
+			}
+		}
+	}
+
+	/** How many vertices sit at the far edge along (dx, dz): the 7's top bar makes that side heavier. */
+	private static int farthest(LightOverlay.Mesh m, int dx, int dz) {
+		float best = -9;
+		for (int i = 0; i < m.vertices; i++) {
+			best = Math.max(best, m.pos[i * 3] * dx + m.pos[i * 3 + 2] * dz);
+		}
+		int n = 0;
+		for (int i = 0; i < m.vertices; i++) {
+			if (Math.abs(m.pos[i * 3] * dx + m.pos[i * 3 + 2] * dz - best) < 1e-4f) {
+				n++;
+			}
+		}
+		return n;
+	}
+
+	private static float minZ(LightOverlay.Mesh m) {
+		float v = 9;
+		for (int i = 0; i < m.vertices; i++) {
+			v = Math.min(v, m.pos[i * 3 + 2]);
+		}
+		return v;
+	}
+
+	private static float maxZ(LightOverlay.Mesh m) {
+		float v = -9;
+		for (int i = 0; i < m.vertices; i++) {
+			v = Math.max(v, m.pos[i * 3 + 2]);
+		}
+		return v;
+	}
+
+	@Test
+	void facingFollowsTheGameYaw() {
+		assertEquals(LightOverlay.SOUTH, LightOverlay.facing(0));
+		assertEquals(LightOverlay.WEST, LightOverlay.facing(90));
+		assertEquals(LightOverlay.NORTH, LightOverlay.facing(180));
+		assertEquals(LightOverlay.NORTH, LightOverlay.facing(-180));
+		assertEquals(LightOverlay.EAST, LightOverlay.facing(-90));
+		assertEquals(LightOverlay.EAST, LightOverlay.facing(270));
+		assertEquals(LightOverlay.SOUTH, LightOverlay.facing(400));
+		assertEquals(LightOverlay.WEST, LightOverlay.facing(44 + 90));
+	}
+
+	/** A flat world: a floor at y 63, dark (block light 0) except where {@link #lit} says. */
+	private static final class World implements LightOverlay.Probe {
+		int lit;
+		int scans;
+
+		@Override
+		public boolean canSpawn(int x, int y, int z) {
+			if (x == 0 && z == 0 && y == 64) {
+				scans++;
+			}
+			return y == 64;
+		}
+
+		@Override
+		public int blockLight(int x, int y, int z) {
+			return lit;
+		}
+
+		@Override
+		public int skyLight(int x, int y, int z) {
+			return 0;
+		}
+
+		@Override
+		public int skyDarken() {
+			return 0;
+		}
+
+		@Override
+		public int blockLimit() {
+			return 0;
+		}
+
+		@Override
+		public int minY() {
+			return 0;
+		}
+
+		@Override
+		public int maxY() {
+			return 256;
+		}
+	}
+
+	@Test
+	void aBlockChangeNearbyRescansWithinAFewTicks() {
+		final World world = new World();
+		com.arcticlauncher.client.config.ClientConfig c = new com.arcticlauncher.client.config.ClientConfig();
+		c.lightOverlay = true;
+		c.lightRange = 4;
+		c.lightKey = "key.keyboard.unknown";
+		com.arcticlauncher.client.Platform p = (com.arcticlauncher.client.Platform) java.lang.reflect.Proxy.newProxyInstance(
+				LightOverlayTest.class.getClassLoader(), new Class<?>[] {com.arcticlauncher.client.Platform.class}, (proxy, m, args) -> {
+					switch (m.getName()) {
+						case "lightOverlayWorks":
+							return true;
+						case "lightProbe":
+							return world;
+						case "position":
+							return new double[] {0.5, 64, 0.5, 180, 0};
+						case "camera":
+							return null;
+						case "isKeyDown":
+							return false;
+						default:
+							Class<?> r = m.getReturnType();
+							return r == boolean.class ? false : r == int.class ? 0 : r == float.class ? 0f : r == double.class ? 0d : r == long.class ? 0L : null;
+					}
+				});
+		LightOverlay o = new LightOverlay();
+		o.tick(p, c, false);
+		assertTrue(o.mesh().vertices > 0);
+		assertEquals(LightOverlay.COLOR_RED, o.mesh().color[0]);
+		// A torch: everything lit; without the change it would wait for the 10 tick rescan.
+		world.lit = 14;
+		o.blockChanged(1, 64, 1);
+		assertTrue(o.changePending());
+		int before = world.scans;
+		for (int t = 0; t < LightOverlay.CHANGE_DELAY; t++) {
+			o.tick(p, c, false);
+		}
+		assertTrue(world.scans > before, "rescanned " + LightOverlay.CHANGE_DELAY + " ticks after the change");
+		assertEquals(LightOverlay.COLOR_GREEN, o.mesh().color[0]);
+		// Far away changes are ignored.
+		o.blockChanged(500, 64, 500);
+		assertTrue(!o.changePending());
+	}
 }

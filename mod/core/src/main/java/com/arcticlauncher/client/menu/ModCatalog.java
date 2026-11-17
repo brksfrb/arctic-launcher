@@ -102,16 +102,6 @@ final class ModCatalog {
 		}
 	}
 
-	/** The "Light" HUD widget (the old readout), or null. */
-	private static HudWidget lightReadout() {
-		for (HudWidget w : ArcticClient.hud().widgets()) {
-			if ("light".equals(w.id)) {
-				return w;
-			}
-		}
-		return null;
-	}
-
 	static List<Mod> all() {
 		final ClientConfig c = ArcticClient.config();
 		Platform p = ArcticClient.platform();
@@ -184,7 +174,9 @@ final class ModCatalog {
 			for (Mod existing : out) {
 				// Merge semantic pairs by stable ids so the card set is the same in every locale.
 				if (("scoreboard".equals(w.id) && "scoreboard".equals(existing.id))
-						|| ("held".equals(w.id) && "helditem".equals(existing.id) && p.hasScreenHooks())) feature = existing;
+						|| ("held".equals(w.id) && "helditem".equals(existing.id) && p.hasScreenHooks())
+						// "Light": the ground overlay and the crosshair readout are one page.
+						|| ("light".equals(w.id) && "lightoverlay".equals(existing.id))) feature = existing;
 			}
 			if (feature == null) {
 				out.add(m);
@@ -196,7 +188,7 @@ final class ModCatalog {
 				feature.keywords += " " + m.name + " " + m.description + " " + m.keywords;
 				feature.settings((host, f) -> {
 					if (appearance != null) appearance.build(host, f);
-					f.section(w.name);
+					f.section("light".equals(w.id) ? Lang.t("mods.light_readout") : w.name);
 					f.toggle(Lang.t("mods.show"), w.description, () -> slot.enabled, on -> slot.enabled = on);
 					f.key(Lang.t("mods.toggle_key"), w.description, Form.key(() -> ToggleKeys.get(m), key -> ToggleKeys.set(m, key)));
 					hudSettings.build(host, f);
@@ -666,22 +658,20 @@ final class ModCatalog {
 					.toggle(() -> c.chunkBorders, on -> c.chunkBorders = on));
 		}
 		if (p.lightOverlayWorks()) {
-			out.add(new Mod("lightoverlay", Lang.t("mods.light_overlay"), Lang.t("mods.marks_the_ground_where_hostile_mobs_can"),
-					"target", Category.GAMEPLAY, "light level lighty spawn mob spawning dark cave lit")
+			// "Light": where mobs can spawn shown on the ground (like Lighty), with the crosshair readout (the "Light" HUD
+			// widget, merged into this page below) and the F7 key.
+			out.add(new Mod("lightoverlay", Lang.t("mods.light"), Lang.t("mods.light_levels_on_the_ground_where_mobs_can_spawn"),
+					"target", Category.GAMEPLAY, "light level lighty overlay spawn mob spawning dark cave lit torch readout ground")
 					.toggle(() -> c.lightOverlay, on -> c.lightOverlay = on)
+					.ownToggleKey()
 					.settings((host, f) -> {
-						f.section(Lang.t("mods.overlay"));
-						f.note(Lang.t("mods.red_mobs_spawn_here_now_yellow_only_at_night"));
+						f.section(Lang.t("mods.on_the_ground"));
+						f.toggle(Lang.t("mods.show_on_ground"), Lang.t("mods.red_mobs_can_spawn_now_orange_at_night_green"), () -> c.lightOverlay,
+								on -> c.lightOverlay = on);
 						f.slider(Lang.t("mods.range"), () -> c.lightRange, v -> c.lightRange = (int) v, 4, 32, 1, "%.0f");
 						f.choice(Lang.t("mods.style"), Lang.all(com.arcticlauncher.client.feature.LightOverlay.STYLES), () -> c.lightStyle, i -> c.lightStyle = i);
 						f.toggle(Lang.t("mods.show_safe_blocks"), Lang.t("mods.green_markers_where_mobs_cant_spawn"), () -> c.lightShowSafe, on -> c.lightShowSafe = on);
 						f.key(Lang.t("mods.toggle_key"), Lang.t("mods.switches_the_overlay_on_and_off"), Form.key(() -> c.lightKey, k -> c.lightKey = k));
-						f.section(Lang.t("mods.readout"));
-						HudWidget readout = lightReadout();
-						if (readout != null) {
-							final HudSlot slot = ArcticClient.hud().slot(readout);
-							f.toggle(Lang.t("mods.light_readout"), Lang.t("mods.keep_the_light_8_sky_0_line_on_screen"), () -> slot.enabled, on -> slot.enabled = on);
-						}
 					}));
 		}
 		if (p.tooltipScrollWorks()) {

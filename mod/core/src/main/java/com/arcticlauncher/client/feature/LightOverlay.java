@@ -5,7 +5,7 @@ import com.arcticlauncher.client.config.ClientConfig;
 
 /**
  * Light Overlay (like the Lighty mod): a marker on the ground of every block around you where a hostile mob could
- * spawn. Red = they can spawn now, yellow = only at night, green = safe (optional).
+ * spawn. Red = they can spawn now, orange = only at night, green = safe (optional).
  *
  * <p>The world is scanned a little every tick (a time budget, on the game thread, so no world is read from another
  * thread) into a snapshot of cells; the drawable quads are rebuilt only when a finished scan differs from the one
@@ -36,6 +36,16 @@ public final class LightOverlay {
 	static final long BUDGET_NANOS = 1_500_000L;
 	/** Highest sky light at which hostile mobs spawn (after the night/rain darkening). */
 	static final int SKY_LIMIT = 7;
+	/** Game ticks after a block changes near you before it's rescanned (the client's light catches up first). */
+	static final int CHANGE_DELAY = 2;
+	/** Blocks around the scanned area where a change can still alter its light (a torch lights 14 blocks). */
+	static final int CHANGE_REACH = 15;
+
+	/** Which way the numbers read: the way you look, in 90 degree steps. */
+	public static final int SOUTH = 0;
+	public static final int WEST = 1;
+	public static final int NORTH = 2;
+	public static final int EAST = 3;
 
 	/** What the scan asks the world (implemented per Minecraft version, game thread only). */
 	public interface Probe {
@@ -105,7 +115,10 @@ public final class LightOverlay {
 	private int meshStyle = -1;
 	private boolean meshSafe;
 	private int meshHash;
+	private int meshFacing = NORTH;
 	private boolean wasKeyDown;
+	/** Ticks left until a block change near you is rescanned (0: none pending). Set on the game thread. */
+	private int changeTicks;
 
 	// ---- the scan in progress ----
 	private boolean scanning;
@@ -146,7 +159,13 @@ public final class LightOverlay {
 		int py = (int) Math.floor(pos[1]);
 		int pz = (int) Math.floor(pos[2]);
 		int range = Math.max(MIN_RANGE, Math.min(MAX_RANGE, c.lightRange));
+		double[] cam = p.camera();
+		int facing = facing(cam != null && cam.length > 3 ? cam[3] : pos.length > 3 ? pos[3] : 180);
 		ticksSinceScan++;
+		if (changeTicks > 0 && --changeTicks == 0) {
+			// A block changed near you: scan again now (from scratch, even if one was under way).
+			begin(px, py, pz, range, c.lightShowSafe, probe);
+		}
 		if (!scanning) {
 			boolean moved = cells == null || Math.abs(px - cells.origX) > MOVE_RESCAN || Math.abs(pz - cells.origZ) > MOVE_RESCAN
 					|| Math.abs(py - cells.origY) > MOVE_RESCAN;
@@ -154,7 +173,7 @@ public final class LightOverlay {
 			if (cells == null || moved || settingsChanged || ticksSinceScan >= RESCAN_TICKS) {
 				begin(px, py, pz, range, c.lightShowSafe, probe);
 			} else {
-				rebuildMesh(c);
+				rebuildMesh(c, facing);
 				return;
 			}
 		}
@@ -166,7 +185,46 @@ public final class LightOverlay {
 			statCells = cells == null ? 0 : cells.n;
 			ticksSinceScan = 0;
 		}
-		rebuildMesh(c);
+		rebuildMesh(c, facing);
+	}
+
+	/** The 90 degree step you look along: {@link #SOUTH}, {@link #WEST}, {@link #NORTH} or {@link #EAST} (the game's yaw). */
+	public static int facing(double yaw) {
+		return Math.floorMod((int) Math.round(yaw / 90.0), 4);
+	}
+
+	/**
+	 * A block changed (game thread): if it's near enough to alter the light of what's shown, rescan in a moment, so a
+	 * torch you place turns the markers around it green within a fraction of a second.
+	 */
+	public void blockChanged(int x, int y, int z) {
+		Cells cs = cells;
+		int cx, cy, cz, r;
+		if (scanning) {
+			cx = scanCx;
+			cy = scanCy;
+			cz = scanCz;
+			r = scanRange;
+		} else if (cs != null) {
+			cx = cs.origX;
+			cy = cs.origY;
+			cz = cs.origZ;
+			r = scanRange;
+		} else {
+			return;
+		}
+		int reach = r + CHANGE_REACH;
+		if (Math.abs(x - cx) > reach || Math.abs(z - cz) > reach || Math.abs(y - cy) > MAX_VERTICAL + CHANGE_REACH) {
+			return;
+		}
+		if (changeTicks == 0) {
+			changeTicks = CHANGE_DELAY;
+		}
+	}
+
+	/** Whether a rescan for a changed block is waiting (tests). */
+	boolean changePending() {
+		return changeTicks > 0;
 	}
 
 	private void begin(int px, int py, int pz, int range, boolean safe, Probe probe) {
@@ -259,19 +317,22 @@ public final class LightOverlay {
 				java.util.Arrays.copyOf(wkind, cellCount), java.util.Arrays.copyOf(wlight, cellCount), h);
 	}
 
-	private void rebuildMesh(ClientConfig c) {
+	private void rebuildMesh(ClientConfig c, int facing) {
 		Cells cs = cells;
 		if (cs == null) {
 			return;
 		}
 		Mesh cur = mesh;
 		boolean sameCells = meshHash == cs.hash && cur.originX == cs.origX && cur.originY == cs.origY && cur.originZ == cs.origZ;
-		if (sameCells && meshStyle == c.lightStyle && meshSafe == c.lightShowSafe) {
+		// Only numbers turn with you; the other styles look the same from every side.
+		boolean sameFacing = c.lightStyle != NUMBERS || meshFacing == facing;
+		if (sameCells && sameFacing && meshStyle == c.lightStyle && meshSafe == c.lightShowSafe) {
 			return;
 		}
 		Mesh next = cur == meshes[0] ? meshes[1] : meshes[0];
-		build(cs, c.lightStyle, next);
+		build(cs, c.lightStyle, facing, next);
 		next.version = ++meshVersion;
+		meshFacing = facing;
 		meshStyle = c.lightStyle;
 		meshSafe = c.lightShowSafe;
 		meshHash = cs.hash;
@@ -281,6 +342,7 @@ public final class LightOverlay {
 	private void clear() {
 		cells = null;
 		scanning = false;
+		changeTicks = 0;
 		meshHash = 0;
 		ticksSinceScan = RESCAN_TICKS;
 		Mesh m = mesh;
@@ -303,7 +365,8 @@ public final class LightOverlay {
 	// ---- geometry ----
 
 	static final int COLOR_RED = 0xB8FF2020;
-	static final int COLOR_YELLOW = 0xB8FFD020;
+	/** Orange like Lighty's "spawns at night" (named yellow in the code since the first version). */
+	static final int COLOR_YELLOW = 0xB8FF9A1F;
 	static final int COLOR_GREEN = 0xB820E040;
 	/** How far above the block's top face the markers float, so they don't flicker against it. */
 	static final float LIFT = 0.02f;
@@ -312,8 +375,16 @@ public final class LightOverlay {
 		return kind == RED ? COLOR_RED : kind == YELLOW ? COLOR_YELLOW : COLOR_GREEN;
 	}
 
-	/** Fill {@code out} with the quads for the cells in the given style (arrays only grow, so it rarely allocates). */
+	/** {@link #build(Cells, int, int, Mesh)} with numbers read looking north. */
 	static void build(Cells cs, int style, Mesh out) {
+		build(cs, style, NORTH, out);
+	}
+
+	/**
+	 * Fill {@code out} with the quads for the cells in the given style, numbers reading the way you look along
+	 * {@code facing} (arrays only grow, so it rarely allocates).
+	 */
+	static void build(Cells cs, int style, int facing, Mesh out) {
 		out.vertices = 0;
 		out.originX = cs.origX;
 		out.originY = cs.origY;
@@ -327,7 +398,7 @@ public final class LightOverlay {
 				line(out, x + 0.15f, z + 0.15f, x + 0.85f, z + 0.85f, y, col);
 				line(out, x + 0.85f, z + 0.15f, x + 0.15f, z + 0.85f, y, col);
 			} else if (style == NUMBERS) {
-				number(out, cs.light[i], x, y, z, col | 0xFF000000);
+				number(out, cs.light[i], x, y, z, col | 0xFF000000, facing);
 			} else {
 				quad(out, x + 0.1f, z + 0.1f, x + 0.9f, z + 0.9f, y, col);
 			}
@@ -380,14 +451,23 @@ public final class LightOverlay {
 			{7, 5, 5, 5, 7}, {2, 6, 2, 2, 7}, {7, 1, 7, 4, 7}, {7, 1, 7, 1, 7}, {5, 5, 7, 1, 1},
 			{7, 4, 7, 1, 7}, {7, 4, 7, 5, 7}, {7, 1, 1, 1, 1}, {7, 5, 7, 5, 7}, {7, 5, 7, 1, 7}};
 
-	/** The number laid flat, reading right from the south when you look north. One or two digits, centered on the block. */
-	static void number(Mesh m, int value, float x, float y, float z, int color) {
+	/**
+	 * The number laid flat on the block, upright for someone looking along {@code facing} (so it reads left to right
+	 * from where you stand). One or two digits, centered on the block.
+	 */
+	static void number(Mesh m, int value, float x, float y, float z, int color, int facing) {
 		int v = Math.max(0, Math.min(99, value));
 		int digits = v >= 10 ? 2 : 1;
 		float px = digits == 2 ? 0.1f : 0.14f;
 		float width = digits * 3 * px + (digits - 1) * px;
-		float left = x + 0.5f - width / 2;
-		float top = z + 0.5f - 5 * px / 2;
+		// Laid out in the block's own reading frame (u to the right, w down toward you, both 0..1), then turned.
+		float left = 0.5f - width / 2;
+		float top = 0.5f - 5 * px / 2;
+		// Where you look (fx, fz); right of it is (-fz, fx); down the page is toward you (-fx, -fz).
+		int fx = facing == WEST ? -1 : facing == EAST ? 1 : 0;
+		int fz = facing == SOUTH ? 1 : facing == NORTH ? -1 : 0;
+		float cx = x + 0.5f;
+		float cz = z + 0.5f;
 		for (int d = 0; d < digits; d++) {
 			int digit = digits == 2 ? (d == 0 ? v / 10 : v % 10) : v;
 			float dxo = left + d * 4 * px;
@@ -395,7 +475,15 @@ public final class LightOverlay {
 				int bits = DIGITS[digit][row];
 				for (int col = 0; col < 3; col++) {
 					if ((bits & (4 >> col)) != 0) {
-						quad(m, dxo + col * px, top + row * px, dxo + (col + 1) * px, top + (row + 1) * px, y, color);
+						float u0 = dxo + col * px - 0.5f;
+						float u1 = u0 + px;
+						float w0 = top + row * px - 0.5f;
+						float w1 = w0 + px;
+						ensure(m, 4);
+						put(m, cx - u0 * fz - w0 * fx, y, cz + u0 * fx - w0 * fz, color);
+						put(m, cx - u0 * fz - w1 * fx, y, cz + u0 * fx - w1 * fz, color);
+						put(m, cx - u1 * fz - w1 * fx, y, cz + u1 * fx - w1 * fz, color);
+						put(m, cx - u1 * fz - w0 * fx, y, cz + u1 * fx - w0 * fz, color);
 					}
 				}
 			}

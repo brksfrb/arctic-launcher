@@ -153,4 +153,24 @@ class ClientConfigTest {
 		assertEquals(null, c.save());
 		assertEquals("key.keyboard.j", ClientConfig.load(dir.toFile()).toggleKeys.get("connected-glass"));
 	}
+
+	@Test
+	void lightReadoutUsersGetTheGroundOverlayOnceAndF7() throws Exception {
+		// Had the Light readout on: the ground overlay comes on, and the unbound key becomes F7.
+		ClientConfig c = load("{\"hudVersion\": 2, \"hud\": {\"light\": {\"enabled\": true}}, \"lightKey\": \"key.keyboard.unknown\"}");
+		assertTrue(c.lightOverlay);
+		assertEquals("key.keyboard.f7", c.lightKey);
+		assertTrue(c.lightMigrated);
+		// Turned off afterwards: stays off.
+		c.lightOverlay = false;
+		assertEquals(null, c.save());
+		assertFalse(ClientConfig.load(dir.toFile()).lightOverlay);
+		// Readout off (or never used): the overlay stays off; a key of their own is kept.
+		ClientConfig other = load("{\"hudVersion\": 2, \"hud\": {\"light\": {\"enabled\": false}}, \"lightKey\": \"key.keyboard.l\"}");
+		assertFalse(other.lightOverlay);
+		assertEquals("key.keyboard.l", other.lightKey);
+		ClientConfig fresh = load("{}");
+		assertFalse(fresh.lightOverlay);
+		assertEquals("key.keyboard.f7", fresh.lightKey);
+	}
 }
