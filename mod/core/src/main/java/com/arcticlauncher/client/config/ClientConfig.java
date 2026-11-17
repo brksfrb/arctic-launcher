@@ -389,8 +389,8 @@ public final class ClientConfig {
 	public boolean replayAutoExport;
 	/** Encode the game framebuffer while playing, alongside the independent 3D recording. */
 	/** The whole replay system: instant clips, recordings and gameplay video. Applies from the next world join. */
-	public boolean replayEnabled = true;
-	public boolean replayVideoEnabled = true;
+	public boolean replayEnabled;
+	public boolean replayVideoEnabled;
 	public int replayVideoHeight = 720;
 	public int replayVideoFps = 30;
 	/** Saves only the recent rolling window, independently of manual recording. */
