@@ -122,4 +122,23 @@ final class ChatForms {
 		f.put(name, f.x + f.w - SIDE_FIELD_W, top + (Form.ROW - FIELD_H) / 2, SIDE_FIELD_W, FIELD_H);
 		f.note(Lang.t("social.also_hides_your_skin_and_the_server_address"));
 	}
+
+	/** Proximity voice chat: the switch (kept by the launcher) and the push-to-talk key. */
+	static void voice(Host host, Form f) {
+		final ClientConfig c = ArcticClient.config();
+		final com.arcticlauncher.client.voice.VoiceLink voice = ArcticClient.voice();
+		f.section(Lang.t("social.voice_chat"));
+		if (voice != null) {
+			f.toggle(Lang.t("social.voice_chat"), Lang.t("social.voice_switch_hint"), voice::enabled, voice::setEnabled);
+			f.put(new Label("", Label.Kind.ACCENT) {
+				@Override
+				protected void draw(com.arcticlauncher.client.gfx.Gfx g, com.arcticlauncher.client.style.Style s, int mx, int my, float dt) {
+					text(voice.statusText());
+					super.draw(g, s, mx, my, dt);
+				}
+			}, f.x + 4, f.row(14), f.w - 4, 14);
+		}
+		f.key(Lang.t("social.voice_talk_key"), Lang.t("social.voice_hold_to_talk"), Form.key(() -> c.voiceKey, k -> c.voiceKey = k));
+		f.note(Lang.t("social.voice_more_settings_note"));
+	}
 }

@@ -47,6 +47,16 @@ public final class VoiceLink {
 	private volatile boolean sentEmpty;
 
 	private volatile boolean enabled;
+	/** Switch voice on or off in the launcher, with the next report. */
+	private volatile Boolean pendingEnable;
+	/** The switch was just flipped here; replies that predate it don't count. */
+	private volatile Boolean awaiting;
+	/** The launcher answered the last report. */
+	private volatile boolean linked = true;
+	/** Why the launcher couldn't start voice (its own words), or null. */
+	private volatile String error;
+	/** In a multiplayer world (voice would start now). */
+	private volatile boolean onServer;
 	private volatile boolean active;
 	private volatile boolean sending;
 	private volatile Set<String> speaking = Collections.emptySet();
@@ -105,6 +115,7 @@ public final class VoiceLink {
 			return;
 		}
 		String server = platform.inWorld() ? platform.server() : null;
+		onServer = server != null && !"Singleplayer".equals(server);
 		// Menus: one empty report. Singleplayer is named, without a position,
 		// so the launcher can tell it from the menus (Discord status) and
 		// voice still only starts from a multiplayer report that has one.
@@ -204,20 +215,34 @@ public final class VoiceLink {
 		}
 		boolean empty = "{}".equals(body);
 		String mute = pendingMute;
+		Boolean enable = pendingEnable;
 		// Out of a server: tell the launcher once, then stay quiet.
-		if (empty && sentEmpty && mute == null) {
+		if (empty && sentEmpty && mute == null && enable == null && linked) {
 			return;
 		}
 		sentEmpty = empty;
-		if (mute != null) {
-			JsonObject withMute = gson.fromJson(body, JsonObject.class);
-			withMute.addProperty("mute", mute);
-			body = withMute.toString();
+		if (mute != null || enable != null) {
+			JsonObject extra = gson.fromJson(body, JsonObject.class);
+			if (mute != null) {
+				extra.addProperty("mute", mute);
+			}
+			if (enable != null) {
+				extra.addProperty("enable", enable);
+			}
+			body = extra.toString();
 			pendingMute = null;
+			pendingEnable = null;
 		}
 		try {
 			JsonObject reply = gson.fromJson(Http.send("POST", bridgeUrl, secret, body), JsonObject.class);
-			enabled = reply.has("enabled") && reply.get("enabled").getAsBoolean();
+			linked = true;
+			error = reply.has("error") && reply.get("error").isJsonPrimitive() ? reply.get("error").getAsString() : null;
+			if (enable != null) {
+				awaiting = null;
+			}
+			if (awaiting == null) {
+				enabled = reply.has("enabled") && reply.get("enabled").getAsBoolean();
+			}
 			active = reply.has("active") && reply.get("active").getAsBoolean();
 			sending = reply.has("sending") && reply.get("sending").getAsBoolean();
 			svcWanted = reply.has("svc") && reply.get("svc").getAsBoolean();
@@ -239,6 +264,9 @@ public final class VoiceLink {
 			list.sort((a, b) -> a.name.compareToIgnoreCase(b.name));
 			members = list;
 		} catch (Exception e) {
+			linked = false;
+			awaiting = null;
+			enabled = false;
 			active = false;
 			speaking = Collections.emptySet();
 			members = Collections.emptyList();
@@ -251,6 +279,47 @@ public final class VoiceLink {
 
 	public boolean enabled() {
 		return enabled;
+	}
+
+	/**
+	 * Turn voice chat on or off in the launcher (it keeps the setting and
+	 * starts or stops voice; off takes effect at once).
+	 */
+	public void setEnabled(boolean on) {
+		if (bridgeUrl == null) {
+			linked = false;
+			return;
+		}
+		awaiting = on;
+		enabled = on;
+		error = null;
+		if (!on) {
+			active = false;
+			speaking = Collections.emptySet();
+			members = Collections.emptyList();
+		}
+		pendingEnable = on;
+	}
+
+	/** A short line for the switch: off, starting, on, or what's wrong. */
+	public String statusText() {
+		String err = error;
+		if (bridgeUrl == null || !linked) {
+			return Lang.t("social.voice_launcher_not_running");
+		}
+		if (!enabled) {
+			return Lang.t("social.voice_off");
+		}
+		if (err != null && !active) {
+			return Lang.t("social.voice_error", err);
+		}
+		if (active) {
+			return listenOnly ? Lang.t("social.voice_chat_listening_only_microphone_blocked") : Lang.t("social.voice_on");
+		}
+		if (awaiting != null || onServer) {
+			return Lang.t("social.voice_starting");
+		}
+		return Lang.t("social.voice_chat_on_starts_on_a_server");
 	}
 
 	public boolean active() {
