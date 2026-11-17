@@ -379,6 +379,9 @@ final class ModCatalog {
 		out.add(new Mod("saturation", Lang.t("mods.saturation_bar"), Lang.t("mods.your_hidden_saturation_as_a_golden_glow_on"), "food",
 				Category.HUD, "hunger food appleskin saturation")
 				.toggle(() -> c.saturationBar, on -> c.saturationBar = on));
+		out.add(new Mod("ridinghud", Lang.t("mods.keep_hunger_and_xp_while_riding"), Lang.t("mods.keeps_hunger_and_xp_above_the_mount_s_health"), "food",
+				Category.HUD, "ride riding horse donkey mule camel llama strider hunger xp mount health jump")
+				.toggle(() -> c.keepBarsWhileRiding, on -> c.keepBarsWhileRiding = on));
 		out.add(new Mod("durability", Lang.t("mods.low_durability"), Lang.t("mods.a_pop_up_when_armor_or_your_tool_is_about_to"), "durability",
 				Category.GAMEPLAY, "armor tool break warning")
 				.toggle(() -> c.durabilityWarning, on -> c.durabilityWarning = on));
