@@ -247,6 +247,7 @@ fn stage(work: &Work, diff: &Diff, downloads: &[Download], fetch: Fetch) -> Resu
             url: d.url.clone(),
             dest: dest.clone(),
             sha1: Some(d.sha1.clone()),
+            md5: None,
             size: Some(d.size),
             lzma: None,
         });
