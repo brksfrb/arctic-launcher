@@ -60,8 +60,9 @@ abstract class OfflineJoinMixin {
 			ci.cancel();
 			return;
 		}
-		// Without a UUID the session wasn't verified (the game gives such a joiner the offline one).
-		if (profile == null || profile.isComplete() || !(server instanceof IntegratedServer)) {
+		// After a failed session the integrated server already fills in the offline UUID, so isComplete() is true.
+		if (profile == null || !(server instanceof IntegratedServer)
+				|| !OfflineJoin.isOfflineProfile(profile.getName(), profile.getId())) {
 			return;
 		}
 		ClientConfig config = ArcticClient.config();
@@ -73,9 +74,11 @@ abstract class OfflineJoinMixin {
 		}
 		OfflineJoin.Verdict verdict = OfflineJoin.decide(config != null && config.allowOfflineFriends, true, loopback, false,
 				profile.getName(), MinecraftClient.getInstance().getSession().getUsername(), online);
-		if (verdict == OfflineJoin.Verdict.SAME_NAME) {
+		if (verdict == OfflineJoin.Verdict.SAME_NAME || verdict == OfflineJoin.Verdict.DISABLED) {
 			arctic$refused = true;
-			String message = Lang.t("social.that_name_is_already_in_this_world");
+			String message = Lang.t(verdict == OfflineJoin.Verdict.SAME_NAME
+					? "social.that_name_is_already_in_this_world"
+					: "social.offline_friends_cant_join_this_world");
 			//#if MC >= 1.12
 			method_14978(new net.minecraft.text.LiteralText(message));
 			//#else

@@ -19,7 +19,9 @@ public final class OfflineJoin {
 		/** A friend through the tunnel: let them in as an offline player. */
 		ACCEPT_OFFLINE,
 		/** The name belongs to the host or someone in the world already. */
-		SAME_NAME
+		SAME_NAME,
+		/** The host turned the setting off: do not let this offline friend in. */
+		DISABLED
 	}
 
 	private OfflineJoin() {}
@@ -35,13 +37,25 @@ public final class OfflineJoin {
 	}
 
 	/**
+	 * True once the integrated server has already given this joiner the offline UUID (vanilla does that
+	 * after a failed session check). Looking at {@code GameProfile#isComplete()} is not enough: that
+	 * becomes true after the UUID is filled in.
+	 */
+	public static boolean isOfflineProfile(String name, UUID id) {
+		return name != null && id != null && id.equals(offlineId(name));
+	}
+
+	/**
 	 * The host's world, for a joiner whose Microsoft session {@code verified} or not. A verified one is never
 	 * touched (they keep their own profile and UUID).
 	 */
 	public static Verdict decide(boolean enabled, boolean integrated, boolean loopback, boolean verified, String name,
 			String hostName, Collection<String> online) {
-		if (!enabled || !integrated || !loopback || verified) {
+		if (!integrated || !loopback || verified) {
 			return Verdict.LEAVE;
+		}
+		if (!enabled) {
+			return Verdict.DISABLED;
 		}
 		if (name == null || taken(name, hostName) || online != null && online.stream().anyMatch(n -> taken(name, n))) {
 			return Verdict.SAME_NAME;

@@ -56,15 +56,16 @@ abstract class OfflineJoinMixin {
 	//#if MC >= 1.20.2
 	@Inject(method = "verifyLoginAndFinishConnectionSetup", at = @At("HEAD"), cancellable = true)
 	private void arctic$offlineFriend(GameProfile profile, CallbackInfo ci) {
-		// An offline joiner is let in with the game's offline UUID; a verified one has their own.
-		boolean offline = Compat.profileId(profile).equals(OfflineJoin.offlineId(Compat.profileName(profile)));
+		// After a failed session the integrated server already fills in the offline UUID.
+		boolean offline = OfflineJoin.isOfflineProfile(Compat.profileName(profile), Compat.profileId(profile));
 		arctic$check(Compat.profileName(profile), offline, ci);
 	}
 	//#else
 	@Inject(method = "handleAcceptedLogin", at = @At("HEAD"), cancellable = true)
 	private void arctic$offlineFriend(CallbackInfo ci) {
-		// Without a UUID the session wasn't verified (the game gives such a joiner the offline one).
-		boolean offline = gameProfile != null && !gameProfile.isComplete();
+		// After a failed session the integrated server already fills in the offline UUID, so isComplete() is true.
+		boolean offline = gameProfile != null
+				&& OfflineJoin.isOfflineProfile(Compat.profileName(gameProfile), Compat.profileId(gameProfile));
 		arctic$check(gameProfile == null ? null : Compat.profileName(gameProfile), offline, ci);
 	}
 	//#endif
@@ -90,6 +91,10 @@ abstract class OfflineJoinMixin {
 		if (verdict == OfflineJoin.Verdict.SAME_NAME) {
 			arctic$refused = true;
 			disconnect(Compat.literal(Lang.t("social.that_name_is_already_in_this_world")));
+			ci.cancel();
+		} else if (verdict == OfflineJoin.Verdict.DISABLED) {
+			arctic$refused = true;
+			disconnect(Compat.literal(Lang.t("social.offline_friends_cant_join_this_world")));
 			ci.cancel();
 		}
 	}
