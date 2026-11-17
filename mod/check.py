@@ -1,7 +1,8 @@
 """Check the Arctic Client for every target in targets.json without starting the game.
 
 Usage (from anywhere, JDK 25 on JAVA_HOME):  python mod/check.py [version ...] [--offline]
-(forge-1.8.9 is a version too: the Forge jar is built and its mixin hooks checked, forge/check_forge.py.)
+(forge-1.8.9 is a version too: the Forge jar is built and its mixin hooks checked, forge/check_forge.py.
+So is neoforge-<build> for a target with a "neoforge" version: the NeoForge jar, versions/neoforge.)
 
 For each target: compile it (with its preprocessed sources and expanded
 mixin config) and check every mixin hook against that version's game jar
@@ -40,10 +41,11 @@ def check(target):
     version = target["build"]
     project = target.get("project", "fabric")
     covers = ",".join(target["covers"])
+    neoforge = [f"-Pneoforge_version={target['neoforge']}"] if project == "neoforge" else []
     print(f"== {version} ({project})", flush=True)
     compiled = gradle(
         [str(GRADLEW), *OFFLINE, "-p", f"versions/{project}", "compileJava", "processResources", *(["remapJar"] if project == "fabric13" else []), *(["-q"] if "--info" not in OFFLINE else []),
-         f"-Pminecraft_version={version}", f"-Pcovers={covers}"],
+         f"-Pminecraft_version={target.get('game', version)}", f"-Pcovers={covers}", *neoforge],
     )
     if compiled.returncode != 0:
         if os.environ.get("GITHUB_ACTIONS") == "true":
@@ -52,7 +54,7 @@ def check(target):
             detail = compiled.stdout[-12000:].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
             print(f"::error title=Gradle build failed ({version})::{detail}", flush=True)
         return f"{version}: does not compile"
-    if project in ("fabric", "fabric13") and subprocess.run([sys.executable, str(MIXCHECK), version]).returncode != 0:
+    if project in ("fabric", "fabric13", "neoforge") and subprocess.run([sys.executable, str(MIXCHECK), version]).returncode != 0:
         return f"{version}: mixin problems"
     if project == "legacy" and subprocess.run([sys.executable, str(LEGACY_MIXCHECK), version]).returncode != 0:
         return f"{version}: mixin problems"
@@ -71,6 +73,8 @@ def check_forge():
 
 def main():
     targets = json.loads((MOD / "targets.json").read_text(encoding="utf-8"))
+    # The NeoForge jars: neoforge-<build>, one for each target with a "neoforge" version.
+    targets += [dict(t, build=f"neoforge-{t['build']}", game=t["build"], project="neoforge") for t in targets if "neoforge" in t]
     if "--offline" in sys.argv:
         OFFLINE.append("--offline")
     wanted = {a for a in sys.argv[1:] if a != "--offline"}

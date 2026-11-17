@@ -1,11 +1,10 @@
 package com.arcticlauncher.mod;
 
-import net.fabricmc.loader.api.FabricLoader;
 
 /** VulkanMod (Vulkan instead of OpenGL): what the client does differently under it. */
 public final class VulkanCompat {
 	/** Whether VulkanMod renders the game. */
-	public static final boolean ACTIVE = FabricLoader.getInstance().isModLoaded("vulkanmod");
+	public static final boolean ACTIVE = Mods.loaded("vulkanmod");
 
 	private VulkanCompat() {}
 

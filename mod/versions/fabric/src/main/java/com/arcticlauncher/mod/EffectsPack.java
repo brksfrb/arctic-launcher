@@ -4,7 +4,6 @@ package com.arcticlauncher.mod;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.function.Consumer;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.packs.PackLocationInfo;
 import net.minecraft.server.packs.PackSelectionConfig;
 import net.minecraft.server.packs.PackType;
@@ -20,9 +19,7 @@ import net.minecraft.server.packs.repository.RepositorySource;
 public final class EffectsPack implements RepositorySource {
 	@Override
 	public void loadPacks(Consumer<Pack> out) {
-		Optional<Path> root = FabricLoader.getInstance()
-				.getModContainer(ArcticMod.ID)
-				.flatMap(mod -> mod.findPath("resourcepacks/client"));
+		Optional<Path> root = Mods.file("resourcepacks/client");
 		if (root.isEmpty()) {
 			return;
 		}

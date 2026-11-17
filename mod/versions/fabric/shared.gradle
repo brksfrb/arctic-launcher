@@ -1,0 +1,369 @@
+// The version preprocessing and mixin switches shared by the Fabric adapter (common.gradle) and
+// the NeoForge one (../neoforge/build.gradle): both build the same sources.
+def mc = project.minecraft_version
+// The CTM development scene and its startup call are opt-in (-Pdevelopment_scenes=true).
+def developmentScenes = project.findProperty('development_scenes') == 'true'
+// -Pplatform=neoforge: the NeoForge adapter (code for it sits in //#if NEOFORGE blocks).
+def neoforge = project.findProperty('platform') == 'neoforge'
+
+/** Minecraft version as numbers, for comparing (26.1.2 → [26, 1, 2]). */
+def parseVersion = { String v -> v.tokenize('.').collect { it as int } }
+
+def compareVersions = { String a, String b ->
+	def x = parseVersion(a)
+	def y = parseVersion(b)
+	for (int i = 0; i < Math.max(x.size(), y.size()); i++) {
+		int d = (i < x.size() ? x[i] : 0) <=> (i < y.size() ? y[i] : 0)
+		if (d != 0) {
+			return d
+		}
+	}
+	return 0
+}
+
+def atLeast = { String v -> compareVersions(mc, v) >= 0 }
+
+/** "MC >= 26.1 && MC < 26.3": comparisons joined by && or ||. */
+def evalCondition
+evalCondition = { String expr ->
+	if (expr == 'DEV') return project.findProperty('chatcopyDev') == 'true'
+	if (expr.trim() == 'DEV_SCENES') return developmentScenes
+	if (expr.contains('||')) {
+		return expr.split(/\|\|/).any { evalCondition(it.trim()) }
+	}
+	return expr.split('&&').every { part ->
+		if (part.trim() == 'NEOFORGE') return neoforge
+		def m = part.trim() =~ /^MC\s*(>=|<=|==|!=|>|<)\s*([0-9.]+)$/
+		if (!m.matches()) {
+			throw new GradleException("bad //#if condition: ${part.trim()}")
+		}
+		int c = compareVersions(mc, m.group(2))
+		switch (m.group(1)) {
+			case '>=': return c >= 0
+			case '<=': return c <= 0
+			case '>': return c > 0
+			case '<': return c < 0
+			case '==': return c == 0
+			default: return c != 0
+		}
+	}
+}
+
+/** Keep the lines of active //#if branches; drop the rest. */
+def preprocessSource = { String text, String name ->
+	def out = new StringBuilder()
+	def stack = [] // each: [active, anyBranchTaken]
+	text.eachLine { line ->
+		def t = line.trim()
+		boolean outerActive = stack.every { it[0] }
+		if (t.startsWith('//#if ')) {
+			boolean on = outerActive && evalCondition(t.substring(6))
+			stack << [on, on]
+		} else if (t.startsWith('//#elif ')) {
+			def top = stack.last()
+			boolean parent = stack.size() == 1 || stack[0..-2].every { it[0] }
+			boolean on = parent && !top[1] && evalCondition(t.substring(8))
+			top[0] = on
+			top[1] = top[1] || on
+		} else if (t == '//#else') {
+			def top = stack.last()
+			boolean parent = stack.size() == 1 || stack[0..-2].every { it[0] }
+			top[0] = parent && !top[1]
+			top[1] = true
+		} else if (t == '//#endif') {
+			if (stack.isEmpty()) {
+				throw new GradleException("stray //#endif in ${name}")
+			}
+			stack.removeLast()
+		} else if (outerActive) {
+			out.append(line).append('\n')
+			return
+		}
+		// Keep line numbers stable for compiler errors.
+		out.append('\n')
+	}
+	if (!stack.isEmpty()) {
+		throw new GradleException("unclosed //#if in ${name}")
+	}
+	return out.toString()
+}
+
+/**
+ * Names Minecraft renamed, as [condition, today's name, the name then]:
+ * sources use today's names and older builds get the old ones.
+ */
+def renames = [
+		['MC < 26.1', 'GuiGraphicsExtractor', 'GuiGraphics'],
+		['MC < 26.1', 'extractRenderState', 'render'],
+		['MC < 26.1', 'extractLines', 'renderLines'],
+		['MC < 26.2', 'submitHandsWithItems', 'renderHandsWithItems'],
+		['MC < 26.1', 'extractBackground', 'renderBackground'],
+		['MC < 26.1', 'extractPanorama', 'renderPanorama'],
+		['MC < 26.1', 'extractDefaultSprite', 'renderDefaultSprite'],
+		['MC < 26.1', 'extractWidgetRenderState', 'renderWidget'],
+		['MC < 26.1', 'extractContents', 'renderContents'],
+		['MC < 26.1', 'ContainerInput', 'ClickType'],
+		['MC < 26.1', 'extractSlot', 'renderSlot'],
+		['MC < 1.21.11', 'Identifier', 'ResourceLocation'],
+		// Before 1.20 there was no GuiGraphics: a stand-in wraps the PoseStack.
+		['MC < 1.20', 'net.minecraft.client.gui.GuiGraphics', 'com.arcticlauncher.mod.compat.GuiGraphics'],
+		// Map colors were "material colors" before 1.20.
+		['MC < 1.20', 'MapColor', 'MaterialColor'],
+		// The key binds had no screen of their own before 1.18 (they were the Controls screen).
+		['MC < 1.18', 'KeyBindsScreen', 'ControlsScreen'],
+		['MC < 1.17', 'addRenderableWidget', 'addButton'],
+		// Before 1.16 texts were mutable Components, and packs "unopened packs".
+		['MC < 1.16', 'MutableComponent', 'Component'],
+		['MC < 1.16', 'net.minecraft.server.packs.repository.Pack', 'net.minecraft.server.packs.repository.UnopenedPack'],
+		// The static registries moved to BuiltInRegistries in 1.19.3.
+		['MC < 1.19.3', 'net.minecraft.core.registries.BuiltInRegistries', 'net.minecraft.core.Registry'],
+		['MC < 1.19.3', 'BuiltInRegistries', 'Registry'],
+		// 1.14 (official names exist from 1.14.4): the client level, the sneak key and input were named differently.
+		['MC < 1.15', 'ClientLevel', 'MultiPlayerLevel'],
+		['MC < 1.15', 'keyShift', 'keySneak'],
+		['MC < 1.15', 'shiftKeyDown', 'sneakKeyDown'],
+		['MC < 1.15', 'isShiftKeyDown', 'isSneaking'],
+		['MC < 1.14', 'isSameThread', 'isOnThread'],
+		// SoundEngine's channel map has no name in the 1.13 mappings.
+		['MC < 1.14', 'instanceToChannel', 'field_8196'],
+		['MC < 1.14', 'net.minecraft.network.protocol.game.ClientboundRespawnPacket', 'net.minecraft.network.packet.s2c.play.PlayerRespawnS2CPacket'],
+		['MC < 1.14', 'ClientboundRespawnPacket', 'PlayerRespawnS2CPacket'],
+		['MC < 1.14', 'isVisuallySwimming', 'isSwimming'],
+		// 1.13: one widget class (Legacy Yarn's ButtonWidget) where 1.14 has AbstractWidget and Button.
+		['MC < 1.14', 'net.minecraft.client.gui.components.AbstractWidget', 'net.minecraft.client.gui.widget.ButtonWidget'],
+		['MC < 1.14', 'net.minecraft.client.gui.components.Button', 'net.minecraft.client.gui.widget.ButtonWidget'],
+		['MC < 1.14', 'AbstractWidget', 'ButtonWidget'],
+		['MC < 1.14', 'Button', 'ButtonWidget'],
+		['MC < 1.15', 'setShiftKeyDown', 'setSneaking'],
+]
+
+/** Rewrites that need a pattern, as [condition, regex, replacement], applied after the names above. */
+def patternRenames = [
+		// 1.14 keeps the window in a field; Window's own getWindow() is the native handle.
+		['MC < 1.15', /\.getWindow\(\)(?=\.getWindow\(\))/, '.window'],
+		['MC < 1.15', /(?<!window)\.getWindow\(\)/, '.window'],
+		// 1.13: the inventory and its slots, a model without type parameters.
+		['MC < 1.14', /\.getContainerSize\(/, '.getInvSize('],
+		['MC < 1.14', /(?<![A-Za-z0-9_])inventory\.getItem\(/, 'inventory.getInvStack('],
+		['MC < 1.14', /\.getItem\(slot\)/, '.getInvStack(slot)'],
+		['MC < 1.14', /level\.getEntity\(/, 'level.getEntityById('],
+		['MC < 1.14', /([A-Za-z.]+)\.copyFrom\(([^;]+)\);/, 'com.arcticlauncher.mod.Compat.copyPart($1, $2);'],
+		['MC < 1.14', /HumanoidModel<\?>/, 'HumanoidModel'],
+		['MC < 1.14', /PlayerModel<AbstractClientPlayer>/, 'PlayerModel'],
+		// 1.13's NativeImage and DynamicTexture close through AutoCloseable (their own close() isn't named).
+		['MC < 1.14', /(?<![A-Za-z0-9_])(image|texture)\.close\(\)/, 'com.arcticlauncher.mod.Compat.closeQuietly($1)'],
+		// 1.13 runs a task on the game's thread with submit(Runnable) (execute takes a Callable there).
+		['MC < 1.14', /(?<!TIMER)\.execute\(/, '.submit('],
+]
+
+def applyRenames = { String text ->
+	def named = renames.findAll { evalCondition(it[0]) }.inject(text) { t, r ->
+		t.replaceAll('(?<![A-Za-z0-9_])' + r[1] + '(?![A-Za-z0-9_])', r[2])
+	}
+	patternRenames.findAll { evalCondition(it[0]) }.inject(named) { t, r ->
+		t.replaceAll(r[1], r[2])
+	}
+}
+
+/** The Java the game runs on for this version. */
+def javaVersion = atLeast('26.1') ? 25 : atLeast('1.20.5') ? 21 : atLeast('1.18') ? 17 : atLeast('1.17') ? 16 : 8
+
+ext.arcticAtLeast = atLeast
+ext.arcticJavaVersion = javaVersion
+/** One source file, with only this version's code and names. */
+ext.arcticPreprocessText = { String text, String name -> applyRenames(preprocessSource(text, name)) }
+
+/**
+ * Writes the Java files under each of `roots`, preprocessed, into `outDir`. A file in a later
+ * root replaces the one at the same path in an earlier root (the NeoForge adapter's own classes).
+ */
+ext.arcticPreprocess = { File outDir, List<File> roots ->
+	project.delete(outDir)
+	roots.each { root ->
+		root.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+			def rel = root.toPath().relativize(f.toPath()).toString()
+			if (!developmentScenes && (f.name.endsWith('Test.java') || f.name.endsWith('Proof.java') || f.name in ['HotbarScrollCheck.java', 'LegacyHotbarScrollCheck.java'])) return
+			def target = new File(outDir, rel)
+			target.parentFile.mkdirs()
+			target.text = applyRenames(preprocessSource(f.getText('UTF-8'), rel))
+		}
+	}
+}
+
+/** The client's resources as this version needs them (`task`: processResources). */
+ext.arcticResources = { task ->
+	// GlyphProviderBuilderType gains SPACE in 1.19. Keep the bitmap providers;
+	// BadgeSpaceMixin supplies the same invisible advances on older clients.
+	if (!atLeast('1.19')) {
+		task.doLast {
+			project.fileTree(task.destinationDir).matching { include 'assets/**/font/*.json' }.each { f ->
+				def data = new groovy.json.JsonSlurper().parse(f)
+				if (data.providers?.removeAll { it.type == 'space' }) {
+					f.text = groovy.json.JsonOutput.toJson(data)
+				}
+			}
+		}
+	}
+	// Fabric Loader alone does not expose a mod's assets to Minecraft. The client
+	// pack is always enabled on these versions, even without Fabric Resource Loader
+	// (e.g. performance mods off). Publish the badge fonts and their pictures there
+	// too, from the same sources, so name tags never fall back to missing glyphs.
+	if (atLeast('1.21.6')) {
+		task.from('../../core/src/main/resources') {
+			include 'assets/arctic/font/*.json'
+			include 'assets/arctic/textures/font/*.png'
+			into 'resourcepacks/client'
+		}
+	}
+	// The resource packs are 26.1+ (the effects pack 1.21.6+); older builds keep only the smooth font's
+	// Inter (and its licence).
+	if (!atLeast('1.21.6')) {
+		task.exclude 'resourcepacks/client/**'
+	}
+	if (!atLeast('26.1')) {
+		task.exclude 'resourcepacks/smooth_font/pack.mcmeta'
+		task.exclude 'resourcepacks/smooth_font/assets/minecraft/**'
+		task.exclude 'resourcepacks/smooth_font/assets/arctic/font/*.json'
+	}
+}
+
+/** The switches arctic.mixins.json (and fabric.mod.json) are expanded with. */
+ext.arcticProps = [
+		chatCopyStyleAccess: atLeast('1.16') ? '"ChatCopyStyleAccess",' : '',
+		version: project.version,
+		ctmContents: atLeast('1.19.3'),
+		badgeSpaces: !atLeast('1.19'),
+		ctmPackOrder: !atLeast('1.16'),
+		ctmSodium: atLeast('1.21'),
+		ctmSodiumContext: atLeast('1.17') && !atLeast('1.21.5'),
+		ctmSodiumOld: atLeast('1.16') && !atLeast('1.21'),
+		ctmQuadAccess: !atLeast('1.21.5'),
+		java: javaVersion,
+		// Zoom, Freelook, Fullbright and the rest (see Compat.FEATURES): 1.20+ for now.
+		features: true,
+		// Minecraft's own buttons, sliders, checkboxes and text boxes in the Arctic style (1.13: Widgets13).
+		restyleWidgets: atLeast('1.14'),
+		widgets13: !atLeast('1.14'),
+		// Menus' backdrop: Screen's panorama from 1.20.6, its dirt background before (ScreenMixin).
+		panoramaHook: true,
+		// Before 26.1 zoom's FOV multiplier is applied on GameRenderer, not Camera.
+		oldCamera: !atLeast('26.1') && atLeast('1.13'),
+		cameraClass: atLeast('1.14'),
+		// Fog: stretching the fog distance has a simple hook from 1.14 up to 1.21.4 (1.21.5 sends the fog to the GPU as a buffer).
+		fogHook: atLeast('1.13') && !atLeast('1.21.5'),
+		fogBuffer: atLeast('1.21.5'),
+		recipeBookPeek: atLeast('1.21.6'),
+		chunkOwn13: atLeast('1.13') && !atLeast('1.14'),
+		// Light Overlay draws through 1.21.11's debug-quad pipeline (the render API changes from 26.1).
+		lightOverlay: atLeast('1.21.11') && !atLeast('26.1'),
+		teamViewClient: atLeast('1.17'),
+		teamViewEntity: !atLeast('1.17') && atLeast('1.13'),
+		tooltipPositioner: atLeast('1.19.3'),
+		tooltipScreen: !atLeast('1.19.3') && atLeast('1.13'),
+		// 1.13 draws the crosshair inline in Gui.render and its buttons have no alpha.
+		crosshairHook: atLeast('1.14'),
+		widgetAlpha: atLeast('1.14'),
+		lightEngine: atLeast('1.14'),
+		// Needs the FreeType font code of 26.1+ (older versions use STB).
+		smoothFont: atLeast('26.1'),
+		// Scaled-up smooth-font text drawn from letters rasterized near their size on screen (ScaledInter):
+		// needs 1.21.9+'s glyph API (baked glyphs that carry their metrics) and GUI text render states.
+		scaledFont: atLeast('1.21.9'),
+		textProjection: atLeast('1.21.6'),
+		worldTextScale: atLeast('26.2'),
+		// 26.2 only: name tags have their own feature renderer (26.3 folded them back into TextFeatureRenderer).
+		nameTagTextScale: atLeast('26.2') && !atLeast('26.3'),
+		oldScaledFont: !atLeast('1.21.9'),
+		oldScaledTexture: !atLeast('1.21.5'),
+		gpuFontTexture: atLeast('1.21.5'),
+		// 1.21.11's chat draws and collects clicks together, with a hardcoded line of 9.
+		emoteOldGlyph: !atLeast('1.19'),
+		emoteLayout: true,
+		chatLine111: atLeast('1.21.11') && !atLeast('26.1'),
+		// Motion blur as a post effect (and its pack) before 26.1, for VulkanMod.
+		postBlur: atLeast('1.21.6') && !atLeast('26.1'),
+		// Before 26.1 the smooth font is put into the default font by code (SmoothFont): through
+		// the font itself, or from 1.21.9 (where a font no longer knows its name) the font manager.
+		smoothFontSet: !atLeast('1.21.9'),
+		smoothFontManager: atLeast('1.21.9') && !atLeast('26.1'),
+		emoteFontManager: atLeast('26.1'),
+		// Glow-ink text (outlined): the text is lifted off its outline so the smooth font's soft edges don't z-fight.
+		glowText: atLeast('1.21.9') && !atLeast('26.1'),
+		// The smooth font's slightly heavier outline needs FreeType (1.20.5+).
+		fontWeight: atLeast('1.20.5'),
+		// Smooth letters' edges in the text's own color: the game's grayscale text shader (1.17+) darkens
+		// them; its source is changed as it's loaded (ShaderManager from 1.21.2, Program before).
+		textShader: atLeast('1.21.2'),
+		textShaderOld: atLeast('1.17') && !atLeast('1.21.2'),
+		// Block states' caches made on all cores (names as in the game: unobfuscated from 26.1).
+		fastStart: atLeast('26.1'),
+		// The startup timeline, class pre-loader and the agent behind it: Java 17+ (1.18 and later).
+		startup: atLeast('1.18'),
+		startupTiming: atLeast('1.14'),
+		// 3D cosmetics: a layer on the player renderer (three shapes across versions), and emotes.
+		cosmeticsSubmit: atLeast('1.21.9'),
+		cosmeticsBuffers: !atLeast('1.21.9'),
+		cosmeticsState: atLeast('1.21.2') && !atLeast('1.21.9'),
+		emotes: true,
+		accountSwitch: true,
+		// Scoreboard tweaks, hit color, the minimap, duels (1.19.4+), toasts: every version.
+		extras: true,
+		// Simple Voice Chat's messages and the hello for servers: every version (custom payloads are a
+		// channel + buffer before 1.20.2, CustomPacketPayload from there, with a codec from 1.20.5).
+		svc: true,
+		// 1.20.2+ read a payload by its id: a hook keeps the bytes of ours.
+		svcCodec: atLeast('1.20.2'),
+		// The hurt tint is a texture from 1.15; before, the renderer sets it up with each hurt mob.
+		overlayTexture: atLeast('1.15'),
+		// 1.15 brought the PoseStack (before, models draw through the global GL matrix).
+		poseStack: atLeast('1.15'),
+		// The burning overlay is a renderer of its own from 1.15 (the hand renderer's before).
+		fireOverlay: atLeast('1.15'),
+		// Block outline: every version (each draws it its own way).
+		outline: true,
+		// Motion blur as a post effect in the client's pack: 26.1's renderer.
+		visuals: atLeast('26.1'),
+		// Motion blur before 26.1: plain OpenGL after the world is drawn (MotionBlurGL).
+		oldMotionBlur: !atLeast('26.1'),
+		// Item physics: every version (three renderer shapes, see ItemPhysicsMixin); from 1.21.2 the
+		// item's render state carries where it is and how far it's turned.
+		itemPhysics: true,
+		itemPhysicsState: atLeast('1.21.2'),
+		// Replays (recording and watching): every version.
+		replay: true,
+		// Before 26.1 a replay grabs finished frames where the window shows them.
+		replayWindow: !atLeast('26.1'),
+		// Self-tests make worlds through the Create World screen before 1.19.4.
+		oldWorldCreation: !atLeast('1.19.4'),
+		// Server names were looked up by ServerNameResolver from 1.17; before, by
+		// the connect screen and the server list themselves (hooked separately).
+		resolver: atLeast('1.17'),
+		// 26.1+ keep the hitbox switch in the debug screen's entry list.
+		debugEntries: atLeast('1.21.9'),
+		// The F3 screen's two text lists (Debug Screen mod); from 1.21.9 it is a list of entries.
+		debugText: atLeast('1.14'),
+		slotLocks: atLeast('1.14'),
+		// No Hurt Shake hooks GameRenderer.bobHurt (every version; 26.1 changed its arguments).
+		hurtCam: atLeast('1.13'),
+		// Dynamic FPS: the frame rate limit lives in Minecraft before 1.21.2, in the limit tracker after.
+		framerateLimit: atLeast('1.14') && !atLeast('1.21.2'),
+		framerateTracker: atLeast('1.21.2'),
+		// Softer shadows under the smooth font: the game's own shadow colour hook exists from 1.21.6.
+		fontShadow: atLeast('1.21.6'),
+		// The player list's Arctic picture without a shadow before styles could say so (1.21.4): a font hook / a blank shadow glyph.
+		badgeShadow: atLeast('1.16') && !atLeast('1.21.4'),
+		badgeShadow13: !atLeast('1.16'),
+		// Pixel-sharp glyphs through STB (1.20.5 and newer use FreeType, see FontWeight).
+		fontSharpStb: atLeast('1.14') && !atLeast('1.20.5'),
+		// 1.21.9+ look players up by name off the game's thread (player heads): made safe.
+		playerInfoRace: atLeast('1.21.9'),
+		// Toast slots were tracked from 1.19.
+		toastSlots: atLeast('1.19'),
+		// HUD widgets hand in last frame's GUI pieces again (26.1's GUI states).
+		guiReplay: atLeast('26.1'),
+		// Before 1.21.2 the hotbar wraps inside Inventory.swapPaint. After that, MouseHandler.onScroll does.
+		inventoryHotbarScroll: !atLeast('1.21.2'),
+		neoforge: neoforge,
+		// NeoForge 1.20.2+ reads minecraft:register itself: Arctic's hellos come from it (NeoForgeRegisterMixin).
+		neoforgeRegister: neoforge && atLeast('1.20.2'),
+]

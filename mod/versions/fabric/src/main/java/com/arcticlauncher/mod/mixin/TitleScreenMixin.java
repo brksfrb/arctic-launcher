@@ -123,10 +123,18 @@ abstract class TitleScreenMixin extends Screen {
 	//#endif
 	//#endif
 
-	//#if MC >= 26.1
+	// NeoForge draws its branding lines (and the game's version among them) in lambdas, named after
+	// Forge's names of the method on 1.20.1.
+	//#if MC >= 26.1 && NEOFORGE
+	@ModifyArg(method = "/lambda\\$.+/", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;text(Lnet/minecraft/client/gui/Font;Ljava/lang/String;III)V"), index = 1)
+	//#elif MC >= 26.1
 	@ModifyArg(method = "extractRenderState", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;text(Lnet/minecraft/client/gui/Font;Ljava/lang/String;III)V"), index = 1)
+	//#elif MC >= 1.21.6 && NEOFORGE
+	@ModifyArg(method = "/lambda\\$.+/", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;drawString(Lnet/minecraft/client/gui/Font;Ljava/lang/String;III)V"), index = 1)
 	//#elif MC >= 1.21.6
 	@ModifyArg(method = "extractRenderState", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;drawString(Lnet/minecraft/client/gui/Font;Ljava/lang/String;III)V"), index = 1)
+	//#elif MC >= 1.20 && NEOFORGE
+	@ModifyArg(method = "/lambda\\$.+/", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;drawString(Lnet/minecraft/client/gui/Font;Ljava/lang/String;III)I"), index = 1)
 	//#elif MC >= 1.20
 	@ModifyArg(method = "extractRenderState", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;drawString(Lnet/minecraft/client/gui/Font;Ljava/lang/String;III)I"), index = 1)
 	//#elif MC >= 1.16

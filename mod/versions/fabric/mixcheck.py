@@ -1,7 +1,9 @@
 """Check the Fabric adapter's mixin hooks against Minecraft versions, without starting the game.
 
 Usage (from anywhere, JDK on JAVA_HOME):
-    python mod/versions/fabric/mixcheck.py 1.21.4 1.19.4 ...
+    python mod/versions/fabric/mixcheck.py 1.21.4 1.19.4 neoforge-1.21.1 ...
+neoforge-<version> checks the NeoForge jar of that version (versions/neoforge) against the game as
+NeoForge patches it: the same mixins, but NeoForge rewrites some of the methods they hook.
 Each version must have been compiled once (python mod/build.py <version>, or
 gradlew compileJava), so its preprocessed sources and Loom's named jar exist.
 
@@ -55,7 +57,24 @@ def constructor_head_problems(src):
     return problems
 
 
+def neoforge(version):
+    """The game version of a NeoForge check ("neoforge-1.21.1"), or None for a Fabric one."""
+    return version[len("neoforge-"):] if version.startswith("neoforge-") else None
+
+
+def neoforge_build(version):
+    """The NeoForge build targets.json compiles `version` against."""
+    with open(os.path.join(HERE, "..", "..", "targets.json"), encoding="utf-8") as f:
+        return next((t.get("neoforge") for t in json.load(f) if t["build"] == version), None)
+
+
 def jar_for(version):
+    game = neoforge(version)
+    if game:
+        # ModDevGradle's game jar, with NeoForge's patches applied (Mojang's names).
+        build = neoforge_build(game)
+        found = [j for r in build_roots(version) for j in glob.glob(os.path.join(r, "build", "moddev", "artifacts", f"*-{build}.jar"))]
+        return max(found, key=os.path.getmtime) if found else None
     found = glob.glob(f"{LOOM}/minecraft-merged-deobf/{version}/*.jar") + glob.glob(f"{LOOM}/minecraft-merged/{version}-loom*/*.jar")
     # Legacy Fabric (1.13.2): the jar with the carried-over names, not the intermediary one next to it.
     found += [j for j in glob.glob(f"{LOOM}/minecraft-merged-legacy*/{version}-*/*.jar")
@@ -123,19 +142,27 @@ class Jar:
         return "\n".join(out)
 
 
+def build_roots(version):
+    """The project folders a version may have been built in: build.py compiles in worker copies
+    (mod/build/workers/wN), a lone gradle build here."""
+    if neoforge(version):
+        return [os.path.join(HERE, "..", "neoforge")] + glob.glob(os.path.join(HERE, "..", "..", "build", "workers", "*", "versions", "neoforge"))
+    return [HERE, os.path.join(HERE, "..", "fabric13")] + glob.glob(os.path.join(HERE, "..", "..", "build", "workers", "*", "versions", "fabric*"))
+
+
 def build_dir(version):
-    """The fabric build folder holding this version's newest preprocessed sources: build.py
-    compiles in worker copies (mod/build/workers/wN), a lone gradle build here."""
-    roots = [HERE, os.path.join(HERE, "..", "fabric13")] + glob.glob(os.path.join(HERE, "..", "..", "build", "workers", "*", "versions", "fabric*"))
-    found = [r for r in roots if os.path.isdir(os.path.join(r, "build", "preprocessed", version))]
+    """The build folder holding this version's newest preprocessed sources."""
+    game = neoforge(version) or version
+    found = [r for r in build_roots(version) if os.path.isdir(os.path.join(r, "build", "preprocessed", game))]
     if not found:
         return HERE
-    return max(found, key=lambda r: os.path.getmtime(os.path.join(r, "build", "preprocessed", version)))
+    return max(found, key=lambda r: os.path.getmtime(os.path.join(r, "build", "preprocessed", game)))
 
 
 def active_mixins(version):
     """Mixin names this version's expanded config lists (from the built jar), or None when unknown."""
-    jar = os.path.join(HERE, "..", "..", "dist", f"arctic-mod-{version}.jar")
+    name = f"arctic-{version}.jar" if neoforge(version) else f"arctic-mod-{version}.jar"
+    jar = os.path.join(HERE, "..", "..", "dist", name)
     if not os.path.isfile(jar):
         return None
     try:
@@ -170,7 +197,7 @@ def listed_without_class(version, src_dir):
 
 def check(version):
     jar_path = jar_for(version)
-    src_dir = os.path.join(build_dir(version), "build", "preprocessed", version, "java", "com", "arcticlauncher", "mod", "mixin")
+    src_dir = os.path.join(build_dir(version), "build", "preprocessed", neoforge(version) or version, "java", "com", "arcticlauncher", "mod", "mixin")
     if not jar_path or not os.path.isdir(src_dir):
         print(f"{version}: compile it first (no named jar or preprocessed sources)")
         return 1

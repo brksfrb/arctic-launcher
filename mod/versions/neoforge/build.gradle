@@ -1,0 +1,125 @@
+plugins {
+	id 'net.neoforged.moddev' version "${moddev_version}" apply false
+	id 'net.neoforged.moddev.legacyforge' version "${moddev_version}" apply false
+}
+
+// The NeoForge adapter: the Fabric adapter's sources and mixins (versions/fabric), built against
+// NeoForge, with this folder's classes in place of the few that talk to Fabric Loader.
+def mc = project.minecraft_version
+def neoforgeVersion = project.neoforge_version
+def fabricRoot = file('../fabric')
+
+ext.platform = 'neoforge'
+apply from: new File(fabricRoot, 'shared.gradle')
+def atLeast = arcticAtLeast
+def javaVersion = arcticJavaVersion
+
+// 1.20.1 is NeoForge's Forge fork: Forge's (SRG) names in the game, mods.toml, and no MixinExtras.
+// 1.20.2+ is NeoForge proper; Mojang's names in the game from 1.20.5.
+def forgeFork = !atLeast('1.20.2')
+if (forgeFork) {
+	apply plugin: 'net.neoforged.moddev.legacyforge'
+	legacyForge {
+		enable {
+			neoForgeVersion = neoforgeVersion
+			// The jar is compiled against the patched game; no decompiling needed.
+			disableRecompilation = true
+		}
+	}
+} else {
+	apply plugin: 'net.neoforged.moddev'
+	neoForge {
+		enable {
+			version = neoforgeVersion
+			disableRecompilation = true
+		}
+	}
+}
+
+def preprocessedJava = layout.buildDirectory.dir("preprocessed/${mc}/java")
+// Fabric-only classes left out (the preLaunch entrypoint).
+def fabricOnly = ['com/arcticlauncher/mod/startup/EarlyStart.java']
+
+tasks.register('preprocessJava') {
+	inputs.dir new File(fabricRoot, 'src/main/java')
+	inputs.dir 'src/main/java'
+	inputs.property 'minecraft_version', mc
+	outputs.dir preprocessedJava
+	// Cheap, and the rules live in shared.gradle: always regenerate.
+	outputs.upToDateWhen { false }
+	doLast {
+		def out = preprocessedJava.get().asFile
+		arcticPreprocess(out, [new File(fabricRoot, 'src/main/java'), file('src/main/java')])
+		fabricOnly.each { new File(out, it).delete() }
+	}
+}
+
+base {
+	archivesName = "arctic-neoforge-${mc}"
+}
+
+sourceSets {
+	main {
+		java.srcDirs = [preprocessedJava, '../../core/src/main/java']
+		resources.srcDirs = [new File(fabricRoot, 'src/main/resources'), '../../core/src/main/resources', 'src/main/resources']
+	}
+	test {
+		java.srcDirs = []
+	}
+}
+
+tasks.named('compileJava') {
+	dependsOn 'preprocessJava'
+}
+
+if (forgeFork) {
+	dependencies {
+		// MixinExtras (NeoForge 1.20.2+ ships it; the Forge fork doesn't): inside the jar.
+		compileOnly annotationProcessor('io.github.llamalad7:mixinextras-common:0.4.1')
+		jarJar implementation('io.github.llamalad7:mixinextras-forge:0.4.1')
+		// Writes the refmap that turns the mixins' Mojang names into the game's SRG ones.
+		annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+	}
+	mixin {
+		add sourceSets.main, 'arctic.refmap.json'
+		config 'arctic.mixins.json'
+	}
+	tasks.named('jar') {
+		manifest.attributes('MixinConfigs': 'arctic.mixins.json')
+	}
+}
+
+// The Minecraft versions this jar loads on (-Pcovers=1.21,1.21.1, from targets.json), as a Maven range.
+def covers = (project.findProperty('covers') ?: mc).tokenize(',').collect { it.trim() }
+def minecraftRange = covers.size() == 1 ? "[${covers[0]}]" : "[${covers.first()},${covers.last()}]"
+
+processResources {
+	def props = arcticProps + [
+			minecraft_range: minecraftRange,
+			// The NeoForge build it was compiled and its mixins checked against, or newer.
+			neoforge_min: forgeFork ? neoforgeVersion.replaceFirst(/^[0-9.]+-/, '') : neoforgeVersion,
+			// "type" replaced "mandatory" in NeoForge 20.5.
+			required: atLeast('1.20.5') ? 'type = "required"' : 'mandatory = true',
+	]
+	inputs.properties props
+	filesMatching(['arctic.mixins.json', 'META-INF/neoforge.mods.toml', 'META-INF/mods.toml']) {
+		expand props
+	}
+	if (forgeFork) {
+		filesMatching('arctic.mixins.json') {
+			filter { it.replace('"required": true,', '"required": true,\n\t"refmap": "arctic.refmap.json",') }
+		}
+	}
+	exclude 'fabric.mod.json'
+	exclude forgeFork ? 'META-INF/neoforge.mods.toml' : 'META-INF/mods.toml'
+	if (!forgeFork) {
+		exclude 'pack.mcmeta'
+	}
+	arcticResources(delegate)
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = javaVersion
+	it.options.encoding = 'UTF-8'
+	it.options.compilerArgs += ['-Xmaxerrs', '1000']
+}

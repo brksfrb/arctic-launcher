@@ -316,21 +316,27 @@ public final class Looks {
 		Http.send("POST", baseUrl + "/v1/online", token, body.toString());
 	}
 
+	/**
+	 * Sends the sign-off. Made up front: by the time the game quits, a mod loader may have closed the
+	 * mod's jar (NeoForge does), and a class first needed then can't be loaded.
+	 */
+	private final Runnable signOff = new Runnable() {
+		@Override
+		public void run() {
+			try {
+				sendCheckIn(null);
+			} catch (Exception e) {
+				// Best effort: the check-in expires on its own.
+			}
+		}
+	};
+
 	/** The game is closing while in a world: sign off, briefly (never hold up quitting). */
 	private void signOffOnQuit() {
 		if (token == null || playingAs == null) {
 			return;
 		}
-		Thread off = new Thread(new Runnable() {
-			@Override
-			public void run() {
-				try {
-					sendCheckIn(null);
-				} catch (Exception e) {
-					// Best effort: the check-in expires on its own.
-				}
-			}
-		}, "arctic-sign-off-send");
+		Thread off = new Thread(signOff, "arctic-sign-off-send");
 		off.setDaemon(true);
 		off.start();
 		try {

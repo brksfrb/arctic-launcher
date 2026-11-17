@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackLocationInfo;
@@ -41,9 +40,7 @@ public final class ArcticPacks implements RepositorySource {
 	}
 
 	private static void add(Consumer<Pack> out, String id, String folder, String title, PackSelectionConfig selection) {
-		Optional<Path> root = FabricLoader.getInstance()
-				.getModContainer(ArcticMod.ID)
-				.flatMap(mod -> mod.findPath(folder));
+		Optional<Path> root = Mods.file(folder);
 		if (root.isEmpty()) {
 			return;
 		}
