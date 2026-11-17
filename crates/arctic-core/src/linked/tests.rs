@@ -1202,3 +1202,118 @@ fn missing_mods_are_found_by_their_ids() {
     let again = find_missing(&dirs, &inst, &wanted[..1]).unwrap();
     assert!(again.diff.is_none() && again.installed.len() == 1);
 }
+
+// ------------------------------------------- client status handling (canned)
+
+/// Answers every request with one fixed status and body; returns the base URL.
+fn canned(status: &'static str, body: &'static str) -> String {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            std::thread::spawn(move || {
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut length = 0usize;
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 || line.trim().is_empty() {
+                        break;
+                    }
+                    if let Some((n, v)) = line.split_once(':')
+                        && n.eq_ignore_ascii_case("content-length")
+                    {
+                        length = v.trim().parse().unwrap_or(0);
+                    }
+                }
+                let mut skip = vec![0u8; length];
+                let _ = reader.read_exact(&mut skip);
+                let mut out = stream;
+                let _ = write!(
+                    out,
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+            });
+        }
+    });
+    format!("http://127.0.0.1:{port}")
+}
+
+#[test]
+fn the_client_explains_each_refusal() {
+    let m = manifest(vec![linked("sodium", "s1", "sodium.jar", b"x")], Vec::new());
+    let key = "k".repeat(40);
+    let msg = |e: crate::Error| e.to_string();
+
+    let base = canned("409 Conflict", "{\"error\":\"moved\",\"revision\":4}");
+    let e = msg(server::publish(&base, "abcdefgh", &key, 1, &m).unwrap_err());
+    assert!(e.contains("changed elsewhere"), "{e}");
+
+    let base = canned("403 Forbidden", "{\"error\":\"nope\"}");
+    assert!(msg(server::publish(&base, "abcdefgh", &key, 1, &m).unwrap_err()).contains("owner"));
+    assert!(msg(server::delete(&base, "abcdefgh", &key).unwrap_err()).contains("owner"));
+
+    for status in ["404 Not Found", "410 Gone"] {
+        let base = canned(status, "{\"error\":\"x\"}");
+        for e in [
+            server::fetch(&base, "abcdefgh").unwrap_err(),
+            server::head(&base, "abcdefgh").unwrap_err(),
+            server::publish(&base, "abcdefgh", &key, 1, &m).unwrap_err(),
+        ] {
+            assert!(msg(e).contains("no link has that code"), "{status}");
+        }
+        // Stopping what is already gone is not a failure.
+        server::delete(&base, "abcdefgh", &key).unwrap();
+    }
+
+    let base = canned("413 Payload Too Large", "{}");
+    assert!(msg(server::create(&base, None, &m).unwrap_err()).contains("too big"));
+
+    let base = canned("429 Too Many Requests", "{\"error\":\"slow down\"}");
+    assert!(msg(server::create(&base, None, &m).unwrap_err()).contains("slow down"));
+
+    let base = canned("500 Internal Server Error", "not json");
+    assert!(msg(server::fetch(&base, "abcdefgh").unwrap_err()).contains("500"));
+    assert!(msg(server::delete(&base, "abcdefgh", &key).unwrap_err()).contains("500"));
+}
+
+#[test]
+fn the_client_refuses_strange_answers() {
+    let m = manifest(Vec::new(), Vec::new());
+    // A key that is too short, or a code that isn't one.
+    let base = canned("201 Created", "{\"code\":\"abcdefgh\",\"key\":\"short\"}");
+    assert!(server::create(&base, None, &m).is_err());
+    let base = canned(
+        "201 Created",
+        "{\"code\":\"!!\",\"key\":\"kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\"}",
+    );
+    assert!(server::create(&base, None, &m).is_err());
+    // A link answer without a manifest, or one that isn't JSON.
+    let base = canned("200 OK", "{\"revision\":1}");
+    assert!(server::fetch(&base, "abcdefgh").is_err());
+    let base = canned("200 OK", "<html>");
+    assert!(server::fetch(&base, "abcdefgh").is_err());
+    assert!(server::head(&base, "abcdefgh").is_err());
+    // A bad code never reaches the network.
+    assert!(server::fetch("http://127.0.0.1:1", "no way!").is_err());
+    assert!(server::head("http://127.0.0.1:1", "").is_err());
+}
+
+#[test]
+fn a_missing_mods_lookup_needs_a_loader_and_skips_junk_ids() {
+    let (_d, dirs) = data_dirs();
+    let want = |id: &str| WantedMod {
+        id: id.into(),
+        version: None,
+    };
+    // Vanilla: nothing to install into.
+    let vanilla = crate::instances::create(&dirs, "Plain", "1.21.11", Loader::Vanilla).unwrap();
+    assert!(find_missing(&dirs, &vanilla, &[want("sodium")]).is_err());
+    // Ids that aren't mod ids are skipped without asking anyone.
+    let inst = crate::instances::create(&dirs, "Server", "1.21.11", new_loader()).unwrap();
+    let found = find_missing(&dirs, &inst, &[want(""), want("../evil"), want("a b")]).unwrap();
+    assert!(found.diff.is_none() && found.not_found.is_empty() && found.installed.is_empty());
+    let found = find_missing(&dirs, &inst, &[]).unwrap();
+    assert!(found.diff.is_none());
+}
