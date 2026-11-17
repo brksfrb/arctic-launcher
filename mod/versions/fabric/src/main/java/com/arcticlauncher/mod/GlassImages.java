@@ -23,13 +23,8 @@ public final class GlassImages {
 		}
 		java.awt.image.BufferedImage preferred = GlassResources.packs.tile(original, tile);
 		if (preferred == null) {
-			// Clear glass: fade the streaks first (joined or not), then drop the borders shared with neighbours.
-			if (GlassTiles.clear(original)) {
-				int[] faded = GlassTiles.clarity(pixels, w, h, fw, fh, com.arcticlauncher.client.ctm.GlassLines.stitched());
-				if (tile == 0) com.arcticlauncher.mod.ArcticMod.LOG.info("glass clarity level={} marks {} -> {} ({})", com.arcticlauncher.client.ctm.GlassLines.stitched(), GlassTiles.marks(pixels, w, h, fw, fh), GlassTiles.marks(faded, w, h, fw, fh), original);
-				pixels = faded;
-			}
-			pixels = GlassTiles.generate(pixels, w, h, fw, fh, tile);
+			pixels = com.arcticlauncher.client.ctm.GlassSynthesis.generate(pixels, w, h, fw, fh, tile,
+					GlassTiles.clear(original), com.arcticlauncher.client.ctm.GlassLines.stitched());
 		}
 		else for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
 			int color = preferred.getRGB((x % fw) * preferred.getWidth() / fw, (y % fh) * preferred.getHeight() / fh);

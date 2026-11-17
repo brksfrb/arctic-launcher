@@ -99,7 +99,7 @@ final class FabricPlatform implements Platform {
 			return -1;
 		}
 		PlayerInfo info = connection.getPlayerInfo(mc.player.getUUID());
-		return info == null ? -1 : info.getLatency();
+		return com.arcticlauncher.client.net.MeasuredPing.value(server(), info == null ? -1 : info.getLatency());
 	}
 
 	@Override
@@ -109,6 +109,8 @@ final class FabricPlatform implements Platform {
 		if (connection == null || mc.hasSingleplayerServer()) {
 			return -1;
 		}
+		// Our own entry: the measured round trip, as the ping widget shows.
+		if (mc.player != null && player.equals(mc.player.getUUID())) return ping();
 		PlayerInfo info = connection.getPlayerInfo(player);
 		return info == null ? -1 : info.getLatency();
 	}

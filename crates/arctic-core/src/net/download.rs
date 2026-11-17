@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+use md5::Md5;
 use sha1::{Digest, Sha1};
 
 use crate::error::IoContext;
@@ -49,6 +50,69 @@ const LARGE_FILE_WORKERS: usize = 8;
 const BUF_SIZE: usize = 64 * 1024;
 const ATTEMPTS: u32 = 5;
 const RETRY_BACKOFF: Duration = Duration::from_millis(400);
+/// Loader hosts (Forge/NeoForge maven and the Forge mirror) can take 15 s just to accept a
+/// connection, so they get a longer connect timeout and fewer, slower retries.
+const LOADER_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+const LOADER_BACKOFF: [Duration; 2] = [Duration::from_secs(2), Duration::from_secs(5)];
+const FORGE_MAVEN: &str = "https://maven.minecraftforge.net/";
+/// Mirror of the Forge maven, tried only after the primary failed.
+const FORGE_MIRROR: &str = "https://bmclapi2.bangbang93.com/maven/";
+
+fn is_loader_host(url: &str) -> bool {
+    let host = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let host = host.split('/').next().unwrap_or_default();
+    ["minecraftforge.net", "neoforged.net", "bangbang93.com"]
+        .iter()
+        .any(|h| host.ends_with(h))
+}
+
+/// Connect timeout for a request to `url`.
+pub(crate) fn connect_timeout(url: &str) -> Option<Duration> {
+    Some(if is_loader_host(url) {
+        LOADER_CONNECT_TIMEOUT
+    } else {
+        super::CONNECT_TIMEOUT
+    })
+}
+
+/// How often and how long to wait between attempts at one URL.
+pub(crate) struct Policy {
+    pub(crate) attempts: u32,
+    pub(crate) delays: Vec<Duration>,
+}
+
+impl Policy {
+    pub(crate) fn for_url(url: &str) -> Self {
+        if is_loader_host(url) {
+            Self {
+                attempts: 3,
+                delays: LOADER_BACKOFF.to_vec(),
+            }
+        } else {
+            Self {
+                attempts: ATTEMPTS,
+                delays: (1..ATTEMPTS).map(|n| RETRY_BACKOFF * n).collect(),
+            }
+        }
+    }
+}
+
+/// A missing file stays missing; retrying only delays the error.
+pub(crate) fn is_not_found(e: &Error) -> bool {
+    matches!(e, Error::Http(m) if m.contains("404"))
+}
+
+/// The mirror URL for a Forge maven file, if `job` may be fetched from there. Nothing from the
+/// mirror is accepted unless its bytes are checked against a hash that did not come from the
+/// mirror, so a job without one never goes there (the installer jar included).
+pub(crate) fn mirror_for(job: &DownloadJob) -> Option<String> {
+    if job.sha1.is_none() && job.md5.is_none() {
+        return None;
+    }
+    let path = job.url.strip_prefix(FORGE_MAVEN)?;
+    Some(format!("{FORGE_MIRROR}{path}"))
+}
+
 /// Body timeout = base + size / slowest acceptable speed. The speed is per file, and up to
 /// [`WORKERS`] files share the connection: on a modest line each gets a few dozen KB/s, so the
 /// bar is low enough that only a connection that has really stalled gives up (a 100 KB/s bar
@@ -83,6 +147,9 @@ pub struct DownloadJob {
     pub url: String,
     pub dest: PathBuf,
     pub sha1: Option<String>,
+    /// MD5 of the final file, for the one source that publishes only that (Forge's meta.json).
+    /// Unlike `sha1` it is not checked for segmented or compressed jobs.
+    pub md5: Option<String>,
     pub size: Option<u64>,
     /// Fetch this LZMA stream instead of `url` and decompress on the fly.
     pub lzma: Option<Compressed>,
@@ -164,7 +231,14 @@ impl Reporter<'_> {
 /// Download every job that is not already present, `WORKERS` at a time.
 /// Returns the first error encountered (remaining jobs are abandoned).
 pub fn download_all(stage: &str, jobs: Vec<DownloadJob>, progress: Progress) -> Result<()> {
+    let checks_started = Instant::now();
+    let count = jobs.len();
     let pending = pending_jobs(jobs);
+    log::info!(
+        "[startup] {stage}: checked {count} files in {} ms, {} downloads needed",
+        checks_started.elapsed().as_millis(),
+        pending.len()
+    );
     let reporter = Reporter {
         stage,
         progress,
@@ -247,17 +321,123 @@ fn take(queue: &Mutex<(usize, usize)>, large: bool) -> Option<usize> {
 /// download (e.g. the client jar) from finishing last on its own.
 fn pending_jobs(jobs: Vec<DownloadJob>) -> Vec<DownloadJob> {
     let mut seen = HashSet::new();
-    let mut pending: Vec<DownloadJob> = jobs
+    let unique: Vec<_> = jobs
         .into_iter()
-        .filter(|j| seen.insert(j.dest.clone()) && !j.is_satisfied())
+        .filter(|j| seen.insert(j.dest.clone()))
         .collect();
+    // Bound disk metadata concurrency independently of the much larger network pool.
+    // Small queues avoid thread creation altogether.
+    let mut pending: Vec<DownloadJob> = if unique.len() < 128 {
+        unique.into_iter().filter(|j| !j.is_satisfied()).collect()
+    } else {
+        std::thread::scope(|scope| {
+            let chunk = unique.len().div_ceil(4);
+            let handles: Vec<_> = unique
+                .chunks(chunk)
+                .map(|jobs| {
+                    scope.spawn(move || {
+                        jobs.iter()
+                            .filter(|j| !j.is_satisfied())
+                            .cloned()
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .flat_map(|h| h.join().expect("file check worker panicked"))
+                .collect()
+        })
+    };
     pending.sort_by_key(|j| std::cmp::Reverse(j.transfer_size().unwrap_or(0)));
     pending
 }
 
 /// Network hiccups (a stalled connection, a reset, a corrupted transfer)
-/// shouldn't fail a whole launch: retry each file a few times.
+/// shouldn't fail a whole launch: retry each file a few times, then try the mirror.
 fn download_with_retry(job: &DownloadJob, reporter: &Reporter) -> Result<()> {
+    download_with_mirror(job, reporter, mirror_for(job), &Policy::for_url(&job.url))
+}
+
+/// Download one file, falling back to `mirror` (only ever used for hash-verified jobs).
+pub(crate) fn download_single(
+    job: &DownloadJob,
+    mirror: Option<String>,
+    policy: &Policy,
+    progress: Progress,
+) -> Result<()> {
+    let reporter = Reporter {
+        stage: "Downloading installer",
+        progress,
+        start: Instant::now(),
+        last_ms: AtomicU64::new(0),
+        files_done: AtomicU64::new(0),
+        files_total: 1,
+        bytes_done: AtomicU64::new(0),
+        bytes_total: job.transfer_size().unwrap_or(0),
+    };
+    reporter.report(true);
+    download_with_mirror(job, &reporter, mirror, policy)?;
+    reporter.file_done();
+    Ok(())
+}
+
+/// GET a small text file (a checksum, a metadata document) with the same retries and backoff as
+/// a download from that host. A 404 is final and comes back as `Ok(None)`.
+pub(crate) fn fetch_text(url: &str, limit: u64, policy: &Policy) -> Result<Option<String>> {
+    let mut attempt = 1;
+    loop {
+        let result = super::agent()
+            .get(url)
+            .config()
+            .timeout_connect(connect_timeout(url))
+            .timeout_global(Some(Duration::from_secs(60)))
+            .build()
+            .call()
+            .map_err(Error::from)
+            .and_then(|mut resp| {
+                resp.body_mut()
+                    .with_config()
+                    .limit(limit)
+                    .read_to_string()
+                    .map_err(Error::from)
+            });
+        match result {
+            Ok(text) => return Ok(Some(text)),
+            Err(e) if is_not_found(&e) => return Ok(None),
+            Err(e) if attempt < policy.attempts => {
+                log::warn!("retrying {url} (attempt {attempt}): {e}");
+                let delay = policy.delays.get(attempt as usize - 1);
+                std::thread::sleep(delay.or(policy.delays.last()).copied().unwrap_or_default());
+                attempt += 1;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+fn download_with_mirror(
+    job: &DownloadJob,
+    reporter: &Reporter,
+    mirror: Option<String>,
+    policy: &Policy,
+) -> Result<()> {
+    let Err(err) = retry_job(job, reporter, policy) else {
+        return Ok(());
+    };
+    // Defence in depth: `mirror_for` already refuses unhashed jobs.
+    let Some(url) = mirror.filter(|_| job.sha1.is_some() || job.md5.is_some()) else {
+        return Err(err);
+    };
+    log::warn!("{} failed ({err}); trying mirror {url}", job.url);
+    let from_mirror = DownloadJob { url, ..job.clone() };
+    retry_job(&from_mirror, reporter, policy).map_err(|mirror_err| {
+        log::warn!("mirror failed too: {mirror_err}");
+        err
+    })
+}
+
+fn retry_job(job: &DownloadJob, reporter: &Reporter, policy: &Policy) -> Result<()> {
     let mut attempt = 1;
     let mut segmented = segments(job).is_some();
     loop {
@@ -278,10 +458,11 @@ fn download_with_retry(job: &DownloadJob, reporter: &Reporter) -> Result<()> {
         };
         match result {
             Ok(()) => return Ok(()),
-            Err(e) if attempt < ATTEMPTS => {
+            Err(e) if attempt < policy.attempts && !is_not_found(&e) => {
                 log::warn!("retrying {} (attempt {attempt}): {e}", job.url);
                 reporter.remove_bytes(transferred.get());
-                std::thread::sleep(RETRY_BACKOFF * attempt);
+                let delay = policy.delays.get(attempt as usize - 1);
+                std::thread::sleep(delay.or(policy.delays.last()).copied().unwrap_or_default());
                 attempt += 1;
             }
             Err(e) => return Err(e),
@@ -308,6 +489,7 @@ fn download_one(job: &DownloadJob, reporter: &Reporter, transferred: &Cell<u64>)
     let mut resp = super::agent()
         .get(url)
         .config()
+        .timeout_connect(connect_timeout(url))
         .timeout_recv_body(Some(body_timeout(job.transfer_size())))
         .build()
         .call()?;
@@ -316,7 +498,8 @@ fn download_one(job: &DownloadJob, reporter: &Reporter, transferred: &Cell<u64>)
         reporter.add_bytes(n);
     };
     let mut input = Hashing::new(resp.body_mut().as_reader(), &on_bytes);
-    let mut output = Hashing::new(fs::File::create(&tmp).at(&tmp)?, &|_| {});
+    let mut output =
+        Hashing::new(fs::File::create(&tmp).at(&tmp)?, &|_| {}).with_md5(job.md5.is_some());
     let copied = match &job.lzma {
         Some(_) => {
             let mut buffered = BufReader::with_capacity(BUF_SIZE, &mut input);
@@ -340,7 +523,7 @@ fn download_one(job: &DownloadJob, reporter: &Reporter, transferred: &Cell<u64>)
 /// [`CHUNK_SIZE`], fetched by [`CONNECTIONS`] connections taking turns.
 fn segments(job: &DownloadJob) -> Option<Vec<(u64, u64)>> {
     let size = job.size.filter(|s| *s >= SEGMENT_MIN_SIZE)?;
-    if job.lzma.is_some() {
+    if job.lzma.is_some() || job.md5.is_some() {
         return None;
     }
     Some(
@@ -563,6 +746,7 @@ fn fetch_once(
         .get(&job.url)
         .header("Range", &format!("bytes={}-{}", chunk.start, chunk.end - 1))
         .config()
+        .timeout_connect(connect_timeout(&job.url))
         .timeout_recv_body(Some(chunk_timeout(len)))
         .build()
         .call()
@@ -631,7 +815,12 @@ fn verify<R, W>(job: &DownloadJob, input: &Hashing<R>, output: &Hashing<W>) -> R
         && job
             .sha1
             .as_deref()
-            .is_none_or(|want| want.eq_ignore_ascii_case(&output.hex_digest()));
+            .is_none_or(|want| want.eq_ignore_ascii_case(&output.hex_digest()))
+        && job.md5.as_deref().is_none_or(|want| {
+            output
+                .md5_digest()
+                .is_some_and(|got| want.eq_ignore_ascii_case(&got))
+        });
     if compressed_ok && raw_ok {
         Ok(())
     } else {
@@ -654,6 +843,7 @@ fn copy(input: &mut impl Read, output: &mut impl Write) -> std::io::Result<()> {
 struct Hashing<'a, T> {
     inner: T,
     hasher: Sha1,
+    md5: Option<Md5>,
     count: u64,
     on_bytes: &'a dyn Fn(u64),
 }
@@ -663,6 +853,7 @@ impl<'a, T> Hashing<'a, T> {
         Self {
             inner,
             hasher: Sha1::new(),
+            md5: None,
             count: 0,
             on_bytes,
         }
@@ -672,8 +863,21 @@ impl<'a, T> Hashing<'a, T> {
         hex::encode(self.hasher.clone().finalize())
     }
 
+    /// Also compute the MD5 (for jobs that carry one).
+    fn with_md5(mut self, on: bool) -> Self {
+        self.md5 = on.then(Md5::new);
+        self
+    }
+
+    fn md5_digest(&self) -> Option<String> {
+        self.md5.as_ref().map(|m| hex::encode(m.clone().finalize()))
+    }
+
     fn record(&mut self, bytes: &[u8]) {
         self.hasher.update(bytes);
+        if let Some(m) = &mut self.md5 {
+            m.update(bytes);
+        }
         self.count += bytes.len() as u64;
         (self.on_bytes)(bytes.len() as u64);
     }
@@ -733,6 +937,7 @@ mod tests {
             sha1: None,
             size,
             lzma: None,
+            md5: None,
         }
     }
 
@@ -782,6 +987,28 @@ mod tests {
             order,
             ["missing/b", "missing/a", "missing/c"].map(PathBuf::from)
         );
+    }
+
+    #[test]
+    fn parallel_checks_keep_missing_and_truncated_files_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut jobs = Vec::new();
+        for i in 0..256 {
+            let dest = dir.path().join(i.to_string());
+            if i % 3 != 0 {
+                fs::write(&dest, if i % 3 == 1 { &b"ok"[..] } else { &b"x"[..] }).unwrap();
+            }
+            let entry = DownloadJob {
+                dest,
+                ..job("", Some(2))
+            };
+            jobs.extend([entry.clone(), entry]);
+        }
+        let pending = pending_jobs(jobs);
+        assert_eq!(pending.len(), 171);
+        let unique: HashSet<_> = pending.iter().map(|j| j.dest.clone()).collect();
+        assert_eq!(unique.len(), pending.len());
+        assert!(pending.iter().all(|j| !j.is_satisfied()));
     }
 
     #[test]
@@ -911,6 +1138,7 @@ mod tests {
                 sha1: Some(sha1),
                 size: Some(size as u64),
                 lzma: None,
+                md5: None,
             }],
             &|_| {},
         )
@@ -945,5 +1173,214 @@ mod tests {
         };
         assert!(download_all("x", vec![], &cb).is_ok());
         assert_eq!(calls.load(Ordering::Relaxed), 1);
+    }
+    /// Local HTTP server: answers each request with the next status from `script`
+    /// (`200` serves `body`, repeating the last entry); returns its base URL and hit counter.
+    fn serve(script: Vec<u16>, body: &'static [u8]) -> (String, std::sync::Arc<AtomicU64>) {
+        use std::io::Write as _;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let hits = std::sync::Arc::new(AtomicU64::new(0));
+        let counter = hits.clone();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let n = counter.fetch_add(1, Ordering::SeqCst) as usize;
+                let status = script[n.min(script.len() - 1)];
+                let mut buf = [0u8; 4096];
+                let _ = std::io::Read::read(&mut stream, &mut buf);
+                let body = if status == 200 { body } else { b"" };
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 {status} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = stream.write_all(body);
+            }
+        });
+        (base, hits)
+    }
+
+    fn sha1_bytes(b: &[u8]) -> String {
+        Sha1::digest(b).iter().map(|x| format!("{x:02x}")).collect()
+    }
+
+    fn fetch(url: &str, mirror: Option<String>, sha1: Option<&str>) -> (Result<()>, PathBuf) {
+        let dir = tempfile::tempdir().unwrap().keep();
+        let job = DownloadJob {
+            url: url.to_string(),
+            dest: dir.join("f.jar"),
+            sha1: sha1.map(String::from),
+            ..job("", None)
+        };
+        let progress = |_: crate::ProgressInfo<'_>| {};
+        let reporter = Reporter {
+            stage: "t",
+            progress: &progress,
+            start: Instant::now(),
+            last_ms: AtomicU64::new(0),
+            files_done: AtomicU64::new(0),
+            files_total: 1,
+            bytes_done: AtomicU64::new(0),
+            bytes_total: 0,
+        };
+        let policy = Policy {
+            attempts: 3,
+            delays: vec![Duration::from_millis(5)],
+        };
+        let dest = job.dest.clone();
+        (download_with_mirror(&job, &reporter, mirror, &policy), dest)
+    }
+
+    #[test]
+    fn retries_server_errors_then_succeeds() {
+        let (base, hits) = serve(vec![503, 502, 200], b"jar");
+        let (res, dest) = fetch(&format!("{base}/a.jar"), None, None);
+        res.unwrap();
+        assert_eq!(fs::read(dest).unwrap(), b"jar");
+        assert_eq!(hits.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn not_found_is_not_retried_or_mirrored() {
+        let (base, hits) = serve(vec![404], b"");
+        let (mirror, mirror_hits) = serve(vec![200], b"jar");
+        let (res, _) = fetch(
+            &format!("{base}/a.jar"),
+            Some(format!("{mirror}/a.jar")),
+            None,
+        );
+        assert!(is_not_found(&res.unwrap_err()));
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+        assert_eq!(mirror_hits.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn not_found_falls_back_to_mirror_when_hash_matches() {
+        let (base, hits) = serve(vec![404], b"");
+        let (mirror, mirror_hits) = serve(vec![200], b"jar");
+        let sha = sha1_bytes(b"jar");
+        let (res, dest) = fetch(
+            &format!("{base}/a.jar"),
+            Some(format!("{mirror}/a.jar")),
+            Some(&sha),
+        );
+        res.unwrap();
+        assert_eq!(fs::read(dest).unwrap(), b"jar");
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+        assert_eq!(mirror_hits.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn not_found_with_bad_mirror_hash_keeps_not_found_error() {
+        let (base, _) = serve(vec![404], b"");
+        let (mirror, _) = serve(vec![200], b"jar");
+        let bad = "0".repeat(40);
+        let (res, dest) = fetch(
+            &format!("{base}/a.jar"),
+            Some(format!("{mirror}/a.jar")),
+            Some(&bad),
+        );
+        assert!(is_not_found(&res.unwrap_err()));
+        assert!(!dest.exists());
+    }
+
+    #[test]
+    fn not_found_installer_is_mirrored_only_with_a_hash() {
+        let (base, _) = serve(vec![404], b"");
+        let (mirror, mirror_hits) = serve(vec![200], b"jar");
+        let sha = sha1_bytes(b"jar");
+        let url = format!("{base}/forge-1-installer.jar");
+        let mirror_url = format!("{mirror}/forge-1-installer.jar");
+        let (res, _) = fetch(&url, Some(mirror_url.clone()), None);
+        assert!(is_not_found(&res.unwrap_err()));
+        assert_eq!(mirror_hits.load(Ordering::SeqCst), 0);
+        let (res, dest) = fetch(&url, Some(mirror_url), Some(&sha));
+        res.unwrap();
+        assert_eq!(fs::read(dest).unwrap(), b"jar");
+        assert_eq!(mirror_hits.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn mirror_used_after_primary_keeps_failing() {
+        let (base, hits) = serve(vec![500], b"");
+        let (mirror, _) = serve(vec![200], b"jar");
+        let sha = sha1_bytes(b"jar");
+        let (res, dest) = fetch(
+            &format!("{base}/a.jar"),
+            Some(format!("{mirror}/a.jar")),
+            Some(&sha),
+        );
+        res.unwrap();
+        assert_eq!(hits.load(Ordering::SeqCst), 3);
+        assert_eq!(fs::read(dest).unwrap(), b"jar");
+    }
+
+    #[test]
+    fn mirror_never_used_without_a_hash() {
+        let (base, _) = serve(vec![500], b"");
+        let (mirror, mirror_hits) = serve(vec![200], b"jar");
+        let (res, dest) = fetch(
+            &format!("{base}/a.jar"),
+            Some(format!("{mirror}/a.jar")),
+            None,
+        );
+        assert!(res.is_err());
+        assert_eq!(mirror_hits.load(Ordering::SeqCst), 0);
+        assert!(!dest.exists());
+    }
+
+    #[test]
+    fn mirror_copy_must_match_known_hash() {
+        let (base, _) = serve(vec![500], b"");
+        let (mirror, _) = serve(vec![200], b"jar");
+        let bad = "0".repeat(40);
+        let (res, dest) = fetch(
+            &format!("{base}/a.jar"),
+            Some(format!("{mirror}/a.jar")),
+            Some(&bad),
+        );
+        // The primary's error is reported, and nothing unverified is left behind.
+        assert!(matches!(res, Err(Error::Http(_))));
+        assert!(!dest.exists());
+    }
+
+    #[test]
+    fn mirror_only_for_verifiable_files() {
+        let job = |url: &str, sha1: Option<&str>| DownloadJob {
+            url: url.into(),
+            sha1: sha1.map(String::from),
+            ..job("", None)
+        };
+        let lib = "https://maven.minecraftforge.net/net/minecraftforge/x/1/x-1.jar";
+        let installer =
+            "https://maven.minecraftforge.net/net/minecraftforge/forge/1/forge-1-installer.jar";
+        assert_eq!(mirror_for(&job(lib, None)), None);
+        assert!(
+            mirror_for(&job(lib, Some("ab")))
+                .unwrap()
+                .starts_with(FORGE_MIRROR)
+        );
+        assert_eq!(mirror_for(&job(installer, None)), None);
+        assert!(mirror_for(&job(installer, Some("ab"))).is_some());
+        assert_eq!(
+            mirror_for(&job("https://libraries.minecraft.net/a.jar", Some("ab"))),
+            None
+        );
+    }
+
+    #[test]
+    fn loader_hosts_get_longer_connect_timeout() {
+        assert_eq!(
+            connect_timeout("https://maven.minecraftforge.net/x"),
+            Some(LOADER_CONNECT_TIMEOUT)
+        );
+        assert_ne!(
+            connect_timeout("https://piston-data.mojang.com/x"),
+            Some(LOADER_CONNECT_TIMEOUT)
+        );
+        assert_ne!(
+            connect_timeout("https://evil.test/maven.minecraftforge.net/"),
+            Some(LOADER_CONNECT_TIMEOUT)
+        );
     }
 }
