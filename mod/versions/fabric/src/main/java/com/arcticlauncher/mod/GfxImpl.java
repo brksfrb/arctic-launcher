@@ -1,5 +1,6 @@
 package com.arcticlauncher.mod;
 
+import com.arcticlauncher.client.gfx.BrandMark;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.mojang.blaze3d.platform.NativeImage;
 import java.io.InputStream;
@@ -14,6 +15,7 @@ import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.Identifier;
 
+import com.arcticlauncher.client.Lang;
 /** The core's drawing primitives on 26.3's GUI renderer. */
 public final class GfxImpl implements Gfx {
 	private static final Identifier ICON = Compat.id(ArcticMod.ID, "icon");
@@ -48,7 +50,7 @@ public final class GfxImpl implements Gfx {
 			iconLoaded = true;
 			try (InputStream in = GfxImpl.class.getResourceAsStream("/assets/arctic/icon.png")) {
 				NativeImage image = NativeImage.read(in);
-				Minecraft.getInstance().getTextureManager().register(ICON, Compat.texture("Arctic icon", image));
+				Minecraft.getInstance().getTextureManager().register(ICON, Compat.texture(Lang.t("platform.arctic_icon"), image));
 			} catch (Exception e) {
 				ArcticMod.LOG.warn("Arctic icon: {}", e.toString());
 			}
@@ -59,7 +61,7 @@ public final class GfxImpl implements Gfx {
 	private static final java.util.Map<String, Identifier> ASSETS = new java.util.HashMap<String, Identifier>();
 
 	/** A PNG from the jar's {@code assets/arctic/}, registered on first use. */
-	private static Identifier asset(String name) {
+	public static Identifier asset(String name) {
 		if (ASSETS.containsKey(name)) {
 			return ASSETS.get(name);
 		}
@@ -76,6 +78,31 @@ public final class GfxImpl implements Gfx {
 			id = null;
 		}
 		ASSETS.put(name, id);
+		return id;
+	}
+
+	private static final java.util.Map<String, Identifier> BRANDS = new java.util.HashMap<String, Identifier>();
+
+	private static Identifier dynamic(String name) {
+		Identifier id = Compat.id(ArcticMod.ID, "dyn/" + name);
+		if (!name.startsWith("brand-")) return id;
+		if (BRANDS.containsKey(name)) return BRANDS.get(name);
+		boolean smooth = name.startsWith("brand-smooth-");
+		int size = BrandMark.clampSize(Integer.parseInt(name.substring(smooth ? 13 : 6)));
+		int[] pixels = BrandMark.raster(size);
+		NativeImage image = new NativeImage(size, size, false);
+		for (int y = 0; y < size; y++) for (int x = 0; x < size; x++) {
+			int color = pixels[y * size + x];
+			//#if MC >= 1.21.2
+			image.setPixel(x, y, color);
+			//#else
+			color = (color & 0xff00ff00) | ((color & 255) << 16) | ((color >>> 16) & 255);
+			image.setPixelRGBA(x, y, color);
+			//#endif
+		}
+		Minecraft.getInstance().getTextureManager().register(id, smooth
+				? Compat.smoothTexture("Arctic " + name, image) : Compat.texture("Arctic " + name, image));
+		BRANDS.put(name, id);
 		return id;
 	}
 
@@ -230,7 +257,7 @@ public final class GfxImpl implements Gfx {
 	public void texture(String key, int x, int y, int w, int h, float u, float v, int regionW, int regionH, int texW, int texH) {
 		Identifier id = key.startsWith("look:") ? look(key.substring(5))
 				: key.startsWith("asset:") ? asset(key.substring(6))
-				: key.startsWith("dyn:") ? Compat.id(ArcticMod.ID, "dyn/" + key.substring(4)) : icon();
+				: key.startsWith("dyn:") ? dynamic(key.substring(4)) : icon();
 		if (id == null) {
 			return;
 		}

@@ -12,7 +12,7 @@ use arctic_core::storage::DataDirs;
 use crate::app::{AddAccount, ArcticApp};
 use crate::tasks::Tasks;
 use crate::toasts::{Kind, Toasts};
-
+use crate::{t, tf};
 /// A profile's data, loaded from its folder.
 pub struct ProfileData {
     pub settings: Settings,
@@ -32,27 +32,24 @@ impl ProfileData {
             toasts.push(Kind::Error, what, e.to_string());
         };
         if let Err(e) = dirs.ensure() {
-            note("Could not create data folders", e);
+            note(t!("tasks.could_not_create_data_folders"), e);
         }
         arctic_core::net::set_dns_memory(dirs.root().join("dns-last-known.json"));
         // Before anything goes online: the proxy applies to all of it.
         let proxy = ProxySettings::load(dirs);
         if let Err(e) = arctic_core::net::set_proxy(proxy.enabled.then_some(&proxy)) {
-            note(
-                "The proxy settings can't be used, so the launcher stays offline",
-                e,
-            );
+            note(t!("tasks.the_proxy_settings_cant_be_used_so_the"), e);
         }
         let settings = Settings::load(dirs).unwrap_or_else(|e| {
-            note("Settings were unreadable, using defaults", e);
+            note(t!("tasks.settings_were_unreadable_using_defaults"), e);
             Settings::default()
         });
         let accounts = AccountStore::load(dirs).unwrap_or_else(|e| {
-            note("Accounts file was unreadable", e);
+            note(t!("tasks.accounts_file_was_unreadable"), e);
             AccountStore::default()
         });
         let instance = instances::load_default(dirs).unwrap_or_else(|e| {
-            note("Could not load the Vanilla instance", e);
+            note(t!("tasks.could_not_load_the_vanilla_instance"), e);
             Instance::vanilla_default()
         });
         let custom_instances = instances::list_custom(dirs).unwrap_or_default();
@@ -87,9 +84,9 @@ impl ArcticApp {
     /// Why switching profiles is not possible right now, if it isn't.
     pub(crate) fn profile_switch_blocked(&self) -> Option<&'static str> {
         if self.runs.any_active() {
-            Some("Close Minecraft before switching profiles.")
+            Some(t!("tasks.close_minecraft_before_switching_profiles"))
         } else if !matches!(self.add_account, AddAccount::Closed) {
-            Some("Finish adding the account first.")
+            Some(t!("tasks.finish_adding_the_account_first"))
         } else {
             None
         }
@@ -109,8 +106,11 @@ impl ArcticApp {
             return;
         }
         if let Err(e) = self.profiles.save(&self.root) {
-            self.toasts
-                .push(Kind::Error, "Could not save profiles", e.to_string());
+            self.toasts.push(
+                Kind::Error,
+                t!("tasks.could_not_save_profiles"),
+                e.to_string(),
+            );
         }
         self.dirs = self.profiles.scoped(&self.root);
         self.tasks = self.tasks.with_dirs(self.dirs.clone());
@@ -119,6 +119,6 @@ impl ArcticApp {
         self.maybe_start_onboarding(false);
         let name = self.profiles.active().name.clone();
         self.toasts
-            .push(Kind::Success, format!("Switched to {name}"), "");
+            .push(Kind::Success, tf!("tasks.switched_to", name = name), "");
     }
 }

@@ -11,7 +11,7 @@ use crate::motion::format_bytes;
 use crate::theme;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf, tn};
 const ICON: f32 = 36.0;
 
 /// Where an instance's "look for newer mods" stands.
@@ -38,18 +38,32 @@ impl ArcticApp {
             let enabled = files.iter().filter(|f| f.enabled).count();
             if data.is_none() && error.is_none() {
                 ui.spinner();
-                ui.label(RichText::new("Loading mods…").color(p.muted));
+                ui.label(RichText::new(t!("instances.loading_mods")).color(p.muted));
             } else if data.is_some() {
                 ui.label(
-                    RichText::new(format!("{} mods · {enabled} enabled", files.len()))
-                        .color(p.muted),
+                    RichText::new(tf!(
+                        "instances.mods_enabled",
+                        count = files.len(),
+                        enabled = enabled
+                    ))
+                    .color(p.muted),
                 );
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::button(ui, p, Some(Icon::Plus), "Add mods", true).clicked() {
+                if widgets::button(ui, p, Some(Icon::Plus), t!("instances.add_mods"), true)
+                    .clicked()
+                {
                     self.inst.page = InstancePage::Browse;
                 }
-                if widgets::button(ui, p, Some(Icon::Folder), "Open folder", false).clicked() {
+                if widgets::button(
+                    ui,
+                    p,
+                    Some(Icon::Folder),
+                    t!("instances.open_folder"),
+                    false,
+                )
+                .clicked()
+                {
                     let _ = std::fs::create_dir_all(&mods_dir);
                     let _ = open::that_detached(&mods_dir);
                 }
@@ -59,8 +73,14 @@ impl ArcticApp {
                 );
                 if !busy
                     && instance.loader.kind().is_some()
-                    && widgets::button(ui, p, Some(Icon::Import), "Look for updates", false)
-                        .clicked()
+                    && widgets::button(
+                        ui,
+                        p,
+                        Some(Icon::Import),
+                        t!("instances.look_for_updates"),
+                        false,
+                    )
+                    .clicked()
                 {
                     self.inst
                         .mod_updates
@@ -73,11 +93,11 @@ impl ArcticApp {
         ui.horizontal(|ui| {
             ui.add(
                 widgets::text_field(&mut self.inst.mod_filter.1)
-                    .hint_text("Search installed mods…")
+                    .hint_text(t!("instances.search_installed_mods"))
                     .desired_width((ui.available_width() - 80.0).max(120.0)),
             );
             if !self.inst.mod_filter.1.is_empty()
-                && widgets::button(ui, p, None, "Clear", false).clicked()
+                && widgets::button(ui, p, None, t!("instances.clear"), false).clicked()
             {
                 self.inst.mod_filter.1.clear();
             }
@@ -85,8 +105,11 @@ impl ArcticApp {
         ui.add_space(8.0);
         if let Some(error) = error {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("Could not refresh mods: {error}")).color(p.error));
-                if widgets::button(ui, p, None, "Retry", false).clicked() {
+                ui.label(
+                    RichText::new(tf!("instances.could_not_refresh_mods", error = error))
+                        .color(p.error),
+                );
+                if widgets::button(ui, p, None, t!("instances.retry"), false).clicked() {
                     self.refresh_mods(&instance.id);
                 }
             });
@@ -102,13 +125,13 @@ impl ArcticApp {
                 ui.vertical_centered(|ui| {
                     ui.add_space(10.0);
                     ui.label(
-                        RichText::new("No mods yet")
+                        RichText::new(t!("instances.no_mods_yet"))
                             .size(17.0)
                             .strong()
                             .color(p.text),
                     );
                     ui.label(
-                        RichText::new("Browse Modrinth, or drop .jar files into the mods folder.")
+                        RichText::new(t!("instances.browse_modrinth_or_drop_jar_files_into_the"))
                             .color(p.muted),
                     );
                     ui.add_space(10.0);
@@ -134,11 +157,18 @@ impl ArcticApp {
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
             if matches.is_empty() {
-                ui.label(RichText::new("No installed mods match your search.").color(p.muted));
+                ui.label(
+                    RichText::new(t!("instances.no_installed_mods_match_your_search"))
+                        .color(p.muted),
+                );
             } else if !query.is_empty() {
                 ui.label(
-                    RichText::new(format!("{} of {} mods", matches.len(), files.len()))
-                        .color(p.muted),
+                    RichText::new(tf!(
+                        "instances.of_mods",
+                        count = matches.len(),
+                        count2 = files.len()
+                    ))
+                    .color(p.muted),
                 );
             }
             visible_rows(ui, matches.len(), |ui, row| {
@@ -167,41 +197,43 @@ impl ArcticApp {
                 UpdateState::Checking => {
                     ui.horizontal(|ui| {
                         ui.spinner();
-                        ui.label(RichText::new("Looking for newer builds…").color(p.muted));
+                        ui.label(
+                            RichText::new(t!("instances.looking_for_newer_builds")).color(p.muted),
+                        );
                     });
                 }
                 UpdateState::Applying => {
                     ui.horizontal(|ui| {
                         ui.spinner();
-                        ui.label(RichText::new("Updating mods…").color(p.muted));
+                        ui.label(RichText::new(t!("instances.updating_mods")).color(p.muted));
                     });
                 }
                 UpdateState::Failed(e) => {
                     ui.label(
-                        RichText::new(format!("Couldn't look for updates: {e}")).color(p.error),
+                        RichText::new(tf!("instances.couldnt_look_for_updates", e = e))
+                            .color(p.error),
                     );
-                    if widgets::button(ui, p, None, "Close", false).clicked() {
+                    if widgets::button(ui, p, None, t!("instances.close"), false).clicked() {
                         dismiss = true;
                     }
                 }
                 UpdateState::Ready(list) if list.is_empty() => {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("All your mods are up to date.").color(p.text));
-                        if widgets::button(ui, p, None, "Close", false).clicked() {
+                        ui.label(
+                            RichText::new(t!("instances.all_your_mods_are_up_to_date"))
+                                .color(p.text),
+                        );
+                        if widgets::button(ui, p, None, t!("instances.close"), false).clicked() {
                             dismiss = true;
                         }
                     });
                 }
                 UpdateState::Ready(list) => {
                     ui.label(
-                        RichText::new(format!(
-                            "{} update{} available",
-                            list.len(),
-                            if list.len() == 1 { "" } else { "s" }
-                        ))
-                        .size(17.0)
-                        .strong()
-                        .color(p.text),
+                        RichText::new(tn!("instances.update_available", list.len()))
+                            .size(17.0)
+                            .strong()
+                            .color(p.text),
                     );
                     ui.add_space(4.0);
                     for update in list {
@@ -216,11 +248,18 @@ impl ArcticApp {
                     }
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
-                        if widgets::button(ui, p, Some(Icon::Import), "Update all", true).clicked()
+                        if widgets::button(
+                            ui,
+                            p,
+                            Some(Icon::Import),
+                            t!("instances.update_all"),
+                            true,
+                        )
+                        .clicked()
                         {
                             apply = Some(list.iter().map(|u| u.project_id.clone()).collect());
                         }
-                        if widgets::button(ui, p, None, "Not now", false).clicked() {
+                        if widgets::button(ui, p, None, t!("instances.not_now"), false).clicked() {
                             dismiss = true;
                         }
                     });
@@ -262,7 +301,7 @@ impl ArcticApp {
             ui.painter().text(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
-                "Drop to add these mods",
+                t!("instances.drop_to_add_these_mods"),
                 egui::FontId::proportional(18.0),
                 p.text,
             );
@@ -288,7 +327,10 @@ impl ArcticApp {
                 Ok(_) => added += 1,
                 Err(e) => self.toasts.push(
                     Kind::Error,
-                    format!("Couldn't add {}", name.to_string_lossy()),
+                    tf!(
+                        "instances.couldnt_add",
+                        to_string_lossy = name.to_string_lossy()
+                    ),
                     e.to_string(),
                 ),
             }
@@ -297,9 +339,9 @@ impl ArcticApp {
             self.toasts.push(
                 Kind::Success,
                 if added == 1 {
-                    "Mod added".to_owned()
+                    t!("instances.mod_added").to_owned()
                 } else {
-                    format!("{added} mods added")
+                    tf!("instances.mods_added", added = added)
                 },
                 "",
             );
@@ -334,7 +376,9 @@ impl ArcticApp {
                     ui.add(egui::Label::new(RichText::new(title).strong().color(color)).truncate())
                         .on_hover_text(title);
                     let detail = match &file.tracked {
-                        Some(m) if m.dependency => format!("{} · dependency", m.version_number),
+                        Some(m) if m.dependency => {
+                            tf!("instances.dependency", version_number = m.version_number)
+                        }
                         Some(m) => m.version_number.clone(),
                         None => format!("{} · {}", file.file_name, format_bytes(file.size)),
                     };
@@ -345,26 +389,28 @@ impl ArcticApp {
                 },
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, p, Icon::Trash, "Remove").clicked() {
+                if widgets::icon_button(ui, p, Icon::Trash, t!("instances.remove")).clicked() {
                     match mods::remove(mods_dir, index, &file.file_name) {
                         Ok(()) => changed = true,
-                        Err(e) => {
-                            self.toasts
-                                .push(Kind::Error, "Could not remove mod", e.to_string())
-                        }
+                        Err(e) => self.toasts.push(
+                            Kind::Error,
+                            t!("instances.could_not_remove_mod"),
+                            e.to_string(),
+                        ),
                     }
                 }
                 let mut enabled = file.enabled;
                 if widgets::switch(ui, p, &mut enabled)
-                    .on_hover_text(if enabled { "On" } else { "Off" })
+                    .on_hover_text(if enabled { "On" } else { t!("instances.off") })
                     .changed()
                 {
                     match mods::set_enabled(mods_dir, &file.file_name, enabled) {
                         Ok(()) => changed = true,
-                        Err(e) => {
-                            self.toasts
-                                .push(Kind::Error, "Could not change mod", e.to_string())
-                        }
+                        Err(e) => self.toasts.push(
+                            Kind::Error,
+                            t!("instances.could_not_change_mod"),
+                            e.to_string(),
+                        ),
                     }
                 }
             });

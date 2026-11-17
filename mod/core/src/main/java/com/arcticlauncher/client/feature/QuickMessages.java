@@ -48,10 +48,14 @@ public final class QuickMessages {
 	public static String fillTyped(String text) {
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
 		Platform platform = com.arcticlauncher.client.ArcticClient.platform();
+		return fillTyped(text, c, platform);
+	}
+
+	static String fillTyped(String text, com.arcticlauncher.client.config.ClientConfig c, Platform platform) {
 		if (text == null || c == null) {
 			return text;
 		}
-		// ":heart:" and friends first, so a symbol can sit in a placeholder's line too.
+		// Only non-conflicting legacy symbols expand; atlas shortcodes stay on the wire.
 		String out = c.chatEmoji ? Emoji.expand(text) : text;
 		if (out.indexOf('{') < 0 || !c.chatPlaceholders || platform == null) {
 			return out;

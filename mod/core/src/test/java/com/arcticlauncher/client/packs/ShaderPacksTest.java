@@ -1,5 +1,7 @@
 package com.arcticlauncher.client.packs;
 
+import com.arcticlauncher.client.Lang;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
@@ -39,7 +41,7 @@ public class ShaderPacksTest {
 		assertFalse(packs.available());
 		assertEquals(2, packs.installed().size());
 		packs.select("pack.zip");
-		assertEquals(ShaderPacks.NEEDS_IRIS, packs.status());
+		assertEquals(Lang.t(ShaderPacks.NEEDS_IRIS), packs.status());
 		assertNull(packs.active());
 	}
 

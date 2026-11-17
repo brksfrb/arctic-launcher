@@ -30,16 +30,39 @@ public final class GlassCtm {
 	private static final boolean CONTINUITY = FabricLoader.getInstance().isModLoaded("continuity");
 	private static volatile Map<TextureAtlasSprite, TextureAtlasSprite[]> sprites = new IdentityHashMap<>();
 	private static boolean lastEnabled = true;
+	private static volatile int atlasTileCount = GlassTiles.COUNT;
 	private static final ThreadLocal<Context> LOCAL = ThreadLocal.withInitial(Context::new);
 	private GlassCtm() {}
 
 	public static boolean available() { return !CONTINUITY; }
+	public static int tileCount() { return atlasTileCount; }
+	public static void reloading() { lastEnabled = enabled(); atlasTileCount = lastEnabled ? GlassTiles.COUNT : 1; }
+
 	public static boolean enabled() { return available() && (ArcticClient.config() == null || ArcticClient.config().connectedGlass); }
 
 	public static void tick() {
+		// The line level (clarity of the glass texture) is part of the tiles: stitching the atlas again also rebuilds every chunk.
+		if (available() && com.arcticlauncher.client.ctm.GlassLines.due(available())) {
+			lastEnabled = enabled();
+			//#if MC >= 1.14
+			Minecraft.getInstance().reloadResourcePacks();
+			//#else
+			Minecraft.getInstance().reloadResources();
+			//#endif
+			return;
+		}
 		boolean on = enabled();
 		if (lastEnabled != on) {
 			lastEnabled = on;
+			// An atlas stitched with Connected Glass off holds only the unjoined tile: enabling it needs the tiles.
+			if (on && tileCount() < GlassTiles.COUNT) {
+				//#if MC >= 1.14
+				Minecraft.getInstance().reloadResourcePacks();
+				//#else
+				Minecraft.getInstance().reloadResources();
+				//#endif
+				return;
+			}
 			if (Minecraft.getInstance().level == null) return;
 			//#if MC >= 26.2
 			Minecraft.getInstance().levelExtractor.allChanged();
@@ -59,12 +82,13 @@ public final class GlassCtm {
 			TextureAtlasSprite[] variants = new TextureAtlasSprite[GlassTiles.COUNT];
 			boolean complete = true;
 			for (int i = 0; i < variants.length; i++) {
-				variants[i] = names.get(GlassTiles.variant(e.getKey(), i));
+				variants[i] = names.get(GlassTiles.variant(e.getKey(), i < tileCount() ? i : 0));
 				complete &= variants[i] != null;
 			}
 			if (complete) found.put(e.getValue(), variants);
 		}
 		sprites = found;
+		ArcticMod.LOG.info("[startup] CTM atlas bound: {} source sprites, {} tiles per face", found.size(), tileCount());
 	}
 
 	//#if MC >= 1.15
@@ -74,7 +98,9 @@ public final class GlassCtm {
 	//#endif
 		Context c = LOCAL.get();
 		c.active = false;
-		if (!enabled()) return;
+		// With Connected Glass off the glass still takes our texture (lone tile, clarity applied), it just joins to nothing.
+		if (c.damageDepth != 0 || !available()) return;
+		c.joined = enabled();
 		Integer type = c.blocks.get(block.getBlock());
 		if (type == null) {
 			//#if MC >= 1.19.3
@@ -93,7 +119,42 @@ public final class GlassCtm {
 		c.world = world; c.block = block.getBlock();
 		c.x = pos.getX(); c.y = pos.getY(); c.z = pos.getZ();
 		c.checked = 0; c.connected = 0; c.faces = 0; c.viewIndex = 0; c.active = true;
+		//#if DEV_SCENES
+		//#if MC >= 1.21.11 && MC < 26.1
+		if (GlassBordersTest.watching(pos)) GlassBordersTest.observe(pos, c.mask(Direction.DOWN) << 8 | c.mask(Direction.SOUTH));
+		GlassFramesTest.meshing(c.x, c.y, c.z);
+		//#endif
+		//#endif
 	}
+
+	/** Damage rendering shares the terrain renderer, but must retain vanilla crack textures. */
+	public static void beginDamage() { LOCAL.get().damageDepth++; end(); }
+	public static void endDamage() { LOCAL.get().damageDepth--; end(); }
+	//#if DEV_SCENES
+	//#if MC >= 1.21.11 && MC < 26.1
+	/** The masks a block gets from a view: down << 8 | south. */
+	static int masks(BlockAndTintGetter world, BlockState block, BlockPos pos) {
+		begin(world, block, pos);
+		Context c = LOCAL.get();
+		int masks = c.active ? c.mask(Direction.DOWN) << 8 | c.mask(Direction.SOUTH) : -1;
+		end();
+		return masks;
+	}
+	//#endif
+	//#endif
+
+	//#if DEV_SCENES
+	//#if MC >= 1.21.11 && MC < 26.1
+	/** The mask one face of a block gets from a view; -1 when Connected Glass leaves the block alone. */
+	static int mask(BlockAndTintGetter world, BlockState block, BlockPos pos, Direction face) {
+		begin(world, block, pos);
+		Context c = LOCAL.get();
+		int mask = c.active ? c.mask(face) : -1;
+		end();
+		return mask;
+	}
+	//#endif
+	//#endif
 
 	public static void end() { Context c = LOCAL.get(); c.active = false; c.world = null; }
 
@@ -114,7 +175,8 @@ public final class GlassCtm {
 	}
 
 	private static final class Context {
-		boolean active, pane;
+		boolean active, pane, joined;
+		int damageDepth;
 		int x, y, z, checked, connected, faces, viewIndex;
 		Block block;
 		//#if MC >= 1.15
@@ -137,7 +199,7 @@ public final class GlassCtm {
 			return (connected & bit) != 0;
 		}
 		boolean hide(Variants variants) {
-			if (!pane || variants == null || !variants.edge || !variants.boundary) return false;
+			if (!joined || !pane || variants == null || !variants.edge || !variants.boundary) return false;
 			Direction face = variants.direction;
 			return same(face == Direction.EAST ? 1 : face == Direction.WEST ? -1 : 0,
 					face == Direction.UP ? 1 : face == Direction.DOWN ? -1 : 0,
@@ -146,6 +208,7 @@ public final class GlassCtm {
 		int mask(Direction face) {
 			int index = face.ordinal();
 			if ((faces & (1 << index)) != 0) return masks[index];
+			if (!joined) { faces |= 1 << index; return masks[index] = 0; }
 			// Face-local right and bottom in vanilla's UV orientation.
 			int rx = 0, rz = 0, by = -1, bz = 0;
 			switch (face) {
@@ -166,6 +229,11 @@ public final class GlassCtm {
 			if ((mask & 80) == 80 && same(rx, -by, rz - bz)) mask |= 32;
 			if ((mask & 65) == 65 && same(-rx, -by, -rz - bz)) mask |= 128;
 			faces |= 1 << index;
+			//#if DEV_SCENES
+			//#if MC >= 1.21.11 && MC < 26.1
+			GlassFramesTest.observe(x, y, z, index, mask);
+			//#endif
+			//#endif
 			return masks[index] = mask;
 		}
 	}
@@ -188,6 +256,9 @@ public final class GlassCtm {
 
 	/** Called while models bake, after their atlas is stitched. Selection never allocates. */
 	public static Variants prepare(BakedQuad quad) {
+		// Called from the base constructor: subclass getters may read uninitialized
+		// fields, and damage overlays have not replaced their UVs yet.
+		if (quad.getClass() != BakedQuad.class) return null;
 		if (!available() || sprites.isEmpty()) return null;
 		//#if MC >= 26.1
 		TextureAtlasSprite sprite = quad.materialInfo().sprite();

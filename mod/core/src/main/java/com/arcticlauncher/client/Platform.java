@@ -21,6 +21,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return english;
 	}
 
+	/** The game's language code ("en_us", "tr_tr"), or null when this version can't say. */
+	default String gameLanguage() {
+		return null;
+	}
+
 	File configDir();
 
 	void log(boolean warning, String message);
@@ -44,6 +49,15 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	default boolean windowFocused() {
 		return true;
 	}
+
+	/** Current screen class for freeze diagnostics; called on the client thread. */
+	default String screenClassName() { return "unknown"; }
+
+	/**
+	 * Recording was asked for inside a world that isn't being buffered: start a buffer now that opens
+	 * with the world as it is. False when this version can't (the caller says to rejoin).
+	 */
+	default boolean beginReplayInWorld() { return false; }
 
 	/** Safe place to start deferred replay exports (never while browsing another menu). */
 	default boolean atTitleScreen() { return false; }
@@ -77,6 +91,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 
 	/** The Minecraft name of a key the game reported (a native key code). */
 	String keyName(int nativeKey);
+
+	/** The name of a game key binding ("Jump") that uses this key, or null when none does (or this version can't tell). */
+	default String keyUsedBy(String key) {
+		return null;
+	}
 
 	/** Switch to third person (true) or back to the view before (false). */
 	void setThirdPerson(boolean on);
@@ -169,6 +188,11 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	 */
 	default java.util.UUID worldPlayerId() {
 		return null;
+	}
+
+	/** Everyone in the player list (the server's tab list), by UUID; empty outside a world or when unknown. */
+	default java.util.Collection<java.util.UUID> onlinePlayerIds() {
+		return java.util.Collections.emptyList();
 	}
 
 	/** Run on the game's main thread. */

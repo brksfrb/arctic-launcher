@@ -29,7 +29,7 @@ public final class BadgeStyleButton extends Widget {
 		Draw.outline(g, x, y, x + w, y + h, picked ? 2 : 1, picked ? s.accent : s.border);
 		g.texture("asset:" + badge.texture, x + (w - 26) / 2, y + 5, 26, 26,
 				0, 0, Badge.TEXTURE_SIZE, Badge.TEXTURE_SIZE, Badge.TEXTURE_SIZE, Badge.TEXTURE_SIZE);
-		Draw.centered(g, badge.label, x + w / 2, y + h - 15, picked ? s.accent : s.text, false);
+		Draw.centered(g, com.arcticlauncher.client.Lang.t(badge.label), x + w / 2, y + h - 15, picked ? s.accent : s.text, false);
 	}
 
 	@Override

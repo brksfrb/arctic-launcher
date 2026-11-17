@@ -1,3 +1,4 @@
+// i18n-ignore-file: Bedrock stays in English for now.
 //! Background jobs for the Bedrock tab: finding the game and its data,
 //! the version list, installing a version, worlds, packs and servers.
 

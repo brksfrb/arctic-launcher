@@ -12,7 +12,7 @@ use crate::share_tasks::Imported;
 use crate::tasks::ProgressSnapshot;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf, tn};
 const WIDTH: f32 = 500.0;
 const MAX_LISTED_MODS: usize = 8;
 /// Tallest the paste box and the list of a profile's parts get before they scroll.
@@ -33,10 +33,10 @@ pub enum ShareKind {
 
 impl ShareKind {
     const FOR_INSTANCE: [(ShareKind, &'static str); 4] = [
-        (ShareKind::Instance, "Mods & version"),
-        (ShareKind::Hud, "HUD layout"),
-        (ShareKind::Crosshair, "Crosshair"),
-        (ShareKind::Client, "All client settings"),
+        (ShareKind::Instance, "social.share_kind.instance"),
+        (ShareKind::Hud, "social.share_kind.hud"),
+        (ShareKind::Crosshair, "social.share_kind.crosshair"),
+        (ShareKind::Client, "social.share_kind.client"),
     ];
 
     fn part(self) -> Option<Part> {
@@ -209,7 +209,7 @@ impl ArcticApp {
             state.looking_up = false;
             state.built = built;
             if result.is_err() {
-                state.note = Some("Couldn't reach Modrinth to look the other mods up.".into());
+                state.note = Some(t!("social.couldnt_reach_modrinth_to_look_the_other").into());
             }
         }
     }
@@ -234,7 +234,7 @@ impl ArcticApp {
                 .and_then(|d| {
                     if d.is_empty() {
                         Err(arctic_core::Error::Other(
-                            "No default game settings yet.".into(),
+                            t!("social.no_default_game_settings_yet").into(),
                         ))
                     } else {
                         Ok((Bundle::Options(d), Vec::new()))
@@ -248,7 +248,7 @@ impl ArcticApp {
                 InstancePack::export(&self.dirs, &i, play, false).and_then(|e| {
                     if e.pack.game_version.is_none() {
                         return Err(arctic_core::Error::Other(
-                            "Pick a version on the Play tab first.".into(),
+                            t!("social.pick_a_version_on_the_play_tab_first").into(),
                         ));
                     }
                     Ok((Bundle::Instance(e.pack), e.left_out))
@@ -258,7 +258,9 @@ impl ArcticApp {
                 ClientPart::read(&i.game_dir(&self.dirs), k.part().unwrap_or(Part::All))
                     .map(|c| (Bundle::Client(c), Vec::new()))
             }
-            (_, None) => Err(arctic_core::Error::Other("That instance is gone.".into())),
+            (_, None) => Err(arctic_core::Error::Other(
+                t!("social.that_instance_is_gone").into(),
+            )),
         };
         result.map_err(|e| e.to_string())
     }
@@ -280,16 +282,16 @@ impl ArcticApp {
             .show(ctx, |ui| {
                 ui.set_width(WIDTH);
                 let title = if state.instance.is_some() {
-                    "Share"
+                    t!("social.share")
                 } else {
-                    "Share your profile"
+                    t!("social.share_your_profile")
                 };
                 ui.label(RichText::new(title).size(22.0).strong().color(p.text));
                 if state.instance.is_some() {
                     ui.add_space(6.0);
                     ui.horizontal_wrapped(|ui| {
                         for (kind, label) in ShareKind::FOR_INSTANCE {
-                            if ui.selectable_label(state.kind == kind, label).clicked()
+                            if ui.selectable_label(state.kind == kind, t!(label)).clicked()
                                 && state.kind != kind
                             {
                                 rebuild = Some(kind);
@@ -298,10 +300,8 @@ impl ArcticApp {
                     });
                 } else {
                     ui.label(
-                        RichText::new(
-                            "Settings, instances (as mod lists) and client settings. Never accounts or passwords.",
-                        )
-                        .color(p.muted),
+                        RichText::new(t!("social.settings_instances_as_mod_lists_and_client"))
+                            .color(p.muted),
                     );
                 }
                 ui.add_space(10.0);
@@ -315,9 +315,9 @@ impl ArcticApp {
                             ui.horizontal(|ui| {
                                 ui.spinner();
                                 ui.label(
-                                    RichText::new(format!(
-                                        "Looking up {} mod files on Modrinth…",
-                                        left_out.len()
+                                    RichText::new(tf!(
+                                        "social.looking_up_mod_files_on_modrinth",
+                                        count = left_out.len()
                                     ))
                                     .color(p.muted),
                                 );
@@ -326,7 +326,7 @@ impl ArcticApp {
                             let notes: Vec<String> = left_out
                                 .iter()
                                 .map(|f| {
-                                    format!("{f} isn't on Modrinth, so it's left out; send it separately.")
+                                    tf!("social.isnt_on_modrinth_so_its_left_out_send_it", f = f)
                                 })
                                 .collect();
                             warnings(ui, p, &notes);
@@ -338,12 +338,12 @@ impl ArcticApp {
                 ui.add_space(12.0);
                 crate::widgets::row(ui, |ui| {
                     ui.label(
-                        RichText::new("Codes are kept on the Arctic server; text and files work anywhere.")
+                        RichText::new(t!("social.codes_are_kept_on_the_arctic_server_text_and"))
                             .small()
                             .color(p.muted),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if widgets::button(ui, p, None, "Done", false).clicked() {
+                        if widgets::button(ui, p, None, t!("social.done"), false).clicked() {
                             close = true;
                         }
                     });
@@ -371,24 +371,25 @@ impl ArcticApp {
             let can_code = account.is_some() && !making;
             let code = ui
                 .add_enabled_ui(can_code, |ui| {
-                    widgets::button(ui, p, Some(Icon::Share), "Get a code", true)
+                    widgets::button(ui, p, Some(Icon::Share), t!("social.get_a_code"), true)
                 })
                 .inner
-                .on_disabled_hover_text(
-                    "Add an account first; codes are made by signed-in players.",
-                );
+                .on_disabled_hover_text(t!("social.add_an_account_first_codes_are_made_by"));
             if code.clicked()
                 && let Some(account) = account
             {
                 state.code = Some(CodeState::Making);
                 self.tasks.share_code(bundle.clone(), account);
             }
-            if widgets::button(ui, p, Some(Icon::Copy), "Copy as text", false).clicked() {
+            if widgets::button(ui, p, Some(Icon::Copy), t!("social.copy_as_text"), false).clicked()
+            {
                 ui.ctx().copy_text(bundle.to_text());
-                state.note = Some("Copied. Paste it anywhere; it works without the server.".into());
-                self.toasts.push(Kind::Success, "Copied as text", "");
+                state.note = Some(t!("social.copied_paste_it_anywhere_it_works_without").into());
+                self.toasts
+                    .push(Kind::Success, t!("social.copied_as_text"), "");
             }
-            if widgets::button(ui, p, Some(Icon::Document), "Save file…", false).clicked() {
+            if widgets::button(ui, p, Some(Icon::Document), t!("social.save_file"), false).clicked()
+            {
                 let name = format!("arctic-{}.json", bundle.kind());
                 self.tasks.share_save(bundle.clone(), name);
             }
@@ -398,7 +399,7 @@ impl ArcticApp {
             Some(CodeState::Making) => {
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    ui.label(RichText::new("Making a code…").color(p.muted));
+                    ui.label(RichText::new(t!("social.making_a_code")).color(p.muted));
                 });
             }
             Some(CodeState::Ready(code)) => {
@@ -411,13 +412,13 @@ impl ArcticApp {
                             .monospace()
                             .color(p.accent),
                     );
-                    if widgets::icon_button(ui, p, Icon::Copy, "Copy code").clicked() {
+                    if widgets::icon_button(ui, p, Icon::Copy, t!("social.copy_code")).clicked() {
                         ui.ctx().copy_text(code.clone());
                         copied = true;
                     }
                 });
                 ui.label(
-                    RichText::new("Copied. Friends paste it into Import (Instances tab) or run `arctic import`.")
+                    RichText::new(t!("social.copied_friends_paste_it_into_import"))
                         .small()
                         .color(p.muted),
                 );
@@ -431,7 +432,8 @@ impl ArcticApp {
             ui.label(RichText::new(note).small().color(p.muted));
         }
         if copied {
-            self.toasts.push(Kind::Success, "Code copied", "");
+            self.toasts
+                .push(Kind::Success, t!("social.code_copied"), "");
         }
     }
 
@@ -445,14 +447,19 @@ impl ArcticApp {
             .frame(super::instances::dialog_frame(p))
             .show(ctx, |ui| {
                 ui.set_width(WIDTH);
-                ui.label(RichText::new("Import").size(22.0).strong().color(p.text));
+                ui.label(
+                    RichText::new(t!("social.import"))
+                        .size(22.0)
+                        .strong()
+                        .color(p.text),
+                );
                 ui.add_space(8.0);
                 close = match &state.stage {
                     ImportStage::Edit(_) => self.import_edit(ui, &mut state),
                     ImportStage::Loading => {
                         ui.horizontal(|ui| {
                             ui.spinner();
-                            ui.label(RichText::new("Looking it up…").color(p.muted));
+                            ui.label(RichText::new(t!("social.looking_it_up")).color(p.muted));
                         });
                         false
                     }
@@ -473,8 +480,7 @@ impl ArcticApp {
     fn import_edit(&mut self, ui: &mut egui::Ui, state: &mut ImportState) -> bool {
         let p = self.palette();
         ui.label(
-            RichText::new("Paste a code (like abcd-efgh) or share text, or open a .json file.")
-                .color(p.muted),
+            RichText::new(t!("social.paste_a_code_like_abcd_efgh_or_share_text_or")).color(p.muted),
         );
         ui.add_space(6.0);
         // A long pasted text scrolls inside the box instead of growing past the window.
@@ -494,19 +500,21 @@ impl ArcticApp {
         ui.add_space(10.0);
         let mut close = false;
         crate::widgets::row(ui, |ui| {
-            if widgets::button(ui, p, Some(Icon::Folder), "Open file…", false).clicked() {
+            if widgets::button(ui, p, Some(Icon::Folder), t!("social.open_file"), false).clicked() {
                 state.stage = ImportStage::Loading;
                 self.tasks.share_open_file();
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let ready = !state.input.trim().is_empty();
                 let go = ui
-                    .add_enabled_ui(ready, |ui| widgets::button(ui, p, None, "Continue", true))
+                    .add_enabled_ui(ready, |ui| {
+                        widgets::button(ui, p, None, t!("social.continue"), true)
+                    })
                     .inner;
                 if go.clicked() {
                     state.stage = self.read_input(&state.input);
                 }
-                if widgets::button(ui, p, None, "Cancel", false).clicked() {
+                if widgets::button(ui, p, None, t!("social.cancel"), false).clicked() {
                     close = true;
                 }
             });
@@ -584,7 +592,7 @@ impl ArcticApp {
                     ui.label(RichText::new(line).color(p.muted));
                 }
                 ui.label(
-                    RichText::new("It becomes a new instance; the exact same mod versions are downloaded from Modrinth.")
+                    RichText::new(t!("social.it_becomes_a_new_instance_the_exact_same_mod"))
                         .small()
                         .color(p.muted),
                 );
@@ -595,9 +603,9 @@ impl ArcticApp {
                 let current = all
                     .iter()
                     .find(|i| i.id == state.target)
-                    .map_or_else(|| "Vanilla".to_owned(), |i| i.name.clone());
+                    .map_or_else(|| t!("social.vanilla").to_owned(), |i| i.name.clone());
                 ui.horizontal(|ui| {
-                    ui.label("Apply to");
+                    ui.label(t!("social.apply_to"));
                     widgets::modal_combo("share_target")
                         .selected_text(current)
                         .show_ui(ui, |ui| {
@@ -610,13 +618,12 @@ impl ArcticApp {
                     .instance_by_id(&state.target)
                     .is_some_and(|i| sharing::client::in_use(&i.game_dir(&self.dirs)));
                 if in_use || self.runs.instance_active(&state.target) {
-                    blocked =
-                        Some("Close that game first; it saves its own settings when it quits.");
+                    blocked = Some(t!("social.close_that_game_first_it_saves_its_own"));
                 }
             }
             Bundle::Options(_) => {
                 ui.label(
-                    RichText::new("These become your default game settings: every new instance starts with them. Your instances keep theirs.")
+                    RichText::new(t!("social.these_become_your_default_game_settings"))
                         .small()
                         .color(p.muted),
                 );
@@ -626,7 +633,7 @@ impl ArcticApp {
                 if pick.instances.len() != pack.instances.len() {
                     *pick = Pick::all(pack);
                 }
-                ui.label(RichText::new("Pick what to bring in").color(p.muted));
+                ui.label(RichText::new(t!("social.pick_what_to_bring_in")).color(p.muted));
                 egui::ScrollArea::vertical()
                     .max_height(PARTS_HEIGHT)
                     .auto_shrink([true, true])
@@ -634,37 +641,41 @@ impl ArcticApp {
                         if !pack.settings.is_empty() {
                             ui.checkbox(
                                 &mut pick.settings,
-                                format!("Launcher settings ({})", pack.settings.len()),
+                                tf!("social.launcher_settings", count = pack.settings.len()),
                             );
                         }
                         if pack.vanilla.is_some() {
-                            ui.checkbox(&mut pick.vanilla, "Vanilla instance's setup");
+                            ui.checkbox(&mut pick.vanilla, t!("social.vanilla_instances_setup"));
                         }
                         if !pack.options.is_empty() {
                             ui.checkbox(
                                 &mut pick.options,
-                                format!("Default game settings ({})", pack.options.len()),
+                                tf!("social.default_game_settings", count = pack.options.len()),
                             );
                         }
                         for (on, instance) in pick.instances.iter_mut().zip(&pack.instances) {
                             ui.checkbox(
                                 on,
-                                format!("{} ({} mods)", instance.name, instance.mods.len()),
+                                tf!(
+                                    "social.mods",
+                                    name = instance.name,
+                                    count = instance.mods.len()
+                                ),
                             );
                         }
                     });
                 ui.label(
-                    RichText::new("Ticked launcher settings replace yours. Ticked instances are added; yours with the same names stay as they are.")
+                    RichText::new(t!("social.ticked_launcher_settings_replace_yours"))
                         .small()
                         .color(p.muted),
                 );
                 if !pick.any() {
-                    blocked = Some("Tick at least one thing to import.");
+                    blocked = Some(t!("social.tick_at_least_one_thing_to_import"));
                 }
                 if self.runs.any_game()
                     || sharing::client::in_use(&self.instance.game_dir(&self.dirs))
                 {
-                    blocked = Some("Close your games first.");
+                    blocked = Some(t!("social.close_your_games_first"));
                 }
             }
         }
@@ -674,13 +685,13 @@ impl ArcticApp {
         ui.add_space(12.0);
         let mut back = false;
         crate::widgets::row(ui, |ui| {
-            if widgets::button(ui, p, None, "Back", false).clicked() {
+            if widgets::button(ui, p, None, t!("social.back"), false).clicked() {
                 back = true;
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let go = ui
                     .add_enabled_ui(blocked.is_none(), |ui| {
-                        widgets::button(ui, p, Some(Icon::Import), "Import", true)
+                        widgets::button(ui, p, Some(Icon::Import), t!("social.import"), true)
                     })
                     .inner;
                 if go.clicked() {
@@ -718,7 +729,7 @@ impl ArcticApp {
                     ui.label(RichText::new(&s.stage).color(p.muted));
                 }
                 None => {
-                    ui.label(RichText::new("Importing…").color(p.muted));
+                    ui.label(RichText::new(t!("social.importing")).color(p.muted));
                 }
             }
         });
@@ -741,11 +752,13 @@ impl ArcticApp {
         match result {
             Ok(Some(path)) => {
                 if let Some(state) = &mut self.sharing.export {
-                    state.note = Some(format!("Saved to {}", path.display()));
+                    state.note = Some(tf!("social.saved_to", path = path.display()));
                 }
             }
             Ok(None) => {}
-            Err(e) => self.toasts.push(Kind::Error, "Could not save", e),
+            Err(e) => self
+                .toasts
+                .push(Kind::Error, t!("social.could_not_save"), e),
         }
     }
 
@@ -779,7 +792,7 @@ impl ArcticApp {
                         text.push_str(&format!("\n…and {} more", done.warnings.len() - shown));
                     }
                     self.toasts
-                        .push(Kind::Info, "Some things were left out", text);
+                        .push(Kind::Info, t!("social.some_things_were_left_out"), text);
                 }
                 if let Some(id) = done.open {
                     self.set_tab(Tab::Instances, now);
@@ -801,7 +814,7 @@ fn warnings(ui: &mut egui::Ui, p: &crate::theme::Palette, list: &[String]) {
     }
     if list.len() > MAX_LISTED_WARNINGS {
         ui.label(
-            RichText::new(format!("…and {} more", list.len() - MAX_LISTED_WARNINGS))
+            RichText::new(tn!("social.and_more", list.len() - MAX_LISTED_WARNINGS))
                 .small()
                 .color(p.error),
         );

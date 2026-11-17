@@ -27,8 +27,9 @@ const WINDOW_MARKERS: [&str; 3] = ["Backend library:", "LWJGL Version:", "Sound 
 pub enum GameEvent {
     /// The game window is (about to be) visible.
     WindowReady,
-    /// The process ended. `code` is `None` if it was killed by a signal.
-    Exited { code: Option<i32> },
+    /// The process ended. `killed` means the launcher requested a force close;
+    /// its nonzero exit code must not be treated as a crash.
+    Exited { code: Option<i32>, killed: bool },
     /// Parsed output lines (one raw line may expand to several).
     Output(Vec<LogLine>),
 }
@@ -48,6 +49,7 @@ impl GameHandle {
     /// End the game now, without waiting for the watcher (the launcher is
     /// quitting and its threads go with it).
     pub fn terminate(&self) {
+        self.kill();
         terminate(self.pid);
     }
 
@@ -80,6 +82,7 @@ pub fn spawn(
     plan: &LaunchPlan,
     on_event: impl Fn(GameEvent) + Send + Sync + 'static,
 ) -> Result<GameHandle> {
+    let spawn_started = std::time::Instant::now();
     log::info!("launching: {}", plan.redacted_command());
     rotate_game_log(&plan.log_file);
     let log = Arc::new(Mutex::new(File::create(&plan.log_file).at(&plan.log_file)?));
@@ -97,6 +100,8 @@ pub fn spawn(
     };
     let mut exe = game_exe(plan);
     let started = std::time::Instant::now();
+    #[cfg(windows)]
+    let launched_at = std::time::SystemTime::now();
     let mut child = match start(&exe) {
         Ok(child) => child,
         // The branded copy would not start: run the runtime's own Java.
@@ -126,6 +131,11 @@ pub fn spawn(
             return Err(crate::Error::io(&plan.java, e));
         }
     };
+    log::info!(
+        "[startup] Java process started in {} ms (pid {})",
+        spawn_started.elapsed().as_millis(),
+        child.id()
+    );
     let launch_context = format!(
         "[Arctic diagnostics] runtime: agent={}; executable={}; high_performance_gpu={}",
         plan.args
@@ -176,8 +186,10 @@ pub fn spawn(
     let game_dir = plan.game_dir.clone();
     let log_path = plan.log_file.clone();
     std::thread::spawn(move || {
+        let mut killed = false;
         let code = loop {
             if kill.swap(false, Ordering::Relaxed) {
+                killed = true;
                 let message = "[Arctic diagnostics] launcher force-close requested";
                 writeln!(log.lock().unwrap(), "{message}").ok();
                 on_event(GameEvent::Output(vec![LogLine {
@@ -195,7 +207,10 @@ pub fn spawn(
                 }
             }
         };
+        #[cfg(windows)]
+        let exited_at = std::time::SystemTime::now();
         drain_readers([out_reader, err_reader].into_iter().flatten().collect());
+        killed |= kill.load(Ordering::Relaxed);
         if let Some(c) = code {
             let summary = format!(
                 "[Arctic diagnostics] process ended after {} ms; exit code {}",
@@ -208,7 +223,33 @@ pub fn spawn(
                 text: summary,
             }]));
         }
-        if code.is_some_and(|c| c != 0) && started.elapsed() < Duration::from_secs(5) {
+        #[cfg(windows)]
+        if !killed && code.is_some_and(crate::native_crash::is_native) {
+            let fresh = |dir: &std::path::Path, prefix: &str| {
+                std::fs::read_dir(dir)
+                    .ok()
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .any(|e| {
+                        e.file_name().to_string_lossy().starts_with(prefix)
+                            && e.metadata()
+                                .and_then(|m| m.modified())
+                                .is_ok_and(|t| t >= launched_at)
+                    })
+            };
+            if !fresh(&game_dir, "hs_err_pid") && !fresh(&game_dir.join("crash-reports"), "crash-")
+            {
+                let evidence =
+                    crate::native_crash::collect(child.id(), exited_at, &game_dir.join("mods"));
+                writeln!(log.lock().unwrap(), "{evidence}").ok();
+                on_event(GameEvent::Output(vec![LogLine {
+                    level: super::logparse::Level::Info,
+                    text: evidence,
+                }]));
+            }
+        }
+        if !killed && code.is_some_and(|c| c != 0) && started.elapsed() < Duration::from_secs(5) {
             let probe = runtime_probe(&exe);
             writeln!(log.lock().unwrap(), "{probe}").ok();
             on_event(GameEvent::Output(vec![LogLine {
@@ -216,7 +257,7 @@ pub fn spawn(
                 text: probe,
             }]));
         }
-        if code.is_some_and(|c| c != 0) {
+        if !killed && code.is_some_and(|c| c != 0) {
             super::startup_cache::drop_pack(&game_dir);
         }
         if let Some(file) = argfile {
@@ -249,7 +290,7 @@ pub fn spawn(
                 text: evidence,
             }]));
         }
-        on_event(GameEvent::Exited { code });
+        on_event(GameEvent::Exited { code, killed });
     });
     Ok(handle)
 }
@@ -610,13 +651,16 @@ fn is_link(path: &Path) -> bool {
     let Ok(meta) = std::fs::symlink_metadata(path) else {
         return false;
     };
-    if meta.file_type().is_symlink() {
-        return true;
-    }
-    #[cfg(windows)]
-    if junction::exists(path).unwrap_or(false) {
-        return true;
-    }
+    meta.file_type().is_symlink() || is_junction(path)
+}
+
+#[cfg(windows)]
+fn is_junction(path: &Path) -> bool {
+    junction::exists(path).unwrap_or(false)
+}
+
+#[cfg(all(not(windows), test))]
+fn is_junction(_path: &Path) -> bool {
     false
 }
 
@@ -765,6 +809,78 @@ fn is_window_marker(line: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    fn test_process(
+        script: &str,
+    ) -> (
+        tempfile::TempDir,
+        GameHandle,
+        std::sync::mpsc::Receiver<GameEvent>,
+    ) {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("test-game");
+        std::fs::write(&exe, format!("#!/bin/sh\n{script}\n")).unwrap();
+        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let plan = LaunchPlan {
+            java: exe,
+            args: Vec::new(),
+            game_dir: dir.path().into(),
+            log_file: dir.path().join("game.log"),
+            high_performance_gpu: false,
+            maximize_window: false,
+            secrets: Vec::new(),
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        let game = spawn(&plan, move |event| {
+            let _ = tx.send(event);
+        })
+        .unwrap();
+        (dir, game, rx)
+    }
+
+    #[cfg(unix)]
+    fn process_exit(rx: &std::sync::mpsc::Receiver<GameEvent>) -> (Option<i32>, bool) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            if let GameEvent::Exited { code, killed } = rx
+                .recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
+                .expect("the watcher must report an exit")
+            {
+                return (code, killed);
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn force_close_is_preserved_by_the_process_watcher() {
+        let (dir, game, rx) = test_process("exec sleep 30");
+        game.kill();
+        let (code, killed) = process_exit(&rx);
+        assert!(killed);
+        assert_eq!(code, Some(137));
+        let log = std::fs::read_to_string(dir.path().join("game.log")).unwrap();
+        assert!(log.contains("launcher force-close requested"));
+        assert!(!log.contains("same-runtime java -version"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn launcher_shutdown_is_also_a_requested_stop() {
+        let (_dir, game, rx) = test_process("exec sleep 30");
+        game.terminate();
+        assert!(process_exit(&rx).1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn nonzero_exit_is_not_marked_as_a_requested_stop() {
+        let (_dir, _game, rx) = test_process("exit 1");
+        assert_eq!(process_exit(&rx), (Some(1), false));
+    }
+
     #[cfg(unix)]
     #[test]
     fn inherited_pipe_does_not_block_exit_drain() {

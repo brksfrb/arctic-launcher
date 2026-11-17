@@ -24,8 +24,28 @@ public final class ChatStacker {
 		repeats = 1;
 	}
 
+	/**
+	 * Nothing to read: empty, whitespace only, or only colour/format codes ("§r", "&lt;§f &gt;"). Servers clear
+	 * the chat with dozens of these; they must stay separate lines, with no "(x53)" and no timestamp.
+	 */
+	public static boolean isBlank(String text) {
+		if (text == null) {
+			return true;
+		}
+		for (int i = 0; i < text.length(); i++) {
+			char ch = text.charAt(i);
+			if (ch == '\u00a7') {
+				i++;
+			} else if (!Character.isWhitespace(ch) && !Character.isSpaceChar(ch) && ch != '\u200b' && ch != '\u200c'
+					&& ch != '\u200d' && ch != '\ufeff' && ch != '\u2060') {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	private static boolean stackable(String text, ClientConfig c) {
-		if (c.chatStackIgnoreBlank && text.trim().isEmpty()) {
+		if (isBlank(text)) {
 			return false;
 		}
 		if (c.chatStackIgnoreBreak && isBreak(text)) {

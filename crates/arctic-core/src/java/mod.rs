@@ -289,6 +289,7 @@ fn collect_files(
                     sha1: Some(downloads.raw.sha1),
                     size: Some(downloads.raw.size),
                     lzma,
+                    md5: None,
                 });
             }
             RuntimeFile::Link { target } => link(&dest, &target)?,

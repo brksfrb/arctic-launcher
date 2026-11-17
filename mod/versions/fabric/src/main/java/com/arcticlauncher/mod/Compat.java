@@ -318,6 +318,21 @@ public final class Compat {
 		//#endif
 	}
 
+	/** The name of the game key binding on this key ("Jump"), or null. Settings screens only, so it may allocate. */
+	public static String keyUsedBy(String name) {
+		//#if MC >= 1.16
+		if (name == null || name.endsWith(".unknown")) {
+			return null;
+		}
+		for (net.minecraft.client.KeyMapping k : mc().options.keyMappings) {
+			if (name.equals(k.saveString())) {
+				return net.minecraft.client.resources.language.I18n.get(k.getName());
+			}
+		}
+		//#endif
+		return null;
+	}
+
 	public static String keyLabel(String name) {
 		//#if MC >= 1.16
 		return InputConstants.getKey(name).getDisplayName().getString();
@@ -566,9 +581,18 @@ public final class Compat {
 	public static net.minecraft.network.chat.Style badgeStyle(int style, boolean tab) {
 		net.minecraft.resources.Identifier font = id(ArcticMod.ID, com.arcticlauncher.client.feature.Badge.definition(style).font + (tab ? "_tab" : ""));
 		//#if MC >= 1.21.9
-		return net.minecraft.network.chat.Style.EMPTY.withFont(new net.minecraft.network.chat.FontDescription.Resource(font));
+		net.minecraft.network.chat.Style badge = net.minecraft.network.chat.Style.EMPTY.withFont(new net.minecraft.network.chat.FontDescription.Resource(font));
 		//#else
-		return net.minecraft.network.chat.Style.EMPTY.withFont(font);
+		net.minecraft.network.chat.Style badge = net.minecraft.network.chat.Style.EMPTY.withFont(font);
+		//#endif
+		// The player list draws names with a shadow; the picture beside them has none (names keep theirs).
+		// Before 1.21.4 a style can't say so, and the picture keeps the text's shadow.
+		//#if MC >= 1.21.11
+		return tab ? badge.withoutShadow() : badge;
+		//#elif MC >= 1.21.4
+		return tab ? badge.withShadowColor(0) : badge;
+		//#else
+		return badge;
 		//#endif
 	}
 	//#endif

@@ -2,6 +2,7 @@ package com.arcticlauncher.mod;
 
 import net.minecraft.client.Minecraft;
 
+import com.arcticlauncher.client.Lang;
 /**
  * A screen is open but the pointer is hidden: it is given back. Two ways it gets lost: the game still
  * has the mouse grabbed (seen after the loading screen in fullscreen), or the window itself has the
@@ -31,7 +32,7 @@ public final class CursorGuard {
 		if (logged < 5) {
 			logged++;
 			com.arcticlauncher.client.ArcticClient.platform().log(false,
-				"Arctic: gave the mouse pointer back to an open screen (game grabbed: " + grabbed + ", window cursor hidden: " + (mode != 0) + ")");
+				"Arctic: gave the mouse pointer back to an open screen (game grabbed: " + grabbed + ", window cursor hidden: " + (mode != 0) + ")"); // i18n-ignore
 		}
 	}
 

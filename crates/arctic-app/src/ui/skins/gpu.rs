@@ -14,7 +14,6 @@ use eframe::egui_glow;
 use eframe::glow::{self, HasContext as _};
 
 use super::model::{Face, V3};
-
 /// View-space depth that maps to the near and far planes (the model is about 40 across).
 const DEPTH_RANGE: f32 = 200.0;
 /// Floats per vertex: clip x, y, z, then u, v, then r, g, b, a.
@@ -158,7 +157,7 @@ impl Renderer {
             }
             let attribute = |name: &str| {
                 gl.get_attrib_location(program, name)
-                    .ok_or_else(|| format!("no {name} in the preview shader"))
+                    .ok_or_else(|| format!("no {name} in the preview shader")) // i18n-ignore
             };
             let attributes = [
                 (attribute("a_pos")?, 3, 0),
@@ -168,7 +167,7 @@ impl Renderer {
             Ok(Self {
                 pass: gl
                     .get_uniform_location(program, "u_pass")
-                    .ok_or("no u_pass in the preview shader")?,
+                    .ok_or("no u_pass in the preview shader")?, // i18n-ignore
                 buffer: gl.create_buffer()?,
                 vao: gl.create_vertex_array().ok(),
                 program,

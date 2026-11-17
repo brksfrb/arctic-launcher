@@ -42,7 +42,7 @@ public final class ReplayTest {
 
 	static boolean requested() {
 		String mode = System.getProperty("arctic.selftest");
-		return "replay".equals(mode) || "replayopen".equals(mode) || "replayperf".equals(mode) || "replayperfopen".equals(mode);
+		return "replay".equals(mode) || "replayopen".equals(mode) || "replayperf".equals(mode) || "replayperfopen".equals(mode) || "replaymid".equals(mode);
 	}
 
 	static void start() {
@@ -71,7 +71,43 @@ public final class ReplayTest {
 			}));
 			return;
 		}
+		if ("replaymid".equals(System.getProperty("arctic.selftest"))) {
+			// Join a world (Replay off with -Darctic.midoff=true), then start/stop a manual recording as the key does.
+			if (Boolean.getBoolean("arctic.midoff")) com.arcticlauncher.client.ArcticClient.config().replayEnabled = false;
+			TIMER.schedule(() -> run(() -> WorldTest.createTestWorld(() -> after(12, ReplayTest::mid))), 10, TimeUnit.SECONDS);
+			return;
+		}
 		TIMER.schedule(() -> run(() -> WorldTest.createTestWorld(ReplayTest::record)), 10, TimeUnit.SECONDS);
+	}
+
+	private static void mid() {
+		if (Boolean.getBoolean("arctic.midoff")) {
+			com.arcticlauncher.client.ArcticClient.config().replayEnabled = true;
+			log("mid: replay switched on inside the world");
+		}
+		log("mid: take=" + (Replays.recorder().current() != null));
+		shot("mid before recording");
+		Replays.toggleRecording();
+		log("mid: recording=" + Replays.recording());
+		if (!Replays.recording()) { fail("recording did not start in an existing world"); return; }
+		command("time set noon");
+		after(8, () -> {
+			Replays.toggleRecording();
+			when("mid recording saved", () -> Replays.recorder().pendingSaves() == 0 && Replays.folder().listFiles((d, n) -> n.endsWith(".mcpr")) != null
+					&& Replays.folder().listFiles((d, n) -> n.endsWith(".mcpr")).length > 0, () -> {
+				final File f = Replays.folder().listFiles((d, n) -> n.endsWith(".mcpr"))[0];
+				log("mid: saved " + f.getName() + " " + f.length() / 1024 + " KB");
+				com.arcticlauncher.client.ArcticClient.platform().leaveWorld();
+				when("left the world", () -> Minecraft.getInstance().level == null, () -> after(3, () -> {
+					Replays.watch(f);
+					when("mid replay opened", () -> Replays.viewer() != null && (Replays.viewer().ready() || Replays.viewer().status() != null), () -> {
+						ReplayViewer v = Replays.viewer();
+						log("mid: opened ready=" + v.ready() + " status=" + v.status() + " duration=" + v.duration());
+						after(4, () -> { shot("mid replay playing"); log(v.ready() && v.duration() > 3000 ? "PASSED" : "FAILED mid replay unusable"); Minecraft.getInstance().stop(); });
+					});
+				}));
+			});
+		});
 	}
 
 	private static void run(Runnable r) {

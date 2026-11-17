@@ -7,6 +7,7 @@ import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Skin;
 import com.arcticlauncher.client.style.Style;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Shows a key binding; click it, then press a key or a mouse button to
  * change it (Escape clears it, like Minecraft's controls). The page
@@ -37,7 +38,7 @@ public class KeyButton extends Widget {
 	protected void draw(Gfx g, Style s, int mx, int my, float dt) {
 		if (listening) {
 			Skin.primary(g, s, x, y, w, h, true, 1f);
-			Draw.centered(g, Draw.fitCentered(g, "Press a key (Esc: none)", w - 6, x + w / 2, y + (h - 8) / 2), x + w / 2, y + (h - 8) / 2,
+			Draw.centered(g, Draw.fitCentered(g, Lang.t("mods.press_a_key_esc_none"), w - 6, x + w / 2, y + (h - 8) / 2), x + w / 2, y + (h - 8) / 2,
 					s.onAccent, false);
 			return;
 		}

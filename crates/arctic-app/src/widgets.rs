@@ -10,8 +10,8 @@ use arctic_core::instances::InstanceIcon;
 
 use crate::art::flakes;
 use crate::art::{hash01, lerp_color, snowflake};
+use crate::t;
 use crate::theme::Palette;
-
 const RUNNING_FRAME: std::time::Duration = std::time::Duration::from_millis(50);
 
 /// What the big Play button shows.
@@ -73,9 +73,9 @@ pub fn play_button(ui: &mut Ui, p: &Palette, state: PlayState, size: Vec2) -> Re
     painter.rect_filled(rect, radius, base);
 
     let (text_color, label) = match &state {
-        PlayState::Ready => (p.on_accent, "PLAY"),
-        PlayState::Blocked => (p.muted, "PLAY"),
-        PlayState::Running => (p.on_accent, "PLAYING"),
+        PlayState::Ready => (p.on_accent, t!("nav.play_2")),
+        PlayState::Blocked => (p.muted, t!("nav.play_2")),
+        PlayState::Running => (p.on_accent, t!("nav.playing")),
         PlayState::Progress { label, .. } => (p.text, *label),
     };
     if let PlayState::Progress { fraction, .. } = state {
@@ -404,7 +404,7 @@ pub fn instance_emblem(ui: &mut Ui, p: &Palette, icon: &InstanceIcon, size: f32)
     let t = ui.input(|i| i.time) as f32;
     paint_emblem_with_hover(ui.painter(), p, icon, rect, t, hover);
     response
-        .on_hover_text("Change icon")
+        .on_hover_text(t!("nav.change_icon"))
         .on_hover_cursor(CursorIcon::PointingHand)
 }
 
@@ -421,7 +421,7 @@ pub fn emblem_at(
     let t = ui.input(|i| i.time) as f32;
     paint_emblem_with_hover(ui.painter(), p, icon, rect, t, hover);
     response
-        .on_hover_text("Change icon")
+        .on_hover_text(t!("nav.change_icon"))
         .on_hover_cursor(CursorIcon::PointingHand)
 }
 

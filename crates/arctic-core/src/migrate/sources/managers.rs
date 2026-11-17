@@ -1,5 +1,5 @@
 //! Instance managers that keep one folder per instance: Prism / PolyMC /
-//! MultiMC, CurseForge, ATLauncher and GDLauncher (new and old).
+//! MultiMC, ATLauncher and GDLauncher (new and old).
 
 use std::path::{Path, PathBuf};
 
@@ -84,46 +84,6 @@ fn prism(dir: &Path, launcher: Launcher) -> Option<Found> {
         entry
             .notes
             .push("LiteLoader and OptiFine components aren't supported and are left out".into());
-    }
-    Some(entry)
-}
-
-pub fn curseforge(scan: &mut Scan) {
-    let roots: Vec<PathBuf> = [dirs::home_dir(), dirs::document_dir()]
-        .into_iter()
-        .flatten()
-        .map(|d| d.join("curseforge").join("minecraft").join("Instances"))
-        .filter(|d| d.is_dir())
-        .collect();
-    for root in roots {
-        add_all(scan, Launcher::CurseForge, &root, curseforge_instance);
-    }
-}
-
-fn curseforge_instance(dir: &Path) -> Option<Found> {
-    let json = read_json(&dir.join("minecraftinstance.json"))?;
-    let text = |k: &str| json.get(k).and_then(Value::as_str).unwrap_or("").to_owned();
-    let game = text("gameVersion");
-    if game.is_empty() {
-        return None;
-    }
-    let base = json.get("baseModLoader").cloned().unwrap_or(Value::Null);
-    let full = base.get("name").and_then(Value::as_str).unwrap_or("");
-    let found_loader = full
-        .split_once('-')
-        .and_then(|(kind, version)| loader(kind, Some(version), &game));
-    let name = Some(text("name"))
-        .filter(|n| !n.is_empty())
-        .unwrap_or_else(|| folder_name(dir));
-    let mut entry = found(
-        Launcher::CurseForge,
-        &name,
-        &game,
-        found_loader,
-        dir.to_path_buf(),
-    );
-    if json.get("isMemoryOverride").and_then(Value::as_bool) == Some(true) {
-        entry.memory_mb = memory(json.get("allocatedMemory").and_then(Value::as_u64));
     }
     Some(entry)
 }
@@ -257,6 +217,10 @@ fn add_all(
 
 /// A picked folder: an instance of any kind, or a folder holding them.
 pub fn folder(path: &Path, scan: &mut Scan) {
+    if crate::curseforge::is_curseforge_instance(path) {
+        scan.curseforge_blocked = true;
+        return;
+    }
     if let Some(entry) = any_instance(path) {
         scan.instances.push(entry);
         return;
@@ -267,6 +231,10 @@ pub fn folder(path: &Path, scan: &mut Scan) {
         path.join("Instances"),
     ] {
         for sub in subdirs(&dir) {
+            if crate::curseforge::is_curseforge_instance(&sub) {
+                scan.curseforge_blocked = true;
+                continue;
+            }
             if let Some(entry) = any_instance(&sub) {
                 scan.instances.push(entry);
             }
@@ -277,7 +245,6 @@ pub fn folder(path: &Path, scan: &mut Scan) {
 
 fn any_instance(dir: &Path) -> Option<Found> {
     prism(dir, Launcher::MultiMc)
-        .or_else(|| curseforge_instance(dir))
         .or_else(|| atlauncher_instance(dir))
         .or_else(|| gdlauncher_instance(dir))
         .or_else(|| gdlauncher_legacy(dir))

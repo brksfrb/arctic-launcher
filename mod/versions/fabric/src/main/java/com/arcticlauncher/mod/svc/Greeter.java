@@ -10,6 +10,7 @@ import java.util.Set;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.network.Connection;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Says hello to a server that lists a hello channel: Arctic's own ({@code arctic:hello}) and Polarium's
  * ({@code polarium:hello}, on Polarium's behalf), once per connection.
@@ -93,7 +94,7 @@ public final class Greeter {
 						case "equals":
 							return proxy == args[0];
 						default:
-							return "Arctic hello listener";
+							return Lang.t("platform.arctic_hello_listener");
 					}
 				}
 				if (args != null && args.length == 4 && args[3] instanceof List<?>) {

@@ -1,4 +1,4 @@
-//#if MC >= 1.18
+//#if MC >= 1.14
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.mod.startup.Timeline;

@@ -7,27 +7,34 @@ use eframe::egui::{self, CornerRadius, RichText, Sense, vec2};
 use crate::app::ArcticApp;
 use crate::theme;
 use crate::widgets;
-
+use crate::{t, tf, tn};
 /// Rows shown in the servers and worlds lists.
 const TOP: usize = 10;
 
 impl ArcticApp {
     pub(crate) fn stats_tab(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        widgets::page_header(ui, p, "Stats", "Where your time goes. It stays on this PC.");
+        widgets::page_header(
+            ui,
+            p,
+            t!("tasks.stats"),
+            t!("tasks.where_your_time_goes_it_stays_on_this_pc"),
+        );
         let stats = self.playtime.clone();
         let now = arctic_core::auth::now_secs();
 
         if stats.total_secs() == 0 && stats.launcher_secs() == 0 {
             theme::card(p).show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.label(RichText::new("Nothing yet").size(17.0).strong().color(p.text));
                 ui.label(
-                    RichText::new(
-                        "Play for a while and this page fills up: time per instance, per server and \
-                         per singleplayer world, and how long you spent in menus.",
-                    )
-                    .color(p.muted),
+                    RichText::new(t!("tasks.nothing_yet"))
+                        .size(17.0)
+                        .strong()
+                        .color(p.text),
+                );
+                ui.label(
+                    RichText::new(t!("tasks.play_for_a_while_and_this_page_fills_up_time"))
+                        .color(p.muted),
                 );
             });
             return;
@@ -36,19 +43,27 @@ impl ArcticApp {
         // Totals.
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new("Total").size(18.0).strong().color(p.text));
+            ui.label(
+                RichText::new(t!("tasks.total"))
+                    .size(18.0)
+                    .strong()
+                    .color(p.text),
+            );
             ui.add_space(6.0);
             ui.horizontal_wrapped(|ui| {
                 let sessions = stats.sessions();
                 let tiles = [
-                    ("Game open", format_duration(stats.total_secs())),
+                    (t!("tasks.game_open"), format_duration(stats.total_secs())),
                     (
-                        "In a world or server",
+                        t!("tasks.in_a_world_or_server"),
                         format_duration(stats.in_world_secs()),
                     ),
-                    ("In menus", format_duration(stats.menu_secs())),
-                    ("Launcher open", format_duration(stats.launcher_secs())),
-                    ("Sessions", sessions.to_string()),
+                    (t!("tasks.in_menus"), format_duration(stats.menu_secs())),
+                    (
+                        t!("tasks.launcher_open"),
+                        format_duration(stats.launcher_secs()),
+                    ),
+                    (t!("tasks.sessions"), sessions.to_string()),
                 ];
                 for (index, (label, value)) in tiles.into_iter().enumerate() {
                     if index > 0 {
@@ -80,19 +95,23 @@ impl ArcticApp {
             .max(1);
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new("Instances").size(18.0).strong().color(p.text));
+            ui.label(
+                RichText::new(t!("tasks.instances"))
+                    .size(18.0)
+                    .strong()
+                    .color(p.text),
+            );
             ui.add_space(6.0);
             for (id, entry) in &instances {
                 let name = self.stats_instance_name(id);
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(name).color(p.text));
                     ui.label(
-                        RichText::new(format!(
-                            "{} · {} session{} · last {}",
-                            format_duration(entry.total_secs),
+                        RichText::new(tn!(
+                            "tasks.session_last",
                             entry.sessions,
-                            if entry.sessions == 1 { "" } else { "s" },
-                            ago(entry.last_played, now)
+                            format_duration = format_duration(entry.total_secs),
+                            ago = ago(entry.last_played, now)
                         ))
                         .small()
                         .color(p.muted),
@@ -111,15 +130,31 @@ impl ArcticApp {
         if !servers.is_empty() || !worlds.is_empty() {
             ui.add_space(12.0);
             if ui
-                .checkbox(&mut hide, "Hide server and world names")
+                .checkbox(&mut hide, t!("tasks.hide_server_and_world_names"))
                 .changed()
             {
                 ui.data_mut(|d| d.insert_temp(hide_id, hide));
             }
             ui.add_space(6.0);
         }
-        top_list(ui, p, "Servers", &servers, hide, now, "Server");
-        top_list(ui, p, "Singleplayer worlds", &worlds, hide, now, "World");
+        top_list(
+            ui,
+            p,
+            t!("tasks.servers"),
+            &servers,
+            hide,
+            now,
+            t!("tasks.server"),
+        );
+        top_list(
+            ui,
+            p,
+            t!("tasks.singleplayer_worlds"),
+            &worlds,
+            hide,
+            now,
+            t!("tasks.world"),
+        );
         let _ = playtime::GAME_LOG;
     }
 
@@ -131,7 +166,10 @@ impl ArcticApp {
         self.custom_instances
             .iter()
             .find(|i| i.id == id)
-            .map_or_else(|| "Removed instance".to_owned(), |i| i.name.clone())
+            .map_or_else(
+                || t!("tasks.removed_instance").to_owned(),
+                |i| i.name.clone(),
+            )
     }
 }
 
@@ -163,10 +201,10 @@ fn top_list(
             ui.horizontal(|ui| {
                 ui.label(RichText::new(shown).color(p.text));
                 ui.label(
-                    RichText::new(format!(
-                        "{} · last {}",
-                        format_duration(part.secs),
-                        ago(part.last, now)
+                    RichText::new(tf!(
+                        "tasks.last",
+                        format_duration = format_duration(part.secs),
+                        ago = ago(part.last, now)
                     ))
                     .small()
                     .color(p.muted),
@@ -177,7 +215,7 @@ fn top_list(
         }
         if list.len() > TOP {
             ui.label(
-                RichText::new(format!("and {} more", list.len() - TOP))
+                RichText::new(tn!("social.and_more", list.len() - TOP))
                     .small()
                     .color(p.muted),
             );

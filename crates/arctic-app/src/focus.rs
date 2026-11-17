@@ -69,7 +69,7 @@ mod imp {
 mod imp {
     pub fn focus(pid: u32) -> bool {
         let script = format!(
-            "tell application \"System Events\" to set frontmost of (first process whose unix id is {pid}) to true"
+            "tell application \"System Events\" to set frontmost of (first process whose unix id is {pid}) to true" // i18n-ignore: AppleScript
         );
         std::process::Command::new("osascript")
             .args(["-e", &script])

@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Quick Join: a game mode of a big network in one step. On the network already, it sends the mode's command
  * ("/play bedwars_eight_one"); elsewhere it joins the server first and sends the command once you are in.
@@ -50,27 +51,27 @@ public final class QuickJoin {
 	private QuickJoin() {}
 
 	private static Mode hypixel(String label, String command) {
-		return new Mode("Hypixel", label, "hypixel.net", "mc.hypixel.net", command);
+		return new Mode("Hypixel", label, "hypixel.net", "mc.hypixel.net", command); // i18n-ignore: a network's name
 	}
 
 	/** The built-in modes, then the ones from the player's file. */
 	public static List<Mode> all(Platform platform) {
 		List<Mode> out = new ArrayList<Mode>();
-		out.add(hypixel("Bed Wars Solo", "/play bedwars_eight_one"));
-		out.add(hypixel("Bed Wars Doubles", "/play bedwars_eight_two"));
-		out.add(hypixel("Bed Wars 3v3v3v3", "/play bedwars_four_three"));
-		out.add(hypixel("Bed Wars 4v4v4v4", "/play bedwars_four_four"));
-		out.add(hypixel("Bed Wars 4v4", "/play bedwars_two_four"));
-		out.add(hypixel("SkyWars Solo", "/play solo_normal"));
-		out.add(hypixel("SkyWars Solo Insane", "/play solo_insane"));
-		out.add(hypixel("SkyWars Teams", "/play teams_normal"));
-		out.add(hypixel("Duels Classic", "/play duels_classic_duel"));
-		out.add(hypixel("Duels Sumo", "/play duels_sumo_duel"));
-		out.add(hypixel("Duels UHC", "/play duels_uhc_duel"));
-		out.add(hypixel("Duels Bridge", "/play duels_bridge_duel"));
-		out.add(hypixel("Murder Mystery", "/play murder_classic"));
-		out.add(hypixel("SkyBlock", "/play skyblock"));
-		out.add(hypixel("Lobby", "/lobby"));
+		out.add(hypixel(Lang.t("servers.bed_wars_solo"), "/play bedwars_eight_one")); // i18n-ignore: a command
+		out.add(hypixel(Lang.t("servers.bed_wars_doubles"), "/play bedwars_eight_two")); // i18n-ignore: a command
+		out.add(hypixel(Lang.t("servers.bed_wars_3v3v3v3"), "/play bedwars_four_three")); // i18n-ignore: a command
+		out.add(hypixel(Lang.t("servers.bed_wars_4v4v4v4"), "/play bedwars_four_four")); // i18n-ignore: a command
+		out.add(hypixel(Lang.t("servers.bed_wars_4v4"), "/play bedwars_two_four")); // i18n-ignore: a command
+		out.add(hypixel(Lang.t("servers.skywars_solo"), "/play solo_normal")); // i18n-ignore: a command
+		out.add(hypixel(Lang.t("servers.skywars_solo_insane"), "/play solo_insane")); // i18n-ignore: a command
+		out.add(hypixel(Lang.t("servers.skywars_teams"), "/play teams_normal")); // i18n-ignore: a command
+		out.add(hypixel(Lang.t("servers.duels_classic"), "/play duels_classic_duel")); // i18n-ignore: a command
+		out.add(hypixel(Lang.t("servers.duels_sumo"), "/play duels_sumo_duel")); // i18n-ignore: a command
+		out.add(hypixel(Lang.t("servers.duels_uhc"), "/play duels_uhc_duel")); // i18n-ignore: a command
+		out.add(hypixel(Lang.t("servers.duels_bridge"), "/play duels_bridge_duel")); // i18n-ignore: a command
+		out.add(hypixel(Lang.t("servers.murder_mystery"), "/play murder_classic")); // i18n-ignore: a command
+		out.add(hypixel(Lang.t("servers.skyblock"), "/play skyblock")); // i18n-ignore: a command
+		out.add(hypixel(Lang.t("servers.lobby"), "/lobby")); // i18n-ignore: a command
 		out.addAll(fromFile(platform));
 		return out;
 	}

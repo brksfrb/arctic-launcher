@@ -1,14 +1,14 @@
 //! An optional "Arctic Launcher" shortcut on the desktop (Settings → "Desktop shortcut"):
 //! a `.lnk` on Windows, a `.desktop` launcher on Linux, a link to the app on macOS.
 
+use crate::{t, tf};
 use std::path::{Path, PathBuf};
-
 /// Make the shortcut and say where it went. Making it again just refreshes it.
 pub fn create() -> Result<PathBuf, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let desktop = desktop_folder().ok_or("couldn't find the desktop folder")?;
+    let desktop = desktop_folder().ok_or(t!("nav.couldnt_find_the_desktop_folder"))?;
     if !desktop.is_dir() {
-        return Err(format!("{} isn't a folder", desktop.display()));
+        return Err(tf!("nav.isnt_a_folder", desktop = desktop.display()));
     }
     write(&exe, &desktop)
 }
@@ -16,8 +16,8 @@ pub fn create() -> Result<PathBuf, String> {
 #[cfg(windows)]
 fn desktop_folder() -> Option<PathBuf> {
     // OneDrive moves the desktop when it backs it up.
-    let home = std::env::var_os("USERPROFILE").map(PathBuf::from);
-    let one_drive = ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"]
+    let home = std::env::var_os("USERPROFILE").map(PathBuf::from); // i18n-ignore
+    let one_drive = ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"] // i18n-ignore
         .iter()
         .filter_map(std::env::var_os)
         .map(|p| PathBuf::from(p).join("Desktop"));
@@ -37,7 +37,7 @@ fn desktop_folder() -> Option<PathBuf> {
         .map(|s| PathBuf::from(s.trim()))
         .filter(|p| p.is_dir());
     asked.or_else(|| {
-        let home = std::env::var_os("HOME").map(PathBuf::from)?;
+        let home = std::env::var_os("HOME").map(PathBuf::from)?; // i18n-ignore
         Some(home.join("Desktop")).filter(|p| p.is_dir())
     })
 }
@@ -55,7 +55,7 @@ fn write(exe: &Path, desktop: &Path) -> Result<PathBuf, String> {
     let app = exe
         .ancestors()
         .find(|a| a.extension().is_some_and(|e| e == "app"))
-        .ok_or("the launcher isn't running from an app bundle")?;
+        .ok_or(t!("nav.the_launcher_isnt_running_from_an_app_bundle"))?;
     let link = desktop.join(app.file_name().ok_or("no app name")?);
     if link.symlink_metadata().is_ok() {
         std::fs::remove_file(&link).map_err(|e| e.to_string())?;

@@ -5,16 +5,17 @@ import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Style;
 
+import com.arcticlauncher.client.Lang;
 /** A small, quiet Arctic snowflake in a corner of the screen (for screenshots and streams); the version after it if asked. */
 public final class Watermark extends HudWidget {
-	public static final String[] CORNERS = {"Bottom left", "Bottom right", "Top left", "Top right"};
-	public static final String[] OPACITIES = {"Faint", "Medium", "Strong"};
+	public static final String[] CORNERS = {"mods.watermark.bottom_left", "mods.watermark.bottom_right", "mods.watermark.top_left", "mods.watermark.top_right"};
+	public static final String[] OPACITIES = {"mods.watermark.faint", "mods.watermark.medium", "mods.watermark.strong"};
 	public static final int[] SIZES = {12, 16, 20, 24, 32};
 	private static final int MARGIN = 6;
 	private static final int GAP = 4;
 
 	public Watermark() {
-		super("watermark", "Arctic watermark", "A small Arctic snowflake in a corner, for screenshots and streams", false, Column.LEFT);
+		super("watermark", Lang.t("hud.arctic_watermark"), Lang.t("hud.a_small_arctic_snowflake_in_a_corner_for"), false, Column.LEFT);
 	}
 
 	private static ClientConfig config() {
@@ -33,7 +34,7 @@ public final class Watermark extends HudWidget {
 		if (c == null) {
 			return "";
 		}
-		String name = c.watermarkName ? "ARCTIC" : "";
+		String name = c.watermarkName ? Lang.t("hud.arctic") : "";
 		String version = c.watermarkVersion ? version() : "";
 		return name.isEmpty() || version.isEmpty() ? name + version : name + " " + version;
 	}

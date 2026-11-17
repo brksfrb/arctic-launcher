@@ -12,7 +12,10 @@ param(
 	# The certificate's thumbprint ("Open Source Developer Leyla Barlak", Certum, until 2027-10-07).
 	[string]$Thumbprint = "1CB4E723F6E1CE921BE5C2E6CBB7B22A131B57D4",
 	[string]$Timestamp = "http://time.certum.pl",
-	[string]$SiteRevalidate = "https://arcticlauncher.com/api/revalidate"
+	[string]$SiteRevalidate = "https://arcticlauncher.com/api/revalidate",
+	# The release.yml run to check against; by default the newest run for the tag, finished or not
+	# (macOS may still be running: only the windows artifact of the build job is needed).
+	[string]$Run = ""
 )
 $ErrorActionPreference = "Stop"
 
@@ -46,8 +49,11 @@ try {
 		$have = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLower()
 		if ($expected[$file.Name] -ne $have) { throw "$($file.Name) is not what CI built (checksum differs or is missing)" }
 	}
-	$run = gh run list --workflow release.yml --branch $Tag --status success --limit 1 --json databaseId --jq ".[0].databaseId"
-	if ($LASTEXITCODE -ne 0 -or -not $run) { throw "no successful release.yml run found for $Tag" }
+	$run = $Run
+	if (-not $run) {
+		$run = gh run list --workflow release.yml --branch $Tag --limit 1 --json databaseId --jq ".[0].databaseId"
+		if ($LASTEXITCODE -ne 0 -or -not $run) { throw "no release.yml run found for $Tag" }
+	}
 	$ci = Join-Path $work "ci-artifact"
 	gh run download $run --name windows --dir $ci
 	if ($LASTEXITCODE -ne 0) { throw "couldn't download the build job's windows artifact (run $run)" }

@@ -2,6 +2,7 @@ package com.arcticlauncher.client.menu;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.gfx.Draw;
+import com.arcticlauncher.client.gfx.BrandMark;
 import com.arcticlauncher.client.gfx.Gfx;
 
 /** Arctic's title artwork, shared by the native menu and the page preview. */
@@ -19,17 +20,8 @@ public final class TitleBranding {
 	public static void draw(Gfx g, int width, int height) {
 		int top = Math.max(6, height / 4 - 48);
 		float ps = g.pixelScale();
-		// The snowflake turns about its center, drawn in screen pixels from a picture made at exactly
-		// that size ("asset:icon-N", linear-filtered) so it stays sharp at every angle.
-		int bucket = Math.max(1, Math.min(WORDMARK.length, Math.round(ps)));
-		int px = ICON * bucket;
 		float angle = (System.nanoTime() % TURN_NANOS) * (360f / TURN_NANOS);
-		g.push();
-		g.scale(1f / ps);
-		g.translate(Math.round(width * ps / 2f), Math.round((top + ICON / 2f) * ps));
-		g.rotate(angle);
-		g.texture("asset:icon-" + bucket, -px / 2, -px / 2, px, px, 0, 0, px, px, px, px);
-		g.pop();
+		BrandMark.drawCentered(g, width / 2f, top + ICON / 2f, ICON, angle);
 		int scale = Math.max(1, Math.min(WORDMARK.length, Math.round(ps)));
 		int w = WORDMARK[scale - 1][0], h = WORDMARK[scale - 1][1];
 		int wordTop = top + ICON + 6;

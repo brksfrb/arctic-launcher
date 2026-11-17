@@ -11,6 +11,14 @@ public final class ChatHistoryText {
 		StringBuilder out = new StringBuilder();
 		message.visit((style, text) -> {
 			out.append("§r");
+			// Resource identifiers cannot contain ';', so this stays unambiguous in the archive.
+			//#if MC >= 1.21.9
+			if (style.getFont() instanceof net.minecraft.network.chat.FontDescription.Resource) {
+				out.append("§@").append(((net.minecraft.network.chat.FontDescription.Resource) style.getFont()).id()).append(';');
+			}
+			//#else
+			out.append("§@").append(style.getFont()).append(';');
+			//#endif
 			if (style.getColor() != null) {
 				out.append("§#").append(String.format(java.util.Locale.ROOT, "%06x", style.getColor().getValue()));
 			}
@@ -42,7 +50,25 @@ public final class ChatHistoryText {
 			out.append(Compat.literal(part.toString()).setStyle(style));
 			part.setLength(0);
 			char code = text.charAt(++i);
-			if (code == '#' && i + 6 < text.length()) {
+			if (code == '@') {
+				int end = text.indexOf(';', i + 1);
+				if (end >= 0) {
+					String font = text.substring(i + 1, end);
+					int colon = font.indexOf(':');
+					try {
+						if (colon > 0) {
+							//#if MC >= 1.21.9
+							style = style.withFont(new net.minecraft.network.chat.FontDescription.Resource(Compat.id(font.substring(0, colon), font.substring(colon + 1))));
+							//#else
+							style = style.withFont(Compat.id(font.substring(0, colon), font.substring(colon + 1)));
+							//#endif
+						}
+					} catch (RuntimeException ignored) {
+						// Invalid font in a manually edited archive: retain the current font.
+					}
+					i = end;
+				}
+			} else if (code == '#' && i + 6 < text.length()) {
 				try {
 					//#if MC < 1.17
 					style = style.withColor(net.minecraft.network.chat.TextColor.fromRgb(Integer.parseInt(text.substring(i + 1, i + 7), 16)));

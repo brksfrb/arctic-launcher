@@ -27,12 +27,19 @@ public final class LegacyGlassCtm {
 	private LegacyGlassCtm() {}
 
 	public static boolean available() { return !CONTINUITY; }
+	private static volatile int atlasTileCount = GlassTiles.COUNT;
+	public static int tileCount() { return atlasTileCount; }
+	public static void reloading() { lastEnabled = enabled(); atlasTileCount = lastEnabled ? GlassTiles.COUNT : 1; }
 	public static boolean enabled() { return available() && (ArcticClient.config() == null || ArcticClient.config().connectedGlass); }
 
 	public static void tick() {
+		// The line level (clarity of the glass texture) is part of the tiles: stitching the atlas again also rebuilds every chunk.
+		if (available() && com.arcticlauncher.client.ctm.GlassLines.due(available())) { lastEnabled = enabled(); MinecraftClient.getInstance().reloadResources(); return; }
 		boolean on = enabled();
 		if (lastEnabled != on) {
 			lastEnabled = on;
+			// An atlas stitched with Connected Glass off holds only the unjoined tile: enabling it needs the tiles.
+			if (on && tileCount() < GlassTiles.COUNT) { MinecraftClient.getInstance().reloadResources(); return; }
 			if (MinecraftClient.getInstance().world == null) return;
 			MinecraftClient.getInstance().worldRenderer.reload();
 		}
@@ -48,18 +55,21 @@ public final class LegacyGlassCtm {
 			Sprite[] variants = new Sprite[GlassTiles.COUNT];
 			boolean complete = true;
 			for (int i = 0; i < variants.length; i++) {
-				variants[i] = names.get(GlassTiles.variant(e.getKey(), i));
+				variants[i] = names.get(GlassTiles.variant(e.getKey(), i < tileCount() ? i : 0));
 				complete &= variants[i] != null;
 			}
 			if (complete) found.put(e.getValue(), variants);
 		}
 		sprites = found;
+		ArcticLegacy.LOG.info("[startup] CTM atlas bound: {} source sprites, {} tiles per face", found.size(), tileCount());
 	}
 
 	public static void begin(BlockView world, BlockState block, BlockPos pos) {
 		Context c = LOCAL.get();
 		c.active = false;
-		if (!enabled()) return;
+		// With Connected Glass off the glass still takes our texture (lone tile, clarity applied), it just joins to nothing.
+		if (c.damageDepth != 0 || !available()) return;
+		c.joined = enabled();
 		Integer type = c.blocks.get(block.getBlock());
 		if (type == null) {
 			String id = Block.REGISTRY.getIdentifier(block.getBlock()).toString();
@@ -72,7 +82,38 @@ public final class LegacyGlassCtm {
 		c.world = world; c.block = block.getBlock(); c.data = c.block.getData(block);
 		c.x = pos.getX(); c.y = pos.getY(); c.z = pos.getZ();
 		c.checked = 0; c.connected = 0; c.faces = 0; c.viewIndex = 0; c.active = true;
+		//#if DEV_SCENES
+		//#if MC < 1.9
+		if (GlassBordersTest.watching(pos)) GlassBordersTest.observe(pos, c.mask(Direction.DOWN) << 8 | c.mask(Direction.SOUTH));
+		//#endif
+		GlassFramesTest.meshing(c.x, c.y, c.z);
+		//#endif
 	}
+
+	/** Damage rendering shares the terrain renderer, but must retain vanilla crack textures. */
+	public static void beginDamage() { LOCAL.get().damageDepth++; end(); }
+	public static void endDamage() { LOCAL.get().damageDepth--; end(); }
+	//#if DEV_SCENES
+	/** The masks a block gets from a view: down << 8 | south. */
+	static int masks(BlockView world, BlockState block, BlockPos pos) {
+		begin(world, block, pos);
+		Context c = LOCAL.get();
+		int masks = c.active ? c.mask(Direction.DOWN) << 8 | c.mask(Direction.SOUTH) : -1;
+		end();
+		return masks;
+	}
+	//#endif
+
+	//#if DEV_SCENES
+	/** The mask one face of a block gets from a view; -1 when Connected Glass leaves the block alone. */
+	static int mask(BlockView world, BlockState block, BlockPos pos, Direction face) {
+		begin(world, block, pos);
+		Context c = LOCAL.get();
+		int mask = c.active ? c.mask(face) : -1;
+		end();
+		return mask;
+	}
+	//#endif
 
 	public static void end() { Context c = LOCAL.get(); c.active = false; c.world = null; }
 
@@ -92,8 +133,12 @@ public final class LegacyGlassCtm {
 		return list;
 	}
 
+	/** A meshing view that knows which of its chunk columns the server has not sent yet. */
+	public interface Chunks { boolean arctic$missing(int chunkX, int chunkZ); }
+
 	private static final class Context {
-		boolean active, pane;
+		boolean active, pane, joined;
+		int damageDepth;
 		int data, x, y, z, checked, connected, faces, viewIndex;
 		Block block;
 		BlockView world;
@@ -112,8 +157,13 @@ public final class LegacyGlassCtm {
 			}
 			return (connected & bit) != 0;
 		}
+		/** Same glass, or a chunk that has not arrived yet: its load rebuilds this section with what is really there. */
+		boolean joins(int dx, int dy, int dz) {
+			return same(dx, dy, dz) || (dx != 0 || dz != 0) && GlassTiles.crossesChunk(x, z, dx, dz)
+					&& world instanceof Chunks && ((Chunks) world).arctic$missing((x + dx) >> 4, (z + dz) >> 4);
+		}
 		boolean hide(Variants variants) {
-			if (!pane || variants == null || !variants.edge || !variants.boundary) return false;
+			if (!joined || !pane || variants == null || !variants.edge || !variants.boundary) return false;
 			Direction face = variants.direction;
 			return same(face == Direction.EAST ? 1 : face == Direction.WEST ? -1 : 0,
 					face == Direction.UP ? 1 : face == Direction.DOWN ? -1 : 0,
@@ -122,6 +172,7 @@ public final class LegacyGlassCtm {
 		int mask(Direction face) {
 			int index = face.ordinal();
 			if ((faces & (1 << index)) != 0) return masks[index];
+			if (!joined) { faces |= 1 << index; return masks[index] = 0; }
 			// Face-local right and bottom in vanilla's UV orientation.
 			int rx = 0, rz = 0, by = -1, bz = 0;
 			switch (face) {
@@ -133,15 +184,18 @@ public final class LegacyGlassCtm {
 				case DOWN: rx = 1; by = 0; bz = -1; break;
 			}
 			int mask = 0;
-			if (same(-rx, 0, -rz)) mask |= 1;
-			if (same(0, by, bz)) mask |= 4;
-			if (same(rx, 0, rz)) mask |= 16;
-			if (same(0, -by, -bz)) mask |= 64;
-			if ((mask & 5) == 5 && same(-rx, by, -rz + bz)) mask |= 2;
-			if ((mask & 20) == 20 && same(rx, by, rz + bz)) mask |= 8;
-			if ((mask & 80) == 80 && same(rx, -by, rz - bz)) mask |= 32;
-			if ((mask & 65) == 65 && same(-rx, -by, -rz - bz)) mask |= 128;
+			if (joins(-rx, 0, -rz)) mask |= 1;
+			if (joins(0, by, bz)) mask |= 4;
+			if (joins(rx, 0, rz)) mask |= 16;
+			if (joins(0, -by, -bz)) mask |= 64;
+			if ((mask & 5) == 5 && joins(-rx, by, -rz + bz)) mask |= 2;
+			if ((mask & 20) == 20 && joins(rx, by, rz + bz)) mask |= 8;
+			if ((mask & 80) == 80 && joins(rx, -by, rz - bz)) mask |= 32;
+			if ((mask & 65) == 65 && joins(-rx, -by, -rz - bz)) mask |= 128;
 			faces |= 1 << index;
+			//#if DEV_SCENES
+			GlassFramesTest.observe(x, y, z, index, mask);
+			//#endif
 			return masks[index] = mask;
 		}
 	}
@@ -182,6 +236,10 @@ public final class LegacyGlassCtm {
 
 	/** Called while models bake, after their atlas is stitched. Selection never allocates. */
 	public static Variants prepare(BakedQuad quad) {
+		// Called from BakedQuad's constructor, before subclass fields are initialized.
+		// Forge's UnpackedBakedQuad overrides getVertexData(); even reading its UVs here
+		// would crash. Leave all subclass quads (including damage overlays) unchanged.
+		if (quad.getClass() != BakedQuad.class) return null;
 		if (!available() || sprites.isEmpty()) return null;
 		Sprite sprite = spriteOf(quad);
 		Sprite[] tiles = sprites.get(sprite);

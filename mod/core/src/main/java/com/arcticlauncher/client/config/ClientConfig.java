@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
+import com.arcticlauncher.client.Lang;
 /** Arctic Client settings, in {@code config/arctic.json}. */
 public final class ClientConfig {
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -42,6 +43,9 @@ public final class ClientConfig {
 	/** Features: Fullbright (on/off), and the keys (Minecraft key names). */
 	public boolean fullbright;
 	public volatile boolean connectedGlass = true;
+	/** Clear glass: how much of the white streaks and flecks in the glass texture stays, 0 (clear) to 100 (as vanilla). Joined neighbours lose their shared border either way. */
+	public static final int CLEAR_GLASS_LINES = 25;
+	public volatile int clearGlassLines = CLEAR_GLASS_LINES;
 	/** With Fullbright: the client's light engine does no work (faster). Takes effect when you rejoin a world. */
 	public boolean fullbrightSkipLight;
 	public boolean zoomEnabled = true;
@@ -66,7 +70,7 @@ public final class ClientConfig {
 	public int zoomDurationMs = 250;
 	/** The scroll wheel eases to its new zoom level instead of jumping. */
 	public boolean zoomSmoothScroll = true;
-	public static final String[] ZOOM_CURVES = {"Instant", "Linear", "Ease out", "Ease in and out", "Snappy"};
+	public static final String[] ZOOM_CURVES = {"mods.zoom_curve.instant", "mods.zoom_curve.linear", "mods.zoom_curve.ease_out", "mods.zoom_curve.ease_in_and_out", "mods.zoom_curve.snappy"};
 	/** The Compass widget's middle tick (ARGB; 0 = the menu's accent color). */
 	public int compassPointer;
 	public String freelookKey = "key.keyboard.left.alt";
@@ -74,6 +78,8 @@ public final class ClientConfig {
 	public boolean snaplookEnabled;
 	public String snaplookKey = "key.keyboard.unknown";
 	public String fullbrightKey = "key.keyboard.unknown";
+	/** Keys that switch a feature on and off, by the feature's id in the Mods list (unbound ones are left out). */
+	public Map<String, String> toggleKeys = new LinkedHashMap<String, String>();
 	/** Opens the emote wheel. */
 	public String emoteKey = "key.keyboard.b";
 	/** The emote wheel stays open while its key is held (let go to play); off: press to open, click to play. */
@@ -83,7 +89,7 @@ public final class ClientConfig {
 	/** Streamer mode: your name, skin and the server are hidden on your screen. */
 	public boolean streamerMode;
 	/** What your name shows as in streamer mode. */
-	public String streamerName = "Streamer";
+	public String streamerName = Lang.t("hud.streamer");
 	/** Switches streamer mode. */
 	public String streamerKey = "key.keyboard.unknown";
 	/** Drops a waypoint where you stand. */
@@ -383,8 +389,8 @@ public final class ClientConfig {
 	public boolean replayAutoExport;
 	/** Encode the game framebuffer while playing, alongside the independent 3D recording. */
 	/** The whole replay system: instant clips, recordings and gameplay video. Applies from the next world join. */
-	public boolean replayEnabled = true;
-	public boolean replayVideoEnabled = true;
+	public boolean replayEnabled;
+	public boolean replayVideoEnabled;
 	public int replayVideoHeight = 720;
 	public int replayVideoFps = 30;
 	/** Saves only the recent rolling window, independently of manual recording. */
@@ -461,6 +467,9 @@ public final class ClientConfig {
 		if (hud == null) {
 			hud = new LinkedHashMap<String, HudSlot>();
 		}
+		if (toggleKeys == null) {
+			toggleKeys = new LinkedHashMap<String, String>();
+		}
 		if (style == null) {
 			style = "arctic";
 		}
@@ -475,6 +484,7 @@ public final class ClientConfig {
 		debugLabelColor = Math.max(0, Math.min(7, debugLabelColor));
 		debugValueColor = Math.max(0, Math.min(7, debugValueColor));
 		zoomAnimation = Math.max(0, Math.min(ZOOM_CURVES.length - 1, zoomAnimation));
+		clearGlassLines = Math.max(0, Math.min(100, clearGlassLines));
 		zoomDurationMs = Math.max(0, Math.min(1500, zoomDurationMs));
 		if (snaplookKey == null) {
 			snaplookKey = "key.keyboard.unknown";

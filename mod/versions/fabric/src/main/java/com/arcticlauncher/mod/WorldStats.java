@@ -8,6 +8,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.LightLayer;
 
+import com.arcticlauncher.client.Lang;
 /** What the extra HUD widgets read: light, items, food, the resource pack. */
 final class WorldStats {
 	private WorldStats() {}
@@ -51,7 +52,7 @@ final class WorldStats {
 		}
 		contents.copyInto(items);
 		//#else
-		net.minecraft.nbt.CompoundTag tag = stack.getTagElement("BlockEntityTag");
+		net.minecraft.nbt.CompoundTag tag = stack.getTagElement("BlockEntityTag"); // i18n-ignore
 		if (tag == null || !tag.contains("Items", 9)) {
 			return null;
 		}

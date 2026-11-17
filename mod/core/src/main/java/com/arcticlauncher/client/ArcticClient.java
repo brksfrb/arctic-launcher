@@ -54,18 +54,42 @@ public final class ArcticClient {
 	private static com.arcticlauncher.client.looks.LauncherSkins launcherSkins;
 
 	public static void init(Platform p) {
+		StartupTiming timing = new StartupTiming(p);
 		CrashDiagnostics.start();
-		com.arcticlauncher.client.looks.OsTrust.installDefault();
+		// Certificate parsing is independent of local settings and HUD construction.
+		java.util.concurrent.CompletableFuture<Void> trust = new java.util.concurrent.CompletableFuture<>();
+		Thread trustWorker = new Thread(() -> {
+			try { com.arcticlauncher.client.looks.OsTrust.installDefault(); trust.complete(null); }
+			catch (Throwable failure) { trust.completeExceptionally(failure); }
+		}, "Arctic system certificates");
+		trustWorker.setDaemon(true);
+		trustWorker.start();
 		platform = p;
+		timing.step("diagnostics + trust worker"); // i18n-ignore: startup log label
+		FreezeWatchdog.logTo(new java.util.function.Consumer<String>() {
+			public void accept(String line) {
+				p.log(true, line);
+			}
+		});
 		com.arcticlauncher.client.config.RunningLock.hold(p.configDir());
+		Session session = Session.read(p.configDir());
+		// Before anything builds its text (the config's defaults, HUD widgets, menus).
+		Lang.init(p, session.language);
 		config = ClientConfig.load(p.configDir());
 		persistentChat = new com.arcticlauncher.client.feature.PersistentChat(p.configDir());
-		Session session = Session.read(p.configDir());
+		persistentChat.readAhead();
 		applyLauncherStyle(session);
 		applyLauncherProxy(session);
 		waypoints = com.arcticlauncher.client.waypoints.Waypoints.load(p.configDir());
+		timing.step("session + language + settings"); // i18n-ignore: startup log label
 		hud = new Hud(config);
 		features = new Features(p, config);
+		timing.step("HUD + features"); // i18n-ignore: startup log label
+		// Finish before starting any network service, preserving the default trust setup.
+		trust.join();
+		timing.step("trust wait"); // i18n-ignore: startup log label
+		// Cosmetic files and textures named by their SHA-1 are kept between sessions (in the instance's .arctic folder).
+		com.arcticlauncher.client.looks.AssetCache.init(new java.io.File(p.configDir().getAbsoluteFile().getParentFile(), ".arctic/cache/looks"));
 		looks = new Looks(p, config, serverUrl(session), session.token);
 		looks.shareServer(session.shareServer);
 		looks.start();
@@ -75,6 +99,7 @@ public final class ArcticClient {
 		launcherSkins = new com.arcticlauncher.client.looks.LauncherSkins(p, session.bridgePort, session.bridgeSecret);
 		voice = new com.arcticlauncher.client.voice.VoiceLink(p, session.bridgePort, session.bridgeSecret);
 		voice.start();
+		timing.step("looks + social + voice"); // i18n-ignore: startup log label
 		packs = new com.arcticlauncher.client.packs.PackBrowser(p, p.configDir());
 		shaders = new com.arcticlauncher.client.packs.ShaderPacks(p);
 		shaderBrowser = new com.arcticlauncher.client.packs.PackBrowser(p, p.configDir(),
@@ -97,6 +122,8 @@ public final class ArcticClient {
 		if (session.replayFile != null && replayAge >= 0 && replayAge < DUEL_REQUEST_SECONDS) {
 			com.arcticlauncher.client.replay.Replays.watchWhenReady(new java.io.File(session.replayFile));
 		}
+		timing.step("packs + replay + bridge"); // i18n-ignore: startup log label
+		timing.done();
 		p.log(false, "Arctic Client ready: style " + config.style + ", looks from " + looks.baseUrl());
 	}
 
@@ -224,7 +251,7 @@ public final class ArcticClient {
 			}
 			hud.render(g, style(), false);
 			if (com.arcticlauncher.client.replay.Replays.recording()) {
-				String recording = "REC · " + com.arcticlauncher.client.replay.Replays.recordingStatus();
+				String recording = Lang.t("mods.rec") + com.arcticlauncher.client.replay.Replays.recordingStatus();
 				g.text(recording, 6, 6, 0xFFFF6767, true);
 			}
 		}
@@ -246,7 +273,7 @@ public final class ArcticClient {
 		int y = g.height() / 2 - 20;
 		if (voice.sending()) {
 			com.arcticlauncher.client.gfx.Draw.round(g, 4, y, 64, y + 12, 3, 0xC0000000 | (s.panel & 0xFFFFFF));
-			g.text("● Talking", 8, y + 2, 0xFF86EFAC, false);
+			g.text(Lang.t("mods.talking"), 8, y + 2, 0xFF86EFAC, false);
 			y += 14;
 		}
 		for (String name : voice.speakingNames()) {
@@ -386,7 +413,16 @@ public final class ArcticClient {
 		CONTROLLER.frame(platform, config.controller, seconds, screenOpen, platform.inWorld());
 	}
 
+	private static int lookPrefetchTicks;
+
 	public static void tick(boolean screenOpen) {
+		if (Lang.follow() && hud != null) {
+			// The widgets' names were worked out in the old language.
+			hud = new Hud(config);
+		}
+		FreezeWatchdog.state(platform == null || platform.windowFocused(), platform != null && platform.inWorld(),
+				platform == null ? "unknown" : platform.screenClassName());
+		if (platform != null) com.arcticlauncher.client.net.MeasuredPing.tick(platform);
 		com.arcticlauncher.client.feature.DynamicFps.tick(platform, screenOpen);
 		com.arcticlauncher.client.replay.Replays.tick(screenOpen);
 		// Gameplay ticks are skipped outside a world and while watching a replay.
@@ -415,6 +451,11 @@ public final class ArcticClient {
 			voice.tick(config.voiceKey, screenOpen);
 		}
 		if (platform.inWorld()) {
+			// Looks of everyone on the server are fetched when the player list arrives, not when a name is first drawn.
+			if (looks != null && ++lookPrefetchTicks >= 5) {
+				lookPrefetchTicks = 0;
+				looks.expect(platform.onlinePlayerIds());
+			}
 			features.tick(screenOpen);
 			stopEmoteWhenMoving();
 			if (platform.hasFeatures()) {
@@ -523,7 +564,7 @@ public final class ArcticClient {
 	/** The Arctic button's label: with the number of unread chats and new features, if any. */
 	public static String hubLabel() {
 		int n = config == null ? 0 : Menus.badge();
-		return n > 0 ? "Arctic (" + (n > 9 ? "9+" : String.valueOf(n)) + ")" : "Arctic";
+		return n > 0 ? Lang.t("mods.arctic") + (n > 9 ? "9+" : String.valueOf(n)) + ")" : "Arctic";
 	}
 
 	/** Right Shift: the HUD screen in a world, the Mods menu elsewhere. */

@@ -15,11 +15,45 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GlassTilesTest {
+	@org.junit.jupiter.api.Test void bottlesAndPaneEdgesAreNotGlassFaces() {
+		org.junit.jupiter.api.Assertions.assertFalse(GlassTiles.glass("minecraft:item/glass_bottle"));
+		org.junit.jupiter.api.Assertions.assertFalse(GlassTiles.glass("minecraft:blocks/glass_pane_top"));
+		org.junit.jupiter.api.Assertions.assertTrue(GlassTiles.glass("minecraft:blocks/glass_silver"));
+		org.junit.jupiter.api.Assertions.assertTrue(GlassTiles.glass("minecraft:block/blue_stained_glass"));
+	}
+
 	@Test void tileRangesAreBoundedAndCannotOverflow() {
 		for (String range : Arrays.asList("2147483647-2147483647", "0-2147483647", "4097-4097", "5-4"))
 			assertThrows(IllegalArgumentException.class, () -> GlassPacks.expand(range));
 		assertEquals(Arrays.asList("4095", "4096"), GlassPacks.expand("4095-4096"));
 		assertEquals(4097, GlassPacks.expand("0-4096").size());
+	}
+
+	@Test void onlyNeighboursInAnotherChunkColumnCrossABorder() {
+		// Inside a chunk nothing crosses, whatever the offset.
+		for (int x : new int[]{1, 8, 14, -2, -15, 17}) for (int z : new int[]{1, 8, 14, -2, -15, 17})
+			for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) assertFalse(GlassTiles.crossesChunk(x, z, dx, dz), x + "," + z + " " + dx + "," + dz);
+		// The last and first block of a chunk, on both sides of zero: only the outward offsets cross.
+		for (int edge : new int[]{15, 31, -1, -17}) {
+			assertTrue(GlassTiles.crossesChunk(edge, 5, 1, 0));
+			assertFalse(GlassTiles.crossesChunk(edge, 5, -1, 0));
+			assertFalse(GlassTiles.crossesChunk(edge, 5, 0, 1));
+			assertTrue(GlassTiles.crossesChunk(5, edge, 0, 1));
+			assertFalse(GlassTiles.crossesChunk(5, edge, 0, -1));
+		}
+		for (int edge : new int[]{0, 16, -16, -32}) {
+			assertTrue(GlassTiles.crossesChunk(edge, 5, -1, 0));
+			assertFalse(GlassTiles.crossesChunk(edge, 5, 1, 0));
+			assertTrue(GlassTiles.crossesChunk(5, edge, 0, -1));
+			assertFalse(GlassTiles.crossesChunk(5, edge, 0, 1));
+		}
+		// A corner block: the diagonal neighbour is in a third chunk, and a diagonal along one border crosses too.
+		assertTrue(GlassTiles.crossesChunk(15, 15, 1, 1));
+		assertTrue(GlassTiles.crossesChunk(15, 8, 1, -1));
+		assertTrue(GlassTiles.crossesChunk(-16, -16, -1, -1));
+		assertFalse(GlassTiles.crossesChunk(15, 15, -1, -1));
+		// The block itself never does.
+		assertFalse(GlassTiles.crossesChunk(15, 0, 0, 0));
 	}
 
 	@Test void all256NeighbourPatternsReduceTo47DistinctTiles() {
@@ -153,5 +187,154 @@ class GlassTilesTest {
 		int[] pixels = new int[size * size];
 		for (int y = 0; y < size; y++) for (int x = 0; x < size; x++) if (x < border || y < border || x >= size - border || y >= size - border) pixels[y * size + x] = 0xffffffff;
 		return pixels;
+	}
+
+	private static int[] framed() {
+		int[] tile = new int[256];
+		for (int i = 0; i < 16; i++) tile[i] = tile[240 + i] = tile[i * 16] = tile[i * 16 + 15] = 0xFFFFFFFF;
+		return tile;
+	}
+
+	@Test
+	void lineLevelZeroIsTheJoinedTileAndFullKeepsEveryBorder() {
+		int[] source = framed();
+		for (int tile = 0; tile < GlassTiles.COUNT; tile++) {
+			assertArrayEquals(GlassTiles.generate(source, 16, 16, 16, 16, tile), GlassTiles.generate(source, 16, 16, 16, 16, tile, 0));
+			assertArrayEquals(source, GlassTiles.generate(source, 16, 16, 16, 16, tile, 100));
+		}
+	}
+
+	@Test
+	void lineLevelKeepsThatShareOfASharedBorderGrowingFromTheCorners() {
+		int[] source = framed();
+		int previous = -1;
+		for (int level = 0; level <= 100; level += 5) {
+			int[] inner = GlassTiles.generate(source, 16, 16, 16, 16, GlassTiles.index(255), level);
+			int left = 0;
+			for (int y = 0; y < 16; y++) if (inner[y * 16] != 0) left++;
+			assertTrue(left >= previous, "more level never removes border");
+			if (level == 0) assertEquals(0, left);
+			if (level == 25) { assertEquals(4, left); assertTrue(inner[0] != 0 && inner[16] != 0 && inner[2 * 16] == 0 && inner[15 * 16] != 0); }
+			if (level == 50) assertEquals(8, left);
+			if (level == 100) assertEquals(16, left);
+			for (int i = 0; i < 256; i++) if (inner[i] != 0) assertEquals(source[i], inner[i]);
+			previous = left;
+		}
+	}
+
+	@Test
+	void lineLevelLeavesTheOuterFrameOfAClusterAlone() {
+		int[] source = framed();
+		// Joined to the right only: the left, top and bottom borders are the cluster's frame at every level.
+		for (int level = 0; level <= 100; level += 25) {
+			int[] tile = GlassTiles.generate(source, 16, 16, 16, 16, GlassTiles.index(16), level);
+			for (int i = 0; i < 16; i++) { assertEquals(0xFFFFFFFF, tile[i * 16]); if (i < 15) { assertEquals(0xFFFFFFFF, tile[i]); assertEquals(0xFFFFFFFF, tile[240 + i]); } }
+		}
+	}
+
+	@Test
+	void onlyPlainGlassIsClear() {
+		assertTrue(GlassTiles.clear("minecraft:blocks/glass"));
+		assertTrue(GlassTiles.clear("minecraft:block/glass"));
+		assertFalse(GlassTiles.clear("minecraft:blocks/glass_blue"));
+		assertFalse(GlassTiles.clear("minecraft:block/blue_stained_glass"));
+		assertFalse(GlassTiles.clear("minecraft:block/tinted_glass"));
+		assertFalse(GlassTiles.clear("minecraft:blocks/glass_pane_top"));
+	}
+
+	@Test
+	void previewIsAFramedWallWhoseStreaksFollowTheLevel() {
+		for (int level : new int[]{0, 25, 100}) {
+			int[] wall = GlassTiles.preview(3, level);
+			// Joined neighbours lose the shared border at every level; the outer frame stays.
+			for (int i = 0; i < 48; i++) assertTrue(wall[i] != 0 && wall[i * 48] != 0 && wall[47 * 48 + i] != 0 && wall[i * 48 + 47] != 0);
+			for (int y = 1; y < 47; y++) { assertEquals(0, wall[y * 48 + 15]); assertEquals(0, wall[y * 48 + 16]); }
+		}
+		// Inside the middle block (no frame left on any side) only the streaks differ with the level.
+		assertEquals(0, streaks(GlassTiles.preview(3, 0)));
+		assertEquals(5, streaks(GlassTiles.preview(3, 100)));
+		assertEquals(1, streaks(GlassTiles.preview(3, 25)));
+	}
+
+	private static int streaks(int[] wall) {
+		int n = 0;
+		for (int y = 16; y < 32; y++) for (int x = 16; x < 32; x++) if (wall[y * 48 + x] != 0) n++;
+		return n;
+	}
+
+	/** The game's own glass.png (alpha, grey): light frame, shaded right and bottom edges, a diagonal streak and a fleck. */
+	private static int[] vanillaGlass() {
+		int[] t = new int[256];
+		for (int i = 0; i < 16; i++) t[i] = t[i * 16] = 0xFFD0D0D0;
+		for (int i = 0; i < 16; i++) { t[15 * 16 + i] = 0xFF8B8B8B; t[i * 16 + 15] = 0xFF8B8B8B; }
+		t[2 * 16 + 4] = t[3 * 16 + 3] = t[4 * 16 + 2] = t[12 * 16 + 13] = t[13 * 16 + 12] = 0xFFD0D0D0;
+		return t;
+	}
+
+	@Test
+	void clarityFadesTheStreaksOfTheTextureItselfFromVanillaToClear() {
+		int[] glass = vanillaGlass();
+		assertEquals(5, GlassTiles.marks(glass, 16, 16, 16, 16));
+		assertArrayEquals(glass, GlassTiles.clarity(glass, 16, 16, 16, 16, 100));
+		int previous = 5;
+		for (int level = 100; level >= 0; level -= 5) {
+			int[] faded = GlassTiles.clarity(glass, 16, 16, 16, 16, level);
+			int marks = GlassTiles.marks(faded, 16, 16, 16, 16);
+			assertTrue(marks <= previous, "level " + level);
+			previous = marks;
+			// Frame untouched at every level.
+			for (int i = 0; i < 16; i++) assertEquals(glass[i], faded[i]);
+			for (int i = 0; i < 16; i++) assertEquals(glass[15 * 16 + i], faded[15 * 16 + i]);
+		}
+		int[] clear = GlassTiles.clarity(glass, 16, 16, 16, 16, 0);
+		assertEquals(0, GlassTiles.marks(clear, 16, 16, 16, 16));
+		for (int y = 1; y < 15; y++) for (int x = 1; x < 15; x++) assertEquals(0, clear[y * 16 + x]);
+		assertEquals(1, GlassTiles.marks(GlassTiles.clarity(glass, 16, 16, 16, 16, 25), 16, 16, 16, 16));
+		// A lone tile (no neighbours) is the faded texture itself.
+		assertArrayEquals(clear, GlassTiles.generate(clear, 16, 16, 16, 16, 0));
+	}
+
+	@Test
+	void clarityTreatsEveryAnimationFrameAndLeavesFramelessArtAlone() {
+		int[] strip = new int[16 * 32];
+		System.arraycopy(vanillaGlass(), 0, strip, 0, 256);
+		System.arraycopy(vanillaGlass(), 0, strip, 256, 256);
+		int[] clear = GlassTiles.clarity(strip, 16, 32, 16, 16, 0);
+		assertEquals(0, GlassTiles.marks(clear, 16, 32, 16, 16));
+		for (int i = 0; i < 15; i++) assertEquals(0xFFD0D0D0, clear[256 + i]);
+		int[] noisy = new int[256];
+		for (int i = 0; i < 256; i++) noisy[i] = 0x80000000 | (i * 2654435) & 0xFFFFFF;
+		assertArrayEquals(noisy, GlassTiles.clarity(noisy, 16, 16, 16, 16, 0));
+		int[] plain = new int[256];
+		assertArrayEquals(plain, GlassTiles.clarity(plain, 16, 16, 16, 16, 0));
+	}
+
+	@Test
+	void aChangedLineLevelIsAppliedOnceAfterItRests() {
+		GlassLines.reset();
+		assertFalse(GlassLines.due(25));
+		for (int i = 0; i < 100; i++) assertFalse(GlassLines.due(25));
+		// Dragging: every new value starts the wait again.
+		for (int level = 30; level <= 60; level += 5) assertFalse(GlassLines.due(level));
+		for (int i = 0; i < GlassLines.REST - 1; i++) assertFalse(GlassLines.due(60));
+		assertTrue(GlassLines.due(60));
+		assertEquals(60, GlassLines.stitched());
+		for (int i = 0; i < 100; i++) assertFalse(GlassLines.due(60));
+		// Back to where it was before it rested: nothing to do.
+		assertFalse(GlassLines.due(40));
+		for (int i = 0; i < 100; i++) assertFalse(GlassLines.due(60));
+		GlassLines.reset();
+	}
+
+	@Test
+	void noReloadWhereOurGlassIsNotInUseAndItCatchesUpWhenAvailable() {
+		GlassLines.reset();
+		assertFalse(GlassLines.due(25, true));
+		for (int i = 0; i < 100; i++) assertFalse(GlassLines.due(80, false));
+		assertEquals(25, GlassLines.stitched());
+		for (int i = 0; i < GlassLines.REST; i++) assertFalse(GlassLines.due(80, true));
+		assertTrue(GlassLines.due(80, true));
+		assertEquals(80, GlassLines.stitched());
+		GlassLines.reset();
 	}
 }

@@ -9,6 +9,7 @@ import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.waypoints.Waypoint;
 
+import com.arcticlauncher.client.Lang;
 /**
  * A compass strip: the directions ahead of you, and your waypoints as
  * dots with their distance. The middle is where you look.
@@ -25,7 +26,7 @@ final class Compass extends HudWidget {
 	private static final int EDGE = 6;
 
 	Compass() {
-		super("compass", "Compass", "Directions ahead, with your waypoints and how far they are", false, Column.LEFT);
+		super("compass", Lang.t("hud.compass"), Lang.t("hud.directions_ahead_with_your_waypoints_and_how"), false, Column.LEFT);
 	}
 
 	@Override
@@ -112,11 +113,11 @@ final class Compass extends HudWidget {
 
 	private static List<Waypoint> samples() {
 		Waypoint home = new Waypoint();
-		home.name = "Home";
+		home.name = Lang.t("hud.home");
 		home.x = -40;
 		home.z = 120;
 		Waypoint mine = new Waypoint();
-		mine.name = "Mine";
+		mine.name = Lang.t("hud.mine");
 		mine.x = 300;
 		mine.z = 200;
 		mine.color = 0xFFFDE047;

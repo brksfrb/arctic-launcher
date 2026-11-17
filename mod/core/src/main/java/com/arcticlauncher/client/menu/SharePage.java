@@ -9,6 +9,7 @@ import com.arcticlauncher.client.ui.Button;
 import com.arcticlauncher.client.ui.Page;
 import com.arcticlauncher.client.ui.TextField;
 
+import com.arcticlauncher.client.Lang;
 /** Use a HUD layout or crosshair someone shared: paste the code or text. */
 public final class SharePage extends Page {
 	private static final int W = 300;
@@ -26,10 +27,10 @@ public final class SharePage extends Page {
 		px = (width - W) / 2;
 		py = (height - H) / 2;
 		String typed = input == null ? "" : input.text();
-		input = add(new TextField("Code like abcd-efgh, or share text (Ctrl+V)", MAX_INPUT, TextField.ANY).text(typed));
+		input = add(new TextField(Lang.t("social.code_like_abcd_efgh_or_share_text_ctrl_v"), MAX_INPUT, TextField.ANY).text(typed));
 		input.bounds(px + 12, py + 44, W - 24, 18);
 		focus(input);
-		add(new Button("Use it", new Runnable() {
+		add(new Button(Lang.t("social.use_it"), new Runnable() {
 			@Override
 			public void run() {
 				ShareService.use(input.text(), new Runnable() {
@@ -41,7 +42,7 @@ public final class SharePage extends Page {
 				});
 			}
 		}).primary()).bounds(px + W - 12 - 80, py + H - 30, 80, 20);
-		add(new Button("Back", new Runnable() {
+		add(new Button(Lang.t("social.back"), new Runnable() {
 			@Override
 			public void run() {
 				ShareService.clearStatus();
@@ -53,8 +54,8 @@ public final class SharePage extends Page {
 	@Override
 	protected void drawBehind(Gfx g, Style s, int mx, int my) {
 		Skin.panel(g, s, px, py, px + W, py + H);
-		g.text("Use a code", px + 12, py + 12, s.text, false);
-		g.text(Draw.fit(g, "A HUD layout, crosshair or client settings from a friend.", W - 24, px + 12, py + 26), px + 12, py + 26, s.muted, false);
+		g.text(Lang.t("social.use_a_code"), px + 12, py + 12, s.text, false);
+		g.text(Draw.fit(g, Lang.t("social.a_hud_layout_crosshair_or_client_settings"), W - 24, px + 12, py + 26), px + 12, py + 26, s.muted, false);
 		String status = ShareService.status();
 		if (!status.isEmpty()) {
 			g.text(Draw.fit(g, status, W - 24, px + 12, py + 70), px + 12, py + 70, ShareService.problem() ? WARN : s.accent, false);

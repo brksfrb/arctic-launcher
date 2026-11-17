@@ -7,7 +7,7 @@
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
-use super::{ProjectHit, SearchPage, SearchQuery, SortBy};
+use super::{ProjectHit, ProjectType, SearchPage, SearchQuery, SortBy};
 use crate::loaders::LoaderKind;
 use crate::net::{agent, read_json_any_status};
 use crate::{Error, Result};
@@ -55,6 +55,8 @@ pub(super) struct SearchHit {
     pub icon_url: Option<String>,
     #[serde(default)]
     pub categories: Vec<String>,
+    #[serde(default, rename = "versions")]
+    pub game_versions: Vec<String>,
 }
 
 impl SearchResponse {
@@ -77,6 +79,7 @@ impl SearchHit {
             downloads: self.downloads,
             icon_url: non_empty(self.icon_url),
             categories: self.categories,
+            game_versions: self.game_versions,
         }
     }
 }
@@ -161,7 +164,7 @@ pub(super) fn non_empty(s: Option<String>) -> Option<String> {
 // ---------------------------------------------------------- version choice
 
 /// Lower is better: releases first, then betas, then alphas.
-fn channel_rank(version_type: &str) -> u8 {
+pub(super) fn channel_rank(version_type: &str) -> u8 {
     match version_type {
         "release" => 0,
         "beta" => 1,
@@ -231,7 +234,9 @@ fn sort_index(sort: SortBy) -> &'static str {
 fn search_facets(query: &SearchQuery) -> String {
     let kind = query.project_type.id();
     let mut facets = vec![vec![format!("project_type:{kind}")]];
-    if !query.game_version.trim().is_empty() {
+    if matches!(query.project_type, ProjectType::Mod | ProjectType::Modpack)
+        && !query.game_version.trim().is_empty()
+    {
         facets.push(vec![format!("versions:{}", query.game_version.trim())]);
     }
     if let Some(loader) = query.loader {
@@ -260,10 +265,17 @@ pub(super) fn search_url(query: &SearchQuery) -> String {
 
 pub(super) fn project_versions_url(project_id: &str, loaders: &[&str], game: &str) -> String {
     format!(
-        "{API}/project/{}/version?loaders={}&game_versions={}",
+        "{}&game_versions={}",
+        project_versions_any_game_url(project_id, loaders),
+        encode(&json_list(&[game])),
+    )
+}
+
+pub(super) fn project_versions_any_game_url(project_id: &str, loaders: &[&str]) -> String {
+    format!(
+        "{API}/project/{}/version?loaders={}",
         encode(project_id),
         encode(&json_list(loaders)),
-        encode(&json_list(&[game])),
     )
 }
 

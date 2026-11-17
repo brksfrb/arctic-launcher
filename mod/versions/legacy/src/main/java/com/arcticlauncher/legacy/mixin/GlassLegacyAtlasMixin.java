@@ -1,5 +1,6 @@
 package com.arcticlauncher.legacy.mixin;
 import com.arcticlauncher.client.ctm.GlassTiles;
+import com.arcticlauncher.client.ctm.GlassPacks;
 import com.arcticlauncher.legacy.LegacyGlassCtm;
 import java.util.ArrayList;
 import java.util.Map;
@@ -20,10 +21,12 @@ abstract class GlassLegacyAtlasMixin {
 	@Inject(method = "method_7005", at = @At("HEAD"))
 	private void arctic$tiles(net.minecraft.resource.ResourceManager manager, CallbackInfo ci) {
 		if (!LegacyGlassCtm.available()) return;
-		LegacyGlassCtm.packs = com.arcticlauncher.legacy.LegacyGlassResources.load(manager);
+		LegacyGlassCtm.reloading();
+		LegacyGlassCtm.packs = GlassPacks.safeLoad("legacy atlas resource packs",
+			() -> com.arcticlauncher.legacy.LegacyGlassResources.load(manager));
 		for (String name : new ArrayList<>(spritesToLoad.keySet())) {
 			if (!GlassTiles.glass(name)) continue;
-			for (int i = 0; i < GlassTiles.COUNT; i++) {
+			for (int i = 0; i < LegacyGlassCtm.tileCount(); i++) {
 				String variant = GlassTiles.variant(name, i);
 				spritesToLoad.put(variant, new com.arcticlauncher.legacy.LegacyGlassSprite(variant));
 			}

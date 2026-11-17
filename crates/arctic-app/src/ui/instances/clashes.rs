@@ -13,7 +13,7 @@ use crate::art::icons::Icon;
 use crate::theme::Palette;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 const DIALOG_WIDTH: f32 = 520.0;
 const LIST_HEIGHT: f32 = 400.0;
 
@@ -93,9 +93,9 @@ impl ArcticApp {
             .show(ctx, |ui| {
                 ui.set_width(DIALOG_WIDTH);
                 let title = if clashes.is_empty() {
-                    "All fixed"
+                    t!("instances.all_fixed")
                 } else {
-                    "These mods won't start together"
+                    t!("instances.these_mods_wont_start_together")
                 };
                 ui.label(
                     RichText::new(title)
@@ -104,11 +104,11 @@ impl ArcticApp {
                 );
                 ui.add_space(6.0);
                 let about = if clashes.is_empty() {
-                    format!("{} is ready to play.", instance.name)
+                    tf!("instances.is_ready_to_play", name = instance.name)
                 } else {
-                    format!(
-                        "The game would stop while loading {}. Fix them here, or play anyway.",
-                        instance.name
+                    tf!(
+                        "instances.the_game_would_stop_while_loading_fix_them",
+                        name = instance.name
                     )
                 };
                 ui.label(RichText::new(about).color(p.muted));
@@ -120,11 +120,13 @@ impl ArcticApp {
                 ui.add_space(12.0);
                 widgets::row(ui, |ui| {
                     if clashes.is_empty() {
-                        play = widgets::button(ui, p, Some(Icon::Play), "Play", true).clicked();
+                        play = widgets::button(ui, p, Some(Icon::Play), t!("instances.play"), true)
+                            .clicked();
                     } else {
-                        play = widgets::button(ui, p, None, "Play anyway", false).clicked();
+                        play = widgets::button(ui, p, None, t!("instances.play_anyway"), false)
+                            .clicked();
                     }
-                    cancel = widgets::button(ui, p, None, "Cancel", false).clicked();
+                    cancel = widgets::button(ui, p, None, t!("instances.cancel"), false).clicked();
                 });
             });
         if let Some(fix) = fix {
@@ -160,7 +162,7 @@ impl ArcticApp {
             ui.set_width(ui.available_width());
             let title = match clashes.len() {
                 1 => "1 problem will stop the game".to_owned(),
-                n => format!("{n} problems will stop the game"),
+                n => tf!("instances.problems_will_stop_the_game", n_value = n),
             };
             ui.label(RichText::new(title).strong().color(p.warn));
             ui.add_space(6.0);
@@ -188,7 +190,7 @@ impl ArcticApp {
                     ui.horizontal_wrapped(|ui| {
                         for fix in &clash.fixes {
                             let busy = matches!(fix, Fix::Get { project, .. } if self.inst.installing.contains(project));
-                            let label = if busy { "Getting it…".to_owned() } else { fix.label() };
+                            let label = if busy { t!("instances.getting_it").to_owned() } else { fix.label() };
                             let primary = matches!(fix, Fix::Get { .. });
                             if ui.add_enabled_ui(!busy, |ui| widgets::button(ui, p, None, &label, primary)).inner.clicked() {
                                 clicked = Some(fix.clone());
@@ -206,8 +208,11 @@ impl ArcticApp {
         match fix {
             Fix::TurnOff { file, .. } => {
                 if let Err(e) = mods::set_enabled(&mods_dir, file, false) {
-                    self.toasts
-                        .push(Kind::Error, "Could not turn the mod off", e.to_string());
+                    self.toasts.push(
+                        Kind::Error,
+                        t!("instances.could_not_turn_the_mod_off"),
+                        e.to_string(),
+                    );
                 }
             }
             Fix::Get {

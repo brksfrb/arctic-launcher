@@ -22,6 +22,7 @@ import org.lwjgl.util.freetype.FreeType;
 //#else
 import org.lwjgl.stb.STBTTFontinfo;
 import org.lwjgl.stb.STBTruetype;
+import com.arcticlauncher.client.Lang;
 //#endif
 
 /**
@@ -116,6 +117,7 @@ public final class SmoothFont {
 
 	/** The default font's providers, with Inter first when Fancy is on. */
 	public static <T> List<T> withInter(List<T> providers, java.util.function.Function<GlyphProvider, T> wrap) {
+		providers = EmoteFont.prepend(providers, wrap);
 		if (!on()) {
 			return providers;
 		}
@@ -177,7 +179,7 @@ public final class SmoothFont {
 		synchronized (FreeTypeUtil.LIBRARY_LOCK) {
 			try (MemoryStack stack = MemoryStack.stackPush()) {
 				PointerBuffer handle = stack.mallocPointer(1);
-				FreeTypeUtil.assertError(FreeType.FT_New_Memory_Face(FreeTypeUtil.getLibrary(), font, 0L, handle), "Initializing font face");
+				FreeTypeUtil.assertError(FreeType.FT_New_Memory_Face(FreeTypeUtil.getLibrary(), font, 0L, handle), "Initializing font face"); // i18n-ignore
 				face = FT_Face.create(handle.get());
 			}
 			if (FreeType.FT_Select_Charmap(face, FreeType.FT_ENCODING_UNICODE) != 0) {

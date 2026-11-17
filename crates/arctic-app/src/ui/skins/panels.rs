@@ -19,7 +19,7 @@ use crate::art::lerp_color;
 use crate::skin_tasks::SkinChange;
 use crate::theme::{self, Palette};
 use crate::widgets;
-
+use crate::{t, tf};
 const PREVIEW_W: f32 = 300.0;
 const PREVIEW_H: f32 = 380.0;
 const RAIL_W: f32 = 150.0;
@@ -36,6 +36,32 @@ const ZOOM_FOCUS: f32 = 28.0;
 /// Cosmetic slots in the order they're listed.
 pub(super) const SLOTS: [&str; 6] = ["head", "face", "back", "shoulders", "arms", "body"];
 
+/// How far the idle auto-turn moves the preview this frame: nothing while locked, or until
+/// `AUTO_TURN_AFTER` seconds after the last drag (`dragged_at < 0` = never auto-turn yet).
+fn auto_turn_step(locked: bool, now: f64, dragged_at: f64, dt: f32) -> f32 {
+    if locked || dragged_at < 0.0 || now - dragged_at <= AUTO_TURN_AFTER {
+        0.0
+    } else {
+        dt * AUTO_TURN_SPEED
+    }
+}
+
+/// Overlay the lock without allocating space again: the preview already advanced the cursor.
+fn preview_lock_button(
+    ui: &mut egui::Ui,
+    rect: Rect,
+    p: &Palette,
+    icon: Icon,
+    tip: &str,
+) -> egui::Response {
+    let button = Rect::from_min_size(
+        pos2(rect.right() - 36.0, rect.top() + 8.0),
+        vec2(28.0, 28.0),
+    );
+    let mut overlay = ui.new_child(egui::UiBuilder::new().max_rect(button));
+    widgets::icon_button(&mut overlay, p, icon, tip)
+}
+
 /// What "you" look like to others: Arctic skin first, then Minecraft's.
 /// Changes still being saved are already in it.
 pub(super) struct CurrentLook {
@@ -51,8 +77,8 @@ impl ArcticApp {
         widgets::page_header(
             ui,
             p,
-            "Cosmetics",
-            "Skins, capes and cosmetics every Arctic player sees, on any account.",
+            t!("skins.cosmetics"),
+            t!("skins.skins_capes_and_cosmetics_every_arctic"),
         );
         self.account_notice(ui, p);
         // What was pointed at last frame is tried on in the preview now.
@@ -107,17 +133,15 @@ impl ArcticApp {
     fn account_notice(&mut self, ui: &mut egui::Ui, p: &Palette) {
         let Some(account) = self.accounts.active() else {
             ui.label(
-                RichText::new(
-                    "Explore the collection below. Add an account to wear capes and cosmetics.",
-                )
-                .color(p.muted),
+                RichText::new(t!("skins.explore_the_collection_below_add_an_account"))
+                    .color(p.muted),
             );
             if self
                 .skins
                 .public_catalog
                 .as_ref()
                 .is_some_and(Result::is_err)
-                && ui.link("Collection unavailable · Retry").clicked()
+                && ui.link(t!("skins.collection_unavailable_retry")).clicked()
             {
                 self.request_skin_state(true);
             }
@@ -133,13 +157,12 @@ impl ArcticApp {
             ui.horizontal(|ui| {
                 // Connection problems get a plain message; details go to the log.
                 let text = if e.starts_with("network error") {
-                    log::info!("looks server: {e}");
                     "Can't reach the Arctic looks server right now.".to_owned()
                 } else {
-                    format!("Arctic looks are unavailable: {e}")
+                    tf!("skins.arctic_looks_are_unavailable", e = e)
                 };
                 ui.label(RichText::new(text).color(p.muted));
-                if ui.link("Retry").clicked() {
+                if ui.link(t!("skins.retry")).clicked() {
                     self.request_skin_state(true);
                 }
             });
@@ -150,10 +173,18 @@ impl ArcticApp {
             ui.horizontal(|ui| {
                 ui.spinner();
                 ui.label(
-                    RichText::new("Signing in to Arctic — you can look around while it loads.")
+                    RichText::new(t!("skins.signing_in_to_arctic_you_can_look_around"))
                         .color(p.muted),
                 );
             });
+            ui.add_space(6.0);
+        }
+        // Logins can't be saved (the data folder isn't writable): they work until the launcher closes.
+        if let Some(problem) = arctic_core::secret::problem() {
+            ui.label(
+                RichText::new(tf!("skins.logins_arent_being_saved", problem = problem))
+                    .color(p.muted),
+            );
             ui.add_space(6.0);
         }
     }
@@ -249,9 +280,14 @@ impl ArcticApp {
             self.skins.yaw += d.x * 0.012;
             self.skins.pitch = model::clamp_pitch(self.skins.pitch + d.y * 0.008);
             self.skins.dragged_at = now;
-        } else if now - self.skins.dragged_at > AUTO_TURN_AFTER && self.skins.dragged_at >= 0.0 {
+        } else {
             let dt = ui.input(|i| i.stable_dt).min(0.1);
-            self.skins.yaw += dt * AUTO_TURN_SPEED;
+            self.skins.yaw += auto_turn_step(
+                self.settings.lock_preview_rotation,
+                now,
+                self.skins.dragged_at,
+                dt,
+            );
         }
         if response.double_clicked() {
             self.skins.yaw = 0.5;
@@ -355,9 +391,9 @@ impl ArcticApp {
             }
             None => {
                 let text = if self.skins.arctic_busy || self.skins.busy {
-                    "Loading…"
+                    t!("skins.loading")
                 } else {
-                    "No skin yet"
+                    t!("skins.no_skin_yet")
                 };
                 painter.text(
                     rect.center(),
@@ -372,7 +408,7 @@ impl ArcticApp {
             painter.text(
                 rect.left_top() + vec2(12.0, 10.0),
                 Align2::LEFT_TOP,
-                "Trying on",
+                t!("skins.trying_on"),
                 FontId::proportional(12.0),
                 p.accent,
             );
@@ -380,17 +416,30 @@ impl ArcticApp {
             painter.text(
                 rect.left_top() + vec2(12.0, 10.0),
                 Align2::LEFT_TOP,
-                "Display model",
+                t!("skins.display_model"),
                 FontId::proportional(12.0),
                 p.muted,
             );
         }
         let hint = if current.skin_key.is_none() {
-            "Display model · drag to turn · scroll to zoom · double-click to reset"
+            t!("skins.display_model_drag_to_turn_scroll_to_zoom")
         } else {
-            "Drag to turn · scroll to zoom · double-click to reset"
+            t!("skins.drag_to_turn_scroll_to_zoom_double_click_to")
         };
         response.on_hover_text(hint);
+        // Lock toggle in the top-right corner; its own click target, so it never turns the figure.
+        let locked = self.settings.lock_preview_rotation;
+        let tip = if locked {
+            t!("skins.unlock_rotation")
+        } else {
+            t!("skins.lock_rotation")
+        };
+        let icon = if locked { Icon::Lock } else { Icon::Unlock };
+        let toggled = preview_lock_button(ui, rect, p, icon, tip).clicked();
+        if toggled {
+            self.settings.lock_preview_rotation = !locked;
+            self.persist_settings();
+        }
     }
 
     /// What you're wearing, each with a way to take it off, and how saving goes.
@@ -398,24 +447,24 @@ impl ArcticApp {
         let p = self.palette();
         let current = self.current_look();
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Equipped").strong().color(p.text));
+            ui.label(RichText::new(t!("skins.equipped")).strong().color(p.text));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 self.save_note(ui, p);
             });
         });
         ui.add_space(4.0);
         let skin = if current.arctic_skin {
-            "Arctic skin"
+            t!("skins.arctic_skin")
         } else if current.skin_key.is_some() {
-            "Minecraft skin"
+            t!("skins.minecraft_skin")
         } else {
-            "None"
+            t!("skins.none")
         };
-        if equipped_row(ui, p, "Skin", skin, current.arctic_skin) {
+        if equipped_row(ui, p, t!("skins.skin"), skin, current.arctic_skin) {
             self.stop_wearing_skin();
         }
         let (cape, arctic_cape) = self.equipped_cape_name();
-        if equipped_row(ui, p, "Cape", &cape, arctic_cape) {
+        if equipped_row(ui, p, t!("skins.cape"), &cape, arctic_cape) {
             self.set_arctic_cape(None, None);
         }
         // An animated cape can be switched to its still image.
@@ -425,13 +474,13 @@ impl ArcticApp {
             ui.horizontal(|ui| {
                 ui.add_sized(
                     [70.0, 20.0],
-                    egui::Label::new(RichText::new("Animate").small().color(p.muted)),
+                    egui::Label::new(RichText::new(t!("skins.animate")).small().color(p.muted)),
                 );
                 flip = switch(ui, p, on)
                     .on_hover_text(if on {
-                        "On. Turn off to show this cape's still image to everyone."
+                        t!("skins.on_turn_off_to_show_this_capes_still_image")
                     } else {
-                        "Off: everyone sees this cape's still image. Remembered for each cape."
+                        t!("skins.off_everyone_sees_this_capes_still_image")
                     })
                     .clicked();
             });
@@ -462,27 +511,28 @@ impl ArcticApp {
         ui.add_space(8.0);
         ui.horizontal_wrapped(|ui| {
             if names.len() > 1
-                && widgets::button(ui, p, Some(Icon::Close), "Remove all", false).clicked()
+                && widgets::button(ui, p, Some(Icon::Close), t!("skins.remove_all"), false)
+                    .clicked()
             {
                 self.set_cosmetics(Vec::new());
             }
             if let Some(key) = &current.skin_key
                 && let Some(png) = self.skin_png(key)
                 && ui
-                    .small_button("Save to library")
-                    .on_hover_text("Keep a copy of the skin you're wearing")
+                    .small_button(t!("skins.save_to_library"))
+                    .on_hover_text(t!("skins.keep_a_copy_of_the_skin_youre_wearing"))
                     .clicked()
             {
                 let name = self
                     .accounts
                     .active()
-                    .map_or("Skin".to_owned(), |a| a.username.clone());
+                    .map_or(t!("skins.skin").to_owned(), |a| a.username.clone());
                 let _ = self.add_skin(&name, &png, current.variant);
             }
             if self.can_change_minecraft_skin()
                 && ui
-                    .small_button("Reset Minecraft skin")
-                    .on_hover_text("Go back to the default Minecraft skin (seen by everyone)")
+                    .small_button(t!("skins.reset_minecraft_skin"))
+                    .on_hover_text(t!("skins.go_back_to_the_default_minecraft_skin_seen"))
                     .clicked()
             {
                 self.change_minecraft_skin(SkinChange::Reset);
@@ -518,7 +568,7 @@ impl ArcticApp {
             Some(hash) => {
                 let name = state
                     .and_then(|s| s.presets.iter().find(|p| p.is_texture(&hash)))
-                    .map_or("Your cape".to_owned(), |p| p.name.clone());
+                    .map_or(t!("skins.your_cape_2").to_owned(), |p| p.name.clone());
                 (name, true)
             }
             None => {
@@ -529,7 +579,7 @@ impl ArcticApp {
                     .and_then(|r| r.as_ref().ok())
                     .and_then(|m| m.profile.active_cape())
                     .map(|c| format!("{} (Minecraft)", c.alias));
-                (mc.unwrap_or_else(|| "None".to_owned()), false)
+                (mc.unwrap_or_else(|| t!("skins.none").to_owned()), false)
             }
         }
     }
@@ -538,7 +588,7 @@ impl ArcticApp {
     fn save_note(&self, ui: &mut egui::Ui, p: &Palette) {
         if self.skins.arctic_busy && self.arctic_state().is_some() {
             ui.spinner();
-            ui.label(RichText::new("Saving…").small().color(p.muted));
+            ui.label(RichText::new(t!("skins.saving")).small().color(p.muted));
             return;
         }
         let Some(at) = self.skins.saved_at else {
@@ -546,7 +596,7 @@ impl ArcticApp {
         };
         let age = super::now_secs_f64() - at;
         if age < SAVED_NOTE_SECS {
-            ui.label(RichText::new("Saved").small().color(p.accent));
+            ui.label(RichText::new(t!("skins.saved")).small().color(p.accent));
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_secs_f64(SAVED_NOTE_SECS - age));
         }
@@ -582,26 +632,36 @@ impl ArcticApp {
         let mut pick = None;
         let mut view = None;
         let on_skins = self.skins.section == Section::Skins;
-        ui.label(RichText::new("LOOKS").small().color(p.muted));
+        ui.label(RichText::new(t!("skins.looks")).small().color(p.muted));
         ui.add_space(2.0);
         // The gallery has its own row: as a toggle inside Skins it went unnoticed.
         for (skins_view, name) in [
-            (SkinsView::Library, "Skins"),
-            (SkinsView::Gallery, "Skin gallery"),
+            (SkinsView::Library, t!("skins.skins")),
+            (SkinsView::Gallery, t!("skins.skin_gallery")),
         ] {
             if rail_row(ui, p, name, None, on_skins && self.skins.view == skins_view) {
                 pick = Some(Section::Skins);
                 view = Some(skins_view);
             }
         }
-        if rail_row(ui, p, "Capes", capes, self.skins.section == Section::Capes) {
+        if rail_row(
+            ui,
+            p,
+            t!("skins.capes"),
+            capes,
+            self.skins.section == Section::Capes,
+        ) {
             pick = Some(Section::Capes);
         }
         if let Some(view) = view {
             self.skins.view = view;
         }
         ui.add_space(10.0);
-        ui.label(RichText::new("COSMETICS").small().color(p.muted));
+        ui.label(
+            RichText::new(t!("skins.cosmetics_2"))
+                .small()
+                .color(p.muted),
+        );
         ui.add_space(2.0);
         for (slot, n) in SLOTS.into_iter().zip(counts) {
             if rail_row(
@@ -681,7 +741,8 @@ fn equipped_row(ui: &mut egui::Ui, p: &Palette, what: &str, name: &str, removabl
         ui.label(RichText::new(name).color(p.text));
         if removable {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                clicked = widgets::icon_button(ui, p, Icon::Close, "Take it off").clicked();
+                clicked =
+                    widgets::icon_button(ui, p, Icon::Close, t!("skins.take_it_off")).clicked();
             });
         }
     });
@@ -746,11 +807,76 @@ pub(super) fn slot_key(slot: &str) -> &'static str {
 /// Words for a cosmetic slot.
 pub(super) fn slot_name(slot: &str) -> &'static str {
     match slot {
-        "head" => "Head",
-        "face" => "Face",
-        "back" => "Back",
-        "shoulders" => "Shoulders",
-        "arms" => "Arms",
-        _ => "Body",
+        "head" => t!("skins.head"),
+        "face" => t!("skins.face"),
+        "back" => t!("skins.back"),
+        "shoulders" => t!("skins.shoulders"),
+        "arms" => t!("skins.arms"),
+        _ => t!("skins.body"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lock_overlay_keeps_equipped_below_preview() {
+        for size in [
+            vec2(640.0, 360.0),
+            vec2(1024.0, 576.0),
+            vec2(1920.0, 1080.0),
+        ] {
+            let ctx = egui::Context::default();
+            let output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, size)),
+                    ..Default::default()
+                },
+                |ui| {
+                    theme::card(&theme::DARK).show(ui, |ui| {
+                        ui.set_width(PREVIEW_W);
+                        egui::ScrollArea::vertical()
+                            .auto_shrink([false, true])
+                            .show(ui, |ui| {
+                                ui.vertical(|ui| {
+                                    let (preview, _) = ui.allocate_exact_size(
+                                        vec2(PREVIEW_W, PREVIEW_H),
+                                        Sense::click_and_drag(),
+                                    );
+                                    let before = ui.cursor();
+                                    for icon in [Icon::Lock, Icon::Unlock] {
+                                        let lock = preview_lock_button(
+                                            ui,
+                                            preview,
+                                            &theme::DARK,
+                                            icon,
+                                            "Rotation",
+                                        );
+                                        assert!(preview.contains_rect(lock.rect));
+                                        assert_eq!(ui.cursor(), before);
+                                    }
+                                    ui.add_space(10.0);
+                                    let equipped = ui.label("Equipped");
+                                    assert!(equipped.rect.top() >= preview.bottom() + 10.0);
+                                });
+                            });
+                    });
+                },
+            );
+            output.drop_without_applying_deltas();
+        }
+    }
+
+    #[test]
+    fn auto_turn_waits_after_a_drag_and_never_runs_locked() {
+        assert!(auto_turn_step(false, 10.0, 0.0, 0.016) > 0.0);
+        assert_eq!(auto_turn_step(false, 2.0, 0.0, 0.016), 0.0, "just dragged");
+        assert_eq!(
+            auto_turn_step(false, 10.0, -1.0, 0.016),
+            0.0,
+            "devshot still"
+        );
+        assert_eq!(auto_turn_step(true, 10.0, 0.0, 0.016), 0.0, "locked");
     }
 }

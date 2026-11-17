@@ -7,7 +7,7 @@ use crate::art::icons::{self, Icon};
 use crate::art::{brand_mark, glow};
 use crate::theme;
 use crate::widgets;
-
+use crate::{t, tf};
 const WEBSITE: &str = "https://arcticlauncher.com";
 pub(crate) const DISCORD: &str = "https://discord.arcticlauncher.com";
 const SUPPORT_EMAIL: &str = "support@arcticlauncher.com";
@@ -15,7 +15,7 @@ const SUPPORT_EMAIL: &str = "support@arcticlauncher.com";
 impl ArcticApp {
     pub(crate) fn about_tab(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        widgets::page_header(ui, p, "About", "");
+        widgets::page_header(ui, p, t!("nav.about"), "");
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
@@ -26,17 +26,16 @@ impl ArcticApp {
                 ui.vertical(|ui| {
                     ui.add_space(8.0);
                     ui.label(RichText::new(APP_NAME).size(24.0).strong().color(p.text));
-                    ui.label(RichText::new(format!("Version {APP_VERSION}")).color(p.muted));
+                    ui.label(
+                        RichText::new(tf!("nav.version", APP_VERSION = APP_VERSION)).color(p.muted),
+                    );
                 });
             });
             ui.add_space(8.0);
-            ui.label("A lightweight, open-source Minecraft launcher.");
+            ui.label(t!("nav.a_lightweight_open_source_minecraft_launcher"));
             ui.add_space(8.0);
             ui.label(
-                RichText::new(
-                    "Need help, or want to hear about updates, promotions and giveaways? Join our Discord.",
-                )
-                .color(p.muted),
+                RichText::new(t!("nav.need_help_or_want_to_hear_about_updates")).color(p.muted),
             );
             ui.add_space(8.0);
             crate::widgets::row(ui, |ui| {
@@ -45,7 +44,14 @@ impl ArcticApp {
                 {
                     ui.ctx().open_url(egui::OpenUrl::new_tab(WEBSITE));
                 }
-                if widgets::button(ui, p, Some(Icon::External), "Source on GitHub", false).clicked()
+                if widgets::button(
+                    ui,
+                    p,
+                    Some(Icon::External),
+                    t!("nav.source_on_github"),
+                    false,
+                )
+                .clicked()
                 {
                     ui.ctx().open_url(egui::OpenUrl::new_tab(format!(
                         "https://github.com/{GITHUB_REPO}"
@@ -54,8 +60,8 @@ impl ArcticApp {
                 if widgets::button(ui, p, Some(Icon::Friends), "Discord", false).clicked() {
                     ui.ctx().open_url(egui::OpenUrl::new_tab(DISCORD));
                 }
-                if widgets::button(ui, p, Some(Icon::Star), "Star us on GitHub", false)
-                    .on_hover_text("A star helps other players find Arctic")
+                if widgets::button(ui, p, Some(Icon::Star), t!("nav.star_us_on_github"), false)
+                    .on_hover_text(t!("nav.a_star_helps_other_players_find_arctic"))
                     .clicked()
                 {
                     ui.ctx().open_url(egui::OpenUrl::new_tab(format!(
@@ -66,14 +72,14 @@ impl ArcticApp {
                     ui,
                     p,
                     Some(Icon::Plus),
-                    "Suggest a feature or report a bug",
+                    t!("nav.suggest_a_feature_or_report_a_bug"),
                     true,
                 )
                 .clicked()
                 {
                     self.open_suggest();
                 }
-                if widgets::button(ui, p, Some(Icon::External), "Email support", false)
+                if widgets::button(ui, p, Some(Icon::External), t!("nav.email_support"), false)
                     .on_hover_text(SUPPORT_EMAIL)
                     .clicked()
                 {
@@ -85,24 +91,26 @@ impl ArcticApp {
             self.sponsor_credit(ui);
             ui.add_space(8.0);
             ui.label(
-                RichText::new(
-                    "Licensed under the GNU General Public License v3.0 or later. \
-                     Not affiliated with Mojang Studios or Microsoft.",
-                )
-                .small()
-                .color(p.muted),
+                RichText::new(t!("nav.licensed_under_the_gnu_general_public"))
+                    .small()
+                    .color(p.muted),
             );
         });
         ui.add_space(14.0);
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new("Updates").size(17.0).strong().color(p.text));
+            ui.label(
+                RichText::new(t!("nav.updates"))
+                    .size(17.0)
+                    .strong()
+                    .color(p.text),
+            );
             ui.add_space(4.0);
             self.update_status(ui);
         });
         ui.add_space(12.0);
         ui.label(
-            RichText::new(format!("Data folder: {}", self.dirs.root().display()))
+            RichText::new(tf!("nav.data_folder", root = self.dirs.root().display()))
                 .small()
                 .color(p.muted),
         );
@@ -110,7 +118,7 @@ impl ArcticApp {
 
     fn update_status(&mut self, ui: &mut egui::Ui) {
         if arctic_core::update::managed_by_flatpak() {
-            ui.label("Updates are managed by your Linux software manager.");
+            ui.label(t!("nav.updates_are_managed_by_your_linux_software"));
             return;
         }
         let p = self.palette();
@@ -123,19 +131,19 @@ impl ArcticApp {
             UpdateState::Checking => {
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    ui.label("Checking…");
+                    ui.label(t!("nav.checking"));
                 });
             }
             UpdateState::UpToDate => {
                 ui.horizontal(|ui| {
                     let (r, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
                     icons::draw(ui.painter(), Icon::Check, r, p.accent);
-                    ui.label(RichText::new("You're on the latest version.").color(p.accent));
+                    ui.label(RichText::new(t!("nav.youre_on_the_latest_version")).color(p.accent));
                 });
             }
             UpdateState::Available { info, .. } => {
                 ui.label(
-                    RichText::new(format!("Version {} is available.", info.version))
+                    RichText::new(tf!("nav.version_is_available", version = info.version))
                         .color(p.accent),
                 );
             }
@@ -152,13 +160,13 @@ impl ArcticApp {
                 );
             }
             UpdateState::Installed { .. } => {
-                ui.label("Update installed; restart to finish.");
+                ui.label(t!("nav.update_installed_restart_to_finish"));
             }
             UpdateState::Failed { error, retry } => {
                 let what = if retry.is_some() {
-                    "Update failed"
+                    t!("nav.update_failed")
                 } else {
-                    "Couldn't check for updates"
+                    t!("nav.couldnt_check_for_updates")
                 };
                 ui.label(RichText::new(format!("{what}: {error}")).color(p.muted));
             }
@@ -166,7 +174,7 @@ impl ArcticApp {
         ui.add_space(4.0);
         if ui
             .add_enabled_ui(!busy, |ui| {
-                widgets::button(ui, p, None, "Check for updates", false)
+                widgets::button(ui, p, None, t!("nav.check_for_updates"), false)
             })
             .inner
             .clicked()

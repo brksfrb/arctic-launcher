@@ -37,6 +37,7 @@ import net.minecraft.network.packet.s2c.play.GameStateChangeS2CPacket;
 import net.minecraft.network.packet.s2c.play.PlayerRespawnS2CPacket;
 import net.minecraft.network.packet.s2c.play.PlayerSpawnS2CPacket;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Playing a replay on old versions: the same approach as newer ones (a
  * connection that goes nowhere, fed the recording on the game thread), with
@@ -45,7 +46,7 @@ import net.minecraft.network.packet.s2c.play.PlayerSpawnS2CPacket;
 public final class LegacyReplayPlayback implements ReplayBackend {
 	static final int CAMERA_ID = -1_789_435;
 	private static final GameProfile CAMERA = new GameProfile(
-			UUID.nameUUIDFromBytes("arctic:replay-camera".getBytes(StandardCharsets.UTF_8)), "Replay");
+			UUID.nameUUIDFromBytes("arctic:replay-camera".getBytes(StandardCharsets.UTF_8)), "Replay"); // i18n-ignore: a game profile name
 	private static final int BODY_STEP_MS = 50;
 	private static final int BODY_JUMP_MS = 1000;
 	/** Game state change reasons: game mode, credits, demo. */
@@ -147,7 +148,7 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 			conn.setPacketListener(new ClientLoginNetworkHandler(conn, mc, new TitleScreen()));
 			return null;
 		} catch (RuntimeException e) {
-			return "Couldn't start the replay: " + e;
+			return Lang.t("platform.couldnt_start_the_replay") + e;
 		}
 	}
 
@@ -300,7 +301,7 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 			return;
 		}
 		if (body == null || body.world != world || body.removed || bodyHidden) {
-			GameProfile profile = new GameProfile(uuid != null ? uuid : UUID.randomUUID(), name != null ? name : "Player");
+			GameProfile profile = new GameProfile(uuid != null ? uuid : UUID.randomUUID(), name != null ? name : "Player"); // i18n-ignore: a game profile name
 			body = new OtherClientPlayerEntity(world, profile);
 			body.setEntityId(selfId);
 			body.refreshPositionAndAngles(s.x, s.y, s.z, s.yaw, s.pitch);

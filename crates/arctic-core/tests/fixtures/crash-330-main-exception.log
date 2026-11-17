@@ -1,0 +1,9 @@
+---- Minecraft Crash Report ----
+Description: Initializing game
+
+java.lang.IllegalStateException: Failed to initialize renderer
+	at example.Game.render(Game.java:42)
+Caused by: java.lang.RuntimeException: underlying failure
+	at example.Renderer.init(Renderer.java:10)
+
+-- System Details --

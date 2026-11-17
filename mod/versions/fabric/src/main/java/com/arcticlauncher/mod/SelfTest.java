@@ -50,8 +50,20 @@ final class SelfTest {
 
 	static void maybeStart() {
 		//#if DEV
+		if ("chat-history".equals(System.getProperty("arctic.selftest"))) {
+			ChatHistoryProof.start();
+			return;
+		}
 		if ("persistent-chat".equals(System.getProperty("arctic.selftest"))) {
 			PersistentChatProof.start();
+			return;
+		}
+		if ("stampwidth".equals(System.getProperty("arctic.selftest"))) {
+			StampWidthTest.start();
+			return;
+		}
+		if ("freezechat".equals(System.getProperty("arctic.selftest"))) {
+			FreezeChatTest.start();
 			return;
 		}
 		if ("chatcopy".equals(System.getProperty("arctic.selftest"))) {
@@ -64,6 +76,12 @@ final class SelfTest {
 		//#if DEV
 		if ("nametagfont".equals(System.getProperty("arctic.selftest"))) {
 			NametagFontTest.start();
+			return;
+		}
+		//#endif
+		//#if DEV
+		if ("nametagsharp".equals(System.getProperty("arctic.selftest"))) {
+			NametagSharpTest.start();
 			return;
 		}
 		//#endif
@@ -94,6 +112,42 @@ final class SelfTest {
 			return;
 		}
 		//#endif
+		//#if DEV_SCENES
+		//#if MC >= 1.21.11
+		if ("ctmlines".equals(System.getProperty("arctic.selftest"))) {
+			GlassLinesTest.startLines();
+			return;
+		}
+		//#endif
+		//#endif
+		//#if DEV_SCENES
+		//#if MC >= 1.21.11 && MC < 26.1
+		if ("ctmborders".equals(System.getProperty("arctic.selftest"))) {
+			GlassBordersTest.start();
+			return;
+		}
+		if ("ctmframes".equals(System.getProperty("arctic.selftest"))) {
+			GlassFramesTest.start();
+			return;
+		}
+		//#endif
+		//#endif
+		if ("fogmatrix".equals(System.getProperty("arctic.selftest"))) {
+			//#if DEV_SCENES
+			//#if MC >= 1.21.5
+			FogMatrixTest.start();
+			//#endif
+			//#endif
+			return;
+		}
+		if ("fog".equals(System.getProperty("arctic.selftest"))) {
+			//#if DEV_SCENES
+			//#if MC >= 1.21.6
+			FogTest.start();
+			//#endif
+			//#endif
+			return;
+		}
 		if ("ctm".equals(System.getProperty("arctic.selftest"))) {
 			//#if DEV_SCENES
 			GlassCtmTest.start();

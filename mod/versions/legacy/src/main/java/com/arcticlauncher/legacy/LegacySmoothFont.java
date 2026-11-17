@@ -17,6 +17,7 @@ import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.client.util.Window;
 import org.lwjgl.opengl.GL11;
 
+import com.arcticlauncher.client.Lang;
 /**
  * The smooth font (Inter) on 1.8.9 - 1.12.2, which have no TrueType fonts: with Fancy on, Inter's
  * glyphs are drawn into one texture at the GUI scale (so each texel lands on one screen pixel),
@@ -88,12 +89,22 @@ public final class LegacySmoothFont {
 	/** Set only by the explicit nametagfont self-test for a matching old-atlas screenshot. */
 	static boolean proofBaseline;
 
-	/** Read the actual GL transform once per string, including direct GL calls made by other mods. */
-	public static void preparing(float x, float y) {
+	/**
+	 * Read the actual transform once per draw, shared by its shadow and foreground layers. Text rendering
+	 * changes colour, blending and textures, but never these matrices or the viewport. Keep the reads here
+	 * (rather than a cross-draw cache) so direct GL transforms from other mods are still observed.
+	 */
+	public static void beginDraw() {
+		// The GUI-size atlas establishes the divisor, including the first draw after a GUI-scale change.
+		ready();
 		GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, MODEL);
 		GL11.glGetFloat(GL11.GL_PROJECTION_MATRIX, PROJECTION);
 		GL11.glGetInteger(GL11.GL_VIEWPORT, VIEWPORT);
 		com.arcticlauncher.client.feature.TextPixelScale.multiply(PROJECTION, MODEL, CLIP);
+	}
+
+	/** Each layer keeps its own anchor for the perspective divide, without another driver read. */
+	public static void preparing(float x, float y) {
 		drawScale = com.arcticlauncher.client.feature.TextPixelScale.projected(CLIP, x, y,
 				VIEWPORT.get(2), VIEWPORT.get(3)) / Math.max(1, scale);
 	}
@@ -186,8 +197,13 @@ public final class LegacySmoothFont {
 	 * shows. While Fancy is on it is switched off in memory (Patcher's own settings file is not touched).
 	 */
 	private static void yieldPatcher() {
+		// Most installs have no Patcher. This is queried by glyph draws and width lookups too;
+		// once absence is known, they need neither reflection nor a clock read.
+		if (patcherLooked && patcherOptimized == null) {
+			return;
+		}
 		long now = System.nanoTime();
-		if (patcherLooked && patcherOptimized == null || now - patcherCheckedAt < 2_000_000_000L && patcherLooked) {
+		if (now - patcherCheckedAt < 2_000_000_000L && patcherLooked) {
 			return;
 		}
 		patcherCheckedAt = now;
@@ -215,6 +231,7 @@ public final class LegacySmoothFont {
 	}
 
 	public static float advance(char c) {
+		if (com.arcticlauncher.client.feature.EmoteAtlas.glyph(c) != null) return com.arcticlauncher.client.feature.EmoteAtlas.ADVANCE;
 		if (c == ' ') {
 			return SPACE;
 		}
@@ -356,7 +373,7 @@ public final class LegacySmoothFont {
 	private static Atlas make(int s, boolean aa) throws Exception {
 		Font font = font().deriveFont(SIZE * s);
 		FontRenderContext frc = new FontRenderContext(null, true, true);
-		java.awt.font.LineMetrics metrics = font.getLineMetrics("Agjpq[]|", frc);
+		java.awt.font.LineMetrics metrics = font.getLineMetrics("Agjpq[]|", frc); // i18n-ignore
 		linePixels = Math.max(9, Math.round(metrics.getHeight() / s));
 		List<Character> chars = new ArrayList<Character>();
 		List<Rectangle> boxes = new ArrayList<Rectangle>();

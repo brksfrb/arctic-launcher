@@ -20,8 +20,9 @@ import net.minecraft.resources.Identifier;
 @Mixin(TextureAtlasSprite.class)
 abstract class GlassOldImageMixin {
 	//#if MC >= 1.15
+	// Constructor HEAD runs before super(); Mixin requires a static handler here.
 	@ModifyVariable(method = "<init>", at = @At("HEAD"), argsOnly = true)
-	private NativeImage arctic$image(NativeImage image, @Local(argsOnly = true) TextureAtlasSprite.Info info) {
+	private static NativeImage arctic$image(NativeImage image, @Local(argsOnly = true) TextureAtlasSprite.Info info) {
 		if (!info.name().toString().startsWith("arctic:ctm/")) return image;
 		NativeImage generated = GlassImages.generate(image, info.width(), info.height(), GlassTiles.tile(info.name().toString()), GlassTiles.original(info.name().toString()));
 		image.close();

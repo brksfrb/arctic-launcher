@@ -20,7 +20,6 @@ pub fn scan() -> Scan {
     sklauncher::v4(&mut scan);
     managers::prism_family(&mut scan);
     modrinth::app(&mut scan);
-    managers::curseforge(&mut scan);
     managers::atlauncher(&mut scan);
     managers::gdlauncher(&mut scan);
     clients::labymod(&mut scan);
@@ -83,11 +82,11 @@ fn tidy(scan: &mut Scan) {
 
 /// Instances in a folder the player picked: an instance folder of any
 /// supported launcher, a folder of them, or a launcher's data folder
-/// (portable MultiMC, a moved CurseForge folder…).
+/// (portable MultiMC…).
 pub fn scan_folder(path: &Path) -> Scan {
     let mut scan = Scan::default();
     managers::folder(path, &mut scan);
-    if scan.instances.is_empty() {
+    if scan.instances.is_empty() && !scan.curseforge_blocked {
         scan.seen.push((
             Launcher::Folder,
             "No instances there that Arctic can read".into(),

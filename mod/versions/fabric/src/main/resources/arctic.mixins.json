@@ -11,7 +11,11 @@
 		"EditBoxMixin",<% } %>
 <% if (widgets13) { %>		"ScreenButtonsAccess",
 <% } %>		"AbstractClientPlayerMixin",
-		"FontMaskMixin",
+		"FontMaskMixin",<% if (badgeShadow) { %>
+		"BadgeShadowMixin",<% } %><% if (badgeShadow13) { %>
+		"BadgeShadow13Mixin",<% } %>
+<% if (emoteOldGlyph) { %>		"EmoteGlyphMixin",
+<% } %>
 		"ClientBrandMixin",
 		"ConnectionProxyMixin",
 <% if (playerInfoRace) { %>		"PlayerInfoLookupMixin",
@@ -33,6 +37,7 @@
 		"PortalScreenMixin",
 		"OwnNametagMixin",
 		"ChatEmojiMixin",
+		"ChatSentHistoryMixin",
 		"ScreenNoticesMixin",
 		"DebugScaleMixin",
 <% if (hurtCam) { %>		"NoHurtCamMixin",
@@ -59,10 +64,12 @@
 <% } %>		"ServerTimeMixin",
 		"ChatPlaceholderMixin",
 		"MinecraftTickMixin",
-		"GlassModelMixin",<% if (ctmPackOrder) { %>
+<% if (badgeSpaces) { %>		"BadgeSpaceMixin",
+<% } %>		"GlassModelMixin",<% if (ctmPackOrder) { %>
 		"GlassPackOrderMixin",<% } %>
 		"GlassBakedQuadMixin",<% if (ctmQuadAccess) { %>
 		"GlassQuadAccess",<% } %>
+		"GlassDamageMixin",
 		"GlassRenderMixin",<% if (ctmSodium) { %>
 		"GlassSodiumMixin",<% } %><% if (ctmSodiumContext) { %>
 		"GlassSodiumContextMixin",<% } %><% if (ctmSodiumOld) { %>
@@ -71,9 +78,7 @@
 		"GlassContentsMixin",
 		"GlassStitchMixin",<% } else { %>
 		"GlassOldAtlasMixin",
-		"GlassOldImageMixin",<% if (ctmInfo) { %>
-		"GlassInfoAccess",<% } %><% if (ctmSpriteAccess) { %>
-		"GlassOldSpriteAccess",<% } %><% } %>
+		"GlassOldImageMixin",<% } %>
 		"ServerMenuScreenMixin",<% if (postBlur) { %>
 		"MotionBlurPostMixin",
 		"EffectsPackMixin",<% } %><% if (oldMotionBlur) { %>
@@ -83,7 +88,8 @@
 		"FontHintingMixin",
 		"FontBitmapHintingMixin",<% } %><% if (smoothFontManager) { %>
 		"SmoothFontManagerMixin",
-		"SmoothFontGlyphInfoMixin",<% } %><% if (glowText) { %>
+		"SmoothFontGlyphInfoMixin",<% } %><% if (emoteFontManager) { %>
+		"SmoothFontManagerMixin",<% } %><% if (glowText) { %>
 		"GlowTextMixin",<% } %><% if (scaledFont) { %>
 		"FontTextureMixin",
 		"ScaledGlyphMixin",<% } %><% if (!worldTextScale) { %>
@@ -91,19 +97,20 @@
 		"ScaledTextStateMixin",
 		"TextProjectionMixin",
 		"TextProjectionBufferMixin",<% } %><% if (worldTextScale) { %>
-		"WorldTextScaleMixin",<% } %><% if (oldScaledFont) { %>
+		"WorldTextScaleMixin",<% } %><% if (nameTagTextScale) { %>
+		"NameTagTextScaleMixin",<% } %><% if (oldScaledFont) { %>
 		"ScaledFontSetMixin",<% } %><% if (oldScaledTexture) { %>
 		"ScaledFontTextureMixin",<% } %><% if (gpuFontTexture && !scaledFont) { %>
 		"FontTextureMixin",<% } %><% if (textShader) { %>
 		"TextShaderMixin",<% } %><% if (textShaderOld) { %>
-		"TextShaderOldMixin",<% } %><% if (startup) { %>
+		"TextShaderOldMixin",<% } %><% if (startupTiming) { %>
 		"MainStartMixin",
 		"MinecraftReadyMixin",
 		"FirstScreenMixin",
 		"BootstrapMarkMixin",
 		"WindowMarkMixin",
+		"OverlayDoneMixin",<% } %><% if (startup) { %>
 		"CrashReportPreloadMixin",
-		"OverlayDoneMixin",
 		"LoadingFadeMixin",<% } %>
 		"WindowMaximizeMixin",
 		"WindowTitleMixin",
@@ -124,6 +131,8 @@
 <% } %>
 		"LightmapMixin",
 		"ChatComponentMixin",
+<% if (emoteLayout) { %>		"ChatEmoteLayoutMixin",
+<% } %>
 		"ChatCopyStyleMixin",
 		${chatCopyStyleAccess}
 <% if (chatLine111) { %>		"ChatLine111Mixin",

@@ -11,7 +11,7 @@ use crate::tasks::Retargeted;
 use crate::theme;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 /// Mods listed before the rest are folded away.
 const SHOWN_ROWS: usize = 12;
 
@@ -55,24 +55,29 @@ impl ArcticApp {
         ui.add_space(12.0);
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new("Minecraft version").size(17.0).strong().color(p.text));
+            ui.label(
+                RichText::new(t!("instances.minecraft_version_2"))
+                    .size(17.0)
+                    .strong()
+                    .color(p.text),
+            );
             ui.label(
                 RichText::new(if kind.is_some() {
-                    "Move this instance to another version. Its mods are looked up on Modrinth first, so you see which ones exist there."
+                    t!("instances.move_this_instance_to_another_version_its")
                 } else {
-                    "Move this instance to another version. Worlds made in a newer version can't be opened in an older one."
+                    t!("instances.move_this_instance_to_another_version_worlds")
                 })
                 .color(p.muted),
             );
             ui.add_space(6.0);
             let Some(games) = self.create_game_versions(kind) else {
-                ui.label(RichText::new("Loading versions…").color(p.muted));
+                ui.label(RichText::new(t!("instances.loading_versions")).color(p.muted));
                 return;
             };
             let picked = state.picked.clone().unwrap_or_else(|| current.clone());
             let mut choice = picked.clone();
             widgets::row(ui, |ui| {
-                ui.label("Version");
+                ui.label(t!("instances.version"));
                 egui::ComboBox::from_id_salt(("retarget", &instance.id))
                     .width(200.0)
                     .height(320.0)
@@ -82,10 +87,13 @@ impl ArcticApp {
                             ui.selectable_value(&mut choice, g.clone(), g);
                         }
                     });
-                let busy = state.applying
-                    || matches!(state.check, Some((_, Load::Loading)));
+                let busy = state.applying || matches!(state.check, Some((_, Load::Loading)));
                 if choice != current && !busy {
-                    let label = if kind.is_some() { "Check mods" } else { "Change version" };
+                    let label = if kind.is_some() {
+                        t!("instances.check_mods")
+                    } else {
+                        t!("instances.change_version")
+                    };
                     if widgets::button(ui, p, None, label, true).clicked() {
                         match kind {
                             Some(_) => {
@@ -96,7 +104,11 @@ impl ArcticApp {
                                 let id = instance.id.clone();
                                 let game = choice.clone();
                                 self.update_instance(&id, |i| i.version = Some(game.clone()));
-                                self.toasts.push(Kind::Success, format!("Now on {game}"), "");
+                                self.toasts.push(
+                                    Kind::Success,
+                                    tf!("instances.now_on", game = game),
+                                    "",
+                                );
                             }
                         }
                     }
@@ -131,12 +143,17 @@ impl ArcticApp {
             Load::Loading => {
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    ui.label(RichText::new("Looking up the mods on Modrinth…").color(p.muted));
+                    ui.label(
+                        RichText::new(t!("instances.looking_up_the_mods_on_modrinth"))
+                            .color(p.muted),
+                    );
                 });
                 return;
             }
             Load::Failed(e) => {
-                ui.label(RichText::new(format!("Couldn't check the mods: {e}")).color(p.error));
+                ui.label(
+                    RichText::new(tf!("instances.couldnt_check_the_mods", e = e)).color(p.error),
+                );
                 return;
             }
             Load::Ready(checks) => checks.clone(),
@@ -145,16 +162,21 @@ impl ArcticApp {
         let ready = checks.iter().filter(|c| c.available.is_some()).count();
         let missing = checks.iter().filter(|c| c.missing()).count();
         ui.label(
-            RichText::new(format!(
-                "{ready} of {known} mods have a version for {version}."
+            RichText::new(tf!(
+                "instances.of_mods_have_a_version_for",
+                ready = ready,
+                known = known,
+                version = version
             ))
             .strong()
             .color(if missing == 0 { p.text } else { p.warn }),
         );
         if missing > 0 {
             ui.label(
-                RichText::new(format!(
-                    "{missing} will be turned off (not deleted): they don't have a version for {version} yet."
+                RichText::new(tf!(
+                    "instances.will_be_turned_off_not_deleted_they_dont",
+                    missing = missing,
+                    version = version
                 ))
                 .color(p.muted),
             );
@@ -168,20 +190,29 @@ impl ArcticApp {
         for c in &checks[..shown] {
             ui.horizontal_wrapped(|ui| {
                 let name = if c.dependency {
-                    format!("{} (needed by another mod)", c.title)
+                    tf!("instances.needed_by_another_mod", title = c.title)
                 } else {
                     c.title.clone()
                 };
                 ui.label(RichText::new(name).color(p.text));
                 let (text, color) = match (&c.project_id, &c.available) {
-                    (None, _) => ("not on Modrinth, kept as it is".to_owned(), p.muted),
+                    (None, _) => (
+                        t!("instances.not_on_modrinth_kept_as_it_is").to_owned(),
+                        p.muted,
+                    ),
                     (Some(_), Some(v)) => (format!("→ {v}"), p.accent),
-                    (Some(_), None) => ("no version yet, turned off".to_owned(), p.warn),
+                    (Some(_), None) => {
+                        (t!("instances.no_version_yet_turned_off").to_owned(), p.warn)
+                    }
                 };
                 ui.label(RichText::new(text).small().color(color));
             });
         }
-        if checks.len() > shown && ui.link(format!("Show all {} mods", checks.len())).clicked() {
+        if checks.len() > shown
+            && ui
+                .link(tf!("instances.show_all_mods", count = checks.len()))
+                .clicked()
+        {
             state.show_all = true;
         }
         ui.add_space(8.0);
@@ -193,18 +224,26 @@ impl ArcticApp {
                     .install_progress
                     .as_ref()
                     .map(|s| s.stage.clone())
-                    .unwrap_or_else(|| "Switching".to_owned());
+                    .unwrap_or_else(|| t!("instances.switching").to_owned());
                 ui.label(RichText::new(stage).color(p.muted));
             });
             return;
         }
         widgets::row(ui, |ui| {
-            if widgets::button(ui, p, None, &format!("Change to {version}"), true).clicked() {
+            if widgets::button(
+                ui,
+                p,
+                None,
+                &tf!("instances.change_to", version = version),
+                true,
+            )
+            .clicked()
+            {
                 state.applying = true;
                 self.tasks
                     .retarget_apply(instance.clone(), version.to_owned(), checks.clone());
             }
-            if widgets::button(ui, p, None, "Cancel", false).clicked() {
+            if widgets::button(ui, p, None, t!("instances.cancel"), false).clicked() {
                 state.check = None;
                 state.picked = None;
             }
@@ -254,19 +293,26 @@ impl ArcticApp {
                     i.version = Some(game);
                     i.loader = Loader::new(kind, done.loader_version.clone());
                 });
-                let mut detail = format!("{} mods updated", done.updated);
+                let mut detail = tf!("instances.mods_updated", updated = done.updated);
                 if !done.disabled.is_empty() {
-                    detail.push_str(&format!(", turned off: {}", done.disabled.join(", ")));
+                    detail.push_str(&tf!(
+                        "instances.turned_off",
+                        join = done.disabled.join(", ")
+                    ));
                 }
                 if !done.failed.is_empty() {
                     detail.push_str(&format!(", couldn't download: {}", done.failed.join(", ")));
                 }
-                self.toasts
-                    .push(Kind::Success, format!("Now on {version}"), detail);
+                self.toasts.push(
+                    Kind::Success,
+                    tf!("instances.now_on_2", version = version),
+                    detail,
+                );
             }
-            Err(e) => self
-                .toasts
-                .push(Kind::Error, "Could not change the version", e),
+            Err(e) => {
+                self.toasts
+                    .push(Kind::Error, t!("instances.could_not_change_the_version"), e)
+            }
         }
         if self.inst.open.as_deref() == Some(instance.as_str()) {
             self.refresh_mods(&instance);

@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Ctrl+K: one search box for everything: Arctic's mods and their settings, your saved servers, your
  * friends and a few actions. Type, pick with the arrow keys or the mouse, Enter opens it.
@@ -43,7 +44,7 @@ public final class CommandPalette extends Page {
 		}
 	}
 
-	private final TextField field = new TextField("Search mods, servers, friends...", MAX_QUERY, TextField.ANY);
+	private final TextField field = new TextField(Lang.t("mods.search_mods_servers_friends"), MAX_QUERY, TextField.ANY);
 	private final List<Entry> all = new ArrayList<Entry>();
 	private List<Entry> shown = new ArrayList<Entry>();
 	private int selected;
@@ -66,20 +67,20 @@ public final class CommandPalette extends Page {
 
 	private void collect() {
 		for (final Mod m : ModCatalog.all()) {
-			all.add(new Entry(m.name, "Mod", m.description, m.keywords, () -> ArcticClient.platform().openPage(Menus.pageFor(m, null))));
+			all.add(new Entry(m.name, Lang.t("mods.mod"), m.description, m.keywords, () -> ArcticClient.platform().openPage(Menus.pageFor(m, null))));
 		}
-		all.add(new Entry("Edit HUD", "Action", "Move and resize your HUD widgets", "layout widgets",
+		all.add(new Entry(Lang.t("mods.edit_hud"), Lang.t("mods.action"), Lang.t("mods.move_and_resize_your_hud_widgets"), "layout widgets", // i18n-ignore
 				() -> ArcticClient.platform().openPage(new HudEditor())));
-		all.add(new Entry("Mods", "Action", "All Arctic mods", "menu settings", Menus::mods));
+		all.add(new Entry(Lang.t("mods.mods"), Lang.t("mods.action"), Lang.t("mods.all_arctic_mods"), "menu settings", Menus::mods)); // i18n-ignore
 		for (final com.arcticlauncher.client.servers.QuickJoin.Mode mode : com.arcticlauncher.client.servers.QuickJoin.all(ArcticClient.platform())) {
-			all.add(new Entry(mode.label, "Quick join", mode.network + " - " + mode.command, "play game mode join " + mode.network,
+			all.add(new Entry(mode.label, Lang.t("mods.quick_join"), mode.network + " - " + mode.command, "play game mode join " + mode.network, // i18n-ignore: search keywords
 					() -> com.arcticlauncher.client.servers.QuickJoin.run(ArcticClient.platform(), mode)));
 		}
 		Social social = ArcticClient.social();
 		if (social != null && social.available()) {
 			for (Social.Friend f : social.friends()) {
 				final String id = f.id;
-				all.add(new Entry(f.name, "Friend", f.online ? (f.server != null ? "Online on " + f.server : "Online") : "Offline", "",
+				all.add(new Entry(f.name, Lang.t("mods.friend"), f.online ? (f.server != null ? Lang.t("mods.online_on") + f.server : Lang.t("mods.online")) : Lang.t("mods.offline"), "",
 						() -> {
 							ArcticClient.social().openChat(id);
 							Menus.open("friends");
@@ -207,7 +208,7 @@ public final class CommandPalette extends Page {
 	protected void drawAbove(Gfx g, Style s, int mx, int my) {
 		int top = py + PAD + FIELD_H + 6;
 		if (shown.isEmpty()) {
-			Draw.centered(g, "Nothing matches.", px + PANEL_W / 2, top + 4, s.muted, false);
+			Draw.centered(g, Lang.t("mods.nothing_matches"), px + PANEL_W / 2, top + 4, s.muted, false);
 			return;
 		}
 		int hover = rowAt(mx, my);

@@ -1,15 +1,19 @@
-"""Rasterize the three picked round-3 badges, using the official Arctic mark.
+"""Rasterize the three picked badges. Style 0 is BrandMark (the official Arctic mark);
+ice and line still come from their SVG sources.
 
 SVG sources are reviewable beside this script. Picker art keeps the sheet's
 3-unit outline; tag/tab variants use 7 units (1.75/1.97 framebuffer px at GUI
-scale 2). Filter at GUI scale 2 before expanding the atlas with nearest sampling, so
-thin mark details cannot fall between the game's nearest-filtered texels.
+scale 2). Font textures are rendered straight from the SVG at 8 texels per GUI pixel
+(never prefiltered to a coarse grid and blown up), so the art keeps full alpha in its
+body and stays sharp when a name tag is seen up close.
 """
 import io
 import json
 from pathlib import Path
 import cairosvg
 from PIL import Image
+from badge_tab import tab_art
+from brand_mark import native
 
 MOD = Path(__file__).resolve().parents[1]
 ASSETS = MOD / 'core/src/main/resources/assets'
@@ -20,13 +24,22 @@ for name, style in STYLES:
     svg = (MOD / 'tools/badges' / (name + '.svg')).read_text()
     def raster(source):
         return Image.open(io.BytesIO(cairosvg.svg2png(bytestring=source.encode(), output_width=1024, output_height=1024))).convert('RGBA')
-    im = raster(svg)
-    im.resize((256, 256), Image.Resampling.LANCZOS).save(ROOT / (name + '.png'))
-    small_art = raster(svg.replace('stroke-width="3"', 'stroke-width="7"')) if style == 2 else im
+    if style == 0:
+        im = native(256)
+        small_art = native(1024)
+        im.save(ROOT / (name + '.png'))
+    else:
+        im = raster(svg)
+        small_art = raster(svg.replace('stroke-width="3"', 'stroke-width="7"')) if style == 2 else im
+        im.resize((256, 256), Image.Resampling.LANCZOS).save(ROOT / (name + '.png'))
     for tab, height, ascent in [(False, 8, 7), (True, 9, 8)]:
         font = name + ('_tab' if tab else '')
         size = height * 8
-        small = small_art.resize((height * 2, height * 2), Image.Resampling.LANCZOS).resize((size, size), Image.Resampling.NEAREST)
+        # The logo's player list picture is pre-filtered onto a coarse grid (see badge_tab.py).
+        if style == 0:
+            small = tab_art(small_art) if tab else native(size)
+        else:
+            small = small_art.resize((size, size), Image.Resampling.LANCZOS)
         small.save(ROOT / 'textures/font' / (font + '.png'))
         small.save(ROOT / (name + ('_tab' if tab else '_tag') + '.png'))
         bitmap = dict(type='bitmap', file='arctic:font/' + font + '.png', height=height, ascent=ascent, chars=['\uE000'])
@@ -35,7 +48,9 @@ for name, style in STYLES:
             contents.insert(1, dict(type='bitmap', file='arctic:font/speaker.png', height=8, ascent=7, chars=['\uE001']))
         (ROOT / 'font' / (font + '.json')).write_text(json.dumps(dict(providers=contents), indent=2) + '\n')
         providers.append(dict(bitmap, chars=[chr(0xE0A0 + style + (0x10 if tab else 0))]))
-providers.append(dict(type='space', advances={'\uE0AF': 1}))
+# Versions before 1.16 draw the player list's picture as a default-font character, and a text's shadow with the
+# picture's own width but nothing in it (BadgeShadow13Mixin): the tab picture is 9 wide plus one advance.
+providers.append(dict(type='space', advances={'\uE0AF': 1, '\uE0C0': 10}))
 (ASSETS / 'minecraft/font/default.json').write_text(json.dumps(dict(providers=providers), indent=2) + '\n')
 for old in ['badge1', 'badge2', 'badge3', 'badge_shield', 'badge_shield_tab', 'badge_shield_tag']:
     for path in [ROOT / (old+'.png'), ROOT / 'font' / (old+'.json'), ROOT / 'textures/font' / (old+'.png')]:
