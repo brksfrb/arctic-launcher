@@ -170,16 +170,17 @@ public abstract class Page {
 			g.translate(-cx, -cy);
 		}
 		drawBehind(g, s, mx, my);
+		Gfx wg = widgetGfx(g);
 		for (Widget w : snapshot()) {
 			if (!w.visible || !w.onScreen()) {
 				continue;
 			}
 			if (w.clip != null) {
-				g.scissor(w.clip[0], w.clip[1], w.clip[2], w.clip[3]);
-				w.render(g, s, mx, my);
-				g.endScissor();
+				wg.scissor(w.clip[0], w.clip[1], w.clip[2], w.clip[3]);
+				w.render(wg, s, mx, my);
+				wg.endScissor();
 			} else {
-				w.render(g, s, mx, my);
+				w.render(wg, s, mx, my);
 			}
 		}
 		drawAbove(g, s, mx, my);
@@ -208,6 +209,11 @@ public abstract class Page {
 	}
 
 	protected void drawBehind(Gfx g, Style s, int mx, int my) {}
+
+	/** What the page's widgets draw on (a page can dim them). */
+	protected Gfx widgetGfx(Gfx g) {
+		return g;
+	}
 
 	protected void drawAbove(Gfx g, Style s, int mx, int my) {}
 

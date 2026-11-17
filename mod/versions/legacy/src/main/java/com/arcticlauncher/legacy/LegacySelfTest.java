@@ -27,6 +27,10 @@ final class LegacySelfTest {
 	static void maybeStart() {
 
 		//#if DEV
+		if ("hudcard".equals(System.getProperty("arctic.selftest"))) {
+			LegacyHudCardTest.start();
+			return;
+		}
 		if ("nametagfont".equals(System.getProperty("arctic.selftest"))) {
 			LegacyNametagFontTest.start();
 			return;

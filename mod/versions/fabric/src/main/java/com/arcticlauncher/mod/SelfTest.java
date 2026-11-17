@@ -50,6 +50,10 @@ final class SelfTest {
 
 	static void maybeStart() {
 		//#if DEV
+		if ("hudcard".equals(System.getProperty("arctic.selftest"))) {
+			HudCardTest.start();
+			return;
+		}
 		if ("chat-history".equals(System.getProperty("arctic.selftest"))) {
 			ChatHistoryProof.start();
 			return;
