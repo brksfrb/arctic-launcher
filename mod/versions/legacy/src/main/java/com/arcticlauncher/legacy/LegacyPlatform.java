@@ -1073,7 +1073,9 @@ public final class LegacyPlatform implements Platform {
 
 	private static void addDurability(List<Object[]> rows, ItemStack stack, String slot) {
 		if (present(stack) && stack.isDamageable()) {
-			rows.add(new Object[] {stack.getCustomName(), stack.getMaxDamage() - stack.getDamage(), stack.getMaxDamage(), slot});
+			Identifier id = (Identifier) net.minecraft.item.Item.REGISTRY.getIdentifier(stack.getItem());
+			rows.add(new Object[] {stack.getCustomName(), stack.getMaxDamage() - stack.getDamage(), stack.getMaxDamage(), slot,
+					com.arcticlauncher.client.feature.DurabilityWatch.tierOf(id == null ? null : id.getPath())});
 		}
 	}
 

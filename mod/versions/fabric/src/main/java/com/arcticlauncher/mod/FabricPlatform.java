@@ -1007,6 +1007,15 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean hasNetherite() {
+		//#if MC >= 1.16
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	@Override
 	public void mentionSound() {
 		//#if MC >= 1.14
 		mc().getSoundManager().play(net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(

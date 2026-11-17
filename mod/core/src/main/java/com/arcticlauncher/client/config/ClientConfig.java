@@ -308,6 +308,12 @@ public final class ClientConfig {
 	public int timeLockOff = -1;
 	/** A pop-up when armor or the held tool is about to break. */
 	public boolean durabilityWarning = true;
+	/** Warn (and block) at or below this percent of durability left; 10 in a file saved before it was a setting. */
+	public int durabilityPercent = 10;
+	/** Also cancel mining / attacking / using the held tool or weapon below the threshold. Off unless chosen. */
+	public boolean durabilityBlockUse;
+	/** Only diamond and netherite gear counts for the warning and the block. */
+	public boolean durabilityDiamondOnly;
 	/**
 	 * Combat Feedback as a whole (the Mods tile): the marker, the sounds and the low-health warning.
 	 * Null in a file saved before the tile had its own switch. {@link #fillDefaults()} then turns it on
@@ -464,6 +470,8 @@ public final class ClientConfig {
 	}
 
 	private void fillDefaults() {
+		// A file from before the setting has no value (the field keeps 10); a hand-edited one may be nonsense.
+		durabilityPercent = com.arcticlauncher.client.feature.DurabilityWatch.clampPercent(durabilityPercent);
 		if (hiddenPlayers == null) {
 			hiddenPlayers = new HashSet<String>();
 		}
