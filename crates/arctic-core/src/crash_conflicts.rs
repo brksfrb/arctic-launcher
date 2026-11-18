@@ -793,11 +793,16 @@ pub fn diagnose_in(text: &str, mods_dir: &Path) -> Option<Diagnosis> {
     if let Some((native, _)) = crate::crash::native_diagnosis(text) {
         return Some(native);
     }
-    diagnose_with_mods(text, mods_dir, &scan(mods_dir))
+    diagnose_with_mods(text, mods_dir, &scan(mods_dir), None)
 }
 
-fn diagnose_with_mods(text: &str, mods_dir: &Path, mods: &[InstalledMod]) -> Option<Diagnosis> {
-    let base = crate::crash::diagnose(text);
+fn diagnose_with_mods(
+    text: &str,
+    mods_dir: &Path,
+    mods: &[InstalledMod],
+    java: Option<&str>,
+) -> Option<Diagnosis> {
+    let base = crate::crash::diagnose_with_java(text, java);
     if base.as_ref().is_some_and(|d| {
         d.title.starts_with("A mod needs ") || d.title == "A mod dependency is missing"
     }) && let Some(game_dir) = mods_dir.parent()
@@ -822,12 +827,22 @@ fn diagnose_with_mods(text: &str, mods_dir: &Path, mods: &[InstalledMod]) -> Opt
 /// The exit diagnosis, with incidental folder clashes kept as advice in the details. The UI has
 /// one fix action, so don't replace the actual cause's action with an unrelated DisableMods fix.
 pub fn diagnose_exit_in(text: &str, code: i32, mods_dir: &Path) -> Option<Diagnosis> {
+    diagnose_exit_in_with_java(text, code, mods_dir, None)
+}
+
+/// Use the launch's Java summary for heap advice while diagnosing the game's own output.
+pub fn diagnose_exit_in_with_java(
+    text: &str,
+    code: i32,
+    mods_dir: &Path,
+    java: Option<&str>,
+) -> Option<Diagnosis> {
     let mods = scan(mods_dir);
     let with_exit = format!(
         "{text}\n(exit code {})",
         crate::crash::exit_description(code)
     );
-    let diagnosis = diagnose_with_mods(&with_exit, mods_dir, &mods)
+    let diagnosis = diagnose_with_mods(&with_exit, mods_dir, &mods, java)
         .or_else(|| crate::crash::silent_exit(text, code));
     let conflicts = find_conflicts(&mods);
     let Some(c) = conflicts.first() else {

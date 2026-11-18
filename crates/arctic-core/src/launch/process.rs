@@ -830,6 +830,7 @@ mod tests {
             log_file: dir.path().join("game.log"),
             high_performance_gpu: false,
             maximize_window: false,
+            custom_max_heap: false,
             secrets: Vec::new(),
         };
         let (tx, rx) = std::sync::mpsc::channel();
@@ -910,6 +911,7 @@ mod tests {
             log_file: game_dir.join("game.log"),
             high_performance_gpu: false,
             maximize_window: false,
+            custom_max_heap: false,
             secrets: Vec::new(),
         };
         let (args, file) = command_args(&plan).unwrap();
