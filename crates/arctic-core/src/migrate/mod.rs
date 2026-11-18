@@ -13,7 +13,7 @@ mod copy;
 mod deps;
 pub(crate) mod detect;
 mod hud;
-mod ranges;
+pub(crate) mod ranges;
 mod sources;
 #[cfg(test)]
 mod tests;

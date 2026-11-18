@@ -255,6 +255,26 @@ pub fn install_many(
     index: &Path,
     progress: Progress,
 ) -> Result<(Vec<InstalledMod>, Vec<Failed>)> {
+    install_many_with(
+        projects,
+        game_version,
+        loader,
+        mods_dir,
+        index,
+        progress,
+        |_, _| Ok(()),
+    )
+}
+
+fn install_many_with(
+    projects: &[&str],
+    game_version: &str,
+    loader: LoaderKind,
+    mods_dir: &Path,
+    index: &Path,
+    progress: Progress,
+    before_download: impl FnOnce(&[InstalledMod], &ModIndex) -> Result<()>,
+) -> Result<(Vec<InstalledMod>, Vec<Failed>)> {
     progress(ProgressInfo::stage("Finding mods"));
     let current = ModIndex::load(index)?;
     let (plan, failed) = plan_many(projects, game_version, loader, &current, mods_dir);
@@ -263,6 +283,7 @@ pub fn install_many(
     }
     let (mods, jobs) = prepare(&plan, mods_dir)?;
     let mods = with_project_info(mods);
+    before_download(&mods, &current)?;
     download_all("Downloading mods", jobs, progress)?;
     record(&current, &mods, mods_dir)?.save(index)?;
     Ok((mods, failed))
