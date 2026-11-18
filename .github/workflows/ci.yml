@@ -79,7 +79,16 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/hello"
-          echo 'public class Hello { public static void main(String[] a) { System.out.println("hello from java"); } }' > "$RUNNER_TEMP/hello/Hello.java"
+          cat > "$RUNNER_TEMP/hello/Hello.java" <<'JAVA'
+          public class Hello {
+              public static void main(String[] args) {
+                  if (java.lang.management.ManagementFactory.getMemoryMXBean().getHeapMemoryUsage() == null) {
+                      throw new AssertionError();
+                  }
+                  System.out.println("hello from java");
+              }
+          }
+          JAVA
           javac --release 17 -d "$RUNNER_TEMP/hello" "$RUNNER_TEMP/hello/Hello.java"
       - name: Start Java from the named copy
         shell: bash
