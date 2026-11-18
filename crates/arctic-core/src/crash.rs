@@ -542,6 +542,7 @@ const RULES: &[Rule] = &[
                     if !name.is_empty()
                         && !name.eq_ignore_ascii_case("none")
                         && !name.contains("Unknown")
+                        && !crate::crash_suspect::is_base_entry(name)
                         && !mods.iter().any(|m| m == name)
                     {
                         mods.push(name.to_owned());
