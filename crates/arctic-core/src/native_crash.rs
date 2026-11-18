@@ -1,5 +1,11 @@
 //! Best-effort Windows native crash evidence. Never infer a culprit from loaded DLLs.
 
+#[cfg(any(windows, test))]
+mod wer;
+
+#[cfg(windows)]
+use std::time::{Duration, Instant, SystemTime};
+
 pub(crate) fn is_native(code: i32) -> bool {
     matches!(
         code as u32,
@@ -17,6 +23,24 @@ struct Fault {
 }
 
 #[cfg(any(windows, test))]
+fn java_exe(name: &str) -> bool {
+    ["javaw.exe", "java.exe", "Arctic Client.exe"]
+        .iter()
+        .any(|exe| exe.eq_ignore_ascii_case(name))
+}
+
+#[cfg(any(windows, test))]
+fn process_id(value: &str) -> Option<u32> {
+    match value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+    {
+        Some(hex) => u32::from_str_radix(hex, 16).ok(),
+        None => value.parse().ok(),
+    }
+}
+
+#[cfg(any(windows, test))]
 fn parse(text: &str, pid: u32) -> Option<Fault> {
     // /l:en-US makes the rendered Application Error fields independent of OS language.
     for event in text.split("Event[") {
@@ -29,21 +53,14 @@ fn parse(text: &str, pid: u32) -> Option<Fault> {
         let Some(process) = field("Faulting process id:") else {
             continue;
         };
-        let process = process
-            .strip_prefix("0x")
-            .and_then(|s| u32::from_str_radix(s, 16).ok())
-            .or_else(|| process.parse().ok());
-        if process != Some(pid) {
+        if process_id(process) != Some(pid) {
             continue;
         }
         let app = field("Faulting application name:")?
             .split(',')
             .next()?
             .trim();
-        if !["javaw.exe", "java.exe", "Arctic Client.exe"]
-            .iter()
-            .any(|name| app.eq_ignore_ascii_case(name))
-        {
+        if !java_exe(app) {
             continue;
         }
         let module = field("Faulting module name:")?;
@@ -95,87 +112,107 @@ fn bundled_owner(mods: &std::path::Path, module: &str) -> Option<String> {
 }
 
 #[cfg(windows)]
-pub(crate) fn collect(pid: u32, exit: std::time::SystemTime, mods: &std::path::Path) -> String {
+fn query_event(pid: u32, begin: SystemTime, end: SystemTime, deadline: Instant) -> Option<Fault> {
     use std::os::windows::process::CommandExt;
     use std::process::{Command, Stdio};
-    use std::time::{Duration, Instant};
-    let deadline = Instant::now() + Duration::from_secs(2);
-    let query = || -> Option<Fault> {
-        if Instant::now() >= deadline {
-            return None;
-        }
-        let end: chrono::DateTime<chrono::Utc> = (exit + Duration::from_secs(5)).into();
-        let begin: chrono::DateTime<chrono::Utc> = (exit - Duration::from_secs(15)).into();
-        // Older Windows event schemas have unnamed EventData fields. Match PID and
-        // executable in the rendered parser rather than relying on that schema.
-        let filter = format!(
-            "/q:*[System[Provider[@Name='Application Error'] and EventID=1000 and TimeCreated[@SystemTime>='{}' and @SystemTime<='{}']]]",
-            begin.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-            end.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-        );
-        let mut child = Command::new("wevtutil.exe")
-            .args([
-                "qe",
-                "Application",
-                &filter,
-                "/c:5",
-                "/rd:true",
-                "/f:text",
-                "/l:en-US",
-                "/uni:false",
-            ])
-            .creation_flags(0x08000000) // CREATE_NO_WINDOW
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .ok()?;
-        // Drain concurrently so a full pipe cannot stall the subprocess. Bound retained output.
-        let stdout = child.stdout.take()?;
-        let reader = std::thread::spawn(move || {
-            use std::io::Read;
-            let mut bytes = Vec::new();
-            let _ = stdout.take(64 * 1024).read_to_end(&mut bytes);
-            bytes
-        });
-        loop {
-            match child.try_wait() {
-                Ok(Some(status)) if status.success() => break,
-                Ok(Some(_)) | Err(_) => return None,
-                Ok(None) if Instant::now() < deadline => {
-                    std::thread::sleep(Duration::from_millis(20))
-                }
-                Ok(None) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return None;
-                }
+    let begin: chrono::DateTime<chrono::Utc> = begin.into();
+    let end: chrono::DateTime<chrono::Utc> = end.into();
+    // Older Windows event schemas have unnamed EventData fields. Match PID and
+    // executable in the rendered parser rather than relying on that schema.
+    let filter = format!(
+        "/q:*[System[Provider[@Name='Application Error'] and EventID=1000 and TimeCreated[@SystemTime>='{}' and @SystemTime<='{}']]]",
+        begin.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        end.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+    );
+    let mut child = Command::new("wevtutil.exe")
+        .args([
+            "qe",
+            "Application",
+            &filter,
+            "/c:5",
+            "/rd:true",
+            "/f:text",
+            "/l:en-US",
+            "/uni:false",
+        ])
+        .creation_flags(0x08000000) // CREATE_NO_WINDOW
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    // Drain concurrently so a full pipe cannot stall the subprocess. Bound retained output.
+    let stdout = child.stdout.take()?;
+    let reader = std::thread::spawn(move || {
+        use std::io::Read;
+        let mut bytes = Vec::new();
+        let _ = stdout.take(64 * 1024).read_to_end(&mut bytes);
+        bytes
+    });
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => break,
+            Ok(Some(_)) | Err(_) => return None,
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
             }
         }
-        while !reader.is_finished() && Instant::now() < deadline {
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        if !reader.is_finished() {
-            return None;
-        }
-        let bytes = reader.join().ok()?;
-        parse(&String::from_utf8_lossy(&bytes), pid)
-    };
-    // Event publication can lag process exit slightly. Retry once within the same budget.
-    let fault = query().or_else(|| {
-        if deadline.saturating_duration_since(Instant::now()) < Duration::from_millis(250) {
-            return None;
-        }
-        std::thread::sleep(Duration::from_millis(200));
-        query()
-    });
-    match fault {
-        Some(f) => {
-            let owner = bundled_owner(mods, &f.module).map(|name| format!("; bundled mod={name}")).unwrap_or_default();
-            format!("[Arctic diagnostics] native fault: module={}; version={}; exception={}; offset={}", f.module, f.version, f.exception, f.offset) + &owner
-        },
-        None => "[Arctic diagnostics] native fault: no matching Application Error 1000 captured (unavailable, delayed, or query timed out); cause unknown".into(),
     }
+    while !reader.is_finished() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    if !reader.is_finished() {
+        return None;
+    }
+    let bytes = reader.join().ok()?;
+    parse(&String::from_utf8_lossy(&bytes), pid)
+}
+
+#[cfg(windows)]
+pub(crate) fn collect(
+    pid: u32,
+    exe: &std::path::Path,
+    start: SystemTime,
+    exit: SystemTime,
+    mods: &std::path::Path,
+) -> String {
+    let now = Instant::now();
+    let budget = Duration::from_secs(10);
+    let deadline = now + budget;
+    let begin = start.max(exit - Duration::from_secs(15));
+    // Absolute offsets keep retries spaced without accumulating sleeps after a slow query.
+    let mut fault = None;
+    for ms in [0, 500, 1500, 3000, 6000, 8000] {
+        let at = now + Duration::from_millis(ms);
+        if ms > 0 && at < Instant::now() {
+            continue;
+        }
+        std::thread::sleep(at.saturating_duration_since(Instant::now()));
+        if Instant::now() >= deadline {
+            break;
+        }
+        let attempt = deadline.min(Instant::now() + Duration::from_secs(3));
+        if let Some(found) = query_event(pid, begin, SystemTime::now(), attempt) {
+            fault = Some((found, ""));
+            break;
+        }
+    }
+    let fault = fault.or_else(|| {
+        wer::collect(exe.to_str()?, pid, start, exit).map(|found| (found, "; source=WER"))
+    });
+    let Some((fault, source)) = fault else {
+        return "[Arctic diagnostics] native fault: no matching Application Error 1000 or WER report captured; cause unknown".into();
+    };
+    let owner = bundled_owner(mods, &fault.module)
+        .map(|name| format!("; bundled mod={name}"))
+        .unwrap_or_default();
+    format!(
+        "[Arctic diagnostics] native fault: module={}; version={}; exception={}; offset={}{source}{owner}",
+        fault.module, fault.version, fault.exception, fault.offset
+    )
 }
 
 #[cfg(test)]
