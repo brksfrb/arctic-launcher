@@ -55,6 +55,7 @@ UTF-8
 SHA-?1
 SHA-?256
 MD5
+OfflinePlayer:
 JSON
 PNG
 JPEG
