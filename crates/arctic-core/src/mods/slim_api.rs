@@ -18,6 +18,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::Result;
 use crate::error::IoContext;
+use crate::loaders::LoaderKind;
+use crate::migrate::deps;
 
 /// Where the big jar waits (next to the mods folder).
 const STASH: &str = "mods-full-api";
@@ -40,9 +42,9 @@ struct State {
     stub_version: u32,
 }
 
-/// 2: the stand-in answers to both `fabric` and `fabric-api` (1 only to `fabric-api`, which
-/// broke mods for old Fabric API, like EntityCulling on 1.16.5).
-const STUB_VERSION: u32 = 2;
+/// 3: also keep modules required by bundled jars. Since 2, the stand-in
+/// answers to both `fabric` and `fabric-api`.
+const STUB_VERSION: u32 = 3;
 
 fn state_path(mods_dir: &Path) -> PathBuf {
     mods_dir.join(STATE)
@@ -234,24 +236,12 @@ fn keep(mods_dir: &Path, umbrella: &str, modules: &[Module]) -> BTreeSet<String>
             continue;
         };
         referenced_classes(file, &mut referenced);
-        // What the jar says it needs.
-        if let Ok(file) = fs::File::open(entry.path())
-            && let Ok(mut zip) = zip::ZipArchive::new(file)
-            && let Ok(mut meta) = zip.by_name("fabric.mod.json")
-        {
-            let mut text = String::new();
-            if meta.read_to_string(&mut text).is_ok()
-                && let Ok(json) =
-                    serde_json::from_str::<serde_json::Value>(text.trim_start_matches('\u{feff}'))
-                && let Some(depends) = json.get("depends").and_then(|d| d.as_object())
-            {
-                for id in depends.keys() {
-                    if modules.iter().any(|m| &m.id == id) {
-                        wanted.insert(id.clone());
-                    }
-                }
-            }
-        }
+        let (_, required) = deps::fabric_ids(&entry.path(), LoaderKind::Fabric);
+        wanted.extend(
+            required
+                .into_iter()
+                .filter(|id| modules.iter().any(|m| &m.id == id)),
+        );
     }
     for class in &referenced {
         let id = owner
@@ -330,11 +320,12 @@ pub fn apply(mods_dir: &Path) -> Result<bool> {
         return Ok(false);
     }
     let sig = signature(mods_dir, &[umbrella.as_str()]);
-    let wanted = match cached(mods_dir, &sig) {
+    let cache_key = format!("{STUB_VERSION}:{umbrella}:{sig}");
+    let wanted = match cached(mods_dir, &cache_key) {
         Some(ids) => ids,
         None => {
             let ids = keep(mods_dir, &umbrella, &modules);
-            store(mods_dir, &sig, &ids);
+            store(mods_dir, &cache_key, &ids);
             ids
         }
     };

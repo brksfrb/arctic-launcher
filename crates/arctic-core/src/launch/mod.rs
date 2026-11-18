@@ -9,11 +9,14 @@ pub mod files;
 mod game_window;
 mod language;
 pub mod logparse;
+#[cfg(any(windows, test))]
+mod named_runtime;
 mod priority;
 pub mod process;
 pub mod progress;
 #[cfg(test)]
 mod repair_tests;
+mod runtime_repair;
 pub mod startup;
 pub mod startup_cache;
 mod truststore;
@@ -108,6 +111,7 @@ fn unix_now() -> u64 {
 #[derive(Debug, Clone)]
 pub struct LaunchPlan {
     pub java: PathBuf,
+    managed_runtime: Option<PathBuf>,
     pub args: Vec<String>,
     pub game_dir: PathBuf,
     pub log_file: PathBuf,
@@ -278,7 +282,15 @@ fn install_with_repair(
     let java_override = java_override.filter(|p| p.is_file());
     let (runtime, assets) = std::thread::scope(|scope| {
         let runtime = scope.spawn(|| match &java_override {
-            Some(_) => Ok(None),
+            Some(path) => java::managed_runtime(dirs, path)
+                .map(|runtime| {
+                    let name = runtime.file_name().unwrap().to_string_lossy();
+                    let intel = cfg!(target_os = "macos")
+                        .then(|| name.strip_suffix("-x64"))
+                        .flatten();
+                    java::plan_runtime_for(dirs, intel.unwrap_or(&name), intel.is_some())
+                })
+                .transpose(),
             None => java::plan_runtime_for(
                 dirs,
                 java::component_for(&version),
@@ -292,7 +304,7 @@ fn install_with_repair(
             .unwrap_or_else(|_| Err(Error::Other("Java runtime check crashed".into())));
         (runtime, assets)
     });
-    let (runtime, assets) = (runtime?, assets?);
+    let (mut runtime, assets) = (runtime?, assets?);
     log::info!(
         "install: runtime and asset plan done at {} ms",
         clock.elapsed().as_millis()
@@ -303,12 +315,19 @@ fn install_with_repair(
     // After a crash that pointed at a damaged file: each library and the client checked in full.
     repair.check(&jobs, &libs.bootstrap, libs.main_class.as_ref())?;
     jobs.extend(logging.iter().map(|(job, _)| job.clone()));
-    jobs.extend(runtime.iter().flat_map(|r| r.jobs.iter().cloned()));
+    let replacements = runtime
+        .as_mut()
+        .map_or_else(Vec::new, |r| std::mem::take(&mut r.jobs));
     let assets_fresh = files::assets_verified_recently(dirs, &assets.index_name);
     if !assets_fresh {
         jobs.extend(assets.jobs.iter().cloned());
     }
-    download_all("Downloading game files", jobs, progress)?;
+    crate::net::download_all_with_replacements(
+        "Downloading game files",
+        jobs,
+        replacements,
+        progress,
+    )?;
     files::verify_main_class(libs.main_class.as_ref())?;
     if !assets_fresh {
         finish_assets_later(dirs, assets.index_name.clone(), assets.later.clone());
@@ -436,6 +455,17 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         .or_else(|| req.settings.java_override.clone());
     progress(ProgressInfo::stage("Reading version"));
     let vanilla = load_version(dirs, req.version, &|_| {})?;
+    let runtime = match java_override.as_ref().filter(|p| p.is_file()) {
+        Some(java) => java::managed_runtime(dirs, java),
+        None => Some(java::runtime_dir(
+            dirs,
+            java::component_for(&vanilla),
+            crate::versions::rules::needs_rosetta(&vanilla),
+        )?),
+    };
+    if let Some(runtime) = runtime {
+        runtime_repair::recover_detached(&runtime, &game_log_file(req), &game_dir);
+    }
     // Going up to a newer game version upgrades worlds for good: back the recent ones up first.
     let backed_up = crate::worlds::backup_before_version_change(&game_dir, &vanilla.id);
     if backed_up > 0 {
@@ -504,7 +534,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                     req.instance.performance,
                     req.instance.shaders,
                     &req.instance.extras,
-                    req.instance.loader.kind().is_some(),
+                    req.instance.loader.kind(),
                     progress,
                 ) {
                     log::warn!("performance mods: {e}");
@@ -653,7 +683,7 @@ fn effective_loader(
         let game_dir = instance.game_dir(dirs);
         let _ = crate::mods::slim_api::undo(&game_dir.join("mods"));
         let _ = arctic_mod::sync(&game_dir.join("mods"), game, false);
-        let _ = crate::mods::performance::sync(&game_dir, game, false, false, &[], false, &|_| {});
+        let _ = crate::mods::performance::sync(&game_dir, game, false, false, &[], None, &|_| {});
         let _ = crate::mods::polarium::sync(&game_dir.join("mods"), game, false);
     }
     fabric.map(|v| (loaders::LoaderKind::Fabric, v))
@@ -967,15 +997,20 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
         java: inst.java.clone(),
         args: args::build(&inst.version, &env, &vars, &opts),
         game_dir: inst.game_dir.clone(),
-        log_file: req.dirs.logs().join(match req.copy {
-            0 => format!("game-{}.log", req.instance.id),
-            n => format!("game-{}-{}.log", req.instance.id, n + 1),
-        }),
+        managed_runtime: java::managed_runtime(req.dirs, &inst.java),
+        log_file: game_log_file(req),
         high_performance_gpu: settings.high_performance_gpu,
         maximize_window: settings.game_maximized && !settings.fullscreen,
         custom_max_heap: custom_max_heap.is_some(),
         secrets: vec![identity.access_token, proxy.password.clone()],
     }
+}
+
+fn game_log_file(req: &LaunchRequest) -> PathBuf {
+    req.dirs.logs().join(match req.copy {
+        0 => format!("game-{}.log", req.instance.id),
+        n => format!("game-{}-{}.log", req.instance.id, n + 1),
+    })
 }
 
 /// Versions from 1.20 take `--quickPlay*`; older ones only know
@@ -1306,6 +1341,7 @@ mod tests {
             log_file: PathBuf::new(),
             high_performance_gpu: false,
             maximize_window: false,
+            managed_runtime: None,
             custom_max_heap: false,
             secrets: vec!["SECRET123".into()],
         };
@@ -1348,6 +1384,7 @@ mod tests {
             log_file: PathBuf::new(),
             high_performance_gpu: false,
             maximize_window: false,
+            managed_runtime: None,
             custom_max_heap: false,
             secrets: Vec::new(),
         };
@@ -1375,6 +1412,7 @@ mod tests {
             log_file: PathBuf::new(),
             high_performance_gpu: false,
             maximize_window: false,
+            managed_runtime: None,
             custom_max_heap: false,
             secrets: vec!["SECRET123".into(), String::new()],
         };
@@ -1392,6 +1430,7 @@ mod tests {
             log_file: PathBuf::new(),
             high_performance_gpu: false,
             maximize_window: false,
+            managed_runtime: None,
             custom_max_heap: false,
             secrets: vec!["tok".into(), "hunter2".into()],
         };
