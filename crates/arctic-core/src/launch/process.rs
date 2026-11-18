@@ -211,7 +211,7 @@ pub fn spawn(
                 }
             }
         };
-        let runtime = started.elapsed();
+        let elapsed = started.elapsed();
         #[cfg(windows)]
         let exited_at = std::time::SystemTime::now();
         drain_readers([out_reader, err_reader].into_iter().flatten().collect());
@@ -219,7 +219,7 @@ pub fn spawn(
         if let Some(c) = code {
             let summary = format!(
                 "[Arctic diagnostics] process ended after {} ms; exit code {}",
-                runtime.as_millis(),
+                elapsed.as_millis(),
                 crate::crash::exit_description(c)
             );
             writeln!(log.lock().unwrap(), "{summary}").ok();
@@ -260,7 +260,7 @@ pub fn spawn(
                 }]));
             }
         }
-        if !killed && code.is_some_and(|c| c != 0) && runtime < Duration::from_secs(5) {
+        if !killed && code.is_some_and(|c| c != 0) && elapsed < Duration::from_secs(5) {
             let probe = runtime_probe(&exe);
             writeln!(log.lock().unwrap(), "{probe}").ok();
             on_event(GameEvent::Output(vec![LogLine {
