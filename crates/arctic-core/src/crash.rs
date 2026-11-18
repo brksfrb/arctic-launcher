@@ -835,6 +835,54 @@ pub fn diagnose(text: &str) -> Option<Diagnosis> {
     diagnose_match(text).map(|(diagnosis, _)| diagnosis)
 }
 
+fn quilt_load_errors() -> &'static Regex {
+    static ERRORS: OnceLock<Regex> = OnceLock::new();
+    ERRORS.get_or_init(|| Regex::new(
+        r"(?:Duplicate mandatory mod ids \[(?P<ids>[^\]\r\n]+)\]|[0-9]+ mods? requires version (?P<range>\[[^\r\n]+?\)) of fabricloader, which is missing!)(?P<files>(?:[ \t\r\n]+-[ \t]+[^\r\n]+)+)"
+    ).unwrap())
+}
+
+/// Quilt reports resolver failures without throwing an exception, then calls System.exit(1).
+/// Match both error kinds together so the first actual error in the report wins.
+fn quilt_load_error(text: &str) -> Option<(Diagnosis, String)> {
+    let c = quilt_load_errors().captures(text)?;
+    let files: Vec<String> = c["files"]
+        .lines()
+        .flat_map(|line| line.trim().trim_start_matches("- ").split(" - "))
+        .filter_map(|path| {
+            let file = path.trim().rsplit(['/', '\\']).next()?;
+            (!file.is_empty()).then(|| file.to_owned())
+        })
+        .collect();
+    let diagnosis = if let Some(ids) = c.name("ids") {
+        let ids: Vec<String> = ids
+            .as_str()
+            .split(',')
+            .map(|id| id.trim().to_owned())
+            .collect();
+        let name = &ids[0];
+        Diagnosis::new(
+            format!("Duplicate mod: {name} installed twice"),
+            format!(
+                "{name} is installed twice ({}). Remove one of these jars from the instance's Mods folder.",
+                files.join(", ")
+            ),
+            ids,
+        )
+    } else {
+        Diagnosis::new(
+            "Fabric Loader is too old for these mods",
+            format!(
+                "{} need Fabric Loader {}. Quilt's Fabric compatibility version does not meet this requirement. Update Quilt Loader to a version that provides the required Fabric Loader version, or use compatible versions of these mods.",
+                files.join(", "),
+                &c["range"]
+            ),
+            files,
+        )
+    };
+    Some((diagnosis, head_of(c.get(0)?.as_str(), 2048).to_owned()))
+}
+
 /// The report's primary exception and cause chain, before the detailed walkthrough/inventory.
 pub(crate) fn crash_exception(text: &str) -> Option<&str> {
     let start = text.rfind("---- Minecraft Crash Report ----")?;
@@ -1009,6 +1057,10 @@ fn diagnose_match(text: &str) -> Option<(Diagnosis, String)> {
         .unwrap_or(0);
     let text = &text[start..];
 
+    if let Some(quilt) = quilt_load_error(text) {
+        return Some(quilt);
+    }
+
     if let Some(registry) = registry_sync_diagnosis(text) {
         return Some(registry);
     }
@@ -1136,6 +1188,9 @@ pub struct Report {
     pub os: String,
     pub title: String,
     pub log: String,
+    /// Installed and currently free physical memory in MiB, if they could be read.
+    pub ram_total_mb: Option<u64>,
+    pub ram_free_mb: Option<u64>,
     /// How the player can be reached (their own words, optional); filled in by the app when it sends.
     pub contact: String,
 }
@@ -1157,6 +1212,12 @@ const REPORT_LAUNCHER_BYTES: usize = 6 * 1024;
 /// Select fatal evidence before ordinary log warnings. A crash document is authoritative;
 /// without one, require an exception followed by a Java stack frame in the same log record.
 fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a str> {
+    if let Some(error) = crash_report
+        .and_then(|report| quilt_load_errors().find(report))
+        .or_else(|| quilt_load_errors().find(log))
+    {
+        return Some(error.as_str());
+    }
     static EXCEPTION: OnceLock<Regex> = OnceLock::new();
     let exception = EXCEPTION
         .get_or_init(|| Regex::new(r"(?:[\w$]+\.)*[\w$]*(?:Exception|Error)(?::|\s*$)").unwrap());
@@ -1260,6 +1321,9 @@ impl Report {
             priority.push_str("\n---- first exceptions ----\n");
             priority.push_str(&scrub(&early, &Own::this_pc()));
         }
+        let ram_total_mb = crate::system::total_memory_mb();
+        let ram_free_mb = crate::system::free_memory_mb();
+        priority.push_str(&memory_section(ram_total_mb, ram_free_mb));
         let remaining = (47 * 1024usize).saturating_sub(priority.len() + 512);
         let skip = lines.len().saturating_sub(REPORT_LOG_LINES);
         let tail = lines[skip..].join("\n");
@@ -1306,6 +1370,13 @@ impl Report {
             text.push_str(head_of(report, REPORT_CRASH_BYTES));
         }
         let title = exit_title(title, &all, java.unwrap_or(""));
+        let title =
+            if title.is_empty() || title == "unknown" || title.starts_with("Game exited with code")
+            {
+                quilt_load_error(&diagnosis_text).map_or(title, |(d, _)| d.title)
+            } else {
+                title
+            };
         let title = registry_sync_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
         let title = native_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
         let title = if crash_report.is_none()
@@ -1341,9 +1412,21 @@ impl Report {
                 47 * 1024,
             )
             .to_owned(),
+            ram_total_mb,
+            ram_free_mb,
             contact: String::new(),
         }
     }
+}
+
+/// "---- memory ----\n16384 MB total, 4096 MB free\n", with "unknown" for what couldn't be read.
+fn memory_section(total_mb: Option<u64>, free_mb: Option<u64>) -> String {
+    let mb = |v: Option<u64>| v.map_or_else(|| "unknown".to_owned(), |v| format!("{v} MB"));
+    format!(
+        "\n---- memory ----\n{} total, {} free\n",
+        mb(total_mb),
+        mb(free_mb)
+    )
 }
 
 /// Resolve inventory from the untrimmed Fabric report, or its startup list when Minecraft
@@ -1873,6 +1956,79 @@ mod tests {
 
     const REPORT_314: &str = include_str!("../tests/fixtures/crash-314-registry-sync.log");
 
+    const QUILT_DUPLICATE_355: &str = "Duplicate mandatory mod ids [fabric-api, fabric] - <mods>/fabric-api-0.141.3+1.21.11.jar - <mods>/fabric-api-0.141.6+1.21.11.jar";
+    const QUILT_LOADER_355: &str = "2 mods requires version [0.19.5, ∞) of fabricloader, which is missing! - <mods>/arctic-mod.jar - <mods>/fabric-language-kotlin-1.14.2+kotlin.2.4.21.jar";
+
+    #[test]
+    fn quilt_355_names_duplicate_jars_without_an_installed_mod_inventory() {
+        let d = diagnose(QUILT_DUPLICATE_355).unwrap();
+        assert_eq!(d.title, "Duplicate mod: fabric-api installed twice");
+        assert_eq!(d.mods, ["fabric-api", "fabric"]);
+        for file in [
+            "fabric-api-0.141.3+1.21.11.jar",
+            "fabric-api-0.141.6+1.21.11.jar",
+        ] {
+            assert!(d.detail.contains(file));
+        }
+        assert!(d.detail.contains("Remove one"));
+    }
+
+    #[test]
+    fn quilt_355_names_mods_requiring_a_newer_fabric_compatibility_version() {
+        let d = diagnose(QUILT_LOADER_355).unwrap();
+        assert_eq!(d.title, "Fabric Loader is too old for these mods");
+        assert_eq!(
+            d.mods,
+            [
+                "arctic-mod.jar",
+                "fabric-language-kotlin-1.14.2+kotlin.2.4.21.jar"
+            ]
+        );
+        assert!(d.detail.contains("[0.19.5, ∞)"));
+        assert!(d.detail.contains("Update Quilt Loader"));
+        // The existing one-click loader update only supports Fabric instances.
+        assert!(d.fix.is_none());
+    }
+
+    #[test]
+    fn quilt_355_first_error_outranks_system_exit_in_logs_and_crash_reports() {
+        for (first, second) in [
+            (QUILT_DUPLICATE_355, QUILT_LOADER_355),
+            (QUILT_LOADER_355, QUILT_DUPLICATE_355),
+        ] {
+            let expected = diagnose(first).unwrap().title;
+            let text = format!(
+                "---- Quilt Loader: Failed to load ----\n-- Error 1 --\n{first}\n-- Error 2 --\n{second}\n[Arctic diagnostics] exit caller other org.quiltmc.loader.impl.QuiltLoaderImpl.runPlugins\nexit code 1 (0x00000001)"
+            );
+            for text in [
+                text.clone(),
+                text.replace(" - ", "\n\n- "),
+                text.replace(" - ", "\r\n\r\n- "),
+            ] {
+                assert_eq!(diagnose(&text).unwrap().title, expected);
+                assert_eq!(diagnose(&text).unwrap().mods, diagnose(first).unwrap().mods);
+                for crash_report in [None, Some(text.as_str())] {
+                    let report = Report::build(
+                        "1.21.11",
+                        "Quilt 0.30.0-beta.3",
+                        "Game exited with code 1 (0x00000001)",
+                        &[&text],
+                        &[],
+                        crash_report,
+                        None,
+                    );
+                    assert_eq!(report.title, expected);
+                    assert!(report.log.contains("---- first error ----"));
+                    assert!(
+                        report
+                            .log
+                            .contains(&format!("---- diagnosis ----\n{expected}"))
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn report_314_diagnoses_registry_sync_without_guessing_a_mod() {
         for report in [REPORT_314.to_owned(), REPORT_314.replace('\n', "\r\n")] {
@@ -1978,6 +2134,34 @@ mod tests {
         assert!(matched.contains("failed to download"));
         assert!(diagnose("OneConfig loaded successfully\nexit code 1").is_none());
         assert!(diagnose("Unrelated mod failed to download texture").is_none());
+    }
+
+    #[test]
+    fn built_report_carries_installed_and_free_memory() {
+        let noise = "noise\n".repeat(4000);
+        let report = Report::build("1.21.1", "Fabric", "unknown", &[&noise], &[], None, None);
+        assert!(report.log.contains("---- memory ----\n"));
+        if let (Some(total), Some(free)) = (report.ram_total_mb, report.ram_free_mb) {
+            assert!(
+                report
+                    .log
+                    .contains(&format!("{total} MB total, {free} MB free\n"))
+            );
+            assert!(free <= total);
+        }
+        assert!(report.log.len() <= 48 * 1024);
+    }
+
+    #[test]
+    fn memory_section_marks_unreadable_values() {
+        assert_eq!(
+            memory_section(Some(16384), Some(4096)),
+            "\n---- memory ----\n16384 MB total, 4096 MB free\n"
+        );
+        assert_eq!(
+            memory_section(None, None),
+            "\n---- memory ----\nunknown total, unknown free\n"
+        );
     }
 
     #[test]

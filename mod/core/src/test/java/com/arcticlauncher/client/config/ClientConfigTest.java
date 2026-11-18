@@ -30,6 +30,17 @@ class ClientConfigTest {
 	}
 
 	@Test
+	void offlineFriendsDefaultOnForOldConfigsAndPersistOff() throws Exception {
+		assertTrue(new ClientConfig().allowOfflineFriends);
+		assertTrue(ClientConfig.load(dir.toFile()).allowOfflineFriends);
+		ClientConfig c = load("{}");
+		assertTrue(c.allowOfflineFriends);
+		c.allowOfflineFriends = false;
+		assertEquals(null, c.save());
+		assertFalse(ClientConfig.load(dir.toFile()).allowOfflineFriends);
+	}
+
+	@Test
 	void replayAndReplayVideoStartOffForNewConfigs() throws Exception {
 		ClientConfig fresh = new ClientConfig();
 		assertFalse(fresh.replayEnabled);

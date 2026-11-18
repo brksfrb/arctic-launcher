@@ -494,6 +494,7 @@ fn target(
 
 /// A Fabric Loader too old for the Arctic Client is moved up to the one it
 /// needs (newer Fabric Loaders keep running older mods).
+/// Preserve Quilt: launch checks its jar's Fabric compatibility and skips the client if needed.
 fn arctic_ready(
     dirs: &DataDirs,
     kind: LoaderKind,
