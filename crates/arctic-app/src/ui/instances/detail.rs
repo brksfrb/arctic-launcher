@@ -608,7 +608,6 @@ impl ArcticApp {
                 })
                 .color(p.muted),
             );
-            ui.label(RichText::new(t!("instances.adds_sodium_lithium_ferritecore")).color(p.muted));
             if modded {
                 ui.label(
                     RichText::new(t!("instances.ones_youve_added_yourself_or_mods_that_do"))
