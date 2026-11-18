@@ -1,4 +1,4 @@
-"""Package Mixin diagnostics without changing unrelated shipped client bytecode.
+"""Package startup diagnostics without changing unrelated shipped client bytecode.
 
 First: python mod/tools/diagnostics/mixin_overlay.py BASELINE.pack --extract
 Then build the 1.18+ targets with mod/build.py (the extracted older jars stay intact).
@@ -16,7 +16,7 @@ import zipfile
 
 MOD = Path(__file__).resolve().parents[2]
 STARTUP = 'com/arcticlauncher/mod/startup/'
-CLASSES = ('ArcticAgent', 'MixinReplay', 'Preloader', 'MixinFailureDiagnostics')
+CLASSES = ('ArcticAgent', 'MixinReplay', 'Preloader', 'MixinFailureDiagnostics', 'VanillaCrashDiagnostics')
 
 
 def allowed(name):
@@ -73,6 +73,7 @@ def main():
                     if allowed(name):
                         updated[name] = fresh.read(name)
             assert STARTUP + 'MixinFailureDiagnostics.class' in updated, version
+            assert STARTUP + 'VanillaCrashDiagnostics.class' in updated, version
             # Don't let a previously overlaid jar stand in for a fresh compiler result.
             assert b'arctic$transformWithDiagnostics' in updated[STARTUP + 'ArcticAgent.class'], version
         changed = {name for name, data in updated.items() if name not in old or old[name] != data}
