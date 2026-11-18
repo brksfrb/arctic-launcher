@@ -2,9 +2,11 @@
 //! instance, list, switch on or off (the game's `options.txt` for resource
 //! packs, Iris's `iris.properties` for shaders) and remove.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use super::modrinth;
+use super::resolve::{self, Planned, Target};
 use crate::loaders::LoaderKind;
 use crate::net::{DownloadJob, download_all};
 use crate::{Error, Progress, ProgressInfo, Result};
@@ -24,10 +26,7 @@ pub enum PackKind {
 
 impl PackKind {
     pub fn folder(self) -> &'static str {
-        match self {
-            PackKind::Resource => "resourcepacks",
-            PackKind::Shader => "shaderpacks",
-        }
+        self.project_type().folder().unwrap_or("resourcepacks")
     }
 
     pub fn label(self) -> &'static str {
@@ -46,7 +45,7 @@ impl PackKind {
     }
 
     /// Modrinth's "loaders" for this kind of file.
-    fn loaders(self) -> &'static [&'static str] {
+    pub(super) fn loaders(self) -> &'static [&'static str] {
         match self {
             PackKind::Resource => &["minecraft"],
             // Iris reads OptiFine-format shader packs too.
@@ -125,27 +124,193 @@ pub fn install(
 ) -> Result<InstalledPack> {
     progress(ProgressInfo::stage("Finding a version"));
     let (version, used_fallback) = resolve_version(kind, project, game_version)?;
+    download_version(kind, &version, used_fallback, game_dir, progress)
+}
+
+/// Fetch and check an explicitly chosen pack version before anything is installed.
+/// A file tagged for another game version passes only with `allow_other_game` (the player
+/// confirmed it); the wrong pack type or a missing file never does.
+pub fn selected_version(
+    kind: PackKind,
+    version_id: &str,
+    game_version: &str,
+    allow_other_game: bool,
+) -> Result<SelectedPack> {
+    let version = modrinth::version(version_id)?;
+    let other_game = check_selected_version(kind, &version, game_version, allow_other_game)?;
+    Ok(SelectedPack {
+        kind,
+        version,
+        other_game,
+    })
+}
+
+/// A checked pack version, ready to download.
+#[derive(Debug, Clone)]
+pub struct SelectedPack {
+    kind: PackKind,
+    version: modrinth::Version,
+    /// Tagged for another game version (the player confirmed it).
+    pub other_game: bool,
+}
+
+/// Install a version picked with [`selected_version`].
+pub fn install_selected(
+    selected: &SelectedPack,
+    game_dir: &Path,
+    progress: Progress,
+) -> Result<InstalledPack> {
+    download_version(
+        selected.kind,
+        &selected.version,
+        selected.other_game,
+        game_dir,
+        progress,
+    )
+}
+
+fn check_selected_version(
+    kind: PackKind,
+    version: &modrinth::Version,
+    game: &str,
+    allow_other_game: bool,
+) -> Result<bool> {
+    check_install_version(kind.loaders(), version, game, allow_other_game)
+}
+
+pub(super) fn check_install_version(
+    loaders: &[&str],
+    version: &modrinth::Version,
+    game: &str,
+    allow_other_game: bool,
+) -> Result<bool> {
+    let right_type = version
+        .loaders
+        .iter()
+        .any(|l| loaders.contains(&l.as_str()));
+    if !right_type || version.primary_file().is_none() {
+        return Err(Error::IncompatibleContentVersion);
+    }
+    let other_game = !game.is_empty() && !version.is_compatible(loaders, game);
+    if other_game && !allow_other_game {
+        return Err(Error::IncompatibleContentVersion);
+    }
+    Ok(other_game)
+}
+
+fn download_version(
+    kind: PackKind,
+    version: &modrinth::Version,
+    used_fallback: bool,
+    game_dir: &Path,
+    progress: Progress,
+) -> Result<InstalledPack> {
+    let job = download_job(version, &game_dir.join(kind.folder()))?;
+    let file_name = version
+        .primary_file()
+        .expect("validated file")
+        .filename
+        .clone();
+    download_all("Downloading", vec![job], progress)?;
+    Ok(InstalledPack {
+        file_name,
+        used_fallback,
+    })
+}
+
+fn download_job(version: &modrinth::Version, dest: &Path) -> Result<DownloadJob> {
     let file = version
         .primary_file()
         .ok_or_else(|| Error::Other("it has no file to download".into()))?;
     super::files::check_pack_name(&file.filename)?;
-    let dir = game_dir.join(kind.folder());
-    download_all(
-        "Downloading",
-        vec![DownloadJob {
-            url: file.url.clone(),
-            dest: dir.join(&file.filename),
-            sha1: file.hashes.sha1.clone(),
-            size: file.size,
-            lzma: None,
-            md5: None,
-        }],
-        progress,
-    )?;
-    Ok(InstalledPack {
-        file_name: file.filename.clone(),
-        used_fallback,
+    Ok(DownloadJob {
+        url: file.url.clone(),
+        dest: dest.join(&file.filename),
+        sha1: file.hashes.sha1.clone(),
+        size: file.size,
+        lzma: None,
+        md5: None,
     })
+}
+
+/// Install the selected archive and the required Modrinth archives that go with it.
+pub fn install_with_dependencies(
+    selected: &SelectedPack,
+    game: &str,
+    game_dir: &Path,
+    present: &HashSet<String>,
+    progress: Progress,
+) -> Result<InstalledPack> {
+    let dest = game_dir.join(selected.kind.folder());
+    let plan = plan_archives(
+        selected.version.clone(),
+        selected.kind.loaders(),
+        game,
+        selected.other_game,
+        present,
+    )?;
+    let file_name = selected
+        .version
+        .primary_file()
+        .expect("validated file")
+        .filename
+        .clone();
+    download_archives(&plan, &dest, progress)?;
+    if selected.kind == PackKind::Resource {
+        for dep in plan.iter().skip(1).rev() {
+            if let Some(file) = dep.version.primary_file() {
+                set_active(selected.kind, game_dir, &file.filename, true)?;
+            }
+        }
+    }
+    Ok(InstalledPack {
+        file_name,
+        used_fallback: selected.other_game,
+    })
+}
+
+pub(super) fn plan_archives(
+    version: modrinth::Version,
+    loaders: &[&str],
+    game: &str,
+    other_game: bool,
+    present: &HashSet<String>,
+) -> Result<Vec<Planned>> {
+    // For a confirmed fallback, resolve its dependencies for the version the file targets.
+    let game_version = if game.is_empty() || other_game {
+        version
+            .game_versions
+            .first()
+            .map_or(game, String::as_str)
+            .to_owned()
+    } else {
+        game.to_owned()
+    };
+    let target = Target {
+        loaders,
+        game_version: &game_version,
+        loader_name: &loaders.join("/"),
+    };
+    let source = resolve::Modrinth {
+        loaders,
+        game_version: &game_version,
+    };
+    let project = version.project_id.clone();
+    resolve::resolve_root(&project, version, target, present, &source)
+}
+
+pub(super) fn download_archives(plan: &[Planned], dest: &Path, progress: Progress) -> Result<()> {
+    let mut jobs = plan
+        .iter()
+        .rev()
+        .map(|planned| download_job(&planned.version, dest))
+        .collect::<Result<Vec<_>>>()?;
+    // Validate every file first. A failed dependency download should not leave a new root.
+    let root = jobs.pop().expect("resolved root");
+    if !jobs.is_empty() {
+        download_all("Downloading", jobs, progress)?;
+    }
+    download_all("Downloading", vec![root], progress)
 }
 
 /// Packs in the instance (files and unpacked folders), by name.
@@ -356,6 +521,41 @@ mod tests {
                        "filename": format!("{id}.zip"), "primary": true}]
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn selected_pack_targets_the_exact_file_and_content_folder() {
+        for (kind, loader, folder) in [
+            (PackKind::Resource, "minecraft", "resourcepacks"),
+            (PackKind::Shader, "iris", "shaderpacks"),
+            (PackKind::Shader, "optifine", "shaderpacks"),
+        ] {
+            let selected = version("older", "beta", "2023", "1.21.4", loader);
+            assert!(!check_selected_version(kind, &selected, "1.21.4", false).unwrap());
+            let job = download_job(
+                &selected,
+                &Path::new("selected-instance").join(kind.folder()),
+            )
+            .unwrap();
+            assert_eq!(
+                job.dest,
+                Path::new("selected-instance")
+                    .join(folder)
+                    .join("older.zip")
+            );
+            assert_eq!(job.url, "https://cdn/older.zip");
+            // Another game version needs the player's confirmation, then is flagged.
+            assert!(check_selected_version(kind, &selected, "1.20.1", false).is_err());
+            assert!(check_selected_version(kind, &selected, "1.20.1", true).unwrap());
+            let mut no_file = selected.clone();
+            no_file.files.clear();
+            assert!(check_selected_version(kind, &no_file, "1.21.4", true).is_err());
+        }
+        // The wrong pack type is never installed, confirmed or not.
+        let canvas = version("canvas", "release", "2023", "1.21.4", "canvas");
+        assert!(check_selected_version(PackKind::Shader, &canvas, "1.21.4", true).is_err());
+        let iris = version("iris", "release", "2023", "1.21.4", "iris");
+        assert!(check_selected_version(PackKind::Resource, &iris, "1.21.4", true).is_err());
     }
 
     #[test]

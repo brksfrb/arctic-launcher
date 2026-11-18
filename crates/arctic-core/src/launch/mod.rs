@@ -475,6 +475,11 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         );
     }
     timer.step("read version");
+    let launcher_owned_vanilla =
+        req.instance.loader.kind().is_none() && req.instance.game_folder.is_none();
+    if launcher_owned_vanilla {
+        crate::mods::performance::recover_vanilla_api(&game_dir)?;
+    }
     let loader = effective_loader(dirs, req.instance, &vanilla.id);
     timer.step("pick loader");
     let version = match loader
@@ -528,13 +533,10 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 progress(ProgressInfo::stage("Checking performance mods"));
                 // Best effort, like the Forge branch: no Sodium is better than no game (an
                 // unreachable Modrinth CDN, a locked or truncated index).
-                if let Err(e) = crate::mods::performance::sync(
+                if let Err(e) = crate::mods::performance::sync_for_launch(
                     &game_dir,
                     &vanilla.id,
-                    req.instance.performance,
-                    req.instance.shaders,
-                    &req.instance.extras,
-                    req.instance.loader.kind(),
+                    req.instance,
                     progress,
                 ) {
                     log::warn!("performance mods: {e}");
@@ -548,11 +550,13 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 }
                 // Vanilla instances (nothing in the folder but the launcher's own mods): load only
                 // the Fabric API modules those use, which starts the game noticeably faster.
-                if req.instance.performance
-                    && req.instance.loader.kind().is_none()
-                    && let Err(e) = crate::mods::slim_api::apply(&game_dir.join("mods"))
-                {
-                    log::warn!("couldn't cut Fabric API down: {e}");
+                if req.instance.loader.kind().is_none() {
+                    crate::mods::performance::finish_vanilla(
+                        &game_dir,
+                        &vanilla.id,
+                        launcher_owned_vanilla,
+                        req.instance.performance,
+                    )?;
                 }
                 timer.step("performance mods");
                 share_session =
@@ -600,7 +604,15 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
             }
             profile
         }
-        _ => vanilla,
+        _ => {
+            if launcher_owned_vanilla
+                && let Err(e) =
+                    crate::mods::performance::finish_vanilla(&game_dir, &vanilla.id, true, false)
+            {
+                log::warn!("vanilla performance cleanup: {e}");
+            }
+            vanilla
+        }
     };
     // The Arctic sign-in (a network round trip) runs while the game files are checked.
     let session = share_session.then(|| start_cosmetics_session(req, &game_dir));
@@ -701,9 +713,12 @@ fn effective_loader(
     if fabric.is_none() {
         // Pure vanilla: make sure earlier Fabric runs left nothing behind.
         let game_dir = instance.game_dir(dirs);
-        let _ = crate::mods::slim_api::undo(&game_dir.join("mods"));
         let _ = arctic_mod::sync(&game_dir.join("mods"), game, false);
-        let _ = crate::mods::performance::sync(&game_dir, game, false, false, &[], None, &|_| {});
+        if let Err(e) =
+            crate::mods::performance::sync(&game_dir, game, false, false, &[], None, &|_| {})
+        {
+            log::warn!("vanilla performance cleanup: {e}");
+        }
         let _ = crate::mods::polarium::sync(&game_dir.join("mods"), game, false);
     }
     fabric.map(|v| (loaders::LoaderKind::Fabric, v))
