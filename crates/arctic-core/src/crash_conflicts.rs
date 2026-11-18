@@ -796,7 +796,35 @@ pub fn diagnose_in(text: &str, mods_dir: &Path) -> Option<Diagnosis> {
     if let Some((native, _)) = crate::crash::native_diagnosis(text) {
         return Some(native);
     }
-    refine(crate::crash::diagnose(text), text, &scan(mods_dir))
+    diagnose_with_mods(text, mods_dir, &scan(mods_dir), None)
+}
+
+fn diagnose_with_mods(
+    text: &str,
+    mods_dir: &Path,
+    mods: &[InstalledMod],
+    java: Option<&str>,
+) -> Option<Diagnosis> {
+    let base = crate::crash::diagnose_with_java(text, java);
+    if base.as_ref().is_some_and(|d| {
+        d.title.starts_with("A mod needs ") || d.title == "A mod dependency is missing"
+    }) && let Some(game_dir) = mods_dir.parent()
+    {
+        let files = crate::mods::performance::installed_files(game_dir);
+        for (by, needs) in crate::crash::fabric_missing_dependencies(text) {
+            if let Some(m) = mods.iter().find(|m| m.id == by && files.contains(&m.file)) {
+                return Some(Diagnosis::new(
+                    format!("Arctic performance mod {} needs {needs}", m.name),
+                    format!(
+                        "Arctic installed {}. On the next launch Arctic will check for {needs} and skip {} if the dependency is still missing.",
+                        m.name, m.name
+                    ),
+                    vec![m.id.clone(), needs.to_owned()],
+                ));
+            }
+        }
+    }
+    refine(base, text, mods)
 }
 
 /// The exit diagnosis, with incidental folder clashes kept as advice in the details. The UI has
@@ -817,12 +845,8 @@ pub fn diagnose_exit_in_with_java(
         "{text}\n(exit code {})",
         crate::crash::exit_description(code)
     );
-    let diagnosis = refine(
-        crate::crash::diagnose_with_java(&with_exit, java),
-        &with_exit,
-        &mods,
-    )
-    .or_else(|| crate::crash::silent_exit(text, code));
+    let diagnosis = diagnose_with_mods(&with_exit, mods_dir, &mods, java)
+        .or_else(|| crate::crash::silent_exit(text, code));
     let conflicts = find_conflicts(&mods);
     let Some(c) = conflicts.first() else {
         return diagnosis;
@@ -858,6 +882,45 @@ mod tests {
             .unwrap();
         zip.write_all(manifest.as_bytes()).unwrap();
         zip.finish().unwrap();
+    }
+
+    #[test]
+    fn missing_fabric_dependency_advice_uses_performance_file_ownership() {
+        let game = tempfile::tempdir().unwrap();
+        let mods = game.path().join("mods");
+        std::fs::create_dir(&mods).unwrap();
+        jar(
+            &mods,
+            "culling.jar",
+            r#"{"id":"entityculling","version":"1.5.2","name":"EntityCulling-Fabric"}"#,
+        );
+        let log = "Incompatible mods found!\n - Mod 'EntityCulling-Fabric' (entityculling) 1.5.2-mc1.19 requires any version of fabric, which is missing!";
+        assert!(
+            diagnose_exit_in(log, 1, &mods)
+                .unwrap()
+                .detail
+                .contains("Add it from Modrinth")
+        );
+
+        crate::storage::save_json(
+            &game.path().join("arctic-performance.json"),
+            &serde_json::json!({"mods": [{
+                "project_id": "NNAgCjsB", "version_id": "R0KPBo5r", "title": "EntityCulling",
+                "version_number": "1.5.2-fabric-1.19", "file_name": "culling.jar"
+            }]}),
+        )
+        .unwrap();
+        let resolver =
+            "Reason: [HARD_DEP_NO_CANDIDATE entityculling 1.5.2-mc1.19 {depends fabric @ [*]}]";
+        for log in [log, resolver] {
+            let d = diagnose_exit_in(log, 1, &mods).unwrap();
+            assert_eq!(
+                d.title,
+                "Arctic performance mod EntityCulling-Fabric needs fabric"
+            );
+            assert!(d.detail.contains("On the next launch"));
+            assert!(d.fix.is_none());
+        }
     }
 
     /// Do the diagnosis' fix and list the folder afterwards.

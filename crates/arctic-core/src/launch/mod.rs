@@ -534,7 +534,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                     req.instance.performance,
                     req.instance.shaders,
                     &req.instance.extras,
-                    req.instance.loader.kind().is_some(),
+                    req.instance.loader.kind(),
                     progress,
                 ) {
                     log::warn!("performance mods: {e}");
@@ -683,7 +683,7 @@ fn effective_loader(
         let game_dir = instance.game_dir(dirs);
         let _ = crate::mods::slim_api::undo(&game_dir.join("mods"));
         let _ = arctic_mod::sync(&game_dir.join("mods"), game, false);
-        let _ = crate::mods::performance::sync(&game_dir, game, false, false, &[], false, &|_| {});
+        let _ = crate::mods::performance::sync(&game_dir, game, false, false, &[], None, &|_| {});
         let _ = crate::mods::polarium::sync(&game_dir.join("mods"), game, false);
     }
     fabric.map(|v| (loaders::LoaderKind::Fabric, v))
