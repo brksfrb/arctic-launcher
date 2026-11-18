@@ -144,6 +144,7 @@
 		"TitleHideMixin",
 		"MobSizeMixin",
 		"OfflineLanMixin",
+		"OfflineJoinMixin",
 		"TimeLockMixin",
 		"MultiPlayerGameModeMixin"<% } %><% if (oldCamera) { %>,
 		"GameRendererFovMixin"<% } %><% if (smoothFont) { %>,
