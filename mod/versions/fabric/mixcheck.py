@@ -9,9 +9,9 @@ gradlew compileJava), so its preprocessed sources and Loom's named jar exist.
 
 Prints, per version, every hooked method, accessor, INVOKE target and
 @Shadow member that doesn't exist, and every INVOKE target the hooked method
-never calls: each of those crashes the game at startup (or silently does
-nothing). Mixins a version leaves out of arctic.mixins.json are skipped when
-the expanded config is available. Also rejects instance handlers at constructor
+never calls, as well as mismatched @Inject callback descriptors. These can crash
+the game at startup or silently do nothing. Mixins excluded from the expanded
+arctic.mixins.json are skipped. Also rejects instance handlers at constructor
 HEAD, which runs before super(). Exit code 1 if anything is wrong.
 """
 import glob
@@ -30,6 +30,17 @@ LOOM = os.path.join(GRADLE_HOME, "caches/fabric-loom/minecraftMaven/net/minecraf
 # the target alone can't see them, so only these are looked up the hierarchy.
 MAX_SUPERS = 6
 INJECTIONS = re.compile(r"@(?:Inject|Redirect|ModifyArg|ModifyArgs|ModifyVariable|ModifyConstant|WrapOperation|WrapWithCondition|ModifyExpressionValue)\((.*?)\)\n\s*(?://[^\n]*\n\s*)*(?:private|public|protected)([^{;]*)", re.S)
+CALLBACK = "org.spongepowered.asm.mixin.injection.callback.CallbackInfo"
+PRIMITIVES = dict(zip("ZBCSIJFDV", ("boolean", "byte", "char", "short", "int", "long", "float", "double", "void")))
+JVM_TYPE = re.compile(r"\[*(?:L[^;]+;|[ZBCSIJFDV])")
+
+
+def method_selectors(annotation, consts):
+    method = re.search(r'method\s*=\s*("[^"]+"|\{[^}]+\}|\w+)', annotation)
+    if method:
+        value = method.group(1)
+        return re.findall(r'"([^"]+)"', value) or ([consts[value]] if value in consts else [])
+    return []
 
 
 def constructor_head_problems(src):
@@ -42,11 +53,7 @@ def constructor_head_problems(src):
     problems = []
     for ann in INJECTIONS.finditer(src):
         annotation, handler = ann.groups()
-        method = re.search(r'method\s*=\s*("[^"]+"|\{[^}]+\}|\w+)', annotation)
-        if not method:
-            continue
-        selectors = re.findall(r'"([^"]+)"', method.group(1)) or [consts.get(method.group(1), "")]
-        if not any(s.split("(")[0] == "<init>" for s in selectors):
+        if not any(s.split("(")[0] == "<init>" for s in method_selectors(annotation, consts)):
             continue
         if not re.search(r'@At\(\s*(?:value\s*=\s*)?"HEAD"', annotation):
             continue
@@ -66,21 +73,6 @@ def neoforge_build(version):
     """The NeoForge build targets.json compiles `version` against."""
     with open(os.path.join(HERE, "..", "..", "targets.json"), encoding="utf-8") as f:
         return next((t.get("neoforge") for t in json.load(f) if t["build"] == version), None)
-
-
-def split_args(text):
-    """A parameter list split at its top-level commas (generic types keep theirs)."""
-    out, depth, start = [], 0, 0
-    for i, ch in enumerate(text):
-        if ch == "<":
-            depth += 1
-        elif ch == ">":
-            depth -= 1
-        elif ch == "," and depth == 0:
-            out.append(text[start:i].strip())
-            start = i + 1
-    last = text[start:].strip()
-    return out + [last] if last else out
 
 
 def jar_for(version):
@@ -143,6 +135,21 @@ class Jar:
         pat = re.compile(r"[ .]" + re.escape(name) + r"(\(|;)")
         return any(pat.search(self.members(c)) for c in self.hierarchy(cls))
 
+    def method_descriptors(self, cls, selector):
+        name, paren, desc = selector.partition("(")
+        pattern = self.selector_pattern(selector)
+        simple = cls.rsplit(".", 1)[-1]
+        for member, descriptor in re.findall(r"^  [^\n]*?([\w.$]+)\([^\n]*\n    descriptor: (\S+)",
+                                             self.members(cls), re.M):
+            member = "<init>" if member == cls or member == simple else member
+            if pattern is not None:
+                if pattern.fullmatch(member):
+                    yield descriptor
+            elif name == member and (not paren or descriptor == paren + desc):
+                yield descriptor
+        if name == "<clinit>" and "static {};" in self.members(cls):
+            yield "()V"
+
     def body(self, cls, method):
         if cls not in self.code_cache:
             self.code_cache[cls] = subprocess.run([JAVAP, "-cp", self.path, "-p", "-c", cls], capture_output=True, text=True).stdout
@@ -175,8 +182,28 @@ def build_dir(version):
 
 
 def active_mixins(version):
-    """Mixin names this version's expanded config lists (from the built jar), or None when unknown."""
-    name = f"arctic-{version}.jar" if neoforge(version) else f"arctic-mod-{version}.jar"
+    """Mixin names from this version's processed resources, or the built jar as a fallback."""
+    resources = os.path.join(build_dir(version), "build", "resources", "main")
+    game = neoforge(version)
+    try:
+        # A Gradle project shares its processed resources between Minecraft targets.
+        if game:
+            metadata = "mods.toml" if game == "1.20.1" else "neoforge.mods.toml"
+            with open(os.path.join(resources, "META-INF", metadata), encoding="utf-8") as f:
+                # The closed Minecraft range ends at the version used for the build.
+                version_range = re.search(r'^modId = "minecraft"\n(?:mandatory|type) = .+\nversionRange = "\[([^"\n]+)\]"$',
+                                          f.read(), re.M)
+            current = version_range is not None and version_range[1].rsplit(",", 1)[-1] == game
+        else:
+            with open(os.path.join(resources, "fabric.mod.json"), encoding="utf-8") as f:
+                covers = json.load(f).get("depends", {}).get("minecraft", [])
+            current = version in covers
+        if current:
+            with open(os.path.join(resources, "arctic.mixins.json"), encoding="utf-8") as f:
+                return set(json.load(f).get("client", []))
+    except (OSError, ValueError):
+        pass
+    name = f"arctic-{version}.jar" if game else f"arctic-mod-{version}.jar"
     jar = os.path.join(HERE, "..", "..", "dist", name)
     if not os.path.isfile(jar):
         return None
@@ -191,14 +218,8 @@ def listed_without_class(version, src_dir):
     """Mixins the version's expanded arctic.mixins.json lists whose class its sources don't make (a mixin
     file wrapped in //#if for other versions, but listed for all): Mixin throws ClassNotFoundException and
     the game dies at startup ("A mod crashed on startup")."""
-    config = os.path.join(build_dir(version), "build", "resources", "main", "arctic.mixins.json")
-    try:
-        with open(config, encoding="utf-8") as f:
-            names = json.load(f).get("client", [])
-    except (OSError, ValueError):
-        names = sorted(active_mixins(version) or [])
     missing = []
-    for name in names:
+    for name in sorted(active_mixins(version) or []):
         path = os.path.join(src_dir, *name.split(".")) + ".java"
         try:
             with open(path, encoding="utf-8") as f:
@@ -208,6 +229,69 @@ def listed_without_class(version, src_dir):
             pass
         missing.append(name)
     return missing
+
+
+def java_type(descriptor):
+    base = descriptor.lstrip("[")
+    name = base[1:-1].replace("/", ".").replace("$", ".") if base.startswith("L") else PRIMITIVES[base]
+    return name.removeprefix("java.lang.") + "[]" * (len(descriptor) - len(base))
+
+
+def qualified_type(name, imports):
+    root, dot, rest = name.partition(".")
+    return imports.get(root, root) + dot + rest
+
+
+def target_class(name, imports):
+    root, dot, rest = name.partition(".")
+    if dot and root in imports:
+        return imports[root] + "$" + rest.replace(".", "$")
+    return qualified_type(name, imports)
+
+
+def callback_problems(jar, cls, src, imports, consts):
+    """Check @Inject's captured arguments and callback type before Mixin applies it."""
+    problems = []
+    for ann in INJECTIONS.finditer(src):
+        if not ann[0].startswith("@Inject("):
+            continue
+        annotation, handler = ann.groups()
+        # Mixin can adapt a coerced argument, but the number of captured arguments must still match.
+        coerced = re.search(r"@(?:[\w.]+\.)?Coerce\b", handler)
+        declaration = re.sub(r"@[\w.]+(?:\([^)]*\))?\s*", "", handler)
+        while re.search(r"<[^<>]*>", declaration):
+            declaration = re.sub(r"<[^<>]*>", "", declaration)
+        match = re.fullmatch(r"\s*(.*?)\s+([\w$]+)\s*\((.*?)\)\s*(?:throws\s+.*)?", declaration, re.S)
+        if not match:
+            continue
+        modifiers, name, params = match.groups()
+        types = [qualified_type(param.replace("...", "[]"), imports).removeprefix("java.lang.")
+                 for param in re.findall(r"([\w.$]+(?:\[\]|\.\.\.)*)\s+\w+\s*(?:,|$)", params)]
+        captures_locals = re.search(r"\blocals\s*=\s*LocalCapture\.CAPTURE_", annotation) or re.search(
+            r"@(?:[\w.]+\.)?Local\b", handler
+        )
+        for selector in method_selectors(annotation, consts):
+            descriptors = list(jar.method_descriptors(cls, selector))
+            if not descriptors and not selector.startswith(("/", "<")):
+                descriptors = [desc for parent in jar.hierarchy(cls)[1:]
+                               for desc in jar.method_descriptors(parent, selector)]
+            if not descriptors:
+                continue
+            for desc in descriptors:
+                args, result = desc[1:].split(")")
+                expected = [java_type(p) for p in JVM_TYPE.findall(args)]
+                callback = CALLBACK if result == "V" else CALLBACK + "Returnable"
+                prefixes = ([callback], [None] * len(expected) + [callback] if coerced else expected + [callback])
+                if modifiers.split()[-1] == "void" and any(
+                    len(types) >= len(prefix) and (len(types) == len(prefix) or captures_locals)
+                    and all(wanted is None or actual == wanted for actual, wanted in zip(types, prefix))
+                    for prefix in prefixes
+                ):
+                    break
+            else:
+                problems.append(f"{name}: incompatible @Inject descriptor for {cls}.{selector} "
+                                f"(target descriptors: {', '.join(descriptors)})")
+    return problems
 
 
 def check(version):
@@ -224,24 +308,27 @@ def check(version):
     for path in sorted(glob.glob(os.path.join(src_dir, "*.java"))):
         f = os.path.basename(path)
         src = open(path, encoding="utf-8").read()
-        m = re.search(r"@Mixin\(([\w.]+)\.class\)", src)
-        if not m:
-            continue
         if listed is not None and f[:-5] not in listed:
             continue
         problems.extend(f"{f}: {p}" for p in constructor_head_problems(src))
-        imports = dict((i.group(2), i.group(1) + "." + i.group(2))
-                       for i in re.finditer(r"import ((?:net\.minecraft|com\.mojang)[\w.]*)\.(\w+);", src))
-        target = m.group(1)
-        cls = imports.get(target.split(".")[0], target)
-        if "." in target and target.split(".")[0] in imports:
-            cls = imports[target.split(".")[0]] + "$" + ".".join(target.split(".")[1:]).replace(".", "$")
-        if not jar.members(cls):
-            problems.append(f"{f}: target class missing {cls}")
-            continue
+        imports = {i.group(2): i.group(1) + "." + i.group(2)
+                   for i in re.finditer(r"import ([\w.]*)\.(\w+);", src)}
         # "a" + "b" (kept apart so the version renames leave the name alone) is one string.
         src = re.sub(r'"\s*\+\s*"', "", src)
         consts = dict(re.findall(r'String (\w+) = "([^"]+)"', src))
+        mixin = re.search(r"@Mixin\(([^)]+)\)", src)
+        if mixin:
+            targets = [target_class(t, imports) for t in re.findall(r"([\w.]+)\.class", mixin[1])]
+            targets += re.findall(r'"((?:net\.minecraft|com\.mojang)\.[\w.$]+)"', mixin[1])
+            for cls in targets:
+                problems.extend(f"{f}: {p}" for p in callback_problems(jar, cls, src, imports, consts))
+        m = re.search(r"@Mixin\(([\w.]+)\.class\)", src)
+        if not m:
+            continue
+        cls = target_class(m.group(1), imports)
+        if not jar.members(cls):
+            problems.append(f"{f}: target class missing {cls}")
+            continue
         methods = re.findall(r'method\s*=\s*"([^"]+)"', src)
         for grp in re.findall(r"method\s*=\s*\{([^}]+)\}", src):
             methods += re.findall(r'"([^"]+)"', grp)
@@ -286,17 +373,6 @@ def check(version):
                           for p in re.findall(r"\n  [^\n]*[ .]" + re.escape(hooked) + r"\(([^)]*)\)", jar.members(c))]
                 if params and not any(re.search(r"(^|[.$ ,])" + re.escape(simple) + r"($|[ ,])", p) for p in params):
                     problems.append(f"{f}: {hooked} takes no {simple} argument (@Local argsOnly)")
-            # @Inject: the handler takes all of the hooked method's arguments before its CallbackInfo, or
-            # none. NeoForge adds arguments to some methods it patches (checked for NeoForge jars only).
-            hooked = (mm.group(1) or consts.get(mm.group(2), "?")) if mm else ""
-            if neoforge(version) and ann.group(0).startswith("@Inject(") and hooked and not hooked.startswith(("/", "<")) and "(" not in hooked:
-                handler = ann.group(2)
-                args = split_args(handler[handler.find("(") + 1:handler.rfind(")")])
-                before = next((i for i, arg in enumerate(args) if "CallbackInfo" in arg), None)
-                counts = {len(split_args(p)) for c in jar.hierarchy(cls)
-                          for p in re.findall(r"\n  [^\n]*[ .]" + re.escape(hooked) + r"\(([^)]*)\)", jar.members(c))}
-                if before and counts and before not in counts:
-                    problems.append(f"{f}: {hooked} takes {' or '.join(map(str, sorted(counts)))} argument(s), the handler {before}")
             tm = re.search(r'value\s*=\s*"INVOKE"[^)]*?target\s*=\s*(?:"([^"]+)"|(\w+))', a, re.S)
             if not mm or not tm:
                 continue
