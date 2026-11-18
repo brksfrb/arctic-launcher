@@ -687,6 +687,21 @@ fn collect(text: &str, group: usize) -> Vec<String> {
     out
 }
 
+/// Fabric's missing-dependency reports give the id of the requiring mod.
+pub(crate) fn fabric_missing_dependencies(text: &str) -> impl Iterator<Item = (&str, &str)> {
+    static NO_CANDIDATE: OnceLock<Regex> = OnceLock::new();
+    let no_candidate = NO_CANDIDATE
+        .get_or_init(|| Regex::new(r"HARD_DEP_NO_CANDIDATE (\S+) \S+ \{depends (\S+) @").unwrap());
+    compiled()[0]
+        .captures_iter(text)
+        .filter_map(|c| Some((c.get(2)?.as_str(), c.get(3)?.as_str())))
+        .chain(
+            resolver_causes(text)
+                .flat_map(|line| no_candidate.captures_iter(line))
+                .filter_map(|c| Some((c.get(1)?.as_str(), c.get(2)?.as_str()))),
+        )
+}
+
 fn compiled() -> &'static [Regex] {
     static COMPILED: OnceLock<Vec<Regex>> = OnceLock::new();
     COMPILED.get_or_init(|| {
@@ -1075,6 +1090,9 @@ pub(crate) fn native_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
 }
 
 fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
+    if let Some(runtime) = runtime_diagnosis(text) {
+        return Some(runtime);
+    }
     if let Some(native) = native_diagnosis(text) {
         return Some(native);
     }
@@ -1138,6 +1156,40 @@ fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)>
         }
     }
     hang_diagnosis(text)
+}
+
+/// The exception must name a native library in a managed JDK layout. Other
+/// UnsatisfiedLinkErrors are commonly caused by mods, LWJGL or system libraries.
+pub(crate) fn runtime_native_error(line: &str) -> Option<regex::Match<'_>> {
+    if !(line.contains("UnsatisfiedLinkError")
+        || line.contains("The specified procedure could not be found")
+        || line.contains("Can't find dependent libraries"))
+    {
+        return None;
+    }
+    const COMPONENT: &str = r"(?:java-runtime-[\w.-]+|jre-legacy(?:-x64)?)";
+    static LIBRARY: OnceLock<Regex> = OnceLock::new();
+    let library = LIBRARY.get_or_init(|| {
+        Regex::new(&format!(
+            r"(?i)(?P<runtime>[/\\]runtimes[/\\](?:{COMPONENT}|\.named[/\\]{COMPONENT}[/\\]Arctic Client))[/\\]{}",
+            r#"(?:jre\.bundle[/\\]Contents[/\\]Home[/\\])?(?:jre[/\\])?(?:bin|lib)[/\\](?:[\w-]+[/\\])*[\w.-]+\.(?:dll|dylib|so(?:\.\d+)*)(?:$|[:\s)'"])"#,
+        )).unwrap()
+    });
+    library.captures(line)?.name("runtime")
+}
+
+pub(crate) fn runtime_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+    let line = text
+        .lines()
+        .find(|line| runtime_native_error(line).is_some())?;
+    Some((
+        Diagnosis::new(
+            "The Java runtime is broken",
+            "Java could not load one of its own libraries. Arctic will verify and repair the runtime on the next launch.",
+            Vec::new(),
+        ),
+        head_of(line.trim(), 2048).to_owned(),
+    ))
 }
 
 fn hang_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
@@ -1410,7 +1462,9 @@ impl Report {
                 title
             };
         let title = registry_sync_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
-        let title = native_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
+        let title = runtime_diagnosis(&diagnosis_text)
+            .or_else(|| native_diagnosis(&diagnosis_text))
+            .map_or(title, |(d, _)| d.title);
         let title = if crash_report.is_none()
             && (title.is_empty()
                 || title == "unknown"
@@ -1940,6 +1994,46 @@ pub fn scrub(text: &str, own: &Own) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn crash_380_prefers_the_runtime_dll_over_the_debug_screen_error() {
+        let text = include_str!("../tests/fixtures/crash-380-runtime-dll.log");
+        let (diagnosis, matched) = diagnose_match(text, None).unwrap();
+        assert_eq!(diagnosis.title, "The Java runtime is broken");
+        assert!(matched.contains("management.dll: The specified procedure could not be found"));
+        assert!(diagnosis.mods.is_empty());
+        assert!(!diagnosis.repair);
+        let diagnosis = crate::crash_conflicts::refine(None, text, &[]).unwrap();
+        assert_eq!(diagnosis.title, "The Java runtime is broken");
+        let report = Report::build(
+            "26.2",
+            "Fabric",
+            "A mod is for a different version",
+            &[],
+            &[],
+            Some(text),
+            None,
+        );
+        assert_eq!(report.title, "The Java runtime is broken");
+    }
+
+    #[test]
+    fn runtime_native_errors_require_a_managed_library_path() {
+        for line in [
+            r"C:\Arctic Data\runtimes\java-runtime-epsilon\bin\server\jvm.dll: Can't find dependent libraries",
+            r"C:\Arctic Data\runtimes\java-runtime-epsilon\bin\management.dll: The specified procedure could not be found",
+            "java.lang.UnsatisfiedLinkError: /home/user/Arctic Data/runtimes/java-runtime-epsilon/lib/libmanagement.so: undefined symbol",
+        ] {
+            assert!(runtime_native_error(line).is_some(), "{line}");
+        }
+        for line in [
+            r"java.lang.UnsatisfiedLinkError: C:\Windows\System32\ucrtbase.dll: The specified procedure could not be found",
+            "java.lang.UnsatisfiedLinkError: /usr/lib/jvm/java-25/lib/libmanagement.so: undefined symbol",
+            "java.lang.UnsatisfiedLinkError: /home/user/runtimes/java-runtime-epsilon/lib/library.jar",
+        ] {
+            assert!(runtime_native_error(line).is_none(), "{line}");
+        }
+    }
+
     #[test]
     fn first_error_prefers_crash_report_over_pack_metadata_warnings() {
         let log = include_str!("../tests/fixtures/crash-325-pack-warning.log");
