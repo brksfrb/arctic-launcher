@@ -217,5 +217,21 @@
   "social.words_separated_by_commas_a_line_with_any_of": "Słowa oddzielone przecinkami; pasuje wiersz z dowolnym z nich. „-słowo” wyklucza wiersze.",
   "social.world_open_to_friends": "Świat otwarty dla znajomych",
   "social.your_friend_joined": "Twój znajomy dołączył",
-  "social.your_world_is_open_to_lan_for_the_friends": "Twój świat jest otwarty w LAN dla zaproszonych znajomych"
+  "social.your_world_is_open_to_lan_for_the_friends": "Twój świat jest otwarty w LAN dla zaproszonych znajomych",
+  "social.hostban_host": "Nie możesz zbanować gospodarza.",
+  "social.hostban_tunnel_ip": "Graczy, którzy dołączyli przez zaproszenie lub kod, nie można zbanować po IP. Użyj /ban <nazwa>.",
+  "social.hostban_disconnect": "Masz zakaz wstępu do tego świata.\n{0}",
+  "social.hostban_default_reason": "Nie podano powodu.",
+  "social.hostban_storage_error": "Nie udało się odczytać lub zapisać listy banów tego świata.",
+  "social.hostban_player_already_banned": "Gracz {0} jest już zbanowany.",
+  "social.hostban_player_banned": "Zbanowano gracza {0}.",
+  "social.hostban_player_not_banned": "Gracz {0} nie jest zbanowany.",
+  "social.hostban_player_pardoned": "Odbanowano gracza {0}.",
+  "social.hostban_unknown_ip": "{0} nie jest prawidłowym adresem IP ani nazwą gracza online.",
+  "social.hostban_ip_already_banned": "Adres IP {0} jest już zablokowany.",
+  "social.hostban_ip_banned": "Zablokowano adres IP {0}.",
+  "social.hostban_ip_not_banned": "Adres IP {0} nie jest zablokowany.",
+  "social.hostban_ip_pardoned": "Odblokowano adres IP {0}.",
+  "social.hostban_list_entry": "{0} — {1}",
+  "social.hostban_list_empty": "Brak banów do wyświetlenia."
 }

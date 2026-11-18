@@ -217,5 +217,21 @@
   "social.words_separated_by_commas_a_line_with_any_of": "Words separated by commas; a line with any of them matches. \"-word\" keeps lines out.",
   "social.world_open_to_friends": "World open to friends",
   "social.your_friend_joined": "Your friend joined",
-  "social.your_world_is_open_to_lan_for_the_friends": "Your world is open to LAN for the friends you invited"
+  "social.your_world_is_open_to_lan_for_the_friends": "Your world is open to LAN for the friends you invited",
+  "social.hostban_host": "You can't ban the host.",
+  "social.hostban_tunnel_ip": "Players who joined by invite or code can't be IP-banned; use /ban <name>.",
+  "social.hostban_disconnect": "You are banned from this world.\n{0}",
+  "social.hostban_default_reason": "No reason given.",
+  "social.hostban_storage_error": "Could not read or save this world's ban list.",
+  "social.hostban_player_already_banned": "{0} is already banned.",
+  "social.hostban_player_banned": "Banned {0}.",
+  "social.hostban_player_not_banned": "{0} is not banned.",
+  "social.hostban_player_pardoned": "Pardoned {0}.",
+  "social.hostban_unknown_ip": "{0} is not a valid IP address or an online player's name.",
+  "social.hostban_ip_already_banned": "IP address {0} is already banned.",
+  "social.hostban_ip_banned": "Banned IP address {0}.",
+  "social.hostban_ip_not_banned": "IP address {0} is not banned.",
+  "social.hostban_ip_pardoned": "Pardoned IP address {0}.",
+  "social.hostban_list_entry": "{0} — {1}",
+  "social.hostban_list_empty": "No bans to show."
 }
