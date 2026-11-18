@@ -1208,6 +1208,8 @@ impl ArcticApp {
             | Event::ModsScanned(..)
             | Event::ModProgress(..)
             | Event::ModInstalled(..)
+            | Event::ContentProgress(..)
+            | Event::ContentInstalled(..)
             | Event::ModUpdatesChecked(..)
             | Event::ModUpdatesApplied(..)
             | Event::RetargetChecked(..)

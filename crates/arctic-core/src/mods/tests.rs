@@ -127,6 +127,28 @@ fn search_url_encodes_query_facets_and_clamps_limit() {
 }
 
 #[test]
+fn data_pack_categories_form_separate_facets_with_type_loader_and_game() {
+    let query = SearchQuery {
+        game_version: "26.3".into(),
+        project_type: ProjectType::DataPack,
+        categories: vec![" adventure ".into(), "worldgen".into(), "".into()],
+        ..SearchQuery::default()
+    };
+    let expected = json!([
+        ["project_type:datapack"],
+        ["categories:datapack"],
+        ["versions:26.3"],
+        ["categories:adventure"],
+        ["categories:worldgen"],
+    ]);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&modrinth::search_facets(&query)).unwrap(),
+        expected
+    );
+    assert!(modrinth::search_url(&query).contains(&encode(&expected.to_string())));
+}
+
+#[test]
 fn encoder_keeps_unreserved_and_escapes_utf8() {
     assert_eq!(encode("aZ09-_.~"), "aZ09-_.~");
     assert_eq!(encode("a b/\"ç"), "a%20b%2F%22%C3%A7");

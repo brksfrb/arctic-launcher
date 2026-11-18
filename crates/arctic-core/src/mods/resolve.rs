@@ -6,7 +6,6 @@
 use std::collections::{HashSet, VecDeque};
 
 use super::modrinth::{self, Version};
-use crate::loaders::LoaderKind;
 use crate::{Error, Result};
 
 /// Where versions come from.
@@ -38,7 +37,7 @@ impl VersionSource for Modrinth<'_> {
 pub(super) struct Target<'a> {
     pub loaders: &'a [&'a str],
     pub game_version: &'a str,
-    pub loader: LoaderKind,
+    pub loader_name: &'a str,
 }
 
 /// A version chosen for installation.
@@ -91,7 +90,7 @@ pub(super) fn resolve_version(
     )
 }
 
-fn resolve_root(
+pub(super) fn resolve_root(
     root: &str,
     root_version: Version,
     target: Target,
@@ -186,8 +185,7 @@ fn newest(project_id: &str, target: Target, source: &dyn VersionSource) -> Resul
         .ok_or_else(|| {
             Error::Other(format!(
                 "{project_id} has no version for {} {}",
-                target.loader.label(),
-                target.game_version
+                target.loader_name, target.game_version
             ))
         })
 }
@@ -248,7 +246,7 @@ mod tests {
     const TARGET: Target = Target {
         loaders: &["fabric"],
         game_version: "1.21.4",
-        loader: LoaderKind::Fabric,
+        loader_name: "Fabric",
     };
 
     fn ids(plan: &[Planned]) -> Vec<(&str, bool)> {

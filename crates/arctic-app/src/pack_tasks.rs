@@ -3,7 +3,7 @@
 use arctic_core::instances::Instance;
 use arctic_core::mods::packs::{self, PackKind};
 use arctic_core::mods::{self, SearchQuery};
-use arctic_core::{Error, ProgressInfo, Result};
+use arctic_core::{Error, Progress, ProgressInfo, Result};
 
 use crate::tasks::{Event, ProgressSnapshot, Tasks};
 use crate::{t, tf};
@@ -52,23 +52,27 @@ impl Tasks {
         chosen: Option<(String, bool)>,
     ) {
         self.run(move |t| {
+            let _guard = t.content_lock();
             let chosen = chosen.as_ref().map(|(id, allow)| (id.as_str(), *allow));
             let result = t
-                .pack_install_blocking(&instance, kind, &project, &game, chosen)
+                .pack_install_blocking(&instance, kind, &project, &game, chosen, None)
                 .map_err(crate::tasks::content_install_error);
             t.send(Event::PackInstalled(instance.id.clone(), project, result));
         });
     }
 
-    fn pack_install_blocking(
+    pub(crate) fn pack_install_blocking(
         &self,
         instance: &Instance,
         kind: PackKind,
         project: &str,
         game: &str,
         chosen: Option<(&str, bool)>,
+        discover_progress: Option<Progress>,
     ) -> Result<PackDone> {
-        let progress = |p: ProgressInfo| self.send(Event::ModProgress(ProgressSnapshot::from(p)));
+        let pack_progress =
+            |p: ProgressInfo| self.send(Event::ModProgress(ProgressSnapshot::from(p)));
+        let progress = discover_progress.unwrap_or(&pack_progress);
         let game_dir = instance.game_dir(self.dirs());
         // A chosen version is checked before Iris is added for it.
         let selected = match chosen {
@@ -104,7 +108,7 @@ impl Tasks {
                             loader,
                             &game_dir.join("mods"),
                             &index,
-                            &progress,
+                            progress,
                         )
                         .map_err(|e| {
                             Error::Other(tf!(
@@ -118,8 +122,21 @@ impl Tasks {
             }
         }
         let installed = match &selected {
-            Some(selected) => packs::install_selected(selected, &game_dir, &progress)?,
-            None => packs::install(kind, project, game, &game_dir, &progress)?,
+            Some(selected) if discover_progress.is_some() => {
+                let mut present = std::collections::HashSet::new();
+                if kind == PackKind::Shader {
+                    // Iris-format packs use the shader loader prepared above.
+                    let shader_mod = instance
+                        .loader
+                        .kind()
+                        .map_or(packs::IRIS, packs::shader_mod);
+                    present.insert(shader_mod.to_owned());
+                    present.insert(packs::IRIS.to_owned());
+                }
+                packs::install_with_dependencies(selected, game, &game_dir, &present, progress)?
+            }
+            Some(selected) => packs::install_selected(selected, &game_dir, progress)?,
+            None => packs::install(kind, project, game, &game_dir, progress)?,
         };
         let file = installed.file_name;
         if let Err(e) = packs::set_active(kind, &game_dir, &file, true) {

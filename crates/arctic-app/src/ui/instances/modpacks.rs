@@ -94,6 +94,7 @@ impl ArcticApp {
         let p = self.palette();
         let mut open = false;
         crate::widgets::row(ui, |ui| {
+            super::content_install::select_content(ui, &mut self.inst.search.selected, hit);
             open |= ui
                 .scope(|ui| mod_icon(ui, self, hit.icon_url.as_deref()))
                 .response

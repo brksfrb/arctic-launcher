@@ -3,6 +3,7 @@
 
 mod browse;
 mod clashes;
+mod content_install;
 mod create;
 mod detail;
 mod hub;
@@ -82,6 +83,7 @@ pub struct SearchState {
     pub instance: Option<String>,
     /// When the search text last changed (search runs shortly after typing stops).
     pub typed_at: Option<f64>,
+    pub selected: Vec<arctic_core::mods::ProjectHit>,
 }
 
 /// Under a result list: when its end scrolls into view and there are more, the next page is
@@ -198,6 +200,7 @@ pub struct InstancesUi {
     pub packs: packs::PacksUi,
     /// The discovery page.
     pub hub: hub::HubUi,
+    pub(crate) content: content_install::ContentUi,
     /// Moving the open instance to another Minecraft version.
     pub retarget: Option<retarget::RetargetUi>,
     /// Moving the open instance to another mod loader.
@@ -207,7 +210,7 @@ pub struct InstancesUi {
 impl InstancesUi {
     /// Dismiss the innermost open view before leaving the Instances tab.
     pub(crate) fn go_back(&mut self) -> bool {
-        if self.preview.take().is_some() {
+        if self.content.close_picker() || self.preview.take().is_some() {
             return true;
         }
         if self.pack_preview.take().is_some() {
@@ -268,16 +271,15 @@ impl ArcticApp {
     pub(crate) fn instances_tab(&mut self, ui: &mut egui::Ui) {
         if self.inst.modpacks_open {
             self.modpacks_page(ui);
-            return;
-        }
-        if let Some(id) = self.inst.open.clone() {
-            if self.instance_by_id(&id).is_some() {
-                self.instance_page(ui, &id);
-                return;
-            }
+        } else if let Some(id) = self.inst.open.clone()
+            && self.instance_by_id(&id).is_some()
+        {
+            self.instance_page(ui, &id);
+        } else {
             self.inst.open = None;
+            self.instances_grid(ui);
         }
-        self.instances_grid(ui);
+        self.content_install_dialog(ui.ctx());
     }
 
     /// A modpack file dropped anywhere on the Instances page installs it.
@@ -582,6 +584,8 @@ impl ArcticApp {
                 self.create_form_defaults();
             }
             Event::HubTags(result) => self.on_hub_tags(result),
+            Event::ContentProgress(progress) => self.inst.content.progress = Some(progress),
+            Event::ContentInstalled(report) => self.on_content_installed(report),
             Event::ModSearch(request, result) => {
                 if let Ok(page) = &result {
                     for hit in &page.hits {

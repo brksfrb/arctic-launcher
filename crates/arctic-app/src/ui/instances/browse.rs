@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use arctic_core::instances::Instance;
-use arctic_core::mods::{ProjectHit, SearchQuery, SortBy};
+use arctic_core::mods::{ProjectHit, ProjectType, SearchQuery, SortBy};
 use eframe::egui::{self, RichText};
 
 use super::mods_page::mod_icon;
@@ -30,6 +30,7 @@ impl ArcticApp {
         if self.inst.search.instance.as_deref() != Some(instance.id.as_str()) {
             self.inst.search.instance = Some(instance.id.clone());
             self.inst.search.text.clear();
+            self.inst.search.selected.clear();
             self.inst.search.sort = SortBy::Downloads;
             self.run_mod_search(instance, 0);
         }
@@ -77,6 +78,7 @@ impl ArcticApp {
             .color(p.muted),
         );
         ui.add_space(8.0);
+        self.content_selection_bar(ui, ProjectType::Mod, instance);
         self.search_results(ui, instance);
     }
 
@@ -96,7 +98,7 @@ impl ArcticApp {
             sort: search.sort,
             offset,
             limit: PAGE_SIZE,
-            project_type: arctic_core::mods::ProjectType::Mod,
+            project_type: ProjectType::Mod,
             ..SearchQuery::default()
         };
         self.tasks.mod_search(search.request, query);
@@ -204,6 +206,7 @@ impl ArcticApp {
     ) {
         let p = self.palette();
         crate::widgets::row(ui, |ui| {
+            super::content_install::select_content(ui, &mut self.inst.search.selected, hit);
             if ui
                 .scope(|ui| mod_icon(ui, self, hit.icon_url.as_deref()))
                 .response

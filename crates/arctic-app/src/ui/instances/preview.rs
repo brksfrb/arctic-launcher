@@ -30,6 +30,7 @@ pub struct Preview {
     kind: Option<PackKind>,
     /// A modpack: installs as an instance of its own.
     modpack: bool,
+    discover_kind: Option<ProjectType>,
     receiver: Receiver<DetailResult>,
     detail: Option<DetailResult>,
     versions_rx: Receiver<VersionsResult>,
@@ -175,7 +176,10 @@ enum VersionFit {
 
 impl VersionFit {
     fn of(v: &VersionInfo, kind: ProjectType, loader: Option<LoaderKind>, game: &str) -> Self {
-        let pack = matches!(kind, ProjectType::ResourcePack | ProjectType::Shader);
+        let pack = matches!(
+            kind,
+            ProjectType::ResourcePack | ProjectType::Shader | ProjectType::DataPack
+        );
         if kind == ProjectType::Modpack {
             Self::NewInstance
         } else if v.fits(kind, loader, game) {
@@ -222,7 +226,7 @@ fn ordered_versions<'a>(
 }
 
 /// "1.20.1, 1.20.2" or, for long lists, the first and last ("1.16 – 1.21.4").
-fn short_game_list(games: &[String]) -> String {
+pub(super) fn short_game_list(games: &[String]) -> String {
     match games {
         [first, .., last] if games.len() > 3 => format!("{first} – {last}"),
         _ => games.join(", "),
@@ -278,6 +282,7 @@ impl ArcticApp {
             versions_shown: VERSIONS_SHOWN,
             confirm_version: None,
             modpack,
+            discover_kind: None,
             hit,
             kind,
             detail: None,
@@ -288,6 +293,20 @@ impl ArcticApp {
             body: String::new(),
             html: Arc::default(),
         });
+    }
+
+    pub(super) fn open_discover_project(
+        &mut self,
+        ctx: &egui::Context,
+        target: &Instance,
+        hit: &ProjectHit,
+        project_type: ProjectType,
+        pack: Option<PackKind>,
+    ) {
+        self.open_project_preview_in(ctx, target.id.clone(), hit.clone(), pack, false);
+        if let Some(preview) = &mut self.inst.preview {
+            preview.discover_kind = Some(project_type);
+        }
     }
 
     pub(super) fn project_preview(&mut self, ctx: &egui::Context, instance: &Instance) {
@@ -436,10 +455,12 @@ impl ArcticApp {
                             None => self.inst.installing.contains(&preview.hit.project_id),
                         }
                     };
-                    let vanilla_mods = !preview.modpack
+                    let vanilla_mods = preview.discover_kind.is_none()
+                        && !preview.modpack
                         && preview.kind.is_none()
                         && instance.loader.kind().is_none();
-                    let installed = preview.kind.is_none()
+                    let installed = preview.discover_kind.is_none()
+                        && preview.kind.is_none()
                         && !preview.modpack
                         && self
                             .inst
@@ -460,15 +481,20 @@ impl ArcticApp {
                         ui.label(t!("instances.installing"));
                     } else {
                         let button = ui
-                            .add_enabled_ui(!vanilla_mods, |ui| {
-                                widgets::button(
-                                    ui,
-                                    p,
-                                    Some(Icon::Plus),
-                                    t!("instances.install"),
-                                    true,
-                                )
-                            })
+                            .add_enabled_ui(
+                                !vanilla_mods
+                                    && (preview.discover_kind.is_none()
+                                        || self.inst.content.progress.is_none()),
+                                |ui| {
+                                    widgets::button(
+                                        ui,
+                                        p,
+                                        Some(Icon::Plus),
+                                        t!("instances.install"),
+                                        true,
+                                    )
+                                },
+                            )
                             .inner;
                         let clicked = if vanilla_mods {
                             button.on_disabled_hover_text(t!("instances.hub.vanilla_has_no_mods"));
@@ -477,7 +503,9 @@ impl ArcticApp {
                             button.clicked()
                         };
                         if clicked {
-                            if preview.modpack {
+                            if let Some(kind) = preview.discover_kind {
+                                self.pick_single_content(ctx, kind, &preview.hit, None, instance);
+                            } else if preview.modpack {
                                 self.inst.pack_installing = Some(preview.hit.project_id.clone());
                                 self.inst.install_progress = None;
                                 self.tasks
@@ -651,7 +679,9 @@ impl ArcticApp {
             }
             Some(Ok(v)) => v,
         };
-        let kind = preview_project_type(preview.modpack, preview.kind);
+        let kind = preview
+            .discover_kind
+            .unwrap_or_else(|| preview_project_type(preview.modpack, preview.kind));
         let (loader, game) = if preview.modpack {
             (None, String::new())
         } else {
@@ -663,14 +693,18 @@ impl ArcticApp {
                 name = instance.name,
                 game = game
             ));
-            let hint = if preview.kind.is_some() {
+            let hint = if preview.discover_kind.is_some() {
+                t!("instances.hub.choose_instance")
+            } else if preview.kind.is_some() {
                 t!("instances.hub.other_game_needs_confirm")
             } else {
                 t!("instances.hub.incompatible_blocked")
             };
             ui.label(RichText::new(hint).small().color(p.muted));
         }
-        let busy = if preview.modpack {
+        let busy = if preview.discover_kind.is_some() && self.inst.content.progress.is_some() {
+            true
+        } else if preview.modpack {
             self.inst.pack_installing.is_some()
         } else if preview.kind.is_some() {
             self.inst.packs.installing.contains(&preview.hit.project_id)
@@ -708,17 +742,29 @@ impl ArcticApp {
                 ui.label(RichText::new(&v.number).strong().color(p.text));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let install = ui
-                        .add_enabled_ui(!busy && fit.installable() && !confirming, |ui| {
-                            widgets::button(ui, p, Some(Icon::Plus), t!("instances.install"), false)
-                        })
+                        .add_enabled_ui(
+                            !busy
+                                && (fit.installable() || preview.discover_kind.is_some())
+                                && !confirming,
+                            |ui| {
+                                widgets::button(
+                                    ui,
+                                    p,
+                                    Some(Icon::Plus),
+                                    t!("instances.install"),
+                                    false,
+                                )
+                            },
+                        )
                         .inner;
-                    let install = if fit == VersionFit::Incompatible {
-                        install.on_disabled_hover_text(t!("instances.hub.incompatible_blocked"))
-                    } else {
-                        install
-                    };
+                    let install =
+                        if fit == VersionFit::Incompatible && preview.discover_kind.is_none() {
+                            install.on_disabled_hover_text(t!("instances.hub.incompatible_blocked"))
+                        } else {
+                            install
+                        };
                     if install.clicked() {
-                        if fit == VersionFit::OtherGame {
+                        if fit == VersionFit::OtherGame && preview.discover_kind.is_none() {
                             state.confirm = Some(v.id.clone());
                         } else {
                             chosen = Some((v.id.clone(), fit));
@@ -761,7 +807,9 @@ impl ArcticApp {
         if let Some((version_id, fit)) = chosen {
             state.confirm = None;
             self.inst.install_progress = None;
-            if preview.modpack {
+            if let Some(kind) = preview.discover_kind {
+                self.pick_single_content(ui.ctx(), kind, &preview.hit, Some(version_id), instance);
+            } else if preview.modpack {
                 self.inst.pack_installing = Some(preview.hit.project_id.clone());
                 self.tasks
                     .install_modpack(preview.hit.project_id.clone(), Some(version_id));
@@ -846,6 +894,7 @@ mod tests {
             downloads: 0,
             game_versions: games.iter().map(|g| g.to_string()).collect(),
             loaders: loaders.iter().map(|l| l.to_string()).collect(),
+            file_name: Some("content.zip".into()),
         }
     }
 
@@ -979,6 +1028,7 @@ mod tests {
             gallery: HashMap::new(),
             body: String::new(),
             html: Arc::default(),
+            discover_kind: None,
         }
     }
 

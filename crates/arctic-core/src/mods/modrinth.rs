@@ -250,8 +250,13 @@ fn sort_index(sort: SortBy) -> &'static str {
 pub(super) fn search_facets(query: &SearchQuery) -> String {
     let kind = query.project_type.id();
     let mut facets = vec![vec![format!("project_type:{kind}")]];
-    if (matches!(query.project_type, ProjectType::Mod | ProjectType::Modpack)
-        || query.strict_version)
+    if query.project_type == ProjectType::DataPack {
+        facets.push(vec!["categories:datapack".into()]);
+    }
+    if (matches!(
+        query.project_type,
+        ProjectType::Mod | ProjectType::Modpack | ProjectType::DataPack
+    ) || query.strict_version)
         && !query.game_version.trim().is_empty()
     {
         facets.push(vec![format!("versions:{}", query.game_version.trim())]);
