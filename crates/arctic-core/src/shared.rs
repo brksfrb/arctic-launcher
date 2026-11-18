@@ -3,7 +3,7 @@
 //! (keys, video, sound...). Kept in step whenever a game starts and after
 //! it quits: the newest copy wins and goes to every other instance.
 //!
-//! Minecraft's settings go through [`Defaults`], which converts keys
+//! Minecraft's settings go through [`Defaults`], which converts preferences
 //! between old and new games, so a 1.8.9 instance and a 26.x one can share
 //! them. The first time a file of an instance is replaced it's kept next to
 //! it as `*.before-sharing`.
@@ -28,6 +28,7 @@ const CLIENT_FILES: [&str; 3] = [
 ];
 const OPTIONS: &str = "options.txt";
 const SHARED_OPTIONS: &str = "options.json";
+const OPTIONS_PROJECTION: &str = ".arctic-shared-options-projection.json";
 const BACKUP: &str = ".before-sharing";
 
 /// What this profile's instances share (all on by default).
@@ -192,23 +193,26 @@ fn sync_options(
     shared: &Path,
     launching: Option<(PathBuf, &str)>,
 ) -> Result<()> {
-    let mut known: Defaults = crate::storage::load_json(shared)?.unwrap_or_default();
+    let stored: Defaults = crate::storage::load_json(shared)?.unwrap_or_default();
+    let mut known = stored.clone();
+    crate::game_defaults_options::canonicalize(&mut known.values);
     let shared_time = modified(shared);
     if let Some(newest) = newest_first(folders, OPTIONS).into_iter().next()
         && modified(&newest).is_some_and(|t| shared_time.is_none_or(|s| t > s))
-        && let Ok(captured) = Defaults::capture(newest.parent().unwrap_or(Path::new(".")))
+        && let Some(game_dir) = newest.parent()
+        && let Ok(mut captured) = Defaults::capture(game_dir)
         && !captured.is_empty()
     {
+        discard_projected_options(game_dir, &mut captured)?;
         // What the newest file says wins, but a setting it doesn't have stays: an older game
         // drops options it doesn't know (1.8.9 has no entity distance), and playing it must not
         // reset them for every newer game.
         let mut merged = known.clone();
-        merged.values.extend(captured.values);
-        let merged = keep_acknowledged(&known, merged);
-        if merged.values != known.values {
-            known = merged;
-            crate::storage::save_json(shared, &known)?;
-        }
+        crate::game_defaults_options::merge(&mut merged.values, captured.values);
+        known = keep_acknowledged(&known, merged);
+    }
+    if known != stored {
+        crate::storage::save_json(shared, &known)?;
     }
     let Some((game_dir, version)) = launching else {
         return Ok(());
@@ -220,7 +224,35 @@ fn sync_options(
     if options.exists() {
         keep_backup(&options)?;
     }
-    known.apply_to(&game_dir, Some(version))?;
+    let projected = known.apply_with_projection(&game_dir, Some(version))?;
+    let path = game_dir.join(OPTIONS_PROJECTION);
+    if !projected.is_empty() || path.exists() {
+        crate::storage::save_json(&path, &projected)?;
+    }
+    Ok(())
+}
+
+/// Keep the more precise shared preference when a client saves back the
+/// fallback it received at launch. A different value is a player change.
+fn discard_projected_options(game_dir: &Path, captured: &mut Defaults) -> Result<()> {
+    let path = game_dir.join(OPTIONS_PROJECTION);
+    let Some(mut projected) = crate::storage::load_json::<Defaults>(&path)? else {
+        return Ok(());
+    };
+    let count = projected.values.len();
+    projected
+        .values
+        .retain(|key, value| match captured.values.get(key) {
+            Some(current) if current == value => {
+                captured.values.remove(key);
+                true
+            }
+            Some(_) => false,
+            None => true,
+        });
+    if projected.values.len() != count {
+        crate::storage::save_json(&path, &projected)?;
+    }
     Ok(())
 }
 
@@ -422,6 +454,120 @@ mod tests {
         assert!(text.contains("fov:0.5"), "{text}");
         // 1.8.9 stores keys as LWJGL 2 codes.
         assert!(text.contains("key_key.jump:57"), "{text}");
+    }
+
+    #[test]
+    fn all_cloud_modes_survive_26_2_to_1_8_9_and_back() {
+        for mode in ["false", "fast", "true"] {
+            // Vanilla can also switch versions in a single folder, leaving no version
+            // line after 1.8.9 saves it. The next 26.2 launch still needs quotes.
+            for same_folder in [false, true] {
+                let (_tmp, dirs, a, b) = setup();
+                let legacy = if same_folder { &a } else { &b };
+                let modern_file = a.game_dir(&dirs).join(OPTIONS);
+                let legacy_file = legacy.game_dir(&dirs).join(OPTIONS);
+                std::fs::write(
+                    &modern_file,
+                    format!("version:4903\nrenderClouds:\"{mode}\"\n"),
+                )
+                .unwrap();
+                let settings = SharedSettings::default();
+                sync(&dirs, settings, Some((legacy, "1.8.9"))).unwrap();
+                let text = std::fs::read_to_string(&legacy_file).unwrap();
+                assert!(
+                    text.lines()
+                        .any(|line| line == format!("renderClouds:{mode}")),
+                    "{text}"
+                );
+
+                // Model the 1.8.9 save, which removes the version line and
+                // changes the file's mtime. A second preference proves it was captured.
+                later();
+                std::fs::write(&legacy_file, format!("renderClouds:{mode}\nfov:0.5\n")).unwrap();
+                sync(&dirs, settings, None).unwrap();
+                sync(&dirs, settings, Some((&a, "26.2"))).unwrap();
+                let text = std::fs::read_to_string(&modern_file).unwrap();
+                assert!(
+                    text.lines()
+                        .any(|line| line == format!("renderClouds:\"{mode}\"")),
+                    "{text}"
+                );
+                assert!(text.contains("graphicsPreset:\"custom\""), "{text}");
+                assert!(text.contains("fov:0.5"), "{text}");
+                let shared: Defaults =
+                    crate::storage::load_json(&dirs.profile_root().join(DIR).join(SHARED_OPTIONS))
+                        .unwrap()
+                        .unwrap();
+                assert_eq!(shared.values["renderClouds"], mode);
+            }
+        }
+    }
+
+    #[test]
+    fn lossy_legacy_saves_preserve_shared_values_and_accept_edits() {
+        let (_tmp, dirs, a, b) = setup();
+        let modern = a.game_dir(&dirs).join(OPTIONS);
+        let legacy = b.game_dir(&dirs).join(OPTIONS);
+        std::fs::write(
+            &modern,
+            "version:4903\nrenderClouds:\"true\"\ngraphicsPreset:\"fabulous\"\nguiScale:6\nkey_key.jump:key.keyboard.world.1\n",
+        )
+        .unwrap();
+        let settings = SharedSettings::default();
+        sync(&dirs, settings, Some((&b, "1.7.10"))).unwrap();
+        let text = std::fs::read_to_string(&legacy).unwrap();
+        assert!(text.contains("clouds:true") && text.contains("fancyGraphics:true"));
+        assert!(
+            text.contains("guiScale:3") && text.contains("key_key.jump:0"),
+            "{text}"
+        );
+        later();
+        std::fs::write(
+            &legacy,
+            "clouds:true\nfancyGraphics:true\nguiScale:3\nkey_key.jump:0\n",
+        )
+        .unwrap();
+        sync(&dirs, settings, Some((&a, "26.2"))).unwrap();
+        let text = std::fs::read_to_string(&modern).unwrap();
+        assert!(
+            text.contains("renderClouds:\"true\"") && text.contains("graphicsPreset:\"fabulous\"")
+        );
+        assert!(
+            text.contains("guiScale:6") && text.contains("key_key.jump:key.keyboard.world.1"),
+            "{text}"
+        );
+
+        later();
+        std::fs::write(&legacy, "clouds:false\nfancyGraphics:false\nguiScale:1\n").unwrap();
+        sync(&dirs, settings, Some((&a, "26.2"))).unwrap();
+        let text = std::fs::read_to_string(&modern).unwrap();
+        assert!(
+            text.contains("renderClouds:\"false\"") && text.contains("graphicsPreset:\"custom\"")
+        );
+        assert!(
+            text.contains("guiScale:1") && text.contains("cutoutLeaves:false"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_legacy_cloud_edit_disables_the_modern_preset_that_would_reset_it() {
+        let (_tmp, dirs, a, b) = setup();
+        let modern = a.game_dir(&dirs).join(OPTIONS);
+        let legacy = b.game_dir(&dirs).join(OPTIONS);
+        std::fs::write(
+            &modern,
+            "version:4903\ngraphicsPreset:\"fancy\"\nrenderClouds:\"true\"\n",
+        )
+        .unwrap();
+        let settings = SharedSettings::default();
+        sync(&dirs, settings, Some((&b, "1.8.9"))).unwrap();
+        later();
+        std::fs::write(&legacy, "fancyGraphics:true\nrenderClouds:false\n").unwrap();
+        sync(&dirs, settings, Some((&a, "26.2"))).unwrap();
+        let text = std::fs::read_to_string(&modern).unwrap();
+        assert!(text.contains("graphicsPreset:\"custom\""), "{text}");
+        assert!(text.contains("renderClouds:\"false\""), "{text}");
     }
 
     #[test]
