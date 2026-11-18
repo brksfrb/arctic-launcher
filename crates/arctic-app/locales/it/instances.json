@@ -11,6 +11,7 @@
   "instances.added": "{name} aggiunto",
   "instances.address": "Indirizzo",
   "instances.adds_patcher_performance_and_bug_fixes_and": "Aggiunge Patcher (prestazioni e correzioni) ed Entity Culling (non disegna ciò che non vedi) per più FPS. Scaricate da Modrinth; quelle che hai già restano come sono.",
+  "instances.adds_sodium_lithium_ferritecore": "Aggiunge Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, ModernFix e Polarium per molti più FPS e avvii più rapidi. Scaricati da Modrinth per la tua versione (Polarium arriva con Arctic); quelli non ancora aggiornati vengono saltati.",
   "instances.adds_sodium_lithium_ferritecore_2": "Aggiunge Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, Particle Core, BadOptimizations, ModernFix e Polarium per molti più FPS e avvii più rapidi. Scaricate da Modrinth per la tua versione (Polarium arriva con Arctic); quelle non ancora aggiornate vengono saltate.",
   "instances.all": "Tutto",
   "instances.all_fixed": "Tutto risolto",
@@ -305,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "Quel file non esiste; verrà usato il Java gestito.",
   "instances.that_instance_is_gone": "Quell'istanza non esiste più.",
   "instances.the_arctic_client_is_off_for_every_instance": "Arctic Client è disattivato per tutte le istanze",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "L'Arctic Client gira su istanze Vanilla, Fabric e Quilt, e su Forge 1.8.9. Non ancora su questo loader o versione: crea un'istanza Vanilla o Fabric della stessa versione per usarlo.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "L'Arctic Client gira su istanze Vanilla, Fabric e Quilt, in modo non ufficiale su NeoForge, e su Forge 1.8.9. Non ancora su questo loader o versione: crea un'istanza Vanilla o Fabric della stessa versione per usarlo.",
   "instances.the_default_instance_plays_whichever_release": "L'istanza predefinita avvia la versione che scegli nella scheda Gioca.",
   "instances.the_folder_worlds_and_mods_included_is_moved": "La cartella (mondi e mod inclusi) viene spostata in instances/.trash, non eliminata.",
   "instances.the_game_would_stop_while_loading_fix_them": "Il gioco si fermerebbe caricando {name}. Risolvi qui, o gioca comunque.",
@@ -415,5 +416,8 @@
   "instances.hub.partial_install": "Non è possibile installare {count} progetti selezionati in questa istanza. Saranno elencati nel riepilogo.",
   "instances.hub.install_compatible": "Installa i progetti compatibili",
   "instances.hub.partially_compatible": "Parzialmente compatibile",
-  "instances.hub.modpacks_create_instances": "Ogni modpack crea una propria istanza."
+  "instances.hub.modpacks_create_instances": "Ogni modpack crea una propria istanza.",
+  "instances.unofficial_on_neoforge_fabric_is_recommended": "Non ufficiale su NeoForge. Ti consigliamo Fabric.",
+  "instances.the_arctic_client_on_neoforge_is_unofficial": "Su NeoForge l'Arctic Client non è ufficiale. Il modo supportato per giocarci è Fabric.",
+  "instances.needs_neoforge_or_newer": "Serve NeoForge {version} o più recente: scegli una build più nuova in Loader di mod."
 }

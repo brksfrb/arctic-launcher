@@ -7,7 +7,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.network.Connection;
 
 import com.arcticlauncher.client.Lang;
@@ -63,7 +62,7 @@ public final class Greeter {
 
 	/** With Fabric API's networking installed, its channel events carry the server's channel list. */
 	public static void listenToFabricApi() {
-		if (!FabricLoader.getInstance().isModLoaded("fabric-networking-api-v1")) {
+		if (!com.arcticlauncher.mod.Mods.loaded("fabric-networking-api-v1")) {
 			return;
 		}
 		// Play phase only: servers' plugin channels (Paper's, BotPvP's) only take hellos sent in play.

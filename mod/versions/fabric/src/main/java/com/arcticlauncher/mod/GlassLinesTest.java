@@ -67,7 +67,7 @@ final class GlassLinesTest {
 		ArcticMod.LOG.info("ctmlines status level={} slider={} stitched={} connectedGlass={} available={} enabled={} ctmSpritesBound={} continuity={}", level,
 				com.arcticlauncher.client.ArcticClient.config().clearGlassLines, com.arcticlauncher.client.ctm.GlassLines.stitched(),
 				com.arcticlauncher.client.ArcticClient.config().connectedGlass, GlassCtm.available(), GlassCtm.enabled(), n,
-				net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("continuity"));
+				Mods.loaded("continuity"));
 	}
 	/** Moves the real slider on the real settings page (click, release), as a hand does, then lets the reload finish with the page still open. */
 	private static void slide(int level, Runnable then) {

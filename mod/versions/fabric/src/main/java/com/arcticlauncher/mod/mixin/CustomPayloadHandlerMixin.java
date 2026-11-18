@@ -53,6 +53,16 @@ abstract class CustomPayloadHandlerMixin {
 			at = @At("HEAD"), cancellable = true)
 	private void arctic$svcSecret(ClientboundCustomPayloadPacket packet, CallbackInfo ci) {
 		Identifier id = packet.getIdentifier();
+		//#if NEOFORGE
+		// Forge reads the server's channel list itself (on whichever thread): only look at it.
+		if (SvcPayload.REGISTER.equals(id)) {
+			FriendlyByteBuf channels = packet.getData();
+			int at = channels.readerIndex();
+			SvcPayload.received(connection, id, SvcPayload.read(channels));
+			channels.readerIndex(at);
+			return;
+		}
+		//#endif
 		// The packet comes by twice: on the network thread (the game then queues it) and on the game's own.
 		// Take it on the second, and only the channels that are ours.
 		if (!SvcPayload.handles(id) || !Minecraft.getInstance().isSameThread()) {

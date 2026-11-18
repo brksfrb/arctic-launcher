@@ -207,6 +207,9 @@ impl ArcticApp {
                 self.tasks.loader_check(instance.clone(), k);
             }
         });
+        if state.picked == Some(LoaderKind::NeoForge) && instance.arctic_mod {
+            super::detail::neoforge_notice(ui, p);
+        }
     }
 
     /// The looked-up mods and the button that switches.

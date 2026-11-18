@@ -3,7 +3,6 @@ package com.arcticlauncher.mod.startup;
 
 import java.util.ArrayList;
 import java.util.List;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
@@ -58,13 +57,7 @@ public final class StateCaches {
 	}
 
 	private static boolean parallelIsSafe() {
-		for (var mod : FabricLoader.getInstance().getAllMods()) {
-			String id = mod.getMetadata().getId();
-			if (!KNOWN.contains(id) && !id.startsWith("fabric-") && mod.getContainingMod().isEmpty()) {
-				return false;
-			}
-		}
-		return true;
+		return com.arcticlauncher.mod.Mods.onlyKnown(KNOWN);
 	}
 }
 //#endif

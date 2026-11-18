@@ -14,7 +14,6 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
@@ -51,15 +50,12 @@ final class FabricPlatform implements Platform {
 
 	@Override
 	public String minecraftVersion() {
-		return FabricLoader.getInstance()
-				.getModContainer("minecraft")
-				.map(c -> c.getMetadata().getVersion().getFriendlyString())
-				.orElse("26.3");
+		return Mods.version("minecraft").orElse("26.3");
 	}
 
 	@Override
 	public File configDir() {
-		return FabricLoader.getInstance().getConfigDir().toFile();
+		return Mods.configDir();
 	}
 
 	@Override
@@ -1018,8 +1014,8 @@ final class FabricPlatform implements Platform {
 		mc.execute(() -> {
 			ClientPacketListener connection = mc.getConnection();
 			if (connection != null) {
-				for (com.arcticlauncher.mod.svc.SvcPayload p : com.arcticlauncher.mod.svc.SvcPayload.request()) {
-					connection.send(p.toPacket());
+				for (net.minecraft.network.protocol.Packet<?> p : com.arcticlauncher.mod.svc.SvcPayload.request()) {
+					connection.send(p);
 				}
 			}
 		});

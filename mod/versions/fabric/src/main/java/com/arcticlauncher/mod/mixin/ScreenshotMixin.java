@@ -14,7 +14,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /** Vanilla already hands the captured NativeImage to an I/O worker; publish its PNG atomically there. */
 @Mixin(Screenshot.class)
 abstract class ScreenshotMixin {
-	//#if MC >= 26.2
+	//#if NEOFORGE
+	// NeoForge's screenshot (its grab is _grab) saves in a lambda of its own number (and, on 1.20.1,
+	// of Forge's names): whichever lambda writes the file.
+	@Redirect(method = "/lambda\\$.+/", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/NativeImage;writeToFile(Ljava/io/File;)V"))
+	//#elif MC >= 26.2
 	@Redirect(method = "lambda$grab$3", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/NativeImage;writeToFile(Ljava/io/File;)V"))
 	//#elif MC >= 26.1
 	@Redirect(method = "lambda$grab$1", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/NativeImage;writeToFile(Ljava/io/File;)V"))

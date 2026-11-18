@@ -11,6 +11,7 @@
   "instances.added": "{name} を追加しました",
   "instances.address": "アドレス",
   "instances.adds_patcher_performance_and_bug_fixes_and": "FPS を上げるために Patcher（パフォーマンスとバグ修正）と Entity Culling（見えないものを描画しない）を追加します。Modrinth からダウンロードし、すでにあるものはそのままにします。",
+  "instances.adds_sodium_lithium_ferritecore": "Sodium、Lithium、FerriteCore、ImmediatelyFast、EntityCulling、ModernFix、Polariumを追加し、FPSを大幅に向上させて起動も速くします。お使いのバージョン向けにModrinthからダウンロードします（PolariumはArcticに付属）。未更新のものはスキップされます。",
   "instances.adds_sodium_lithium_ferritecore_2": "Sodium、Lithium、FerriteCore、ImmediatelyFast、EntityCulling、Particle Core、BadOptimizations、ModernFix、Polarium を追加し、FPS を大きく上げて起動も速くします。お使いのバージョン用を Modrinth からダウンロードします（Polarium は Arctic に同梱）。まだ更新されていないものはスキップします。",
   "instances.all": "すべて",
   "instances.all_fixed": "すべて修正済み",
@@ -305,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "そのファイルは存在しません。管理されたJavaを使用します。",
   "instances.that_instance_is_gone": "そのインスタンスはもうありません。",
   "instances.the_arctic_client_is_off_for_every_instance": "すべてのインスタンスで Arctic Client がオフです",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Clientはバニラ、Fabric、QuiltのインスタンスとForge 1.8.9で動作します。このローダーやバージョンにはまだ対応していません。同じバージョンのバニラかFabricのインスタンスを作成して使ってください。",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Clientはバニラ、Fabric、QuiltのインスタンスとForge 1.8.9で動作し、NeoForgeでも非公式に動作します。このローダーやバージョンにはまだ対応していません。同じバージョンのバニラかFabricのインスタンスを作成して使ってください。",
   "instances.the_default_instance_plays_whichever_release": "デフォルトのインスタンスは、プレイタブで選んだバージョンを起動します。",
   "instances.the_folder_worlds_and_mods_included_is_moved": "フォルダー（ワールドとModを含む）はinstances/.trashに移動され、消去はされません。",
   "instances.the_game_would_stop_while_loading_fix_them": "{name} の読み込み中にゲームが止まります。ここで修正するか、それでもプレイしてください。",
@@ -415,5 +416,8 @@
   "instances.hub.partial_install": "選択したプロジェクトのうち {count} 件はこのインスタンスにインストールできません。詳細は結果に表示されます。",
   "instances.hub.install_compatible": "互換性のあるプロジェクトをインストール",
   "instances.hub.partially_compatible": "一部に互換性あり",
-  "instances.hub.modpacks_create_instances": "Modpack ごとに新しいインスタンスを作成します。"
+  "instances.hub.modpacks_create_instances": "Modpack ごとに新しいインスタンスを作成します。",
+  "instances.unofficial_on_neoforge_fabric_is_recommended": "NeoForgeでは非公式です。Fabricをおすすめします。",
+  "instances.the_arctic_client_on_neoforge_is_unofficial": "NeoForgeのArctic Clientは非公式です。公式にサポートしているのはFabricです。",
+  "instances.needs_neoforge_or_newer": "NeoForge {version}以降が必要です。MOD ローダーで新しいビルドを選んでください。"
 }

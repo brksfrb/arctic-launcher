@@ -3,7 +3,9 @@
 	"package": "com.arcticlauncher.mod.mixin",
 	"compatibilityLevel": "JAVA_${java}",
 	"client": [
-		"ScreenshotMixin",<% if (restyleWidgets) { %>
+		<% if (neoforge) { %>"NeoForgeStartMixin",
+		<% } %><% if (neoforgeRegister) { %>"NeoForgeRegisterMixin",
+		<% } %>"ScreenshotMixin",<% if (restyleWidgets) { %>
 		"AbstractButtonMixin",
 		"AbstractSliderButtonMixin",
 		"ButtonMixin",

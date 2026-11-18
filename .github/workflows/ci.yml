@@ -133,7 +133,8 @@ jobs:
       - id: list
         env:
           ONLY: ${{ inputs.only }}
-        run: echo "versions=$(jq -c --arg only "$ONLY" '[.[].build | . as $b | select($only == "" or ($only | split(" ") | index($b)))]' mod/targets.json)" >> "$GITHUB_OUTPUT"
+        # Every target, and neoforge-<build> for the ones with a NeoForge jar (mod/versions/neoforge).
+        run: echo "versions=$(jq -c --arg only "$ONLY" '[.[] | .build, (select(.neoforge) | "neoforge-" + .build) | . as $b | select($only == "" or ($only | split(" ") | index($b)))]' mod/targets.json)" >> "$GITHUB_OUTPUT"
 
   mod:
     needs: mod-targets

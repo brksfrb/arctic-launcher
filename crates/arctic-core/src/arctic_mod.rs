@@ -1,5 +1,6 @@
 //! Arctic's companion mod (capes from Arctic and the in-game Arctic menu),
-//! bundled with the launcher and kept in sync in Fabric and Quilt instances.
+//! bundled with the launcher and kept in sync in Fabric and Quilt instances
+//! (and, unofficially, NeoForge and Forge 1.8.9 ones).
 
 use std::collections::HashMap;
 use std::fs;
@@ -36,6 +37,40 @@ pub fn supports_forge(game_version: &str) -> bool {
     forge_build_for(game_version)
         .zip(pack())
         .is_some_and(|(build, pack)| pack.jars.contains_key(build))
+}
+
+/// The NeoForge build (mod/versions/neoforge) that serves `game_version`: `neoforge-<build>`.
+fn neoforge_build_for(game_version: &str) -> Option<&'static str> {
+    NEOFORGE_COVERS
+        .iter()
+        .find(|(v, _)| *v == game_version)
+        .map(|(_, build)| *build)
+}
+
+/// True if the mod exists for this Minecraft version on NeoForge. Unofficial: Fabric is the
+/// supported way to play with it.
+pub fn supports_neoforge(game_version: &str) -> bool {
+    neoforge_build_for(game_version).is_some()
+}
+
+/// The oldest NeoForge the mod for `game_version` runs on (its `mods.toml` says
+/// `versionRange = "[x,)"`): the build its mixins were checked against.
+pub fn min_neoforge(game_version: &str) -> Option<String> {
+    let build = neoforge_build_for(game_version)?;
+    MIN_LOADER
+        .iter()
+        .find(|(b, _)| *b == build)
+        .map(|(_, loader)| (*loader).to_owned())
+}
+
+/// Can the mod for `game_version` run on NeoForge `loader_version`? (1.20.1's
+/// `1.20.1-47.1.106` is compared without the Minecraft version in front.)
+pub fn neoforge_fits(game_version: &str, loader_version: &str) -> bool {
+    let loader = loader_version
+        .split_once('-')
+        .filter(|(game, _)| game.starts_with("1."))
+        .map_or(loader_version, |(_, build)| build);
+    min_neoforge(game_version).is_none_or(|min| at_least(loader, &min))
 }
 
 /// The build target that serves `game_version`.
@@ -220,6 +255,20 @@ pub fn sync_forge(mods_dir: &Path, game_version: &str, enabled: bool) -> Result<
     sync_build(
         mods_dir,
         forge_build_for(game_version).filter(|_| supports_forge(game_version)),
+        enabled,
+    )
+}
+
+/// The same for a NeoForge instance: the NeoForge build of the mod, if `loader_version` can run it.
+pub fn sync_neoforge(
+    mods_dir: &Path,
+    game_version: &str,
+    loader_version: &str,
+    enabled: bool,
+) -> Result<()> {
+    sync_build(
+        mods_dir,
+        neoforge_build_for(game_version).filter(|_| neoforge_fits(game_version, loader_version)),
         enabled,
     )
 }
@@ -450,6 +499,54 @@ mod tests {
     }
 
     #[test]
+    fn neoforge_jar_is_installed_and_taken_out() {
+        let dir = tempfile::tempdir().unwrap();
+        let mods = dir.path().join("mods");
+        let path = mods.join(FILE_NAME);
+        let min = min_neoforge("1.21.1").unwrap();
+        sync_neoforge(&mods, "1.21.1", &min, true).unwrap();
+        assert!(path.exists());
+        assert!(mods.join(STAMP_NAME).exists());
+        // The NeoForge build, not the Fabric one.
+        let jar = fs::read(&path).unwrap();
+        let mut zip = zip::ZipArchive::new(Cursor::new(jar)).unwrap();
+        assert!(zip.by_name("META-INF/neoforge.mods.toml").is_ok());
+        assert!(zip.by_name("fabric.mod.json").is_err());
+        sync_neoforge(&mods, "1.21.1", &min, false).unwrap();
+        assert!(!path.exists());
+        assert!(!mods.join(STAMP_NAME).exists());
+        // No NeoForge jar for this version: nothing is written.
+        sync_neoforge(&mods, "1.19.4", "47.0.0", true).unwrap();
+        assert!(!path.exists());
+        // A NeoForge older than the one the jar was checked against starts without it.
+        sync_neoforge(&mods, "1.21.1", "21.1.0", true).unwrap();
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn neoforge_builds_cover_their_versions_and_loader_floor() {
+        assert!(supports_neoforge("1.21") && supports_neoforge("1.21.1"));
+        assert_eq!(neoforge_build_for("1.21"), neoforge_build_for("1.21.1"));
+        assert!(supports_neoforge("1.20.1"));
+        assert!(!supports_neoforge("1.19.4"));
+        // The Fabric build and the NeoForge one are different jars.
+        assert_ne!(
+            jar_of(neoforge_build_for("1.21.1").unwrap()),
+            jar_for("1.21.1")
+        );
+        let min = min_neoforge("1.21.1").unwrap();
+        assert!(neoforge_fits("1.21.1", &min));
+        assert!(!neoforge_fits("1.21.1", "21.1.0"));
+        // 1.20.1's fork names its builds after the game version.
+        let fork = min_neoforge("1.20.1").unwrap();
+        assert!(neoforge_fits("1.20.1", &format!("1.20.1-{fork}")));
+        assert!(!neoforge_fits("1.20.1", "1.20.1-47.1.0"));
+        // Forge 1.8.9 and the Fabric jars keep their own builds.
+        assert!(supports_forge("1.8.9"));
+        assert!(!supports_neoforge("1.8.9"));
+    }
+
+    #[test]
     fn a_rebuilt_jar_is_the_same_every_time() {
         let pack = pack().unwrap();
         assert_eq!(pack.jar("1.8.9"), pack.jar("1.8.9"));
@@ -459,8 +556,14 @@ mod tests {
     fn rebuilt_jars_hold_what_the_built_ones_do() {
         // Only where the jars were built here (they aren't committed).
         let dist = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mod/dist");
-        for (_, build) in COVERS {
-            let Ok(built) = fs::read(dist.join(format!("arctic-mod-{build}.jar"))) else {
+        let neoforge = NEOFORGE_COVERS
+            .iter()
+            .map(|(_, build)| (*build, format!("arctic-{build}.jar")));
+        let fabric = COVERS
+            .iter()
+            .map(|(_, build)| (*build, format!("arctic-mod-{build}.jar")));
+        for (build, name) in fabric.chain(neoforge) {
+            let Ok(built) = fs::read(dist.join(name)) else {
                 continue;
             };
             let mut built = zip::ZipArchive::new(Cursor::new(built)).unwrap();

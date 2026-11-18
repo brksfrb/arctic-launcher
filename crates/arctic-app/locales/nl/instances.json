@@ -11,6 +11,7 @@
   "instances.added": "{name} toegevoegd",
   "instances.address": "Adres",
   "instances.adds_patcher_performance_and_bug_fixes_and": "Voegt Patcher (prestaties en bugfixes) en Entity Culling (tekent niet wat je niet ziet) toe voor meer FPS. Gedownload van Modrinth; wat je al hebt blijft zoals het is.",
+  "instances.adds_sodium_lithium_ferritecore": "Voegt Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, ModernFix en Polarium toe voor veel meer FPS en snellere starts. Gedownload van Modrinth voor jouw versie (Polarium komt met Arctic); nog niet bijgewerkte worden overgeslagen.",
   "instances.adds_sodium_lithium_ferritecore_2": "Voegt Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, Particle Core, BadOptimizations, ModernFix en Polarium toe voor veel meer FPS en snellere starts. Gedownload van Modrinth voor jouw versie (Polarium zit bij Arctic); mods die nog niet zijn bijgewerkt worden overgeslagen.",
   "instances.all": "Alles",
   "instances.all_fixed": "Alles opgelost",
@@ -305,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "Dat bestand bestaat niet; de beheerde Java wordt gebruikt.",
   "instances.that_instance_is_gone": "Die instantie bestaat niet meer.",
   "instances.the_arctic_client_is_off_for_every_instance": "De Arctic Client staat uit voor alle instanties",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "De Arctic Client draait op Vanilla-, Fabric- en Quilt-instanties en op Forge 1.8.9. Nog niet op deze loader of versie: maak een Vanilla- of Fabric-instantie van dezelfde versie om ermee te spelen.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "De Arctic Client draait op Vanilla-, Fabric- en Quilt-instanties, onofficieel op NeoForge, en op Forge 1.8.9. Nog niet op deze loader of versie: maak een Vanilla- of Fabric-instantie van dezelfde versie om ermee te spelen.",
   "instances.the_default_instance_plays_whichever_release": "De standaardinstantie speelt de versie die je kiest op het tabblad Spelen.",
   "instances.the_folder_worlds_and_mods_included_is_moved": "De map (inclusief werelden en mods) wordt naar instances/.trash verplaatst, niet gewist.",
   "instances.the_game_would_stop_while_loading_fix_them": "Het spel zou stoppen bij het laden van {name}. Los het hier op, of speel toch.",
@@ -415,5 +416,8 @@
   "instances.hub.partial_install": "{count} geselecteerde projecten kunnen niet in deze instantie worden geïnstalleerd. Ze staan in het overzicht.",
   "instances.hub.install_compatible": "Compatibele projecten installeren",
   "instances.hub.partially_compatible": "Gedeeltelijk compatibel",
-  "instances.hub.modpacks_create_instances": "Elk modpack maakt een eigen instantie aan."
+  "instances.hub.modpacks_create_instances": "Elk modpack maakt een eigen instantie aan.",
+  "instances.unofficial_on_neoforge_fabric_is_recommended": "Onofficieel op NeoForge. We raden Fabric aan.",
+  "instances.the_arctic_client_on_neoforge_is_unofficial": "De Arctic Client op NeoForge is onofficieel. Met Fabric speel je ermee zoals bedoeld.",
+  "instances.needs_neoforge_or_newer": "Vereist NeoForge {version} of nieuwer: kies een nieuwere build onder Modloader."
 }

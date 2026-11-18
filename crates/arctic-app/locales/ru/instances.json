@@ -11,6 +11,7 @@
   "instances.added": "Добавлено: {name}",
   "instances.address": "Адрес",
   "instances.adds_patcher_performance_and_bug_fixes_and": "Добавляет Patcher (производительность и исправления) и Entity Culling (не рисует то, чего не видно) для большего FPS. Скачиваются с Modrinth; уже установленные остаются как есть.",
+  "instances.adds_sodium_lithium_ferritecore": "Добавляет Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, ModernFix и Polarium для намного большего FPS и быстрого запуска. Загружаются с Modrinth под вашу версию (Polarium идёт с Arctic); ещё не обновлённые пропускаются.",
   "instances.adds_sodium_lithium_ferritecore_2": "Добавляет Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, Particle Core, BadOptimizations, ModernFix и Polarium для гораздо большего FPS и быстрого запуска. Скачиваются с Modrinth для твоей версии (Polarium идёт с Arctic); ещё не обновлённые пропускаются.",
   "instances.all": "Все",
   "instances.all_fixed": "Всё исправлено",
@@ -305,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "Такого файла нет; будет использована управляемая Java.",
   "instances.that_instance_is_gone": "Этой сборки больше нет.",
   "instances.the_arctic_client_is_off_for_every_instance": "Arctic Client выключен для всех сборок",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client работает на сборках Vanilla, Fabric и Quilt, а также на Forge 1.8.9. На этом загрузчике или версии пока нет: создайте сборку Vanilla или Fabric той же версии, чтобы играть с ним.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client работает на сборках Vanilla, Fabric и Quilt, неофициально на NeoForge, а также на Forge 1.8.9. На этом загрузчике или версии пока нет: создайте сборку Vanilla или Fabric той же версии, чтобы играть с ним.",
   "instances.the_default_instance_plays_whichever_release": "Сборка по умолчанию запускает версию, выбранную на вкладке «Играть».",
   "instances.the_folder_worlds_and_mods_included_is_moved": "Папка (с мирами и модами) переместится в instances/.trash, а не удалится.",
   "instances.the_game_would_stop_while_loading_fix_them": "Игра остановится при загрузке {name}. Исправьте здесь или играйте всё равно.",
@@ -419,5 +420,8 @@
   "instances.hub.partial_install": "Не удастся установить выбранные проекты ({count}) в этот экземпляр. Они будут перечислены в итогах.",
   "instances.hub.install_compatible": "Установить совместимые проекты",
   "instances.hub.partially_compatible": "Частично совместимо",
-  "instances.hub.modpacks_create_instances": "Каждая сборка создаёт свой экземпляр."
+  "instances.hub.modpacks_create_instances": "Каждая сборка создаёт свой экземпляр.",
+  "instances.unofficial_on_neoforge_fabric_is_recommended": "На NeoForge — неофициально. Рекомендуем Fabric.",
+  "instances.the_arctic_client_on_neoforge_is_unofficial": "Arctic Client на NeoForge — неофициальная версия. Официально поддерживается игра с ним на Fabric.",
+  "instances.needs_neoforge_or_newer": "Нужен NeoForge {version} или новее: выберите более новую сборку в разделе «Загрузчик модов»."
 }

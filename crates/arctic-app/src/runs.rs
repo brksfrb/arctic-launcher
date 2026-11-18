@@ -882,18 +882,18 @@ impl ArcticApp {
         {
             return;
         }
-        let forge = matches!(
-            instance.loader.kind(),
-            Some(
-                arctic_core::loaders::LoaderKind::Forge
-                    | arctic_core::loaders::LoaderKind::NeoForge
-            )
-        );
-        let client = if forge {
-            arctic_core::arctic_mod::supports_forge(version_id)
-                && instance.loader.kind() == Some(arctic_core::loaders::LoaderKind::Forge)
-        } else {
-            arctic_core::arctic_mod::supports(version_id)
+        use arctic_core::arctic_mod;
+        use arctic_core::loaders::LoaderKind;
+        let client = match instance.loader.kind() {
+            Some(LoaderKind::Forge) => arctic_mod::supports_forge(version_id),
+            Some(LoaderKind::NeoForge) => {
+                arctic_mod::supports_neoforge(version_id)
+                    && arctic_mod::neoforge_fits(
+                        version_id,
+                        instance.loader.version().unwrap_or_default(),
+                    )
+            }
+            _ => arctic_mod::supports(version_id),
         };
         if instance.arctic_mod && client {
             return;

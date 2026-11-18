@@ -8,7 +8,6 @@ import java.util.List;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.voice.VoiceLink;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.network.Connection;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.Packet;
@@ -114,9 +113,14 @@ public final class SvcPayload {
 	private static final int COMPATIBILITY_VERSION = 20;
 
 	/** The Simple Voice Chat mod handles its own messages when installed. */
-	public static final boolean ENABLED = !FabricLoader.getInstance().isModLoaded("voicechat");
+	public static final boolean ENABLED = !com.arcticlauncher.mod.Mods.loaded("voicechat");
+	//#if NEOFORGE
+	/** NeoForge reads the server's channel list itself (and lets a client send only on channels in it). */
+	private static final boolean OWN_REGISTER = false;
+	//#else
 	/** Fabric API owns channel registration when it's installed. */
-	private static final boolean OWN_REGISTER = !FabricLoader.getInstance().isModLoaded("fabric-networking-api-v1");
+	private static final boolean OWN_REGISTER = !com.arcticlauncher.mod.Mods.loaded("fabric-networking-api-v1");
+	//#endif
 
 	/** Whether Arctic reads and writes this payload itself. */
 	public static boolean handles(Identifier id) {
@@ -187,8 +191,7 @@ public final class SvcPayload {
 	 * launcher is Arctic, as UTF-8 JSON. Nothing about the player or the PC.
 	 */
 	public static SvcPayload hello() {
-		String version = FabricLoader.getInstance().getModContainer("arctic")
-				.map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("unknown");
+		String version = com.arcticlauncher.mod.Mods.version("arctic").orElse("unknown");
 		com.google.gson.JsonObject json = new com.google.gson.JsonObject();
 		json.addProperty("version", version);
 		json.addProperty("launcher", "arctic");
@@ -200,12 +203,12 @@ public final class SvcPayload {
 	 * leaves it to Arctic when both are installed: only one of them can read the server's channel list.
 	 */
 	public static SvcPayload polariumHello() {
-		java.util.Optional<net.fabricmc.loader.api.ModContainer> polarium = FabricLoader.getInstance().getModContainer("polarium");
+		java.util.Optional<String> polarium = com.arcticlauncher.mod.Mods.version("polarium");
 		if (!polarium.isPresent()) {
 			return null;
 		}
 		com.google.gson.JsonObject json = new com.google.gson.JsonObject();
-		json.addProperty("version", polarium.get().getMetadata().getVersion().getFriendlyString());
+		json.addProperty("version", polarium.get());
 		return of(POLARIUM_HELLO, json.toString().getBytes(StandardCharsets.UTF_8));
 	}
 
@@ -216,15 +219,23 @@ public final class SvcPayload {
 	}
 	//#endif
 
-	/** Register for the secret (for Paper), then ask for it. */
-	public static SvcPayload[] request() {
-		List<SvcPayload> out = new ArrayList<>();
+	/** Register for the secret (for Paper), then ask for it: the packets to send. */
+	public static List<Packet<?>> request() {
+		List<Packet<?>> out = new ArrayList<>();
+		//#if NEOFORGE && MC >= 1.20.2
+		// NeoForge's own channel list payload (it reads minecraft:register itself).
+		out.add(new net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket(
+				new net.neoforged.neoforge.network.payload.MinecraftRegisterPayload(java.util.Collections.singleton(SECRET))));
+		//#elif NEOFORGE
+		out.add(of(REGISTER, SECRET.toString().getBytes(StandardCharsets.UTF_8)).toPacket());
+		//#else
 		if (OWN_REGISTER) {
 			byte[] channels = SECRET.toString().getBytes(StandardCharsets.UTF_8);
-			out.add(of(REGISTER, channels));
+			out.add(of(REGISTER, channels).toPacket());
 		}
+		//#endif
 		byte[] version = java.nio.ByteBuffer.allocate(4).putInt(COMPATIBILITY_VERSION).array();
-		out.add(of(REQUEST, version));
-		return out.toArray(new SvcPayload[0]);
+		out.add(of(REQUEST, version).toPacket());
+		return out;
 	}
 }

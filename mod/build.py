@@ -2,7 +2,8 @@
 
 Usage (from anywhere, JDK 25 on JAVA_HOME):
     python mod/build.py [version ...] [--jobs N] [--pack] [--offline]
-With versions, only those targets are built. Each jar goes to dist/, and
+With versions, only those targets are built (neoforge-1.21.1: the NeoForge jar of
+a target that has a "neoforge" version, versions/neoforge). Each jar goes to dist/, and
 then all of them are packed into dist/arctic-client.pack, which is what the
 launcher embeds (and what's committed; the jars themselves aren't).
 `--pack` only packs the jars already in dist/. `--offline` builds from
@@ -68,27 +69,40 @@ def has_chatcopy_proof(jar):
     return any((Path(name).stem.split("$", 1)[0] in forbidden or Path(name).stem.split("$", 1)[0].endswith(("Test", "Proof", "HotbarScrollCheck"))) for name in jar.namelist())
 
 
+def neoforge_jobs(targets):
+    """The NeoForge jars to build: one for each target with a "neoforge" version, as its own job."""
+    return [dict(t, build=f"neoforge-{t['build']}", game=t["build"], project="neoforge") for t in targets if "neoforge" in t]
+
+
 def build_one(root, target):
     version = target["build"]
     covers = ",".join(target["covers"])
-    # "fabric" (1.14+, Mojang's names) or "legacy" (Legacy Fabric, 1.13.2 and older).
+    # "fabric" (1.14+, Mojang's names), "legacy" (Legacy Fabric, 1.13.2 and older) or "neoforge".
     project = target.get("project", "fabric")
+    game = target.get("game", version)
+    extra = [f"-Pneoforge_version={target['neoforge']}"] if project == "neoforge" else []
     started = time.time()
     result = subprocess.run(
         [gradlew(root), *OFFLINE, "-p", f"versions/{project}", "build", *([] if "--info" in OFFLINE else ["-q"]),
-         f"-Pminecraft_version={version}", f"-Pcovers={covers}", "-PchatcopyDev=false"],
+         f"-Pminecraft_version={game}", f"-Pcovers={covers}", "-PchatcopyDev=false", *extra],
         cwd=root, capture_output=True, text=True,
     )
     if result.returncode != 0:
         return f"{version} failed:\n{result.stdout[-3000:]}{result.stderr[-3000:]}"
-    built = root / f"versions/{project}/build/libs" / f"arctic-mod-{version}-1.0.0.jar"
+    name = "arctic-neoforge" if project == "neoforge" else "arctic-mod"
+    built = root / f"versions/{project}/build/libs" / f"{name}-{game}-1.0.0.jar"
     # Release builds must never ship opt-in proof harnesses.
     with zipfile.ZipFile(built) as jar:
         if has_chatcopy_proof(jar):
             return f"{version}: development proof leaked into release jar"
-    shutil.copyfile(built, DIST / f"arctic-mod-{version}.jar")
+    shutil.copyfile(built, DIST / dist_name(version))
     print(f"== {version} (covers {covers}) in {time.time() - started:.0f}s", flush=True)
     return None
+
+
+def dist_name(build):
+    """The jar's name in dist/: arctic-mod-1.21.1.jar, or arctic-neoforge-1.21.1.jar for neoforge-1.21.1."""
+    return f"arctic-{build}.jar" if build.startswith("neoforge-") else f"arctic-mod-{build}.jar"
 
 
 def build(targets, jobs):
@@ -117,8 +131,9 @@ def pack(targets):
     files. Index: {"jars": {build: [[name, file number or -1 for a folder], ...]},
     "sizes": [bytes of each file]}."""
     files, sizes, numbers, jars = [], [], {}, {}
-    # The Forge flavour of 1.8.9 (forge/build_forge.py) travels in the pack under its own key.
-    built = [(t["build"], DIST / f"arctic-mod-{t['build']}.jar") for t in targets]
+    # The Forge flavour of 1.8.9 (forge/build_forge.py) travels in the pack under its own key, and
+    # so do the NeoForge jars (neoforge-<build>).
+    built = [(t["build"], DIST / dist_name(t["build"])) for t in targets + neoforge_jobs(targets)]
     built.append(("forge-1.8.9", DIST / "arctic-forge-1.8.9.jar"))
     for version, path in built:
         if not path.exists():
@@ -162,7 +177,7 @@ def main() -> None:
         OFFLINE.append("--offline")
     wanted = {a for a in args if a not in ("--pack", "--offline")}
     if not only_pack:
-        chosen = [t for t in targets if not wanted or t["build"] in wanted]
+        chosen = [t for t in targets + neoforge_jobs(targets) if not wanted or t["build"] in wanted]
         started = time.time()
         failed = build(chosen, jobs)
         print(f"built {len(chosen) - len(failed)} of {len(chosen)} in {time.time() - started:.0f}s")

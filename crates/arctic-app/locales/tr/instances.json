@@ -11,6 +11,7 @@
   "instances.added": "{name} eklendi",
   "instances.address": "Adres",
   "instances.adds_patcher_performance_and_bug_fixes_and": "Daha yüksek FPS için Patcher (performans ve hata düzeltmeleri) ve Entity Culling (göremediğin şeyleri çizmez) ekler. Modrinth'ten indirilir; zaten sende olanlar olduğu gibi bırakılır.",
+  "instances.adds_sodium_lithium_ferritecore": "Çok daha yüksek FPS ve hızlı açılış için Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, ModernFix ve Polarium ekler. Sürümün için Modrinth'ten indirilir (Polarium Arctic ile gelir); henüz güncellenmemiş olanlar atlanır.",
   "instances.adds_sodium_lithium_ferritecore_2": "Çok daha yüksek FPS ve daha hızlı açılış için Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, Particle Core, BadOptimizations, ModernFix ve Polarium ekler. Sürümün için Modrinth'ten indirilir (Polarium Arctic ile gelir); henüz güncellenmemiş olanlar atlanır.",
   "instances.all": "Tümü",
   "instances.all_fixed": "Hepsi düzeltildi",
@@ -305,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "O dosya yok; yönetilen Java kullanılacak.",
   "instances.that_instance_is_gone": "O kurulum artık yok.",
   "instances.the_arctic_client_is_off_for_every_instance": "Arctic Client tüm kurulumlar için kapalı",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client; Vanilla, Fabric ve Quilt örneklerinde ve Forge 1.8.9'da çalışır. Bu yükleyici ya da sürümde henüz yok: onunla oynamak için aynı sürümde bir Vanilla veya Fabric örneği oluştur.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client; Vanilla, Fabric ve Quilt örneklerinde, resmî olmayan şekilde NeoForge'da ve Forge 1.8.9'da çalışır. Bu yükleyici ya da sürümde henüz yok: onunla oynamak için aynı sürümde bir Vanilla veya Fabric örneği oluştur.",
   "instances.the_default_instance_plays_whichever_release": "Varsayılan örnek, Oyna sekmesinde seçtiğin sürümü oynatır.",
   "instances.the_folder_worlds_and_mods_included_is_moved": "Klasör (dünyalar ve modlar dahil) instances/.trash içine taşınır, silinmez.",
   "instances.the_game_would_stop_while_loading_fix_them": "Oyun {name} yüklenirken duracaktı. Burada düzelt ya da yine de oyna.",
@@ -415,5 +416,8 @@
   "instances.hub.partial_install": "Seçilen projelerin {count} tanesi bu örneğe kurulamaz. Bunlar özette listelenecek.",
   "instances.hub.install_compatible": "Uyumlu projeleri kur",
   "instances.hub.partially_compatible": "Kısmen uyumlu",
-  "instances.hub.modpacks_create_instances": "Her mod paketi ayrı bir örnek oluşturur."
+  "instances.hub.modpacks_create_instances": "Her mod paketi ayrı bir örnek oluşturur.",
+  "instances.unofficial_on_neoforge_fabric_is_recommended": "NeoForge'da resmî değil. Fabric'i öneririz.",
+  "instances.the_arctic_client_on_neoforge_is_unofficial": "Arctic Client'ın NeoForge sürümü resmî değil. Resmî olarak desteklenen yol Fabric.",
+  "instances.needs_neoforge_or_newer": "NeoForge {version} ya da daha yenisi gerekiyor: Mod yükleyici bölümünden daha yeni bir sürüm seç."
 }
