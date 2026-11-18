@@ -217,5 +217,21 @@
   "social.words_separated_by_commas_a_line_with_any_of": "Слова через кому; підходить рядок з будь-яким із них. «-слово» виключає рядки.",
   "social.world_open_to_friends": "Світ відкритий для друзів",
   "social.your_friend_joined": "Твій друг приєднався",
-  "social.your_world_is_open_to_lan_for_the_friends": "Твій світ відкритий у LAN для запрошених друзів"
+  "social.your_world_is_open_to_lan_for_the_friends": "Твій світ відкритий у LAN для запрошених друзів",
+  "social.hostban_host": "Власника світу не можна заблокувати.",
+  "social.hostban_tunnel_ip": "Гравців, які приєдналися за запрошенням або кодом, не можна заблокувати за IP-адресою. Скористайтеся /ban <ім’я>.",
+  "social.hostban_disconnect": "Вам заборонено входити в цей світ.\n{0}",
+  "social.hostban_default_reason": "Причину не вказано.",
+  "social.hostban_storage_error": "Не вдалося прочитати або зберегти список блокувань цього світу.",
+  "social.hostban_player_already_banned": "Гравця {0} вже заблоковано.",
+  "social.hostban_player_banned": "Гравця {0} заблоковано.",
+  "social.hostban_player_not_banned": "Гравця {0} не заблоковано.",
+  "social.hostban_player_pardoned": "Блокування гравця {0} скасовано.",
+  "social.hostban_unknown_ip": "{0} не є дійсною IP-адресою чи іменем гравця в мережі.",
+  "social.hostban_ip_already_banned": "IP-адресу {0} вже заблоковано.",
+  "social.hostban_ip_banned": "IP-адресу {0} заблоковано.",
+  "social.hostban_ip_not_banned": "IP-адресу {0} не заблоковано.",
+  "social.hostban_ip_pardoned": "Блокування IP-адреси {0} скасовано.",
+  "social.hostban_list_entry": "{0} — {1}",
+  "social.hostban_list_empty": "Немає блокувань для показу."
 }

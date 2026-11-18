@@ -217,5 +217,21 @@
   "social.words_separated_by_commas_a_line_with_any_of": "カンマ区切りの単語。どれかを含む行が一致します。「-単語」でその行を除外します。",
   "social.world_open_to_friends": "フレンドに公開中のワールド",
   "social.your_friend_joined": "フレンドが参加しました",
-  "social.your_world_is_open_to_lan_for_the_friends": "招待したフレンド向けに、あなたのワールドを LAN に公開しています"
+  "social.your_world_is_open_to_lan_for_the_friends": "招待したフレンド向けに、あなたのワールドを LAN に公開しています",
+  "social.hostban_host": "ホストをBANすることはできません。",
+  "social.hostban_tunnel_ip": "招待やコードで参加したプレイヤーはIPアドレスでBANできません。/ban <名前> を使ってください。",
+  "social.hostban_disconnect": "このワールドからBANされています。\n{0}",
+  "social.hostban_default_reason": "理由は指定されていません。",
+  "social.hostban_storage_error": "このワールドのBANリストを読み込み、または保存できませんでした。",
+  "social.hostban_player_already_banned": "{0} はすでにBANされています。",
+  "social.hostban_player_banned": "{0} をBANしました。",
+  "social.hostban_player_not_banned": "{0} はBANされていません。",
+  "social.hostban_player_pardoned": "{0} のBANを解除しました。",
+  "social.hostban_unknown_ip": "{0} は有効なIPアドレスでも、オンラインのプレイヤー名でもありません。",
+  "social.hostban_ip_already_banned": "IPアドレス {0} はすでにBANされています。",
+  "social.hostban_ip_banned": "IPアドレス {0} をBANしました。",
+  "social.hostban_ip_not_banned": "IPアドレス {0} はBANされていません。",
+  "social.hostban_ip_pardoned": "IPアドレス {0} のBANを解除しました。",
+  "social.hostban_list_entry": "{0} — {1}",
+  "social.hostban_list_empty": "表示できるBANはありません。"
 }

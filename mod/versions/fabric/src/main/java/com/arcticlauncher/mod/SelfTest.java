@@ -49,6 +49,14 @@ final class SelfTest {
 	private SelfTest() {}
 
 	static void maybeStart() {
+		//#if DEV_SCENES
+		//#if MC >= 1.21.9
+		if ("hostban".equals(System.getProperty("arctic.selftest"))) {
+			HostBanTest.start();
+			return;
+		}
+		//#endif
+		//#endif
 		//#if DEV
 		if ("chat-history".equals(System.getProperty("arctic.selftest"))) {
 			ChatHistoryProof.start();

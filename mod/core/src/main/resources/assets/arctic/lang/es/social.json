@@ -217,5 +217,21 @@
   "social.words_separated_by_commas_a_line_with_any_of": "Palabras separadas por comas; una línea con cualquiera de ellas coincide. «-palabra» excluye líneas.",
   "social.world_open_to_friends": "Mundo abierto a amigos",
   "social.your_friend_joined": "Tu amigo se unió",
-  "social.your_world_is_open_to_lan_for_the_friends": "Tu mundo está abierto en LAN para los amigos que invitaste"
+  "social.your_world_is_open_to_lan_for_the_friends": "Tu mundo está abierto en LAN para los amigos que invitaste",
+  "social.hostban_host": "No puedes expulsar permanentemente al anfitrión.",
+  "social.hostban_tunnel_ip": "No se puede vetar por IP a quienes se unieron por invitación o código. Usa /ban <nombre>.",
+  "social.hostban_disconnect": "Se te ha vetado el acceso a este mundo.\n{0}",
+  "social.hostban_default_reason": "No se indicó ningún motivo.",
+  "social.hostban_storage_error": "No se pudo leer o guardar la lista de vetos de este mundo.",
+  "social.hostban_player_already_banned": "{0} ya está en la lista de vetos.",
+  "social.hostban_player_banned": "Se ha vetado a {0}.",
+  "social.hostban_player_not_banned": "{0} no está en la lista de vetos.",
+  "social.hostban_player_pardoned": "Se ha levantado el veto a {0}.",
+  "social.hostban_unknown_ip": "{0} no es una dirección IP válida ni el nombre de un jugador conectado.",
+  "social.hostban_ip_already_banned": "La dirección IP {0} ya está vetada.",
+  "social.hostban_ip_banned": "Se ha vetado la dirección IP {0}.",
+  "social.hostban_ip_not_banned": "La dirección IP {0} no está vetada.",
+  "social.hostban_ip_pardoned": "Se ha levantado el veto a la dirección IP {0}.",
+  "social.hostban_list_entry": "{0} — {1}",
+  "social.hostban_list_empty": "No hay vetos que mostrar."
 }
