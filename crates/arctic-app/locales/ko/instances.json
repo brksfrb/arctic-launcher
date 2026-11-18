@@ -11,7 +11,6 @@
   "instances.added": "{name} 추가됨",
   "instances.address": "주소",
   "instances.adds_patcher_performance_and_bug_fixes_and": "더 높은 FPS를 위해 Patcher(성능 및 버그 수정)와 Entity Culling(보이지 않는 것은 그리지 않음)을 추가합니다. Modrinth에서 받으며 이미 있는 것은 그대로 둡니다.",
-  "instances.adds_sodium_lithium_ferritecore": "Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, ModernFix, Polarium을 추가해 FPS를 크게 높이고 시작을 빠르게 합니다. 내 버전에 맞게 Modrinth에서 내려받으며(Polarium은 Arctic에 포함), 아직 업데이트되지 않은 것은 건너뜁니다.",
   "instances.adds_sodium_lithium_ferritecore_2": "훨씬 높은 FPS와 빠른 시작을 위해 Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, Particle Core, BadOptimizations, ModernFix, Polarium을 추가합니다. 버전에 맞게 Modrinth에서 받으며(Polarium은 Arctic에 포함), 아직 업데이트되지 않은 것은 건너뜁니다.",
   "instances.all": "전체",
   "instances.all_fixed": "모두 해결됨",
