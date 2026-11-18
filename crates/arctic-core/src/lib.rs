@@ -20,6 +20,7 @@ pub mod ffmpeg;
 pub mod friends;
 pub mod game_defaults;
 mod game_defaults_keys;
+mod game_defaults_options;
 pub mod gpu_preference;
 pub mod instances;
 pub mod java;
