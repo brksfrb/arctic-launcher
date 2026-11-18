@@ -734,6 +734,14 @@ impl ArcticApp {
     /// Player-facing text for a diagnosis. Crash reports keep the English title from core
     /// so uploaded groups stay stable; the toast is translated.
     fn localized_diagnosis(d: &Diagnosis) -> (String, String) {
+        if let Some((name, ours)) = arctic_core::crash_suspect::named(d) {
+            let detail = if ours {
+                tf!("tasks.arctic_part_crashed", name = name)
+            } else {
+                tf!("tasks.update_or_remove_the_crashing_mod", name = name)
+            };
+            return (tf!("tasks.mod_crashed_the_game", name = name), detail);
+        }
         match d.title.as_str() {
             "Minecraft ran out of memory and froze" => {
                 let mut detail = t!("tasks.the_game_froze_with_memory_pressure").to_string();

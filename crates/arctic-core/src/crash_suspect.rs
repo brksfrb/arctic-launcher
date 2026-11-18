@@ -1,0 +1,747 @@
+//! Names the mod that crashed the game: the game's own "Suspected Mods" line, or else the first
+//! frame of the fatal exception's stack trace (following "Caused by" chains, deepest first) that
+//! belongs to an installed mod, including Mixin-merged methods (`handler$zbh000$modid$...`).
+//! Anything unsure gives `None` so the caller keeps its generic message.
+
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::OnceLock;
+
+use regex::Regex;
+
+use crate::crash::Diagnosis;
+
+/// Name shown for the Arctic mod's own frames.
+const ARCTIC_NAME: &str = "Arctic Client";
+const ARCTIC_PACKAGE: &str = "com.arcticlauncher.";
+const POLARIUM_PACKAGE: &str = "com.arcticlauncher.polarium.";
+
+/// Game, loader and JDK code never gets blamed.
+const NOT_MODS: &[&str] = &[
+    "java.",
+    "javax.",
+    "jdk.",
+    "sun.",
+    "com.sun.",
+    "net.minecraft.",
+    "net.minecraftforge.",
+    "net.neoforged.",
+    "net.fabricmc.loader.",
+    "net.fabricmc.api.",
+    "net.fabricmc.devlaunchinjector.",
+    "org.quiltmc.loader.",
+    "org.quiltmc.json5.",
+    "org.spongepowered.",
+    "cpw.mods.",
+    "com.mojang.",
+    "org.lwjgl.",
+    "org.objectweb.",
+    "org.apache.",
+    "com.google.",
+    "io.netty.",
+    "it.unimi.",
+    "org.slf4j.",
+    "org.jetbrains.",
+    "kotlin.",
+    "kotlinx.",
+    "scala.",
+    "oshi.",
+    "com.electronwill.",
+];
+
+/// Mod ids that are the game or its loader, not something to remove.
+const BASE_IDS: &[&str] = &[
+    "minecraft",
+    "java",
+    "fabricloader",
+    "fabric-loader",
+    "quilt_loader",
+    "quilt-loader",
+    "forge",
+    "neoforge",
+    "fml",
+    "javafml",
+    "lowcodefml",
+    "mixin",
+    "mixinextras",
+];
+
+/// Mods that mostly provide code for other mods; a crash passing through them is rarely theirs.
+const LIBRARIES: &[&str] = &[
+    "fabric-api",
+    "fabric",
+    "cloth-config",
+    "cloth-config2",
+    "cloth_config",
+    "architectury",
+    "geckolib",
+    "geckolib3",
+    "owo",
+    "owo-lib",
+    "placeholder-api",
+    "forgeconfigapiport",
+    "forge-config-api-port",
+    "midnightlib",
+    "yet_another_config_lib_v3",
+    "yacl",
+    "modmenu",
+    "kotlinforforge",
+    "fabric-language-kotlin",
+    "fabric-permissions-api-v0",
+    "collective",
+    "balm",
+    "bclib",
+    "puzzleslib",
+    "cardinal-components",
+    "cca-base",
+    "trinkets",
+    "curios",
+    "playerabilitylib",
+    "supermartijn642corelib",
+    "supermartijn642configlib",
+    "azurelib",
+    "terraform-api",
+    "resourcefulconfig",
+    "resourcefullib",
+    "creativecore",
+    "moonlight",
+    "jankson",
+    "mixinextras",
+    "iris_shader_mod_dummy",
+];
+
+/// A mod in the instance's mods folder with what is needed to match stack frames to it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Known {
+    pub id: String,
+    pub name: String,
+    pub file: String,
+    /// Packages (dotted) its classes live in.
+    pub packages: Vec<String>,
+    pub library: bool,
+}
+
+/// The mod a crash points at.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Suspect {
+    pub id: String,
+    pub name: String,
+    /// Part of Arctic (the Arctic Client or Polarium).
+    pub ours: bool,
+}
+
+fn norm(id: &str) -> String {
+    id.to_lowercase().replace(['_', '-'], "")
+}
+
+fn is_arctic_id(id: &str) -> bool {
+    matches!(norm(id).as_str(), "arctic" | "polarium")
+}
+
+fn is_library(id: &str, json_library: bool) -> bool {
+    json_library
+        || id.starts_with("fabric-")
+        || id.starts_with("quilted_fabric_api")
+        || LIBRARIES.iter().any(|l| norm(l) == norm(id))
+}
+
+/// Every jar in `mods_dir` with the packages its classes use.
+pub fn scan(mods_dir: &Path) -> Vec<Known> {
+    let Ok(entries) = std::fs::read_dir(mods_dir) else {
+        return Vec::new();
+    };
+    let mut out: Vec<Known> = entries
+        .flatten()
+        .filter(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .to_lowercase()
+                .ends_with(".jar")
+        })
+        .filter_map(|e| read_known(&e.path()))
+        .collect();
+    out.sort_by(|a, b| a.file.cmp(&b.file));
+    out
+}
+
+fn read_known(jar: &Path) -> Option<Known> {
+    let file = jar.file_name()?.to_string_lossy().into_owned();
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(jar).ok()?).ok()?;
+    let mut packages: Vec<String> = Vec::new();
+    for i in 0..zip.len() {
+        let Ok(entry) = zip.by_index_raw(i) else {
+            continue;
+        };
+        let name = entry.name();
+        if let Some(path) = name.strip_suffix(".class")
+            && !name.starts_with("META-INF/")
+            && let Some((dir, _)) = path.rsplit_once('/')
+        {
+            let pkg = dir.replace('/', ".");
+            if packages.last() != Some(&pkg) && !packages.contains(&pkg) {
+                packages.push(pkg);
+            }
+        }
+    }
+    let mut read = |name: &str| {
+        let mut text = String::new();
+        std::io::Read::read_to_string(&mut zip.by_name(name).ok()?, &mut text).ok()?;
+        Some(text)
+    };
+    let (m, json_library) = if let Some(text) = read("fabric.mod.json") {
+        let library =
+            serde_json::from_str::<serde_json::Value>(&text.replace(['\n', '\r', '\t'], " "))
+                .ok()
+                .and_then(|j| {
+                    j.pointer("/custom/modmenu/badges")?
+                        .as_array()
+                        .map(|b| b.iter().any(|x| x.as_str() == Some("library")))
+                })
+                .unwrap_or(false);
+        (
+            crate::crash_conflicts::from_fabric_json(&file, &text)?,
+            library,
+        )
+    } else {
+        let toml = read("META-INF/neoforge.mods.toml").or_else(|| read("META-INF/mods.toml"))?;
+        (crate::crash_conflicts::from_mods_toml(&file, &toml)?, false)
+    };
+    Some(Known {
+        library: is_library(&m.id, json_library),
+        id: m.id,
+        name: m.name,
+        file,
+        packages,
+    })
+}
+
+/// One stack frame, reduced to what identifies its owner.
+struct Frame {
+    class: String,
+    method: String,
+    /// Module/mod id written into the frame (`TRANSFORMER/modid@1.0/...`).
+    module: Option<String>,
+    /// Jar named at the end of the frame (`~[file.jar:?]`).
+    jar: Option<String>,
+}
+
+fn frame(line: &str) -> Option<Frame> {
+    static JAR: OnceLock<Regex> = OnceLock::new();
+    let rest = line.trim_start().strip_prefix("at ")?;
+    let (token, tail) = rest.split_once('(')?;
+    let mut parts: Vec<&str> = token.split('/').collect();
+    let call = parts.pop()?;
+    let (class, method) = call.rsplit_once('.')?;
+    let module = parts
+        .iter()
+        .find_map(|p| p.split_once('@').map(|(id, _)| id.to_owned()));
+    let jar = JAR
+        .get_or_init(|| Regex::new(r"\[([^\]\s:%!]+\.jar)[:%!\]]").unwrap())
+        .captures(tail)
+        .map(|c| c[1].to_owned());
+    Some(Frame {
+        class: class.to_owned(),
+        method: method.to_owned(),
+        module,
+        jar,
+    })
+}
+
+/// `handler$zbh000$modid$onTick` → `modid`.
+fn mixin_owner(method: &str) -> Option<&str> {
+    static OWNER: OnceLock<Regex> = OnceLock::new();
+    OWNER
+        .get_or_init(|| Regex::new(r"\$[a-z]{1,4}\d{3}\$([A-Za-z0-9_.\-]+)\$").unwrap())
+        .captures(method)
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str())
+}
+
+/// The stack of the exception that ended the game, split into its chain, deepest cause first.
+/// `None` unless the text shows the exception was fatal (not just logged).
+fn fatal_chain(text: &str) -> Option<Vec<Vec<&str>>> {
+    let region = if let Some(stack) = crate::crash::crash_exception(text) {
+        stack
+    } else {
+        let fatal = text.contains("Exception in thread")
+            || text.contains("Reported exception thrown")
+            || text.contains("Unreported exception");
+        if !fatal {
+            return None;
+        }
+        static HEAD: OnceLock<Regex> = OnceLock::new();
+        let head = HEAD.get_or_init(|| {
+            Regex::new(r#"^(?:Exception in thread "[^"]*" )?[\w$]+(?:\.[\w$]+)+(?::.*)?$"#).unwrap()
+        });
+        // The last unindented exception line that is followed by stack frames.
+        let mut start = None;
+        let mut pos = 0;
+        let mut lines = text.split_inclusive('\n').peekable();
+        while let Some(line) = lines.next() {
+            let next_is_frame = lines
+                .peek()
+                .is_some_and(|n| n.trim_start().starts_with("at "));
+            if next_is_frame && head.is_match(line.trim_end()) {
+                start = Some(pos);
+            }
+            pos += line.len();
+        }
+        let start = start?;
+        let rest = &text[start..];
+        let mut end = rest.len();
+        let mut pos = 0;
+        for (i, line) in rest.split_inclusive('\n').enumerate() {
+            let l = line.trim_end();
+            let part = i == 0
+                || l.starts_with('\t')
+                || l.starts_with("    ")
+                || l.starts_with("Caused by:")
+                || l.starts_with("Suppressed:");
+            if !part {
+                end = pos;
+                break;
+            }
+            pos += line.len();
+        }
+        &rest[..end]
+    };
+    let mut chain: Vec<Vec<&str>> = vec![Vec::new()];
+    for (i, line) in region.lines().enumerate() {
+        if i > 0
+            && line.trim_start().starts_with("Caused by:")
+            && !line.starts_with(char::is_whitespace)
+        {
+            chain.push(Vec::new());
+        }
+        if let Some(last) = chain.last_mut() {
+            last.push(line);
+        }
+    }
+    chain.reverse();
+    Some(chain)
+}
+
+struct Index<'a> {
+    mods: &'a [Known],
+    by_package: HashMap<&'a str, Option<usize>>,
+}
+
+impl<'a> Index<'a> {
+    fn new(mods: &'a [Known]) -> Self {
+        let mut by_package: HashMap<&str, Option<usize>> = HashMap::new();
+        for (i, m) in mods.iter().enumerate() {
+            for p in &m.packages {
+                by_package
+                    .entry(p.as_str())
+                    .and_modify(|owner| {
+                        if *owner != Some(i) {
+                            *owner = None;
+                        }
+                    })
+                    .or_insert(Some(i));
+            }
+        }
+        Self { mods, by_package }
+    }
+
+    fn by_id(&self, id: &str) -> Option<usize> {
+        let n = norm(id);
+        self.mods.iter().position(|m| norm(&m.id) == n)
+    }
+
+    fn owner(&self, f: &Frame) -> Option<usize> {
+        if let Some(i) = f.module.as_deref().and_then(|m| self.by_id(m)) {
+            return Some(i);
+        }
+        if let Some(jar) = &f.jar
+            && let Some(i) = self.mods.iter().position(|m| &m.file == jar)
+        {
+            return Some(i);
+        }
+        let mut package = f.class.rsplit_once('.').map(|(p, _)| p)?;
+        loop {
+            if let Some(owner) = self.by_package.get(package) {
+                return *owner;
+            }
+            // Parent packages only count once they name a vendor and a mod (three parts).
+            let (parent, _) = package.rsplit_once('.')?;
+            if parent.matches('.').count() < 2 {
+                return None;
+            }
+            package = parent;
+        }
+    }
+}
+
+fn arctic(id: &str) -> Suspect {
+    Suspect {
+        id: id.to_owned(),
+        name: if norm(id) == "polarium" {
+            crate::mods::polarium::NAME
+        } else {
+            ARCTIC_NAME
+        }
+        .to_owned(),
+        ours: true,
+    }
+}
+
+/// The mod to blame for the crash in `text`, if the evidence is clear.
+pub fn suspect(text: &str, mods: &[Known]) -> Option<Suspect> {
+    let index = Index::new(mods);
+    let named = |i: usize| {
+        let m = &mods[i];
+        Suspect {
+            id: m.id.clone(),
+            name: m.name.clone(),
+            ours: is_arctic_id(&m.id),
+        }
+    };
+    let by_game = suspected_line(text);
+    let mut game_library = None;
+    for (id, name) in &by_game {
+        let known = index.by_id(id);
+        let library = known.map_or_else(|| is_library(id, false), |i| mods[i].library);
+        let s = match known {
+            Some(i) => named(i),
+            None if is_arctic_id(id) => arctic(id),
+            None => Suspect {
+                id: id.clone(),
+                name: name.clone(),
+                ours: false,
+            },
+        };
+        if library {
+            game_library.get_or_insert(s);
+        } else {
+            return Some(s);
+        }
+    }
+    if let Some(chain) = fatal_chain(text) {
+        for block in &chain {
+            for line in block {
+                let Some(f) = frame(line) else {
+                    continue;
+                };
+                if let Some(owner) = mixin_owner(&f.method) {
+                    if is_arctic_id(owner) {
+                        return Some(arctic(owner));
+                    }
+                    match index.by_id(owner) {
+                        Some(i) if !mods[i].library => return Some(named(i)),
+                        _ => continue,
+                    }
+                }
+                if f.class.starts_with(POLARIUM_PACKAGE) {
+                    return Some(arctic("polarium"));
+                }
+                if f.class.starts_with(ARCTIC_PACKAGE) {
+                    return Some(arctic("arctic"));
+                }
+                if NOT_MODS.iter().any(|p| f.class.starts_with(p)) {
+                    continue;
+                }
+                match index.owner(&f) {
+                    Some(i) if BASE_IDS.contains(&mods[i].id.as_str()) => {}
+                    Some(i) if mods[i].library => {}
+                    Some(i) => return Some(named(i)),
+                    None => {}
+                }
+            }
+        }
+    }
+    game_library
+}
+
+/// Ids named on the game's own "Suspected Mod(s): Name (id), ..." line.
+fn suspected_line(text: &str) -> Vec<(String, String)> {
+    static LINE: OnceLock<Regex> = OnceLock::new();
+    static ITEM: OnceLock<Regex> = OnceLock::new();
+    let line = LINE.get_or_init(|| Regex::new(r"(?m)^\s*Suspected Mods?:[ \t]*(.*)$").unwrap());
+    let item = ITEM.get_or_init(|| Regex::new(r"([^,()\n]+?)\s*\(([A-Za-z0-9_.\-]+)\)").unwrap());
+    let Some(c) = line.captures_iter(text).last() else {
+        return Vec::new();
+    };
+    item.captures_iter(&c[1])
+        .filter(|i| !BASE_IDS.contains(&&i[2]))
+        .map(|i| (i[2].to_owned(), i[1].trim().to_owned()))
+        .collect()
+}
+
+/// "Minecraft (minecraft)": a Suspected Mods entry that is the game or loader itself.
+pub(crate) fn is_base_entry(entry: &str) -> bool {
+    entry
+        .rsplit_once('(')
+        .and_then(|(_, id)| id.split(')').next())
+        .is_some_and(|id| BASE_IDS.contains(&id))
+}
+
+/// Title for a named mod. The app recognises it (see [`named`]) to show a translation.
+pub fn title(name: &str) -> String {
+    format!("{name} crashed the game")
+}
+
+/// The diagnosis for `text`, if one mod can be named.
+pub fn diagnosis(text: &str, mods: &[Known]) -> Option<Diagnosis> {
+    let s = suspect(text, mods)?;
+    let detail = if s.ours {
+        format!(
+            "The game crashed in {}, which is part of Arctic. Please send the crash report so it can be fixed.",
+            s.name
+        )
+    } else {
+        format!(
+            "The game crashed inside {}. Update it to the newest version for this Minecraft version, or remove it on the instance's Mods page. If it keeps crashing, tell the mod's author.",
+            s.name
+        )
+    };
+    Some(Diagnosis::new(title(&s.name), detail, vec![s.name]))
+}
+
+/// If `d` is a diagnosis made by [`diagnosis`]: the mod's name and whether it is Arctic's own.
+pub fn named(d: &Diagnosis) -> Option<(&str, bool)> {
+    let name = d.mods.first()?;
+    (d.mods.len() == 1 && d.title == title(name) && d.fix.is_none()).then(|| {
+        let ours = name == ARCTIC_NAME || name == crate::mods::polarium::NAME;
+        (name.as_str(), ours)
+    })
+}
+
+/// Titles that only restate an exit code, which a named mod replaces.
+pub fn is_generic(d: &Diagnosis) -> bool {
+    d.title.starts_with("Game exited with code") || d.title.starts_with("The game stopped before")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crash_conflicts::{diagnose_exit_in, diagnose_in};
+    use std::io::Write;
+
+    /// A mod jar with a fabric.mod.json and empty class files in the given packages.
+    fn jar(dir: &Path, file: &str, id: &str, name: &str, packages: &[&str], extra: &str) {
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(dir.join(file)).unwrap());
+        let options = zip::write::SimpleFileOptions::default();
+        zip.start_file("fabric.mod.json", options).unwrap();
+        write!(
+            zip,
+            r#"{{"schemaVersion":1,"id":"{id}","name":"{name}","version":"1.0.0"{extra}}}"#
+        )
+        .unwrap();
+        for p in packages {
+            zip.start_file(format!("{}/Main.class", p.replace('.', "/")), options)
+                .unwrap();
+            zip.write_all(b"\xca\xfe\xba\xbe").unwrap();
+        }
+        zip.finish().unwrap();
+    }
+
+    fn pack() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        jar(
+            p,
+            "enhancedblockentities-0.9.jar",
+            "enhancedblockentities",
+            "Enhanced Block Entities",
+            &[
+                "foundationgames.enhancedblockentities",
+                "foundationgames.enhancedblockentities.util",
+                "foundationgames.enhancedblockentities.client.screen",
+            ],
+            "",
+        );
+        jar(
+            p,
+            "sodium-0.5.jar",
+            "sodium",
+            "Sodium",
+            &["me.jellysquid.mods.sodium.client.render"],
+            "",
+        );
+        jar(
+            p,
+            "lithium-0.11.jar",
+            "lithium",
+            "Lithium",
+            &["me.jellysquid.mods.lithium.common"],
+            "",
+        );
+        jar(
+            p,
+            "cloth-config-11.jar",
+            "cloth-config",
+            "Cloth Config API",
+            &["me.shedaniel.clothconfig2.gui"],
+            "",
+        );
+        jar(
+            p,
+            "somelib.jar",
+            "somelib",
+            "Some Lib",
+            &["net.example.somelib"],
+            r#","custom":{"modmenu":{"badges":["library"]}}"#,
+        );
+        dir
+    }
+
+    const EBE: &str = "---- Minecraft Crash Report ----\n\
+// Don't do that.\n\n\
+Time: 2026-11-17 20:11:03\n\
+Description: Unexpected error\n\n\
+java.nio.file.ProviderMismatchException\n\
+\tat java.base/sun.nio.fs.AbstractPath.toAbsolutePath(AbstractPath.java:90)\n\
+\tat java.base/java.nio.file.Path.of(Path.java:208)\n\
+\tat foundationgames.enhancedblockentities.util.ResourceUtil.dumpResources(ResourceUtil.java:105)\n\
+\tat foundationgames.enhancedblockentities.client.screen.ConfigScreen.method_25402(ConfigScreen.java:88)\n\
+\tat net.minecraft.class_437.method_25402(class_437.java:300)\n\
+\tat net.minecraft.class_310.method_1523(class_310.java:1234)\n\n\
+-- System Details --\n\
+Details:\n\
+\tMinecraft Version: 1.20.1\n";
+
+    #[test]
+    fn enhanced_block_entities_crash_names_the_mod() {
+        let dir = pack();
+        let d = diagnose_exit_in(EBE, -1, dir.path()).unwrap();
+        assert_eq!(d.title, "Enhanced Block Entities crashed the game");
+        assert_eq!(d.mods, ["Enhanced Block Entities"]);
+        assert!(d.detail.contains("Update it"));
+        assert_eq!(named(&d), Some(("Enhanced Block Entities", false)));
+        // The same text without an exit code reaches the same answer.
+        assert_eq!(diagnose_in(EBE, dir.path()).unwrap(), d);
+    }
+
+    #[test]
+    fn game_suspected_mods_line_wins_over_frames() {
+        let dir = pack();
+        let text = EBE.replace(
+            "-- System Details --",
+            "-- System Details --\nSuspected Mods: Lithium (lithium)",
+        );
+        let found = suspect(&text, &scan(dir.path())).unwrap();
+        assert_eq!(
+            (found.id.as_str(), found.name.as_str()),
+            ("lithium", "Lithium")
+        );
+        // Fabric's own rule already words this one; it must still name the mod.
+        let d = diagnose_exit_in(&text, -1, dir.path()).unwrap();
+        assert!(d.title.contains("Lithium"), "{}", d.title);
+        // "NONE" and loader entries say nothing, so the frames decide.
+        for line in [
+            "Suspected Mods: NONE",
+            "Suspected Mods: Minecraft (minecraft)",
+        ] {
+            let text = EBE.replace(
+                "-- System Details --",
+                &format!("-- System Details --\n{line}"),
+            );
+            let d = diagnose_exit_in(&text, -1, dir.path()).unwrap();
+            assert_eq!(d.title, "Enhanced Block Entities crashed the game");
+        }
+        // A library on the game's line gives way to a real mod; mods missing on disk keep the game's name.
+        let text = EBE.replace(
+            "-- System Details --",
+            "-- System Details --\nSuspected Mods: Cloth Config API (cloth-config), Ghost Mod (ghost)",
+        );
+        let found = suspect(&text, &scan(dir.path())).unwrap();
+        assert_eq!(
+            (found.id.as_str(), found.name.as_str()),
+            ("ghost", "Ghost Mod")
+        );
+    }
+
+    #[test]
+    fn mixin_handler_frame_names_the_mixin_owner() {
+        let dir = pack();
+        let text = "Exception in thread \"Render thread\" java.lang.NullPointerException: Cannot invoke \"Object.hashCode()\"\n\
+\tat net.minecraft.class_761.handler$zbh000$sodium$onRender(class_761.java:12) ~[client.jar:?]\n\
+\tat net.minecraft.class_761.method_22710(class_761.java:1) ~[client.jar:?]\n\
+\tat net.minecraft.class_757.method_3192(class_757.java:900) ~[client.jar:?]\n\
+\tat net.minecraft.class_310.method_1523(class_310.java:1200) ~[client.jar:?]\n";
+        let d = diagnose_exit_in(text, 1, dir.path()).unwrap();
+        assert_eq!(d.title, "Sodium crashed the game");
+        // Unknown or library owners are not blamed.
+        let lib = text.replace("sodium", "fabric-rendering-v1");
+        assert!(diagnose_exit_in(&lib, 1, dir.path()).is_none_or(|d| d.mods.is_empty()));
+    }
+
+    #[test]
+    fn library_frames_are_skipped_for_the_mod_that_used_them() {
+        let dir = pack();
+        let text = "[12:00:01] [Render thread/ERROR]: Reported exception thrown!\n\
+net.minecraft.class_148: Rendering screen\n\
+\tat net.minecraft.class_310.method_1523(class_310.java:1)\n\
+Caused by: java.lang.IllegalStateException: no\n\
+\tat me.shedaniel.clothconfig2.gui.Entry.render(Entry.java:5)\n\
+\tat foundationgames.enhancedblockentities.client.screen.ConfigScreen.method_25394(ConfigScreen.java:1)\n\
+\tat net.minecraft.class_437.method_25394(class_437.java:3)\n";
+        let d = diagnose_exit_in(text, -1, dir.path()).unwrap();
+        assert_eq!(d.title, "Enhanced Block Entities crashed the game");
+        // Only library frames: nobody is named.
+        let only = text.replace("\tat foundationgames.enhancedblockentities.client.screen.ConfigScreen.method_25394(ConfigScreen.java:1)\n", "");
+        let d = diagnose_exit_in(&only, -1, dir.path());
+        assert!(d.is_none_or(|d| d.mods.is_empty() && !d.title.contains("crashed the game")));
+    }
+
+    #[test]
+    fn vanilla_and_driver_crashes_name_no_mod() {
+        let dir = pack();
+        let text = "---- Minecraft Crash Report ----\n\n\
+Description: Rendering overlay\n\n\
+java.lang.IllegalStateException: Failed to create window\n\
+\tat net.minecraft.class_310.method_1523(class_310.java:1234)\n\
+\tat org.lwjgl.glfw.GLFW.glfwCreateWindow(GLFW.java:1)\n\
+\tat com.mojang.blaze3d.systems.RenderSystem.initRenderer(RenderSystem.java:5)\n\
+\tat java.base/java.lang.Thread.run(Thread.java:833)\n\n";
+        let d = diagnose_exit_in(text, -1, dir.path());
+        assert!(d.is_none_or(|d| !d.title.contains("crashed the game")));
+        assert!(suspect(text, &scan(dir.path())).is_none());
+        // A logged (non-fatal) exception in a mod is not the reason for a native exit.
+        let log = "[main/WARN]: caught\njava.io.IOException: x\n\tat foundationgames.enhancedblockentities.util.ResourceUtil.a(R.java:1)\n[main/INFO]: bye\n";
+        assert!(suspect(log, &scan(dir.path())).is_none());
+    }
+
+    #[test]
+    fn arctic_frames_name_arctic_only_when_they_are_on_top() {
+        let dir = pack();
+        let top = "---- Minecraft Crash Report ----\n\n\
+java.lang.RuntimeException: boom\n\
+\tat com.arcticlauncher.mod.NameTagDecor.render(NameTagDecor.java:40)\n\
+\tat foundationgames.enhancedblockentities.util.ResourceUtil.a(ResourceUtil.java:1)\n\
+\tat net.minecraft.class_310.method_1523(class_310.java:1)\n\n";
+        let d = diagnose_exit_in(top, -1, dir.path()).unwrap();
+        assert_eq!(d.title, "Arctic Client crashed the game");
+        assert_eq!(named(&d), Some(("Arctic Client", true)));
+        assert!(d.detail.contains("send the crash report"));
+        let polarium = top.replace(
+            "com.arcticlauncher.mod.NameTagDecor",
+            "com.arcticlauncher.polarium.ChestBatch",
+        );
+        assert_eq!(
+            diagnose_exit_in(&polarium, -1, dir.path()).unwrap().title,
+            "Polarium crashed the game"
+        );
+        // Another mod above Arctic's frames is the culprit.
+        let below = "---- Minecraft Crash Report ----\n\n\
+java.lang.RuntimeException: boom\n\
+\tat me.jellysquid.mods.lithium.common.Cache.get(Cache.java:1)\n\
+\tat com.arcticlauncher.mod.NameTagDecor.render(NameTagDecor.java:40)\n\n";
+        assert_eq!(
+            diagnose_exit_in(below, -1, dir.path()).unwrap().title,
+            "Lithium crashed the game"
+        );
+    }
+
+    #[test]
+    fn forge_module_prefix_and_jar_hint_map_frames() {
+        let dir = pack();
+        let forge = "Exception in thread \"main\" java.lang.RuntimeException: x\n\
+\tat TRANSFORMER/sodium@0.5/me.example.Unseen.run(Unseen.java:3)\n";
+        assert_eq!(suspect(forge, &scan(dir.path())).unwrap().id, "sodium");
+        let hint = "Exception in thread \"main\" java.lang.RuntimeException: x\n\
+\tat knot//com.unknown.pkg.Thing.run(Thing.java:3) ~[lithium-0.11.jar:?]\n";
+        assert_eq!(suspect(hint, &scan(dir.path())).unwrap().id, "lithium");
+    }
+}

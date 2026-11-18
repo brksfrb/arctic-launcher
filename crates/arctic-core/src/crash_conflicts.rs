@@ -85,7 +85,7 @@ pub fn read_jar(jar: &Path) -> Option<InstalledMod> {
     from_mods_toml(&file, &toml)
 }
 
-fn from_fabric_json(file: &str, text: &str) -> Option<InstalledMod> {
+pub(crate) fn from_fabric_json(file: &str, text: &str) -> Option<InstalledMod> {
     // Some mods put raw newlines inside strings; lenient enough for what is read here.
     let json: serde_json::Value =
         serde_json::from_str(&text.replace(['\n', '\r', '\t'], " ")).ok()?;
@@ -133,7 +133,7 @@ fn from_fabric_json(file: &str, text: &str) -> Option<InstalledMod> {
     })
 }
 
-fn from_mods_toml(file: &str, text: &str) -> Option<InstalledMod> {
+pub(crate) fn from_mods_toml(file: &str, text: &str) -> Option<InstalledMod> {
     let value = |key: &str| {
         Regex::new(&format!(r#"(?m)^\s*{key}\s*=\s*"([^"]*)""#))
             .ok()?
@@ -794,6 +794,12 @@ pub fn diagnose_in(text: &str, mods_dir: &Path) -> Option<Diagnosis> {
         return Some(native);
     }
     refine(crate::crash::diagnose(text), text, &scan(mods_dir))
+        .or_else(|| suspect_in(text, mods_dir))
+}
+
+/// The mod the fatal stack trace (or the game's "Suspected Mods" line) points at.
+fn suspect_in(text: &str, mods_dir: &Path) -> Option<Diagnosis> {
+    crate::crash_suspect::diagnosis(text, &crate::crash_suspect::scan(mods_dir))
 }
 
 /// The exit diagnosis, with incidental folder clashes kept as advice in the details. The UI has
@@ -806,6 +812,10 @@ pub fn diagnose_exit_in(text: &str, code: i32, mods_dir: &Path) -> Option<Diagno
     );
     let diagnosis = refine(crate::crash::diagnose(&with_exit), &with_exit, &mods)
         .or_else(|| crate::crash::silent_exit(text, code));
+    let diagnosis = match diagnosis {
+        Some(d) if !crate::crash_suspect::is_generic(&d) => Some(d),
+        other => suspect_in(text, mods_dir).or(other),
+    };
     let conflicts = find_conflicts(&mods);
     let Some(c) = conflicts.first() else {
         return diagnosis;
