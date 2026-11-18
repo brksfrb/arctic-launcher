@@ -15,6 +15,8 @@ use crate::Result;
 use crate::loaders::LoaderKind;
 use crate::storage::{load_json, save_json};
 
+const ENTITY_CULLING: &str = "NNAgCjsB";
+
 /// (Modrinth project id, name). Each is skipped if it has no build yet
 /// for the version; required dependencies come along automatically.
 pub const MODS: &[(&str, &str)] = &[
@@ -23,7 +25,7 @@ pub const MODS: &[(&str, &str)] = &[
     ("gvQqBUqZ", "Lithium"),
     ("uXXizFIs", "FerriteCore"),
     ("5ZwdcRci", "ImmediatelyFast"),
-    ("NNAgCjsB", "EntityCulling"),
+    (ENTITY_CULLING, "EntityCulling"),
     ("RSeLon5O", "Particle Core"),
     ("g96Z4WVZ", "BadOptimizations"),
 ];
@@ -49,13 +51,29 @@ fn provided_by(project: &str) -> (&'static [&'static str], &'static [&'static st
         "gvQqBUqZ" => (&["lithium"], &["canary", "radium"]),
         "uXXizFIs" => (&["ferritecore"], &[]),
         "5ZwdcRci" => (&["immediatelyfast"], &[]),
-        "NNAgCjsB" => (&["entityculling"], &[]),
+        ENTITY_CULLING => (&["entityculling"], &[]),
         "RSeLon5O" => (&["particle_core"], &[]),
         "g96Z4WVZ" => (&["badoptimizations"], &[]),
         super::packs::IRIS => (&["iris"], &["optifabric", "oculus"]),
         "kYuIpRLv" => (&["waveycapes"], &[]),
         _ => (&[], &[]),
     }
+}
+
+pub(crate) fn performance_mod_name(id: &str) -> Option<&'static str> {
+    MODS.iter()
+        .find(|(project, _)| provided_by(project).0.contains(&id))
+        .map(|(_, name)| *name)
+}
+
+fn supported_mods(game_version: &str) -> Vec<(&'static str, &'static str)> {
+    // Modrinth's only EntityCulling build for 1.16 (Qek7k92S) is tagged 1.16.x.
+    // Its jar accepts any 'fabric', but calls ClientTickEvents. The only Fabric API tagged
+    // for 1.16 (RtAjPwHu) lacks that class even in the full jar. 1.16.1 has it.
+    MODS.iter()
+        .copied()
+        .filter(|(project, _)| *project != ENTITY_CULLING || game_version != "1.16")
+        .collect()
 }
 
 /// Ids of the mods in the folder the player put there (not this switch's).
@@ -119,7 +137,7 @@ fn leave_players_mods(game_dir: &Path, wanted: &mut Vec<(&str, &str)>) -> Result
 pub const FORGE_189: &[(&str, &str, &[&str])] = &[
     ("YknNc5nN", "Patcher", &["patcher"]),
     (
-        "NNAgCjsB",
+        ENTITY_CULLING,
         "EntityCulling",
         &["entityculling", "entity_culling", "entity-culling"],
     ),
@@ -444,7 +462,11 @@ pub fn sync(
 ) -> Result<()> {
     let state: State = load_json(&state_path(game_dir))?.unwrap_or_default();
     let mods_dir = game_dir.join("mods");
-    let mut wanted: Vec<(&str, &str)> = if enabled { MODS.to_vec() } else { Vec::new() };
+    let mut wanted = if enabled {
+        supported_mods(game_version)
+    } else {
+        Vec::new()
+    };
     if shaders {
         wanted.push((super::packs::IRIS, "Iris"));
     }
@@ -463,28 +485,38 @@ pub fn sync(
         super::slim_api::undo(&mods_dir)?;
         return remove_all(game_dir);
     }
-    if modded
-        && state.game_version == game_version
+    let same_set = state.game_version == game_version
         && state.shaders == shaders
-        && state.extras == extras_key
-    {
+        && state.extras == extras_key;
+    if modded && same_set {
         super::slim_api::undo(&mods_dir)?;
         leave_players_mods(game_dir, &mut wanted)?;
-        if wanted.is_empty() {
-            return Ok(());
-        }
     }
     let index = index_path(game_dir);
-    if state.game_version != game_version || state.shaders != shaders || state.extras != extras_key
-    {
+    let restored = if same_set {
+        false
+    } else {
         // Another version's set: keep it for later, and bring back this one's if we have it.
         super::slim_api::undo(&mods_dir)?;
         stash(game_dir, &state)?;
         remove_all(game_dir)?;
-        if unstash(game_dir, game_version, shaders, &extras_key)? {
-            return Ok(());
+        unstash(game_dir, game_version, shaders, &extras_key)?
+    };
+    if game_version == "1.16" {
+        if let Some(m) = ModIndex::load(&index)?.by_project(ENTITY_CULLING) {
+            super::slim_api::undo(&mods_dir)?;
+            super::remove(&mods_dir, &index, &m.file_name)?;
         }
-    } else if !state.update_waiting && all_present(&index, &mods_dir)? {
+        if enabled {
+            log::info!(
+                "EntityCulling skipped for Minecraft 1.16: compatible Fabric API lacks lifecycle events v1"
+            );
+        }
+    }
+    if restored || wanted.is_empty() {
+        return Ok(());
+    }
+    if same_set && !state.update_waiting && all_present(&index, &mods_dir)? {
         if crate::auth::now_secs().saturating_sub(state.checked) >= RECHECK_SECS {
             // Due for a look at Modrinth: the game starts with what is here meanwhile,
             // and only a real update is installed (at the next start).
@@ -827,6 +859,49 @@ mod tests {
             update_waiting: false,
         };
         save_json(&state_path(game_dir), &state).unwrap();
+    }
+
+    #[test]
+    fn crash_378_skips_entityculling_only_for_minecraft_1_16() {
+        let selected = |game| {
+            supported_mods(game)
+                .iter()
+                .any(|(id, _)| *id == ENTITY_CULLING)
+        };
+        assert!(!selected("1.16"));
+        assert!(selected("1.16.1"));
+        assert!(selected("1.16.5"));
+    }
+
+    #[test]
+    fn crash_378_repairs_checked_and_stashed_performance_sets_offline() {
+        for stashed in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let game = dir.path();
+            let mods = game.join("mods");
+            installed_set(game, "1.16", "entityculling.jar");
+            std::fs::write(mods.join("fabric-api-0.13.1.jar"), b"api").unwrap();
+            let mut culling = tracked("entityculling.jar");
+            culling.project_id = ENTITY_CULLING.into();
+            let mut api = tracked("fabric-api-0.13.1.jar");
+            api.project_id = "P7dR8mSH".into();
+            api.dependency = true;
+            let index = ModIndex::default().with(culling).with(api.clone());
+            index.save(&index_path(game)).unwrap();
+            if stashed {
+                stash(game, &load_json(&state_path(game)).unwrap().unwrap()).unwrap();
+            }
+            std::fs::write(mods.join("player-entityculling.jar"), b"player").unwrap();
+
+            sync(game, "1.16", true, false, &[], false, &|_| {
+                panic!("the existing set is repaired offline")
+            })
+            .unwrap();
+            assert!(!mods.join("entityculling.jar").exists());
+            assert!(mods.join("player-entityculling.jar").is_file());
+            assert!(mods.join("fabric-api-0.13.1.jar").is_file());
+            assert_eq!(ModIndex::load(&index_path(game)).unwrap().mods, [api]);
+        }
     }
 
     #[test]
