@@ -796,8 +796,7 @@ pub fn diagnose_in(text: &str, mods_dir: &Path) -> Option<Diagnosis> {
     if let Some((native, _)) = crate::crash::native_diagnosis(text) {
         return Some(native);
     }
-    diagnose_with_mods(text, mods_dir, &scan(mods_dir), None)
-        .or_else(|| suspect_in(text, mods_dir))
+    diagnose_with_mods(text, mods_dir, &scan(mods_dir), None).or_else(|| suspect_in(text, mods_dir))
 }
 
 fn diagnose_with_mods(
