@@ -305,7 +305,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "That file doesn't exist; the managed Java will be used.",
   "instances.that_instance_is_gone": "That instance is gone.",
   "instances.the_arctic_client_is_off_for_every_instance": "The Arctic Client is off for every instance",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "The Arctic Client runs on Vanilla, Fabric and Quilt instances, unofficially on NeoForge, and on Forge 1.8.9. Not on this loader or version yet: make a Vanilla or Fabric instance of the same version to play with it.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "The Arctic Client runs on Vanilla, Fabric and Quilt instances, and on Forge 1.8.9. Not on this loader or version yet: make a Vanilla or Fabric instance of the same version to play with it.",
   "instances.the_default_instance_plays_whichever_release": "The default instance plays whichever release you pick on the Play tab.",
   "instances.the_folder_worlds_and_mods_included_is_moved": "The folder (worlds and mods included) is moved to instances/.trash, not deleted.",
   "instances.the_game_would_stop_while_loading_fix_them": "The game would stop while loading {name}. Fix them here, or play anyway.",

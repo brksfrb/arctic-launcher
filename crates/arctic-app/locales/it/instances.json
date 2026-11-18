@@ -305,7 +305,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "Quel file non esiste; verrà usato il Java gestito.",
   "instances.that_instance_is_gone": "Quell'istanza non esiste più.",
   "instances.the_arctic_client_is_off_for_every_instance": "Arctic Client è disattivato per tutte le istanze",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "L'Arctic Client gira su istanze Vanilla, Fabric e Quilt, in modo non ufficiale su NeoForge, e su Forge 1.8.9. Non ancora su questo loader o versione: crea un'istanza Vanilla o Fabric della stessa versione per usarlo.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "L'Arctic Client gira su istanze Vanilla, Fabric e Quilt, e su Forge 1.8.9. Non ancora su questo loader o versione: crea un'istanza Vanilla o Fabric della stessa versione per usarlo.",
   "instances.the_default_instance_plays_whichever_release": "L'istanza predefinita avvia la versione che scegli nella scheda Gioca.",
   "instances.the_folder_worlds_and_mods_included_is_moved": "La cartella (mondi e mod inclusi) viene spostata in instances/.trash, non eliminata.",
   "instances.the_game_would_stop_while_loading_fix_them": "Il gioco si fermerebbe caricando {name}. Risolvi qui, o gioca comunque.",

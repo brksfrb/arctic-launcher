@@ -305,7 +305,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "そのファイルは存在しません。管理されたJavaを使用します。",
   "instances.that_instance_is_gone": "そのインスタンスはもうありません。",
   "instances.the_arctic_client_is_off_for_every_instance": "すべてのインスタンスで Arctic Client がオフです",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Clientはバニラ、Fabric、QuiltのインスタンスとForge 1.8.9で動作し、NeoForgeでも非公式に動作します。このローダーやバージョンにはまだ対応していません。同じバージョンのバニラかFabricのインスタンスを作成して使ってください。",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Clientはバニラ、Fabric、QuiltのインスタンスとForge 1.8.9で動作します。このローダーやバージョンにはまだ対応していません。同じバージョンのバニラかFabricのインスタンスを作成して使ってください。",
   "instances.the_default_instance_plays_whichever_release": "デフォルトのインスタンスは、プレイタブで選んだバージョンを起動します。",
   "instances.the_folder_worlds_and_mods_included_is_moved": "フォルダー（ワールドとModを含む）はinstances/.trashに移動され、消去はされません。",
   "instances.the_game_would_stop_while_loading_fix_them": "{name} の読み込み中にゲームが止まります。ここで修正するか、それでもプレイしてください。",

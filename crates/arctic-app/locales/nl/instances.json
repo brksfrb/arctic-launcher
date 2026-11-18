@@ -305,7 +305,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "Dat bestand bestaat niet; de beheerde Java wordt gebruikt.",
   "instances.that_instance_is_gone": "Die instantie bestaat niet meer.",
   "instances.the_arctic_client_is_off_for_every_instance": "De Arctic Client staat uit voor alle instanties",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "De Arctic Client draait op Vanilla-, Fabric- en Quilt-instanties, onofficieel op NeoForge, en op Forge 1.8.9. Nog niet op deze loader of versie: maak een Vanilla- of Fabric-instantie van dezelfde versie om ermee te spelen.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "De Arctic Client draait op Vanilla-, Fabric- en Quilt-instanties en op Forge 1.8.9. Nog niet op deze loader of versie: maak een Vanilla- of Fabric-instantie van dezelfde versie om ermee te spelen.",
   "instances.the_default_instance_plays_whichever_release": "De standaardinstantie speelt de versie die je kiest op het tabblad Spelen.",
   "instances.the_folder_worlds_and_mods_included_is_moved": "De map (inclusief werelden en mods) wordt naar instances/.trash verplaatst, niet gewist.",
   "instances.the_game_would_stop_while_loading_fix_them": "Het spel zou stoppen bij het laden van {name}. Los het hier op, of speel toch.",

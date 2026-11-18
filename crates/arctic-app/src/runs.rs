@@ -408,13 +408,53 @@ fn latest_log_tail(game_dir: &std::path::Path, since: SystemTime) -> Vec<String>
         return Vec::new();
     };
     let text = String::from_utf8_lossy(&bytes);
-    let lines: Vec<&str> = text.lines().collect();
+    let lines = log_without_html(&text);
     let skip = lines.len().saturating_sub(LATEST_LOG_LINES);
     let registry = crash::registry_failure_evidence(&lines[..skip].join("\n"));
     registry
         .lines()
         .chain(lines[skip..].iter().copied())
         .map(str::to_owned)
+        .collect()
+}
+
+fn log_without_html(text: &str) -> Vec<&str> {
+    let mut in_html = false;
+    text.lines()
+        .filter_map(|line| {
+            // Resume at the next log record even if the HTTP body was cut off.
+            if in_html
+                && line.starts_with('[')
+                && line
+                    .split_once("]: ")
+                    .is_some_and(|(header, _)| header.contains('/'))
+            {
+                in_html = false;
+            }
+            if !in_html && !line.contains('<') {
+                return Some(line);
+            }
+            let lower = line.to_ascii_lowercase();
+            if in_html {
+                in_html = !lower.contains("</html>");
+                return None;
+            }
+            let Some(start) = lower
+                .find("<!doctype html")
+                .into_iter()
+                .chain(
+                    ["<html>", "<html "]
+                        .iter()
+                        .filter_map(|tag| lower.find(tag)),
+                )
+                .min()
+            else {
+                return Some(line);
+            };
+            in_html = !lower[start..].contains("</html>");
+            let header = line[..start].trim_end();
+            (!header.is_empty()).then_some(header)
+        })
         .collect()
 }
 
@@ -767,7 +807,25 @@ impl ArcticApp {
                 };
                 (t!("tasks.the_game_froze_and_was_closed").into(), detail)
             }
-            _ => (d.title.clone(), d.detail.clone()),
+            title => {
+                if let [name, dependency] = d.mods.as_slice()
+                    && title == format!("{name} needs {dependency}")
+                {
+                    return (
+                        tf!(
+                            "tasks.needs_dependency",
+                            name = name,
+                            dependency = dependency
+                        ),
+                        tf!(
+                            "tasks.install_dependency_or_remove_mod",
+                            name = name,
+                            dependency = dependency
+                        ),
+                    );
+                }
+                (d.title.clone(), d.detail.clone())
+            }
         }
     }
 
@@ -922,6 +980,30 @@ impl Tasks {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn latest_log_html_body_does_not_evict_startup_error() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("logs")).unwrap();
+        let fixture = include_str!("../../arctic-core/tests/fixtures/crash-398-vanilla-exit.log");
+        let (latest, _) = fixture.split_once("\n\n---- diagnostics ----").unwrap();
+        let latest = latest.replace("<body>\n", &format!("<body>\n{}", "    body\n".repeat(120)));
+        let error = "[19:23:13] [main/ERROR]: Startup error";
+        let started = SystemTime::now() - Duration::from_secs(60);
+        for latest in [latest.clone(), latest.replace("</html>", "")] {
+            std::fs::write(
+                dir.path().join("logs/latest.log"),
+                format!("{error}\n{latest}"),
+            )
+            .unwrap();
+            let tail = latest_log_tail(dir.path(), started).join("\n");
+            assert!(tail.contains(error));
+            assert!(tail.contains("Got an error with a html body connecting to"));
+            assert!(tail.contains("MinecraftClientHttpException: Status: 429"));
+            assert!(!tail.contains("<!DOCTYPE"));
+            assert!(!tail.contains("    body"));
+        }
+    }
 
     #[test]
     fn registry_warnings_before_latest_log_tail_reach_diagnosis_and_upload() {

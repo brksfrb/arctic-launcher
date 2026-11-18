@@ -305,7 +305,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "Такого файла нет; будет использована управляемая Java.",
   "instances.that_instance_is_gone": "Этой сборки больше нет.",
   "instances.the_arctic_client_is_off_for_every_instance": "Arctic Client выключен для всех сборок",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client работает на сборках Vanilla, Fabric и Quilt, неофициально на NeoForge, а также на Forge 1.8.9. На этом загрузчике или версии пока нет: создайте сборку Vanilla или Fabric той же версии, чтобы играть с ним.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client работает на сборках Vanilla, Fabric и Quilt, а также на Forge 1.8.9. На этом загрузчике или версии пока нет: создайте сборку Vanilla или Fabric той же версии, чтобы играть с ним.",
   "instances.the_default_instance_plays_whichever_release": "Сборка по умолчанию запускает версию, выбранную на вкладке «Играть».",
   "instances.the_folder_worlds_and_mods_included_is_moved": "Папка (с мирами и модами) переместится в instances/.trash, а не удалится.",
   "instances.the_game_would_stop_while_loading_fix_them": "Игра остановится при загрузке {name}. Исправьте здесь или играйте всё равно.",

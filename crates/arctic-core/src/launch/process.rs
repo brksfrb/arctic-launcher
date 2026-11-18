@@ -187,7 +187,7 @@ pub fn spawn(
         kill: kill.clone(),
     };
     let game_dir = plan.game_dir.clone();
-    let runtime = plan.managed_runtime.clone();
+    let managed_runtime = plan.managed_runtime.clone();
     let log_path = plan.log_file.clone();
     std::thread::spawn(move || {
         let mut killed = false;
@@ -211,7 +211,7 @@ pub fn spawn(
                 }
             }
         };
-        let elapsed = started.elapsed();
+        let runtime = started.elapsed();
         #[cfg(windows)]
         let exited_at = std::time::SystemTime::now();
         drain_readers([out_reader, err_reader].into_iter().flatten().collect());
@@ -219,7 +219,7 @@ pub fn spawn(
         if let Some(c) = code {
             let summary = format!(
                 "[Arctic diagnostics] process ended after {} ms; exit code {}",
-                elapsed.as_millis(),
+                runtime.as_millis(),
                 crate::crash::exit_description(c)
             );
             writeln!(log.lock().unwrap(), "{summary}").ok();
@@ -260,7 +260,7 @@ pub fn spawn(
                 }]));
             }
         }
-        if !killed && code.is_some_and(|c| c != 0) && elapsed < Duration::from_secs(5) {
+        if !killed && code.is_some_and(|c| c != 0) && runtime < Duration::from_secs(5) {
             let probe = runtime_probe(&exe);
             writeln!(log.lock().unwrap(), "{probe}").ok();
             on_event(GameEvent::Output(vec![LogLine {
@@ -270,9 +270,9 @@ pub fn spawn(
         }
         if !killed && code.is_some_and(|c| c != 0) {
             super::startup_cache::drop_pack(&game_dir);
-            if let Some(runtime) = runtime
+            if let Some(runtime) = &managed_runtime
                 && let Some(line) =
-                    runtime_repair::mark_after_crash(&runtime, &log_path, &game_dir, launched_at)
+                    runtime_repair::mark_after_crash(runtime, &log_path, &game_dir, launched_at)
             {
                 let evidence = format!("[Arctic diagnostics] Java runtime failure: {line}");
                 writeln!(log.lock().unwrap(), "{evidence}").ok();
