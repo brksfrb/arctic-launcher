@@ -1,0 +1,30 @@
+---- logs/latest.log ----
+[19:23:13] [main/WARN]: Error loading class: link/e4mc/QuiclimeSession$2$1 (java.lang.ClassNotFoundException: link/e4mc/QuiclimeSession$2$1)
+[19:23:14] [main/INFO]: Starting Essential v1.5.2
+[19:23:19] [Download-1/ERROR]: Got an error with a html body connecting to https://sessionserver.mojang.com/session/minecraft/profile/<id>?unsigned=false: <!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.0 Transitional//EN'>
+<html xmlns='http://www.w3.org/1999/xhtml'>
+
+<head>
+    <meta content='text/html; charset=utf-8' http-equiv='content-type' />
+</head>
+<body>
+    <div id='content'>
+        <div id='message'>
+        </div>
+    </div>
+</body>
+</html>
+
+[19:23:19] [Download-1/WARN]: Couldn't look up profile properties for <id>
+com.mojang.authlib.exceptions.MinecraftClientHttpException: Status: 429
+	at knot//com.mojang.authlib.minecraft.client.MinecraftClient.readInputStream(MinecraftClient.java:100)
+	at knot//net.minecraft.client.Minecraft.lambda$new$0(Minecraft.java:455)
+
+---- diagnostics ----
+[Arctic diagnostics] exit stack
+[Arctic diagnostics] exit caller vanilla knot//net.minecraft.client.Minecraft.crash(Minecraft.java:1082)
+[Arctic diagnostics]     at knot//net.minecraft.client.main.Main.main(Main.java:242)
+
+---- java ----
+(exit code -2 (0xFFFFFFFE; no known NTSTATUS name))
+run: ended after 11 s; 611 lines printed; logs/latest.log: 15916 bytes; crash report or hs_err: none

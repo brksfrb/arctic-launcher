@@ -69,6 +69,11 @@ public final class ArcticAgent {
 					if (name != null && loader != null && MixinCache.recording() && loader.getClass().getName().startsWith("net.fabricmc.loader.impl.launch.knot.Knot")) {
 						MixinCache.defined(name.replace('/', '.'), bytes, loader);
 					}
+					try {
+						if (VanillaCrashDiagnostics.targets(name)) {
+							return VanillaCrashDiagnostics.transform(name, bytes);
+						}
+					} catch (Throwable ignored) { }
 					return null;
 				}
 				try {

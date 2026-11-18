@@ -13,6 +13,7 @@ pub mod cosmetics;
 pub mod crash;
 pub mod crash_conflicts;
 pub mod crash_fix;
+pub mod crash_suspect;
 pub mod curseforge;
 pub mod error;
 pub mod ffmpeg;

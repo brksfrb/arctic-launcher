@@ -408,13 +408,53 @@ fn latest_log_tail(game_dir: &std::path::Path, since: SystemTime) -> Vec<String>
         return Vec::new();
     };
     let text = String::from_utf8_lossy(&bytes);
-    let lines: Vec<&str> = text.lines().collect();
+    let lines = log_without_html(&text);
     let skip = lines.len().saturating_sub(LATEST_LOG_LINES);
     let registry = crash::registry_failure_evidence(&lines[..skip].join("\n"));
     registry
         .lines()
         .chain(lines[skip..].iter().copied())
         .map(str::to_owned)
+        .collect()
+}
+
+fn log_without_html(text: &str) -> Vec<&str> {
+    let mut in_html = false;
+    text.lines()
+        .filter_map(|line| {
+            // Resume at the next log record even if the HTTP body was cut off.
+            if in_html
+                && line.starts_with('[')
+                && line
+                    .split_once("]: ")
+                    .is_some_and(|(header, _)| header.contains('/'))
+            {
+                in_html = false;
+            }
+            if !in_html && !line.contains('<') {
+                return Some(line);
+            }
+            let lower = line.to_ascii_lowercase();
+            if in_html {
+                in_html = !lower.contains("</html>");
+                return None;
+            }
+            let Some(start) = lower
+                .find("<!doctype html")
+                .into_iter()
+                .chain(
+                    ["<html>", "<html "]
+                        .iter()
+                        .filter_map(|tag| lower.find(tag)),
+                )
+                .min()
+            else {
+                return Some(line);
+            };
+            in_html = !lower[start..].contains("</html>");
+            let header = line[..start].trim_end();
+            (!header.is_empty()).then_some(header)
+        })
         .collect()
 }
 
@@ -735,6 +775,14 @@ impl ArcticApp {
     /// Player-facing text for a diagnosis. Crash reports keep the English title from core
     /// so uploaded groups stay stable; the toast is translated.
     fn localized_diagnosis(d: &Diagnosis) -> (String, String) {
+        if let Some((name, ours)) = arctic_core::crash_suspect::named(d) {
+            let detail = if ours {
+                tf!("tasks.arctic_part_crashed", name = name)
+            } else {
+                tf!("tasks.update_or_remove_the_crashing_mod", name = name)
+            };
+            return (tf!("tasks.mod_crashed_the_game", name = name), detail);
+        }
         match d.title.as_str() {
             "Minecraft ran out of memory and froze" => {
                 let mut detail = t!("tasks.the_game_froze_with_memory_pressure").to_string();
@@ -932,6 +980,30 @@ impl Tasks {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn latest_log_html_body_does_not_evict_startup_error() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("logs")).unwrap();
+        let fixture = include_str!("../../arctic-core/tests/fixtures/crash-398-vanilla-exit.log");
+        let (latest, _) = fixture.split_once("\n\n---- diagnostics ----").unwrap();
+        let latest = latest.replace("<body>\n", &format!("<body>\n{}", "    body\n".repeat(120)));
+        let error = "[19:23:13] [main/ERROR]: Startup error";
+        let started = SystemTime::now() - Duration::from_secs(60);
+        for latest in [latest.clone(), latest.replace("</html>", "")] {
+            std::fs::write(
+                dir.path().join("logs/latest.log"),
+                format!("{error}\n{latest}"),
+            )
+            .unwrap();
+            let tail = latest_log_tail(dir.path(), started).join("\n");
+            assert!(tail.contains(error));
+            assert!(tail.contains("Got an error with a html body connecting to"));
+            assert!(tail.contains("MinecraftClientHttpException: Status: 429"));
+            assert!(!tail.contains("<!DOCTYPE"));
+            assert!(!tail.contains("    body"));
+        }
+    }
 
     #[test]
     fn registry_warnings_before_latest_log_tail_reach_diagnosis_and_upload() {

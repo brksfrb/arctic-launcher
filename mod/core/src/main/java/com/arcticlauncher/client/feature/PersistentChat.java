@@ -47,6 +47,8 @@ public final class PersistentChat {
 	 * a million overflowed an 1800 MB heap), so older lines stay on disk past this.
 	 */
 	public static final int MAX_LOADED = 100_000;
+	/** Room for wrapped lines during replay, with headroom for other mods' limit modifiers. */
+	public static final int MAX_HUD_LINES = 1 << 20;
 	private static final int MAX_TEXT = 32768;
 	private static final int MAX_LINE_BYTES = 1 << 20;
 	private static final int MAX_LEGACY_BYTES = 16 * 1024 * 1024;
@@ -98,6 +100,13 @@ public final class PersistentChat {
 	public PersistentChat(File instanceConfig) {
 		root = new File(instanceConfig, "chat-history");
 		legacy = new File(instanceConfig, LEGACY_NAME);
+	}
+
+	public static int historyLimit(boolean loading, int history, int loadedLines) {
+		if (loading) {
+			return MAX_HUD_LINES;
+		}
+		return (int) Math.max(1L, Math.min(MAX_HUD_LINES, (long) history + loadedLines));
 	}
 
 	private boolean enabled() {
@@ -171,14 +180,18 @@ public final class PersistentChat {
 			for (String text : sent) {
 				view.sent(text);
 			}
+			replay(messages, view);
+			if (!messages.isEmpty()) {
+				replay(Collections.singletonList(new Entry(0, null, Lang.t("hud.8_previous_session"), true)), view);
+			}
+		} catch (RuntimeException e) {
+			chatCursor.stop();
+			sentCursor.stop();
+			log("Could not restore saved chat into the HUD: " + e);
 		} finally {
 			restoring = false;
+			restoreNanos = System.nanoTime() - began;
 		}
-		replay(messages, view);
-		if (!messages.isEmpty()) {
-			replay(Collections.singletonList(new Entry(0, null, Lang.t("hud.8_previous_session"), true)), view);
-		}
-		restoreNanos = System.nanoTime() - began;
 	}
 
 	/** How long {@link #restore} took (reading the start page and handing it over), in ms; -1 before it ran. */

@@ -345,7 +345,7 @@ const RULES: &[Rule] = &[
     },
     Rule {
         // Fabric's root injection failure owns the blame, ahead of outer Mixin errors.
-        pattern: r"(?:InjectionError|InvalidInjectionException):[^\r\n]*from mod [\w\-]+",
+        pattern: crate::crash_conflicts::EXPLICIT_MIXIN_FAILURE_PATTERN,
         explain: |_, text| {
             crate::crash_conflicts::diagnose_mixin(text, &[]).unwrap_or_else(Diagnosis::none)
         },
@@ -361,7 +361,7 @@ const RULES: &[Rule] = &[
     },
     Rule {
         // Forge/NeoForge and generic Mixin failures often name only the config.
-        pattern: r"[\w\-.]+\.mixins\.json",
+        pattern: crate::crash_conflicts::MIXIN_CONFIG_PATTERN,
         explain: |_, text| {
             crate::crash_conflicts::diagnose_mixin(text, &[]).unwrap_or_else(Diagnosis::none)
         },
@@ -542,6 +542,7 @@ const RULES: &[Rule] = &[
                     if !name.is_empty()
                         && !name.eq_ignore_ascii_case("none")
                         && !name.contains("Unknown")
+                        && !crate::crash_suspect::is_base_entry(name)
                         && !mods.iter().any(|m| m == name)
                     {
                         mods.push(name.to_owned());
@@ -577,6 +578,10 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
+        pattern: r"(?:NoClassDefFoundError|ClassNotFoundException):[ \t]+(net[./]fabricmc[./]fabric[./]api[./][\w./$]+)",
+        explain: missing_fabric_api_class,
+    },
+    Rule {
         pattern: r"java\.lang\.(?:NoClassDefFoundError|ClassNotFoundException):[ \t]+([\w$]+(?:[./][\w$]+)+)",
         explain: missing_recommended_dependency,
     },
@@ -601,6 +606,85 @@ const RULES: &[Rule] = &[
         },
     },
 ];
+
+fn missing_fabric_api_class(c: &regex::Captures, text: &str) -> Diagnosis {
+    let class = c[1].replace('/', ".");
+    let package = class.trim_start_matches("net.fabricmc.fabric.api.");
+    let module = match package {
+        p if p.starts_with("client.event.lifecycle.v1.")
+            || p.starts_with("event.lifecycle.v1.") =>
+        {
+            Some(("lifecycle events", "fabric-lifecycle-events-v1"))
+        }
+        p if p.starts_with("client.keybinding.v1.") => {
+            Some(("key binding API", "fabric-key-binding-api-v1"))
+        }
+        p if p.starts_with("client.networking.v1.") || p.starts_with("networking.v1.") => {
+            Some(("networking API", "fabric-networking-api-v1"))
+        }
+        "event.Event" | "event.EventFactory" => Some(("base API", "fabric-api-base")),
+        _ => None,
+    };
+    // The current exception's entrypoint names the provider. The mod inventory may contain many
+    // unrelated mods, so use it only to look up the name of that provider.
+    static ENTRYPOINT: OnceLock<Regex> = OnceLock::new();
+    let entrypoint = ENTRYPOINT.get_or_init(|| {
+        Regex::new(r"Could not execute entrypoint stage '[^']+'[^\r\n]*?provided by '([\w-]+)'")
+            .unwrap()
+    });
+    let before = &text[..c.get(0).unwrap().start()];
+    let context = before
+        .rsplit("\n[")
+        .next()
+        .unwrap_or(before)
+        .rsplit("\n\n")
+        .next()
+        .unwrap_or(before)
+        .rsplit("\r\n\r\n")
+        .next()
+        .unwrap_or(before);
+    let id = entrypoint
+        .captures_iter(context)
+        .last()
+        .and_then(|m| m.get(1))
+        .map(|m| m.as_str());
+    let performance_name = id.and_then(crate::mods::performance::performance_mod_name);
+    let name = performance_name.map(str::to_owned).or_else(|| {
+        let id = id?;
+        Some(
+            crate::crash_conflicts::from_crash_report(text)
+                .into_iter()
+                .find(|m| m.id == id)
+                .map_or_else(|| id.to_owned(), |m| m.name),
+        )
+    });
+    let name = name.as_deref().unwrap_or("A mod");
+    let title = module.map_or_else(
+        || format!("{name} needs Fabric API"),
+        |(name_of_module, _)| format!("{name} needs Fabric API's {name_of_module}"),
+    );
+    let mut detail = module.map_or_else(
+        || format!("{name} needs {class}. Fabric API is missing or too old to provide it."),
+        |(name_of_module, id)| {
+            format!(
+                "{name} needs Fabric API's {name_of_module} module ({id}), which is missing or too old."
+            )
+        },
+    );
+    let vanilla = text.lines().any(|line| {
+        line.starts_with("──── Launching Vanilla (")
+            || (line.contains("--gameDir")
+                && line
+                    .replace('\\', "/")
+                    .contains("/instances/vanilla/minecraft"))
+    });
+    if performance_name.is_some() && vanilla {
+        detail.push_str(&format!(
+            " Arctic installed {name} through Performance for this Vanilla instance."
+        ));
+    }
+    Diagnosis::new(title, detail, id.into_iter().map(str::to_owned).collect())
+}
 
 fn missing_recommended_dependency(class: &regex::Captures, text: &str) -> Diagnosis {
     static WARNING: OnceLock<Regex> = OnceLock::new();
@@ -899,11 +983,87 @@ fn resolution_log(text: &str) -> Diagnosis {
 
 /// Explain a crash from the game log and/or crash report text.
 pub fn diagnose(text: &str) -> Option<Diagnosis> {
-    diagnose_with_java(text, None)
+    diagnose_match(text, None).map(|(diagnosis, _)| diagnosis)
 }
 
 pub(crate) fn diagnose_with_java(text: &str, java: Option<&str>) -> Option<Diagnosis> {
-    diagnose_match(text, java).map(|(diagnosis, _)| diagnosis)
+    diagnose_rules(text, java).map(|(diagnosis, _)| diagnosis)
+}
+
+const VANILLA_CRASH: &str = "[Arctic diagnostics] vanilla crash";
+const VANILLA_CRASH_TRACE: &str = "[Arctic diagnostics] vanilla crash trace ";
+pub(crate) const SAVE_FAILED_TITLE: &str =
+    "Minecraft crashed while starting and couldn't save its crash report";
+
+pub(crate) fn vanilla_crash_save_failed(text: &str, code: i32) -> Option<&str> {
+    // POSIX process exit statuses carry only the low byte of Java's -2.
+    if !matches!(code, -2 | 254) {
+        return None;
+    }
+    text.lines().find(|line| {
+        line.strip_prefix("[Arctic diagnostics] exit caller vanilla ")
+            .and_then(|frame| frame.split('(').next())
+            .is_some_and(|method| {
+                matches!(
+                    method.rsplit('/').next(),
+                    Some(
+                        "net.minecraft.client.Minecraft.crash"
+                            | "net.minecraft.class_310.method_1565"
+                    )
+                )
+            })
+    })
+}
+
+pub(crate) fn logged_vanilla_crash_save_failure(text: &str) -> Option<&str> {
+    let code = text.lines().rev().find_map(|line| {
+        line.strip_prefix('(')
+            .unwrap_or(line)
+            .strip_prefix("exit code ")
+            .or_else(|| {
+                line.strip_prefix("[Arctic diagnostics] process ended after ")?
+                    .split_once("; exit code ")
+                    .map(|(_, code)| code)
+            })
+            .or_else(|| {
+                line.strip_prefix("[Arctic diagnostics] exit Runtime.exit() called with status: ")
+            })?
+            .split_whitespace()
+            .next()?
+            .parse()
+            .ok()
+    })?;
+    vanilla_crash_save_failed(text, code)
+}
+
+fn vanilla_crash_trace(text: &str) -> impl Iterator<Item = &str> {
+    text.lines()
+        .filter_map(|line| line.strip_prefix(VANILLA_CRASH_TRACE))
+}
+
+pub(crate) fn captured_vanilla_crash(text: &str) -> Option<String> {
+    let mut lines = vanilla_crash_trace(text).peekable();
+    lines.peek()?;
+    // The captured exception has the same provenance as a written report's exception.
+    let mut report = String::from("---- Minecraft Crash Report ----\n\n");
+    for line in lines {
+        report.push_str(line);
+        report.push('\n');
+    }
+    Some(report)
+}
+
+pub(crate) fn vanilla_crash_diagnosis(text: &str, cause: Option<Diagnosis>) -> Diagnosis {
+    if let Some(mut cause) = cause {
+        cause.detail = format!("{}\n\n{}", cause.title, cause.detail);
+        cause.title = SAVE_FAILED_TITLE.into();
+        return cause;
+    }
+    let detail = vanilla_crash_trace(text).next().map_or_else(
+        || "Minecraft exited from its crash handler before it could save a report.".into(),
+        |error| scrub(head_of(error, 2048), &Own::this_pc()),
+    );
+    Diagnosis::new(SAVE_FAILED_TITLE, detail, Vec::new())
 }
 
 fn quilt_load_errors() -> &'static Regex {
@@ -1036,6 +1196,7 @@ fn fatal_linkage(text: &str, at: usize) -> bool {
     let explicit = context.contains("exception in thread")
         || context.contains("uncaught exception")
         || context.contains("/fatal]")
+        || context.contains("minecraft has crashed!")
         || context.contains("encountered an unexpected exception")
         || context.contains("reported exception thrown");
     let later_progress = text[at..]
@@ -1169,6 +1330,27 @@ fn fabric_wrong_game(text: &str) -> Option<(Diagnosis, String)> {
 }
 
 fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
+    if let Some(caller) = logged_vanilla_crash_save_failure(text) {
+        let captured = captured_vanilla_crash(text);
+        let (cause, matched) = captured
+            .as_deref()
+            .and_then(|trace| diagnose_rules(trace, java))
+            .map_or_else(
+                || {
+                    (
+                        None,
+                        head_of(vanilla_crash_trace(text).next().unwrap_or(caller), 2048)
+                            .to_owned(),
+                    )
+                },
+                |(cause, matched)| (Some(cause), matched),
+            );
+        return Some((vanilla_crash_diagnosis(text, cause), matched));
+    }
+    diagnose_rules(text, java)
+}
+
+fn diagnose_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
     if let Some(runtime) = runtime_diagnosis(text) {
         return Some(runtime);
     }
@@ -1224,9 +1406,12 @@ fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)>
             };
             let diagnosis = (rule.explain)(&c, context);
             if !diagnosis.title.is_empty() {
-                // The generic config rule can first match an unrelated refmap warning or
-                // inventory. Its explanation selects the actual failure; use that as evidence.
-                if rule.pattern == r"[\w\-.]+\.mixins\.json" {
+                // The mixin rules select the actual failure, which can differ from their first match.
+                if matches!(
+                    rule.pattern,
+                    crate::crash_conflicts::MIXIN_CONFIG_PATTERN
+                        | crate::crash_conflicts::EXPLICIT_MIXIN_FAILURE_PATTERN
+                ) {
                     let line = crate::crash_conflicts::mixin_failure_line(text)?;
                     return Some((diagnosis, head_of(line, 2048).to_owned()));
                 }
@@ -1376,9 +1561,12 @@ const REPORT_JAVA_BYTES: usize = 5 * 1024;
 const REPORT_LAUNCHER_LINES: usize = 80;
 const REPORT_LAUNCHER_BYTES: usize = 6 * 1024;
 
-/// Select fatal evidence before ordinary log warnings. A crash document is authoritative;
-/// without one, require an exception followed by a Java stack frame in the same log record.
+/// Prefer the captured exception or a crash document. In ordinary logs, require an exception
+/// followed by a Java stack frame in the same log record.
 fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a str> {
+    if let Some(error) = vanilla_crash_trace(log).next() {
+        return Some(error);
+    }
     if let Some(error) = crash_report
         .and_then(|report| quilt_load_errors().find(report))
         .or_else(|| quilt_load_errors().find(log))
@@ -1464,12 +1652,34 @@ impl Report {
             java.unwrap_or("")
         );
         // Keep the exact triggering line even when it falls outside the uploaded log tail.
-        if let Some((diagnosis, matched)) = diagnose_match(&diagnosis_text, java) {
+        let diagnosis = diagnose_match(&diagnosis_text, java);
+        let failed_save = title == SAVE_FAILED_TITLE
+            || diagnosis
+                .as_ref()
+                .is_some_and(|(d, _)| d.title == SAVE_FAILED_TITLE);
+        if let Some((diagnosis, matched)) = diagnosis {
             priority.push_str(&format!(
                 "\n---- diagnosis ----\n{}\nmatched: {}\n",
                 diagnosis.title,
                 scrub(&matched, &Own::this_pc())
             ));
+            if diagnosis.title == SAVE_FAILED_TITLE && vanilla_crash_trace(&all).next().is_some() {
+                priority.push_str(&scrub(head_of(&diagnosis.detail, 2048), &Own::this_pc()));
+                priority.push('\n');
+            }
+        }
+        let vanilla_evidence = all
+            .lines()
+            .filter(|line| line.starts_with(VANILLA_CRASH))
+            .collect::<Vec<_>>()
+            .join("\n");
+        if !vanilla_evidence.is_empty() {
+            priority.push_str("\n---- vanilla crash ----\n");
+            priority.push_str(&scrub(
+                head_of(&vanilla_evidence, 18 * 1024),
+                &Own::this_pc(),
+            ));
+            priority.push('\n');
         }
         let registry = registry_failure_evidence(&all);
         if !registry.is_empty() {
@@ -1573,7 +1783,12 @@ impl Report {
             loader: loader.to_owned(),
             os: std::env::consts::OS.to_owned(),
             title: scrub(
-                if orderly_shutdown(&all) && crash_report.is_none() && diagnose(&all).is_none() {
+                if failed_save {
+                    SAVE_FAILED_TITLE
+                } else if orderly_shutdown(&all)
+                    && crash_report.is_none()
+                    && diagnose(&all).is_none()
+                {
                     "Non-crash: Minecraft stopped normally"
                 } else {
                     &title
@@ -1907,7 +2122,10 @@ fn diagnostic_evidence(text: &str, budget: usize) -> String {
         }
     }
     for line in text.lines().filter(|l| {
-        l.contains("[Arctic diagnostics]") && !l.contains("hang ") && !l.contains("thread ")
+        l.contains("[Arctic diagnostics]")
+            && !l.starts_with(VANILLA_CRASH)
+            && !l.contains("hang ")
+            && !l.contains("thread ")
     }) {
         if out.len() < budget.saturating_sub(1024) {
             out.push_str(line);
@@ -2086,6 +2304,97 @@ pub fn scrub(text: &str, own: &Own) -> String {
 
 #[cfg(test)]
 mod tests {
+    const VANILLA_EXIT_398: &str = include_str!("../tests/fixtures/crash-398-vanilla-exit.log");
+
+    #[test]
+    fn crash_398_requires_vanilla_crash_and_failed_save_exit_code() {
+        let mods = tempfile::tempdir().unwrap();
+        let d =
+            crate::crash_conflicts::diagnose_exit_in(VANILLA_EXIT_398, -2, mods.path()).unwrap();
+        assert_eq!(d.title, SAVE_FAILED_TITLE);
+        assert!(d.mods.is_empty());
+        assert!(first_error(VANILLA_EXIT_398, None).is_none());
+        assert_eq!(diagnose(VANILLA_EXIT_398).unwrap().title, SAVE_FAILED_TITLE);
+        assert_eq!(
+            crate::crash_conflicts::diagnose_in(VANILLA_EXIT_398, mods.path())
+                .unwrap()
+                .title,
+            SAVE_FAILED_TITLE
+        );
+        let unix = VANILLA_EXIT_398.replace(
+            "(exit code -2 (0xFFFFFFFE; no known NTSTATUS name))",
+            "[Arctic diagnostics] process ended after 11000 ms; exit code 254 (0x000000FE)",
+        );
+        assert_eq!(diagnose(&unix).unwrap().title, SAVE_FAILED_TITLE);
+        assert!(vanilla_crash_save_failed(&unix, 254).is_some());
+        assert!(vanilla_crash_save_failed(VANILLA_EXIT_398, -1).is_none());
+        assert!(
+            vanilla_crash_save_failed(&VANILLA_EXIT_398.replace(".crash(", ".destroy("), -2)
+                .is_none()
+        );
+        assert!(
+            vanilla_crash_save_failed(
+                &VANILLA_EXIT_398.replace("client.Minecraft.crash(", "class_310.method_1565("),
+                -2,
+            )
+            .is_some()
+        );
+    }
+
+    #[test]
+    fn crash_398_prioritizes_captured_exception_and_keeps_save_evidence() {
+        // The original upload had no Throwable. Supplement it with a simulated startup failure.
+        let error = "java.lang.RuntimeException: Could not execute entrypoint stage 'client' due to errors, provided by 'example' at 'example.Client'!";
+        let log = format!(
+            "{VANILLA_EXIT_398}\n[Arctic diagnostics] vanilla crash: Initializing game\n\
+             {VANILLA_CRASH_TRACE}{error}\n\
+             {VANILLA_CRASH_TRACE}\tat knot//net.fabricmc.loader.impl.FabricLoaderImpl.invokeEntrypoints(FabricLoaderImpl.java:1)\n\
+             {VANILLA_CRASH_TRACE}Caused by: java.lang.ClassNotFoundException: org.lwjgl.Optional\n\
+             {VANILLA_CRASH_TRACE}\tat knot//example.Client.onInitializeClient(Client.java:10)\n\
+             [Arctic diagnostics] vanilla crash save failed: <home>/game/crash-reports/crash.txt\n\
+             [Arctic diagnostics] vanilla crash save trace java.nio.file.AccessDeniedException: <home>/game/crash-reports/crash.txt\n{}",
+            "[main/INFO]: shutdown output\n".repeat(200)
+        );
+        let mods = tempfile::tempdir().unwrap();
+        let d = crate::crash_conflicts::diagnose_exit_in(&log, -2, mods.path()).unwrap();
+        assert_eq!(d.title, SAVE_FAILED_TITLE);
+        assert!(d.detail.contains("A game library couldn't be loaded"));
+        assert!(d.repair);
+        let mixin = log.replace(
+            "java.lang.ClassNotFoundException: org.lwjgl.Optional",
+            "org.spongepowered.asm.mixin.injection.throwables.InjectionError: example.mixins.json from mod example",
+        );
+        let d = crate::crash_conflicts::diagnose_exit_in(&mixin, -2, mods.path()).unwrap();
+        assert_eq!(d.title, SAVE_FAILED_TITLE);
+        assert_eq!(d.mods, ["example"]);
+        assert!(d.detail.contains("example failed to change the game"));
+        let report = Report::build("26.1.2", "fabric", "unknown", &[&log], &[], None, None);
+        assert_eq!(report.title, SAVE_FAILED_TITLE);
+        assert!(report.log.contains("A game library couldn't be loaded"));
+        assert!(
+            report
+                .log
+                .starts_with(&format!("\n---- first error ----\n{error}\n"))
+        );
+        assert!(
+            report.log.contains(
+                "matched: Caused by: java.lang.ClassNotFoundException: org.lwjgl.Optional"
+            )
+        );
+        assert!(report.log.contains("vanilla crash: Initializing game"));
+        assert!(
+            report
+                .log
+                .contains("vanilla crash trace \tat knot//example")
+        );
+        assert!(
+            report
+                .log
+                .contains("save trace java.nio.file.AccessDeniedException: <home>")
+        );
+        assert!(report.log.len() < 48 * 1024);
+    }
+
     #[test]
     fn crash_380_prefers_the_runtime_dll_over_the_debug_screen_error() {
         let text = include_str!("../tests/fixtures/crash-380-runtime-dll.log");
@@ -2856,6 +3165,48 @@ USERNAME=someone
         let d = diagnose("java.lang.NoClassDefFoundError: com/example/coolmod/Thing").unwrap();
         assert_eq!(d.title, "A mod is for a different version");
         assert!(!d.repair);
+    }
+
+    #[test]
+    fn crash_378_names_entityculling_and_the_missing_fabric_api_module() {
+        let exception = r"[main/ERROR]: Minecraft has crashed!
+net.fabricmc.loader.impl.FormattedException: java.lang.RuntimeException: Could not execute entrypoint stage 'client' due to errors, provided by 'entityculling' at 'dev.tr7zw.entityculling.EntityCullingMod'!
+Caused by: java.lang.NoClassDefFoundError: net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientTickEvents
+    at dev.tr7zw.entityculling.EntityCullingMod.initModloader(EntityCullingMod.java:23)
+Caused by: java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents";
+        let log = format!(
+            r#"launching Minecraft --gameDir "C:\Arctic Launcher\profiles\default\instances\vanilla\minecraft"
+[main/INFO]: Loading Minecraft 1.16 with Fabric Loader 0.20.1
+[main/INFO]: Loading 8 mods:
+    - entityculling 1.5.2
+    - fabric 0.13.1+build.370-1.16
+       |-- fabric-api-base 0.1.3+12a8474c7c
+       \-- fabric-key-binding-api-v1 1.0.0+e16a97747c
+    - fabricloader 0.20.1
+       \-- mixinextras 0.5.5
+    - java 8
+    - minecraft 1.16
+{exception}"#
+        );
+        let (d, matched) = diagnose_match(&log, None).unwrap();
+        assert_eq!(d.title, "EntityCulling needs Fabric API's lifecycle events");
+        assert_eq!(d.mods, ["entityculling"]);
+        assert!(d.detail.contains("fabric-lifecycle-events-v1"));
+        assert!(d.detail.contains("missing or too old"));
+        assert!(d.detail.contains("Arctic installed EntityCulling"));
+        assert!(matched.contains("NoClassDefFoundError"));
+
+        let other_instance = exception.replace(
+            "java.lang.NoClassDefFoundError: net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientTickEvents",
+            "java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents",
+        );
+        let d = diagnose(&other_instance).unwrap();
+        assert_eq!(d.title, "EntityCulling needs Fabric API's lifecycle events");
+        assert!(!d.detail.contains("Arctic installed"));
+        assert!(
+            diagnose("[main/WARN]: java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents")
+                .is_none()
+        );
     }
 
     #[test]
