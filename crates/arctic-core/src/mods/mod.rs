@@ -6,6 +6,7 @@
 //! too (untracked). Disabled mods are renamed to `*.jar.disabled`, which is
 //! what loaders ignore.
 
+pub mod datapack;
 pub mod discovery;
 mod exact;
 mod files;
@@ -66,17 +67,17 @@ pub enum ProjectType {
     Modpack,
     ResourcePack,
     Shader,
+    DataPack,
 }
 
 impl ProjectType {
-    /// The game-folder directory this kind of project installs into (`None`: a modpack
-    /// becomes an instance of its own instead).
+    /// The game-folder directory for instance-wide content.
     pub fn folder(self) -> Option<&'static str> {
         match self {
             ProjectType::Mod => Some("mods"),
             ProjectType::ResourcePack => Some("resourcepacks"),
             ProjectType::Shader => Some("shaderpacks"),
-            ProjectType::Modpack => None,
+            ProjectType::Modpack | ProjectType::DataPack => None,
         }
     }
 
@@ -86,6 +87,7 @@ impl ProjectType {
             ProjectType::Modpack => "modpack",
             ProjectType::ResourcePack => "resourcepack",
             ProjectType::Shader => "shader",
+            ProjectType::DataPack => "datapack",
         }
     }
 }
@@ -305,7 +307,7 @@ fn install_selected(
     let target = Target {
         loaders: &loaders,
         game_version,
-        loader,
+        loader_name: loader.label(),
     };
     let current = ModIndex::load(index)?;
     let installed = installed_projects(&current, mods_dir);
@@ -448,7 +450,7 @@ fn plan_many(
     let target = Target {
         loaders: &loaders,
         game_version,
-        loader,
+        loader_name: loader.label(),
     };
     let installed = installed_projects(current, mods_dir);
     let results: Vec<(String, Result<Vec<Planned>>)> = std::thread::scope(|s| {

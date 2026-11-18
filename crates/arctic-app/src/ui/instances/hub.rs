@@ -1,9 +1,6 @@
-//! Discover content: one page for Modrinth's mods, resource packs, shaders and modpacks, with
-//! filters (game version, loader, category, environment), five sort orders and endless results.
-//! Mods, packs and shaders install into the instance picked at the top; modpacks become a new
-//! instance.
+//! Discover content from Modrinth, with per-section filters and paginated results.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
 
 use arctic_core::instances::Instance;
@@ -35,14 +32,16 @@ pub enum Section {
     ResourcePacks,
     Shaders,
     Modpacks,
+    DataPacks,
 }
 
 impl Section {
-    pub const ALL: [Section; 4] = [
+    pub const ALL: [Section; 5] = [
         Section::Mods,
         Section::ResourcePacks,
         Section::Shaders,
         Section::Modpacks,
+        Section::DataPacks,
     ];
 
     pub fn project_type(self) -> ProjectType {
@@ -51,6 +50,7 @@ impl Section {
             Section::ResourcePacks => ProjectType::ResourcePack,
             Section::Shaders => ProjectType::Shader,
             Section::Modpacks => ProjectType::Modpack,
+            Section::DataPacks => ProjectType::DataPack,
         }
     }
 
@@ -60,6 +60,7 @@ impl Section {
             Section::ResourcePacks => t!("instances.hub.resource_packs"),
             Section::Shaders => t!("instances.hub.shaders"),
             Section::Modpacks => t!("instances.modpacks"),
+            Section::DataPacks => t!("instances.hub.data_packs"),
         }
     }
 
@@ -69,6 +70,7 @@ impl Section {
             Section::ResourcePacks => t!("instances.search_resource_packs_on_modrinth"),
             Section::Shaders => t!("instances.search_shaders_on_modrinth"),
             Section::Modpacks => t!("instances.search_modpacks_on_modrinth"),
+            Section::DataPacks => t!("instances.hub.search_data_packs"),
         }
     }
 
@@ -80,7 +82,7 @@ impl Section {
     /// Mods and modpacks care about the loader; shaders have their own (Iris...) and resource
     /// packs none.
     fn has_loader_filter(self) -> bool {
-        self != Section::ResourcePacks
+        matches!(self, Section::Mods | Section::Modpacks | Section::Shaders)
     }
 
     fn has_environment_filter(self) -> bool {
@@ -109,8 +111,7 @@ pub struct Filters {
     pub game_version: String,
     /// A Modrinth loader id; "" = any.
     pub loader: String,
-    /// A Modrinth category id; "" = any.
-    pub category: String,
+    pub categories: BTreeSet<String>,
     pub environment: Option<Environment>,
     /// When the text last changed (the search runs shortly after typing stops).
     pub typed_at: Option<f64>,
@@ -123,7 +124,7 @@ impl Default for Filters {
             sort: SortBy::Downloads,
             game_version: String::new(),
             loader: String::new(),
-            category: String::new(),
+            categories: BTreeSet::new(),
             environment: None,
             typed_at: None,
         }
@@ -131,21 +132,16 @@ impl Default for Filters {
 }
 
 impl Filters {
-    /// Starting filters for `section` when installing into `instance`: mods fit its game version
-    /// and loader; packs, shaders and modpacks start open, since few are tagged for every version.
-    fn defaults(section: Section, instance: Option<&Instance>) -> Self {
-        let mut filters = Self::default();
-        if section == Section::Mods
-            && let Some(instance) = instance
-        {
-            filters.game_version = instance.version.clone().unwrap_or_default();
-            filters.loader = instance
-                .loader
-                .kind()
-                .map(|l| l.modrinth_id().to_owned())
-                .unwrap_or_default();
+    /// Set the version and loader from the instance used as the browsing context.
+    fn follow_instance(&mut self, section: Section, game: &str, loader: Option<LoaderKind>) {
+        self.game_version = game.to_owned();
+        self.loader = match (section, loader) {
+            (Section::Mods | Section::Modpacks, Some(loader)) => loader.modrinth_id(),
+            (Section::Shaders, Some(LoaderKind::Forge)) => "optifine",
+            (Section::Shaders, _) => "iris",
+            _ => "",
         }
-        filters
+        .to_owned();
     }
 
     /// The Modrinth query for one page of `section`.
@@ -169,11 +165,7 @@ impl Filters {
             offset,
             limit: PAGE_SIZE,
             project_type: section.project_type(),
-            categories: if self.category.is_empty() {
-                Vec::new()
-            } else {
-                vec![self.category.clone()]
-            },
+            categories: self.categories.iter().cloned().collect(),
             environment: self
                 .environment
                 .filter(|_| section.has_environment_filter()),
@@ -191,17 +183,20 @@ fn loader_kind(id: &str) -> Option<LoaderKind> {
 #[derive(Default)]
 pub struct HubUi {
     pub section: Section,
-    /// The instance mods, packs and shaders install into.
+    /// The instance supplying search defaults and the default install target.
     pub target: Option<String>,
     tags: Option<Load<Arc<Tags>>>,
-    filters: [Filters; 4],
-    /// Which (section, target) the filters were last set up for.
-    showing: Option<(Section, Option<String>)>,
+    filters: [Filters; Section::ALL.len()],
+    showing: Option<Section>,
+    defaults_from: Option<(String, String, Option<LoaderKind>)>,
 }
 
 impl ArcticApp {
     /// Open the discovery page on `section`.
     pub(crate) fn open_hub(&mut self, section: Section) {
+        if !self.inst.modpacks_open {
+            self.inst.hub.target = Some(self.selected_instance().id.clone());
+        }
         self.inst.hub.section = section;
         self.inst.modpacks_open = true;
     }
@@ -269,42 +264,48 @@ impl ArcticApp {
             self.inst.hub.target = Some(self.selected_instance().id.clone());
             self.inst.hub.showing = None;
         }
-        // Switching section or target: set the filters up, search once.
-        let key = (section, self.inst.hub.target.clone());
-        if self.inst.hub.showing.as_ref() != Some(&key)
-            || self.inst.search.instance.as_deref() != Some(SEARCH_OWNER)
-        {
-            let target = self.hub_target();
-            let target_changed = self
-                .inst
-                .hub
-                .showing
-                .as_ref()
-                .is_none_or(|(_, t)| *t != key.1);
-            if target_changed {
-                // Mods follow the instance; the other sections keep what was chosen.
-                self.inst.hub.filters[Section::Mods.index()] =
-                    Filters::defaults(Section::Mods, target.as_ref());
+        let target = self
+            .hub_target()
+            .unwrap_or_else(|| self.selected_instance().clone());
+        let game = self.pack_game(&target);
+        let loader = target.loader.kind();
+        let defaults_from = (target.id.clone(), game.clone(), loader);
+        let defaults_changed = self.inst.hub.defaults_from.as_ref() != Some(&defaults_from);
+        let section_changed = self.inst.hub.showing != Some(section);
+        let browser_changed = self.inst.search.instance.as_deref() != Some(SEARCH_OWNER);
+        if defaults_changed {
+            for s in Section::ALL {
+                self.inst.hub.filters[s.index()].follow_instance(s, &game, loader);
             }
-            self.inst.hub.showing = Some(key.clone());
+            self.inst.hub.defaults_from = Some(defaults_from);
+            self.check_mods(&target.id, false);
+        }
+        if defaults_changed || section_changed || browser_changed {
+            if section_changed || browser_changed {
+                self.inst.search.selected.clear();
+            }
+            self.inst.hub.showing = Some(section);
             self.inst.search.instance = Some(SEARCH_OWNER.to_owned());
-            if let Some(id) = &key.1 {
-                self.check_mods(id, false);
-            }
             self.run_hub_search(0);
         }
 
         // Sections.
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             for s in Section::ALL {
                 if ui.selectable_label(section == s, s.label()).clicked() {
                     self.inst.hub.section = s;
                 }
             }
         });
+        if self.inst.hub.section != section {
+            return;
+        }
         ui.add_space(6.0);
         if section.needs_instance() {
             self.hub_target_picker(ui);
+            if self.inst.hub.target.as_deref() != Some(target.id.as_str()) {
+                return;
+            }
             ui.add_space(6.0);
         }
         self.hub_filter_bar(ui);
@@ -314,6 +315,7 @@ impl ArcticApp {
         } else {
             self.install_bar(ui);
         }
+        self.content_selection_bar(ui, section.project_type(), &target);
         self.hub_results(ui);
     }
 
@@ -390,17 +392,22 @@ impl ArcticApp {
         let before = filters.clone();
         ui.horizontal_wrapped(|ui| {
             let kind = section.project_type();
-            // Game version: the instance's own first, then the releases.
+            // Game version: the browsing instance first, then all Modrinth versions.
             let mut versions: Vec<String> = Vec::new();
-            if let Some(v) = target.as_ref().and_then(|i| i.version.clone()) {
-                versions.push(v);
+            if let Some(target) = &target {
+                let game = self.pack_game(target);
+                if !game.is_empty() {
+                    versions.push(game);
+                }
             }
             if let Some(tags) = &tags {
-                for v in tags.releases() {
-                    if !versions.iter().any(|x| x == v) {
-                        versions.push(v.to_owned());
-                    }
-                }
+                let current = versions.first().cloned();
+                versions.extend(
+                    tags.game_versions
+                        .iter()
+                        .filter(|tag| Some(&tag.version) != current.as_ref())
+                        .map(|tag| tag.version.clone()),
+                );
             }
             option_combo(
                 ui,
@@ -410,35 +417,25 @@ impl ArcticApp {
                 versions.iter().map(|v| (v.clone(), v.clone())),
             );
             if section.has_loader_filter() {
-                let loaders: Vec<(String, String)> = tags
+                let mut ids: BTreeSet<&str> = tags
                     .as_ref()
                     .map(|t| t.loaders_for(kind))
                     .unwrap_or_default()
                     .into_iter()
-                    .map(|l| (l.to_owned(), discovery::pretty_name(l)))
                     .collect();
+                if matches!(section, Section::Mods | Section::Modpacks) {
+                    ids.extend(LoaderKind::ALL.map(LoaderKind::modrinth_id));
+                } else {
+                    ids.extend(["iris", "optifine", "vanilla"]);
+                }
                 option_combo(
                     ui,
                     "hub_loader",
                     &mut filters.loader,
                     t!("instances.hub.any_loader"),
-                    loaders.into_iter(),
+                    ids.into_iter().map(|id| (id.to_owned(), loader_label(id))),
                 );
             }
-            let categories: Vec<(String, String)> = tags
-                .as_ref()
-                .map(|t| t.categories_for(kind))
-                .unwrap_or_default()
-                .into_iter()
-                .map(|c| (c.to_owned(), discovery::pretty_name(c)))
-                .collect();
-            option_combo(
-                ui,
-                "hub_category",
-                &mut filters.category,
-                t!("instances.hub.any_category"),
-                categories.into_iter(),
-            );
             if section.has_environment_filter() {
                 let mut env = match filters.environment {
                     None => String::new(),
@@ -473,6 +470,32 @@ impl ArcticApp {
                 filters = unfiltered;
             }
         });
+        if let Some(tags) = &tags {
+            let categories = tags.categories_for(section.project_type());
+            if !categories.is_empty() {
+                ui.horizontal_wrapped(|ui| {
+                    if ui
+                        .selectable_label(
+                            filters.categories.is_empty(),
+                            t!("instances.hub.any_category"),
+                        )
+                        .clicked()
+                    {
+                        filters.categories.clear();
+                    }
+                    for category in categories {
+                        let selected = filters.categories.contains(category);
+                        if ui
+                            .selectable_label(selected, discovery::pretty_name(category))
+                            .clicked()
+                            && !filters.categories.remove(category)
+                        {
+                            filters.categories.insert(category.to_owned());
+                        }
+                    }
+                });
+            }
+        }
         if let Some(Load::Failed(e)) = &self.inst.hub.tags {
             ui.label(
                 RichText::new(tf!("instances.hub.filters_failed", e = e))
@@ -482,7 +505,7 @@ impl ArcticApp {
         }
         search |= filters.game_version != before.game_version
             || filters.loader != before.loader
-            || filters.category != before.category
+            || filters.categories != before.categories
             || filters.environment != before.environment;
         if search {
             filters.typed_at = None;
@@ -573,8 +596,8 @@ impl ArcticApp {
         let kind = section.pack_kind();
         let game = self.pack_game(target);
         let mut open = false;
-        let vanilla_mods = section == Section::Mods && target.loader.kind().is_none();
         widgets::row(ui, |ui| {
+            super::content_install::select_content(ui, &mut self.inst.search.selected, hit);
             open |= ui
                 .scope(|ui| mod_icon(ui, self, hit.icon_url.as_deref()))
                 .response
@@ -626,43 +649,24 @@ impl ArcticApp {
                     Some(_) => self.inst.packs.installing.contains(&hit.project_id),
                     None => self.inst.installing.contains(&hit.project_id),
                 };
-                if kind.is_none() && installed.contains(&hit.project_id) {
-                    ui.label(RichText::new(t!("instances.installed")).color(p.accent));
-                } else if busy {
+                if busy {
                     ui.spinner();
-                } else {
-                    let button = ui
-                        .add_enabled_ui(!vanilla_mods, |ui| {
-                            widgets::button(ui, p, Some(Icon::Plus), t!("instances.install"), true)
-                        })
-                        .inner;
-                    if vanilla_mods {
-                        button.on_disabled_hover_text(t!("instances.hub.vanilla_has_no_mods"));
-                    } else if button.clicked() {
-                        self.hub_install(section, target, hit);
-                    }
+                } else if ui
+                    .add_enabled_ui(self.inst.content.progress.is_none(), |ui| {
+                        widgets::button(ui, p, Some(Icon::Plus), t!("instances.install"), true)
+                    })
+                    .inner
+                    .clicked()
+                {
+                    self.pick_single_content(ui.ctx(), section.project_type(), hit, None, target);
+                }
+                if section == Section::Mods && installed.contains(&hit.project_id) {
+                    ui.label(RichText::new(t!("instances.installed")).color(p.accent));
                 }
             });
         });
         if open {
-            self.open_project_preview_in(ui.ctx(), target.id.clone(), hit.clone(), kind, false);
-        }
-    }
-
-    /// Install `hit` into `target`, in the folder its project type belongs in.
-    pub(super) fn hub_install(&mut self, section: Section, target: &Instance, hit: &ProjectHit) {
-        match section.pack_kind() {
-            Some(kind) => {
-                self.inst.packs.installing.insert(hit.project_id.clone());
-                let game = self.pack_game(target);
-                self.tasks
-                    .pack_install(target.clone(), kind, hit.project_id.clone(), game);
-            }
-            None => {
-                self.inst.installing.insert(hit.project_id.clone());
-                self.tasks
-                    .mod_install(target.clone(), hit.project_id.clone(), None);
-            }
+            self.open_discover_project(ui.ctx(), target, hit, section.project_type(), kind);
         }
     }
 }
@@ -684,6 +688,18 @@ pub(super) fn stats_line(hit: &ProjectHit) -> String {
         parts.push(categories.join(", "));
     }
     parts.join(" · ")
+}
+
+fn loader_label(id: &str) -> String {
+    match id {
+        "iris" => "Iris".into(),
+        "optifine" => "OptiFine".into(),
+        "vanilla" => t!("instances.vanilla").into(),
+        _ => loader_kind(id).map_or_else(
+            || discovery::pretty_name(id),
+            |loader| loader.label().to_owned(),
+        ),
+    }
 }
 
 /// Sort dropdown, as tall as the search field next to it.
@@ -729,7 +745,7 @@ mod tests {
         Filters {
             game_version: "1.21.1".into(),
             loader: "fabric".into(),
-            category: "optimization".into(),
+            categories: ["optimization".into(), "utility".into()].into(),
             environment: Some(Environment::Client),
             sort: SortBy::Follows,
             text: "  sodium ".into(),
@@ -745,7 +761,7 @@ mod tests {
         assert!(q.loaders.is_empty());
         assert_eq!(q.text, "sodium");
         assert_eq!(q.game_version, "1.21.1");
-        assert_eq!(q.categories, ["optimization"]);
+        assert_eq!(q.categories, ["optimization", "utility"]);
         assert_eq!(q.environment, Some(Environment::Client));
         assert_eq!(
             (q.offset, q.limit, q.sort),
@@ -781,11 +797,16 @@ mod tests {
     }
 
     #[test]
-    fn only_mods_start_filtered_by_the_instance() {
-        assert_eq!(
-            Filters::defaults(Section::Shaders, None),
-            Filters::default()
-        );
-        assert_eq!(Filters::defaults(Section::Mods, None), Filters::default());
+    fn browsing_context_supplies_defaults_and_data_pack_query_uses_its_own_type() {
+        let mut f = Filters::default();
+        f.follow_instance(Section::Mods, "1.21.4", Some(LoaderKind::NeoForge));
+        assert_eq!(f.query(Section::Mods, 0).loader, Some(LoaderKind::NeoForge));
+        f.follow_instance(Section::Shaders, "1.21.4", None);
+        assert_eq!(f.query(Section::Shaders, 0).loaders, ["iris"]);
+        f.follow_instance(Section::DataPacks, "1.21.4", Some(LoaderKind::Fabric));
+        let q = f.query(Section::DataPacks, 0);
+        assert_eq!(q.project_type, ProjectType::DataPack);
+        assert_eq!(q.game_version, "1.21.4");
+        assert!(q.loader.is_none() && q.loaders.is_empty());
     }
 }

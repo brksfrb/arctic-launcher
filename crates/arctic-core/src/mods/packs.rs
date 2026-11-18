@@ -2,9 +2,11 @@
 //! instance, list, switch on or off (the game's `options.txt` for resource
 //! packs, Iris's `iris.properties` for shaders) and remove.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use super::modrinth;
+use super::resolve::{self, Planned, Target};
 use crate::loaders::LoaderKind;
 use crate::net::{DownloadJob, download_all};
 use crate::{Error, Progress, ProgressInfo, Result};
@@ -173,7 +175,15 @@ fn check_selected_version(
     game: &str,
     allow_other_game: bool,
 ) -> Result<bool> {
-    let loaders = kind.loaders();
+    check_install_version(kind.loaders(), version, game, allow_other_game)
+}
+
+pub(super) fn check_install_version(
+    loaders: &[&str],
+    version: &modrinth::Version,
+    game: &str,
+    allow_other_game: bool,
+) -> Result<bool> {
     let right_type = version
         .loaders
         .iter()
@@ -181,7 +191,7 @@ fn check_selected_version(
     if !right_type || version.primary_file().is_none() {
         return Err(Error::IncompatibleContentVersion);
     }
-    let other_game = !version.is_compatible(loaders, game);
+    let other_game = !game.is_empty() && !version.is_compatible(loaders, game);
     if other_game && !allow_other_game {
         return Err(Error::IncompatibleContentVersion);
     }
@@ -195,7 +205,7 @@ fn download_version(
     game_dir: &Path,
     progress: Progress,
 ) -> Result<InstalledPack> {
-    let job = download_job(kind, version, game_dir)?;
+    let job = download_job(version, &game_dir.join(kind.folder()))?;
     let file_name = version
         .primary_file()
         .expect("validated file")
@@ -208,23 +218,99 @@ fn download_version(
     })
 }
 
-fn download_job(
-    kind: PackKind,
-    version: &modrinth::Version,
-    game_dir: &Path,
-) -> Result<DownloadJob> {
+fn download_job(version: &modrinth::Version, dest: &Path) -> Result<DownloadJob> {
     let file = version
         .primary_file()
         .ok_or_else(|| Error::Other("it has no file to download".into()))?;
     super::files::check_pack_name(&file.filename)?;
     Ok(DownloadJob {
         url: file.url.clone(),
-        dest: game_dir.join(kind.folder()).join(&file.filename),
+        dest: dest.join(&file.filename),
         sha1: file.hashes.sha1.clone(),
         size: file.size,
         lzma: None,
         md5: None,
     })
+}
+
+/// Install the selected archive and the required Modrinth archives that go with it.
+pub fn install_with_dependencies(
+    selected: &SelectedPack,
+    game: &str,
+    game_dir: &Path,
+    present: &HashSet<String>,
+    progress: Progress,
+) -> Result<InstalledPack> {
+    let dest = game_dir.join(selected.kind.folder());
+    let plan = plan_archives(
+        selected.version.clone(),
+        selected.kind.loaders(),
+        game,
+        selected.other_game,
+        present,
+    )?;
+    let file_name = selected
+        .version
+        .primary_file()
+        .expect("validated file")
+        .filename
+        .clone();
+    download_archives(&plan, &dest, progress)?;
+    if selected.kind == PackKind::Resource {
+        for dep in plan.iter().skip(1).rev() {
+            if let Some(file) = dep.version.primary_file() {
+                set_active(selected.kind, game_dir, &file.filename, true)?;
+            }
+        }
+    }
+    Ok(InstalledPack {
+        file_name,
+        used_fallback: selected.other_game,
+    })
+}
+
+pub(super) fn plan_archives(
+    version: modrinth::Version,
+    loaders: &[&str],
+    game: &str,
+    other_game: bool,
+    present: &HashSet<String>,
+) -> Result<Vec<Planned>> {
+    // For a confirmed fallback, resolve its dependencies for the version the file targets.
+    let game_version = if game.is_empty() || other_game {
+        version
+            .game_versions
+            .first()
+            .map_or(game, String::as_str)
+            .to_owned()
+    } else {
+        game.to_owned()
+    };
+    let target = Target {
+        loaders,
+        game_version: &game_version,
+        loader_name: &loaders.join("/"),
+    };
+    let source = resolve::Modrinth {
+        loaders,
+        game_version: &game_version,
+    };
+    let project = version.project_id.clone();
+    resolve::resolve_root(&project, version, target, present, &source)
+}
+
+pub(super) fn download_archives(plan: &[Planned], dest: &Path, progress: Progress) -> Result<()> {
+    let mut jobs = plan
+        .iter()
+        .rev()
+        .map(|planned| download_job(&planned.version, dest))
+        .collect::<Result<Vec<_>>>()?;
+    // Validate every file first. A failed dependency download should not leave a new root.
+    let root = jobs.pop().expect("resolved root");
+    if !jobs.is_empty() {
+        download_all("Downloading", jobs, progress)?;
+    }
+    download_all("Downloading", vec![root], progress)
 }
 
 /// Packs in the instance (files and unpacked folders), by name.
@@ -446,7 +532,11 @@ mod tests {
         ] {
             let selected = version("older", "beta", "2023", "1.21.4", loader);
             assert!(!check_selected_version(kind, &selected, "1.21.4", false).unwrap());
-            let job = download_job(kind, &selected, Path::new("selected-instance")).unwrap();
+            let job = download_job(
+                &selected,
+                &Path::new("selected-instance").join(kind.folder()),
+            )
+            .unwrap();
             assert_eq!(
                 job.dest,
                 Path::new("selected-instance")

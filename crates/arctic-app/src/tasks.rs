@@ -29,6 +29,7 @@ pub(crate) fn content_install_error(error: arctic_core::Error) -> String {
         arctic_core::Error::IncompatibleContentVersion => {
             t!("instances.hub.incompatible_blocked").into()
         }
+        arctic_core::Error::DataPackWorldMissing => t!("instances.hub.world_missing").into(),
         other => other.to_string(),
     }
 }
@@ -124,6 +125,8 @@ pub enum Event {
     ModProgress(ProgressSnapshot),
     /// (instance id, project id, result)
     ModInstalled(String, String, Outcome<Vec<InstalledMod>>),
+    ContentProgress(crate::content_tasks::ContentProgress),
+    ContentInstalled(crate::content_tasks::ContentReport),
     /// What an instance's mods become on another version: (instance id, version, result).
     /// The newer builds of an instance's mods (from `mod_updates_check`).
     ModUpdatesChecked(String, Outcome<Vec<arctic_core::mods::ModUpdate>>),
@@ -246,6 +249,7 @@ pub struct Tasks {
     dirs: DataDirs,
     /// The in-game account switcher's bridge, passed to launched games.
     bridge: Option<Arc<arctic_core::bridge::BridgeInfo>>,
+    content_lock: Arc<Mutex<()>>,
 }
 
 /// How a game starts beyond its instance: which copy it is, and where it
@@ -265,6 +269,7 @@ impl Tasks {
             ctx,
             dirs,
             bridge: None,
+            content_lock: Arc::default(),
         }
     }
 
@@ -275,12 +280,18 @@ impl Tasks {
             ctx: self.ctx.clone(),
             dirs,
             bridge: self.bridge.clone(),
+            content_lock: Arc::clone(&self.content_lock),
         }
     }
 
     pub fn with_bridge(mut self, bridge: Option<Arc<arctic_core::bridge::BridgeInfo>>) -> Self {
         self.bridge = bridge;
         self
+    }
+
+    /// Installs that share a mod index or pack settings must not race.
+    pub(crate) fn content_lock(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.content_lock.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub(crate) fn dirs(&self) -> &DataDirs {
@@ -618,6 +629,7 @@ impl Tasks {
     /// Install the newest builds of `projects` (each replacing the old one).
     pub fn mod_updates_apply(&self, instance: Instance, projects: Vec<String>) {
         self.run(move |t| {
+            let _guard = t.content_lock();
             let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
             let result = match instance.loader.kind() {
                 Some(loader) => {
@@ -671,6 +683,7 @@ impl Tasks {
         checks: Vec<arctic_core::mods::retarget::ModCheck>,
     ) {
         self.run(move |t| {
+            let _guard = t.content_lock();
             let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
             let result = (|| -> Outcome<Retargeted> {
                 let loader = instance
@@ -724,6 +737,7 @@ impl Tasks {
         checks: Vec<arctic_core::mods::retarget::ModCheck>,
     ) {
         self.run(move |t| {
+            let _guard = t.content_lock();
             let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
             let result = (|| -> Outcome<Retargeted> {
                 let game = instance.version.clone().unwrap_or_default();
@@ -769,6 +783,7 @@ impl Tasks {
     ) {
         self.run(move |t| {
             let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
+            let _guard = t.content_lock();
             let game = instance.version.clone().unwrap_or_default();
             let result = match instance.loader.kind() {
                 Some(loader) => {

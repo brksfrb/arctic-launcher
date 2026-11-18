@@ -29,7 +29,7 @@ pub struct PacksUi {
     request: u64,
     results: Option<Result<SearchPage, String>>,
     /// The instance, pack kind and game folder the results and list are for.
-    showing: Option<(String, PackKind, std::path::PathBuf)>,
+    pub(super) showing: Option<(String, PackKind, std::path::PathBuf)>,
     rescan_at: f64,
     installed: Vec<Pack>,
     /// The groups the packs are filed under (shared with the game).
@@ -131,7 +131,7 @@ impl ArcticApp {
         self.rp_results(ui, instance);
     }
 
-    fn refresh_packs(&mut self, instance: &Instance) {
+    pub(super) fn refresh_packs(&mut self, instance: &Instance) {
         let game_dir = instance.game_dir(&self.dirs);
         self.inst.packs.installed = packs::list(self.inst.packs.kind, &game_dir);
         self.inst.packs.groups = PackGroups::load(&game_dir);

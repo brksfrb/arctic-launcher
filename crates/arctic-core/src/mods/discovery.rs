@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 use super::modrinth::{self, Version};
 use super::packs::{OCULUS, PackKind};
-use super::{ProjectType, packs};
+use super::{ProjectType, datapack, packs};
 use crate::Result;
 use crate::loaders::LoaderKind;
 
@@ -61,10 +61,18 @@ impl Tags {
     /// Category names that apply to `kind`, in Modrinth's order, without repeats (the
     /// "categories" header only: features and resolutions are other kinds of filter).
     pub fn categories_for(&self, kind: ProjectType) -> Vec<&str> {
+        // The v2 tag endpoint still groups data pack categories under "mod".
+        let id = if kind == ProjectType::DataPack
+            && !self.categories.iter().any(|c| c.project_type == kind.id())
+        {
+            ProjectType::Mod.id()
+        } else {
+            kind.id()
+        };
         let mut seen = HashSet::new();
         self.categories
             .iter()
-            .filter(|c| c.project_type == kind.id() && c.header == "categories")
+            .filter(|c| c.project_type == id && c.header == "categories")
             .map(|c| c.name.as_str())
             .filter(|n| seen.insert(*n))
             .collect()
@@ -76,15 +84,6 @@ impl Tags {
             .iter()
             .filter(|l| l.supported_project_types.iter().any(|t| t == kind.id()))
             .map(|l| l.name.as_str())
-            .collect()
-    }
-
-    /// Release game versions, newest first.
-    pub fn releases(&self) -> Vec<&str> {
-        self.game_versions
-            .iter()
-            .filter(|v| v.version_type == "release")
-            .map(|v| v.version.as_str())
             .collect()
     }
 }
@@ -113,6 +112,7 @@ pub struct VersionInfo {
     pub downloads: u64,
     pub game_versions: Vec<String>,
     pub loaders: Vec<String>,
+    pub file_name: Option<String>,
 }
 
 impl From<&Version> for VersionInfo {
@@ -126,6 +126,7 @@ impl From<&Version> for VersionInfo {
             downloads: v.downloads,
             game_versions: v.game_versions.clone(),
             loaders: v.loaders.clone(),
+            file_name: v.primary_file().map(|file| file.filename.clone()),
         }
     }
 }
@@ -144,12 +145,24 @@ impl VersionInfo {
                 None => kind == ProjectType::Modpack,
             },
             ProjectType::ResourcePack => self.loaders.iter().any(|l| l == "minecraft"),
+            ProjectType::DataPack => self
+                .loaders
+                .iter()
+                .any(|l| datapack::LOADERS.contains(&l.as_str())),
             ProjectType::Shader => self
                 .loaders
                 .iter()
                 .any(|l| PackKind::Shader.loaders().contains(&l.as_str())),
         };
         game_ok && loader_ok
+    }
+
+    pub fn has_install_file(&self, kind: ProjectType) -> bool {
+        self.file_name.as_ref().is_some_and(|file| match kind {
+            ProjectType::DataPack => file.to_ascii_lowercase().ends_with(".zip"),
+            ProjectType::Modpack => file.to_ascii_lowercase().ends_with(".mrpack"),
+            _ => true,
+        })
     }
 
     /// What a shader version asks of the player, from the loaders Modrinth tags it with.
@@ -183,10 +196,28 @@ pub fn project_version_list(project_id: &str) -> Result<Vec<VersionInfo>> {
     Ok(versions.iter().map(VersionInfo::from).collect())
 }
 
+/// The most stable fitting release, with the newest publish date breaking ties.
+pub fn best_version(
+    versions: &[VersionInfo],
+    kind: ProjectType,
+    loader: Option<LoaderKind>,
+    game: &str,
+) -> Option<VersionInfo> {
+    versions
+        .iter()
+        .filter(|v| v.has_install_file(kind) && v.fits(kind, loader, game))
+        .min_by(|a, b| {
+            modrinth::channel_rank(&a.version_type)
+                .cmp(&modrinth::channel_rank(&b.version_type))
+                .then_with(|| b.date.cmp(&a.date))
+        })
+        .cloned()
+}
+
 // ---------------------------------------------------------------- routing
 
 /// Where an installed project of `kind` goes in an instance's game folder; `None` for
-/// modpacks, which become instances of their own.
+/// modpacks and world-specific data packs.
 pub fn install_dir(kind: ProjectType, game_dir: &Path) -> Option<PathBuf> {
     kind.folder().map(|f| game_dir.join(f))
 }
@@ -238,6 +269,7 @@ mod tests {
             downloads: 0,
             game_versions: game.iter().map(|s| s.to_string()).collect(),
             loaders: loaders.iter().map(|s| s.to_string()).collect(),
+            file_name: Some("content.zip".into()),
         }
     }
 
@@ -381,7 +413,7 @@ mod tests {
         assert_eq!(tags.categories_for(ProjectType::Shader), ["realistic"]);
         assert_eq!(tags.loaders_for(ProjectType::Shader), ["iris"]);
         assert_eq!(tags.loaders_for(ProjectType::Modpack), ["fabric"]);
-        assert_eq!(tags.releases(), ["1.21.1"]);
+        assert_eq!(tags.categories_for(ProjectType::DataPack), ["optimization"]);
         assert_eq!(pretty_name("world-generation"), "World generation");
     }
 }
