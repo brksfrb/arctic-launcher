@@ -127,6 +127,15 @@ fn strip_verbatim(path: &Path) -> std::path::PathBuf {
     }
 }
 
+#[cfg(any(windows, test))]
+fn display_adapter(name: &str, version: Option<&str>, date: Option<&str>) -> String {
+    let version = version.filter(|s| !s.is_empty()).unwrap_or("unknown");
+    match date.filter(|s| !s.is_empty()) {
+        Some(date) => format!("{name} (driver {version}, {date})"),
+        None => format!("{name} (driver {version})"),
+    }
+}
+
 #[cfg(windows)]
 mod windows {
     use std::os::windows::ffi::OsStrExt;
@@ -134,8 +143,9 @@ mod windows {
     use std::ptr::{null, null_mut};
 
     use windows_sys::Win32::System::Registry::{
-        HKEY, HKEY_CURRENT_USER, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_OPTION_NON_VOLATILE, REG_SZ,
-        RegCloseKey, RegCreateKeyExW, RegDeleteValueW, RegQueryValueExW, RegSetValueExW,
+        HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_QUERY_VALUE, KEY_SET_VALUE,
+        REG_OPTION_NON_VOLATILE, REG_SZ, RegCloseKey, RegCreateKeyExW, RegDeleteValueW,
+        RegOpenKeyExW, RegQueryValueExW, RegSetValueExW,
     };
 
     use super::HIGH_PERFORMANCE;
@@ -209,25 +219,36 @@ mod windows {
         }
     }
 
-    pub(super) fn diagnostics(exe: &Path) -> String {
-        use windows_sys::Win32::Graphics::Gdi::{
-            DISPLAY_DEVICE_MIRRORING_DRIVER, DISPLAY_DEVICEW, EnumDisplayDevicesW,
-        };
-        use windows_sys::Win32::System::Registry::RegOpenKeyExW;
+    fn open(root: HKEY, path: &str) -> Result<Key, u32> {
         let mut handle: HKEY = null_mut();
         let status = unsafe {
             RegOpenKeyExW(
-                HKEY_CURRENT_USER,
-                wide(std::ffi::OsStr::new(KEY)).as_ptr(),
+                root,
+                wide(path.as_ref()).as_ptr(),
                 0,
                 KEY_QUERY_VALUE,
                 &mut handle,
             )
         };
-        let preference = if status == ERROR_SUCCESS {
-            format!("{:?}", read(&Key(handle), &wide(exe.as_os_str())))
+        if status == ERROR_SUCCESS {
+            Ok(Key(handle))
         } else {
-            format!("registry unavailable ({status})")
+            Err(status)
+        }
+    }
+
+    fn display_string(buf: &[u16]) -> String {
+        let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+        String::from_utf16_lossy(&buf[..end])
+    }
+
+    pub(super) fn diagnostics(exe: &Path) -> String {
+        use windows_sys::Win32::Graphics::Gdi::{
+            DISPLAY_DEVICE_MIRRORING_DRIVER, DISPLAY_DEVICEW, EnumDisplayDevicesW,
+        };
+        let preference = match open(HKEY_CURRENT_USER, KEY) {
+            Ok(key) => format!("{:?}", read(&key, &wide(exe.as_os_str()))),
+            Err(status) => format!("registry unavailable ({status})"),
         };
         let mut adapters = Vec::new();
         for index in 0..64 {
@@ -241,12 +262,18 @@ mod windows {
             if device.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER != 0 {
                 continue;
             }
-            let end = device
-                .DeviceString
-                .iter()
-                .position(|c| *c == 0)
-                .unwrap_or(device.DeviceString.len());
-            adapters.push(String::from_utf16_lossy(&device.DeviceString[..end]));
+            let path = display_string(&device.DeviceKey);
+            let prefix = r"\Registry\Machine\";
+            let key = path
+                .get(..prefix.len())
+                .filter(|s| s.eq_ignore_ascii_case(prefix))
+                .and_then(|_| open(HKEY_LOCAL_MACHINE, &path[prefix.len()..]).ok());
+            let value = |name: &str| read(key.as_ref()?, &wide(name.as_ref())).ok().flatten();
+            adapters.push(super::display_adapter(
+                &display_string(&device.DeviceString),
+                value("DriverVersion").as_deref(),
+                value("DriverDate").as_deref(),
+            ));
         }
         format!(
             "GPU registry preference for spawned exe: {preference}; display adapters={} [{}] (display devices, not a physical GPU inventory)",
@@ -312,11 +339,28 @@ mod windows {
 }
 
 #[cfg(test)]
-mod offload_tests {
+mod tests {
     use super::*;
 
     const INTEL: u16 = 0x8086;
     const AMD: u16 = 0x1002;
+
+    #[test]
+    fn display_adapter_includes_available_driver_details() {
+        let name = "Intel UHD Graphics 600";
+        assert_eq!(
+            display_adapter(name, Some("27.20.100.8681"), Some("9-5-2020")),
+            "Intel UHD Graphics 600 (driver 27.20.100.8681, 9-5-2020)"
+        );
+        assert_eq!(
+            display_adapter(name, Some("1.2"), None),
+            "Intel UHD Graphics 600 (driver 1.2)"
+        );
+        assert_eq!(
+            display_adapter(name, None, None),
+            "Intel UHD Graphics 600 (driver unknown)"
+        );
+    }
 
     #[test]
     fn nvidia_laptops_use_the_nvidia_offload() {

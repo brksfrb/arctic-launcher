@@ -211,6 +211,7 @@ pub fn spawn(
                 }
             }
         };
+        let runtime = started.elapsed();
         #[cfg(windows)]
         let exited_at = std::time::SystemTime::now();
         drain_readers([out_reader, err_reader].into_iter().flatten().collect());
@@ -218,7 +219,7 @@ pub fn spawn(
         if let Some(c) = code {
             let summary = format!(
                 "[Arctic diagnostics] process ended after {} ms; exit code {}",
-                started.elapsed().as_millis(),
+                runtime.as_millis(),
                 crate::crash::exit_description(c)
             );
             writeln!(log.lock().unwrap(), "{summary}").ok();
@@ -244,8 +245,14 @@ pub fn spawn(
             };
             if !fresh(&game_dir, "hs_err_pid") && !fresh(&game_dir.join("crash-reports"), "crash-")
             {
-                let evidence =
-                    crate::native_crash::collect(child.id(), exited_at, &game_dir.join("mods"));
+                // Finish on the watcher before Exited triggers the UI's diagnosis.
+                let evidence = crate::native_crash::collect(
+                    child.id(),
+                    &exe,
+                    launched_at,
+                    exited_at,
+                    &game_dir.join("mods"),
+                );
                 writeln!(log.lock().unwrap(), "{evidence}").ok();
                 on_event(GameEvent::Output(vec![LogLine {
                     level: super::logparse::Level::Info,
@@ -253,7 +260,7 @@ pub fn spawn(
                 }]));
             }
         }
-        if !killed && code.is_some_and(|c| c != 0) && started.elapsed() < Duration::from_secs(5) {
+        if !killed && code.is_some_and(|c| c != 0) && runtime < Duration::from_secs(5) {
             let probe = runtime_probe(&exe);
             writeln!(log.lock().unwrap(), "{probe}").ok();
             on_event(GameEvent::Output(vec![LogLine {
@@ -501,13 +508,19 @@ const ARGFILE_READ_TIME: Duration = Duration::from_secs(5);
 /// long for Windows (a Forge or NeoForge classpath of 100+ libraries under a long data folder). Java 9+ reads
 /// `@file`; Java 8 can't, and gets a message about moving the data folder instead of an obscure spawn error.
 fn command_args(plan: &LaunchPlan) -> Result<(Vec<String>, Option<PathBuf>)> {
-    let mut args = plan.args.clone();
     // Portal instances run with home as cwd; keep diagnostics in the instance.
-    let hang_file = std::path::absolute(plan.game_dir.join("arctic-hang.txt")).at(&plan.game_dir)?;
-    args.insert(
-        0,
-        format!("-Darctic.diagnostics.hangFile={}", hang_file.display()),
-    );
+    let dir = std::path::absolute(&plan.game_dir).at(&plan.game_dir)?;
+    let mut args = vec![format!(
+        "-Darctic.diagnostics.hangFile={}",
+        dir.join("arctic-hang.txt").display()
+    )];
+    if !plan.args.iter().any(|a| a.starts_with("-XX:ErrorFile=")) {
+        args.push(format!(
+            "-XX:ErrorFile={}",
+            dir.join("hs_err_pid%p.log").display()
+        ));
+    }
+    args.extend_from_slice(&plan.args);
     let length =
         args.iter().map(|a| a.chars().count() + 3).sum::<usize>() + plan.java.as_os_str().len();
     if !cfg!(windows) || length <= MAX_COMMAND_CHARS {
@@ -849,9 +862,9 @@ mod tests {
     }
 
     #[test]
-    fn hang_sidecar_argument_stays_in_the_instance() {
+    fn hang_and_fatal_error_logs_stay_in_the_instance() {
         let game_dir = std::env::temp_dir().join("portal instance");
-        let plan = LaunchPlan {
+        let mut plan = LaunchPlan {
             java: PathBuf::from("java"),
             args: vec!["net.minecraft.client.Main".into()],
             game_dir: game_dir.clone(),
@@ -871,7 +884,25 @@ mod tests {
                 game_dir.join("arctic-hang.txt").display()
             )
         );
-        assert_eq!(args[1], "net.minecraft.client.Main");
+        assert_eq!(
+            args[1],
+            format!(
+                "-XX:ErrorFile={}",
+                game_dir.join("hs_err_pid%p.log").display()
+            )
+        );
+        assert_eq!(args[2], "net.minecraft.client.Main");
+
+        plan.args
+            .insert(0, "-XX:ErrorFile=custom file-%p.log".into());
+        let (args, _) = command_args(&plan).unwrap();
+        assert_eq!(
+            &args[1..],
+            [
+                "-XX:ErrorFile=custom file-%p.log",
+                "net.minecraft.client.Main"
+            ]
+        );
     }
 
     #[test]
