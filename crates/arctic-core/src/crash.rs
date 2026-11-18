@@ -600,7 +600,11 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
-        pattern: r"java\.lang\.(NoSuchMethodError|NoSuchFieldError|NoClassDefFoundError|AbstractMethodError)",
+        pattern: r"java\.lang\.(?:NoClassDefFoundError|ClassNotFoundException):[ \t]+([\w$]+(?:[./][\w$]+)+)",
+        explain: missing_recommended_dependency,
+    },
+    Rule {
+        pattern: r"java\.lang\.(NoSuchMethodError|NoSuchFieldError|NoClassDefFoundError|ClassNotFoundException|AbstractMethodError)",
         explain: |_, _| {
             Diagnosis::new(
                 "A mod is for a different version",
@@ -620,6 +624,54 @@ const RULES: &[Rule] = &[
         },
     },
 ];
+
+fn missing_recommended_dependency(class: &regex::Captures, text: &str) -> Diagnosis {
+    static WARNING: OnceLock<Regex> = OnceLock::new();
+    static ENTRYPOINT: OnceLock<Regex> = OnceLock::new();
+    let warning = WARNING.get_or_init(|| {
+        Regex::new(r"Mod '([^\r\n]+?)' \(([\w.-]+)\) [^\r\n]*?\b(?:recommends|suggests) (?:[^\r\n]*?\bof )?(?:(?:mod )?'([^\r\n]+?)' \()?([\w.-]+)\)?, which is missing!").unwrap()
+    });
+    let entrypoint = ENTRYPOINT.get_or_init(|| {
+        Regex::new(r"Could not execute entrypoint stage [^\r\n]*?provided by '([\w.-]+)'").unwrap()
+    });
+    let before = &text[..class.get(0).unwrap().start()];
+    let owner = entrypoint
+        .captures_iter(before)
+        .last()
+        .and_then(|c| c.get(1))
+        .map(|id| id.as_str());
+    let (package, _) = class[1].rsplit_once(['/', '.']).unwrap();
+    let Some(missing) = warning
+        .captures_iter(text)
+        .filter(|c| {
+            let segment = match &c[4] {
+                "fabric-language-kotlin" => "kotlin".to_owned(),
+                id => id.replace(['-', '_'], ""),
+            };
+            package
+                .split(['/', '.'])
+                .any(|part| part.replace('_', "").eq_ignore_ascii_case(&segment))
+        })
+        .min_by_key(|c| owner != Some(&c[2]))
+    else {
+        return Diagnosis::none();
+    };
+    let name = &missing[1];
+    let dependency = missing.get(3).map_or_else(
+        || match &missing[4] {
+            "modernui" => "Modern UI",
+            "fabric-language-kotlin" => "Fabric Language Kotlin",
+            "cloth-config" => "Cloth Config",
+            id => id,
+        },
+        |display| display.as_str(),
+    );
+    Diagnosis::new(
+        format!("{name} needs {dependency}"),
+        format!("Install {dependency} or remove {name}."),
+        vec![name.to_owned(), dependency.to_owned()],
+    )
+}
 
 fn split_package(a: &str, b: &str, package: &str) -> Diagnosis {
     Diagnosis::new(
@@ -2317,6 +2369,63 @@ mod tests {
         assert!(diagnose(recovered).is_none());
         let fatal = "[Render thread/ERROR] Uncaught exception in thread main\njava.lang.IllegalStateException: broken\n---- logs/arctic-freezes/freeze-now.txt ----\nduration: 20.34s (still frozen when written)";
         assert!(diagnose(fatal).is_none());
+    }
+
+    #[test]
+    fn missing_recommended_dependency_crash_387() {
+        let log = include_str!("../tests/fixtures/crash-387-music-hud.log");
+        let (d, matched) = diagnose_match(log, None).unwrap();
+        assert_eq!(d.title, "Music HUD needs Modern UI");
+        assert_eq!(d.detail, "Install Modern UI or remove Music HUD.");
+        assert_eq!(d.mods, ["Music HUD", "Modern UI"]);
+        assert!(matched.contains("NoClassDefFoundError: icyllis/modernui/"));
+    }
+
+    #[test]
+    fn unrelated_recommendations_keep_the_version_diagnosis() {
+        let log = include_str!("../tests/fixtures/crash-387-music-hud.log");
+        let (warnings, crash) = log.split_once("---- Minecraft Crash Report ----").unwrap();
+        assert!(diagnose(warnings).is_none());
+        let text = format!(
+            "{}\n---- Minecraft Crash Report ----{crash}",
+            warnings
+                .lines()
+                .filter(|line| !line.contains("modernui"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        assert_eq!(
+            diagnose(&text).unwrap().title,
+            "A mod is for a different version"
+        );
+    }
+
+    #[test]
+    fn suggested_dependency_can_use_a_package_alias() {
+        for (warning, class, name) in [
+            (
+                "any version of fabric-language-kotlin",
+                "kotlin.jvm.internal.Intrinsics",
+                "Fabric Language Kotlin",
+            ),
+            (
+                "'Cloth Config' (cloth-config)",
+                "me.shedaniel.clothconfig.api.ConfigBuilder",
+                "Cloth Config",
+            ),
+        ] {
+            let log = format!(
+                "- Mod 'Other Mod' (other_mod) 1.0 suggests {warning}, which is missing!\n\
+                 - Mod 'Example' (example) 1.0 suggests {warning}, which is missing!\n\
+                 ---- Minecraft Crash Report ----\n\
+                 java.lang.RuntimeException: Could not execute entrypoint stage 'client' due to errors, provided by 'example' at 'example.Client'!\n\
+                 Caused by: java.lang.ClassNotFoundException: {class}"
+            );
+            assert_eq!(
+                diagnose(&log).unwrap().title,
+                format!("Example needs {name}")
+            );
+        }
     }
 
     #[test]

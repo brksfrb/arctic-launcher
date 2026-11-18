@@ -217,5 +217,21 @@
   "social.words_separated_by_commas_a_line_with_any_of": "Woorden gescheiden door komma's; een regel met een van die woorden past. '-woord' sluit regels uit.",
   "social.world_open_to_friends": "Wereld open voor vrienden",
   "social.your_friend_joined": "Je vriend is erbij gekomen",
-  "social.your_world_is_open_to_lan_for_the_friends": "Je wereld staat open op LAN voor de vrienden die je hebt uitgenodigd"
+  "social.your_world_is_open_to_lan_for_the_friends": "Je wereld staat open op LAN voor de vrienden die je hebt uitgenodigd",
+  "social.hostban_host": "Je kunt de host niet verbannen.",
+  "social.hostban_tunnel_ip": "Spelers die via een uitnodiging of code meedoen, kunnen geen IP-ban krijgen. Gebruik /ban <naam>.",
+  "social.hostban_disconnect": "Je bent verbannen uit deze wereld.\n{0}",
+  "social.hostban_default_reason": "Geen reden opgegeven.",
+  "social.hostban_storage_error": "De banlijst van deze wereld kon niet worden gelezen of opgeslagen.",
+  "social.hostban_player_already_banned": "{0} is al verbannen.",
+  "social.hostban_player_banned": "{0} is verbannen.",
+  "social.hostban_player_not_banned": "{0} is niet verbannen.",
+  "social.hostban_player_pardoned": "De ban van {0} is opgeheven.",
+  "social.hostban_unknown_ip": "{0} is geen geldig IP-adres of de naam van een online speler.",
+  "social.hostban_ip_already_banned": "Het IP-adres {0} is al geblokkeerd.",
+  "social.hostban_ip_banned": "Het IP-adres {0} is geblokkeerd.",
+  "social.hostban_ip_not_banned": "Het IP-adres {0} is niet geblokkeerd.",
+  "social.hostban_ip_pardoned": "De blokkade van IP-adres {0} is opgeheven.",
+  "social.hostban_list_entry": "{0} — {1}",
+  "social.hostban_list_empty": "Er zijn geen bans om te tonen."
 }
