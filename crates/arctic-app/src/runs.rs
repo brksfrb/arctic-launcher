@@ -211,10 +211,11 @@ impl Run {
 
     fn exit_diagnosis(&self, code: Option<i32>, shutdown_watchdog: bool) -> Option<Diagnosis> {
         let code = code.filter(|c| *c != 0 && !shutdown_watchdog)?;
-        arctic_core::crash_conflicts::diagnose_exit_in(
+        arctic_core::crash_conflicts::diagnose_exit_in_with_java(
             &self.crash_text(),
             code,
             &self.game_dir.join("mods"),
+            self.java.as_deref(),
         )
     }
 
@@ -1010,6 +1011,26 @@ mod tests {
         }
         assert!(run.exit_diagnosis(Some(0), false).is_none());
         assert!(run.exit_diagnosis(Some(1), true).is_none());
+    }
+
+    #[test]
+    fn game_exit_explains_the_custom_heap_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.20.1", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.java = Some(
+            "Java javaw.exe (maximum heap set by custom JVM arguments), flags: -Xms512M -Xmx3584M"
+                .into(),
+        );
+        run.push_log([LogLine {
+            level: Level::Error,
+            text: "java.lang.OutOfMemoryError: Java heap space".into(),
+        }]);
+        let diagnosis = run.exit_diagnosis(Some(1), false).unwrap();
+        let (_, detail) = ArcticApp::localized_diagnosis(&diagnosis);
+        assert!(detail.contains("heap to 3584 MB"));
+        assert!(detail.contains("Remove the custom -Xmx"));
     }
 
     #[test]
