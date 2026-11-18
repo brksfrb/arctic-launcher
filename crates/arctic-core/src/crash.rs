@@ -184,54 +184,31 @@ const RULES: &[Rule] = &[
         explain: |c, _| split_package(&c[2], &c[3], &c[1]),
     },
     Rule {
-        // Fabric's newer wording, with names in quotes and ranges:
-        //  "- Mod 'SpruceUI' (spruceui) 9.1 requires any version between 1.21.11- (inclusive) and 1.22- (exclusive) of 'Minecraft' (minecraft), but only the wrong version is present: 26.3!"
-        //  "- Mod 'ModernFix' (modernfix) 5.2 requires version 0.16.10 or later of mod 'Fabric Loader' (fabricloader), but only the wrong version is present: 0.15.11!"
-        pattern: r"Mod '([^']+)' \(([^)]+)\) \S+ requires (?:any version|version) (.+?) of (?:mod )?'[^']+' \((minecraft|fabricloader)\), but only the wrong version is present: ([^!\s]+)",
+        // Fabric: "- Mod 'ModernFix' (modernfix) 5.2 requires version 0.16.10 or later of mod 'Fabric Loader' (fabricloader), but only the wrong version is present: 0.15.11!"
+        pattern: r"Mod '([^']+)' \([^)]+\) \S+ requires (?:any version|version) (.+?) of (?:mod )?'[^']+' \(fabricloader\), but only the wrong version is present: ([^!\s]+)",
         explain: |c, text| {
-            // Every mod the same complaint names, once each.
-            let target = c[4].to_owned();
-            let mut names: Vec<String> = Vec::new();
-            if let Ok(re) = Regex::new(&format!(
-                r"Mod '([^']+)' \([^)]+\) \S+ requires [^
-]*? \({target}\), but only the wrong version is present"
-            )) {
-                for m in re.captures_iter(text) {
-                    let name = m[1].to_owned();
-                    if !names.contains(&name) {
-                        names.push(name);
-                    }
+            static LOADER: OnceLock<Regex> = OnceLock::new();
+            let re = LOADER.get_or_init(|| Regex::new(
+                r"Mod '([^']+)' \([^)]+\) \S+ requires [^\r\n]*? \(fabricloader\), but only the wrong version is present"
+            ).unwrap());
+            let mut names = Vec::new();
+            for m in re.captures_iter(text) {
+                if !names.iter().any(|name| name == &m[1]) {
+                    names.push(m[1].to_owned());
                 }
             }
-            if names.is_empty() {
-                names.push(c[1].to_owned());
-            }
-            let have = &c[5];
-            if target == "minecraft" {
-                Diagnosis {
-                    fix: Some(Fix::DisableMods(names.clone())),
-                    ..Diagnosis::new(
-                        format!("{} mod(s) are for another Minecraft version", names.len()),
-                        format!(
-                            "These mods are made for another Minecraft version than {have}: {}. They are probably left over from another version (an instance copied or switched to a newer game). Switch them off, or update them from the instance's Mods page.",
-                            names.join(", ")
-                        ),
-                        names,
-                    )
-                }
-            } else {
-                Diagnosis {
-                    fix: Some(Fix::UpdateLoader),
-                    ..Diagnosis::new(
-                        "Fabric Loader is too old for these mods",
-                        format!(
-                            "{} need {} of Fabric Loader, but this instance has {have}. Update Fabric Loader in the instance's settings (Loader), or remove those mods.",
-                            names.join(", "),
-                            c[3].to_owned()
-                        ),
-                        names,
-                    )
-                }
+            Diagnosis {
+                fix: Some(Fix::UpdateLoader),
+                ..Diagnosis::new(
+                    "Fabric Loader is too old for these mods",
+                    format!(
+                        "{} need {} of Fabric Loader, but this instance has {}. Update Fabric Loader in the instance's settings (Loader), or remove those mods.",
+                        names.join(", "),
+                        &c[2],
+                        &c[3]
+                    ),
+                    names,
+                )
             }
         },
     },
@@ -600,6 +577,10 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
+        pattern: r"(?:NoClassDefFoundError|ClassNotFoundException):[ \t]+(net[./]fabricmc[./]fabric[./]api[./][\w./$]+)",
+        explain: missing_fabric_api_class,
+    },
+    Rule {
         pattern: r"java\.lang\.(NoSuchMethodError|NoSuchFieldError|NoClassDefFoundError|AbstractMethodError)",
         explain: |_, _| {
             Diagnosis::new(
@@ -620,6 +601,85 @@ const RULES: &[Rule] = &[
         },
     },
 ];
+
+fn missing_fabric_api_class(c: &regex::Captures, text: &str) -> Diagnosis {
+    let class = c[1].replace('/', ".");
+    let package = class.trim_start_matches("net.fabricmc.fabric.api.");
+    let module = match package {
+        p if p.starts_with("client.event.lifecycle.v1.")
+            || p.starts_with("event.lifecycle.v1.") =>
+        {
+            Some(("lifecycle events", "fabric-lifecycle-events-v1"))
+        }
+        p if p.starts_with("client.keybinding.v1.") => {
+            Some(("key binding API", "fabric-key-binding-api-v1"))
+        }
+        p if p.starts_with("client.networking.v1.") || p.starts_with("networking.v1.") => {
+            Some(("networking API", "fabric-networking-api-v1"))
+        }
+        "event.Event" | "event.EventFactory" => Some(("base API", "fabric-api-base")),
+        _ => None,
+    };
+    // The current exception's entrypoint names the provider. The mod inventory may contain many
+    // unrelated mods, so use it only to look up the name of that provider.
+    static ENTRYPOINT: OnceLock<Regex> = OnceLock::new();
+    let entrypoint = ENTRYPOINT.get_or_init(|| {
+        Regex::new(r"Could not execute entrypoint stage '[^']+'[^\r\n]*?provided by '([\w-]+)'")
+            .unwrap()
+    });
+    let before = &text[..c.get(0).unwrap().start()];
+    let context = before
+        .rsplit("\n[")
+        .next()
+        .unwrap_or(before)
+        .rsplit("\n\n")
+        .next()
+        .unwrap_or(before)
+        .rsplit("\r\n\r\n")
+        .next()
+        .unwrap_or(before);
+    let id = entrypoint
+        .captures_iter(context)
+        .last()
+        .and_then(|m| m.get(1))
+        .map(|m| m.as_str());
+    let performance_name = id.and_then(crate::mods::performance::performance_mod_name);
+    let name = performance_name.map(str::to_owned).or_else(|| {
+        let id = id?;
+        Some(
+            crate::crash_conflicts::from_crash_report(text)
+                .into_iter()
+                .find(|m| m.id == id)
+                .map_or_else(|| id.to_owned(), |m| m.name),
+        )
+    });
+    let name = name.as_deref().unwrap_or("A mod");
+    let title = module.map_or_else(
+        || format!("{name} needs Fabric API"),
+        |(name_of_module, _)| format!("{name} needs Fabric API's {name_of_module}"),
+    );
+    let mut detail = module.map_or_else(
+        || format!("{name} needs {class}. Fabric API is missing or too old to provide it."),
+        |(name_of_module, id)| {
+            format!(
+                "{name} needs Fabric API's {name_of_module} module ({id}), which is missing or too old."
+            )
+        },
+    );
+    let vanilla = text.lines().any(|line| {
+        line.starts_with("──── Launching Vanilla (")
+            || (line.contains("--gameDir")
+                && line
+                    .replace('\\', "/")
+                    .contains("/instances/vanilla/minecraft"))
+    });
+    if performance_name.is_some() && vanilla {
+        detail.push_str(&format!(
+            " Arctic installed {name} through Performance for this Vanilla instance."
+        ));
+    }
+    Diagnosis::new(title, detail, id.into_iter().map(str::to_owned).collect())
+}
 
 fn split_package(a: &str, b: &str, package: &str) -> Diagnosis {
     Diagnosis::new(
@@ -685,6 +745,21 @@ fn collect(text: &str, group: usize) -> Vec<String> {
         }
     }
     out
+}
+
+/// Fabric's missing-dependency reports give the id of the requiring mod.
+pub(crate) fn fabric_missing_dependencies(text: &str) -> impl Iterator<Item = (&str, &str)> {
+    static NO_CANDIDATE: OnceLock<Regex> = OnceLock::new();
+    let no_candidate = NO_CANDIDATE
+        .get_or_init(|| Regex::new(r"HARD_DEP_NO_CANDIDATE (\S+) \S+ \{depends (\S+) @").unwrap());
+    compiled()[0]
+        .captures_iter(text)
+        .filter_map(|c| Some((c.get(2)?.as_str(), c.get(3)?.as_str())))
+        .chain(
+            resolver_causes(text)
+                .flat_map(|line| no_candidate.captures_iter(line))
+                .filter_map(|c| Some((c.get(1)?.as_str(), c.get(2)?.as_str()))),
+        )
 }
 
 fn compiled() -> &'static [Regex] {
@@ -992,6 +1067,7 @@ fn fatal_linkage(text: &str, at: usize) -> bool {
     let explicit = context.contains("exception in thread")
         || context.contains("uncaught exception")
         || context.contains("/fatal]")
+        || context.contains("minecraft has crashed!")
         || context.contains("encountered an unexpected exception")
         || context.contains("reported exception thrown");
     let later_progress = text[at..]
@@ -1074,6 +1150,56 @@ pub(crate) fn native_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
     ))
 }
 
+/// A Minecraft mismatch is the cause even when the same report also lists
+/// missing libraries for the incompatible mods.
+fn fabric_wrong_game(text: &str) -> Option<(Diagnosis, String)> {
+    static WRONG_GAME: OnceLock<Regex> = OnceLock::new();
+    let re = WRONG_GAME.get_or_init(|| Regex::new(
+        r"Mod '([^\r\n]+?)' \(([\w.-]+)\) \S+ requires [^\r\n]+? of (?:mod )?'Minecraft' \(minecraft\), but only the wrong version is present: ([^!\s]+)"
+    ).unwrap());
+    let mut matches = re.captures_iter(text).peekable();
+    let first = matches.peek()?;
+    let have = first.get(3)?.as_str();
+    let matched = first.get(0)?.as_str();
+    let vanilla = text.contains("Launching Vanilla (") || text.contains("-Darctic.brand=vanilla");
+    let mut seen = std::collections::HashSet::new();
+    let mut names = Vec::new();
+    let mut performance = Vec::new();
+    for m in matches {
+        let (name, id) = (m.get(1)?.as_str(), m.get(2)?.as_str());
+        if seen.insert(id) {
+            names.push(name.to_owned());
+            if vanilla && crate::mods::performance::is_performance_mod(id) {
+                performance.push(name);
+            }
+        }
+    }
+    let summary = if names.len() == 1 {
+        "1 mod is for a different Minecraft version".to_owned()
+    } else {
+        format!("{} mods are for a different Minecraft version", names.len())
+    };
+    let mut detail = format!(
+        "Minecraft {have} cannot load these mods: {}.",
+        names.join(", ")
+    );
+    if performance.is_empty() {
+        detail.push_str(" Switch them off, or update them from the instance's Mods page.");
+    } else {
+        detail.push_str(&format!(
+            " Arctic's Performance mods from another Minecraft version are still in this Vanilla instance: {}.",
+            performance.join(", ")
+        ));
+    }
+    Some((
+        Diagnosis {
+            fix: Some(Fix::DisableMods(names.clone())),
+            ..Diagnosis::new(format!("{summary}: {}", names.join(", ")), detail, names)
+        },
+        head_of(matched, 2048).to_owned(),
+    ))
+}
+
 fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
     if let Some(native) = native_diagnosis(text) {
         return Some(native);
@@ -1103,6 +1229,10 @@ fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)>
             ),
             head_of(matched.as_str(), 2048).to_owned(),
         ));
+    }
+
+    if let Some(wrong_game) = fabric_wrong_game(text) {
+        return Some(wrong_game);
     }
 
     for (rule, re) in RULES.iter().zip(compiled()) {
@@ -1409,6 +1539,15 @@ impl Report {
             } else {
                 title
             };
+        let title = if title.is_empty()
+            || title == "unknown"
+            || title.starts_with("Game exited with code")
+            || title.starts_with("A mod needs ")
+        {
+            fabric_wrong_game(&diagnosis_text).map_or(title, |(d, _)| d.title)
+        } else {
+            title
+        };
         let title = registry_sync_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
         let title = native_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
         let title = if crash_report.is_none()
@@ -2616,6 +2755,48 @@ USERNAME=someone
     }
 
     #[test]
+    fn crash_378_names_entityculling_and_the_missing_fabric_api_module() {
+        let exception = r"[main/ERROR]: Minecraft has crashed!
+net.fabricmc.loader.impl.FormattedException: java.lang.RuntimeException: Could not execute entrypoint stage 'client' due to errors, provided by 'entityculling' at 'dev.tr7zw.entityculling.EntityCullingMod'!
+Caused by: java.lang.NoClassDefFoundError: net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientTickEvents
+    at dev.tr7zw.entityculling.EntityCullingMod.initModloader(EntityCullingMod.java:23)
+Caused by: java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents";
+        let log = format!(
+            r#"launching Minecraft --gameDir "C:\Arctic Launcher\profiles\default\instances\vanilla\minecraft"
+[main/INFO]: Loading Minecraft 1.16 with Fabric Loader 0.20.1
+[main/INFO]: Loading 8 mods:
+    - entityculling 1.5.2
+    - fabric 0.13.1+build.370-1.16
+       |-- fabric-api-base 0.1.3+12a8474c7c
+       \-- fabric-key-binding-api-v1 1.0.0+e16a97747c
+    - fabricloader 0.20.1
+       \-- mixinextras 0.5.5
+    - java 8
+    - minecraft 1.16
+{exception}"#
+        );
+        let (d, matched) = diagnose_match(&log, None).unwrap();
+        assert_eq!(d.title, "EntityCulling needs Fabric API's lifecycle events");
+        assert_eq!(d.mods, ["entityculling"]);
+        assert!(d.detail.contains("fabric-lifecycle-events-v1"));
+        assert!(d.detail.contains("missing or too old"));
+        assert!(d.detail.contains("Arctic installed EntityCulling"));
+        assert!(matched.contains("NoClassDefFoundError"));
+
+        let other_instance = exception.replace(
+            "java.lang.NoClassDefFoundError: net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientTickEvents",
+            "java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents",
+        );
+        let d = diagnose(&other_instance).unwrap();
+        assert_eq!(d.title, "EntityCulling needs Fabric API's lifecycle events");
+        assert!(!d.detail.contains("Arctic installed"));
+        assert!(
+            diagnose("[main/WARN]: java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents")
+                .is_none()
+        );
+    }
+
+    #[test]
     fn missing_fabric_dependencies_are_named() {
         let log = "Incompatible mods found!\n\
             - Mod 'Sodium Extra' (sodium-extra) 0.5.4 requires any version of fabric-api, which is missing!\n\
@@ -2882,7 +3063,10 @@ Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 (
             	 - Mod 'SpruceUI' (spruceui) 9.1.0+1.21.11 requires any version between 1.21.11- (inclusive) and 1.22- (exclusive) of 'Minecraft' (minecraft), but only the wrong version is present: 26.3!
             	 - Mod 'Pride Lib' (pride) 1.5.1+1.21.11 requires any version between 1.21.11- (inclusive) and 1.22- (exclusive) of 'Minecraft' (minecraft), but only the wrong version is present: 26.3!";
         let d = diagnose(log).unwrap();
-        assert_eq!(d.title, "2 mod(s) are for another Minecraft version");
+        assert_eq!(
+            d.title,
+            "2 mods are for a different Minecraft version: SpruceUI, Pride Lib"
+        );
         assert_eq!(d.mods, ["SpruceUI", "Pride Lib"]);
         assert!(d.detail.contains("26.3") && d.detail.contains("Switch them off"));
         assert_eq!(
@@ -2892,6 +3076,38 @@ Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 (
                 "Pride Lib".into()
             ]))
         );
+    }
+
+    #[test]
+    fn report_377_names_stale_vanilla_performance_mods_before_missing_libraries() {
+        let log = "──── Launching Vanilla (1.8.9) as Player ────
+[main/INFO] Loading Minecraft 1.8.9 with Fabric Loader 0.20.1
+[main/ERROR] Incompatible mods found!
+ - Mod 'EntityCulling' (entityculling) 1.8.2 requires any version of fabric-api, which is missing!
+ - Mod 'Fzzy Config' (fzzy_config) 0.7.7+1.21 requires any version of fabric-language-kotlin, which is missing!
+ - Mod 'Particle Core' (particle_core) 0.3.3+1.21 requires version 1.21 or later of 'Minecraft' (minecraft), but only the wrong version is present: 1.8.9!
+ - Mod 'TRender' (trender) 1.0.5 requires any 1.21.x version of 'Minecraft' (minecraft), but only the wrong version is present: 1.8.9!
+ - Mod 'Sodium' (sodium) 0.6.13+mc1.21.1 requires version 1.21.1 of 'Minecraft' (minecraft), but only the wrong version is present: 1.8.9!";
+        let (d, matched) = diagnose_match(&format!("{log}\n{log}"), None).unwrap();
+        assert_eq!(
+            d.title,
+            "3 mods are for a different Minecraft version: Particle Core, TRender, Sodium"
+        );
+        assert_eq!(d.mods, ["Particle Core", "TRender", "Sodium"]);
+        assert!(d.detail.contains("Arctic's Performance mods"));
+        assert!(d.detail.contains("Vanilla instance"));
+        assert!(matched.contains("(minecraft)"));
+        assert!(!d.detail.contains("fabric-api"));
+        let report = Report::build(
+            "1.8.9",
+            "",
+            "A mod needs fabric-api",
+            &[log],
+            &[],
+            None,
+            None,
+        );
+        assert_eq!(report.title, d.title);
     }
 
     #[test]
