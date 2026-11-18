@@ -231,9 +231,19 @@ impl Reporter<'_> {
 /// Download every job that is not already present, `WORKERS` at a time.
 /// Returns the first error encountered (remaining jobs are abandoned).
 pub fn download_all(stage: &str, jobs: Vec<DownloadJob>, progress: Progress) -> Result<()> {
+    download_all_with_replacements(stage, jobs, Vec::new(), progress)
+}
+
+/// Replacements have already been checked by hash and must bypass the size-only check.
+pub(crate) fn download_all_with_replacements(
+    stage: &str,
+    jobs: Vec<DownloadJob>,
+    replacements: Vec<DownloadJob>,
+    progress: Progress,
+) -> Result<()> {
     let checks_started = Instant::now();
-    let count = jobs.len();
-    let pending = pending_jobs(jobs);
+    let count = replacements.len() + jobs.len();
+    let pending = pending_jobs(jobs, replacements);
     log::info!(
         "[startup] {stage}: checked {count} files in {} ms, {} downloads needed",
         checks_started.elapsed().as_millis(),
@@ -319,8 +329,9 @@ fn take(queue: &Mutex<(usize, usize)>, large: bool) -> Option<usize> {
 /// map many names to the same content hash, and two workers writing the same
 /// `.part` file would corrupt it. Starting big files first keeps one slow
 /// download (e.g. the client jar) from finishing last on its own.
-fn pending_jobs(jobs: Vec<DownloadJob>) -> Vec<DownloadJob> {
+fn pending_jobs(jobs: Vec<DownloadJob>, mut replacements: Vec<DownloadJob>) -> Vec<DownloadJob> {
     let mut seen = HashSet::new();
+    replacements.retain(|job| seen.insert(job.dest.clone()));
     let unique: Vec<_> = jobs
         .into_iter()
         .filter(|j| seen.insert(j.dest.clone()))
@@ -349,6 +360,7 @@ fn pending_jobs(jobs: Vec<DownloadJob>) -> Vec<DownloadJob> {
                 .collect()
         })
     };
+    pending.append(&mut replacements);
     pending.sort_by_key(|j| std::cmp::Reverse(j.transfer_size().unwrap_or(0)));
     pending
 }
@@ -905,7 +917,7 @@ impl<T: Write> Write for Hashing<'_, T> {
 
 /// `<dest>.part`. Appends rather than replacing the extension, otherwise
 /// e.g. `java.exe` and `java.dll` would race on the same temp file.
-fn part_path(dest: &Path) -> PathBuf {
+pub(crate) fn part_path(dest: &Path) -> PathBuf {
     let mut name = dest.as_os_str().to_owned();
     name.push(".part");
     PathBuf::from(name)
@@ -976,12 +988,15 @@ mod tests {
 
     #[test]
     fn pending_dedupes_and_sorts_largest_first() {
-        let pending = pending_jobs(vec![
-            job("missing/a", Some(1)),
-            job("missing/a", Some(1)),
-            job("missing/b", Some(300)),
-            job("missing/c", None),
-        ]);
+        let pending = pending_jobs(
+            vec![
+                job("missing/a", Some(1)),
+                job("missing/a", Some(1)),
+                job("missing/b", Some(300)),
+                job("missing/c", None),
+            ],
+            Vec::new(),
+        );
         let order: Vec<_> = pending.iter().map(|j| j.dest.clone()).collect();
         assert_eq!(
             order,
@@ -1004,7 +1019,7 @@ mod tests {
             };
             jobs.extend([entry.clone(), entry]);
         }
-        let pending = pending_jobs(jobs);
+        let pending = pending_jobs(jobs, Vec::new());
         assert_eq!(pending.len(), 171);
         let unique: HashSet<_> = pending.iter().map(|j| j.dest.clone()).collect();
         assert_eq!(unique.len(), pending.len());
