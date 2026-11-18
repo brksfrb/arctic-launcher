@@ -345,7 +345,7 @@ const RULES: &[Rule] = &[
     },
     Rule {
         // Fabric's root injection failure owns the blame, ahead of outer Mixin errors.
-        pattern: r"(?:InjectionError|InvalidInjectionException):[^\r\n]*from mod [\w\-]+",
+        pattern: crate::crash_conflicts::EXPLICIT_MIXIN_FAILURE_PATTERN,
         explain: |_, text| {
             crate::crash_conflicts::diagnose_mixin(text, &[]).unwrap_or_else(Diagnosis::none)
         },
@@ -361,7 +361,7 @@ const RULES: &[Rule] = &[
     },
     Rule {
         // Forge/NeoForge and generic Mixin failures often name only the config.
-        pattern: r"[\w\-.]+\.mixins\.json",
+        pattern: crate::crash_conflicts::MIXIN_CONFIG_PATTERN,
         explain: |_, text| {
             crate::crash_conflicts::diagnose_mixin(text, &[]).unwrap_or_else(Diagnosis::none)
         },
@@ -1309,9 +1309,12 @@ fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)>
             };
             let diagnosis = (rule.explain)(&c, context);
             if !diagnosis.title.is_empty() {
-                // The generic config rule can first match an unrelated refmap warning or
-                // inventory. Its explanation selects the actual failure; use that as evidence.
-                if rule.pattern == r"[\w\-.]+\.mixins\.json" {
+                // The mixin rules select the actual failure, which can differ from their first match.
+                if matches!(
+                    rule.pattern,
+                    crate::crash_conflicts::MIXIN_CONFIG_PATTERN
+                        | crate::crash_conflicts::EXPLICIT_MIXIN_FAILURE_PATTERN
+                ) {
                     let line = crate::crash_conflicts::mixin_failure_line(text)?;
                     return Some((diagnosis, head_of(line, 2048).to_owned()));
                 }

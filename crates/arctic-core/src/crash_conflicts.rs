@@ -281,10 +281,14 @@ pub fn find_conflicts(mods: &[InstalledMod]) -> Vec<Conflict> {
 }
 
 struct MixinFailure<'a> {
-    config: &'a str,
+    config: Option<&'a str>,
     owner: Option<String>,
     line: &'a str,
 }
+
+pub(crate) const MIXIN_CONFIG_PATTERN: &str = r"[\w.-]+\.mixins\.json|mixins\.[\w.-]+\.json";
+pub(crate) const EXPLICIT_MIXIN_FAILURE_PATTERN: &str =
+    r"(?:InjectionError|InvalidInjectionException):[^\r\n]*\bfrom mod [\w-]+";
 
 /// Prefer the explicit owner in the deepest injection error over outer transformation failures.
 fn mixin_failure(text: &str) -> Option<MixinFailure<'_>> {
@@ -312,17 +316,23 @@ fn mixin_failure(text: &str) -> Option<MixinFailure<'_>> {
     } else {
         text
     };
-    let config = Regex::new(r"([\w\-.]+\.mixins\.json)").ok()?;
-    let owner = Regex::new(r"(?:from mod|apply for mod) ([\w\-]+)").ok()?;
-    let injection = Regex::new(r"(?:InjectionError|InvalidInjectionException):").ok()?;
+    let config = Regex::new(MIXIN_CONFIG_PATTERN).ok()?;
+    let from_mod = Regex::new(r"\bfrom mod ([\w-]+)").ok()?;
+    let apply_for = Regex::new(r"Mixin apply for mod ([\w-]+)").ok()?;
+    let injection = Regex::new(EXPLICIT_MIXIN_FAILURE_PATTERN).ok()?;
     text.lines()
         .rev()
-        .filter(|l| injection.is_match(l) && owner.is_match(l))
+        .filter(|l| injection.is_match(l))
         .chain(text.lines().filter(|l| gate.is_match(l)))
         .find_map(|line| {
-            Some(MixinFailure {
-                config: config.captures(line)?.get(1)?.as_str(),
-                owner: owner.captures(line).map(|o| o[1].to_lowercase()),
+            let owner = from_mod
+                .captures(line)
+                .or_else(|| apply_for.captures(line))
+                .map(|o| o[1].to_lowercase());
+            let config = config.find(line).map(|c| c.as_str());
+            (owner.is_some() || config.is_some()).then_some(MixinFailure {
+                config,
+                owner,
                 line,
             })
         })
@@ -333,10 +343,17 @@ pub(crate) fn mixin_failure_line(text: &str) -> Option<&str> {
     mixin_failure(text).map(|f| f.line)
 }
 
+fn mixin_config_stem(config: &str) -> &str {
+    config
+        .strip_suffix(".mixins.json")
+        .or_else(|| config.strip_prefix("mixins.")?.strip_suffix(".json"))
+        .unwrap_or(config)
+}
+
 /// Which installed mod owns mixin config `config`: the log's own answer, else the jar that lists
-/// the config, else the mod whose id starts the config's name ("noisiumed-common.mixins.json").
+/// the config, else the mod whose id starts the config's stem ("noisiumed-common").
 fn owner_of<'a>(
-    config: &str,
+    config: Option<&str>,
     said: Option<&str>,
     mods: &'a [InstalledMod],
 ) -> Option<&'a InstalledMod> {
@@ -344,15 +361,16 @@ fn owner_of<'a>(
     if let Some(id) = said {
         return by_id(id);
     }
+    let config = config?;
     mods.iter()
         .find(|m| m.mixins.iter().any(|c| c == config))
         .or_else(|| {
-            let stem = config.to_lowercase();
+            let stem = mixin_config_stem(config).to_lowercase();
             mods.iter()
                 .filter(|m| {
                     let id = m.id.to_lowercase();
                     stem.strip_prefix(&id)
-                        .is_some_and(|r| r.starts_with(['-', '.', '_']))
+                        .is_some_and(|r| r.is_empty() || r.starts_with(['-', '.', '_']))
                 })
                 .max_by_key(|m| m.id.len())
         })
@@ -554,6 +572,7 @@ pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Opt
         };
     }
     if failed.is_none()
+        && failure.as_ref().is_none_or(|f| f.owner.is_none())
         && let Some(c) = conflicts.iter().find(|c| clash_mattered(text, c, mods))
     {
         return Some(explain(c, mods, None, false));
@@ -583,6 +602,7 @@ fn mixin_competitor(
     id: &str,
     mods: &[InstalledMod],
 ) -> Option<String> {
+    let config = failure.config?;
     let missing = Regex::new(r"Scanned 0 target\(s\)|(?i:target[^\r\n]*?(?:not found|was not found)|could not find any targets)").ok()?;
     if !missing.is_match(failure.line) {
         return None;
@@ -622,7 +642,7 @@ fn mixin_competitor(
             .filter_map(|l| entry.captures(l))
             .collect();
         if !entries.iter().any(|c| {
-            &c[1] == failure.config
+            &c[1] == config
                 && (&c[2] == failed_mixin
                     || c[2]
                         .strip_suffix(failed_mixin)
@@ -641,7 +661,7 @@ fn mixin_competitor(
                             || e[2].strip_suffix(mixin).is_some_and(|p| p.ends_with('.')))
                 })
             };
-            if &c[1] == failure.config
+            if &c[1] == config
                 && &c[2] == failed_mixin
                 && c[3].eq_ignore_ascii_case(id)
                 && failure.line.contains(&c[4])
@@ -655,10 +675,10 @@ fn mixin_competitor(
         let mut others = Vec::new();
         for c in entries {
             // The failed config's explicit owner also applies to its context entry.
-            if &c[1] == failure.config {
+            if &c[1] == config {
                 continue;
             }
-            let other = owner_of(&c[1], None, mods).map_or_else(
+            let other = owner_of(Some(&c[1]), None, mods).map_or_else(
                 || c[1].trim_end_matches(".mixins.json").to_owned(),
                 |m| m.id.clone(),
             );
@@ -681,6 +701,7 @@ fn redirect_clash(
     failure: &MixinFailure<'_>,
     mods: &[InstalledMod],
 ) -> Option<Diagnosis> {
+    let config = failure.config?;
     let failed = Regex::new(
         r"(?:InjectionError|InvalidInjectionException):[^\r\n]*?Redirector (\S+) in ([\w\-.]+\.mixins\.json):([\w.$]+)",
     )
@@ -693,7 +714,7 @@ fn redirect_clash(
     let before = &text[..text.rfind(failure.line)?];
     let c = before.lines().rev().find_map(|line| {
         let c = conflict.captures(line)?;
-        (&c[1] == failure.config
+        (&c[1] == config
             && c[1] == failed[2]
             && c[2] == failed[3]
             && c[4] == failed[1]
@@ -730,24 +751,46 @@ fn redirect_clash(
     ))
 }
 
+/// The top-level mod to update or remove for a bundled entry in Fabric's resolved mod tree.
+fn fabric_bundler<'a>(text: &'a str, id: &str) -> Option<&'a str> {
+    let header = Regex::new(r"\bLoading \d+ mods?:\s*$").ok()?;
+    let entry = Regex::new(r"^[ \t]*(-|[| ]*[|\\]--) ([a-z][a-z0-9_-]*) \S").ok()?;
+    let mut in_tree = false;
+    let mut root = None;
+    for line in text.lines() {
+        if header.is_match(line) {
+            in_tree = true;
+            root = None;
+        } else if in_tree && !line.trim().is_empty() {
+            let Some(c) = entry.captures(line) else {
+                in_tree = false;
+                continue;
+            };
+            let entry_id = c.get(2)?.as_str();
+            if &c[1] == "-" {
+                root = Some(entry_id);
+            } else if entry_id == id && root.is_some_and(|root| root != id) {
+                return root;
+            }
+        }
+    }
+    None
+}
+
 /// Attribute failures to their explicit owner, then installed metadata, then the config stem.
 pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagnosis> {
     let failure = mixin_failure(text)?;
     let owner = owner_of(failure.config, failure.owner.as_deref(), mods);
-    let id = owner.map_or_else(
-        || {
-            failure
-                .owner
-                .clone()
-                .unwrap_or_else(|| failure.config.trim_end_matches(".mixins.json").to_owned())
-        },
-        |m| m.id.clone(),
-    );
-    let name = owner.map_or(id.as_str(), |m| m.name.as_str());
+    let id = failure
+        .owner
+        .as_deref()
+        .or_else(|| owner.map(|m| m.id.as_str()))
+        .or_else(|| failure.config.map(mixin_config_stem))?;
+    let name = owner.map_or(if id == "modmenu" { "Mod Menu" } else { id }, |m| &m.name);
     if let Some(clash) = redirect_clash(text, &failure, mods) {
         return Some(clash);
     }
-    if let Some(other) = mixin_competitor(text, &failure, &id, mods) {
+    if let Some(other) = mixin_competitor(text, &failure, id, mods) {
         let display = |id: &str| {
             mods.iter()
                 .find(|m| m.id.eq_ignore_ascii_case(id))
@@ -762,7 +805,7 @@ pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagno
                     |m| m.name.clone(),
                 )
         };
-        let (name, other_name) = (display(&id), display(&other));
+        let (name, other_name) = (display(id), display(&other));
         let reason = if id == "particle_core" && other == "sodium" {
             " Sodium replaces the particle rendering code that Particle Core tries to change."
         } else {
@@ -773,7 +816,16 @@ pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagno
             format!(
                 "{name}'s mixin could not find its injection target. {name} and {other_name} both change the same game class, indicating a compatibility clash.{reason} Update or remove {name}, or check its compatibility with {other_name}."
             ),
-            vec![id, other],
+            vec![id.to_owned(), other],
+        ));
+    }
+    if let Some(bundler) = fabric_bundler(text, id) {
+        return Some(Diagnosis::new(
+            format!("{name} (bundled in {bundler}) failed to change the game"),
+            format!(
+                "{name}'s mixin doesn't fit this version of Minecraft or a mod it changes. Update or remove {bundler}, or install a newer {name} build for this Minecraft version to override the bundled copy."
+            ),
+            vec![id.to_owned(), bundler.to_owned()],
         ));
     }
     Some(Diagnosis::new(
@@ -787,7 +839,7 @@ pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagno
                 "{name}'s mixin doesn't fit this version of Minecraft or a mod it changes. Update {name} (or the mod it's an addon for), or remove {name}."
             )
         },
-        vec![id],
+        vec![id.to_owned()],
     ))
 }
 
@@ -1367,6 +1419,79 @@ mod tests {
         assert_eq!(d.title, "Particle Core clashes with Sodium");
         assert_eq!(d.mods, ["particle_core", "sodium"]);
         assert!(d.detail.contains("Update or remove Particle Core"));
+    }
+
+    const REPORT_395: &str = include_str!("../tests/fixtures/crash-395-modmenu.log");
+
+    #[test]
+    fn report_395_names_bundled_modmenu_with_appleskin_first() {
+        let dir = tempfile::tempdir().unwrap();
+        jar(
+            dir.path(),
+            "appleskin.jar",
+            r#"{"id":"appleskin","name":"AppleSkin","version":"3.0.8+mc1.21.11"}"#,
+        );
+        jar(
+            dir.path(),
+            "chestesp.jar",
+            r#"{"id":"chestesp","version":"1.4.1-MC1.21.10-Fabric","jars":[{"file":"META-INF/jars/modmenu.jar"}]}"#,
+        );
+
+        let d = diagnose_exit_in(REPORT_395, 1, dir.path()).unwrap();
+        assert_eq!(
+            d.title,
+            "Mod Menu (bundled in chestesp) failed to change the game"
+        );
+        assert_eq!(d.mods, ["modmenu", "chestesp"]);
+        assert!(d.detail.contains("Update or remove chestesp"));
+        assert!(
+            d.detail
+                .contains("newer Mod Menu build for this Minecraft version")
+        );
+        assert!(d.fix.is_none());
+        assert_eq!(crate::crash::diagnose(REPORT_395), Some(d.clone()));
+
+        let lines: Vec<_> = REPORT_395.lines().collect();
+        let report =
+            crate::crash::Report::build("1.21.11", "fabric", &d.title, &lines, &[], None, None);
+        let failure = mixin_failure_line(REPORT_395).unwrap();
+        assert!(
+            report
+                .log
+                .contains(&format!("{}\nmatched: {failure}", d.title))
+        );
+    }
+
+    #[test]
+    fn report_395_explicit_owner_wins_over_an_unrelated_mixin_and_jar_metadata() {
+        let text = format!(
+            "InvalidMixinException: invalid appleskin.mixins.json:UnrelatedMixin\n{REPORT_395}"
+        )
+        .replace("mixins.modmenu.json", "title-screen-hooks.json")
+        .replace("\t   \\-- modmenu 16.0.0-rc.1", "\t- modmenu 17.0.0");
+        let mods = [
+            InstalledMod {
+                id: "appleskin".into(),
+                name: "AppleSkin".into(),
+                version: "3.0.8".into(),
+                mixins: vec!["title-screen-hooks.json".into()],
+                ..InstalledMod::default()
+            },
+            InstalledMod {
+                id: "appleskin".into(),
+                version: "3.0.7".into(),
+                ..InstalledMod::default()
+            },
+        ];
+        let d = refine(crate::crash::diagnose(&text), &text, &mods).unwrap();
+        assert_eq!(d.title, "Mod Menu failed to change the game");
+        assert_eq!(d.mods, ["modmenu"]);
+        assert_eq!(refine(None, &text, &mods), Some(d));
+        assert!(
+            mixin_failure_line(&text)
+                .unwrap()
+                .contains("from mod modmenu")
+        );
     }
 
     #[test]
