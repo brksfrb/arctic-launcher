@@ -344,7 +344,8 @@ pub fn install_many(
 ) -> Result<(Vec<InstalledMod>, Vec<Failed>)> {
     progress(ProgressInfo::stage("Finding mods"));
     let current = ModIndex::load(index)?;
-    let (plan, failed) = plan_many(projects, game_version, loader, &current, mods_dir);
+    let installed = installed_projects(&current, mods_dir);
+    let (plan, failed) = plan_many(projects, game_version, loader, &installed);
     if plan.is_empty() {
         return Ok((Vec::new(), failed));
     }
@@ -368,7 +369,8 @@ pub fn updates_waiting(
     present: &dyn Fn(&str) -> bool,
 ) -> Result<Option<bool>> {
     let current = ModIndex::load(index)?;
-    let (plan, failed) = plan_many(projects, game_version, loader, &current, mods_dir);
+    let installed = installed_projects(&current, mods_dir);
+    let (plan, failed) = plan_many(projects, game_version, loader, &installed);
     if failed
         .iter()
         .any(|(_, e)| matches!(e, crate::Error::Http(_)))
@@ -417,7 +419,8 @@ pub fn available_updates(
     if projects.is_empty() {
         return Ok(Vec::new());
     }
-    let (plan, _failed) = plan_many(&projects, game_version, loader, &current, mods_dir);
+    let installed = installed_projects(&current, mods_dir);
+    let (plan, _failed) = plan_many(&projects, game_version, loader, &installed);
     let mut updates: Vec<ModUpdate> = plan
         .iter()
         .filter_map(|planned| {
@@ -443,8 +446,7 @@ fn plan_many(
     projects: &[&str],
     game_version: &str,
     loader: LoaderKind,
-    current: &ModIndex,
-    mods_dir: &Path,
+    installed: &HashSet<String>,
 ) -> (Vec<Planned>, Vec<Failed>) {
     let loaders = modrinth::compatible_loaders(loader, game_version);
     let target = Target {
@@ -452,12 +454,10 @@ fn plan_many(
         game_version,
         loader_name: loader.label(),
     };
-    let installed = installed_projects(current, mods_dir);
     let results: Vec<(String, Result<Vec<Planned>>)> = std::thread::scope(|s| {
         let handles: Vec<_> = projects
             .iter()
             .map(|project| {
-                let installed = &installed;
                 let loaders = &loaders;
                 s.spawn(move || {
                     let source = resolve::Modrinth {
