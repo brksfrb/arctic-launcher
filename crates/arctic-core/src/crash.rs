@@ -6,6 +6,8 @@ use std::sync::OnceLock;
 
 use regex::Regex;
 
+use crate::launch::args::{CUSTOM_MAX_HEAP_SOURCE, heap_size_mb};
+
 /// A fix the launcher can do for the player in one click (see `crash_fix`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Fix {
@@ -55,18 +57,35 @@ const BIG_PACK_MODS: usize = 80;
 /// …with less memory than this hardly gets through the loader reading its mods.
 const BIG_PACK_LEAST_MB: u32 = 3 * 1024;
 
-/// `-Xmx1918M` (or `-Xmx2G`) in how Java was started → MB.
+/// The last `-Xmx` in how Java was started, in MiB.
 pub fn max_memory_mb(java: &str) -> Option<u32> {
-    let flag = java
+    let flags = java.lines().rev().find_map(java_summary_parts);
+    let flag = flags
+        .map_or(java, |(_, flags)| flags)
         .split_whitespace()
+        .rev()
         .find_map(|w| w.strip_prefix("-Xmx"))?;
-    let (number, unit) = flag.split_at(flag.find(|c: char| !c.is_ascii_digit())?);
-    let n: u32 = number.parse().ok()?;
-    match unit.to_ascii_lowercase().as_str() {
-        "m" => Some(n),
-        "g" => n.checked_mul(1024),
-        _ => None,
+    heap_size_mb(flag)
+}
+
+fn java_summary_parts(line: &str) -> Option<(&str, &str)> {
+    let (java, flags) = line.strip_prefix("Java ")?.split_once(", flags: ")?;
+    let flags = flags.split_once(" | classpath:").map_or(flags, |(f, _)| f);
+    Some((java, flags))
+}
+
+fn custom_max_memory_mb(text: &str) -> Option<u32> {
+    let (java, flags) = text.lines().rev().find_map(java_summary_parts)?;
+    let mut sizes = flags
+        .split_whitespace()
+        .rev()
+        .filter_map(|w| w.strip_prefix("-Xmx"));
+    let effective = sizes.next()?;
+    // Older Arctic summaries start with the launcher's heap flag and append the custom one.
+    if java.ends_with(CUSTOM_MAX_HEAP_SOURCE) || sizes.next().is_some() {
+        return heap_size_mb(effective);
     }
+    None
 }
 
 /// A big pack that got too little memory (the computer has little to give): what to tell the
@@ -88,6 +107,8 @@ struct Rule {
     pattern: &'static str,
     explain: fn(&regex::Captures, &str) -> Diagnosis,
 }
+
+const OUT_OF_MEMORY: &str = r"java\.lang\.OutOfMemoryError";
 
 /// Checked in order: the most specific causes first.
 const RULES: &[Rule] = &[
@@ -459,13 +480,15 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
-        pattern: r"java\.lang\.OutOfMemoryError",
-        explain: |_, _| {
-            Diagnosis::new(
-                "Minecraft ran out of memory",
-                "Give it more memory in Settings → Memory (or the instance's own setting), or use fewer or lighter mods and resource packs.",
-                Vec::new(),
-            )
+        pattern: OUT_OF_MEMORY,
+        explain: |_, text| {
+            let detail = match custom_max_memory_mb(text) {
+                Some(mb) => format!(
+                    "Custom JVM arguments limit Minecraft's heap to {mb} MB. Remove the custom -Xmx flags to use the launcher's memory setting, or raise the last one if your computer has enough memory."
+                ),
+                None => "Give it more memory in Settings → Memory (or the instance's own setting), or use fewer or lighter mods and resource packs.".into(),
+            };
+            Diagnosis::new("Minecraft ran out of memory", detail, Vec::new())
         },
     },
     Rule {
@@ -847,7 +870,11 @@ fn resolution_log(text: &str) -> Diagnosis {
 
 /// Explain a crash from the game log and/or crash report text.
 pub fn diagnose(text: &str) -> Option<Diagnosis> {
-    diagnose_match(text).map(|(diagnosis, _)| diagnosis)
+    diagnose_with_java(text, None)
+}
+
+pub(crate) fn diagnose_with_java(text: &str, java: Option<&str>) -> Option<Diagnosis> {
+    diagnose_match(text, java).map(|(diagnosis, _)| diagnosis)
 }
 
 fn quilt_load_errors() -> &'static Regex {
@@ -1062,7 +1089,7 @@ pub(crate) fn native_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
     ))
 }
 
-fn diagnose_match(text: &str) -> Option<(Diagnosis, String)> {
+fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
     if let Some(native) = native_diagnosis(text) {
         return Some(native);
     }
@@ -1104,7 +1131,12 @@ fn diagnose_match(text: &str) -> Option<(Diagnosis, String)> {
             {
                 continue;
             }
-            let diagnosis = (rule.explain)(&c, text);
+            let context = if rule.pattern == OUT_OF_MEMORY {
+                java.unwrap_or(text)
+            } else {
+                text
+            };
+            let diagnosis = (rule.explain)(&c, context);
             if !diagnosis.title.is_empty() {
                 // The generic config rule can first match an unrelated refmap warning or
                 // inventory. Its explanation selects the actual failure; use that as evidence.
@@ -1312,7 +1344,7 @@ impl Report {
             java.unwrap_or("")
         );
         // Keep the exact triggering line even when it falls outside the uploaded log tail.
-        if let Some((diagnosis, matched)) = diagnose_match(&diagnosis_text) {
+        if let Some((diagnosis, matched)) = diagnose_match(&diagnosis_text, java) {
             priority.push_str(&format!(
                 "\n---- diagnosis ----\n{}\nmatched: {}\n",
                 diagnosis.title,
@@ -2047,7 +2079,7 @@ mod tests {
     #[test]
     fn report_314_diagnoses_registry_sync_without_guessing_a_mod() {
         for report in [REPORT_314.to_owned(), REPORT_314.replace('\n', "\r\n")] {
-            let (d, matched) = diagnose_match(&report).unwrap();
+            let (d, matched) = diagnose_match(&report, None).unwrap();
             assert_eq!(d.title, "Forge registry IDs did not sync");
             assert!(d.detail.contains("expected IDs"));
             assert!(d.detail.contains("mod conflict in the pack"));
@@ -2136,14 +2168,14 @@ mod tests {
         let warning = REPORT_314.lines().next().unwrap();
         let failure =
             "InjectionError: Critical injection failure in realaddon.mixins.json:AddonMixin";
-        let (_, matched) = diagnose_match(&format!("{warning}\n{failure}")).unwrap();
+        let (_, matched) = diagnose_match(&format!("{warning}\n{failure}"), None).unwrap();
         assert_eq!(matched, failure);
     }
 
     #[test]
     fn oneconfig_download_failure_317() {
         let text = include_str!("../tests/fixtures/crash-317-oneconfig.log");
-        let (d, matched) = diagnose_match(text).unwrap();
+        let (d, matched) = diagnose_match(text, None).unwrap();
         assert_eq!(d.title, "Patcher couldn't download OneConfig (network)");
         assert!(d.detail.contains("Arctic will retry"));
         assert!(matched.contains("failed to download"));
@@ -2456,6 +2488,31 @@ USERNAME=someone
         assert!(!cut.contains("Command Line"));
         assert!(!cut.contains("Environment"));
         assert!(!cut.contains("USERNAME"));
+    }
+
+    #[test]
+    fn the_last_maximum_heap_flag_wins_in_a_java_summary() {
+        let java = "Java javaw.exe, flags: -Xms512M -Xmx6144M -Xmx3584M -XX:+UseG1GC | classpath: client.jar";
+        assert_eq!(max_memory_mb(java), Some(3584));
+        assert_eq!(max_memory_mb("-Xmx6144M -Xmx4g"), Some(4096));
+        assert_eq!(max_memory_mb("-Xmx6144M -Xmxbad"), None);
+    }
+
+    #[test]
+    fn heap_exhaustion_explains_custom_flags_in_old_and_new_java_summaries() {
+        let error = "java.lang.OutOfMemoryError: Java heap space";
+        let summaries = [
+            "Java javaw.exe, flags: -Xms512M -Xmx6144M -Xmx3584M -XX:+UseG1GC".to_owned(),
+            format!("Java javaw.exe{CUSTOM_MAX_HEAP_SOURCE}, flags: -Xms512M -Xmx3584M"),
+        ];
+        for summary in summaries {
+            let diagnosis = diagnose(&format!("{error}\n{summary}")).unwrap();
+            assert_eq!(diagnosis.title, "Minecraft ran out of memory");
+            assert!(diagnosis.detail.contains("heap to 3584 MB"));
+            assert!(diagnosis.detail.contains("Remove the custom -Xmx"));
+        }
+        let default = diagnose(&format!("{error}\nJava javaw.exe, flags: -Xmx3584M")).unwrap();
+        assert!(default.detail.contains("Settings → Memory"));
     }
 
     #[test]
@@ -2990,7 +3047,7 @@ Stacktrace:
     #[test]
     fn report_323_names_the_arctic_redirect_clash() {
         for text in [REPORT_323.to_owned(), REPORT_323.replace('\n', "\r\n")] {
-            let (d, matched) = diagnose_match(&text).unwrap();
+            let (d, matched) = diagnose_match(&text, None).unwrap();
             assert_eq!(d.title, "Arctic Client conflict with mod_id");
             assert_eq!(d.mods, ["mod_id", "arctic"]);
             assert!(d.detail.contains("renderSpace"));
@@ -3038,7 +3095,7 @@ Stacktrace:
     fn unreadable_refmap_is_never_the_matched_mixin_evidence() {
         // Without an explicit failure owner, the generic config rule matches first.
         let text = REPORT_323.replace(" from mod mod_id failed", " failed");
-        let (d, matched) = diagnose_match(&text).unwrap();
+        let (d, matched) = diagnose_match(&text, None).unwrap();
         assert_eq!(d.title, "Arctic Client conflict with mod_id");
         assert!(matched.contains("InjectionError"));
         assert!(!matched.contains("could not be read"));
@@ -3046,7 +3103,7 @@ Stacktrace:
         assert!(diagnose(warning).is_none());
         let text =
             format!("{warning}\nInvalidMixinException: invalid broken.mixins.json:BrokenMixin");
-        let (d, matched) = diagnose_match(&text).unwrap();
+        let (d, matched) = diagnose_match(&text, None).unwrap();
         assert_eq!(d.mods, ["broken"]);
         assert!(matched.starts_with("InvalidMixinException:"));
     }
