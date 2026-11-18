@@ -126,7 +126,7 @@ jobs:
             echo "target-prefix=$target_prefix"
             echo "target-key=$target_prefix$BUILD_HASH-${day%-*}"
           } >> "$GITHUB_OUTPUT"
-      - name: Check for today's shared Gradle cache
+      - name: Restore the shared Gradle cache
         id: warm-cache
         uses: actions/cache/restore@v4
         with:
@@ -135,13 +135,6 @@ jobs:
             ~/.gradle/caches/modules-2/files-2.1
             ~/.gradle/caches/modules-2/metadata-*
             ~/.gradle/caches/modules-2/resources-2.1
-          key: ${{ steps.gradle-keys.outputs.warm-key }}
-          lookup-only: true
-      - name: Restore a previous Gradle cache
-        if: steps.warm-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v4
-        with:
-          path: *gradle-dependency-paths
           key: ${{ steps.gradle-keys.outputs.warm-key }}
           restore-keys: ${{ steps.gradle-keys.outputs.warm-prefix }}
       - name: Cache the Gradle distribution separately
@@ -170,6 +163,27 @@ jobs:
           mod/gradlew -p mod/versions/fabric -Pminecraft_version=1.21.11 "${gradle_args[@]}"
           mod/gradlew -p mod/versions/legacy -Pminecraft_version=1.8.9 "${gradle_args[@]}"
           mod/gradlew --stop
+      - name: Archive the shared Gradle dependencies
+        shell: bash
+        run: |
+          cd "$HOME/.gradle/caches/modules-2"
+          shopt -s nullglob
+          directories=()
+          for directory in files-2.1 metadata-* resources-2.1; do
+            if [[ -d "$directory" ]]; then
+              directories+=("$directory")
+            fi
+          done
+          tar --zstd -cf "$RUNNER_TEMP/gradle-warm.tar.zst" -- "${directories[@]}"
+      - name: Upload Gradle dependencies for this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-warm
+          path: ${{ runner.temp }}/gradle-warm.tar.zst
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          overwrite: true
       - name: Save the resolved Gradle cache
         if: success() && steps.warm-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
@@ -198,7 +212,7 @@ jobs:
         name: Cache the Gradle distribution separately
         uses: actions/cache@v4
         with: *gradle-wrapper-cache-inputs
-      # Search all accessible refs for this target's cache before trying the shared cache.
+      # Try this target's cache first, then the shared dependencies from this run.
       - &restore-target-cache
         name: Restore this target's Gradle dependencies
         id: target-cache
@@ -207,9 +221,25 @@ jobs:
           path: *gradle-dependency-paths
           key: ${{ steps.gradle-keys.outputs.target-key }}
           restore-keys: ${{ steps.gradle-keys.outputs.target-prefix }}
+      - &download-warm-artifact
+        name: Download shared Gradle dependencies from this run
+        id: warm-artifact
+        if: steps.target-cache.outputs.cache-matched-key == '' && needs.gradle-warm.result == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: gradle-warm
+          path: ${{ runner.temp }}/gradle-warm
+      - &extract-warm-artifact
+        name: Extract the shared Gradle dependencies
+        if: steps.warm-artifact.outcome == 'success'
+        run: |
+          modules="$HOME/.gradle/caches/modules-2"
+          mkdir -p "$modules"
+          tar --zstd -xf "$RUNNER_TEMP/gradle-warm/gradle-warm.tar.zst" -C "$modules"
       - &restore-warm-cache
-        name: Fall back to the shared Gradle dependencies
-        if: steps.target-cache.outputs.cache-matched-key == ''
+        name: Fall back to the shared Gradle cache
+        if: steps.target-cache.outputs.cache-matched-key == '' && steps.warm-artifact.outcome != 'success'
         uses: actions/cache/restore@v4
         with:
           path: *gradle-dependency-paths
@@ -260,6 +290,8 @@ jobs:
       - *gradle-cache-keys
       - *gradle-wrapper-cache
       - *restore-target-cache
+      - *download-warm-artifact
+      - *extract-warm-artifact
       - *restore-warm-cache
       - *gradle-network
       - name: Compile and check mod hooks
@@ -279,7 +311,6 @@ jobs:
           fi
           exit "$status"
         env:
-          # check.py retries dependency resolution failures with --refresh-dependencies.
           ARCTIC_GRADLE_FLAGS: ${{ inputs.gradle }}
       - name: Probe a game class
         if: ${{ always() && inputs.probe != '' }}
@@ -304,6 +335,8 @@ jobs:
       - *gradle-cache-keys
       - *gradle-wrapper-cache
       - *restore-target-cache
+      - *download-warm-artifact
+      - *extract-warm-artifact
       - *restore-warm-cache
       - *gradle-network
       - run: chmod +x mod/gradlew

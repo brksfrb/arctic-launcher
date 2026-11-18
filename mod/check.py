@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 MOD = Path(__file__).resolve().parent
@@ -27,13 +28,30 @@ FORGE = "forge-1.8.9"
 
 
 def gradle(cmd):
-    """Run Gradle, echoing its output; retry once with --refresh-dependencies if artifacts could not be resolved."""
-    for attempt in (0, 1):
-        run = subprocess.run(cmd + (["--refresh-dependencies"] if attempt else []), cwd=MOD, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
+    """Run Gradle and retry dependency resolution failures with fresh metadata."""
+    ci = os.environ.get("GITHUB_ACTIONS") == "true"
+    retry_delays = (30, 90) if ci else (0,)
+    retry_flags = ["--refresh-dependencies"]
+    dependency_error = r"Could not find .*\.jar|Could not resolve all (artifacts|files)"
+    if ci:
+        # Use a fresh JVM for each retry so the daemon can't reuse failed lookups.
+        retry_flags.append("--no-daemon")
+        dependency_error += r"|Could not resolve all dependencies|Could not (?:find|resolve) [^\s:]+:[^\s:]+:\S+"
+
+    for attempt, delay in enumerate((0, *retry_delays)):
+        if attempt:
+            message = "== dependency resolution failed; retrying with --refresh-dependencies"
+            print(message + (f" --no-daemon in {delay}s" if delay else ""), flush=True)
+            if delay:
+                time.sleep(delay)
+        run = subprocess.run(
+            cmd + (retry_flags if attempt else []), cwd=MOD, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True, errors="replace",
+        )
         print(run.stdout, end="", flush=True)
-        if run.returncode == 0 or attempt or not re.search(r"Could not find .*\.jar|Could not resolve all (artifacts|files)", run.stdout):
-            return run
-        print("== dependency resolution failed; retrying with --refresh-dependencies", flush=True)
+        if run.returncode == 0 or not re.search(dependency_error, run.stdout):
+            break
+    return run
 
 
 def check(target):
