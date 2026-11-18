@@ -6,6 +6,8 @@ use std::sync::OnceLock;
 
 use regex::Regex;
 
+use crate::launch::args::{CUSTOM_MAX_HEAP_SOURCE, heap_size_mb};
+
 /// A fix the launcher can do for the player in one click (see `crash_fix`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Fix {
@@ -55,18 +57,35 @@ const BIG_PACK_MODS: usize = 80;
 /// …with less memory than this hardly gets through the loader reading its mods.
 const BIG_PACK_LEAST_MB: u32 = 3 * 1024;
 
-/// `-Xmx1918M` (or `-Xmx2G`) in how Java was started → MB.
+/// The last `-Xmx` in how Java was started, in MiB.
 pub fn max_memory_mb(java: &str) -> Option<u32> {
-    let flag = java
+    let flags = java.lines().rev().find_map(java_summary_parts);
+    let flag = flags
+        .map_or(java, |(_, flags)| flags)
         .split_whitespace()
+        .rev()
         .find_map(|w| w.strip_prefix("-Xmx"))?;
-    let (number, unit) = flag.split_at(flag.find(|c: char| !c.is_ascii_digit())?);
-    let n: u32 = number.parse().ok()?;
-    match unit.to_ascii_lowercase().as_str() {
-        "m" => Some(n),
-        "g" => n.checked_mul(1024),
-        _ => None,
+    heap_size_mb(flag)
+}
+
+fn java_summary_parts(line: &str) -> Option<(&str, &str)> {
+    let (java, flags) = line.strip_prefix("Java ")?.split_once(", flags: ")?;
+    let flags = flags.split_once(" | classpath:").map_or(flags, |(f, _)| f);
+    Some((java, flags))
+}
+
+fn custom_max_memory_mb(text: &str) -> Option<u32> {
+    let (java, flags) = text.lines().rev().find_map(java_summary_parts)?;
+    let mut sizes = flags
+        .split_whitespace()
+        .rev()
+        .filter_map(|w| w.strip_prefix("-Xmx"));
+    let effective = sizes.next()?;
+    // Older Arctic summaries start with the launcher's heap flag and append the custom one.
+    if java.ends_with(CUSTOM_MAX_HEAP_SOURCE) || sizes.next().is_some() {
+        return heap_size_mb(effective);
     }
+    None
 }
 
 /// A big pack that got too little memory (the computer has little to give): what to tell the
@@ -88,6 +107,8 @@ struct Rule {
     pattern: &'static str,
     explain: fn(&regex::Captures, &str) -> Diagnosis,
 }
+
+const OUT_OF_MEMORY: &str = r"java\.lang\.OutOfMemoryError";
 
 /// Checked in order: the most specific causes first.
 const RULES: &[Rule] = &[
@@ -163,54 +184,31 @@ const RULES: &[Rule] = &[
         explain: |c, _| split_package(&c[2], &c[3], &c[1]),
     },
     Rule {
-        // Fabric's newer wording, with names in quotes and ranges:
-        //  "- Mod 'SpruceUI' (spruceui) 9.1 requires any version between 1.21.11- (inclusive) and 1.22- (exclusive) of 'Minecraft' (minecraft), but only the wrong version is present: 26.3!"
-        //  "- Mod 'ModernFix' (modernfix) 5.2 requires version 0.16.10 or later of mod 'Fabric Loader' (fabricloader), but only the wrong version is present: 0.15.11!"
-        pattern: r"Mod '([^']+)' \(([^)]+)\) \S+ requires (?:any version|version) (.+?) of (?:mod )?'[^']+' \((minecraft|fabricloader)\), but only the wrong version is present: ([^!\s]+)",
+        // Fabric: "- Mod 'ModernFix' (modernfix) 5.2 requires version 0.16.10 or later of mod 'Fabric Loader' (fabricloader), but only the wrong version is present: 0.15.11!"
+        pattern: r"Mod '([^']+)' \([^)]+\) \S+ requires (?:any version|version) (.+?) of (?:mod )?'[^']+' \(fabricloader\), but only the wrong version is present: ([^!\s]+)",
         explain: |c, text| {
-            // Every mod the same complaint names, once each.
-            let target = c[4].to_owned();
-            let mut names: Vec<String> = Vec::new();
-            if let Ok(re) = Regex::new(&format!(
-                r"Mod '([^']+)' \([^)]+\) \S+ requires [^
-]*? \({target}\), but only the wrong version is present"
-            )) {
-                for m in re.captures_iter(text) {
-                    let name = m[1].to_owned();
-                    if !names.contains(&name) {
-                        names.push(name);
-                    }
+            static LOADER: OnceLock<Regex> = OnceLock::new();
+            let re = LOADER.get_or_init(|| Regex::new(
+                r"Mod '([^']+)' \([^)]+\) \S+ requires [^\r\n]*? \(fabricloader\), but only the wrong version is present"
+            ).unwrap());
+            let mut names = Vec::new();
+            for m in re.captures_iter(text) {
+                if !names.iter().any(|name| name == &m[1]) {
+                    names.push(m[1].to_owned());
                 }
             }
-            if names.is_empty() {
-                names.push(c[1].to_owned());
-            }
-            let have = &c[5];
-            if target == "minecraft" {
-                Diagnosis {
-                    fix: Some(Fix::DisableMods(names.clone())),
-                    ..Diagnosis::new(
-                        format!("{} mod(s) are for another Minecraft version", names.len()),
-                        format!(
-                            "These mods are made for another Minecraft version than {have}: {}. They are probably left over from another version (an instance copied or switched to a newer game). Switch them off, or update them from the instance's Mods page.",
-                            names.join(", ")
-                        ),
-                        names,
-                    )
-                }
-            } else {
-                Diagnosis {
-                    fix: Some(Fix::UpdateLoader),
-                    ..Diagnosis::new(
-                        "Fabric Loader is too old for these mods",
-                        format!(
-                            "{} need {} of Fabric Loader, but this instance has {have}. Update Fabric Loader in the instance's settings (Loader), or remove those mods.",
-                            names.join(", "),
-                            c[3].to_owned()
-                        ),
-                        names,
-                    )
-                }
+            Diagnosis {
+                fix: Some(Fix::UpdateLoader),
+                ..Diagnosis::new(
+                    "Fabric Loader is too old for these mods",
+                    format!(
+                        "{} need {} of Fabric Loader, but this instance has {}. Update Fabric Loader in the instance's settings (Loader), or remove those mods.",
+                        names.join(", "),
+                        &c[2],
+                        &c[3]
+                    ),
+                    names,
+                )
             }
         },
     },
@@ -459,13 +457,15 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
-        pattern: r"java\.lang\.OutOfMemoryError",
-        explain: |_, _| {
-            Diagnosis::new(
-                "Minecraft ran out of memory",
-                "Give it more memory in Settings → Memory (or the instance's own setting), or use fewer or lighter mods and resource packs.",
-                Vec::new(),
-            )
+        pattern: OUT_OF_MEMORY,
+        explain: |_, text| {
+            let detail = match custom_max_memory_mb(text) {
+                Some(mb) => format!(
+                    "Custom JVM arguments limit Minecraft's heap to {mb} MB. Remove the custom -Xmx flags to use the launcher's memory setting, or raise the last one if your computer has enough memory."
+                ),
+                None => "Give it more memory in Settings → Memory (or the instance's own setting), or use fewer or lighter mods and resource packs.".into(),
+            };
+            Diagnosis::new("Minecraft ran out of memory", detail, Vec::new())
         },
     },
     Rule {
@@ -747,6 +747,21 @@ fn collect(text: &str, group: usize) -> Vec<String> {
     out
 }
 
+/// Fabric's missing-dependency reports give the id of the requiring mod.
+pub(crate) fn fabric_missing_dependencies(text: &str) -> impl Iterator<Item = (&str, &str)> {
+    static NO_CANDIDATE: OnceLock<Regex> = OnceLock::new();
+    let no_candidate = NO_CANDIDATE
+        .get_or_init(|| Regex::new(r"HARD_DEP_NO_CANDIDATE (\S+) \S+ \{depends (\S+) @").unwrap());
+    compiled()[0]
+        .captures_iter(text)
+        .filter_map(|c| Some((c.get(2)?.as_str(), c.get(3)?.as_str())))
+        .chain(
+            resolver_causes(text)
+                .flat_map(|line| no_candidate.captures_iter(line))
+                .filter_map(|c| Some((c.get(1)?.as_str(), c.get(2)?.as_str()))),
+        )
+}
+
 fn compiled() -> &'static [Regex] {
     static COMPILED: OnceLock<Vec<Regex>> = OnceLock::new();
     COMPILED.get_or_init(|| {
@@ -915,7 +930,11 @@ fn resolution_log(text: &str) -> Diagnosis {
 
 /// Explain a crash from the game log and/or crash report text.
 pub fn diagnose(text: &str) -> Option<Diagnosis> {
-    diagnose_match(text).map(|(diagnosis, _)| diagnosis)
+    diagnose_with_java(text, None)
+}
+
+pub(crate) fn diagnose_with_java(text: &str, java: Option<&str>) -> Option<Diagnosis> {
+    diagnose_match(text, java).map(|(diagnosis, _)| diagnosis)
 }
 
 fn quilt_load_errors() -> &'static Regex {
@@ -1131,7 +1150,57 @@ pub(crate) fn native_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
     ))
 }
 
-fn diagnose_match(text: &str) -> Option<(Diagnosis, String)> {
+/// A Minecraft mismatch is the cause even when the same report also lists
+/// missing libraries for the incompatible mods.
+fn fabric_wrong_game(text: &str) -> Option<(Diagnosis, String)> {
+    static WRONG_GAME: OnceLock<Regex> = OnceLock::new();
+    let re = WRONG_GAME.get_or_init(|| Regex::new(
+        r"Mod '([^\r\n]+?)' \(([\w.-]+)\) \S+ requires [^\r\n]+? of (?:mod )?'Minecraft' \(minecraft\), but only the wrong version is present: ([^!\s]+)"
+    ).unwrap());
+    let mut matches = re.captures_iter(text).peekable();
+    let first = matches.peek()?;
+    let have = first.get(3)?.as_str();
+    let matched = first.get(0)?.as_str();
+    let vanilla = text.contains("Launching Vanilla (") || text.contains("-Darctic.brand=vanilla");
+    let mut seen = std::collections::HashSet::new();
+    let mut names = Vec::new();
+    let mut performance = Vec::new();
+    for m in matches {
+        let (name, id) = (m.get(1)?.as_str(), m.get(2)?.as_str());
+        if seen.insert(id) {
+            names.push(name.to_owned());
+            if vanilla && crate::mods::performance::is_performance_mod(id) {
+                performance.push(name);
+            }
+        }
+    }
+    let summary = if names.len() == 1 {
+        "1 mod is for a different Minecraft version".to_owned()
+    } else {
+        format!("{} mods are for a different Minecraft version", names.len())
+    };
+    let mut detail = format!(
+        "Minecraft {have} cannot load these mods: {}.",
+        names.join(", ")
+    );
+    if performance.is_empty() {
+        detail.push_str(" Switch them off, or update them from the instance's Mods page.");
+    } else {
+        detail.push_str(&format!(
+            " Arctic's Performance mods from another Minecraft version are still in this Vanilla instance: {}.",
+            performance.join(", ")
+        ));
+    }
+    Some((
+        Diagnosis {
+            fix: Some(Fix::DisableMods(names.clone())),
+            ..Diagnosis::new(format!("{summary}: {}", names.join(", ")), detail, names)
+        },
+        head_of(matched, 2048).to_owned(),
+    ))
+}
+
+fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
     if let Some(native) = native_diagnosis(text) {
         return Some(native);
     }
@@ -1162,6 +1231,10 @@ fn diagnose_match(text: &str) -> Option<(Diagnosis, String)> {
         ));
     }
 
+    if let Some(wrong_game) = fabric_wrong_game(text) {
+        return Some(wrong_game);
+    }
+
     for (rule, re) in RULES.iter().zip(compiled()) {
         for c in re.captures_iter(text) {
             let matched = c.get(0)?;
@@ -1173,7 +1246,12 @@ fn diagnose_match(text: &str) -> Option<(Diagnosis, String)> {
             {
                 continue;
             }
-            let diagnosis = (rule.explain)(&c, text);
+            let context = if rule.pattern == OUT_OF_MEMORY {
+                java.unwrap_or(text)
+            } else {
+                text
+            };
+            let diagnosis = (rule.explain)(&c, context);
             if !diagnosis.title.is_empty() {
                 // The generic config rule can first match an unrelated refmap warning or
                 // inventory. Its explanation selects the actual failure; use that as evidence.
@@ -1381,7 +1459,7 @@ impl Report {
             java.unwrap_or("")
         );
         // Keep the exact triggering line even when it falls outside the uploaded log tail.
-        if let Some((diagnosis, matched)) = diagnose_match(&diagnosis_text) {
+        if let Some((diagnosis, matched)) = diagnose_match(&diagnosis_text, java) {
             priority.push_str(&format!(
                 "\n---- diagnosis ----\n{}\nmatched: {}\n",
                 diagnosis.title,
@@ -1461,6 +1539,15 @@ impl Report {
             } else {
                 title
             };
+        let title = if title.is_empty()
+            || title == "unknown"
+            || title.starts_with("Game exited with code")
+            || title.starts_with("A mod needs ")
+        {
+            fabric_wrong_game(&diagnosis_text).map_or(title, |(d, _)| d.title)
+        } else {
+            title
+        };
         let title = registry_sync_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
         let title = native_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
         let title = if crash_report.is_none()
@@ -2116,7 +2203,7 @@ mod tests {
     #[test]
     fn report_314_diagnoses_registry_sync_without_guessing_a_mod() {
         for report in [REPORT_314.to_owned(), REPORT_314.replace('\n', "\r\n")] {
-            let (d, matched) = diagnose_match(&report).unwrap();
+            let (d, matched) = diagnose_match(&report, None).unwrap();
             assert_eq!(d.title, "Forge registry IDs did not sync");
             assert!(d.detail.contains("expected IDs"));
             assert!(d.detail.contains("mod conflict in the pack"));
@@ -2205,14 +2292,14 @@ mod tests {
         let warning = REPORT_314.lines().next().unwrap();
         let failure =
             "InjectionError: Critical injection failure in realaddon.mixins.json:AddonMixin";
-        let (_, matched) = diagnose_match(&format!("{warning}\n{failure}")).unwrap();
+        let (_, matched) = diagnose_match(&format!("{warning}\n{failure}"), None).unwrap();
         assert_eq!(matched, failure);
     }
 
     #[test]
     fn oneconfig_download_failure_317() {
         let text = include_str!("../tests/fixtures/crash-317-oneconfig.log");
-        let (d, matched) = diagnose_match(text).unwrap();
+        let (d, matched) = diagnose_match(text, None).unwrap();
         assert_eq!(d.title, "Patcher couldn't download OneConfig (network)");
         assert!(d.detail.contains("Arctic will retry"));
         assert!(matched.contains("failed to download"));
@@ -2528,6 +2615,31 @@ USERNAME=someone
     }
 
     #[test]
+    fn the_last_maximum_heap_flag_wins_in_a_java_summary() {
+        let java = "Java javaw.exe, flags: -Xms512M -Xmx6144M -Xmx3584M -XX:+UseG1GC | classpath: client.jar";
+        assert_eq!(max_memory_mb(java), Some(3584));
+        assert_eq!(max_memory_mb("-Xmx6144M -Xmx4g"), Some(4096));
+        assert_eq!(max_memory_mb("-Xmx6144M -Xmxbad"), None);
+    }
+
+    #[test]
+    fn heap_exhaustion_explains_custom_flags_in_old_and_new_java_summaries() {
+        let error = "java.lang.OutOfMemoryError: Java heap space";
+        let summaries = [
+            "Java javaw.exe, flags: -Xms512M -Xmx6144M -Xmx3584M -XX:+UseG1GC".to_owned(),
+            format!("Java javaw.exe{CUSTOM_MAX_HEAP_SOURCE}, flags: -Xms512M -Xmx3584M"),
+        ];
+        for summary in summaries {
+            let diagnosis = diagnose(&format!("{error}\n{summary}")).unwrap();
+            assert_eq!(diagnosis.title, "Minecraft ran out of memory");
+            assert!(diagnosis.detail.contains("heap to 3584 MB"));
+            assert!(diagnosis.detail.contains("Remove the custom -Xmx"));
+        }
+        let default = diagnose(&format!("{error}\nJava javaw.exe, flags: -Xmx3584M")).unwrap();
+        assert!(default.detail.contains("Settings → Memory"));
+    }
+
+    #[test]
     fn a_big_pack_with_little_memory_gets_a_warning_not_a_diagnosis() {
         assert_eq!(
             max_memory_mb("Java x, flags: -Xms512M -Xmx1918M -XX:+UseG1GC"),
@@ -2663,7 +2775,7 @@ Caused by: java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.even
     - minecraft 1.16
 {exception}"#
         );
-        let (d, matched) = diagnose_match(&log).unwrap();
+        let (d, matched) = diagnose_match(&log, None).unwrap();
         assert_eq!(d.title, "EntityCulling needs Fabric API's lifecycle events");
         assert_eq!(d.mods, ["entityculling"]);
         assert!(d.detail.contains("fabric-lifecycle-events-v1"));
@@ -2951,7 +3063,10 @@ Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 (
             	 - Mod 'SpruceUI' (spruceui) 9.1.0+1.21.11 requires any version between 1.21.11- (inclusive) and 1.22- (exclusive) of 'Minecraft' (minecraft), but only the wrong version is present: 26.3!
             	 - Mod 'Pride Lib' (pride) 1.5.1+1.21.11 requires any version between 1.21.11- (inclusive) and 1.22- (exclusive) of 'Minecraft' (minecraft), but only the wrong version is present: 26.3!";
         let d = diagnose(log).unwrap();
-        assert_eq!(d.title, "2 mod(s) are for another Minecraft version");
+        assert_eq!(
+            d.title,
+            "2 mods are for a different Minecraft version: SpruceUI, Pride Lib"
+        );
         assert_eq!(d.mods, ["SpruceUI", "Pride Lib"]);
         assert!(d.detail.contains("26.3") && d.detail.contains("Switch them off"));
         assert_eq!(
@@ -2961,6 +3076,38 @@ Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 (
                 "Pride Lib".into()
             ]))
         );
+    }
+
+    #[test]
+    fn report_377_names_stale_vanilla_performance_mods_before_missing_libraries() {
+        let log = "──── Launching Vanilla (1.8.9) as Player ────
+[main/INFO] Loading Minecraft 1.8.9 with Fabric Loader 0.20.1
+[main/ERROR] Incompatible mods found!
+ - Mod 'EntityCulling' (entityculling) 1.8.2 requires any version of fabric-api, which is missing!
+ - Mod 'Fzzy Config' (fzzy_config) 0.7.7+1.21 requires any version of fabric-language-kotlin, which is missing!
+ - Mod 'Particle Core' (particle_core) 0.3.3+1.21 requires version 1.21 or later of 'Minecraft' (minecraft), but only the wrong version is present: 1.8.9!
+ - Mod 'TRender' (trender) 1.0.5 requires any 1.21.x version of 'Minecraft' (minecraft), but only the wrong version is present: 1.8.9!
+ - Mod 'Sodium' (sodium) 0.6.13+mc1.21.1 requires version 1.21.1 of 'Minecraft' (minecraft), but only the wrong version is present: 1.8.9!";
+        let (d, matched) = diagnose_match(&format!("{log}\n{log}"), None).unwrap();
+        assert_eq!(
+            d.title,
+            "3 mods are for a different Minecraft version: Particle Core, TRender, Sodium"
+        );
+        assert_eq!(d.mods, ["Particle Core", "TRender", "Sodium"]);
+        assert!(d.detail.contains("Arctic's Performance mods"));
+        assert!(d.detail.contains("Vanilla instance"));
+        assert!(matched.contains("(minecraft)"));
+        assert!(!d.detail.contains("fabric-api"));
+        let report = Report::build(
+            "1.8.9",
+            "",
+            "A mod needs fabric-api",
+            &[log],
+            &[],
+            None,
+            None,
+        );
+        assert_eq!(report.title, d.title);
     }
 
     #[test]
@@ -3101,7 +3248,7 @@ Stacktrace:
     #[test]
     fn report_323_names_the_arctic_redirect_clash() {
         for text in [REPORT_323.to_owned(), REPORT_323.replace('\n', "\r\n")] {
-            let (d, matched) = diagnose_match(&text).unwrap();
+            let (d, matched) = diagnose_match(&text, None).unwrap();
             assert_eq!(d.title, "Arctic Client conflict with mod_id");
             assert_eq!(d.mods, ["mod_id", "arctic"]);
             assert!(d.detail.contains("renderSpace"));
@@ -3149,7 +3296,7 @@ Stacktrace:
     fn unreadable_refmap_is_never_the_matched_mixin_evidence() {
         // Without an explicit failure owner, the generic config rule matches first.
         let text = REPORT_323.replace(" from mod mod_id failed", " failed");
-        let (d, matched) = diagnose_match(&text).unwrap();
+        let (d, matched) = diagnose_match(&text, None).unwrap();
         assert_eq!(d.title, "Arctic Client conflict with mod_id");
         assert!(matched.contains("InjectionError"));
         assert!(!matched.contains("could not be read"));
@@ -3157,7 +3304,7 @@ Stacktrace:
         assert!(diagnose(warning).is_none());
         let text =
             format!("{warning}\nInvalidMixinException: invalid broken.mixins.json:BrokenMixin");
-        let (d, matched) = diagnose_match(&text).unwrap();
+        let (d, matched) = diagnose_match(&text, None).unwrap();
         assert_eq!(d.mods, ["broken"]);
         assert!(matched.starts_with("InvalidMixinException:"));
     }

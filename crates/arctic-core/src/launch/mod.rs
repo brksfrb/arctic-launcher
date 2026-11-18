@@ -115,6 +115,7 @@ pub struct LaunchPlan {
     pub high_performance_gpu: bool,
     /// Maximize the game window once it opens.
     pub maximize_window: bool,
+    custom_max_heap: bool,
     /// Access token and proxy password, kept only to redact them from logs.
     secrets: Vec<String>,
 }
@@ -190,8 +191,13 @@ impl LaunchPlan {
             }
             flags.push(java_flag_without_path(arg));
         }
+        let heap_source = if self.custom_max_heap {
+            args::CUSTOM_MAX_HEAP_SOURCE
+        } else {
+            ""
+        };
         format!(
-            "Java {java}, flags: {} | classpath: {}",
+            "Java {java}{heap_source}, flags: {} | classpath: {}",
             flags.join(" "),
             classpath.join(", ")
         )
@@ -439,6 +445,11 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         );
     }
     timer.step("read version");
+    let launcher_owned_vanilla =
+        req.instance.loader.kind().is_none() && req.instance.game_folder.is_none();
+    if launcher_owned_vanilla {
+        crate::mods::performance::recover_vanilla_api(&game_dir)?;
+    }
     let loader = effective_loader(dirs, req.instance, &vanilla.id);
     timer.step("pick loader");
     let version = match loader
@@ -492,13 +503,10 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 progress(ProgressInfo::stage("Checking performance mods"));
                 // Best effort, like the Forge branch: no Sodium is better than no game (an
                 // unreachable Modrinth CDN, a locked or truncated index).
-                if let Err(e) = crate::mods::performance::sync(
+                if let Err(e) = crate::mods::performance::sync_for_launch(
                     &game_dir,
                     &vanilla.id,
-                    req.instance.performance,
-                    req.instance.shaders,
-                    &req.instance.extras,
-                    req.instance.loader.kind().is_some(),
+                    req.instance,
                     progress,
                 ) {
                     log::warn!("performance mods: {e}");
@@ -512,11 +520,13 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 }
                 // Vanilla instances (nothing in the folder but the launcher's own mods): load only
                 // the Fabric API modules those use, which starts the game noticeably faster.
-                if req.instance.performance
-                    && req.instance.loader.kind().is_none()
-                    && let Err(e) = crate::mods::slim_api::apply(&game_dir.join("mods"))
-                {
-                    log::warn!("couldn't cut Fabric API down: {e}");
+                if req.instance.loader.kind().is_none() {
+                    crate::mods::performance::finish_vanilla(
+                        &game_dir,
+                        &vanilla.id,
+                        launcher_owned_vanilla,
+                        req.instance.performance,
+                    )?;
                 }
                 timer.step("performance mods");
                 share_session =
@@ -544,7 +554,15 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
             }
             profile
         }
-        _ => vanilla,
+        _ => {
+            if launcher_owned_vanilla
+                && let Err(e) =
+                    crate::mods::performance::finish_vanilla(&game_dir, &vanilla.id, true, false)
+            {
+                log::warn!("vanilla performance cleanup: {e}");
+            }
+            vanilla
+        }
     };
     // The Arctic sign-in (a network round trip) runs while the game files are checked.
     let session = share_session.then(|| start_cosmetics_session(req, &game_dir));
@@ -645,9 +663,12 @@ fn effective_loader(
     if fabric.is_none() {
         // Pure vanilla: make sure earlier Fabric runs left nothing behind.
         let game_dir = instance.game_dir(dirs);
-        let _ = crate::mods::slim_api::undo(&game_dir.join("mods"));
         let _ = arctic_mod::sync(&game_dir.join("mods"), game, false);
-        let _ = crate::mods::performance::sync(&game_dir, game, false, false, &[], false, &|_| {});
+        if let Err(e) =
+            crate::mods::performance::sync(&game_dir, game, false, false, &[], None, &|_| {})
+        {
+            log::warn!("vanilla performance cleanup: {e}");
+        }
         let _ = crate::mods::polarium::sync(&game_dir.join("mods"), game, false);
     }
     fabric.map(|v| (loaders::LoaderKind::Fabric, v))
@@ -852,12 +873,28 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
         }
         _ => Vec::new(),
     };
+    // Quoted values stay one argument (`-Dx="1.8.9 Forge"`). A leftover word is not passed on:
+    // Java would take it as the main class.
+    let user_args = split_jvm_args(&settings.extra_jvm_args)
+        .into_iter()
+        .chain(split_jvm_args(&req.instance.jvm_args))
+        .filter(|arg| user_jvm_arg_allowed(arg))
+        .collect::<Vec<_>>();
+    let custom_max_heap = user_args
+        .iter()
+        .rev()
+        .find_map(|arg| arg.strip_prefix("-Xmx"));
+    let custom_memory_mb = custom_max_heap.and_then(args::heap_size_mb);
+    let mods = if req.instance.max_memory_mb.is_none() || custom_max_heap.is_some() {
+        mod_count(&inst.game_dir.join("mods"))
+    } else {
+        0
+    };
     let asked = match req.instance.max_memory_mb {
         Some(own) => own,
         None => {
-            let mods = mod_count(&inst.game_dir.join("mods"));
             let asked = crate::system::memory_for_mods(settings.max_memory_mb, mods);
-            if asked > settings.max_memory_mb {
+            if asked > settings.max_memory_mb && custom_max_heap.is_none() {
                 log::info!(
                     "{mods} mods: giving the game {asked} MB (more than the {} MB setting)",
                     settings.max_memory_mb
@@ -867,23 +904,27 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
         }
     };
     let max_memory_mb = crate::system::playable_memory_mb(asked);
-    if max_memory_mb < asked {
+    if let Some(size) = custom_max_heap {
+        log::warn!(
+            "JVM arguments set -Xmx{size}, overriding the launcher memory setting ({max_memory_mb} MB)"
+        );
+        // Use the pack's recommendation independently of the player's memory settings.
+        let recommended = crate::system::memory_for_mods(0, mods);
+        if let Some(custom_mb) = custom_memory_mb.filter(|&mb| mb < recommended) {
+            log::warn!(
+                "JVM arguments limit the heap to {custom_mb} MB, below the recommended {recommended} MB for {mods} mods"
+            );
+        }
+    } else if max_memory_mb < asked {
         log::warn!(
             "memory setting {asked} MB is more than this computer can spare: using {max_memory_mb} MB"
         );
     }
-    // Quoted values stay one argument (`-Dx="1.8.9 Forge"`). A leftover word is not passed on:
-    // Java would take it as the main class.
-    let user_args = split_jvm_args(&settings.extra_jvm_args)
-        .into_iter()
-        .chain(split_jvm_args(&req.instance.jvm_args))
-        .collect::<Vec<_>>();
     let opts = JvmOptions {
         min_memory_mb: settings.min_memory_mb.min(max_memory_mb),
         max_memory_mb,
         extra: user_args
             .iter()
-            .filter(|arg| user_jvm_arg_allowed(arg))
             .cloned()
             .chain(arctic_mod::jvm_flag())
             .chain(arctic_mod::brand_flag(&req.instance.loader))
@@ -900,7 +941,7 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
                     .then(|| inst.version.java_version.as_ref().map(|j| j.major_version))
                     .flatten(),
                 std::thread::available_parallelism().map_or(1, |n| n.get()),
-                max_memory_mb,
+                custom_memory_mb.unwrap_or(max_memory_mb),
             ))
             .chain(fast_start_flags(req.instance))
             .chain(lwjgl_stack_flag(
@@ -947,6 +988,7 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
         }),
         high_performance_gpu: settings.high_performance_gpu,
         maximize_window: settings.game_maximized && !settings.fullscreen,
+        custom_max_heap: custom_max_heap.is_some(),
         secrets: vec![identity.access_token, proxy.password.clone()],
     }
 }
@@ -1190,6 +1232,71 @@ mod tests {
     }
 
     #[test]
+    fn launch_uses_each_last_custom_heap_flag_once() {
+        let temp = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(temp.path());
+        let account = Account {
+            id: "test".into(),
+            username: "Test".into(),
+            uuid: "0".into(),
+            kind: crate::auth::AccountKind::Offline,
+        };
+        let version = VersionEntry {
+            id: "1.20.1".into(),
+            kind: crate::versions::VersionKind::Release,
+            url: String::new(),
+            release_time: String::new(),
+            sha1: String::new(),
+        };
+        let settings = Settings {
+            max_memory_mb: 6144,
+            extra_jvm_args: "-Xms768M -Xmx5G -XX:+UseG1GC".into(),
+            ..Settings::default()
+        };
+        let instance = Instance {
+            arctic_mod: false,
+            jvm_args: "-Xmx4G -Xms1G -Xmx3584M".into(),
+            ..Instance::vanilla_default()
+        };
+        let inst = Installation {
+            version: serde_json::from_str(
+                r#"{"id":"1.20.1","mainClass":"M","javaVersion":{"component":"java-runtime-gamma","majorVersion":17},"arguments":{"jvm":["-cp","${classpath}","-Xms512M","-Xmx6G"]}}"#,
+            )
+            .unwrap(),
+            java: "java".into(),
+            game_dir: temp.path().into(),
+            classpath: Vec::new(),
+            natives_dir: temp.path().into(),
+            game_assets: temp.path().into(),
+            asset_index: String::new(),
+            logging: None,
+        };
+        let plan = plan(
+            &LaunchRequest {
+                dirs: &dirs,
+                version: &version,
+                instance: &instance,
+                account: &account,
+                settings: &settings,
+                bridge: None,
+                copy: 0,
+                quick_play: None,
+            },
+            &inst,
+        );
+        let heap_flags: Vec<_> = plan
+            .args
+            .iter()
+            .filter(|arg| arg.starts_with("-Xm"))
+            .collect();
+        assert_eq!(heap_flags, ["-Xms1G", "-Xmx3584M"]);
+        assert!(plan.args.iter().any(|arg| arg == "-XX:+UseG1GC"));
+        let summary = plan.java_summary();
+        assert!(summary.contains(args::CUSTOM_MAX_HEAP_SOURCE));
+        assert_eq!(crate::crash::max_memory_mb(&summary), Some(3584));
+    }
+
+    #[test]
     fn java_summary_names_flags_and_jars_but_not_folders_or_the_account() {
         let plan = LaunchPlan {
             java: PathBuf::from("C:/Users/me/runtimes/java-runtime-epsilon/bin/javaw.exe"),
@@ -1214,6 +1321,7 @@ mod tests {
             log_file: PathBuf::new(),
             high_performance_gpu: false,
             maximize_window: false,
+            custom_max_heap: false,
             secrets: vec!["SECRET123".into()],
         };
         let s = plan.java_summary();
@@ -1255,6 +1363,7 @@ mod tests {
             log_file: PathBuf::new(),
             high_performance_gpu: false,
             maximize_window: false,
+            custom_max_heap: false,
             secrets: Vec::new(),
         };
         let s = plan.java_summary();
@@ -1281,6 +1390,7 @@ mod tests {
             log_file: PathBuf::new(),
             high_performance_gpu: false,
             maximize_window: false,
+            custom_max_heap: false,
             secrets: vec!["SECRET123".into(), String::new()],
         };
         let cmd = plan.redacted_command();
@@ -1297,6 +1407,7 @@ mod tests {
             log_file: PathBuf::new(),
             high_performance_gpu: false,
             maximize_window: false,
+            custom_max_heap: false,
             secrets: vec!["tok".into(), "hunter2".into()],
         };
         assert!(plan.redacted_command().ends_with("--proxyPass <redacted>"));
