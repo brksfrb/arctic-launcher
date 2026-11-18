@@ -5,7 +5,8 @@ mod resolver;
 
 pub use download::{Compressed, DownloadJob, download_all, set_gentle, sha1_file};
 pub(crate) use download::{
-    Policy, body_timeout, download_single, fetch_text, is_not_found, mirror_for,
+    Policy, body_timeout, download_all_with_replacements, download_single, fetch_text,
+    is_not_found, mirror_for, part_path,
 };
 
 use std::sync::{PoisonError, RwLock};

@@ -516,6 +516,9 @@ fn clash_mattered(text: &str, c: &Conflict, mods: &[InstalledMod]) -> bool {
 /// owned by a clashing mod gets the clash explanation; other clashes require evidence from the
 /// run before they can explain an otherwise unknown crash.
 pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Option<Diagnosis> {
+    if let Some((runtime, _)) = crate::crash::runtime_diagnosis(text) {
+        return Some(runtime);
+    }
     if let Some((registry, _)) = crate::crash::registry_sync_diagnosis(text) {
         return Some(registry);
     }
