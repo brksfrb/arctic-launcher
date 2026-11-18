@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::Path;
 
-use super::{ModIndex, index_path};
+use super::{ModIndex, clear_pending, index_path, record_pending};
 use crate::error::IoContext;
 use crate::loaders::LoaderKind;
 use crate::migrate::{deps, detect};
@@ -78,7 +78,7 @@ pub(super) fn check(
     let index_file = index_path(game_dir);
     let mods_dir = game_dir.join("mods");
     reconcile(&mods_dir, &index_file, game_version, loader, |id| {
-        install_missing(id, game_version, loader, &mods_dir, &index_file, progress)
+        install_missing(id, game_version, loader, game_dir, progress)
     })
 }
 
@@ -141,13 +141,13 @@ fn install_missing(
     id: &str,
     game_version: &str,
     loader: LoaderKind,
-    mods_dir: &Path,
-    index: &Path,
+    game_dir: &Path,
     progress: Progress,
 ) -> Result<()> {
     let project = project_for(id);
-    let current = ModIndex::load(index)?;
-    let existing = mods::installed_projects(&current, mods_dir);
+    let mods_dir = game_dir.join("mods");
+    let current = ModIndex::load(&index_path(game_dir))?;
+    let existing = mods::installed_projects(&current, &mods_dir);
     let (mut plan, mut failed) =
         mods::plan_many(&[project], game_version, LoaderKind::Fabric, &existing);
     if let Some((_, error)) = failed.pop() {
@@ -164,10 +164,10 @@ fn install_missing(
     for p in &mut plan {
         p.dependency = true;
     }
-    let present: HashSet<_> = deps::jars(mods_dir)
+    let present: HashSet<_> = deps::jars(&mods_dir)
         .flat_map(|p| deps::fabric_ids(&p, loader).0)
         .collect();
-    install_plan(&plan, &current, mods_dir, index, progress, |staging| {
+    install_plan(&plan, &current, game_dir, progress, |staging| {
         let providers: Vec<_> = deps::jars(staging).collect();
         if !providers
             .iter()
@@ -197,25 +197,25 @@ fn install_missing(
 pub(super) fn install_plan(
     plan: &[Planned],
     current: &ModIndex,
-    mods_dir: &Path,
-    index: &Path,
+    game_dir: &Path,
     progress: Progress,
     validate: impl FnOnce(&Path) -> Result<()>,
 ) -> Result<Vec<mods::InstalledMod>> {
     if plan.is_empty() {
         return Ok(Vec::new());
     }
-    fs::create_dir_all(mods_dir).at(mods_dir)?;
+    let mods_dir = game_dir.join("mods");
+    fs::create_dir_all(&mods_dir).at(&mods_dir)?;
     let staging = tempfile::Builder::new()
         .prefix(".arctic-performance-")
-        .tempdir_in(mods_dir)
-        .at(mods_dir)?;
-    let (entries, jobs) = mods::prepare(plan, mods_dir)?;
+        .tempdir_in(&mods_dir)
+        .at(&mods_dir)?;
+    let (entries, jobs) = mods::prepare(plan, &mods_dir)?;
     let mut names = HashSet::new();
     let mut downloads = Vec::new();
     for (entry, mut job) in entries.iter().zip(jobs) {
         if !names.insert(&entry.file_name)
-            || (mods::files::exists(mods_dir, &entry.file_name)
+            || (mods::files::exists(&mods_dir, &entry.file_name)
                 && current
                     .by_file(&entry.file_name)
                     .is_none_or(|m| m.project_id != entry.project_id))
@@ -234,27 +234,18 @@ pub(super) fn install_plan(
     crate::net::download_all("Downloading mods", downloads, progress)?;
     validate(staging.path())?;
 
-    let mut added = Vec::new();
+    record_pending(game_dir, &entries, current)?;
     let result = (|| {
         for entry in &entries {
             let from = staging.path().join(&entry.file_name);
             if from.is_file() {
                 let to = mods_dir.join(&entry.file_name);
                 fs::rename(&from, &to).at(&to)?;
-                if current.by_file(&entry.file_name).is_none() {
-                    added.push(to);
-                }
             }
         }
-        mods::record(current, &entries, mods_dir)?.save(index)
+        mods::record(current, &entries, &mods_dir)?.save(&index_path(game_dir))
     })();
-    if result.is_err() {
-        for path in added {
-            if let Err(e) = fs::remove_file(&path) {
-                log::warn!("couldn't remove untracked {}: {e}", path.display());
-            }
-        }
-    }
+    clear_pending(game_dir)?;
     result?;
     Ok(entries)
 }
