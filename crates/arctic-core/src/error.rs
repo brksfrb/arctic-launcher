@@ -25,6 +25,12 @@ pub enum Error {
     #[error("{0}")]
     NotConfigured(String),
 
+    #[error("Selected version is incompatible with this instance")]
+    IncompatibleContentVersion,
+
+    #[error("The selected world is no longer available")]
+    DataPackWorldMissing,
+
     #[error("{0}")]
     Other(String),
 }

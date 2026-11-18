@@ -1,22 +1,17 @@
-//! Modpack browser: search Modrinth modpacks and install one as a new
-//! instance, or import a `.mrpack` file.
+//! The discovery page's frame (back button, title, `.mrpack` import) and the modpack rows.
+//! Searching and filtering live in `hub.rs`.
 
 use arctic_core::instances::Instance;
-use arctic_core::mods::{ProjectHit, SearchQuery, SortBy};
+use arctic_core::mods::ProjectHit;
 use eframe::egui::{self, RichText};
 
 use super::Load;
 use super::mods_page::mod_icon;
 use crate::app::ArcticApp;
 use crate::art::icons::Icon;
-use crate::theme;
 use crate::toasts::Kind;
 use crate::widgets;
 use crate::{t, tf};
-const PAGE_SIZE: usize = 20;
-const SEARCH_DELAY: f64 = 0.35;
-/// Marks the shared search state as belonging to this page.
-const SEARCH_OWNER: &str = "\0modpacks";
 
 impl ArcticApp {
     pub(super) fn modpacks_page(&mut self, ui: &mut egui::Ui) {
@@ -39,8 +34,8 @@ impl ArcticApp {
                 widgets::page_header(
                     ui,
                     p,
-                    t!("instances.modpacks"),
-                    t!("instances.search_modpacks_on_modrinth"),
+                    t!("instances.hub.title"),
+                    t!("instances.hub.subtitle"),
                 );
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
@@ -62,77 +57,13 @@ impl ArcticApp {
                 }
             });
         });
-        if self.inst.search.instance.as_deref() != Some(SEARCH_OWNER) {
-            self.inst.search.instance = Some(SEARCH_OWNER.to_owned());
-            self.inst.search.text.clear();
-            self.inst.search.sort = SortBy::Downloads;
-            self.run_pack_search();
-        }
-        self.pack_search_bar(ui);
-        ui.add_space(8.0);
-        self.pack_install_progress(ui);
-        self.pack_results(ui);
+        ui.add_space(6.0);
+        self.hub_body(ui);
+        self.project_preview_in_hub(ui.ctx());
+        self.pack_preview_dialog(ui.ctx());
     }
 
-    fn pack_search_bar(&mut self, ui: &mut egui::Ui) {
-        let p = self.palette();
-        let mut search = false;
-        crate::widgets::row(ui, |ui| {
-            let field = ui.add(
-                widgets::text_field(&mut self.inst.search.text)
-                    .hint_text(t!("instances.search_modpacks_on_modrinth"))
-                    .desired_width(360.0),
-            );
-            let now = ui.input(|i| i.time);
-            if field.changed() {
-                self.inst.search.typed_at = Some(now);
-            }
-            search |= field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            if let Some(at) = self.inst.search.typed_at {
-                if now - at >= SEARCH_DELAY {
-                    search = true;
-                } else {
-                    ui.ctx()
-                        .request_repaint_after(std::time::Duration::from_secs_f64(
-                            SEARCH_DELAY - (now - at),
-                        ));
-                }
-            }
-            let before = self.inst.search.sort;
-            super::browse::sort_combo(ui, "pack_sort", &mut self.inst.search.sort);
-            search |= self.inst.search.sort != before;
-            search |= widgets::button(ui, p, None, t!("instances.search"), true).clicked();
-        });
-        if search {
-            self.inst.search.typed_at = None;
-            self.run_pack_search();
-        }
-    }
-
-    fn run_pack_search(&mut self) {
-        self.run_pack_search_from(0);
-    }
-
-    fn run_pack_search_from(&mut self, offset: usize) {
-        let search = &mut self.inst.search;
-        search.request += 1;
-        search.loading = true;
-        search.more_from = offset;
-        if offset == 0 {
-            search.results = None;
-        }
-        let query = SearchQuery {
-            text: search.text.trim().to_owned(),
-            sort: search.sort,
-            offset,
-            limit: PAGE_SIZE,
-            project_type: arctic_core::mods::ProjectType::Modpack,
-            ..SearchQuery::default()
-        };
-        self.tasks.mod_search(search.request, query);
-    }
-
-    fn pack_install_progress(&mut self, ui: &mut egui::Ui) {
+    pub(super) fn pack_install_progress(&mut self, ui: &mut egui::Ui) {
         if self.inst.pack_installing.is_none() {
             return;
         }
@@ -159,46 +90,27 @@ impl ArcticApp {
         ui.add_space(8.0);
     }
 
-    fn pack_results(&mut self, ui: &mut egui::Ui) {
+    pub(super) fn pack_row(&mut self, ui: &mut egui::Ui, hit: &ProjectHit) {
         let p = self.palette();
-        let hits = match &self.inst.search.results {
-            None => {
-                ui.horizontal(|ui| {
-                    ui.spinner();
-                    ui.label(RichText::new(t!("instances.searching_modrinth")).color(p.muted));
-                });
-                return;
-            }
-            Some(Err(e)) => {
-                ui.label(RichText::new(tf!("instances.search_failed", e = e)).color(p.error));
-                return;
-            }
-            Some(Ok(page)) if page.hits.is_empty() => {
-                ui.label(RichText::new(t!("instances.no_modpacks_found")).color(p.muted));
-                return;
-            }
-            Some(Ok(page)) => page.hits.clone(),
-        };
-        theme::card(p).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            for hit in &hits {
-                self.pack_row(ui, hit);
-                ui.separator();
-            }
-        });
-        if let Some(from) = super::more_on_scroll(ui, p, &self.inst.search) {
-            self.run_pack_search_from(from);
-        }
-    }
-
-    fn pack_row(&mut self, ui: &mut egui::Ui, hit: &ProjectHit) {
-        let p = self.palette();
+        let mut open = false;
         crate::widgets::row(ui, |ui| {
-            mod_icon(ui, self, hit.icon_url.as_deref());
+            super::content_install::select_content(ui, &mut self.inst.search.selected, hit);
+            open |= ui
+                .scope(|ui| mod_icon(ui, self, hit.icon_url.as_deref()))
+                .response
+                .interact(egui::Sense::click())
+                .on_hover_text(t!("instances.preview_project"))
+                .clicked();
             ui.vertical(|ui| {
                 ui.set_max_width(ui.available_width() - 130.0);
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(&hit.title).strong().color(p.text));
+                    open |= ui
+                        .add(
+                            egui::Label::new(RichText::new(&hit.title).strong().color(p.text))
+                                .sense(egui::Sense::click()),
+                        )
+                        .on_hover_text(t!("instances.preview_project"))
+                        .clicked();
                     ui.label(
                         RichText::new(tf!("common.by_author", author = hit.author))
                             .small()
@@ -207,12 +119,9 @@ impl ArcticApp {
                 });
                 ui.label(RichText::new(&hit.description).color(p.muted));
                 ui.label(
-                    RichText::new(tf!(
-                        "instances.downloads",
-                        compact = super::browse::compact(hit.downloads)
-                    ))
-                    .small()
-                    .color(p.muted),
+                    RichText::new(super::hub::stats_line(hit))
+                        .small()
+                        .color(p.muted),
                 );
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -230,6 +139,9 @@ impl ArcticApp {
                         self.inst.install_progress = None;
                         self.tasks.install_modpack(hit.project_id.clone(), None);
                     }
+                }
+                if widgets::button(ui, p, None, t!("instances.view_mods"), false).clicked() {
+                    self.open_pack_preview(&hit.project_id, &hit.title, None);
                 }
                 let open = self.inst.pack_choosing.as_deref() == Some(hit.project_id.as_str());
                 let label = if open {
@@ -252,13 +164,17 @@ impl ArcticApp {
                 }
             });
         });
+        if open {
+            let owner = self.instance.id.clone();
+            self.open_project_preview_in(ui.ctx(), owner, hit.clone(), None, true);
+        }
         if self.inst.pack_choosing.as_deref() == Some(hit.project_id.as_str()) {
-            self.pack_version_list(ui, &hit.project_id);
+            self.pack_version_list(ui, &hit.project_id, &hit.title);
         }
     }
 
     /// The versions of one modpack, each with its Minecraft version and loader and an Install button.
-    fn pack_version_list(&mut self, ui: &mut egui::Ui, project_id: &str) {
+    fn pack_version_list(&mut self, ui: &mut egui::Ui, project_id: &str, title: &str) {
         let p = self.palette();
         let versions = match self.inst.pack_versions.get(project_id) {
             None | Some(Load::Loading) => {
@@ -283,6 +199,7 @@ impl ArcticApp {
         }
         let busy = self.inst.pack_installing.is_some();
         let mut chosen = None;
+        let mut viewed = None;
         egui::ScrollArea::vertical()
             .id_salt("pack_versions")
             .max_height(240.0)
@@ -315,10 +232,18 @@ impl ArcticApp {
                             if install.clicked() {
                                 chosen = Some(v.id.clone());
                             }
+                            if widgets::button(ui, p, None, t!("instances.view_mods"), false)
+                                .clicked()
+                            {
+                                viewed = Some(v.id.clone());
+                            }
                         });
                     });
                 }
             });
+        if let Some(version_id) = viewed {
+            self.open_pack_preview(project_id, title, Some(version_id));
+        }
         if let Some(version_id) = chosen {
             self.inst.pack_installing = Some(project_id.to_owned());
             self.inst.install_progress = None;

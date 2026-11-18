@@ -88,7 +88,7 @@ pub fn recognize(
     Ok(report)
 }
 
-fn lookup_retrying(hashes: &[String]) -> Result<HashMap<String, Version>> {
+pub(super) fn lookup_retrying(hashes: &[String]) -> Result<HashMap<String, Version>> {
     let mut attempt = 1;
     loop {
         match lookup(hashes) {

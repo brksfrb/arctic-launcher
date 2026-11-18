@@ -577,6 +577,10 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
+        pattern: r"(?:NoClassDefFoundError|ClassNotFoundException):[ \t]+(net[./]fabricmc[./]fabric[./]api[./][\w./$]+)",
+        explain: missing_fabric_api_class,
+    },
+    Rule {
         pattern: r"java\.lang\.(?:NoClassDefFoundError|ClassNotFoundException):[ \t]+([\w$]+(?:[./][\w$]+)+)",
         explain: missing_recommended_dependency,
     },
@@ -601,6 +605,85 @@ const RULES: &[Rule] = &[
         },
     },
 ];
+
+fn missing_fabric_api_class(c: &regex::Captures, text: &str) -> Diagnosis {
+    let class = c[1].replace('/', ".");
+    let package = class.trim_start_matches("net.fabricmc.fabric.api.");
+    let module = match package {
+        p if p.starts_with("client.event.lifecycle.v1.")
+            || p.starts_with("event.lifecycle.v1.") =>
+        {
+            Some(("lifecycle events", "fabric-lifecycle-events-v1"))
+        }
+        p if p.starts_with("client.keybinding.v1.") => {
+            Some(("key binding API", "fabric-key-binding-api-v1"))
+        }
+        p if p.starts_with("client.networking.v1.") || p.starts_with("networking.v1.") => {
+            Some(("networking API", "fabric-networking-api-v1"))
+        }
+        "event.Event" | "event.EventFactory" => Some(("base API", "fabric-api-base")),
+        _ => None,
+    };
+    // The current exception's entrypoint names the provider. The mod inventory may contain many
+    // unrelated mods, so use it only to look up the name of that provider.
+    static ENTRYPOINT: OnceLock<Regex> = OnceLock::new();
+    let entrypoint = ENTRYPOINT.get_or_init(|| {
+        Regex::new(r"Could not execute entrypoint stage '[^']+'[^\r\n]*?provided by '([\w-]+)'")
+            .unwrap()
+    });
+    let before = &text[..c.get(0).unwrap().start()];
+    let context = before
+        .rsplit("\n[")
+        .next()
+        .unwrap_or(before)
+        .rsplit("\n\n")
+        .next()
+        .unwrap_or(before)
+        .rsplit("\r\n\r\n")
+        .next()
+        .unwrap_or(before);
+    let id = entrypoint
+        .captures_iter(context)
+        .last()
+        .and_then(|m| m.get(1))
+        .map(|m| m.as_str());
+    let performance_name = id.and_then(crate::mods::performance::performance_mod_name);
+    let name = performance_name.map(str::to_owned).or_else(|| {
+        let id = id?;
+        Some(
+            crate::crash_conflicts::from_crash_report(text)
+                .into_iter()
+                .find(|m| m.id == id)
+                .map_or_else(|| id.to_owned(), |m| m.name),
+        )
+    });
+    let name = name.as_deref().unwrap_or("A mod");
+    let title = module.map_or_else(
+        || format!("{name} needs Fabric API"),
+        |(name_of_module, _)| format!("{name} needs Fabric API's {name_of_module}"),
+    );
+    let mut detail = module.map_or_else(
+        || format!("{name} needs {class}. Fabric API is missing or too old to provide it."),
+        |(name_of_module, id)| {
+            format!(
+                "{name} needs Fabric API's {name_of_module} module ({id}), which is missing or too old."
+            )
+        },
+    );
+    let vanilla = text.lines().any(|line| {
+        line.starts_with("──── Launching Vanilla (")
+            || (line.contains("--gameDir")
+                && line
+                    .replace('\\', "/")
+                    .contains("/instances/vanilla/minecraft"))
+    });
+    if performance_name.is_some() && vanilla {
+        detail.push_str(&format!(
+            " Arctic installed {name} through Performance for this Vanilla instance."
+        ));
+    }
+    Diagnosis::new(title, detail, id.into_iter().map(str::to_owned).collect())
+}
 
 fn missing_recommended_dependency(class: &regex::Captures, text: &str) -> Diagnosis {
     static WARNING: OnceLock<Regex> = OnceLock::new();
@@ -1036,6 +1119,7 @@ fn fatal_linkage(text: &str, at: usize) -> bool {
     let explicit = context.contains("exception in thread")
         || context.contains("uncaught exception")
         || context.contains("/fatal]")
+        || context.contains("minecraft has crashed!")
         || context.contains("encountered an unexpected exception")
         || context.contains("reported exception thrown");
     let later_progress = text[at..]
@@ -2859,6 +2943,48 @@ USERNAME=someone
         let d = diagnose("java.lang.NoClassDefFoundError: com/example/coolmod/Thing").unwrap();
         assert_eq!(d.title, "A mod is for a different version");
         assert!(!d.repair);
+    }
+
+    #[test]
+    fn crash_378_names_entityculling_and_the_missing_fabric_api_module() {
+        let exception = r"[main/ERROR]: Minecraft has crashed!
+net.fabricmc.loader.impl.FormattedException: java.lang.RuntimeException: Could not execute entrypoint stage 'client' due to errors, provided by 'entityculling' at 'dev.tr7zw.entityculling.EntityCullingMod'!
+Caused by: java.lang.NoClassDefFoundError: net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientTickEvents
+    at dev.tr7zw.entityculling.EntityCullingMod.initModloader(EntityCullingMod.java:23)
+Caused by: java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents";
+        let log = format!(
+            r#"launching Minecraft --gameDir "C:\Arctic Launcher\profiles\default\instances\vanilla\minecraft"
+[main/INFO]: Loading Minecraft 1.16 with Fabric Loader 0.20.1
+[main/INFO]: Loading 8 mods:
+    - entityculling 1.5.2
+    - fabric 0.13.1+build.370-1.16
+       |-- fabric-api-base 0.1.3+12a8474c7c
+       \-- fabric-key-binding-api-v1 1.0.0+e16a97747c
+    - fabricloader 0.20.1
+       \-- mixinextras 0.5.5
+    - java 8
+    - minecraft 1.16
+{exception}"#
+        );
+        let (d, matched) = diagnose_match(&log, None).unwrap();
+        assert_eq!(d.title, "EntityCulling needs Fabric API's lifecycle events");
+        assert_eq!(d.mods, ["entityculling"]);
+        assert!(d.detail.contains("fabric-lifecycle-events-v1"));
+        assert!(d.detail.contains("missing or too old"));
+        assert!(d.detail.contains("Arctic installed EntityCulling"));
+        assert!(matched.contains("NoClassDefFoundError"));
+
+        let other_instance = exception.replace(
+            "java.lang.NoClassDefFoundError: net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientTickEvents",
+            "java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents",
+        );
+        let d = diagnose(&other_instance).unwrap();
+        assert_eq!(d.title, "EntityCulling needs Fabric API's lifecycle events");
+        assert!(!d.detail.contains("Arctic installed"));
+        assert!(
+            diagnose("[main/WARN]: java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents")
+                .is_none()
+        );
     }
 
     #[test]
