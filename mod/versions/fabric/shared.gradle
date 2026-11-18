@@ -241,6 +241,7 @@ ext.arcticProps = [
 		java: javaVersion,
 		// Zoom, Freelook, Fullbright and the rest (see Compat.FEATURES): 1.20+ for now.
 		features: true,
+		hostedBans: atLeast('1.14'),
 		// Minecraft's own buttons, sliders, checkboxes and text boxes in the Arctic style (1.13: Widgets13).
 		restyleWidgets: atLeast('1.14'),
 		widgets13: !atLeast('1.14'),

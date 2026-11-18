@@ -759,7 +759,25 @@ impl ArcticApp {
                 };
                 (t!("tasks.the_game_froze_and_was_closed").into(), detail)
             }
-            _ => (d.title.clone(), d.detail.clone()),
+            title => {
+                if let [name, dependency] = d.mods.as_slice()
+                    && title == format!("{name} needs {dependency}")
+                {
+                    return (
+                        tf!(
+                            "tasks.needs_dependency",
+                            name = name,
+                            dependency = dependency
+                        ),
+                        tf!(
+                            "tasks.install_dependency_or_remove_mod",
+                            name = name,
+                            dependency = dependency
+                        ),
+                    );
+                }
+                (d.title.clone(), d.detail.clone())
+            }
         }
     }
 
