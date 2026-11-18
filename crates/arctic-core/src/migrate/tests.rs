@@ -599,10 +599,14 @@ fn reads_sklauncher_3_profiles_and_4_instances() {
                    "gameDir": mc.join("instances/Fabric_26.3"), "memoryMax": 3072,
                    "javaArgs": "-Xmx1G -XX:+UseG1GC"},
             "b2": {"name": "", "type": "latest-release"},
+            "c3": {"name": "Custom heap", "type": "custom", "lastVersionId": "fabric-loader-0.20.1-26.3",
+                   "gameDir": mc.join("instances/Custom_Heap"),
+                   "javaArgs": "-Xms512M -Xmx6144M \"-Xmx3584M\" -XX:+UseG1GC"},
         }, "version": 6})
         .to_string(),
     );
     std::fs::create_dir_all(mc.join("instances/Fabric_26.3")).unwrap();
+    std::fs::create_dir_all(mc.join("instances/Custom_Heap")).unwrap();
     let mut scan = Scan::default();
     sources::minecraft_profiles(&mut scan, &mc);
     let fabric = scan
@@ -618,6 +622,12 @@ fn reads_sklauncher_3_profiles_and_4_instances() {
         Some("0.20.1")
     );
     assert_eq!(fabric.memory_mb, Some(3072));
+    let custom_heap = scan
+        .instances
+        .iter()
+        .find(|f| f.name == "Custom heap")
+        .unwrap();
+    assert_eq!(custom_heap.memory_mb, Some(3584));
     assert!(!fabric.shared);
     assert!(scan.instances.iter().any(|f| f.into_vanilla));
 
