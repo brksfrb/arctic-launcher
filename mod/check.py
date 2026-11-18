@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 MOD = Path(__file__).resolve().parent
@@ -26,14 +27,46 @@ LEGACY_MIXCHECK = MOD / "versions" / "legacy" / "mixcheck.py"
 FORGE = "forge-1.8.9"
 
 
+DEPENDENCY_ERROR = re.compile(
+    r"Could not find .*\.jar|Could not resolve all (?:artifacts|files|dependencies)"
+    r"|Could not (?:find|resolve) [^\s:]+:[^\s:]+:\S+|could not resolve plugin artifact"
+)
+OFFLINE_CACHE_MISS = re.compile(
+    r"No cached .* available for offline mode"
+    r"|Failed download after \d+ attempts"
+    r"|Failed to setup Minecraft, .*Failed (?:to )?download"
+)
+
+
+def run_gradle(cmd):
+    run = subprocess.run(
+        cmd, cwd=MOD, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, errors="replace",
+    )
+    print(run.stdout, end="", flush=True)
+    return run
+
+
 def gradle(cmd):
-    """Run Gradle, echoing its output; retry once with --refresh-dependencies if artifacts could not be resolved."""
-    for attempt in (0, 1):
-        run = subprocess.run(cmd + (["--refresh-dependencies"] if attempt else []), cwd=MOD, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
-        print(run.stdout, end="", flush=True)
-        if run.returncode == 0 or attempt or not re.search(r"Could not find .*\.jar|Could not resolve all (artifacts|files)", run.stdout):
+    """Prefer a restored cache and retry online dependency failures in CI."""
+    if os.environ.get("GITHUB_ACTIONS") != "true" or "--offline" in cmd:
+        return run_gradle(cmd)
+
+    if os.environ.get("ARCTIC_GRADLE_WARM_CACHE") == "true":
+        print("== trying Gradle offline with the restored cache", flush=True)
+        run = run_gradle([*cmd, "--offline"])
+        if run.returncode == 0 or not (DEPENDENCY_ERROR.search(run.stdout) or OFFLINE_CACHE_MISS.search(run.stdout)):
             return run
-        print("== dependency resolution failed; retrying with --refresh-dependencies", flush=True)
+        print("== offline dependency resolution failed; trying Gradle online", flush=True)
+
+    run = run_gradle(cmd)
+    for delay in (60, 180):
+        if run.returncode == 0 or not DEPENDENCY_ERROR.search(run.stdout):
+            break
+        print(f"== dependency resolution failed; retrying in {delay}s", flush=True)
+        time.sleep(delay)
+        run = run_gradle(cmd)
+    return run
 
 
 def check(target):
