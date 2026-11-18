@@ -233,5 +233,21 @@
   "social.words_separated_by_commas_a_line_with_any_of": "Palavras separadas por vírgulas; uma linha com qualquer uma delas corresponde. \"-palavra\" exclui linhas.",
   "social.world_open_to_friends": "Mundo aberto para amigos",
   "social.your_friend_joined": "Seu amigo entrou",
-  "social.your_world_is_open_to_lan_for_the_friends": "Seu mundo está aberto em LAN para os amigos que você convidou"
+  "social.your_world_is_open_to_lan_for_the_friends": "Seu mundo está aberto em LAN para os amigos que você convidou",
+  "social.hostban_host": "Não podes banir o anfitrião.",
+  "social.hostban_tunnel_ip": "Não é possível banir por IP quem entrou por convite ou código. Usa /ban <nome>.",
+  "social.hostban_disconnect": "Foste banido deste mundo.\n{0}",
+  "social.hostban_default_reason": "Nenhum motivo indicado.",
+  "social.hostban_storage_error": "Não foi possível ler ou guardar a lista de banimentos deste mundo.",
+  "social.hostban_player_already_banned": "{0} já está banido.",
+  "social.hostban_player_banned": "{0} foi banido.",
+  "social.hostban_player_not_banned": "{0} não está banido.",
+  "social.hostban_player_pardoned": "O banimento de {0} foi removido.",
+  "social.hostban_unknown_ip": "{0} não é um endereço IP válido nem o nome de um jogador online.",
+  "social.hostban_ip_already_banned": "O endereço IP {0} já está banido.",
+  "social.hostban_ip_banned": "O endereço IP {0} foi banido.",
+  "social.hostban_ip_not_banned": "O endereço IP {0} não está banido.",
+  "social.hostban_ip_pardoned": "O banimento do endereço IP {0} foi removido.",
+  "social.hostban_list_entry": "{0} — {1}",
+  "social.hostban_list_empty": "Não há banimentos a mostrar."
 }

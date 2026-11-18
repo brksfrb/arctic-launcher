@@ -106,6 +106,8 @@
 <% if (!forge) { %>		"ServerAddressMixin",
 <% } %>		"LoginSessionMixin",
 		"OfflineJoinMixin",
+		"HostedBanCommandsMixin",
+		"HostedBanLoginMixin",
 		"ScoreboardRemoveMixin",
 		"ClientPlayerSwingMixin",
 		"ServerPingPoolMixin",

@@ -81,6 +81,10 @@ final class LegacySelfTest {
 			return;
 		}
 		//#if DEV_SCENES
+		if ("hostban".equals(mode)) {
+			HostBanTest.start();
+			return;
+		}
 		//#if MC < 1.9
 		if ("ctmborders".equals(System.getProperty("arctic.selftest"))) {
 			GlassBordersTest.start();

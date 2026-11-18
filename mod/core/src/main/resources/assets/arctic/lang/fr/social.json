@@ -233,5 +233,21 @@
   "social.words_separated_by_commas_a_line_with_any_of": "Mots séparés par des virgules ; une ligne contenant l'un d'eux correspond. « -mot » exclut des lignes.",
   "social.world_open_to_friends": "Monde ouvert aux amis",
   "social.your_friend_joined": "Ton ami a rejoint",
-  "social.your_world_is_open_to_lan_for_the_friends": "Ton monde est ouvert au LAN pour les amis que tu as invités"
+  "social.your_world_is_open_to_lan_for_the_friends": "Ton monde est ouvert au LAN pour les amis que tu as invités",
+  "social.hostban_host": "Vous ne pouvez pas bannir l’hôte.",
+  "social.hostban_tunnel_ip": "Les joueurs ayant rejoint par invitation ou par code ne peuvent pas être bannis par IP. Utilisez /ban <nom>.",
+  "social.hostban_disconnect": "Vous êtes banni de ce monde.\n{0}",
+  "social.hostban_default_reason": "Aucun motif indiqué.",
+  "social.hostban_storage_error": "Impossible de lire ou d’enregistrer la liste des bannissements de ce monde.",
+  "social.hostban_player_already_banned": "{0} est déjà banni.",
+  "social.hostban_player_banned": "{0} a été banni.",
+  "social.hostban_player_not_banned": "{0} n’est pas banni.",
+  "social.hostban_player_pardoned": "Le bannissement de {0} a été levé.",
+  "social.hostban_unknown_ip": "{0} n’est ni une adresse IP valide ni le nom d’un joueur connecté.",
+  "social.hostban_ip_already_banned": "L’adresse IP {0} est déjà bannie.",
+  "social.hostban_ip_banned": "L’adresse IP {0} a été bannie.",
+  "social.hostban_ip_not_banned": "L’adresse IP {0} n’est pas bannie.",
+  "social.hostban_ip_pardoned": "Le bannissement de l’adresse IP {0} a été levé.",
+  "social.hostban_list_entry": "{0} — {1}",
+  "social.hostban_list_empty": "Aucun bannissement à afficher."
 }

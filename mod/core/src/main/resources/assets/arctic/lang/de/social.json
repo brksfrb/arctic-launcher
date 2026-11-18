@@ -233,5 +233,21 @@
   "social.words_separated_by_commas_a_line_with_any_of": "Wörter durch Kommas getrennt; eine Zeile mit einem davon passt. „-wort“ schließt Zeilen aus.",
   "social.world_open_to_friends": "Welt für Freunde offen",
   "social.your_friend_joined": "Dein Freund ist beigetreten",
-  "social.your_world_is_open_to_lan_for_the_friends": "Deine Welt ist im LAN für die eingeladenen Freunde offen"
+  "social.your_world_is_open_to_lan_for_the_friends": "Deine Welt ist im LAN für die eingeladenen Freunde offen",
+  "social.hostban_host": "Der Gastgeber kann nicht gesperrt werden.",
+  "social.hostban_tunnel_ip": "Spieler, die per Einladung oder Code beigetreten sind, können nicht per IP gesperrt werden. Verwende /ban <Name>.",
+  "social.hostban_disconnect": "Du bist von dieser Welt gesperrt.\n{0}",
+  "social.hostban_default_reason": "Kein Grund angegeben.",
+  "social.hostban_storage_error": "Die Sperrliste dieser Welt konnte nicht gelesen oder gespeichert werden.",
+  "social.hostban_player_already_banned": "{0} ist bereits gesperrt.",
+  "social.hostban_player_banned": "{0} wurde gesperrt.",
+  "social.hostban_player_not_banned": "{0} ist nicht gesperrt.",
+  "social.hostban_player_pardoned": "Die Sperre für {0} wurde aufgehoben.",
+  "social.hostban_unknown_ip": "{0} ist weder eine gültige IP-Adresse noch der Name eines Spielers, der online ist.",
+  "social.hostban_ip_already_banned": "Die IP-Adresse {0} ist bereits gesperrt.",
+  "social.hostban_ip_banned": "Die IP-Adresse {0} wurde gesperrt.",
+  "social.hostban_ip_not_banned": "Die IP-Adresse {0} ist nicht gesperrt.",
+  "social.hostban_ip_pardoned": "Die Sperre für die IP-Adresse {0} wurde aufgehoben.",
+  "social.hostban_list_entry": "{0} — {1}",
+  "social.hostban_list_empty": "Keine Sperren vorhanden."
 }

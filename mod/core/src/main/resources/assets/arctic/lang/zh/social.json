@@ -233,5 +233,21 @@
   "social.words_separated_by_commas_a_line_with_any_of": "用逗号分隔的词；包含其中任意一个的行即匹配。“-词”可排除行。",
   "social.world_open_to_friends": "世界已对好友开放",
   "social.your_friend_joined": "你的好友加入了",
-  "social.your_world_is_open_to_lan_for_the_friends": "你的世界已对你邀请的好友开放局域网"
+  "social.your_world_is_open_to_lan_for_the_friends": "你的世界已对你邀请的好友开放局域网",
+  "social.hostban_host": "无法封禁房主。",
+  "social.hostban_tunnel_ip": "通过邀请或代码加入的玩家无法按 IP 封禁。请使用 /ban <名称>。",
+  "social.hostban_disconnect": "你已被此世界封禁。\n{0}",
+  "social.hostban_default_reason": "未指定原因。",
+  "social.hostban_storage_error": "无法读取或保存此世界的封禁名单。",
+  "social.hostban_player_already_banned": "{0} 已在封禁名单中。",
+  "social.hostban_player_banned": "已封禁 {0}。",
+  "social.hostban_player_not_banned": "{0} 未被封禁。",
+  "social.hostban_player_pardoned": "已解除对 {0} 的封禁。",
+  "social.hostban_unknown_ip": "{0} 不是有效的 IP 地址，也不是在线玩家的名称。",
+  "social.hostban_ip_already_banned": "IP 地址 {0} 已在封禁名单中。",
+  "social.hostban_ip_banned": "已封禁 IP 地址 {0}。",
+  "social.hostban_ip_not_banned": "IP 地址 {0} 未被封禁。",
+  "social.hostban_ip_pardoned": "已解除对 IP 地址 {0} 的封禁。",
+  "social.hostban_list_entry": "{0} — {1}",
+  "social.hostban_list_empty": "没有可显示的封禁记录。"
 }
