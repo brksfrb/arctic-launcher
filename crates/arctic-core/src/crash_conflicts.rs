@@ -534,6 +534,13 @@ fn clash_mattered(text: &str, c: &Conflict, mods: &[InstalledMod]) -> bool {
 /// owned by a clashing mod gets the clash explanation; other clashes require evidence from the
 /// run before they can explain an otherwise unknown crash.
 pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Option<Diagnosis> {
+    // The exit diagnosis already ran the rules on the captured throwable.
+    if base
+        .as_ref()
+        .is_some_and(|d| d.title == crate::crash::SAVE_FAILED_TITLE)
+    {
+        return base;
+    }
     if let Some((runtime, _)) = crate::crash::runtime_diagnosis(text) {
         return Some(runtime);
     }
@@ -845,6 +852,9 @@ pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagno
 
 /// `crash::diagnose` plus the clash check against the mods in `mods_dir`.
 pub fn diagnose_in(text: &str, mods_dir: &Path) -> Option<Diagnosis> {
+    if crate::crash::logged_vanilla_crash_save_failure(text).is_some() {
+        return diagnose_exit_in(text, -2, mods_dir);
+    }
     if let Some((native, _)) = crate::crash::native_diagnosis(text) {
         return Some(native);
     }
@@ -898,12 +908,18 @@ pub fn diagnose_exit_in_with_java(
     java: Option<&str>,
 ) -> Option<Diagnosis> {
     let mods = scan(mods_dir);
-    let with_exit = format!(
-        "{text}\n(exit code {})",
-        crate::crash::exit_description(code)
-    );
-    let diagnosis = diagnose_with_mods(&with_exit, mods_dir, &mods, java)
-        .or_else(|| crate::crash::silent_exit(text, code));
+    let diagnosis = if crate::crash::vanilla_crash_save_failed(text, code).is_some() {
+        let cause = crate::crash::captured_vanilla_crash(text)
+            .and_then(|trace| diagnose_with_mods(&trace, mods_dir, &mods, java));
+        Some(crate::crash::vanilla_crash_diagnosis(text, cause))
+    } else {
+        let with_exit = format!(
+            "{text}\n(exit code {})",
+            crate::crash::exit_description(code)
+        );
+        diagnose_with_mods(&with_exit, mods_dir, &mods, java)
+            .or_else(|| crate::crash::silent_exit(text, code))
+    };
     let diagnosis = match diagnosis {
         Some(d) if !crate::crash_suspect::is_generic(&d) => Some(d),
         other => suspect_in(text, mods_dir).or(other),

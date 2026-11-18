@@ -983,11 +983,87 @@ fn resolution_log(text: &str) -> Diagnosis {
 
 /// Explain a crash from the game log and/or crash report text.
 pub fn diagnose(text: &str) -> Option<Diagnosis> {
-    diagnose_with_java(text, None)
+    diagnose_match(text, None).map(|(diagnosis, _)| diagnosis)
 }
 
 pub(crate) fn diagnose_with_java(text: &str, java: Option<&str>) -> Option<Diagnosis> {
-    diagnose_match(text, java).map(|(diagnosis, _)| diagnosis)
+    diagnose_rules(text, java).map(|(diagnosis, _)| diagnosis)
+}
+
+const VANILLA_CRASH: &str = "[Arctic diagnostics] vanilla crash";
+const VANILLA_CRASH_TRACE: &str = "[Arctic diagnostics] vanilla crash trace ";
+pub(crate) const SAVE_FAILED_TITLE: &str =
+    "Minecraft crashed while starting and couldn't save its crash report";
+
+pub(crate) fn vanilla_crash_save_failed(text: &str, code: i32) -> Option<&str> {
+    // POSIX process exit statuses carry only the low byte of Java's -2.
+    if !matches!(code, -2 | 254) {
+        return None;
+    }
+    text.lines().find(|line| {
+        line.strip_prefix("[Arctic diagnostics] exit caller vanilla ")
+            .and_then(|frame| frame.split('(').next())
+            .is_some_and(|method| {
+                matches!(
+                    method.rsplit('/').next(),
+                    Some(
+                        "net.minecraft.client.Minecraft.crash"
+                            | "net.minecraft.class_310.method_1565"
+                    )
+                )
+            })
+    })
+}
+
+pub(crate) fn logged_vanilla_crash_save_failure(text: &str) -> Option<&str> {
+    let code = text.lines().rev().find_map(|line| {
+        line.strip_prefix('(')
+            .unwrap_or(line)
+            .strip_prefix("exit code ")
+            .or_else(|| {
+                line.strip_prefix("[Arctic diagnostics] process ended after ")?
+                    .split_once("; exit code ")
+                    .map(|(_, code)| code)
+            })
+            .or_else(|| {
+                line.strip_prefix("[Arctic diagnostics] exit Runtime.exit() called with status: ")
+            })?
+            .split_whitespace()
+            .next()?
+            .parse()
+            .ok()
+    })?;
+    vanilla_crash_save_failed(text, code)
+}
+
+fn vanilla_crash_trace(text: &str) -> impl Iterator<Item = &str> {
+    text.lines()
+        .filter_map(|line| line.strip_prefix(VANILLA_CRASH_TRACE))
+}
+
+pub(crate) fn captured_vanilla_crash(text: &str) -> Option<String> {
+    let mut lines = vanilla_crash_trace(text).peekable();
+    lines.peek()?;
+    // The captured exception has the same provenance as a written report's exception.
+    let mut report = String::from("---- Minecraft Crash Report ----\n\n");
+    for line in lines {
+        report.push_str(line);
+        report.push('\n');
+    }
+    Some(report)
+}
+
+pub(crate) fn vanilla_crash_diagnosis(text: &str, cause: Option<Diagnosis>) -> Diagnosis {
+    if let Some(mut cause) = cause {
+        cause.detail = format!("{}\n\n{}", cause.title, cause.detail);
+        cause.title = SAVE_FAILED_TITLE.into();
+        return cause;
+    }
+    let detail = vanilla_crash_trace(text).next().map_or_else(
+        || "Minecraft exited from its crash handler before it could save a report.".into(),
+        |error| scrub(head_of(error, 2048), &Own::this_pc()),
+    );
+    Diagnosis::new(SAVE_FAILED_TITLE, detail, Vec::new())
 }
 
 fn quilt_load_errors() -> &'static Regex {
@@ -1254,6 +1330,27 @@ fn fabric_wrong_game(text: &str) -> Option<(Diagnosis, String)> {
 }
 
 fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
+    if let Some(caller) = logged_vanilla_crash_save_failure(text) {
+        let captured = captured_vanilla_crash(text);
+        let (cause, matched) = captured
+            .as_deref()
+            .and_then(|trace| diagnose_rules(trace, java))
+            .map_or_else(
+                || {
+                    (
+                        None,
+                        head_of(vanilla_crash_trace(text).next().unwrap_or(caller), 2048)
+                            .to_owned(),
+                    )
+                },
+                |(cause, matched)| (Some(cause), matched),
+            );
+        return Some((vanilla_crash_diagnosis(text, cause), matched));
+    }
+    diagnose_rules(text, java)
+}
+
+fn diagnose_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
     if let Some(runtime) = runtime_diagnosis(text) {
         return Some(runtime);
     }
@@ -1464,9 +1561,12 @@ const REPORT_JAVA_BYTES: usize = 5 * 1024;
 const REPORT_LAUNCHER_LINES: usize = 80;
 const REPORT_LAUNCHER_BYTES: usize = 6 * 1024;
 
-/// Select fatal evidence before ordinary log warnings. A crash document is authoritative;
-/// without one, require an exception followed by a Java stack frame in the same log record.
+/// Prefer the captured exception or a crash document. In ordinary logs, require an exception
+/// followed by a Java stack frame in the same log record.
 fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a str> {
+    if let Some(error) = vanilla_crash_trace(log).next() {
+        return Some(error);
+    }
     if let Some(error) = crash_report
         .and_then(|report| quilt_load_errors().find(report))
         .or_else(|| quilt_load_errors().find(log))
@@ -1552,12 +1652,34 @@ impl Report {
             java.unwrap_or("")
         );
         // Keep the exact triggering line even when it falls outside the uploaded log tail.
-        if let Some((diagnosis, matched)) = diagnose_match(&diagnosis_text, java) {
+        let diagnosis = diagnose_match(&diagnosis_text, java);
+        let failed_save = title == SAVE_FAILED_TITLE
+            || diagnosis
+                .as_ref()
+                .is_some_and(|(d, _)| d.title == SAVE_FAILED_TITLE);
+        if let Some((diagnosis, matched)) = diagnosis {
             priority.push_str(&format!(
                 "\n---- diagnosis ----\n{}\nmatched: {}\n",
                 diagnosis.title,
                 scrub(&matched, &Own::this_pc())
             ));
+            if diagnosis.title == SAVE_FAILED_TITLE && vanilla_crash_trace(&all).next().is_some() {
+                priority.push_str(&scrub(head_of(&diagnosis.detail, 2048), &Own::this_pc()));
+                priority.push('\n');
+            }
+        }
+        let vanilla_evidence = all
+            .lines()
+            .filter(|line| line.starts_with(VANILLA_CRASH))
+            .collect::<Vec<_>>()
+            .join("\n");
+        if !vanilla_evidence.is_empty() {
+            priority.push_str("\n---- vanilla crash ----\n");
+            priority.push_str(&scrub(
+                head_of(&vanilla_evidence, 18 * 1024),
+                &Own::this_pc(),
+            ));
+            priority.push('\n');
         }
         let registry = registry_failure_evidence(&all);
         if !registry.is_empty() {
@@ -1661,7 +1783,12 @@ impl Report {
             loader: loader.to_owned(),
             os: std::env::consts::OS.to_owned(),
             title: scrub(
-                if orderly_shutdown(&all) && crash_report.is_none() && diagnose(&all).is_none() {
+                if failed_save {
+                    SAVE_FAILED_TITLE
+                } else if orderly_shutdown(&all)
+                    && crash_report.is_none()
+                    && diagnose(&all).is_none()
+                {
                     "Non-crash: Minecraft stopped normally"
                 } else {
                     &title
@@ -1995,7 +2122,10 @@ fn diagnostic_evidence(text: &str, budget: usize) -> String {
         }
     }
     for line in text.lines().filter(|l| {
-        l.contains("[Arctic diagnostics]") && !l.contains("hang ") && !l.contains("thread ")
+        l.contains("[Arctic diagnostics]")
+            && !l.starts_with(VANILLA_CRASH)
+            && !l.contains("hang ")
+            && !l.contains("thread ")
     }) {
         if out.len() < budget.saturating_sub(1024) {
             out.push_str(line);
@@ -2174,6 +2304,97 @@ pub fn scrub(text: &str, own: &Own) -> String {
 
 #[cfg(test)]
 mod tests {
+    const VANILLA_EXIT_398: &str = include_str!("../tests/fixtures/crash-398-vanilla-exit.log");
+
+    #[test]
+    fn crash_398_requires_vanilla_crash_and_failed_save_exit_code() {
+        let mods = tempfile::tempdir().unwrap();
+        let d =
+            crate::crash_conflicts::diagnose_exit_in(VANILLA_EXIT_398, -2, mods.path()).unwrap();
+        assert_eq!(d.title, SAVE_FAILED_TITLE);
+        assert!(d.mods.is_empty());
+        assert!(first_error(VANILLA_EXIT_398, None).is_none());
+        assert_eq!(diagnose(VANILLA_EXIT_398).unwrap().title, SAVE_FAILED_TITLE);
+        assert_eq!(
+            crate::crash_conflicts::diagnose_in(VANILLA_EXIT_398, mods.path())
+                .unwrap()
+                .title,
+            SAVE_FAILED_TITLE
+        );
+        let unix = VANILLA_EXIT_398.replace(
+            "(exit code -2 (0xFFFFFFFE; no known NTSTATUS name))",
+            "[Arctic diagnostics] process ended after 11000 ms; exit code 254 (0x000000FE)",
+        );
+        assert_eq!(diagnose(&unix).unwrap().title, SAVE_FAILED_TITLE);
+        assert!(vanilla_crash_save_failed(&unix, 254).is_some());
+        assert!(vanilla_crash_save_failed(VANILLA_EXIT_398, -1).is_none());
+        assert!(
+            vanilla_crash_save_failed(&VANILLA_EXIT_398.replace(".crash(", ".destroy("), -2)
+                .is_none()
+        );
+        assert!(
+            vanilla_crash_save_failed(
+                &VANILLA_EXIT_398.replace("client.Minecraft.crash(", "class_310.method_1565("),
+                -2,
+            )
+            .is_some()
+        );
+    }
+
+    #[test]
+    fn crash_398_prioritizes_captured_exception_and_keeps_save_evidence() {
+        // The original upload had no Throwable. Supplement it with a simulated startup failure.
+        let error = "java.lang.RuntimeException: Could not execute entrypoint stage 'client' due to errors, provided by 'example' at 'example.Client'!";
+        let log = format!(
+            "{VANILLA_EXIT_398}\n[Arctic diagnostics] vanilla crash: Initializing game\n\
+             {VANILLA_CRASH_TRACE}{error}\n\
+             {VANILLA_CRASH_TRACE}\tat knot//net.fabricmc.loader.impl.FabricLoaderImpl.invokeEntrypoints(FabricLoaderImpl.java:1)\n\
+             {VANILLA_CRASH_TRACE}Caused by: java.lang.ClassNotFoundException: org.lwjgl.Optional\n\
+             {VANILLA_CRASH_TRACE}\tat knot//example.Client.onInitializeClient(Client.java:10)\n\
+             [Arctic diagnostics] vanilla crash save failed: <home>/game/crash-reports/crash.txt\n\
+             [Arctic diagnostics] vanilla crash save trace java.nio.file.AccessDeniedException: <home>/game/crash-reports/crash.txt\n{}",
+            "[main/INFO]: shutdown output\n".repeat(200)
+        );
+        let mods = tempfile::tempdir().unwrap();
+        let d = crate::crash_conflicts::diagnose_exit_in(&log, -2, mods.path()).unwrap();
+        assert_eq!(d.title, SAVE_FAILED_TITLE);
+        assert!(d.detail.contains("A game library couldn't be loaded"));
+        assert!(d.repair);
+        let mixin = log.replace(
+            "java.lang.ClassNotFoundException: org.lwjgl.Optional",
+            "org.spongepowered.asm.mixin.injection.throwables.InjectionError: example.mixins.json from mod example",
+        );
+        let d = crate::crash_conflicts::diagnose_exit_in(&mixin, -2, mods.path()).unwrap();
+        assert_eq!(d.title, SAVE_FAILED_TITLE);
+        assert_eq!(d.mods, ["example"]);
+        assert!(d.detail.contains("example failed to change the game"));
+        let report = Report::build("26.1.2", "fabric", "unknown", &[&log], &[], None, None);
+        assert_eq!(report.title, SAVE_FAILED_TITLE);
+        assert!(report.log.contains("A game library couldn't be loaded"));
+        assert!(
+            report
+                .log
+                .starts_with(&format!("\n---- first error ----\n{error}\n"))
+        );
+        assert!(
+            report.log.contains(
+                "matched: Caused by: java.lang.ClassNotFoundException: org.lwjgl.Optional"
+            )
+        );
+        assert!(report.log.contains("vanilla crash: Initializing game"));
+        assert!(
+            report
+                .log
+                .contains("vanilla crash trace \tat knot//example")
+        );
+        assert!(
+            report
+                .log
+                .contains("save trace java.nio.file.AccessDeniedException: <home>")
+        );
+        assert!(report.log.len() < 48 * 1024);
+    }
+
     #[test]
     fn crash_380_prefers_the_runtime_dll_over_the_debug_screen_error() {
         let text = include_str!("../tests/fixtures/crash-380-runtime-dll.log");
