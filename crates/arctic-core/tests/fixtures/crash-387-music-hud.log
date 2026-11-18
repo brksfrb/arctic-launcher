@@ -1,0 +1,12 @@
+[17:17:08] [main/WARN] Warnings were found!
+ - Mod 'Forge Config API Port' (forgeconfigapiport) 21.11.1 recommends any version of modmenu, which is missing!
+ - Mod 'Music HUD' (music_hud) <ip>+1.21.11 recommends any version of modmenu, which is missing!
+ - Mod 'Music HUD' (music_hud) <ip>+1.21.11 recommends any version of modernui, which is missing!
+
+---- Minecraft Crash Report ----
+Description: Initializing game
+
+java.lang.RuntimeException: Could not execute entrypoint stage 'client' due to errors, provided by 'music_hud' at 'indi.etern.musichud.fabric.config.ConfigRegister'!
+Caused by: java.lang.NoClassDefFoundError: icyllis/modernui/animation/TimeInterpolator
+	at knot//indi.etern.musichud.client.ui.hud.renderer.TextRenderer.<init>(TextRenderer.java:27)
+Caused by: java.lang.ClassNotFoundException: icyllis.modernui.animation.TimeInterpolator
