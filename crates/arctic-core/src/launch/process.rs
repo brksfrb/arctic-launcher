@@ -777,6 +777,7 @@ mod tests {
             high_performance_gpu: false,
             maximize_window: false,
             managed_runtime: None,
+            custom_max_heap: false,
             secrets: Vec::new(),
         };
         let (tx, rx) = std::sync::mpsc::channel();
@@ -858,6 +859,7 @@ mod tests {
             high_performance_gpu: false,
             maximize_window: false,
             managed_runtime: None,
+            custom_max_heap: false,
             secrets: Vec::new(),
         };
         let (args, file) = command_args(&plan).unwrap();

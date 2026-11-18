@@ -22,6 +22,25 @@ pub struct JvmOptions {
 /// Placeholder values for `${name}` substitution.
 pub type Placeholders = HashMap<&'static str, String>;
 
+pub(crate) const CUSTOM_MAX_HEAP_SOURCE: &str = " (maximum heap set by custom JVM arguments)";
+
+/// A Java heap size in MiB. Java interprets an unsuffixed size as bytes.
+pub(crate) fn heap_size_mb(size: &str) -> Option<u32> {
+    let end = size
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(size.len());
+    let (number, unit) = size.split_at(end);
+    let number = number.parse::<u64>().ok()?;
+    let mib = match unit {
+        "" => number / (1024 * 1024),
+        "k" | "K" => number / 1024,
+        "m" | "M" => number,
+        "g" | "G" => number.checked_mul(1024)?,
+        _ => return None,
+    };
+    mib.try_into().ok()
+}
+
 /// Arguments used by versions that predate the `arguments` object.
 const LEGACY_JVM_ARGS: [&str; 3] = [
     "-Djava.library.path=${natives_directory}",
@@ -36,14 +55,39 @@ pub fn build(
     vars: &Placeholders,
     opts: &JvmOptions,
 ) -> Vec<String> {
-    let mut args = vec![
-        format!("-Xms{}M", opts.min_memory_mb),
-        format!("-Xmx{}M", opts.max_memory_mb),
-    ];
-    args.extend(opts.extra.iter().cloned());
+    let custom_min = opts.extra.iter().rposition(|arg| arg.starts_with("-Xms"));
+    let custom_max = opts.extra.iter().rposition(|arg| arg.starts_with("-Xmx"));
+    let mut args = Vec::new();
+    if custom_min.is_none() {
+        let min_mb = custom_max
+            .and_then(|i| opts.extra[i].strip_prefix("-Xmx"))
+            .and_then(heap_size_mb)
+            .map_or(opts.min_memory_mb, |max| opts.min_memory_mb.min(max));
+        args.push(format!("-Xms{min_mb}M"));
+    }
+    if custom_max.is_none() {
+        args.push(format!("-Xmx{}M", opts.max_memory_mb));
+    }
+    // Keep the last explicit flag in its original position among the JVM arguments.
+    args.extend(
+        opts.extra
+            .iter()
+            .enumerate()
+            .filter(|(i, arg)| match arg.as_str() {
+                a if a.starts_with("-Xms") => Some(*i) == custom_min,
+                a if a.starts_with("-Xmx") => Some(*i) == custom_max,
+                _ => true,
+            })
+            .map(|(_, arg)| arg.clone()),
+    );
 
     match &version.arguments {
-        Some(a) if !a.jvm.is_empty() => args.extend(expand(&a.jvm, env, vars)),
+        Some(a) if !a.jvm.is_empty() => {
+            args.extend(expand(&a.jvm, env, vars).into_iter().filter(|arg| {
+                (custom_min.is_none() || !arg.starts_with("-Xms"))
+                    && (custom_max.is_none() || !arg.starts_with("-Xmx"))
+            }));
+        }
         _ => args.extend(LEGACY_JVM_ARGS.iter().map(|s| substitute(s, vars))),
     }
     args.extend(opts.logging_arg.iter().cloned());
@@ -276,6 +320,25 @@ mod tests {
         assert_eq!(
             split_jvm_args(r#"-Dfoo="1.8.9 Forge"#),
             [r#"-Dfoo="1.8.9"#, "Forge"]
+        );
+    }
+
+    #[test]
+    fn launcher_minimum_cannot_exceed_a_custom_maximum() {
+        let version: VersionJson =
+            serde_json::from_str(r#"{"id":"1.20.1","mainClass":"M"}"#).unwrap();
+        let args = build(
+            &version,
+            &windows_env(),
+            &vars(),
+            &JvmOptions {
+                extra: vec!["-Xmx256M".into()],
+                ..opts()
+            },
+        );
+        assert_eq!(
+            &args[..3],
+            ["-Xms256M", "-Xmx256M", "-Djava.library.path=N"]
         );
     }
 

@@ -25,7 +25,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(ModelBlockRenderer.class)
 abstract class GlassRenderMixin {
 	@Inject(method = "tesselateBlock", at = @At("HEAD"))
-	//#if MC >= 1.19.3
+	//#if MC >= 1.19
 	private void arctic$begin(CallbackInfo ci,
 	//#else
 	private void arctic$begin(CallbackInfoReturnable<Boolean> ci,
@@ -40,7 +40,7 @@ abstract class GlassRenderMixin {
 		GlassCtm.begin(world, state, pos);
 	}
 	@Inject(method = "tesselateBlock", at = @At("RETURN"))
-	//#if MC >= 1.19.3
+	//#if MC >= 1.19
 	private void arctic$end(CallbackInfo ci) { GlassCtm.end(); }
 	//#else
 	private void arctic$end(CallbackInfoReturnable<Boolean> ci) { GlassCtm.end(); }

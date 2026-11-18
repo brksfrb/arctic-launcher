@@ -802,13 +802,27 @@ pub fn diagnose_in(text: &str, mods_dir: &Path) -> Option<Diagnosis> {
 /// The exit diagnosis, with incidental folder clashes kept as advice in the details. The UI has
 /// one fix action, so don't replace the actual cause's action with an unrelated DisableMods fix.
 pub fn diagnose_exit_in(text: &str, code: i32, mods_dir: &Path) -> Option<Diagnosis> {
+    diagnose_exit_in_with_java(text, code, mods_dir, None)
+}
+
+/// Use the launch's Java summary for heap advice while diagnosing the game's own output.
+pub fn diagnose_exit_in_with_java(
+    text: &str,
+    code: i32,
+    mods_dir: &Path,
+    java: Option<&str>,
+) -> Option<Diagnosis> {
     let mods = scan(mods_dir);
     let with_exit = format!(
         "{text}\n(exit code {})",
         crate::crash::exit_description(code)
     );
-    let diagnosis = refine(crate::crash::diagnose(&with_exit), &with_exit, &mods)
-        .or_else(|| crate::crash::silent_exit(text, code));
+    let diagnosis = refine(
+        crate::crash::diagnose_with_java(&with_exit, java),
+        &with_exit,
+        &mods,
+    )
+    .or_else(|| crate::crash::silent_exit(text, code));
     let conflicts = find_conflicts(&mods);
     let Some(c) = conflicts.first() else {
         return diagnosis;
