@@ -2,6 +2,7 @@ gradle.rootProject { project ->
     project.tasks.register('resolveCiDependencies') {
         doLast {
             // Resolve the jars as well as the dependency graph, failing on missing artifacts.
+            project.buildscript.configurations.getByName('classpath').resolve()
             ['compileClasspath', 'runtimeClasspath', 'annotationProcessor',
              'testCompileClasspath', 'testRuntimeClasspath'].each { name ->
                 project.configurations.getByName(name).resolve()

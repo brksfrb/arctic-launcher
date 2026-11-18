@@ -155,14 +155,25 @@ jobs:
         run: |
           mkdir -p "${GRADLE_USER_HOME:-$HOME/.gradle}"
           cat .github/gradle.properties >> "${GRADLE_USER_HOME:-$HOME/.gradle}/gradle.properties"
-      - name: Resolve common Gradle dependencies
+      - name: Resolve Gradle dependencies for every target
+        id: warm-resolve
         if: steps.warm-cache.outputs.cache-hit != 'true'
         run: |
-          gradle_args=(-I "$GITHUB_WORKSPACE/.github/scripts/resolve-gradle.init.gradle" resolveCiDependencies --refresh-dependencies)
-          mod/gradlew -p mod/core "${gradle_args[@]}"
-          mod/gradlew -p mod/versions/fabric -Pminecraft_version=1.21.11 "${gradle_args[@]}"
-          mod/gradlew -p mod/versions/legacy -Pminecraft_version=1.8.9 "${gradle_args[@]}"
+          gradle_args=(-I "$GITHUB_WORKSPACE/.github/scripts/resolve-gradle.init.gradle" resolveCiDependencies)
+          targets=$(jq -r '.[] | [.project // "fabric", .build] | @tsv' mod/targets.json)
+          complete=true
+          if ! mod/gradlew -p mod/core "${gradle_args[@]}"; then
+            echo '::warning::Could not warm Gradle dependencies for mod/core'
+            complete=false
+          fi
+          while IFS=$'\t' read -r project version <&3; do
+            if ! mod/gradlew -p "mod/versions/$project" "-Pminecraft_version=$version" "${gradle_args[@]}"; then
+              echo "::warning::Could not warm Gradle dependencies for $version ($project)"
+              complete=false
+            fi
+          done 3<<< "$targets"
           mod/gradlew --stop
+          echo "complete=$complete" >> "$GITHUB_OUTPUT"
       - name: Archive the shared Gradle dependencies
         shell: bash
         run: |
@@ -185,7 +196,7 @@ jobs:
           compression-level: 0
           overwrite: true
       - name: Save the resolved Gradle cache
-        if: success() && steps.warm-cache.outputs.cache-hit != 'true'
+        if: success() && steps.warm-resolve.outputs.complete == 'true'
         uses: actions/cache/save@v4
         with:
           path: *gradle-dependency-paths
@@ -212,7 +223,7 @@ jobs:
         name: Cache the Gradle distribution separately
         uses: actions/cache@v4
         with: *gradle-wrapper-cache-inputs
-      # Try this target's cache first, then the shared dependencies from this run.
+      # Prefer an exact target cache, then the shared dependencies from this run.
       - &restore-target-cache
         name: Restore this target's Gradle dependencies
         id: target-cache
@@ -224,7 +235,7 @@ jobs:
       - &download-warm-artifact
         name: Download shared Gradle dependencies from this run
         id: warm-artifact
-        if: steps.target-cache.outputs.cache-matched-key == '' && needs.gradle-warm.result == 'success'
+        if: steps.target-cache.outputs.cache-hit != 'true' && needs.gradle-warm.result == 'success'
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
@@ -232,6 +243,7 @@ jobs:
           path: ${{ runner.temp }}/gradle-warm
       - &extract-warm-artifact
         name: Extract the shared Gradle dependencies
+        id: extract-warm
         if: steps.warm-artifact.outcome == 'success'
         run: |
           modules="$HOME/.gradle/caches/modules-2"
@@ -239,6 +251,7 @@ jobs:
           tar --zstd -xf "$RUNNER_TEMP/gradle-warm/gradle-warm.tar.zst" -C "$modules"
       - &restore-warm-cache
         name: Fall back to the shared Gradle cache
+        id: shared-cache
         if: steps.target-cache.outputs.cache-matched-key == '' && steps.warm-artifact.outcome != 'success'
         uses: actions/cache/restore@v4
         with:
@@ -312,6 +325,7 @@ jobs:
           exit "$status"
         env:
           ARCTIC_GRADLE_FLAGS: ${{ inputs.gradle }}
+          ARCTIC_GRADLE_WARM_CACHE: ${{ steps.extract-warm.outcome == 'success' || steps.shared-cache.outputs.cache-matched-key != '' || steps.target-cache.outputs.cache-matched-key != '' }}
       - name: Probe a game class
         if: ${{ always() && inputs.probe != '' }}
         env:

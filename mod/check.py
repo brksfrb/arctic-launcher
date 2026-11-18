@@ -27,30 +27,45 @@ LEGACY_MIXCHECK = MOD / "versions" / "legacy" / "mixcheck.py"
 FORGE = "forge-1.8.9"
 
 
-def gradle(cmd):
-    """Run Gradle and retry dependency resolution failures with fresh metadata."""
-    ci = os.environ.get("GITHUB_ACTIONS") == "true"
-    retry_delays = (30, 90) if ci else (0,)
-    retry_flags = ["--refresh-dependencies"]
-    dependency_error = r"Could not find .*\.jar|Could not resolve all (artifacts|files)"
-    if ci:
-        # Use a fresh JVM for each retry so the daemon can't reuse failed lookups.
-        retry_flags.append("--no-daemon")
-        dependency_error += r"|Could not resolve all dependencies|Could not (?:find|resolve) [^\s:]+:[^\s:]+:\S+"
+DEPENDENCY_ERROR = re.compile(
+    r"Could not find .*\.jar|Could not resolve all (?:artifacts|files|dependencies)"
+    r"|Could not (?:find|resolve) [^\s:]+:[^\s:]+:\S+|could not resolve plugin artifact"
+)
+OFFLINE_CACHE_MISS = re.compile(
+    r"No cached .* available for offline mode"
+    r"|Failed download after \d+ attempts"
+    r"|Failed to setup Minecraft, .*Failed (?:to )?download"
+)
 
-    for attempt, delay in enumerate((0, *retry_delays)):
-        if attempt:
-            message = "== dependency resolution failed; retrying with --refresh-dependencies"
-            print(message + (f" --no-daemon in {delay}s" if delay else ""), flush=True)
-            if delay:
-                time.sleep(delay)
-        run = subprocess.run(
-            cmd + (retry_flags if attempt else []), cwd=MOD, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, text=True, errors="replace",
-        )
-        print(run.stdout, end="", flush=True)
-        if run.returncode == 0 or not re.search(dependency_error, run.stdout):
+
+def run_gradle(cmd):
+    run = subprocess.run(
+        cmd, cwd=MOD, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, errors="replace",
+    )
+    print(run.stdout, end="", flush=True)
+    return run
+
+
+def gradle(cmd):
+    """Prefer a restored cache and retry online dependency failures in CI."""
+    if os.environ.get("GITHUB_ACTIONS") != "true" or "--offline" in cmd:
+        return run_gradle(cmd)
+
+    if os.environ.get("ARCTIC_GRADLE_WARM_CACHE") == "true":
+        print("== trying Gradle offline with the restored cache", flush=True)
+        run = run_gradle([*cmd, "--offline"])
+        if run.returncode == 0 or not (DEPENDENCY_ERROR.search(run.stdout) or OFFLINE_CACHE_MISS.search(run.stdout)):
+            return run
+        print("== offline dependency resolution failed; trying Gradle online", flush=True)
+
+    run = run_gradle(cmd)
+    for delay in (60, 180):
+        if run.returncode == 0 or not DEPENDENCY_ERROR.search(run.stdout):
             break
+        print(f"== dependency resolution failed; retrying in {delay}s", flush=True)
+        time.sleep(delay)
+        run = run_gradle(cmd)
     return run
 
 
