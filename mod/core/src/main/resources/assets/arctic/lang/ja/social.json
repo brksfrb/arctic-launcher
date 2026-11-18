@@ -183,6 +183,8 @@
   "social.switch_accounts_or_connect_through_a_proxy": "アカウントを切り替えるか、プロキシ経由で接続します。",
   "social.switches_it_on_and_off": "オン／オフを切り替えます",
   "social.sword": "Sword",
+  "social.that_name_is_already_in_this_world": "その名前はすでにこのワールドにいます。",
+  "social.offline_friends_cant_join_this_world": "オフラインの友達はこのワールドに参加できません。",
   "social.thats_not_a_share_code_like_abcd_efgh_or": "共有コード（abcd-efghなど）でも共有テキストでもありません。",
   "social.the_account": "アカウント",
   "social.the_duel_world_didnt_open": "デュエルのワールドが開きませんでした。",

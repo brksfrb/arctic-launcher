@@ -27,7 +27,7 @@ abstract class DropLockMixin {
 		}
 	}
 }
-//#elif MC >= 1.16
+//#elif MC >= 1.15
 @Mixin(LocalPlayer.class)
 abstract class DropLockMixin {
 	@Inject(method = "drop(Z)Z", at = @At("HEAD"), cancellable = true, require = 0)

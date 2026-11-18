@@ -349,6 +349,9 @@ final class ModCatalog {
 			out.add(new Mod("lanauto", Lang.t("mods.auto_lan"), Lang.t("mods.while_you_host_in_arctic_launchers_play"), "friends", Category.SOCIAL,
 					"lan open world friends together host share p2p")
 					.toggle(() -> c.lanAuto, on -> c.lanAuto = on));
+			out.add(new Mod("offlinefriends", Lang.t("mods.let_offline_friends_join"), Lang.t("mods.friends_who_play_offline_can_join_your_play"), "friends",
+					Category.SOCIAL, "offline friends join play together invite code microsoft login")
+					.toggle(() -> c.allowOfflineFriends, on -> c.allowOfflineFriends = on));
 		}
 		out.add(new Mod("rangeindicator", Lang.t("mods.attack_range_indicator"), Lang.t("mods.brackets_around_the_crosshair_while_a_player"), "reach",
 				Category.GAMEPLAY, "reach range crosshair hit attack distance pvp")
