@@ -11,7 +11,6 @@
   "instances.added": "{name} añadido",
   "instances.address": "Dirección",
   "instances.adds_patcher_performance_and_bug_fixes_and": "Añade Patcher (rendimiento y correcciones) y Entity Culling (no dibuja lo que no ves) para más FPS. Se descargan de Modrinth; los que ya tienes se quedan como están.",
-  "instances.adds_sodium_lithium_ferritecore": "Añade Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, ModernFix y Polarium para muchos más FPS e inicios más rápidos. Se descargan de Modrinth para tu versión (Polarium viene con Arctic); los que aún no se han actualizado se omiten.",
   "instances.adds_sodium_lithium_ferritecore_2": "Añade Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, Particle Core, BadOptimizations, ModernFix y Polarium para muchos más FPS y arranques más rápidos. Se descargan de Modrinth para tu versión (Polarium viene con Arctic); los que aún no están actualizados se omiten.",
   "instances.all": "Todo",
   "instances.all_fixed": "Todo arreglado",

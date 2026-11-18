@@ -11,7 +11,6 @@
   "instances.added": "Добавлено: {name}",
   "instances.address": "Адрес",
   "instances.adds_patcher_performance_and_bug_fixes_and": "Добавляет Patcher (производительность и исправления) и Entity Culling (не рисует то, чего не видно) для большего FPS. Скачиваются с Modrinth; уже установленные остаются как есть.",
-  "instances.adds_sodium_lithium_ferritecore": "Добавляет Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, ModernFix и Polarium для намного большего FPS и быстрого запуска. Загружаются с Modrinth под вашу версию (Polarium идёт с Arctic); ещё не обновлённые пропускаются.",
   "instances.adds_sodium_lithium_ferritecore_2": "Добавляет Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, Particle Core, BadOptimizations, ModernFix и Polarium для гораздо большего FPS и быстрого запуска. Скачиваются с Modrinth для твоей версии (Polarium идёт с Arctic); ещё не обновлённые пропускаются.",
   "instances.all": "Все",
   "instances.all_fixed": "Всё исправлено",
