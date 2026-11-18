@@ -2,6 +2,7 @@ package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
+import com.arcticlauncher.client.feature.PersistentChat;
 import java.util.List;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.ChatComponent;
@@ -200,8 +201,8 @@ abstract class ChatComponentMixin {
 			constant = @Constant(intValue = 100))
 	private int arctic$history(int vanilla) {
 		ClientConfig c = ArcticClient.config();
-		if (arctic$loading) return Integer.MAX_VALUE;
-		return c == null ? vanilla : c.chatHistory + arctic$loadedLines;
+		return PersistentChat.historyLimit(arctic$loading, c == null ? vanilla : c.chatHistory,
+				c == null ? 0 : arctic$loadedLines);
 	}
 
 	@Shadow
@@ -243,11 +244,11 @@ abstract class ChatComponentMixin {
 		}
 	}
 
-	/** The up-arrow list is not capped at 100 while it is saved (the log would have gaps). */
+	/** Keep a larger up-arrow history while chat is saved to disk. */
 	@ModifyConstant(method = "addRecentChat", constant = @Constant(intValue = 100), require = 0)
 	private int arctic$sentLimit(int vanilla) {
 		ClientConfig c = ArcticClient.config();
-		return c != null && c.chatPersistent ? Integer.MAX_VALUE : vanilla;
+		return c != null && c.chatPersistent ? PersistentChat.MAX_HUD_LINES : vanilla;
 	}
 
 	/** Muted players and hidden words: the line never reaches the chat. */
