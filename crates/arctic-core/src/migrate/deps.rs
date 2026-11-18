@@ -5,7 +5,7 @@
 
 use std::collections::HashSet;
 use std::io::{Cursor, Read, Seek};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
@@ -55,7 +55,7 @@ pub fn missing(mods_dir: &Path, loader: LoaderKind) -> Vec<Missing> {
             continue;
         }
         if let Ok(file) = std::fs::File::open(e.path()) {
-            read_jar(file, 0, Some(loader), &mut ids);
+            read_jar(file, 0, Some(loader), false, &mut ids);
         }
     }
     let mut seen = HashSet::new();
@@ -67,11 +67,45 @@ pub fn missing(mods_dir: &Path, loader: LoaderKind) -> Vec<Missing> {
         .collect()
 }
 
+/// Enabled jar paths, including paths whose names used an uppercase extension.
+pub(crate) fn jars(mods_dir: &Path) -> impl Iterator<Item = PathBuf> {
+    std::fs::read_dir(mods_dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("jar"))
+        })
+}
+
+/// Requirements and providers of a Fabric mod, including its bundled jars.
+/// Quilt also recognizes the ids in Quilt's metadata.
+pub(crate) fn fabric_ids(path: &Path, loader: LoaderKind) -> (HashSet<String>, HashSet<String>) {
+    let mut ids = Ids::default();
+    if let Ok(file) = std::fs::File::open(path) {
+        read_jar(file, 0, Some(loader), true, &mut ids);
+    }
+    let required = ids
+        .required
+        .into_iter()
+        .map(|(_, id)| id)
+        .filter(|id| !BUILT_IN.contains(&id.as_str()))
+        .collect();
+    (ids.provided, required)
+}
+
 /// Ids a jar provides (itself, `provides`, bundled jars) and, for the
-/// top-level jar, what it requires.
-/// `top`: the loader whose description counts for requirements (only
-/// top-level jars; bundled ones just provide ids).
-fn read_jar<R: Read + Seek>(reader: R, depth: u8, top: Option<LoaderKind>, ids: &mut Ids) {
+/// selected loader, what it requires. The launch check also counts the
+/// requirements of bundled jars.
+fn read_jar<R: Read + Seek>(
+    reader: R,
+    depth: u8,
+    loader: Option<LoaderKind>,
+    launch: bool,
+    ids: &mut Ids,
+) {
     let Ok(mut zip) = zip::ZipArchive::new(reader) else {
         return;
     };
@@ -81,11 +115,52 @@ fn read_jar<R: Read + Seek>(reader: R, depth: u8, top: Option<LoaderKind>, ids: 
         Some(s)
     };
     let mut nested: Vec<String> = Vec::new();
-    let counts = |file: &str| top.is_some_and(|l| super::detect::metadata_files(l).contains(&file));
-    let fabric_needs = counts("fabric.mod.json") && top != Some(LoaderKind::Quilt);
-    if let Some(json) = text("fabric.mod.json")
-        .and_then(|t| serde_json::from_str::<Value>(&t.replace(['\n', '\r', '\t'], " ")).ok())
+    let counts =
+        |file: &str| loader.is_some_and(|l| super::detect::metadata_files(l).contains(&file));
+    let quilt = (launch && loader == Some(LoaderKind::Quilt))
+        .then(|| text("quilt.mod.json"))
+        .flatten();
+    if let Some(quilt) = &quilt
+        && let Ok(json) = serde_json::from_str::<Value>(quilt)
+        && let Some(meta) = json.get("quilt_loader")
     {
+        if let Some(id) = meta.get("id").and_then(Value::as_str) {
+            ids.provided.insert(id.to_owned());
+        }
+        ids.provided.extend(
+            meta["provides"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|p| p.as_str().or_else(|| p["id"].as_str()))
+                .map(str::to_owned),
+        );
+        nested.extend(
+            meta["jars"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|j| j.as_str().map(str::to_owned)),
+        );
+    }
+    let fabric_needs = counts("fabric.mod.json")
+        && (loader != Some(LoaderKind::Quilt) || launch)
+        && quilt.is_none();
+    if let Some(json) = quilt
+        .is_none()
+        .then(|| text("fabric.mod.json"))
+        .flatten()
+        .and_then(|t| {
+            serde_json::from_str::<Value>(
+                &t.trim_start_matches('\u{feff}')
+                    .replace(['\n', '\r', '\t'], " "),
+            )
+            .ok()
+        })
+    {
+        if launch && json["environment"] == "server" {
+            return;
+        }
         let id = json
             .get("id")
             .and_then(Value::as_str)
@@ -114,27 +189,29 @@ fn read_jar<R: Read + Seek>(reader: R, depth: u8, top: Option<LoaderKind>, ids: 
                 .filter_map(|j| j.get("file").and_then(Value::as_str).map(str::to_owned)),
         );
     }
-    // Each description provides ids; only the loader's own one requires.
-    let neo = text("META-INF/neoforge.mods.toml");
-    let forge = text("META-INF/mods.toml");
-    let neo_needs = counts("META-INF/neoforge.mods.toml");
-    let forge_needs = counts("META-INF/mods.toml") && !(neo_needs && neo.is_some());
-    if let Some(toml) = neo {
-        read_toml(&toml, neo_needs, ids);
-    }
-    if let Some(toml) = forge {
-        read_toml(&toml, forge_needs, ids);
-    }
-    if let Some(meta) =
-        text("META-INF/jarjar/metadata.json").and_then(|t| serde_json::from_str::<Value>(&t).ok())
-    {
-        nested.extend(
-            meta.get("jars")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(|j| j.get("path").and_then(Value::as_str).map(str::to_owned)),
-        );
+    if !launch {
+        // The migration scan also checks Forge-family manifests.
+        let neo = text("META-INF/neoforge.mods.toml");
+        let forge = text("META-INF/mods.toml");
+        let neo_needs = counts("META-INF/neoforge.mods.toml");
+        let forge_needs = counts("META-INF/mods.toml") && !(neo_needs && neo.is_some());
+        if let Some(toml) = neo {
+            read_toml(&toml, neo_needs, ids);
+        }
+        if let Some(toml) = forge {
+            read_toml(&toml, forge_needs, ids);
+        }
+        if let Some(meta) = text("META-INF/jarjar/metadata.json")
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        {
+            nested.extend(
+                meta.get("jars")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|j| j.get("path").and_then(Value::as_str).map(str::to_owned)),
+            );
+        }
     }
     if depth >= MAX_NESTING {
         return;
@@ -147,7 +224,13 @@ fn read_jar<R: Read + Seek>(reader: R, depth: u8, top: Option<LoaderKind>, ids: 
             .and_then(|mut f| f.read_to_end(&mut bytes).ok())
             .is_some()
         {
-            read_jar(Cursor::new(bytes), depth + 1, None, ids);
+            read_jar(
+                Cursor::new(bytes),
+                depth + 1,
+                if launch { loader } else { None },
+                launch,
+                ids,
+            );
         }
     }
 }
