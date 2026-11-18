@@ -16,6 +16,7 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.arcticlauncher.client.Lang;
+import com.arcticlauncher.client.feature.PersistentChat;
 /** Chat timestamps, repeated lines stacked, mentions of you marked, and Auto GG. */
 @Mixin(ChatHud.class)
 abstract class ChatHudMixin {
@@ -147,15 +148,15 @@ abstract class ChatHudMixin {
 	@ModifyConstant(method = "addMessage(Lnet/minecraft/text/Text;IIZ)V", constant = @Constant(intValue = 100))
 	private int arctic$history(int vanilla) {
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
-		if (arctic$loading) return Integer.MAX_VALUE;
-		return c == null ? vanilla : c.chatHistory + arctic$loadedLines;
+		return PersistentChat.historyLimit(arctic$loading, c == null ? vanilla : c.chatHistory,
+				c == null ? 0 : arctic$loadedLines);
 	}
 
-	/** The up-arrow list is not capped at 100 while it is saved (the log would have gaps). */
+	/** Keep a larger up-arrow history while chat is saved to disk. */
 	@ModifyConstant(method = "addToMessageHistory", constant = @Constant(intValue = 100), require = 0)
 	private int arctic$sentLimit(int vanilla) {
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
-		return c != null && c.chatPersistent ? Integer.MAX_VALUE : vanilla;
+		return c != null && c.chatPersistent ? PersistentChat.MAX_HUD_LINES : vanilla;
 	}
 
 	/** Hide the chat: none of its lines are drawn. */
