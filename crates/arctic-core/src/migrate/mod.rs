@@ -10,7 +10,7 @@
 
 mod clashes;
 mod copy;
-mod deps;
+pub(crate) mod deps;
 pub(crate) mod detect;
 mod hud;
 pub(crate) mod ranges;

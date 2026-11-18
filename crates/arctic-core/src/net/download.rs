@@ -171,7 +171,7 @@ impl DownloadJob {
 
     /// Cheap "is it already there" check: existence + size. Full hashing of
     /// thousands of assets on every launch would make launches slow.
-    fn is_satisfied(&self) -> bool {
+    pub(crate) fn is_satisfied(&self) -> bool {
         match (fs::metadata(&self.dest), self.size) {
             (Ok(meta), Some(size)) => meta.is_file() && meta.len() == size,
             (Ok(meta), None) => meta.is_file(),

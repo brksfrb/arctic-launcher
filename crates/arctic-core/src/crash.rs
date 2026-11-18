@@ -641,6 +641,21 @@ fn collect(text: &str, group: usize) -> Vec<String> {
     out
 }
 
+/// Fabric's missing-dependency reports give the id of the requiring mod.
+pub(crate) fn fabric_missing_dependencies(text: &str) -> impl Iterator<Item = (&str, &str)> {
+    static NO_CANDIDATE: OnceLock<Regex> = OnceLock::new();
+    let no_candidate = NO_CANDIDATE
+        .get_or_init(|| Regex::new(r"HARD_DEP_NO_CANDIDATE (\S+) \S+ \{depends (\S+) @").unwrap());
+    compiled()[0]
+        .captures_iter(text)
+        .filter_map(|c| Some((c.get(2)?.as_str(), c.get(3)?.as_str())))
+        .chain(
+            resolver_causes(text)
+                .flat_map(|line| no_candidate.captures_iter(line))
+                .filter_map(|c| Some((c.get(1)?.as_str(), c.get(2)?.as_str()))),
+        )
+}
+
 fn compiled() -> &'static [Regex] {
     static COMPILED: OnceLock<Vec<Regex>> = OnceLock::new();
     COMPILED.get_or_init(|| {

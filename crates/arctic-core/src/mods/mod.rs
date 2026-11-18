@@ -255,35 +255,15 @@ pub fn install_many(
     index: &Path,
     progress: Progress,
 ) -> Result<(Vec<InstalledMod>, Vec<Failed>)> {
-    install_many_with(
-        projects,
-        game_version,
-        loader,
-        mods_dir,
-        index,
-        progress,
-        |_, _| Ok(()),
-    )
-}
-
-fn install_many_with(
-    projects: &[&str],
-    game_version: &str,
-    loader: LoaderKind,
-    mods_dir: &Path,
-    index: &Path,
-    progress: Progress,
-    before_download: impl FnOnce(&[InstalledMod], &ModIndex) -> Result<()>,
-) -> Result<(Vec<InstalledMod>, Vec<Failed>)> {
     progress(ProgressInfo::stage("Finding mods"));
     let current = ModIndex::load(index)?;
-    let (plan, failed) = plan_many(projects, game_version, loader, &current, mods_dir);
+    let installed = installed_projects(&current, mods_dir);
+    let (plan, failed) = plan_many(projects, game_version, loader, &installed);
     if plan.is_empty() {
         return Ok((Vec::new(), failed));
     }
     let (mods, jobs) = prepare(&plan, mods_dir)?;
     let mods = with_project_info(mods);
-    before_download(&mods, &current)?;
     download_all("Downloading mods", jobs, progress)?;
     record(&current, &mods, mods_dir)?.save(index)?;
     Ok((mods, failed))
@@ -302,7 +282,8 @@ pub fn updates_waiting(
     present: &dyn Fn(&str) -> bool,
 ) -> Result<Option<bool>> {
     let current = ModIndex::load(index)?;
-    let (plan, failed) = plan_many(projects, game_version, loader, &current, mods_dir);
+    let installed = installed_projects(&current, mods_dir);
+    let (plan, failed) = plan_many(projects, game_version, loader, &installed);
     if failed
         .iter()
         .any(|(_, e)| matches!(e, crate::Error::Http(_)))
@@ -351,7 +332,8 @@ pub fn available_updates(
     if projects.is_empty() {
         return Ok(Vec::new());
     }
-    let (plan, _failed) = plan_many(&projects, game_version, loader, &current, mods_dir);
+    let installed = installed_projects(&current, mods_dir);
+    let (plan, _failed) = plan_many(&projects, game_version, loader, &installed);
     let mut updates: Vec<ModUpdate> = plan
         .iter()
         .filter_map(|planned| {
@@ -377,8 +359,7 @@ fn plan_many(
     projects: &[&str],
     game_version: &str,
     loader: LoaderKind,
-    current: &ModIndex,
-    mods_dir: &Path,
+    installed: &HashSet<String>,
 ) -> (Vec<Planned>, Vec<Failed>) {
     let loaders = modrinth::compatible_loaders(loader, game_version);
     let target = Target {
@@ -386,12 +367,10 @@ fn plan_many(
         game_version,
         loader,
     };
-    let installed = installed_projects(current, mods_dir);
     let results: Vec<(String, Result<Vec<Planned>>)> = std::thread::scope(|s| {
         let handles: Vec<_> = projects
             .iter()
             .map(|project| {
-                let installed = &installed;
                 let loaders = &loaders;
                 s.spawn(move || {
                     let source = resolve::Modrinth {

@@ -5,6 +5,8 @@
 //! exact version rather than bundled, and tracked in their own index so user
 //! mods are never touched.
 
+mod dependencies;
+
 use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
 
@@ -54,6 +56,7 @@ fn provided_by(project: &str) -> (&'static [&'static str], &'static [&'static st
         "NNAgCjsB" => (&["entityculling"], &[]),
         "RSeLon5O" => (&["particle_core"], &[]),
         "g96Z4WVZ" => (&["badoptimizations"], &[]),
+        dependencies::FABRIC_API => (&["fabric", "fabric-api", "quilted_fabric_api"], &[]),
         super::packs::IRIS => (&["iris"], &["optifabric", "oculus"]),
         "kYuIpRLv" => (&["waveycapes"], &[]),
         _ => (&[], &[]),
@@ -458,47 +461,79 @@ fn unstash(game_dir: &Path, game_version: &str, shaders: bool, extras: &str) -> 
 /// Install (or update) the performance mods for `game_version` (and Iris
 /// when `shaders` is on), or remove them when neither is wanted. Offline,
 /// mods already installed for this version are kept.
-/// `modded`: an instance with its own Fabric/Quilt mods, where those the
-/// player already has (or something in their place) are left out.
+/// An explicit Fabric/Quilt loader also means the instance may have player
+/// mods. Leave out anything the player already provides.
 pub fn sync(
     game_dir: &Path,
     game_version: &str,
     enabled: bool,
     shaders: bool,
     extras: &[String],
-    modded: bool,
+    loader: Option<LoaderKind>,
     progress: Progress,
 ) -> Result<()> {
     sync_with_install(
-        game_dir,
-        game_version,
+        SyncTarget {
+            game_dir,
+            game_version,
+            loader,
+            launcher_owned_vanilla: false,
+            progress,
+        },
         enabled,
         shaders,
         extras,
-        modded,
-        |ids| {
-            super::install_many_with(
-                ids,
-                game_version,
-                LoaderKind::Fabric,
-                &game_dir.join("mods"),
-                &index_path(game_dir),
-                progress,
-                |mods, current| record_pending(game_dir, mods, current),
-            )
-        },
+        install_wanted,
     )
 }
 
-fn sync_with_install(
+pub(crate) fn sync_for_launch(
     game_dir: &Path,
     game_version: &str,
+    instance: &crate::instances::Instance,
+    progress: Progress,
+) -> Result<()> {
+    let loader = instance.loader.kind();
+    sync_with_install(
+        SyncTarget {
+            game_dir,
+            game_version,
+            loader,
+            launcher_owned_vanilla: loader.is_none() && instance.game_folder.is_none(),
+            progress,
+        },
+        instance.performance,
+        instance.shaders,
+        &instance.extras,
+        install_wanted,
+    )
+}
+
+struct SyncTarget<'a> {
+    game_dir: &'a Path,
+    game_version: &'a str,
+    loader: Option<LoaderKind>,
+    launcher_owned_vanilla: bool,
+    progress: Progress<'a>,
+}
+
+fn sync_with_install(
+    target: SyncTarget<'_>,
     enabled: bool,
     shaders: bool,
     extras: &[String],
-    modded: bool,
-    install: impl FnOnce(&[&str]) -> Result<(Vec<super::InstalledMod>, Vec<super::Failed>)>,
+    install: impl FnOnce(
+        &SyncTarget<'_>,
+        &[&str],
+    ) -> Result<(Vec<super::InstalledMod>, Vec<super::Failed>)>,
 ) -> Result<()> {
+    let SyncTarget {
+        game_dir,
+        game_version,
+        loader,
+        launcher_owned_vanilla,
+        progress,
+    } = target;
     let _lock = lock(game_dir)?;
     clear_pending(game_dir)?;
     let state: State = load_json(&state_path(game_dir))?.unwrap_or_default();
@@ -521,6 +556,16 @@ fn sync_with_install(
     if wanted.is_empty() {
         return remove_all(game_dir);
     }
+    let modded = loader.is_some();
+    let loader = loader.unwrap_or(LoaderKind::Fabric);
+    let check = || {
+        // The old set has already been stashed. Park any incompatible leftovers
+        // before deciding which active jars need or provide dependencies.
+        if launcher_owned_vanilla {
+            park_incompatible_vanilla(game_dir, game_version)?;
+        }
+        dependencies::check(game_dir, game_version, loader, progress)
+    };
     if modded
         && state.game_version == game_version
         && state.shaders == shaders
@@ -529,7 +574,7 @@ fn sync_with_install(
         super::slim_api::undo(&mods_dir)?;
         leave_players_mods(game_dir, &mut wanted)?;
         if wanted.is_empty() {
-            return Ok(());
+            return check();
         }
     }
     let index = index_path(game_dir);
@@ -540,7 +585,10 @@ fn sync_with_install(
         stash(game_dir, &state)?;
         remove_all(game_dir)?;
         if unstash(game_dir, game_version, shaders, &extras_key)? {
-            return Ok(());
+            if modded {
+                leave_players_mods(game_dir, &mut wanted)?;
+            }
+            return check();
         }
     } else if !state.update_waiting && all_present(&index, &mods_dir)? {
         if crate::auth::now_secs().saturating_sub(state.checked) >= RECHECK_SECS {
@@ -549,20 +597,21 @@ fn sync_with_install(
             let ids: Vec<String> = wanted.iter().map(|(id, _)| (*id).to_owned()).collect();
             recheck_later(game_dir.to_path_buf(), ids, game_version.to_owned(), state);
         }
-        return Ok(());
+        return check();
     }
     // New or changed mods are about to be written: Fabric API goes back to the whole one first.
     super::slim_api::undo(&mods_dir)?;
     if modded {
         leave_players_mods(game_dir, &mut wanted)?;
         if wanted.is_empty() {
-            return Ok(());
+            return check();
         }
     }
     let ids: Vec<&str> = wanted.iter().map(|(id, _)| *id).collect();
-    let result = install(&ids);
-    clear_pending(game_dir)?;
-    let (installed, failed) = result?;
+    let install = install(&target, &ids);
+    let checked = check();
+    let (installed, failed) = install?;
+    checked?;
     let mut reached = !installed.is_empty();
     for (id, e) in failed {
         let name = wanted
@@ -591,6 +640,43 @@ fn sync_with_install(
         )?;
     }
     Ok(())
+}
+
+fn install_wanted(
+    target: &SyncTarget<'_>,
+    ids: &[&str],
+) -> Result<(Vec<super::InstalledMod>, Vec<super::Failed>)> {
+    let SyncTarget {
+        game_dir,
+        game_version,
+        loader,
+        progress,
+        ..
+    } = *target;
+    let mods_dir = game_dir.join("mods");
+    let current = ModIndex::load(&index_path(game_dir))?;
+    let mut existing = super::installed_projects(&current, &mods_dir);
+    if loader.is_some() {
+        let our_files: Vec<String> = current.mods.iter().map(|m| m.file_name.clone()).collect();
+        let player_ids = players_mod_ids(&mods_dir, &our_files);
+        for project in MODS
+            .iter()
+            .map(|(id, _)| *id)
+            .chain([dependencies::FABRIC_API])
+        {
+            if provided_by(project)
+                .0
+                .iter()
+                .any(|id| player_ids.contains(*id))
+            {
+                existing.insert(project.to_owned());
+            }
+        }
+    }
+    progress(crate::ProgressInfo::stage("Finding mods"));
+    let (plan, failed) = super::plan_many(ids, game_version, LoaderKind::Fabric, &existing);
+    let installed = dependencies::install_plan(&plan, &current, game_dir, progress, |_| Ok(()))?;
+    Ok((installed, failed))
 }
 
 fn pending_path(game_dir: &Path) -> PathBuf {
@@ -979,7 +1065,7 @@ mod tests {
             .unwrap();
         assert_eq!(installed(dir.path()), vec!["Sodium".to_owned()]);
 
-        sync(dir.path(), "26.3", false, false, &[], false, &|_| {}).unwrap();
+        sync(dir.path(), "26.3", false, false, &[], None, &|_| {}).unwrap();
         assert!(!mods.join("sodium.jar").exists());
         assert!(mods.join("mine.jar").exists());
         assert!(installed(dir.path()).is_empty());
@@ -1004,7 +1090,7 @@ mod tests {
         };
         save_json(&state_path(dir.path()), &state).unwrap();
         // Would fail (and log) if it tried Modrinth with a fake version.
-        sync(dir.path(), "26.3", true, false, &[], false, &|_| {}).unwrap();
+        sync(dir.path(), "26.3", true, false, &[], None, &|_| {}).unwrap();
         assert!(mods.join("sodium.jar").exists());
     }
 
@@ -1027,7 +1113,7 @@ mod tests {
         };
         save_json(&state_path(dir.path()), &state).unwrap();
         let start = std::time::Instant::now();
-        sync(dir.path(), "0.0-test", true, false, &[], false, &|_| {}).unwrap();
+        sync(dir.path(), "0.0-test", true, false, &[], None, &|_| {}).unwrap();
         // The set is used as it is; Modrinth is asked on another thread.
         assert!(start.elapsed() < std::time::Duration::from_millis(500));
         assert!(mods.join("sodium.jar").exists());
@@ -1066,7 +1152,7 @@ mod tests {
         assert!(!mods.join("sodium-26.2.jar").exists());
         installed_set(dir.path(), "26.3", "sodium-26.3.jar");
         // Back to 26.2 through sync: no network, the stashed set returns.
-        sync(dir.path(), "26.2", true, false, &[], false, &|_| {}).unwrap();
+        sync(dir.path(), "26.2", true, false, &[], None, &|_| {}).unwrap();
         assert_eq!(
             std::fs::read(mods.join("sodium-26.2.jar")).unwrap(),
             b"26.2"
@@ -1086,8 +1172,13 @@ mod tests {
         let opts = zip::write::SimpleFileOptions::default();
         let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
         zip.start_file("fabric.mod.json", opts).unwrap();
-        let meta =
-            serde_json::json!({"schemaVersion": 1, "id": id, "version": "1", "depends": depends});
+        let jars: Vec<_> = nested
+            .iter()
+            .map(|(file, _)| serde_json::json!({"file": file}))
+            .collect();
+        let meta = serde_json::json!({
+            "schemaVersion": 1, "id": id, "version": "1", "depends": depends, "jars": jars,
+        });
         zip.write_all(meta.to_string().as_bytes()).unwrap();
         for (name, bytes) in nested {
             zip.start_file(*name, opts).unwrap();
@@ -1098,6 +1189,16 @@ mod tests {
 
     const API: &str = "fabric-api-1.jar";
     const RENDERER: &str = "fabric-renderer-api-v1-1.jar";
+
+    fn vanilla_target<'a>(game_dir: &'a Path, game_version: &'a str) -> SyncTarget<'a> {
+        SyncTarget {
+            game_dir,
+            game_version,
+            loader: None,
+            launcher_owned_vanilla: true,
+            progress: &|_| {},
+        }
+    }
 
     fn write_fabric_api(mods: &Path) {
         use serde_json::json;
@@ -1136,41 +1237,47 @@ mod tests {
         save_json(&state_path(game), &old).unwrap();
 
         let expected = ["sodium.jar", "fzzy-config.jar", API];
-        sync_with_install(game, "1.21.1", true, false, &[], false, |ids| {
-            assert!(ids.contains(&"AANobbMI"));
-            fs::write(
-                mods.join("sodium.jar"),
-                fabric_jar(
-                    "sodium",
-                    json!({"minecraft": "1.21.x", "fabric-renderer-api-v1": "*"}),
-                    &[],
-                ),
-            )
-            .unwrap();
-            // A dependency may have no Minecraft requirement of its own.
-            fs::write(
-                mods.join("fzzy-config.jar"),
-                fabric_jar("fzzy_config", json!({}), &[]),
-            )
-            .unwrap();
-            write_fabric_api(&mods);
-            let installed: Vec<_> = expected
-                .iter()
-                .enumerate()
-                .map(|(i, name)| {
-                    let mut entry = tracked(name);
-                    entry.project_id = format!("project-{i}");
-                    entry.dependency = i != 0;
-                    entry
-                })
-                .collect();
-            ModIndex {
-                mods: installed.clone(),
-            }
-            .save(&index_path(game))
-            .unwrap();
-            Ok((installed, Vec::new()))
-        })
+        sync_with_install(
+            vanilla_target(game, "1.21.1"),
+            true,
+            false,
+            &[],
+            |_, ids| {
+                assert!(ids.contains(&"AANobbMI"));
+                fs::write(
+                    mods.join("sodium.jar"),
+                    fabric_jar(
+                        "sodium",
+                        json!({"minecraft": "1.21.x", "fabric-renderer-api-v1": "*"}),
+                        &[],
+                    ),
+                )
+                .unwrap();
+                // A dependency may have no Minecraft requirement of its own.
+                fs::write(
+                    mods.join("fzzy-config.jar"),
+                    fabric_jar("fzzy_config", json!({}), &[]),
+                )
+                .unwrap();
+                write_fabric_api(&mods);
+                let installed: Vec<_> = expected
+                    .iter()
+                    .enumerate()
+                    .map(|(i, name)| {
+                        let mut entry = tracked(name);
+                        entry.project_id = format!("project-{i}");
+                        entry.dependency = i != 0;
+                        entry
+                    })
+                    .collect();
+                ModIndex {
+                    mods: installed.clone(),
+                }
+                .save(&index_path(game))
+                .unwrap();
+                Ok((installed, Vec::new()))
+            },
+        )
         .unwrap();
         assert!(super::super::slim_api::apply(&mods).unwrap());
         assert!(mods.join(RENDERER).is_file());
@@ -1181,7 +1288,7 @@ mod tests {
         note_recheck(game, old, false).unwrap();
         let state: State = load_json(&state_path(game)).unwrap().unwrap();
         assert_eq!(state.game_version, "1.21.1");
-        sync_with_install(game, "1.8.9", true, false, &[], false, |ids| {
+        sync_with_install(vanilla_target(game, "1.8.9"), true, false, &[], |_, ids| {
             assert_eq!(ids.len(), MODS.len());
             assert!(
                 super::super::files::list(&mods, &ModIndex::default())
@@ -1209,11 +1316,11 @@ mod tests {
         let stash = stash_dir(game, "1.21.1", false, "");
         assert!(expected.iter().all(|name| stash.join(name).is_file()));
         assert_eq!(installed_files(game), Vec::<String>::new());
-        sync_with_install(game, "1.8.9", true, false, &[], false, |_| {
+        sync_with_install(vanilla_target(game, "1.8.9"), true, false, &[], |_, _| {
             panic!("empty set is checked")
         })
         .unwrap();
-        sync_with_install(game, "1.21.1", true, false, &[], false, |_| {
+        sync_with_install(vanilla_target(game, "1.21.1"), true, false, &[], |_, _| {
             panic!("use the cached set")
         })
         .unwrap();
@@ -1241,7 +1348,11 @@ mod tests {
                 "sodium",
                 json!({"minecraft": ["1.21.1", "1.8.x"]}),
             ),
-            ("indexed.jar", "indexed", json!({"minecraft": "1.21.1"})),
+            (
+                "indexed.jar",
+                "indexed",
+                json!({"minecraft": "1.21.1", "missing_lib": "*"}),
+            ),
             ("dependency.jar", "library", json!({})),
         ] {
             fs::write(mods.join(name), fabric_jar(id, depends, &[])).unwrap();
@@ -1268,7 +1379,7 @@ mod tests {
         )
         .unwrap();
         recover_vanilla_api(game).unwrap();
-        sync_with_install(game, "1.8.9", true, false, &[], false, |_| {
+        sync_with_install(vanilla_target(game, "1.8.9"), true, false, &[], |_, _| {
             panic!("state says the version is checked")
         })
         .unwrap();
@@ -1278,6 +1389,11 @@ mod tests {
         assert!(!mods.join("old.jar").exists());
         assert!(!mods.join("indexed.jar").exists());
         assert!(!mods.join("dependency.jar").exists());
+        assert!(
+            fs::read_dir(game.join(".arctic/performance-incompatible"))
+                .unwrap()
+                .any(|entry| entry.unwrap().path().join("indexed.jar").is_file())
+        );
         assert!(mods.join("new.jar").is_file());
         assert!(mods.join("my-mod.jar").is_file());
     }
@@ -1298,7 +1414,7 @@ mod tests {
         )
         .unwrap();
         fs::write(mods.join("dep.jar"), b"downloaded before the error").unwrap();
-        sync(game, "1.8.9", false, false, &[], false, &|_| {}).unwrap();
+        sync(game, "1.8.9", false, false, &[], None, &|_| {}).unwrap();
         assert!(!mods.join("dep.jar").exists());
         assert!(mods.join("user.jar").is_file());
         assert!(!pending_path(game).exists());

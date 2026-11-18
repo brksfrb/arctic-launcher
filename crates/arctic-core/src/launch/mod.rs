@@ -497,13 +497,10 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 progress(ProgressInfo::stage("Checking performance mods"));
                 // Best effort, like the Forge branch: no Sodium is better than no game (an
                 // unreachable Modrinth CDN, a locked or truncated index).
-                if let Err(e) = crate::mods::performance::sync(
+                if let Err(e) = crate::mods::performance::sync_for_launch(
                     &game_dir,
                     &vanilla.id,
-                    req.instance.performance,
-                    req.instance.shaders,
-                    &req.instance.extras,
-                    req.instance.loader.kind().is_some(),
+                    req.instance,
                     progress,
                 ) {
                     log::warn!("performance mods: {e}");
@@ -662,7 +659,7 @@ fn effective_loader(
         let game_dir = instance.game_dir(dirs);
         let _ = arctic_mod::sync(&game_dir.join("mods"), game, false);
         if let Err(e) =
-            crate::mods::performance::sync(&game_dir, game, false, false, &[], false, &|_| {})
+            crate::mods::performance::sync(&game_dir, game, false, false, &[], None, &|_| {})
         {
             log::warn!("vanilla performance cleanup: {e}");
         }
