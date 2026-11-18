@@ -248,17 +248,9 @@ pub fn jar_fits(path: &Path, loader: Option<LoaderKind>) -> bool {
 
 /// `-Xmx4G` / `-Xmx4096M` in JVM arguments, in MiB.
 pub fn xmx_mb(args: &str) -> Option<u32> {
-    let v = args
-        .split_whitespace()
-        .find_map(|a| a.strip_prefix("-Xmx"))?;
-    let (num, unit) = v.split_at(v.find(|c: char| !c.is_ascii_digit()).unwrap_or(v.len()));
-    let n: u32 = num.parse().ok()?;
-    match unit.to_ascii_lowercase().as_str() {
-        "g" => n.checked_mul(1024),
-        "m" | "" => Some(n),
-        "k" => Some(n / 1024),
-        _ => None,
-    }
+    let args = crate::launch::args::split_jvm_args(args);
+    let size = args.iter().rev().find_map(|arg| arg.strip_prefix("-Xmx"))?;
+    crate::launch::args::heap_size_mb(size).filter(|&mb| mb > 0)
 }
 
 /// Mod id and version from a jar's `fabric.mod.json` / `quilt.mod.json`
