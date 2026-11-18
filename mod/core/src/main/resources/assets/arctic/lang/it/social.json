@@ -217,5 +217,21 @@
   "social.words_separated_by_commas_a_line_with_any_of": "Parole separate da virgole; una riga con una qualsiasi di esse corrisponde. \"-parola\" esclude righe.",
   "social.world_open_to_friends": "Mondo aperto agli amici",
   "social.your_friend_joined": "Il tuo amico è entrato",
-  "social.your_world_is_open_to_lan_for_the_friends": "Il tuo mondo è aperto in LAN per gli amici che hai invitato"
+  "social.your_world_is_open_to_lan_for_the_friends": "Il tuo mondo è aperto in LAN per gli amici che hai invitato",
+  "social.hostban_host": "Non puoi bandire l’host.",
+  "social.hostban_tunnel_ip": "I giocatori entrati tramite invito o codice non possono essere banditi per IP. Usa /ban <nome>.",
+  "social.hostban_disconnect": "Sei stato bandito da questo mondo.\n{0}",
+  "social.hostban_default_reason": "Nessun motivo indicato.",
+  "social.hostban_storage_error": "Impossibile leggere o salvare l’elenco dei ban di questo mondo.",
+  "social.hostban_player_already_banned": "{0} è già stato bandito.",
+  "social.hostban_player_banned": "{0} è stato bandito.",
+  "social.hostban_player_not_banned": "{0} non è stato bandito.",
+  "social.hostban_player_pardoned": "Il ban di {0} è stato revocato.",
+  "social.hostban_unknown_ip": "{0} non è un indirizzo IP valido né il nome di un giocatore online.",
+  "social.hostban_ip_already_banned": "L’indirizzo IP {0} è già stato bandito.",
+  "social.hostban_ip_banned": "L’indirizzo IP {0} è stato bandito.",
+  "social.hostban_ip_not_banned": "L’indirizzo IP {0} non è stato bandito.",
+  "social.hostban_ip_pardoned": "Il ban dell’indirizzo IP {0} è stato revocato.",
+  "social.hostban_list_entry": "{0} — {1}",
+  "social.hostban_list_empty": "Nessun ban da mostrare."
 }
