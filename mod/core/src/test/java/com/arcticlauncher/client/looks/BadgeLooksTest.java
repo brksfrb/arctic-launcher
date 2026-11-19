@@ -105,6 +105,62 @@ class BadgeLooksTest {
 	}
 
 	@Test
+	void remoteLooksAndEmotesFollowTheBadgeThroughTheCheckInGraceWindow() throws Exception {
+		String hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+		JsonObject outfit = new JsonParser().parse("{\"skin\":\"" + hash + "\",\"cape\":\"" + hash
+				+ "\",\"cosmetics\":[\"hat\"]}").getAsJsonObject();
+		Looks looks = new Looks(platform(), new ClientConfig(), "", "fixture");
+		java.lang.reflect.Field players = Looks.class.getDeclaredField("players");
+		players.setAccessible(true);
+		@SuppressWarnings("unchecked")
+		java.util.Map<UUID, Look> cache = (java.util.Map<UUID, Look>) players.get(looks);
+		java.lang.reflect.Method keepArctic = Looks.class.getDeclaredMethod("keepArctic", UUID.class, Look.class, long.class);
+		keepArctic.setAccessible(true);
+		try {
+			Cosmetics cosmetics = looks.cosmetics();
+			Cosmetics.Emote wave = new Cosmetics.Emote("wave", "Wave", "");
+			wave.animation = Animation.parse(new JsonParser().parse(
+					"{\"animations\":{\"wave\":{\"animation_length\":1,\"loop\":true,\"bones\":{}}}}"));
+			cosmetics.holdLocal(A, wave, 0);
+			// Keep an emote cached for B across look refreshes, as if a remote poll had just returned it.
+			cosmetics.holdLocal(B, wave, 0);
+			long now = System.currentTimeMillis();
+			Look offline = looks.parseLook(outfit, now);
+			cache.put(A, offline);
+			cache.put(B, offline);
+			assertFalse(looks.isArctic(B));
+			assertNull(looks.lookFor(B));
+			assertNull(cosmetics.playingFor(B));
+			Look own = looks.lookFor(A);
+			assertNotNull(own);
+			assertFalse(own.arctic);
+			assertEquals(java.util.Collections.singletonList("hat"), own.cosmetics);
+			assertNotNull(cosmetics.playingFor(A));
+
+			outfit.addProperty("arctic", true);
+			Look online = looks.parseLook(outfit, now);
+			cache.put(B, (Look) keepArctic.invoke(looks, B, online, now));
+			assertTrue(looks.isArctic(B));
+			Look remote = looks.lookFor(B);
+			assertNotNull(remote);
+			assertEquals(hash, remote.skin);
+			assertEquals(hash, remote.cape);
+			assertEquals(java.util.Collections.singletonList("hat"), remote.cosmetics);
+			assertNotNull(cosmetics.playingFor(B));
+
+			cache.put(B, (Look) keepArctic.invoke(looks, B, offline, now + 149_000L));
+			assertTrue(looks.isArctic(B));
+			assertEquals(remote.cosmetics, looks.lookFor(B).cosmetics);
+			assertNotNull(cosmetics.playingFor(B));
+
+			cache.put(B, (Look) keepArctic.invoke(looks, B, offline, now + 150_000L));
+			assertFalse(looks.isArctic(B));
+			assertNull(looks.lookFor(B));
+			assertNull(cosmetics.playingFor(B));
+		} finally { close(looks); }
+	}
+
+	@Test
 	void everyoneInThePlayerListIsAskedAboutAtOnceInOneRequest() throws Exception {
 		java.util.concurrent.atomic.AtomicInteger requests = new java.util.concurrent.atomic.AtomicInteger();
 		java.util.List<String> asked = java.util.Collections.synchronizedList(new java.util.ArrayList<String>());
