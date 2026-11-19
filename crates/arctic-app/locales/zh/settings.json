@@ -177,6 +177,7 @@
   "settings.start_the_launcher_maximized": "最大化启动启动器",
   "settings.storage": "存储",
   "settings.supported_by_flash_hosting_in_the_sidebar": "在侧边栏、关于和联机页面显示“赞助方：Flash Hosting”。",
+  "settings.temporary_portal_folder": "此文件夹使用 Linux 临时文档门户。切换会话后可能无法访问。请尽量选择普通文件夹。",
   "settings.test_proxy": "测试代理",
   "settings.testing": "测试中…",
   "settings.the_file_cant_be_read_as_a_picture": "无法将该文件作为图片读取（{e}）。",

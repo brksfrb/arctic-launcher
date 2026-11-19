@@ -8,7 +8,7 @@ use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::Sender;
 
-use crate::t;
+use crate::{t, tf};
 use arctic_core::auth::avatar::{self, Face};
 use arctic_core::auth::microsoft::{self, DeviceCode, MsaConfig};
 use arctic_core::auth::{Account, now_secs};
@@ -410,7 +410,17 @@ impl Tasks {
             }
             let result = result.map(|(game, log, java)| (game, log, version.id.clone(), java));
             // The toast shows this string; it has to be the whole cause chain, not just Display.
-            t.send(Event::Launched(id, result.map_err(|e| e.chain())));
+            t.send(Event::Launched(
+                id,
+                result.map_err(|e| match e {
+                    arctic_core::Error::GameWorkingDirectory { path, source } => tf!(
+                        "tasks.could_not_open_game_working_folder",
+                        path = path.display(),
+                        error = source
+                    ),
+                    _ => e.chain(),
+                }),
+            ));
         });
     }
 

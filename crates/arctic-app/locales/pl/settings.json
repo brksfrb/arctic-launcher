@@ -177,6 +177,7 @@
   "settings.start_the_launcher_maximized": "Uruchamiaj launcher zmaksymalizowany",
   "settings.storage": "Pamięć",
   "settings.supported_by_flash_hosting_in_the_sidebar": "„Wspierane przez Flash Hosting” na pasku bocznym, w O programie i w Graj razem.",
+  "settings.temporary_portal_folder": "Ten folder korzysta z tymczasowego portalu dokumentów systemu Linux. Dostęp może zniknąć między sesjami. Jeśli to możliwe, wybierz zwykły folder.",
   "settings.test_proxy": "Testuj proxy",
   "settings.testing": "Testowanie…",
   "settings.the_file_cant_be_read_as_a_picture": "Nie można odczytać pliku jako obrazu ({e}).",

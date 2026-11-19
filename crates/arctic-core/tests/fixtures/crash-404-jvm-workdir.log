@@ -1,0 +1,5 @@
+Error occurred during initialization of VM
+java.lang.InternalError: platform encoding not initialized
+	at jdk.internal.util.SystemProps$Raw.platformProperties(java.base/Native Method)
+	at java.lang.System.initPhase1(...)
+(exit code 1)

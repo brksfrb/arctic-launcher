@@ -177,6 +177,7 @@
   "settings.start_the_launcher_maximized": "Открывать лаунчер развёрнутым",
   "settings.storage": "Хранилище",
   "settings.supported_by_flash_hosting_in_the_sidebar": "«При поддержке Flash Hosting» в боковой панели, разделе «О программе» и «Играть вместе».",
+  "settings.temporary_portal_folder": "Эта папка использует временный портал документов Linux. Доступ может пропасть между сеансами. По возможности выберите обычную папку.",
   "settings.test_proxy": "Проверить прокси",
   "settings.testing": "Проверка…",
   "settings.the_file_cant_be_read_as_a_picture": "Файл не читается как изображение ({e}).",

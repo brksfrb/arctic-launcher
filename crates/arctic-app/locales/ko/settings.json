@@ -177,6 +177,7 @@
   "settings.start_the_launcher_maximized": "런처를 최대화하여 시작",
   "settings.storage": "저장소",
   "settings.supported_by_flash_hosting_in_the_sidebar": "사이드바, 정보, 함께 플레이에 'Flash Hosting 후원' 표시.",
+  "settings.temporary_portal_folder": "이 폴더는 Linux의 임시 문서 포털을 사용합니다. 세션이 바뀌면 접근할 수 없게 될 수 있습니다. 가능하면 일반 폴더를 선택하세요.",
   "settings.test_proxy": "프록시 테스트",
   "settings.testing": "테스트 중…",
   "settings.the_file_cant_be_read_as_a_picture": "파일을 그림으로 읽을 수 없습니다({e}).",
