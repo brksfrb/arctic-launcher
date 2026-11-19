@@ -11,6 +11,7 @@ import com.arcticlauncher.client.ui.Button;
 import com.arcticlauncher.client.ui.Hints;
 import com.arcticlauncher.client.ui.Page;
 import com.arcticlauncher.client.ui.TextField;
+import com.arcticlauncher.client.ui.Widget;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +55,7 @@ public final class ServersPage extends Page {
 	private String selectedLan;
 	private float scroll;
 	private Mode mode = Mode.LIST;
+	private ServerFormLayout formLayout;
 	private TextField nameField;
 	private TextField addressField;
 
@@ -261,33 +263,26 @@ public final class ServersPage extends Page {
 		t.start();
 	}
 
-	/** Add, edit or direct connect: a small form over the list. */
 	private void buildForm() {
 		boolean direct = mode == Mode.DIRECT;
-		// Direct mode adds a button: wide enough for the longest locale ("Zur Liste hinzufügen") and still room for the address.
-		int w = direct ? 340 : 240;
-		int x = width / 2 - w / 2;
-		int y = height / 2 - 40;
-		Servers.Entry editing = mode == Mode.EDIT && selected >= 0 ? entries.get(selected) : null;
-		if (!direct) {
-			nameField = add(new TextField(tr("addServer.enterName", Lang.t("servers.server_name_2")), 64, TextField.ANY));
-			nameField.bounds(x, y, w, BUTTON_H);
-			if (editing != null) {
-				nameField.text(editing.name);
-			}
-			y += BUTTON_H + GAP + 10;
+		formLayout = new ServerFormLayout(width, height, direct);
+		boolean newForm = addressField == null;
+		if (newForm) {
+			initForm(direct);
 		}
-		addressField = add(new TextField(tr("addServer.enterIp", Lang.t("servers.server_address")), 256, TextField.ANY));
-		int copyW = 44;
-		int addW = direct ? 120 : 0;
-		addressField.bounds(x, y, w - copyW - GAP - (direct ? addW + GAP : 0), BUTTON_H);
-		addressField.onEnter(this::submit);
+		if (!direct) {
+			add(nameField, formLayout.name);
+		}
+		add(addressField, formLayout.address);
+		if (newForm) {
+			focus(direct ? addressField : nameField);
+		}
 		add(new Button(Lang.t("servers.copy"), () -> {
 			String a = addressField.text().trim();
 			if (!a.isEmpty()) {
 				platform.setClipboard(a);
 			}
-		})).bounds(x + w - copyW, y, copyW, BUTTON_H);
+		}), formLayout.copy);
 		if (direct) {
 			add(new Button(Lang.t("servers.add_to_list"), () -> {
 				String address = addressField.text().trim();
@@ -296,23 +291,39 @@ public final class ServersPage extends Page {
 					servers.ping(address);
 					open(Mode.LIST);
 				}
-			})).bounds(x + w - copyW - GAP - addW, y, addW, BUTTON_H);
+			}), formLayout.addToList);
 		}
+		String ok = direct ? tr("selectServer.select", Lang.t("servers.join_server")) : tr("gui.done", Lang.t("servers.done"));
+		add(new Button(ok, this::submit).primary(), formLayout.submit);
+		add(new Button(tr("gui.cancel", Lang.t("servers.cancel")), () -> open(Mode.LIST)), formLayout.cancel);
+	}
+
+	private void add(Widget widget, ServerFormLayout.Bounds bounds) {
+		add(widget).bounds(bounds.x, bounds.y, bounds.width, bounds.height);
+	}
+
+	private void initForm(boolean direct) {
+		if (!direct) {
+			nameField = new TextField(tr("addServer.enterName", Lang.t("servers.server_name_2")), 64, TextField.ANY);
+		}
+		addressField = new TextField(tr("addServer.enterIp", Lang.t("servers.server_address")), 256, TextField.ANY)
+				.onEnter(this::submit);
+		Servers.Entry editing = mode == Mode.EDIT && selected >= 0 ? entries.get(selected) : null;
 		if (editing != null) {
+			nameField.text(editing.name);
 			addressField.text(editing.address);
 		} else if (direct && ArcticClient.config().lastDirect != null) {
 			addressField.text(ArcticClient.config().lastDirect);
 		}
-		focus(direct ? addressField : nameField);
-		y += BUTTON_H + GAP * 2;
-		int bw = (w - GAP) / 2;
-		String ok = direct ? tr("selectServer.select", Lang.t("servers.join_server")) : tr("gui.done", Lang.t("servers.done"));
-		add(new Button(ok, this::submit).primary()).bounds(x, y, bw, BUTTON_H);
-		add(new Button(tr("gui.cancel", Lang.t("servers.cancel")), () -> open(Mode.LIST))).bounds(x + bw + GAP, y, w - bw - GAP, BUTTON_H);
 	}
 
 	private void open(Mode m) {
 		mode = m;
+		nameField = null;
+		addressField = null;
+		pressed = -1;
+		dragging = false;
+		lastClickAt = 0;
 		rebuild();
 	}
 
@@ -415,12 +426,23 @@ public final class ServersPage extends Page {
 	// ---- Drawing -------------------------------------------------------------------------
 
 	@Override
+	protected boolean animatesIn() {
+		return mode == Mode.LIST;
+	}
+
+	@Override
 	protected void drawAbove(Gfx g, Style s, int mx, int my) {
-		drawTip(g, s);
+		if (mode == Mode.LIST) {
+			drawTip(g, s);
+		}
 	}
 
 	@Override
 	protected void drawBehind(Gfx g, Style s, int mx, int my) {
+		if (mode != Mode.LIST) {
+			drawForm(g, s);
+			return;
+		}
 		tip = null;
 		tipX = mx;
 		tipY = my;
@@ -459,7 +481,7 @@ public final class ServersPage extends Page {
 			if (ry + ROW_H < top - 4 || ry > bottom + 4) {
 				continue;
 			}
-			boolean over = mode == Mode.LIST && !dragging && mx >= left && mx < left + LIST_W && my >= ry && my < ry + ROW_H
+			boolean over = !dragging && mx >= left && mx < left + LIST_W && my >= ry && my < ry + ROW_H
 					&& my >= top && my < bottom;
 			playHint = true;
 			row(g, s, left, ry, e.name, e.address, i == selected, over);
@@ -479,13 +501,17 @@ public final class ServersPage extends Page {
 		if (entries.isEmpty() && lan.worlds().isEmpty()) {
 			Draw.centered(g, Lang.t("servers.no_servers_yet_add_server_or_direct"), width / 2, (top + bottom) / 2 - 4, s.muted, false);
 		}
-		if (mode != Mode.LIST) {
-			g.fill(0, 0, width, height, 0x88000000);
-			Skin.panel(g, s, width / 2 - 130, height / 2 - 60, width / 2 + 130, height / 2 + 50);
-			String title = mode == Mode.DIRECT ? tr("selectServer.direct", Lang.t("servers.direct_connection"))
-					: mode == Mode.EDIT ? tr("selectServer.edit", Lang.t("servers.edit")) : tr("selectServer.add", Lang.t("servers.add_server"));
-			Draw.centered(g, title, width / 2, height / 2 - 54, s.text, false);
-		}
+	}
+
+	private void drawForm(Gfx g, Style s) {
+		g.fill(0, 0, width, height, 0x88000000);
+		ServerFormLayout.Bounds panel = formLayout.panel;
+		Skin.panel(g, s, panel.x, panel.y, panel.right(), panel.bottom());
+		String title = mode == Mode.DIRECT ? tr("selectServer.direct", Lang.t("servers.direct_connection"))
+				: mode == Mode.EDIT ? tr("selectServer.edit", Lang.t("servers.edit")) : tr("selectServer.add", Lang.t("servers.add_server"));
+		ServerFormLayout.Bounds titleBox = formLayout.title;
+		Draw.centered(g, Draw.fit(g, title, titleBox.width), titleBox.x + titleBox.width / 2,
+				titleBox.y + (titleBox.height - 8) / 2, s.text, false);
 	}
 
 	private void drawDiscover(Gfx g, Style s, int left, int top, int bottom, int mx, int my) {
@@ -527,7 +553,7 @@ public final class ServersPage extends Page {
 		y += 14;
 		for (LanScan.World w : worlds) {
 			int ry = Math.round(top + y - scroll);
-			boolean over = mode == Mode.LIST && !dragging && mx >= left && mx < left + LIST_W && my >= ry && my < ry + ROW_H;
+			boolean over = !dragging && mx >= left && mx < left + LIST_W && my >= ry && my < ry + ROW_H;
 			lanRow(g, s, left, ry, w, w.address.equals(selectedLan), over);
 			y += ROW_H + ROW_GAP;
 		}
@@ -844,7 +870,7 @@ public final class ServersPage extends Page {
 	@Override
 	public boolean mouseDragged(double mx, double my, int button) {
 		if (pressed < 0) {
-			return super.mouseDragged(mx, my, button);
+			return super.mouseDragged(mx, my, button) || mode != Mode.LIST;
 		}
 		mouseY = my;
 		if (!dragging && (Math.abs(my - pressY) > DRAG_START || Math.abs(mx - pressX) > DRAG_START)) {
@@ -856,7 +882,7 @@ public final class ServersPage extends Page {
 	@Override
 	public boolean mouseReleased(double mx, double my, int button) {
 		if (pressed < 0) {
-			return super.mouseReleased(mx, my, button);
+			return super.mouseReleased(mx, my, button) || mode != Mode.LIST;
 		}
 		if (dragging) {
 			int to = dropIndex();
@@ -879,7 +905,7 @@ public final class ServersPage extends Page {
 	@Override
 	public boolean mouseScrolled(double mx, double my, double amount) {
 		if (mode != Mode.LIST) {
-			return false;
+			return true;
 		}
 		scroll -= (float) amount * (ROW_H + ROW_GAP);
 		if (!discover) {
