@@ -177,6 +177,7 @@
   "settings.start_the_launcher_maximized": "Launcher maximiert starten",
   "settings.storage": "Speicher",
   "settings.supported_by_flash_hosting_in_the_sidebar": "„Unterstützt von Flash Hosting“ in der Seitenleiste, unter Über und bei Zusammen spielen.",
+  "settings.temporary_portal_folder": "Dieser Ordner verwendet ein temporäres Linux-Dokumentenportal. Der Zugriff kann zwischen Sitzungen verloren gehen. Wähle möglichst einen normalen Ordner.",
   "settings.test_proxy": "Proxy testen",
   "settings.testing": "Wird getestet…",
   "settings.the_file_cant_be_read_as_a_picture": "Die Datei kann nicht als Bild gelesen werden ({e}).",

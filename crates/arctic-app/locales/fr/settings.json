@@ -177,6 +177,7 @@
   "settings.start_the_launcher_maximized": "Démarrer le launcher en fenêtre agrandie",
   "settings.storage": "Stockage",
   "settings.supported_by_flash_hosting_in_the_sidebar": "« Soutenu par Flash Hosting » dans la barre latérale, À propos et Jouer ensemble.",
+  "settings.temporary_portal_folder": "Ce dossier utilise un portail de documents temporaire de Linux. L’accès peut disparaître entre deux sessions. Choisis un dossier ordinaire si possible.",
   "settings.test_proxy": "Tester le proxy",
   "settings.testing": "Test en cours…",
   "settings.the_file_cant_be_read_as_a_picture": "Le fichier ne peut pas être lu comme une image ({e}).",

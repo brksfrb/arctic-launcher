@@ -177,6 +177,7 @@
   "settings.start_the_launcher_maximized": "Відкривати лаунчер розгорнутим",
   "settings.storage": "Сховище",
   "settings.supported_by_flash_hosting_in_the_sidebar": "«За підтримки Flash Hosting» на бічній панелі, у розділі «Про програму» та «Грати разом».",
+  "settings.temporary_portal_folder": "Ця папка використовує тимчасовий портал документів Linux. Доступ може зникнути між сеансами. За можливості виберіть звичайну папку.",
   "settings.test_proxy": "Перевірити проксі",
   "settings.testing": "Перевірка…",
   "settings.the_file_cant_be_read_as_a_picture": "Файл не читається як зображення ({e}).",
