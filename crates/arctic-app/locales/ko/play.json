@@ -154,7 +154,7 @@
   "play.pick_an_instance_and_jump_in": "인스턴스를 고르고 바로 시작하세요.",
   "play.play": "플레이",
   "play.play_2": "{name} 플레이",
-  "play.play_another_copy_switch_account_first_for_a": "게임 하나 더 실행 (두 번째 플레이어는 먼저 계정을 전환하세요)",
+  "play.play_another_copy": "다른 복사본 실행",
   "play.play_that_instance_once_first": "먼저 그 인스턴스를 한 번 플레이하세요.",
   "play.play_with_the_arctic_client": "Arctic 클라이언트로 플레이",
   "play.played_session_last.one": "{format_duration} 플레이 · 1회 · 마지막 {value2}",

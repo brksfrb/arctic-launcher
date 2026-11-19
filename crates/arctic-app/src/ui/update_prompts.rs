@@ -226,7 +226,7 @@ impl ArcticApp {
             Ok("mod-clashes") => {
                 // As if Play was pressed on the selected instance.
                 let instance = self.selected_instance().clone();
-                self.held_by_clashes(&instance, false, &None);
+                self.held_by_clashes(&instance, &None);
             }
             _ => {}
         }
