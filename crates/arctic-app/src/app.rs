@@ -661,7 +661,7 @@ impl ArcticApp {
 
     /// Start preparing + launching the selected version for the active account.
     pub(crate) fn launch_selected(&mut self) {
-        self.launch_selected_as(false, None);
+        self.launch_selected_as(None);
     }
 
     /// The Join button of a server. A running game is brought to the front and told to connect (the
@@ -782,34 +782,20 @@ impl ArcticApp {
                 tf!("tasks.the_game_makes_an_arena_and_invites", who = who),
             );
         }
-        self.launch_selected_as(false, Some(target));
+        self.launch_selected_as(Some(target));
     }
 
-    /// Start the selected instance again while it runs (a second account,
-    /// say); each copy gets its own log.
-    pub(crate) fn launch_another_copy(&mut self) {
-        self.launch_selected_as(true, None);
-    }
-
-    fn launch_selected_as(
-        &mut self,
-        another_copy: bool,
-        quick_play: Option<arctic_core::launch::QuickPlay>,
-    ) {
+    fn launch_selected_as(&mut self, quick_play: Option<arctic_core::launch::QuickPlay>) {
         // Mods that would stop the game while loading: offer the fixes first.
         let instance = self.selected_instance().clone();
-        if self.held_by_clashes(&instance, another_copy, &quick_play) {
+        if self.held_by_clashes(&instance, &quick_play) {
             return;
         }
-        self.launch_unchecked(another_copy, quick_play);
+        self.launch_unchecked(quick_play);
     }
 
     /// Start the selected instance as is (its mods were checked, or the player chose to).
-    pub(crate) fn launch_unchecked(
-        &mut self,
-        another_copy: bool,
-        quick_play: Option<arctic_core::launch::QuickPlay>,
-    ) {
+    pub(crate) fn launch_unchecked(&mut self, quick_play: Option<arctic_core::launch::QuickPlay>) {
         let ManifestState::Ready(manifest) = &self.manifest else {
             return;
         };
@@ -838,46 +824,14 @@ impl ArcticApp {
         let Some(account) = self.accounts.active().cloned() else {
             return;
         };
-        let copy = self
-            .runs
-            .active()
-            .filter(|r| r.instance_id == instance.id)
-            .count() as u32;
-        // Vanilla on another version is a different game, not another copy.
-        let same = instance.is_default().then_some(version.id.as_str());
-        if self.runs.active_for(&instance.id, same).is_some() && !another_copy {
+        if self.runs.instance_active(&instance.id) {
             self.toasts.push(
                 Kind::Info,
                 tf!("tasks.is_already_running", name = instance.name),
-                "Pick another instance to play more at once.",
+                t!("tasks.last_copy_keeps_settings"),
             );
-            return;
         }
-        // The default instance's mods folder holds one Minecraft version's performance mods at a
-        // time. Starting another version would have to swap them out under the game that's
-        // running (Windows refuses: the files are in use), so say so instead of failing midway.
-        if instance.is_default()
-            && let Some(other) = self
-                .runs
-                .active()
-                .find(|r| r.instance_id == instance.id && r.version != version.id)
-            && (instance.performance
-                || instance
-                    .game_dir(&self.dirs)
-                    .join("arctic-performance.json")
-                    .exists())
-        {
-            self.toasts.push(
-                Kind::Info,
-                tf!("tasks.vanilla_is_already_running", version = other.version),
-                tf!(
-                    "tasks.to_play_at_the_same_time_make_a_new_instance",
-                    id = version.id,
-                    version = other.version
-                ),
-            );
-            return;
-        }
+        let copy = self.runs.next_copy(&instance.id);
         self.warn_if_proxy_misses_servers(&instance, &version.id);
         // A new launch isn't on the previous game's server yet.
         self.voice.forget_place();
@@ -1135,10 +1089,12 @@ impl ArcticApp {
                 self.save_accounts();
             }
             Event::Launched(id, result) => {
-                let result = result.map(|(game, _log_file, version, java)| {
+                let result = result.map(|(game, log_file, version, java)| {
                     self.installed.insert(version);
                     if let Some(run) = self.runs.get_mut(id) {
                         run.java = Some(java);
+                        run.log_file = Some(log_file);
+                        run.game_dir = game.game_dir().to_path_buf();
                         if let Some(warning) = run.memory_warning() {
                             run.push_log([arctic_core::launch::logparse::LogLine {
                                 level: arctic_core::launch::logparse::Level::Warn,

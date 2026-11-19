@@ -154,7 +154,7 @@
   "play.pick_an_instance_and_jump_in": "Bir örnek seç ve oyuna dal.",
   "play.play": "Oyna",
   "play.play_2": "{name} oyna",
-  "play.play_another_copy_switch_account_first_for_a": "Başka bir kopya oynat (ikinci oyuncu için önce hesap değiştir)",
+  "play.play_another_copy": "Bir kopya daha başlat",
   "play.play_that_instance_once_first": "Önce o örneği bir kez oyna.",
   "play.play_with_the_arctic_client": "Arctic Client ile oyna",
   "play.played_session_last.one": "{format_duration} oynandı · 1 oturum · son: {value2}",
