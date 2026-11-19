@@ -87,7 +87,7 @@ pub enum Event {
     /// Preparing a launch (id, progress).
     LaunchProgress(LaunchId, ProgressSnapshot),
     UpdateProgress(ProgressSnapshot),
-    AccountRefreshed(Account),
+    AccountRefreshed(DataDirs, Account),
     /// Game process started (window not necessarily up yet). Carries the
     /// version id that was actually launched.
     /// The game, its log file, its version and how Java was started.
@@ -435,15 +435,10 @@ impl Tasks {
             snapshot.percent = Some(percent);
             self.send(Event::LaunchProgress(id, snapshot));
         };
-        let account = if account.needs_refresh(now_secs()) {
+        if account.needs_refresh(now_secs()) {
             progress(ProgressInfo::stage(t!("tasks.refreshing_microsoft_login")));
-            let cfg = MsaConfig::load(&self.dirs)?;
-            let fresh = microsoft::refresh(&cfg, &account)?;
-            self.send(Event::AccountRefreshed(fresh.clone()));
-            fresh
-        } else {
-            account
-        };
+        }
+        let account = self.fresh_account(account)?;
         let req = LaunchRequest {
             dirs: &self.dirs,
             version,

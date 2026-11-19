@@ -140,7 +140,7 @@ impl ArcticApp {
         let game_log = form.game_log.then(|| {
             let instance = self.selected_instance();
             self.runs
-                .for_instance(&instance.id)
+                .for_instance(&self.dirs, &instance.id)
                 .and_then(|run| run.log_file.clone())
                 .unwrap_or_else(|| {
                     instance

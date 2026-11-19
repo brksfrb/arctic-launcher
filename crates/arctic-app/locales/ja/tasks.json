@@ -20,7 +20,6 @@
   "tasks.choose_a_world_archive": "ワールドのアーカイブを選択",
   "tasks.choose_an_account_to_play": "プレイするアカウントを選んでください",
   "tasks.chosen_file_is_tagged_for_another": "選択したファイルは別の Minecraft バージョン向けです。",
-  "tasks.close_minecraft_before_switching_profiles": "プロファイルを切り替える前にMinecraftを閉じてください。",
   "tasks.closed": "{title} が終了しました",
   "tasks.closed_unexpectedly": "{title} が予期せず終了しました",
   "tasks.could_not_create_data_folders": "データフォルダーを作成できませんでした",

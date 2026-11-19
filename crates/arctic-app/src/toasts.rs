@@ -45,7 +45,7 @@ pub enum ToastAction {
     WhatsNew(String),
     /// Do a crash's one-click fix on this instance.
     Fix {
-        instance: String,
+        run: crate::tasks::LaunchId,
         fix: arctic_core::crash::Fix,
     },
 }

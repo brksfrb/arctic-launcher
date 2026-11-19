@@ -212,6 +212,8 @@ impl ArcticApp {
         let mut changed = false;
         for profile in &profiles {
             let active = profile.id == self.profiles.active;
+            let dirs = self.root.with_profile(&profile.id);
+            let can_remove = !active && !self.runs.active().any(|run| run.belongs_to(&dirs));
             egui::Frame::new()
                 .fill(lerp_color(p.bg, p.surface_hover, 0.35))
                 .corner_radius(CornerRadius::same(10))
@@ -254,7 +256,7 @@ impl ArcticApp {
                             }
                         }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if !active
+                            if can_remove
                                 && widgets::icon_button(ui, p, Icon::Trash, t!("play.remove_2"))
                                     .clicked()
                             {
@@ -289,7 +291,7 @@ impl ArcticApp {
                             }
                         }
                     });
-                    if confirm.as_deref() == Some(profile.id.as_str()) {
+                    if can_remove && confirm.as_deref() == Some(profile.id.as_str()) {
                         ui.add_space(4.0);
                         ui.label(
                             RichText::new(t!("play.remove_this_profile_its_folder_worlds"))

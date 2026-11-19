@@ -325,7 +325,7 @@ impl ArcticApp {
             tray: None,
             window_known: false,
             hidden_since: None,
-            playtime: arctic_core::playtime::Stats::load(&dirs),
+            playtime: arctic_core::playtime::Stats::default(),
             open_flushed: std::time::Instant::now(),
             close_prompt: false,
             join_confirm: None,
@@ -488,7 +488,7 @@ impl ArcticApp {
         };
         self.proxy = data.proxy;
         self.bridge.update(&self.accounts, &self.tasks);
-        self.runs.clear();
+        self.playtime = arctic_core::playtime::Stats::load(&self.dirs);
         self.log_cache = None;
         // Instance pages and mod listings belong to the old profile.
         self.inst = InstancesUi::default();
@@ -664,16 +664,15 @@ impl ArcticApp {
         self.launch_selected_as(None);
     }
 
-    /// The Join button of a server. A running game is brought to the front and told to connect (the
-    /// Arctic Client listens for that); without a running game, the player is asked (once, if they
-    /// like) before Minecraft starts. Returns false while that question is up.
+    /// The Join button of a server. Bring a running game in this profile to the front and tell it
+    /// to connect, or ask before Minecraft starts. Returns false while that question is up.
     pub(crate) fn join_server(&mut self, address: &str) -> bool {
         use crate::toasts::Kind;
         let running = self
             .runs
             .active()
-            .map(|r| (r.id, r.game().map(|g| g.pid())))
-            .next();
+            .find(|r| r.belongs_to(&self.dirs))
+            .map(|r| (r.id, r.game().map(|g| g.pid())));
         match running {
             Some((_, None)) => {
                 self.toasts.push(
@@ -824,14 +823,27 @@ impl ArcticApp {
         let Some(account) = self.accounts.active().cloned() else {
             return;
         };
-        if self.runs.instance_active(&instance.id) {
+        let game_dir = instance.game_dir(&self.dirs);
+        if let Some(other) = self
+            .runs
+            .active()
+            .find(|r| !r.belongs_to(&self.dirs) && r.game_dir == game_dir)
+        {
+            self.toasts.push(
+                Kind::Info,
+                tf!("tasks.is_already_running", name = other.title),
+                "",
+            );
+            return;
+        }
+        if self.runs.instance_active(&self.dirs, &instance.id) {
             self.toasts.push(
                 Kind::Info,
                 tf!("tasks.is_already_running", name = instance.name),
                 t!("tasks.last_copy_keeps_settings"),
             );
         }
-        let copy = self.runs.next_copy(&instance.id);
+        let copy = self.runs.next_copy(&self.dirs, &instance.id);
         self.warn_if_proxy_misses_servers(&instance, &version.id);
         // A new launch isn't on the previous game's server yet.
         self.voice.forget_place();
@@ -840,10 +852,11 @@ impl ArcticApp {
             instance.loader.label().to_owned(),
         );
         let id = self.runs.start(
+            &self.dirs,
             &instance.id,
             &version.id,
             format!("{} · {}", instance.name, version.id),
-            instance.game_dir(&self.dirs),
+            game_dir,
         );
         self.run_note(
             id,
@@ -864,21 +877,24 @@ impl ArcticApp {
             .launch(id, version, instance, account, self.settings.clone(), start);
     }
 
+    pub(crate) fn flush_launcher_time(&mut self) {
+        let secs = if crate::window::hidden() {
+            0
+        } else {
+            self.open_flushed.elapsed().as_secs().min(300)
+        };
+        if let Err(e) = arctic_core::playtime::add_launcher_time(&self.dirs, secs) {
+            log::warn!("launcher open time: {e}");
+        }
+        self.open_flushed = std::time::Instant::now();
+        self.playtime = arctic_core::playtime::Stats::load(&self.dirs);
+    }
+
     /// Tray icon, close-to-tray and starts forwarded from other processes.
     fn window_and_tray(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
         // How long the launcher window is open, added to the stats once a minute.
-        let open = self.open_flushed.elapsed();
-        if open >= std::time::Duration::from_secs(60) {
-            let secs = if crate::window::hidden() {
-                0
-            } else {
-                open.as_secs().min(300)
-            };
-            if let Err(e) = arctic_core::playtime::add_launcher_time(&self.dirs, secs) {
-                log::warn!("launcher open time: {e}");
-            }
-            self.open_flushed = std::time::Instant::now();
-            self.playtime = arctic_core::playtime::Stats::load(&self.dirs);
+        if self.open_flushed.elapsed() >= std::time::Duration::from_secs(60) {
+            self.flush_launcher_time();
         }
         if !self.window_known {
             self.window_known = true;
@@ -931,7 +947,10 @@ impl ArcticApp {
             match action {
                 crate::tray::Action::Play => {
                     self.set_tab(Tab::Play, now);
-                    if !self.runs.instance_active(&self.selected_instance().id) {
+                    if !self
+                        .runs
+                        .instance_active(&self.dirs, &self.selected_instance().id)
+                    {
                         self.launch_selected();
                     }
                 }
@@ -1084,29 +1103,32 @@ impl ArcticApp {
                     (*done, *total) = (p.bytes_done, p.bytes_total);
                 }
             }
-            Event::AccountRefreshed(account) => {
-                self.accounts.upsert(account);
-                self.save_accounts();
+            Event::AccountRefreshed(dirs, account) => {
+                if dirs.profile_root() == self.dirs.profile_root() {
+                    self.accounts.upsert(account);
+                    self.save_accounts();
+                } else if let Err(e) = AccountStore::load(&dirs).and_then(|mut accounts| {
+                    if let Some(existing) =
+                        accounts.accounts.iter_mut().find(|a| a.id == account.id)
+                    {
+                        *existing = account;
+                        accounts.save(&dirs)?;
+                    }
+                    Ok(())
+                }) {
+                    self.toasts.push(
+                        Kind::Error,
+                        t!("tasks.could_not_save_accounts"),
+                        e.to_string(),
+                    );
+                }
             }
             Event::Launched(id, result) => {
                 let result = result.map(|(game, log_file, version, java)| {
                     self.installed.insert(version);
                     if let Some(run) = self.runs.get_mut(id) {
-                        run.java = Some(java);
                         run.log_file = Some(log_file);
-                        run.game_dir = game.game_dir().to_path_buf();
-                        if let Some(warning) = run.memory_warning() {
-                            run.push_log([arctic_core::launch::logparse::LogLine {
-                                level: arctic_core::launch::logparse::Level::Warn,
-                                text: format!("──── Arctic: {warning} ────"),
-                            }]);
-                            let title = run.title.clone();
-                            self.toasts.push(
-                                Kind::Info,
-                                tf!("tasks.not_much_memory", title = title),
-                                warning,
-                            );
-                        }
+                        run.java = Some(java);
                     }
                     game
                 });

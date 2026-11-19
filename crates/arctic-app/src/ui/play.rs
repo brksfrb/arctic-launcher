@@ -115,7 +115,6 @@ impl ArcticApp {
         self.discover_dialog(&ui.ctx().clone());
     }
 
-    /// The selected instance's game, while it's being prepared or runs.
     /// The selected instance's running game (for Vanilla, on the picked version).
     fn selected_run(&self) -> Option<&Run> {
         let instance = self.selected_instance();
@@ -123,7 +122,7 @@ impl ArcticApp {
             .is_default()
             .then_some(self.settings.last_version.as_deref())
             .flatten();
-        self.runs.active_for(&instance.id, version)
+        self.runs.active_for(&self.dirs, &instance.id, version)
     }
 
     /// Other games running at the same time, each with its log and a stop.
@@ -133,8 +132,8 @@ impl ArcticApp {
         let others: Vec<(crate::tasks::LaunchId, String, bool)> = self
             .runs
             .active()
-            .filter(|r| Some(r.id) != selected)
-            .map(|r| (r.id, r.title.clone(), r.game().is_some()))
+            .filter(|r| r.belongs_to(&self.dirs) && Some(r.id) != selected)
+            .map(|r| (r.id, self.run_title(r), r.game().is_some()))
             .collect();
         if others.is_empty() {
             return;
@@ -656,7 +655,7 @@ impl ArcticApp {
         let instance_id = &self.selected_instance().id;
         let log = self
             .selected_run()
-            .or_else(|| self.runs.for_instance(instance_id))
+            .or_else(|| self.runs.for_instance(&self.dirs, instance_id))
             .and_then(|r| r.log_file.clone())
             .unwrap_or_else(|| self.dirs.logs().join(format!("game-{instance_id}.log")));
         if log.is_file()

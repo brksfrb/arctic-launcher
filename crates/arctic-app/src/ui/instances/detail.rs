@@ -294,7 +294,10 @@ impl ArcticApp {
     /// "Duplicate instance": a copy to try other mods in without touching this one.
     fn duplicate_card(&mut self, ui: &mut egui::Ui, instance: &Instance) {
         let p = self.palette();
-        let running = self.runs.active_for(&instance.id, None).is_some();
+        let running = self
+            .runs
+            .active_for(&self.dirs, &instance.id, None)
+            .is_some();
         ui.add_space(12.0);
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -659,16 +662,29 @@ impl ArcticApp {
     }
 
     /// A crash's "Fix it": switch off the mods it names, or update the instance's loader.
-    pub(crate) fn apply_crash_fix(&mut self, instance_id: &str, fix: &arctic_core::crash::Fix) {
-        let found = if self.instance.id == instance_id {
-            Some(self.instance.clone())
-        } else {
-            self.custom_instances
-                .iter()
-                .find(|i| i.id == instance_id)
-                .cloned()
-        };
-        let Some(mut instance) = found else {
+    pub(crate) fn apply_crash_fix(
+        &mut self,
+        id: crate::tasks::LaunchId,
+        fix: &arctic_core::crash::Fix,
+    ) {
+        let found = self.runs.get(id).and_then(|run| {
+            let current = run.belongs_to(&self.dirs);
+            let dirs = &run.dirs;
+            let instance = if current {
+                self.instance_by_id(&run.instance_id).cloned()
+            } else if !dirs.profile_root().is_dir() {
+                None
+            } else if run.instance_id == instances::VANILLA_ID {
+                instances::load_default(dirs).ok()
+            } else {
+                instances::list_custom(dirs)
+                    .ok()?
+                    .into_iter()
+                    .find(|i| i.id == run.instance_id)
+            }?;
+            (instance.game_dir(dirs) == run.game_dir).then(|| (dirs.clone(), instance, current))
+        });
+        let Some((dirs, mut instance, current)) = found else {
             self.toasts.push(
                 Kind::Error,
                 t!("instances.couldnt_fix_it"),
@@ -676,11 +692,12 @@ impl ArcticApp {
             );
             return;
         };
-        match arctic_core::crash_fix::apply(&self.dirs, &mut instance, fix) {
+        match arctic_core::crash_fix::apply(&dirs, &mut instance, fix) {
             Ok(done) => {
-                let loader = instance.loader.clone();
                 // A loader update is already saved; keep the open copy in step.
-                self.update_instance(instance_id, move |i| i.loader = loader);
+                if current && let Some(open) = self.instance_mut(&instance.id) {
+                    open.loader = instance.loader;
+                }
                 self.toasts.push(Kind::Success, t!("instances.fixed"), done);
             }
             Err(e) => self

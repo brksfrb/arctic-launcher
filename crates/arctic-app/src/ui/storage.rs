@@ -386,7 +386,7 @@ impl ArcticApp {
         let p = self.palette();
         let id = instance.id.clone();
         let folder = instance.game_dir(&self.dirs);
-        let running = self.runs.instance_active(&id);
+        let running = self.runs.instance_active(&self.dirs, &id);
         ui.add_space(12.0);
         crate::theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());

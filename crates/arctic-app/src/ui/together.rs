@@ -244,7 +244,9 @@ impl ArcticApp {
                 });
                 ui.add_space(8.0);
                 crate::widgets::row(ui, |ui| {
-                    let idle = !self.runs.instance_active(&self.selected_instance().id);
+                    let idle = !self
+                        .runs
+                        .instance_active(&self.dirs, &self.selected_instance().id);
                     let play = ui
                         .add_enabled_ui(idle, |ui| {
                             widgets::button(

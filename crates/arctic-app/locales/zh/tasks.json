@@ -20,7 +20,6 @@
   "tasks.choose_a_world_archive": "选择世界存档",
   "tasks.choose_an_account_to_play": "选择一个账户来游玩",
   "tasks.chosen_file_is_tagged_for_another": "所选文件标记为其他 Minecraft 版本。",
-  "tasks.close_minecraft_before_switching_profiles": "切换配置文件前请先关闭 Minecraft。",
   "tasks.closed": "{title} 已关闭",
   "tasks.closed_unexpectedly": "{title} 意外关闭",
   "tasks.could_not_create_data_folders": "无法创建数据文件夹",

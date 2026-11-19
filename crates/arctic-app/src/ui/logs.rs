@@ -46,7 +46,7 @@ impl ArcticApp {
             self.launcher_log = lines;
             self.launcher_log_seen = total;
         }
-        // A game log that's gone (profile switch) falls back to the newest.
+        // A game log replaced by a newer launch falls back to the newest.
         if let LogSource::Game(id) = self.log_source
             && self.runs.get(id).is_none()
         {
@@ -233,11 +233,12 @@ impl ArcticApp {
             for run in &self.runs.list {
                 // A bullet the launcher's font has (● isn't in it).
                 let marker = if run.is_active() { "• " } else { "" };
+                let title = self.run_title(run);
                 ui.push_id(run.id, |ui| {
                     ui.selectable_value(
                         &mut self.log_source,
                         LogSource::Game(run.id),
-                        format!("{marker}{}", run.title),
+                        format!("{marker}{title}"),
                     );
                 });
             }

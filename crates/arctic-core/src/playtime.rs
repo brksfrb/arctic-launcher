@@ -1,6 +1,6 @@
 //! Where the time goes, for the Stats page: per instance, per server, per singleplayer world, time
 //! in a world or server versus in the menus, and how long the launcher itself was open. Kept in
-//! `meta/playtime.json`.
+//! `playtime.json` in the profile's folder.
 //!
 //! Two sources: the launcher times each game from its start to its exit (the instance's total and
 //! session count), and the Arctic Client writes the stretches spent in a server, a world or the menus
@@ -62,7 +62,22 @@ pub struct Stats {
 impl Stats {
     /// The saved stats (empty when there are none or they can't be read).
     pub fn load(dirs: &DataDirs) -> Self {
-        load_json(&path(dirs)).ok().flatten().unwrap_or_default()
+        match load_json(&path(dirs)) {
+            Ok(Some(stats)) => stats,
+            // Older launchers combined all profiles in one file. Keep that history in Default.
+            Ok(None)
+                if dirs.profile_root()
+                    == dirs
+                        .with_profile(crate::profiles::DEFAULT_PROFILE_ID)
+                        .profile_root() =>
+            {
+                load_json(&dirs.meta().join("playtime.json"))
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default()
+            }
+            _ => Self::default(),
+        }
     }
 
     pub fn of(&self, instance_id: &str) -> Option<&Entry> {
@@ -126,7 +141,11 @@ fn merged<'a>(maps: impl Iterator<Item = &'a BTreeMap<String, Part>>) -> Vec<(St
 }
 
 fn path(dirs: &DataDirs) -> std::path::PathBuf {
-    dirs.meta().join("playtime.json")
+    if dirs.profile_root() == dirs.root() {
+        dirs.meta().join("playtime.json")
+    } else {
+        dirs.profile_root().join("playtime.json")
+    }
 }
 
 /// Add a session of `secs` that ended at `now` (Unix seconds) to an instance.
@@ -248,6 +267,23 @@ mod tests {
         assert_eq!(entry.last_played, 2_000);
         assert!(stats.of("other").is_none());
         assert_eq!(stats.total_secs(), 5400);
+    }
+
+    #[test]
+    fn default_profile_keeps_legacy_stats_and_new_sessions_are_profile_scoped() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = DataDirs::new(dir.path());
+        let default = root.with_profile(crate::profiles::DEFAULT_PROFILE_ID);
+        let other = root.with_profile("other");
+        record(&root, "vanilla", 60, 100).unwrap();
+        assert_eq!(Stats::load(&default).total_secs(), 60);
+        assert_eq!(Stats::load(&other).total_secs(), 0);
+
+        record(&default, "vanilla", 120, 200).unwrap();
+        record(&other, "vanilla", 240, 300).unwrap();
+        assert_eq!(Stats::load(&default).total_secs(), 180);
+        assert_eq!(Stats::load(&other).total_secs(), 240);
+        assert_eq!(Stats::load(&root).total_secs(), 60);
     }
 
     #[test]
