@@ -117,6 +117,26 @@ class GlassPacksTest {
 		}
 	}
 
+	@Test void failedDecodeClosesThePackResourceAndItsMetadataStream() {
+		List<String> closed = new ArrayList<>();
+		InputStream data = new ByteArrayInputStream(new byte[]{42}) {
+			@Override public void close() { closed.add("data"); }
+		};
+		InputStream metadata = new ByteArrayInputStream(new byte[0]) {
+			@Override public void close() { closed.add("metadata"); }
+		};
+		assertThrows(IOException.class, () -> {
+			try (InputStream stream = GlassPacks.ownedStream(data, () -> {
+				data.close();
+				metadata.close();
+			})) {
+				assertEquals(42, stream.read());
+				throw new IOException("decode failed");
+			}
+		});
+		assertEquals(Arrays.asList("data", "metadata"), closed);
+	}
+
 	private void assertBadRuleSkipped(boolean tileFailure, boolean runtimeFailure) throws Exception {
 		String bad = "minecraft:optifine/ctm/bad/glass.properties";
 		String good = "minecraft:optifine/ctm/good/glass.properties";

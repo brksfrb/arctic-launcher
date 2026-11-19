@@ -64,7 +64,8 @@ public final class GlassResources {
 				//#if MC >= 1.19
 				return manager.getResourceOrThrow(GlassImages.id(name)).open();
 				//#else
-				return manager.getResource(GlassImages.id(name)).getInputStream();
+				net.minecraft.server.packs.resources.Resource resource = manager.getResource(GlassImages.id(name));
+				return GlassPacks.ownedStream(resource.getInputStream(), resource);
 				//#endif
 			}
 		});
