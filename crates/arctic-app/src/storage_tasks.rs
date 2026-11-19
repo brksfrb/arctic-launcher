@@ -8,7 +8,7 @@ use arctic_core::instances::{self, FolderChange, Instance};
 use arctic_core::storage::location::{self, Target};
 
 use crate::t;
-use crate::tasks::{Event, Tasks};
+use crate::tasks::{Event, Tasks, java_path_error};
 /// How often a copy reports progress.
 const PROGRESS_EVERY: Duration = Duration::from_millis(100);
 
@@ -53,7 +53,10 @@ impl Tasks {
     pub fn storage_check(&self, from: PathBuf, to: PathBuf) {
         self.run(move |t| {
             let checked = Checked {
-                problem: location::check_move(&from, &to),
+                problem: location::check_java_path(&to)
+                    .err()
+                    .map(java_path_error)
+                    .or_else(|| location::check_move(&from, &to)),
                 target: location::inspect(&to),
                 size: location::size_to_move(&from),
                 to,
@@ -111,7 +114,7 @@ impl Tasks {
                 change,
                 &|_, _| {},
             )
-            .map_err(|e| e.to_string());
+            .map_err(java_path_error);
             t.send(Event::Storage(StorageEvent::InstanceMoved(id, result)));
         });
     }

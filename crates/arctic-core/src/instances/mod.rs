@@ -317,6 +317,7 @@ pub fn set_game_folder(
         ..instance.clone()
     };
     let (from, to) = (instance.game_dir(dirs), updated.game_dir(dirs));
+    crate::storage::location::check_java_path(&to)?;
     if let Some(folder) = folder
         && !folder.is_absolute()
     {

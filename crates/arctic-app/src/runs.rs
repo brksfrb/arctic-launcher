@@ -737,9 +737,10 @@ impl ArcticApp {
                 self.playtime = arctic_core::playtime::Stats::load(&self.dirs);
                 let diagnosis = run.exit_diagnosis(code, watchdog);
                 if let Some(d) = &diagnosis {
+                    let (heading, detail) = Self::localized_diagnosis(d);
                     run.push_log([LogLine {
                         level: Level::Error,
-                        text: format!("──── Arctic: {} — {} ────", d.title, d.detail),
+                        text: format!("──── Arctic: {heading} — {detail} ────"),
                     }]);
                     if d.repair {
                         arctic_core::launch::files::request_repair(&self.dirs);
@@ -801,6 +802,10 @@ impl ArcticApp {
             return (tf!("tasks.mod_crashed_the_game", name = name), detail);
         }
         match d.title.as_str() {
+            arctic_core::crash::UNSAFE_JAVA_PATH_TITLE => (
+                t!("tasks.game_path_contains_bang").into(),
+                t!("tasks.java_path_contains_bang").into(),
+            ),
             "Minecraft ran out of memory and froze" => {
                 let mut detail = t!("tasks.the_game_froze_with_memory_pressure").to_string();
                 if d.detail.contains("Arctic capped the memory") {

@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+pub(crate) const UNSAFE_JAVA_PATH_DETAIL: &str = "Java cannot load game files from a path containing '!'. Choose a data folder, game folder, or custom Java path without '!' in Settings. If you use portable mode or ARCTIC_DATA_DIR, use a path without '!' there too.";
+
 /// Core error type. Messages are written to be shown to the user as-is.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -30,6 +32,9 @@ pub enum Error {
 
     #[error("The selected world is no longer available")]
     DataPackWorldMissing,
+
+    #[error("{UNSAFE_JAVA_PATH_DETAIL}\n{}", .0.display())]
+    UnsafeJavaPath(PathBuf),
 
     #[error("{0}")]
     Other(String),

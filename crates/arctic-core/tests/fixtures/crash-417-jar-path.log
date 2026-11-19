@@ -1,0 +1,11 @@
+[main/INFO] [FabricLoader/]: Loading Minecraft 1.21.1 with Fabric Loader 0.20.1
+[main/ERROR] [FabricLoader/]: Uncaught exception in thread "main"
+java.lang.RuntimeException: Error reading mappings
+	at net.fabricmc.loader.impl.launch.MappingConfiguration.initializeMappings(MappingConfiguration.java:214)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.initialize(MinecraftGameProvider.java)
+	at net.fabricmc.loader.impl.launch.knot.Knot.init(Knot.java)
+Caused by: java.nio.file.NoSuchFileException: C:\Users\Znxganesh !
+	at java.base/java.util.zip.ZipFile$Source.get(ZipFile.java)
+	at java.base/java.util.jar.JarFile.<init>(JarFile.java)
+	at java.base/sun.net.www.protocol.jar.URLJarFile.<init>(URLJarFile.java)
+	at java.base/sun.net.www.protocol.jar.JarURLConnection.connect(JarURLConnection.java)

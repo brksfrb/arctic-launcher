@@ -23,6 +23,20 @@ use arctic_core::update::{self, UpdateChannel, UpdateInfo};
 use arctic_core::versions::{VersionEntry, VersionManifest};
 use arctic_core::{ProgressInfo, Result};
 use eframe::egui;
+
+pub(crate) fn java_path_error(error: arctic_core::Error) -> String {
+    match error {
+        arctic_core::Error::UnsafeJavaPath(path) => {
+            format!(
+                "{}\n{}",
+                t!("tasks.java_path_contains_bang"),
+                path.display()
+            )
+        }
+        other => other.chain(),
+    }
+}
+
 /// Translate compatibility failures from the exact-version install paths.
 pub(crate) fn content_install_error(error: arctic_core::Error) -> String {
     match error {
@@ -410,7 +424,7 @@ impl Tasks {
             }
             let result = result.map(|(game, log, java)| (game, log, version.id.clone(), java));
             // The toast shows this string; it has to be the whole cause chain, not just Display.
-            t.send(Event::Launched(id, result.map_err(|e| e.chain())));
+            t.send(Event::Launched(id, result.map_err(java_path_error)));
         });
     }
 

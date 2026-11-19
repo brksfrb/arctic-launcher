@@ -205,6 +205,12 @@ Everything also works with `--json` for scripts. Full reference:
 Windows: `%LOCALAPPDATA%\ArcticLauncher`. macOS: `~/Library/Application Support/ArcticLauncher`.
 Linux: `~/.local/share/ArcticLauncher`.
 
+If the usual Windows path contains `!`, a fresh install uses
+`%ProgramData%\ArcticLauncher-<Windows account SID>` when the account can create and write
+its private folder there. Arctic leaves existing installs in place. Choose a folder
+without `!` in Settings → Storage if the fallback is unavailable or your existing
+folder prevents Minecraft from starting.
+
 The Flatpak uses `~/.var/app/com.arcticlauncher.ArcticLauncher/data/ArcticLauncher`.
 Each profile lives in `profiles/<name>/`. Worlds are inside
 `instances/vanilla/minecraft/saves`. `arctic paths` prints them all.

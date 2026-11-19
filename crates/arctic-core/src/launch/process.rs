@@ -107,6 +107,8 @@ pub(super) fn spawn_with_session(
     session: Option<GameSession>,
     on_event: impl Fn(GameEvent) + Send + Sync + 'static,
 ) -> Result<GameHandle> {
+    crate::storage::location::check_java_path(&plan.game_dir)?;
+    crate::storage::location::check_java_path(&plan.java)?;
     let spawn_started = std::time::Instant::now();
     log::info!("launching: {}", plan.redacted_command());
     let runtime_lock = lock_launch_runtime(plan)?;
@@ -442,6 +444,8 @@ fn exit_code(status: &std::process::ExitStatus) -> Option<i32> {
 /// to `plan.log_file` (no pipes), so the game keeps running and logging
 /// after a short-lived caller (e.g. the CLI) exits. Returns the pid.
 pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
+    crate::storage::location::check_java_path(&plan.game_dir)?;
+    crate::storage::location::check_java_path(&plan.java)?;
     log::info!("launching (detached): {}", plan.redacted_command());
     let runtime_lock = lock_launch_runtime(plan)?;
     if let Some(parent) = plan.log_file.parent() {

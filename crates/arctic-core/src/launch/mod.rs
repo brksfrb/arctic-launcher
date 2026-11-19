@@ -35,6 +35,7 @@ use crate::instances::Instance;
 use crate::net::{DownloadJob, download_all};
 use crate::settings::Settings;
 use crate::storage::DataDirs;
+use crate::storage::location::check_java_path;
 use crate::versions::{RuleEnv, VersionEntry, VersionJson, load_version, mark_installed};
 use crate::{
     APP_VERSION, Error, LAUNCHER_BRAND, Progress, ProgressInfo, Result, arctic_mod, java, loaders,
@@ -253,6 +254,7 @@ pub fn install(
     java_override: Option<PathBuf>,
     progress: Progress,
 ) -> Result<Installation> {
+    check_launch_folders(dirs, game_dir)?;
     let repair = files::LibraryRepair::new(dirs)?;
     let installed = install_with_repair(dirs, version, game_dir, java_override, progress, &repair)?;
     repair.finish();
@@ -268,6 +270,19 @@ fn install_with_repair(
     repair: &files::LibraryRepair,
 ) -> Result<Installation> {
     let clock = std::time::Instant::now();
+    check_java_path(game_dir)?;
+    let natives_dir = dirs.version_dir(&version.id).join("natives");
+    check_java_path(&natives_dir)?;
+    let libs = files::resolve_libraries(dirs, &version, &RuleEnv::for_version(&version));
+    let client = files::client_job(dirs, &version)?;
+    let client_jar = client.dest.clone();
+    check_java_path(&client_jar)?;
+    for path in &libs.classpath {
+        check_java_path(path)?;
+    }
+    if let Some(path) = &java_override {
+        check_java_path(path)?;
+    }
     fs::create_dir_all(game_dir).at(game_dir)?;
     // 1.8.9 lists this folder when a server sends a resource pack and crashes if it isn't there
     // ("Parameter 'directory' is not a directory"); later versions make it themselves.
@@ -275,9 +290,6 @@ fn install_with_repair(
     if !server_packs.exists() {
         let _ = fs::create_dir_all(&server_packs);
     }
-    let libs = files::resolve_libraries(dirs, &version, &RuleEnv::for_version(&version));
-    let client = files::client_job(dirs, &version)?;
-    let client_jar = client.dest.clone();
     let logging = files::logging_job(dirs, &version);
 
     progress(ProgressInfo::stage("Checking files"));
@@ -307,6 +319,9 @@ fn install_with_repair(
         (runtime, assets)
     });
     let (mut runtime, assets) = (runtime?, assets?);
+    if let Some(runtime) = &runtime {
+        check_java_path(&runtime.java)?;
+    }
     log::info!(
         "install: runtime and asset plan done at {} ms",
         clock.elapsed().as_millis()
@@ -345,7 +360,6 @@ fn install_with_repair(
         (None, Some(path)) => path,
         (None, None) => unreachable!("runtime is planned whenever there is no override"),
     };
-    let natives_dir = dirs.version_dir(&version.id).join("natives");
     files::extract_natives(&libs.natives, &natives_dir)?;
     assets.finish()?;
     language::prepare(&client_jar, game_dir)?;
@@ -389,11 +403,14 @@ fn finish_assets_later(dirs: &DataDirs, index_name: String, later: Vec<DownloadJ
 /// installer needs its client jar and Java), then the loader profile is
 /// layered on top and its extra libraries are downloaded.
 pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
-    prepare_in(req, &req.instance.game_dir(req.dirs), progress)
+    let game_dir = req.instance.game_dir(req.dirs);
+    check_launch_paths(req, &game_dir)?;
+    prepare_in(req, &game_dir, progress)
 }
 
 /// Prepare a game whose lifetime will be watched by the launcher.
 pub fn prepare_watched(req: &LaunchRequest, progress: Progress) -> Result<WatchedLaunch> {
+    check_launch_paths(req, &req.instance.game_dir(req.dirs))?;
     let (session, copy) =
         session::GameSession::reserve(req.dirs, req.instance, req.settings.shared, req.copy)?;
     let req = LaunchRequest {
@@ -402,6 +419,31 @@ pub fn prepare_watched(req: &LaunchRequest, progress: Progress) -> Result<Watche
     };
     let plan = prepare_in(&req, session.game_dir(), progress)?;
     Ok(WatchedLaunch { plan, session })
+}
+
+fn check_launch_folders(dirs: &DataDirs, game_dir: &Path) -> Result<()> {
+    for path in [
+        game_dir,
+        &dirs.libraries(),
+        &dirs.versions(),
+        &dirs.runtimes(),
+    ] {
+        check_java_path(path)?;
+    }
+    Ok(())
+}
+
+fn check_launch_paths(req: &LaunchRequest, game_dir: &Path) -> Result<()> {
+    check_launch_folders(req.dirs, game_dir)?;
+    if let Some(java) = req
+        .instance
+        .java_path
+        .as_ref()
+        .or(req.settings.java_override.as_ref())
+    {
+        check_java_path(java)?;
+    }
+    Ok(())
 }
 
 pub struct WatchedLaunch {
@@ -416,6 +458,7 @@ impl WatchedLaunch {
 }
 
 fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Result<LaunchPlan> {
+    check_java_path(game_dir)?;
     // "Play with Arctic Client" is off in Settings: the game starts as if the instance had no client
     // (the mod is taken out of its mods folder, no client flags or login sharing).
     if !req.settings.play_with_client && req.instance.arctic_mod {
@@ -492,6 +535,7 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
         )?),
     };
     if let Some(runtime) = runtime {
+        check_java_path(&runtime)?;
         runtime_repair::recover_detached(&runtime, &game_log_file(req), game_dir);
     }
     // Going up to a newer game version upgrades worlds for good: back the recent ones up first.
@@ -1172,6 +1216,53 @@ fn placeholders(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preflight_rejects_unsafe_launch_paths_before_installing_or_reserving() {
+        let tmp = tempfile::tempdir().unwrap();
+        let safe = DataDirs::new(tmp.path().join("arctic"));
+        let unsafe_data = DataDirs::new(tmp.path().join("player !").join("arctic"));
+        let game_dir = tmp.path().join("game");
+        let unsafe_game = tmp.path().join("game!");
+        let unsafe_java = tmp.path().join("java!").join("bin/java");
+        let version = VersionEntry {
+            id: "1.21.1".into(),
+            kind: crate::versions::VersionKind::Release,
+            url: String::new(),
+            release_time: String::new(),
+            sha1: String::new(),
+        };
+        let account = crate::auth::offline::create("Test").unwrap();
+        let settings = Settings::default();
+        for (dirs, game_folder, java_path, expected) in [
+            (&unsafe_data, &game_dir, None, unsafe_data.libraries()),
+            (&safe, &unsafe_game, None, unsafe_game.clone()),
+            (&safe, &game_dir, Some(unsafe_java.clone()), unsafe_java),
+        ] {
+            let instance = Instance {
+                game_folder: Some(game_folder.clone()),
+                java_path,
+                ..Instance::vanilla_default()
+            };
+            let req = LaunchRequest {
+                dirs,
+                version: &version,
+                instance: &instance,
+                account: &account,
+                settings: &settings,
+                bridge: None,
+                copy: 0,
+                quick_play: None,
+            };
+            assert!(
+                matches!(prepare(&req, &|_| panic!()), Err(Error::UnsafeJavaPath(path)) if path == expected)
+            );
+            assert!(
+                matches!(prepare_watched(&req, &|_| panic!()), Err(Error::UnsafeJavaPath(path)) if path == expected)
+            );
+        }
+        assert!(fs::read_dir(tmp.path()).unwrap().next().is_none());
+    }
 
     #[test]
     fn quilt_client_fit_reads_the_selected_jar_and_removes_an_incompatible_client() {

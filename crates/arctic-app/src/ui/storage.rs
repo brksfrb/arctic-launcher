@@ -186,6 +186,14 @@ impl ArcticApp {
             }
             StorageEvent::Moved(Err(e)) => self.storage.dialog = Some(Dialog::Failed(e)),
             StorageEvent::InstancePicked(id, folder, empty) => {
+                if let Err(e) = location::check_java_path(&folder) {
+                    self.toasts.push(
+                        Kind::Error,
+                        t!("settings.couldnt_change_the_game_folder"),
+                        crate::tasks::java_path_error(e),
+                    );
+                    return;
+                }
                 self.storage.folder = Some(FolderDialog {
                     id,
                     folder: Some(folder),

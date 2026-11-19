@@ -11,6 +11,9 @@ use std::path::{Path, PathBuf};
 use crate::error::IoContext;
 use crate::{Error, Result};
 
+#[cfg(windows)]
+mod windows;
+
 /// In the default data folder: the folder the player picked instead.
 pub const LOCATION_FILE: &str = "location.txt";
 /// In the new folder after a move: the old folder, removed on the next start.
@@ -55,11 +58,24 @@ impl RootSource {
 }
 
 /// The usual data folder (`%LOCALAPPDATA%\ArcticLauncher`, `~/.local/share/ArcticLauncher`,
-/// `~/Library/Application Support/ArcticLauncher`).
+/// `~/Library/Application Support/ArcticLauncher`). It holds the location pointer even when
+/// the effective data folder is elsewhere.
 pub fn default_root() -> Result<PathBuf> {
     dirs::data_local_dir()
         .map(|d| d.join(super::DIR_NAME))
         .ok_or_else(|| Error::Other("could not determine local app data directory".into()))
+}
+
+/// A JAR URL splits at the first `!/`, including a Windows `!\` converted to URL form.
+/// Reject bare bangs too as a conservative rule for game paths.
+pub fn check_java_path(path: &Path) -> Result<()> {
+    let has_bang = |p: &Path| p.as_os_str().as_encoded_bytes().contains(&b'!');
+    if has_bang(path)
+        || (!path.is_absolute() && std::path::absolute(path).is_ok_and(|p| has_bang(&p)))
+    {
+        return Err(Error::UnsafeJavaPath(path.to_path_buf()));
+    }
+    Ok(())
 }
 
 /// The folder `location.txt` points at, if any.
@@ -71,6 +87,14 @@ pub fn chosen(default: &Path) -> Option<PathBuf> {
 
 /// Pick the data folder: `chosen` when it's there, otherwise the default (and say so).
 pub(super) fn from_choice(default: PathBuf) -> RootSource {
+    #[cfg(windows)]
+    let fallback = windows::fallback;
+    #[cfg(not(windows))]
+    let fallback = || None;
+    resolve_choice(default, fallback)
+}
+
+fn resolve_choice(default: PathBuf, fallback: impl FnOnce() -> Option<PathBuf>) -> RootSource {
     match chosen(&default) {
         Some(path) if path == default => RootSource::Default(default),
         Some(path) if path.is_dir() => RootSource::Chosen(path),
@@ -78,12 +102,29 @@ pub(super) fn from_choice(default: PathBuf) -> RootSource {
             chosen: path,
             using: default,
         },
-        None => RootSource::Default(default),
+        None => {
+            if check_java_path(&default).is_err()
+                && is_unused(&default)
+                && let Some(safe) = fallback()
+            {
+                return RootSource::Default(safe);
+            }
+            RootSource::Default(default)
+        }
+    }
+}
+
+/// Preserve any existing installation, even one from before profiles were introduced.
+fn is_unused(default: &Path) -> bool {
+    match fs::read_dir(default) {
+        Ok(mut entries) => entries.next().is_none(),
+        Err(e) => e.kind() == std::io::ErrorKind::NotFound,
     }
 }
 
 /// Remember `folder` as the data folder (the default folder: forget the choice).
 pub fn set_chosen(default: &Path, folder: &Path) -> Result<()> {
+    check_java_path(folder)?;
     let file = default.join(LOCATION_FILE);
     if folder == default {
         return match fs::remove_file(&file) {
@@ -127,6 +168,9 @@ pub fn inspect(folder: &Path) -> Target {
 
 /// Why `to` can't hold the data now in `from`, if it can't.
 pub fn check_move(from: &Path, to: &Path) -> Option<String> {
+    if let Err(error) = check_java_path(to) {
+        return Some(error.to_string());
+    }
     if !to.is_absolute() {
         return Some("Pick a full folder path.".into());
     }
@@ -356,6 +400,57 @@ mod tests {
         fs::write(dir.join("profiles.json"), b"{}").unwrap();
         fs::create_dir_all(dir.join("cache")).unwrap();
         fs::write(dir.join("cache/big.zip"), b"cache").unwrap();
+    }
+
+    #[test]
+    fn jar_paths_reject_bangs_with_either_separator_or_inside_a_name() {
+        for path in [
+            r"C:\Users\Player !\ArcticLauncher",
+            "/home/player!/ArcticLauncher",
+            "/home/player!",
+            "/home/player!extra",
+        ] {
+            assert!(matches!(
+                check_java_path(Path::new(path)),
+                Err(Error::UnsafeJavaPath(_))
+            ));
+        }
+        assert!(check_java_path(Path::new("/home/player/Arctic Launcher")).is_ok());
+    }
+
+    #[test]
+    fn unsafe_default_only_falls_back_for_a_fresh_install() {
+        let tmp = tempfile::tempdir().unwrap();
+        let default = tmp.path().join("user !").join("ArcticLauncher");
+        let fallback = tmp.path().join("safe");
+        assert_eq!(
+            resolve_choice(default.clone(), || Some(fallback.clone())),
+            RootSource::Default(fallback.clone())
+        );
+        assert_eq!(
+            resolve_choice(default.clone(), || None),
+            RootSource::Default(default.clone())
+        );
+        let picked = tmp.path().join("picked!");
+        fs::create_dir(&picked).unwrap();
+        fs::create_dir_all(&default).unwrap();
+        // A location saved by an older launcher still takes priority.
+        fs::write(
+            default.join(LOCATION_FILE),
+            picked.to_string_lossy().as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(
+            resolve_choice(default.clone(), || panic!()),
+            RootSource::Chosen(picked)
+        );
+        fs::remove_file(default.join(LOCATION_FILE)).unwrap();
+        data(&default);
+        assert_eq!(
+            resolve_choice(default.clone(), || panic!()),
+            RootSource::Default(default.clone())
+        );
+        assert!(default.join("profiles.json").is_file());
     }
 
     #[test]

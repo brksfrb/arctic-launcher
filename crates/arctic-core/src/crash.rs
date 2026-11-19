@@ -994,6 +994,7 @@ const VANILLA_CRASH: &str = "[Arctic diagnostics] vanilla crash";
 const VANILLA_CRASH_TRACE: &str = "[Arctic diagnostics] vanilla crash trace ";
 pub(crate) const SAVE_FAILED_TITLE: &str =
     "Minecraft crashed while starting and couldn't save its crash report";
+pub const UNSAFE_JAVA_PATH_TITLE: &str = "A game path contains '!'";
 
 pub(crate) fn vanilla_crash_save_failed(text: &str, code: i32) -> Option<&str> {
     // POSIX process exit statuses carry only the low byte of Java's -2.
@@ -1362,6 +1363,24 @@ fn diagnose_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)>
         .find(|&i| text.is_char_boundary(i))
         .unwrap_or(0);
     let text = &text[start..];
+
+    let reading_mappings = text.contains("Error reading mappings");
+    if let Some(line) = text.lines().find(|line| {
+        line.split_once("NoSuchFileException:")
+            .is_some_and(|(_, path)| {
+                let path = path.trim();
+                path.ends_with('!') || (reading_mappings && path.contains('!'))
+            })
+    }) {
+        return Some((
+            Diagnosis::new(
+                UNSAFE_JAVA_PATH_TITLE,
+                crate::error::UNSAFE_JAVA_PATH_DETAIL,
+                Vec::new(),
+            ),
+            head_of(line, 2048).to_owned(),
+        ));
+    }
 
     if let Some(quilt) = quilt_load_error(text) {
         return Some(quilt);
@@ -2305,6 +2324,27 @@ pub fn scrub(text: &str, own: &Own) -> String {
 #[cfg(test)]
 mod tests {
     const VANILLA_EXIT_398: &str = include_str!("../tests/fixtures/crash-398-vanilla-exit.log");
+
+    #[test]
+    fn crash_417_explains_the_truncated_jar_path() {
+        let log = include_str!("../tests/fixtures/crash-417-jar-path.log");
+        let mods = tempfile::tempdir().unwrap();
+        let diagnosis = crate::crash_conflicts::diagnose_exit_in(log, 1, mods.path()).unwrap();
+        assert_eq!(diagnosis.title, UNSAFE_JAVA_PATH_TITLE);
+        assert!(diagnosis.detail.contains("Settings"));
+        assert!(!diagnosis.repair);
+        assert_eq!(diagnose(log), Some(diagnosis.clone()));
+        assert_eq!(
+            diagnose(r"Caused by: java.nio.file.NoSuchFileException: C:\Users\Player !"),
+            Some(diagnosis.clone())
+        );
+        assert_eq!(
+            diagnose(&log.replace(r"Znxganesh !", r"Znxganesh ! files\mappings.jar")),
+            Some(diagnosis)
+        );
+        let missing_file = log.replace(r"Znxganesh !", r"Znxganesh\mappings.jar");
+        assert!(diagnose(&missing_file).is_none_or(|d| d.title != UNSAFE_JAVA_PATH_TITLE));
+    }
 
     #[test]
     fn crash_398_requires_vanilla_crash_and_failed_save_exit_code() {
